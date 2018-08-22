@@ -24,26 +24,8 @@
 
 #include "si_shader_internal.h"
 #include "si_pipe.h"
-
-#include "gallivm/lp_bld_const.h"
-#include "gallivm/lp_bld_gather.h"
-#include "gallivm/lp_bld_flow.h"
-#include "gallivm/lp_bld_init.h"
-#include "gallivm/lp_bld_intr.h"
-#include "gallivm/lp_bld_misc.h"
-#include "gallivm/lp_bld_swizzle.h"
-#include "tgsi/tgsi_info.h"
-#include "tgsi/tgsi_parse.h"
-#include "util/u_math.h"
+#include "ac_llvm_util.h"
 #include "util/u_memory.h"
-#include "util/u_debug.h"
-
-#include <stdio.h>
-#include <llvm-c/Transforms/IPO.h>
-#include <llvm-c/Transforms/Scalar.h>
-#if HAVE_LLVM >= 0x0700
-#include <llvm-c/Transforms/Utils.h>
-#endif
 
 enum si_llvm_calling_convention {
 	RADEON_LLVM_AMDGPU_VS = 87,
@@ -99,16 +81,15 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
  * @returns 0 for success, 1 for failure
  */
 unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
-			 LLVMTargetMachineRef tm,
-			 struct pipe_debug_callback *debug)
+			 struct ac_llvm_compiler *compiler,
+			 struct pipe_debug_callback *debug,
+			 bool less_optimized)
 {
+	struct ac_compiler_passes *passes =
+		less_optimized && compiler->low_opt_passes ?
+			compiler->low_opt_passes : compiler->passes;
 	struct si_llvm_diagnostics diag;
-	char *err;
 	LLVMContextRef llvm_ctx;
-	LLVMMemoryBufferRef out_buffer;
-	unsigned buffer_size;
-	const char *buffer_data;
-	LLVMBool mem_err;
 
 	diag.debug = debug;
 	diag.retval = 0;
@@ -118,33 +99,10 @@ unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
 
 	LLVMContextSetDiagnosticHandler(llvm_ctx, si_diagnostic_handler, &diag);
 
-	/* Compile IR*/
-	mem_err = LLVMTargetMachineEmitToMemoryBuffer(tm, M, LLVMObjectFile, &err,
-								 &out_buffer);
-
-	/* Process Errors/Warnings */
-	if (mem_err) {
-		fprintf(stderr, "%s: %s", __FUNCTION__, err);
-		pipe_debug_message(debug, SHADER_INFO,
-				   "LLVM emit error: %s", err);
-		FREE(err);
+	/* Compile IR. */
+	if (!ac_compile_module_to_binary(passes, M, binary))
 		diag.retval = 1;
-		goto out;
-	}
 
-	/* Extract Shader Code*/
-	buffer_size = LLVMGetBufferSize(out_buffer);
-	buffer_data = LLVMGetBufferStart(out_buffer);
-
-	if (!ac_elf_read(buffer_data, buffer_size, binary)) {
-		fprintf(stderr, "radeonsi: cannot read an ELF shader binary\n");
-		diag.retval = 1;
-	}
-
-	/* Clean up */
-	LLVMDisposeMemoryBuffer(out_buffer);
-
-out:
 	if (diag.retval != 0)
 		pipe_debug_message(debug, SHADER_INFO, "LLVM compile failed");
 	return diag.retval;
@@ -512,7 +470,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 		for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
 			values[chan] = si_llvm_emit_fetch(bld_base, reg, type, chan);
 		}
-		return lp_build_gather_values(&ctx->gallivm, values,
+		return ac_build_gather_values(&ctx->ac, values,
 					      TGSI_NUM_CHANNELS);
 	}
 
@@ -642,9 +600,8 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 		for (idx = decl->Range.First; idx <= decl->Range.Last; idx++) {
 			unsigned chan;
 			for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
-				 ctx->addrs[idx][chan] = lp_build_alloca_undef(
-					&ctx->gallivm,
-					ctx->i32, "");
+				 ctx->addrs[idx][chan] = ac_build_alloca_undef(
+					&ctx->ac, ctx->i32, "");
 			}
 		}
 		break;
@@ -689,7 +646,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 			 */
 			if (array_size > 16 ||
 			    !ctx->screen->llvm_has_working_vgpr_indexing) {
-				array_alloca = lp_build_alloca_undef(&ctx->gallivm,
+				array_alloca = ac_build_alloca_undef(&ctx->ac,
 					LLVMArrayType(ctx->f32,
 						      array_size), "array");
 				ctx->temp_array_allocas[id] = array_alloca;
@@ -707,7 +664,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 					 first + i / 4, "xyzw"[i % 4]);
 #endif
 				ctx->temps[first * TGSI_NUM_CHANNELS + i] =
-					lp_build_alloca_undef(&ctx->gallivm,
+					ac_build_alloca_undef(&ctx->ac,
 							      ctx->f32,
 							      name);
 			}
@@ -725,9 +682,8 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 				 * a shader ever reads from a channel that
 				 * it never writes to.
 				 */
-				ctx->undef_alloca = lp_build_alloca_undef(
-					&ctx->gallivm,
-					ctx->f32, "undef");
+				ctx->undef_alloca = ac_build_alloca_undef(
+					&ctx->ac, ctx->f32, "undef");
 			}
 
 			for (i = 0; i < decl_size; ++i) {
@@ -791,9 +747,8 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 				snprintf(name, sizeof(name), "OUT%d.%c",
 					 idx, "xyzw"[chan % 4]);
 #endif
-				ctx->outputs[idx][chan] = lp_build_alloca_undef(
-					&ctx->gallivm,
-					ctx->f32, name);
+				ctx->outputs[idx][chan] = ac_build_alloca_undef(
+					&ctx->ac, ctx->f32, name);
 			}
 		}
 		break;
@@ -992,7 +947,7 @@ static void emit_immediate(struct lp_build_tgsi_context *bld_base,
 
 void si_llvm_context_init(struct si_shader_context *ctx,
 			  struct si_screen *sscreen,
-			  LLVMTargetMachineRef tm)
+			  struct ac_llvm_compiler *compiler)
 {
 	struct lp_type type;
 
@@ -1003,31 +958,20 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	 */
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->screen = sscreen;
-	ctx->tm = tm;
+	ctx->compiler = compiler;
 
-	ctx->gallivm.context = LLVMContextCreate();
-	ctx->gallivm.module = LLVMModuleCreateWithNameInContext("tgsi",
-						ctx->gallivm.context);
-	LLVMSetTarget(ctx->gallivm.module, "amdgcn--");
+	ac_llvm_context_init(&ctx->ac, sscreen->info.chip_class, sscreen->info.family);
+	ctx->ac.module = ac_create_module(compiler->tm, ctx->ac.context);
 
-	LLVMTargetDataRef data_layout = LLVMCreateTargetDataLayout(tm);
-	char *data_layout_str = LLVMCopyStringRepOfTargetData(data_layout);
-	LLVMSetDataLayout(ctx->gallivm.module, data_layout_str);
-	LLVMDisposeTargetData(data_layout);
-	LLVMDisposeMessage(data_layout_str);
-
-	bool unsafe_fpmath = (sscreen->debug_flags & DBG(UNSAFE_MATH)) != 0;
 	enum ac_float_mode float_mode =
-		unsafe_fpmath ? AC_FLOAT_MODE_UNSAFE_FP_MATH :
-				AC_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH;
+		sscreen->debug_flags & DBG(UNSAFE_MATH) ?
+			AC_FLOAT_MODE_UNSAFE_FP_MATH :
+			AC_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH;
+	ctx->ac.builder = ac_create_builder(ctx->ac.context, float_mode);
 
-	ctx->gallivm.builder = ac_create_builder(ctx->gallivm.context,
-						 float_mode);
-
-	ac_llvm_context_init(&ctx->ac, ctx->gallivm.context,
-			     sscreen->info.chip_class, sscreen->info.family);
-	ctx->ac.module = ctx->gallivm.module;
-	ctx->ac.builder = ctx->gallivm.builder;
+	ctx->gallivm.context = ctx->ac.context;
+	ctx->gallivm.module = ctx->ac.module;
+	ctx->gallivm.builder = ctx->ac.builder;
 
 	struct lp_build_tgsi_context *bld_base = &ctx->bld_base;
 
@@ -1190,8 +1134,7 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 		call_conv = RADEON_LLVM_AMDGPU_VS;
 		break;
 	case PIPE_SHADER_TESS_CTRL:
-		call_conv = HAVE_LLVM >= 0x0500 ? RADEON_LLVM_AMDGPU_HS :
-						  RADEON_LLVM_AMDGPU_VS;
+		call_conv = RADEON_LLVM_AMDGPU_HS;
 		break;
 	case PIPE_SHADER_GEOMETRY:
 		call_conv = RADEON_LLVM_AMDGPU_GS;
@@ -1211,44 +1154,14 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 
 void si_llvm_optimize_module(struct si_shader_context *ctx)
 {
-	struct gallivm_state *gallivm = &ctx->gallivm;
-	const char *triple = LLVMGetTarget(gallivm->module);
-	LLVMTargetLibraryInfoRef target_library_info;
-
 	/* Dump LLVM IR before any optimization passes */
 	if (ctx->screen->debug_flags & DBG(PREOPT_IR) &&
 	    si_can_dump_shader(ctx->screen, ctx->type))
 		LLVMDumpModule(ctx->gallivm.module);
 
-	/* Create the pass manager */
-	gallivm->passmgr = LLVMCreatePassManager();
-
-	target_library_info = gallivm_create_target_library_info(triple);
-	LLVMAddTargetLibraryInfo(target_library_info, gallivm->passmgr);
-
-	if (si_extra_shader_checks(ctx->screen, ctx->type))
-		LLVMAddVerifierPass(gallivm->passmgr);
-
-	LLVMAddAlwaysInlinerPass(gallivm->passmgr);
-
-	/* This pass should eliminate all the load and store instructions */
-	LLVMAddPromoteMemoryToRegisterPass(gallivm->passmgr);
-
-	/* Add some optimization passes */
-	LLVMAddScalarReplAggregatesPass(gallivm->passmgr);
-	LLVMAddLICMPass(gallivm->passmgr);
-	LLVMAddAggressiveDCEPass(gallivm->passmgr);
-	LLVMAddCFGSimplificationPass(gallivm->passmgr);
-	/* This is recommended by the instruction combining pass. */
-	LLVMAddEarlyCSEMemSSAPass(gallivm->passmgr);
-	LLVMAddInstructionCombiningPass(gallivm->passmgr);
-
 	/* Run the pass */
-	LLVMRunPassManager(gallivm->passmgr, ctx->gallivm.module);
-
+	LLVMRunPassManager(ctx->compiler->passmgr, ctx->gallivm.module);
 	LLVMDisposeBuilder(ctx->ac.builder);
-	LLVMDisposePassManager(gallivm->passmgr);
-	gallivm_dispose_target_library_info(target_library_info);
 }
 
 void si_llvm_dispose(struct si_shader_context *ctx)

@@ -76,6 +76,7 @@
 #include "util/set.h"
 #include "string_to_uint_map.h"
 #include "linker.h"
+#include "linker_util.h"
 #include "link_varyings.h"
 #include "ir_optimization.h"
 #include "ir_rvalue_visitor.h"
@@ -895,7 +896,7 @@ validate_intrastage_arrays(struct gl_shader_program *prog,
  * Perform validation of global variables used across multiple shaders
  */
 static void
-cross_validate_globals(struct gl_shader_program *prog,
+cross_validate_globals(struct gl_context *ctx, struct gl_shader_program *prog,
                        struct exec_list *ir, glsl_symbol_table *variables,
                        bool uniforms_only)
 {
@@ -1116,7 +1117,8 @@ cross_validate_globals(struct gl_shader_program *prog,
          /* Check the precision qualifier matches for uniform variables on
           * GLSL ES.
           */
-         if (prog->IsES && !var->get_interface_type() &&
+         if (!ctx->Const.AllowGLSLRelaxedES &&
+             prog->IsES && !var->get_interface_type() &&
              existing->data.precision != var->data.precision) {
             if ((existing->data.used && var->data.used) || prog->data->Version >= 300) {
                linker_error(prog, "declarations for %s `%s` have "
@@ -1169,15 +1171,16 @@ cross_validate_globals(struct gl_shader_program *prog,
  * Perform validation of uniforms used across multiple shader stages
  */
 static void
-cross_validate_uniforms(struct gl_shader_program *prog)
+cross_validate_uniforms(struct gl_context *ctx,
+                        struct gl_shader_program *prog)
 {
    glsl_symbol_table variables;
    for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
       if (prog->_LinkedShaders[i] == NULL)
          continue;
 
-      cross_validate_globals(prog, prog->_LinkedShaders[i]->ir, &variables,
-                             true);
+      cross_validate_globals(ctx, prog, prog->_LinkedShaders[i]->ir,
+                             &variables, true);
    }
 }
 
@@ -1979,6 +1982,14 @@ link_fs_inout_layout_qualifiers(struct gl_shader_program *prog,
       linked_shader->Program->info.fs.inner_coverage |= shader->InnerCoverage;
       linked_shader->Program->info.fs.post_depth_coverage |=
          shader->PostDepthCoverage;
+      linked_shader->Program->info.fs.pixel_interlock_ordered |=
+         shader->PixelInterlockOrdered;
+      linked_shader->Program->info.fs.pixel_interlock_unordered |=
+         shader->PixelInterlockUnordered;
+      linked_shader->Program->info.fs.sample_interlock_ordered |=
+         shader->SampleInterlockOrdered;
+      linked_shader->Program->info.fs.sample_interlock_unordered |=
+         shader->SampleInterlockUnordered;
 
       linked_shader->Program->sh.fs.BlendSupport |= shader->BlendSupport;
    }
@@ -2203,7 +2214,8 @@ link_intrastage_shaders(void *mem_ctx,
    for (unsigned i = 0; i < num_shaders; i++) {
       if (shader_list[i] == NULL)
          continue;
-      cross_validate_globals(prog, shader_list[i]->ir, &variables, false);
+      cross_validate_globals(ctx, prog, shader_list[i]->ir, &variables,
+                             false);
    }
 
    if (!prog->data->LinkStatus)
@@ -3517,23 +3529,7 @@ check_explicit_uniform_locations(struct gl_context *ctx,
       }
    }
 
-   struct empty_uniform_block *current_block = NULL;
-
-   for (unsigned i = 0; i < prog->NumUniformRemapTable; i++) {
-      /* We found empty space in UniformRemapTable. */
-      if (prog->UniformRemapTable[i] == NULL) {
-         /* We've found the beginning of a new continous block of empty slots */
-         if (!current_block || current_block->start + current_block->slots != i) {
-            current_block = rzalloc(prog, struct empty_uniform_block);
-            current_block->start = i;
-            exec_list_push_tail(&prog->EmptyUniformLocations,
-                                &current_block->link);
-         }
-
-         /* The current block continues, so we simply increment its slots */
-         current_block->slots++;
-      }
-   }
+   link_util_update_empty_uniform_locations(prog);
 
    delete uniform_map;
    prog->NumExplicitUniformLocations = entries_total;
@@ -3612,42 +3608,6 @@ should_add_buffer_variable(struct gl_shader_program *shProg,
    }
 
    return false;
-}
-
-static bool
-add_program_resource(struct gl_shader_program *prog,
-                     struct set *resource_set,
-                     GLenum type, const void *data, uint8_t stages)
-{
-   assert(data);
-
-   /* If resource already exists, do not add it again. */
-   if (_mesa_set_search(resource_set, data))
-      return true;
-
-   prog->data->ProgramResourceList =
-      reralloc(prog->data,
-               prog->data->ProgramResourceList,
-               gl_program_resource,
-               prog->data->NumProgramResourceList + 1);
-
-   if (!prog->data->ProgramResourceList) {
-      linker_error(prog, "Out of memory during linking.\n");
-      return false;
-   }
-
-   struct gl_program_resource *res =
-      &prog->data->ProgramResourceList[prog->data->NumProgramResourceList];
-
-   res->Type = type;
-   res->Data = data;
-   res->StageReferences = stages;
-
-   prog->data->NumProgramResourceList++;
-
-   _mesa_set_add(resource_set, data);
-
-   return true;
 }
 
 /* Function checks if a variable var is a packed varying and
@@ -3943,8 +3903,8 @@ add_shader_variable(const struct gl_context *ctx,
       if (!sha_v)
          return false;
 
-      return add_program_resource(shProg, resource_set,
-                                  programInterface, sha_v, stage_mask);
+      return link_util_add_program_resource(shProg, resource_set,
+                                            programInterface, sha_v, stage_mask);
    }
    }
 }
@@ -4373,9 +4333,9 @@ build_program_resource_list(struct gl_context *ctx,
       /* Add transform feedback varyings. */
       if (linked_xfb->NumVarying > 0) {
          for (int i = 0; i < linked_xfb->NumVarying; i++) {
-            if (!add_program_resource(shProg, resource_set,
-                                      GL_TRANSFORM_FEEDBACK_VARYING,
-                                      &linked_xfb->Varyings[i], 0))
+            if (!link_util_add_program_resource(shProg, resource_set,
+                                                GL_TRANSFORM_FEEDBACK_VARYING,
+                                                &linked_xfb->Varyings[i], 0))
             return;
          }
       }
@@ -4384,9 +4344,9 @@ build_program_resource_list(struct gl_context *ctx,
       for (unsigned i = 0; i < ctx->Const.MaxTransformFeedbackBuffers; i++) {
          if ((linked_xfb->ActiveBuffers >> i) & 1) {
             linked_xfb->Buffers[i].Binding = i;
-            if (!add_program_resource(shProg, resource_set,
-                                      GL_TRANSFORM_FEEDBACK_BUFFER,
-                                      &linked_xfb->Buffers[i], 0))
+            if (!link_util_add_program_resource(shProg, resource_set,
+                                                GL_TRANSFORM_FEEDBACK_BUFFER,
+                                                &linked_xfb->Buffers[i], 0))
             return;
          }
       }
@@ -4422,29 +4382,29 @@ build_program_resource_list(struct gl_context *ctx,
                                          &shProg->data->UniformStorage[i]);
       }
 
-      if (!add_program_resource(shProg, resource_set, type,
-                                &shProg->data->UniformStorage[i], stageref))
+      if (!link_util_add_program_resource(shProg, resource_set, type,
+                                          &shProg->data->UniformStorage[i], stageref))
          return;
    }
 
    /* Add program uniform blocks. */
    for (unsigned i = 0; i < shProg->data->NumUniformBlocks; i++) {
-      if (!add_program_resource(shProg, resource_set, GL_UNIFORM_BLOCK,
-          &shProg->data->UniformBlocks[i], 0))
+      if (!link_util_add_program_resource(shProg, resource_set, GL_UNIFORM_BLOCK,
+                                          &shProg->data->UniformBlocks[i], 0))
          return;
    }
 
    /* Add program shader storage blocks. */
    for (unsigned i = 0; i < shProg->data->NumShaderStorageBlocks; i++) {
-      if (!add_program_resource(shProg, resource_set, GL_SHADER_STORAGE_BLOCK,
-          &shProg->data->ShaderStorageBlocks[i], 0))
+      if (!link_util_add_program_resource(shProg, resource_set, GL_SHADER_STORAGE_BLOCK,
+                                          &shProg->data->ShaderStorageBlocks[i], 0))
          return;
    }
 
    /* Add atomic counter buffers. */
    for (unsigned i = 0; i < shProg->data->NumAtomicBuffers; i++) {
-      if (!add_program_resource(shProg, resource_set, GL_ATOMIC_COUNTER_BUFFER,
-                                &shProg->data->AtomicBuffers[i], 0))
+      if (!link_util_add_program_resource(shProg, resource_set, GL_ATOMIC_COUNTER_BUFFER,
+                                          &shProg->data->AtomicBuffers[i], 0))
          return;
    }
 
@@ -4460,8 +4420,8 @@ build_program_resource_list(struct gl_context *ctx,
 
          type = _mesa_shader_stage_to_subroutine_uniform((gl_shader_stage)j);
          /* add shader subroutines */
-         if (!add_program_resource(shProg, resource_set,
-                                   type, &shProg->data->UniformStorage[i], 0))
+         if (!link_util_add_program_resource(shProg, resource_set,
+                                             type, &shProg->data->UniformStorage[i], 0))
             return;
       }
    }
@@ -4473,8 +4433,8 @@ build_program_resource_list(struct gl_context *ctx,
 
       GLuint type = _mesa_shader_stage_to_subroutine((gl_shader_stage)i);
       for (unsigned j = 0; j < p->sh.NumSubroutineFunctions; j++) {
-         if (!add_program_resource(shProg, resource_set,
-                                   type, &p->sh.SubroutineFunctions[j], 0))
+         if (!link_util_add_program_resource(shProg, resource_set,
+                                             type, &p->sh.SubroutineFunctions[j], 0))
             return;
       }
    }
@@ -4800,7 +4760,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
       min_version = MIN2(min_version, prog->Shaders[i]->Version);
       max_version = MAX2(max_version, prog->Shaders[i]->Version);
 
-      if (prog->Shaders[i]->IsES != prog->Shaders[0]->IsES) {
+      if (!ctx->Const.AllowGLSLRelaxedES &&
+          prog->Shaders[i]->IsES != prog->Shaders[0]->IsES) {
          linker_error(prog, "all shaders must use same shading "
                       "language version\n");
          goto done;
@@ -4818,7 +4779,8 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
    /* In desktop GLSL, different shader versions may be linked together.  In
     * GLSL ES, all shader versions must be the same.
     */
-   if (prog->Shaders[0]->IsES && min_version != max_version) {
+   if (!ctx->Const.AllowGLSLRelaxedES && prog->Shaders[0]->IsES &&
+       min_version != max_version) {
       linker_error(prog, "all shaders must use same shading "
                    "language version\n");
       goto done;
@@ -4944,7 +4906,7 @@ link_shaders(struct gl_context *ctx, struct gl_shader_program *prog)
     * performed, then locations are assigned for uniforms, attributes, and
     * varyings.
     */
-   cross_validate_uniforms(prog);
+   cross_validate_uniforms(ctx, prog);
    if (!prog->data->LinkStatus)
       goto done;
 

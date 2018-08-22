@@ -1712,35 +1712,6 @@ NVC0LoweringPass::loadMsInfo32(Value *ptr, uint32_t off)
       mkLoadv(TYPE_U32, bld.mkSymbol(FILE_MEMORY_CONST, b, TYPE_U32, off), ptr);
 }
 
-/* On nvc0, surface info is obtained via the surface binding points passed
- * to the SULD/SUST instructions.
- * On nve4, surface info is stored in c[] and is used by various special
- * instructions, e.g. for clamping coordinates or generating an address.
- * They couldn't just have added an equivalent to TIC now, couldn't they ?
- */
-#define NVC0_SU_INFO_ADDR   0x00
-#define NVC0_SU_INFO_FMT    0x04
-#define NVC0_SU_INFO_DIM_X  0x08
-#define NVC0_SU_INFO_PITCH  0x0c
-#define NVC0_SU_INFO_DIM_Y  0x10
-#define NVC0_SU_INFO_ARRAY  0x14
-#define NVC0_SU_INFO_DIM_Z  0x18
-#define NVC0_SU_INFO_UNK1C  0x1c
-#define NVC0_SU_INFO_WIDTH  0x20
-#define NVC0_SU_INFO_HEIGHT 0x24
-#define NVC0_SU_INFO_DEPTH  0x28
-#define NVC0_SU_INFO_TARGET 0x2c
-#define NVC0_SU_INFO_BSIZE  0x30
-#define NVC0_SU_INFO_RAW_X  0x34
-#define NVC0_SU_INFO_MS_X   0x38
-#define NVC0_SU_INFO_MS_Y   0x3c
-
-#define NVC0_SU_INFO__STRIDE 0x40
-
-#define NVC0_SU_INFO_DIM(i)  (0x08 + (i) * 8)
-#define NVC0_SU_INFO_SIZE(i) (0x20 + (i) * 4)
-#define NVC0_SU_INFO_MS(i)   (0x38 + (i) * 4)
-
 inline Value *
 NVC0LoweringPass::loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless)
 {
@@ -2374,6 +2345,8 @@ NVC0LoweringPass::processSurfaceCoordsGM107(TexInstruction *su)
 
    bld.setPosition(su, false);
 
+   adjustCoordinatesMS(su);
+
    // add texture handle
    switch (su->op) {
    case OP_SUSTP:
@@ -2630,6 +2603,18 @@ NVC0LoweringPass::handleRDSV(Instruction *i)
          // TGSI backend may use 4th component of TID,NTID,CTAID,NCTAID
          i->op = OP_MOV;
          i->setSrc(0, bld.mkImm((sv == SV_NTID || sv == SV_NCTAID) ? 1 : 0));
+      } else
+      if (sv == SV_TID) {
+         // Help CSE combine TID fetches
+         Value *tid = bld.mkOp1v(OP_RDSV, TYPE_U32, bld.getScratch(),
+                                 bld.mkSysVal(SV_COMBINED_TID, 0));
+         i->op = OP_EXTBF;
+         i->setSrc(0, tid);
+         switch (sym->reg.data.sv.index) {
+         case 0: i->setSrc(1, bld.mkImm(0x1000)); break;
+         case 1: i->setSrc(1, bld.mkImm(0x0a10)); break;
+         case 2: i->setSrc(1, bld.mkImm(0x061a)); break;
+         }
       }
       if (sv == SV_VERTEX_COUNT) {
          bld.setPosition(i, true);
@@ -2689,17 +2674,33 @@ NVC0LoweringPass::handleRDSV(Instruction *i)
       ld->subOp = NV50_IR_SUBOP_PIXLD_SAMPLEID;
       break;
    case SV_SAMPLE_POS: {
-      Value *off = new_LValue(func, FILE_GPR);
-      ld = bld.mkOp1(OP_PIXLD, TYPE_U32, i->getDef(0), bld.mkImm(0));
+      Value *sampleID = bld.getScratch();
+      ld = bld.mkOp1(OP_PIXLD, TYPE_U32, sampleID, bld.mkImm(0));
       ld->subOp = NV50_IR_SUBOP_PIXLD_SAMPLEID;
-      bld.mkOp2(OP_SHL, TYPE_U32, off, i->getDef(0), bld.mkImm(3));
-      bld.mkLoad(TYPE_F32,
-                 i->getDef(0),
-                 bld.mkSymbol(
-                       FILE_MEMORY_CONST, prog->driver->io.auxCBSlot,
-                       TYPE_U32, prog->driver->io.sampleInfoBase +
-                       4 * sym->reg.data.sv.index),
-                 off);
+      Value *offset = calculateSampleOffset(sampleID);
+
+      assert(prog->driver->prop.fp.readsSampleLocations);
+
+      if (targ->getChipset() >= NVISA_GM200_CHIPSET) {
+         bld.mkLoad(TYPE_F32,
+                    i->getDef(0),
+                    bld.mkSymbol(
+                          FILE_MEMORY_CONST, prog->driver->io.auxCBSlot,
+                          TYPE_U32, prog->driver->io.sampleInfoBase),
+                    offset);
+         bld.mkOp2(OP_EXTBF, TYPE_U32, i->getDef(0), i->getDef(0),
+                   bld.mkImm(0x040c + sym->reg.data.sv.index * 16));
+         bld.mkCvt(OP_CVT, TYPE_F32, i->getDef(0), TYPE_U32, i->getDef(0));
+         bld.mkOp2(OP_MUL, TYPE_F32, i->getDef(0), i->getDef(0), bld.mkImm(1.0f / 16.0f));
+      } else {
+         bld.mkLoad(TYPE_F32,
+                    i->getDef(0),
+                    bld.mkSymbol(
+                          FILE_MEMORY_CONST, prog->driver->io.auxCBSlot,
+                          TYPE_U32, prog->driver->io.sampleInfoBase +
+                          4 * sym->reg.data.sv.index),
+                    offset);
+      }
       break;
    }
    case SV_SAMPLE_MASK: {
@@ -2859,6 +2860,69 @@ NVC0LoweringPass::handleOUT(Instruction *i)
    return true;
 }
 
+Value *
+NVC0LoweringPass::calculateSampleOffset(Value *sampleID)
+{
+   Value *offset = bld.getScratch();
+   if (targ->getChipset() >= NVISA_GM200_CHIPSET) {
+      // Sample location offsets (in bytes) are calculated like so:
+      // offset = (SV_POSITION.y % 4 * 2) + (SV_POSITION.x % 2)
+      // offset = offset * 32 + sampleID % 8 * 4;
+      // which is equivalent to:
+      // offset = (SV_POSITION.y & 0x3) << 6 + (SV_POSITION.x & 0x1) << 5;
+      // offset += sampleID << 2
+
+      // The second operand (src1) of the INSBF instructions are like so:
+      // 0xssll where ss is the size and ll is the offset.
+      // so: dest = src2 | (src0 & (1 << ss - 1)) << ll
+
+      // Add sample ID (offset = (sampleID & 0x7) << 2)
+      bld.mkOp3(OP_INSBF, TYPE_U32, offset, sampleID, bld.mkImm(0x0302), bld.mkImm(0x0));
+
+      Symbol *xSym = bld.mkSysVal(SV_POSITION, 0);
+      Symbol *ySym = bld.mkSysVal(SV_POSITION, 1);
+      Value *coord = bld.getScratch();
+
+      // Add X coordinate (offset |= (SV_POSITION.x & 0x1) << 5)
+      bld.mkInterp(NV50_IR_INTERP_LINEAR, coord,
+                   targ->getSVAddress(FILE_SHADER_INPUT, xSym), NULL);
+      bld.mkCvt(OP_CVT, TYPE_U32, coord, TYPE_F32, coord)
+         ->rnd = ROUND_ZI;
+      bld.mkOp3(OP_INSBF, TYPE_U32, offset, coord, bld.mkImm(0x0105), offset);
+
+      // Add Y coordinate (offset |= (SV_POSITION.y & 0x3) << 6)
+      bld.mkInterp(NV50_IR_INTERP_LINEAR, coord,
+                   targ->getSVAddress(FILE_SHADER_INPUT, ySym), NULL);
+      bld.mkCvt(OP_CVT, TYPE_U32, coord, TYPE_F32, coord)
+         ->rnd = ROUND_ZI;
+      bld.mkOp3(OP_INSBF, TYPE_U32, offset, coord, bld.mkImm(0x0206), offset);
+   } else {
+      bld.mkOp2(OP_SHL, TYPE_U32, offset, sampleID, bld.mkImm(3));
+   }
+   return offset;
+}
+
+// Handle programmable sample locations for GM20x+
+void
+NVC0LoweringPass::handlePIXLD(Instruction *i)
+{
+   if (i->subOp != NV50_IR_SUBOP_PIXLD_OFFSET)
+      return;
+   if (targ->getChipset() < NVISA_GM200_CHIPSET)
+      return;
+
+   assert(prog->driver->prop.fp.readsSampleLocations);
+
+   bld.mkLoad(TYPE_F32,
+              i->getDef(0),
+              bld.mkSymbol(
+                    FILE_MEMORY_CONST, prog->driver->io.auxCBSlot,
+                    TYPE_U32, prog->driver->io.sampleInfoBase),
+              calculateSampleOffset(i->getSrc(0)));
+
+   bld.getBB()->remove(i);
+}
+
 // Generate a binary predicate if an instruction is predicated by
 // e.g. an f32 value.
 void
@@ -2957,6 +3021,9 @@ NVC0LoweringPass::visit(Instruction *i)
       break;
    case OP_BUFQ:
       handleBUFQ(i);
+      break;
+   case OP_PIXLD:
+      handlePIXLD(i);
       break;
    default:
       break;

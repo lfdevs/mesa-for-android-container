@@ -135,6 +135,8 @@ calculate_tiles(struct fd_batch *batch)
 			cbuf_cpp[i] = util_format_get_blocksize(pfb->cbufs[i]->format);
 		else
 			cbuf_cpp[i] = 4;
+		/* if MSAA, color buffers are super-sampled in GMEM: */
+		cbuf_cpp[i] *= pfb->samples;
 	}
 
 	if (!memcmp(gmem->zsbuf_cpp, zsbuf_cpp, sizeof(zsbuf_cpp)) &&
@@ -393,9 +395,11 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 
 	if (ctx->emit_sysmem_prep && !batch->nondraw) {
 		if (batch->cleared || batch->gmem_reason ||
-				((batch->num_draws > 5) && !batch->blit)) {
-			DBG("GMEM: cleared=%x, gmem_reason=%x, num_draws=%u",
-				batch->cleared, batch->gmem_reason, batch->num_draws);
+				((batch->num_draws > 5) && !batch->blit) ||
+				(pfb->samples > 1)) {
+			DBG("GMEM: cleared=%x, gmem_reason=%x, num_draws=%u, samples=%u",
+				batch->cleared, batch->gmem_reason, batch->num_draws,
+				pfb->samples);
 		} else if (!(fd_mesa_debug & FD_DBG_NOBYPASS)) {
 			sysmem = true;
 		}
@@ -435,21 +439,6 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		ctx->stats.batch_gmem++;
 	}
 
-	flush_ring(batch);
-}
-
-/* special case for when we need to create a fence but have no rendering
- * to flush.. just emit a no-op string-marker packet.
- */
-void
-fd_gmem_render_noop(struct fd_batch *batch)
-{
-	struct fd_context *ctx = batch->ctx;
-	struct pipe_context *pctx = &ctx->base;
-
-	pctx->emit_string_marker(pctx, "noop", 4);
-	/* emit IB to drawcmds (which contain the string marker): */
-	ctx->emit_ib(batch->gmem, batch->draw);
 	flush_ring(batch);
 }
 

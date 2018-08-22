@@ -103,12 +103,10 @@ fd_set_constant_buffer(struct pipe_context *pctx,
 	 */
 	if (unlikely(!cb)) {
 		so->enabled_mask &= ~(1 << index);
-		so->dirty_mask &= ~(1 << index);
 		return;
 	}
 
 	so->enabled_mask |= 1 << index;
-	so->dirty_mask |= 1 << index;
 	ctx->dirty_shader[shader] |= FD_DIRTY_SHADER_CONST;
 	ctx->dirty |= FD_DIRTY_CONST;
 }
@@ -157,7 +155,6 @@ fd_set_shader_buffers(struct pipe_context *pctx,
 		so->enabled_mask &= ~mask;
 	}
 
-	so->dirty_mask |= mask;
 	ctx->dirty_shader[shader] |= FD_DIRTY_SHADER_SSBO;
 }
 
@@ -204,7 +201,6 @@ fd_set_shader_images(struct pipe_context *pctx,
 		so->enabled_mask &= ~mask;
 	}
 
-	so->dirty_mask |= mask;
 	ctx->dirty_shader[shader] |= FD_DIRTY_SHADER_IMAGE;
 }
 
@@ -248,6 +244,8 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 	cso = &ctx->batch->framebuffer;
 
 	util_copy_framebuffer_state(cso, framebuffer);
+
+	cso->samples = util_framebuffer_get_num_samples(cso);
 
 	ctx->dirty |= FD_DIRTY_FRAMEBUFFER;
 

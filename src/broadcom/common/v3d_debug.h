@@ -54,10 +54,15 @@ extern uint32_t V3D_DEBUG;
 #define V3D_DEBUG_PERF			(1 << 10)
 #define V3D_DEBUG_NORAST		(1 << 11)
 #define V3D_DEBUG_ALWAYS_FLUSH		(1 << 12)
+#define V3D_DEBUG_CLIF			(1 << 13)
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "BROADCOM-MESA"
+#if ANDROID_API_LEVEL >= 26
+#include <log/log.h>
+#else
 #include <cutils/log.h>
+#endif /* use log/log.h start from android 8 major version */
 #ifndef ALOGW
 #define ALOGW LOGW
 #endif

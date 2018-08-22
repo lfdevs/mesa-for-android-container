@@ -42,10 +42,10 @@ prefix##0YOffset   = 0.5;
  * c   1
  */
 #define GEN_SAMPLE_POS_2X(prefix) \
-prefix##0XOffset   = 0.25; \
-prefix##0YOffset   = 0.25; \
-prefix##1XOffset   = 0.75; \
-prefix##1YOffset   = 0.75;
+prefix##0XOffset   = 0.75; \
+prefix##0YOffset   = 0.75; \
+prefix##1XOffset   = 0.25; \
+prefix##1YOffset   = 0.25;
 
 /**
  * Sample positions:

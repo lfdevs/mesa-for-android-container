@@ -296,12 +296,6 @@ dri2_create_image_from_renderbuffer2(__DRIcontext *context,
    img->dri_format = driGLFormatToImageFormat(rb->Format);
    img->loader_private = loaderPrivate;
 
-   if (img->dri_format == __DRI_IMAGE_FORMAT_NONE) {
-      *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
-      free(img);
-      return NULL;
-   }
-
    pipe_resource_reference(&img->texture, tex);
 
    *error = __DRI_IMAGE_ERROR_SUCCESS;
@@ -378,12 +372,6 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
    img->dri_format = driGLFormatToImageFormat(obj->Image[face][level]->TexFormat);
 
    img->loader_private = loaderPrivate;
-
-   if (img->dri_format == __DRI_IMAGE_FORMAT_NONE) {
-      *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
-      free(img);
-      return NULL;
-   }
 
    pipe_resource_reference(&img->texture, tex);
 

@@ -23,6 +23,7 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_framebuffer.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -414,21 +415,10 @@ vc4_set_framebuffer_state(struct pipe_context *pctx,
 {
         struct vc4_context *vc4 = vc4_context(pctx);
         struct pipe_framebuffer_state *cso = &vc4->framebuffer;
-        unsigned i;
 
         vc4->job = NULL;
 
-        for (i = 0; i < framebuffer->nr_cbufs; i++)
-                pipe_surface_reference(&cso->cbufs[i], framebuffer->cbufs[i]);
-        for (; i < vc4->framebuffer.nr_cbufs; i++)
-                pipe_surface_reference(&cso->cbufs[i], NULL);
-
-        cso->nr_cbufs = framebuffer->nr_cbufs;
-
-        pipe_surface_reference(&cso->zsbuf, framebuffer->zsbuf);
-
-        cso->width = framebuffer->width;
-        cso->height = framebuffer->height;
+        util_copy_framebuffer_state(cso, framebuffer);
 
         /* Nonzero texture mipmap levels are laid out as if they were in
          * power-of-two-sized spaces.  The renderbuffer config infers its

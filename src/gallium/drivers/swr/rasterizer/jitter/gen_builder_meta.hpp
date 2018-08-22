@@ -33,6 +33,7 @@
 //    --gen_meta_h
 //
 //============================================================================
+// clang-format off
 #pragma once
 
 //============================================================================
@@ -159,7 +160,7 @@ Value* VCVTPS2PH(Value* a, Value* round, const llvm::Twine& name = "")
     SmallVector<Type*, 2> argTypes;
     argTypes.push_back(a->getType());
     argTypes.push_back(round->getType());
-    FunctionType* pFuncTy = FunctionType::get(mSimdFP16Ty, argTypes, false);
+    FunctionType* pFuncTy = FunctionType::get(mSimdInt16Ty, argTypes, false);
     Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("meta.intrinsic.VCVTPS2PH", pFuncTy));
     return CALL(pFunc, std::initializer_list<Value*>{a, round}, name);
 }
@@ -232,3 +233,4 @@ Value* RDTSC(const llvm::Twine& name = "")
     return CALL(pFunc, std::initializer_list<Value*>{}, name);
 }
 
+    // clang-format on

@@ -1642,6 +1642,8 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
                       struct isl_surf *mcs_surf)
 {
+   assert(ISL_DEV_GEN(dev) >= 7);
+
    /* It must be multisampled with an array layout */
    assert(surf->samples > 1 && surf->msaa_layout == ISL_MSAA_LAYOUT_ARRAY);
 
@@ -2321,4 +2323,122 @@ isl_surf_get_depth_format(const struct isl_device *dev,
       assert(!has_stencil);
       return 5; /* D16_UNORM */
    }
+}
+
+bool
+isl_swizzle_supports_rendering(const struct gen_device_info *devinfo,
+                               struct isl_swizzle swizzle)
+{
+   if (devinfo->is_haswell) {
+      /* From the Haswell PRM,
+       * RENDER_SURFACE_STATE::Shader Channel Select Red
+       *
+       *    "The Shader channel selects also define which shader channels are
+       *    written to which surface channel. If the Shader channel select is
+       *    SCS_ZERO or SCS_ONE then it is not written to the surface. If the
+       *    shader channel select is SCS_RED it is written to the surface red
+       *    channel and so on. If more than one shader channel select is set
+       *    to the same surface channel only the first shader channel in RGBA
+       *    order will be written."
+       */
+      return true;
+   } else if (devinfo->gen <= 7) {
+      /* Ivy Bridge and early doesn't have any swizzling */
+      return isl_swizzle_is_identity(swizzle);
+   } else {
+      /* From the Sky Lake PRM Vol. 2d,
+       * RENDER_SURFACE_STATE::Shader Channel Select Red
+       *
+       *    "For Render Target, Red, Green and Blue Shader Channel Selects
+       *    MUST be such that only valid components can be swapped i.e. only
+       *    change the order of components in the pixel. Any other values for
+       *    these Shader Channel Select fields are not valid for Render
+       *    Targets. This also means that there MUST not be multiple shader
+       *    channels mapped to the same RT channel."
+       *
+       * From the Sky Lake PRM Vol. 2d,
+       * RENDER_SURFACE_STATE::Shader Channel Select Alpha
+       *
+       *    "For Render Target, this field MUST be programmed to
+       *    value = SCS_ALPHA."
+       */
+      return (swizzle.r == ISL_CHANNEL_SELECT_RED ||
+              swizzle.r == ISL_CHANNEL_SELECT_GREEN ||
+              swizzle.r == ISL_CHANNEL_SELECT_BLUE) &&
+             (swizzle.g == ISL_CHANNEL_SELECT_RED ||
+              swizzle.g == ISL_CHANNEL_SELECT_GREEN ||
+              swizzle.g == ISL_CHANNEL_SELECT_BLUE) &&
+             (swizzle.b == ISL_CHANNEL_SELECT_RED ||
+              swizzle.b == ISL_CHANNEL_SELECT_GREEN ||
+              swizzle.b == ISL_CHANNEL_SELECT_BLUE) &&
+             swizzle.r != swizzle.g &&
+             swizzle.r != swizzle.b &&
+             swizzle.g != swizzle.b &&
+             swizzle.a == ISL_CHANNEL_SELECT_ALPHA;
+   }
+}
+
+static enum isl_channel_select
+swizzle_select(enum isl_channel_select chan, struct isl_swizzle swizzle)
+{
+   switch (chan) {
+   case ISL_CHANNEL_SELECT_ZERO:
+   case ISL_CHANNEL_SELECT_ONE:
+      return chan;
+   case ISL_CHANNEL_SELECT_RED:
+      return swizzle.r;
+   case ISL_CHANNEL_SELECT_GREEN:
+      return swizzle.g;
+   case ISL_CHANNEL_SELECT_BLUE:
+      return swizzle.b;
+   case ISL_CHANNEL_SELECT_ALPHA:
+      return swizzle.a;
+   default:
+      unreachable("Invalid swizzle component");
+   }
+}
+
+/**
+ * Returns the single swizzle that is equivalent to applying the two given
+ * swizzles in sequence.
+ */
+struct isl_swizzle
+isl_swizzle_compose(struct isl_swizzle first, struct isl_swizzle second)
+{
+   return (struct isl_swizzle) {
+      .r = swizzle_select(first.r, second),
+      .g = swizzle_select(first.g, second),
+      .b = swizzle_select(first.b, second),
+      .a = swizzle_select(first.a, second),
+   };
+}
+
+/**
+ * Returns a swizzle that is the pseudo-inverse of this swizzle.
+ */
+struct isl_swizzle
+isl_swizzle_invert(struct isl_swizzle swizzle)
+{
+   /* Default to zero for channels which do not show up in the swizzle */
+   enum isl_channel_select chans[4] = {
+      ISL_CHANNEL_SELECT_ZERO,
+      ISL_CHANNEL_SELECT_ZERO,
+      ISL_CHANNEL_SELECT_ZERO,
+      ISL_CHANNEL_SELECT_ZERO,
+   };
+
+   /* We go in ABGR order so that, if there are any duplicates, the first one
+    * is taken if you look at it in RGBA order.  This is what Haswell hardware
+    * does for render target swizzles.
+    */
+   if ((unsigned)(swizzle.a - ISL_CHANNEL_SELECT_RED) < 4)
+      chans[swizzle.a - ISL_CHANNEL_SELECT_RED] = ISL_CHANNEL_SELECT_ALPHA;
+   if ((unsigned)(swizzle.b - ISL_CHANNEL_SELECT_RED) < 4)
+      chans[swizzle.b - ISL_CHANNEL_SELECT_RED] = ISL_CHANNEL_SELECT_BLUE;
+   if ((unsigned)(swizzle.g - ISL_CHANNEL_SELECT_RED) < 4)
+      chans[swizzle.g - ISL_CHANNEL_SELECT_RED] = ISL_CHANNEL_SELECT_GREEN;
+   if ((unsigned)(swizzle.r - ISL_CHANNEL_SELECT_RED) < 4)
+      chans[swizzle.r - ISL_CHANNEL_SELECT_RED] = ISL_CHANNEL_SELECT_RED;
+
+   return (struct isl_swizzle) { chans[0], chans[1], chans[2], chans[3] };
 }

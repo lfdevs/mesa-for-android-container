@@ -53,7 +53,7 @@ intrinsics = [
     ['VPERMPS',     ['idx', 'a'], 'a'],
     ['VCVTPD2PS',   ['a'], 'VectorType::get(mFP32Ty, a->getType()->getVectorNumElements())'],
     ['VCVTPH2PS',   ['a'], 'VectorType::get(mFP32Ty, a->getType()->getVectorNumElements())'],
-    ['VCVTPS2PH',   ['a', 'round'], 'mSimdFP16Ty'],
+    ['VCVTPS2PH',   ['a', 'round'], 'mSimdInt16Ty'],
     ['VHSUBPS',     ['a', 'b'], 'a'],
     ['VPTESTC',     ['a', 'b'], 'mInt32Ty'],
     ['VPTESTZ',     ['a', 'b'], 'mInt32Ty'],

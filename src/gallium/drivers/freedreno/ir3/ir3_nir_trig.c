@@ -16,95 +16,6 @@ struct transform {
 #endif
 
    
-static const nir_search_variable search1_0 = {
-   { nir_search_value_variable, 0 },
-   0, /* x */
-   false,
-   nir_type_invalid,
-   NULL,
-};
-static const nir_search_expression search1 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fcos,
-   { &search1_0.value },
-   NULL,
-};
-   
-static const nir_search_constant replace1_0_0_0 = {
-   { nir_search_value_constant, 0 },
-   nir_type_float, { 0x401921fb3fa6defc /* 6.283185 */ },
-};
-
-static const nir_search_constant replace1_0_0_1_0_0_0 = {
-   { nir_search_value_constant, 0 },
-   nir_type_float, { 0x3fc45f30e7ff583a /* 0.159155 */ },
-};
-
-static const nir_search_variable replace1_0_0_1_0_0_1 = {
-   { nir_search_value_variable, 0 },
-   0, /* x */
-   false,
-   nir_type_invalid,
-   NULL,
-};
-static const nir_search_expression replace1_0_0_1_0_0 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fmul,
-   { &replace1_0_0_1_0_0_0.value, &replace1_0_0_1_0_0_1.value },
-   NULL,
-};
-
-static const nir_search_constant replace1_0_0_1_0_1 = {
-   { nir_search_value_constant, 0 },
-   nir_type_float, { 0x3fe0000000000000 /* 0.5 */ },
-};
-static const nir_search_expression replace1_0_0_1_0 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fadd,
-   { &replace1_0_0_1_0_0.value, &replace1_0_0_1_0_1.value },
-   NULL,
-};
-static const nir_search_expression replace1_0_0_1 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_ffract,
-   { &replace1_0_0_1_0.value },
-   NULL,
-};
-static const nir_search_expression replace1_0_0 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fmul,
-   { &replace1_0_0_0.value, &replace1_0_0_1.value },
-   NULL,
-};
-
-static const nir_search_constant replace1_0_1 = {
-   { nir_search_value_constant, 0 },
-   nir_type_float, { 0x400921fb82c2bd7f /* 3.141593 */ },
-};
-static const nir_search_expression replace1_0 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fsub,
-   { &replace1_0_0.value, &replace1_0_1.value },
-   NULL,
-};
-static const nir_search_expression replace1 = {
-   { nir_search_value_expression, 0 },
-   false,
-   nir_op_fcos,
-   { &replace1_0.value },
-   NULL,
-};
-
-static const struct transform ir3_nir_apply_trig_workarounds_fcos_xforms[] = {
-   { &search1, &replace1.value, 0 },
-};
-   
 static const nir_search_variable search0_0 = {
    { nir_search_value_variable, 0 },
    0, /* x */
@@ -193,6 +104,95 @@ static const nir_search_expression replace0 = {
 static const struct transform ir3_nir_apply_trig_workarounds_fsin_xforms[] = {
    { &search0, &replace0.value, 0 },
 };
+   
+static const nir_search_variable search1_0 = {
+   { nir_search_value_variable, 0 },
+   0, /* x */
+   false,
+   nir_type_invalid,
+   NULL,
+};
+static const nir_search_expression search1 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fcos,
+   { &search1_0.value },
+   NULL,
+};
+   
+static const nir_search_constant replace1_0_0_0 = {
+   { nir_search_value_constant, 0 },
+   nir_type_float, { 0x401921fb3fa6defc /* 6.283185 */ },
+};
+
+static const nir_search_constant replace1_0_0_1_0_0_0 = {
+   { nir_search_value_constant, 0 },
+   nir_type_float, { 0x3fc45f30e7ff583a /* 0.159155 */ },
+};
+
+static const nir_search_variable replace1_0_0_1_0_0_1 = {
+   { nir_search_value_variable, 0 },
+   0, /* x */
+   false,
+   nir_type_invalid,
+   NULL,
+};
+static const nir_search_expression replace1_0_0_1_0_0 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fmul,
+   { &replace1_0_0_1_0_0_0.value, &replace1_0_0_1_0_0_1.value },
+   NULL,
+};
+
+static const nir_search_constant replace1_0_0_1_0_1 = {
+   { nir_search_value_constant, 0 },
+   nir_type_float, { 0x3fe0000000000000 /* 0.5 */ },
+};
+static const nir_search_expression replace1_0_0_1_0 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fadd,
+   { &replace1_0_0_1_0_0.value, &replace1_0_0_1_0_1.value },
+   NULL,
+};
+static const nir_search_expression replace1_0_0_1 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_ffract,
+   { &replace1_0_0_1_0.value },
+   NULL,
+};
+static const nir_search_expression replace1_0_0 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fmul,
+   { &replace1_0_0_0.value, &replace1_0_0_1.value },
+   NULL,
+};
+
+static const nir_search_constant replace1_0_1 = {
+   { nir_search_value_constant, 0 },
+   nir_type_float, { 0x400921fb82c2bd7f /* 3.141593 */ },
+};
+static const nir_search_expression replace1_0 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fsub,
+   { &replace1_0_0.value, &replace1_0_1.value },
+   NULL,
+};
+static const nir_search_expression replace1 = {
+   { nir_search_value_expression, 0 },
+   false,
+   nir_op_fcos,
+   { &replace1_0.value },
+   NULL,
+};
+
+static const struct transform ir3_nir_apply_trig_workarounds_fcos_xforms[] = {
+   { &search1, &replace1.value, 0 },
+};
 
 static bool
 ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_flags,
@@ -209,9 +209,9 @@ ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_fla
          continue;
 
       switch (alu->op) {
-      case nir_op_fcos:
-         for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fcos_xforms); i++) {
-            const struct transform *xform = &ir3_nir_apply_trig_workarounds_fcos_xforms[i];
+      case nir_op_fsin:
+         for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fsin_xforms); i++) {
+            const struct transform *xform = &ir3_nir_apply_trig_workarounds_fsin_xforms[i];
             if (condition_flags[xform->condition_offset] &&
                 nir_replace_instr(alu, xform->search, xform->replace,
                                   mem_ctx)) {
@@ -220,9 +220,9 @@ ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_fla
             }
          }
          break;
-      case nir_op_fsin:
-         for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fsin_xforms); i++) {
-            const struct transform *xform = &ir3_nir_apply_trig_workarounds_fsin_xforms[i];
+      case nir_op_fcos:
+         for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fcos_xforms); i++) {
+            const struct transform *xform = &ir3_nir_apply_trig_workarounds_fcos_xforms[i];
             if (condition_flags[xform->condition_offset] &&
                 nir_replace_instr(alu, xform->search, xform->replace,
                                   mem_ctx)) {

@@ -33,6 +33,7 @@
 #include "compiler/brw_nir.h"
 #include "anv_nir.h"
 #include "spirv/nir_spirv.h"
+#include "vk_util.h"
 
 /* Needed for SWIZZLE macros */
 #include "program/prog_instruction.h"
@@ -144,12 +145,17 @@ anv_shader_compile_to_nir(struct anv_pipeline *pipeline,
          .multiview = true,
          .variable_pointers = true,
          .storage_16bit = device->instance->physicalDevice.info.gen >= 8,
+         .int16 = device->instance->physicalDevice.info.gen >= 8,
+         .shader_viewport_index_layer = true,
          .subgroup_arithmetic = true,
          .subgroup_basic = true,
          .subgroup_ballot = true,
          .subgroup_quad = true,
          .subgroup_shuffle = true,
          .subgroup_vote = true,
+         .stencil_export = device->instance->physicalDevice.info.gen >= 9,
+         .storage_8bit = device->instance->physicalDevice.info.gen >= 8,
+         .post_depth_coverage = device->instance->physicalDevice.info.gen >= 9,
       },
    };
 
@@ -177,6 +183,7 @@ anv_shader_compile_to_nir(struct anv_pipeline *pipeline,
    NIR_PASS_V(nir, nir_lower_constant_initializers, nir_var_local);
    NIR_PASS_V(nir, nir_lower_returns);
    NIR_PASS_V(nir, nir_inline_functions);
+   NIR_PASS_V(nir, nir_copy_prop);
 
    /* Pick off the single entrypoint that we want */
    foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
@@ -192,6 +199,12 @@ anv_shader_compile_to_nir(struct anv_pipeline *pipeline,
     * corresponding stores.
     */
    NIR_PASS_V(nir, nir_lower_constant_initializers, ~0);
+
+   /* Split member structs.  We do this before lower_io_to_temporaries so that
+    * it doesn't lower system values to temporaries by accident.
+    */
+   NIR_PASS_V(nir, nir_split_var_copies);
+   NIR_PASS_V(nir, nir_split_per_member_structs);
 
    NIR_PASS_V(nir, nir_remove_dead_variables,
               nir_var_shader_in | nir_var_shader_out | nir_var_system_value);
@@ -295,6 +308,27 @@ populate_vs_prog_key(const struct gen_device_info *devinfo,
 }
 
 static void
+populate_tcs_prog_key(const struct gen_device_info *devinfo,
+                      unsigned input_vertices,
+                      struct brw_tcs_prog_key *key)
+{
+   memset(key, 0, sizeof(*key));
+
+   populate_sampler_prog_key(devinfo, &key->tex);
+
+   key->input_vertices = input_vertices;
+}
+
+static void
+populate_tes_prog_key(const struct gen_device_info *devinfo,
+                      struct brw_tes_prog_key *key)
+{
+   memset(key, 0, sizeof(*key));
+
+   populate_sampler_prog_key(devinfo, &key->tex);
+}
+
+static void
 populate_gs_prog_key(const struct gen_device_info *devinfo,
                      struct brw_gs_prog_key *key)
 {
@@ -304,21 +338,19 @@ populate_gs_prog_key(const struct gen_device_info *devinfo,
 }
 
 static void
-populate_wm_prog_key(const struct anv_pipeline *pipeline,
-                     const VkGraphicsPipelineCreateInfo *info,
+populate_wm_prog_key(const struct gen_device_info *devinfo,
+                     const struct anv_subpass *subpass,
+                     const VkPipelineMultisampleStateCreateInfo *ms_info,
                      struct brw_wm_prog_key *key)
 {
-   const struct gen_device_info *devinfo = &pipeline->device->info;
-
    memset(key, 0, sizeof(*key));
 
    populate_sampler_prog_key(devinfo, &key->tex);
 
-   /* TODO: we could set this to 0 based on the information in nir_shader, but
-    * this function is called before spirv_to_nir. */
-   const struct brw_vue_map *vue_map =
-      &anv_pipeline_get_last_vue_prog_data(pipeline)->vue_map;
-   key->input_slots_valid = vue_map->slots_valid;
+   /* We set this to 0 here and set to the actual value before we call
+    * brw_compile_fs.
+    */
+   key->input_slots_valid = 0;
 
    /* Vulkan doesn't specify a default */
    key->high_quality_derivatives = false;
@@ -326,25 +358,28 @@ populate_wm_prog_key(const struct anv_pipeline *pipeline,
    /* XXX Vulkan doesn't appear to specify */
    key->clamp_fragment_color = false;
 
-   key->nr_color_regions = pipeline->subpass->color_count;
+   assert(subpass->color_count <= MAX_RTS);
+   for (uint32_t i = 0; i < subpass->color_count; i++) {
+      if (subpass->color_attachments[i].attachment != VK_ATTACHMENT_UNUSED)
+         key->color_outputs_valid |= (1 << i);
+   }
+
+   key->nr_color_regions = _mesa_bitcount(key->color_outputs_valid);
 
    key->replicate_alpha = key->nr_color_regions > 1 &&
-                          info->pMultisampleState &&
-                          info->pMultisampleState->alphaToCoverageEnable;
+                          ms_info && ms_info->alphaToCoverageEnable;
 
-   if (info->pMultisampleState) {
+   if (ms_info) {
       /* We should probably pull this out of the shader, but it's fairly
        * harmless to compute it and then let dead-code take care of it.
        */
-      if (info->pMultisampleState->rasterizationSamples > 1) {
+      if (ms_info->rasterizationSamples > 1) {
          key->persample_interp =
-            (info->pMultisampleState->minSampleShading *
-             info->pMultisampleState->rasterizationSamples) > 1;
+            (ms_info->minSampleShading * ms_info->rasterizationSamples) > 1;
          key->multisample_fbo = true;
       }
 
-      key->frag_coord_adds_sample_pos =
-         info->pMultisampleState->sampleShadingEnable;
+      key->frag_coord_adds_sample_pos = ms_info->sampleShadingEnable;
    }
 }
 
@@ -470,29 +505,6 @@ anv_fill_binding_table(struct brw_stage_prog_data *prog_data, unsigned bias)
    prog_data->binding_table.image_start = bias;
 }
 
-static struct anv_shader_bin *
-anv_pipeline_upload_kernel(struct anv_pipeline *pipeline,
-                           struct anv_pipeline_cache *cache,
-                           const void *key_data, uint32_t key_size,
-                           const void *kernel_data, uint32_t kernel_size,
-                           const struct brw_stage_prog_data *prog_data,
-                           uint32_t prog_data_size,
-                           const struct anv_pipeline_bind_map *bind_map)
-{
-   if (cache) {
-      return anv_pipeline_cache_upload_kernel(cache, key_data, key_size,
-                                              kernel_data, kernel_size,
-                                              prog_data, prog_data_size,
-                                              bind_map);
-   } else {
-      return anv_shader_bin_create(pipeline->device, key_data, key_size,
-                                   kernel_data, kernel_size,
-                                   prog_data, prog_data_size,
-                                   prog_data->param, bind_map);
-   }
-}
-
-
 static void
 anv_pipeline_add_compiled_stage(struct anv_pipeline *pipeline,
                                 gl_shader_stage stage,
@@ -513,18 +525,16 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
       pipeline->device->instance->physicalDevice.compiler;
    struct brw_vs_prog_key key;
    struct anv_shader_bin *bin = NULL;
-   unsigned char sha1[20];
 
    populate_vs_prog_key(&pipeline->device->info, &key);
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 
-   if (cache) {
-      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
-                               MESA_SHADER_VERTEX, spec_info,
-                               &key, sizeof(key), sha1);
-      bin = anv_pipeline_cache_search(cache, sha1, 20);
-   }
+   unsigned char sha1[20];
+   anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
+                            MESA_SHADER_VERTEX, spec_info,
+                            &key, sizeof(key), sha1);
+   bin = anv_device_search_for_kernel(pipeline->device, cache, sha1, 20);
 
    if (bin == NULL) {
       struct brw_vs_prog_data prog_data = {};
@@ -563,10 +573,12 @@ anv_pipeline_compile_vs(struct anv_pipeline *pipeline,
       }
 
       unsigned code_size = prog_data.base.base.program_size;
-      bin = anv_pipeline_upload_kernel(pipeline, cache, sha1, 20,
-                                       shader_code, code_size,
-                                       &prog_data.base.base, sizeof(prog_data),
-                                       &map);
+      bin = anv_device_upload_kernel(pipeline->device, cache, sha1, 20,
+                                     shader_code, code_size,
+                                     nir->constant_data,
+                                     nir->constant_data_size,
+                                     &prog_data.base.base, sizeof(prog_data),
+                                     &map);
       if (!bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -637,27 +649,29 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
    struct brw_tes_prog_key tes_key = {};
    struct anv_shader_bin *tcs_bin = NULL;
    struct anv_shader_bin *tes_bin = NULL;
-   unsigned char tcs_sha1[40];
-   unsigned char tes_sha1[40];
 
-   populate_sampler_prog_key(&pipeline->device->info, &tcs_key.tex);
-   populate_sampler_prog_key(&pipeline->device->info, &tes_key.tex);
-   tcs_key.input_vertices = info->pTessellationState->patchControlPoints;
+   populate_tcs_prog_key(&pipeline->device->info,
+                         info->pTessellationState->patchControlPoints,
+                         &tcs_key);
+   populate_tes_prog_key(&pipeline->device->info, &tes_key);
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 
-   if (cache) {
-      anv_pipeline_hash_shader(pipeline, layout, tcs_module, tcs_entrypoint,
-                               MESA_SHADER_TESS_CTRL, tcs_spec_info,
-                               &tcs_key, sizeof(tcs_key), tcs_sha1);
-      anv_pipeline_hash_shader(pipeline, layout, tes_module, tes_entrypoint,
-                               MESA_SHADER_TESS_EVAL, tes_spec_info,
-                               &tes_key, sizeof(tes_key), tes_sha1);
-      memcpy(&tcs_sha1[20], tes_sha1, 20);
-      memcpy(&tes_sha1[20], tcs_sha1, 20);
-      tcs_bin = anv_pipeline_cache_search(cache, tcs_sha1, sizeof(tcs_sha1));
-      tes_bin = anv_pipeline_cache_search(cache, tes_sha1, sizeof(tes_sha1));
-   }
+   unsigned char tcs_sha1[40];
+   unsigned char tes_sha1[40];
+   anv_pipeline_hash_shader(pipeline, layout, tcs_module, tcs_entrypoint,
+                            MESA_SHADER_TESS_CTRL, tcs_spec_info,
+                            &tcs_key, sizeof(tcs_key), tcs_sha1);
+   anv_pipeline_hash_shader(pipeline, layout, tes_module, tes_entrypoint,
+                            MESA_SHADER_TESS_EVAL, tes_spec_info,
+                            &tes_key, sizeof(tes_key), tes_sha1);
+   memcpy(&tcs_sha1[20], tes_sha1, 20);
+   memcpy(&tes_sha1[20], tcs_sha1, 20);
+
+   tcs_bin = anv_device_search_for_kernel(pipeline->device, cache,
+                                          tcs_sha1, sizeof(tcs_sha1));
+   tes_bin = anv_device_search_for_kernel(pipeline->device, cache,
+                                          tes_sha1, sizeof(tes_sha1));
 
    if (tcs_bin == NULL || tes_bin == NULL) {
       struct brw_tcs_prog_data tcs_prog_data = {};
@@ -693,8 +707,8 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
       }
 
-      nir_lower_tes_patch_vertices(tes_nir,
-                                   tcs_nir->info.tess.tcs_vertices_out);
+      nir_lower_patch_vertices(tes_nir, tcs_nir->info.tess.tcs_vertices_out,
+                               NULL);
 
       /* Copy TCS info into the TES info */
       merge_tess_info(&tes_nir->info, &tcs_nir->info);
@@ -729,12 +743,14 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
       }
 
       unsigned code_size = tcs_prog_data.base.base.program_size;
-      tcs_bin = anv_pipeline_upload_kernel(pipeline, cache,
-                                           tcs_sha1, sizeof(tcs_sha1),
-                                           shader_code, code_size,
-                                           &tcs_prog_data.base.base,
-                                           sizeof(tcs_prog_data),
-                                           &tcs_map);
+      tcs_bin = anv_device_upload_kernel(pipeline->device, cache,
+                                         tcs_sha1, sizeof(tcs_sha1),
+                                         shader_code, code_size,
+                                         tcs_nir->constant_data,
+                                         tcs_nir->constant_data_size,
+                                         &tcs_prog_data.base.base,
+                                         sizeof(tcs_prog_data),
+                                         &tcs_map);
       if (!tcs_bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -750,12 +766,14 @@ anv_pipeline_compile_tcs_tes(struct anv_pipeline *pipeline,
       }
 
       code_size = tes_prog_data.base.base.program_size;
-      tes_bin = anv_pipeline_upload_kernel(pipeline, cache,
-                                           tes_sha1, sizeof(tes_sha1),
-                                           shader_code, code_size,
-                                           &tes_prog_data.base.base,
-                                           sizeof(tes_prog_data),
-                                           &tes_map);
+      tes_bin = anv_device_upload_kernel(pipeline->device, cache,
+                                         tes_sha1, sizeof(tes_sha1),
+                                         shader_code, code_size,
+                                         tes_nir->constant_data,
+                                         tes_nir->constant_data_size,
+                                         &tes_prog_data.base.base,
+                                         sizeof(tes_prog_data),
+                                         &tes_map);
       if (!tes_bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -782,18 +800,16 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
       pipeline->device->instance->physicalDevice.compiler;
    struct brw_gs_prog_key key;
    struct anv_shader_bin *bin = NULL;
-   unsigned char sha1[20];
 
    populate_gs_prog_key(&pipeline->device->info, &key);
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 
-   if (cache) {
-      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
-                               MESA_SHADER_GEOMETRY, spec_info,
-                               &key, sizeof(key), sha1);
-      bin = anv_pipeline_cache_search(cache, sha1, 20);
-   }
+   unsigned char sha1[20];
+   anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
+                            MESA_SHADER_GEOMETRY, spec_info,
+                            &key, sizeof(key), sha1);
+   bin = anv_device_search_for_kernel(pipeline->device, cache, sha1, 20);
 
    if (bin == NULL) {
       struct brw_gs_prog_data prog_data = {};
@@ -833,10 +849,12 @@ anv_pipeline_compile_gs(struct anv_pipeline *pipeline,
 
       /* TODO: SIMD8 GS */
       const unsigned code_size = prog_data.base.base.program_size;
-      bin = anv_pipeline_upload_kernel(pipeline, cache, sha1, 20,
-                                       shader_code, code_size,
-                                       &prog_data.base.base, sizeof(prog_data),
-                                       &map);
+      bin = anv_device_upload_kernel(pipeline->device, cache, sha1, 20,
+                                     shader_code, code_size,
+                                     nir->constant_data,
+                                     nir->constant_data_size,
+                                     &prog_data.base.base, sizeof(prog_data),
+                                     &map);
       if (!bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -862,18 +880,24 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
       pipeline->device->instance->physicalDevice.compiler;
    struct brw_wm_prog_key key;
    struct anv_shader_bin *bin = NULL;
-   unsigned char sha1[20];
 
-   populate_wm_prog_key(pipeline, info, &key);
+   populate_wm_prog_key(&pipeline->device->info, pipeline->subpass,
+                        info->pMultisampleState, &key);
+
+   /* TODO: we could set this to 0 based on the information in nir_shader, but
+    * we need this before we call spirv_to_nir.
+    */
+   const struct brw_vue_map *vue_map =
+      &anv_pipeline_get_last_vue_prog_data(pipeline)->vue_map;
+   key.input_slots_valid = vue_map->slots_valid;
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 
-   if (cache) {
-      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
-                               MESA_SHADER_FRAGMENT, spec_info,
-                               &key, sizeof(key), sha1);
-      bin = anv_pipeline_cache_search(cache, sha1, 20);
-   }
+   unsigned char sha1[20];
+   anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
+                            MESA_SHADER_FRAGMENT, spec_info,
+                            &key, sizeof(key), sha1);
+   bin = anv_device_search_for_kernel(pipeline->device, cache, sha1, 20);
 
    if (bin == NULL) {
       struct brw_wm_prog_data prog_data = {};
@@ -911,8 +935,8 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
             continue;
 
          const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
-         /* Out-of-bounds */
-         if (rt >= key.nr_color_regions)
+         /* Unused or out-of-bounds */
+         if (rt >= MAX_RTS || !(key.color_outputs_valid & (1 << rt)))
             continue;
 
          const unsigned array_len =
@@ -937,13 +961,15 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
          num_rts++;
       }
 
+      bool deleted_output = false;
       nir_foreach_variable_safe(var, &nir->outputs) {
          if (var->data.location < FRAG_RESULT_DATA0)
             continue;
 
          const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
-         if (rt >= key.nr_color_regions) {
-            /* Out-of-bounds, throw it away */
+         if (rt >= MAX_RTS || !(key.color_outputs_valid & (1 << rt))) {
+            /* Unused or out-of-bounds, throw it away */
+            deleted_output = true;
             var->data.mode = nir_var_local;
             exec_node_remove(&var->node);
             exec_list_push_tail(&impl->locals, &var->node);
@@ -955,6 +981,9 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
          var->data.location = rt_to_bindings[rt] + FRAG_RESULT_DATA0;
       }
 
+      if (deleted_output)
+         nir_fixup_deref_modes(nir);
+
       if (num_rts == 0) {
          /* If we have no render targets, we need a null render target */
          rt_bindings[0] = (struct anv_pipeline_binding) {
@@ -964,6 +993,12 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
          };
          num_rts = 1;
       }
+
+      /* Now that we've determined the actual number of render targets, adjust
+       * the key accordingly.
+       */
+      key.nr_color_regions = num_rts;
+      key.color_outputs_valid = (1 << num_rts) - 1;
 
       assert(num_rts <= max_rt);
       map.surface_to_descriptor -= num_rts;
@@ -976,17 +1011,19 @@ anv_pipeline_compile_fs(struct anv_pipeline *pipeline,
 
       const unsigned *shader_code =
          brw_compile_fs(compiler, NULL, mem_ctx, &key, &prog_data, nir,
-                        NULL, -1, -1, true, false, NULL, NULL);
+                        NULL, -1, -1, -1, true, false, NULL, NULL);
       if (shader_code == NULL) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
       }
 
       unsigned code_size = prog_data.base.program_size;
-      bin = anv_pipeline_upload_kernel(pipeline, cache, sha1, 20,
-                                       shader_code, code_size,
-                                       &prog_data.base, sizeof(prog_data),
-                                       &map);
+      bin = anv_device_upload_kernel(pipeline->device, cache, sha1, 20,
+                                     shader_code, code_size,
+                                     nir->constant_data,
+                                     nir->constant_data_size,
+                                     &prog_data.base, sizeof(prog_data),
+                                     &map);
       if (!bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -1012,18 +1049,16 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
       pipeline->device->instance->physicalDevice.compiler;
    struct brw_cs_prog_key key;
    struct anv_shader_bin *bin = NULL;
-   unsigned char sha1[20];
 
    populate_cs_prog_key(&pipeline->device->info, &key);
 
    ANV_FROM_HANDLE(anv_pipeline_layout, layout, info->layout);
 
-   if (cache) {
-      anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
-                               MESA_SHADER_COMPUTE, spec_info,
-                               &key, sizeof(key), sha1);
-      bin = anv_pipeline_cache_search(cache, sha1, 20);
-   }
+   unsigned char sha1[20];
+   anv_pipeline_hash_shader(pipeline, layout, module, entrypoint,
+                            MESA_SHADER_COMPUTE, spec_info,
+                            &key, sizeof(key), sha1);
+   bin = anv_device_search_for_kernel(pipeline->device, cache, sha1, 20);
 
    if (bin == NULL) {
       struct brw_cs_prog_data prog_data = {};
@@ -1059,10 +1094,12 @@ anv_pipeline_compile_cs(struct anv_pipeline *pipeline,
       }
 
       const unsigned code_size = prog_data.base.program_size;
-      bin = anv_pipeline_upload_kernel(pipeline, cache, sha1, 20,
-                                       shader_code, code_size,
-                                       &prog_data.base, sizeof(prog_data),
-                                       &map);
+      bin = anv_device_upload_kernel(pipeline->device, cache, sha1, 20,
+                                     shader_code, code_size,
+                                     nir->constant_data,
+                                     nir->constant_data_size,
+                                     &prog_data.base, sizeof(prog_data),
+                                     &map);
       if (!bin) {
          ralloc_free(mem_ctx);
          return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -1181,7 +1218,7 @@ copy_non_dynamic_state(struct anv_pipeline *pipeline,
     *    against does not use a depth/stencil attachment.
     */
    if (!pCreateInfo->pRasterizationState->rasterizerDiscardEnable &&
-       subpass->depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED) {
+       subpass->depth_stencil_attachment) {
       assert(pCreateInfo->pDepthStencilState);
 
       if (states & (1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS)) {
@@ -1242,11 +1279,21 @@ anv_pipeline_validate_create_info(const VkGraphicsPipelineCreateInfo *info)
       assert(info->pViewportState);
       assert(info->pMultisampleState);
 
-      if (subpass && subpass->depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED)
+      if (subpass && subpass->depth_stencil_attachment)
          assert(info->pDepthStencilState);
 
-      if (subpass && subpass->color_count > 0)
-         assert(info->pColorBlendState);
+      if (subpass && subpass->color_count > 0) {
+         bool all_color_unused = true;
+         for (int i = 0; i < subpass->color_count; i++) {
+            if (subpass->color_attachments[i].attachment != VK_ATTACHMENT_UNUSED)
+               all_color_unused = false;
+         }
+         /* pColorBlendState is ignored if the pipeline has rasterization
+          * disabled or if the subpass of the render pass the pipeline is
+          * created against does not use any color attachments.
+          */
+         assert(info->pColorBlendState || all_color_unused);
+      }
    }
 
    for (uint32_t i = 0; i < info->stageCount; ++i) {
@@ -1404,7 +1451,7 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
       const VkVertexInputBindingDescription *desc =
          &vi_info->pVertexBindingDescriptions[i];
 
-      pipeline->binding_stride[desc->binding] = desc->stride;
+      pipeline->vb[desc->binding].stride = desc->stride;
 
       /* Step rate is programmed per vertex element (attribute), not
        * binding. Set up a map of which bindings step per instance, for
@@ -1412,11 +1459,38 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
       switch (desc->inputRate) {
       default:
       case VK_VERTEX_INPUT_RATE_VERTEX:
-         pipeline->instancing_enable[desc->binding] = false;
+         pipeline->vb[desc->binding].instanced = false;
          break;
       case VK_VERTEX_INPUT_RATE_INSTANCE:
-         pipeline->instancing_enable[desc->binding] = true;
+         pipeline->vb[desc->binding].instanced = true;
          break;
+      }
+
+      pipeline->vb[desc->binding].instance_divisor = 1;
+   }
+
+   const VkPipelineVertexInputDivisorStateCreateInfoEXT *vi_div_state =
+      vk_find_struct_const(vi_info->pNext,
+                           PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT);
+   if (vi_div_state) {
+      for (uint32_t i = 0; i < vi_div_state->vertexBindingDivisorCount; i++) {
+         const VkVertexInputBindingDivisorDescriptionEXT *desc =
+            &vi_div_state->pVertexBindingDivisors[i];
+
+         pipeline->vb[desc->binding].instance_divisor = desc->divisor;
+      }
+   }
+
+   /* Our implementation of VK_KHR_multiview uses instancing to draw the
+    * different views.  If the client asks for instancing, we need to multiply
+    * the instance divisor by the number of views ensure that we repeat the
+    * client's per-instance data once for each view.
+    */
+   if (pipeline->subpass->view_mask) {
+      const uint32_t view_count = anv_subpass_view_count(pipeline->subpass);
+      for (uint32_t vb = 0; vb < MAX_VBS; vb++) {
+         if (pipeline->vb[vb].instanced)
+            pipeline->vb[vb].instance_divisor *= view_count;
       }
    }
 

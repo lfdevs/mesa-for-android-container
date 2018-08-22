@@ -741,7 +741,8 @@ static void lp_exec_mask_store(struct lp_exec_mask *mask,
 
    assert(lp_check_value(bld_store->type, val));
    assert(LLVMGetTypeKind(LLVMTypeOf(dst_ptr)) == LLVMPointerTypeKind);
-   assert(LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val));
+   assert(LLVMGetElementType(LLVMTypeOf(dst_ptr)) == LLVMTypeOf(val) ||
+          LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(dst_ptr))) == LLVMArrayTypeKind);
 
    if (exec_mask) {
       LLVMValueRef res, dst;
@@ -852,7 +853,14 @@ get_file_ptr(struct lp_build_tgsi_soa_context *bld,
 
    if (bld->indirect_files & (1 << file)) {
       LLVMValueRef lindex = lp_build_const_int32(bld->bld_base.base.gallivm, index * 4 + chan);
-      return LLVMBuildGEP(builder, var_of_array, &lindex, 1, "");
+      if (LLVMGetTypeKind(LLVMGetElementType(LLVMTypeOf(var_of_array))) == LLVMArrayTypeKind) {
+         LLVMValueRef gep[2];
+         gep[0] = lp_build_const_int32(bld->bld_base.base.gallivm, 0);
+         gep[1] = lindex;
+         return LLVMBuildGEP(builder, var_of_array, gep, 2, "");
+      } else {
+         return LLVMBuildGEP(builder, var_of_array, &lindex, 1, "");
+      }
    }
    else {
       assert(index <= bld->bld_base.info->file_max[file]);
@@ -1352,21 +1360,20 @@ emit_fetch_immediate(
          /* Gather values from the immediate register array */
          res = build_gather(bld_base, imms_array, index_vec, NULL, index_vec2);
       } else {
-         LLVMValueRef lindex = lp_build_const_int32(gallivm,
-                                        reg->Register.Index * 4 + swizzle);
-         LLVMValueRef imms_ptr =  LLVMBuildGEP(builder,
-                                                bld->imms_array, &lindex, 1, "");
+         LLVMValueRef gep[2];
+         gep[0] = lp_build_const_int32(gallivm, 0);
+         gep[1] = lp_build_const_int32(gallivm, reg->Register.Index * 4 + swizzle);
+         LLVMValueRef imms_ptr = LLVMBuildGEP(builder,
+                                              bld->imms_array, gep, 2, "");
          res = LLVMBuildLoad(builder, imms_ptr, "");
 
          if (tgsi_type_is_64bit(stype)) {
-            LLVMValueRef lindex1;
             LLVMValueRef imms_ptr2;
             LLVMValueRef res2;
-
-            lindex1 = lp_build_const_int32(gallivm,
-                                           reg->Register.Index * 4 + swizzle + 1);
+            gep[1] = lp_build_const_int32(gallivm,
+                                          reg->Register.Index * 4 + swizzle + 1);
             imms_ptr2 = LLVMBuildGEP(builder,
-                                      bld->imms_array, &lindex1, 1, "");
+                                     bld->imms_array, gep, 2, "");
             res2 = LLVMBuildLoad(builder, imms_ptr2, "");
             res = emit_fetch_64bit(bld_base, stype, res, res2);
          }
@@ -2957,13 +2964,14 @@ void lp_emit_immediate_soa(
       unsigned index = bld->num_immediates;
       struct gallivm_state *gallivm = bld->bld_base.base.gallivm;
       LLVMBuilderRef builder = gallivm->builder;
+      LLVMValueRef gep[2];
+      gep[0] = lp_build_const_int32(gallivm, 0);
 
       assert(bld->indirect_files & (1 << TGSI_FILE_IMMEDIATE));
       for (i = 0; i < 4; ++i ) {
-         LLVMValueRef lindex = lp_build_const_int32(
-                  bld->bld_base.base.gallivm, index * 4 + i);
+         gep[1] = lp_build_const_int32(gallivm, index * 4 + i);
          LLVMValueRef imm_ptr = LLVMBuildGEP(builder,
-                                             bld->imms_array, &lindex, 1, "");
+                                             bld->imms_array, gep, 2, "");
          LLVMBuildStore(builder, imms[i], imm_ptr);
       }
    } else {
@@ -2979,11 +2987,12 @@ void lp_emit_immediate_soa(
          unsigned index = bld->num_immediates;
          struct gallivm_state *gallivm = bld->bld_base.base.gallivm;
          LLVMBuilderRef builder = gallivm->builder;
+         LLVMValueRef gep[2];
+         gep[0] = lp_build_const_int32(gallivm, 0);
          for (i = 0; i < 4; ++i ) {
-            LLVMValueRef lindex = lp_build_const_int32(
-                     bld->bld_base.base.gallivm, index * 4 + i);
+            gep[1] = lp_build_const_int32(gallivm, index * 4 + i);
             LLVMValueRef imm_ptr = LLVMBuildGEP(builder,
-                                                bld->imms_array, &lindex, 1, "");
+                                                bld->imms_array, gep, 2, "");
             LLVMBuildStore(builder,
                            bld->immediates[index][i],
                            imm_ptr);
@@ -3649,12 +3658,10 @@ static void emit_prologue(struct lp_build_tgsi_context * bld_base)
    struct gallivm_state * gallivm = bld_base->base.gallivm;
 
    if (bld->indirect_files & (1 << TGSI_FILE_TEMPORARY)) {
-      LLVMValueRef array_size =
-         lp_build_const_int32(gallivm,
-                         bld_base->info->file_max[TGSI_FILE_TEMPORARY] * 4 + 4);
-      bld->temps_array = lp_build_array_alloca(gallivm,
-                                              bld_base->base.vec_type, array_size,
-                                              "temp_array");
+      unsigned array_size = bld_base->info->file_max[TGSI_FILE_TEMPORARY] * 4 + 4;
+      bld->temps_array = lp_build_alloca_undef(gallivm,
+                                               LLVMArrayType(bld_base->base.vec_type, array_size),
+                                               "temp_array");
    }
 
    if (bld->indirect_files & (1 << TGSI_FILE_OUTPUT)) {
@@ -3667,11 +3674,9 @@ static void emit_prologue(struct lp_build_tgsi_context * bld_base)
    }
 
    if (bld->indirect_files & (1 << TGSI_FILE_IMMEDIATE)) {
-      LLVMValueRef array_size =
-         lp_build_const_int32(gallivm,
-                         bld_base->info->file_max[TGSI_FILE_IMMEDIATE] * 4 + 4);
-      bld->imms_array = lp_build_array_alloca(gallivm,
-                                              bld_base->base.vec_type, array_size,
+      unsigned array_size = bld_base->info->file_max[TGSI_FILE_IMMEDIATE] * 4 + 4;
+      bld->imms_array = lp_build_alloca_undef(gallivm,
+                                              LLVMArrayType(bld_base->base.vec_type, array_size),
                                               "imms_array");
    }
 

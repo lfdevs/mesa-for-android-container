@@ -25,6 +25,7 @@
 
 #include <sys/errno.h>
 
+#include "main/arrayobj.h"
 #include "main/blend.h"
 #include "main/context.h"
 #include "main/condrender.h"
@@ -277,8 +278,7 @@ brw_emit_prim(struct brw_context *brw,
 
 
 static void
-brw_merge_inputs(struct brw_context *brw,
-                 const struct gl_vertex_array *arrays)
+brw_merge_inputs(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    const struct gl_context *ctx = &brw->ctx;
@@ -291,8 +291,10 @@ brw_merge_inputs(struct brw_context *brw,
    brw->vb.nr_buffers = 0;
 
    for (i = 0; i < VERT_ATTRIB_MAX; i++) {
-      brw->vb.inputs[i].buffer = -1;
-      brw->vb.inputs[i].glarray = &arrays[i];
+      struct brw_vertex_element *input = &brw->vb.inputs[i];
+      input->buffer = -1;
+      _mesa_draw_attrib_and_binding(ctx, i,
+                                    &input->glattrib, &input->glbinding);
    }
 
    if (devinfo->gen < 8 && !devinfo->is_haswell) {
@@ -305,7 +307,7 @@ brw_merge_inputs(struct brw_context *brw,
          uint8_t wa_flags = 0;
 
          i = u_bit_scan64(&mask);
-         glattrib = brw->vb.inputs[i].glarray->VertexAttrib;
+         glattrib = brw->vb.inputs[i].glattrib;
 
          switch (glattrib->Type) {
 
@@ -574,6 +576,9 @@ brw_predraw_resolve_framebuffer(struct brw_context *brw,
  * If the depth buffer was written to and if it has an accompanying HiZ
  * buffer, then mark that it needs a depth resolve.
  *
+ * If the stencil buffer was written to then mark that it may need to be
+ * copied to an R8 texture.
+ *
  * If the color buffer is a multisample window system buffer, then
  * mark that it needs a downsample.
  *
@@ -617,8 +622,15 @@ brw_postdraw_set_buffers_need_resolve(struct brw_context *brw)
          brw_depth_cache_add_bo(brw, depth_irb->mt->bo);
    }
 
-   if (stencil_irb && brw->stencil_write_enabled)
-      brw_depth_cache_add_bo(brw, stencil_irb->mt->bo);
+   if (stencil_irb && brw->stencil_write_enabled) {
+      struct intel_mipmap_tree *stencil_mt =
+         stencil_irb->mt->stencil_mt != NULL ?
+         stencil_irb->mt->stencil_mt : stencil_irb->mt;
+      brw_depth_cache_add_bo(brw, stencil_mt->bo);
+      intel_miptree_finish_write(brw, stencil_mt, stencil_irb->mt_level,
+                                 stencil_irb->mt_layer,
+                                 stencil_irb->layer_count, ISL_AUX_USAGE_NONE);
+   }
 
    for (unsigned i = 0; i < fb->_NumColorDrawBuffers; i++) {
       struct intel_renderbuffer *irb =
@@ -692,7 +704,6 @@ brw_postdraw_reconcile_align_wa_slices(struct brw_context *brw)
 
 static void
 brw_prepare_drawing(struct gl_context *ctx,
-                    const struct gl_vertex_array *arrays,
                     const struct _mesa_index_buffer *ib,
                     bool index_bounds_valid,
                     GLuint min_index,
@@ -745,7 +756,7 @@ brw_prepare_drawing(struct gl_context *ctx,
 
    /* Bind all inputs, derive varying and size information:
     */
-   brw_merge_inputs(brw, arrays);
+   brw_merge_inputs(brw);
 
    brw->ib.ib = ib;
    brw->ctx.NewDriverState |= BRW_NEW_INDICES;
@@ -779,7 +790,6 @@ brw_finish_drawing(struct gl_context *ctx)
  */
 static void
 brw_draw_single_prim(struct gl_context *ctx,
-                     const struct gl_vertex_array *arrays,
                      const struct _mesa_prim *prim,
                      unsigned prim_id,
                      struct brw_transform_feedback_object *xfb_obj,
@@ -798,7 +808,7 @@ brw_draw_single_prim(struct gl_context *ctx,
    /* Flush the batch if the batch/state buffers are nearly full.  We can
     * grow them if needed, but this is not free, so we'd like to avoid it.
     */
-   intel_batchbuffer_require_space(brw, 1500, RENDER_RING);
+   intel_batchbuffer_require_space(brw, 1500);
    brw_require_statebuffer_space(brw, 2400);
    intel_batchbuffer_save_state(brw);
 
@@ -810,7 +820,7 @@ brw_draw_single_prim(struct gl_context *ctx,
       brw->baseinstance = prim->base_instance;
       if (prim_id > 0) { /* For i == 0 we just did this before the loop */
          brw->ctx.NewDriverState |= BRW_NEW_VERTICES;
-         brw_merge_inputs(brw, arrays);
+         brw_merge_inputs(brw);
       }
    }
 
@@ -825,16 +835,12 @@ brw_draw_single_prim(struct gl_context *ctx,
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
    if (prim_id > 0) {
-      const bool uses_firstvertex =
-         vs_prog_data->uses_basevertex ||
-         vs_prog_data->uses_firstvertex;
-
       const bool uses_draw_parameters =
-         uses_firstvertex ||
+         vs_prog_data->uses_firstvertex ||
          vs_prog_data->uses_baseinstance;
 
       if ((uses_draw_parameters && prim->is_indirect) ||
-          (uses_firstvertex &&
+          (vs_prog_data->uses_firstvertex &&
            brw->draw.params.firstvertex != new_firstvertex) ||
           (vs_prog_data->uses_baseinstance &&
            brw->draw.params.gl_baseinstance != new_baseinstance))
@@ -861,16 +867,20 @@ brw_draw_single_prim(struct gl_context *ctx,
    }
 
    /* gl_DrawID always needs its own vertex buffer since it's not part of
-    * the indirect parameter buffer. If the program uses gl_DrawID we need
-    * to flag BRW_NEW_VERTICES. For the first iteration, we don't have
-    * valid vs_prog_data, but we always flag BRW_NEW_VERTICES before
-    * the loop.
+    * the indirect parameter buffer. Same for is_indexed_draw, which shares
+    * the buffer with gl_DrawID. If the program uses gl_DrawID, we need to
+    * flag BRW_NEW_VERTICES. For the first iteration, we don't have valid
+    * vs_prog_data, but we always flag BRW_NEW_VERTICES before the loop.
     */
-   brw->draw.gl_drawid = prim->draw_id;
-   brw_bo_unreference(brw->draw.draw_id_bo);
-   brw->draw.draw_id_bo = NULL;
    if (prim_id > 0 && vs_prog_data->uses_drawid)
       brw->ctx.NewDriverState |= BRW_NEW_VERTICES;
+
+   brw->draw.derived_params.gl_drawid = prim->draw_id;
+   brw->draw.derived_params.is_indexed_draw = prim->indexed ? ~0 : 0;
+
+   brw_bo_unreference(brw->draw.derived_draw_params_bo);
+   brw->draw.derived_draw_params_bo = NULL;
+   brw->draw.derived_draw_params_offset = 0;
 
    if (devinfo->gen < 6)
       brw_set_prim(brw, prim);
@@ -917,20 +927,6 @@ retry:
 }
 
 
-static bool
-all_varyings_in_vbos(const struct gl_vertex_array *arrays)
-{
-   GLuint i;
-
-   for (i = 0; i < VERT_ATTRIB_MAX; i++)
-      if (arrays[i].BufferBinding->Stride &&
-          arrays[i].BufferBinding->BufferObj->Name == 0)
-         return false;
-
-   return true;
-}
-
-
 
 void
 brw_draw_prims(struct gl_context *ctx,
@@ -946,15 +942,9 @@ brw_draw_prims(struct gl_context *ctx,
 {
    unsigned i;
    struct brw_context *brw = brw_context(ctx);
-   const struct gl_vertex_array *arrays;
    int predicate_state = brw->predicate.state;
    struct brw_transform_feedback_object *xfb_obj =
       (struct brw_transform_feedback_object *) gl_xfb_obj;
-
-   /* The initial pushdown of the inputs array into the drivers */
-   _mesa_set_drawing_arrays(ctx, brw->vb.draw_arrays.inputs);
-   arrays = ctx->Array._DrawArrays;
-   _vbo_update_inputs(ctx, &brw->vb.draw_arrays);
 
    if (!brw_check_conditional_render(brw))
       return;
@@ -982,15 +972,14 @@ brw_draw_prims(struct gl_context *ctx,
     * get the minimum and maximum of their index buffer so we know what range
     * to upload.
     */
-   if (!index_bounds_valid && !all_varyings_in_vbos(arrays)) {
+   if (!index_bounds_valid && _mesa_draw_user_array_bits(ctx) != 0) {
       perf_debug("Scanning index buffer to compute index buffer bounds.  "
                  "Use glDrawRangeElements() to avoid this.\n");
       vbo_get_minmax_indices(ctx, prims, ib, &min_index, &max_index, nr_prims);
       index_bounds_valid = true;
    }
 
-   brw_prepare_drawing(ctx, arrays, ib, index_bounds_valid, min_index,
-                       max_index);
+   brw_prepare_drawing(ctx, ib, index_bounds_valid, min_index, max_index);
    /* Try drawing with the hardware, but don't do anything else if we can't
     * manage it.  swrast doesn't support our featureset, so we can't fall back
     * to it.
@@ -1027,8 +1016,7 @@ brw_draw_prims(struct gl_context *ctx,
          brw->predicate.state = BRW_PREDICATE_STATE_USE_BIT;
       }
 
-      brw_draw_single_prim(ctx, arrays, &prims[i], i, xfb_obj, stream,
-                           indirect);
+      brw_draw_single_prim(ctx, &prims[i], i, xfb_obj, stream, indirect);
    }
 
    brw_finish_drawing(ctx);
@@ -1096,9 +1084,6 @@ brw_init_draw_functions(struct dd_function_table *functions)
 void
 brw_draw_init(struct brw_context *brw)
 {
-   /* Keep our list of gl_vertex_array inputs */
-   _vbo_init_inputs(&brw->vb.draw_arrays);
-
    for (int i = 0; i < VERT_ATTRIB_MAX; i++)
       brw->vb.inputs[i].buffer = -1;
    brw->vb.nr_buffers = 0;

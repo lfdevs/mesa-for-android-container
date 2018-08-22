@@ -241,6 +241,11 @@ struct gen_device_info
     */
    uint64_t timestamp_frequency;
 
+   /**
+    * ID to put into the .aub files.
+    */
+   int simulator_id;
+
    /** @} */
 };
 

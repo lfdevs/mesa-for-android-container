@@ -805,7 +805,7 @@ VdpStatus vlVdpOutputSurfaceDMABuf(VdpOutputSurface surface,
    vlsurface->device->context->flush(vlsurface->device->context, NULL, 0);
 
    memset(&whandle, 0, sizeof(struct winsys_handle));
-   whandle.type = DRM_API_HANDLE_TYPE_FD;
+   whandle.type = WINSYS_HANDLE_TYPE_FD;
 
    pscreen = vlsurface->surface->texture->screen;
    if (!pscreen->resource_get_handle(pscreen, vlsurface->device->context,

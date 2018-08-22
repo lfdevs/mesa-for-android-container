@@ -127,12 +127,18 @@ static inline void virgl_ws_fill_new_caps_defaults(struct virgl_drm_caps *caps)
    caps->caps.v2.max_geom_total_output_components = 1024;
    caps->caps.v2.max_vertex_outputs = 32;
    caps->caps.v2.max_vertex_attribs = 16;
-   caps->caps.v2.max_shader_patch_varyings = 0;
+   caps->caps.v2.max_shader_patch_varyings = 30;
    caps->caps.v2.min_texel_offset = -8;
    caps->caps.v2.max_texel_offset = 7;
    caps->caps.v2.min_texture_gather_offset = -8;
    caps->caps.v2.max_texture_gather_offset = 7;
    caps->caps.v2.texture_buffer_offset_alignment = 0;
    caps->caps.v2.uniform_buffer_offset_alignment = 256;
+   caps->caps.v2.shader_buffer_offset_alignment = 32;
+   caps->caps.v2.capability_bits = 0;
+   caps->caps.v2.max_vertex_attrib_stride = 0;
+   caps->caps.v2.max_image_samples = 0;
+   caps->caps.v2.max_compute_work_group_invocations = 0;
+   caps->caps.v2.max_compute_shared_memory_size = 0;
 }
 #endif

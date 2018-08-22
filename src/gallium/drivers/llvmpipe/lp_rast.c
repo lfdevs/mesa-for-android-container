@@ -107,7 +107,7 @@ lp_rast_tile_begin(struct lp_rasterizer_task *task,
                     task->scene->fb.height - y * TILE_SIZE : TILE_SIZE;
 
    task->thread_data.vis_counter = 0;
-   task->ps_invocations = 0;
+   task->thread_data.ps_invocations = 0;
 
    for (i = 0; i < task->scene->fb.nr_cbufs; i++) {
       if (task->scene->fb.cbufs[i]) {
@@ -446,10 +446,6 @@ lp_rast_shade_quads_mask(struct lp_rasterizer_task *task,
     * allocated 4x4 blocks hence need to filter them out here.
     */
    if ((x % TILE_SIZE) < task->width && (y % TILE_SIZE) < task->height) {
-      /* not very accurate would need a popcount on the mask */
-      /* always count this not worth bothering? */
-      task->ps_invocations += 1 * variant->ps_inv_multiplier;
-
       /* Propagate non-interpolated raster state. */
       task->thread_data.raster_state.viewport_index = inputs->viewport_index;
 
@@ -491,7 +487,7 @@ lp_rast_begin_query(struct lp_rasterizer_task *task,
       pq->start[task->thread_index] = task->thread_data.vis_counter;
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
-      pq->start[task->thread_index] = task->ps_invocations;
+      pq->start[task->thread_index] = task->thread_data.ps_invocations;
       break;
    default:
       assert(0);
@@ -524,7 +520,7 @@ lp_rast_end_query(struct lp_rasterizer_task *task,
       break;
    case PIPE_QUERY_PIPELINE_STATISTICS:
       pq->end[task->thread_index] +=
-         task->ps_invocations - pq->start[task->thread_index];
+         task->thread_data.ps_invocations - pq->start[task->thread_index];
       pq->start[task->thread_index] = 0;
       break;
    default:
@@ -679,7 +675,7 @@ rasterize_scene(struct lp_rasterizer_task *task,
 #endif
 #endif
 
-   if (!task->rast->no_rast && !scene->discard) {
+   if (!task->rast->no_rast) {
       /* loop over scene bins, rasterize each */
       {
          struct cmd_bin *bin;

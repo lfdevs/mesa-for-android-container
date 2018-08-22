@@ -43,6 +43,29 @@
 #include <inttypes.h>
 
 #define ITEM_ALIGNMENT 1024
+
+/* A few forward declarations of static functions */
+static void compute_memory_shadow(struct compute_memory_pool* pool,
+	struct pipe_context *pipe, int device_to_host);
+
+static void compute_memory_defrag(struct compute_memory_pool *pool,
+	struct pipe_resource *src, struct pipe_resource *dst,
+	struct pipe_context *pipe);
+
+static int compute_memory_promote_item(struct compute_memory_pool *pool,
+	struct compute_memory_item *item, struct pipe_context *pipe,
+	int64_t allocated);
+
+static void compute_memory_move_item(struct compute_memory_pool *pool,
+	struct pipe_resource *src, struct pipe_resource *dst,
+	struct compute_memory_item *item, uint64_t new_start_in_dw,
+	struct pipe_context *pipe);
+
+static void compute_memory_transfer(struct compute_memory_pool* pool,
+	struct pipe_context * pipe, int device_to_host,
+	struct compute_memory_item* chunk, void* data,
+	int offset_in_chunk, int size);
+
 /**
  * Creates a new pool.
  */
@@ -91,7 +114,7 @@ void compute_memory_pool_delete(struct compute_memory_pool* pool)
 {
 	COMPUTE_DBG(pool->screen, "* compute_memory_pool_delete()\n");
 	free(pool->shadow);
-	pipe_resource_reference(&pool->bo, NULL);
+	r600_resource_reference(&pool->bo, NULL);
 	/* In theory, all of the items were freed in compute_memory_free.
 	 * Just delete the list heads
 	 */
@@ -102,88 +125,11 @@ void compute_memory_pool_delete(struct compute_memory_pool* pool)
 }
 
 /**
- * Searches for an empty space in the pool, return with the pointer to the
- * allocatable space in the pool.
- * \param size_in_dw	The size of the space we are looking for.
- * \return -1 on failure
- */
-int64_t compute_memory_prealloc_chunk(
-	struct compute_memory_pool* pool,
-	int64_t size_in_dw)
-{
-	struct compute_memory_item *item;
-
-	int last_end = 0;
-
-	assert(size_in_dw <= pool->size_in_dw);
-
-	COMPUTE_DBG(pool->screen, "* compute_memory_prealloc_chunk() size_in_dw = %"PRIi64"\n",
-		size_in_dw);
-
-	LIST_FOR_EACH_ENTRY(item, pool->item_list, link) {
-		if (last_end + size_in_dw <= item->start_in_dw) {
-			return last_end;
-		}
-
-		last_end = item->start_in_dw + align(item->size_in_dw, ITEM_ALIGNMENT);
-	}
-
-	if (pool->size_in_dw - last_end < size_in_dw) {
-		return -1;
-	}
-
-	return last_end;
-}
-
-/**
- *  Search for the chunk where we can link our new chunk after it.
- *  \param start_in_dw	The position of the item we want to add to the pool.
- *  \return The item that is just before the passed position
- */
-struct list_head *compute_memory_postalloc_chunk(
-	struct compute_memory_pool* pool,
-	int64_t start_in_dw)
-{
-	struct compute_memory_item *item;
-	struct compute_memory_item *next;
-	struct list_head *next_link;
-
-	COMPUTE_DBG(pool->screen, "* compute_memory_postalloc_chunck() start_in_dw = %"PRIi64"\n",
-		start_in_dw);
-
-	/* Check if we can insert it in the front of the list */
-	item = LIST_ENTRY(struct compute_memory_item, pool->item_list->next, link);
-	if (LIST_IS_EMPTY(pool->item_list) || item->start_in_dw > start_in_dw) {
-		return pool->item_list;
-	}
-
-	LIST_FOR_EACH_ENTRY(item, pool->item_list, link) {
-		next_link = item->link.next;
-
-		if (next_link != pool->item_list) {
-			next = container_of(next_link, item, link);
-			if (item->start_in_dw < start_in_dw
-				&& next->start_in_dw > start_in_dw) {
-				return &item->link;
-			}
-		}
-		else {
-			/* end of chain */
-			assert(item->start_in_dw < start_in_dw);
-			return &item->link;
-		}
-	}
-
-	assert(0 && "unreachable");
-	return NULL;
-}
-
-/**
  * Reallocates and defragments the pool, conserves data.
  * \returns -1 if it fails, 0 otherwise
  * \see compute_memory_finalize_pending
  */
-int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
+static int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
 	struct pipe_context *pipe, int new_size_in_dw)
 {
 	new_size_in_dw = align(new_size_in_dw, ITEM_ALIGNMENT);
@@ -211,7 +157,7 @@ int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
 			compute_memory_defrag(pool, src, dst, pipe);
 
 			/* Release the old buffer */
-			pipe_resource_reference(&pool->bo, NULL);
+			r600_resource_reference(&pool->bo, NULL);
 			pool->bo = temp;
 			pool->size_in_dw = new_size_in_dw;
 		}
@@ -226,7 +172,7 @@ int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
 
 			pool->size_in_dw = new_size_in_dw;
 			/* Release the old buffer */
-			pipe_resource_reference(&pool->bo, NULL);
+			r600_resource_reference(&pool->bo, NULL);
 			pool->bo = r600_compute_buffer_alloc_vram(pool->screen, pool->size_in_dw * 4);
 			compute_memory_shadow(pool, pipe, 0);
 
@@ -245,7 +191,7 @@ int compute_memory_grow_defrag_pool(struct compute_memory_pool *pool,
  * \param device_to_host 1 for device->host, 0 for host->device
  * \see compute_memory_grow_defrag_pool
  */
-void compute_memory_shadow(struct compute_memory_pool* pool,
+static void compute_memory_shadow(struct compute_memory_pool* pool,
 	struct pipe_context * pipe, int device_to_host)
 {
 	struct compute_memory_item chunk;
@@ -339,7 +285,7 @@ int compute_memory_finalize_pending(struct compute_memory_pool* pool,
  * \param dst	The destination resource
  * \see compute_memory_grow_defrag_pool and compute_memory_finalize_pending
  */
-void compute_memory_defrag(struct compute_memory_pool *pool,
+static void compute_memory_defrag(struct compute_memory_pool *pool,
 	struct pipe_resource *src, struct pipe_resource *dst,
 	struct pipe_context *pipe)
 {
@@ -369,7 +315,7 @@ void compute_memory_defrag(struct compute_memory_pool *pool,
  * \return -1 if it fails, 0 otherwise
  * \see compute_memory_finalize_pending
  */
-int compute_memory_promote_item(struct compute_memory_pool *pool,
+static int compute_memory_promote_item(struct compute_memory_pool *pool,
 		struct compute_memory_item *item, struct pipe_context *pipe,
 		int64_t start_in_dw)
 {
@@ -474,7 +420,7 @@ void compute_memory_demote_item(struct compute_memory_pool *pool,
  * \param new_start_in_dw	The new position of the item in \a item_list
  * \see compute_memory_defrag
  */
-void compute_memory_move_item(struct compute_memory_pool *pool,
+static void compute_memory_move_item(struct compute_memory_pool *pool,
 	struct pipe_resource *src, struct pipe_resource *dst,
 	struct compute_memory_item *item, uint64_t new_start_in_dw,
 	struct pipe_context *pipe)
@@ -646,7 +592,7 @@ struct compute_memory_item* compute_memory_alloc(
  * \param device_to_host 1 for device->host, 0 for host->device.
  * \see compute_memory_shadow
  */
-void compute_memory_transfer(
+static void compute_memory_transfer(
 	struct compute_memory_pool* pool,
 	struct pipe_context * pipe,
 	int device_to_host,
@@ -685,19 +631,4 @@ void compute_memory_transfer(
 		memcpy(map + internal_offset, data, size);
 		pipe->transfer_unmap(pipe, xfer);
 	}
-}
-
-/**
- * Transfer data between chunk<->data, it is for VRAM<->GART transfers
- */
-void compute_memory_transfer_direct(
-	struct compute_memory_pool* pool,
-	int chunk_to_data,
-	struct compute_memory_item* chunk,
-	struct r600_resource* data,
-	int offset_in_chunk,
-	int offset_in_data,
-	int size)
-{
-	///TODO: DMA
 }

@@ -87,9 +87,8 @@ struct cso_context {
     */
    int max_sampler_seen;
 
-   struct pipe_vertex_buffer aux_vertex_buffer_current;
-   struct pipe_vertex_buffer aux_vertex_buffer_saved;
-   unsigned aux_vertex_buffer_index;
+   struct pipe_vertex_buffer vertex_buffer0_current;
+   struct pipe_vertex_buffer vertex_buffer0_saved;
 
    struct pipe_constant_buffer aux_constbuf_current[PIPE_SHADER_TYPES];
    struct pipe_constant_buffer aux_constbuf_saved[PIPE_SHADER_TYPES];
@@ -161,7 +160,7 @@ static boolean delete_depth_stencil_state(struct cso_context *ctx, void *state)
    return TRUE;
 }
 
-static boolean delete_sampler_state(struct cso_context *ctx, void *state)
+static boolean delete_sampler_state(UNUSED struct cso_context *ctx, void *state)
 {
    struct cso_sampler *cso = (struct cso_sampler *)state;
    if (cso->delete_state)
@@ -291,8 +290,7 @@ static void cso_init_vbuf(struct cso_context *cso, unsigned flags)
 
    /* Install u_vbuf if there is anything unsupported. */
    if (u_vbuf_get_caps(cso->pipe->screen, &caps, flags)) {
-      cso->vbuf = u_vbuf_create(cso->pipe, &caps,
-                                cso->aux_vertex_buffer_index);
+      cso->vbuf = u_vbuf_create(cso->pipe, &caps);
    }
 }
 
@@ -312,8 +310,6 @@ cso_create_context(struct pipe_context *pipe, unsigned u_vbuf_flags)
 
    ctx->pipe = pipe;
    ctx->sample_mask = ~0;
-
-   ctx->aux_vertex_buffer_index = 0; /* 0 for now */
 
    cso_init_vbuf(ctx, u_vbuf_flags);
 
@@ -417,8 +413,8 @@ void cso_destroy_context( struct cso_context *ctx )
    util_unreference_framebuffer_state(&ctx->fb);
    util_unreference_framebuffer_state(&ctx->fb_saved);
 
-   pipe_vertex_buffer_unreference(&ctx->aux_vertex_buffer_current);
-   pipe_vertex_buffer_unreference(&ctx->aux_vertex_buffer_saved);
+   pipe_vertex_buffer_unreference(&ctx->vertex_buffer0_current);
+   pipe_vertex_buffer_unreference(&ctx->vertex_buffer0_saved);
 
    for (i = 0; i < PIPE_SHADER_TYPES; i++) {
       pipe_resource_reference(&ctx->aux_constbuf_current[i].buffer, NULL);
@@ -1151,6 +1147,9 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
 {
    struct u_vbuf *vbuf = ctx->vbuf;
 
+   if (!count)
+      return;
+
    if (vbuf) {
       u_vbuf_set_vertex_buffers(vbuf, start_slot, count, buffers);
       return;
@@ -1158,15 +1157,12 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
 
    /* Save what's in the auxiliary slot, so that we can save and restore it
     * for meta ops. */
-   if (start_slot <= ctx->aux_vertex_buffer_index &&
-       start_slot+count > ctx->aux_vertex_buffer_index) {
+   if (start_slot == 0) {
       if (buffers) {
-         const struct pipe_vertex_buffer *vb =
-               buffers + (ctx->aux_vertex_buffer_index - start_slot);
-
-         pipe_vertex_buffer_reference(&ctx->aux_vertex_buffer_current, vb);
+         pipe_vertex_buffer_reference(&ctx->vertex_buffer0_current,
+                                      buffers);
       } else {
-         pipe_vertex_buffer_unreference(&ctx->aux_vertex_buffer_current);
+         pipe_vertex_buffer_unreference(&ctx->vertex_buffer0_current);
       }
    }
 
@@ -1174,39 +1170,32 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
 }
 
 static void
-cso_save_aux_vertex_buffer_slot(struct cso_context *ctx)
+cso_save_vertex_buffer0(struct cso_context *ctx)
 {
    struct u_vbuf *vbuf = ctx->vbuf;
 
    if (vbuf) {
-      u_vbuf_save_aux_vertex_buffer_slot(vbuf);
+      u_vbuf_save_vertex_buffer0(vbuf);
       return;
    }
 
-   pipe_vertex_buffer_reference(&ctx->aux_vertex_buffer_saved,
-                                &ctx->aux_vertex_buffer_current);
+   pipe_vertex_buffer_reference(&ctx->vertex_buffer0_saved,
+                                &ctx->vertex_buffer0_current);
 }
 
 static void
-cso_restore_aux_vertex_buffer_slot(struct cso_context *ctx)
+cso_restore_vertex_buffer0(struct cso_context *ctx)
 {
    struct u_vbuf *vbuf = ctx->vbuf;
 
    if (vbuf) {
-      u_vbuf_restore_aux_vertex_buffer_slot(vbuf);
+      u_vbuf_restore_vertex_buffer0(vbuf);
       return;
    }
 
-   cso_set_vertex_buffers(ctx, ctx->aux_vertex_buffer_index, 1,
-                          &ctx->aux_vertex_buffer_saved);
-   pipe_vertex_buffer_unreference(&ctx->aux_vertex_buffer_saved);
+   cso_set_vertex_buffers(ctx, 0, 1, &ctx->vertex_buffer0_saved);
+   pipe_vertex_buffer_unreference(&ctx->vertex_buffer0_saved);
 }
-
-unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx)
-{
-   return ctx->aux_vertex_buffer_index;
-}
-
 
 
 void
@@ -1595,7 +1584,7 @@ cso_save_state(struct cso_context *cso, unsigned state_mask)
    cso->saved_state = state_mask;
 
    if (state_mask & CSO_BIT_AUX_VERTEX_BUFFER_SLOT)
-      cso_save_aux_vertex_buffer_slot(cso);
+      cso_save_vertex_buffer0(cso);
    if (state_mask & CSO_BIT_BLEND)
       cso_save_blend(cso);
    if (state_mask & CSO_BIT_DEPTH_STENCIL_ALPHA)
@@ -1650,7 +1639,7 @@ cso_restore_state(struct cso_context *cso)
    assert(state_mask);
 
    if (state_mask & CSO_BIT_AUX_VERTEX_BUFFER_SLOT)
-      cso_restore_aux_vertex_buffer_slot(cso);
+      cso_restore_vertex_buffer0(cso);
    if (state_mask & CSO_BIT_BLEND)
       cso_restore_blend(cso);
    if (state_mask & CSO_BIT_DEPTH_STENCIL_ALPHA)

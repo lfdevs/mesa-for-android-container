@@ -67,7 +67,7 @@ struct fd_acc_sample_provider {
 	void (*resume)(struct fd_acc_query *aq, struct fd_batch *batch);
 	void (*pause)(struct fd_acc_query *aq, struct fd_batch *batch);
 
-	void (*result)(struct fd_context *ctx, void *buf,
+	void (*result)(struct fd_acc_query *aq, void *buf,
 			union pipe_query_result *result);
 };
 
@@ -77,11 +77,18 @@ struct fd_acc_query {
 	const struct fd_acc_sample_provider *provider;
 
 	struct pipe_resource *prsc;
-	unsigned offset;
+
+	/* usually the same as provider->size but for batch queries we
+	 * need to calculate the size dynamically when the query is
+	 * allocated:
+	 */
+	unsigned size;
 
 	struct list_head node;   /* list-node in ctx->active_acc_queries */
 
 	int no_wait_cnt;         /* see fd_acc_get_query_result() */
+
+	void *query_data;        /* query specific data */
 };
 
 static inline struct fd_acc_query *
@@ -91,6 +98,8 @@ fd_acc_query(struct fd_query *q)
 }
 
 struct fd_query * fd_acc_create_query(struct fd_context *ctx, unsigned query_type);
+struct fd_query * fd_acc_create_query2(struct fd_context *ctx, unsigned query_type,
+		const struct fd_acc_sample_provider *provider);
 void fd_acc_query_set_stage(struct fd_batch *batch, enum fd_render_stage stage);
 void fd_acc_query_register_provider(struct pipe_context *pctx,
 		const struct fd_acc_sample_provider *provider);

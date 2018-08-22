@@ -106,8 +106,6 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 			.vclamp_color = ctx->rasterizer->clamp_vertex_color,
 			.fclamp_color = ctx->rasterizer->clamp_fragment_color,
 			.rasterflat = ctx->rasterizer->flatshade,
-			.half_precision = ctx->in_blit &&
-					fd_half_precision(&ctx->batch->framebuffer),
 			.ucp_enables = ctx->rasterizer->clip_plane_enable,
 			.has_per_samp = (fd5_ctx->fsaturate || fd5_ctx->vsaturate ||
 					fd5_ctx->fastc_srgb || fd5_ctx->vastc_srgb),
@@ -119,6 +117,8 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 			.fsaturate_r = fd5_ctx->fsaturate_r,
 			.vastc_srgb = fd5_ctx->vastc_srgb,
 			.fastc_srgb = fd5_ctx->fastc_srgb,
+			.vsamples = ctx->tex[PIPE_SHADER_VERTEX].samples,
+			.fsamples = ctx->tex[PIPE_SHADER_FRAGMENT].samples,
 		},
 		.rasterflat = ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
@@ -135,6 +135,9 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 
 	if (!vp || !fp)
 		return false;
+
+	ctx->stats.vs_regs += ir3_shader_halfregs(vp);
+	ctx->stats.fs_regs += ir3_shader_halfregs(fp);
 
 	/* figure out whether we need to disable LRZ write for binning
 	 * pass using draw pass's fp:
@@ -209,7 +212,8 @@ fd5_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_RING(ring, 0x20fffff);
 
 	OUT_PKT4(ring, REG_A5XX_GRAS_SU_CNTL, 1);
-	OUT_RING(ring, A5XX_GRAS_SU_CNTL_LINEHALFWIDTH(0.0));
+	OUT_RING(ring, A5XX_GRAS_SU_CNTL_LINEHALFWIDTH(0.0) |
+			COND(zsbuf->base.nr_samples > 1, A5XX_GRAS_SU_CNTL_MSAA_ENABLE));
 
 	OUT_PKT4(ring, REG_A5XX_GRAS_CNTL, 1);
 	OUT_RING(ring, 0x00000000);

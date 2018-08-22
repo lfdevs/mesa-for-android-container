@@ -106,7 +106,7 @@ tgsi_util_set_src_register_swizzle(struct tgsi_src_register *reg,
 unsigned
 tgsi_util_get_full_src_register_sign_mode(
    const struct tgsi_full_src_register *reg,
-   unsigned component)
+   UNUSED unsigned component)
 {
    unsigned sign_mode;
 

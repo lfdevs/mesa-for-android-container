@@ -52,7 +52,7 @@ dri2_query_renderer_integer(__DRIscreen *_screen, int param,
       value[0] =
          screen->base.screen->is_format_supported(screen->base.screen,
                                                   PIPE_FORMAT_B8G8R8A8_SRGB,
-                                                  PIPE_TEXTURE_2D, 0,
+                                                  PIPE_TEXTURE_2D, 0, 0,
                                                   PIPE_BIND_RENDER_TARGET);
       return 0;
    case __DRI2_RENDERER_HAS_CONTEXT_PRIORITY:

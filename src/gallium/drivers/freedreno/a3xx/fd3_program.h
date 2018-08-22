@@ -33,10 +33,6 @@
 #include "freedreno_context.h"
 #include "ir3_shader.h"
 
-struct fd3_shader_stateobj {
-	struct ir3_shader *shader;
-};
-
 struct fd3_emit;
 
 void fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
@@ -44,7 +40,7 @@ void fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 void fd3_prog_init(struct pipe_context *pctx);
 
-bool fd3_needs_manual_clipping(const struct fd3_shader_stateobj *,
+bool fd3_needs_manual_clipping(const struct ir3_shader *,
 							   const struct pipe_rasterizer_state *);
 
 #endif /* FD3_PROGRAM_H_ */

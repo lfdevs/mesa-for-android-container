@@ -73,7 +73,7 @@ aa_decl(struct tgsi_transform_context *ctx,
       ts->num_input++;
    }
    else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
-      ts->num_tmp = MAX2(ts->num_tmp, decl->Range.Last + 1);
+      ts->num_tmp = MAX2(ts->num_tmp, (unsigned)(decl->Range.Last + 1));
    }
 
    ctx->emit_declaration(ctx, decl);
@@ -217,7 +217,7 @@ aa_inst(struct tgsi_transform_context *ctx,
    for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
       struct tgsi_full_dst_register *dst = &inst->Dst[i];
       if (dst->Register.File == TGSI_FILE_OUTPUT &&
-          dst->Register.Index == ts->color_out) {
+	  dst->Register.Index == (int)ts->color_out) {
          dst->Register.File = TGSI_FILE_TEMPORARY;
          dst->Register.Index = ts->color_tmp;
       }

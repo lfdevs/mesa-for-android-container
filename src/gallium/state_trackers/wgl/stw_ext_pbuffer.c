@@ -101,45 +101,47 @@ wglCreatePbufferARB(HDC hCurrentDC,
       return 0;
    }
 
-   for (piAttrib = piAttribList; *piAttrib; piAttrib++) {
-      switch (*piAttrib) {
-      case WGL_PBUFFER_LARGEST_ARB:
-         piAttrib++;
-         useLargest = *piAttrib;
-         break;
-       case WGL_TEXTURE_FORMAT_ARB:
-          /* WGL_ARB_render_texture */
-          piAttrib++;
-          textureFormat = *piAttrib;
-          if (textureFormat != WGL_TEXTURE_RGB_ARB &&
-             textureFormat != WGL_TEXTURE_RGBA_ARB &&
-             textureFormat != WGL_NO_TEXTURE_ARB) {
-             SetLastError(ERROR_INVALID_DATA);
-             return 0;
-          }
-          break;
-       case WGL_TEXTURE_TARGET_ARB:
-          /* WGL_ARB_render_texture */
-          piAttrib++;
-          textureTarget = *piAttrib;
-          if (textureTarget != WGL_TEXTURE_CUBE_MAP_ARB &&
-              textureTarget != WGL_TEXTURE_1D_ARB &&
-              textureTarget != WGL_TEXTURE_2D_ARB &&
-              textureTarget != WGL_NO_TEXTURE_ARB) {
-             SetLastError(ERROR_INVALID_DATA);
-             return 0;
-          }
-          break;
-      case WGL_MIPMAP_TEXTURE_ARB:
-         /* WGL_ARB_render_texture */
-         piAttrib++;
-         textureMipmap = !!*piAttrib;
-         break;
-      default:
-         SetLastError(ERROR_INVALID_DATA);
-         debug_printf("wgl: Unsupported attribute 0x%x in %s\n",
-                      *piAttrib, __func__);
-         return 0;
+   if (piAttribList) {
+      for (piAttrib = piAttribList; *piAttrib; piAttrib++) {
+         switch (*piAttrib) {
+         case WGL_PBUFFER_LARGEST_ARB:
+            piAttrib++;
+            useLargest = *piAttrib;
+            break;
+          case WGL_TEXTURE_FORMAT_ARB:
+             /* WGL_ARB_render_texture */
+             piAttrib++;
+             textureFormat = *piAttrib;
+             if (textureFormat != WGL_TEXTURE_RGB_ARB &&
+                textureFormat != WGL_TEXTURE_RGBA_ARB &&
+                textureFormat != WGL_NO_TEXTURE_ARB) {
+                SetLastError(ERROR_INVALID_DATA);
+                return 0;
+             }
+             break;
+          case WGL_TEXTURE_TARGET_ARB:
+             /* WGL_ARB_render_texture */
+             piAttrib++;
+             textureTarget = *piAttrib;
+             if (textureTarget != WGL_TEXTURE_CUBE_MAP_ARB &&
+                 textureTarget != WGL_TEXTURE_1D_ARB &&
+                 textureTarget != WGL_TEXTURE_2D_ARB &&
+                 textureTarget != WGL_NO_TEXTURE_ARB) {
+                SetLastError(ERROR_INVALID_DATA);
+                return 0;
+             }
+             break;
+         case WGL_MIPMAP_TEXTURE_ARB:
+            /* WGL_ARB_render_texture */
+            piAttrib++;
+            textureMipmap = !!*piAttrib;
+            break;
+         default:
+            SetLastError(ERROR_INVALID_DATA);
+            debug_printf("wgl: Unsupported attribute 0x%x in %s\n",
+                         *piAttrib, __func__);
+            return 0;
+         }
       }
    }
 

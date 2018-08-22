@@ -37,59 +37,9 @@
 #include "intel_mipmap_tree.h"
 #include "intel_fbo.h"
 #include "intel_tex.h"
-#include "intel_blit.h"
 #include "brw_context.h"
 
 #define FILE_DEBUG_FLAG DEBUG_TEXTURE
-
-
-static bool
-intel_copy_texsubimage(struct brw_context *brw,
-                       struct intel_texture_image *intelImage,
-                       GLint dstx, GLint dsty, GLint slice,
-                       struct intel_renderbuffer *irb,
-                       GLint x, GLint y, GLsizei width, GLsizei height)
-{
-   const GLenum internalFormat = intelImage->base.Base.InternalFormat;
-
-   if (!intelImage->mt || !irb || !irb->mt) {
-      if (unlikely(INTEL_DEBUG & DEBUG_PERF))
-	 fprintf(stderr, "%s fail %p %p (0x%08x)\n",
-		 __func__, intelImage->mt, irb, internalFormat);
-      return false;
-   }
-
-   /* No pixel transfer operations (zoom, bias, mapping), just a blit */
-   if (brw->ctx._ImageTransferState)
-      return false;
-
-   intel_prepare_render(brw);
-
-   /* glCopyTexSubImage() can be called on a multisampled renderbuffer (if
-    * that renderbuffer is associated with the window system framebuffer),
-    * however the hardware blitter can't handle this case, so fall back to
-    * meta (which can, since it uses ReadPixels).
-    */
-   if (irb->Base.Base.NumSamples != 0)
-      return false;
-
-   /* glCopyTexSubImage() can't be called on a multisampled texture. */
-   assert(intelImage->base.Base.NumSamples == 0);
-
-   /* account for view parameters and face index */
-   int dst_level = intelImage->base.Base.Level +
-                   intelImage->base.Base.TexObject->MinLevel;
-   int dst_slice = slice + intelImage->base.Base.Face +
-                   intelImage->base.Base.TexObject->MinLayer;
-
-   /* blit from src buffer to texture */
-   return intel_miptree_blit(brw,
-                             irb->mt, irb->mt_level, irb->mt_layer,
-                             x, y, irb->Base.Base.Name == 0,
-                             intelImage->mt, dst_level, dst_slice,
-                             dstx, dsty, false,
-                             width, height, COLOR_LOGICOP_COPY);
-}
 
 
 static void
@@ -106,14 +56,6 @@ intelCopyTexSubImage(struct gl_context *ctx, GLuint dims,
    if (brw_blorp_copytexsubimage(brw, rb, texImage, slice, x, y,
                                  xoffset, yoffset, width, height))
       return;
-
-   /* Next, try the BLT engine. */
-   if (intel_copy_texsubimage(brw,
-                              intel_texture_image(texImage),
-                              xoffset, yoffset, slice,
-                              intel_renderbuffer(rb), x, y, width, height)) {
-      return;
-   }
 
    /* Finally, fall back to meta.  This will likely be slow. */
    perf_debug("%s - fallback to swrast\n", __func__);

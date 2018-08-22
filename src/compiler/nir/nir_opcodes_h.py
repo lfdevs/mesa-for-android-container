@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 template = """\
 /* Copyright (C) 2014 Connor Abbott
@@ -28,7 +29,7 @@ template = """\
 #ifndef _NIR_OPCODES_
 #define _NIR_OPCODES_
 
-<% opcode_names = sorted(opcodes.iterkeys()) %>
+<% opcode_names = sorted(opcodes.keys()) %>
 
 typedef enum {
 % for name in opcode_names:
@@ -43,4 +44,4 @@ typedef enum {
 from nir_opcodes import opcodes
 from mako.template import Template
 
-print Template(template).render(opcodes=opcodes)
+print(Template(template).render(opcodes=opcodes))

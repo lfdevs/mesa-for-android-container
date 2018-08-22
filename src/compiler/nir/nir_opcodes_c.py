@@ -23,6 +23,8 @@
 # Authors:
 #    Connor Abbott (cwabbott0@gmail.com)
 
+from __future__ import print_function
+
 from nir_opcodes import opcodes
 from mako.template import Template
 
@@ -62,14 +64,19 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd
 %                 endif
 %              endif
                switch (dst_bit_size) {
-%                 for dst_bits in [16, 32, 64]:
+%                 if dst_t == 'float':
+<%                    bit_sizes = [16, 32, 64] %>
+%                 else:
+<%                    bit_sizes = [8, 16, 32, 64] %>
+%                 endif
+%                 for dst_bits in bit_sizes:
                   case ${dst_bits}:
 %                    if src_t == 'float' and dst_t == 'float' and dst_bits == 16:
                      switch(rnd) {
-%                       for rnd_t in ['rtne', 'rtz', 'undef']:
-                        case nir_rounding_mode_${rnd_t}:
-                           return ${'nir_op_{0}2{1}{2}_{3}'.format(src_t[0], dst_t[0],
-                                                                   dst_bits, rnd_t)};
+%                       for rnd_t in [('rtne', '_rtne'), ('rtz', '_rtz'), ('undef', '')]:
+                        case nir_rounding_mode_${rnd_t[0]}:
+                           return ${'nir_op_{0}2{1}{2}{3}'.format(src_t[0], dst_t[0],
+                                                                   dst_bits, rnd_t[1])};
 %                       endfor
                         default:
                            unreachable("Invalid 16-bit nir rounding mode");
@@ -109,7 +116,7 @@ nir_type_conversion_op(nir_alu_type src, nir_alu_type dst, nir_rounding_mode rnd
 }
 
 const nir_op_info nir_op_infos[nir_num_opcodes] = {
-% for name, opcode in sorted(opcodes.iteritems()):
+% for name, opcode in sorted(opcodes.items()):
 {
    .name = "${name}",
    .num_inputs = ${opcode.num_inputs},
@@ -130,4 +137,4 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
 };
 """)
 
-print template.render(opcodes=opcodes)
+print(template.render(opcodes=opcodes))

@@ -83,10 +83,6 @@ public:
    void setup_uniform_clipplane_values();
    void compute_clip_distance();
 
-   fs_inst *get_instruction_generating_reg(fs_inst *start,
-					   fs_inst *end,
-					   const fs_reg &reg);
-
    void VARYING_PULL_CONSTANT_LOAD(const brw::fs_builder &bld,
                                    const fs_reg &dst,
                                    const fs_reg &surf_index,
@@ -235,7 +231,7 @@ public:
    fs_reg get_nir_src(const nir_src &src);
    fs_reg get_nir_src_imm(const nir_src &src);
    fs_reg get_nir_dest(const nir_dest &dest);
-   fs_reg get_nir_image_deref(const nir_deref_var *deref);
+   fs_reg get_nir_image_deref(nir_deref_instr *deref);
    fs_reg get_indirect_offset(nir_intrinsic_instr *instr);
    void emit_percomp(const brw::fs_builder &bld, const fs_inst &inst,
                      unsigned wr_mask);
@@ -276,7 +272,7 @@ public:
 
    fs_reg get_timestamp(const brw::fs_builder &bld);
 
-   struct brw_reg interp_reg(int location, int channel);
+   fs_reg interp_reg(int location, int channel);
 
    int implied_mrf_writes(fs_inst *inst) const;
 
@@ -338,14 +334,15 @@ public:
 
    /** Register numbers for thread payload fields. */
    struct thread_payload {
-      uint8_t source_depth_reg;
-      uint8_t source_w_reg;
-      uint8_t aa_dest_stencil_reg;
-      uint8_t dest_depth_reg;
-      uint8_t sample_pos_reg;
-      uint8_t sample_mask_in_reg;
-      uint8_t barycentric_coord_reg[BRW_BARYCENTRIC_MODE_COUNT];
-      uint8_t local_invocation_id_reg;
+      uint8_t subspan_coord_reg[2];
+      uint8_t source_depth_reg[2];
+      uint8_t source_w_reg[2];
+      uint8_t aa_dest_stencil_reg[2];
+      uint8_t dest_depth_reg[2];
+      uint8_t sample_pos_reg[2];
+      uint8_t sample_mask_in_reg[2];
+      uint8_t barycentric_coord_reg[BRW_BARYCENTRIC_MODE_COUNT][2];
+      uint8_t local_invocation_id_reg[2];
 
       /** The number of thread payload registers the hardware will supply. */
       uint8_t num_regs;
@@ -387,7 +384,6 @@ class fs_generator
 public:
    fs_generator(const struct brw_compiler *compiler, void *log_data,
                 void *mem_ctx,
-                const void *key,
                 struct brw_stage_prog_data *prog_data,
                 unsigned promoted_constants,
                 bool runtime_check_aads_emit,
@@ -485,7 +481,6 @@ private:
    const struct gen_device_info *devinfo;
 
    struct brw_codegen *p;
-   const void * const key;
    struct brw_stage_prog_data * const prog_data;
 
    unsigned dispatch_width; /**< 8, 16 or 32 */
@@ -499,28 +494,57 @@ private:
    void *mem_ctx;
 };
 
-void shuffle_32bit_load_result_to_64bit_data(const brw::fs_builder &bld,
-                                             const fs_reg &dst,
-                                             const fs_reg &src,
-                                             uint32_t components);
+namespace brw {
+   inline fs_reg
+   fetch_payload_reg(const brw::fs_builder &bld, uint8_t regs[2],
+                     brw_reg_type type = BRW_REGISTER_TYPE_F, unsigned n = 1)
+   {
+      if (!regs[0])
+         return fs_reg();
 
-fs_reg shuffle_64bit_data_for_32bit_write(const brw::fs_builder &bld,
-                                          const fs_reg &src,
-                                          uint32_t components);
+      if (bld.dispatch_width() > 16) {
+         const fs_reg tmp = bld.vgrf(type, n);
+         const brw::fs_builder hbld = bld.exec_all().group(16, 0);
+         const unsigned m = bld.dispatch_width() / hbld.dispatch_width();
+         fs_reg *const components = new fs_reg[n * m];
 
-void shuffle_32bit_load_result_to_16bit_data(const brw::fs_builder &bld,
-                                             const fs_reg &dst,
-                                             const fs_reg &src,
-                                             uint32_t first_component,
-                                             uint32_t components);
+         for (unsigned c = 0; c < n; c++) {
+            for (unsigned g = 0; g < m; g++) {
+               components[c * m + g] =
+                  offset(retype(brw_vec8_grf(regs[g], 0), type), hbld, c);
+            }
+         }
 
-void shuffle_16bit_data_for_32bit_write(const brw::fs_builder &bld,
-                                        const fs_reg &dst,
-                                        const fs_reg &src,
-                                        uint32_t components);
+         hbld.LOAD_PAYLOAD(tmp, components, n * m, 0);
+
+         delete[] components;
+         return tmp;
+
+      } else {
+         return fs_reg(retype(brw_vec8_grf(regs[0], 0), type));
+      }
+   }
+}
+
+void shuffle_from_32bit_read(const brw::fs_builder &bld,
+                             const fs_reg &dst,
+                             const fs_reg &src,
+                             uint32_t first_component,
+                             uint32_t components);
+
+fs_reg shuffle_for_32bit_write(const brw::fs_builder &bld,
+                               const fs_reg &src,
+                               uint32_t first_component,
+                               uint32_t components);
 
 fs_reg setup_imm_df(const brw::fs_builder &bld,
                     double v);
+
+fs_reg setup_imm_b(const brw::fs_builder &bld,
+                   int8_t v);
+
+fs_reg setup_imm_ub(const brw::fs_builder &bld,
+                   uint8_t v);
 
 enum brw_barycentric_mode brw_barycentric_mode(enum glsl_interp_mode mode,
                                                nir_intrinsic_op op);

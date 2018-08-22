@@ -1,31 +1,31 @@
 /****************************************************************************
-* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file backend.cpp
-*
-* @brief Backend handles rasterization, pixel shading and output merger
-*        operations.
-*
-******************************************************************************/
+ * Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file backend.cpp
+ *
+ * @brief Backend handles rasterization, pixel shading and output merger
+ *        operations.
+ *
+ ******************************************************************************/
 
 #include <smmintrin.h>
 
@@ -37,36 +37,45 @@
 
 #include <algorithm>
 
-template<typename T>
-void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint32_t y, SWR_TRIANGLE_DESC &work, RenderOutputBuffers &renderBuffers)
+template <typename T>
+void BackendSingleSample(DRAW_CONTEXT*        pDC,
+                         uint32_t             workerId,
+                         uint32_t             x,
+                         uint32_t             y,
+                         SWR_TRIANGLE_DESC&   work,
+                         RenderOutputBuffers& renderBuffers)
 {
     RDTSC_BEGIN(BESingleSampleBackend, pDC->drawId);
     RDTSC_BEGIN(BESetup, pDC->drawId);
 
     void* pWorkerData = pDC->pContext->threadPool.pThreadData[workerId].pWorkerPrivateData;
 
-    const API_STATE &state = GetApiState(pDC);
+    const API_STATE& state = GetApiState(pDC);
 
     BarycentricCoeffs coeffs;
     SetupBarycentricCoeffs(&coeffs, work);
 
-    SWR_PS_CONTEXT psContext;
+    SWR_PS_CONTEXT             psContext;
     const SWR_MULTISAMPLE_POS& samplePos = state.rastState.samplePositions;
     SetupPixelShaderContext<T>(&psContext, samplePos, work);
 
     uint8_t *pDepthBuffer, *pStencilBuffer;
-    SetupRenderBuffers(psContext.pColorBuffer, &pDepthBuffer, &pStencilBuffer, state.colorHottileEnable, renderBuffers);
+    SetupRenderBuffers(psContext.pColorBuffer,
+                       &pDepthBuffer,
+                       &pStencilBuffer,
+                       state.colorHottileEnable,
+                       renderBuffers);
 
     RDTSC_END(BESetup, 1);
 
-    psContext.vY.UL     = _simd_add_ps(vULOffsetsY,     _simd_set1_ps(static_cast<float>(y)));
+    psContext.vY.UL     = _simd_add_ps(vULOffsetsY, _simd_set1_ps(static_cast<float>(y)));
     psContext.vY.center = _simd_add_ps(vCenterOffsetsY, _simd_set1_ps(static_cast<float>(y)));
 
     const simdscalar dy = _simd_set1_ps(static_cast<float>(SIMD_TILE_Y_DIM));
 
     for (uint32_t yy = y; yy < y + KNOB_TILE_Y_DIM; yy += SIMD_TILE_Y_DIM)
     {
-        psContext.vX.UL     = _simd_add_ps(vULOffsetsX,     _simd_set1_ps(static_cast<float>(x)));
+        psContext.vX.UL     = _simd_add_ps(vULOffsetsX, _simd_set1_ps(static_cast<float>(x)));
         psContext.vX.center = _simd_add_ps(vCenterOffsetsX, _simd_set1_ps(static_cast<float>(x)));
 
         const simdscalar dx = _simd_set1_ps(static_cast<float>(SIMD_TILE_X_DIM));
@@ -82,9 +91,11 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
             {
                 if (state.depthHottileEnable && state.depthBoundsState.depthBoundsTestEnable)
                 {
-                    static_assert(KNOB_DEPTH_HOT_TILE_FORMAT == R32_FLOAT, "Unsupported depth hot tile format");
+                    static_assert(KNOB_DEPTH_HOT_TILE_FORMAT == R32_FLOAT,
+                                  "Unsupported depth hot tile format");
 
-                    const simdscalar z = _simd_load_ps(reinterpret_cast<const float *>(pDepthBuffer));
+                    const simdscalar z =
+                        _simd_load_ps(reinterpret_cast<const float*>(pDepthBuffer));
 
                     const float minz = state.depthBoundsState.depthBoundsTestMinValue;
                     const float maxz = state.depthBoundsState.depthBoundsTestMaxValue;
@@ -94,19 +105,25 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
 
                 if (T::InputCoverage != SWR_INPUT_COVERAGE_NONE)
                 {
-                    const uint64_t* pCoverageMask = (T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE) ? &work.innerCoverageMask : &work.coverageMask[0];
+                    const uint64_t* pCoverageMask =
+                        (T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE)
+                            ? &work.innerCoverageMask
+                            : &work.coverageMask[0];
 
-                    generateInputCoverage<T, T::InputCoverage>(pCoverageMask, psContext.inputMask, state.blendState.sampleMask);
+                    generateInputCoverage<T, T::InputCoverage>(
+                        pCoverageMask, psContext.inputMask, state.blendState.sampleMask);
                 }
 
                 RDTSC_BEGIN(BEBarycentric, pDC->drawId);
 
                 CalcPixelBarycentrics(coeffs, psContext);
 
-                CalcCentroid<T, true>(&psContext, samplePos, coeffs, work.coverageMask, state.blendState.sampleMask);
+                CalcCentroid<T, true>(
+                    &psContext, samplePos, coeffs, work.coverageMask, state.blendState.sampleMask);
 
                 // interpolate and quantize z
-                psContext.vZ = vplaneps(coeffs.vZa, coeffs.vZb, coeffs.vZc, psContext.vI.center, psContext.vJ.center);
+                psContext.vZ = vplaneps(
+                    coeffs.vZa, coeffs.vZb, coeffs.vZc, psContext.vI.center, psContext.vJ.center);
                 psContext.vZ = state.pfnQuantizeDepth(psContext.vZ);
 
                 RDTSC_END(BEBarycentric, 1);
@@ -114,27 +131,45 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
                 // interpolate user clip distance if available
                 if (state.backendState.clipDistanceMask)
                 {
-                    coverageMask &= ~ComputeUserClipMask(state.backendState.clipDistanceMask, work.pUserClipBuffer, psContext.vI.center, psContext.vJ.center);
+                    coverageMask &= ~ComputeUserClipMask(state.backendState.clipDistanceMask,
+                                                         work.pUserClipBuffer,
+                                                         psContext.vI.center,
+                                                         psContext.vJ.center);
                 }
 
-                simdscalar vCoverageMask = _simd_vmask_ps(coverageMask);
-                simdscalar depthPassMask = vCoverageMask;
+                simdscalar vCoverageMask   = _simd_vmask_ps(coverageMask);
+                simdscalar depthPassMask   = vCoverageMask;
                 simdscalar stencilPassMask = vCoverageMask;
 
                 // Early-Z?
                 if (T::bCanEarlyZ)
                 {
                     RDTSC_BEGIN(BEEarlyDepthTest, pDC->drawId);
-                    depthPassMask = DepthStencilTest(&state, work.triFlags.frontFacing, work.triFlags.viewportIndex,
-                                                     psContext.vZ, pDepthBuffer, vCoverageMask, pStencilBuffer, &stencilPassMask);
-                    AR_EVENT(EarlyDepthStencilInfoSingleSample(_simd_movemask_ps(depthPassMask), _simd_movemask_ps(stencilPassMask), _simd_movemask_ps(vCoverageMask)));
+                    depthPassMask = DepthStencilTest(&state,
+                                                     work.triFlags.frontFacing,
+                                                     work.triFlags.viewportIndex,
+                                                     psContext.vZ,
+                                                     pDepthBuffer,
+                                                     vCoverageMask,
+                                                     pStencilBuffer,
+                                                     &stencilPassMask);
+                    AR_EVENT(EarlyDepthStencilInfoSingleSample(_simd_movemask_ps(depthPassMask),
+                                                               _simd_movemask_ps(stencilPassMask),
+                                                               _simd_movemask_ps(vCoverageMask)));
                     RDTSC_END(BEEarlyDepthTest, 0);
 
                     // early-exit if no pixels passed depth or earlyZ is forced on
                     if (state.psState.forceEarlyZ || !_simd_movemask_ps(depthPassMask))
                     {
-                        DepthStencilWrite(&state.vp[work.triFlags.viewportIndex], &state.depthStencilState, work.triFlags.frontFacing, psContext.vZ,
-                            pDepthBuffer, depthPassMask, vCoverageMask, pStencilBuffer, stencilPassMask);
+                        DepthStencilWrite(&state.vp[work.triFlags.viewportIndex],
+                                          &state.depthStencilState,
+                                          work.triFlags.frontFacing,
+                                          psContext.vZ,
+                                          pDepthBuffer,
+                                          depthPassMask,
+                                          vCoverageMask,
+                                          pStencilBuffer,
+                                          stencilPassMask);
 
                         if (!_simd_movemask_ps(depthPassMask))
                         {
@@ -144,7 +179,7 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
                 }
 
                 psContext.sampleIndex = 0;
-                psContext.activeMask = _simd_castps_si(vCoverageMask);
+                psContext.activeMask  = _simd_castps_si(vCoverageMask);
 
                 // execute pixel shader
                 RDTSC_BEGIN(BEPixelShader, pDC->drawId);
@@ -161,50 +196,94 @@ void BackendSingleSample(DRAW_CONTEXT *pDC, uint32_t workerId, uint32_t x, uint3
                 if (!T::bCanEarlyZ)
                 {
                     RDTSC_BEGIN(BELateDepthTest, pDC->drawId);
-                    depthPassMask = DepthStencilTest(&state, work.triFlags.frontFacing, work.triFlags.viewportIndex,
-                                                        psContext.vZ, pDepthBuffer, vCoverageMask, pStencilBuffer, &stencilPassMask);
-                    AR_EVENT(LateDepthStencilInfoSingleSample(_simd_movemask_ps(depthPassMask), _simd_movemask_ps(stencilPassMask), _simd_movemask_ps(vCoverageMask)));
+                    depthPassMask = DepthStencilTest(&state,
+                                                     work.triFlags.frontFacing,
+                                                     work.triFlags.viewportIndex,
+                                                     psContext.vZ,
+                                                     pDepthBuffer,
+                                                     vCoverageMask,
+                                                     pStencilBuffer,
+                                                     &stencilPassMask);
+                    AR_EVENT(LateDepthStencilInfoSingleSample(_simd_movemask_ps(depthPassMask),
+                                                              _simd_movemask_ps(stencilPassMask),
+                                                              _simd_movemask_ps(vCoverageMask)));
                     RDTSC_END(BELateDepthTest, 0);
 
                     if (!_simd_movemask_ps(depthPassMask))
                     {
                         // need to call depth/stencil write for stencil write
-                        DepthStencilWrite(&state.vp[work.triFlags.viewportIndex], &state.depthStencilState, work.triFlags.frontFacing, psContext.vZ,
-                            pDepthBuffer, depthPassMask, vCoverageMask, pStencilBuffer, stencilPassMask);
+                        DepthStencilWrite(&state.vp[work.triFlags.viewportIndex],
+                                          &state.depthStencilState,
+                                          work.triFlags.frontFacing,
+                                          psContext.vZ,
+                                          pDepthBuffer,
+                                          depthPassMask,
+                                          vCoverageMask,
+                                          pStencilBuffer,
+                                          stencilPassMask);
                         goto Endtile;
                     }
-                } else {
+                }
+                else
+                {
                     // for early z, consolidate discards from shader
                     // into depthPassMask
                     depthPassMask = _simd_and_ps(depthPassMask, vCoverageMask);
                 }
 
-                uint32_t statMask = _simd_movemask_ps(depthPassMask);
+                uint32_t statMask  = _simd_movemask_ps(depthPassMask);
                 uint32_t statCount = _mm_popcnt_u32(statMask);
                 UPDATE_STAT_BE(DepthPassCount, statCount);
 
                 // output merger
                 RDTSC_BEGIN(BEOutputMerger, pDC->drawId);
 #if USE_8x2_TILE_BACKEND
-                OutputMerger8x2(pDC, psContext, psContext.pColorBuffer, 0, &state.blendState, state.pfnBlendFunc, vCoverageMask, depthPassMask, state.psState.renderTargetMask, useAlternateOffset, workerId);
+                OutputMerger8x2(pDC,
+                                psContext,
+                                psContext.pColorBuffer,
+                                0,
+                                &state.blendState,
+                                state.pfnBlendFunc,
+                                vCoverageMask,
+                                depthPassMask,
+                                state.psState.renderTargetMask,
+                                useAlternateOffset,
+                                workerId);
 #else
-                OutputMerger4x2(pDC, psContext, psContext.pColorBuffer, 0, &state.blendState, state.pfnBlendFunc, vCoverageMask, depthPassMask, state.psState.renderTargetMask, workerId, workerId);
+                OutputMerger4x2(pDC,
+                                psContext,
+                                psContext.pColorBuffer,
+                                0,
+                                &state.blendState,
+                                state.pfnBlendFunc,
+                                vCoverageMask,
+                                depthPassMask,
+                                state.psState.renderTargetMask,
+                                workerId,
+                                workerId);
 #endif
 
                 // do final depth write after all pixel kills
                 if (!state.psState.forceEarlyZ)
                 {
-                    DepthStencilWrite(&state.vp[work.triFlags.viewportIndex], &state.depthStencilState, work.triFlags.frontFacing, psContext.vZ,
-                        pDepthBuffer, depthPassMask, vCoverageMask, pStencilBuffer, stencilPassMask);
+                    DepthStencilWrite(&state.vp[work.triFlags.viewportIndex],
+                                      &state.depthStencilState,
+                                      work.triFlags.frontFacing,
+                                      psContext.vZ,
+                                      pDepthBuffer,
+                                      depthPassMask,
+                                      vCoverageMask,
+                                      pStencilBuffer,
+                                      stencilPassMask);
                 }
                 RDTSC_END(BEOutputMerger, 0);
             }
 
-Endtile:
+        Endtile:
             RDTSC_BEGIN(BEEndTile, pDC->drawId);
 
             work.coverageMask[0] >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
-            if(T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE)
+            if (T::InputCoverage == SWR_INPUT_COVERAGE_INNER_CONSERVATIVE)
             {
                 work.innerCoverageMask >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
             }
@@ -212,12 +291,13 @@ Endtile:
 #if USE_8x2_TILE_BACKEND
             if (useAlternateOffset)
             {
-                DWORD rt;
+                DWORD    rt;
                 uint32_t rtMask = state.colorHottileEnable;
-                while(_BitScanForward(&rt, rtMask))
+                while (_BitScanForward(&rt, rtMask))
                 {
                     rtMask &= ~(1 << rt);
-                    psContext.pColorBuffer[rt] += (2 * KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
+                    psContext.pColorBuffer[rt] +=
+                        (2 * KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
                 }
             }
 #else
@@ -226,19 +306,21 @@ Endtile:
             while (_BitScanForward(&rt, rtMask))
             {
                 rtMask &= ~(1 << rt);
-                psContext.pColorBuffer[rt] += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
+                psContext.pColorBuffer[rt] +=
+                    (KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
             }
 #endif
             pDepthBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_DEPTH_HOT_TILE_FORMAT>::bpp) / 8;
-            pStencilBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_STENCIL_HOT_TILE_FORMAT>::bpp) / 8;
+            pStencilBuffer +=
+                (KNOB_SIMD_WIDTH * FormatTraits<KNOB_STENCIL_HOT_TILE_FORMAT>::bpp) / 8;
 
             RDTSC_END(BEEndTile, 0);
 
-            psContext.vX.UL     = _simd_add_ps(psContext.vX.UL,     dx);
+            psContext.vX.UL     = _simd_add_ps(psContext.vX.UL, dx);
             psContext.vX.center = _simd_add_ps(psContext.vX.center, dx);
         }
 
-        psContext.vY.UL     = _simd_add_ps(psContext.vY.UL,     dy);
+        psContext.vY.UL     = _simd_add_ps(psContext.vY.UL, dy);
         psContext.vY.center = _simd_add_ps(psContext.vY.center, dy);
     }
 
@@ -253,9 +335,11 @@ struct BEChooserSingleSample
     // Last Arg Terminator
     static PFN_BACKEND_FUNC GetFunc(SWR_BACKEND_FUNCS tArg)
     {
-        switch(tArg)
+        switch (tArg)
         {
-        case SWR_BACKEND_SINGLE_SAMPLE: return BackendSingleSample<SwrBackendTraits<ArgsT...>>; break;
+        case SWR_BACKEND_SINGLE_SAMPLE:
+            return BackendSingleSample<SwrBackendTraits<ArgsT...>>;
+            break;
         case SWR_BACKEND_MSAA_PIXEL_RATE:
         case SWR_BACKEND_MSAA_SAMPLE_RATE:
         default:
@@ -269,15 +353,25 @@ struct BEChooserSingleSample
     template <typename... TArgsT>
     static PFN_BACKEND_FUNC GetFunc(SWR_INPUT_COVERAGE tArg, TArgsT... remainingArgs)
     {
-        switch(tArg)
+        switch (tArg)
         {
-        case SWR_INPUT_COVERAGE_NONE: return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NONE>::GetFunc(remainingArgs...); break;
-        case SWR_INPUT_COVERAGE_NORMAL: return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NORMAL>::GetFunc(remainingArgs...); break;
-        case SWR_INPUT_COVERAGE_INNER_CONSERVATIVE: return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_INNER_CONSERVATIVE>::GetFunc(remainingArgs...); break;
+        case SWR_INPUT_COVERAGE_NONE:
+            return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NONE>::GetFunc(
+                remainingArgs...);
+            break;
+        case SWR_INPUT_COVERAGE_NORMAL:
+            return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NORMAL>::GetFunc(
+                remainingArgs...);
+            break;
+        case SWR_INPUT_COVERAGE_INNER_CONSERVATIVE:
+            return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_INNER_CONSERVATIVE>::GetFunc(
+                remainingArgs...);
+            break;
         default:
-        SWR_ASSERT(0 && "Invalid sample pattern\n");
-        return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NONE>::GetFunc(remainingArgs...);
-        break;
+            SWR_ASSERT(0 && "Invalid sample pattern\n");
+            return BEChooserSingleSample<ArgsT..., SWR_INPUT_COVERAGE_NONE>::GetFunc(
+                remainingArgs...);
+            break;
         }
     }
 
@@ -285,17 +379,27 @@ struct BEChooserSingleSample
     template <typename... TArgsT>
     static PFN_BACKEND_FUNC GetFunc(SWR_MULTISAMPLE_COUNT tArg, TArgsT... remainingArgs)
     {
-        switch(tArg)
+        switch (tArg)
         {
-        case SWR_MULTISAMPLE_1X: return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_1X>::GetFunc(remainingArgs...); break;
-        case SWR_MULTISAMPLE_2X: return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_2X>::GetFunc(remainingArgs...); break;
-        case SWR_MULTISAMPLE_4X: return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_4X>::GetFunc(remainingArgs...); break;
-        case SWR_MULTISAMPLE_8X: return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_8X>::GetFunc(remainingArgs...); break;
-        case SWR_MULTISAMPLE_16X: return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_16X>::GetFunc(remainingArgs...); break;
+        case SWR_MULTISAMPLE_1X:
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_1X>::GetFunc(remainingArgs...);
+            break;
+        case SWR_MULTISAMPLE_2X:
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_2X>::GetFunc(remainingArgs...);
+            break;
+        case SWR_MULTISAMPLE_4X:
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_4X>::GetFunc(remainingArgs...);
+            break;
+        case SWR_MULTISAMPLE_8X:
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_8X>::GetFunc(remainingArgs...);
+            break;
+        case SWR_MULTISAMPLE_16X:
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_16X>::GetFunc(remainingArgs...);
+            break;
         default:
-        SWR_ASSERT(0 && "Invalid sample count\n");
-        return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_1X>::GetFunc(remainingArgs...);
-        break;
+            SWR_ASSERT(0 && "Invalid sample count\n");
+            return BEChooserSingleSample<ArgsT..., SWR_MULTISAMPLE_1X>::GetFunc(remainingArgs...);
+            break;
         }
     }
 
@@ -303,7 +407,7 @@ struct BEChooserSingleSample
     template <typename... TArgsT>
     static PFN_BACKEND_FUNC GetFunc(bool tArg, TArgsT... remainingArgs)
     {
-        if(tArg == true)
+        if (tArg == true)
         {
             return BEChooserSingleSample<ArgsT..., 1>::GetFunc(remainingArgs...);
         }
@@ -314,15 +418,20 @@ struct BEChooserSingleSample
 
 void InitBackendSingleFuncTable(PFN_BACKEND_FUNC (&table)[SWR_INPUT_COVERAGE_COUNT][2][2])
 {
-    for(uint32_t inputCoverage = 0; inputCoverage < SWR_INPUT_COVERAGE_COUNT; inputCoverage++)
+    for (uint32_t inputCoverage = 0; inputCoverage < SWR_INPUT_COVERAGE_COUNT; inputCoverage++)
     {
-        for(uint32_t isCentroid = 0; isCentroid < 2; isCentroid++)
+        for (uint32_t isCentroid = 0; isCentroid < 2; isCentroid++)
         {
-            for(uint32_t canEarlyZ = 0; canEarlyZ < 2; canEarlyZ++)
+            for (uint32_t canEarlyZ = 0; canEarlyZ < 2; canEarlyZ++)
             {
                 table[inputCoverage][isCentroid][canEarlyZ] =
-                    BEChooserSingleSample<>::GetFunc(SWR_MULTISAMPLE_1X, false, (SWR_INPUT_COVERAGE)inputCoverage,
-                                         (isCentroid > 0), false, (canEarlyZ > 0), SWR_BACKEND_SINGLE_SAMPLE);
+                    BEChooserSingleSample<>::GetFunc(SWR_MULTISAMPLE_1X,
+                                                     false,
+                                                     (SWR_INPUT_COVERAGE)inputCoverage,
+                                                     (isCentroid > 0),
+                                                     false,
+                                                     (canEarlyZ > 0),
+                                                     SWR_BACKEND_SINGLE_SAMPLE);
             }
         }
     }

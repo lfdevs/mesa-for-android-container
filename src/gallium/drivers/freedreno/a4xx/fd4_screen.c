@@ -39,17 +39,20 @@ fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
 		unsigned sample_count,
+		unsigned storage_sample_count,
 		unsigned usage)
 {
 	unsigned retval = 0;
 
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
-			(sample_count > 1) || /* TODO add MSAA */
-			!util_format_is_supported(format, usage)) {
+			(sample_count > 1)) { /* TODO add MSAA */
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
 		return FALSE;
 	}
+
+	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+		return false;
 
 	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
 			(fd4_pipe2vtx(format) != (enum a4xx_vtx_fmt)~0)) {

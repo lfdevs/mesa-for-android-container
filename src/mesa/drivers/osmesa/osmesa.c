@@ -573,7 +573,8 @@ osmesa_MapRenderbuffer(struct gl_context *ctx,
                        struct gl_renderbuffer *rb,
                        GLuint x, GLuint y, GLuint w, GLuint h,
                        GLbitfield mode,
-                       GLubyte **mapOut, GLint *rowStrideOut)
+                       GLubyte **mapOut, GLint *rowStrideOut,
+                       bool flip_y)
 {
    const OSMesaContext osmesa = OSMESA_CONTEXT(ctx);
 
@@ -601,7 +602,7 @@ osmesa_MapRenderbuffer(struct gl_context *ctx,
    }
    else {
       _swrast_map_soft_renderbuffer(ctx, rb, x, y, w, h, mode,
-                                    mapOut, rowStrideOut);
+                                    mapOut, rowStrideOut, flip_y);
    }
 }
 

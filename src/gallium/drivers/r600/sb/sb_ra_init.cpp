@@ -545,10 +545,13 @@ void ra_split::split_phi_src(container_node *loc, container_node *c,
 			continue;
 
 		value *t = sh.create_temp_value();
+		alu_node* n = sh.create_copy_mov(t, v);
+		if (loop)
+			n->flags |= NF_DONT_MOVE;
 		if (loop && id == 0)
-			loc->insert_before(sh.create_copy_mov(t, v));
+			loc->insert_before(n);
 		else
-			loc->push_back(sh.create_copy_mov(t, v));
+			loc->push_back(n);
 		v = t;
 
 		sh.coal.add_edge(v, d, coalescer::phi_cost);
@@ -566,9 +569,10 @@ void ra_split::split_phi_dst(node* loc, container_node *c, bool loop) {
 
 		value *t = sh.create_temp_value();
 		node *cp = sh.create_copy_mov(v, t);
-		if (loop)
+		if (loop) {
+			cp->flags |= NF_DONT_MOVE;
 			static_cast<container_node*>(loc)->push_front(cp);
-		else
+		} else
 			loc->insert_after(cp);
 		v = t;
 	}

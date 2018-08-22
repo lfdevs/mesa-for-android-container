@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-xa_version = ['2', '3', '0']
+xa_version = ['2', '4', '0']
 
 xa_conf = configuration_data()
 xa_conf.set('XA_MAJOR', xa_version[0])

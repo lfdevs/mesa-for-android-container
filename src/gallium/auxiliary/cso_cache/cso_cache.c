@@ -87,7 +87,7 @@ static inline struct cso_hash *_cso_hash_for_type(struct cso_cache *sc, enum cso
    return hash;
 }
 
-static void delete_blend_state(void *state, void *data)
+static void delete_blend_state(void *state, UNUSED void *data)
 {
    struct cso_blend *cso = (struct cso_blend *)state;
    if (cso->delete_state)
@@ -95,7 +95,7 @@ static void delete_blend_state(void *state, void *data)
    FREE(state);
 }
 
-static void delete_depth_stencil_state(void *state, void *data)
+static void delete_depth_stencil_state(void *state, UNUSED void *data)
 {
    struct cso_depth_stencil_alpha *cso = (struct cso_depth_stencil_alpha *)state;
    if (cso->delete_state)
@@ -103,7 +103,7 @@ static void delete_depth_stencil_state(void *state, void *data)
    FREE(state);
 }
 
-static void delete_sampler_state(void *state, void *data)
+static void delete_sampler_state(void *state, UNUSED void *data)
 {
    struct cso_sampler *cso = (struct cso_sampler *)state;
    if (cso->delete_state)
@@ -111,7 +111,7 @@ static void delete_sampler_state(void *state, void *data)
    FREE(state);
 }
 
-static void delete_rasterizer_state(void *state, void *data)
+static void delete_rasterizer_state(void *state, UNUSED void *data)
 {
    struct cso_rasterizer *cso = (struct cso_rasterizer *)state;
    if (cso->delete_state)
@@ -119,7 +119,7 @@ static void delete_rasterizer_state(void *state, void *data)
    FREE(state);
 }
 
-static void delete_velements(void *state, void *data)
+static void delete_velements(void *state, UNUSED void *data)
 {
    struct cso_velements *cso = (struct cso_velements *)state;
    if (cso->delete_state)
@@ -163,7 +163,7 @@ static inline void sanitize_hash(struct cso_cache *sc,
 
 
 static inline void sanitize_cb(struct cso_hash *hash, enum cso_cache_type type,
-                               int max_size, void *user_data)
+			       int max_size, UNUSED void *user_data)
 {
    /* if we're approach the maximum size, remove fourth of the entries
     * otherwise every subsequent call will go through the same */

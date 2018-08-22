@@ -340,9 +340,13 @@ brw_init_driver_functions(struct brw_context *brw,
    /* GL_ARB_get_program_binary */
    brw_program_binary_init(brw->screen->deviceID);
    functions->GetProgramBinaryDriverSHA1 = brw_get_program_binary_driver_sha1;
-   functions->ProgramBinarySerializeDriverBlob = brw_program_serialize_nir;
+   functions->ProgramBinarySerializeDriverBlob = brw_serialize_program_binary;
    functions->ProgramBinaryDeserializeDriverBlob =
       brw_deserialize_program_binary;
+
+   if (brw->screen->disk_cache) {
+      functions->ShaderCacheSerializeDriverBlob = brw_program_serialize_nir;
+   }
 }
 
 static void
@@ -363,6 +367,9 @@ brw_initialize_spirv_supported_capabilities(struct brw_context *brw)
    ctx->Const.SpirVCapabilities.draw_parameters = true;
    ctx->Const.SpirVCapabilities.image_write_without_format = true;
    ctx->Const.SpirVCapabilities.variable_pointers = true;
+   ctx->Const.SpirVCapabilities.atomic_storage = devinfo->gen >= 7;
+   ctx->Const.SpirVCapabilities.transform_feedback = devinfo->gen >= 7;
+   ctx->Const.SpirVCapabilities.geometry_streams = devinfo->gen >= 7;
 }
 
 static void
@@ -688,7 +695,7 @@ brw_initialize_context_constants(struct brw_context *brw)
    /* ARB_viewport_array, OES_viewport_array */
    if (devinfo->gen >= 6) {
       ctx->Const.MaxViewports = GEN6_NUM_VIEWPORTS;
-      ctx->Const.ViewportSubpixelBits = 0;
+      ctx->Const.ViewportSubpixelBits = 8;
 
       /* Cast to float before negating because MaxViewportWidth is unsigned.
        */
@@ -922,15 +929,6 @@ brwCreateContext(gl_api api,
    brw->gs.base.stage = MESA_SHADER_GEOMETRY;
    brw->wm.base.stage = MESA_SHADER_FRAGMENT;
    brw->cs.base.stage = MESA_SHADER_COMPUTE;
-   if (devinfo->gen >= 8) {
-      brw->vtbl.emit_depth_stencil_hiz = gen8_emit_depth_stencil_hiz;
-   } else if (devinfo->gen >= 7) {
-      brw->vtbl.emit_depth_stencil_hiz = gen7_emit_depth_stencil_hiz;
-   } else if (devinfo->gen >= 6) {
-      brw->vtbl.emit_depth_stencil_hiz = gen6_emit_depth_stencil_hiz;
-   } else {
-      brw->vtbl.emit_depth_stencil_hiz = brw_emit_depth_stencil_hiz;
-   }
 
    brw_init_driver_functions(brw, &functions);
 
@@ -989,22 +987,21 @@ brwCreateContext(gl_api api,
 
    intel_batchbuffer_init(brw);
 
-   if (devinfo->gen >= 6) {
-      /* Create a new hardware context.  Using a hardware context means that
-       * our GPU state will be saved/restored on context switch, allowing us
-       * to assume that the GPU is in the same state we left it in.
-       *
-       * This is required for transform feedback buffer offsets, query objects,
-       * and also allows us to reduce how much state we have to emit.
-       */
-      brw->hw_ctx = brw_create_hw_context(brw->bufmgr);
+   /* Create a new hardware context.  Using a hardware context means that
+    * our GPU state will be saved/restored on context switch, allowing us
+    * to assume that the GPU is in the same state we left it in.
+    *
+    * This is required for transform feedback buffer offsets, query objects,
+    * and also allows us to reduce how much state we have to emit.
+    */
+   brw->hw_ctx = brw_create_hw_context(brw->bufmgr);
+   if (!brw->hw_ctx && devinfo->gen >= 6) {
+      fprintf(stderr, "Failed to create hardware context.\n");
+      intelDestroyContext(driContextPriv);
+      return false;
+   }
 
-      if (!brw->hw_ctx) {
-         fprintf(stderr, "Failed to create hardware context.\n");
-         intelDestroyContext(driContextPriv);
-         return false;
-      }
-
+   if (brw->hw_ctx) {
       int hw_priority = GEN_CONTEXT_MEDIUM_PRIORITY;
       if (ctx_config->attribute_mask & __DRIVER_CONTEXT_ATTRIB_PRIORITY) {
          switch (ctx_config->priority) {
@@ -1698,9 +1695,18 @@ intel_update_image_buffer(struct brw_context *intel,
    if (last_mt && last_mt->bo == buffer->bo)
       return;
 
+   /* Only allow internal compression if samples == 0.  For multisampled
+    * window system buffers, the only thing the single-sampled buffer is used
+    * for is as a resolve target.  If we do any compression beyond what is
+    * supported by the window system, we will just have to resolve so it's
+    * probably better to just not bother.
+    */
+   const bool allow_internal_aux = (num_samples == 0);
+
    struct intel_mipmap_tree *mt =
       intel_miptree_create_for_dri_image(intel, buffer, GL_TEXTURE_2D,
-                                         intel_rb_format(rb), true);
+                                         intel_rb_format(rb),
+                                         allow_internal_aux);
    if (!mt)
       return;
 

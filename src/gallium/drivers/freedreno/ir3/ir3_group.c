@@ -263,6 +263,10 @@ find_neighbors(struct ir3 *ir)
 			struct ir3_instruction *instr = block->keeps[i];
 			instr_find_neighbors(instr);
 		}
+
+		/* We also need to account for if-condition: */
+		if (block->condition)
+			instr_find_neighbors(block->condition);
 	}
 }
 

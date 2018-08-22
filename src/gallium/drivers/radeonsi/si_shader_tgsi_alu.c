@@ -23,11 +23,7 @@
  */
 
 #include "si_shader_internal.h"
-#include "gallivm/lp_bld_const.h"
-#include "gallivm/lp_bld_intr.h"
-#include "gallivm/lp_bld_gather.h"
-#include "tgsi/tgsi_parse.h"
-#include "amd/common/ac_llvm_build.h"
+#include "ac_llvm_util.h"
 
 static void kill_if_fetch_args(struct lp_build_tgsi_context *bld_base,
 			       struct lp_build_emit_data *emit_data)
@@ -248,7 +244,9 @@ static void emit_arl(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef floor_index =  lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_FLR, emit_data->args[0]);
+	LLVMValueRef floor_index =
+		ac_build_intrinsic(&ctx->ac, "llvm.floor.f32", ctx->f32,
+				   &emit_data->args[0], 1, AC_FUNC_ATTR_READNONE);
 	emit_data->output[emit_data->chan] = LLVMBuildFPToSI(ctx->ac.builder,
 			floor_index, ctx->i32, "");
 }
@@ -453,9 +451,9 @@ build_tgsi_intrinsic_nomem(const struct lp_build_tgsi_action *action,
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	emit_data->output[emit_data->chan] =
-		lp_build_intrinsic(ctx->ac.builder, action->intr_name,
+		ac_build_intrinsic(&ctx->ac, action->intr_name,
 				   emit_data->dst_type, emit_data->args,
-				   emit_data->arg_count, LP_FUNC_ATTR_READNONE);
+				   emit_data->arg_count, AC_FUNC_ATTR_READNONE);
 }
 
 static void emit_bfi(const struct lp_build_tgsi_action *action,
@@ -560,10 +558,8 @@ static void emit_iabs(const struct lp_build_tgsi_action *action,
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 
 	emit_data->output[emit_data->chan] =
-		lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_IMAX,
-					  emit_data->args[0],
-					  LLVMBuildNeg(ctx->ac.builder,
-						       emit_data->args[0], ""));
+		ac_build_imax(&ctx->ac,  emit_data->args[0],
+			      LLVMBuildNeg(ctx->ac.builder, emit_data->args[0], ""));
 }
 
 static void emit_minmax_int(const struct lp_build_tgsi_action *action,
@@ -615,14 +611,17 @@ static void emit_pk2h(const struct lp_build_tgsi_action *action,
 		      struct lp_build_tgsi_context *bld_base,
 		      struct lp_build_emit_data *emit_data)
 {
+	struct si_shader_context *ctx = si_shader_context(bld_base);
+
 	/* From the GLSL 4.50 spec:
 	 *   "The rounding mode cannot be set and is undefined."
 	 *
 	 * v_cvt_pkrtz_f16 rounds to zero, but it's fastest.
 	 */
 	emit_data->output[emit_data->chan] =
-		ac_build_cvt_pkrtz_f16(&si_shader_context(bld_base)->ac,
-				       emit_data->args);
+		LLVMBuildBitCast(ctx->ac.builder,
+				 ac_build_cvt_pkrtz_f16(&ctx->ac, emit_data->args),
+				 ctx->i32, "");
 }
 
 static void up2h_fetch_args(struct lp_build_tgsi_context *bld_base,
@@ -672,12 +671,11 @@ static void emit_rsq(const struct lp_build_tgsi_action *action,
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 
 	LLVMValueRef sqrt =
-		lp_build_emit_llvm_unary(bld_base, TGSI_OPCODE_SQRT,
-					 emit_data->args[0]);
+		ac_build_intrinsic(&ctx->ac, "llvm.sqrt.f32", ctx->f32,
+				   &emit_data->args[0], 1, AC_FUNC_ATTR_READNONE);
 
 	emit_data->output[emit_data->chan] =
-		lp_build_emit_llvm_binary(bld_base, TGSI_OPCODE_DIV,
-					  ctx->ac.f32_1, sqrt);
+		ac_build_fdiv(&ctx->ac, ctx->ac.f32_1, sqrt);
 }
 
 static void dfracexp_fetch_args(struct lp_build_tgsi_context *bld_base,
@@ -694,10 +692,10 @@ static void dfracexp_emit(const struct lp_build_tgsi_action *action,
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 
 	emit_data->output[emit_data->chan] =
-		lp_build_intrinsic(ctx->ac.builder, "llvm.amdgcn.frexp.mant.f64",
+		ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.frexp.mant.f64",
 				   ctx->ac.f64, &emit_data->args[0], 1, 0);
 	emit_data->output1[emit_data->chan] =
-		lp_build_intrinsic(ctx->ac.builder, "llvm.amdgcn.frexp.exp.i32.f64",
+		ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.frexp.exp.i32.f64",
 				   ctx->ac.i32, &emit_data->args[0], 1, 0);
 }
 

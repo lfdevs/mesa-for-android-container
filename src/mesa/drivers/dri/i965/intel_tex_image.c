@@ -21,7 +21,6 @@
 #include "intel_buffer_objects.h"
 #include "intel_batchbuffer.h"
 #include "intel_tex.h"
-#include "intel_blit.h"
 #include "intel_fbo.h"
 #include "intel_image.h"
 #include "intel_tiled_memcpy.h"
@@ -325,9 +324,6 @@ intel_upload_tex(struct gl_context * ctx,
       return;
 
    bool tex_busy = mt && brw_bo_busy(mt->bo);
-
-   if (mt && mt->format == MESA_FORMAT_S_UINT8)
-      mt->r8stencil_needs_update = true;
 
    if (_mesa_is_bufferobj(packing->BufferObj) || tex_busy ||
        mt->aux_usage == ISL_AUX_USAGE_CCS_E) {

@@ -250,7 +250,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
       if (!scanout)
          return NULL;
 
-      assert(handle.type == DRM_API_HANDLE_TYPE_FD);
+      assert(handle.type == WINSYS_HANDLE_TYPE_FD);
       handle.modifier = modifier;
       rsc = etna_resource(pscreen->resource_from_handle(pscreen, templat,
                                                         &handle,
@@ -600,16 +600,16 @@ etna_resource_get_handle(struct pipe_screen *pscreen,
    handle->stride = rsc->levels[0].stride;
    handle->modifier = layout_to_modifier(rsc->layout);
 
-   if (handle->type == DRM_API_HANDLE_TYPE_SHARED) {
+   if (handle->type == WINSYS_HANDLE_TYPE_SHARED) {
       return etna_bo_get_name(rsc->bo, &handle->handle) == 0;
-   } else if (handle->type == DRM_API_HANDLE_TYPE_KMS) {
+   } else if (handle->type == WINSYS_HANDLE_TYPE_KMS) {
       if (renderonly_get_handle(scanout, handle)) {
          return TRUE;
       } else {
          handle->handle = etna_bo_handle(rsc->bo);
          return TRUE;
       }
-   } else if (handle->type == DRM_API_HANDLE_TYPE_FD) {
+   } else if (handle->type == WINSYS_HANDLE_TYPE_FD) {
       handle->handle = etna_bo_dmabuf(rsc->bo);
       return TRUE;
    } else {

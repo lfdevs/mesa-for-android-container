@@ -65,34 +65,6 @@
 #include "util/u_vector.h"
 #include "mapi/glapi/glapi.h"
 
-/* The kernel header drm_fourcc.h defines the DRM formats below.  We duplicate
- * some of the definitions here so that building Mesa won't bleeding-edge
- * kernel headers.
- */
-#ifndef DRM_FORMAT_R8
-#define DRM_FORMAT_R8            fourcc_code('R', '8', ' ', ' ') /* [7:0] R */
-#endif
-
-#ifndef DRM_FORMAT_RG88
-#define DRM_FORMAT_RG88          fourcc_code('R', 'G', '8', '8') /* [15:0] R:G 8:8 little endian */
-#endif
-
-#ifndef DRM_FORMAT_GR88
-#define DRM_FORMAT_GR88          fourcc_code('G', 'R', '8', '8') /* [15:0] G:R 8:8 little endian */
-#endif
-
-#ifndef DRM_FORMAT_R16
-#define DRM_FORMAT_R16           fourcc_code('R', '1', '6', ' ') /* [15:0] R 16 little endian */
-#endif
-
-#ifndef DRM_FORMAT_GR1616
-#define DRM_FORMAT_GR1616        fourcc_code('G', 'R', '3', '2') /* [31:0] R:G 16:16 little endian */
-#endif
-
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL<<56) - 1)
-#endif
-
 #define NUM_ATTRIBS 12
 
 static void
@@ -2596,6 +2568,28 @@ dri2_export_drm_image_mesa(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img,
    return EGL_TRUE;
 }
 
+/**
+ * Checks if we can support EGL_MESA_image_dma_buf_export on this image.
+
+ * The spec provides a boolean return for the driver to reject exporting for
+ * basically any reason, but doesn't specify any particular error cases.  For
+ * now, we just fail if we don't have a DRM fourcc for the format.
+ */
+static bool
+dri2_can_export_dma_buf_image(_EGLDisplay *disp, _EGLImage *img)
+{
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_image *dri2_img = dri2_egl_image(img);
+   EGLint fourcc;
+
+   if (!dri2_dpy->image->queryImage(dri2_img->dri_image,
+                                    __DRI_IMAGE_ATTRIB_FOURCC, &fourcc)) {
+      return false;
+   }
+
+   return true;
+}
+
 static EGLBoolean
 dri2_export_dma_buf_image_query_mesa(_EGLDriver *drv, _EGLDisplay *disp,
                                      _EGLImage *img,
@@ -2607,6 +2601,8 @@ dri2_export_dma_buf_image_query_mesa(_EGLDriver *drv, _EGLDisplay *disp,
 
    (void) drv;
 
+   if (!dri2_can_export_dma_buf_image(disp, img))
+      return EGL_FALSE;
 
    if (nplanes)
       dri2_dpy->image->queryImage(dri2_img->dri_image,
@@ -2629,6 +2625,9 @@ dri2_export_dma_buf_image_mesa(_EGLDriver *drv, _EGLDisplay *disp, _EGLImage *im
    struct dri2_egl_image *dri2_img = dri2_egl_image(img);
 
    (void) drv;
+
+   if (!dri2_can_export_dma_buf_image(disp, img))
+      return EGL_FALSE;
 
    /* rework later to provide multiple fds/strides/offsets */
    if (fds)

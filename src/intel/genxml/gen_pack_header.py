@@ -220,7 +220,7 @@ def num_from_str(num_str):
     if num_str.lower().startswith('0x'):
         return int(num_str, base=16)
     else:
-        assert(not num_str.startswith('0') and 'octals numbers not allowed')
+        assert not num_str.startswith('0'), 'octals numbers not allowed'
         return int(num_str)
 
 class Field(object):
@@ -235,13 +235,21 @@ class Field(object):
         self.end = int(attrs["end"])
         self.type = attrs["type"]
 
+        assert self.start <= self.end, \
+               'field {} has end ({}) < start ({})'.format(self.name, self.end,
+                                                           self.start)
+        if self.type == 'bool':
+            assert self.end == self.start, \
+                   'bool field ({}) is too wide'.format(self.name)
+
         if "prefix" in attrs:
             self.prefix = attrs["prefix"]
         else:
             self.prefix = None
 
         if "default" in attrs:
-            self.default = int(attrs["default"])
+            # Base 0 recognizes 0x, 0o, 0b prefixes in addition to decimal ints.
+            self.default = int(attrs["default"], base=0)
         else:
             self.default = None
 

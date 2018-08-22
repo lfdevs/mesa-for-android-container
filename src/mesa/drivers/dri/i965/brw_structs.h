@@ -65,13 +65,4 @@ struct brw_urb_fence
    } bits1;
 };
 
-struct gen5_sampler_default_color {
-   uint8_t ub[4];
-   float f[4];
-   uint16_t hf[4];
-   uint16_t us[4];
-   int16_t s[4];
-   uint8_t b[4];
-};
-
 #endif

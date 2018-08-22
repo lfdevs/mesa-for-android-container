@@ -543,6 +543,10 @@ instr_cp(struct ir3_cp_ctx *ctx, struct ir3_instruction *instr)
 		if (reg->flags & IR3_REG_ARRAY)
 			continue;
 
+		/* Don't CP absneg into meta instructions, that won't end well: */
+		if (is_meta(instr) && (src->opc != OPC_MOV))
+			continue;
+
 		reg_cp(ctx, instr, reg, n);
 	}
 

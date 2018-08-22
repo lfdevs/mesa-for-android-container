@@ -470,42 +470,15 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if (GEN_GEN >= 8 || GEN_IS_HASWELL)
-   if (info->view->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) {
-      /* From the Sky Lake PRM Vol. 2d,
-       * RENDER_SURFACE_STATE::Shader Channel Select Red
-       *
-       *    "For Render Target, Red, Green and Blue Shader Channel Selects
-       *    MUST be such that only valid components can be swapped i.e. only
-       *    change the order of components in the pixel. Any other values for
-       *    these Shader Channel Select fields are not valid for Render
-       *    Targets. This also means that there MUST not be multiple shader
-       *    channels mapped to the same RT channel."
-       */
-      assert(info->view->swizzle.r == ISL_CHANNEL_SELECT_RED ||
-             info->view->swizzle.r == ISL_CHANNEL_SELECT_GREEN ||
-             info->view->swizzle.r == ISL_CHANNEL_SELECT_BLUE);
-      assert(info->view->swizzle.g == ISL_CHANNEL_SELECT_RED ||
-             info->view->swizzle.g == ISL_CHANNEL_SELECT_GREEN ||
-             info->view->swizzle.g == ISL_CHANNEL_SELECT_BLUE);
-      assert(info->view->swizzle.b == ISL_CHANNEL_SELECT_RED ||
-             info->view->swizzle.b == ISL_CHANNEL_SELECT_GREEN ||
-             info->view->swizzle.b == ISL_CHANNEL_SELECT_BLUE);
-      assert(info->view->swizzle.r != info->view->swizzle.g);
-      assert(info->view->swizzle.r != info->view->swizzle.b);
-      assert(info->view->swizzle.g != info->view->swizzle.b);
+   if (info->view->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT)
+      assert(isl_swizzle_supports_rendering(dev->info, info->view->swizzle));
 
-      /* From the Sky Lake PRM Vol. 2d,
-       * RENDER_SURFACE_STATE::Shader Channel Select Alpha
-       *
-       *    "For Render Target, this field MUST be programmed to
-       *    value = SCS_ALPHA."
-       */
-      assert(info->view->swizzle.a == ISL_CHANNEL_SELECT_ALPHA);
-   }
    s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) info->view->swizzle.r;
    s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) info->view->swizzle.g;
    s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) info->view->swizzle.b;
    s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) info->view->swizzle.a;
+#else
+   assert(isl_swizzle_is_identity(info->view->swizzle));
 #endif
 
    s.SurfaceBaseAddress = info->address;

@@ -1086,12 +1086,12 @@ i
     <field name="CLIP Unit URB Reallocation Request" start="10" end="10" type="bool"/>
     <field name="GS Unit URB Reallocation Request" start="9" end="9" type="bool"/>
     <field name="VS Unit URB Reallocation Request" start="8" end="8" type="bool"/>
-    <field name="CLIP Fence" start="52" end="61" type="bool"/>
-    <field name="GS Fence" start="42" end="51" type="bool"/>
-    <field name="VS Fence" start="32" end="41" type="bool"/>
-    <field name="CS Fence" start="84" end="94" type="bool"/>
-    <field name="VFE Fence" start="74" end="83" type="bool"/>
-    <field name="SF Fence" start="64" end="73" type="bool"/>
+    <field name="CLIP Fence" start="52" end="61" type="uint"/>
+    <field name="GS Fence" start="42" end="51" type="uint"/>
+    <field name="VS Fence" start="32" end="41" type="uint"/>
+    <field name="CS Fence" start="84" end="94" type="uint"/>
+    <field name="VFE Fence" start="74" end="83" type="uint"/>
+    <field name="SF Fence" start="64" end="73" type="uint"/>
   </instruction>
 
   <instruction name="XY_COLOR_BLT" bias="2" length="6">

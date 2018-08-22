@@ -28,20 +28,36 @@
 #include <stdarg.h>
 #include "util/list.h"
 
+struct clif_bo {
+        const char *name;
+        uint32_t offset;
+        uint32_t size;
+        void *vaddr;
+        bool dumped;
+};
+
 struct clif_dump {
         const struct v3d_device_info *devinfo;
-        bool (*lookup_vaddr)(void *data, uint32_t addr, void **vaddr);
         FILE *out;
-        /* Opaque data from the caller that is passed to the callbacks. */
-        void *data;
 
         struct v3d_spec *spec;
 
         /* List of struct reloc_worklist_entry */
         struct list_head worklist;
+
+        struct clif_bo *bo;
+        int bo_count;
+        int bo_array_size;
+
+        /**
+         * Flag to switch from CLIF ABI to slightly more human-readable
+         * output.
+         */
+        bool pretty;
 };
 
 enum reloc_worklist_type {
+        reloc_cl,
         reloc_gl_shader_state,
         reloc_generic_tile_list,
 };
@@ -54,6 +70,9 @@ struct reloc_worklist_entry {
 
         union {
                 struct {
+                        uint32_t end;
+                } cl;
+                struct {
                         uint32_t num_attrs;
                 } shader_state;
                 struct {
@@ -62,26 +81,20 @@ struct reloc_worklist_entry {
         };
 };
 
+struct clif_bo *
+clif_lookup_bo(struct clif_dump *clif, uint32_t addr);
+
 struct reloc_worklist_entry *
 clif_dump_add_address_to_worklist(struct clif_dump *clif,
                                   enum reloc_worklist_type type,
                                   uint32_t addr);
 
 bool v3d33_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
-                            const uint8_t *cl, uint32_t *size);
-void v3d33_clif_dump_gl_shader_state_record(struct clif_dump *clif,
-                                            struct reloc_worklist_entry *reloc,
-                                            void *vaddr);
+                            const uint8_t *cl, uint32_t *size, bool reloc_mode);
 bool v3d41_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
-                            const uint8_t *cl, uint32_t *size);
-void v3d41_clif_dump_gl_shader_state_record(struct clif_dump *clif,
-                                            struct reloc_worklist_entry *reloc,
-                                            void *vaddr);
+                            const uint8_t *cl, uint32_t *size, bool reloc_mode);
 bool v3d42_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
-                            const uint8_t *cl, uint32_t *size);
-void v3d42_clif_dump_gl_shader_state_record(struct clif_dump *clif,
-                                            struct reloc_worklist_entry *reloc,
-                                            void *vaddr);
+                            const uint8_t *cl, uint32_t *size, bool reloc_mode);
 
 static inline void
 out(struct clif_dump *clif, const char *fmt, ...)
@@ -91,6 +104,20 @@ out(struct clif_dump *clif, const char *fmt, ...)
         va_start(args, fmt);
         vfprintf(clif->out, fmt, args);
         va_end(args);
+}
+
+static inline void
+out_address(struct clif_dump *clif, uint32_t addr)
+{
+        struct clif_bo *bo = clif_lookup_bo(clif, addr);
+        if (bo) {
+                out(clif, "[%s+0x%08x] /* 0x%08x */",
+                    bo->name, addr - bo->offset, addr);
+        } else if (addr) {
+                out(clif, "/* XXX: BO unknown */ 0x%08x", addr);
+        } else {
+                out(clif, "[null]");
+        }
 }
 
 #endif /* CLIF_PRIVATE_H */

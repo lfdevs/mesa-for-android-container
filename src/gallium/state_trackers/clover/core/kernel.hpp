@@ -93,6 +93,7 @@ namespace clover {
          /// Free any resources that were allocated in bind().
          virtual void unbind(exec_context &ctx) = 0;
 
+         virtual ~argument() {};
       protected:
          argument();
 

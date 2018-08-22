@@ -1247,7 +1247,7 @@ static int allocate_system_value_inputs(struct r600_shader_ctx *ctx, int gpr_off
 	tgsi_parse_free(&parse);
 
 	if (ctx->info.reads_samplemask &&
-	    (ctx->info.uses_linear_sample || ctx->info.uses_linear_sample)) {
+	    (ctx->info.uses_linear_sample || ctx->info.uses_persp_sample)) {
 		inputs[1].enabled = true;
 	}
 
@@ -4331,8 +4331,32 @@ static void tgsi_dst(struct r600_shader_ctx *ctx,
 
 		if (spilled) {
 			struct r600_bytecode_output cf;
-			int reg = r600_get_temp(ctx);
+			int reg = 0;
 			int r;
+			bool add_pending_output = true;
+
+			memset(&cf, 0, sizeof(struct r600_bytecode_output));
+			get_spilled_array_base_and_size(ctx, tgsi_dst->Register.Index,
+				&cf.array_base, &cf.array_size);
+
+			/* If no component has spilled, reserve a register and add the spill code
+			 *  ctx->bc->n_pending_outputs is cleared after each instruction group */
+			if (ctx->bc->n_pending_outputs == 0) {
+				reg = r600_get_temp(ctx);
+			} else {
+				/* If we are already spilling and the output address is the same like
+				* before then just reuse the same slot */
+				struct r600_bytecode_output *tmpl = &ctx->bc->pending_outputs[ctx->bc->n_pending_outputs-1];
+				if ((cf.array_base + idx == tmpl->array_base) ||
+				    (cf.array_base == tmpl->array_base &&
+				     tmpl->index_gpr == ctx->bc->ar_reg &&
+				     tgsi_dst->Register.Indirect)) {
+					reg = ctx->bc->pending_outputs[0].gpr;
+					add_pending_output = false;
+				} else {
+					reg = r600_get_temp(ctx);
+				}
+			}
 
 			r600_dst->sel = reg;
 			r600_dst->chan = swizzle;
@@ -4341,29 +4365,26 @@ static void tgsi_dst(struct r600_shader_ctx *ctx,
 				r600_dst->clamp = 1;
 			}
 
-			// needs to be added after op using tgsi_dst
-			memset(&cf, 0, sizeof(struct r600_bytecode_output));
-			cf.op = CF_OP_MEM_SCRATCH;
-			cf.elem_size = 3;
-			cf.gpr = reg;
-			cf.type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE;
-			cf.mark = 1;
-			cf.comp_mask = inst->Dst[0].Register.WriteMask;
-			cf.swizzle_x = 0;
-			cf.swizzle_y = 1;
-			cf.swizzle_z = 2;
-			cf.swizzle_w = 3;
-			cf.burst_count = 1;
+			/* Add new outputs as pending */
+			if (add_pending_output) {
+				cf.op = CF_OP_MEM_SCRATCH;
+				cf.elem_size = 3;
+				cf.gpr = reg;
+				cf.type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE;
+				cf.mark = 1;
+				cf.comp_mask = inst->Dst[0].Register.WriteMask;
+				cf.swizzle_x = 0;
+				cf.swizzle_y = 1;
+				cf.swizzle_z = 2;
+				cf.swizzle_w = 3;
+				cf.burst_count = 1;
 
-			get_spilled_array_base_and_size(ctx, tgsi_dst->Register.Index,
-				&cf.array_base, &cf.array_size);
-
-			if (tgsi_dst->Register.Indirect) {
-				if (ctx->bc->chip_class < R700)
-					cf.type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND;
-				else
-					cf.type = 3; // V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND_ACK;
-				cf.index_gpr = ctx->bc->ar_reg;
+				if (tgsi_dst->Register.Indirect) {
+					if (ctx->bc->chip_class < R700)
+						cf.type = V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND;
+					else
+						cf.type = 3; // V_SQ_CF_ALLOC_EXPORT_WORD0_SQ_EXPORT_WRITE_IND_ACK;
+					cf.index_gpr = ctx->bc->ar_reg;
 			}
 			else {
 				cf.array_base += idx;
@@ -4376,7 +4397,7 @@ static void tgsi_dst(struct r600_shader_ctx *ctx,
 
 			if (ctx->bc->chip_class >= R700)
 				r600_bytecode_need_wait_ack(ctx->bc, true);
-
+			}
 			return;
 		}
 		else {
@@ -5719,10 +5740,19 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 	struct r600_bytecode_alu alu;
 	int i, r, j;
 	unsigned write_mask = inst->Dst[0].Register.WriteMask;
+	int lasti = tgsi_last_instruction(write_mask);
 	int tmp0 = ctx->temp_reg;
 	int tmp1 = r600_get_temp(ctx);
 	int tmp2 = r600_get_temp(ctx);
 	int tmp3 = r600_get_temp(ctx);
+	int tmp4 = 0;
+
+	/* Use additional temp if dst register and src register are the same */
+	if (inst->Src[0].Register.Index == inst->Dst[0].Register.Index ||
+	    inst->Src[1].Register.Index == inst->Dst[0].Register.Index) {
+		tmp4 = r600_get_temp(ctx);
+	}
+
 	/* Unsigned path:
 	 *
 	 * we need to represent src1 as src2*q + r, where q - quotient, r - remainder
@@ -6337,7 +6367,13 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 			alu.dst.chan = 2;
 			alu.dst.write = 1;
 		} else {
-			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+			if (tmp4 > 0) {
+				alu.dst.sel = tmp4;
+				alu.dst.chan = i;
+				alu.dst.write = 1;
+			} else {
+				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+			}
 		}
 
 		alu.src[0].sel = tmp1;
@@ -6379,7 +6415,13 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 				alu.op = ALU_OP3_CNDGE_INT;
 				alu.is_op3 = 1;
 
-				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				if (tmp4 > 0) {
+					alu.dst.sel = tmp4;
+					alu.dst.chan = i;
+					alu.dst.write = 1;
+				} else {
+					tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				}
 
 				r600_bytecode_src(&alu.src[0], &ctx->src[0], i);
 				alu.src[1].sel = tmp0;
@@ -6415,7 +6457,13 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 				alu.op = ALU_OP3_CNDGE_INT;
 				alu.is_op3 = 1;
 
-				tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				if (tmp4 > 0) {
+					alu.dst.sel = tmp4;
+					alu.dst.chan = i;
+					alu.dst.write = 1;
+				} else {
+					tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+				}
 
 				alu.src[0].sel = tmp2;
 				alu.src[0].chan = 2;
@@ -6430,6 +6478,25 @@ static int tgsi_divmod(struct r600_shader_ctx *ctx, int mod, int signed_op)
 			}
 		}
 	}
+
+	if (tmp4 > 0) {
+		for (i = 0; i <= lasti; ++i) {
+			if (!(write_mask & (1<<i)))
+				continue;
+
+			memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+			alu.op = ALU_OP1_MOV;
+			tgsi_dst(ctx, &inst->Dst[0], i, &alu.dst);
+			alu.src[0].sel = tmp4;
+			alu.src[0].chan = i;
+
+			if (i == lasti)
+				alu.last = 1;
+			if ((r = r600_bytecode_add_alu(ctx->bc, &alu)))
+				return r;
+		}
+	}
+
 	return 0;
 }
 
@@ -6625,11 +6692,15 @@ static int tgsi_issg(struct r600_shader_ctx *ctx)
 static int tgsi_ssg(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
+	unsigned write_mask = inst->Dst[0].Register.WriteMask;
+	int last_inst = tgsi_last_instruction(write_mask);
 	struct r600_bytecode_alu alu;
 	int i, r;
 
 	/* tmp = (src > 0 ? 1 : src) */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i <= last_inst; i++) {
+		if (!(write_mask & (1 << i)))
+			continue;
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP3_CNDGT;
 		alu.is_op3 = 1;
@@ -6641,7 +6712,7 @@ static int tgsi_ssg(struct r600_shader_ctx *ctx)
 		alu.src[1].sel = V_SQ_ALU_SRC_1;
 		r600_bytecode_src(&alu.src[2], &ctx->src[0], i);
 
-		if (i == 3)
+		if (i == last_inst)
 			alu.last = 1;
 		r = r600_bytecode_add_alu(ctx->bc, &alu);
 		if (r)
@@ -6649,7 +6720,9 @@ static int tgsi_ssg(struct r600_shader_ctx *ctx)
 	}
 
 	/* dst = (-tmp > 0 ? -1 : tmp) */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i <= last_inst; i++) {
+		if (!(write_mask & (1 << i)))
+			continue;
 		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 		alu.op = ALU_OP3_CNDGT;
 		alu.is_op3 = 1;
@@ -6665,7 +6738,7 @@ static int tgsi_ssg(struct r600_shader_ctx *ctx)
 		alu.src[2].sel = ctx->temp_reg;
 		alu.src[2].chan = i;
 
-		if (i == 3)
+		if (i == last_inst)
 			alu.last = 1;
 		r = r600_bytecode_add_alu(ctx->bc, &alu);
 		if (r)
@@ -7372,9 +7445,10 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 {
 	struct tgsi_full_instruction *inst = &ctx->parse.FullToken.FullInstruction;
 	struct r600_bytecode_tex tex;
+	struct r600_bytecode_tex grad_offs[3];
 	struct r600_bytecode_alu alu;
 	unsigned src_gpr;
-	int r, i, j;
+	int r, i, j, n_grad_offs = 0;
 	int opcode;
 	bool read_compressed_msaa = ctx->bc->has_compressed_msaa_texturing &&
 				    inst->Instruction.Opcode == TGSI_OPCODE_TXF &&
@@ -7396,6 +7470,7 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 	int8_t offset_x = 0, offset_y = 0, offset_z = 0;
 	boolean has_txq_cube_array_z = false;
 	unsigned sampler_index_mode;
+	int array_index_offset_channel = -1;
 
 	if (inst->Instruction.Opcode == TGSI_OPCODE_TXQ &&
 	    ((inst->Texture.Texture == TGSI_TEXTURE_CUBE_ARRAY ||
@@ -7637,11 +7712,43 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 				if (r)
 					return r;
 
+				/* Evaluate the array index according to floor(idx + 0.5). This
+				 * needs to be done before merging the face select value, because
+				 * otherwise the fractional part of the array index will interfere
+				 * with the face select value */
+				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+				r600_bytecode_src(&alu.src[0], &ctx->src[0], 3);
+				alu.op = ALU_OP1_RNDNE;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = 3;
+				alu.dst.write = 1;
+				alu.last = 1;
+				r = r600_bytecode_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+
+				/* Because the array slice index and the cube face index are merged
+				 * into one value we have to make sure the array slice index is >= 0,
+				 * otherwise the face selection will fail */
+				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+				alu.op = ALU_OP2_MAX;
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 3;
+				alu.src[1].sel = V_SQ_ALU_SRC_0;
+				alu.dst.sel = ctx->temp_reg;
+				alu.dst.chan = 3;
+				alu.dst.write = 1;
+				alu.last = 1;
+				r = r600_bytecode_add_alu(ctx->bc, &alu);
+				if (r)
+					return r;
+
 				/* have to multiply original layer by 8 and add to face id (temp.w) in Z */
 				memset(&alu, 0, sizeof(struct r600_bytecode_alu));
 				alu.op = ALU_OP3_MULADD;
 				alu.is_op3 = 1;
-				r600_bytecode_src(&alu.src[0], &ctx->src[0], 3);
+				alu.src[0].sel = ctx->temp_reg;
+				alu.src[0].chan = 3;
 				alu.src[1].sel = V_SQ_ALU_SRC_LITERAL;
 				alu.src[1].chan = 0;
 				alu.src[1].value = u_bitcast_f2u(8.0f);
@@ -7747,31 +7854,29 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		}
 		for (i = 1; i < 3; i++) {
 			/* set gradients h/v */
-			memset(&tex, 0, sizeof(struct r600_bytecode_tex));
-			tex.op = (i == 1) ? FETCH_OP_SET_GRADIENTS_H :
+			struct r600_bytecode_tex *t = &grad_offs[n_grad_offs++];
+			memset(t, 0, sizeof(struct r600_bytecode_tex));
+			t->op = (i == 1) ? FETCH_OP_SET_GRADIENTS_H :
 				FETCH_OP_SET_GRADIENTS_V;
-			tex.sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
-			tex.sampler_index_mode = sampler_index_mode;
-			tex.resource_id = tex.sampler_id + R600_MAX_CONST_BUFFERS;
-			tex.resource_index_mode = sampler_index_mode;
+			t->sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
+			t->sampler_index_mode = sampler_index_mode;
+			t->resource_id = t->sampler_id + R600_MAX_CONST_BUFFERS;
+			t->resource_index_mode = sampler_index_mode;
 
-			tex.src_gpr = (i == 1) ? temp_h : temp_v;
-			tex.src_sel_x = 0;
-			tex.src_sel_y = 1;
-			tex.src_sel_z = 2;
-			tex.src_sel_w = 3;
+			t->src_gpr = (i == 1) ? temp_h : temp_v;
+			t->src_sel_x = 0;
+			t->src_sel_y = 1;
+			t->src_sel_z = 2;
+			t->src_sel_w = 3;
 
-			tex.dst_gpr = r600_get_temp(ctx); /* just to avoid confusing the asm scheduler */
-			tex.dst_sel_x = tex.dst_sel_y = tex.dst_sel_z = tex.dst_sel_w = 7;
+			t->dst_gpr = r600_get_temp(ctx); /* just to avoid confusing the asm scheduler */
+			t->dst_sel_x = t->dst_sel_y = t->dst_sel_z = t->dst_sel_w = 7;
 			if (inst->Texture.Texture != TGSI_TEXTURE_RECT) {
-				tex.coord_type_x = 1;
-				tex.coord_type_y = 1;
-				tex.coord_type_z = 1;
-				tex.coord_type_w = 1;
+				t->coord_type_x = 1;
+				t->coord_type_y = 1;
+				t->coord_type_z = 1;
+				t->coord_type_w = 1;
 			}
-			r = r600_bytecode_add_tex(ctx->bc, &tex);
-			if (r)
-				return r;
 		}
 	}
 
@@ -8176,32 +8281,37 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 	if (opcode == FETCH_OP_GATHER4 &&
 		inst->TexOffsets[0].File != TGSI_FILE_NULL &&
 		inst->TexOffsets[0].File != TGSI_FILE_IMMEDIATE) {
+		struct r600_bytecode_tex *t;
 		opcode = FETCH_OP_GATHER4_O;
 
 		/* GATHER4_O/GATHER4_C_O use offset values loaded by
 		   SET_TEXTURE_OFFSETS instruction. The immediate offset values
 		   encoded in the instruction are ignored. */
-		memset(&tex, 0, sizeof(struct r600_bytecode_tex));
-		tex.op = FETCH_OP_SET_TEXTURE_OFFSETS;
-		tex.sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
-		tex.sampler_index_mode = sampler_index_mode;
-		tex.resource_id = tex.sampler_id + R600_MAX_CONST_BUFFERS;
-		tex.resource_index_mode = sampler_index_mode;
+		t = &grad_offs[n_grad_offs++];
+		memset(t, 0, sizeof(struct r600_bytecode_tex));
+		t->op = FETCH_OP_SET_TEXTURE_OFFSETS;
+		t->sampler_id = tgsi_tex_get_src_gpr(ctx, sampler_src_reg);
+		t->sampler_index_mode = sampler_index_mode;
+		t->resource_id = t->sampler_id + R600_MAX_CONST_BUFFERS;
+		t->resource_index_mode = sampler_index_mode;
 
-		tex.src_gpr = ctx->file_offset[inst->TexOffsets[0].File] + inst->TexOffsets[0].Index;
-		tex.src_sel_x = inst->TexOffsets[0].SwizzleX;
-		tex.src_sel_y = inst->TexOffsets[0].SwizzleY;
-		tex.src_sel_z = inst->TexOffsets[0].SwizzleZ;
-		tex.src_sel_w = 4;
+		t->src_gpr = ctx->file_offset[inst->TexOffsets[0].File] + inst->TexOffsets[0].Index;
+		t->src_sel_x = inst->TexOffsets[0].SwizzleX;
+		t->src_sel_y = inst->TexOffsets[0].SwizzleY;
+		if (inst->Texture.Texture == TGSI_TEXTURE_2D_ARRAY ||
+			 inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D_ARRAY)
+			/* make sure array index selector is 0, this is just a safety
+			 * precausion because TGSI seems to emit something strange here */
+			t->src_sel_z = 4;
+		else
+			t->src_sel_z = inst->TexOffsets[0].SwizzleZ;
 
-		tex.dst_sel_x = 7;
-		tex.dst_sel_y = 7;
-		tex.dst_sel_z = 7;
-		tex.dst_sel_w = 7;
+		t->src_sel_w = 4;
 
-		r = r600_bytecode_add_tex(ctx->bc, &tex);
-		if (r)
-			return r;
+		t->dst_sel_x = 7;
+		t->dst_sel_y = 7;
+		t->dst_sel_z = 7;
+		t->dst_sel_w = 7;
 	}
 
 	if (inst->Texture.Texture == TGSI_TEXTURE_SHADOW1D ||
@@ -8351,18 +8461,42 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 		    opcode == FETCH_OP_SAMPLE_C_LB) {
 			/* the array index is read from Y */
 			tex.coord_type_y = 0;
+			array_index_offset_channel = tex.src_sel_y;
 		} else {
 			/* the array index is read from Z */
 			tex.coord_type_z = 0;
 			tex.src_sel_z = tex.src_sel_y;
+			array_index_offset_channel = tex.src_sel_z;
 		}
 	} else if (inst->Texture.Texture == TGSI_TEXTURE_2D_ARRAY ||
-		   inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D_ARRAY ||
-		   ((inst->Texture.Texture == TGSI_TEXTURE_CUBE_ARRAY ||
-		    inst->Texture.Texture == TGSI_TEXTURE_SHADOWCUBE_ARRAY) &&
-		    (ctx->bc->chip_class >= EVERGREEN)))
-		/* the array index is read from Z */
+		    inst->Texture.Texture == TGSI_TEXTURE_SHADOW2D_ARRAY) {
 		tex.coord_type_z = 0;
+		array_index_offset_channel = tex.src_sel_z;
+	} else if  ((inst->Texture.Texture == TGSI_TEXTURE_CUBE_ARRAY ||
+		    inst->Texture.Texture == TGSI_TEXTURE_SHADOWCUBE_ARRAY) &&
+		    (ctx->bc->chip_class >= EVERGREEN))
+		/* the array index is read from Z, coordinate will be corrected elsewhere  */
+		tex.coord_type_z = 0;
+
+	/* We have array access to 1D or 2D ARRAY, the coordinates are not int ->
+	 * evaluate the array index  */
+	if (array_index_offset_channel >= 0 &&
+		 opcode != FETCH_OP_LD &&
+		 opcode != FETCH_OP_GET_TEXTURE_RESINFO) {
+		memset(&alu, 0, sizeof(struct r600_bytecode_alu));
+		alu.src[0].sel =  tex.src_gpr;
+		alu.src[0].chan =  array_index_offset_channel;
+		alu.src[0].rel = tex.src_rel;
+		alu.op = ALU_OP1_RNDNE;
+		alu.dst.sel = tex.src_gpr;
+		alu.dst.chan = array_index_offset_channel;
+		alu.dst.rel = tex.src_rel;
+		alu.dst.write = 1;
+		alu.last = 1;
+		r = r600_bytecode_add_alu(ctx->bc, &alu);
+		if (r)
+			return r;
+	}
 
 	/* mask unused source components */
 	if (opcode == FETCH_OP_SAMPLE || opcode == FETCH_OP_GATHER4) {
@@ -8382,6 +8516,13 @@ static int tgsi_tex(struct r600_shader_ctx *ctx)
 			tex.src_sel_w = 7;
 			break;
 		}
+	}
+
+	/* Emit set gradient and offset instructions. */
+	for (i = 0; i < n_grad_offs; ++i) {
+		r = r600_bytecode_add_tex(ctx->bc, &grad_offs[i]);
+		if (r)
+			return r;
 	}
 
 	r = r600_bytecode_add_tex(ctx->bc, &tex);

@@ -123,6 +123,7 @@ struct inout_decl {
    enum glsl_interp_mode interp;
    enum glsl_base_type base_type;
    ubyte usage_mask; /* GLSL-style usage-mask,  i.e. single bit per double */
+   bool invariant;
 };
 
 static struct inout_decl *
@@ -316,6 +317,7 @@ public:
                           st_src_reg *indirect,
                           unsigned *location);
    st_src_reg canonicalize_gather_offset(st_src_reg offset);
+   bool handle_bound_deref(ir_dereference *ir);
 
    bool try_emit_mad(ir_expression *ir,
               int mul_operand);
@@ -2439,9 +2441,14 @@ st_translate_interp_loc(ir_variable *var)
 void
 glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
 {
-   variable_storage *entry = find_variable_storage(ir->var);
+   variable_storage *entry;
    ir_variable *var = ir->var;
    bool remove_array;
+
+   if (handle_bound_deref(ir->as_dereference()))
+      return;
+
+   entry = find_variable_storage(ir->var);
 
    if (!entry) {
       switch (var->data.mode) {
@@ -2507,6 +2514,8 @@ glsl_to_tgsi_visitor::visit(ir_dereference_variable *ir)
          unsigned component = var->data.location_frac;
          unsigned num_components;
          num_outputs++;
+
+         decl->invariant = var->data.invariant;
 
          if (type_without_array->is_64bit())
             component = component / 2;
@@ -2669,6 +2678,9 @@ glsl_to_tgsi_visitor::visit(ir_dereference_array *ir)
    bool is_2D = false;
    ir_variable *var = ir->variable_referenced();
 
+   if (handle_bound_deref(ir->as_dereference()))
+      return;
+
    /* We only need the logic provided by st_glsl_storage_type_size()
     * for arrays of structs. Indirect sampler and image indexing is handled
     * elsewhere.
@@ -2767,6 +2779,9 @@ glsl_to_tgsi_visitor::visit(ir_dereference_record *ir)
    const glsl_type *struct_type = ir->record->type;
    ir_variable *var = ir->record->variable_referenced();
    int offset = 0;
+
+   if (handle_bound_deref(ir->as_dereference()))
+      return;
 
    ir->record->accept(this);
 
@@ -3104,7 +3119,7 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
    GLdouble stack_vals[4] = { 0 };
    gl_constant_value *values = (gl_constant_value *) stack_vals;
    GLenum gl_type = GL_NONE;
-   unsigned int i;
+   unsigned int i, elements;
    static int in_array = 0;
    gl_register_file file = in_array ? PROGRAM_CONSTANT : PROGRAM_IMMEDIATE;
 
@@ -3226,6 +3241,7 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
       return;
    }
 
+   elements = ir->type->vector_elements;
    switch (ir->type->base_type) {
    case GLSL_TYPE_FLOAT:
       gl_type = GL_FLOAT;
@@ -3275,14 +3291,21 @@ glsl_to_tgsi_visitor::visit(ir_constant *ir)
          values[i].u = ir->value.b[i] ? ctx->Const.UniformBooleanTrue : 0;
       }
       break;
+   case GLSL_TYPE_SAMPLER:
+   case GLSL_TYPE_IMAGE:
+      gl_type = GL_UNSIGNED_INT;
+      elements = 2;
+      values[0].u = ir->value.u64[0] & 0xffffffff;
+      values[1].u = ir->value.u64[0] >> 32;
+      break;
    default:
-      assert(!"Non-float/uint/int/bool constant");
+      assert(!"Non-float/uint/int/bool/sampler/image constant");
    }
 
    this->result = st_src_reg(file, -1, ir->type);
    this->result.index = add_constant(file,
                                      values,
-                                     ir->type->vector_elements,
+                                     elements,
                                      gl_type,
                                      &this->result.swizzle);
 }
@@ -3990,6 +4013,8 @@ glsl_to_tgsi_visitor::visit(ir_call *ir)
    case ir_intrinsic_generic_atomic_max:
    case ir_intrinsic_generic_atomic_exchange:
    case ir_intrinsic_generic_atomic_comp_swap:
+   case ir_intrinsic_begin_invocation_interlock:
+   case ir_intrinsic_end_invocation_interlock:
       unreachable("Invalid intrinsic");
    }
 }
@@ -4109,6 +4134,45 @@ glsl_to_tgsi_visitor::canonicalize_gather_offset(st_src_reg offset)
    }
 
    return offset;
+}
+ 
+bool
+glsl_to_tgsi_visitor::handle_bound_deref(ir_dereference *ir)
+{
+   ir_variable *var = ir->variable_referenced();
+
+   if (!var || var->data.mode != ir_var_uniform || var->data.bindless ||
+       !(ir->type->is_image() || ir->type->is_sampler()))
+      return false;
+
+   /* Convert from bound sampler/image to bindless handle. */
+   bool is_image = ir->type->is_image();
+   st_src_reg resource(is_image ? PROGRAM_IMAGE : PROGRAM_SAMPLER, 0, GLSL_TYPE_UINT);
+   uint16_t index = 0;
+   unsigned array_size = 1, base = 0;
+   st_src_reg reladdr;
+   get_deref_offsets(ir, &array_size, &base, &index, &reladdr, true);
+
+   resource.index = index;
+   if (reladdr.file != PROGRAM_UNDEFINED) {
+      resource.reladdr = ralloc(mem_ctx, st_src_reg);
+      *resource.reladdr = reladdr;
+      emit_arl(ir, sampler_reladdr, reladdr);
+   }
+
+   this->result = get_temp(glsl_type::uvec2_type);
+   st_dst_reg dst(this->result);
+   dst.writemask = WRITEMASK_XY;
+
+   glsl_to_tgsi_instruction *inst = emit_asm(
+      ir, is_image ? TGSI_OPCODE_IMG2HND : TGSI_OPCODE_SAMP2HND, dst);
+
+   inst->tex_target = ir->type->sampler_index();
+   inst->resource = resource;
+   inst->sampler_array_size = array_size;
+   inst->sampler_base = base;
+
+   return true;
 }
 
 void
@@ -5904,6 +5968,7 @@ compile_tgsi_instruction(struct st_translate *t,
    case TGSI_OPCODE_TXL2:
    case TGSI_OPCODE_TG4:
    case TGSI_OPCODE_LODQ:
+   case TGSI_OPCODE_SAMP2HND:
       if (inst->resource.file == PROGRAM_SAMPLER) {
          src[num_src] = t->samplers[inst->resource.index];
       } else {
@@ -5942,6 +6007,7 @@ compile_tgsi_instruction(struct st_translate *t,
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMIMAX:
+   case TGSI_OPCODE_IMG2HND:
       for (i = num_src - 1; i >= 0; i--)
          src[i + 1] = src[i];
       num_src++;
@@ -6441,14 +6507,15 @@ st_translate_program(
                      (enum tgsi_semantic) outputSemanticName[slot],
                      outputSemanticIndex[slot],
                      decl->gs_out_streams,
-                     slot, tgsi_usage_mask, decl->array_id, decl->size);
-
+                     slot, tgsi_usage_mask, decl->array_id, decl->size, decl->invariant);
+         dst.Invariant = decl->invariant;
          for (unsigned j = 0; j < decl->size; ++j) {
             if (t->outputs[slot + j].File != TGSI_FILE_OUTPUT) {
                /* The ArrayID is set up in dst_register */
                t->outputs[slot + j] = dst;
                t->outputs[slot + j].ArrayID = 0;
                t->outputs[slot + j].Index += j;
+               t->outputs[slot + j].Invariant = decl->invariant;
             }
          }
       }

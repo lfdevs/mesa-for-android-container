@@ -26,8 +26,6 @@
 
 #include "etnaviv_rs.h"
 
-#include "hw/common.xml.h"
-
 #include "etnaviv_clear_blit.h"
 #include "etnaviv_context.h"
 #include "etnaviv_emit.h"

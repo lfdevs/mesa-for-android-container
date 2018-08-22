@@ -247,7 +247,7 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, format, PIPE_TEXTURE_3D, 1,
+      pscreen, format, PIPE_TEXTURE_3D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {
@@ -299,7 +299,7 @@ vlVdpOutputSurfaceQueryGetPutBitsNativeCapabilities(VdpDevice device, VdpRGBAFor
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, format, PIPE_TEXTURE_2D, 1,
+      pscreen, format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    mtx_unlock(&dev->mutex);
@@ -348,19 +348,19 @@ vlVdpOutputSurfaceQueryPutBitsIndexedCapabilities(VdpDevice device,
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
+      pscreen, rgba_format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
 
    *is_supported &= pscreen->is_format_supported
    (
-      pscreen, index_format, PIPE_TEXTURE_2D, 1,
+      pscreen, index_format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW
    );
 
    *is_supported &= pscreen->is_format_supported
    (
-      pscreen, colortbl_format, PIPE_TEXTURE_1D, 1,
+      pscreen, colortbl_format, PIPE_TEXTURE_1D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW
    );
    mtx_unlock(&dev->mutex);
@@ -403,7 +403,7 @@ vlVdpOutputSurfaceQueryPutBitsYCbCrCapabilities(VdpDevice device, VdpRGBAFormat 
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, rgba_format, PIPE_TEXTURE_2D, 1,
+      pscreen, rgba_format, PIPE_TEXTURE_2D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
 
@@ -447,7 +447,7 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
    mtx_lock(&dev->mutex);
    *is_supported = pscreen->is_format_supported
    (
-      pscreen, format, PIPE_TEXTURE_3D, 1,
+      pscreen, format, PIPE_TEXTURE_3D, 1, 1,
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {

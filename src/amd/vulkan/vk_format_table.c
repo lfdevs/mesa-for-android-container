@@ -5742,6 +5742,266 @@ vk_format_bc7_srgb_block_description = {
    VK_FORMAT_COLORSPACE_SRGB,
 };
 
+static const struct vk_format_description
+vk_format_etc2_r8g8b8_unorm_block_description = {
+   VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK",
+   "etc2_r8g8b8_unorm_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_Y,	/* g */
+      VK_SWIZZLE_Z,	/* b */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_etc2_r8g8b8_srgb_block_description = {
+   VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK",
+   "etc2_r8g8b8_srgb_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* sr */
+      VK_SWIZZLE_Y,	/* sg */
+      VK_SWIZZLE_Z,	/* sb */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_SRGB,
+};
+
+static const struct vk_format_description
+vk_format_etc2_r8g8b8a1_unorm_block_description = {
+   VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK",
+   "etc2_r8g8b8a1_unorm_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_Y,	/* g */
+      VK_SWIZZLE_Z,	/* b */
+      VK_SWIZZLE_W	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_etc2_r8g8b8a1_srgb_block_description = {
+   VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK",
+   "etc2_r8g8b8a1_srgb_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* sr */
+      VK_SWIZZLE_Y,	/* sg */
+      VK_SWIZZLE_Z,	/* sb */
+      VK_SWIZZLE_W	/* a */
+   },
+   VK_FORMAT_COLORSPACE_SRGB,
+};
+
+static const struct vk_format_description
+vk_format_etc2_r8g8b8a8_unorm_block_description = {
+   VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK",
+   "etc2_r8g8b8a8_unorm_block",
+   {4, 4, 128},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_Y,	/* g */
+      VK_SWIZZLE_Z,	/* b */
+      VK_SWIZZLE_W	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_etc2_r8g8b8a8_srgb_block_description = {
+   VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,
+   "VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK",
+   "etc2_r8g8b8a8_srgb_block",
+   {4, 4, 128},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* sr */
+      VK_SWIZZLE_Y,	/* sg */
+      VK_SWIZZLE_Z,	/* sb */
+      VK_SWIZZLE_W	/* a */
+   },
+   VK_FORMAT_COLORSPACE_SRGB,
+};
+
+static const struct vk_format_description
+vk_format_eac_r11_unorm_block_description = {
+   VK_FORMAT_EAC_R11_UNORM_BLOCK,
+   "VK_FORMAT_EAC_R11_UNORM_BLOCK",
+   "eac_r11_unorm_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_0,	/* g */
+      VK_SWIZZLE_0,	/* b */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_eac_r11_snorm_block_description = {
+   VK_FORMAT_EAC_R11_SNORM_BLOCK,
+   "VK_FORMAT_EAC_R11_SNORM_BLOCK",
+   "eac_r11_snorm_block",
+   {4, 4, 64},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 64, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_0,	/* g */
+      VK_SWIZZLE_0,	/* b */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_eac_r11g11_unorm_block_description = {
+   VK_FORMAT_EAC_R11G11_UNORM_BLOCK,
+   "VK_FORMAT_EAC_R11G11_UNORM_BLOCK",
+   "eac_r11g11_unorm_block",
+   {4, 4, 128},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_Y,	/* g */
+      VK_SWIZZLE_0,	/* b */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
+static const struct vk_format_description
+vk_format_eac_r11g11_snorm_block_description = {
+   VK_FORMAT_EAC_R11G11_SNORM_BLOCK,
+   "VK_FORMAT_EAC_R11G11_SNORM_BLOCK",
+   "eac_r11g11_snorm_block",
+   {4, 4, 128},	/* block */
+   VK_FORMAT_LAYOUT_ETC,
+   1,	/* nr_channels */
+   false,	/* is_array */
+   false,	/* is_bitmask */
+   false,	/* is_mixed */
+   {
+      {VK_FORMAT_TYPE_VOID, false, false, false, 128, 0},	/* x = x */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      VK_SWIZZLE_X,	/* r */
+      VK_SWIZZLE_Y,	/* g */
+      VK_SWIZZLE_0,	/* b */
+      VK_SWIZZLE_1	/* a */
+   },
+   VK_FORMAT_COLORSPACE_RGB,
+};
+
 const struct vk_format_description *
 vk_format_description(VkFormat format)
 {
@@ -6044,6 +6304,26 @@ vk_format_description(VkFormat format)
       return &vk_format_bc7_unorm_block_description;
    case VK_FORMAT_BC7_SRGB_BLOCK:
       return &vk_format_bc7_srgb_block_description;
+   case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+      return &vk_format_etc2_r8g8b8_unorm_block_description;
+   case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+      return &vk_format_etc2_r8g8b8_srgb_block_description;
+   case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+      return &vk_format_etc2_r8g8b8a1_unorm_block_description;
+   case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+      return &vk_format_etc2_r8g8b8a1_srgb_block_description;
+   case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+      return &vk_format_etc2_r8g8b8a8_unorm_block_description;
+   case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+      return &vk_format_etc2_r8g8b8a8_srgb_block_description;
+   case VK_FORMAT_EAC_R11_UNORM_BLOCK:
+      return &vk_format_eac_r11_unorm_block_description;
+   case VK_FORMAT_EAC_R11_SNORM_BLOCK:
+      return &vk_format_eac_r11_snorm_block_description;
+   case VK_FORMAT_EAC_R11G11_UNORM_BLOCK:
+      return &vk_format_eac_r11g11_unorm_block_description;
+   case VK_FORMAT_EAC_R11G11_SNORM_BLOCK:
+      return &vk_format_eac_r11g11_snorm_block_description;
    default:
       return NULL;
    }

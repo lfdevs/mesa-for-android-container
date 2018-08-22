@@ -31,7 +31,7 @@ class Intrinsic(object):
    """Class that represents all the information about an intrinsic opcode.
    NOTE: this must be kept in sync with nir_intrinsic_info.
    """
-   def __init__(self, name, src_components, dest_components, num_variables,
+   def __init__(self, name, src_components, dest_components,
                 indices, flags, sysval):
        """Parameters:
 
@@ -42,7 +42,6 @@ class Intrinsic(object):
        - dest_components: number of destination components, -1 means no
          dest, 0 means number of components given in num_components field
          in nir_intrinsic_instr.
-       - num_variables: the number of variables
        - indices: list of constant indicies
        - flags: list of semantic flags
        - sysval: is this a system-value intrinsic
@@ -52,7 +51,6 @@ class Intrinsic(object):
        if src_components:
            assert isinstance(src_components[0], int)
        assert isinstance(dest_components, int)
-       assert isinstance(num_variables, int)
        assert isinstance(indices, list)
        if indices:
            assert isinstance(indices[0], str)
@@ -66,7 +64,6 @@ class Intrinsic(object):
        self.src_components = src_components
        self.has_dest = (dest_components >= 0)
        self.dest_components = dest_components
-       self.num_variables = num_variables
        self.num_indices = len(indices)
        self.indices = indices
        self.flags = flags
@@ -102,6 +99,8 @@ INTERP_MODE = "NIR_INTRINSIC_INTERP_MODE"
 REDUCTION_OP = "NIR_INTRINSIC_REDUCTION_OP"
 # Cluster size for reduction operations
 CLUSTER_SIZE = "NIR_INTRINSIC_CLUSTER_SIZE"
+# Parameter index for a load_param intrinsic
+PARAM_IDX = "NIR_INTRINSIC_PARAM_IDX"
 
 #
 # Possible flags:
@@ -112,29 +111,31 @@ CAN_REORDER   = "NIR_INTRINSIC_CAN_REORDER"
 
 INTR_OPCODES = {}
 
-def intrinsic(name, src_comp=[], dest_comp=-1, num_vars=0, indices=[],
+def intrinsic(name, src_comp=[], dest_comp=-1, indices=[],
               flags=[], sysval=False):
     assert name not in INTR_OPCODES
-    INTR_OPCODES[name] = Intrinsic(name, src_comp, dest_comp, num_vars,
+    INTR_OPCODES[name] = Intrinsic(name, src_comp, dest_comp,
                                    indices, flags, sysval)
 
 intrinsic("nop", flags=[CAN_ELIMINATE])
 
-intrinsic("load_var", dest_comp=0, num_vars=1, flags=[CAN_ELIMINATE])
-intrinsic("store_var", src_comp=[0], num_vars=1, indices=[WRMASK])
-intrinsic("copy_var", num_vars=2)
+intrinsic("load_param", dest_comp=0, indices=[PARAM_IDX], flags=[CAN_ELIMINATE])
 
-# Interpolation of input.  The interp_var_at* intrinsics are similar to the
-# load_var intrinsic acting on a shader input except that they interpolate
-# the input differently.  The at_sample and at_offset intrinsics take an
+intrinsic("load_deref", dest_comp=0, src_comp=[1], flags=[CAN_ELIMINATE])
+intrinsic("store_deref", src_comp=[1, 0], indices=[WRMASK])
+intrinsic("copy_deref", src_comp=[1, 1])
+
+# Interpolation of input.  The interp_deref_at* intrinsics are similar to the
+# load_var intrinsic acting on a shader input except that they interpolate the
+# input differently.  The at_sample and at_offset intrinsics take an
 # additional source that is an integer sample id or a vec2 position offset
 # respectively.
 
-intrinsic("interp_var_at_centroid", dest_comp=0, num_vars=1,
+intrinsic("interp_deref_at_centroid", dest_comp=0, src_comp=[1],
           flags=[ CAN_ELIMINATE, CAN_REORDER])
-intrinsic("interp_var_at_sample", src_comp=[1], dest_comp=0, num_vars=1,
+intrinsic("interp_deref_at_sample", src_comp=[1, 1], dest_comp=0,
           flags=[CAN_ELIMINATE, CAN_REORDER])
-intrinsic("interp_var_at_offset", src_comp=[2], dest_comp=0, num_vars=1,
+intrinsic("interp_deref_at_offset", src_comp=[1, 2], dest_comp=0,
           flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Ask the driver for the size of a given buffer. It takes the buffer index
@@ -188,6 +189,8 @@ barrier("memory_barrier_atomic_counter")
 barrier("memory_barrier_buffer")
 barrier("memory_barrier_image")
 barrier("memory_barrier_shared")
+barrier("begin_invocation_interlock")
+barrier("end_invocation_interlock")
 
 # A conditional discard, with a single boolean source.
 intrinsic("discard_if", src_comp=[1])
@@ -255,19 +258,20 @@ intrinsic("set_vertex_count", src_comp=[1])
 # lowered, variants take a constant buffer index and register offset.
 
 def atomic(name, flags=[]):
-    intrinsic(name + "_var", dest_comp=1, num_vars=1, flags=flags)
+    intrinsic(name + "_deref", src_comp=[1], dest_comp=1, flags=flags)
     intrinsic(name, src_comp=[1], dest_comp=1, indices=[BASE], flags=flags)
 
 def atomic2(name):
-    intrinsic(name + "_var", src_comp=[1], dest_comp=1, num_vars=1)
+    intrinsic(name + "_deref", src_comp=[1, 1], dest_comp=1)
     intrinsic(name, src_comp=[1, 1], dest_comp=1, indices=[BASE])
 
 def atomic3(name):
-    intrinsic(name + "_var", src_comp=[1, 1], dest_comp=1, num_vars=1)
+    intrinsic(name + "_deref", src_comp=[1, 1, 1], dest_comp=1)
     intrinsic(name, src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
 
 atomic("atomic_counter_inc")
-atomic("atomic_counter_dec")
+atomic("atomic_counter_pre_dec")
+atomic("atomic_counter_post_dec")
 atomic("atomic_counter_read", flags=[CAN_ELIMINATE])
 atomic2("atomic_counter_add")
 atomic2("atomic_counter_min")
@@ -280,30 +284,31 @@ atomic3("atomic_counter_comp_swap")
 
 # Image load, store and atomic intrinsics.
 #
-# All image intrinsics take an image target passed as a nir_variable.  Image
-# variables contain a number of memory and layout qualifiers that influence
-# the semantics of the intrinsic.
+# All image intrinsics take an image target passed as a nir_variable.  The
+# variable is passed in using a chain of nir_deref_instr with as the first
+# source of the image intrinsic.  Image variables contain a number of memory
+# and layout qualifiers that influence the semantics of the intrinsic.
 #
 # All image intrinsics take a four-coordinate vector and a sample index as
-# first two sources, determining the location within the image that will be
+# 2nd and 3rd sources, determining the location within the image that will be
 # accessed by the intrinsic.  Components not applicable to the image target
 # in use are undefined.  Image store takes an additional four-component
 # argument with the value to be written, and image atomic operations take
 # either one or two additional scalar arguments with the same meaning as in
 # the ARB_shader_image_load_store specification.
-intrinsic("image_var_load", src_comp=[4, 1], dest_comp=4, num_vars=1,
+intrinsic("image_deref_load", src_comp=[1, 4, 1], dest_comp=4,
           flags=[CAN_ELIMINATE])
-intrinsic("image_var_store", src_comp=[4, 1, 4], num_vars=1)
-intrinsic("image_var_atomic_add",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_min",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_max",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_and",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_or",   src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_xor",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_exchange",  src_comp=[4, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_atomic_comp_swap", src_comp=[4, 1, 1, 1], dest_comp=1, num_vars=1)
-intrinsic("image_var_size",    dest_comp=0, num_vars=1, flags=[CAN_ELIMINATE, CAN_REORDER])
-intrinsic("image_var_samples", dest_comp=1, num_vars=1, flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("image_deref_store", src_comp=[1, 4, 1, 4])
+intrinsic("image_deref_atomic_add",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_min",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_max",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_and",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_or",   src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_xor",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_exchange",  src_comp=[1, 4, 1, 1], dest_comp=1)
+intrinsic("image_deref_atomic_comp_swap", src_comp=[1, 4, 1, 1, 1], dest_comp=1)
+intrinsic("image_deref_size",    src_comp=[1], dest_comp=0, flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("image_deref_samples", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Vulkan descriptor set intrinsics
 #
@@ -335,24 +340,23 @@ intrinsic("vulkan_resource_reindex", src_comp=[1, 1], dest_comp=1,
 # compute a new value using one of the operations below, write the new value
 # to memory, and return the original value read.
 #
-# All operations take 1 source except CompSwap that takes 2. These sources
+# All operations take 2 sources except CompSwap that takes 3. These sources
 # represent:
 #
-# 0: The data parameter to the atomic function (i.e. the value to add
+# 0: A deref to the memory on which to perform the atomic
+# 1: The data parameter to the atomic function (i.e. the value to add
 #    in shared_atomic_add, etc).
-# 1: For CompSwap only: the second data parameter.
-#
-# All operations take 1 variable deref.
-intrinsic("var_atomic_add",  src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_imin", src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_umin", src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_imax", src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_umax", src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_and",  src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_or",   src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_xor",  src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_exchange", src_comp=[1], dest_comp=1, num_vars=1)
-intrinsic("var_atomic_comp_swap", src_comp=[1, 1], dest_comp=1, num_vars=1)
+# 2: For CompSwap only: the second data parameter.
+intrinsic("deref_atomic_add",  src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_imin", src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_umin", src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_imax", src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_umax", src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_and",  src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_or",   src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_xor",  src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_exchange", src_comp=[1, 1], dest_comp=1)
+intrinsic("deref_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1)
 
 # SSBO atomic intrinsics
 #
@@ -406,7 +410,7 @@ intrinsic("shared_atomic_exchange", src_comp=[1, 1], dest_comp=1, indices=[BASE]
 intrinsic("shared_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
 
 def system_value(name, dest_comp, indices=[]):
-    intrinsic("load_" + name, [], dest_comp, 0, indices,
+    intrinsic("load_" + name, [], dest_comp, indices,
               flags=[CAN_ELIMINATE, CAN_REORDER], sysval=True)
 
 system_value("frag_coord", 4)
@@ -414,11 +418,15 @@ system_value("front_face", 1)
 system_value("vertex_id", 1)
 system_value("vertex_id_zero_base", 1)
 system_value("first_vertex", 1)
+system_value("is_indexed_draw", 1)
 system_value("base_vertex", 1)
 system_value("instance_id", 1)
 system_value("base_instance", 1)
 system_value("draw_id", 1)
 system_value("sample_id", 1)
+# sample_id_no_per_sample is like sample_id but does not imply per-
+# sample shading.  See the lower_helper_invocation option.
+system_value("sample_id_no_per_sample", 1)
 system_value("sample_pos", 2)
 system_value("sample_mask_in", 1)
 system_value("primitive_id", 1)
@@ -446,6 +454,8 @@ system_value("subgroup_lt_mask", 0)
 system_value("num_subgroups", 1)
 system_value("subgroup_id", 1)
 system_value("local_group_size", 3)
+system_value("global_invocation_id", 3)
+system_value("work_dim", 1)
 
 # Blend constant color values.  Float values are clamped.#
 system_value("blend_const_color_r_float", 1)
@@ -527,6 +537,8 @@ load("per_vertex_output", 2, [BASE, COMPONENT], [CAN_ELIMINATE])
 load("shared", 1, [BASE], [CAN_ELIMINATE])
 # src[] = { offset }. const_index[] = { base, range }
 load("push_constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { offset }. const_index[] = { base, range }
+load("constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
 
 # Stores work the same way as loads, except now the first source is the value
 # to store and the second (and possibly third) source specify where to store

@@ -41,7 +41,7 @@
  * structures. */
 
 static int
-get_array_stride(struct gl_context *ctx, const struct gl_vertex_array *a)
+get_array_stride(struct gl_context *ctx, const struct tnl_vertex_array *a)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	const struct gl_vertex_buffer_binding *binding = a->BufferBinding;
@@ -57,7 +57,7 @@ get_array_stride(struct gl_context *ctx, const struct gl_vertex_array *a)
 
 static void
 vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
-		const struct gl_vertex_array *arrays)
+		const struct tnl_vertex_array *arrays)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	GLboolean imm = (render->mode == IMM);
@@ -78,7 +78,7 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 	}
 
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
-		const struct gl_vertex_array *array = &arrays[attr];
+		const struct tnl_vertex_array *array = &arrays[attr];
 		const struct gl_vertex_buffer_binding *binding =
 			array->BufferBinding;
 		const struct gl_array_attributes *attrib = array->VertexAttrib;
@@ -94,7 +94,7 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 
 static void
 vbo_deinit_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
-		  const struct gl_vertex_array *arrays)
+		  const struct tnl_vertex_array *arrays)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	int i, attr;
@@ -118,7 +118,7 @@ vbo_deinit_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 /* Make some rendering decisions from the GL context. */
 
 static void
-vbo_choose_render_mode(struct gl_context *ctx, const struct gl_vertex_array *arrays)
+vbo_choose_render_mode(struct gl_context *ctx, const struct tnl_vertex_array *arrays)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	int i;
@@ -136,12 +136,12 @@ vbo_choose_render_mode(struct gl_context *ctx, const struct gl_vertex_array *arr
 }
 
 static void
-vbo_emit_attr(struct gl_context *ctx, const struct gl_vertex_array *arrays,
+vbo_emit_attr(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 	      int attr)
 {
 	struct nouveau_pushbuf *push = context_push(ctx);
 	struct nouveau_render_state *render = to_render_state(ctx);
-	const struct gl_vertex_array *array = &arrays[attr];
+	const struct tnl_vertex_array *array = &arrays[attr];
 	const struct gl_vertex_buffer_binding *binding = array->BufferBinding;
 	const struct gl_array_attributes *attrib = array->VertexAttrib;
 	const GLubyte *p = _mesa_vertex_attrib_address(attrib, binding);
@@ -179,7 +179,7 @@ vbo_emit_attr(struct gl_context *ctx, const struct gl_vertex_array *arrays,
 #define MAT(a) VERT_ATTRIB_MAT(MAT_ATTRIB_##a)
 
 static void
-vbo_choose_attrs(struct gl_context *ctx, const struct gl_vertex_array *arrays)
+vbo_choose_attrs(struct gl_context *ctx, const struct tnl_vertex_array *arrays)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	int i;
@@ -222,13 +222,13 @@ vbo_choose_attrs(struct gl_context *ctx, const struct gl_vertex_array *arrays)
 }
 
 static int
-get_max_client_stride(struct gl_context *ctx, const struct gl_vertex_array *arrays)
+get_max_client_stride(struct gl_context *ctx, const struct tnl_vertex_array *arrays)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
 	int i, attr, s = 0;
 
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
-		const struct gl_vertex_array *a = &arrays[attr];
+		const struct tnl_vertex_array *a = &arrays[attr];
 
 		if (!_mesa_is_bufferobj(a->BufferBinding->BufferObj))
 			s = MAX2(s, get_array_stride(ctx, a));
@@ -239,7 +239,7 @@ get_max_client_stride(struct gl_context *ctx, const struct gl_vertex_array *arra
 
 static void
 TAG(vbo_render_prims)(struct gl_context *ctx,
-		      const struct gl_vertex_array *arrays,
+		      const struct tnl_vertex_array *arrays,
 		      const struct _mesa_prim *prims, GLuint nr_prims,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
@@ -249,7 +249,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 		      struct gl_buffer_object *indirect);
 
 static GLboolean
-vbo_maybe_split(struct gl_context *ctx, const struct gl_vertex_array *arrays,
+vbo_maybe_split(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 	    const struct _mesa_prim *prims, GLuint nr_prims,
 	    const struct _mesa_index_buffer *ib,
 	    GLuint min_index, GLuint max_index)
@@ -309,7 +309,7 @@ check_update_array(struct nouveau_array *a, unsigned offset,
 }
 
 static void
-vbo_bind_vertices(struct gl_context *ctx, const struct gl_vertex_array *arrays,
+vbo_bind_vertices(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 		  int base, unsigned min_index, unsigned max_index, int *pdelta)
 {
 	struct nouveau_render_state *render = to_render_state(ctx);
@@ -323,7 +323,7 @@ vbo_bind_vertices(struct gl_context *ctx, const struct gl_vertex_array *arrays,
 	*pdelta = -1;
 
 	FOR_EACH_BOUND_ATTR(render, i, attr) {
-		const struct gl_vertex_array *array = &arrays[attr];
+		const struct tnl_vertex_array *array = &arrays[attr];
 		const struct gl_vertex_buffer_binding *binding =
 			array->BufferBinding;
 		const struct gl_array_attributes *attrib = array->VertexAttrib;
@@ -381,7 +381,7 @@ vbo_bind_vertices(struct gl_context *ctx, const struct gl_vertex_array *arrays,
 }
 
 static void
-vbo_draw_vbo(struct gl_context *ctx, const struct gl_vertex_array *arrays,
+vbo_draw_vbo(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 	     const struct _mesa_prim *prims, GLuint nr_prims,
 	     const struct _mesa_index_buffer *ib, GLuint min_index,
 	     GLuint max_index)
@@ -431,7 +431,7 @@ extract_id(struct nouveau_array *a, int i, int j)
 }
 
 static void
-vbo_draw_imm(struct gl_context *ctx, const struct gl_vertex_array *arrays,
+vbo_draw_imm(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 	     const struct _mesa_prim *prims, GLuint nr_prims,
 	     const struct _mesa_index_buffer *ib, GLuint min_index,
 	     GLuint max_index)
@@ -477,7 +477,7 @@ vbo_draw_imm(struct gl_context *ctx, const struct gl_vertex_array *arrays,
 
 static void
 TAG(vbo_render_prims)(struct gl_context *ctx,
-		      const struct gl_vertex_array *arrays,
+		      const struct tnl_vertex_array *arrays,
 		      const struct _mesa_prim *prims, GLuint nr_prims,
 		      const struct _mesa_index_buffer *ib,
 		      GLboolean index_bounds_valid,
@@ -515,7 +515,7 @@ TAG(vbo_render_prims)(struct gl_context *ctx,
 
 static void
 TAG(vbo_check_render_prims)(struct gl_context *ctx,
-			    const struct gl_vertex_array *arrays,
+			    const struct tnl_vertex_array *arrays,
 			    const struct _mesa_prim *prims, GLuint nr_prims,
 			    const struct _mesa_index_buffer *ib,
 			    GLboolean index_bounds_valid,
@@ -550,9 +550,9 @@ TAG(vbo_draw)(struct gl_context *ctx,
 	      struct gl_buffer_object *indirect)
 {
 	/* Borrow and update the inputs list from the tnl context */
-	_tnl_bind_inputs(ctx);
+	const struct tnl_vertex_array* arrays = _tnl_bind_inputs(ctx);
 
-	TAG(vbo_check_render_prims)(ctx, ctx->Array._DrawArrays,
+	TAG(vbo_check_render_prims)(ctx, arrays,
 				    prims, nr_prims, ib,
 				    index_bounds_valid, min_index, max_index,
 				    tfb_vertcount, stream, indirect);

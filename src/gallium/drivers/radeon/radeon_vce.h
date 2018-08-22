@@ -381,7 +381,7 @@ struct rvce_encoder {
 
 	struct pipe_screen		*screen;
 	struct radeon_winsys*		ws;
-	struct radeon_winsys_cs*	cs;
+	struct radeon_cmdbuf*	cs;
 
 	rvce_get_buffer			get_buffer;
 

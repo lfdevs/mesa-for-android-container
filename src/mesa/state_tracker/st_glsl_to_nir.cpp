@@ -43,7 +43,9 @@
 #include "compiler/nir/nir.h"
 #include "compiler/glsl_types.h"
 #include "compiler/glsl/glsl_to_nir.h"
+#include "compiler/glsl/gl_nir.h"
 #include "compiler/glsl/ir.h"
+#include "compiler/glsl/ir_optimization.h"
 #include "compiler/glsl/string_to_uint_map.h"
 
 
@@ -271,12 +273,15 @@ st_nir_assign_uniform_locations(struct gl_context *ctx,
           uniform->interface_type != NULL)
          continue;
 
-      if (!uniform->data.bindless &&
-          (uniform->type->is_sampler() || uniform->type->is_image())) {
-         if (uniform->type->is_sampler())
-            loc = shaderidx++;
-         else
-            loc = imageidx++;
+      const struct glsl_type *type = glsl_without_array(uniform->type);
+      if (!uniform->data.bindless && (type->is_sampler() || type->is_image())) {
+         if (type->is_sampler()) {
+            loc = shaderidx;
+            shaderidx += type_size(uniform->type);
+         } else {
+            loc = imageidx;
+            imageidx += type_size(uniform->type);
+         }
       } else if (strncmp(uniform->name, "gl_", 3) == 0) {
          const gl_state_index16 *const stateTokens = uniform->state_slots[0].tokens;
          /* This state reference has already been setup by ir_to_mesa, but we'll
@@ -284,7 +289,6 @@ st_nir_assign_uniform_locations(struct gl_context *ctx,
           */
 
          unsigned comps;
-         const struct glsl_type *type = glsl_without_array(uniform->type);
          if (glsl_type_is_struct(type)) {
             comps = 4;
          } else {
@@ -313,18 +317,22 @@ st_nir_assign_uniform_locations(struct gl_context *ctx,
    *size = max;
 }
 
-static void
-st_nir_opts(nir_shader *nir)
+void
+st_nir_opts(nir_shader *nir, bool scalar)
 {
    bool progress;
    do {
       progress = false;
 
       NIR_PASS_V(nir, nir_lower_vars_to_ssa);
-      NIR_PASS_V(nir, nir_lower_alu_to_scalar);
-      NIR_PASS_V(nir, nir_lower_phis_to_scalar);
 
-      NIR_PASS_V(nir, nir_lower_64bit_pack);
+      if (scalar) {
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar);
+         NIR_PASS_V(nir, nir_lower_phis_to_scalar);
+      }
+
+      NIR_PASS_V(nir, nir_lower_alu);
+      NIR_PASS_V(nir, nir_lower_pack);
       NIR_PASS(progress, nir, nir_copy_prop);
       NIR_PASS(progress, nir, nir_opt_remove_phis);
       NIR_PASS(progress, nir, nir_opt_dce);
@@ -360,6 +368,9 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
 {
    const nir_shader_compiler_options *options =
       st->ctx->Const.ShaderCompilerOptions[prog->info.stage].NirOptions;
+   enum pipe_shader_type type = pipe_shader_type_from_mesa(stage);
+   struct pipe_screen *screen = st->pipe->screen;
+   bool is_scalar = screen->get_shader_param(screen, type, PIPE_SHADER_CAP_SCALAR_ISA);
    assert(options);
 
    if (prog->nir)
@@ -402,7 +413,7 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
    NIR_PASS_V(nir, nir_split_var_copies);
    NIR_PASS_V(nir, nir_lower_var_copies);
 
-   st_nir_opts(nir);
+   st_nir_opts(nir, is_scalar);
 
    return nir;
 }
@@ -467,7 +478,7 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
    st_set_prog_affected_state_flags(prog);
 
    NIR_PASS_V(nir, st_nir_lower_builtin);
-   NIR_PASS_V(nir, nir_lower_atomics, shader_program, true);
+   NIR_PASS_V(nir, gl_nir_lower_atomics, shader_program, true);
 
    if (st->ctx->_Shader->Flags & GLSL_DUMP) {
       _mesa_log("\n");
@@ -553,6 +564,7 @@ st_nir_get_mesa_program(struct gl_context *ctx,
                         struct gl_linked_shader *shader)
 {
    struct st_context *st = st_context(ctx);
+   struct pipe_screen *pscreen = ctx->st->pipe->screen;
    struct gl_program *prog;
 
    validate_ir_tree(shader->ir);
@@ -564,6 +576,10 @@ st_nir_get_mesa_program(struct gl_context *ctx,
    _mesa_copy_linked_program_data(shader_program, shader);
    _mesa_generate_parameters_list_for_uniforms(ctx, shader_program, shader,
                                                prog->Parameters);
+
+   /* Remove reads from output registers. */
+   if (!pscreen->get_param(pscreen, PIPE_CAP_TGSI_CAN_READ_OUTPUTS))
+      lower_output_reads(shader->Stage, shader->ir);
 
    if (ctx->_Shader->Flags & GLSL_DUMP) {
       _mesa_log("\n");
@@ -584,7 +600,7 @@ st_nir_get_mesa_program(struct gl_context *ctx,
 }
 
 static void
-st_nir_link_shaders(nir_shader **producer, nir_shader **consumer)
+st_nir_link_shaders(nir_shader **producer, nir_shader **consumer, bool scalar)
 {
    nir_lower_io_arrays_to_elements(*producer, *consumer);
 
@@ -611,8 +627,8 @@ st_nir_link_shaders(nir_shader **producer, nir_shader **consumer)
       NIR_PASS_V(*producer, nir_lower_indirect_derefs, indirect_mask);
       NIR_PASS_V(*consumer, nir_lower_indirect_derefs, indirect_mask);
 
-      st_nir_opts(*producer);
-      st_nir_opts(*consumer);
+      st_nir_opts(*producer, scalar);
+      st_nir_opts(*consumer, scalar);
    }
 }
 
@@ -623,6 +639,20 @@ st_link_nir(struct gl_context *ctx,
             struct gl_shader_program *shader_program)
 {
    struct st_context *st = st_context(ctx);
+   struct pipe_screen *screen = st->pipe->screen;
+   bool is_scalar[MESA_SHADER_STAGES];
+
+   /* Determine scalar property of each shader stage */
+   for (unsigned i = 0; i < MESA_SHADER_STAGES; i++) {
+      struct gl_linked_shader *shader = shader_program->_LinkedShaders[i];
+      enum pipe_shader_type type;
+
+      if (shader == NULL)
+         continue;
+
+      type = pipe_shader_type_from_mesa(shader->Stage);
+      is_scalar[i] = screen->get_shader_param(screen, type, PIPE_SHADER_CAP_SCALAR_ISA);
+   }
 
    /* Determine first and last stage. */
    unsigned first = MESA_SHADER_STAGES;
@@ -651,7 +681,7 @@ st_link_nir(struct gl_context *ctx,
 
       nir_shader *nir = shader->Program->nir;
       NIR_PASS_V(nir, nir_lower_io_to_scalar_early, mask);
-      st_nir_opts(nir);
+      st_nir_opts(nir, is_scalar[i]);
    }
 
    /* Linking the stages in the opposite order (from fragment to vertex)
@@ -666,7 +696,8 @@ st_link_nir(struct gl_context *ctx,
          continue;
 
       st_nir_link_shaders(&shader->Program->nir,
-                          &shader_program->_LinkedShaders[next]->Program->nir);
+                          &shader_program->_LinkedShaders[next]->Program->nir,
+                          is_scalar[i]);
       next = i;
    }
 
@@ -714,7 +745,15 @@ st_link_nir(struct gl_context *ctx,
       shader->Program->info = nir->info;
 
       if (prev != -1) {
-         nir_compact_varyings(shader_program->_LinkedShaders[prev]->Program->nir,
+         struct gl_program *prev_shader =
+            shader_program->_LinkedShaders[prev]->Program;
+
+         /* We can't use nir_compact_varyings with transform feedback, since
+          * the pipe_stream_output->output_register field is based on the
+          * pre-compacted driver_locations.
+          */
+         if (!prev_shader->sh.LinkedTransformFeedback)
+            nir_compact_varyings(shader_program->_LinkedShaders[prev]->Program->nir,
                               nir, ctx->API != API_OPENGL_COMPAT);
       }
       prev = i;
@@ -734,6 +773,8 @@ st_link_nir(struct gl_context *ctx,
          _mesa_reference_program(ctx, &shader->Program, NULL);
          return false;
       }
+
+      nir_sweep(shader->Program->nir);
    }
 
    return true;
@@ -813,9 +854,9 @@ st_finalize_nir(struct st_context *st, struct gl_program *prog,
    }
 
    if (screen->get_param(screen, PIPE_CAP_NIR_SAMPLERS_AS_DEREF))
-      NIR_PASS_V(nir, nir_lower_samplers_as_deref, shader_program);
+      NIR_PASS_V(nir, gl_nir_lower_samplers_as_deref, shader_program);
    else
-      NIR_PASS_V(nir, nir_lower_samplers, shader_program);
+      NIR_PASS_V(nir, gl_nir_lower_samplers, shader_program);
 }
 
 } /* extern "C" */

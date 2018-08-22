@@ -1,25 +1,25 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-****************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ ****************************************************************************/
 
 #include "common/os.h"
 #include <stdarg.h>
@@ -38,29 +38,32 @@ namespace ConsoleUtils
 {
     enum class TextColor
     {
-        BLACK      = 0,
+        BLACK = 0,
 #if defined(_WIN32)
-        RED        = 4,
-        GREEN      = 2,
-        BLUE       = 1,
+        RED   = 4,
+        GREEN = 2,
+        BLUE  = 1,
 #else
-        RED        = 1,
-        GREEN      = 2,
-        BLUE       = 4,
+        RED   = 1,
+        GREEN = 2,
+        BLUE  = 4,
 #endif // _WIN32
-        PURPLE     = static_cast<uint32_t>(RED) | static_cast<uint32_t>(BLUE),
-        CYAN       = static_cast<uint32_t>(GREEN) | static_cast<uint32_t>(BLUE),
-        YELLOW     = static_cast<uint32_t>(RED) | static_cast<uint32_t>(GREEN),
-        WHITE      = static_cast<uint32_t>(RED) | static_cast<uint32_t>(GREEN) | static_cast<uint32_t>(BLUE),
+        PURPLE = static_cast<uint32_t>(RED) | static_cast<uint32_t>(BLUE),
+        CYAN   = static_cast<uint32_t>(GREEN) | static_cast<uint32_t>(BLUE),
+        YELLOW = static_cast<uint32_t>(RED) | static_cast<uint32_t>(GREEN),
+        WHITE =
+            static_cast<uint32_t>(RED) | static_cast<uint32_t>(GREEN) | static_cast<uint32_t>(BLUE),
     };
 
     enum class TextStyle
     {
-        NORMAL     = 0,
-        INTENSITY  = 1,
+        NORMAL    = 0,
+        INTENSITY = 1,
     };
 
-    void SetTextColor(FILE* stream, TextColor color = TextColor::WHITE, TextStyle style = TextStyle::NORMAL)
+    void SetTextColor(FILE*     stream,
+                      TextColor color = TextColor::WHITE,
+                      TextStyle style = TextStyle::NORMAL)
     {
 #if defined(_WIN32)
 
@@ -89,7 +92,8 @@ namespace ConsoleUtils
 #else // !_WIN32
 
         // Print ANSI codes
-        uint32_t cc = 30 + ((style == TextStyle::INTENSITY) ? 60 : 0) + static_cast<uint32_t>(color);
+        uint32_t cc =
+            30 + ((style == TextStyle::INTENSITY) ? 60 : 0) + static_cast<uint32_t>(color);
         fprintf(stream, "\033[0m\033[%d;%dm", static_cast<uint32_t>(style), cc);
 
 #endif
@@ -110,17 +114,16 @@ namespace ConsoleUtils
     }
 
     static std::mutex g_stderrMutex;
-} // ns ConsoleUtils
+} // namespace ConsoleUtils
 
-bool SwrAssert(
-        bool        chkDebugger,
-        bool&       enabled,
-        const char* pExpression,
-        const char* pFileName,
-        uint32_t    lineNum,
-        const char* pFunction,
-        const char* pFmtString,
-        ...)
+bool SwrAssert(bool        chkDebugger,
+               bool&       enabled,
+               const char* pExpression,
+               const char* pFileName,
+               uint32_t    lineNum,
+               const char* pFunction,
+               const char* pFmtString,
+               ...)
 {
     using namespace ConsoleUtils;
     std::lock_guard<std::mutex> l(g_stderrMutex);
@@ -151,7 +154,7 @@ bool SwrAssert(
 
 #if defined(_WIN32)
     static const int MAX_MESSAGE_LEN = 2048;
-    char msgBuf[MAX_MESSAGE_LEN];
+    char             msgBuf[MAX_MESSAGE_LEN];
 
     sprintf_s(msgBuf, "%s(%d): ASSERT: %s\n", pFileName, lineNum, pExpression);
     msgBuf[MAX_MESSAGE_LEN - 2] = '\n';
@@ -169,15 +172,13 @@ bool SwrAssert(
     {
         va_list args;
         va_start(args, pFmtString);
-        offset = _vsnprintf_s(
-                msgBuf,
-                sizeof(msgBuf),
-                sizeof(msgBuf),
-                pFmtString,
-                args);
+        offset = _vsnprintf_s(msgBuf, sizeof(msgBuf), sizeof(msgBuf), pFmtString, args);
         va_end(args);
 
-        if (offset < 0) { return true; }
+        if (offset < 0)
+        {
+            return true;
+        }
 
         OutputDebugStringA("\t");
         OutputDebugStringA(msgBuf);
@@ -186,46 +187,51 @@ bool SwrAssert(
 
     if (enabled && KNOB_ENABLE_ASSERT_DIALOGS)
     {
-        int retval = sprintf_s(
-                &msgBuf[offset],
-                MAX_MESSAGE_LEN - offset,
-                "\n\n"
-                "File: %s\n"
-                "Line: %d\n"
-                "\n"
-                "Expression: %s\n\n"
-                "Cancel: Disable this assert for the remainder of the process\n"
-                "Try Again: Break into the debugger\n"
-                "Continue: Continue execution (but leave assert enabled)",
-                pFileName,
-                lineNum,
-                pExpression);
+        int retval = sprintf_s(&msgBuf[offset],
+                               MAX_MESSAGE_LEN - offset,
+                               "\n\n"
+                               "File: %s\n"
+                               "Line: %d\n"
+                               "\n"
+                               "Expression: %s\n\n"
+                               "Cancel: Disable this assert for the remainder of the process\n"
+                               "Try Again: Break into the debugger\n"
+                               "Continue: Continue execution (but leave assert enabled)",
+                               pFileName,
+                               lineNum,
+                               pExpression);
 
-        if (retval < 0) { return true; }
+        if (retval < 0)
+        {
+            return true;
+        }
 
         offset += retval;
 
         if (!IsDebuggerPresent())
         {
-            sprintf_s(
-                    &msgBuf[offset],
-                    MAX_MESSAGE_LEN - offset,
-                    "\n\n*** NO DEBUGGER DETECTED ***\n\nPressing \"Try Again\" will cause a program crash!");
+            sprintf_s(&msgBuf[offset],
+                      MAX_MESSAGE_LEN - offset,
+                      "\n\n*** NO DEBUGGER DETECTED ***\n\nPressing \"Try Again\" will cause a "
+                      "program crash!");
         }
 
-        retval = MessageBoxA(nullptr, msgBuf, "Assert Failed", MB_CANCELTRYCONTINUE | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
+        retval = MessageBoxA(nullptr,
+                             msgBuf,
+                             "Assert Failed",
+                             MB_CANCELTRYCONTINUE | MB_ICONEXCLAMATION | MB_SETFOREGROUND);
 
         switch (retval)
         {
-            case IDCANCEL:
-                enabled = false;
-                return false;
+        case IDCANCEL:
+            enabled = false;
+            return false;
 
-            case IDTRYAGAIN:
-                return true;
+        case IDTRYAGAIN:
+            return true;
 
-            case IDCONTINUE:
-                return false;
+        case IDCONTINUE:
+            return false;
         }
     }
     else
@@ -238,11 +244,7 @@ bool SwrAssert(
 }
 
 void SwrTrace(
-        const char* pFileName,
-        uint32_t    lineNum,
-        const char* pFunction,
-        const char* pFmtString,
-        ...)
+    const char* pFileName, uint32_t lineNum, const char* pFunction, const char* pFmtString, ...)
 {
     using namespace ConsoleUtils;
     std::lock_guard<std::mutex> l(g_stderrMutex);
@@ -266,7 +268,7 @@ void SwrTrace(
 
 #if defined(_WIN32)
     static const int MAX_MESSAGE_LEN = 2048;
-    char msgBuf[MAX_MESSAGE_LEN];
+    char             msgBuf[MAX_MESSAGE_LEN];
 
     sprintf_s(msgBuf, "%s(%d): TRACE in %s\n", pFileName, lineNum, pFunction);
     msgBuf[MAX_MESSAGE_LEN - 2] = '\n';
@@ -279,15 +281,13 @@ void SwrTrace(
     {
         va_list args;
         va_start(args, pFmtString);
-        offset = _vsnprintf_s(
-                msgBuf,
-                sizeof(msgBuf),
-                sizeof(msgBuf),
-                pFmtString,
-                args);
+        offset = _vsnprintf_s(msgBuf, sizeof(msgBuf), sizeof(msgBuf), pFmtString, args);
         va_end(args);
 
-        if (offset < 0) { return; }
+        if (offset < 0)
+        {
+            return;
+        }
 
         OutputDebugStringA("\t");
         OutputDebugStringA(msgBuf);

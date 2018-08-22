@@ -34,7 +34,7 @@
 
 #include "vl/vl_video_buffer.h"
 
-#include "r600_pipe_common.h"
+#include "si_pipe.h"
 #include "radeon_video.h"
 #include "radeon_vce.h"
 

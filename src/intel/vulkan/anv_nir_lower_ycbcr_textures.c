@@ -30,6 +30,7 @@ struct ycbcr_state {
    nir_builder *builder;
    nir_ssa_def *image_size;
    nir_tex_instr *origin_tex;
+   nir_deref_instr *tex_deref;
    struct anv_ycbcr_conversion *conversion;
 };
 
@@ -152,21 +153,23 @@ convert_ycbcr(struct ycbcr_state *state,
 
 /* TODO: we should probably replace this with a push constant/uniform. */
 static nir_ssa_def *
-get_texture_size(struct ycbcr_state *state, nir_deref_var *texture)
+get_texture_size(struct ycbcr_state *state, nir_deref_instr *texture)
 {
    if (state->image_size)
       return state->image_size;
 
    nir_builder *b = state->builder;
-   const struct glsl_type *type = nir_deref_tail(&texture->deref)->type;
-   nir_tex_instr *tex = nir_tex_instr_create(b->shader, 0);
+   const struct glsl_type *type = texture->type;
+   nir_tex_instr *tex = nir_tex_instr_create(b->shader, 1);
 
    tex->op = nir_texop_txs;
    tex->sampler_dim = glsl_get_sampler_dim(type);
    tex->is_array = glsl_sampler_type_is_array(type);
    tex->is_shadow = glsl_sampler_type_is_shadow(type);
-   tex->texture = nir_deref_var_clone(texture, tex);
    tex->dest_type = nir_type_int;
+
+   tex->src[0].src_type = nir_tex_src_texture_deref;
+   tex->src[0].src = nir_src_for_ssa(&texture->dest.ssa);
 
    nir_ssa_dest_init(&tex->instr, &tex->dest,
                      nir_tex_instr_dest_size(tex), 32, NULL);
@@ -199,8 +202,7 @@ implicit_downsampled_coords(struct ycbcr_state *state,
 {
    nir_builder *b = state->builder;
    struct anv_ycbcr_conversion *conversion = state->conversion;
-   nir_ssa_def *image_size = get_texture_size(state,
-                                              state->origin_tex->texture);
+   nir_ssa_def *image_size = get_texture_size(state, state->tex_deref);
    nir_ssa_def *comp[4] = { NULL, };
    int c;
 
@@ -266,10 +268,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
 
    tex->texture_index = old_tex->texture_index;
    tex->texture_array_size = old_tex->texture_array_size;
-   tex->texture = nir_deref_var_clone(old_tex->texture, tex);
-
    tex->sampler_index = old_tex->sampler_index;
-   tex->sampler = nir_deref_var_clone(old_tex->sampler, tex);
 
    nir_ssa_dest_init(&tex->instr, &tex->dest,
                      old_tex->dest.ssa.num_components,
@@ -320,7 +319,11 @@ try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
                     nir_builder *builder,
                     nir_tex_instr *tex)
 {
-   nir_variable *var = tex->texture->var;
+   int deref_src_idx = nir_tex_instr_src_index(tex, nir_tex_src_texture_deref);
+   assert(deref_src_idx >= 0);
+   nir_deref_instr *deref = nir_src_as_deref(tex->src[deref_src_idx].src);
+
+   nir_variable *var = nir_deref_instr_get_variable(deref);
    const struct anv_descriptor_set_layout *set_layout =
       layout->set[var->data.descriptor_set].layout;
    const struct anv_descriptor_set_binding_layout *binding =
@@ -337,18 +340,16 @@ try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
    if (binding->immutable_samplers == NULL)
       return false;
 
-   unsigned texture_index = tex->texture_index;
-   if (tex->texture->deref.child) {
-      assert(tex->texture->deref.child->deref_type == nir_deref_type_array);
-      nir_deref_array *deref_array = nir_deref_as_array(tex->texture->deref.child);
-      if (deref_array->deref_array_type != nir_deref_array_type_direct)
+   assert(tex->texture_index == 0);
+   unsigned array_index = 0;
+   if (deref->deref_type != nir_deref_type_var) {
+      assert(deref->deref_type == nir_deref_type_array);
+      nir_const_value *const_index = nir_src_as_const_value(deref->arr.index);
+      if (!const_index)
          return false;
-      size_t hw_binding_size =
-         anv_descriptor_set_binding_layout_get_hw_size(binding);
-      texture_index += MIN2(deref_array->base_offset, hw_binding_size - 1);
+      array_index = MIN2(const_index->u32[0], binding->array_size - 1);
    }
-   const struct anv_sampler *sampler =
-      binding->immutable_samplers[texture_index];
+   const struct anv_sampler *sampler = binding->immutable_samplers[array_index];
 
    if (sampler->conversion == NULL)
       return false;
@@ -356,6 +357,7 @@ try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
    struct ycbcr_state state = {
       .builder = builder,
       .origin_tex = tex,
+      .tex_deref = deref,
       .conversion = sampler->conversion,
    };
 

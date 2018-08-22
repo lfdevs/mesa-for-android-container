@@ -295,7 +295,8 @@ struct section {
    int count;
 };
 
-#define MAX_SECTIONS 30
+#define MAX_SECTIONS 256
+static unsigned num_sections;
 static struct section sections[MAX_SECTIONS];
 
 static int zlib_inflate(uint32_t **ptr, int len)
@@ -386,7 +387,7 @@ static int ascii85_decode(const char *in, uint32_t **out, bool inflate)
 static struct gen_batch_decode_bo
 get_gen_batch_bo(void *user_data, uint64_t address)
 {
-   for (int s = 0; s < MAX_SECTIONS; s++) {
+   for (int s = 0; s < num_sections; s++) {
       if (sections[s].gtt_offset <= address &&
           address < sections[s].gtt_offset + sections[s].count * 4) {
          return (struct gen_batch_decode_bo) {
@@ -411,7 +412,6 @@ read_data_file(FILE *file)
    uint32_t offset, value;
    char *ring_name = NULL;
    struct gen_device_info devinfo;
-   int sect_num = 0;
 
    while (getline(&line, &line_size, file) > 0) {
       char *new_ring_name = NULL;
@@ -429,9 +429,10 @@ read_data_file(FILE *file)
             fprintf(stderr, "ASCII85 decode failed.\n");
             exit(EXIT_FAILURE);
          }
-         sections[sect_num].data = data;
-         sections[sect_num].count = count;
-         sect_num++;
+         assert(num_sections < MAX_SECTIONS);
+         sections[num_sections].data = data;
+         sections[num_sections].count = count;
+         num_sections++;
          continue;
       }
 
@@ -465,13 +466,14 @@ read_data_file(FILE *file)
                break;
          }
 
-         sections[sect_num].buffer_name = b->name;
-         sections[sect_num].ring_name = strdup(ring_name);
+         assert(num_sections < MAX_SECTIONS);
+         sections[num_sections].buffer_name = b->name;
+         sections[num_sections].ring_name = strdup(ring_name);
 
          uint32_t hi, lo;
          dashes = strchr(dashes, '=');
          if (dashes && sscanf(dashes, "= 0x%08x %08x\n", &hi, &lo))
-            sections[sect_num].gtt_offset = ((uint64_t) hi) << 32 | lo;
+            sections[num_sections].gtt_offset = ((uint64_t) hi) << 32 | lo;
 
          continue;
       }
@@ -595,10 +597,10 @@ read_data_file(FILE *file)
 
    struct gen_batch_decode_ctx batch_ctx;
    gen_batch_decode_ctx_init(&batch_ctx, &devinfo, stdout, batch_flags,
-                             xml_path, get_gen_batch_bo, NULL);
+                             xml_path, get_gen_batch_bo, NULL, NULL);
 
 
-   for (int s = 0; s < sect_num; s++) {
+   for (int s = 0; s < num_sections; s++) {
       printf("--- %s (%s) at 0x%08x %08x\n",
              sections[s].buffer_name, sections[s].ring_name,
              (unsigned) (sections[s].gtt_offset >> 32),
@@ -615,7 +617,7 @@ read_data_file(FILE *file)
 
    gen_batch_decode_ctx_finish(&batch_ctx);
 
-   for (int s = 0; s < sect_num; s++) {
+   for (int s = 0; s < num_sections; s++) {
       free(sections[s].ring_name);
       free(sections[s].data);
    }

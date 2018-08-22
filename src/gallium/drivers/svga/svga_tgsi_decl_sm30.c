@@ -42,11 +42,11 @@ translate_vs_ps_semantic(struct svga_shader_emitter *emit,
                          unsigned *idx)
 {
    switch (semantic.Name) {
-   case TGSI_SEMANTIC_POSITION:  
+   case TGSI_SEMANTIC_POSITION:
       *idx = semantic.Index;
       *usage = SVGA3D_DECLUSAGE_POSITION;
       break;
-   case TGSI_SEMANTIC_COLOR:     
+   case TGSI_SEMANTIC_COLOR:
       *idx = semantic.Index;
       *usage = SVGA3D_DECLUSAGE_COLOR;
       break;
@@ -54,21 +54,21 @@ translate_vs_ps_semantic(struct svga_shader_emitter *emit,
       *idx = semantic.Index + 2; /* sharing with COLOR */
       *usage = SVGA3D_DECLUSAGE_COLOR;
       break;
-   case TGSI_SEMANTIC_FOG:       
+   case TGSI_SEMANTIC_FOG:
       *idx = 0;
       assert(semantic.Index == 0);
       *usage = SVGA3D_DECLUSAGE_TEXCOORD;
       break;
-   case TGSI_SEMANTIC_PSIZE:     
+   case TGSI_SEMANTIC_PSIZE:
       *idx = semantic.Index;
       *usage = SVGA3D_DECLUSAGE_PSIZE;
       break;
-   case TGSI_SEMANTIC_GENERIC:   
+   case TGSI_SEMANTIC_GENERIC:
       *idx = svga_remap_generic_index(emit->key.generic_remap_table,
                                       semantic.Index);
       *usage = SVGA3D_DECLUSAGE_TEXCOORD;
       break;
-   case TGSI_SEMANTIC_NORMAL:    
+   case TGSI_SEMANTIC_NORMAL:
       *idx = semantic.Index;
       *usage = SVGA3D_DECLUSAGE_NORMAL;
       break;
@@ -98,7 +98,7 @@ translate_vs_ps_semantic(struct svga_shader_emitter *emit,
 static boolean
 emit_decl(struct svga_shader_emitter *emit,
           SVGA3dShaderDestToken reg,
-          unsigned usage, 
+          unsigned usage,
           unsigned index)
 {
    SVGA3DOpDclArgs dcl;
@@ -108,7 +108,7 @@ emit_decl(struct svga_shader_emitter *emit,
    assert(index < 16);
    assert(usage <= SVGA3D_DECLUSAGE_MAX);
 
-   opcode = inst_token( SVGA3DOP_DCL );
+   opcode = inst_token(SVGA3DOP_DCL);
    dcl.values[0] = 0;
    dcl.values[1] = 0;
 
@@ -118,7 +118,7 @@ emit_decl(struct svga_shader_emitter *emit,
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
+           svga_shader_emit_dwords(emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -132,7 +132,7 @@ emit_vface_decl(struct svga_shader_emitter *emit)
       SVGA3dShaderDestToken reg =
          dst_register(SVGA3DREG_MISCTYPE, SVGA3DMISCREG_FACE);
 
-      if (!emit_decl( emit, reg, 0, 0 ))
+      if (!emit_decl(emit, reg, 0, 0))
          return FALSE;
 
       emit->emitted_vface = TRUE;
@@ -146,8 +146,8 @@ emit_vface_decl(struct svga_shader_emitter *emit)
  * Note that this always goes into texcoord[0].
  */
 static boolean
-ps30_input_emit_depth_fog( struct svga_shader_emitter *emit,
-                           struct src_register *out )
+ps30_input_emit_depth_fog(struct svga_shader_emitter *emit,
+                          struct src_register *out)
 {
    struct src_register reg;
 
@@ -159,14 +159,14 @@ ps30_input_emit_depth_fog( struct svga_shader_emitter *emit,
    if (emit->ps30_input_count >= SVGA3D_INPUTREG_MAX)
       return FALSE;
 
-   reg = src_register( SVGA3DREG_INPUT,
-                       emit->ps30_input_count++ );
+   reg = src_register(SVGA3DREG_INPUT,
+                       emit->ps30_input_count++);
 
    *out = emit->ps_depth_fog = reg;
 
    emit->emitted_depth_fog = TRUE;
 
-   return emit_decl( emit, dst( reg ), SVGA3D_DECLUSAGE_TEXCOORD, 0 );
+   return emit_decl(emit, dst(reg), SVGA3D_DECLUSAGE_TEXCOORD, 0);
 }
 
 
@@ -184,73 +184,74 @@ ps30_input(struct svga_shader_emitter *emit,
 
    if (semantic.Name == TGSI_SEMANTIC_POSITION) {
 
-      emit->ps_true_pos = src_register( SVGA3DREG_MISCTYPE,
-                                        SVGA3DMISCREG_POSITION );
-      emit->ps_true_pos.base.swizzle = TRANSLATE_SWIZZLE( TGSI_SWIZZLE_X,
+      emit->ps_true_pos = src_register(SVGA3DREG_MISCTYPE,
+                                        SVGA3DMISCREG_POSITION);
+      emit->ps_true_pos.base.swizzle = TRANSLATE_SWIZZLE(TGSI_SWIZZLE_X,
                                                           TGSI_SWIZZLE_Y,
                                                           TGSI_SWIZZLE_Y,
-                                                          TGSI_SWIZZLE_Y );
-      reg = writemask( dst(emit->ps_true_pos),
-                       TGSI_WRITEMASK_XY );
+                                                          TGSI_SWIZZLE_Y);
+      reg = writemask(dst(emit->ps_true_pos),
+                       TGSI_WRITEMASK_XY);
       emit->ps_reads_pos = TRUE;
 
       if (emit->info.reads_z) {
-         emit->ps_temp_pos = dst_register( SVGA3DREG_TEMP,
-                                           emit->nr_hw_temp );
+         emit->ps_temp_pos = dst_register(SVGA3DREG_TEMP,
+                                           emit->nr_hw_temp);
 
-         emit->input_map[idx] = src_register( SVGA3DREG_TEMP,
-                                              emit->nr_hw_temp );
+         emit->input_map[idx] = src_register(SVGA3DREG_TEMP,
+                                              emit->nr_hw_temp);
          emit->nr_hw_temp++;
 
-         if (!ps30_input_emit_depth_fog( emit, &emit->ps_depth_pos ))
+         if (!ps30_input_emit_depth_fog(emit, &emit->ps_depth_pos))
             return FALSE;
 
-         emit->ps_depth_pos.base.swizzle = TRANSLATE_SWIZZLE( TGSI_SWIZZLE_Z,
+         emit->ps_depth_pos.base.swizzle = TRANSLATE_SWIZZLE(TGSI_SWIZZLE_Z,
                                                               TGSI_SWIZZLE_Z,
                                                               TGSI_SWIZZLE_Z,
-                                                              TGSI_SWIZZLE_W );
+                                                              TGSI_SWIZZLE_W);
       }
       else {
          emit->input_map[idx] = emit->ps_true_pos;
       }
 
-      return emit_decl( emit, reg, 0, 0 );
+      return emit_decl(emit, reg, 0, 0);
    }
    else if (emit->key.fs.light_twoside &&
             (semantic.Name == TGSI_SEMANTIC_COLOR)) {
 
-      if (!translate_vs_ps_semantic( emit, semantic, &usage, &index ))
+      if (!translate_vs_ps_semantic(emit, semantic, &usage, &index))
          return FALSE;
 
       emit->internal_color_idx[emit->internal_color_count] = idx;
-      emit->input_map[idx] = src_register( SVGA3DREG_INPUT, emit->ps30_input_count );
+      emit->input_map[idx] =
+         src_register(SVGA3DREG_INPUT, emit->ps30_input_count);
       emit->ps30_input_count++;
       emit->internal_color_count++;
 
-      reg = dst( emit->input_map[idx] );
+      reg = dst(emit->input_map[idx]);
 
-      if (!emit_decl( emit, reg, usage, index ))
+      if (!emit_decl(emit, reg, usage, index))
          return FALSE;
 
       semantic.Name = TGSI_SEMANTIC_BCOLOR;
-      if (!translate_vs_ps_semantic( emit, semantic, &usage, &index ))
+      if (!translate_vs_ps_semantic(emit, semantic, &usage, &index))
          return FALSE;
 
       if (emit->ps30_input_count >= SVGA3D_INPUTREG_MAX)
          return FALSE;
 
-      reg = dst_register( SVGA3DREG_INPUT, emit->ps30_input_count++ );
+      reg = dst_register(SVGA3DREG_INPUT, emit->ps30_input_count++);
 
-      if (!emit_decl( emit, reg, usage, index ))
+      if (!emit_decl(emit, reg, usage, index))
          return FALSE;
 
-      if (!emit_vface_decl( emit ))
+      if (!emit_vface_decl(emit))
          return FALSE;
 
       return TRUE;
    }
    else if (semantic.Name == TGSI_SEMANTIC_FACE) {
-      if (!emit_vface_decl( emit ))
+      if (!emit_vface_decl(emit))
          return FALSE;
       emit->emit_frontface = TRUE;
       emit->internal_frontface_idx = idx;
@@ -260,28 +261,29 @@ ps30_input(struct svga_shader_emitter *emit,
 
       assert(semantic.Index == 0);
 
-      if (!ps30_input_emit_depth_fog( emit, &emit->input_map[idx] ))
+      if (!ps30_input_emit_depth_fog(emit, &emit->input_map[idx]))
          return FALSE;
 
-      emit->input_map[idx].base.swizzle = TRANSLATE_SWIZZLE( TGSI_SWIZZLE_X,
+      emit->input_map[idx].base.swizzle = TRANSLATE_SWIZZLE(TGSI_SWIZZLE_X,
                                                              TGSI_SWIZZLE_X,
                                                              TGSI_SWIZZLE_X,
-                                                             TGSI_SWIZZLE_X );
-
+                                                             TGSI_SWIZZLE_X);
       return TRUE;
    }
    else {
 
-      if (!translate_vs_ps_semantic( emit, semantic, &usage, &index ))
+      if (!translate_vs_ps_semantic(emit, semantic, &usage, &index))
          return FALSE;
 
       if (emit->ps30_input_count >= SVGA3D_INPUTREG_MAX)
          return FALSE;
 
-      emit->input_map[idx] = src_register( SVGA3DREG_INPUT, emit->ps30_input_count++ );
-      reg = dst( emit->input_map[idx] );
+      emit->input_map[idx] =
+         src_register(SVGA3DREG_INPUT, emit->ps30_input_count++);
 
-      if (!emit_decl( emit, reg, usage, index ))
+      reg = dst(emit->input_map[idx]);
+
+      if (!emit_decl(emit, reg, usage, index))
          return FALSE;
 
       if (semantic.Name == TGSI_SEMANTIC_GENERIC &&
@@ -331,10 +333,10 @@ ps30_output(struct svga_shader_emitter *emit,
       if (emit->unit == PIPE_SHADER_FRAGMENT) {
          if (emit->key.fs.white_fragments) {
             /* Used for XOR logicop mode */
-            emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
-                                                  emit->nr_hw_temp++ );
+            emit->output_map[idx] = dst_register(SVGA3DREG_TEMP,
+                                                  emit->nr_hw_temp++);
             emit->temp_color_output[idx] = emit->output_map[idx];
-            emit->true_color_output[idx] = dst_register(SVGA3DREG_COLOROUT, 
+            emit->true_color_output[idx] = dst_register(SVGA3DREG_COLOROUT,
                                                         semantic.Index);
          }
          else if (emit->key.fs.write_color0_to_n_cbufs) {
@@ -359,21 +361,21 @@ ps30_output(struct svga_shader_emitter *emit,
          }
       }
       else {
-         emit->output_map[idx] = dst_register( SVGA3DREG_COLOROUT, 
-                                               semantic.Index );
+         emit->output_map[idx] = dst_register(SVGA3DREG_COLOROUT,
+                                               semantic.Index);
       }
       break;
    case TGSI_SEMANTIC_POSITION:
-      emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
-                                            emit->nr_hw_temp++ );
+      emit->output_map[idx] = dst_register(SVGA3DREG_TEMP,
+                                            emit->nr_hw_temp++);
       emit->temp_pos = emit->output_map[idx];
-      emit->true_pos = dst_register( SVGA3DREG_DEPTHOUT, 
-                                     semantic.Index );
+      emit->true_pos = dst_register(SVGA3DREG_DEPTHOUT,
+                                     semantic.Index);
       break;
    default:
       assert(0);
       /* A wild stab in the dark. */
-      emit->output_map[idx] = dst_register( SVGA3DREG_COLOROUT, 0 );
+      emit->output_map[idx] = dst_register(SVGA3DREG_COLOROUT, 0);
       break;
    }
 
@@ -394,23 +396,23 @@ vs30_input(struct svga_shader_emitter *emit,
    SVGA3dShaderInstToken opcode;
    unsigned usage, index;
 
-   opcode = inst_token( SVGA3DOP_DCL );
+   opcode = inst_token(SVGA3DOP_DCL);
    dcl.values[0] = 0;
    dcl.values[1] = 0;
 
-   emit->input_map[idx] = src_register( SVGA3DREG_INPUT, idx );
-   dcl.dst = dst_register( SVGA3DREG_INPUT, idx );
+   emit->input_map[idx] = src_register(SVGA3DREG_INPUT, idx);
+   dcl.dst = dst_register(SVGA3DREG_INPUT, idx);
 
    assert(dcl.dst.reserved0);
 
-   svga_generate_vdecl_semantics( idx, &usage, &index );
+   svga_generate_vdecl_semantics(idx, &usage, &index);
 
    dcl.usage = usage;
    dcl.index = index;
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
+           svga_shader_emit_dwords(emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -428,13 +430,13 @@ vs30_output_emit_depth_fog(struct svga_shader_emitter *emit,
       return TRUE;
    }
 
-   reg = dst_register( SVGA3DREG_OUTPUT, emit->vs30_output_count++ );
+   reg = dst_register(SVGA3DREG_OUTPUT, emit->vs30_output_count++);
 
    *out = emit->vs_depth_fog = reg;
 
    emit->emitted_depth_fog = TRUE;
 
-   return emit_decl( emit, reg, SVGA3D_DECLUSAGE_TEXCOORD, 0 );
+   return emit_decl(emit, reg, SVGA3D_DECLUSAGE_TEXCOORD, 0);
 }
 
 
@@ -452,39 +454,39 @@ vs30_output(struct svga_shader_emitter *emit,
    SVGA3dShaderInstToken opcode;
    unsigned usage, index;
 
-   opcode = inst_token( SVGA3DOP_DCL );
+   opcode = inst_token(SVGA3DOP_DCL);
    dcl.values[0] = 0;
    dcl.values[1] = 0;
 
-   if (!translate_vs_ps_semantic( emit, semantic, &usage, &index ))
+   if (!translate_vs_ps_semantic(emit, semantic, &usage, &index))
       return FALSE;
 
    if (emit->vs30_output_count >= SVGA3D_OUTPUTREG_MAX)
       return FALSE;
 
-   dcl.dst = dst_register( SVGA3DREG_OUTPUT, emit->vs30_output_count++ );
+   dcl.dst = dst_register(SVGA3DREG_OUTPUT, emit->vs30_output_count++);
    dcl.usage = usage;
    dcl.index = index;
    dcl.values[0] |= 1<<31;
 
    if (semantic.Name == TGSI_SEMANTIC_POSITION) {
       assert(idx == 0);
-      emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
-                                            emit->nr_hw_temp++ );
+      emit->output_map[idx] = dst_register(SVGA3DREG_TEMP,
+                                            emit->nr_hw_temp++);
       emit->temp_pos = emit->output_map[idx];
       emit->true_pos = dcl.dst;
 
       /* Grab an extra output for the depth output */
-      if (!vs30_output_emit_depth_fog( emit, &emit->depth_pos ))
+      if (!vs30_output_emit_depth_fog(emit, &emit->depth_pos))
          return FALSE;
 
    }
    else if (semantic.Name == TGSI_SEMANTIC_PSIZE) {
-      emit->output_map[idx] = dst_register( SVGA3DREG_TEMP,
-                                            emit->nr_hw_temp++ );
+      emit->output_map[idx] = dst_register(SVGA3DREG_TEMP,
+                                            emit->nr_hw_temp++);
       emit->temp_psiz = emit->output_map[idx];
 
-      /* This has the effect of not declaring psiz (below) and not 
+      /* This has the effect of not declaring psiz (below) and not
        * emitting the final MOV to true_psiz in the postamble.
        */
       if (!emit->key.vs.allow_psiz)
@@ -499,7 +501,7 @@ vs30_output(struct svga_shader_emitter *emit,
        */
       emit->vs30_output_count--;
 
-      if (!vs30_output_emit_depth_fog( emit, &emit->output_map[idx] ))
+      if (!vs30_output_emit_depth_fog(emit, &emit->output_map[idx]))
          return FALSE;
 
       return TRUE;
@@ -509,7 +511,7 @@ vs30_output(struct svga_shader_emitter *emit,
    }
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
+           svga_shader_emit_dwords(emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
 
@@ -534,26 +536,27 @@ svga_tgsi_sampler_type(const struct svga_shader_emitter *emit, int idx)
 
 
 static boolean
-ps30_sampler( struct svga_shader_emitter *emit,
-              unsigned idx )
+ps30_sampler(struct svga_shader_emitter *emit,
+              unsigned idx)
 {
    SVGA3DOpDclArgs dcl;
    SVGA3dShaderInstToken opcode;
 
-   opcode = inst_token( SVGA3DOP_DCL );
+   opcode = inst_token(SVGA3DOP_DCL);
    dcl.values[0] = 0;
    dcl.values[1] = 0;
 
-   dcl.dst = dst_register( SVGA3DREG_SAMPLER, idx );
-   dcl.type = svga_tgsi_sampler_type( emit, idx );
+   dcl.dst = dst_register(SVGA3DREG_SAMPLER, idx);
+   dcl.type = svga_tgsi_sampler_type(emit, idx);
    dcl.values[0] |= 1<<31;
 
    return (emit_instruction(emit, opcode) &&
-           svga_shader_emit_dwords( emit, dcl.values, ARRAY_SIZE(dcl.values)));
+           svga_shader_emit_dwords(emit, dcl.values, ARRAY_SIZE(dcl.values)));
 }
 
+
 boolean
-svga_shader_emit_samplers_decl( struct svga_shader_emitter *emit )
+svga_shader_emit_samplers_decl(struct svga_shader_emitter *emit)
 {
    unsigned i;
 
@@ -564,15 +567,16 @@ svga_shader_emit_samplers_decl( struct svga_shader_emitter *emit )
    return TRUE;
 }
 
+
 boolean
-svga_translate_decl_sm30( struct svga_shader_emitter *emit,
-                          const struct tgsi_full_declaration *decl )
+svga_translate_decl_sm30(struct svga_shader_emitter *emit,
+                         const struct tgsi_full_declaration *decl)
 {
    unsigned first = decl->Range.First;
    unsigned last = decl->Range.Last;
    unsigned idx;
 
-   for( idx = first; idx <= last; idx++ ) {
+   for(idx = first; idx <= last; idx++) {
       boolean ok = TRUE;
 
       switch (decl->Declaration.File) {
@@ -586,16 +590,16 @@ svga_translate_decl_sm30( struct svga_shader_emitter *emit,
 
       case TGSI_FILE_INPUT:
          if (emit->unit == PIPE_SHADER_VERTEX)
-            ok = vs30_input( emit, decl->Semantic, idx );
+            ok = vs30_input(emit, decl->Semantic, idx);
          else
-            ok = ps30_input( emit, decl->Semantic, idx );
+            ok = ps30_input(emit, decl->Semantic, idx);
          break;
 
       case TGSI_FILE_OUTPUT:
          if (emit->unit == PIPE_SHADER_VERTEX)
-            ok = vs30_output( emit, decl->Semantic, idx );
+            ok = vs30_output(emit, decl->Semantic, idx);
          else
-            ok = ps30_output( emit, decl->Semantic, idx );
+            ok = ps30_output(emit, decl->Semantic, idx);
          break;
 
       case TGSI_FILE_SAMPLER_VIEW:

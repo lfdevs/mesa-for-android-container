@@ -197,6 +197,28 @@ DRI_CONF_OPT_BEGIN_B(allow_glsl_extension_directive_midshader, def) \
         DRI_CONF_DESC(sv,"Allow GLSL #extension directives in the middle of shaders") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_GLSL_BUILTIN_CONST_EXPRESSION(def) \
+DRI_CONF_OPT_BEGIN_B(allow_glsl_builtin_const_expression, def) \
+        DRI_CONF_DESC(en,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(ca,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(de,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(es,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(nl,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(fr,"Allow builtins as part of constant expressions") \
+        DRI_CONF_DESC(sv,"Allow builtins as part of constant expressions") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_ALLOW_GLSL_RELAXED_ES(def) \
+DRI_CONF_OPT_BEGIN_B(allow_glsl_relaxed_es, def) \
+        DRI_CONF_DESC(en,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(ca,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(de,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(es,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(nl,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(fr,"Allow some relaxation of GLSL ES shader restrictions") \
+        DRI_CONF_DESC(sv,"Allow some relaxation of GLSL ES shader restrictions") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_ALLOW_GLSL_BUILTIN_VARIABLE_REDECLARATION(def) \
 DRI_CONF_OPT_BEGIN_B(allow_glsl_builtin_variable_redeclaration, def) \
         DRI_CONF_DESC(en,"Allow GLSL built-in variables to be redeclared verbatim") \

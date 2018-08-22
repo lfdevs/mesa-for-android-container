@@ -58,10 +58,6 @@ emit_constants(struct fd_ringbuffer *ring, uint32_t base,
 	uint32_t start_base = base;
 	unsigned i;
 
-	// XXX TODO only emit dirty consts.. but we need to keep track if
-	// they are clobbered by a clear, gmem2mem, or mem2gmem..
-	constbuf->dirty_mask = enabled_mask;
-
 	/* emit user constants: */
 	while (enabled_mask) {
 		unsigned index = ffs(enabled_mask) - 1;
@@ -79,25 +75,21 @@ emit_constants(struct fd_ringbuffer *ring, uint32_t base,
 		if (shader && ((base - start_base) >= (shader->first_immediate * 4)))
 			break;
 
-		if (constbuf->dirty_mask & (1 << index)) {
-			const uint32_t *dwords;
+		const uint32_t *dwords;
 
-			if (cb->user_buffer) {
-				dwords = cb->user_buffer;
-			} else {
-				struct fd_resource *rsc = fd_resource(cb->buffer);
-				dwords = fd_bo_map(rsc->bo);
-			}
-
-			dwords = (uint32_t *)(((uint8_t *)dwords) + cb->buffer_offset);
-
-			OUT_PKT3(ring, CP_SET_CONSTANT, size + 1);
-			OUT_RING(ring, base);
-			for (i = 0; i < size; i++)
-				OUT_RING(ring, *(dwords++));
-
-			constbuf->dirty_mask &= ~(1 << index);
+		if (cb->user_buffer) {
+			dwords = cb->user_buffer;
+		} else {
+			struct fd_resource *rsc = fd_resource(cb->buffer);
+			dwords = fd_bo_map(rsc->bo);
 		}
+
+		dwords = (uint32_t *)(((uint8_t *)dwords) + cb->buffer_offset);
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, size + 1);
+		OUT_RING(ring, base);
+		for (i = 0; i < size; i++)
+			OUT_RING(ring, *(dwords++));
 
 		base += size;
 		enabled_mask &= ~(1 << index);
@@ -303,7 +295,7 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_ZSA)) {
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
-		OUT_RING(ring, zsa->rb_colorcontrol | blend->rb_colorcontrol);
+		OUT_RING(ring, blend ? zsa->rb_colorcontrol | blend->rb_colorcontrol : 0);
 	}
 
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER)) {
@@ -313,13 +305,13 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
-		OUT_RING(ring, blend->rb_blendcontrol_alpha |
+		OUT_RING(ring, blend ? blend->rb_blendcontrol_alpha |
 			COND(has_alpha, blend->rb_blendcontrol_rgb) |
-			COND(!has_alpha, blend->rb_blendcontrol_no_alpha_rgb));
+			COND(!has_alpha, blend->rb_blendcontrol_no_alpha_rgb) : 0);
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));
-		OUT_RING(ring, blend->rb_colormask);
+		OUT_RING(ring, blend ? blend->rb_colormask : 0xf);
 	}
 
 	if (dirty & FD_DIRTY_BLEND_COLOR) {
@@ -340,6 +332,16 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 void
 fd2_emit_restore(struct fd_context *ctx, struct fd_ringbuffer *ring)
 {
+	if (is_a20x(ctx->screen)) {
+		OUT_PKT0(ring, REG_A2XX_RB_BC_CONTROL, 1);
+		OUT_RING(ring,
+			A2XX_RB_BC_CONTROL_ACCUM_TIMEOUT_SELECT(3) |
+			A2XX_RB_BC_CONTROL_DISABLE_LZ_NULL_ZCMD_DROP |
+			A2XX_RB_BC_CONTROL_ENABLE_CRC_UPDATE |
+			A2XX_RB_BC_CONTROL_ACCUM_DATA_FIFO_LIMIT(8) |
+			A2XX_RB_BC_CONTROL_MEM_EXPORT_TIMEOUT_SELECT(3));
+	}
+
 	OUT_PKT0(ring, REG_A2XX_TP0_CHICKEN, 1);
 	OUT_RING(ring, 0x00000002);
 

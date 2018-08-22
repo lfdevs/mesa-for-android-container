@@ -1,32 +1,32 @@
 /****************************************************************************
-* Copyright (C) 2017-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file jit_pch.hpp
-*
-* @brief Pre-compiled header for jitter
-*
-* Notes:
-*
-******************************************************************************/
+ * Copyright (C) 2017-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file jit_pch.hpp
+ *
+ * @brief Pre-compiled header for jitter
+ *
+ * Notes:
+ *
+ ******************************************************************************/
 
 #pragma once
 
@@ -58,7 +58,7 @@
 
 #include "llvm/IR/LegacyPassManager.h"
 using FunctionPassManager = llvm::legacy::FunctionPassManager;
-using PassManager = llvm::legacy::PassManager;
+using PassManager         = llvm::legacy::PassManager;
 
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
@@ -69,6 +69,7 @@ using PassManager = llvm::legacy::PassManager;
 #include "llvm/Transforms/Scalar.h"
 #if LLVM_VERSION_MAJOR >= 7
 #include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #endif
 #include "llvm/Support/Host.h"
 #include "llvm/Support/DynamicLibrary.h"
@@ -90,7 +91,6 @@ using PassManager = llvm::legacy::PassManager;
 #include "llvm/Analysis/LoopInfo.h"
 
 #include "llvm/Transforms/Utils/Cloning.h"
-
 
 #if defined(_WIN32)
 #include "llvm/ADT/Triple.h"
@@ -116,23 +116,24 @@ using PassManager = llvm::legacy::PassManager;
 #endif
 
 #if LLVM_VERSION_MAJOR >= 5
-static const auto Sync_CrossThread = llvm::SyncScope::System;
-static const auto Attrib_FunctionIndex = llvm::AttributeList::FunctionIndex;
-static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext& ctx, const llvm::AttrBuilder &b)
+static const auto                Sync_CrossThread     = llvm::SyncScope::System;
+static const auto                Attrib_FunctionIndex = llvm::AttributeList::FunctionIndex;
+static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext&       ctx,
+                                                  const llvm::AttrBuilder& b)
 {
     return llvm::AttributeSet::get(ctx, b);
 }
 #else
-static const auto Sync_CrossThread = llvm::SynchronizationScope::CrossThread;
-static const auto Attrib_FunctionIndex = llvm::AttributeSet::FunctionIndex;
-static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext& ctx, const llvm::AttrBuilder &b)
+static const auto                Sync_CrossThread     = llvm::SynchronizationScope::CrossThread;
+static const auto                Attrib_FunctionIndex = llvm::AttributeSet::FunctionIndex;
+static inline llvm::AttributeSet GetFuncAttribSet(llvm::LLVMContext&       ctx,
+                                                  const llvm::AttrBuilder& b)
 {
     return llvm::AttributeSet::get(ctx, Attrib_FunctionIndex, b);
 }
 #endif
 
 #pragma pop_macro("DEBUG")
-
 
 #include <deque>
 #include <list>

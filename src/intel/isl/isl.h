@@ -1008,6 +1008,7 @@ struct isl_extent4d {
 
 struct isl_channel_layout {
    enum isl_base_type type;
+   uint8_t start_bit; /**< Bit at which this channel starts */
    uint8_t bits; /**< Size in bits */
 };
 
@@ -1569,8 +1570,28 @@ isl_format_is_rgb(enum isl_format fmt)
           fmtl->channels.a.bits == 0;
 }
 
+static inline bool
+isl_format_is_rgbx(enum isl_format fmt)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+
+   return fmtl->channels.r.bits > 0 &&
+          fmtl->channels.g.bits > 0 &&
+          fmtl->channels.b.bits > 0 &&
+          fmtl->channels.a.bits > 0 &&
+          fmtl->channels.a.type == ISL_VOID;
+}
+
 enum isl_format isl_format_rgb_to_rgba(enum isl_format rgb) ATTRIBUTE_CONST;
 enum isl_format isl_format_rgb_to_rgbx(enum isl_format rgb) ATTRIBUTE_CONST;
+enum isl_format isl_format_rgbx_to_rgba(enum isl_format rgb) ATTRIBUTE_CONST;
+
+void isl_color_value_pack(const union isl_color_value *value,
+                          enum isl_format format,
+                          uint32_t *data_out);
+void isl_color_value_unpack(union isl_color_value *value,
+                            enum isl_format format,
+                            const uint32_t *data_in);
 
 bool isl_is_storage_image_format(enum isl_format fmt);
 
@@ -1738,6 +1759,24 @@ bool isl_color_value_is_zero(union isl_color_value value,
 
 bool isl_color_value_is_zero_one(union isl_color_value value,
                                  enum isl_format format);
+
+static inline bool
+isl_swizzle_is_identity(struct isl_swizzle swizzle)
+{
+   return swizzle.r == ISL_CHANNEL_SELECT_RED &&
+          swizzle.g == ISL_CHANNEL_SELECT_GREEN &&
+          swizzle.b == ISL_CHANNEL_SELECT_BLUE &&
+          swizzle.a == ISL_CHANNEL_SELECT_ALPHA;
+}
+
+bool
+isl_swizzle_supports_rendering(const struct gen_device_info *devinfo,
+                               struct isl_swizzle swizzle);
+
+struct isl_swizzle
+isl_swizzle_compose(struct isl_swizzle first, struct isl_swizzle second);
+struct isl_swizzle
+isl_swizzle_invert(struct isl_swizzle swizzle);
 
 #define isl_surf_init(dev, surf, ...) \
    isl_surf_init_s((dev), (surf), \

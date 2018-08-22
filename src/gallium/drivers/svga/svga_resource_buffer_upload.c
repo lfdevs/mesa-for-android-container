@@ -1003,9 +1003,14 @@ svga_buffer_handle(struct svga_context *svga, struct pipe_resource *buf,
             return NULL;
       }
    } else {
-      if (!sbuf->bind_flags) {
+      /* If there is no resource handle yet, then combine the buffer bind
+       * flags and the tobind_flags if they are compatible.
+       * If not, just use the tobind_flags for creating the resource handle.
+       */
+      if (compatible_bind_flags(sbuf->bind_flags, tobind_flags))
+         sbuf->bind_flags = sbuf->bind_flags | tobind_flags;
+      else
          sbuf->bind_flags = tobind_flags;
-      }
 
       assert((sbuf->bind_flags & tobind_flags) == tobind_flags);
 

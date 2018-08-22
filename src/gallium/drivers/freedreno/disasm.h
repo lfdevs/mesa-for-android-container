@@ -24,6 +24,19 @@
 #ifndef DISASM_H_
 #define DISASM_H_
 
+#include <stdio.h>
+#include <stdbool.h>
+
+#include "util/u_debug.h"
+
+enum fd_shader_debug {
+	FD_DBG_SHADER_VS = 0x01,
+	FD_DBG_SHADER_FS = 0x02,
+	FD_DBG_SHADER_CS = 0x04,
+};
+
+extern enum fd_shader_debug fd_shader_debug;
+
 enum shader_t {
 	SHADER_VERTEX,
 	SHADER_TCS,
@@ -34,6 +47,38 @@ enum shader_t {
 	SHADER_MAX,
 };
 
+static inline bool
+shader_debug_enabled(enum shader_t type)
+{
+	switch (type) {
+	case SHADER_VERTEX:      return !!(fd_shader_debug & FD_DBG_SHADER_VS);
+	case SHADER_FRAGMENT:    return !!(fd_shader_debug & FD_DBG_SHADER_FS);
+	case SHADER_COMPUTE:     return !!(fd_shader_debug & FD_DBG_SHADER_CS);
+	default:
+		debug_assert(0);
+		return false;
+	}
+}
+
+static inline const char *
+shader_stage_name(enum shader_t type)
+{
+	/* NOTE these names are chosen to match the INTEL_DEBUG output
+	 * which frameretrace parses.  Hurray accidental ABI!
+	 */
+	switch (type) {
+	case SHADER_VERTEX:      return "vertex";
+	case SHADER_TCS:         return "tessellation control";
+	case SHADER_TES:         return "tessellation evaluation";
+	case SHADER_GEOM:        return "geometry";
+	case SHADER_FRAGMENT:    return "fragment";
+	case SHADER_COMPUTE:     return "compute";
+	default:
+		debug_assert(0);
+		return NULL;
+	}
+}
+
 /* bitmask of debug flags */
 enum debug_t {
 	PRINT_RAW      = 0x1,    /* dump raw hexdump */
@@ -41,7 +86,7 @@ enum debug_t {
 };
 
 int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
-int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type);
+int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out);
 void disasm_set_debug(enum debug_t debug);
 
 #endif /* DISASM_H_ */

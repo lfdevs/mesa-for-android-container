@@ -52,6 +52,8 @@ struct fd_texture_stateobj {
 	struct pipe_sampler_state *samplers[PIPE_MAX_SAMPLERS];
 	unsigned num_samplers;
 	unsigned valid_samplers;
+	/* number of samples per sampler, 2 bits per sampler: */
+	uint32_t samples;
 };
 
 struct fd_program_stateobj {
@@ -69,26 +71,22 @@ struct fd_program_stateobj {
 struct fd_constbuf_stateobj {
 	struct pipe_constant_buffer cb[PIPE_MAX_CONSTANT_BUFFERS];
 	uint32_t enabled_mask;
-	uint32_t dirty_mask;
 };
 
 struct fd_shaderbuf_stateobj {
 	struct pipe_shader_buffer sb[PIPE_MAX_SHADER_BUFFERS];
 	uint32_t enabled_mask;
-	uint32_t dirty_mask;
 };
 
 struct fd_shaderimg_stateobj {
 	struct pipe_image_view si[PIPE_MAX_SHADER_IMAGES];
 	uint32_t enabled_mask;
-	uint32_t dirty_mask;
 };
 
 struct fd_vertexbuf_stateobj {
 	struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
 	unsigned count;
 	uint32_t enabled_mask;
-	uint32_t dirty_mask;
 };
 
 struct fd_vertex_stateobj {
@@ -223,6 +221,7 @@ struct fd_context {
 		uint64_t draw_calls;
 		uint64_t batch_total, batch_sysmem, batch_gmem, batch_nondraw, batch_restore;
 		uint64_t staging_uploads, shadow_uploads;
+		uint64_t vs_regs, fs_regs;
 	} stats;
 
 	/* Current batch.. the rule here is that you can deref ctx->batch

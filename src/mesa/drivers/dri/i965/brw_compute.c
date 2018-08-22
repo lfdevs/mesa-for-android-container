@@ -182,7 +182,7 @@ brw_dispatch_compute_common(struct gl_context *ctx)
    /* Flush the batch if the batch/state buffers are nearly full.  We can
     * grow them if needed, but this is not free, so we'd like to avoid it.
     */
-   intel_batchbuffer_require_space(brw, 600, RENDER_RING);
+   intel_batchbuffer_require_space(brw, 600);
    brw_require_statebuffer_space(brw, 2500);
    intel_batchbuffer_save_state(brw);
 

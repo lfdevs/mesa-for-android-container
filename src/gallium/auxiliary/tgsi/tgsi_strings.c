@@ -185,6 +185,8 @@ const char *tgsi_interpolate_locations[TGSI_INTERPOLATE_LOC_COUNT] =
    "SAMPLE",
 };
 
+const char *tgsi_invariant_name = "INVARIANT";
+
 const char *tgsi_primitive_names[PIPE_PRIM_MAX] =
 {
    "POINTS",

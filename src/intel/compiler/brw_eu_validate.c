@@ -472,9 +472,11 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
       dst_type_size = 8;
 
    if (exec_type_size > dst_type_size) {
-      ERROR_IF(dst_stride * dst_type_size != exec_type_size,
-               "Destination stride must be equal to the ratio of the sizes of "
-               "the execution data type to the destination type");
+      if (!(dst_type_is_byte && inst_is_raw_move(devinfo, inst))) {
+         ERROR_IF(dst_stride * dst_type_size != exec_type_size,
+                  "Destination stride must be equal to the ratio of the sizes "
+                  "of the execution data type to the destination type");
+      }
 
       unsigned subreg = brw_inst_dst_da1_subreg_nr(devinfo, inst);
 

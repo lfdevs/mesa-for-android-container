@@ -104,6 +104,7 @@ gen_swr_context_llvm.h: rasterizer/codegen/gen_llvm_types.py rasterizer/codegen/
 		$(srcdir)/rasterizer/codegen/gen_llvm_types.py \
 		--input $(srcdir)/swr_context.h \
 		--output ./gen_swr_context_llvm.h
+	$(AM_V_GEN)touch $@
 
 rasterizer/codegen/gen_knobs.cpp: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.cpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -111,6 +112,7 @@ rasterizer/codegen/gen_knobs.cpp: rasterizer/codegen/gen_knobs.py rasterizer/cod
 		$(srcdir)/rasterizer/codegen/gen_knobs.py \
 		--output rasterizer/codegen/gen_knobs.cpp \
 		--gen_cpp
+	$(AM_V_GEN)touch $@
 
 rasterizer/codegen/gen_knobs.h: rasterizer/codegen/gen_knobs.py rasterizer/codegen/knob_defs.py rasterizer/codegen/templates/gen_knobs.h rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -118,6 +120,7 @@ rasterizer/codegen/gen_knobs.h: rasterizer/codegen/gen_knobs.py rasterizer/codeg
 		$(srcdir)/rasterizer/codegen/gen_knobs.py \
 		--output rasterizer/codegen/gen_knobs.h \
 		--gen_h
+	$(AM_V_GEN)touch $@
 
 rasterizer/jitter/gen_state_llvm.h: rasterizer/codegen/gen_llvm_types.py rasterizer/codegen/templates/gen_llvm.hpp rasterizer/core/state.h rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -125,6 +128,7 @@ rasterizer/jitter/gen_state_llvm.h: rasterizer/codegen/gen_llvm_types.py rasteri
 		$(srcdir)/rasterizer/codegen/gen_llvm_types.py \
 		--input $(srcdir)/rasterizer/core/state.h \
 		--output rasterizer/jitter/gen_state_llvm.h
+	$(AM_V_GEN)touch $@
 
 rasterizer/jitter/gen_builder.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rasterizer/codegen/templates/gen_builder.hpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -133,6 +137,7 @@ rasterizer/jitter/gen_builder.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rast
 		--input $(LLVM_INCLUDEDIR)/llvm/IR/IRBuilder.h \
 		--output rasterizer/jitter \
 		--gen_h
+	$(AM_V_GEN)touch $@
 
 rasterizer/jitter/gen_builder_meta.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rasterizer/codegen/templates/gen_builder.hpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -140,6 +145,7 @@ rasterizer/jitter/gen_builder_meta.hpp: rasterizer/codegen/gen_llvm_ir_macros.py
 		$(srcdir)/rasterizer/codegen/gen_llvm_ir_macros.py \
 		--output rasterizer/jitter \
 		--gen_meta_h
+	$(AM_V_GEN)touch $@
 
 rasterizer/jitter/gen_builder_intrin.hpp: rasterizer/codegen/gen_llvm_ir_macros.py rasterizer/codegen/templates/gen_builder.hpp rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -147,6 +153,7 @@ rasterizer/jitter/gen_builder_intrin.hpp: rasterizer/codegen/gen_llvm_ir_macros.
 		$(srcdir)/rasterizer/codegen/gen_llvm_ir_macros.py \
 		--output rasterizer/jitter \
 		--gen_intrin_h
+	$(AM_V_GEN)touch $@
 
 rasterizer/archrast/gen_ar_event.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_event.hpp rasterizer/archrast/events.proto rasterizer/archrast/events_private.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -156,6 +163,7 @@ rasterizer/archrast/gen_ar_event.hpp: rasterizer/codegen/gen_archrast.py rasteri
 		--proto_private $(srcdir)/rasterizer/archrast/events_private.proto \
 		--output rasterizer/archrast/gen_ar_event.hpp \
 		--gen_event_hpp
+	$(AM_V_GEN)touch $@
 
 rasterizer/archrast/gen_ar_event.cpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_event.cpp rasterizer/archrast/events.proto rasterizer/archrast/events_private.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -165,6 +173,7 @@ rasterizer/archrast/gen_ar_event.cpp: rasterizer/codegen/gen_archrast.py rasteri
 		--proto_private $(srcdir)/rasterizer/archrast/events_private.proto \
 		--output rasterizer/archrast/gen_ar_event.cpp \
 		--gen_event_cpp
+	$(AM_V_GEN)touch $@
 
 rasterizer/archrast/gen_ar_eventhandler.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_eventhandler.hpp rasterizer/archrast/events.proto rasterizer/archrast/events_private.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -174,6 +183,7 @@ rasterizer/archrast/gen_ar_eventhandler.hpp: rasterizer/codegen/gen_archrast.py 
 		--proto_private $(srcdir)/rasterizer/archrast/events_private.proto \
 		--output rasterizer/archrast/gen_ar_eventhandler.hpp \
 		--gen_eventhandler_hpp
+	$(AM_V_GEN)touch $@
 
 rasterizer/archrast/gen_ar_eventhandlerfile.hpp: rasterizer/codegen/gen_archrast.py rasterizer/codegen/templates/gen_ar_eventhandlerfile.hpp rasterizer/archrast/events.proto rasterizer/archrast/events_private.proto rasterizer/codegen/gen_common.py
 	$(MKDIR_GEN)
@@ -183,6 +193,7 @@ rasterizer/archrast/gen_ar_eventhandlerfile.hpp: rasterizer/codegen/gen_archrast
 		--proto_private $(srcdir)/rasterizer/archrast/events_private.proto \
 		--output rasterizer/archrast/gen_ar_eventhandlerfile.hpp \
 		--gen_eventhandlerfile_hpp
+	$(AM_V_GEN)touch $@
 
 rasterizer/core/backends/gen_BackendPixelRate0.cpp \
 rasterizer/core/backends/gen_BackendPixelRate1.cpp \
@@ -363,9 +374,9 @@ include $(top_srcdir)/install-gallium-links.mk
 # created with the oldest supported version of LLVM.
 dist-hook:
 if SWR_INVALID_LLVM_VERSION
-	@echo "*******************************************************"
-	@echo "LLVM 4.0.0 or LLVM 4.0.1 required to create the tarball"
-	@echo "*******************************************************"
+	@echo "*****************************************"
+	@echo "LLVM 5.0.x required to create the tarball"
+	@echo "*****************************************"
 	@test
 endif
 

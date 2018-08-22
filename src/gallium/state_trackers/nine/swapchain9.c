@@ -96,7 +96,7 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
     HRESULT hr;
 
     memset(&whandle, 0, sizeof(whandle));
-    whandle.type = DRM_API_HANDLE_TYPE_FD;
+    whandle.type = WINSYS_HANDLE_TYPE_FD;
     This->screen->resource_get_handle(This->screen, pipe, resource,
                                       &whandle,
                                       for_frontbuffer_reading ?
@@ -307,6 +307,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     for (i = 0; i < newBufferCount; ++i) {
         tmplt.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET;
         tmplt.nr_samples = multisample_type;
+        tmplt.nr_storage_samples = multisample_type;
         if (!has_present_buffers)
             tmplt.bind |= NINE_BIND_PRESENTBUFFER_FLAGS;
         tmplt.format = d3d9_to_pipe_format_checked(This->screen,
@@ -345,6 +346,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
             tmplt.format = PIPE_FORMAT_B8G8R8X8_UNORM;
             tmplt.bind = NINE_BIND_PRESENTBUFFER_FLAGS;
             tmplt.nr_samples = 0;
+            tmplt.nr_storage_samples = 0;
             if (This->actx->linear_framebuffer)
                 tmplt.bind |= PIPE_BIND_LINEAR;
             if (pParams->SwapEffect != D3DSWAPEFFECT_DISCARD)
@@ -361,6 +363,7 @@ NineSwapChain9_Resize( struct NineSwapChain9 *This,
     if (pParams->EnableAutoDepthStencil) {
         tmplt.bind = d3d9_get_pipe_depth_format_bindings(pParams->AutoDepthStencilFormat);
         tmplt.nr_samples = multisample_type;
+        tmplt.nr_storage_samples = multisample_type;
         tmplt.format = d3d9_to_pipe_format_checked(This->screen,
                                                    pParams->AutoDepthStencilFormat,
                                                    PIPE_TEXTURE_2D,

@@ -313,7 +313,7 @@ iter_instruction(
    uint i;
 
    if (inst->Instruction.Opcode == TGSI_OPCODE_END) {
-      if (ctx->index_of_END != ~0) {
+      if (ctx->index_of_END != ~0u) {
          report_error( ctx, "Too many END instructions" );
       }
       ctx->index_of_END = ctx->num_instructions;
@@ -514,7 +514,7 @@ epilog(
 
    /* There must be an END instruction somewhere.
     */
-   if (ctx->index_of_END == ~0) {
+   if (ctx->index_of_END == ~0u) {
       report_error( ctx, "Missing END instruction" );
    }
 

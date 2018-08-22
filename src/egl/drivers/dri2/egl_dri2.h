@@ -67,8 +67,6 @@ struct zwp_linux_dmabuf_v1;
 
 #include <system/window.h>
 #include <hardware/gralloc.h>
-#include <gralloc_drm_handle.h>
-
 #endif /* HAVE_ANDROID_PLATFORM */
 
 #include "eglconfig.h"
@@ -413,6 +411,8 @@ EGLBoolean
 dri2_initialize_x11(_EGLDriver *drv, _EGLDisplay *disp);
 void
 dri2_teardown_x11(struct dri2_egl_display *dri2_dpy);
+unsigned int
+dri2_x11_get_red_mask_for_depth(struct dri2_egl_display *dri2_dpy, int depth);
 #else
 static inline EGLBoolean
 dri2_initialize_x11(_EGLDriver *drv, _EGLDisplay *disp)
@@ -421,6 +421,11 @@ dri2_initialize_x11(_EGLDriver *drv, _EGLDisplay *disp)
 }
 static inline void
 dri2_teardown_x11(struct dri2_egl_display *dri2_dpy) {}
+static inline unsigned int
+dri2_x11_get_red_mask_for_depth(struct dri2_egl_display *dri2_dpy, int depth)
+{
+   return 0;
+}
 #endif
 
 #ifdef HAVE_DRM_PLATFORM

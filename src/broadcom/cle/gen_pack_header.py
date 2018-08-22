@@ -43,7 +43,7 @@ pack_header = """%(license)s
 #ifndef %(guard)s
 #define %(guard)s
 
-#include "v3d_packet_helpers.h"
+#include "cle/v3d_packet_helpers.h"
 
 """
 
@@ -129,6 +129,12 @@ class Field(object):
         else:
             self.default = None
 
+        if "minus_one" in attrs:
+            assert(attrs["minus_one"] == "true")
+            self.minus_one = True
+        else:
+            self.minus_one = False
+
         ufixed_match = Field.ufixed_pattern.match(self.type)
         if ufixed_match:
             self.type = 'ufixed'
@@ -145,6 +151,8 @@ class Field(object):
         elif self.type == 'bool':
             type = 'bool'
         elif self.type == 'float':
+            type = 'float'
+        elif self.type == 'f187':
             type = 'float'
         elif self.type == 'ufixed':
             type = 'float'
@@ -186,6 +194,8 @@ class Group(object):
         self.count = count
         self.size = 0
         self.fields = []
+        self.min_ver = 0
+        self.max_ver = 0
 
     def emit_template_struct(self, dim):
         if self.count == 0:
@@ -208,7 +218,7 @@ class Group(object):
             first_byte = field.start // 8
             last_byte = field.end // 8
 
-            for b in xrange(first_byte, last_byte + 1):
+            for b in range(first_byte, last_byte + 1):
                 if not b in bytes:
                     bytes[b] = self.Byte()
 
@@ -227,6 +237,10 @@ class Group(object):
 
         relocs_emitted = set()
         memcpy_fields = set()
+
+        for field in self.fields:
+            if field.minus_one:
+                print("   assert(values->%s >= 1);" % field.name)
 
         for index in range(self.length):
             # Handle MBZ bytes
@@ -252,7 +266,7 @@ class Group(object):
             # uints/ints with no merged fields.
             if len(byte.fields) == 1:
                 field = byte.fields[0]
-                if field.type in ["float", "uint", "int"] and field.start % 8 == 0 and field.end - field.start == 31:
+                if field.type in ["float", "uint", "int"] and field.start % 8 == 0 and field.end - field.start == 31 and not field.minus_one:
                     if field in memcpy_fields:
                         continue
 
@@ -281,6 +295,10 @@ class Group(object):
                 end -= field_byte_start
                 extra_shift = 0
 
+                value = "values->%s" % name
+                if field.minus_one:
+                    value = "%s - 1" % value
+
                 if field.type == "mbo":
                     s = "__gen_mbo(%d, %d)" % \
                         (start, end)
@@ -288,28 +306,31 @@ class Group(object):
                     extra_shift = (31 - (end - start)) // 8 * 8
                     s = "__gen_address_offset(&values->%s)" % byte.address.name
                 elif field.type == "uint":
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, start, end)
+                    s = "__gen_uint(%s, %d, %d)" % \
+                        (value, start, end)
                 elif field.type in self.parser.enums:
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, start, end)
+                    s = "__gen_uint(%s, %d, %d)" % \
+                        (value, start, end)
                 elif field.type == "int":
-                    s = "__gen_sint(values->%s, %d, %d)" % \
-                        (name, start, end)
+                    s = "__gen_sint(%s, %d, %d)" % \
+                        (value, start, end)
                 elif field.type == "bool":
-                    s = "__gen_uint(values->%s, %d, %d)" % \
-                        (name, start, end)
+                    s = "__gen_uint(%s, %d, %d)" % \
+                        (value, start, end)
                 elif field.type == "float":
                     s = "#error %s float value mixed in with other fields" % name
+                elif field.type == "f187":
+                    s = "__gen_uint(fui(%s) >> 16, %d, %d)" % \
+                        (value, start, end)
                 elif field.type == "offset":
-                    s = "__gen_offset(values->%s, %d, %d)" % \
-                        (name, start, end)
+                    s = "__gen_offset(%s, %d, %d)" % \
+                        (value, start, end)
                 elif field.type == 'ufixed':
-                    s = "__gen_ufixed(values->%s, %d, %d, %d)" % \
-                        (name, start, end, field.fractional_size)
+                    s = "__gen_ufixed(%s, %d, %d, %d)" % \
+                        (value, start, end, field.fractional_size)
                 elif field.type == 'sfixed':
-                    s = "__gen_sfixed(values->%s, %d, %d, %d)" % \
-                        (name, start, end, field.fractional_size)
+                    s = "__gen_sfixed(%s, %d, %d, %d)" % \
+                        (value, start, end, field.fractional_size)
                 elif field.type in self.parser.structs:
                     s = "__gen_uint(v%d_%d, %d, %d)" % \
                         (index, field_index, start, end)
@@ -354,6 +375,8 @@ class Group(object):
                     convert = "__gen_unpack_uint"
                 elif field.type == "float":
                     convert = "__gen_unpack_float"
+                elif field.type == "f187":
+                    convert = "__gen_unpack_f187"
                 elif field.type == "offset":
                     convert = "__gen_unpack_offset"
                 elif field.type == 'ufixed':
@@ -366,8 +389,11 @@ class Group(object):
                     print("/* unhandled field %s, type %s */\n" % (field.name, field.type))
                     s = None
 
-                print("   values->%s = %s(%s);" % \
-                      (field.name, convert, ', '.join(args)))
+                plusone = ""
+                if field.minus_one:
+                    plusone = " + 1"
+                print("   values->%s = %s(%s)%s;" % \
+                      (field.name, convert, ', '.join(args), plusone))
 
 class Value(object):
     def __init__(self, attrs):
@@ -375,7 +401,7 @@ class Value(object):
         self.value = int(attrs["value"])
 
 class Parser(object):
-    def __init__(self):
+    def __init__(self, ver):
         self.parser = xml.parsers.expat.ParserCreate()
         self.parser.StartElementHandler = self.start_element
         self.parser.EndElementHandler = self.end_element
@@ -386,6 +412,7 @@ class Parser(object):
         # Set of enum names we've seen.
         self.enums = set()
         self.registers = {}
+        self.ver = ver
 
     def gen_prefix(self, name):
         if name[0] == "_":
@@ -396,10 +423,27 @@ class Parser(object):
     def gen_guard(self):
         return self.gen_prefix("PACK_H")
 
+    def attrs_version_valid(self, attrs):
+        if "min_ver" in attrs and self.ver < attrs["min_ver"]:
+            return False
+
+        if "max_ver" in attrs and self.ver > attrs["max_ver"]:
+            return False
+
+        return True
+
+    def group_enabled(self):
+        if self.group.min_ver != 0 and self.ver < self.group.min_ver:
+            return False
+
+        if self.group.max_ver != 0 and self.ver > self.group.max_ver:
+            return False
+
+        return True
+
     def start_element(self, name, attrs):
         if name == "vcxml":
-            self.platform = "V3D {}".format(attrs["gen"])
-            self.ver = attrs["gen"].replace('.', '')
+            self.platform = "V3D {}.{}".format(self.ver[0], self.ver[1])
             print(pack_header % {'license': license, 'platform': self.platform, 'guard': self.gen_guard()})
         elif name in ("packet", "struct", "register"):
             default_field = None
@@ -432,6 +476,11 @@ class Parser(object):
                 field.values = []
                 self.group.fields.append(field)
 
+            if "min_ver" in attrs:
+                self.group.min_ver = attrs["min_ver"]
+            if "max_ver" in attrs:
+                self.group.max_ver = attrs["max_ver"]
+
         elif name == "field":
             self.group.fields.append(Field(self, attrs))
             self.values = []
@@ -439,12 +488,14 @@ class Parser(object):
             self.values = []
             self.enum = safe_name(attrs["name"])
             self.enums.add(attrs["name"])
+            self.enum_enabled = self.attrs_version_valid(attrs)
             if "prefix" in attrs:
                 self.prefix = attrs["prefix"]
             else:
                 self.prefix= None
         elif name == "value":
-            self.values.append(Value(attrs))
+            if self.attrs_version_valid(attrs):
+                self.values.append(Value(attrs))
 
     def end_element(self, name):
         if name  == "packet":
@@ -463,7 +514,8 @@ class Parser(object):
         elif name  == "field":
             self.group.fields[-1].values = self.values
         elif name  == "enum":
-            self.emit_enum()
+            if self.enum_enabled:
+                self.emit_enum()
             self.enum = None
         elif name == "vcxml":
             print('#endif /* %s */' % self.gen_guard())
@@ -508,6 +560,9 @@ class Parser(object):
         print('')
 
     def emit_packet(self):
+        if not self.group_enabled():
+            return
+
         name = self.packet
 
         assert(self.group.fields[0].name == "opcode")
@@ -522,6 +577,9 @@ class Parser(object):
         print('')
 
     def emit_register(self):
+        if not self.group_enabled():
+            return
+
         name = self.register
         if not self.reg_num == None:
             print('#define %-33s 0x%04x' %
@@ -532,6 +590,9 @@ class Parser(object):
         self.emit_unpack_function(self.register, self.group)
 
     def emit_struct(self):
+        if not self.group_enabled():
+            return
+
         name = self.struct
 
         self.emit_header(name)
@@ -562,5 +623,5 @@ if len(sys.argv) < 2:
 
 input_file = sys.argv[1]
 
-p = Parser()
+p = Parser(sys.argv[2])
 p.parse(input_file)

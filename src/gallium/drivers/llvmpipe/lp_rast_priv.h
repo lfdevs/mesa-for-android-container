@@ -99,8 +99,6 @@ struct lp_rasterizer_task
 
    /** Non-interpolated passthru state and occlude counter for visible pixels */
    struct lp_jit_thread_data thread_data;
-   uint64_t ps_invocations;
-   uint8_t ps_inv_multiplier;
 
    pipe_semaphore work_ready;
    pipe_semaphore work_done;
@@ -259,10 +257,6 @@ lp_rast_shade_quads_all( struct lp_rasterizer_task *task,
     * allocated 4x4 blocks hence need to filter them out here.
     */
    if ((x % TILE_SIZE) < task->width && (y % TILE_SIZE) < task->height) {
-      /* not very accurate would need a popcount on the mask */
-      /* always count this not worth bothering? */
-      task->ps_invocations += 1 * variant->ps_inv_multiplier;
-
       /* Propagate non-interpolated raster state. */
       task->thread_data.raster_state.viewport_index = inputs->viewport_index;
 

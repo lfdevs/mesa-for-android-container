@@ -112,7 +112,7 @@ util_create_blit(struct pipe_context *pipe, struct cso_context *cso)
    for (i = 0; i < 2; i++) {
       ctx->velem[i].src_offset = i * 4 * sizeof(float);
       ctx->velem[i].instance_divisor = 0;
-      ctx->velem[i].vertex_buffer_index = cso_get_aux_vertex_buffer_slot(cso);
+      ctx->velem[i].vertex_buffer_index = 0;
       ctx->velem[i].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
    }
 
@@ -551,6 +551,7 @@ util_blit_pixels_tex(struct blit_state *ctx,
    assert(ctx->pipe->screen->is_format_supported(ctx->pipe->screen, dst->format,
                                                  PIPE_TEXTURE_2D,
                                                  dst->texture->nr_samples,
+                                                 dst->texture->nr_storage_samples,
                                                  PIPE_BIND_RENDER_TARGET));
 
    /* save state (restored below) */
@@ -631,8 +632,7 @@ util_blit_pixels_tex(struct blit_state *ctx,
                                   s0, t0, s1, t1,
                                   z);
 
-   util_draw_vertex_buffer(ctx->pipe, ctx->cso, ctx->vbuf,
-                           cso_get_aux_vertex_buffer_slot(ctx->cso),
+   util_draw_vertex_buffer(ctx->pipe, ctx->cso, ctx->vbuf, 0,
                            offset,
                            PIPE_PRIM_TRIANGLE_FAN,
                            4,  /* verts */

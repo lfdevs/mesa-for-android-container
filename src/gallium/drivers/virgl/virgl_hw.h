@@ -83,6 +83,7 @@ enum virgl_formats {
    VIRGL_FORMAT_L8A8_SRGB               = 96,
    VIRGL_FORMAT_B8G8R8A8_SRGB           = 100,
    VIRGL_FORMAT_B8G8R8X8_SRGB           = 101,
+   VIRGL_FORMAT_R8G8B8A8_SRGB           = 104,
 
    /* compressed formats */
    VIRGL_FORMAT_DXT1_RGB                = 105,
@@ -196,6 +197,20 @@ enum virgl_formats {
    VIRGL_FORMAT_MAX,
 };
 
+/* These are used by the capability_bits field in virgl_caps_v2. */
+#define VIRGL_CAP_NONE 0
+#define VIRGL_CAP_TGSI_INVARIANT       (1 << 0)
+#define VIRGL_CAP_TEXTURE_VIEW         (1 << 1)
+#define VIRGL_CAP_SET_MIN_SAMPLES      (1 << 2)
+#define VIRGL_CAP_COPY_IMAGE           (1 << 3)
+#define VIRGL_CAP_TGSI_PRECISE         (1 << 4)
+#define VIRGL_CAP_TXQS                 (1 << 5)
+#define VIRGL_CAP_MEMORY_BARRIER       (1 << 6)
+#define VIRGL_CAP_COMPUTE_SHADER       (1 << 7)
+#define VIRGL_CAP_FB_NO_ATTACH         (1 << 8)
+#define VIRGL_CAP_ROBUST_BUFFER_ACCESS (1 << 9)
+#define VIRGL_CAP_TGSI_FBFETCH         (1 << 10)
+
 #define VIRGL_BIND_DEPTH_STENCIL (1 << 0)
 #define VIRGL_BIND_RENDER_TARGET (1 << 1)
 #define VIRGL_BIND_SAMPLER_VIEW  (1 << 3)
@@ -204,6 +219,7 @@ enum virgl_formats {
 #define VIRGL_BIND_CONSTANT_BUFFER (1 << 6)
 #define VIRGL_BIND_DISPLAY_TARGET (1 << 7)
 #define VIRGL_BIND_STREAM_OUTPUT (1 << 11)
+#define VIRGL_BIND_SHADER_BUFFER (1 << 14)
 #define VIRGL_BIND_CURSOR        (1 << 16)
 #define VIRGL_BIND_CUSTOM        (1 << 17)
 #define VIRGL_BIND_SCANOUT       (1 << 18)
@@ -237,6 +253,11 @@ struct virgl_caps_bool_set1 {
         unsigned has_indirect_draw:1;
         unsigned has_sample_shading:1;
         unsigned has_cull:1;
+        unsigned conditional_render_inverted:1;
+        unsigned derivative_control:1;
+        unsigned polygon_offset_clamp:1;
+        unsigned transform_feedback_overflow_query:1;
+        /* DO NOT ADD ANYMORE MEMBERS - need to add another 32-bit to v2 caps */
 };
 
 /* endless expansion capabilites - current gallium has 252 formats */
@@ -286,6 +307,19 @@ struct virgl_caps_v2 {
         int32_t max_texture_gather_offset;
         uint32_t texture_buffer_offset_alignment;
         uint32_t uniform_buffer_offset_alignment;
+        uint32_t shader_buffer_offset_alignment;
+        uint32_t capability_bits;
+        uint32_t msaa_sample_positions[8];
+        uint32_t max_vertex_attrib_stride;
+        uint32_t max_shader_buffer_frag_compute;
+        uint32_t max_shader_buffer_other_stages;
+        uint32_t max_shader_image_frag_compute;
+        uint32_t max_shader_image_other_stages;
+        uint32_t max_image_samples;
+        uint32_t max_compute_work_group_invocations;
+        uint32_t max_compute_shared_memory_size;
+        uint32_t max_compute_grid_size[3];
+        uint32_t max_compute_block_size[3];
 };
 
 union virgl_caps {

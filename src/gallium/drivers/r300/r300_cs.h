@@ -39,7 +39,7 @@
  */
 
 #define CS_LOCALS(context) \
-    struct radeon_winsys_cs *cs_copy = (context)->cs; \
+    struct radeon_cmdbuf *cs_copy = (context)->cs; \
     struct radeon_winsys *cs_winsys = (context)->rws; \
     int cs_count = 0; (void) cs_count; (void) cs_winsys;
 

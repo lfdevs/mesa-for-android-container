@@ -24,9 +24,12 @@
 # Authors:
 #    Ian Romanick <idr@us.ibm.com>
 
+from __future__ import print_function
+
+from collections import OrderedDict
 from decimal import Decimal
 import xml.etree.ElementTree as ET
-import re, sys, string
+import re, sys
 import os.path
 import typeexpr
 import static_data
@@ -125,17 +128,17 @@ class gl_print_base(object):
     def printHeader(self):
         """Print the header associated with all files and call the printRealHeader method."""
 
-        print '/* DO NOT EDIT - This file generated automatically by %s script */' \
-                % (self.name)
-        print ''
-        print '/*'
-        print (' * ' + self.license.replace('\n', '\n * ')).replace(' \n', '\n')
-        print ' */'
-        print ''
+        print('/* DO NOT EDIT - This file generated automatically by %s script */' \
+                % (self.name))
+        print('')
+        print('/*')
+        print((' * ' + self.license.replace('\n', '\n * ')).replace(' \n', '\n'))
+        print(' */')
+        print('')
         if self.header_tag:
-            print '#if !defined( %s )' % (self.header_tag)
-            print '#  define %s' % (self.header_tag)
-            print ''
+            print('#if !defined( %s )' % (self.header_tag))
+            print('#  define %s' % (self.header_tag))
+            print('')
         self.printRealHeader();
         return
 
@@ -146,13 +149,13 @@ class gl_print_base(object):
         self.printRealFooter()
 
         if self.undef_list:
-            print ''
+            print('')
             for u in self.undef_list:
-                print "#  undef %s" % (u)
+                print("#  undef %s" % (u))
 
         if self.header_tag:
-            print ''
-            print '#endif /* !defined( %s ) */' % (self.header_tag)
+            print('')
+            print('#endif /* !defined( %s ) */' % (self.header_tag))
 
 
     def printRealHeader(self):
@@ -182,11 +185,11 @@ class gl_print_base(object):
         The name is also added to the file's undef_list.
         """
         self.undef_list.append("PURE")
-        print """#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
+        print("""#  if defined(__GNUC__) || (defined(__SUNPRO_C) && (__SUNPRO_C >= 0x590))
 #    define PURE __attribute__((pure))
 #  else
 #    define PURE
-#  endif"""
+#  endif""")
         return
 
 
@@ -202,11 +205,11 @@ class gl_print_base(object):
         """
 
         self.undef_list.append("FASTCALL")
-        print """#  if defined(__i386__) && defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
+        print("""#  if defined(__i386__) && defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
 #    define FASTCALL __attribute__((fastcall))
 #  else
 #    define FASTCALL
-#  endif"""
+#  endif""")
         return
 
 
@@ -222,11 +225,11 @@ class gl_print_base(object):
         """
 
         self.undef_list.append(S)
-        print """#  if defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
+        print("""#  if defined(__GNUC__) && !defined(__CYGWIN__) && !defined(__MINGW32__)
 #    define %s  __attribute__((visibility("%s")))
 #  else
 #    define %s
-#  endif""" % (S, s, S)
+#  endif""" % (S, s, S))
         return
 
 
@@ -242,11 +245,11 @@ class gl_print_base(object):
         """
 
         self.undef_list.append("NOINLINE")
-        print """#  if defined(__GNUC__)
+        print("""#  if defined(__GNUC__)
 #    define NOINLINE __attribute__((noinline))
 #  else
 #    define NOINLINE
-#  endif"""
+#  endif""")
         return
 
 
@@ -281,7 +284,7 @@ def classify_category(name, number):
 
     try:
         core_version = float(name)
-    except Exception,e:
+    except Exception:
         core_version = 0.0
 
     if core_version > 0.0:
@@ -317,7 +320,7 @@ def create_parameter_string(parameters, include_names):
 
     if len(list) == 0: list = ["void"]
 
-    return string.join(list, ", ")
+    return ", ".join(list)
 
 
 class gl_item(object):
@@ -362,7 +365,7 @@ class gl_enum( gl_item ):
         else:
             try:
                 c = int(temp)
-            except Exception,e:
+            except Exception:
                 raise RuntimeError('Invalid count value "%s" for enum "%s" in function "%s" when an integer was expected.' % (temp, self.name, n))
 
             self.default_count = c
@@ -423,7 +426,7 @@ class gl_parameter(object):
             count = int(c)
             self.count = count
             self.counter = None
-        except Exception,e:
+        except Exception:
             count = 1
             self.count = 0
             self.counter = c
@@ -575,9 +578,9 @@ class gl_parameter(object):
                 list.append( str(s) )
 
             if len(list) > 1 and use_parens :
-                return "safe_mul(%s)" % (string.join(list, ", "))
+                return "safe_mul(%s)" % ", ".join(list)
             else:
-                return string.join(list, " * ")
+                return " * ".join(list)
 
         elif self.is_image():
             return "compsize"
@@ -779,9 +782,9 @@ class gl_function( gl_item ):
 
     def parameterIterator(self, name = None):
         if name is not None:
-            return self.entry_point_parameters[name].__iter__();
+            return iter(self.entry_point_parameters[name]);
         else:
-            return self.parameters.__iter__();
+            return iter(self.parameters);
 
 
     def get_parameter_string(self, entrypoint = None):
@@ -831,7 +834,7 @@ class gl_function( gl_item ):
         versions.
         """
         result = []
-        for entry_point, api_to_ver in self.entry_point_api_map.iteritems():
+        for entry_point, api_to_ver in self.entry_point_api_map.items():
             if api not in api_to_ver:
                 continue
             if version is not None and version < api_to_ver[api]:
@@ -861,7 +864,7 @@ class gl_item_factory(object):
 
 class gl_api(object):
     def __init__(self, factory):
-        self.functions_by_name = {}
+        self.functions_by_name = OrderedDict()
         self.enums_by_name = {}
         self.types_by_name = {}
 
@@ -878,7 +881,7 @@ class gl_api(object):
     def filter_functions(self, entry_point_list):
         """Filter out entry points not in entry_point_list."""
         functions_by_name = {}
-        for func in self.functions_by_name.itervalues():
+        for func in self.functions_by_name.values():
             entry_points = [ent for ent in func.entry_points if ent in entry_point_list]
             if entry_points:
                 func.filter_entry_points(entry_points)
@@ -891,7 +894,7 @@ class gl_api(object):
         optionally, not in the given version of the given API).
         """
         functions_by_name = {}
-        for func in self.functions_by_name.itervalues():
+        for func in self.functions_by_name.values():
             entry_points = func.entry_points_for_api_version(api, version)
             if entry_points:
                 func.filter_entry_points(entry_points)
@@ -940,7 +943,7 @@ class gl_api(object):
                 temp_name = child.get( "name" )
                 self.category_dict[ temp_name ] = [cat_name, cat_number]
 
-                if self.functions_by_name.has_key( func_name ):
+                if func_name in self.functions_by_name:
                     func = self.functions_by_name[ func_name ]
                     func.process_element( child )
                 else:
@@ -977,7 +980,7 @@ class gl_api(object):
             if (cat == None) or (cat == cat_name):
                 [func_cat_type, key] = classify_category(cat_name, cat_number)
 
-                if not lists[func_cat_type].has_key(key):
+                if key not in lists[func_cat_type]:
                     lists[func_cat_type][key] = {}
 
                 lists[func_cat_type][key][func.name] = func
@@ -985,28 +988,26 @@ class gl_api(object):
 
         functions = []
         for func_cat_type in range(0,4):
-            keys = lists[func_cat_type].keys()
-            keys.sort()
+            keys = sorted(lists[func_cat_type].keys())
 
             for key in keys:
-                names = lists[func_cat_type][key].keys()
-                names.sort()
+                names = sorted(lists[func_cat_type][key].keys())
 
                 for name in names:
                     functions.append(lists[func_cat_type][key][name])
 
-        return functions.__iter__()
+        return iter(functions)
 
 
     def functionIterateByOffset(self):
         max_offset = -1
-        for func in self.functions_by_name.itervalues():
+        for func in self.functions_by_name.values():
             if func.offset > max_offset:
                 max_offset = func.offset
 
 
         temp = [None for i in range(0, max_offset + 1)]
-        for func in self.functions_by_name.itervalues():
+        for func in self.functions_by_name.values():
             if func.offset != -1:
                 temp[ func.offset ] = func
 
@@ -1016,22 +1017,21 @@ class gl_api(object):
             if temp[i]:
                 list.append(temp[i])
 
-        return list.__iter__();
+        return iter(list);
 
 
     def functionIterateAll(self):
-        return self.functions_by_name.itervalues()
+        return self.functions_by_name.values()
 
 
     def enumIterateByName(self):
-        keys = self.enums_by_name.keys()
-        keys.sort()
+        keys = sorted(self.enums_by_name.keys())
 
         list = []
         for enum in keys:
             list.append( self.enums_by_name[ enum ] )
 
-        return list.__iter__()
+        return iter(list)
 
 
     def categoryIterate(self):
@@ -1044,29 +1044,28 @@ class gl_api(object):
 
         list = []
         for cat_type in range(0,4):
-            keys = self.categories[cat_type].keys()
-            keys.sort()
+            keys = sorted(self.categories[cat_type].keys())
 
             for key in keys:
                 list.append(self.categories[cat_type][key])
 
-        return list.__iter__()
+        return iter(list)
 
 
     def get_category_for_name( self, name ):
-        if self.category_dict.has_key(name):
+        if name in self.category_dict:
             return self.category_dict[name]
         else:
             return ["<unknown category>", None]
 
 
     def typeIterate(self):
-        return self.types_by_name.itervalues()
+        return self.types_by_name.values()
 
 
     def find_type( self, type_name ):
         if type_name in self.types_by_name:
             return self.types_by_name[ type_name ].type_expr
         else:
-            print "Unable to find base type matching \"%s\"." % (type_name)
+            print("Unable to find base type matching \"%s\"." % (type_name))
             return None

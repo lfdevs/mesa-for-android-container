@@ -459,6 +459,84 @@ FC(gen4_pop_count,  115, 112, devinfo->gen < 6)
 #define MD(x) ((x) + 96)
 
 /**
+ * Set the SEND(C) message descriptor immediate.
+ *
+ * This doesn't include the SFID nor the EOT field that were considered to be
+ * part of the message descriptor by ancient versions of the BSpec, because
+ * they are present in the instruction even if the message descriptor is
+ * provided indirectly in the address register, so we want to specify them
+ * separately.
+ */
+static inline void
+brw_inst_set_send_desc(const struct gen_device_info *devinfo,
+                       brw_inst *inst, uint32_t value)
+{
+   if (devinfo->gen >= 9) {
+      brw_inst_set_bits(inst, 126, 96, value);
+      assert(value >> 31 == 0);
+   } else if (devinfo->gen >= 5) {
+      brw_inst_set_bits(inst, 124, 96, value);
+      assert(value >> 29 == 0);
+   } else {
+      brw_inst_set_bits(inst, 119, 96, value);
+      assert(value >> 24 == 0);
+   }
+}
+
+/**
+ * Get the SEND(C) message descriptor immediate.
+ *
+ * \sa brw_inst_set_send_desc().
+ */
+static inline uint32_t
+brw_inst_send_desc(const struct gen_device_info *devinfo, const brw_inst *inst)
+{
+   if (devinfo->gen >= 9)
+      return brw_inst_bits(inst, 126, 96);
+   else if (devinfo->gen >= 5)
+      return brw_inst_bits(inst, 124, 96);
+   else
+      return brw_inst_bits(inst, 119, 96);
+}
+
+/**
+ * Set the SEND(C) message extended descriptor immediate.
+ *
+ * This doesn't include the SFID nor the EOT field that were considered to be
+ * part of the extended message descriptor by some versions of the BSpec,
+ * because they are present in the instruction even if the extended message
+ * descriptor is provided indirectly in a register, so we want to specify them
+ * separately.
+ */
+static inline void
+brw_inst_set_send_ex_desc(const struct gen_device_info *devinfo,
+                          brw_inst *inst, uint32_t value)
+{
+   assert(devinfo->gen >= 9);
+   brw_inst_set_bits(inst, 94, 91, (value >> 28) & ((1u << 4) - 1));
+   brw_inst_set_bits(inst, 88, 85, (value >> 24) & ((1u << 4) - 1));
+   brw_inst_set_bits(inst, 83, 80, (value >> 20) & ((1u << 4) - 1));
+   brw_inst_set_bits(inst, 67, 64, (value >> 16) & ((1u << 4) - 1));
+   assert((value & ((1u << 16) - 1)) == 0);
+}
+
+/**
+ * Get the SEND(C) message extended descriptor immediate.
+ *
+ * \sa brw_inst_set_send_ex_desc().
+ */
+static inline uint32_t
+brw_inst_send_ex_desc(const struct gen_device_info *devinfo,
+                      const brw_inst *inst)
+{
+   assert(devinfo->gen >= 9);
+   return (brw_inst_bits(inst, 94, 91) << 28 |
+           brw_inst_bits(inst, 88, 85) << 24 |
+           brw_inst_bits(inst, 83, 80) << 20 |
+           brw_inst_bits(inst, 67, 64) << 16);
+}
+
+/**
  * Fields for SEND messages:
  *  @{
  */

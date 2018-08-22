@@ -123,7 +123,7 @@ void si_pm4_free_state(struct si_context *sctx,
 
 void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 {
-	struct radeon_winsys_cs *cs = sctx->gfx_cs;
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
 	for (int i = 0; i < state->nbo; ++i) {
 		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, state->bo[i],
@@ -167,7 +167,7 @@ void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 
 	r600_resource_reference(&state->indirect_buffer, NULL);
 	/* TODO: this hangs with 1024 or higher alignment on GFX9. */
-	state->indirect_buffer = (struct r600_resource*)
+	state->indirect_buffer =
 		si_aligned_buffer_create(screen, 0,
 					 PIPE_USAGE_DEFAULT, aligned_ndw * 4,
 					 256);

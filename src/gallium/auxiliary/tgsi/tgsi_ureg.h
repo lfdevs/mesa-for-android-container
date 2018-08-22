@@ -79,6 +79,7 @@ struct ureg_dst
    unsigned DimIndirect     : 1;  /* BOOL */
    unsigned Dimension       : 1;  /* BOOL */
    unsigned Saturate        : 1;  /* BOOL */
+   unsigned Invariant       : 1;  /* BOOL */
    int      Index           : 16; /* SINT */
    int      IndirectIndex   : 16; /* SINT */
    unsigned IndirectFile    : 4;  /* TGSI_FILE_ */
@@ -250,7 +251,8 @@ ureg_DECL_output_layout(struct ureg_program *,
                         unsigned index,
                         unsigned usage_mask,
                         unsigned array_id,
-                        unsigned array_size);
+                        unsigned array_size,
+                        boolean invariant);
 
 struct ureg_dst
 ureg_DECL_output_masked(struct ureg_program *,
@@ -372,7 +374,7 @@ struct ureg_src
 ureg_DECL_image(struct ureg_program *ureg,
                 unsigned index,
                 enum tgsi_texture_type target,
-                unsigned format,
+                enum pipe_format format,
                 boolean wr,
                 boolean raw);
 
@@ -579,8 +581,8 @@ ureg_memory_insn(struct ureg_program *ureg,
                  const struct ureg_src *src,
                  unsigned nr_src,
                  unsigned qualifier,
-                 unsigned texture,
-                 unsigned format);
+                 enum tgsi_texture_type texture,
+                 enum pipe_format format);
 
 /***********************************************************************
  * Internal instruction helpers, don't call these directly:
@@ -619,8 +621,8 @@ void
 ureg_emit_memory(struct ureg_program *ureg,
                  unsigned insn_token,
                  unsigned qualifier,
-                 unsigned texture,
-                 unsigned format);
+                 enum tgsi_texture_type texture,
+                 enum pipe_format format);
 
 void 
 ureg_emit_dst( struct ureg_program *ureg,
@@ -1017,6 +1019,7 @@ ureg_dst_array_register(unsigned file,
    dst.DimIndIndex = 0;
    dst.DimIndSwizzle = 0;
    dst.ArrayID = array_id;
+   dst.Invariant = 0;
 
    return dst;
 }
@@ -1048,6 +1051,7 @@ ureg_dst( struct ureg_src src )
    dst.DimIndIndex = src.DimIndIndex;
    dst.DimIndSwizzle = src.DimIndSwizzle;
    dst.ArrayID = src.ArrayID;
+   dst.Invariant = 0;
 
    return dst;
 }
@@ -1139,6 +1143,7 @@ ureg_dst_undef( void )
    dst.DimIndIndex = 0;
    dst.DimIndSwizzle = 0;
    dst.ArrayID = 0;
+   dst.Invariant = 0;
 
    return dst;
 }

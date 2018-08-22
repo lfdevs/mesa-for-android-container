@@ -23,6 +23,8 @@ public:
    virtual bool canDualIssue(const Instruction *, const Instruction *) const;
    virtual int getLatency(const Instruction *) const;
    virtual int getReadLatency(const Instruction *) const;
+
+   virtual bool isCS2RSV(SVSemantic) const;
 };
 
 } // namespace nv50_ir

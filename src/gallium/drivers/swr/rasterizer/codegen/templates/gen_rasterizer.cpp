@@ -19,17 +19,18 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 // @file gen_rasterizer${fileNum}.cpp
-// 
+//
 // @brief auto-generated file
-// 
+//
 // DO NOT EDIT
 //
 // Generation Command Line:
 //  ${'\n//    '.join(cmdline)}
 //
 //============================================================================
+// clang-format off
 
 #include "core/rasterizer.h"
 #include "core/rasterizer_impl.h"
@@ -40,3 +41,4 @@ void InitRasterizerFuncs${fileNum}()
     ${func}
     %endfor
 }
+// clang-format on

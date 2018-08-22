@@ -1127,6 +1127,11 @@ static void triangle_cw(struct lp_setup_context *setup,
                         const float (*v2)[4])
 {
    PIPE_ALIGN_VAR(16) struct fixed_position position;
+   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
+
+   if (lp_context->active_statistics_queries) {
+      lp_context->pipeline_statistics.c_primitives++;
+   }
 
    calc_fixed_position(setup, &position, v0, v1, v2);
 
@@ -1148,6 +1153,11 @@ static void triangle_ccw(struct lp_setup_context *setup,
                          const float (*v2)[4])
 {
    PIPE_ALIGN_VAR(16) struct fixed_position position;
+   struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
+
+   if (lp_context->active_statistics_queries) {
+      lp_context->pipeline_statistics.c_primitives++;
+   }
 
    calc_fixed_position(setup, &position, v0, v1, v2);
 
@@ -1166,8 +1176,7 @@ static void triangle_both(struct lp_setup_context *setup,
    PIPE_ALIGN_VAR(16) struct fixed_position position;
    struct llvmpipe_context *lp_context = (struct llvmpipe_context *)setup->pipe;
 
-   if (lp_context->active_statistics_queries &&
-       !llvmpipe_rasterization_disabled(lp_context)) {
+   if (lp_context->active_statistics_queries) {
       lp_context->pipeline_statistics.c_primitives++;
    }
 
@@ -1196,17 +1205,21 @@ static void triangle_both(struct lp_setup_context *setup,
 }
 
 
-static void triangle_nop( struct lp_setup_context *setup,
-			  const float (*v0)[4],
-			  const float (*v1)[4],
-			  const float (*v2)[4] )
+static void triangle_noop(struct lp_setup_context *setup,
+                          const float (*v0)[4],
+                          const float (*v1)[4],
+                          const float (*v2)[4])
 {
 }
 
 
 void 
-lp_setup_choose_triangle( struct lp_setup_context *setup )
+lp_setup_choose_triangle(struct lp_setup_context *setup)
 {
+   if (setup->rasterizer_discard) {
+      setup->triangle = triangle_noop;
+      return;
+   }
    switch (setup->cullmode) {
    case PIPE_FACE_NONE:
       setup->triangle = triangle_both;
@@ -1218,7 +1231,7 @@ lp_setup_choose_triangle( struct lp_setup_context *setup )
       setup->triangle = setup->ccw_is_frontface ? triangle_cw : triangle_ccw;
       break;
    default:
-      setup->triangle = triangle_nop;
+      setup->triangle = triangle_noop;
       break;
    }
 }

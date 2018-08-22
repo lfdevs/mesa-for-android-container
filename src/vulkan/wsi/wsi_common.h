@@ -36,6 +36,7 @@
 #define VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA (VkStructureType)1000001002
 #define VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA (VkStructureType)1000001003
 #define VK_STRUCTURE_TYPE_WSI_FORMAT_MODIFIER_PROPERTIES_LIST_MESA (VkStructureType)1000001004
+#define VK_STRUCTURE_TYPE_WSI_SURFACE_SUPPORTED_COUNTERS_MESA (VkStructureType)1000001005
 
 struct wsi_image_create_info {
     VkStructureType sType;
@@ -66,9 +67,27 @@ struct wsi_format_modifier_properties_list {
    struct wsi_format_modifier_properties *modifier_properties;
 };
 
+/* To be chained into VkSurfaceCapabilities2KHR */
+struct wsi_surface_supported_counters {
+   VkStructureType sType;
+   const void *pNext;
+
+   VkSurfaceCounterFlagsEXT supported_surface_counters;
+
+};
+
+struct wsi_fence {
+   VkDevice                     device;
+   const struct wsi_device      *wsi_device;
+   VkDisplayKHR                 display;
+   const VkAllocationCallbacks  *alloc;
+   VkResult                     (*wait)(struct wsi_fence *fence, uint64_t abs_timeout);
+   void                         (*destroy)(struct wsi_fence *fence);
+};
+
 struct wsi_interface;
 
-#define VK_ICD_WSI_PLATFORM_MAX 5
+#define VK_ICD_WSI_PLATFORM_MAX (VK_ICD_WSI_PLATFORM_DISPLAY + 1)
 
 struct wsi_device {
    VkPhysicalDevice pdevice;
@@ -116,7 +135,8 @@ VkResult
 wsi_device_init(struct wsi_device *wsi,
                 VkPhysicalDevice pdevice,
                 WSI_FN_GetPhysicalDeviceProcAddr proc_addr,
-                const VkAllocationCallbacks *alloc);
+                const VkAllocationCallbacks *alloc,
+                int display_fd);
 
 void
 wsi_device_finish(struct wsi_device *wsi,
@@ -176,6 +196,12 @@ wsi_common_get_surface_present_modes(struct wsi_device *wsi_device,
                                      VkSurfaceKHR surface,
                                      uint32_t *pPresentModeCount,
                                      VkPresentModeKHR *pPresentModes);
+
+VkResult
+wsi_common_get_surface_capabilities2ext(
+   struct wsi_device *wsi_device,
+   VkSurfaceKHR surface,
+   VkSurfaceCapabilities2EXT *pSurfaceCapabilities);
 
 VkResult
 wsi_common_get_images(VkSwapchainKHR _swapchain,

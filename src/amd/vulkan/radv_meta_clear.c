@@ -366,10 +366,10 @@ emit_color_clear(struct radv_cmd_buffer *cmd_buffer,
 
 	struct radv_subpass clear_subpass = {
 		.color_count = 1,
-		.color_attachments = (VkAttachmentReference[]) {
+		.color_attachments = (struct radv_subpass_attachment[]) {
 			subpass->color_attachments[clear_att->colorAttachment]
 		},
-		.depth_stencil_attachment = (VkAttachmentReference) { VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED }
+		.depth_stencil_attachment = (struct radv_subpass_attachment) { VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_UNDEFINED }
 	};
 
 	radv_cmd_buffer_set_subpass(cmd_buffer, &clear_subpass, false);
@@ -645,7 +645,8 @@ emit_depthstencil_clear(struct radv_cmd_buffer *cmd_buffer,
 	if (depth_view_can_fast_clear(cmd_buffer, iview, aspects,
 	                              subpass->depth_stencil_attachment.layout,
 	                              clear_rect, clear_value))
-		radv_set_depth_clear_regs(cmd_buffer, iview->image, clear_value, aspects);
+		radv_update_ds_clear_metadata(cmd_buffer, iview->image,
+					      clear_value, aspects);
 
 	radv_CmdSetViewport(radv_cmd_buffer_to_handle(cmd_buffer), 0, 1, &(VkViewport) {
 			.x = clear_rect->rect.offset.x,
@@ -744,7 +745,7 @@ emit_fast_htile_clear(struct radv_cmd_buffer *cmd_buffer,
 				      iview->image->offset + iview->image->htile_offset,
 				      iview->image->surface.htile_size, clear_word);
 
-	radv_set_depth_clear_regs(cmd_buffer, iview->image, clear_value, aspects);
+	radv_update_ds_clear_metadata(cmd_buffer, iview->image, clear_value, aspects);
 	if (post_flush) {
 		*post_flush |= flush_bits;
 	} else {
@@ -993,7 +994,7 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	const struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
 	const struct radv_image_view *iview = fb->attachments[pass_att].attachment;
 	VkClearColorValue clear_value = clear_att->clearValue.color;
-	uint32_t clear_color[2], flush_bits;
+	uint32_t clear_color[2], flush_bits = 0;
 	uint32_t cmask_clear_value;
 	bool ret;
 
@@ -1019,8 +1020,6 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 	if (iview->image->info.levels > 1)
 		goto fail;
 
-	if (iview->image->surface.is_linear)
-		goto fail;
 	if (!radv_image_extent_compare(iview->image, &iview->extent))
 		goto fail;
 
@@ -1090,7 +1089,7 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 		if (!can_avoid_fast_clear_elim)
 			need_decompress_pass = true;
 
-		flush_bits = radv_clear_dcc(cmd_buffer, iview->image, reset_value);
+		flush_bits |= radv_clear_dcc(cmd_buffer, iview->image, reset_value);
 
 		radv_set_dcc_need_cmask_elim_pred(cmd_buffer, iview->image,
 						  need_decompress_pass);
@@ -1105,7 +1104,8 @@ emit_fast_color_clear(struct radv_cmd_buffer *cmd_buffer,
 		cmd_buffer->state.flush_bits |= flush_bits;
 	}
 
-	radv_set_color_clear_regs(cmd_buffer, iview->image, subpass_att, clear_color);
+	radv_update_color_clear_metadata(cmd_buffer, iview->image, subpass_att,
+					 clear_color);
 
 	return true;
 fail:

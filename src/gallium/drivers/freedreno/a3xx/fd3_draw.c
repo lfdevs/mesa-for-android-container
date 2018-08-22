@@ -149,11 +149,16 @@ fd3_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	fixup_shader_state(ctx, &emit.key);
 
 	unsigned dirty = ctx->dirty;
+	const struct ir3_shader_variant *vp = fd3_emit_get_vp(&emit);
+	const struct ir3_shader_variant *fp = fd3_emit_get_fp(&emit);
 
 	/* do regular pass first, since that is more likely to fail compiling: */
 
-	if (!(fd3_emit_get_vp(&emit) && fd3_emit_get_fp(&emit)))
+	if (!vp || !fp)
 		return false;
+
+	ctx->stats.vs_regs += ir3_shader_halfregs(vp);
+	ctx->stats.fs_regs += ir3_shader_halfregs(fp);
 
 	emit.key.binning_pass = false;
 	emit.dirty = dirty;

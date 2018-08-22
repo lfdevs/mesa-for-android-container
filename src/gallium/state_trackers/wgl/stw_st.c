@@ -95,6 +95,7 @@ stw_st_framebuffer_validate_locked(struct st_framebuffer_iface *stfb,
    templ.array_size = 1;
    templ.last_level = 0;
    templ.nr_samples = stwfb->stvis.samples;
+   templ.nr_storage_samples = stwfb->stvis.samples;;
 
    for (i = 0; i < ST_ATTACHMENT_COUNT; i++) {
       enum pipe_format format;

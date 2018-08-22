@@ -1,35 +1,36 @@
 /******************************************************************************
-* Copyright (C) 2015-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file ${filename}.cpp
-*
-* @brief Dynamic Knobs for Core.
-*
-* ======================= AUTO GENERATED: DO NOT EDIT !!! ====================
-*
-* Generation Command Line:
-*  ${'\n*    '.join(cmdline)}
-*
-******************************************************************************/
+ * Copyright (C) 2015-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file ${filename}.cpp
+ *
+ * @brief Dynamic Knobs for Core.
+ *
+ * ======================= AUTO GENERATED: DO NOT EDIT !!! ====================
+ *
+ * Generation Command Line:
+ *  ${'\n *    '.join(cmdline)}
+ *
+ ******************************************************************************/
+// clang-format off
 <% calc_max_knob_len(knobs) %>
 % for inc in includes:
 #include <${inc}>
@@ -40,13 +41,14 @@
 //========================================================
 // Implementation
 //========================================================
-void KnobBase::autoExpandEnvironmentVariables(std::string &text)
+void KnobBase::autoExpandEnvironmentVariables(std::string& text)
 {
 #if (__GNUC__) && (GCC_VERSION < 409000)
     // <regex> isn't implemented prior to gcc-4.9.0
     // unix style variable replacement
     size_t start;
-    while ((start = text.find("${'${'}")) != std::string::npos) {
+    while ((start = text.find("${'${'}")) != std::string::npos)
+    {
         size_t end = text.find("}");
         if (end == std::string::npos)
             break;
@@ -54,7 +56,8 @@ void KnobBase::autoExpandEnvironmentVariables(std::string &text)
         text.replace(start, end - start + 1, var);
     }
     // win32 style variable replacement
-    while ((start = text.find("%")) != std::string::npos) {
+    while ((start = text.find("%")) != std::string::npos)
+    {
         size_t end = text.find("%", start + 1);
         if (end == std::string::npos)
             break;
@@ -65,7 +68,7 @@ void KnobBase::autoExpandEnvironmentVariables(std::string &text)
     {
         // unix style variable replacement
         static std::regex env("\\$\\{([^}]+)\\}");
-        std::smatch match;
+        std::smatch       match;
         while (std::regex_search(text, match, env))
         {
             const std::string var = GetEnv(match[1].str());
@@ -77,7 +80,7 @@ void KnobBase::autoExpandEnvironmentVariables(std::string &text)
     {
         // win32 style variable replacement
         static std::regex env("\\%([^}]+)\\%");
-        std::smatch match;
+        std::smatch       match;
         while (std::regex_search(text, match, env))
         {
             const std::string var = GetEnv(match[1].str());
@@ -88,7 +91,6 @@ void KnobBase::autoExpandEnvironmentVariables(std::string &text)
     }
 #endif
 }
-
 
 //========================================================
 // Static Data Members
@@ -113,7 +115,10 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
     std::basic_stringstream<char> str;
     str << std::showbase << std::setprecision(1) << std::fixed;
 
-    if (optPerLinePrefix == nullptr) { optPerLinePrefix = ""; }
+    if (optPerLinePrefix == nullptr)
+    {
+        optPerLinePrefix = "";
+    }
 
     % for knob in knobs:
     str << optPerLinePrefix << "KNOB_${knob[0]}:${space_knob(knob[0])}";
@@ -157,3 +162,4 @@ std::string GlobalKnobs::ToString(const char* optPerLinePrefix)
         name_len = len(name)
         return ' '*(max_len - name_len)
 %>
+// clang-format on

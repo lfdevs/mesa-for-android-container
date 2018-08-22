@@ -305,7 +305,7 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
          drv->pipe->flush(drv->pipe, NULL, 0);
 
          memset(&whandle, 0, sizeof(whandle));
-         whandle.type = DRM_API_HANDLE_TYPE_FD;
+         whandle.type = WINSYS_HANDLE_TYPE_FD;
 
          if (!screen->resource_get_handle(screen, drv->pipe,
                                           buf->derived_surface.resource,

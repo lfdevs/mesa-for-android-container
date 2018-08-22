@@ -251,9 +251,9 @@ brw_upload_ff_gs_prog(struct brw_context *brw)
    }
 
    if (brw->ff_gs.prog_active) {
-      if (!brw_search_cache(&brw->cache, BRW_CACHE_FF_GS_PROG,
-			    &key, sizeof(key),
-			    &brw->ff_gs.prog_offset, &brw->ff_gs.prog_data)) {
+      if (!brw_search_cache(&brw->cache, BRW_CACHE_FF_GS_PROG, &key,
+                            sizeof(key), &brw->ff_gs.prog_offset,
+                            &brw->ff_gs.prog_data, true)) {
          brw_codegen_ff_gs_prog(brw, &key);
       }
    }

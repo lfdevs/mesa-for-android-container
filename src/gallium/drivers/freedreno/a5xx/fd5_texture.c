@@ -217,6 +217,7 @@ fd5_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 
 	so->texconst0 =
 		A5XX_TEX_CONST_0_FMT(fd5_pipe2tex(format)) |
+		A5XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
 		fd5_tex_swiz(format, cso->swizzle_r, cso->swizzle_g,
 				cso->swizzle_b, cso->swizzle_a);
 

@@ -76,9 +76,7 @@ is_lowerable_uniform(struct qinst *inst, int i)
 {
         if (inst->src[i].file != QFILE_UNIF)
                 return false;
-        if (vir_has_implicit_uniform(inst))
-                return i != vir_get_implicit_uniform_src(inst);
-        return true;
+        return i != vir_get_implicit_uniform_src(inst);
 }
 
 /* Returns the number of different uniform values referenced by the
@@ -152,7 +150,7 @@ vir_lower_uniforms(struct v3d_compile *c)
                  * reference a temp instead.
                  */
                 vir_for_each_block(block, c) {
-                        struct qinst *mov = NULL;
+                        struct qreg temp = c->undef;
 
                         vir_for_each_inst(inst, block) {
                                 uint32_t nsrc = vir_get_nsrc(inst);
@@ -162,29 +160,27 @@ vir_lower_uniforms(struct v3d_compile *c)
                                 if (count <= 1)
                                         continue;
 
-                                /* If the block doesn't have a load of the
-                                 * uniform yet, add it.  We could potentially
-                                 * do better and CSE MOVs from multiple blocks
-                                 * into dominating blocks, except that may
-                                 * cause troubles for register allocation.
-                                 */
-                                if (!mov) {
-                                        mov = vir_mul_inst(V3D_QPU_M_MOV,
-                                                           vir_get_temp(c),
-                                                           unif, c->undef);
-                                        list_add(&mov->link,
-                                                 &block->instructions);
-                                        c->defs[mov->dst.index] = mov;
-                                }
-
                                 bool removed = false;
                                 for (int i = 0; i < nsrc; i++) {
                                         if (is_lowerable_uniform(inst, i) &&
                                             inst->src[i].index == max_index) {
-                                                inst->src[i].file =
-                                                        mov->dst.file;
-                                                inst->src[i].index =
-                                                        mov->dst.index;
+                                                /* If the block doesn't have a
+                                                 * load of the uniform yet,
+                                                 * add it now.  We could
+                                                 * potentially do better and
+                                                 * CSE MOVs from multiple
+                                                 * blocks into dominating
+                                                 * blocks, except that may
+                                                 * cause troubles for register
+                                                 * allocation.
+                                                 */
+                                                if (temp.file == QFILE_NULL) {
+                                                        c->cursor =
+                                                                vir_before_inst(inst);
+                                                        temp = vir_MOV(c, unif);
+                                                }
+
+                                                inst->src[i] = temp;
                                                 remove_uniform(ht, unif);
                                                 removed = true;
                                         }

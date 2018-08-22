@@ -474,7 +474,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
       prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
-      fs_generator g(compiler, log_data, mem_ctx, (void *) key,
+      fs_generator g(compiler, log_data, mem_ctx,
                      &prog_data->base.base, v.promoted_constants, false,
                      MESA_SHADER_TESS_CTRL);
       if (unlikely(INTEL_DEBUG & DEBUG_TCS)) {

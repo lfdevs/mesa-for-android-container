@@ -2592,6 +2592,31 @@ For these opcodes, the resource can be a BUFFER, IMAGE, or MEMORY.
   barrier in between.
 
 
+.. _bindlessopcodes:
+
+Bindless Opcodes
+^^^^^^^^^^^^^^^^
+
+These opcodes are for working with bindless sampler or image handles and
+require PIPE_CAP_BINDLESS_TEXTURE.
+
+.. opcode:: IMG2HND - Get a bindless handle for a image
+
+  Syntax: ``IMG2HND dst, image``
+
+  Example: ``IMG2HND TEMP[0], IMAGE[0]``
+
+  Sets 'dst' to a bindless handle for 'image'.
+
+.. opcode:: SAMP2HND - Get a bindless handle for a sampler
+
+  Syntax: ``SAMP2HND dst, sampler``
+
+  Example: ``SAMP2HND TEMP[0], SAMP[0]``
+
+  Sets 'dst' to a bindless handle for 'sampler'.
+
+
 .. _threadsyncopcodes:
 
 Inter-thread synchronization opcodes

@@ -73,12 +73,16 @@ read_counter(struct fd_context *ctx, int type)
 		return ctx->stats.staging_uploads;
 	case FD_QUERY_SHADOW_UPLOADS:
 		return ctx->stats.shadow_uploads;
+	case FD_QUERY_VS_REGS:
+		return ctx->stats.vs_regs;
+	case FD_QUERY_FS_REGS:
+		return ctx->stats.fs_regs;
 	}
 	return 0;
 }
 
 static bool
-is_rate_query(struct fd_query *q)
+is_time_rate_query(struct fd_query *q)
 {
 	switch (q->type) {
 	case FD_QUERY_BATCH_TOTAL:
@@ -94,14 +98,29 @@ is_rate_query(struct fd_query *q)
 	}
 }
 
+static bool
+is_draw_rate_query(struct fd_query *q)
+{
+	switch (q->type) {
+	case FD_QUERY_VS_REGS:
+	case FD_QUERY_FS_REGS:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static boolean
 fd_sw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
 	sq->begin_value = read_counter(ctx, q->type);
-	if (is_rate_query(q))
+	if (is_time_rate_query(q)) {
 		sq->begin_time = os_time_get();
-   return true;
+	} else if (is_draw_rate_query(q)) {
+		sq->begin_time = ctx->stats.draw_calls;
+	}
+	return true;
 }
 
 static void
@@ -109,8 +128,11 @@ fd_sw_end_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_sw_query *sq = fd_sw_query(q);
 	sq->end_value = read_counter(ctx, q->type);
-	if (is_rate_query(q))
+	if (is_time_rate_query(q)) {
 		sq->end_time = os_time_get();
+	} else if (is_draw_rate_query(q)) {
+		sq->end_time = ctx->stats.draw_calls;
+	}
 }
 
 static boolean
@@ -121,10 +143,14 @@ fd_sw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 
 	result->u64 = sq->end_value - sq->begin_value;
 
-	if (is_rate_query(q)) {
+	if (is_time_rate_query(q)) {
 		double fps = (result->u64 * 1000000) /
 				(double)(sq->end_time - sq->begin_time);
 		result->u64 = (uint64_t)fps;
+	} else if (is_draw_rate_query(q)) {
+		double avg = ((double)result->u64) /
+				(double)(sq->end_time - sq->begin_time);
+		result->f = avg;
 	}
 
 	return true;
@@ -154,6 +180,8 @@ fd_sw_create_query(struct fd_context *ctx, unsigned query_type)
 	case FD_QUERY_BATCH_RESTORE:
 	case FD_QUERY_STAGING_UPLOADS:
 	case FD_QUERY_SHADOW_UPLOADS:
+	case FD_QUERY_VS_REGS:
+	case FD_QUERY_FS_REGS:
 		break;
 	default:
 		return NULL;

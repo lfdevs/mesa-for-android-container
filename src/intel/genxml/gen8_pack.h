@@ -7320,7 +7320,7 @@ struct GEN8_MI_LOAD_SCAN_LINES_INCL {
 #define DisplayPlaneA                            0
 #define DisplayPlaneB                            1
 #define DisplayPlaneC                            4
-   bool                                 ScanLineEventDoneForward;
+   uint32_t                             ScanLineEventDoneForward;
    uint32_t                             DWordLength;
    uint32_t                             StartScanLineNumber;
    uint32_t                             EndScanLineNumber;
@@ -9518,6 +9518,10 @@ struct GEN8_INSTPM {
    bool                                 _3DRenderingInstructionDisable;
    bool                                 MediaInstructionDisable;
    bool                                 CONSTANT_BUFFERAddressOffsetDisable;
+   bool                                 _3DStateInstructionDisableMask;
+   bool                                 _3DRenderingInstructionDisableMask;
+   bool                                 MediaInstructionDisableMask;
+   bool                                 CONSTANT_BUFFERAddressOffsetDisableMask;
 };
 
 static inline void
@@ -9531,7 +9535,11 @@ GEN8_INSTPM_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DStateInstructionDisable, 1, 1) |
       __gen_uint(values->_3DRenderingInstructionDisable, 2, 2) |
       __gen_uint(values->MediaInstructionDisable, 3, 3) |
-      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 6, 6);
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 6, 6) |
+      __gen_uint(values->_3DStateInstructionDisableMask, 17, 17) |
+      __gen_uint(values->_3DRenderingInstructionDisableMask, 18, 18) |
+      __gen_uint(values->MediaInstructionDisableMask, 19, 19) |
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisableMask, 22, 22);
 }
 
 #endif /* GEN8_PACK_H */

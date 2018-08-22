@@ -837,13 +837,12 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
           procType == PIPE_SHADER_TESS_EVAL ||
           procType == PIPE_SHADER_COMPUTE);
    info->processor = procType;
+   info->num_tokens = tgsi_num_tokens(parse.Tokens);
 
    /**
     ** Loop over incoming program tokens/instructions
     */
    while (!tgsi_parse_end_of_tokens(&parse)) {
-      info->num_tokens++;
-
       tgsi_parse_token( &parse );
 
       switch( parse.FullToken.Token.Type ) {

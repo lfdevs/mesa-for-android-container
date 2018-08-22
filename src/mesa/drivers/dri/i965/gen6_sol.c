@@ -195,9 +195,11 @@ brw_new_transform_feedback(struct gl_context *ctx, GLuint name)
    _mesa_init_transform_feedback_object(&brw_obj->base, name);
 
    brw_obj->offset_bo =
-      brw_bo_alloc(brw->bufmgr, "transform feedback offsets", 16);
+      brw_bo_alloc(brw->bufmgr, "transform feedback offsets", 16,
+                   BRW_MEMZONE_OTHER);
    brw_obj->prim_count_bo =
-      brw_bo_alloc(brw->bufmgr, "xfb primitive counts", 16384);
+      brw_bo_alloc(brw->bufmgr, "xfb primitive counts", 16384,
+                   BRW_MEMZONE_OTHER);
 
    return &brw_obj->base;
 }

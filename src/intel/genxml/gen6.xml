@@ -622,6 +622,17 @@
     <field name="Maximum VP Index" start="96" end="99" type="uint"/>
   </instruction>
 
+  <struct name="3DSTATE_CONSTANT_BODY" length="4">
+    <field name="Pointer to Constant Buffer 0" start="5" end="31" type="offset"/>
+    <field name="Constant Buffer 0 Read Length" start="0" end="4" type="uint"/>
+    <field name="Pointer to Constant Buffer 1" start="37" end="63" type="address"/>
+    <field name="Constant Buffer 1 Read Length" start="32" end="36" type="uint"/>
+    <field name="Pointer to Constant Buffer 2" start="69" end="95" type="address"/>
+    <field name="Constant Buffer 2 Read Length" start="64" end="68" type="uint"/>
+    <field name="Pointer to Constant Buffer 3" start="101" end="127" type="address"/>
+    <field name="Constant Buffer 3 Read Length" start="96" end="100" type="uint"/>
+  </struct>
+
   <instruction name="3DSTATE_CONSTANT_GS" bias="2" length="5">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
@@ -633,14 +644,7 @@
     <field name="Buffer 0 Valid" start="12" end="12" type="bool"/>
     <field name="Constant Buffer Object Control State" start="8" end="11" type="MEMORY_OBJECT_CONTROL_STATE"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
-    <field name="Pointer to GS Constant Buffer 0" start="37" end="63" type="offset"/>
-    <field name="GS Constant Buffer 0 Read Length" start="32" end="36" type="uint"/>
-    <field name="Pointer to GS Constant Buffer 1" start="69" end="95" type="address"/>
-    <field name="GS Constant Buffer 1 Read Length" start="64" end="68" type="uint"/>
-    <field name="Pointer to GS Constant Buffer 2" start="101" end="127" type="address"/>
-    <field name="GS Constant Buffer 2 Read Length" start="96" end="100" type="uint"/>
-    <field name="Pointer to GS Constant Buffer 3" start="133" end="159" type="address"/>
-    <field name="GS Constant Buffer 3 Read Length" start="128" end="132" type="uint"/>
+    <field name="Constant Body" start="32" end="159" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
   <instruction name="3DSTATE_CONSTANT_PS" bias="2" length="5">
@@ -654,14 +658,7 @@
     <field name="Buffer 0 Valid" start="12" end="12" type="bool"/>
     <field name="Constant Buffer Object Control State" start="8" end="11" type="MEMORY_OBJECT_CONTROL_STATE"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
-    <field name="Pointer to PS Constant Buffer 0" start="37" end="63" type="offset"/>
-    <field name="PS Constant Buffer 0 Read Length" start="32" end="36" type="uint"/>
-    <field name="Pointer to PS Constant Buffer 1" start="69" end="95" type="address"/>
-    <field name="PS Constant Buffer 1 Read Length" start="64" end="68" type="uint"/>
-    <field name="Pointer to PS Constant Buffer 2" start="101" end="127" type="address"/>
-    <field name="PS Constant Buffer 2 Read Length" start="96" end="100" type="uint"/>
-    <field name="Pointer to PS Constant Buffer 3" start="133" end="159" type="address"/>
-    <field name="PS Constant Buffer 3 Read Length" start="128" end="132" type="uint"/>
+    <field name="Constant Body" start="32" end="159" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
   <instruction name="3DSTATE_CONSTANT_VS" bias="2" length="5">
@@ -675,14 +672,7 @@
     <field name="Buffer 0 Valid" start="12" end="12" type="bool"/>
     <field name="Constant Buffer Object Control State" start="8" end="11" type="MEMORY_OBJECT_CONTROL_STATE"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="3"/>
-    <field name="Pointer to VS Constant Buffer 0" start="37" end="63" type="offset"/>
-    <field name="VS Constant Buffer 0 Read Length" start="32" end="36" type="uint"/>
-    <field name="Pointer to VS Constant Buffer 1" start="69" end="95" type="address"/>
-    <field name="VS Constant Buffer 1 Read Length" start="64" end="68" type="uint"/>
-    <field name="Pointer to VS Constant Buffer 2" start="101" end="127" type="address"/>
-    <field name="VS Constant Buffer 2 Read Length" start="96" end="100" type="uint"/>
-    <field name="Pointer to VS Constant Buffer 3" start="133" end="159" type="address"/>
-    <field name="VS Constant Buffer 3 Read Length" start="128" end="132" type="uint"/>
+    <field name="Constant Body" start="32" end="159" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
   <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="7">
@@ -1888,7 +1878,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -1904,7 +1894,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -1920,7 +1910,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -1972,6 +1962,11 @@
     <field name="3D Rendering Instruction Disable" start="2" end="2" type="bool"/>
     <field name="Media Instruction Disable" start="3" end="3" type="bool"/>
     <field name="CONSTANT_BUFFER Address Offset Disable" start="6" end="6" type="bool"/>
+
+    <field name="3D State Instruction Disable Mask" start="17" end="17" type="bool"/>
+    <field name="3D Rendering Instruction Disable Mask" start="18" end="18" type="bool"/>
+    <field name="Media Instruction Disable Mask" start="19" end="19" type="bool"/>
+    <field name="CONSTANT_BUFFER Address Offset Disable Mask" start="22" end="22" type="bool"/>
   </register>
 
 </genxml>

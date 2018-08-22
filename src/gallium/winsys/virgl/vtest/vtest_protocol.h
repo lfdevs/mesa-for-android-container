@@ -47,6 +47,8 @@
 
 /* pass the process cmd line for debugging */
 #define VCMD_CREATE_RENDERER 8
+
+#define VCMD_GET_CAPS2 9
 /* get caps */
 /* 0 length cmd */
 /* resp VCMD_GET_CAPS + caps */

@@ -216,7 +216,7 @@ namespace {
       // http://www.llvm.org/bugs/show_bug.cgi?id=19735
       c->getDiagnosticOpts().ShowCarets = false;
 
-      compat::set_lang_defaults(c->getInvocation(), c->getLangOpts(),
+      c->getInvocation().setLangDefaults(c->getLangOpts(),
                                 compat::ik_opencl, ::llvm::Triple(target.triple),
                                 c->getPreprocessorOpts(),
                                 get_language_version(opts, device_clc_version));
@@ -314,9 +314,7 @@ namespace {
    void
    optimize(Module &mod, unsigned optimization_level,
             bool internalize_symbols) {
-      compat::pass_manager pm;
-
-      compat::add_data_layout_pass(pm);
+      ::llvm::legacy::PassManager pm;
 
       // By default, the function internalizer pass will look for a function
       // called "main" and then mark all other functions as internal.  Marking
@@ -330,13 +328,19 @@ namespace {
       // list of kernel functions to the internalizer.  The internalizer will
       // treat the functions in the list as "main" functions and internalize
       // all of the other functions.
-      if (internalize_symbols)
-         compat::add_internalize_pass(pm, map(std::mem_fn(&Function::getName),
-                                              get_kernels(mod)));
+      if (internalize_symbols) {
+         std::vector<std::string> names =
+            map(std::mem_fn(&Function::getName), get_kernels(mod));
+         pm.add(::llvm::createInternalizePass(
+                      [=](const ::llvm::GlobalValue &gv) {
+                         return std::find(names.begin(), names.end(),
+                                          gv.getName()) != names.end();
+                      }));
+      }
 
       ::llvm::PassManagerBuilder pmb;
       pmb.OptLevel = optimization_level;
-      pmb.LibraryInfo = new compat::target_library_info(
+      pmb.LibraryInfo = new ::llvm::TargetLibraryInfoImpl(
          ::llvm::Triple(mod.getTargetTriple()));
       pmb.populateModulePassManager(pm);
       pm.run(mod);
@@ -346,11 +350,10 @@ namespace {
    link(LLVMContext &ctx, const clang::CompilerInstance &c,
         const std::vector<module> &modules, std::string &r_log) {
       std::unique_ptr<Module> mod { new Module("link", ctx) };
-      auto linker = compat::create_linker(*mod);
+      std::unique_ptr< ::llvm::Linker> linker { new ::llvm::Linker(*mod) };
 
       for (auto &m : modules) {
-         if (compat::link_in_module(*linker,
-                                    parse_module_library(m, ctx, r_log)))
+         if (linker->linkInModule(parse_module_library(m, ctx, r_log)))
             throw build_error();
       }
 

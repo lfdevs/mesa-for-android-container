@@ -25,6 +25,8 @@
 #ifndef GLSL_LINKER_H
 #define GLSL_LINKER_H
 
+#include "linker_util.h"
+
 struct gl_shader_program;
 struct gl_shader;
 struct gl_linked_shader;
@@ -190,25 +192,6 @@ private:
                   const enum glsl_interface_packing packing,
                   bool last_field, unsigned record_array_count,
                   const glsl_struct_field *named_ifc_member);
-};
-
-void
-linker_error(gl_shader_program *prog, const char *fmt, ...);
-
-void
-linker_warning(gl_shader_program *prog, const char *fmt, ...);
-
-/**
- * Sometimes there are empty slots left over in UniformRemapTable after we
- * allocate slots to explicit locations. This struct represents a single
- * continouous block of empty slots in UniformRemapTable.
- */
-struct empty_uniform_block {
-   struct exec_node link;
-   /* The start location of the block */
-   unsigned start;
-   /* The number of slots in the block */
-   unsigned slots;
 };
 
 #endif /* GLSL_LINKER_H */

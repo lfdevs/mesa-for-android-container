@@ -68,6 +68,9 @@ objects. They all follow simple, one-method binding calls, e.g.
   that this takes effect even if multisampling is not explicitly enabled if
   the frambuffer surface(s) are multisampled.  Also, this mask is AND-ed
   with the optional fragment shader sample mask output (when emitted).
+* ``set_sample_locations`` sets the sample locations used for rasterization.
+  ```get_sample_position``` still returns the default locations. When NULL,
+  the default locations are used.
 * ``set_min_samples`` sets the minimum number of samples that must be run.
 * ``set_clip_state``
 * ``set_polygon_stipple``
@@ -269,6 +272,17 @@ format.
 (which may be multiple bytes in length). Logically this is a memset with a
 multi-byte element value starting at offset bytes from resource start, going
 for size bytes. It is guaranteed that size % clear_value_size == 0.
+
+Evaluating Depth Buffers
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+``evaluate_depth_buffer`` is a hint to decompress the current depth buffer
+assuming the current sample locations to avoid problems that could arise when
+using programmable sample locations.
+
+If a depth buffer is rendered with different sample location state than
+what is current at the time of reading the depth buffer, the values may differ
+because depth buffer compression can depend the sample locations.
 
 
 Uploading

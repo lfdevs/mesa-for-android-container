@@ -629,7 +629,7 @@ def main():
 
     c(textwrap.dedent("""\
         #include "brw_context.h"
-        #include "brw_performance_query.h"
+        #include "brw_performance_query_metrics.h"
 
 
         #define MIN(a, b) ((a < b) ? (a) : (b))
@@ -653,7 +653,7 @@ def main():
 
             c("\n")
             register_lengths = compute_register_lengths(set);
-            for reg_type, reg_length in register_lengths.iteritems():
+            for reg_type, reg_length in register_lengths.items():
                 c("static struct brw_perf_query_register_prog {0}_{1}_{2}[{3}];".format(gen.chipset,
                                                                                         set.underscore_name,
                                                                                         reg_type, reg_length))
@@ -692,7 +692,7 @@ def main():
                     .c_offset = 46,
                 """))
 
-            for reg_type, reg_length in register_lengths.iteritems():
+            for reg_type, reg_length in register_lengths.items():
                 c(".{0} = {1}_{2}_{3},".format(reg_type, gen.chipset, set.underscore_name, reg_type))
                 c(".n_{0} = 0, /* Determined at runtime */".format(reg_type))
 

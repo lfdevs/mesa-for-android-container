@@ -101,12 +101,14 @@ fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	OUT_PKT0(ring, REG_A2XX_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, A2XX_TC_CNTL_STATUS_L2_INVALIDATE);
 
-	OUT_WFI (ring);
+	if (!is_a20x(ctx->screen)) {
+		OUT_WFI (ring);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
-	OUT_RING(ring, info->max_index);        /* VGT_MAX_VTX_INDX */
-	OUT_RING(ring, info->min_index);        /* VGT_MIN_VTX_INDX */
+		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
+		OUT_RING(ring, info->max_index);        /* VGT_MAX_VTX_INDX */
+		OUT_RING(ring, info->min_index);        /* VGT_MIN_VTX_INDX */
+	}
 
 	fd_draw_emit(ctx->batch, ring, ctx->primtypes[info->mode],
 				 IGNORE_VISIBILITY, info, index_offset);
@@ -133,7 +135,7 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 	uint32_t reg, colr = 0;
 
 	if ((buffers & PIPE_CLEAR_COLOR) && fb->nr_cbufs)
-		colr  = pack_rgba(fb->cbufs[0]->format, color->f);
+		colr = pack_rgba(PIPE_FORMAT_R8G8B8A8_UNORM, color->f);
 
 	/* emit generic state now: */
 	fd2_emit_state(ctx, ctx->dirty &
@@ -157,9 +159,18 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 	OUT_PKT0(ring, REG_A2XX_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, A2XX_TC_CNTL_STATUS_L2_INVALIDATE);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A2XX_CLEAR_COLOR));
-	OUT_RING(ring, colr);
+	if (is_a20x(ctx->screen)) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 5);
+		OUT_RING(ring, 0x00000480);
+		OUT_RING(ring, color->ui[0]);
+		OUT_RING(ring, color->ui[1]);
+		OUT_RING(ring, color->ui[2]);
+		OUT_RING(ring, color->ui[3]);
+	} else {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_CLEAR_COLOR));
+		OUT_RING(ring, colr);
+	}
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_A220_RB_LRZ_VSC_CONTROL));
@@ -264,10 +275,12 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 		OUT_RING(ring, 0x0);
 	}
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
-	OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
-	OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
-	OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
+	if (!is_a20x(ctx->screen)) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_MAX_VTX_INDX));
+		OUT_RING(ring, 3);                 /* VGT_MAX_VTX_INDX */
+		OUT_RING(ring, 0);                 /* VGT_MIN_VTX_INDX */
+	}
 
 	fd_draw(ctx->batch, ring, DI_PT_RECTLIST, IGNORE_VISIBILITY,
 			DI_SRC_SEL_AUTO_INDEX, 3, 0, INDEX_SIZE_IGN, 0, 0, NULL);

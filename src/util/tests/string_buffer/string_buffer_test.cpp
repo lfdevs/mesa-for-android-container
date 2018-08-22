@@ -95,15 +95,15 @@ TEST_F(string_buffer, string_buffer_tests)
    EXPECT_TRUE(strlen(buf->buf) == 0);
 
    /* Test a string with some formatting */
-   sprintf(str4, "Testing formatting %d, %f", 100, 1.0);
+   snprintf(str4, sizeof(str4), "Testing formatting %d, %f", 100, 1.0);
    EXPECT_TRUE(_mesa_string_buffer_printf(buf, "Testing formatting %d, %f", 100, 1.0));
    EXPECT_TRUE(strcmp(buf->buf, str4) == 0);
 
    /* Compile a string with some other formatting */
-   sprintf(str5, "Testing formatting %d, %x", 100, 0xDEADBEAF);
+   snprintf(str5, sizeof(str5), "Testing formatting %d, %x", 100, 0xDEADBEAF);
 
    /* Concatenate str5 to str4 */
-   strcat(str4, str5);
+   strncat(str4, str5, sizeof(str5));
 
    /* Now use the formatted append function again */
    EXPECT_TRUE(_mesa_string_buffer_printf(buf, "Testing formatting %d, %x", 100, 0xDEADBEAF));

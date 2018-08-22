@@ -129,12 +129,14 @@ int virgl_vtest_connect(struct virgl_vtest_winsys *vws)
 int virgl_vtest_send_get_caps(struct virgl_vtest_winsys *vws,
                               struct virgl_drm_caps *caps)
 {
-   uint32_t get_caps_buf[VTEST_HDR_SIZE];
+   uint32_t get_caps_buf[VTEST_HDR_SIZE * 2];
    uint32_t resp_buf[VTEST_HDR_SIZE];
-
+   uint32_t caps_size = sizeof(struct virgl_caps_v2);
    int ret;
    get_caps_buf[VTEST_CMD_LEN] = 0;
-   get_caps_buf[VTEST_CMD_ID] = VCMD_GET_CAPS;
+   get_caps_buf[VTEST_CMD_ID] = VCMD_GET_CAPS2;
+   get_caps_buf[VTEST_CMD_LEN + 2] = 0;
+   get_caps_buf[VTEST_CMD_ID + 2] = VCMD_GET_CAPS;
 
    virgl_block_write(vws->sock_fd, &get_caps_buf, sizeof(get_caps_buf));
 
@@ -142,7 +144,27 @@ int virgl_vtest_send_get_caps(struct virgl_vtest_winsys *vws,
    if (ret <= 0)
       return 0;
 
-   ret = virgl_block_read(vws->sock_fd, &caps->caps, sizeof(struct virgl_caps_v1));
+   if (resp_buf[1] == 2) {
+       struct virgl_caps_v1 dummy;
+       uint32_t resp_size = resp_buf[0] - 1;
+       uint32_t dummy_size = 0;
+       if (resp_size > caps_size) {
+	   dummy_size = resp_size - caps_size;
+	   resp_size = caps_size;
+       }
+
+       ret = virgl_block_read(vws->sock_fd, &caps->caps, resp_size);
+
+       if (dummy_size)
+	   ret = virgl_block_read(vws->sock_fd, &dummy, dummy_size);
+
+       /* now read back the pointless caps v1 we requested */
+       ret = virgl_block_read(vws->sock_fd, resp_buf, sizeof(resp_buf));
+       if (ret <= 0)
+	   return 0;
+       ret = virgl_block_read(vws->sock_fd, &dummy, sizeof(struct virgl_caps_v1));
+   } else
+       ret = virgl_block_read(vws->sock_fd, &caps->caps, sizeof(struct virgl_caps_v1));
 
    return 0;
 }

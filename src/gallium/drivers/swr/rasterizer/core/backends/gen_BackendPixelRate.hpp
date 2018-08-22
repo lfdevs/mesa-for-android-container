@@ -19,11 +19,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 // @file gen_BackendPixelRate.hpp
-// 
+//
 // @brief auto-generated file
-// 
+//
 // DO NOT EDIT
 //
 // Generation Command Line:
@@ -44,6 +44,8 @@
 //
 //============================================================================
 
+// clang-format off
+
 void InitBackendPixelRate0();
 void InitBackendPixelRate1();
 void InitBackendPixelRate2();
@@ -56,3 +58,4 @@ static INLINE void InitBackendPixelRate()
     InitBackendPixelRate2();
     InitBackendPixelRate3();
 }
+// clang-format on

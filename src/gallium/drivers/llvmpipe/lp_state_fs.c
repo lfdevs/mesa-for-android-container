@@ -2554,6 +2554,25 @@ generate_fragment(struct llvmpipe_context *lp,
    assert(builder);
    LLVMPositionBuilderAtEnd(builder, block);
 
+   /*
+    * Must not count ps invocations if there's a null shader.
+    * (It would be ok to count with null shader if there's d/s tests,
+    * but only if there's d/s buffers too, which is different
+    * to implicit rasterization disable which must not depend
+    * on the d/s buffers.)
+    * Could use popcount on mask, but pixel accuracy is not required.
+    * Could disable if there's no stats query, but maybe not worth it.
+    */
+   if (shader->info.base.num_instructions > 1) {
+      LLVMValueRef invocs, val;
+      invocs = lp_jit_thread_data_invocations(gallivm, thread_data_ptr);
+      val = LLVMBuildLoad(builder, invocs, "");
+      val = LLVMBuildAdd(builder, val,
+                         LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), 1, 0),
+                         "invoc_count");
+      LLVMBuildStore(builder, val, invocs);
+   }
+
    /* code generated texture sampling */
    sampler = lp_llvm_sampler_soa_create(key->state);
 
@@ -2842,13 +2861,6 @@ generate_variant(struct llvmpipe_context *lp,
          !shader->info.base.uses_kill &&
          !shader->info.base.writes_samplemask
       ? TRUE : FALSE;
-
-   if ((shader->info.base.num_tokens <= 1) &&
-       !key->depth.enabled && !key->stencil[0].enabled) {
-      variant->ps_inv_multiplier = 0;
-   } else {
-      variant->ps_inv_multiplier = 1;
-   }
 
    if ((LP_DEBUG & DEBUG_FS) || (gallivm_debug & GALLIVM_DEBUG_IR)) {
       lp_debug_fs_variant(variant);
@@ -3470,17 +3482,4 @@ llvmpipe_init_fs_funcs(struct llvmpipe_context *llvmpipe)
    llvmpipe->pipe.set_constant_buffer = llvmpipe_set_constant_buffer;
 }
 
-/*
- * Rasterization is disabled if there is no pixel shader and
- * both depth and stencil testing are disabled:
- * http://msdn.microsoft.com/en-us/library/windows/desktop/bb205125
- */
-boolean
-llvmpipe_rasterization_disabled(struct llvmpipe_context *lp)
-{
-   boolean null_fs = !lp->fs || lp->fs->info.base.num_tokens <= 1;
 
-   return (null_fs &&
-           !lp->depth_stencil->depth.enabled &&
-           !lp->depth_stencil->stencil[0].enabled);
-}

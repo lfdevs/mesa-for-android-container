@@ -1,25 +1,25 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-****************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ ****************************************************************************/
 
 #pragma once
 #include "knobs.h"
@@ -29,6 +29,9 @@
 
 #include <vector>
 
+///////////////////////////////////////////////////////////////////////////////
+// NOTE:  This enum MUST be kept in sync with gCoreBuckets in rdtsc_core.cpp
+///////////////////////////////////////////////////////////////////////////////
 enum CORE_BUCKETS
 {
     APIClearRenderTarget,
@@ -59,6 +62,7 @@ enum CORE_BUCKETS
     FEClipPoints,
     FEClipLines,
     FEClipTriangles,
+    FEClipRectangles,
     FECullZeroAreaAndBackface,
     FECullBetweenCenters,
     FEEarlyRastEnter,
@@ -120,10 +124,10 @@ void rdtscEndFrame();
 #endif
 
 extern std::vector<uint32_t> gBucketMap;
-extern BucketManager gBucketMgr;
-extern BUCKET_DESC gCoreBuckets[];
-extern uint32_t gCurrentFrame;
-extern bool gBucketsInitialized;
+extern BucketManager         gBucketMgr;
+extern BUCKET_DESC           gCoreBuckets[];
+extern uint32_t              gCurrentFrame;
+extern bool                  gBucketsInitialized;
 
 INLINE void rdtscReset()
 {
@@ -170,12 +174,14 @@ INLINE void rdtscEndFrame()
 {
     gCurrentFrame++;
 
-    if (gCurrentFrame == KNOB_BUCKETS_START_FRAME && KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
+    if (gCurrentFrame == KNOB_BUCKETS_START_FRAME &&
+        KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
     {
         gBucketMgr.StartCapture();
     }
 
-    if (gCurrentFrame == KNOB_BUCKETS_END_FRAME && KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
+    if (gCurrentFrame == KNOB_BUCKETS_END_FRAME &&
+        KNOB_BUCKETS_START_FRAME < KNOB_BUCKETS_END_FRAME)
     {
         gBucketMgr.StopCapture();
         gBucketMgr.PrintReport("rdtsc.txt");

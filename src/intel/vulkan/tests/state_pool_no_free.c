@@ -61,7 +61,7 @@ static void run_test()
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_state_pool_init(&state_pool, &device, 64, 0);
+   anv_state_pool_init(&state_pool, &device, 4096, 64, 0);
 
    pthread_barrier_init(&barrier, NULL, NUM_THREADS);
 

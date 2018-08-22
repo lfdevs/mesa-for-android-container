@@ -154,7 +154,7 @@ void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,
 }
 
 static void r600_emit_one_scissor(struct r600_common_context *rctx,
-				  struct radeon_winsys_cs *cs,
+				  struct radeon_cmdbuf *cs,
 				  struct r600_signed_scissor *vp_scissor,
 				  struct pipe_scissor_state *scissor)
 {
@@ -185,7 +185,7 @@ static void r600_emit_one_scissor(struct r600_common_context *rctx,
 static void r600_emit_guardband(struct r600_common_context *rctx,
 				struct r600_signed_scissor *vp_as_scissor)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct pipe_viewport_state vp;
 	float left, top, right, bottom, max_range, guardband_x, guardband_y;
 
@@ -235,7 +235,7 @@ static void r600_emit_guardband(struct r600_common_context *rctx,
 
 static void r600_emit_scissors(struct r600_common_context *rctx, struct r600_atom *atom)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct pipe_scissor_state *states = rctx->scissors.states;
 	unsigned mask = rctx->scissors.dirty_mask;
 	bool scissor_enabled = rctx->scissor_enabled;
@@ -306,7 +306,7 @@ static void r600_set_viewport_states(struct pipe_context *ctx,
 static void r600_emit_one_viewport(struct r600_common_context *rctx,
 				   struct pipe_viewport_state *state)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 
 	radeon_emit(cs, fui(state->scale[0]));
 	radeon_emit(cs, fui(state->translate[0]));
@@ -318,7 +318,7 @@ static void r600_emit_one_viewport(struct r600_common_context *rctx,
 
 static void r600_emit_viewports(struct r600_common_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct pipe_viewport_state *states = rctx->viewports.states;
 	unsigned mask = rctx->viewports.dirty_mask;
 
@@ -348,7 +348,7 @@ static void r600_emit_viewports(struct r600_common_context *rctx)
 
 static void r600_emit_depth_ranges(struct r600_common_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct pipe_viewport_state *states = rctx->viewports.states;
 	unsigned mask = rctx->viewports.depth_range_dirty_mask;
 	float zmin, zmax;

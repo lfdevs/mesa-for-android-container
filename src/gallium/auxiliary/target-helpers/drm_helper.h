@@ -310,24 +310,24 @@ pipe_vc4_create_screen(int fd, const struct pipe_screen_config *config)
 
 #endif
 
-#ifdef GALLIUM_VC5
-#include "vc5/drm/vc5_drm_public.h"
+#ifdef GALLIUM_V3D
+#include "v3d/drm/v3d_drm_public.h"
 
 struct pipe_screen *
-pipe_vc5_create_screen(int fd, const struct pipe_screen_config *config)
+pipe_v3d_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 
-   screen = vc5_drm_screen_create(fd);
+   screen = v3d_drm_screen_create(fd);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
 
 #else
 
 struct pipe_screen *
-pipe_vc5_create_screen(int fd, const struct pipe_screen_config *config)
+pipe_v3d_create_screen(int fd, const struct pipe_screen_config *config)
 {
-   fprintf(stderr, "vc5: driver missing\n");
+   fprintf(stderr, "v3d: driver missing\n");
    return NULL;
 }
 

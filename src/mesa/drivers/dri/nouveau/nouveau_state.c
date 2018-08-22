@@ -115,7 +115,7 @@ nouveau_read_buffer(struct gl_context *ctx, GLenum buffer)
 }
 
 static void
-nouveau_draw_buffer(struct gl_context *ctx, GLenum buffer)
+nouveau_draw_buffer(struct gl_context *ctx)
 {
 	nouveau_validate_framebuffer(ctx);
 	context_dirty(ctx, FRAMEBUFFER);

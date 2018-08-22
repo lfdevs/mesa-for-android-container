@@ -74,6 +74,8 @@ vir_has_implicit_uniform(struct qinst *inst)
 int
 vir_get_implicit_uniform_src(struct qinst *inst)
 {
+        if (!vir_has_implicit_uniform(inst))
+                return -1;
         return vir_get_nsrc(inst) - 1;
 }
 
@@ -96,6 +98,7 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
                 case V3D_QPU_A_STVPMD:
                 case V3D_QPU_A_STVPMP:
                 case V3D_QPU_A_VPMWT:
+                case V3D_QPU_A_TMUWT:
                         return true;
                 default:
                         break;
@@ -191,6 +194,11 @@ vir_is_tex(struct qinst *inst)
 {
         if (inst->dst.file == QFILE_MAGIC)
                 return v3d_qpu_magic_waddr_is_tmu(inst->dst.index);
+
+        if (inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU &&
+            inst->qpu.alu.add.op == V3D_QPU_A_TMUWT) {
+                return true;
+        }
 
         return false;
 }
@@ -444,6 +452,16 @@ vir_emit_def(struct v3d_compile *c, struct qinst *inst)
 {
         assert(inst->dst.file == QFILE_NULL);
 
+        /* If we're emitting an instruction that's a def, it had better be
+         * writing a register.
+         */
+        if (inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU) {
+                assert(inst->qpu.alu.add.op == V3D_QPU_A_NOP ||
+                       v3d_qpu_add_op_has_dst(inst->qpu.alu.add.op));
+                assert(inst->qpu.alu.mul.op == V3D_QPU_M_NOP ||
+                       v3d_qpu_mul_op_has_dst(inst->qpu.alu.mul.op));
+        }
+
         inst->dst = vir_get_temp(c);
 
         if (inst->dst.file == QFILE_TEMP)
@@ -572,7 +590,7 @@ v3d_lower_nir(struct v3d_compile *c)
 {
         struct nir_lower_tex_options tex_options = {
                 .lower_txd = true,
-                .lower_rect = false, /* XXX */
+                .lower_rect = false, /* XXX: Use this on V3D 3.x */
                 .lower_txp = ~0,
                 /* Apply swizzles to all samplers. */
                 .swizzle_result = ~0,
@@ -738,9 +756,27 @@ uint64_t *v3d_compile_vs(const struct v3d_compiler *compiler,
         if (prog_data->uses_iid)
                 prog_data->vpm_input_size++;
 
-        /* Input/output segment size are in 8x32-bit multiples. */
+        /* Input/output segment size are in sectors (8 rows of 32 bits per
+         * channel).
+         */
         prog_data->vpm_input_size = align(prog_data->vpm_input_size, 8) / 8;
         prog_data->vpm_output_size = align(c->num_vpm_writes, 8) / 8;
+
+        /* Compute VCM cache size.  We set up our program to take up less than
+         * half of the VPM, so that any set of bin and render programs won't
+         * run out of space.  We need space for at least one input segment,
+         * and then allocate the rest to output segments (one for the current
+         * program, the rest to VCM).  The valid range of the VCM cache size
+         * field is 1-4 16-vertex batches, but GFXH-1744 limits us to 2-4
+         * batches.
+         */
+        assert(c->devinfo->vpm_size);
+        int sector_size = 16 * sizeof(uint32_t) * 8;
+        int vpm_size_in_sectors = c->devinfo->vpm_size / sector_size;
+        int half_vpm = vpm_size_in_sectors / 2;
+        int vpm_output_batches = half_vpm - prog_data->vpm_input_size;
+        assert(vpm_output_batches >= 2);
+        prog_data->vcm_cache_size = CLAMP(vpm_output_batches - 1, 2, 4);
 
         return v3d_return_qpu_insts(c, final_assembly_size);
 }
@@ -758,6 +794,12 @@ v3d_set_fs_prog_data_inputs(struct v3d_compile *c,
         for (int i = 0; i < V3D_MAX_FS_INPUTS; i++) {
                 if (BITSET_TEST(c->flat_shade_flags, i))
                         prog_data->flat_shade_flags[i / 24] |= 1 << (i % 24);
+
+                if (BITSET_TEST(c->noperspective_flags, i))
+                        prog_data->noperspective_flags[i / 24] |= 1 << (i % 24);
+
+                if (BITSET_TEST(c->centroid_flags, i))
+                        prog_data->centroid_flags[i / 24] |= 1 << (i % 24);
         }
 }
 
@@ -837,7 +879,9 @@ uint64_t *v3d_compile_fs(const struct v3d_compiler *compiler,
         v3d_set_fs_prog_data_inputs(c, prog_data);
         prog_data->writes_z = (c->s->info.outputs_written &
                                (1 << FRAG_RESULT_DEPTH));
-        prog_data->discard = c->s->info.fs.uses_discard;
+        prog_data->discard = (c->s->info.fs.uses_discard ||
+                              c->fs_key->sample_alpha_to_coverage);
+        prog_data->uses_center_w = c->uses_center_w;
 
         return v3d_return_qpu_insts(c, final_assembly_size);
 }
@@ -927,6 +971,17 @@ vir_uniform(struct v3d_compile *c,
         return vir_reg(QFILE_UNIF, uniform);
 }
 
+static bool
+vir_can_set_flags(struct v3d_compile *c, struct qinst *inst)
+{
+        if (c->devinfo->ver >= 40 && (v3d_qpu_reads_vpm(&inst->qpu) ||
+                                      v3d_qpu_uses_sfu(&inst->qpu))) {
+                return false;
+        }
+
+        return true;
+}
+
 void
 vir_PF(struct v3d_compile *c, struct qreg src, enum v3d_qpu_pf pf)
 {
@@ -946,7 +1001,8 @@ vir_PF(struct v3d_compile *c, struct qreg src, enum v3d_qpu_pf pf)
 
         if (src.file != QFILE_TEMP ||
             !c->defs[src.index] ||
-            last_inst != c->defs[src.index]) {
+            last_inst != c->defs[src.index] ||
+            !vir_can_set_flags(c, last_inst)) {
                 /* XXX: Make the MOV be the appropriate type */
                 last_inst = vir_MOV_dest(c, vir_reg(QFILE_NULL, 0), src);
         }
@@ -979,6 +1035,7 @@ vir_optimize(struct v3d_compile *c)
 
                 OPTPASS(vir_opt_copy_propagate);
                 OPTPASS(vir_opt_dead_code);
+                OPTPASS(vir_opt_small_immediates);
 
                 if (!progress)
                         break;

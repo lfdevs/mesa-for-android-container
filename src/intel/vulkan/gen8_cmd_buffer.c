@@ -566,8 +566,7 @@ void genX(CmdBindIndexBuffer)(
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
       ib.IndexFormat                = vk_to_gen_index_type[indexType];
       ib.MemoryObjectControlState   = GENX(MOCS);
-      ib.BufferStartingAddress      =
-         (struct anv_address) { buffer->bo, buffer->offset + offset };
+      ib.BufferStartingAddress      = anv_address_add(buffer->address, offset);
       ib.BufferSize                 = buffer->size - offset;
    }
 

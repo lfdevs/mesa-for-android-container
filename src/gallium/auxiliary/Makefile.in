@@ -92,34 +92,42 @@ target_triplet = @target@
 @HAVE_LIBDRM_TRUE@am__append_1 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_DRISW_TRUE@am__append_2 = \
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_2 = \
+@HAVE_PLATFORM_ANDROID_TRUE@	$(ANDROID_LIBS) \
+@HAVE_PLATFORM_ANDROID_TRUE@	$(BACKTRACE_LIBS)
+
+@HAVE_DRISW_TRUE@am__append_3 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRISW_KMS_TRUE@am__append_3 = \
+@HAVE_DRISW_KMS_TRUE@am__append_4 = \
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_LIBDRM_TRUE@am__append_4 = \
+
+# Android's libbacktrace headers required C++11, but the Android toolchain (at
+# least in the Chrome OS SDK) does not enable C++11 by default.
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_5 = $(CXX11_CXXFLAGS)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_6 = util/u_debug_stack_android.cpp
+@HAVE_LIBDRM_TRUE@am__append_7 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_CFLAGS)
 
-@HAVE_LIBDRM_TRUE@am__append_5 = \
+@HAVE_LIBDRM_TRUE@am__append_8 = \
 @HAVE_LIBDRM_TRUE@	$(RENDERONLY_SOURCES)
 
-@HAVE_GALLIUM_LLVM_TRUE@am__append_6 = \
+@HAVE_GALLIUM_LLVM_TRUE@am__append_9 = \
 @HAVE_GALLIUM_LLVM_TRUE@	$(LLVM_CFLAGS)
 
-@HAVE_GALLIUM_LLVM_TRUE@am__append_7 = \
-@HAVE_GALLIUM_LLVM_TRUE@	$(GALLIUM_CFLAGS) \
+@HAVE_GALLIUM_LLVM_TRUE@am__append_10 = \
 @HAVE_GALLIUM_LLVM_TRUE@	$(LLVM_CXXFLAGS)
 
-@HAVE_GALLIUM_LLVM_TRUE@am__append_8 = \
+@HAVE_GALLIUM_LLVM_TRUE@am__append_11 = \
 @HAVE_GALLIUM_LLVM_TRUE@	$(GALLIVM_SOURCES)
 
-@NEED_GALLIUM_VL_TRUE@am__append_9 = libgalliumvl.la
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_10 = libgalliumvlwinsys.la
-@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_11 = $(VL_WINSYS_DRI2_SOURCES)
-@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_12 = $(VL_WINSYS_DRI3_SOURCES)
-@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_13 = $(VL_WINSYS_DRM_SOURCES)
+@NEED_GALLIUM_VL_TRUE@am__append_12 = libgalliumvl.la
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_13 = libgalliumvlwinsys.la
+@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_14 = $(VL_WINSYS_DRI2_SOURCES)
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_15 = $(VL_WINSYS_DRI3_SOURCES)
+@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__append_16 = $(VL_WINSYS_DRM_SOURCES)
 subdir = src/gallium/auxiliary
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -247,15 +255,16 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_draw.h util/u_draw_quad.c util/u_draw_quad.h \
 	util/u_dual_blend.h util/u_dump_defines.c util/u_dump.h \
 	util/u_dump_state.c util/u_fifo.h util/u_format.c \
-	util/u_format.h util/u_format_etc.c util/u_format_etc.h \
-	util/u_format_latc.c util/u_format_latc.h \
-	util/u_format_other.c util/u_format_other.h \
-	util/u_format_rgtc.c util/u_format_rgtc.h util/u_format_s3tc.c \
-	util/u_format_s3tc.h util/u_format_tests.c \
-	util/u_format_tests.h util/u_format_yuv.c util/u_format_yuv.h \
-	util/u_format_zs.c util/u_format_zs.h util/u_framebuffer.c \
-	util/u_framebuffer.h util/u_gen_mipmap.c util/u_gen_mipmap.h \
-	util/u_half.h util/u_handle_table.c util/u_handle_table.h \
+	util/u_format.h util/u_format_bptc.c util/u_format_bptc.h \
+	util/u_format_etc.c util/u_format_etc.h util/u_format_latc.c \
+	util/u_format_latc.h util/u_format_other.c \
+	util/u_format_other.h util/u_format_rgtc.c \
+	util/u_format_rgtc.h util/u_format_s3tc.c util/u_format_s3tc.h \
+	util/u_format_tests.c util/u_format_tests.h \
+	util/u_format_yuv.c util/u_format_yuv.h util/u_format_zs.c \
+	util/u_format_zs.h util/u_framebuffer.c util/u_framebuffer.h \
+	util/u_gen_mipmap.c util/u_gen_mipmap.h util/u_half.h \
+	util/u_handle_table.c util/u_handle_table.h \
 	util/u_hash_table.c util/u_hash_table.h util/u_helpers.c \
 	util/u_helpers.h util/u_idalloc.c util/u_idalloc.h \
 	util/u_index_modify.c util/u_index_modify.h util/u_inlines.h \
@@ -279,39 +288,39 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_upload_mgr.h util/u_vbuf.c util/u_vbuf.h util/u_video.h \
 	util/u_viewport.h nir/tgsi_to_nir.c nir/tgsi_to_nir.h \
 	indices/u_indices_gen.c indices/u_unfilled_gen.c \
-	util/u_format_table.c renderonly/renderonly.c \
-	renderonly/renderonly.h gallivm/lp_bld_arit.c \
-	gallivm/lp_bld_arit.h gallivm/lp_bld_arit_overflow.c \
-	gallivm/lp_bld_arit_overflow.h gallivm/lp_bld_assert.c \
-	gallivm/lp_bld_assert.h gallivm/lp_bld_bitarit.c \
-	gallivm/lp_bld_bitarit.h gallivm/lp_bld_const.c \
-	gallivm/lp_bld_const.h gallivm/lp_bld_conv.c \
-	gallivm/lp_bld_conv.h gallivm/lp_bld_debug.cpp \
-	gallivm/lp_bld_debug.h gallivm/lp_bld_flow.c \
-	gallivm/lp_bld_flow.h gallivm/lp_bld_format_aos_array.c \
-	gallivm/lp_bld_format_aos.c gallivm/lp_bld_format_cached.c \
-	gallivm/lp_bld_format_float.c gallivm/lp_bld_format.c \
-	gallivm/lp_bld_format.h gallivm/lp_bld_format_soa.c \
-	gallivm/lp_bld_format_srgb.c gallivm/lp_bld_format_yuv.c \
-	gallivm/lp_bld_gather.c gallivm/lp_bld_gather.h \
-	gallivm/lp_bld.h gallivm/lp_bld_init.c gallivm/lp_bld_init.h \
-	gallivm/lp_bld_intr.c gallivm/lp_bld_intr.h \
-	gallivm/lp_bld_limits.h gallivm/lp_bld_logic.c \
-	gallivm/lp_bld_logic.h gallivm/lp_bld_misc.cpp \
-	gallivm/lp_bld_misc.h gallivm/lp_bld_pack.c \
-	gallivm/lp_bld_pack.h gallivm/lp_bld_printf.c \
-	gallivm/lp_bld_printf.h gallivm/lp_bld_quad.c \
-	gallivm/lp_bld_quad.h gallivm/lp_bld_sample_aos.c \
-	gallivm/lp_bld_sample_aos.h gallivm/lp_bld_sample.c \
-	gallivm/lp_bld_sample.h gallivm/lp_bld_sample_soa.c \
-	gallivm/lp_bld_struct.c gallivm/lp_bld_struct.h \
-	gallivm/lp_bld_swizzle.c gallivm/lp_bld_swizzle.h \
-	gallivm/lp_bld_tgsi_action.c gallivm/lp_bld_tgsi_action.h \
-	gallivm/lp_bld_tgsi_aos.c gallivm/lp_bld_tgsi.c \
-	gallivm/lp_bld_tgsi.h gallivm/lp_bld_tgsi_info.c \
-	gallivm/lp_bld_tgsi_soa.c gallivm/lp_bld_type.c \
-	gallivm/lp_bld_type.h draw/draw_llvm.c draw/draw_llvm.h \
-	draw/draw_llvm_sample.c \
+	util/u_format_table.c util/u_debug_stack_android.cpp \
+	renderonly/renderonly.c renderonly/renderonly.h \
+	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
+	gallivm/lp_bld_arit_overflow.c gallivm/lp_bld_arit_overflow.h \
+	gallivm/lp_bld_assert.c gallivm/lp_bld_assert.h \
+	gallivm/lp_bld_bitarit.c gallivm/lp_bld_bitarit.h \
+	gallivm/lp_bld_const.c gallivm/lp_bld_const.h \
+	gallivm/lp_bld_conv.c gallivm/lp_bld_conv.h \
+	gallivm/lp_bld_debug.cpp gallivm/lp_bld_debug.h \
+	gallivm/lp_bld_flow.c gallivm/lp_bld_flow.h \
+	gallivm/lp_bld_format_aos_array.c gallivm/lp_bld_format_aos.c \
+	gallivm/lp_bld_format_cached.c gallivm/lp_bld_format_float.c \
+	gallivm/lp_bld_format.c gallivm/lp_bld_format.h \
+	gallivm/lp_bld_format_soa.c gallivm/lp_bld_format_srgb.c \
+	gallivm/lp_bld_format_yuv.c gallivm/lp_bld_gather.c \
+	gallivm/lp_bld_gather.h gallivm/lp_bld.h gallivm/lp_bld_init.c \
+	gallivm/lp_bld_init.h gallivm/lp_bld_intr.c \
+	gallivm/lp_bld_intr.h gallivm/lp_bld_limits.h \
+	gallivm/lp_bld_logic.c gallivm/lp_bld_logic.h \
+	gallivm/lp_bld_misc.cpp gallivm/lp_bld_misc.h \
+	gallivm/lp_bld_pack.c gallivm/lp_bld_pack.h \
+	gallivm/lp_bld_printf.c gallivm/lp_bld_printf.h \
+	gallivm/lp_bld_quad.c gallivm/lp_bld_quad.h \
+	gallivm/lp_bld_sample_aos.c gallivm/lp_bld_sample_aos.h \
+	gallivm/lp_bld_sample.c gallivm/lp_bld_sample.h \
+	gallivm/lp_bld_sample_soa.c gallivm/lp_bld_struct.c \
+	gallivm/lp_bld_struct.h gallivm/lp_bld_swizzle.c \
+	gallivm/lp_bld_swizzle.h gallivm/lp_bld_tgsi_action.c \
+	gallivm/lp_bld_tgsi_action.h gallivm/lp_bld_tgsi_aos.c \
+	gallivm/lp_bld_tgsi.c gallivm/lp_bld_tgsi.h \
+	gallivm/lp_bld_tgsi_info.c gallivm/lp_bld_tgsi_soa.c \
+	gallivm/lp_bld_type.c gallivm/lp_bld_type.h draw/draw_llvm.c \
+	draw/draw_llvm.h draw/draw_llvm_sample.c \
 	draw/draw_pt_fetch_shade_pipeline_llvm.c draw/draw_vs_llvm.c
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
@@ -371,14 +380,15 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_debug_refcnt.lo util/u_debug_stack.lo \
 	util/u_debug_symbol.lo util/u_dl.lo util/u_draw.lo \
 	util/u_draw_quad.lo util/u_dump_defines.lo \
-	util/u_dump_state.lo util/u_format.lo util/u_format_etc.lo \
-	util/u_format_latc.lo util/u_format_other.lo \
-	util/u_format_rgtc.lo util/u_format_s3tc.lo \
-	util/u_format_tests.lo util/u_format_yuv.lo \
-	util/u_format_zs.lo util/u_framebuffer.lo util/u_gen_mipmap.lo \
-	util/u_handle_table.lo util/u_hash_table.lo util/u_helpers.lo \
-	util/u_idalloc.lo util/u_index_modify.lo util/u_linear.lo \
-	util/u_log.lo util/u_math.lo util/u_mm.lo util/u_network.lo \
+	util/u_dump_state.lo util/u_format.lo util/u_format_bptc.lo \
+	util/u_format_etc.lo util/u_format_latc.lo \
+	util/u_format_other.lo util/u_format_rgtc.lo \
+	util/u_format_s3tc.lo util/u_format_tests.lo \
+	util/u_format_yuv.lo util/u_format_zs.lo util/u_framebuffer.lo \
+	util/u_gen_mipmap.lo util/u_handle_table.lo \
+	util/u_hash_table.lo util/u_helpers.lo util/u_idalloc.lo \
+	util/u_index_modify.lo util/u_linear.lo util/u_log.lo \
+	util/u_math.lo util/u_mm.lo util/u_network.lo \
 	util/u_prim_restart.lo util/u_pstipple.lo util/u_resource.lo \
 	util/u_ringbuffer.lo util/u_sampler.lo \
 	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
@@ -388,9 +398,11 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 am__objects_2 = nir/tgsi_to_nir.lo
 am__objects_3 = indices/u_indices_gen.lo indices/u_unfilled_gen.lo \
 	util/u_format_table.lo
-am__objects_4 = renderonly/renderonly.lo
-@HAVE_LIBDRM_TRUE@am__objects_5 = $(am__objects_4)
-am__objects_6 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
+@HAVE_PLATFORM_ANDROID_TRUE@am__objects_4 =  \
+@HAVE_PLATFORM_ANDROID_TRUE@	util/u_debug_stack_android.lo
+am__objects_5 = renderonly/renderonly.lo
+@HAVE_LIBDRM_TRUE@am__objects_6 = $(am__objects_5)
+am__objects_7 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
 	gallivm/lp_bld_assert.lo gallivm/lp_bld_bitarit.lo \
 	gallivm/lp_bld_const.lo gallivm/lp_bld_conv.lo \
 	gallivm/lp_bld_debug.lo gallivm/lp_bld_flow.lo \
@@ -410,9 +422,10 @@ am__objects_6 = gallivm/lp_bld_arit.lo gallivm/lp_bld_arit_overflow.lo \
 	gallivm/lp_bld_tgsi_soa.lo gallivm/lp_bld_type.lo \
 	draw/draw_llvm.lo draw/draw_llvm_sample.lo \
 	draw/draw_pt_fetch_shade_pipeline_llvm.lo draw/draw_vs_llvm.lo
-@HAVE_GALLIUM_LLVM_TRUE@am__objects_7 = $(am__objects_6)
+@HAVE_GALLIUM_LLVM_TRUE@am__objects_8 = $(am__objects_7)
 am_libgallium_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
-	$(am__objects_3) $(am__objects_5) $(am__objects_7)
+	$(am__objects_3) $(am__objects_4) $(am__objects_6) \
+	$(am__objects_8)
 libgallium_la_OBJECTS = $(am_libgallium_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -431,7 +444,7 @@ am__libgalliumvl_la_SOURCES_DIST = vl/vl_bicubic_filter.c \
 	vl/vl_types.h vl/vl_vertex_buffers.c vl/vl_vertex_buffers.h \
 	vl/vl_video_buffer.c vl/vl_video_buffer.h vl/vl_vlc.h \
 	vl/vl_zscan.c vl/vl_zscan.h vl/vl_probs_table.h
-am__objects_8 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
+am__objects_9 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
 	vl/libgalliumvl_la-vl_compositor.lo \
 	vl/libgalliumvl_la-vl_csc.lo vl/libgalliumvl_la-vl_decoder.lo \
 	vl/libgalliumvl_la-vl_deint_filter.lo \
@@ -444,7 +457,7 @@ am__objects_8 = vl/libgalliumvl_la-vl_bicubic_filter.lo \
 	vl/libgalliumvl_la-vl_vertex_buffers.lo \
 	vl/libgalliumvl_la-vl_video_buffer.lo \
 	vl/libgalliumvl_la-vl_zscan.lo
-@NEED_GALLIUM_VL_TRUE@am_libgalliumvl_la_OBJECTS = $(am__objects_8)
+@NEED_GALLIUM_VL_TRUE@am_libgalliumvl_la_OBJECTS = $(am__objects_9)
 libgalliumvl_la_OBJECTS = $(am_libgalliumvl_la_OBJECTS)
 libgalliumvl_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -452,23 +465,23 @@ libgalliumvl_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	-o $@
 @NEED_GALLIUM_VL_TRUE@am_libgalliumvl_la_rpath =
 libgalliumvl_stub_la_LIBADD =
-am__objects_9 = vl/vl_stubs.lo
-am_libgalliumvl_stub_la_OBJECTS = $(am__objects_9)
+am__objects_10 = vl/vl_stubs.lo
+am_libgalliumvl_stub_la_OBJECTS = $(am__objects_10)
 libgalliumvl_stub_la_OBJECTS = $(am_libgalliumvl_stub_la_OBJECTS)
 libgalliumvlwinsys_la_LIBADD =
 am__libgalliumvlwinsys_la_SOURCES_DIST = vl/vl_winsys.h \
 	vl/vl_winsys_dri.c vl/vl_winsys_dri3.c vl/vl_winsys_drm.c
-am__objects_10 =
-am__objects_11 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo
-@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_12 = $(am__objects_11)
-am__objects_13 = vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo
-@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_14 = $(am__objects_13)
-am__objects_15 = vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
-@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_16 = $(am__objects_15)
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_10) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_12) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_14) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_16)
+am__objects_11 =
+am__objects_12 = vl/libgalliumvlwinsys_la-vl_winsys_dri.lo
+@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_13 = $(am__objects_12)
+am__objects_14 = vl/libgalliumvlwinsys_la-vl_winsys_dri3.lo
+@HAVE_DRI3_TRUE@@HAVE_PLATFORM_X11_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_15 = $(am__objects_14)
+am__objects_16 = vl/libgalliumvlwinsys_la-vl_winsys_drm.lo
+@HAVE_PLATFORM_DRM_TRUE@@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am__objects_17 = $(am__objects_16)
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@am_libgalliumvlwinsys_la_OBJECTS = $(am__objects_11) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_13) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_15) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__objects_17)
 libgalliumvlwinsys_la_OBJECTS = $(am_libgalliumvlwinsys_la_OBJECTS)
 libgalliumvlwinsys_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
@@ -574,6 +587,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -754,6 +769,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -761,8 +778,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -776,6 +793,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -796,10 +815,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -857,6 +880,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1127,6 +1151,8 @@ C_SOURCES := \
 	util/u_fifo.h \
 	util/u_format.c \
 	util/u_format.h \
+	util/u_format_bptc.c \
+	util/u_format_bptc.h \
 	util/u_format_etc.c \
 	util/u_format_etc.h \
 	util/u_format_latc.c \
@@ -1399,7 +1425,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(VISIBILITY_CFLAGS)
 
 GALLIUM_COMMON_LIB_DEPS = -lm $(LIBUNWIND_LIBS) $(LIBSENSORS_LIBS) \
-	$(CLOCK_LIB) $(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
+	$(CLOCK_LIB) $(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1) \
+	$(am__append_2)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -1411,18 +1438,19 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_2) $(am__append_3)
+	$(am__append_3) $(am__append_4)
 noinst_LTLIBRARIES = libgallium.la libgalliumvl_stub.la \
-	$(am__append_9) $(am__append_10)
+	$(am__append_12) $(am__append_13)
 AM_CFLAGS = -I$(top_srcdir)/src/loader \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/gallium/auxiliary/util $(GALLIUM_CFLAGS) \
 	$(LIBUNWIND_CFLAGS) $(VISIBILITY_CFLAGS) \
-	$(MSVC2013_COMPAT_CFLAGS) $(am__append_4) $(am__append_6)
-AM_CXXFLAGS = $(VISIBILITY_CXXFLAGS) $(MSVC2013_COMPAT_CXXFLAGS) \
-	$(am__append_7)
+	$(MSVC2013_COMPAT_CFLAGS) $(am__append_7) $(am__append_9)
+AM_CXXFLAGS = $(GALLIUM_CFLAGS) $(VISIBILITY_CXXFLAGS) \
+	$(MSVC2013_COMPAT_CXXFLAGS) $(am__append_5) $(am__append_10)
 libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
-	$(GENERATED_SOURCES) $(am__append_5) $(am__append_8)
+	$(GENERATED_SOURCES) $(am__append_6) $(am__append_8) \
+	$(am__append_11)
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
@@ -1443,9 +1471,9 @@ libgalliumvl_stub_la_SOURCES = \
 
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_CFLAGS = $(COMMON_VL_CFLAGS)
 @NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@libgalliumvlwinsys_la_SOURCES = $(VL_WINSYS_SOURCES) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_11) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_12) \
-@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_13)
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_14) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_15) \
+@NEED_GALLIUM_VL_TRUE@@NEED_GALLIUM_VL_WINSYS_TRUE@	$(am__append_16)
 EXTRA_DIST = \
 	SConscript \
 	driver_rbug/README \
@@ -1842,6 +1870,8 @@ util/u_dump_defines.lo: util/$(am__dirstamp) \
 util/u_dump_state.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_format.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_format_bptc.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
 util/u_format_etc.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_format_latc.lo: util/$(am__dirstamp) \
@@ -1915,6 +1945,8 @@ indices/u_indices_gen.lo: indices/$(am__dirstamp) \
 indices/u_unfilled_gen.lo: indices/$(am__dirstamp) \
 	indices/$(DEPDIR)/$(am__dirstamp)
 util/u_format_table.lo: util/$(am__dirstamp) \
+	util/$(DEPDIR)/$(am__dirstamp)
+util/u_debug_stack_android.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 renderonly/$(am__dirstamp):
 	@$(MKDIR_P) renderonly
@@ -2276,6 +2308,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_memory.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_refcnt.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_stack.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_stack_android.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_symbol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_dl.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_draw.Plo@am__quote@
@@ -2283,6 +2316,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_dump_defines.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_dump_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_format.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_format_bptc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_format_etc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_format_latc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_format_other.Plo@am__quote@

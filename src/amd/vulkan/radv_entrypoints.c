@@ -31,7 +31,7 @@ struct string_map_entry {
    uint32_t num;
 };
 
-/* We use a big string constant to avoid lots of reloctions from the entry
+/* We use a big string constant to avoid lots of relocations from the entry
  * point table to lots of little strings. The entries in the entry point table
  * store the index into this big string.
  */
@@ -40,6 +40,7 @@ static const char strings[] =
     "vkAcquireImageANDROID\0"
     "vkAcquireNextImage2KHR\0"
     "vkAcquireNextImageKHR\0"
+    "vkAcquireXlibDisplayEXT\0"
     "vkAllocateCommandBuffers\0"
     "vkAllocateDescriptorSets\0"
     "vkAllocateMemory\0"
@@ -50,8 +51,10 @@ static const char strings[] =
     "vkBindImageMemory\0"
     "vkBindImageMemory2\0"
     "vkBindImageMemory2KHR\0"
+    "vkCmdBeginConditionalRenderingEXT\0"
     "vkCmdBeginQuery\0"
     "vkCmdBeginRenderPass\0"
+    "vkCmdBeginRenderPass2KHR\0"
     "vkCmdBindDescriptorSets\0"
     "vkCmdBindIndexBuffer\0"
     "vkCmdBindPipeline\0"
@@ -73,13 +76,18 @@ static const char strings[] =
     "vkCmdDrawIndexed\0"
     "vkCmdDrawIndexedIndirect\0"
     "vkCmdDrawIndexedIndirectCountAMD\0"
+    "vkCmdDrawIndexedIndirectCountKHR\0"
     "vkCmdDrawIndirect\0"
     "vkCmdDrawIndirectCountAMD\0"
+    "vkCmdDrawIndirectCountKHR\0"
+    "vkCmdEndConditionalRenderingEXT\0"
     "vkCmdEndQuery\0"
     "vkCmdEndRenderPass\0"
+    "vkCmdEndRenderPass2KHR\0"
     "vkCmdExecuteCommands\0"
     "vkCmdFillBuffer\0"
     "vkCmdNextSubpass\0"
+    "vkCmdNextSubpass2KHR\0"
     "vkCmdPipelineBarrier\0"
     "vkCmdPushConstants\0"
     "vkCmdPushDescriptorSetKHR\0"
@@ -113,6 +121,8 @@ static const char strings[] =
     "vkCreateDescriptorUpdateTemplate\0"
     "vkCreateDescriptorUpdateTemplateKHR\0"
     "vkCreateDevice\0"
+    "vkCreateDisplayModeKHR\0"
+    "vkCreateDisplayPlaneSurfaceKHR\0"
     "vkCreateEvent\0"
     "vkCreateFence\0"
     "vkCreateFramebuffer\0"
@@ -124,6 +134,7 @@ static const char strings[] =
     "vkCreatePipelineLayout\0"
     "vkCreateQueryPool\0"
     "vkCreateRenderPass\0"
+    "vkCreateRenderPass2KHR\0"
     "vkCreateSampler\0"
     "vkCreateSamplerYcbcrConversion\0"
     "vkCreateSemaphore\0"
@@ -160,6 +171,7 @@ static const char strings[] =
     "vkDestroySurfaceKHR\0"
     "vkDestroySwapchainKHR\0"
     "vkDeviceWaitIdle\0"
+    "vkDisplayPowerControlEXT\0"
     "vkEndCommandBuffer\0"
     "vkEnumerateDeviceExtensionProperties\0"
     "vkEnumerateDeviceLayerProperties\0"
@@ -186,6 +198,11 @@ static const char strings[] =
     "vkGetDeviceProcAddr\0"
     "vkGetDeviceQueue\0"
     "vkGetDeviceQueue2\0"
+    "vkGetDisplayModeProperties2KHR\0"
+    "vkGetDisplayModePropertiesKHR\0"
+    "vkGetDisplayPlaneCapabilities2KHR\0"
+    "vkGetDisplayPlaneCapabilitiesKHR\0"
+    "vkGetDisplayPlaneSupportedDisplaysKHR\0"
     "vkGetEventStatus\0"
     "vkGetFenceFdKHR\0"
     "vkGetFenceStatus\0"
@@ -200,6 +217,10 @@ static const char strings[] =
     "vkGetMemoryFdKHR\0"
     "vkGetMemoryFdPropertiesKHR\0"
     "vkGetMemoryHostPointerPropertiesEXT\0"
+    "vkGetPhysicalDeviceDisplayPlaneProperties2KHR\0"
+    "vkGetPhysicalDeviceDisplayPlanePropertiesKHR\0"
+    "vkGetPhysicalDeviceDisplayProperties2KHR\0"
+    "vkGetPhysicalDeviceDisplayPropertiesKHR\0"
     "vkGetPhysicalDeviceExternalBufferProperties\0"
     "vkGetPhysicalDeviceExternalBufferPropertiesKHR\0"
     "vkGetPhysicalDeviceExternalFenceProperties\0"
@@ -228,6 +249,7 @@ static const char strings[] =
     "vkGetPhysicalDeviceSparseImageFormatProperties\0"
     "vkGetPhysicalDeviceSparseImageFormatProperties2\0"
     "vkGetPhysicalDeviceSparseImageFormatProperties2KHR\0"
+    "vkGetPhysicalDeviceSurfaceCapabilities2EXT\0"
     "vkGetPhysicalDeviceSurfaceCapabilities2KHR\0"
     "vkGetPhysicalDeviceSurfaceCapabilitiesKHR\0"
     "vkGetPhysicalDeviceSurfaceFormats2KHR\0"
@@ -239,9 +261,11 @@ static const char strings[] =
     "vkGetPhysicalDeviceXlibPresentationSupportKHR\0"
     "vkGetPipelineCacheData\0"
     "vkGetQueryPoolResults\0"
+    "vkGetRandROutputDisplayEXT\0"
     "vkGetRenderAreaGranularity\0"
     "vkGetSemaphoreFdKHR\0"
     "vkGetShaderInfoAMD\0"
+    "vkGetSwapchainCounterEXT\0"
     "vkGetSwapchainGrallocUsageANDROID\0"
     "vkGetSwapchainImagesKHR\0"
     "vkImportFenceFdKHR\0"
@@ -254,6 +278,9 @@ static const char strings[] =
     "vkQueueSignalReleaseImageANDROID\0"
     "vkQueueSubmit\0"
     "vkQueueWaitIdle\0"
+    "vkRegisterDeviceEventEXT\0"
+    "vkRegisterDisplayEventEXT\0"
+    "vkReleaseDisplayEXT\0"
     "vkResetCommandBuffer\0"
     "vkResetCommandPool\0"
     "vkResetDescriptorPool\0"
@@ -270,248 +297,275 @@ static const char strings[] =
 ;
 
 static const struct string_map_entry string_map_entries[] = {
-    { 0, 0x6bf780dd, 226 }, /* vkAcquireImageANDROID */
-    { 22, 0x82860572, 200 }, /* vkAcquireNextImage2KHR */
-    { 45, 0xc3fedb2e, 146 }, /* vkAcquireNextImageKHR */
-    { 67, 0x8c0c811a, 89 }, /* vkAllocateCommandBuffers */
-    { 92, 0x4c449d3a, 78 }, /* vkAllocateDescriptorSets */
-    { 117, 0x522b85d3, 22 }, /* vkAllocateMemory */
-    { 134, 0xc54f7327, 91 }, /* vkBeginCommandBuffer */
-    { 155, 0x6bcbdcb, 30 }, /* vkBindBufferMemory */
-    { 174, 0xc27aaf4f, 192 }, /* vkBindBufferMemory2 */
-    { 194, 0x6878d3ce, 193 }, /* vkBindBufferMemory2KHR */
-    { 217, 0x5caaae4a, 32 }, /* vkBindImageMemory */
-    { 235, 0xa9097118, 194 }, /* vkBindImageMemory2 */
-    { 254, 0xf18729ad, 195 }, /* vkBindImageMemory2KHR */
-    { 276, 0xf5064ea4, 128 }, /* vkCmdBeginQuery */
-    { 292, 0xcb7a58e3, 134 }, /* vkCmdBeginRenderPass */
-    { 313, 0x28c7a5da, 104 }, /* vkCmdBindDescriptorSets */
-    { 337, 0x4c22d870, 105 }, /* vkCmdBindIndexBuffer */
-    { 358, 0x3af9fd84, 94 }, /* vkCmdBindPipeline */
-    { 376, 0xa9c83f1d, 106 }, /* vkCmdBindVertexBuffers */
-    { 399, 0x331ebf89, 115 }, /* vkCmdBlitImage */
-    { 414, 0x93cb5cb8, 122 }, /* vkCmdClearAttachments */
-    { 436, 0xb4bc8d08, 120 }, /* vkCmdClearColorImage */
-    { 457, 0x4f88e4ba, 121 }, /* vkCmdClearDepthStencilImage */
-    { 485, 0xc939a0da, 113 }, /* vkCmdCopyBuffer */
-    { 501, 0x929847e, 116 }, /* vkCmdCopyBufferToImage */
-    { 524, 0x278effa9, 114 }, /* vkCmdCopyImage */
-    { 539, 0x68cddbac, 117 }, /* vkCmdCopyImageToBuffer */
-    { 562, 0xdee8c6d4, 132 }, /* vkCmdCopyQueryPoolResults */
-    { 588, 0xbd58e867, 111 }, /* vkCmdDispatch */
-    { 602, 0xfb767220, 201 }, /* vkCmdDispatchBase */
-    { 620, 0x402403e5, 202 }, /* vkCmdDispatchBaseKHR */
-    { 641, 0xd6353005, 112 }, /* vkCmdDispatchIndirect */
-    { 663, 0x9912c1a1, 107 }, /* vkCmdDraw */
-    { 673, 0xbe5a8058, 108 }, /* vkCmdDrawIndexed */
-    { 690, 0x94e7ed36, 110 }, /* vkCmdDrawIndexedIndirect */
-    { 715, 0xc86e9287, 158 }, /* vkCmdDrawIndexedIndirectCountAMD */
-    { 748, 0xe9ac41bf, 109 }, /* vkCmdDrawIndirect */
-    { 766, 0xe5ad0a50, 157 }, /* vkCmdDrawIndirectCountAMD */
-    { 792, 0xd556fd22, 129 }, /* vkCmdEndQuery */
-    { 806, 0xdcdb0235, 136 }, /* vkCmdEndRenderPass */
-    { 825, 0x9eaabe40, 137 }, /* vkCmdExecuteCommands */
-    { 846, 0x5bdd2ae0, 119 }, /* vkCmdFillBuffer */
-    { 862, 0x2eeec2f9, 135 }, /* vkCmdNextSubpass */
-    { 879, 0x97fccfe8, 127 }, /* vkCmdPipelineBarrier */
-    { 900, 0xb1c6b468, 133 }, /* vkCmdPushConstants */
-    { 919, 0xf17232a1, 173 }, /* vkCmdPushDescriptorSetKHR */
-    { 945, 0x3d528981, 210 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
-    { 983, 0x4fccce28, 125 }, /* vkCmdResetEvent */
-    { 999, 0x2f614082, 130 }, /* vkCmdResetQueryPool */
-    { 1019, 0x671bb594, 123 }, /* vkCmdResolveImage */
-    { 1037, 0x1c989dfb, 99 }, /* vkCmdSetBlendConstants */
-    { 1060, 0x30f14d07, 98 }, /* vkCmdSetDepthBias */
-    { 1078, 0x7b3a8a63, 100 }, /* vkCmdSetDepthBounds */
-    { 1098, 0xaecdae87, 196 }, /* vkCmdSetDeviceMask */
-    { 1117, 0xfbb79356, 197 }, /* vkCmdSetDeviceMaskKHR */
-    { 1139, 0x64df188b, 211 }, /* vkCmdSetDiscardRectangleEXT */
-    { 1167, 0xe257f075, 124 }, /* vkCmdSetEvent */
-    { 1181, 0x32282165, 97 }, /* vkCmdSetLineWidth */
-    { 1199, 0x48f28c7f, 96 }, /* vkCmdSetScissor */
-    { 1215, 0xa8f534e2, 101 }, /* vkCmdSetStencilCompareMask */
-    { 1242, 0x83e2b024, 103 }, /* vkCmdSetStencilReference */
-    { 1267, 0xe7c4b134, 102 }, /* vkCmdSetStencilWriteMask */
-    { 1292, 0x53d6c2b, 95 }, /* vkCmdSetViewport */
-    { 1309, 0xd2986b5e, 118 }, /* vkCmdUpdateBuffer */
-    { 1327, 0x3b9346b3, 126 }, /* vkCmdWaitEvents */
-    { 1343, 0xec4d324c, 131 }, /* vkCmdWriteTimestamp */
-    { 1363, 0x7d4282b9, 51 }, /* vkCreateBuffer */
-    { 1378, 0x925bd256, 53 }, /* vkCreateBufferView */
-    { 1397, 0x820fe476, 86 }, /* vkCreateCommandPool */
-    { 1417, 0xf70c85eb, 67 }, /* vkCreateComputePipelines */
-    { 1442, 0x987ef56, 154 }, /* vkCreateDebugReportCallbackEXT */
-    { 1473, 0xfb95a8a4, 75 }, /* vkCreateDescriptorPool */
-    { 1496, 0x3c14cc74, 73 }, /* vkCreateDescriptorSetLayout */
-    { 1524, 0xad3ce733, 204 }, /* vkCreateDescriptorUpdateTemplate */
-    { 1557, 0x5189488a, 205 }, /* vkCreateDescriptorUpdateTemplateKHR */
-    { 1593, 0x85ed23f, 11 }, /* vkCreateDevice */
-    { 1608, 0xe7188731, 43 }, /* vkCreateEvent */
-    { 1622, 0x958af968, 36 }, /* vkCreateFence */
-    { 1636, 0x887a38c4, 81 }, /* vkCreateFramebuffer */
-    { 1656, 0x4b59f96d, 66 }, /* vkCreateGraphicsPipelines */
-    { 1682, 0x652128c2, 55 }, /* vkCreateImage */
-    { 1696, 0xdce077ff, 58 }, /* vkCreateImageView */
-    { 1714, 0x38a581a6, 0 }, /* vkCreateInstance */
-    { 1731, 0xcbf6489f, 62 }, /* vkCreatePipelineCache */
-    { 1753, 0x451ef1ed, 69 }, /* vkCreatePipelineLayout */
-    { 1776, 0x5edcd92b, 48 }, /* vkCreateQueryPool */
-    { 1794, 0x109a9c18, 83 }, /* vkCreateRenderPass */
-    { 1813, 0x13cf03f, 71 }, /* vkCreateSampler */
-    { 1829, 0xe6a58c26, 220 }, /* vkCreateSamplerYcbcrConversion */
-    { 1860, 0xf2065e5b, 41 }, /* vkCreateSemaphore */
-    { 1878, 0xa0d3cea2, 60 }, /* vkCreateShaderModule */
-    { 1899, 0xcdefcaa8, 143 }, /* vkCreateSwapchainKHR */
-    { 1920, 0x2b2a4b79, 148 }, /* vkCreateWaylandSurfaceKHR */
-    { 1946, 0xc5e5b106, 152 }, /* vkCreateXcbSurfaceKHR */
-    { 1968, 0xa693bc66, 150 }, /* vkCreateXlibSurfaceKHR */
-    { 1991, 0xa4e75334, 156 }, /* vkDebugReportMessageEXT */
-    { 2015, 0x94a07a45, 52 }, /* vkDestroyBuffer */
-    { 2031, 0x98b27962, 54 }, /* vkDestroyBufferView */
-    { 2051, 0xd5d83a0a, 87 }, /* vkDestroyCommandPool */
-    { 2072, 0x43d4c4e2, 155 }, /* vkDestroyDebugReportCallbackEXT */
-    { 2104, 0x47bdaf30, 76 }, /* vkDestroyDescriptorPool */
-    { 2128, 0xa4227b08, 74 }, /* vkDestroyDescriptorSetLayout */
-    { 2157, 0xbb2cbe7f, 206 }, /* vkDestroyDescriptorUpdateTemplate */
-    { 2191, 0xaa83901e, 207 }, /* vkDestroyDescriptorUpdateTemplateKHR */
-    { 2228, 0x1fbcc9cb, 12 }, /* vkDestroyDevice */
-    { 2244, 0x4df27c05, 44 }, /* vkDestroyEvent */
-    { 2259, 0xfc64ee3c, 37 }, /* vkDestroyFence */
-    { 2274, 0xdc428e58, 82 }, /* vkDestroyFramebuffer */
-    { 2295, 0xcbfb1d96, 56 }, /* vkDestroyImage */
-    { 2310, 0xb5853953, 59 }, /* vkDestroyImageView */
-    { 2329, 0x9bd21af2, 1 }, /* vkDestroyInstance */
-    { 2347, 0x6aac68af, 68 }, /* vkDestroyPipeline */
-    { 2365, 0x4112a673, 63 }, /* vkDestroyPipelineCache */
-    { 2388, 0x9146f879, 70 }, /* vkDestroyPipelineLayout */
-    { 2412, 0x37819a7f, 49 }, /* vkDestroyQueryPool */
-    { 2431, 0x16f14324, 84 }, /* vkDestroyRenderPass */
-    { 2451, 0x3b645153, 72 }, /* vkDestroySampler */
-    { 2468, 0x20f261b2, 221 }, /* vkDestroySamplerYcbcrConversion */
-    { 2500, 0xcaab1faf, 42 }, /* vkDestroySemaphore */
-    { 2519, 0x2d77af6e, 61 }, /* vkDestroyShaderModule */
-    { 2541, 0xf204ce7d, 138 }, /* vkDestroySurfaceKHR */
-    { 2561, 0x5a93ab74, 144 }, /* vkDestroySwapchainKHR */
-    { 2583, 0xd46c5f24, 21 }, /* vkDeviceWaitIdle */
-    { 2600, 0xaffb5725, 92 }, /* vkEndCommandBuffer */
-    { 2619, 0x5fd13eed, 17 }, /* vkEnumerateDeviceExtensionProperties */
-    { 2656, 0x2f8566e7, 16 }, /* vkEnumerateDeviceLayerProperties */
-    { 2689, 0xeb27627e, 15 }, /* vkEnumerateInstanceExtensionProperties */
-    { 2728, 0x81f69d8, 14 }, /* vkEnumerateInstanceLayerProperties */
-    { 2763, 0xd0481e5c, 13 }, /* vkEnumerateInstanceVersion */
-    { 2790, 0x270514f0, 188 }, /* vkEnumeratePhysicalDeviceGroups */
-    { 2822, 0x549ce595, 189 }, /* vkEnumeratePhysicalDeviceGroupsKHR */
-    { 2857, 0x5787c327, 2 }, /* vkEnumeratePhysicalDevices */
-    { 2884, 0xff52f051, 26 }, /* vkFlushMappedMemoryRanges */
-    { 2910, 0xb9db2b91, 90 }, /* vkFreeCommandBuffers */
-    { 2931, 0x7a1347b1, 79 }, /* vkFreeDescriptorSets */
-    { 2952, 0x8f6f838a, 23 }, /* vkFreeMemory */
-    { 2965, 0xab98422a, 29 }, /* vkGetBufferMemoryRequirements */
-    { 2995, 0xd1fd0638, 214 }, /* vkGetBufferMemoryRequirements2 */
-    { 3026, 0x78dbe98d, 215 }, /* vkGetBufferMemoryRequirements2KHR */
-    { 3060, 0xfeac9573, 223 }, /* vkGetDescriptorSetLayoutSupport */
-    { 3092, 0xd7e44a, 224 }, /* vkGetDescriptorSetLayoutSupportKHR */
-    { 3127, 0x2e218c10, 190 }, /* vkGetDeviceGroupPeerMemoryFeatures */
-    { 3162, 0xa3809375, 191 }, /* vkGetDeviceGroupPeerMemoryFeaturesKHR */
-    { 3200, 0xf72c87d4, 198 }, /* vkGetDeviceGroupPresentCapabilitiesKHR */
-    { 3239, 0x6b9448c3, 199 }, /* vkGetDeviceGroupSurfacePresentModesKHR */
-    { 3278, 0x46e38db5, 28 }, /* vkGetDeviceMemoryCommitment */
-    { 3306, 0xba013486, 3 }, /* vkGetDeviceProcAddr */
-    { 3326, 0xcc920d9a, 18 }, /* vkGetDeviceQueue */
-    { 3343, 0xb11a6348, 222 }, /* vkGetDeviceQueue2 */
-    { 3361, 0x96d834b, 45 }, /* vkGetEventStatus */
-    { 3378, 0x69a5d6af, 186 }, /* vkGetFenceFdKHR */
-    { 3394, 0x5f391892, 39 }, /* vkGetFenceStatus */
-    { 3411, 0x916f1e63, 31 }, /* vkGetImageMemoryRequirements */
-    { 3440, 0x56e213f7, 216 }, /* vkGetImageMemoryRequirements2 */
-    { 3470, 0x8de28366, 217 }, /* vkGetImageMemoryRequirements2KHR */
-    { 3503, 0x15855f5b, 33 }, /* vkGetImageSparseMemoryRequirements */
-    { 3538, 0xbd4e3d3f, 218 }, /* vkGetImageSparseMemoryRequirements2 */
-    { 3574, 0x3df40f5e, 219 }, /* vkGetImageSparseMemoryRequirements2KHR */
-    { 3613, 0x9163b686, 57 }, /* vkGetImageSubresourceLayout */
-    { 3641, 0x3d2ae9ad, 4 }, /* vkGetInstanceProcAddr */
-    { 3663, 0x503c14c5, 178 }, /* vkGetMemoryFdKHR */
-    { 3680, 0xb028a792, 179 }, /* vkGetMemoryFdPropertiesKHR */
-    { 3707, 0x7030ee5b, 229 }, /* vkGetMemoryHostPointerPropertiesEXT */
-    { 3743, 0x944476dc, 176 }, /* vkGetPhysicalDeviceExternalBufferProperties */
-    { 3787, 0xee68b389, 177 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
-    { 3834, 0x3bc965eb, 184 }, /* vkGetPhysicalDeviceExternalFenceProperties */
-    { 3877, 0x99b35492, 185 }, /* vkGetPhysicalDeviceExternalFencePropertiesKHR */
-    { 3923, 0xcf251b0e, 180 }, /* vkGetPhysicalDeviceExternalSemaphoreProperties */
-    { 3970, 0x984c3fa7, 181 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
-    { 4020, 0x113e2f33, 8 }, /* vkGetPhysicalDeviceFeatures */
-    { 4048, 0x63c068a7, 159 }, /* vkGetPhysicalDeviceFeatures2 */
-    { 4077, 0x6a9a3636, 160 }, /* vkGetPhysicalDeviceFeatures2KHR */
-    { 4109, 0x3e54b398, 9 }, /* vkGetPhysicalDeviceFormatProperties */
-    { 4145, 0xca3bb9da, 163 }, /* vkGetPhysicalDeviceFormatProperties2 */
-    { 4182, 0x9099cbbb, 164 }, /* vkGetPhysicalDeviceFormatProperties2KHR */
-    { 4222, 0xdd36a867, 10 }, /* vkGetPhysicalDeviceImageFormatProperties */
-    { 4263, 0x35d260d3, 165 }, /* vkGetPhysicalDeviceImageFormatProperties2 */
-    { 4305, 0x102ff7ea, 166 }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
-    { 4350, 0xa90da4da, 7 }, /* vkGetPhysicalDeviceMemoryProperties */
-    { 4386, 0xcb4cc208, 169 }, /* vkGetPhysicalDeviceMemoryProperties2 */
-    { 4423, 0xc8c3da3d, 170 }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
-    { 4463, 0x100341b4, 203 }, /* vkGetPhysicalDevicePresentRectanglesKHR */
-    { 4503, 0x52fe22c9, 5 }, /* vkGetPhysicalDeviceProperties */
-    { 4533, 0x6c4d8ee1, 161 }, /* vkGetPhysicalDeviceProperties2 */
-    { 4564, 0xcd15838c, 162 }, /* vkGetPhysicalDeviceProperties2KHR */
-    { 4598, 0x4e5fc88a, 6 }, /* vkGetPhysicalDeviceQueueFamilyProperties */
-    { 4639, 0xcad374d8, 167 }, /* vkGetPhysicalDeviceQueueFamilyProperties2 */
-    { 4681, 0x5ceb2bed, 168 }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
-    { 4726, 0x272ef8ef, 34 }, /* vkGetPhysicalDeviceSparseImageFormatProperties */
-    { 4773, 0xebddba0b, 171 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2 */
-    { 4821, 0x8746ed72, 172 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
-    { 4872, 0x9497e378, 212 }, /* vkGetPhysicalDeviceSurfaceCapabilities2KHR */
-    { 4915, 0x77890558, 140 }, /* vkGetPhysicalDeviceSurfaceCapabilitiesKHR */
-    { 4957, 0xd00b7188, 213 }, /* vkGetPhysicalDeviceSurfaceFormats2KHR */
-    { 4995, 0xe32227c8, 141 }, /* vkGetPhysicalDeviceSurfaceFormatsKHR */
-    { 5032, 0x31c3cbd1, 142 }, /* vkGetPhysicalDeviceSurfacePresentModesKHR */
-    { 5074, 0x1a687885, 139 }, /* vkGetPhysicalDeviceSurfaceSupportKHR */
-    { 5111, 0x84e085ac, 149 }, /* vkGetPhysicalDeviceWaylandPresentationSupportKHR */
-    { 5160, 0x41782cb9, 153 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
-    { 5205, 0x34a063ab, 151 }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
-    { 5251, 0x2092a349, 64 }, /* vkGetPipelineCacheData */
-    { 5274, 0xbf3f2cb3, 50 }, /* vkGetQueryPoolResults */
-    { 5296, 0xa9820d22, 85 }, /* vkGetRenderAreaGranularity */
-    { 5323, 0x3e0e9884, 182 }, /* vkGetSemaphoreFdKHR */
-    { 5343, 0x5330743c, 228 }, /* vkGetShaderInfoAMD */
-    { 5362, 0x4979c9a3, 225 }, /* vkGetSwapchainGrallocUsageANDROID */
-    { 5396, 0x57695f28, 145 }, /* vkGetSwapchainImagesKHR */
-    { 5420, 0x51df0390, 187 }, /* vkImportFenceFdKHR */
-    { 5439, 0x36337c05, 183 }, /* vkImportSemaphoreFdKHR */
-    { 5462, 0x1e115cca, 27 }, /* vkInvalidateMappedMemoryRanges */
-    { 5493, 0xcb977bd8, 24 }, /* vkMapMemory */
-    { 5505, 0xc3499606, 65 }, /* vkMergePipelineCaches */
-    { 5527, 0xc3628a09, 35 }, /* vkQueueBindSparse */
-    { 5545, 0xfc5fb6ce, 147 }, /* vkQueuePresentKHR */
-    { 5563, 0xa0313eef, 227 }, /* vkQueueSignalReleaseImageANDROID */
-    { 5596, 0xfa4713ec, 19 }, /* vkQueueSubmit */
-    { 5610, 0x6f8fc2a5, 20 }, /* vkQueueWaitIdle */
-    { 5626, 0x847dc731, 93 }, /* vkResetCommandBuffer */
-    { 5647, 0x6da9f7fd, 88 }, /* vkResetCommandPool */
-    { 5666, 0x9bd85f5, 77 }, /* vkResetDescriptorPool */
-    { 5688, 0x6d373ba8, 47 }, /* vkResetEvent */
-    { 5701, 0x684781dc, 38 }, /* vkResetFences */
-    { 5715, 0x592ae5f5, 46 }, /* vkSetEvent */
-    { 5726, 0xfef2fb38, 174 }, /* vkTrimCommandPool */
-    { 5744, 0x51177c8d, 175 }, /* vkTrimCommandPoolKHR */
-    { 5765, 0x1a1a0e2f, 25 }, /* vkUnmapMemory */
-    { 5779, 0x5349c9d, 208 }, /* vkUpdateDescriptorSetWithTemplate */
-    { 5813, 0x214ad230, 209 }, /* vkUpdateDescriptorSetWithTemplateKHR */
-    { 5850, 0xbfd090ae, 80 }, /* vkUpdateDescriptorSets */
-    { 5873, 0x19d64c81, 40 }, /* vkWaitForFences */
+    { 0, 0x6bf780dd, 247 }, /* vkAcquireImageANDROID */
+    { 22, 0x82860572, 217 }, /* vkAcquireNextImage2KHR */
+    { 45, 0xc3fedb2e, 155 }, /* vkAcquireNextImageKHR */
+    { 67, 0x60df100d, 198 }, /* vkAcquireXlibDisplayEXT */
+    { 91, 0x8c0c811a, 89 }, /* vkAllocateCommandBuffers */
+    { 116, 0x4c449d3a, 78 }, /* vkAllocateDescriptorSets */
+    { 141, 0x522b85d3, 22 }, /* vkAllocateMemory */
+    { 158, 0xc54f7327, 91 }, /* vkBeginCommandBuffer */
+    { 179, 0x6bcbdcb, 30 }, /* vkBindBufferMemory */
+    { 198, 0xc27aaf4f, 209 }, /* vkBindBufferMemory2 */
+    { 218, 0x6878d3ce, 210 }, /* vkBindBufferMemory2KHR */
+    { 241, 0x5caaae4a, 32 }, /* vkBindImageMemory */
+    { 259, 0xa9097118, 211 }, /* vkBindImageMemory2 */
+    { 278, 0xf18729ad, 212 }, /* vkBindImageMemory2KHR */
+    { 300, 0xe561c19f, 130 }, /* vkCmdBeginConditionalRenderingEXT */
+    { 334, 0xf5064ea4, 128 }, /* vkCmdBeginQuery */
+    { 350, 0xcb7a58e3, 136 }, /* vkCmdBeginRenderPass */
+    { 371, 0x8b6b4de6, 252 }, /* vkCmdBeginRenderPass2KHR */
+    { 396, 0x28c7a5da, 104 }, /* vkCmdBindDescriptorSets */
+    { 420, 0x4c22d870, 105 }, /* vkCmdBindIndexBuffer */
+    { 441, 0x3af9fd84, 94 }, /* vkCmdBindPipeline */
+    { 459, 0xa9c83f1d, 106 }, /* vkCmdBindVertexBuffers */
+    { 482, 0x331ebf89, 115 }, /* vkCmdBlitImage */
+    { 497, 0x93cb5cb8, 122 }, /* vkCmdClearAttachments */
+    { 519, 0xb4bc8d08, 120 }, /* vkCmdClearColorImage */
+    { 540, 0x4f88e4ba, 121 }, /* vkCmdClearDepthStencilImage */
+    { 568, 0xc939a0da, 113 }, /* vkCmdCopyBuffer */
+    { 584, 0x929847e, 116 }, /* vkCmdCopyBufferToImage */
+    { 607, 0x278effa9, 114 }, /* vkCmdCopyImage */
+    { 622, 0x68cddbac, 117 }, /* vkCmdCopyImageToBuffer */
+    { 645, 0xdee8c6d4, 134 }, /* vkCmdCopyQueryPoolResults */
+    { 671, 0xbd58e867, 111 }, /* vkCmdDispatch */
+    { 685, 0xfb767220, 218 }, /* vkCmdDispatchBase */
+    { 703, 0x402403e5, 219 }, /* vkCmdDispatchBaseKHR */
+    { 724, 0xd6353005, 112 }, /* vkCmdDispatchIndirect */
+    { 746, 0x9912c1a1, 107 }, /* vkCmdDraw */
+    { 756, 0xbe5a8058, 108 }, /* vkCmdDrawIndexed */
+    { 773, 0x94e7ed36, 110 }, /* vkCmdDrawIndexedIndirect */
+    { 798, 0xc86e9287, 167 }, /* vkCmdDrawIndexedIndirectCountAMD */
+    { 831, 0xda9e8a2c, 256 }, /* vkCmdDrawIndexedIndirectCountKHR */
+    { 864, 0xe9ac41bf, 109 }, /* vkCmdDrawIndirect */
+    { 882, 0xe5ad0a50, 166 }, /* vkCmdDrawIndirectCountAMD */
+    { 908, 0xf7dd01f5, 255 }, /* vkCmdDrawIndirectCountKHR */
+    { 934, 0x18c8217d, 131 }, /* vkCmdEndConditionalRenderingEXT */
+    { 966, 0xd556fd22, 129 }, /* vkCmdEndQuery */
+    { 980, 0xdcdb0235, 138 }, /* vkCmdEndRenderPass */
+    { 999, 0x57eebe78, 254 }, /* vkCmdEndRenderPass2KHR */
+    { 1022, 0x9eaabe40, 139 }, /* vkCmdExecuteCommands */
+    { 1043, 0x5bdd2ae0, 119 }, /* vkCmdFillBuffer */
+    { 1059, 0x2eeec2f9, 137 }, /* vkCmdNextSubpass */
+    { 1076, 0x25b621bc, 253 }, /* vkCmdNextSubpass2KHR */
+    { 1097, 0x97fccfe8, 127 }, /* vkCmdPipelineBarrier */
+    { 1118, 0xb1c6b468, 135 }, /* vkCmdPushConstants */
+    { 1137, 0xf17232a1, 182 }, /* vkCmdPushDescriptorSetKHR */
+    { 1163, 0x3d528981, 227 }, /* vkCmdPushDescriptorSetWithTemplateKHR */
+    { 1201, 0x4fccce28, 125 }, /* vkCmdResetEvent */
+    { 1217, 0x2f614082, 132 }, /* vkCmdResetQueryPool */
+    { 1237, 0x671bb594, 123 }, /* vkCmdResolveImage */
+    { 1255, 0x1c989dfb, 99 }, /* vkCmdSetBlendConstants */
+    { 1278, 0x30f14d07, 98 }, /* vkCmdSetDepthBias */
+    { 1296, 0x7b3a8a63, 100 }, /* vkCmdSetDepthBounds */
+    { 1316, 0xaecdae87, 213 }, /* vkCmdSetDeviceMask */
+    { 1335, 0xfbb79356, 214 }, /* vkCmdSetDeviceMaskKHR */
+    { 1357, 0x64df188b, 228 }, /* vkCmdSetDiscardRectangleEXT */
+    { 1385, 0xe257f075, 124 }, /* vkCmdSetEvent */
+    { 1399, 0x32282165, 97 }, /* vkCmdSetLineWidth */
+    { 1417, 0x48f28c7f, 96 }, /* vkCmdSetScissor */
+    { 1433, 0xa8f534e2, 101 }, /* vkCmdSetStencilCompareMask */
+    { 1460, 0x83e2b024, 103 }, /* vkCmdSetStencilReference */
+    { 1485, 0xe7c4b134, 102 }, /* vkCmdSetStencilWriteMask */
+    { 1510, 0x53d6c2b, 95 }, /* vkCmdSetViewport */
+    { 1527, 0xd2986b5e, 118 }, /* vkCmdUpdateBuffer */
+    { 1545, 0x3b9346b3, 126 }, /* vkCmdWaitEvents */
+    { 1561, 0xec4d324c, 133 }, /* vkCmdWriteTimestamp */
+    { 1581, 0x7d4282b9, 51 }, /* vkCreateBuffer */
+    { 1596, 0x925bd256, 53 }, /* vkCreateBufferView */
+    { 1615, 0x820fe476, 86 }, /* vkCreateCommandPool */
+    { 1635, 0xf70c85eb, 67 }, /* vkCreateComputePipelines */
+    { 1660, 0x987ef56, 163 }, /* vkCreateDebugReportCallbackEXT */
+    { 1691, 0xfb95a8a4, 75 }, /* vkCreateDescriptorPool */
+    { 1714, 0x3c14cc74, 73 }, /* vkCreateDescriptorSetLayout */
+    { 1742, 0xad3ce733, 221 }, /* vkCreateDescriptorUpdateTemplate */
+    { 1775, 0x5189488a, 222 }, /* vkCreateDescriptorUpdateTemplateKHR */
+    { 1811, 0x85ed23f, 11 }, /* vkCreateDevice */
+    { 1826, 0xcc0bde41, 144 }, /* vkCreateDisplayModeKHR */
+    { 1849, 0x7ac4dacb, 146 }, /* vkCreateDisplayPlaneSurfaceKHR */
+    { 1880, 0xe7188731, 43 }, /* vkCreateEvent */
+    { 1894, 0x958af968, 36 }, /* vkCreateFence */
+    { 1908, 0x887a38c4, 81 }, /* vkCreateFramebuffer */
+    { 1928, 0x4b59f96d, 66 }, /* vkCreateGraphicsPipelines */
+    { 1954, 0x652128c2, 55 }, /* vkCreateImage */
+    { 1968, 0xdce077ff, 58 }, /* vkCreateImageView */
+    { 1986, 0x38a581a6, 0 }, /* vkCreateInstance */
+    { 2003, 0xcbf6489f, 62 }, /* vkCreatePipelineCache */
+    { 2025, 0x451ef1ed, 69 }, /* vkCreatePipelineLayout */
+    { 2048, 0x5edcd92b, 48 }, /* vkCreateQueryPool */
+    { 2066, 0x109a9c18, 83 }, /* vkCreateRenderPass */
+    { 2085, 0xfa16043b, 251 }, /* vkCreateRenderPass2KHR */
+    { 2108, 0x13cf03f, 71 }, /* vkCreateSampler */
+    { 2124, 0xe6a58c26, 241 }, /* vkCreateSamplerYcbcrConversion */
+    { 2155, 0xf2065e5b, 41 }, /* vkCreateSemaphore */
+    { 2173, 0xa0d3cea2, 60 }, /* vkCreateShaderModule */
+    { 2194, 0xcdefcaa8, 152 }, /* vkCreateSwapchainKHR */
+    { 2215, 0x2b2a4b79, 157 }, /* vkCreateWaylandSurfaceKHR */
+    { 2241, 0xc5e5b106, 161 }, /* vkCreateXcbSurfaceKHR */
+    { 2263, 0xa693bc66, 159 }, /* vkCreateXlibSurfaceKHR */
+    { 2286, 0xa4e75334, 165 }, /* vkDebugReportMessageEXT */
+    { 2310, 0x94a07a45, 52 }, /* vkDestroyBuffer */
+    { 2326, 0x98b27962, 54 }, /* vkDestroyBufferView */
+    { 2346, 0xd5d83a0a, 87 }, /* vkDestroyCommandPool */
+    { 2367, 0x43d4c4e2, 164 }, /* vkDestroyDebugReportCallbackEXT */
+    { 2399, 0x47bdaf30, 76 }, /* vkDestroyDescriptorPool */
+    { 2423, 0xa4227b08, 74 }, /* vkDestroyDescriptorSetLayout */
+    { 2452, 0xbb2cbe7f, 223 }, /* vkDestroyDescriptorUpdateTemplate */
+    { 2486, 0xaa83901e, 224 }, /* vkDestroyDescriptorUpdateTemplateKHR */
+    { 2523, 0x1fbcc9cb, 12 }, /* vkDestroyDevice */
+    { 2539, 0x4df27c05, 44 }, /* vkDestroyEvent */
+    { 2554, 0xfc64ee3c, 37 }, /* vkDestroyFence */
+    { 2569, 0xdc428e58, 82 }, /* vkDestroyFramebuffer */
+    { 2590, 0xcbfb1d96, 56 }, /* vkDestroyImage */
+    { 2605, 0xb5853953, 59 }, /* vkDestroyImageView */
+    { 2624, 0x9bd21af2, 1 }, /* vkDestroyInstance */
+    { 2642, 0x6aac68af, 68 }, /* vkDestroyPipeline */
+    { 2660, 0x4112a673, 63 }, /* vkDestroyPipelineCache */
+    { 2683, 0x9146f879, 70 }, /* vkDestroyPipelineLayout */
+    { 2707, 0x37819a7f, 49 }, /* vkDestroyQueryPool */
+    { 2726, 0x16f14324, 84 }, /* vkDestroyRenderPass */
+    { 2746, 0x3b645153, 72 }, /* vkDestroySampler */
+    { 2763, 0x20f261b2, 242 }, /* vkDestroySamplerYcbcrConversion */
+    { 2795, 0xcaab1faf, 42 }, /* vkDestroySemaphore */
+    { 2814, 0x2d77af6e, 61 }, /* vkDestroyShaderModule */
+    { 2836, 0xf204ce7d, 147 }, /* vkDestroySurfaceKHR */
+    { 2856, 0x5a93ab74, 153 }, /* vkDestroySwapchainKHR */
+    { 2878, 0xd46c5f24, 21 }, /* vkDeviceWaitIdle */
+    { 2895, 0xdbb064, 200 }, /* vkDisplayPowerControlEXT */
+    { 2920, 0xaffb5725, 92 }, /* vkEndCommandBuffer */
+    { 2939, 0x5fd13eed, 17 }, /* vkEnumerateDeviceExtensionProperties */
+    { 2976, 0x2f8566e7, 16 }, /* vkEnumerateDeviceLayerProperties */
+    { 3009, 0xeb27627e, 15 }, /* vkEnumerateInstanceExtensionProperties */
+    { 3048, 0x81f69d8, 14 }, /* vkEnumerateInstanceLayerProperties */
+    { 3083, 0xd0481e5c, 13 }, /* vkEnumerateInstanceVersion */
+    { 3110, 0x270514f0, 205 }, /* vkEnumeratePhysicalDeviceGroups */
+    { 3142, 0x549ce595, 206 }, /* vkEnumeratePhysicalDeviceGroupsKHR */
+    { 3177, 0x5787c327, 2 }, /* vkEnumeratePhysicalDevices */
+    { 3204, 0xff52f051, 26 }, /* vkFlushMappedMemoryRanges */
+    { 3230, 0xb9db2b91, 90 }, /* vkFreeCommandBuffers */
+    { 3251, 0x7a1347b1, 79 }, /* vkFreeDescriptorSets */
+    { 3272, 0x8f6f838a, 23 }, /* vkFreeMemory */
+    { 3285, 0xab98422a, 29 }, /* vkGetBufferMemoryRequirements */
+    { 3315, 0xd1fd0638, 235 }, /* vkGetBufferMemoryRequirements2 */
+    { 3346, 0x78dbe98d, 236 }, /* vkGetBufferMemoryRequirements2KHR */
+    { 3380, 0xfeac9573, 244 }, /* vkGetDescriptorSetLayoutSupport */
+    { 3412, 0xd7e44a, 245 }, /* vkGetDescriptorSetLayoutSupportKHR */
+    { 3447, 0x2e218c10, 207 }, /* vkGetDeviceGroupPeerMemoryFeatures */
+    { 3482, 0xa3809375, 208 }, /* vkGetDeviceGroupPeerMemoryFeaturesKHR */
+    { 3520, 0xf72c87d4, 215 }, /* vkGetDeviceGroupPresentCapabilitiesKHR */
+    { 3559, 0x6b9448c3, 216 }, /* vkGetDeviceGroupSurfacePresentModesKHR */
+    { 3598, 0x46e38db5, 28 }, /* vkGetDeviceMemoryCommitment */
+    { 3626, 0xba013486, 3 }, /* vkGetDeviceProcAddr */
+    { 3646, 0xcc920d9a, 18 }, /* vkGetDeviceQueue */
+    { 3663, 0xb11a6348, 243 }, /* vkGetDeviceQueue2 */
+    { 3681, 0x3e613e42, 233 }, /* vkGetDisplayModeProperties2KHR */
+    { 3712, 0x36b8a8de, 143 }, /* vkGetDisplayModePropertiesKHR */
+    { 3742, 0xff1655a4, 234 }, /* vkGetDisplayPlaneCapabilities2KHR */
+    { 3776, 0x4b60d48c, 145 }, /* vkGetDisplayPlaneCapabilitiesKHR */
+    { 3809, 0xabef4889, 142 }, /* vkGetDisplayPlaneSupportedDisplaysKHR */
+    { 3847, 0x96d834b, 45 }, /* vkGetEventStatus */
+    { 3864, 0x69a5d6af, 195 }, /* vkGetFenceFdKHR */
+    { 3880, 0x5f391892, 39 }, /* vkGetFenceStatus */
+    { 3897, 0x916f1e63, 31 }, /* vkGetImageMemoryRequirements */
+    { 3926, 0x56e213f7, 237 }, /* vkGetImageMemoryRequirements2 */
+    { 3956, 0x8de28366, 238 }, /* vkGetImageMemoryRequirements2KHR */
+    { 3989, 0x15855f5b, 33 }, /* vkGetImageSparseMemoryRequirements */
+    { 4024, 0xbd4e3d3f, 239 }, /* vkGetImageSparseMemoryRequirements2 */
+    { 4060, 0x3df40f5e, 240 }, /* vkGetImageSparseMemoryRequirements2KHR */
+    { 4099, 0x9163b686, 57 }, /* vkGetImageSubresourceLayout */
+    { 4127, 0x3d2ae9ad, 4 }, /* vkGetInstanceProcAddr */
+    { 4149, 0x503c14c5, 187 }, /* vkGetMemoryFdKHR */
+    { 4166, 0xb028a792, 188 }, /* vkGetMemoryFdPropertiesKHR */
+    { 4193, 0x7030ee5b, 250 }, /* vkGetMemoryHostPointerPropertiesEXT */
+    { 4229, 0xb7bc4386, 232 }, /* vkGetPhysicalDeviceDisplayPlaneProperties2KHR */
+    { 4275, 0xb9b8ddba, 141 }, /* vkGetPhysicalDeviceDisplayPlanePropertiesKHR */
+    { 4320, 0x540c0372, 231 }, /* vkGetPhysicalDeviceDisplayProperties2KHR */
+    { 4361, 0xfa0cd2e, 140 }, /* vkGetPhysicalDeviceDisplayPropertiesKHR */
+    { 4401, 0x944476dc, 185 }, /* vkGetPhysicalDeviceExternalBufferProperties */
+    { 4445, 0xee68b389, 186 }, /* vkGetPhysicalDeviceExternalBufferPropertiesKHR */
+    { 4492, 0x3bc965eb, 193 }, /* vkGetPhysicalDeviceExternalFenceProperties */
+    { 4535, 0x99b35492, 194 }, /* vkGetPhysicalDeviceExternalFencePropertiesKHR */
+    { 4581, 0xcf251b0e, 189 }, /* vkGetPhysicalDeviceExternalSemaphoreProperties */
+    { 4628, 0x984c3fa7, 190 }, /* vkGetPhysicalDeviceExternalSemaphorePropertiesKHR */
+    { 4678, 0x113e2f33, 8 }, /* vkGetPhysicalDeviceFeatures */
+    { 4706, 0x63c068a7, 168 }, /* vkGetPhysicalDeviceFeatures2 */
+    { 4735, 0x6a9a3636, 169 }, /* vkGetPhysicalDeviceFeatures2KHR */
+    { 4767, 0x3e54b398, 9 }, /* vkGetPhysicalDeviceFormatProperties */
+    { 4803, 0xca3bb9da, 172 }, /* vkGetPhysicalDeviceFormatProperties2 */
+    { 4840, 0x9099cbbb, 173 }, /* vkGetPhysicalDeviceFormatProperties2KHR */
+    { 4880, 0xdd36a867, 10 }, /* vkGetPhysicalDeviceImageFormatProperties */
+    { 4921, 0x35d260d3, 174 }, /* vkGetPhysicalDeviceImageFormatProperties2 */
+    { 4963, 0x102ff7ea, 175 }, /* vkGetPhysicalDeviceImageFormatProperties2KHR */
+    { 5008, 0xa90da4da, 7 }, /* vkGetPhysicalDeviceMemoryProperties */
+    { 5044, 0xcb4cc208, 178 }, /* vkGetPhysicalDeviceMemoryProperties2 */
+    { 5081, 0xc8c3da3d, 179 }, /* vkGetPhysicalDeviceMemoryProperties2KHR */
+    { 5121, 0x100341b4, 220 }, /* vkGetPhysicalDevicePresentRectanglesKHR */
+    { 5161, 0x52fe22c9, 5 }, /* vkGetPhysicalDeviceProperties */
+    { 5191, 0x6c4d8ee1, 170 }, /* vkGetPhysicalDeviceProperties2 */
+    { 5222, 0xcd15838c, 171 }, /* vkGetPhysicalDeviceProperties2KHR */
+    { 5256, 0x4e5fc88a, 6 }, /* vkGetPhysicalDeviceQueueFamilyProperties */
+    { 5297, 0xcad374d8, 176 }, /* vkGetPhysicalDeviceQueueFamilyProperties2 */
+    { 5339, 0x5ceb2bed, 177 }, /* vkGetPhysicalDeviceQueueFamilyProperties2KHR */
+    { 5384, 0x272ef8ef, 34 }, /* vkGetPhysicalDeviceSparseImageFormatProperties */
+    { 5431, 0xebddba0b, 180 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2 */
+    { 5479, 0x8746ed72, 181 }, /* vkGetPhysicalDeviceSparseImageFormatProperties2KHR */
+    { 5530, 0x5a5fba04, 204 }, /* vkGetPhysicalDeviceSurfaceCapabilities2EXT */
+    { 5573, 0x9497e378, 229 }, /* vkGetPhysicalDeviceSurfaceCapabilities2KHR */
+    { 5616, 0x77890558, 149 }, /* vkGetPhysicalDeviceSurfaceCapabilitiesKHR */
+    { 5658, 0xd00b7188, 230 }, /* vkGetPhysicalDeviceSurfaceFormats2KHR */
+    { 5696, 0xe32227c8, 150 }, /* vkGetPhysicalDeviceSurfaceFormatsKHR */
+    { 5733, 0x31c3cbd1, 151 }, /* vkGetPhysicalDeviceSurfacePresentModesKHR */
+    { 5775, 0x1a687885, 148 }, /* vkGetPhysicalDeviceSurfaceSupportKHR */
+    { 5812, 0x84e085ac, 158 }, /* vkGetPhysicalDeviceWaylandPresentationSupportKHR */
+    { 5861, 0x41782cb9, 162 }, /* vkGetPhysicalDeviceXcbPresentationSupportKHR */
+    { 5906, 0x34a063ab, 160 }, /* vkGetPhysicalDeviceXlibPresentationSupportKHR */
+    { 5952, 0x2092a349, 64 }, /* vkGetPipelineCacheData */
+    { 5975, 0xbf3f2cb3, 50 }, /* vkGetQueryPoolResults */
+    { 5997, 0xb87cdd6c, 199 }, /* vkGetRandROutputDisplayEXT */
+    { 6024, 0xa9820d22, 85 }, /* vkGetRenderAreaGranularity */
+    { 6051, 0x3e0e9884, 191 }, /* vkGetSemaphoreFdKHR */
+    { 6071, 0x5330743c, 249 }, /* vkGetShaderInfoAMD */
+    { 6090, 0xa4aeb5a, 203 }, /* vkGetSwapchainCounterEXT */
+    { 6115, 0x4979c9a3, 246 }, /* vkGetSwapchainGrallocUsageANDROID */
+    { 6149, 0x57695f28, 154 }, /* vkGetSwapchainImagesKHR */
+    { 6173, 0x51df0390, 196 }, /* vkImportFenceFdKHR */
+    { 6192, 0x36337c05, 192 }, /* vkImportSemaphoreFdKHR */
+    { 6215, 0x1e115cca, 27 }, /* vkInvalidateMappedMemoryRanges */
+    { 6246, 0xcb977bd8, 24 }, /* vkMapMemory */
+    { 6258, 0xc3499606, 65 }, /* vkMergePipelineCaches */
+    { 6280, 0xc3628a09, 35 }, /* vkQueueBindSparse */
+    { 6298, 0xfc5fb6ce, 156 }, /* vkQueuePresentKHR */
+    { 6316, 0xa0313eef, 248 }, /* vkQueueSignalReleaseImageANDROID */
+    { 6349, 0xfa4713ec, 19 }, /* vkQueueSubmit */
+    { 6363, 0x6f8fc2a5, 20 }, /* vkQueueWaitIdle */
+    { 6379, 0x26cc78f5, 201 }, /* vkRegisterDeviceEventEXT */
+    { 6404, 0x4a0bd849, 202 }, /* vkRegisterDisplayEventEXT */
+    { 6430, 0x4207f4f1, 197 }, /* vkReleaseDisplayEXT */
+    { 6450, 0x847dc731, 93 }, /* vkResetCommandBuffer */
+    { 6471, 0x6da9f7fd, 88 }, /* vkResetCommandPool */
+    { 6490, 0x9bd85f5, 77 }, /* vkResetDescriptorPool */
+    { 6512, 0x6d373ba8, 47 }, /* vkResetEvent */
+    { 6525, 0x684781dc, 38 }, /* vkResetFences */
+    { 6539, 0x592ae5f5, 46 }, /* vkSetEvent */
+    { 6550, 0xfef2fb38, 183 }, /* vkTrimCommandPool */
+    { 6568, 0x51177c8d, 184 }, /* vkTrimCommandPoolKHR */
+    { 6589, 0x1a1a0e2f, 25 }, /* vkUnmapMemory */
+    { 6603, 0x5349c9d, 225 }, /* vkUpdateDescriptorSetWithTemplate */
+    { 6637, 0x214ad230, 226 }, /* vkUpdateDescriptorSetWithTemplateKHR */
+    { 6674, 0xbfd090ae, 80 }, /* vkUpdateDescriptorSets */
+    { 6697, 0x19d64c81, 40 }, /* vkWaitForFences */
 };
 
 /* Hash table stats:
- * size 230 entries
+ * size 257 entries
  * collisions entries:
- *     0      182
- *     1      32
- *     2      10
- *     3      3
- *     4      2
- *     5      1
- *     6      0
+ *     0      203
+ *     1      33
+ *     2      9
+ *     3      7
+ *     4      0
+ *     5      2
+ *     6      3
  *     7      0
  *     8      0
  *     9+     0
@@ -519,71 +573,26 @@ static const struct string_map_entry string_map_entries[] = {
 
 #define none 0xffff
 static const uint16_t string_map[512] = {
-    0x00ad,
+    0x00c2,
     none,
     none,
     none,
-    none,
-    0x001f,
-    0x00d3,
-    none,
-    0x00b3,
     0x00d4,
-    0x0062,
-    0x00bd,
+    0x0022,
+    0x00eb,
     none,
-    none,
-    none,
-    none,
-    0x008d,
+    0x00c8,
+    0x00ec,
+    0x006d,
     0x00d2,
     none,
-    0x00bb,
+    0x0003,
     none,
     none,
+    0x0099,
+    0x00ea,
     none,
-    none,
-    0x0056,
-    none,
-    none,
-    0x00de,
-    none,
-    none,
-    0x0067,
-    none,
-    0x001d,
-    none,
-    none,
-    none,
-    0x003c,
-    none,
-    0x0058,
-    none,
-    0x002f,
-    none,
-    0x0088,
-    0x003e,
-    none,
-    none,
-    none,
-    0x00e1,
-    0x00e3,
-    none,
-    none,
-    none,
-    none,
-    0x0027,
-    0x00ab,
-    none,
-    0x0089,
-    none,
-    none,
-    none,
-    0x006a,
-    0x00b4,
-    0x0069,
-    0x004b,
-    0x0028,
+    0x00d0,
     none,
     none,
     none,
@@ -591,446 +600,491 @@ static const uint16_t string_map[512] = {
     0x0060,
     none,
     none,
+    0x00f6,
     none,
     none,
-    0x000a,
+    0x0072,
     none,
-    0x0041,
-    none,
-    none,
-    0x00cc,
-    0x0025,
-    0x0084,
-    0x0057,
+    0x0020,
     none,
     none,
     none,
-    0x0043,
+    0x0044,
     none,
-    0x0021,
+    0x0063,
+    none,
+    0x0037,
+    none,
+    0x0094,
+    0x0046,
+    0x0027,
+    none,
+    0x00f9,
+    0x00fc,
+    0x00fe,
     none,
     none,
-    0x0059,
-    0x0080,
-    0x008c,
     none,
     none,
+    0x002d,
+    0x00c0,
+    none,
+    0x0095,
     none,
     none,
-    none,
-    0x0034,
-    0x00d0,
-    none,
-    0x005e,
-    0x001c,
-    0x002c,
+    0x0061,
+    0x0075,
+    0x00c9,
+    0x0074,
+    0x0053,
+    0x002f,
+    0x0054,
+    0x00a1,
     none,
     none,
     0x006b,
     none,
     none,
-    0x00a2,
     none,
-    0x0010,
+    0x00f2,
+    0x000b,
     none,
-    none,
-    0x0070,
-    0x0048,
-    0x0038,
-    0x0044,
+    0x0049,
     none,
     none,
-    0x0071,
-    0x00af,
+    0x00e3,
+    0x0029,
+    0x0090,
+    0x0062,
     none,
     none,
-    0x0078,
-    0x0018,
-    0x003a,
     none,
-    0x00e5,
-    0x0030,
+    0x004b,
     none,
-    0x00cb,
-    0x00c4,
-    0x0092,
-    0x0023,
+    0x0024,
     none,
+    none,
+    0x0064,
+    0x008c,
     0x0098,
-    0x004a,
-    0x0037,
-    none,
-    0x00e0,
     none,
     none,
     none,
-    0x007e,
+    none,
+    none,
+    0x003c,
+    0x0086,
+    none,
+    0x0069,
+    0x001f,
+    0x0034,
+    none,
+    none,
+    0x0076,
+    none,
+    none,
+    0x00b3,
+    none,
+    0x0013,
+    none,
+    none,
+    0x007b,
+    0x0050,
+    0x0040,
+    0x004c,
+    0x00e8,
+    0x002e,
+    0x007c,
+    0x00c4,
+    none,
+    none,
+    0x0083,
+    0x001b,
+    0x0042,
+    none,
+    0x0100,
+    0x0038,
+    none,
+    0x00e2,
+    0x00da,
+    0x009e,
+    0x0026,
+    none,
+    0x00a5,
+    0x0052,
+    0x003f,
+    0x00a4,
+    0x00fb,
+    none,
+    none,
+    none,
+    0x008a,
+    0x0071,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    0x00af,
+    0x003d,
+    none,
+    0x00a9,
+    0x00ce,
+    none,
+    0x005d,
+    none,
+    0x0035,
+    0x0065,
+    none,
+    0x000f,
+    0x007d,
+    none,
+    0x00bf,
     0x0066,
     none,
     none,
     none,
     none,
     none,
+    0x00ff,
+    0x007a,
+    0x00fd,
     none,
-    0x009e,
-    0x0035,
     none,
-    none,
-    0x00b9,
-    none,
-    0x0053,
-    none,
-    0x002d,
-    0x005a,
-    none,
-    0x000d,
-    0x0072,
-    none,
-    0x00aa,
-    0x005b,
+    0x0048,
     none,
     none,
     none,
-    none,
-    none,
-    0x00e4,
-    0x006f,
-    0x00e2,
-    none,
-    none,
-    0x0040,
-    none,
-    none,
-    none,
-    0x0047,
-    0x0014,
-    0x0042,
-    0x0016,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    0x0050,
-    0x0090,
-    0x004e,
-    0x00a0,
-    0x00c9,
-    none,
-    none,
-    0x00b6,
-    0x00d1,
-    0x0097,
-    0x00c6,
-    none,
-    0x00d5,
-    none,
-    none,
-    none,
-    none,
-    0x00b0,
-    0x001b,
-    0x0096,
-    none,
-    none,
-    0x00ba,
-    none,
+    0x004f,
     0x0017,
+    0x004a,
+    0x0019,
     none,
-    0x00a3,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    0x005a,
+    0x009c,
+    0x0058,
+    0x00b1,
+    0x00df,
+    none,
+    none,
+    0x00cb,
+    0x00e9,
+    0x0055,
+    0x00dc,
+    none,
+    0x00ed,
+    none,
+    none,
+    none,
+    none,
+    0x00c5,
+    0x001e,
+    0x00a7,
+    none,
+    none,
+    0x00cf,
+    none,
+    0x001a,
+    none,
+    0x00b8,
     0x0000,
-    0x00a6,
+    0x00a2,
     none,
-    0x0029,
-    0x00b7,
-    0x003b,
-    0x000e,
-    none,
-    none,
-    none,
-    0x007d,
+    0x0030,
+    0x00cc,
+    0x0043,
+    0x0010,
     none,
     none,
     none,
+    0x0089,
     none,
     none,
-    0x007c,
     none,
-    0x00bc,
-    0x0081,
-    0x00d8,
+    none,
+    none,
+    0x0088,
+    none,
+    0x00d1,
+    0x008d,
+    0x00a8,
+    0x0079,
+    none,
+    none,
     0x006e,
     none,
     none,
-    0x0063,
     none,
-    none,
-    none,
-    0x002a,
+    0x0031,
     none,
     none,
     none,
     none,
     none,
     none,
-    0x00b2,
+    0x00c7,
     none,
-    0x00d6,
+    0x00ee,
+    none,
+    0x00bb,
+    none,
+    0x0068,
+    0x003b,
+    0x0018,
     none,
     none,
     none,
-    0x005d,
-    0x0033,
+    none,
+    none,
+    0x00bc,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    0x00f0,
+    0x000c,
+    none,
+    0x0004,
+    0x0070,
+    none,
     0x0015,
     none,
     none,
     none,
     none,
+    0x002c,
     none,
-    0x00a7,
+    0x007e,
+    0x0087,
     none,
+    0x0007,
+    0x00e6,
     none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    0x000b,
-    none,
-    0x0003,
-    0x0065,
-    none,
-    0x0012,
-    none,
-    none,
-    none,
-    none,
-    0x0026,
-    none,
-    0x0073,
-    0x007b,
-    none,
-    0x0006,
-    0x00ce,
-    none,
-    none,
-    0x0055,
+    0x00f3,
+    0x005f,
     none,
     none,
     0x0002,
     none,
-    0x0064,
-    0x004c,
+    0x006f,
+    0x0056,
     none,
-    0x0049,
-    0x003d,
-    0x00ca,
-    0x0022,
-    0x007a,
-    0x00df,
-    none,
-    0x0004,
-    none,
-    none,
-    none,
-    none,
-    0x009c,
-    none,
-    none,
-    none,
-    none,
-    0x00d9,
-    none,
-    0x00a9,
-    0x005f,
-    0x0094,
-    0x00c8,
-    none,
-    0x0095,
-    none,
-    0x0083,
-    none,
-    0x0008,
-    none,
-    none,
-    none,
-    0x006d,
-    none,
-    none,
-    0x0036,
-    none,
-    0x00c0,
-    none,
-    none,
-    0x009b,
-    none,
-    none,
-    0x003f,
-    none,
-    none,
-    none,
-    0x0061,
-    none,
-    none,
-    0x0039,
-    0x0074,
-    none,
-    0x004d,
-    0x0046,
-    none,
-    none,
-    none,
-    0x004f,
-    0x0077,
-    none,
-    none,
-    0x009d,
-    0x0001,
-    0x008b,
-    0x0079,
-    0x008e,
-    none,
-    none,
-    0x00bf,
-    0x005c,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    none,
-    0x002e,
-    none,
-    none,
-    0x0011,
-    0x00be,
-    none,
-    none,
-    0x00c1,
-    0x0013,
-    0x0087,
-    none,
-    0x009a,
-    0x008a,
-    none,
-    none,
-    0x00cf,
+    0x0051,
+    0x0045,
+    0x00e1,
+    0x0025,
     0x0085,
-    0x00a1,
+    0x00fa,
     none,
-    0x0031,
-    0x0082,
-    0x006c,
-    none,
-    0x00ac,
-    none,
-    0x0093,
-    none,
-    0x00a4,
-    none,
-    none,
-    0x00b8,
-    none,
-    0x0020,
-    none,
-    0x00cd,
-    none,
-    none,
-    0x0052,
-    0x00a8,
-    0x00dc,
-    0x0019,
-    none,
-    0x00c7,
-    0x001a,
-    0x000c,
-    none,
-    0x0076,
-    none,
-    0x0086,
-    0x0075,
-    none,
-    0x00b5,
-    0x0091,
+    0x0005,
     none,
     none,
     none,
     none,
+    0x00ad,
     none,
-    0x00ae,
-    none,
-    none,
-    none,
-    0x0024,
-    0x009f,
+    0x00b7,
     none,
     none,
+    0x00f4,
     none,
+    0x00be,
+    0x006a,
+    0x00a0,
+    0x00de,
     none,
+    0x00a6,
     none,
-    none,
-    none,
-    0x00c2,
-    none,
-    none,
-    0x0007,
-    none,
+    0x008f,
     none,
     0x0009,
     none,
     none,
-    0x00c3,
-    0x00c5,
-    0x0005,
-    0x008f,
+    none,
+    0x0078,
+    0x00f1,
+    none,
+    0x003e,
+    none,
+    0x00d6,
+    none,
+    0x00e4,
+    0x00ac,
+    none,
+    none,
+    0x0047,
     none,
     none,
     none,
+    0x006c,
+    none,
+    none,
+    0x0041,
     0x007f,
     none,
-    0x000f,
-    none,
-    0x00dd,
-    none,
-    0x0068,
+    0x0057,
+    0x004e,
     none,
     none,
+    0x00e0,
+    0x0059,
+    0x0082,
     none,
     none,
+    0x00ae,
+    0x0001,
+    0x0097,
+    0x0084,
+    0x009a,
     none,
     none,
-    0x001e,
+    0x00d5,
+    0x0067,
+    none,
     none,
     none,
     0x002b,
     none,
-    0x00b1,
-    0x0045,
+    none,
+    none,
+    0x0036,
+    none,
+    none,
+    0x0014,
+    0x00b6,
+    0x00b4,
+    none,
     0x00d7,
-    0x0054,
+    0x0016,
+    0x0093,
+    none,
+    0x00ab,
+    0x0096,
+    none,
+    none,
+    0x00e7,
+    0x0091,
+    0x00b2,
+    none,
+    0x0039,
+    0x008e,
+    0x0077,
+    none,
+    0x00c1,
+    none,
+    0x009f,
+    none,
+    0x00b9,
+    none,
+    none,
+    0x000e,
+    none,
+    0x0023,
+    none,
+    0x00e5,
+    0x00a3,
+    none,
+    0x005c,
+    0x00bd,
+    0x00f7,
+    0x001c,
+    none,
+    0x00d3,
+    0x001d,
+    0x000d,
+    none,
+    0x0081,
+    none,
+    0x0092,
+    0x0080,
+    none,
+    0x00ca,
+    0x009d,
     none,
     none,
     none,
     none,
-    none,
-    none,
-    none,
-    0x00db,
-    none,
-    0x0099,
-    none,
-    none,
-    none,
+    0x00b5,
+    0x00c3,
     0x0032,
     none,
-    0x00da,
-    0x00a5,
-    0x0051,
+    0x00dd,
+    0x0028,
+    0x00b0,
+    none,
+    none,
+    none,
+    none,
+    0x00cd,
+    none,
+    none,
+    0x00d8,
+    none,
+    none,
+    0x0008,
+    none,
+    none,
+    0x000a,
+    none,
+    none,
+    0x00d9,
+    0x00db,
+    0x0006,
+    0x009b,
+    none,
+    none,
+    none,
+    0x008b,
+    none,
+    0x0012,
+    none,
+    0x00f8,
+    none,
+    0x0073,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    0x0021,
+    0x0011,
+    none,
+    0x0033,
+    none,
+    0x00c6,
+    0x004d,
+    0x00ef,
+    0x005e,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    none,
+    0x002a,
+    none,
+    0x00aa,
+    none,
+    none,
+    none,
+    0x003a,
+    none,
+    0x00f5,
+    0x00ba,
+    0x005b,
 };
 
 /* Weak aliases for all potential implementations. These will resolve to
@@ -1168,6 +1222,8 @@ static const uint16_t string_map[512] = {
     void radv_CmdPipelineBarrier(VkCommandBuffer commandBuffer, VkPipelineStageFlags srcStageMask, VkPipelineStageFlags dstStageMask, VkDependencyFlags dependencyFlags, uint32_t memoryBarrierCount, const VkMemoryBarrier* pMemoryBarriers, uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier* pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier* pImageMemoryBarriers) __attribute__ ((weak));
     void radv_CmdBeginQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query, VkQueryControlFlags flags) __attribute__ ((weak));
     void radv_CmdEndQuery(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t query) __attribute__ ((weak));
+    void radv_CmdBeginConditionalRenderingEXT(VkCommandBuffer commandBuffer, const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin) __attribute__ ((weak));
+    void radv_CmdEndConditionalRenderingEXT(VkCommandBuffer commandBuffer) __attribute__ ((weak));
     void radv_CmdResetQueryPool(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount) __attribute__ ((weak));
     void radv_CmdWriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, VkQueryPool queryPool, uint32_t query) __attribute__ ((weak));
     void radv_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool, uint32_t firstQuery, uint32_t queryCount, VkBuffer dstBuffer, VkDeviceSize dstOffset, VkDeviceSize stride, VkQueryResultFlags flags) __attribute__ ((weak));
@@ -1176,6 +1232,13 @@ static const uint16_t string_map[512] = {
     void radv_CmdNextSubpass(VkCommandBuffer commandBuffer, VkSubpassContents contents) __attribute__ ((weak));
     void radv_CmdEndRenderPass(VkCommandBuffer commandBuffer) __attribute__ ((weak));
     void radv_CmdExecuteCommands(VkCommandBuffer commandBuffer, uint32_t commandBufferCount, const VkCommandBuffer* pCommandBuffers) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPropertiesKHR* pProperties) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties) __attribute__ ((weak));
+    VkResult radv_GetDisplayPlaneSupportedDisplaysKHR(VkPhysicalDevice physicalDevice, uint32_t planeIndex, uint32_t* pDisplayCount, VkDisplayKHR* pDisplays) __attribute__ ((weak));
+    VkResult radv_GetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModePropertiesKHR* pProperties) __attribute__ ((weak));
+    VkResult radv_CreateDisplayModeKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, const VkDisplayModeCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDisplayModeKHR* pMode) __attribute__ ((weak));
+    VkResult radv_GetDisplayPlaneCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkDisplayModeKHR mode, uint32_t planeIndex, VkDisplayPlaneCapabilitiesKHR* pCapabilities) __attribute__ ((weak));
+    VkResult radv_CreateDisplayPlaneSurfaceKHR(VkInstance instance, const VkDisplaySurfaceCreateInfoKHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkSurfaceKHR* pSurface) __attribute__ ((weak));
     void radv_DestroySurfaceKHR(VkInstance instance, VkSurfaceKHR surface, const VkAllocationCallbacks* pAllocator) __attribute__ ((weak));
     VkResult radv_GetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported) __attribute__ ((weak));
     VkResult radv_GetPhysicalDeviceSurfaceCapabilitiesKHR(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) __attribute__ ((weak));
@@ -1227,6 +1290,18 @@ static const uint16_t string_map[512] = {
     void radv_GetPhysicalDeviceExternalFenceProperties(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo, VkExternalFenceProperties* pExternalFenceProperties) __attribute__ ((weak));
           VkResult radv_GetFenceFdKHR(VkDevice device, const VkFenceGetFdInfoKHR* pGetFdInfo, int* pFd) __attribute__ ((weak));
     VkResult radv_ImportFenceFdKHR(VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo) __attribute__ ((weak));
+    VkResult radv_ReleaseDisplayEXT(VkPhysicalDevice physicalDevice, VkDisplayKHR display) __attribute__ ((weak));
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    VkResult radv_AcquireXlibDisplayEXT(VkPhysicalDevice physicalDevice, Display* dpy, VkDisplayKHR display) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    VkResult radv_GetRandROutputDisplayEXT(VkPhysicalDevice physicalDevice, Display* dpy, RROutput rrOutput, VkDisplayKHR* pDisplay) __attribute__ ((weak));
+#endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    VkResult radv_DisplayPowerControlEXT(VkDevice device, VkDisplayKHR display, const VkDisplayPowerInfoEXT* pDisplayPowerInfo) __attribute__ ((weak));
+    VkResult radv_RegisterDeviceEventEXT(VkDevice device, const VkDeviceEventInfoEXT* pDeviceEventInfo, const VkAllocationCallbacks* pAllocator, VkFence* pFence) __attribute__ ((weak));
+    VkResult radv_RegisterDisplayEventEXT(VkDevice device, VkDisplayKHR display, const VkDisplayEventInfoEXT* pDisplayEventInfo, const VkAllocationCallbacks* pAllocator, VkFence* pFence) __attribute__ ((weak));
+    VkResult radv_GetSwapchainCounterEXT(VkDevice device, VkSwapchainKHR swapchain, VkSurfaceCounterFlagBitsEXT counter, uint64_t* pCounterValue) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceSurfaceCapabilities2EXT(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface, VkSurfaceCapabilities2EXT* pSurfaceCapabilities) __attribute__ ((weak));
     VkResult radv_EnumeratePhysicalDeviceGroups(VkInstance instance, uint32_t* pPhysicalDeviceGroupCount, VkPhysicalDeviceGroupProperties* pPhysicalDeviceGroupProperties) __attribute__ ((weak));
           void radv_GetDeviceGroupPeerMemoryFeatures(VkDevice device, uint32_t heapIndex, uint32_t localDeviceIndex, uint32_t remoteDeviceIndex, VkPeerMemoryFeatureFlags* pPeerMemoryFeatures) __attribute__ ((weak));
           VkResult radv_BindBufferMemory2(VkDevice device, uint32_t bindInfoCount, const VkBindBufferMemoryInfo* pBindInfos) __attribute__ ((weak));
@@ -1244,6 +1319,10 @@ static const uint16_t string_map[512] = {
     void radv_CmdSetDiscardRectangleEXT(VkCommandBuffer commandBuffer, uint32_t firstDiscardRectangle, uint32_t discardRectangleCount, const VkRect2D* pDiscardRectangles) __attribute__ ((weak));
     VkResult radv_GetPhysicalDeviceSurfaceCapabilities2KHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, VkSurfaceCapabilities2KHR* pSurfaceCapabilities) __attribute__ ((weak));
     VkResult radv_GetPhysicalDeviceSurfaceFormats2KHR(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, uint32_t* pSurfaceFormatCount, VkSurfaceFormat2KHR* pSurfaceFormats) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayProperties2KHR* pProperties) __attribute__ ((weak));
+    VkResult radv_GetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlaneProperties2KHR* pProperties) __attribute__ ((weak));
+    VkResult radv_GetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t* pPropertyCount, VkDisplayModeProperties2KHR* pProperties) __attribute__ ((weak));
+    VkResult radv_GetDisplayPlaneCapabilities2KHR(VkPhysicalDevice physicalDevice, const VkDisplayPlaneInfo2KHR* pDisplayPlaneInfo, VkDisplayPlaneCapabilities2KHR* pCapabilities) __attribute__ ((weak));
     void radv_GetBufferMemoryRequirements2(VkDevice device, const VkBufferMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) __attribute__ ((weak));
           void radv_GetImageMemoryRequirements2(VkDevice device, const VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements) __attribute__ ((weak));
           void radv_GetImageSparseMemoryRequirements2(VkDevice device, const VkImageSparseMemoryRequirementsInfo2* pInfo, uint32_t* pSparseMemoryRequirementCount, VkSparseImageMemoryRequirements2* pSparseMemoryRequirements) __attribute__ ((weak));
@@ -1262,6 +1341,12 @@ static const uint16_t string_map[512] = {
 #endif // VK_USE_PLATFORM_ANDROID_KHR
     VkResult radv_GetShaderInfoAMD(VkDevice device, VkPipeline pipeline, VkShaderStageFlagBits shaderStage, VkShaderInfoTypeAMD infoType, size_t* pInfoSize, void* pInfo) __attribute__ ((weak));
     VkResult radv_GetMemoryHostPointerPropertiesEXT(VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType, const void* pHostPointer, VkMemoryHostPointerPropertiesEXT* pMemoryHostPointerProperties) __attribute__ ((weak));
+    VkResult radv_CreateRenderPass2KHR(VkDevice device, const VkRenderPassCreateInfo2KHR* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass) __attribute__ ((weak));
+    void radv_CmdBeginRenderPass2KHR(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo*      pRenderPassBegin, const VkSubpassBeginInfoKHR*      pSubpassBeginInfo) __attribute__ ((weak));
+    void radv_CmdNextSubpass2KHR(VkCommandBuffer commandBuffer, const VkSubpassBeginInfoKHR*      pSubpassBeginInfo, const VkSubpassEndInfoKHR*        pSubpassEndInfo) __attribute__ ((weak));
+    void radv_CmdEndRenderPass2KHR(VkCommandBuffer commandBuffer, const VkSubpassEndInfoKHR*        pSubpassEndInfo) __attribute__ ((weak));
+    void radv_CmdDrawIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
+    void radv_CmdDrawIndexedIndirectCountKHR(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount, uint32_t stride) __attribute__ ((weak));
 
   const struct radv_dispatch_table radv_layer = {
     .vkCreateInstance = radv_CreateInstance,
@@ -1394,6 +1479,8 @@ static const uint16_t string_map[512] = {
     .vkCmdPipelineBarrier = radv_CmdPipelineBarrier,
     .vkCmdBeginQuery = radv_CmdBeginQuery,
     .vkCmdEndQuery = radv_CmdEndQuery,
+    .vkCmdBeginConditionalRenderingEXT = radv_CmdBeginConditionalRenderingEXT,
+    .vkCmdEndConditionalRenderingEXT = radv_CmdEndConditionalRenderingEXT,
     .vkCmdResetQueryPool = radv_CmdResetQueryPool,
     .vkCmdWriteTimestamp = radv_CmdWriteTimestamp,
     .vkCmdCopyQueryPoolResults = radv_CmdCopyQueryPoolResults,
@@ -1402,6 +1489,13 @@ static const uint16_t string_map[512] = {
     .vkCmdNextSubpass = radv_CmdNextSubpass,
     .vkCmdEndRenderPass = radv_CmdEndRenderPass,
     .vkCmdExecuteCommands = radv_CmdExecuteCommands,
+    .vkGetPhysicalDeviceDisplayPropertiesKHR = radv_GetPhysicalDeviceDisplayPropertiesKHR,
+    .vkGetPhysicalDeviceDisplayPlanePropertiesKHR = radv_GetPhysicalDeviceDisplayPlanePropertiesKHR,
+    .vkGetDisplayPlaneSupportedDisplaysKHR = radv_GetDisplayPlaneSupportedDisplaysKHR,
+    .vkGetDisplayModePropertiesKHR = radv_GetDisplayModePropertiesKHR,
+    .vkCreateDisplayModeKHR = radv_CreateDisplayModeKHR,
+    .vkGetDisplayPlaneCapabilitiesKHR = radv_GetDisplayPlaneCapabilitiesKHR,
+    .vkCreateDisplayPlaneSurfaceKHR = radv_CreateDisplayPlaneSurfaceKHR,
     .vkDestroySurfaceKHR = radv_DestroySurfaceKHR,
     .vkGetPhysicalDeviceSurfaceSupportKHR = radv_GetPhysicalDeviceSurfaceSupportKHR,
     .vkGetPhysicalDeviceSurfaceCapabilitiesKHR = radv_GetPhysicalDeviceSurfaceCapabilitiesKHR,
@@ -1464,6 +1558,18 @@ static const uint16_t string_map[512] = {
     .vkGetPhysicalDeviceExternalFencePropertiesKHR = radv_GetPhysicalDeviceExternalFenceProperties,
     .vkGetFenceFdKHR = radv_GetFenceFdKHR,
     .vkImportFenceFdKHR = radv_ImportFenceFdKHR,
+    .vkReleaseDisplayEXT = radv_ReleaseDisplayEXT,
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    .vkAcquireXlibDisplayEXT = radv_AcquireXlibDisplayEXT,
+#endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    .vkGetRandROutputDisplayEXT = radv_GetRandROutputDisplayEXT,
+#endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    .vkDisplayPowerControlEXT = radv_DisplayPowerControlEXT,
+    .vkRegisterDeviceEventEXT = radv_RegisterDeviceEventEXT,
+    .vkRegisterDisplayEventEXT = radv_RegisterDisplayEventEXT,
+    .vkGetSwapchainCounterEXT = radv_GetSwapchainCounterEXT,
+    .vkGetPhysicalDeviceSurfaceCapabilities2EXT = radv_GetPhysicalDeviceSurfaceCapabilities2EXT,
     .vkEnumeratePhysicalDeviceGroups = radv_EnumeratePhysicalDeviceGroups,
     .vkEnumeratePhysicalDeviceGroupsKHR = radv_EnumeratePhysicalDeviceGroups,
     .vkGetDeviceGroupPeerMemoryFeatures = radv_GetDeviceGroupPeerMemoryFeatures,
@@ -1490,6 +1596,10 @@ static const uint16_t string_map[512] = {
     .vkCmdSetDiscardRectangleEXT = radv_CmdSetDiscardRectangleEXT,
     .vkGetPhysicalDeviceSurfaceCapabilities2KHR = radv_GetPhysicalDeviceSurfaceCapabilities2KHR,
     .vkGetPhysicalDeviceSurfaceFormats2KHR = radv_GetPhysicalDeviceSurfaceFormats2KHR,
+    .vkGetPhysicalDeviceDisplayProperties2KHR = radv_GetPhysicalDeviceDisplayProperties2KHR,
+    .vkGetPhysicalDeviceDisplayPlaneProperties2KHR = radv_GetPhysicalDeviceDisplayPlaneProperties2KHR,
+    .vkGetDisplayModeProperties2KHR = radv_GetDisplayModeProperties2KHR,
+    .vkGetDisplayPlaneCapabilities2KHR = radv_GetDisplayPlaneCapabilities2KHR,
     .vkGetBufferMemoryRequirements2 = radv_GetBufferMemoryRequirements2,
     .vkGetBufferMemoryRequirements2KHR = radv_GetBufferMemoryRequirements2,
     .vkGetImageMemoryRequirements2 = radv_GetImageMemoryRequirements2,
@@ -1512,6 +1622,12 @@ static const uint16_t string_map[512] = {
 #endif // VK_USE_PLATFORM_ANDROID_KHR
     .vkGetShaderInfoAMD = radv_GetShaderInfoAMD,
     .vkGetMemoryHostPointerPropertiesEXT = radv_GetMemoryHostPointerPropertiesEXT,
+    .vkCreateRenderPass2KHR = radv_CreateRenderPass2KHR,
+    .vkCmdBeginRenderPass2KHR = radv_CmdBeginRenderPass2KHR,
+    .vkCmdNextSubpass2KHR = radv_CmdNextSubpass2KHR,
+    .vkCmdEndRenderPass2KHR = radv_CmdEndRenderPass2KHR,
+    .vkCmdDrawIndirectCountKHR = radv_CmdDrawIndirectCountKHR,
+    .vkCmdDrawIndexedIndirectCountKHR = radv_CmdDrawIndexedIndirectCountKHR,
   };
 
 static void * __attribute__ ((noinline))
@@ -1812,9 +1928,11 @@ radv_entrypoint_is_enabled(int index, uint32_t core_version,
    case 129:
       return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
    case 130:
-      return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
+      if (instance && (!device || device->EXT_conditional_rendering)) return true;
+      return false;
    case 131:
-      return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
+      if (instance && (!device || device->EXT_conditional_rendering)) return true;
+      return false;
    case 132:
       return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
    case 133:
@@ -1828,297 +1946,391 @@ radv_entrypoint_is_enabled(int index, uint32_t core_version,
    case 137:
       return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
    case 138:
-      if (device) return false;
-      if (instance && instance->KHR_surface) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
    case 139:
-      if (device) return false;
-      if (instance && instance->KHR_surface) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 0, 0) <= core_version;
    case 140:
       if (device) return false;
-      if (instance && instance->KHR_surface) return true;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 141:
       if (device) return false;
-      if (instance && instance->KHR_surface) return true;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 142:
       if (device) return false;
-      if (instance && instance->KHR_surface) return true;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 143:
-      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 144:
-      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 145:
-      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 146:
-      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_display) return true;
       return false;
    case 147:
-      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_surface) return true;
       return false;
    case 148:
       if (device) return false;
-      if (instance && instance->KHR_wayland_surface) return true;
+      if (instance && instance->KHR_surface) return true;
       return false;
    case 149:
       if (device) return false;
-      if (instance && instance->KHR_wayland_surface) return true;
+      if (instance && instance->KHR_surface) return true;
       return false;
    case 150:
       if (device) return false;
-      if (instance && instance->KHR_xlib_surface) return true;
+      if (instance && instance->KHR_surface) return true;
       return false;
    case 151:
       if (device) return false;
-      if (instance && instance->KHR_xlib_surface) return true;
+      if (instance && instance->KHR_surface) return true;
       return false;
    case 152:
-      if (device) return false;
-      if (instance && instance->KHR_xcb_surface) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
       return false;
    case 153:
-      if (device) return false;
-      if (instance && instance->KHR_xcb_surface) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
       return false;
    case 154:
-      if (device) return false;
-      if (instance && instance->EXT_debug_report) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
       return false;
    case 155:
-      if (device) return false;
-      if (instance && instance->EXT_debug_report) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
       return false;
    case 156:
-      if (device) return false;
-      if (instance && instance->EXT_debug_report) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
       return false;
    case 157:
-      if (instance && (!device || device->AMD_draw_indirect_count)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_wayland_surface) return true;
       return false;
    case 158:
-      if (instance && (!device || device->AMD_draw_indirect_count)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_wayland_surface) return true;
       return false;
    case 159:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->KHR_xlib_surface) return true;
+      return false;
    case 160:
       if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      if (instance && instance->KHR_xlib_surface) return true;
       return false;
    case 161:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->KHR_xcb_surface) return true;
+      return false;
    case 162:
       if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      if (instance && instance->KHR_xcb_surface) return true;
       return false;
    case 163:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->EXT_debug_report) return true;
+      return false;
    case 164:
       if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      if (instance && instance->EXT_debug_report) return true;
       return false;
    case 165:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->EXT_debug_report) return true;
+      return false;
    case 166:
-      if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      if (instance && (!device || device->AMD_draw_indirect_count)) return true;
       return false;
    case 167:
-      if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && (!device || device->AMD_draw_indirect_count)) return true;
+      return false;
    case 168:
       if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 169:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      return false;
    case 170:
       if (device) return false;
-      if (instance && instance->KHR_get_physical_device_properties2) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 171:
       if (device) return false;
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
+      return false;
    case 172:
+      if (device) return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 173:
       if (device) return false;
       if (instance && instance->KHR_get_physical_device_properties2) return true;
       return false;
-   case 173:
-      if (instance && (!device || device->KHR_push_descriptor)) return true;
-      return false;
    case 174:
+      if (device) return false;
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 175:
-      if (instance && (!device || device->KHR_maintenance1)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
       return false;
    case 176:
       if (device) return false;
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 177:
       if (device) return false;
-      if (instance && instance->KHR_external_memory_capabilities) return true;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
       return false;
    case 178:
-      if (instance && (!device || device->KHR_external_memory_fd)) return true;
-      return false;
+      if (device) return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 179:
-      if (instance && (!device || device->KHR_external_memory_fd)) return true;
+      if (device) return false;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
       return false;
    case 180:
       if (device) return false;
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 181:
       if (device) return false;
-      if (instance && instance->KHR_external_semaphore_capabilities) return true;
+      if (instance && instance->KHR_get_physical_device_properties2) return true;
       return false;
    case 182:
-      if (instance && (!device || device->KHR_external_semaphore_fd)) return true;
+      if (instance && (!device || device->KHR_push_descriptor)) return true;
       return false;
    case 183:
-      if (instance && (!device || device->KHR_external_semaphore_fd)) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 184:
+      if (instance && (!device || device->KHR_maintenance1)) return true;
+      return false;
+   case 185:
       if (device) return false;
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 185:
+   case 186:
+      if (device) return false;
+      if (instance && instance->KHR_external_memory_capabilities) return true;
+      return false;
+   case 187:
+      if (instance && (!device || device->KHR_external_memory_fd)) return true;
+      return false;
+   case 188:
+      if (instance && (!device || device->KHR_external_memory_fd)) return true;
+      return false;
+   case 189:
+      if (device) return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 190:
+      if (device) return false;
+      if (instance && instance->KHR_external_semaphore_capabilities) return true;
+      return false;
+   case 191:
+      if (instance && (!device || device->KHR_external_semaphore_fd)) return true;
+      return false;
+   case 192:
+      if (instance && (!device || device->KHR_external_semaphore_fd)) return true;
+      return false;
+   case 193:
+      if (device) return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 194:
       if (device) return false;
       if (instance && instance->KHR_external_fence_capabilities) return true;
       return false;
-   case 186:
+   case 195:
       if (instance && (!device || device->KHR_external_fence_fd)) return true;
       return false;
-   case 187:
+   case 196:
       if (instance && (!device || device->KHR_external_fence_fd)) return true;
       return false;
-   case 188:
+   case 197:
+      if (device) return false;
+      if (instance && instance->EXT_direct_mode_display) return true;
+      return false;
+   case 198:
+      if (device) return false;
+      if (instance && instance->EXT_acquire_xlib_display) return true;
+      return false;
+   case 199:
+      if (device) return false;
+      if (instance && instance->EXT_acquire_xlib_display) return true;
+      return false;
+   case 200:
+      if (instance && (!device || device->EXT_display_control)) return true;
+      return false;
+   case 201:
+      if (instance && (!device || device->EXT_display_control)) return true;
+      return false;
+   case 202:
+      if (instance && (!device || device->EXT_display_control)) return true;
+      return false;
+   case 203:
+      if (instance && (!device || device->EXT_display_control)) return true;
+      return false;
+   case 204:
+      if (device) return false;
+      if (instance && instance->EXT_display_surface_counter) return true;
+      return false;
+   case 205:
       if (device) return false;
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 189:
+   case 206:
       if (device) return false;
       if (instance && instance->KHR_device_group_creation) return true;
       return false;
-   case 190:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 191:
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 192:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 193:
-      if (instance && (!device || device->KHR_bind_memory2)) return true;
-      return false;
-   case 194:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 195:
-      if (instance && (!device || device->KHR_bind_memory2)) return true;
-      return false;
-   case 196:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 197:
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 198:
-      if (instance && (!device || device->KHR_swapchain)) return true;
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 199:
-      if (instance && (!device || device->KHR_swapchain)) return true;
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 200:
-      if (instance && (!device || device->KHR_swapchain)) return true;
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 201:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 202:
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 203:
-      if (device) return false;
-      if (instance && (!device || device->KHR_swapchain)) return true;
-      if (instance && (!device || device->KHR_device_group)) return true;
-      return false;
-   case 204:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 205:
-      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
-      return false;
-   case 206:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 207:
-      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
-      return false;
-   case 208:
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
-   case 209:
-      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
+   case 208:
+      if (instance && (!device || device->KHR_device_group)) return true;
       return false;
+   case 209:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 210:
-      if (instance && (!device || device->KHR_push_descriptor)) return true;
-      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
+      if (instance && (!device || device->KHR_bind_memory2)) return true;
       return false;
    case 211:
-      if (instance && (!device || device->EXT_discard_rectangles)) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 212:
-      if (device) return false;
-      if (instance && instance->KHR_get_surface_capabilities2) return true;
+      if (instance && (!device || device->KHR_bind_memory2)) return true;
       return false;
    case 213:
-      if (device) return false;
-      if (instance && instance->KHR_get_surface_capabilities2) return true;
-      return false;
-   case 214:
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 214:
+      if (instance && (!device || device->KHR_device_group)) return true;
+      return false;
    case 215:
-      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (instance && (!device || device->KHR_device_group)) return true;
       return false;
    case 216:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (instance && (!device || device->KHR_device_group)) return true;
+      return false;
    case 217:
-      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (instance && (!device || device->KHR_device_group)) return true;
       return false;
    case 218:
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 219:
-      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      if (instance && (!device || device->KHR_device_group)) return true;
       return false;
    case 220:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (device) return false;
+      if (instance && (!device || device->KHR_swapchain)) return true;
+      if (instance && (!device || device->KHR_device_group)) return true;
+      return false;
    case 221:
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 222:
-      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
+      return false;
    case 223:
       return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 224:
-      if (instance && (!device || device->KHR_maintenance3)) return true;
+      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
       return false;
    case 225:
-      if (instance && (!device || device->ANDROID_native_buffer)) return true;
-      return false;
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
    case 226:
-      if (instance && (!device || device->ANDROID_native_buffer)) return true;
+      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
       return false;
    case 227:
-      if (instance && (!device || device->ANDROID_native_buffer)) return true;
+      if (instance && (!device || device->KHR_push_descriptor)) return true;
+      if (instance && (!device || device->KHR_descriptor_update_template)) return true;
       return false;
    case 228:
-      if (instance && (!device || device->AMD_shader_info)) return true;
+      if (instance && (!device || device->EXT_discard_rectangles)) return true;
       return false;
    case 229:
+      if (device) return false;
+      if (instance && instance->KHR_get_surface_capabilities2) return true;
+      return false;
+   case 230:
+      if (device) return false;
+      if (instance && instance->KHR_get_surface_capabilities2) return true;
+      return false;
+   case 231:
+      if (device) return false;
+      if (instance && instance->KHR_get_display_properties2) return true;
+      return false;
+   case 232:
+      if (device) return false;
+      if (instance && instance->KHR_get_display_properties2) return true;
+      return false;
+   case 233:
+      if (device) return false;
+      if (instance && instance->KHR_get_display_properties2) return true;
+      return false;
+   case 234:
+      if (device) return false;
+      if (instance && instance->KHR_get_display_properties2) return true;
+      return false;
+   case 235:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 236:
+      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      return false;
+   case 237:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 238:
+      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      return false;
+   case 239:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 240:
+      if (instance && (!device || device->KHR_get_memory_requirements2)) return true;
+      return false;
+   case 241:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 242:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 243:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 244:
+      return instance && VK_MAKE_VERSION(1, 1, 0) <= core_version;
+   case 245:
+      if (instance && (!device || device->KHR_maintenance3)) return true;
+      return false;
+   case 246:
+      if (instance && (!device || device->ANDROID_native_buffer)) return true;
+      return false;
+   case 247:
+      if (instance && (!device || device->ANDROID_native_buffer)) return true;
+      return false;
+   case 248:
+      if (instance && (!device || device->ANDROID_native_buffer)) return true;
+      return false;
+   case 249:
+      if (instance && (!device || device->AMD_shader_info)) return true;
+      return false;
+   case 250:
       if (instance && (!device || device->EXT_external_memory_host)) return true;
+      return false;
+   case 251:
+      if (instance && (!device || device->KHR_create_renderpass2)) return true;
+      return false;
+   case 252:
+      if (instance && (!device || device->KHR_create_renderpass2)) return true;
+      return false;
+   case 253:
+      if (instance && (!device || device->KHR_create_renderpass2)) return true;
+      return false;
+   case 254:
+      if (instance && (!device || device->KHR_create_renderpass2)) return true;
+      return false;
+   case 255:
+      if (instance && (!device || device->KHR_draw_indirect_count)) return true;
+      return false;
+   case 256:
+      if (instance && (!device || device->KHR_draw_indirect_count)) return true;
       return false;
    default:
       return false;

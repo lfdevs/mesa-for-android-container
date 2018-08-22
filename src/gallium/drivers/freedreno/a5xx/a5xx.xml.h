@@ -8,15 +8,17 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    431 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  37162 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13612 bytes, from 2017-12-19 18:19:46)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  34499 bytes, from 2018-01-03 15:58:51)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2017-12-19 18:19:46)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 146261 bytes, from 2018-01-03 15:58:51)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2017-05-17 13:21:27)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-01-31 18:26:32)
+- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  36805 bytes, from 2018-05-20 19:03:35)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13634 bytes, from 2018-06-10 17:35:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  41584 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-01-10 16:21:40)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 147158 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx.xml          (  88437 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-06-10 17:37:04)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-01-08 14:56:24)
 
 Copyright (C) 2013-2018 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -2381,11 +2383,11 @@ static inline uint32_t A5XX_VSC_RESOLVE_CNTL_Y(uint32_t val)
 
 #define REG_A5XX_VBIF_PERF_CNT_CLR0				0x000030c8
 
-#define REG_A5XX_VBIF_PERF_CNT_CLR1				0x000030c8
+#define REG_A5XX_VBIF_PERF_CNT_CLR1				0x000030c9
 
-#define REG_A5XX_VBIF_PERF_CNT_CLR2				0x000030c8
+#define REG_A5XX_VBIF_PERF_CNT_CLR2				0x000030ca
 
-#define REG_A5XX_VBIF_PERF_CNT_CLR3				0x000030c8
+#define REG_A5XX_VBIF_PERF_CNT_CLR3				0x000030cb
 
 #define REG_A5XX_VBIF_PERF_CNT_SEL0				0x000030d0
 
@@ -3000,7 +3002,9 @@ static inline uint32_t A5XX_RB_DEST_MSAA_CNTL_SAMPLES(enum a3xx_msaa_samples val
 #define A5XX_RB_RENDER_CONTROL0_WCOORD				0x00000200
 
 #define REG_A5XX_RB_RENDER_CONTROL1				0x0000e145
+#define A5XX_RB_RENDER_CONTROL1_SAMPLEMASK			0x00000001
 #define A5XX_RB_RENDER_CONTROL1_FACENESS			0x00000002
+#define A5XX_RB_RENDER_CONTROL1_SAMPLEID			0x00000004
 
 #define REG_A5XX_RB_FS_OUTPUT_CNTL				0x0000e146
 #define A5XX_RB_FS_OUTPUT_CNTL_MRT__MASK			0x0000000f
@@ -3296,6 +3300,7 @@ static inline uint32_t A5XX_RB_BLEND_CNTL_ENABLE_BLEND(uint32_t val)
 	return ((val) << A5XX_RB_BLEND_CNTL_ENABLE_BLEND__SHIFT) & A5XX_RB_BLEND_CNTL_ENABLE_BLEND__MASK;
 }
 #define A5XX_RB_BLEND_CNTL_INDEPENDENT_BLEND			0x00000100
+#define A5XX_RB_BLEND_CNTL_ALPHA_TO_COVERAGE			0x00000400
 #define A5XX_RB_BLEND_CNTL_SAMPLE_MASK__MASK			0xffff0000
 #define A5XX_RB_BLEND_CNTL_SAMPLE_MASK__SHIFT			16
 static inline uint32_t A5XX_RB_BLEND_CNTL_SAMPLE_MASK(uint32_t val)
@@ -3557,6 +3562,7 @@ static inline uint32_t A5XX_RB_BLIT_DST_ARRAY_PITCH(uint32_t val)
 
 #define REG_A5XX_RB_CLEAR_CNTL					0x0000e21c
 #define A5XX_RB_CLEAR_CNTL_FAST_CLEAR				0x00000002
+#define A5XX_RB_CLEAR_CNTL_MSAA_RESOLVE				0x00000004
 #define A5XX_RB_CLEAR_CNTL_MASK__MASK				0x000000f0
 #define A5XX_RB_CLEAR_CNTL_MASK__SHIFT				4
 static inline uint32_t A5XX_RB_CLEAR_CNTL_MASK(uint32_t val)
@@ -4147,6 +4153,7 @@ static inline uint32_t A5XX_SP_FS_CTRL_REG0_BRANCHSTACK(uint32_t val)
 #define REG_A5XX_SP_BLEND_CNTL					0x0000e5c9
 #define A5XX_SP_BLEND_CNTL_ENABLED				0x00000001
 #define A5XX_SP_BLEND_CNTL_UNK8					0x00000100
+#define A5XX_SP_BLEND_CNTL_ALPHA_TO_COVERAGE			0x00000400
 
 #define REG_A5XX_SP_FS_OUTPUT_CNTL				0x0000e5ca
 #define A5XX_SP_FS_OUTPUT_CNTL_MRT__MASK			0x0000000f
@@ -4228,7 +4235,33 @@ static inline uint32_t A5XX_SP_CS_CTRL_REG0_BRANCHSTACK(uint32_t val)
 
 #define REG_A5XX_SP_CS_OBJ_START_HI				0x0000e5f4
 
-#define REG_A5XX_UNKNOWN_E600					0x0000e600
+#define REG_A5XX_SP_HS_CTRL_REG0				0x0000e600
+#define A5XX_SP_HS_CTRL_REG0_THREADSIZE__MASK			0x00000008
+#define A5XX_SP_HS_CTRL_REG0_THREADSIZE__SHIFT			3
+static inline uint32_t A5XX_SP_HS_CTRL_REG0_THREADSIZE(enum a3xx_threadsize val)
+{
+	return ((val) << A5XX_SP_HS_CTRL_REG0_THREADSIZE__SHIFT) & A5XX_SP_HS_CTRL_REG0_THREADSIZE__MASK;
+}
+#define A5XX_SP_HS_CTRL_REG0_HALFREGFOOTPRINT__MASK		0x000003f0
+#define A5XX_SP_HS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT		4
+static inline uint32_t A5XX_SP_HS_CTRL_REG0_HALFREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_HS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT) & A5XX_SP_HS_CTRL_REG0_HALFREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_HS_CTRL_REG0_FULLREGFOOTPRINT__MASK		0x0000fc00
+#define A5XX_SP_HS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT		10
+static inline uint32_t A5XX_SP_HS_CTRL_REG0_FULLREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_HS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT) & A5XX_SP_HS_CTRL_REG0_FULLREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_HS_CTRL_REG0_VARYING				0x00010000
+#define A5XX_SP_HS_CTRL_REG0_PIXLODENABLE			0x00100000
+#define A5XX_SP_HS_CTRL_REG0_BRANCHSTACK__MASK			0xfe000000
+#define A5XX_SP_HS_CTRL_REG0_BRANCHSTACK__SHIFT			25
+static inline uint32_t A5XX_SP_HS_CTRL_REG0_BRANCHSTACK(uint32_t val)
+{
+	return ((val) << A5XX_SP_HS_CTRL_REG0_BRANCHSTACK__SHIFT) & A5XX_SP_HS_CTRL_REG0_BRANCHSTACK__MASK;
+}
 
 #define REG_A5XX_UNKNOWN_E602					0x0000e602
 
@@ -4236,13 +4269,67 @@ static inline uint32_t A5XX_SP_CS_CTRL_REG0_BRANCHSTACK(uint32_t val)
 
 #define REG_A5XX_SP_HS_OBJ_START_HI				0x0000e604
 
+#define REG_A5XX_SP_DS_CTRL_REG0				0x0000e610
+#define A5XX_SP_DS_CTRL_REG0_THREADSIZE__MASK			0x00000008
+#define A5XX_SP_DS_CTRL_REG0_THREADSIZE__SHIFT			3
+static inline uint32_t A5XX_SP_DS_CTRL_REG0_THREADSIZE(enum a3xx_threadsize val)
+{
+	return ((val) << A5XX_SP_DS_CTRL_REG0_THREADSIZE__SHIFT) & A5XX_SP_DS_CTRL_REG0_THREADSIZE__MASK;
+}
+#define A5XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT__MASK		0x000003f0
+#define A5XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT		4
+static inline uint32_t A5XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT) & A5XX_SP_DS_CTRL_REG0_HALFREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT__MASK		0x0000fc00
+#define A5XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT		10
+static inline uint32_t A5XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT) & A5XX_SP_DS_CTRL_REG0_FULLREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_DS_CTRL_REG0_VARYING				0x00010000
+#define A5XX_SP_DS_CTRL_REG0_PIXLODENABLE			0x00100000
+#define A5XX_SP_DS_CTRL_REG0_BRANCHSTACK__MASK			0xfe000000
+#define A5XX_SP_DS_CTRL_REG0_BRANCHSTACK__SHIFT			25
+static inline uint32_t A5XX_SP_DS_CTRL_REG0_BRANCHSTACK(uint32_t val)
+{
+	return ((val) << A5XX_SP_DS_CTRL_REG0_BRANCHSTACK__SHIFT) & A5XX_SP_DS_CTRL_REG0_BRANCHSTACK__MASK;
+}
+
 #define REG_A5XX_UNKNOWN_E62B					0x0000e62b
 
 #define REG_A5XX_SP_DS_OBJ_START_LO				0x0000e62c
 
 #define REG_A5XX_SP_DS_OBJ_START_HI				0x0000e62d
 
-#define REG_A5XX_UNKNOWN_E640					0x0000e640
+#define REG_A5XX_SP_GS_CTRL_REG0				0x0000e640
+#define A5XX_SP_GS_CTRL_REG0_THREADSIZE__MASK			0x00000008
+#define A5XX_SP_GS_CTRL_REG0_THREADSIZE__SHIFT			3
+static inline uint32_t A5XX_SP_GS_CTRL_REG0_THREADSIZE(enum a3xx_threadsize val)
+{
+	return ((val) << A5XX_SP_GS_CTRL_REG0_THREADSIZE__SHIFT) & A5XX_SP_GS_CTRL_REG0_THREADSIZE__MASK;
+}
+#define A5XX_SP_GS_CTRL_REG0_HALFREGFOOTPRINT__MASK		0x000003f0
+#define A5XX_SP_GS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT		4
+static inline uint32_t A5XX_SP_GS_CTRL_REG0_HALFREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_GS_CTRL_REG0_HALFREGFOOTPRINT__SHIFT) & A5XX_SP_GS_CTRL_REG0_HALFREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_GS_CTRL_REG0_FULLREGFOOTPRINT__MASK		0x0000fc00
+#define A5XX_SP_GS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT		10
+static inline uint32_t A5XX_SP_GS_CTRL_REG0_FULLREGFOOTPRINT(uint32_t val)
+{
+	return ((val) << A5XX_SP_GS_CTRL_REG0_FULLREGFOOTPRINT__SHIFT) & A5XX_SP_GS_CTRL_REG0_FULLREGFOOTPRINT__MASK;
+}
+#define A5XX_SP_GS_CTRL_REG0_VARYING				0x00010000
+#define A5XX_SP_GS_CTRL_REG0_PIXLODENABLE			0x00100000
+#define A5XX_SP_GS_CTRL_REG0_BRANCHSTACK__MASK			0xfe000000
+#define A5XX_SP_GS_CTRL_REG0_BRANCHSTACK__SHIFT			25
+static inline uint32_t A5XX_SP_GS_CTRL_REG0_BRANCHSTACK(uint32_t val)
+{
+	return ((val) << A5XX_SP_GS_CTRL_REG0_BRANCHSTACK__SHIFT) & A5XX_SP_GS_CTRL_REG0_BRANCHSTACK__MASK;
+}
 
 #define REG_A5XX_UNKNOWN_E65B					0x0000e65b
 
@@ -4361,6 +4448,18 @@ static inline uint32_t A5XX_HLSQ_CONTROL_1_REG_PRIMALLOCTHRESHOLD(uint32_t val)
 static inline uint32_t A5XX_HLSQ_CONTROL_2_REG_FACEREGID(uint32_t val)
 {
 	return ((val) << A5XX_HLSQ_CONTROL_2_REG_FACEREGID__SHIFT) & A5XX_HLSQ_CONTROL_2_REG_FACEREGID__MASK;
+}
+#define A5XX_HLSQ_CONTROL_2_REG_SAMPLEID__MASK			0x0000ff00
+#define A5XX_HLSQ_CONTROL_2_REG_SAMPLEID__SHIFT			8
+static inline uint32_t A5XX_HLSQ_CONTROL_2_REG_SAMPLEID(uint32_t val)
+{
+	return ((val) << A5XX_HLSQ_CONTROL_2_REG_SAMPLEID__SHIFT) & A5XX_HLSQ_CONTROL_2_REG_SAMPLEID__MASK;
+}
+#define A5XX_HLSQ_CONTROL_2_REG_SAMPLEMASK__MASK		0x00ff0000
+#define A5XX_HLSQ_CONTROL_2_REG_SAMPLEMASK__SHIFT		16
+static inline uint32_t A5XX_HLSQ_CONTROL_2_REG_SAMPLEMASK(uint32_t val)
+{
+	return ((val) << A5XX_HLSQ_CONTROL_2_REG_SAMPLEMASK__SHIFT) & A5XX_HLSQ_CONTROL_2_REG_SAMPLEMASK__MASK;
 }
 
 #define REG_A5XX_HLSQ_CONTROL_3_REG				0x0000e787
@@ -4564,34 +4663,52 @@ static inline uint32_t A5XX_HLSQ_CS_NDRANGE_0_LOCALSIZEZ(uint32_t val)
 }
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_1				0x0000e7b1
-#define A5XX_HLSQ_CS_NDRANGE_1_SIZE_X__MASK			0xffffffff
-#define A5XX_HLSQ_CS_NDRANGE_1_SIZE_X__SHIFT			0
-static inline uint32_t A5XX_HLSQ_CS_NDRANGE_1_SIZE_X(uint32_t val)
+#define A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X(uint32_t val)
 {
-	return ((val) << A5XX_HLSQ_CS_NDRANGE_1_SIZE_X__SHIFT) & A5XX_HLSQ_CS_NDRANGE_1_SIZE_X__MASK;
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X__SHIFT) & A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X__MASK;
 }
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_2				0x0000e7b2
+#define A5XX_HLSQ_CS_NDRANGE_2_GLOBALOFF_X__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_2_GLOBALOFF_X__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_2_GLOBALOFF_X(uint32_t val)
+{
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_2_GLOBALOFF_X__SHIFT) & A5XX_HLSQ_CS_NDRANGE_2_GLOBALOFF_X__MASK;
+}
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_3				0x0000e7b3
-#define A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y__MASK			0xffffffff
-#define A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y__SHIFT			0
-static inline uint32_t A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y(uint32_t val)
+#define A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y(uint32_t val)
 {
-	return ((val) << A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y__SHIFT) & A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y__MASK;
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y__SHIFT) & A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y__MASK;
 }
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_4				0x0000e7b4
+#define A5XX_HLSQ_CS_NDRANGE_4_GLOBALOFF_Y__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_4_GLOBALOFF_Y__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_4_GLOBALOFF_Y(uint32_t val)
+{
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_4_GLOBALOFF_Y__SHIFT) & A5XX_HLSQ_CS_NDRANGE_4_GLOBALOFF_Y__MASK;
+}
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_5				0x0000e7b5
-#define A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z__MASK			0xffffffff
-#define A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z__SHIFT			0
-static inline uint32_t A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z(uint32_t val)
+#define A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z(uint32_t val)
 {
-	return ((val) << A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z__SHIFT) & A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z__MASK;
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z__SHIFT) & A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z__MASK;
 }
 
 #define REG_A5XX_HLSQ_CS_NDRANGE_6				0x0000e7b6
+#define A5XX_HLSQ_CS_NDRANGE_6_GLOBALOFF_Z__MASK		0xffffffff
+#define A5XX_HLSQ_CS_NDRANGE_6_GLOBALOFF_Z__SHIFT		0
+static inline uint32_t A5XX_HLSQ_CS_NDRANGE_6_GLOBALOFF_Z(uint32_t val)
+{
+	return ((val) << A5XX_HLSQ_CS_NDRANGE_6_GLOBALOFF_Z__SHIFT) & A5XX_HLSQ_CS_NDRANGE_6_GLOBALOFF_Z__MASK;
+}
 
 #define REG_A5XX_HLSQ_CS_CNTL_0					0x0000e7b7
 #define A5XX_HLSQ_CS_CNTL_0_WGIDCONSTID__MASK			0x000000ff
@@ -4922,6 +5039,12 @@ static inline uint32_t A5XX_TEX_CONST_0_SWIZ_W(enum a5xx_tex_swiz val)
 static inline uint32_t A5XX_TEX_CONST_0_MIPLVLS(uint32_t val)
 {
 	return ((val) << A5XX_TEX_CONST_0_MIPLVLS__SHIFT) & A5XX_TEX_CONST_0_MIPLVLS__MASK;
+}
+#define A5XX_TEX_CONST_0_SAMPLES__MASK				0x00300000
+#define A5XX_TEX_CONST_0_SAMPLES__SHIFT				20
+static inline uint32_t A5XX_TEX_CONST_0_SAMPLES(enum a3xx_msaa_samples val)
+{
+	return ((val) << A5XX_TEX_CONST_0_SAMPLES__SHIFT) & A5XX_TEX_CONST_0_SAMPLES__MASK;
 }
 #define A5XX_TEX_CONST_0_FMT__MASK				0x3fc00000
 #define A5XX_TEX_CONST_0_FMT__SHIFT				22

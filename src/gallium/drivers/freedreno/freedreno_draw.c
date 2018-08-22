@@ -170,9 +170,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 		buffers |= PIPE_CLEAR_COLOR0 << i;
 
-		if (surf->nr_samples > 1)
-			batch->gmem_reason |= FD_GMEM_MSAA_ENABLED;
-
 		if (fd_blend_enabled(ctx, i))
 			batch->gmem_reason |= FD_GMEM_BLEND_ENABLED;
 	}

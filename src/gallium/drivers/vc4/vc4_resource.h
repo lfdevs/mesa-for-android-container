@@ -32,9 +32,6 @@
 struct vc4_transfer {
         struct pipe_transfer base;
         void *map;
-
-        struct pipe_resource *ss_resource;
-        struct pipe_box ss_box;
 };
 
 struct vc4_resource_slice {

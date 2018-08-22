@@ -27,8 +27,8 @@
 #define USE_TRACE 0
 #define WIDTH 300
 #define HEIGHT 300
-#define NEAR 30
-#define FAR 1000
+#define NEAR 0
+#define FAR 1
 #define FLIP 0
 
 /* pipe_*_state structs */
@@ -171,7 +171,7 @@ static void init_prog(struct program *p)
 	{
 		float x = 0;
 		float y = 0;
-		float z = FAR;
+		float z = NEAR;
 		float half_width = (float)WIDTH / 2.0f;
 		float half_height = (float)HEIGHT / 2.0f;
 		float half_depth = ((float)FAR - (float)NEAR) / 2.0f;

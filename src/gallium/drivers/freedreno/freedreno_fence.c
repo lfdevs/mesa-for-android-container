@@ -41,7 +41,7 @@ struct pipe_fence_handle {
 	 * fence_fd become valid and the week reference is dropped.
 	 */
 	struct fd_batch *batch;
-	struct fd_context *ctx;
+	struct fd_pipe *pipe;
 	struct fd_screen *screen;
 	int fence_fd;
 	uint32_t timestamp;
@@ -68,6 +68,7 @@ static void fd_fence_destroy(struct pipe_fence_handle *fence)
 {
 	if (fence->fence_fd != -1)
 		close(fence->fence_fd);
+	fd_pipe_del(fence->pipe);
 	FREE(fence);
 }
 
@@ -93,7 +94,7 @@ boolean fd_fence_finish(struct pipe_screen *pscreen,
 		return ret == 0;
 	}
 
-	if (fd_pipe_wait_timeout(fence->ctx->pipe, fence->timestamp, timeout))
+	if (fd_pipe_wait_timeout(fence->pipe, fence->timestamp, timeout))
 		return false;
 
 	return true;
@@ -111,7 +112,7 @@ static struct pipe_fence_handle * fence_create(struct fd_context *ctx,
 	pipe_reference_init(&fence->reference, 1);
 
 	fence->batch = batch;
-	fence->ctx = ctx;
+	fence->pipe = fd_pipe_ref(ctx->pipe);
 	fence->screen = ctx->screen;
 	fence->timestamp = timestamp;
 	fence->fence_fd = fence_fd;

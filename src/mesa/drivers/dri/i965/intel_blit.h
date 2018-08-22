@@ -61,11 +61,5 @@ intelEmitImmediateColorExpandBlit(struct brw_context *brw,
 				  GLshort x, GLshort y,
 				  GLshort w, GLshort h,
 				  enum gl_logicop_mode logic_op);
-void intel_emit_linear_blit(struct brw_context *brw,
-			    struct brw_bo *dst_bo,
-			    unsigned int dst_offset,
-			    struct brw_bo *src_bo,
-			    unsigned int src_offset,
-			    unsigned int size);
 
 #endif

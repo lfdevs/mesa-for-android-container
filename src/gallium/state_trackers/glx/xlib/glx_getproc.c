@@ -43,7 +43,7 @@ struct name_address_pair {
 };
 
 
-static struct name_address_pair GLX_functions[] = {
+static const struct name_address_pair GLX_functions[] = {
    /*** GLX_VERSION_1_0 ***/
    { "glXChooseVisual", (__GLXextFuncPtr) glXChooseVisual },
    { "glXCopyContext", (__GLXextFuncPtr) glXCopyContext },

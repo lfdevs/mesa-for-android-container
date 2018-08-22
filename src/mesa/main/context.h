@@ -233,6 +233,22 @@ do {								\
 } while (0)
 
 /**
+ * Flush vertices.
+ *
+ * \param ctx GL context.
+ *
+ * Checks if dd_function_table::NeedFlush is marked to flush stored vertices
+ * or current state and calls dd_function_table::FlushVertices if so.
+ */
+#define FLUSH_FOR_DRAW(ctx)                                     \
+do {                                                            \
+   if (MESA_VERBOSE & VERBOSE_STATE)                            \
+      _mesa_debug(ctx, "FLUSH_FOR_DRAW in %s\n", __func__);     \
+   if (ctx->Driver.NeedFlush)                                   \
+      vbo_exec_FlushVertices(ctx, ctx->Driver.NeedFlush);       \
+} while (0)
+
+/**
  * Macro to assert that the API call was made outside the
  * glBegin()/glEnd() pair, with return value.
  * 
@@ -360,6 +376,13 @@ _mesa_has_texture_cube_map_array(const struct gl_context *ctx)
 {
    return _mesa_has_ARB_texture_cube_map_array(ctx) ||
           _mesa_has_OES_texture_cube_map_array(ctx);
+}
+
+static inline bool
+_mesa_has_texture_view(const struct gl_context *ctx)
+{
+   return _mesa_has_ARB_texture_view(ctx) ||
+          _mesa_has_OES_texture_view(ctx);
 }
 
 #ifdef __cplusplus

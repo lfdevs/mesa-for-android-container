@@ -9,7 +9,7 @@
 #ifndef V3D41_PACK_H
 #define V3D41_PACK_H
 
-#include "v3d_packet_helpers.h"
+#include "cle/v3d_packet_helpers.h"
 
 
 enum V3D41_Compare_Function {
@@ -81,11 +81,11 @@ enum V3D41_Primitive {
         V3D_PRIM_TRIANGLE_FAN_TF             =     22,
 };
 
-enum V3D41_Border_Colour_Mode {
-        V3D_BORDER_COLOUR_0000               =      0,
-        V3D_BORDER_COLOUR_0001               =      1,
-        V3D_BORDER_COLOUR_1111               =      2,
-        V3D_BORDER_COLOUR_FOLLOWS            =      7,
+enum V3D41_Border_Color_Mode {
+        V3D_BORDER_COLOR_0000                =      0,
+        V3D_BORDER_COLOR_0001                =      1,
+        V3D_BORDER_COLOR_1111                =      2,
+        V3D_BORDER_COLOR_FOLLOWS             =      7,
 };
 
 enum V3D41_Wrap_Mode {
@@ -129,7 +129,6 @@ enum V3D41_Memory_Format {
 enum V3D41_Decimate_Mode {
         V3D_DECIMATE_MODE_SAMPLE_0           =      0,
         V3D_DECIMATE_MODE_4X                 =      1,
-        V3D_DECIMATE_MODE_16X                =      2,
         V3D_DECIMATE_MODE_ALL_SAMPLES        =      3,
 };
 
@@ -207,6 +206,13 @@ enum V3D41_Output_Image_Format {
         V3D_OUTPUT_IMAGE_FORMAT_D16          =     42,
         V3D_OUTPUT_IMAGE_FORMAT_D24S8        =     43,
         V3D_OUTPUT_IMAGE_FORMAT_S8           =     44,
+};
+
+enum V3D41_Dither_Mode {
+        V3D_DITHER_MODE_NONE                 =      0,
+        V3D_DITHER_MODE_RGB                  =      1,
+        V3D_DITHER_MODE_A                    =      2,
+        V3D_DITHER_MODE_RGBA                 =      3,
 };
 
 #define V3D41_HALT_opcode                      0
@@ -998,9 +1004,8 @@ struct V3D41_STORE_TILE_BUFFER_GENERAL {
    bool                                 channel_reverse;
    bool                                 clear_buffer_being_stored;
    enum V3D41_Output_Image_Format       output_image_format;
-   enum V3D41_Decimate_Mode             decimate;
-   bool                                 a_dithered;
-   bool                                 bgr_dithered;
+   enum V3D41_Decimate_Mode             decimate_mode;
+   enum V3D41_Dither_Mode               dither_mode;
    bool                                 flip_y;
    enum V3D41_Memory_Format             memory_format;
    uint32_t                             buffer_to_store;
@@ -1025,9 +1030,8 @@ V3D41_STORE_TILE_BUFFER_GENERAL_pack(__gen_user_data *data, uint8_t * restrict c
             __gen_uint(values->buffer_to_store, 0, 3);
 
    cl[ 2] = __gen_uint(values->output_image_format, 4, 9) |
-            __gen_uint(values->decimate, 2, 3) |
-            __gen_uint(values->a_dithered, 1, 1) |
-            __gen_uint(values->bgr_dithered, 0, 0);
+            __gen_uint(values->decimate_mode, 2, 3) |
+            __gen_uint(values->dither_mode, 0, 1);
 
    cl[ 3] = __gen_uint(values->r_b_swap, 4, 4) |
             __gen_uint(values->channel_reverse, 3, 3) |
@@ -1069,9 +1073,8 @@ V3D41_STORE_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
    values->channel_reverse = __gen_unpack_uint(cl, 27, 27);
    values->clear_buffer_being_stored = __gen_unpack_uint(cl, 26, 26);
    values->output_image_format = __gen_unpack_uint(cl, 20, 25);
-   values->decimate = __gen_unpack_uint(cl, 18, 19);
-   values->a_dithered = __gen_unpack_uint(cl, 17, 17);
-   values->bgr_dithered = __gen_unpack_uint(cl, 16, 16);
+   values->decimate_mode = __gen_unpack_uint(cl, 18, 19);
+   values->dither_mode = __gen_unpack_uint(cl, 16, 17);
    values->flip_y = __gen_unpack_uint(cl, 15, 15);
    values->memory_format = __gen_unpack_uint(cl, 12, 14);
    values->buffer_to_store = __gen_unpack_uint(cl, 8, 11);
@@ -1091,7 +1094,7 @@ struct V3D41_LOAD_TILE_BUFFER_GENERAL {
    bool                                 r_b_swap;
    bool                                 channel_reverse;
    enum V3D41_Output_Image_Format       input_image_format;
-   enum V3D41_Decimate_Mode             decimate;
+   enum V3D41_Decimate_Mode             decimate_mode;
    bool                                 flip_y;
    enum V3D41_Memory_Format             memory_format;
    uint32_t                             buffer_to_load;
@@ -1116,7 +1119,7 @@ V3D41_LOAD_TILE_BUFFER_GENERAL_pack(__gen_user_data *data, uint8_t * restrict cl
             __gen_uint(values->buffer_to_load, 0, 3);
 
    cl[ 2] = __gen_uint(values->input_image_format, 4, 9) |
-            __gen_uint(values->decimate, 2, 3);
+            __gen_uint(values->decimate_mode, 2, 3);
 
    cl[ 3] = __gen_uint(values->r_b_swap, 4, 4) |
             __gen_uint(values->channel_reverse, 3, 3) |
@@ -1156,7 +1159,7 @@ V3D41_LOAD_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
    values->r_b_swap = __gen_unpack_uint(cl, 28, 28);
    values->channel_reverse = __gen_unpack_uint(cl, 27, 27);
    values->input_image_format = __gen_unpack_uint(cl, 20, 25);
-   values->decimate = __gen_unpack_uint(cl, 18, 19);
+   values->decimate_mode = __gen_unpack_uint(cl, 18, 19);
    values->flip_y = __gen_unpack_uint(cl, 15, 15);
    values->memory_format = __gen_unpack_uint(cl, 12, 14);
    values->buffer_to_load = __gen_unpack_uint(cl, 8, 11);
@@ -1164,11 +1167,38 @@ V3D41_LOAD_TILE_BUFFER_GENERAL_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_INDEXED_PRIMITIVE_LIST_opcode     32
-#define V3D41_INDEXED_PRIMITIVE_LIST_header     \
+#define V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT_opcode     31
+#define V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT_header\
+   .opcode                              =     31
+
+struct V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT {
+   uint32_t                             opcode;
+};
+
+static inline void
+V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                              const struct V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+}
+
+#define V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT_length      1
+#ifdef __gen_unpack_address
+static inline void
+V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT_unpack(const uint8_t * restrict cl,
+                                                struct V3D41_TRANSFORM_FEEDBACK_FLUSH_AND_COUNT * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+}
+#endif
+
+
+#define V3D41_INDEXED_PRIM_LIST_opcode        32
+#define V3D41_INDEXED_PRIM_LIST_header          \
    .opcode                              =     32
 
-struct V3D41_INDEXED_PRIMITIVE_LIST {
+struct V3D41_INDEXED_PRIM_LIST {
    uint32_t                             opcode;
    uint32_t                             index_offset;
    bool                                 enable_primitive_restarts;
@@ -1181,8 +1211,8 @@ struct V3D41_INDEXED_PRIMITIVE_LIST {
 };
 
 static inline void
-V3D41_INDEXED_PRIMITIVE_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                  const struct V3D41_INDEXED_PRIMITIVE_LIST * restrict values)
+V3D41_INDEXED_PRIM_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
+                             const struct V3D41_INDEXED_PRIM_LIST * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1202,11 +1232,11 @@ V3D41_INDEXED_PRIMITIVE_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
    memcpy(&cl[6], &values->index_offset, sizeof(values->index_offset));
 }
 
-#define V3D41_INDEXED_PRIMITIVE_LIST_length     10
+#define V3D41_INDEXED_PRIM_LIST_length        10
 #ifdef __gen_unpack_address
 static inline void
-V3D41_INDEXED_PRIMITIVE_LIST_unpack(const uint8_t * restrict cl,
-                                    struct V3D41_INDEXED_PRIMITIVE_LIST * restrict values)
+V3D41_INDEXED_PRIM_LIST_unpack(const uint8_t * restrict cl,
+                               struct V3D41_INDEXED_PRIM_LIST * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_offset = __gen_unpack_uint(cl, 48, 79);
@@ -1218,11 +1248,11 @@ V3D41_INDEXED_PRIMITIVE_LIST_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_opcode     34
-#define V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_header\
+#define V3D41_INDEXED_INSTANCED_PRIM_LIST_opcode     34
+#define V3D41_INDEXED_INSTANCED_PRIM_LIST_header\
    .opcode                              =     34
 
-struct V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST {
+struct V3D41_INDEXED_INSTANCED_PRIM_LIST {
    uint32_t                             opcode;
    uint32_t                             index_offset;
    uint32_t                             number_of_instances;
@@ -1236,8 +1266,8 @@ struct V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST {
 };
 
 static inline void
-V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                            const struct V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST * restrict values)
+V3D41_INDEXED_INSTANCED_PRIM_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                       const struct V3D41_INDEXED_INSTANCED_PRIM_LIST * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1259,11 +1289,11 @@ V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_pack(__gen_user_data *data, uint8_t * res
    memcpy(&cl[10], &values->index_offset, sizeof(values->index_offset));
 }
 
-#define V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_length     14
+#define V3D41_INDEXED_INSTANCED_PRIM_LIST_length     14
 #ifdef __gen_unpack_address
 static inline void
-V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_unpack(const uint8_t * restrict cl,
-                                              struct V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST * restrict values)
+V3D41_INDEXED_INSTANCED_PRIM_LIST_unpack(const uint8_t * restrict cl,
+                                         struct V3D41_INDEXED_INSTANCED_PRIM_LIST * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_offset = __gen_unpack_uint(cl, 80, 111);
@@ -1276,11 +1306,11 @@ V3D41_INDEXED_INSTANCED_PRIMITIVE_LIST_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_VERTEX_ARRAY_PRIMITIVES_opcode     36
-#define V3D41_VERTEX_ARRAY_PRIMITIVES_header    \
+#define V3D41_VERTEX_ARRAY_PRIMS_opcode       36
+#define V3D41_VERTEX_ARRAY_PRIMS_header         \
    .opcode                              =     36
 
-struct V3D41_VERTEX_ARRAY_PRIMITIVES {
+struct V3D41_VERTEX_ARRAY_PRIMS {
    uint32_t                             opcode;
    uint32_t                             index_of_first_vertex;
    uint32_t                             length;
@@ -1288,8 +1318,8 @@ struct V3D41_VERTEX_ARRAY_PRIMITIVES {
 };
 
 static inline void
-V3D41_VERTEX_ARRAY_PRIMITIVES_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                   const struct V3D41_VERTEX_ARRAY_PRIMITIVES * restrict values)
+V3D41_VERTEX_ARRAY_PRIMS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                              const struct V3D41_VERTEX_ARRAY_PRIMS * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1301,11 +1331,11 @@ V3D41_VERTEX_ARRAY_PRIMITIVES_pack(__gen_user_data *data, uint8_t * restrict cl,
    memcpy(&cl[6], &values->index_of_first_vertex, sizeof(values->index_of_first_vertex));
 }
 
-#define V3D41_VERTEX_ARRAY_PRIMITIVES_length     10
+#define V3D41_VERTEX_ARRAY_PRIMS_length       10
 #ifdef __gen_unpack_address
 static inline void
-V3D41_VERTEX_ARRAY_PRIMITIVES_unpack(const uint8_t * restrict cl,
-                                     struct V3D41_VERTEX_ARRAY_PRIMITIVES * restrict values)
+V3D41_VERTEX_ARRAY_PRIMS_unpack(const uint8_t * restrict cl,
+                                struct V3D41_VERTEX_ARRAY_PRIMS * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_of_first_vertex = __gen_unpack_uint(cl, 48, 79);
@@ -1315,11 +1345,11 @@ V3D41_VERTEX_ARRAY_PRIMITIVES_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_opcode     38
-#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_header\
+#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMS_opcode     38
+#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMS_header\
    .opcode                              =     38
 
-struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES {
+struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMS {
    uint32_t                             opcode;
    uint32_t                             index_of_first_vertex;
    uint32_t                             number_of_instances;
@@ -1328,8 +1358,8 @@ struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES {
 };
 
 static inline void
-V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                             const struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES * restrict values)
+V3D41_VERTEX_ARRAY_INSTANCED_PRIMS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                        const struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1343,11 +1373,11 @@ V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_pack(__gen_user_data *data, uint8_t * re
    memcpy(&cl[10], &values->index_of_first_vertex, sizeof(values->index_of_first_vertex));
 }
 
-#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_length     14
+#define V3D41_VERTEX_ARRAY_INSTANCED_PRIMS_length     14
 #ifdef __gen_unpack_address
 static inline void
-V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES_unpack(const uint8_t * restrict cl,
-                                               struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMITIVES * restrict values)
+V3D41_VERTEX_ARRAY_INSTANCED_PRIMS_unpack(const uint8_t * restrict cl,
+                                          struct V3D41_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_of_first_vertex = __gen_unpack_uint(cl, 80, 111);
@@ -1435,15 +1465,13 @@ V3D41_INDEX_BUFFER_SETUP_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_PRIMITIVE_LIST_FORMAT_opcode     56
-#define V3D41_PRIMITIVE_LIST_FORMAT_header      \
+#define V3D41_PRIM_LIST_FORMAT_opcode         56
+#define V3D41_PRIM_LIST_FORMAT_header           \
    .opcode                              =     56
 
-struct V3D41_PRIMITIVE_LIST_FORMAT {
+struct V3D41_PRIM_LIST_FORMAT {
    uint32_t                             opcode;
-   uint32_t                             data_type;
-#define LIST_INDEXED                             0
-#define LIST_32_BIT_X_Y                          1
+   bool                                 tri_strip_or_fan;
    uint32_t                             primitive_type;
 #define LIST_POINTS                              0
 #define LIST_LINES                               1
@@ -1451,24 +1479,24 @@ struct V3D41_PRIMITIVE_LIST_FORMAT {
 };
 
 static inline void
-V3D41_PRIMITIVE_LIST_FORMAT_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                 const struct V3D41_PRIMITIVE_LIST_FORMAT * restrict values)
+V3D41_PRIM_LIST_FORMAT_pack(__gen_user_data *data, uint8_t * restrict cl,
+                            const struct V3D41_PRIM_LIST_FORMAT * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->data_type, 6, 6) |
+   cl[ 1] = __gen_uint(values->tri_strip_or_fan, 7, 7) |
             __gen_uint(values->primitive_type, 0, 5);
 
 }
 
-#define V3D41_PRIMITIVE_LIST_FORMAT_length      2
+#define V3D41_PRIM_LIST_FORMAT_length          2
 #ifdef __gen_unpack_address
 static inline void
-V3D41_PRIMITIVE_LIST_FORMAT_unpack(const uint8_t * restrict cl,
-                                   struct V3D41_PRIMITIVE_LIST_FORMAT * restrict values)
+V3D41_PRIM_LIST_FORMAT_unpack(const uint8_t * restrict cl,
+                              struct V3D41_PRIM_LIST_FORMAT * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->data_type = __gen_unpack_uint(cl, 14, 14);
+   values->tri_strip_or_fan = __gen_unpack_uint(cl, 15, 15);
    values->primitive_type = __gen_unpack_uint(cl, 8, 13);
 }
 #endif
@@ -1511,6 +1539,40 @@ V3D41_GL_SHADER_STATE_unpack(const uint8_t * restrict cl,
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->address = __gen_unpack_address(cl, 13, 39);
    values->number_of_attribute_arrays = __gen_unpack_uint(cl, 8, 12);
+}
+#endif
+
+
+#define V3D41_VCM_CACHE_SIZE_opcode           71
+#define V3D41_VCM_CACHE_SIZE_header             \
+   .opcode                              =     71
+
+struct V3D41_VCM_CACHE_SIZE {
+   uint32_t                             opcode;
+   uint32_t                             number_of_16_vertex_batches_for_rendering;
+   uint32_t                             number_of_16_vertex_batches_for_binning;
+};
+
+static inline void
+V3D41_VCM_CACHE_SIZE_pack(__gen_user_data *data, uint8_t * restrict cl,
+                          const struct V3D41_VCM_CACHE_SIZE * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->number_of_16_vertex_batches_for_rendering, 4, 7) |
+            __gen_uint(values->number_of_16_vertex_batches_for_binning, 0, 3);
+
+}
+
+#define V3D41_VCM_CACHE_SIZE_length            2
+#ifdef __gen_unpack_address
+static inline void
+V3D41_VCM_CACHE_SIZE_unpack(const uint8_t * restrict cl,
+                            struct V3D41_VCM_CACHE_SIZE * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->number_of_16_vertex_batches_for_rendering = __gen_unpack_uint(cl, 12, 15);
+   values->number_of_16_vertex_batches_for_binning = __gen_unpack_uint(cl, 8, 11);
 }
 #endif
 
@@ -1632,18 +1694,21 @@ V3D41_FLUSH_TRANSFORM_FEEDBACK_DATA_unpack(const uint8_t * restrict cl,
 
 struct V3D41_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC {
    uint32_t                             first_shaded_vertex_value_to_output;
-   uint32_t                             number_of_consecutive_vertex_values_to_output_as_32_bit_values_minus_1;
+   uint32_t                             number_of_consecutive_vertex_values_to_output_as_32_bit_values;
    uint32_t                             output_buffer_to_write_to;
+   uint32_t                             stream_number;
 };
 
 static inline void
 V3D41_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_pack(__gen_user_data *data, uint8_t * restrict cl,
                                                const struct V3D41_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC * restrict values)
 {
+   assert(values->number_of_consecutive_vertex_values_to_output_as_32_bit_values >= 1);
    cl[ 0] = __gen_uint(values->first_shaded_vertex_value_to_output, 0, 7);
 
-   cl[ 1] = __gen_uint(values->number_of_consecutive_vertex_values_to_output_as_32_bit_values_minus_1, 0, 3) |
-            __gen_uint(values->output_buffer_to_write_to, 4, 5);
+   cl[ 1] = __gen_uint(values->number_of_consecutive_vertex_values_to_output_as_32_bit_values - 1, 0, 3) |
+            __gen_uint(values->output_buffer_to_write_to, 4, 5) |
+            __gen_uint(values->stream_number, 6, 7);
 
 }
 
@@ -1654,8 +1719,9 @@ V3D41_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC_unpack(const uint8_t * restrict cl,
                                                  struct V3D41_TRANSFORM_FEEDBACK_OUTPUT_DATA_SPEC * restrict values)
 {
    values->first_shaded_vertex_value_to_output = __gen_unpack_uint(cl, 0, 7);
-   values->number_of_consecutive_vertex_values_to_output_as_32_bit_values_minus_1 = __gen_unpack_uint(cl, 8, 11);
+   values->number_of_consecutive_vertex_values_to_output_as_32_bit_values = __gen_unpack_uint(cl, 8, 11) + 1;
    values->output_buffer_to_write_to = __gen_unpack_uint(cl, 12, 13);
+   values->stream_number = __gen_unpack_uint(cl, 14, 15);
 }
 #endif
 
@@ -1693,11 +1759,11 @@ V3D41_TRANSFORM_FEEDBACK_OUTPUT_ADDRESS_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_STENCIL_CONFIG_opcode           80
-#define V3D41_STENCIL_CONFIG_header             \
+#define V3D41_STENCIL_CFG_opcode              80
+#define V3D41_STENCIL_CFG_header                \
    .opcode                              =     80
 
-struct V3D41_STENCIL_CONFIG {
+struct V3D41_STENCIL_CFG {
    uint32_t                             opcode;
    uint32_t                             stencil_write_mask;
    bool                                 back_config;
@@ -1711,8 +1777,8 @@ struct V3D41_STENCIL_CONFIG {
 };
 
 static inline void
-V3D41_STENCIL_CONFIG_pack(__gen_user_data *data, uint8_t * restrict cl,
-                          const struct V3D41_STENCIL_CONFIG * restrict values)
+V3D41_STENCIL_CFG_pack(__gen_user_data *data, uint8_t * restrict cl,
+                       const struct V3D41_STENCIL_CFG * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1733,11 +1799,11 @@ V3D41_STENCIL_CONFIG_pack(__gen_user_data *data, uint8_t * restrict cl,
 
 }
 
-#define V3D41_STENCIL_CONFIG_length            6
+#define V3D41_STENCIL_CFG_length               6
 #ifdef __gen_unpack_address
 static inline void
-V3D41_STENCIL_CONFIG_unpack(const uint8_t * restrict cl,
-                            struct V3D41_STENCIL_CONFIG * restrict values)
+V3D41_STENCIL_CFG_unpack(const uint8_t * restrict cl,
+                         struct V3D41_STENCIL_CFG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->stencil_write_mask = __gen_unpack_uint(cl, 40, 47);
@@ -1784,54 +1850,51 @@ V3D41_BLEND_ENABLES_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_BLEND_CONFIG_opcode             84
-#define V3D41_BLEND_CONFIG_header               \
+#define V3D41_BLEND_CFG_opcode                84
+#define V3D41_BLEND_CFG_header                  \
    .opcode                              =     84
 
-struct V3D41_BLEND_CONFIG {
+struct V3D41_BLEND_CFG {
    uint32_t                             opcode;
-   uint32_t                             vg_coverage_modes;
    uint32_t                             render_target_mask;
-   enum V3D41_Blend_Factor              colour_blend_dst_factor;
-   enum V3D41_Blend_Factor              colour_blend_src_factor;
-   enum V3D41_Blend_Mode                colour_blend_mode;
+   enum V3D41_Blend_Factor              color_blend_dst_factor;
+   enum V3D41_Blend_Factor              color_blend_src_factor;
+   enum V3D41_Blend_Mode                color_blend_mode;
    enum V3D41_Blend_Factor              alpha_blend_dst_factor;
    enum V3D41_Blend_Factor              alpha_blend_src_factor;
    enum V3D41_Blend_Mode                alpha_blend_mode;
 };
 
 static inline void
-V3D41_BLEND_CONFIG_pack(__gen_user_data *data, uint8_t * restrict cl,
-                        const struct V3D41_BLEND_CONFIG * restrict values)
+V3D41_BLEND_CFG_pack(__gen_user_data *data, uint8_t * restrict cl,
+                     const struct V3D41_BLEND_CFG * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
    cl[ 1] = __gen_uint(values->alpha_blend_src_factor, 4, 7) |
             __gen_uint(values->alpha_blend_mode, 0, 3);
 
-   cl[ 2] = __gen_uint(values->colour_blend_mode, 4, 7) |
+   cl[ 2] = __gen_uint(values->color_blend_mode, 4, 7) |
             __gen_uint(values->alpha_blend_dst_factor, 0, 3);
 
-   cl[ 3] = __gen_uint(values->colour_blend_dst_factor, 4, 7) |
-            __gen_uint(values->colour_blend_src_factor, 0, 3);
+   cl[ 3] = __gen_uint(values->color_blend_dst_factor, 4, 7) |
+            __gen_uint(values->color_blend_src_factor, 0, 3);
 
-   cl[ 4] = __gen_uint(values->vg_coverage_modes, 4, 5) |
-            __gen_uint(values->render_target_mask, 0, 3);
+   cl[ 4] = __gen_uint(values->render_target_mask, 0, 3);
 
 }
 
-#define V3D41_BLEND_CONFIG_length              5
+#define V3D41_BLEND_CFG_length                 5
 #ifdef __gen_unpack_address
 static inline void
-V3D41_BLEND_CONFIG_unpack(const uint8_t * restrict cl,
-                          struct V3D41_BLEND_CONFIG * restrict values)
+V3D41_BLEND_CFG_unpack(const uint8_t * restrict cl,
+                       struct V3D41_BLEND_CFG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->vg_coverage_modes = __gen_unpack_uint(cl, 36, 37);
    values->render_target_mask = __gen_unpack_uint(cl, 32, 35);
-   values->colour_blend_dst_factor = __gen_unpack_uint(cl, 28, 31);
-   values->colour_blend_src_factor = __gen_unpack_uint(cl, 24, 27);
-   values->colour_blend_mode = __gen_unpack_uint(cl, 20, 23);
+   values->color_blend_dst_factor = __gen_unpack_uint(cl, 28, 31);
+   values->color_blend_src_factor = __gen_unpack_uint(cl, 24, 27);
+   values->color_blend_mode = __gen_unpack_uint(cl, 20, 23);
    values->alpha_blend_dst_factor = __gen_unpack_uint(cl, 16, 19);
    values->alpha_blend_src_factor = __gen_unpack_uint(cl, 12, 15);
    values->alpha_blend_mode = __gen_unpack_uint(cl, 8, 11);
@@ -1839,11 +1902,11 @@ V3D41_BLEND_CONFIG_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_BLEND_CONSTANT_COLOUR_opcode     86
-#define V3D41_BLEND_CONSTANT_COLOUR_header      \
+#define V3D41_BLEND_CONSTANT_COLOR_opcode     86
+#define V3D41_BLEND_CONSTANT_COLOR_header       \
    .opcode                              =     86
 
-struct V3D41_BLEND_CONSTANT_COLOUR {
+struct V3D41_BLEND_CONSTANT_COLOR {
    uint32_t                             opcode;
    uint32_t                             alpha_f16;
    uint32_t                             blue_f16;
@@ -1852,8 +1915,8 @@ struct V3D41_BLEND_CONSTANT_COLOUR {
 };
 
 static inline void
-V3D41_BLEND_CONSTANT_COLOUR_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                 const struct V3D41_BLEND_CONSTANT_COLOUR * restrict values)
+V3D41_BLEND_CONSTANT_COLOR_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                const struct V3D41_BLEND_CONSTANT_COLOR * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -1875,11 +1938,11 @@ V3D41_BLEND_CONSTANT_COLOUR_pack(__gen_user_data *data, uint8_t * restrict cl,
 
 }
 
-#define V3D41_BLEND_CONSTANT_COLOUR_length      9
+#define V3D41_BLEND_CONSTANT_COLOR_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_BLEND_CONSTANT_COLOUR_unpack(const uint8_t * restrict cl,
-                                   struct V3D41_BLEND_CONSTANT_COLOUR * restrict values)
+V3D41_BLEND_CONSTANT_COLOR_unpack(const uint8_t * restrict cl,
+                                  struct V3D41_BLEND_CONSTANT_COLOR * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->alpha_f16 = __gen_unpack_uint(cl, 56, 71);
@@ -1890,49 +1953,33 @@ V3D41_BLEND_CONSTANT_COLOUR_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_COLOUR_WRITE_MASKS_opcode       87
-#define V3D41_COLOUR_WRITE_MASKS_header         \
+#define V3D41_COLOR_WRITE_MASKS_opcode        87
+#define V3D41_COLOR_WRITE_MASKS_header          \
    .opcode                              =     87
 
-struct V3D41_COLOUR_WRITE_MASKS {
+struct V3D41_COLOR_WRITE_MASKS {
    uint32_t                             opcode;
-   uint32_t                             reserved;
-   uint32_t                             render_target_3_per_colour_component_write_masks;
-   uint32_t                             render_target_2_per_colour_component_write_masks;
-   uint32_t                             render_target_1_per_colour_component_write_masks;
-   uint32_t                             render_target_0_per_colour_component_write_masks;
+   uint32_t                             mask;
 };
 
 static inline void
-V3D41_COLOUR_WRITE_MASKS_pack(__gen_user_data *data, uint8_t * restrict cl,
-                              const struct V3D41_COLOUR_WRITE_MASKS * restrict values)
+V3D41_COLOR_WRITE_MASKS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                             const struct V3D41_COLOR_WRITE_MASKS * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->render_target_1_per_colour_component_write_masks, 4, 7) |
-            __gen_uint(values->render_target_0_per_colour_component_write_masks, 0, 3);
 
-   cl[ 2] = __gen_uint(values->render_target_3_per_colour_component_write_masks, 4, 7) |
-            __gen_uint(values->render_target_2_per_colour_component_write_masks, 0, 3);
-
-   cl[ 3] = __gen_uint(values->reserved, 0, 15);
-
-   cl[ 4] = __gen_uint(values->reserved, 0, 15) >> 8;
-
+   memcpy(&cl[1], &values->mask, sizeof(values->mask));
 }
 
-#define V3D41_COLOUR_WRITE_MASKS_length        5
+#define V3D41_COLOR_WRITE_MASKS_length         5
 #ifdef __gen_unpack_address
 static inline void
-V3D41_COLOUR_WRITE_MASKS_unpack(const uint8_t * restrict cl,
-                                struct V3D41_COLOUR_WRITE_MASKS * restrict values)
+V3D41_COLOR_WRITE_MASKS_unpack(const uint8_t * restrict cl,
+                               struct V3D41_COLOR_WRITE_MASKS * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->reserved = __gen_unpack_uint(cl, 24, 39);
-   values->render_target_3_per_colour_component_write_masks = __gen_unpack_uint(cl, 20, 23);
-   values->render_target_2_per_colour_component_write_masks = __gen_unpack_uint(cl, 16, 19);
-   values->render_target_1_per_colour_component_write_masks = __gen_unpack_uint(cl, 12, 15);
-   values->render_target_0_per_colour_component_write_masks = __gen_unpack_uint(cl, 8, 11);
+   values->mask = __gen_unpack_uint(cl, 8, 39);
 }
 #endif
 
@@ -2009,6 +2056,44 @@ V3D41_CENTROID_FLAGS_unpack(const uint8_t * restrict cl,
 #endif
 
 
+#define V3D41_SAMPLE_STATE_opcode             91
+#define V3D41_SAMPLE_STATE_header               \
+   .opcode                              =     91
+
+struct V3D41_SAMPLE_STATE {
+   uint32_t                             opcode;
+   float                                coverage;
+   uint32_t                             mask;
+};
+
+static inline void
+V3D41_SAMPLE_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
+                        const struct V3D41_SAMPLE_STATE * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->mask, 0, 3);
+
+   cl[ 2] = 0;
+   cl[ 3] = __gen_uint(fui(values->coverage) >> 16, 0, 15);
+
+   cl[ 4] = __gen_uint(fui(values->coverage) >> 16, 0, 15) >> 8;
+
+}
+
+#define V3D41_SAMPLE_STATE_length              5
+#ifdef __gen_unpack_address
+static inline void
+V3D41_SAMPLE_STATE_unpack(const uint8_t * restrict cl,
+                          struct V3D41_SAMPLE_STATE * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->coverage = __gen_unpack_f187(cl, 24, 39);
+   values->mask = __gen_unpack_uint(cl, 8, 11);
+}
+#endif
+
+
 #define V3D41_OCCLUSION_QUERY_COUNTER_opcode     92
 #define V3D41_OCCLUSION_QUERY_COUNTER_header    \
    .opcode                              =     92
@@ -2047,11 +2132,11 @@ V3D41_OCCLUSION_QUERY_COUNTER_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_CONFIGURATION_BITS_opcode       96
-#define V3D41_CONFIGURATION_BITS_header         \
+#define V3D41_CFG_BITS_opcode                 96
+#define V3D41_CFG_BITS_header                   \
    .opcode                              =     96
 
-struct V3D41_CONFIGURATION_BITS {
+struct V3D41_CFG_BITS {
    uint32_t                             opcode;
    bool                                 direct3d_provoking_vertex;
    bool                                 direct3d_point_fill_mode;
@@ -2062,8 +2147,6 @@ struct V3D41_CONFIGURATION_BITS {
    bool                                 z_updates_enable;
    enum V3D41_Compare_Function          depth_test_function;
    bool                                 direct3d_wireframe_triangles_mode;
-   uint32_t                             coverage_update_mode;
-   bool                                 coverage_pipe_select;
    uint32_t                             rasterizer_oversample_mode;
    uint32_t                             line_rasterization;
    bool                                 enable_depth_offset;
@@ -2073,8 +2156,8 @@ struct V3D41_CONFIGURATION_BITS {
 };
 
 static inline void
-V3D41_CONFIGURATION_BITS_pack(__gen_user_data *data, uint8_t * restrict cl,
-                              const struct V3D41_CONFIGURATION_BITS * restrict values)
+V3D41_CFG_BITS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                    const struct V3D41_CFG_BITS * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -2087,9 +2170,7 @@ V3D41_CONFIGURATION_BITS_pack(__gen_user_data *data, uint8_t * restrict cl,
 
    cl[ 2] = __gen_uint(values->z_updates_enable, 7, 7) |
             __gen_uint(values->depth_test_function, 4, 6) |
-            __gen_uint(values->direct3d_wireframe_triangles_mode, 3, 3) |
-            __gen_uint(values->coverage_update_mode, 1, 2) |
-            __gen_uint(values->coverage_pipe_select, 0, 0);
+            __gen_uint(values->direct3d_wireframe_triangles_mode, 3, 3);
 
    cl[ 3] = __gen_uint(values->direct3d_provoking_vertex, 5, 5) |
             __gen_uint(values->direct3d_point_fill_mode, 4, 4) |
@@ -2100,11 +2181,11 @@ V3D41_CONFIGURATION_BITS_pack(__gen_user_data *data, uint8_t * restrict cl,
 
 }
 
-#define V3D41_CONFIGURATION_BITS_length        4
+#define V3D41_CFG_BITS_length                  4
 #ifdef __gen_unpack_address
 static inline void
-V3D41_CONFIGURATION_BITS_unpack(const uint8_t * restrict cl,
-                                struct V3D41_CONFIGURATION_BITS * restrict values)
+V3D41_CFG_BITS_unpack(const uint8_t * restrict cl,
+                      struct V3D41_CFG_BITS * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->direct3d_provoking_vertex = __gen_unpack_uint(cl, 29, 29);
@@ -2116,8 +2197,6 @@ V3D41_CONFIGURATION_BITS_unpack(const uint8_t * restrict cl,
    values->z_updates_enable = __gen_unpack_uint(cl, 23, 23);
    values->depth_test_function = __gen_unpack_uint(cl, 20, 22);
    values->direct3d_wireframe_triangles_mode = __gen_unpack_uint(cl, 19, 19);
-   values->coverage_update_mode = __gen_unpack_uint(cl, 17, 18);
-   values->coverage_pipe_select = __gen_unpack_uint(cl, 16, 16);
    values->rasterizer_oversample_mode = __gen_unpack_uint(cl, 14, 15);
    values->line_rasterization = __gen_unpack_uint(cl, 12, 13);
    values->enable_depth_offset = __gen_unpack_uint(cl, 11, 11);
@@ -2235,7 +2314,7 @@ struct V3D41_NON_PERSPECTIVE_FLAGS {
    uint32_t                             opcode;
    uint32_t                             non_perspective_flags_for_varyings_v024;
    enum V3D41_Varying_Flags_Action      action_for_non_perspective_flags_of_higher_numbered_varyings;
-   enum V3D41_Varying_Flags_Action      action_for_non_perspectivey_flags_of_lower_numbered_varyings;
+   enum V3D41_Varying_Flags_Action      action_for_non_perspective_flags_of_lower_numbered_varyings;
    uint32_t                             varying_offset_v0;
 };
 
@@ -2246,7 +2325,7 @@ V3D41_NON_PERSPECTIVE_FLAGS_pack(__gen_user_data *data, uint8_t * restrict cl,
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
    cl[ 1] = __gen_uint(values->action_for_non_perspective_flags_of_higher_numbered_varyings, 6, 7) |
-            __gen_uint(values->action_for_non_perspectivey_flags_of_lower_numbered_varyings, 4, 5) |
+            __gen_uint(values->action_for_non_perspective_flags_of_lower_numbered_varyings, 4, 5) |
             __gen_uint(values->varying_offset_v0, 0, 3);
 
    cl[ 2] = __gen_uint(values->non_perspective_flags_for_varyings_v024, 0, 23);
@@ -2266,7 +2345,7 @@ V3D41_NON_PERSPECTIVE_FLAGS_unpack(const uint8_t * restrict cl,
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->non_perspective_flags_for_varyings_v024 = __gen_unpack_uint(cl, 16, 39);
    values->action_for_non_perspective_flags_of_higher_numbered_varyings = __gen_unpack_uint(cl, 14, 15);
-   values->action_for_non_perspectivey_flags_of_lower_numbered_varyings = __gen_unpack_uint(cl, 12, 13);
+   values->action_for_non_perspective_flags_of_lower_numbered_varyings = __gen_unpack_uint(cl, 12, 13);
    values->varying_offset_v0 = __gen_unpack_uint(cl, 8, 11);
 }
 #endif
@@ -2341,8 +2420,8 @@ V3D41_LINE_WIDTH_unpack(const uint8_t * restrict cl,
 struct V3D41_DEPTH_OFFSET {
    uint32_t                             opcode;
    float                                limit;
-   uint32_t                             depth_offset_units;
-   uint32_t                             depth_offset_factor;
+   float                                depth_offset_units;
+   float                                depth_offset_factor;
 };
 
 static inline void
@@ -2351,13 +2430,13 @@ V3D41_DEPTH_OFFSET_pack(__gen_user_data *data, uint8_t * restrict cl,
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->depth_offset_factor, 0, 15);
+   cl[ 1] = __gen_uint(fui(values->depth_offset_factor) >> 16, 0, 15);
 
-   cl[ 2] = __gen_uint(values->depth_offset_factor, 0, 15) >> 8;
+   cl[ 2] = __gen_uint(fui(values->depth_offset_factor) >> 16, 0, 15) >> 8;
 
-   cl[ 3] = __gen_uint(values->depth_offset_units, 0, 15);
+   cl[ 3] = __gen_uint(fui(values->depth_offset_units) >> 16, 0, 15);
 
-   cl[ 4] = __gen_uint(values->depth_offset_units, 0, 15) >> 8;
+   cl[ 4] = __gen_uint(fui(values->depth_offset_units) >> 16, 0, 15) >> 8;
 
 
    memcpy(&cl[5], &values->limit, sizeof(values->limit));
@@ -2371,8 +2450,8 @@ V3D41_DEPTH_OFFSET_unpack(const uint8_t * restrict cl,
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->limit = __gen_unpack_float(cl, 40, 71);
-   values->depth_offset_units = __gen_unpack_uint(cl, 24, 39);
-   values->depth_offset_factor = __gen_unpack_uint(cl, 8, 23);
+   values->depth_offset_units = __gen_unpack_f187(cl, 24, 39);
+   values->depth_offset_factor = __gen_unpack_f187(cl, 8, 23);
 }
 #endif
 
@@ -2592,16 +2671,17 @@ V3D41_CLIPPER_Z_SCALE_AND_OFFSET_unpack(const uint8_t * restrict cl,
 
 struct V3D41_NUMBER_OF_LAYERS {
    uint32_t                             opcode;
-   uint32_t                             number_of_layers_minus_1;
+   uint32_t                             number_of_layers;
 };
 
 static inline void
 V3D41_NUMBER_OF_LAYERS_pack(__gen_user_data *data, uint8_t * restrict cl,
                             const struct V3D41_NUMBER_OF_LAYERS * restrict values)
 {
+   assert(values->number_of_layers >= 1);
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->number_of_layers_minus_1, 0, 7);
+   cl[ 1] = __gen_uint(values->number_of_layers - 1, 0, 7);
 
 }
 
@@ -2612,26 +2692,26 @@ V3D41_NUMBER_OF_LAYERS_unpack(const uint8_t * restrict cl,
                               struct V3D41_NUMBER_OF_LAYERS * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->number_of_layers_minus_1 = __gen_unpack_uint(cl, 8, 15);
+   values->number_of_layers = __gen_unpack_uint(cl, 8, 15) + 1;
 }
 #endif
 
 
-#define V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_opcode    120
-#define V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_header\
+#define V3D41_TILE_BINNING_MODE_CFG_opcode    120
+#define V3D41_TILE_BINNING_MODE_CFG_header      \
    .opcode                              =    120
 
-struct V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1 {
+struct V3D41_TILE_BINNING_MODE_CFG {
    uint32_t                             opcode;
-   uint32_t                             height_in_pixels_minus_1;
-   uint32_t                             width_in_pixels_minus_1;
+   uint32_t                             height_in_pixels;
+   uint32_t                             width_in_pixels;
    bool                                 double_buffer_in_non_ms_mode;
    bool                                 multisample_mode_4x;
    uint32_t                             maximum_bpp_of_all_render_targets;
 #define RENDER_TARGET_MAXIMUM_32BPP              0
 #define RENDER_TARGET_MAXIMUM_64BPP              1
 #define RENDER_TARGET_MAXIMUM_128BPP             2
-   uint32_t                             number_of_render_targets_minus_1;
+   uint32_t                             number_of_render_targets;
    uint32_t                             tile_allocation_block_size;
 #define TILE_ALLOCATION_BLOCK_SIZE_64B           0
 #define TILE_ALLOCATION_BLOCK_SIZE_128B          1
@@ -2643,9 +2723,12 @@ struct V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1 {
 };
 
 static inline void
-V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                 const struct V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1 * restrict values)
+V3D41_TILE_BINNING_MODE_CFG_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                 const struct V3D41_TILE_BINNING_MODE_CFG * restrict values)
 {
+   assert(values->height_in_pixels >= 1);
+   assert(values->width_in_pixels >= 1);
+   assert(values->number_of_render_targets >= 1);
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
    cl[ 1] = __gen_uint(values->tile_allocation_block_size, 4, 5) |
@@ -2654,45 +2737,45 @@ V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_pack(__gen_user_data *data, uint8_t 
    cl[ 2] = __gen_uint(values->double_buffer_in_non_ms_mode, 7, 7) |
             __gen_uint(values->multisample_mode_4x, 6, 6) |
             __gen_uint(values->maximum_bpp_of_all_render_targets, 4, 5) |
-            __gen_uint(values->number_of_render_targets_minus_1, 0, 3);
+            __gen_uint(values->number_of_render_targets - 1, 0, 3);
 
    cl[ 3] = 0;
    cl[ 4] = 0;
-   cl[ 5] = __gen_uint(values->width_in_pixels_minus_1, 0, 11);
+   cl[ 5] = __gen_uint(values->width_in_pixels - 1, 0, 11);
 
-   cl[ 6] = __gen_uint(values->width_in_pixels_minus_1, 0, 11) >> 8;
+   cl[ 6] = __gen_uint(values->width_in_pixels - 1, 0, 11) >> 8;
 
-   cl[ 7] = __gen_uint(values->height_in_pixels_minus_1, 0, 11);
+   cl[ 7] = __gen_uint(values->height_in_pixels - 1, 0, 11);
 
-   cl[ 8] = __gen_uint(values->height_in_pixels_minus_1, 0, 11) >> 8;
+   cl[ 8] = __gen_uint(values->height_in_pixels - 1, 0, 11) >> 8;
 
 }
 
-#define V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_length      9
+#define V3D41_TILE_BINNING_MODE_CFG_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1_unpack(const uint8_t * restrict cl,
-                                                   struct V3D41_TILE_BINNING_MODE_CONFIGURATION_PART1 * restrict values)
+V3D41_TILE_BINNING_MODE_CFG_unpack(const uint8_t * restrict cl,
+                                   struct V3D41_TILE_BINNING_MODE_CFG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->height_in_pixels_minus_1 = __gen_unpack_uint(cl, 56, 67);
-   values->width_in_pixels_minus_1 = __gen_unpack_uint(cl, 40, 51);
+   values->height_in_pixels = __gen_unpack_uint(cl, 56, 67) + 1;
+   values->width_in_pixels = __gen_unpack_uint(cl, 40, 51) + 1;
    values->double_buffer_in_non_ms_mode = __gen_unpack_uint(cl, 23, 23);
    values->multisample_mode_4x = __gen_unpack_uint(cl, 22, 22);
    values->maximum_bpp_of_all_render_targets = __gen_unpack_uint(cl, 20, 21);
-   values->number_of_render_targets_minus_1 = __gen_unpack_uint(cl, 16, 19);
+   values->number_of_render_targets = __gen_unpack_uint(cl, 16, 19) + 1;
    values->tile_allocation_block_size = __gen_unpack_uint(cl, 12, 13);
    values->tile_allocation_initial_block_size = __gen_unpack_uint(cl, 10, 11);
 }
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_COMMON_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_COMMON_header\
    .opcode                              =    121,  \
    .sub_id                              =      0
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION {
+struct V3D41_TILE_RENDERING_MODE_CFG_COMMON {
    uint32_t                             opcode;
    uint32_t                             pad;
    bool                                 early_depth_stencil_clear;
@@ -2701,23 +2784,23 @@ struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION {
    uint32_t                             early_z_test_and_update_direction;
 #define EARLY_Z_DIRECTION_LT_LE                  0
 #define EARLY_Z_DIRECTION_GT_GE                  1
-   bool                                 select_coverage_mode;
    bool                                 double_buffer_in_non_ms_mode;
    bool                                 multisample_mode_4x;
    enum V3D41_Internal_BPP              maximum_bpp_of_all_render_targets;
    uint32_t                             image_height_pixels;
    uint32_t                             image_width_pixels;
-   uint32_t                             number_of_render_targets_minus_1;
+   uint32_t                             number_of_render_targets;
    uint32_t                             sub_id;
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                  const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_COMMON_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                          const struct V3D41_TILE_RENDERING_MODE_CFG_COMMON * restrict values)
 {
+   assert(values->number_of_render_targets >= 1);
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->number_of_render_targets_minus_1, 4, 7) |
+   cl[ 1] = __gen_uint(values->number_of_render_targets - 1, 4, 7) |
             __gen_uint(values->sub_id, 0, 3);
 
    cl[ 2] = __gen_uint(values->image_width_pixels, 0, 15);
@@ -2731,7 +2814,6 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_pack(__gen_user_dat
    cl[ 6] = __gen_uint(values->internal_depth_type, 7, 10) |
             __gen_uint(values->early_z_disable, 6, 6) |
             __gen_uint(values->early_z_test_and_update_direction, 5, 5) |
-            __gen_uint(values->select_coverage_mode, 4, 4) |
             __gen_uint(values->double_buffer_in_non_ms_mode, 3, 3) |
             __gen_uint(values->multisample_mode_4x, 2, 2) |
             __gen_uint(values->maximum_bpp_of_all_render_targets, 0, 1);
@@ -2744,11 +2826,11 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_pack(__gen_user_dat
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_COMMON_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_unpack(const uint8_t * restrict cl,
-                                                                    struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_COMMON_unpack(const uint8_t * restrict cl,
+                                            struct V3D41_TILE_RENDERING_MODE_CFG_COMMON * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->pad = __gen_unpack_uint(cl, 60, 71);
@@ -2756,24 +2838,23 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_COMMON_CONFIGURATION_unpack(const uint8_
    values->internal_depth_type = __gen_unpack_uint(cl, 55, 58);
    values->early_z_disable = __gen_unpack_uint(cl, 54, 54);
    values->early_z_test_and_update_direction = __gen_unpack_uint(cl, 53, 53);
-   values->select_coverage_mode = __gen_unpack_uint(cl, 52, 52);
    values->double_buffer_in_non_ms_mode = __gen_unpack_uint(cl, 51, 51);
    values->multisample_mode_4x = __gen_unpack_uint(cl, 50, 50);
    values->maximum_bpp_of_all_render_targets = __gen_unpack_uint(cl, 48, 49);
    values->image_height_pixels = __gen_unpack_uint(cl, 32, 47);
    values->image_width_pixels = __gen_unpack_uint(cl, 16, 31);
-   values->number_of_render_targets_minus_1 = __gen_unpack_uint(cl, 12, 15);
+   values->number_of_render_targets = __gen_unpack_uint(cl, 12, 15) + 1;
    values->sub_id = __gen_unpack_uint(cl, 8, 11);
 }
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_COLOR_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_COLOR_header\
    .opcode                              =    121,  \
    .sub_id                              =      1
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG {
+struct V3D41_TILE_RENDERING_MODE_CFG_COLOR {
    uint32_t                             opcode;
    uint32_t                             pad;
    enum V3D41_Render_Target_Clamp       render_target_3_clamp;
@@ -2792,8 +2873,8 @@ struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG {
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                  const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_COLOR_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                         const struct V3D41_TILE_RENDERING_MODE_CFG_COLOR * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -2828,11 +2909,11 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_pack(__gen_user_dat
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_COLOR_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_unpack(const uint8_t * restrict cl,
-                                                                    struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_COLOR_unpack(const uint8_t * restrict cl,
+                                           struct V3D41_TILE_RENDERING_MODE_CFG_COLOR * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->pad = __gen_unpack_uint(cl, 42, 69);
@@ -2853,28 +2934,28 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_RENDER_TARGET_CONFIG_unpack(const uint8_
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES_header\
    .opcode                              =    121,  \
    .sub_id                              =      2
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES {
+struct V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES {
    uint32_t                             opcode;
    uint32_t                             unused;
    float                                z_clear_value;
-   uint32_t                             stencil_vg_mask_clear_value;
+   uint32_t                             stencil_clear_value;
    uint32_t                             sub_id;
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                    const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                   const struct V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
    cl[ 1] = __gen_uint(values->sub_id, 0, 3);
 
-   cl[ 2] = __gen_uint(values->stencil_vg_mask_clear_value, 0, 7);
+   cl[ 2] = __gen_uint(values->stencil_clear_value, 0, 7);
 
 
    memcpy(&cl[3], &values->z_clear_value, sizeof(values->z_clear_value));
@@ -2884,27 +2965,27 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_pack(__gen_user_d
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES_unpack(const uint8_t * restrict cl,
-                                                                      struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_Z_STENCIL_CLEAR_VALUES * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES_unpack(const uint8_t * restrict cl,
+                                                     struct V3D41_TILE_RENDERING_MODE_CFG_ZS_CLEAR_VALUES * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->unused = __gen_unpack_uint(cl, 56, 71);
    values->z_clear_value = __gen_unpack_float(cl, 24, 55);
-   values->stencil_vg_mask_clear_value = __gen_unpack_uint(cl, 16, 23);
+   values->stencil_clear_value = __gen_unpack_uint(cl, 16, 23);
    values->sub_id = __gen_unpack_uint(cl, 8, 11);
 }
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1_header\
    .opcode                              =    121,  \
    .sub_id                              =      3
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1 {
+struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1 {
    uint32_t                             opcode;
    uint32_t                             clear_color_next_24_bits;
    uint32_t                             clear_color_low_32_bits;
@@ -2913,8 +2994,8 @@ struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1 {
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                      const struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1 * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -2931,11 +3012,11 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_pack(__gen_user_data 
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_unpack(const uint8_t * restrict cl,
-                                                                  struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1_unpack(const uint8_t * restrict cl,
+                                                        struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART1 * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->clear_color_next_24_bits = __gen_unpack_uint(cl, 48, 71);
@@ -2946,12 +3027,12 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART1_unpack(const uint8_t 
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2_header\
    .opcode                              =    121,  \
    .sub_id                              =      4
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2 {
+struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2 {
    uint32_t                             opcode;
    uint32_t                             clear_color_mid_high_24_bits;
    uint32_t                             clear_color_mid_low_32_bits;
@@ -2960,8 +3041,8 @@ struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2 {
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                      const struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2 * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -2978,11 +3059,11 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_pack(__gen_user_data 
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_unpack(const uint8_t * restrict cl,
-                                                                  struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2_unpack(const uint8_t * restrict cl,
+                                                        struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART2 * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->clear_color_mid_high_24_bits = __gen_unpack_uint(cl, 48, 71);
@@ -2993,12 +3074,12 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART2_unpack(const uint8_t 
 #endif
 
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_opcode    121
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_header\
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3_opcode    121
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3_header\
    .opcode                              =    121,  \
    .sub_id                              =      5
 
-struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3 {
+struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3 {
    uint32_t                             opcode;
    uint32_t                             pad;
    uint32_t                             uif_padded_height_in_uif_blocks;
@@ -3009,8 +3090,8 @@ struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3 {
 };
 
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                                const struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                      const struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3 * restrict values)
 {
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
@@ -3034,11 +3115,11 @@ V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_pack(__gen_user_data 
 
 }
 
-#define V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_length      9
+#define V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3_unpack(const uint8_t * restrict cl,
-                                                                  struct V3D41_TILE_RENDERING_MODE_CONFIGURATION_CLEAR_COLORS_PART3 * restrict values)
+V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3_unpack(const uint8_t * restrict cl,
+                                                        struct V3D41_TILE_RENDERING_MODE_CFG_CLEAR_COLORS_PART3 * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->pad = __gen_unpack_uint(cl, 61, 71);
@@ -3089,31 +3170,35 @@ V3D41_TILE_COORDINATES_unpack(const uint8_t * restrict cl,
 #endif
 
 
-#define V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_opcode    122
-#define V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_header\
+#define V3D41_MULTICORE_RENDERING_SUPERTILE_CFG_opcode    122
+#define V3D41_MULTICORE_RENDERING_SUPERTILE_CFG_header\
    .opcode                              =    122
 
-struct V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION {
+struct V3D41_MULTICORE_RENDERING_SUPERTILE_CFG {
    uint32_t                             opcode;
+   uint32_t                             number_of_bin_tile_lists;
    bool                                 supertile_raster_order;
    bool                                 multicore_enable;
    uint32_t                             total_frame_height_in_tiles;
    uint32_t                             total_frame_width_in_tiles;
    uint32_t                             total_frame_height_in_supertiles;
    uint32_t                             total_frame_width_in_supertiles;
-   uint32_t                             supertile_height_in_tiles_minus_1;
-   uint32_t                             supertile_width_in_tiles_minus_1;
+   uint32_t                             supertile_height_in_tiles;
+   uint32_t                             supertile_width_in_tiles;
 };
 
 static inline void
-V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                                       const struct V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION * restrict values)
+V3D41_MULTICORE_RENDERING_SUPERTILE_CFG_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                             const struct V3D41_MULTICORE_RENDERING_SUPERTILE_CFG * restrict values)
 {
+   assert(values->number_of_bin_tile_lists >= 1);
+   assert(values->supertile_height_in_tiles >= 1);
+   assert(values->supertile_width_in_tiles >= 1);
    cl[ 0] = __gen_uint(values->opcode, 0, 7);
 
-   cl[ 1] = __gen_uint(values->supertile_width_in_tiles_minus_1, 0, 7);
+   cl[ 1] = __gen_uint(values->supertile_width_in_tiles - 1, 0, 7);
 
-   cl[ 2] = __gen_uint(values->supertile_height_in_tiles_minus_1, 0, 7);
+   cl[ 2] = __gen_uint(values->supertile_height_in_tiles - 1, 0, 7);
 
    cl[ 3] = __gen_uint(values->total_frame_width_in_supertiles, 0, 7);
 
@@ -3126,26 +3211,28 @@ V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_pack(__gen_user_data *data, ui
 
    cl[ 7] = __gen_uint(values->total_frame_height_in_tiles, 4, 15) >> 8;
 
-   cl[ 8] = __gen_uint(values->supertile_raster_order, 4, 4) |
+   cl[ 8] = __gen_uint(values->number_of_bin_tile_lists - 1, 5, 7) |
+            __gen_uint(values->supertile_raster_order, 4, 4) |
             __gen_uint(values->multicore_enable, 0, 0);
 
 }
 
-#define V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_length      9
+#define V3D41_MULTICORE_RENDERING_SUPERTILE_CFG_length      9
 #ifdef __gen_unpack_address
 static inline void
-V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION_unpack(const uint8_t * restrict cl,
-                                                         struct V3D41_MULTICORE_RENDERING_SUPERTILE_CONFIGURATION * restrict values)
+V3D41_MULTICORE_RENDERING_SUPERTILE_CFG_unpack(const uint8_t * restrict cl,
+                                               struct V3D41_MULTICORE_RENDERING_SUPERTILE_CFG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->number_of_bin_tile_lists = __gen_unpack_uint(cl, 69, 71) + 1;
    values->supertile_raster_order = __gen_unpack_uint(cl, 68, 68);
    values->multicore_enable = __gen_unpack_uint(cl, 64, 64);
    values->total_frame_height_in_tiles = __gen_unpack_uint(cl, 52, 63);
    values->total_frame_width_in_tiles = __gen_unpack_uint(cl, 40, 51);
    values->total_frame_height_in_supertiles = __gen_unpack_uint(cl, 32, 39);
    values->total_frame_width_in_supertiles = __gen_unpack_uint(cl, 24, 31);
-   values->supertile_height_in_tiles_minus_1 = __gen_unpack_uint(cl, 16, 23);
-   values->supertile_width_in_tiles_minus_1 = __gen_unpack_uint(cl, 8, 15);
+   values->supertile_height_in_tiles = __gen_unpack_uint(cl, 16, 23) + 1;
+   values->supertile_width_in_tiles = __gen_unpack_uint(cl, 8, 15) + 1;
 }
 #endif
 
@@ -3251,6 +3338,229 @@ V3D41_TILE_LIST_INITIAL_BLOCK_SIZE_unpack(const uint8_t * restrict cl,
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->use_auto_chained_tile_lists = __gen_unpack_uint(cl, 10, 10);
    values->size_of_first_block_in_chained_tile_lists = __gen_unpack_uint(cl, 8, 9);
+}
+#endif
+
+
+#define V3D41_GL_SHADER_STATE_RECORD_header     \
+
+
+struct V3D41_GL_SHADER_STATE_RECORD {
+   bool                                 point_size_in_shaded_vertex_data;
+   bool                                 enable_clipping;
+   bool                                 vertex_id_read_by_coordinate_shader;
+   bool                                 instance_id_read_by_coordinate_shader;
+   bool                                 base_instance_id_read_by_coordinate_shader;
+   bool                                 vertex_id_read_by_vertex_shader;
+   bool                                 instance_id_read_by_vertex_shader;
+   bool                                 base_instance_id_read_by_vertex_shader;
+   bool                                 fragment_shader_does_z_writes;
+   bool                                 turn_off_early_z_test;
+   bool                                 coordinate_shader_has_separate_input_and_output_vpm_blocks;
+   bool                                 vertex_shader_has_separate_input_and_output_vpm_blocks;
+   bool                                 fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2;
+   bool                                 enable_sample_rate_shading;
+   bool                                 any_shader_reads_hardware_written_primitive_id;
+   bool                                 insert_primitive_id_as_first_varying_to_fragment_shader;
+   bool                                 turn_off_scoreboard;
+   bool                                 do_scoreboard_wait_on_first_thread_switch;
+   bool                                 disable_implicit_point_line_varyings;
+   bool                                 no_prim_pack;
+   uint32_t                             number_of_varyings_in_fragment_shader;
+   uint32_t                             coordinate_shader_output_vpm_segment_size;
+   uint32_t                             min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size;
+   uint32_t                             coordinate_shader_input_vpm_segment_size;
+   uint32_t                             min_coord_shader_input_segments_required_in_play;
+   uint32_t                             vertex_shader_output_vpm_segment_size;
+   uint32_t                             min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size;
+   uint32_t                             vertex_shader_input_vpm_segment_size;
+   uint32_t                             min_vertex_shader_input_segments_required_in_play;
+   __gen_address_type                   address_of_default_attribute_values;
+   __gen_address_type                   fragment_shader_code_address;
+   bool                                 fragment_shader_4_way_threadable;
+   bool                                 fragment_shader_start_in_final_thread_section;
+   bool                                 fragment_shader_propagate_nans;
+   __gen_address_type                   fragment_shader_uniforms_address;
+   __gen_address_type                   vertex_shader_code_address;
+   bool                                 vertex_shader_4_way_threadable;
+   bool                                 vertex_shader_start_in_final_thread_section;
+   bool                                 vertex_shader_propagate_nans;
+   __gen_address_type                   vertex_shader_uniforms_address;
+   __gen_address_type                   coordinate_shader_code_address;
+   bool                                 coordinate_shader_4_way_threadable;
+   bool                                 coordinate_shader_start_in_final_thread_section;
+   bool                                 coordinate_shader_propagate_nans;
+   __gen_address_type                   coordinate_shader_uniforms_address;
+};
+
+static inline void
+V3D41_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                  const struct V3D41_GL_SHADER_STATE_RECORD * restrict values)
+{
+   assert(values->min_coord_shader_input_segments_required_in_play >= 1);
+   assert(values->min_vertex_shader_input_segments_required_in_play >= 1);
+   cl[ 0] = __gen_uint(values->point_size_in_shaded_vertex_data, 0, 0) |
+            __gen_uint(values->enable_clipping, 1, 1) |
+            __gen_uint(values->vertex_id_read_by_coordinate_shader, 2, 2) |
+            __gen_uint(values->instance_id_read_by_coordinate_shader, 3, 3) |
+            __gen_uint(values->base_instance_id_read_by_coordinate_shader, 4, 4) |
+            __gen_uint(values->vertex_id_read_by_vertex_shader, 5, 5) |
+            __gen_uint(values->instance_id_read_by_vertex_shader, 6, 6) |
+            __gen_uint(values->base_instance_id_read_by_vertex_shader, 7, 7);
+
+   cl[ 1] = __gen_uint(values->fragment_shader_does_z_writes, 0, 0) |
+            __gen_uint(values->turn_off_early_z_test, 1, 1) |
+            __gen_uint(values->coordinate_shader_has_separate_input_and_output_vpm_blocks, 2, 2) |
+            __gen_uint(values->vertex_shader_has_separate_input_and_output_vpm_blocks, 3, 3) |
+            __gen_uint(values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2, 4, 4) |
+            __gen_uint(values->enable_sample_rate_shading, 5, 5) |
+            __gen_uint(values->any_shader_reads_hardware_written_primitive_id, 6, 6) |
+            __gen_uint(values->insert_primitive_id_as_first_varying_to_fragment_shader, 7, 7);
+
+   cl[ 2] = __gen_uint(values->turn_off_scoreboard, 0, 0) |
+            __gen_uint(values->do_scoreboard_wait_on_first_thread_switch, 1, 1) |
+            __gen_uint(values->disable_implicit_point_line_varyings, 2, 2) |
+            __gen_uint(values->no_prim_pack, 3, 3);
+
+   cl[ 3] = __gen_uint(values->number_of_varyings_in_fragment_shader, 0, 7);
+
+   cl[ 4] = __gen_uint(values->coordinate_shader_output_vpm_segment_size, 0, 3) |
+            __gen_uint(values->min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size, 4, 7);
+
+   cl[ 5] = __gen_uint(values->coordinate_shader_input_vpm_segment_size, 0, 3) |
+            __gen_uint(values->min_coord_shader_input_segments_required_in_play - 1, 4, 7);
+
+   cl[ 6] = __gen_uint(values->vertex_shader_output_vpm_segment_size, 0, 3) |
+            __gen_uint(values->min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size, 4, 7);
+
+   cl[ 7] = __gen_uint(values->vertex_shader_input_vpm_segment_size, 0, 3) |
+            __gen_uint(values->min_vertex_shader_input_segments_required_in_play - 1, 4, 7);
+
+   __gen_emit_reloc(data, &values->address_of_default_attribute_values);
+   cl[ 8] = __gen_address_offset(&values->address_of_default_attribute_values);
+
+   cl[ 9] = __gen_address_offset(&values->address_of_default_attribute_values) >> 8;
+
+   cl[10] = __gen_address_offset(&values->address_of_default_attribute_values) >> 16;
+
+   cl[11] = __gen_address_offset(&values->address_of_default_attribute_values) >> 24;
+
+   __gen_emit_reloc(data, &values->fragment_shader_code_address);
+   cl[12] = __gen_address_offset(&values->fragment_shader_code_address) |
+            __gen_uint(values->fragment_shader_4_way_threadable, 0, 0) |
+            __gen_uint(values->fragment_shader_start_in_final_thread_section, 1, 1) |
+            __gen_uint(values->fragment_shader_propagate_nans, 2, 2);
+
+   cl[13] = __gen_address_offset(&values->fragment_shader_code_address) >> 8;
+
+   cl[14] = __gen_address_offset(&values->fragment_shader_code_address) >> 16;
+
+   cl[15] = __gen_address_offset(&values->fragment_shader_code_address) >> 24;
+
+   __gen_emit_reloc(data, &values->fragment_shader_uniforms_address);
+   cl[16] = __gen_address_offset(&values->fragment_shader_uniforms_address);
+
+   cl[17] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 8;
+
+   cl[18] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 16;
+
+   cl[19] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 24;
+
+   __gen_emit_reloc(data, &values->vertex_shader_code_address);
+   cl[20] = __gen_address_offset(&values->vertex_shader_code_address) |
+            __gen_uint(values->vertex_shader_4_way_threadable, 0, 0) |
+            __gen_uint(values->vertex_shader_start_in_final_thread_section, 1, 1) |
+            __gen_uint(values->vertex_shader_propagate_nans, 2, 2);
+
+   cl[21] = __gen_address_offset(&values->vertex_shader_code_address) >> 8;
+
+   cl[22] = __gen_address_offset(&values->vertex_shader_code_address) >> 16;
+
+   cl[23] = __gen_address_offset(&values->vertex_shader_code_address) >> 24;
+
+   __gen_emit_reloc(data, &values->vertex_shader_uniforms_address);
+   cl[24] = __gen_address_offset(&values->vertex_shader_uniforms_address);
+
+   cl[25] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 8;
+
+   cl[26] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 16;
+
+   cl[27] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 24;
+
+   __gen_emit_reloc(data, &values->coordinate_shader_code_address);
+   cl[28] = __gen_address_offset(&values->coordinate_shader_code_address) |
+            __gen_uint(values->coordinate_shader_4_way_threadable, 0, 0) |
+            __gen_uint(values->coordinate_shader_start_in_final_thread_section, 1, 1) |
+            __gen_uint(values->coordinate_shader_propagate_nans, 2, 2);
+
+   cl[29] = __gen_address_offset(&values->coordinate_shader_code_address) >> 8;
+
+   cl[30] = __gen_address_offset(&values->coordinate_shader_code_address) >> 16;
+
+   cl[31] = __gen_address_offset(&values->coordinate_shader_code_address) >> 24;
+
+   __gen_emit_reloc(data, &values->coordinate_shader_uniforms_address);
+   cl[32] = __gen_address_offset(&values->coordinate_shader_uniforms_address);
+
+   cl[33] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 8;
+
+   cl[34] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 16;
+
+   cl[35] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 24;
+
+}
+
+#define V3D41_GL_SHADER_STATE_RECORD_length     36
+#ifdef __gen_unpack_address
+static inline void
+V3D41_GL_SHADER_STATE_RECORD_unpack(const uint8_t * restrict cl,
+                                    struct V3D41_GL_SHADER_STATE_RECORD * restrict values)
+{
+   values->point_size_in_shaded_vertex_data = __gen_unpack_uint(cl, 0, 0);
+   values->enable_clipping = __gen_unpack_uint(cl, 1, 1);
+   values->vertex_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 2, 2);
+   values->instance_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 3, 3);
+   values->base_instance_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 4, 4);
+   values->vertex_id_read_by_vertex_shader = __gen_unpack_uint(cl, 5, 5);
+   values->instance_id_read_by_vertex_shader = __gen_unpack_uint(cl, 6, 6);
+   values->base_instance_id_read_by_vertex_shader = __gen_unpack_uint(cl, 7, 7);
+   values->fragment_shader_does_z_writes = __gen_unpack_uint(cl, 8, 8);
+   values->turn_off_early_z_test = __gen_unpack_uint(cl, 9, 9);
+   values->coordinate_shader_has_separate_input_and_output_vpm_blocks = __gen_unpack_uint(cl, 10, 10);
+   values->vertex_shader_has_separate_input_and_output_vpm_blocks = __gen_unpack_uint(cl, 11, 11);
+   values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 = __gen_unpack_uint(cl, 12, 12);
+   values->enable_sample_rate_shading = __gen_unpack_uint(cl, 13, 13);
+   values->any_shader_reads_hardware_written_primitive_id = __gen_unpack_uint(cl, 14, 14);
+   values->insert_primitive_id_as_first_varying_to_fragment_shader = __gen_unpack_uint(cl, 15, 15);
+   values->turn_off_scoreboard = __gen_unpack_uint(cl, 16, 16);
+   values->do_scoreboard_wait_on_first_thread_switch = __gen_unpack_uint(cl, 17, 17);
+   values->disable_implicit_point_line_varyings = __gen_unpack_uint(cl, 18, 18);
+   values->no_prim_pack = __gen_unpack_uint(cl, 19, 19);
+   values->number_of_varyings_in_fragment_shader = __gen_unpack_uint(cl, 24, 31);
+   values->coordinate_shader_output_vpm_segment_size = __gen_unpack_uint(cl, 32, 35);
+   values->min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size = __gen_unpack_uint(cl, 36, 39);
+   values->coordinate_shader_input_vpm_segment_size = __gen_unpack_uint(cl, 40, 43);
+   values->min_coord_shader_input_segments_required_in_play = __gen_unpack_uint(cl, 44, 47) + 1;
+   values->vertex_shader_output_vpm_segment_size = __gen_unpack_uint(cl, 48, 51);
+   values->min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size = __gen_unpack_uint(cl, 52, 55);
+   values->vertex_shader_input_vpm_segment_size = __gen_unpack_uint(cl, 56, 59);
+   values->min_vertex_shader_input_segments_required_in_play = __gen_unpack_uint(cl, 60, 63) + 1;
+   values->address_of_default_attribute_values = __gen_unpack_address(cl, 64, 95);
+   values->fragment_shader_code_address = __gen_unpack_address(cl, 99, 127);
+   values->fragment_shader_4_way_threadable = __gen_unpack_uint(cl, 96, 96);
+   values->fragment_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 97, 97);
+   values->fragment_shader_propagate_nans = __gen_unpack_uint(cl, 98, 98);
+   values->fragment_shader_uniforms_address = __gen_unpack_address(cl, 128, 159);
+   values->vertex_shader_code_address = __gen_unpack_address(cl, 163, 191);
+   values->vertex_shader_4_way_threadable = __gen_unpack_uint(cl, 160, 160);
+   values->vertex_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 161, 161);
+   values->vertex_shader_propagate_nans = __gen_unpack_uint(cl, 162, 162);
+   values->vertex_shader_uniforms_address = __gen_unpack_address(cl, 192, 223);
+   values->coordinate_shader_code_address = __gen_unpack_address(cl, 227, 255);
+   values->coordinate_shader_4_way_threadable = __gen_unpack_uint(cl, 224, 224);
+   values->coordinate_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 225, 225);
+   values->coordinate_shader_propagate_nans = __gen_unpack_uint(cl, 226, 226);
+   values->coordinate_shader_uniforms_address = __gen_unpack_address(cl, 256, 287);
 }
 #endif
 
@@ -3436,218 +3746,6 @@ V3D41_TESSELLATION_SHADER_STATE_RECORD_unpack(const uint8_t * restrict cl,
    values->tessellation_bin_mode_evaluation_shader_uniforms_address = __gen_unpack_address(cl, 160, 191);
    values->tessellation_render_mode_evaluation_shader_code_address = __gen_unpack_address(cl, 192, 223);
    values->tessellation_render_mode_evaluation_shader_uniforms_address = __gen_unpack_address(cl, 224, 255);
-}
-#endif
-
-
-#define V3D41_GL_SHADER_STATE_RECORD_header     \
-
-
-struct V3D41_GL_SHADER_STATE_RECORD {
-   bool                                 point_size_in_shaded_vertex_data;
-   bool                                 enable_clipping;
-   bool                                 vertex_id_read_by_coordinate_shader;
-   bool                                 instance_id_read_by_coordinate_shader;
-   bool                                 base_instance_id_read_by_coordinate_shader;
-   bool                                 vertex_id_read_by_vertex_shader;
-   bool                                 instance_id_read_by_vertex_shader;
-   bool                                 base_instance_id_read_by_vertex_shader;
-   bool                                 fragment_shader_does_z_writes;
-   bool                                 turn_off_early_z_test;
-   bool                                 coordinate_shader_has_separate_input_and_output_vpm_blocks;
-   bool                                 vertex_shader_has_separate_input_and_output_vpm_blocks;
-   bool                                 fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2;
-   bool                                 enable_sample_rate_shading;
-   bool                                 any_shader_reads_hardware_written_primitive_id;
-   bool                                 insert_primitive_id_as_first_varying_to_fragment_shader;
-   bool                                 turn_off_scoreboard;
-   bool                                 do_scoreboard_wait_on_first_thread_switch;
-   bool                                 disable_implicit_point_line_varyings;
-   uint32_t                             number_of_varyings_in_fragment_shader;
-   uint32_t                             coordinate_shader_output_vpm_segment_size;
-   uint32_t                             min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size;
-   uint32_t                             coordinate_shader_input_vpm_segment_size;
-   uint32_t                             min_coord_shader_input_segments_required_in_play_minus_1;
-   uint32_t                             vertex_shader_output_vpm_segment_size;
-   uint32_t                             min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size;
-   uint32_t                             vertex_shader_input_vpm_segment_size;
-   uint32_t                             min_vertex_shader_input_segments_required_in_play_minus_1;
-   __gen_address_type                   address_of_default_attribute_values;
-   __gen_address_type                   fragment_shader_code_address;
-   bool                                 fragment_shader_4_way_threadable;
-   bool                                 fragment_shader_start_in_final_thread_section;
-   bool                                 propagate_nans;
-   __gen_address_type                   fragment_shader_uniforms_address;
-   __gen_address_type                   vertex_shader_code_address;
-   bool                                 vertex_shader_4_way_threadable;
-   bool                                 vertex_shader_start_in_final_thread_section;
-   __gen_address_type                   vertex_shader_uniforms_address;
-   __gen_address_type                   coordinate_shader_code_address;
-   bool                                 coordinate_shader_4_way_threadable;
-   bool                                 coordinate_shader_start_in_final_thread_section;
-   __gen_address_type                   coordinate_shader_uniforms_address;
-};
-
-static inline void
-V3D41_GL_SHADER_STATE_RECORD_pack(__gen_user_data *data, uint8_t * restrict cl,
-                                  const struct V3D41_GL_SHADER_STATE_RECORD * restrict values)
-{
-   cl[ 0] = __gen_uint(values->point_size_in_shaded_vertex_data, 0, 0) |
-            __gen_uint(values->enable_clipping, 1, 1) |
-            __gen_uint(values->vertex_id_read_by_coordinate_shader, 2, 2) |
-            __gen_uint(values->instance_id_read_by_coordinate_shader, 3, 3) |
-            __gen_uint(values->base_instance_id_read_by_coordinate_shader, 4, 4) |
-            __gen_uint(values->vertex_id_read_by_vertex_shader, 5, 5) |
-            __gen_uint(values->instance_id_read_by_vertex_shader, 6, 6) |
-            __gen_uint(values->base_instance_id_read_by_vertex_shader, 7, 7);
-
-   cl[ 1] = __gen_uint(values->fragment_shader_does_z_writes, 0, 0) |
-            __gen_uint(values->turn_off_early_z_test, 1, 1) |
-            __gen_uint(values->coordinate_shader_has_separate_input_and_output_vpm_blocks, 2, 2) |
-            __gen_uint(values->vertex_shader_has_separate_input_and_output_vpm_blocks, 3, 3) |
-            __gen_uint(values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2, 4, 4) |
-            __gen_uint(values->enable_sample_rate_shading, 5, 5) |
-            __gen_uint(values->any_shader_reads_hardware_written_primitive_id, 6, 6) |
-            __gen_uint(values->insert_primitive_id_as_first_varying_to_fragment_shader, 7, 7);
-
-   cl[ 2] = __gen_uint(values->turn_off_scoreboard, 0, 0) |
-            __gen_uint(values->do_scoreboard_wait_on_first_thread_switch, 1, 1) |
-            __gen_uint(values->disable_implicit_point_line_varyings, 2, 2);
-
-   cl[ 3] = __gen_uint(values->number_of_varyings_in_fragment_shader, 0, 7);
-
-   cl[ 4] = __gen_uint(values->coordinate_shader_output_vpm_segment_size, 0, 3) |
-            __gen_uint(values->min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size, 4, 7);
-
-   cl[ 5] = __gen_uint(values->coordinate_shader_input_vpm_segment_size, 0, 3) |
-            __gen_uint(values->min_coord_shader_input_segments_required_in_play_minus_1, 4, 7);
-
-   cl[ 6] = __gen_uint(values->vertex_shader_output_vpm_segment_size, 0, 3) |
-            __gen_uint(values->min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size, 4, 7);
-
-   cl[ 7] = __gen_uint(values->vertex_shader_input_vpm_segment_size, 0, 3) |
-            __gen_uint(values->min_vertex_shader_input_segments_required_in_play_minus_1, 4, 7);
-
-   __gen_emit_reloc(data, &values->address_of_default_attribute_values);
-   cl[ 8] = __gen_address_offset(&values->address_of_default_attribute_values);
-
-   cl[ 9] = __gen_address_offset(&values->address_of_default_attribute_values) >> 8;
-
-   cl[10] = __gen_address_offset(&values->address_of_default_attribute_values) >> 16;
-
-   cl[11] = __gen_address_offset(&values->address_of_default_attribute_values) >> 24;
-
-   __gen_emit_reloc(data, &values->fragment_shader_code_address);
-   cl[12] = __gen_address_offset(&values->fragment_shader_code_address) |
-            __gen_uint(values->fragment_shader_4_way_threadable, 0, 0) |
-            __gen_uint(values->fragment_shader_start_in_final_thread_section, 1, 1) |
-            __gen_uint(values->propagate_nans, 2, 2);
-
-   cl[13] = __gen_address_offset(&values->fragment_shader_code_address) >> 8;
-
-   cl[14] = __gen_address_offset(&values->fragment_shader_code_address) >> 16;
-
-   cl[15] = __gen_address_offset(&values->fragment_shader_code_address) >> 24;
-
-   __gen_emit_reloc(data, &values->fragment_shader_uniforms_address);
-   cl[16] = __gen_address_offset(&values->fragment_shader_uniforms_address);
-
-   cl[17] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 8;
-
-   cl[18] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 16;
-
-   cl[19] = __gen_address_offset(&values->fragment_shader_uniforms_address) >> 24;
-
-   __gen_emit_reloc(data, &values->vertex_shader_code_address);
-   cl[20] = __gen_address_offset(&values->vertex_shader_code_address) |
-            __gen_uint(values->vertex_shader_4_way_threadable, 0, 0) |
-            __gen_uint(values->vertex_shader_start_in_final_thread_section, 1, 1);
-
-   cl[21] = __gen_address_offset(&values->vertex_shader_code_address) >> 8;
-
-   cl[22] = __gen_address_offset(&values->vertex_shader_code_address) >> 16;
-
-   cl[23] = __gen_address_offset(&values->vertex_shader_code_address) >> 24;
-
-   __gen_emit_reloc(data, &values->vertex_shader_uniforms_address);
-   cl[24] = __gen_address_offset(&values->vertex_shader_uniforms_address);
-
-   cl[25] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 8;
-
-   cl[26] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 16;
-
-   cl[27] = __gen_address_offset(&values->vertex_shader_uniforms_address) >> 24;
-
-   __gen_emit_reloc(data, &values->coordinate_shader_code_address);
-   cl[28] = __gen_address_offset(&values->coordinate_shader_code_address) |
-            __gen_uint(values->coordinate_shader_4_way_threadable, 0, 0) |
-            __gen_uint(values->coordinate_shader_start_in_final_thread_section, 1, 1);
-
-   cl[29] = __gen_address_offset(&values->coordinate_shader_code_address) >> 8;
-
-   cl[30] = __gen_address_offset(&values->coordinate_shader_code_address) >> 16;
-
-   cl[31] = __gen_address_offset(&values->coordinate_shader_code_address) >> 24;
-
-   __gen_emit_reloc(data, &values->coordinate_shader_uniforms_address);
-   cl[32] = __gen_address_offset(&values->coordinate_shader_uniforms_address);
-
-   cl[33] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 8;
-
-   cl[34] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 16;
-
-   cl[35] = __gen_address_offset(&values->coordinate_shader_uniforms_address) >> 24;
-
-}
-
-#define V3D41_GL_SHADER_STATE_RECORD_length     36
-#ifdef __gen_unpack_address
-static inline void
-V3D41_GL_SHADER_STATE_RECORD_unpack(const uint8_t * restrict cl,
-                                    struct V3D41_GL_SHADER_STATE_RECORD * restrict values)
-{
-   values->point_size_in_shaded_vertex_data = __gen_unpack_uint(cl, 0, 0);
-   values->enable_clipping = __gen_unpack_uint(cl, 1, 1);
-   values->vertex_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 2, 2);
-   values->instance_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 3, 3);
-   values->base_instance_id_read_by_coordinate_shader = __gen_unpack_uint(cl, 4, 4);
-   values->vertex_id_read_by_vertex_shader = __gen_unpack_uint(cl, 5, 5);
-   values->instance_id_read_by_vertex_shader = __gen_unpack_uint(cl, 6, 6);
-   values->base_instance_id_read_by_vertex_shader = __gen_unpack_uint(cl, 7, 7);
-   values->fragment_shader_does_z_writes = __gen_unpack_uint(cl, 8, 8);
-   values->turn_off_early_z_test = __gen_unpack_uint(cl, 9, 9);
-   values->coordinate_shader_has_separate_input_and_output_vpm_blocks = __gen_unpack_uint(cl, 10, 10);
-   values->vertex_shader_has_separate_input_and_output_vpm_blocks = __gen_unpack_uint(cl, 11, 11);
-   values->fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 = __gen_unpack_uint(cl, 12, 12);
-   values->enable_sample_rate_shading = __gen_unpack_uint(cl, 13, 13);
-   values->any_shader_reads_hardware_written_primitive_id = __gen_unpack_uint(cl, 14, 14);
-   values->insert_primitive_id_as_first_varying_to_fragment_shader = __gen_unpack_uint(cl, 15, 15);
-   values->turn_off_scoreboard = __gen_unpack_uint(cl, 16, 16);
-   values->do_scoreboard_wait_on_first_thread_switch = __gen_unpack_uint(cl, 17, 17);
-   values->disable_implicit_point_line_varyings = __gen_unpack_uint(cl, 18, 18);
-   values->number_of_varyings_in_fragment_shader = __gen_unpack_uint(cl, 24, 31);
-   values->coordinate_shader_output_vpm_segment_size = __gen_unpack_uint(cl, 32, 35);
-   values->min_coord_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size = __gen_unpack_uint(cl, 36, 39);
-   values->coordinate_shader_input_vpm_segment_size = __gen_unpack_uint(cl, 40, 43);
-   values->min_coord_shader_input_segments_required_in_play_minus_1 = __gen_unpack_uint(cl, 44, 47);
-   values->vertex_shader_output_vpm_segment_size = __gen_unpack_uint(cl, 48, 51);
-   values->min_vertex_shader_output_segments_required_in_play_in_addition_to_vcm_cache_size = __gen_unpack_uint(cl, 52, 55);
-   values->vertex_shader_input_vpm_segment_size = __gen_unpack_uint(cl, 56, 59);
-   values->min_vertex_shader_input_segments_required_in_play_minus_1 = __gen_unpack_uint(cl, 60, 63);
-   values->address_of_default_attribute_values = __gen_unpack_address(cl, 64, 95);
-   values->fragment_shader_code_address = __gen_unpack_address(cl, 96, 127);
-   values->fragment_shader_4_way_threadable = __gen_unpack_uint(cl, 96, 96);
-   values->fragment_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 97, 97);
-   values->propagate_nans = __gen_unpack_uint(cl, 98, 98);
-   values->fragment_shader_uniforms_address = __gen_unpack_address(cl, 128, 159);
-   values->vertex_shader_code_address = __gen_unpack_address(cl, 160, 191);
-   values->vertex_shader_4_way_threadable = __gen_unpack_uint(cl, 160, 160);
-   values->vertex_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 161, 161);
-   values->vertex_shader_uniforms_address = __gen_unpack_address(cl, 192, 223);
-   values->coordinate_shader_code_address = __gen_unpack_address(cl, 224, 255);
-   values->coordinate_shader_4_way_threadable = __gen_unpack_uint(cl, 224, 224);
-   values->coordinate_shader_start_in_final_thread_section = __gen_unpack_uint(cl, 225, 225);
-   values->coordinate_shader_uniforms_address = __gen_unpack_address(cl, 256, 287);
 }
 #endif
 
@@ -4008,7 +4106,7 @@ struct V3D41_TEXTURE_SHADER_STATE {
    uint32_t                             image_width;
    uint32_t                             array_stride_64_byte_aligned;
    __gen_address_type                   texture_base_pointer;
-   bool                                 reverse_standard_border_colour;
+   bool                                 reverse_standard_border_color;
    bool                                 ahdr;
    bool                                 srgb;
    bool                                 flip_s_and_t_on_incoming_request;
@@ -4022,7 +4120,7 @@ V3D41_TEXTURE_SHADER_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
 {
    __gen_emit_reloc(data, &values->texture_base_pointer);
    cl[ 0] = __gen_address_offset(&values->texture_base_pointer) |
-            __gen_uint(values->reverse_standard_border_colour, 5, 5) |
+            __gen_uint(values->reverse_standard_border_color, 5, 5) |
             __gen_uint(values->ahdr, 4, 4) |
             __gen_uint(values->srgb, 3, 3) |
             __gen_uint(values->flip_s_and_t_on_incoming_request, 2, 2) |
@@ -4113,7 +4211,7 @@ V3D41_TEXTURE_SHADER_STATE_unpack(const uint8_t * restrict cl,
    values->image_width = __gen_unpack_uint(cl, 58, 71);
    values->array_stride_64_byte_aligned = __gen_unpack_uint(cl, 32, 57);
    values->texture_base_pointer = __gen_unpack_address(cl, 0, 31);
-   values->reverse_standard_border_colour = __gen_unpack_uint(cl, 5, 5);
+   values->reverse_standard_border_color = __gen_unpack_uint(cl, 5, 5);
    values->ahdr = __gen_unpack_uint(cl, 4, 4);
    values->srgb = __gen_unpack_uint(cl, 3, 3);
    values->flip_s_and_t_on_incoming_request = __gen_unpack_uint(cl, 2, 2);
@@ -4127,12 +4225,12 @@ V3D41_TEXTURE_SHADER_STATE_unpack(const uint8_t * restrict cl,
 
 
 struct V3D41_SAMPLER_STATE {
-   uint32_t                             border_colour_alpha;
-   uint32_t                             border_colour_blue;
-   uint32_t                             border_colour_green;
-   uint32_t                             border_colour_red;
+   uint32_t                             border_color_alpha;
+   uint32_t                             border_color_blue;
+   uint32_t                             border_color_green;
+   uint32_t                             border_color_red;
    uint32_t                             maximum_anisotropy;
-   enum V3D41_Border_Colour_Mode        border_colour_mode;
+   enum V3D41_Border_Color_Mode         border_color_mode;
    bool                                 wrap_i_border;
    enum V3D41_Wrap_Mode                 wrap_r;
    enum V3D41_Wrap_Mode                 wrap_t;
@@ -4175,18 +4273,18 @@ V3D41_SAMPLER_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
             __gen_uint(values->wrap_s, 0, 2);
 
    cl[ 7] = __gen_uint(values->maximum_anisotropy, 5, 6) |
-            __gen_uint(values->border_colour_mode, 2, 4) |
+            __gen_uint(values->border_color_mode, 2, 4) |
             __gen_uint(values->wrap_i_border, 1, 1) |
             __gen_uint(values->wrap_r, 6, 8) >> 8;
 
 
-   memcpy(&cl[8], &values->border_colour_red, sizeof(values->border_colour_red));
+   memcpy(&cl[8], &values->border_color_red, sizeof(values->border_color_red));
 
-   memcpy(&cl[12], &values->border_colour_green, sizeof(values->border_colour_green));
+   memcpy(&cl[12], &values->border_color_green, sizeof(values->border_color_green));
 
-   memcpy(&cl[16], &values->border_colour_blue, sizeof(values->border_colour_blue));
+   memcpy(&cl[16], &values->border_color_blue, sizeof(values->border_color_blue));
 
-   memcpy(&cl[20], &values->border_colour_alpha, sizeof(values->border_colour_alpha));
+   memcpy(&cl[20], &values->border_color_alpha, sizeof(values->border_color_alpha));
 }
 
 #define V3D41_SAMPLER_STATE_length            24
@@ -4195,12 +4293,12 @@ static inline void
 V3D41_SAMPLER_STATE_unpack(const uint8_t * restrict cl,
                            struct V3D41_SAMPLER_STATE * restrict values)
 {
-   values->border_colour_alpha = __gen_unpack_uint(cl, 160, 191);
-   values->border_colour_blue = __gen_unpack_uint(cl, 128, 159);
-   values->border_colour_green = __gen_unpack_uint(cl, 96, 127);
-   values->border_colour_red = __gen_unpack_uint(cl, 64, 95);
+   values->border_color_alpha = __gen_unpack_uint(cl, 160, 191);
+   values->border_color_blue = __gen_unpack_uint(cl, 128, 159);
+   values->border_color_green = __gen_unpack_uint(cl, 96, 127);
+   values->border_color_red = __gen_unpack_uint(cl, 64, 95);
    values->maximum_anisotropy = __gen_unpack_uint(cl, 61, 62);
-   values->border_colour_mode = __gen_unpack_uint(cl, 58, 60);
+   values->border_color_mode = __gen_unpack_uint(cl, 58, 60);
    values->wrap_i_border = __gen_unpack_uint(cl, 57, 57);
    values->wrap_r = __gen_unpack_uint(cl, 54, 56);
    values->wrap_t = __gen_unpack_uint(cl, 51, 53);

@@ -154,8 +154,7 @@ struct u_vbuf {
    uint32_t enabled_vb_mask;
 
    /* Saved vertex buffer. */
-   unsigned aux_vertex_buffer_slot;
-   struct pipe_vertex_buffer aux_vertex_buffer_saved;
+   struct pipe_vertex_buffer vertex_buffer0_saved;
 
    /* Vertex buffers for the driver.
     * There are usually no user buffers. */
@@ -270,7 +269,7 @@ boolean u_vbuf_get_caps(struct pipe_screen *screen, struct u_vbuf_caps *caps,
    for (i = 0; i < ARRAY_SIZE(vbuf_format_fallbacks); i++) {
       enum pipe_format format = vbuf_format_fallbacks[i].from;
 
-      if (!screen->is_format_supported(screen, format, PIPE_BUFFER, 0,
+      if (!screen->is_format_supported(screen, format, PIPE_BUFFER, 0, 0,
                                        PIPE_BIND_VERTEX_BUFFER)) {
          caps->format_translation[format] = vbuf_format_fallbacks[i].to;
          fallback = TRUE;
@@ -300,13 +299,11 @@ boolean u_vbuf_get_caps(struct pipe_screen *screen, struct u_vbuf_caps *caps,
 }
 
 struct u_vbuf *
-u_vbuf_create(struct pipe_context *pipe,
-              struct u_vbuf_caps *caps, unsigned aux_vertex_buffer_index)
+u_vbuf_create(struct pipe_context *pipe, struct u_vbuf_caps *caps)
 {
    struct u_vbuf *mgr = CALLOC_STRUCT(u_vbuf);
 
    mgr->caps = *caps;
-   mgr->aux_vertex_buffer_slot = aux_vertex_buffer_index;
    mgr->pipe = pipe;
    mgr->cso_cache = cso_cache_create();
    mgr->translate_cache = translate_cache_create();
@@ -381,7 +378,7 @@ void u_vbuf_destroy(struct u_vbuf *mgr)
    for (i = 0; i < PIPE_MAX_ATTRIBS; i++)
       pipe_vertex_buffer_unreference(&mgr->real_vertex_buffer[i]);
 
-   pipe_vertex_buffer_unreference(&mgr->aux_vertex_buffer_saved);
+   pipe_vertex_buffer_unreference(&mgr->vertex_buffer0_saved);
 
    translate_cache_destroy(mgr->translate_cache);
    cso_cache_delete(mgr->cso_cache);
@@ -1025,13 +1022,84 @@ static boolean u_vbuf_mapping_vertex_buffer_blocks(const struct u_vbuf *mgr)
             mgr->nonzero_stride_vb_mask)) != 0;
 }
 
-static void u_vbuf_get_minmax_index(struct pipe_context *pipe,
-                                    const struct pipe_draw_info *info,
-                                    int *out_min_index, int *out_max_index)
+static void
+u_vbuf_get_minmax_index_mapped(const struct pipe_draw_info *info,
+                               const void *indices, unsigned *out_min_index,
+                               unsigned *out_max_index)
+{
+   unsigned max = 0;
+   unsigned min = ~0u;
+
+   switch (info->index_size) {
+   case 4: {
+      const unsigned *ui_indices = (const unsigned*)indices;
+      if (info->primitive_restart) {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (ui_indices[i] != info->restart_index) {
+               if (ui_indices[i] > max) max = ui_indices[i];
+               if (ui_indices[i] < min) min = ui_indices[i];
+            }
+         }
+      }
+      else {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (ui_indices[i] > max) max = ui_indices[i];
+            if (ui_indices[i] < min) min = ui_indices[i];
+         }
+      }
+      break;
+   }
+   case 2: {
+      const unsigned short *us_indices = (const unsigned short*)indices;
+      if (info->primitive_restart) {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (us_indices[i] != info->restart_index) {
+               if (us_indices[i] > max) max = us_indices[i];
+               if (us_indices[i] < min) min = us_indices[i];
+            }
+         }
+      }
+      else {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (us_indices[i] > max) max = us_indices[i];
+            if (us_indices[i] < min) min = us_indices[i];
+         }
+      }
+      break;
+   }
+   case 1: {
+      const unsigned char *ub_indices = (const unsigned char*)indices;
+      if (info->primitive_restart) {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (ub_indices[i] != info->restart_index) {
+               if (ub_indices[i] > max) max = ub_indices[i];
+               if (ub_indices[i] < min) min = ub_indices[i];
+            }
+         }
+      }
+      else {
+         for (unsigned i = 0; i < info->count; i++) {
+            if (ub_indices[i] > max) max = ub_indices[i];
+            if (ub_indices[i] < min) min = ub_indices[i];
+         }
+      }
+      break;
+   }
+   default:
+      assert(0);
+   }
+
+   *out_min_index = min;
+   *out_max_index = max;
+}
+
+static void
+u_vbuf_get_minmax_index(struct pipe_context *pipe,
+                        const struct pipe_draw_info *info,
+                        unsigned *out_min_index, unsigned *out_max_index)
 {
    struct pipe_transfer *transfer = NULL;
    const void *indices;
-   unsigned i;
 
    if (info->has_user_indices) {
       indices = (uint8_t*)info->index.user +
@@ -1043,78 +1111,7 @@ static void u_vbuf_get_minmax_index(struct pipe_context *pipe,
                                       PIPE_TRANSFER_READ, &transfer);
    }
 
-   switch (info->index_size) {
-   case 4: {
-      const unsigned *ui_indices = (const unsigned*)indices;
-      unsigned max_ui = 0;
-      unsigned min_ui = ~0U;
-      if (info->primitive_restart) {
-         for (i = 0; i < info->count; i++) {
-            if (ui_indices[i] != info->restart_index) {
-               if (ui_indices[i] > max_ui) max_ui = ui_indices[i];
-               if (ui_indices[i] < min_ui) min_ui = ui_indices[i];
-            }
-         }
-      }
-      else {
-         for (i = 0; i < info->count; i++) {
-            if (ui_indices[i] > max_ui) max_ui = ui_indices[i];
-            if (ui_indices[i] < min_ui) min_ui = ui_indices[i];
-         }
-      }
-      *out_min_index = min_ui;
-      *out_max_index = max_ui;
-      break;
-   }
-   case 2: {
-      const unsigned short *us_indices = (const unsigned short*)indices;
-      unsigned max_us = 0;
-      unsigned min_us = ~0U;
-      if (info->primitive_restart) {
-         for (i = 0; i < info->count; i++) {
-            if (us_indices[i] != info->restart_index) {
-               if (us_indices[i] > max_us) max_us = us_indices[i];
-               if (us_indices[i] < min_us) min_us = us_indices[i];
-            }
-         }
-      }
-      else {
-         for (i = 0; i < info->count; i++) {
-            if (us_indices[i] > max_us) max_us = us_indices[i];
-            if (us_indices[i] < min_us) min_us = us_indices[i];
-         }
-      }
-      *out_min_index = min_us;
-      *out_max_index = max_us;
-      break;
-   }
-   case 1: {
-      const unsigned char *ub_indices = (const unsigned char*)indices;
-      unsigned max_ub = 0;
-      unsigned min_ub = ~0U;
-      if (info->primitive_restart) {
-         for (i = 0; i < info->count; i++) {
-            if (ub_indices[i] != info->restart_index) {
-               if (ub_indices[i] > max_ub) max_ub = ub_indices[i];
-               if (ub_indices[i] < min_ub) min_ub = ub_indices[i];
-            }
-         }
-      }
-      else {
-         for (i = 0; i < info->count; i++) {
-            if (ub_indices[i] > max_ub) max_ub = ub_indices[i];
-            if (ub_indices[i] < min_ub) min_ub = ub_indices[i];
-         }
-      }
-      *out_min_index = min_ub;
-      *out_max_index = max_ub;
-      break;
-   }
-   default:
-      assert(0);
-      *out_min_index = 0;
-      *out_max_index = 0;
-   }
+   u_vbuf_get_minmax_index_mapped(info, indices, out_min_index, out_max_index);
 
    if (transfer) {
       pipe_buffer_unmap(pipe, transfer);
@@ -1134,10 +1131,36 @@ static void u_vbuf_set_driver_vertex_buffers(struct u_vbuf *mgr)
    mgr->dirty_real_vb_mask = 0;
 }
 
+static void
+u_vbuf_split_indexed_multidraw(struct u_vbuf *mgr, struct pipe_draw_info *info,
+                               unsigned *indirect_data, unsigned stride,
+                               unsigned draw_count)
+{
+   assert(info->index_size);
+   info->indirect = NULL;
+
+   for (unsigned i = 0; i < draw_count; i++) {
+      unsigned offset = i * stride / 4;
+
+      info->count = indirect_data[offset + 0];
+      info->instance_count = indirect_data[offset + 1];
+
+      if (!info->count || !info->instance_count)
+         continue;
+
+      info->start = indirect_data[offset + 2];
+      info->index_bias = indirect_data[offset + 3];
+      info->start_instance = indirect_data[offset + 4];
+
+      u_vbuf_draw_vbo(mgr, info);
+   }
+}
+
 void u_vbuf_draw_vbo(struct u_vbuf *mgr, const struct pipe_draw_info *info)
 {
    struct pipe_context *pipe = mgr->pipe;
-   int start_vertex, min_index;
+   int start_vertex;
+   unsigned min_index;
    unsigned num_vertices;
    boolean unroll_indices = FALSE;
    const uint32_t used_vb_mask = mgr->ve->used_vb_mask;
@@ -1162,36 +1185,169 @@ void u_vbuf_draw_vbo(struct u_vbuf *mgr, const struct pipe_draw_info *info)
 
    new_info = *info;
 
-   /* Fallback. We need to know all the parameters. */
+   /* Handle indirect (multi)draws. */
    if (new_info.indirect) {
-      struct pipe_transfer *transfer = NULL;
-      int *data;
+      const struct pipe_draw_indirect_info *indirect = new_info.indirect;
+      unsigned draw_count = 0;
 
-      if (new_info.index_size) {
-         data = pipe_buffer_map_range(pipe, new_info.indirect->buffer,
-                                      new_info.indirect->offset, 20,
-                                      PIPE_TRANSFER_READ, &transfer);
-         new_info.index_bias = data[3];
-         new_info.start_instance = data[4];
-      }
-      else {
-         data = pipe_buffer_map_range(pipe, new_info.indirect->buffer,
-                                      new_info.indirect->offset, 16,
-                                      PIPE_TRANSFER_READ, &transfer);
-         new_info.start_instance = data[3];
+      /* Get the number of draws. */
+      if (indirect->indirect_draw_count) {
+         pipe_buffer_read(pipe, indirect->indirect_draw_count,
+                          indirect->indirect_draw_count_offset,
+                          4, &draw_count);
+      } else {
+         draw_count = indirect->draw_count;
       }
 
-      new_info.count = data[0];
-      new_info.instance_count = data[1];
-      new_info.start = data[2];
-      pipe_buffer_unmap(pipe, transfer);
-      new_info.indirect = NULL;
+      if (!draw_count)
+         return;
+
+      unsigned data_size = (draw_count - 1) * indirect->stride +
+                           (new_info.index_size ? 20 : 16);
+      unsigned *data = malloc(data_size);
+      if (!data)
+         return; /* report an error? */
+
+      /* Read the used buffer range only once, because the read can be
+       * uncached.
+       */
+      pipe_buffer_read(pipe, indirect->buffer, indirect->offset, data_size,
+                       data);
+
+      if (info->index_size) {
+         /* Indexed multidraw. */
+         unsigned index_bias0 = data[3];
+         bool index_bias_same = true;
+
+         /* If we invoke the translate path, we have to split the multidraw. */
+         if (incompatible_vb_mask ||
+             mgr->ve->incompatible_elem_mask) {
+            u_vbuf_split_indexed_multidraw(mgr, &new_info, data,
+                                           indirect->stride, draw_count);
+            free(data);
+            return;
+         }
+
+         /* See if index_bias is the same for all draws. */
+         for (unsigned i = 1; i < draw_count; i++) {
+            if (data[i * indirect->stride / 4 + 3] != index_bias0) {
+               index_bias_same = false;
+               break;
+            }
+         }
+
+         /* Split the multidraw if index_bias is different. */
+         if (!index_bias_same) {
+            u_vbuf_split_indexed_multidraw(mgr, &new_info, data,
+                                           indirect->stride, draw_count);
+            free(data);
+            return;
+         }
+
+         /* If we don't need to use the translate path and index_bias is
+          * the same, we can process the multidraw with the time complexity
+          * equal to 1 draw call (except for the index range computation).
+          * We only need to compute the index range covering all draw calls
+          * of the multidraw.
+          *
+          * The driver will not look at these values because indirect != NULL.
+          * These values determine the user buffer bounds to upload.
+          */
+         new_info.index_bias = index_bias0;
+         new_info.min_index = ~0u;
+         new_info.max_index = 0;
+         new_info.start_instance = ~0u;
+         unsigned end_instance = 0;
+
+         struct pipe_transfer *transfer = NULL;
+         const uint8_t *indices;
+
+         if (info->has_user_indices) {
+            indices = (uint8_t*)info->index.user;
+         } else {
+            indices = (uint8_t*)pipe_buffer_map(pipe, info->index.resource,
+                                                PIPE_TRANSFER_READ, &transfer);
+         }
+
+         for (unsigned i = 0; i < draw_count; i++) {
+            unsigned offset = i * indirect->stride / 4;
+            unsigned start = data[offset + 2];
+            unsigned count = data[offset + 0];
+            unsigned start_instance = data[offset + 4];
+            unsigned instance_count = data[offset + 1];
+
+            if (!count || !instance_count)
+               continue;
+
+            /* Update the ranges of instances. */
+            new_info.start_instance = MIN2(new_info.start_instance,
+                                           start_instance);
+            end_instance = MAX2(end_instance, start_instance + instance_count);
+
+            /* Update the index range. */
+            unsigned min, max;
+            new_info.count = count; /* only used by get_minmax_index */
+            u_vbuf_get_minmax_index_mapped(&new_info,
+                                           indices +
+                                           new_info.index_size * start,
+                                           &min, &max);
+
+            new_info.min_index = MIN2(new_info.min_index, min);
+            new_info.max_index = MAX2(new_info.max_index, max);
+         }
+         free(data);
+
+         if (transfer)
+            pipe_buffer_unmap(pipe, transfer);
+
+         /* Set the final instance count. */
+         new_info.instance_count = end_instance - new_info.start_instance;
+
+         if (new_info.start_instance == ~0u || !new_info.instance_count)
+            return;
+      } else {
+         /* Non-indexed multidraw.
+          *
+          * Keep the draw call indirect and compute minimums & maximums,
+          * which will determine the user buffer bounds to upload, but
+          * the driver will not look at these values because indirect != NULL.
+          *
+          * This efficiently processes the multidraw with the time complexity
+          * equal to 1 draw call.
+          */
+         new_info.start = ~0u;
+         new_info.start_instance = ~0u;
+         unsigned end_vertex = 0;
+         unsigned end_instance = 0;
+
+         for (unsigned i = 0; i < draw_count; i++) {
+            unsigned offset = i * indirect->stride / 4;
+            unsigned start = data[offset + 2];
+            unsigned count = data[offset + 0];
+            unsigned start_instance = data[offset + 3];
+            unsigned instance_count = data[offset + 1];
+
+            new_info.start = MIN2(new_info.start, start);
+            new_info.start_instance = MIN2(new_info.start_instance,
+                                           start_instance);
+
+            end_vertex = MAX2(end_vertex, start + count);
+            end_instance = MAX2(end_instance, start_instance + instance_count);
+         }
+
+         /* Set the final counts. */
+         new_info.count = end_vertex - new_info.start;
+         new_info.instance_count = end_instance - new_info.start_instance;
+
+         if (new_info.start == ~0u || !new_info.count || !new_info.instance_count)
+            return;
+      }
    }
 
    if (new_info.index_size) {
       /* See if anything needs to be done for per-vertex attribs. */
       if (u_vbuf_need_minmax_index(mgr)) {
-         int max_index;
+         unsigned max_index;
 
          if (new_info.max_index != ~0u) {
             min_index = new_info.min_index;
@@ -1210,7 +1366,8 @@ void u_vbuf_draw_vbo(struct u_vbuf *mgr, const struct pipe_draw_info *info)
           * We would have to break this drawing operation into several ones. */
          /* Use some heuristic to see if unrolling indices improves
           * performance. */
-         if (!new_info.primitive_restart &&
+         if (!info->indirect &&
+             !new_info.primitive_restart &&
              num_vertices > new_info.count*2 &&
              num_vertices - new_info.count > 32 &&
              !u_vbuf_mapping_vertex_buffer_blocks(mgr)) {
@@ -1313,15 +1470,14 @@ void u_vbuf_restore_vertex_elements(struct u_vbuf *mgr)
    mgr->ve_saved = NULL;
 }
 
-void u_vbuf_save_aux_vertex_buffer_slot(struct u_vbuf *mgr)
+void u_vbuf_save_vertex_buffer0(struct u_vbuf *mgr)
 {
-   pipe_vertex_buffer_reference(&mgr->aux_vertex_buffer_saved,
-                           &mgr->vertex_buffer[mgr->aux_vertex_buffer_slot]);
+   pipe_vertex_buffer_reference(&mgr->vertex_buffer0_saved,
+                                &mgr->vertex_buffer[0]);
 }
 
-void u_vbuf_restore_aux_vertex_buffer_slot(struct u_vbuf *mgr)
+void u_vbuf_restore_vertex_buffer0(struct u_vbuf *mgr)
 {
-   u_vbuf_set_vertex_buffers(mgr, mgr->aux_vertex_buffer_slot, 1,
-                             &mgr->aux_vertex_buffer_saved);
-   pipe_vertex_buffer_unreference(&mgr->aux_vertex_buffer_saved);
+   u_vbuf_set_vertex_buffers(mgr, 0, 1, &mgr->vertex_buffer0_saved);
+   pipe_vertex_buffer_unreference(&mgr->vertex_buffer0_saved);
 }

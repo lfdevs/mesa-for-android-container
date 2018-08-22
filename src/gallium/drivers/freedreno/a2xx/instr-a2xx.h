@@ -366,10 +366,8 @@ typedef struct PACKED {
 	uint8_t             pred_select              : 1;
 	/* dword2: */
 	uint8_t             stride                   : 8;
-	/* possibly offset and reserved4 are swapped on a200? */
-	uint8_t             offset                   : 8;
-	uint8_t             reserved4                : 8;
-	uint8_t             reserved5                : 7;
+	uint32_t            offset                   : 22;
+	uint8_t             reserved4                : 1;
 	uint8_t             pred_condition           : 1;
 } instr_fetch_vtx_t;
 

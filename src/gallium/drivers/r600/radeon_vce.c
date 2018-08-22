@@ -518,7 +518,7 @@ void rvce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
 	int reloc_idx;
 
 	reloc_idx = enc->ws->cs_add_buffer(enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
-					   domain, RADEON_PRIO_VCE);
+					   domain, 0);
 	if (enc->use_vm) {
 		uint64_t addr;
 		addr = enc->ws->buffer_get_virtual_address(buf);

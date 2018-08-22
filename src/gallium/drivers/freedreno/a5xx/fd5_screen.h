@@ -29,6 +29,19 @@
 
 #include "pipe/p_screen.h"
 
+#include "freedreno_util.h"
+
+#include "a5xx.xml.h"
+
 void fd5_screen_init(struct pipe_screen *pscreen);
+
+static inline void
+emit_marker5(struct fd_ringbuffer *ring, int scratch_idx)
+{
+	extern unsigned marker_cnt;
+	unsigned reg = REG_A5XX_CP_SCRATCH_REG(scratch_idx);
+	OUT_PKT4(ring, reg, 1);
+	OUT_RING(ring, ++marker_cnt);
+}
 
 #endif /* FD5_SCREEN_H_ */

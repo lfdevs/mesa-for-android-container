@@ -111,6 +111,7 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
+@HAVE_STD_CXX11_TRUE@am__append_1 = tests/vma
 check_PROGRAMS = u_atomic_test$(EXEEXT) roundeven_test$(EXEEXT) \
 	mesa-sha1_test$(EXEEXT)
 subdir = src/util
@@ -142,13 +143,14 @@ am__objects_1 = libmesautil_la-bitscan.lo libmesautil_la-build_id.lo \
 	libmesautil_la-crc32.lo libmesautil_la-debug.lo \
 	libmesautil_la-disk_cache.lo libmesautil_la-half_float.lo \
 	libmesautil_la-hash_table.lo libmesautil_la-mesa-sha1.lo \
-	libmesautil_la-os_time.lo sha1/libmesautil_la-sha1.lo \
-	libmesautil_la-ralloc.lo libmesautil_la-rand_xor.lo \
+	libmesautil_la-os_time.lo libmesautil_la-u_process.lo \
+	sha1/libmesautil_la-sha1.lo libmesautil_la-ralloc.lo \
+	libmesautil_la-rand_xor.lo libmesautil_la-rb_tree.lo \
 	libmesautil_la-register_allocate.lo libmesautil_la-rgtc.lo \
 	libmesautil_la-set.lo libmesautil_la-slab.lo \
 	libmesautil_la-string_buffer.lo libmesautil_la-strtod.lo \
 	libmesautil_la-u_atomic.lo libmesautil_la-u_queue.lo \
-	libmesautil_la-u_vector.lo
+	libmesautil_la-u_vector.lo libmesautil_la-vma.lo
 am__objects_2 = libmesautil_la-format_srgb.lo
 am_libmesautil_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libmesautil_la_OBJECTS = $(am_libmesautil_la_OBJECTS)
@@ -456,7 +458,8 @@ TEST_LOGS = $(am__test_logs2:.test.log=.log)
 TEST_LOG_DRIVER = $(SHELL) $(top_srcdir)/bin/test-driver
 TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
 	$(TEST_LOG_FLAGS)
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = . xmlpool tests/hash_table tests/string_buffer \
+	tests/set tests/vma
 am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/Makefile.sources \
 	$(top_srcdir)/bin/depcomp $(top_srcdir)/bin/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -497,6 +500,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -677,6 +682,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -684,8 +691,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -699,6 +706,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -719,10 +728,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -780,6 +793,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -792,11 +806,8 @@ target_vendor = @target_vendor@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = . \
-	xmlpool \
-	tests/hash_table \
-	tests/string_buffer
-
+SUBDIRS = . xmlpool tests/hash_table tests/string_buffer tests/set \
+	$(am__append_1)
 MESA_UTIL_FILES := \
 	bitscan.c \
 	bitscan.h \
@@ -823,12 +834,16 @@ MESA_UTIL_FILES := \
 	mesa-sha1.h \
 	os_time.c \
 	os_time.h \
+	u_process.c \
+	u_process.h \
 	sha1/sha1.c \
 	sha1/sha1.h \
 	ralloc.c \
 	ralloc.h \
 	rand_xor.c \
 	rand_xor.h \
+	rb_tree.c \
+	rb_tree.h \
 	register_allocate.c \
 	register_allocate.h \
 	rgtc.c \
@@ -855,7 +870,9 @@ MESA_UTIL_FILES := \
 	u_string.h \
 	u_thread.h \
 	u_vector.c \
-	u_vector.h
+	u_vector.h \
+	vma.c \
+	vma.h
 
 MESA_UTIL_GENERATED_FILES = \
 	format_srgb.c
@@ -1023,6 +1040,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-os_time.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-ralloc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-rand_xor.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-rb_tree.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-register_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-rgtc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-set.Plo@am__quote@
@@ -1030,8 +1048,10 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-string_buffer.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-strtod.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_atomic.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_process.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_queue.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-u_vector.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libmesautil_la-vma.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libxmlconfig_la-xmlconfig.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mesa-sha1_test.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/roundeven_test.Po@am__quote@
@@ -1125,6 +1145,13 @@ libmesautil_la-os_time.lo: os_time.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-os_time.lo `test -f 'os_time.c' || echo '$(srcdir)/'`os_time.c
 
+libmesautil_la-u_process.lo: u_process.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-u_process.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-u_process.Tpo -c -o libmesautil_la-u_process.lo `test -f 'u_process.c' || echo '$(srcdir)/'`u_process.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-u_process.Tpo $(DEPDIR)/libmesautil_la-u_process.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='u_process.c' object='libmesautil_la-u_process.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-u_process.lo `test -f 'u_process.c' || echo '$(srcdir)/'`u_process.c
+
 sha1/libmesautil_la-sha1.lo: sha1/sha1.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT sha1/libmesautil_la-sha1.lo -MD -MP -MF sha1/$(DEPDIR)/libmesautil_la-sha1.Tpo -c -o sha1/libmesautil_la-sha1.lo `test -f 'sha1/sha1.c' || echo '$(srcdir)/'`sha1/sha1.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) sha1/$(DEPDIR)/libmesautil_la-sha1.Tpo sha1/$(DEPDIR)/libmesautil_la-sha1.Plo
@@ -1145,6 +1172,13 @@ libmesautil_la-rand_xor.lo: rand_xor.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='rand_xor.c' object='libmesautil_la-rand_xor.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-rand_xor.lo `test -f 'rand_xor.c' || echo '$(srcdir)/'`rand_xor.c
+
+libmesautil_la-rb_tree.lo: rb_tree.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-rb_tree.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-rb_tree.Tpo -c -o libmesautil_la-rb_tree.lo `test -f 'rb_tree.c' || echo '$(srcdir)/'`rb_tree.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-rb_tree.Tpo $(DEPDIR)/libmesautil_la-rb_tree.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='rb_tree.c' object='libmesautil_la-rb_tree.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-rb_tree.lo `test -f 'rb_tree.c' || echo '$(srcdir)/'`rb_tree.c
 
 libmesautil_la-register_allocate.lo: register_allocate.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-register_allocate.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-register_allocate.Tpo -c -o libmesautil_la-register_allocate.lo `test -f 'register_allocate.c' || echo '$(srcdir)/'`register_allocate.c
@@ -1208,6 +1242,13 @@ libmesautil_la-u_vector.lo: u_vector.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='u_vector.c' object='libmesautil_la-u_vector.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-u_vector.lo `test -f 'u_vector.c' || echo '$(srcdir)/'`u_vector.c
+
+libmesautil_la-vma.lo: vma.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-vma.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-vma.Tpo -c -o libmesautil_la-vma.lo `test -f 'vma.c' || echo '$(srcdir)/'`vma.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libmesautil_la-vma.Tpo $(DEPDIR)/libmesautil_la-vma.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='vma.c' object='libmesautil_la-vma.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libmesautil_la-vma.lo `test -f 'vma.c' || echo '$(srcdir)/'`vma.c
 
 libmesautil_la-format_srgb.lo: format_srgb.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libmesautil_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libmesautil_la-format_srgb.lo -MD -MP -MF $(DEPDIR)/libmesautil_la-format_srgb.Tpo -c -o libmesautil_la-format_srgb.lo `test -f 'format_srgb.c' || echo '$(srcdir)/'`format_srgb.c

@@ -161,32 +161,36 @@ isl_lower_storage_image_format(const struct gen_device_info *devinfo,
    /* No normalized fixed-point formats are supported by the hardware. */
    case ISL_FORMAT_R16G16B16A16_UNORM:
    case ISL_FORMAT_R16G16B16A16_SNORM:
-      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->gen >= 11 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16B16A16_UINT :
               ISL_FORMAT_R32G32_UINT);
 
    case ISL_FORMAT_R8G8B8A8_UNORM:
    case ISL_FORMAT_R8G8B8A8_SNORM:
-      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->gen >= 11 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8B8A8_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R16G16_UNORM:
    case ISL_FORMAT_R16G16_SNORM:
-      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->gen >= 11 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R16G16_UINT : ISL_FORMAT_R32_UINT);
 
    case ISL_FORMAT_R8G8_UNORM:
    case ISL_FORMAT_R8G8_SNORM:
-      return (devinfo->gen >= 8 || devinfo->is_haswell ?
+      return (devinfo->gen >= 11 ? format :
+              devinfo->gen >= 8 || devinfo->is_haswell ?
               ISL_FORMAT_R8G8_UINT : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R16_UNORM:
    case ISL_FORMAT_R16_SNORM:
-      return ISL_FORMAT_R16_UINT;
+      return (devinfo->gen >= 11 ? format : ISL_FORMAT_R16_UINT);
 
    case ISL_FORMAT_R8_UNORM:
    case ISL_FORMAT_R8_SNORM:
-      return ISL_FORMAT_R8_UINT;
+      return (devinfo->gen >= 11 ? format : ISL_FORMAT_R8_UINT);
 
    default:
       assert(!"Unknown image format");

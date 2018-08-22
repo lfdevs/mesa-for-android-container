@@ -1,34 +1,34 @@
 /****************************************************************************
-* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file context.h
-*
-* @brief Definitions for SWR_CONTEXT and DRAW_CONTEXT
-*        The SWR_CONTEXT is our global context and contains the DC ring,
-*        thread state, etc.
-*
-*        The DRAW_CONTEXT contains all state associated with a draw operation.
-*
-******************************************************************************/
+ * Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file context.h
+ *
+ * @brief Definitions for SWR_CONTEXT and DRAW_CONTEXT
+ *        The SWR_CONTEXT is our global context and contains the DC ring,
+ *        thread state, etc.
+ *
+ *        The DRAW_CONTEXT contains all state associated with a draw operation.
+ *
+ ******************************************************************************/
 #pragma once
 
 #include <condition_variable>
@@ -59,9 +59,9 @@ struct TRI_FLAGS
 {
     uint32_t frontFacing : 1;
     uint32_t yMajor : 1;
-    uint32_t coverageMask : (SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM);
+    uint32_t coverageMask : (SIMD_TILE_X_DIM* SIMD_TILE_Y_DIM);
     uint32_t reserved : 32 - 1 - 1 - (SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM);
-    float pointSize;
+    float    pointSize;
     uint32_t renderTargetArrayIndex;
     uint32_t viewportIndex;
 };
@@ -77,14 +77,15 @@ struct SWR_TRIANGLE_DESC
     float OneOverW[3];
     float recipDet;
 
-    float *pRecipW;
-    float *pAttribs;
-    float *pPerspAttribs;
-    float *pSamplePos;
-    float *pUserClipBuffer;
+    float* pRecipW;
+    float* pAttribs;
+    float* pPerspAttribs;
+    float* pSamplePos;
+    float* pUserClipBuffer;
 
     uint64_t coverageMask[SWR_MAX_NUM_MULTISAMPLES];
-    uint64_t innerCoverageMask; // Conservative rasterization inner coverage: marked covered if entire pixel is covered
+    uint64_t innerCoverageMask; // Conservative rasterization inner coverage: marked covered if
+                                // entire pixel is covered
     uint64_t anyCoveredSamples;
 
     TRI_FLAGS triFlags;
@@ -92,10 +93,10 @@ struct SWR_TRIANGLE_DESC
 
 struct TRIANGLE_WORK_DESC
 {
-    float *pTriBuffer;
-    float *pAttribs;
-    float *pUserClipBuffer;
-    uint32_t numAttribs;
+    float* pTriBuffer;
+    float* pAttribs;
+    float* pUserClipBuffer;
+    uint32_t  numAttribs;
     TRI_FLAGS triFlags;
 };
 
@@ -104,33 +105,33 @@ struct CLEAR_DESC
     SWR_RECT rect;
     uint32_t attachmentMask;
     uint32_t renderTargetArrayIndex;
-    float clearRTColor[4];  // RGBA_32F
-    float clearDepth;   // [0..1]
-    uint8_t clearStencil;
+    float    clearRTColor[4]; // RGBA_32F
+    float    clearDepth;      // [0..1]
+    uint8_t  clearStencil;
 };
 
 struct DISCARD_INVALIDATE_TILES_DESC
 {
-    uint32_t attachmentMask;
-    SWR_RECT rect;
+    uint32_t       attachmentMask;
+    SWR_RECT       rect;
     SWR_TILE_STATE newTileState;
-    bool createNewTiles;
-    bool fullTilesOnly;
+    bool           createNewTiles;
+    bool           fullTilesOnly;
 };
 
 struct SYNC_DESC
 {
     PFN_CALLBACK_FUNC pfnCallbackFunc;
-    uint64_t userData;
-    uint64_t userData2;
-    uint64_t userData3;
+    uint64_t          userData;
+    uint64_t          userData2;
+    uint64_t          userData3;
 };
 
 struct STORE_TILES_DESC
 {
-    uint32_t attachmentMask;
+    uint32_t       attachmentMask;
     SWR_TILE_STATE postStoreTileState;
-    SWR_RECT rect;
+    SWR_RECT       rect;
 };
 
 struct COMPUTE_DESC
@@ -140,7 +141,10 @@ struct COMPUTE_DESC
     uint32_t threadGroupCountZ;
 };
 
-typedef void(*PFN_WORK_FUNC)(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, void* pDesc);
+typedef void (*PFN_WORK_FUNC)(DRAW_CONTEXT* pDC,
+                              uint32_t      workerId,
+                              uint32_t      macroTile,
+                              void*         pDesc);
 
 enum WORK_TYPE
 {
@@ -154,51 +158,55 @@ enum WORK_TYPE
 
 OSALIGNSIMD(struct) BE_WORK
 {
-    WORK_TYPE type;
+    WORK_TYPE     type;
     PFN_WORK_FUNC pfnWork;
     union
     {
-        SYNC_DESC sync;
-        TRIANGLE_WORK_DESC tri;
-        CLEAR_DESC clear;
+        SYNC_DESC                     sync;
+        TRIANGLE_WORK_DESC            tri;
+        CLEAR_DESC                    clear;
         DISCARD_INVALIDATE_TILES_DESC discardInvalidateTiles;
-        STORE_TILES_DESC storeTiles;
+        STORE_TILES_DESC              storeTiles;
     } desc;
 };
 
 struct DRAW_WORK
 {
-    DRAW_CONTEXT*   pDC;
+    DRAW_CONTEXT* pDC;
     union
     {
-        uint32_t   numIndices;      // DrawIndexed: Number of indices for draw.
-        uint32_t   numVerts;        // Draw: Number of verts (triangles, lines, etc)
+        uint32_t numIndices; // DrawIndexed: Number of indices for draw.
+        uint32_t numVerts;   // Draw: Number of verts (triangles, lines, etc)
     };
     union
     {
-        gfxptr_t   xpIB;              // DrawIndexed: App supplied int32 indices 
-        uint32_t   startVertex;    // Draw: Starting vertex in VB to render from.
+        gfxptr_t xpIB;        // DrawIndexed: App supplied int32 indices
+        uint32_t startVertex; // Draw: Starting vertex in VB to render from.
     };
-    int32_t    baseVertex;
-    uint32_t   numInstances;        // Number of instances
-    uint32_t   startInstance;       // Instance offset
-    uint32_t   startPrimID;         // starting primitiveID for this draw batch
-    uint32_t   startVertexID;       // starting VertexID for this draw batch (only needed for non-indexed draws)
-    SWR_FORMAT type;                // index buffer type
+    int32_t  baseVertex;
+    uint32_t numInstances;  // Number of instances
+    uint32_t startInstance; // Instance offset
+    uint32_t startPrimID;   // starting primitiveID for this draw batch
+    uint32_t
+               startVertexID; // starting VertexID for this draw batch (only needed for non-indexed draws)
+    SWR_FORMAT type;          // index buffer type
 };
 
-typedef void(*PFN_FE_WORK_FUNC)(SWR_CONTEXT* pContext, DRAW_CONTEXT* pDC, uint32_t workerId, void* pDesc);
+typedef void (*PFN_FE_WORK_FUNC)(SWR_CONTEXT*  pContext,
+                                 DRAW_CONTEXT* pDC,
+                                 uint32_t      workerId,
+                                 void*         pDesc);
 struct FE_WORK
 {
-    WORK_TYPE type;
+    WORK_TYPE        type;
     PFN_FE_WORK_FUNC pfnWork;
     union
     {
-        SYNC_DESC sync;
-        DRAW_WORK draw;
-        CLEAR_DESC clear;
+        SYNC_DESC                     sync;
+        DRAW_WORK                     draw;
+        CLEAR_DESC                    clear;
         DISCARD_INVALIDATE_TILES_DESC discardInvalidateTiles;
-        STORE_TILES_DESC storeTiles;
+        STORE_TILES_DESC              storeTiles;
     } desc;
 };
 
@@ -213,13 +221,25 @@ struct GUARDBANDS
 struct PA_STATE;
 
 // function signature for pipeline stages that execute after primitive assembly
-typedef void(*PFN_PROCESS_PRIMS)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], 
-    uint32_t primMask, simdscalari const &primID, simdscalari const &viewportIdx, simdscalari const &rtIdx);
+typedef void (*PFN_PROCESS_PRIMS)(DRAW_CONTEXT*      pDC,
+                                  PA_STATE&          pa,
+                                  uint32_t           workerId,
+                                  simdvector         prims[],
+                                  uint32_t           primMask,
+                                  simdscalari const& primID,
+                                  simdscalari const& viewportIdx,
+                                  simdscalari const& rtIdx);
 
 #if ENABLE_AVX512_SIMD16
 // function signature for pipeline stages that execute after primitive assembly
-typedef void(SIMDCALL *PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[],
-    uint32_t primMask, simd16scalari const &primID, simd16scalari const &viewportIdx, simd16scalari const &rtIdx);
+typedef void(SIMDCALL* PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT*        pDC,
+                                                 PA_STATE&            pa,
+                                                 uint32_t             workerId,
+                                                 simd16vector         prims[],
+                                                 uint32_t             primMask,
+                                                 simd16scalari const& primID,
+                                                 simd16scalari const& viewportIdx,
+                                                 simd16scalari const& rtIdx);
 
 #endif
 OSALIGNLINE(struct) API_STATE
@@ -228,86 +248,85 @@ OSALIGNLINE(struct) API_STATE
     SWR_VERTEX_BUFFER_STATE vertexBuffers[KNOB_NUM_STREAMS];
 
     // GS - Geometry Shader State
-    SWR_GS_STATE            gsState;
-    PFN_GS_FUNC             pfnGsFunc;
+    SWR_GS_STATE gsState;
+    PFN_GS_FUNC  pfnGsFunc;
 
     // FS - Fetch Shader State
-    PFN_FETCH_FUNC          pfnFetchFunc;
+    PFN_FETCH_FUNC pfnFetchFunc;
 
     // VS - Vertex Shader State
-    PFN_VERTEX_FUNC         pfnVertexFunc;
+    PFN_VERTEX_FUNC pfnVertexFunc;
 
     // Index Buffer
-    SWR_INDEX_BUFFER_STATE  indexBuffer;
+    SWR_INDEX_BUFFER_STATE indexBuffer;
 
     // CS - Compute Shader
-    PFN_CS_FUNC             pfnCsFunc;
-    uint32_t                totalThreadsInGroup;
-    uint32_t                totalSpillFillSize;
-    uint32_t                scratchSpaceSize;
-    uint32_t                scratchSpaceNumInstances;
+    PFN_CS_FUNC pfnCsFunc;
+    uint32_t    totalThreadsInGroup;
+    uint32_t    totalSpillFillSize;
+    uint32_t    scratchSpaceSize;
+    uint32_t    scratchSpaceNumInstances;
 
     // FE - Frontend State
-    SWR_FRONTEND_STATE      frontendState;
+    SWR_FRONTEND_STATE frontendState;
 
     // SOS - Streamout Shader State
-    PFN_SO_FUNC             pfnSoFunc[MAX_SO_STREAMS];
+    PFN_SO_FUNC pfnSoFunc[MAX_SO_STREAMS];
 
     // Streamout state
-    SWR_STREAMOUT_STATE     soState;
+    SWR_STREAMOUT_STATE          soState;
     mutable SWR_STREAMOUT_BUFFER soBuffer[MAX_SO_STREAMS];
 
     // Tessellation State
-    PFN_HS_FUNC             pfnHsFunc;
-    PFN_DS_FUNC             pfnDsFunc;
-    SWR_TS_STATE            tsState;
+    PFN_HS_FUNC  pfnHsFunc;
+    PFN_DS_FUNC  pfnDsFunc;
+    SWR_TS_STATE tsState;
 
     // Number of attributes used by the frontend (vs, so, gs)
-    uint32_t                feNumAttributes;
-
+    uint32_t feNumAttributes;
 
     // RS - Rasterizer State
-    SWR_RASTSTATE           rastState;
+    SWR_RASTSTATE rastState;
     // floating point multisample offsets
     float samplePos[SWR_MAX_NUM_MULTISAMPLES * 2];
 
-    GUARDBANDS               gbState;
+    GUARDBANDS gbState;
 
-    SWR_VIEWPORT            vp[KNOB_NUM_VIEWPORTS_SCISSORS];
-    SWR_VIEWPORT_MATRICES   vpMatrices;
+    SWR_VIEWPORT          vp[KNOB_NUM_VIEWPORTS_SCISSORS];
+    SWR_VIEWPORT_MATRICES vpMatrices;
 
-    SWR_RECT                scissorRects[KNOB_NUM_VIEWPORTS_SCISSORS];
-    SWR_RECT                scissorsInFixedPoint[KNOB_NUM_VIEWPORTS_SCISSORS];
-    bool                    scissorsTileAligned;
+    SWR_RECT scissorRects[KNOB_NUM_VIEWPORTS_SCISSORS];
+    SWR_RECT scissorsInFixedPoint[KNOB_NUM_VIEWPORTS_SCISSORS];
+    bool     scissorsTileAligned;
 
-    bool                    forceFront;
-    PRIMITIVE_TOPOLOGY      topology;
+    bool               forceFront;
+    PRIMITIVE_TOPOLOGY topology;
 
 
     // Backend state
     OSALIGNLINE(SWR_BACKEND_STATE) backendState;
 
-    SWR_DEPTH_BOUNDS_STATE  depthBoundsState;
+    SWR_DEPTH_BOUNDS_STATE depthBoundsState;
 
     // PS - Pixel shader state
-    SWR_PS_STATE            psState;
+    SWR_PS_STATE psState;
 
     SWR_DEPTH_STENCIL_STATE depthStencilState;
 
     // OM - Output Merger State
-    SWR_BLEND_STATE         blendState;
-    PFN_BLEND_JIT_FUNC      pfnBlendFunc[SWR_NUM_RENDERTARGETS];
+    SWR_BLEND_STATE    blendState;
+    PFN_BLEND_JIT_FUNC pfnBlendFunc[SWR_NUM_RENDERTARGETS];
 
     struct
     {
-        uint32_t enableStatsFE : 1;             // Enable frontend pipeline stats
-        uint32_t enableStatsBE : 1;             // Enable backend pipeline stats
-        uint32_t colorHottileEnable : 8;        // Bitmask of enabled color hottiles
-        uint32_t depthHottileEnable: 1;         // Enable depth buffer hottile
-        uint32_t stencilHottileEnable : 1;      // Enable stencil buffer hottile
+        uint32_t enableStatsFE : 1;        // Enable frontend pipeline stats
+        uint32_t enableStatsBE : 1;        // Enable backend pipeline stats
+        uint32_t colorHottileEnable : 8;   // Bitmask of enabled color hottiles
+        uint32_t depthHottileEnable : 1;   // Enable depth buffer hottile
+        uint32_t stencilHottileEnable : 1; // Enable stencil buffer hottile
     };
 
-    PFN_QUANTIZE_DEPTH      pfnQuantizeDepth;
+    PFN_QUANTIZE_DEPTH pfnQuantizeDepth;
 };
 
 class MacroTileMgr;
@@ -343,13 +362,23 @@ struct BarycentricCoeffs
 };
 
 // pipeline function pointer types
-typedef void(*PFN_BACKEND_FUNC)(DRAW_CONTEXT*, uint32_t, uint32_t, uint32_t, SWR_TRIANGLE_DESC&, RenderOutputBuffers&);
-typedef void(*PFN_OUTPUT_MERGER)(SWR_PS_CONTEXT &, uint8_t* (&)[SWR_NUM_RENDERTARGETS], uint32_t, const SWR_BLEND_STATE*,
-                                 const PFN_BLEND_JIT_FUNC (&)[SWR_NUM_RENDERTARGETS], simdscalar&, simdscalar const &);
-typedef void(*PFN_CALC_PIXEL_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT &);
-typedef void(*PFN_CALC_SAMPLE_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT&);
-typedef void(*PFN_CALC_CENTROID_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT &, const uint64_t *const, const uint32_t,
-                                              simdscalar const &, simdscalar const &);
+typedef void (*PFN_BACKEND_FUNC)(
+    DRAW_CONTEXT*, uint32_t, uint32_t, uint32_t, SWR_TRIANGLE_DESC&, RenderOutputBuffers&);
+typedef void (*PFN_OUTPUT_MERGER)(SWR_PS_CONTEXT&,
+                                  uint8_t* (&)[SWR_NUM_RENDERTARGETS],
+                                  uint32_t,
+                                  const SWR_BLEND_STATE*,
+                                  const PFN_BLEND_JIT_FUNC (&)[SWR_NUM_RENDERTARGETS],
+                                  simdscalar&,
+                                  simdscalar const&);
+typedef void (*PFN_CALC_PIXEL_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT&);
+typedef void (*PFN_CALC_SAMPLE_BARYCENTRICS)(const BarycentricCoeffs&, SWR_PS_CONTEXT&);
+typedef void (*PFN_CALC_CENTROID_BARYCENTRICS)(const BarycentricCoeffs&,
+                                               SWR_PS_CONTEXT&,
+                                               const uint64_t* const,
+                                               const uint32_t,
+                                               simdscalar const&,
+                                               simdscalar const&);
 
 struct BACKEND_FUNCS
 {
@@ -361,16 +390,16 @@ struct DRAW_STATE
 {
     API_STATE state;
 
-    void* pPrivateState;  // Its required the driver sets this up for each draw.
+    void* pPrivateState; // Its required the driver sets this up for each draw.
 
     // pipeline function pointers, filled in by API thread when setting up the draw
-    BACKEND_FUNCS backendFuncs;
+    BACKEND_FUNCS     backendFuncs;
     PFN_PROCESS_PRIMS pfnProcessPrims;
 #if USE_SIMD16_FRONTEND
     PFN_PROCESS_PRIMS_SIMD16 pfnProcessPrims_simd16;
 #endif
 
-    CachingArena* pArena;     // This should only be used by API thread.
+    CachingArena* pArena; // This should only be used by API thread.
 };
 
 struct DRAW_DYNAMIC_STATE
@@ -386,7 +415,7 @@ struct DRAW_DYNAMIC_STATE
     uint32_t SoWriteOffset[4];
     bool     SoWriteOffsetDirty[4];
 
-    SWR_STATS_FE statsFE;   // Only one FE thread per DC.
+    SWR_STATS_FE statsFE; // Only one FE thread per DC.
     SWR_STATS*   pStats;
 };
 
@@ -395,30 +424,30 @@ struct DRAW_DYNAMIC_STATE
 //    This draw context maintains all of the state needed for the draw operation.
 struct DRAW_CONTEXT
 {
-    SWR_CONTEXT*    pContext;
+    SWR_CONTEXT* pContext;
     union
     {
-        MacroTileMgr*   pTileMgr;
-        DispatchQueue*  pDispatch;      // Queue for thread groups. (isCompute)
+        MacroTileMgr*  pTileMgr;
+        DispatchQueue* pDispatch; // Queue for thread groups. (isCompute)
     };
-    DRAW_STATE*     pState;             // Read-only state. Core should not update this outside of API thread.
-    CachingArena*   pArena;
+    DRAW_STATE*   pState; // Read-only state. Core should not update this outside of API thread.
+    CachingArena* pArena;
 
-    uint32_t        drawId;
-    bool            dependentFE;    // Frontend work is dependent on all previous FE
-    bool            dependent;      // Backend work is dependent on all previous BE
-    bool            isCompute;      // Is this DC a compute context?
-    bool            cleanupState;   // True if this is the last draw using an entry in the state ring.
+    uint32_t drawId;
+    bool     dependentFE;  // Frontend work is dependent on all previous FE
+    bool     dependent;    // Backend work is dependent on all previous BE
+    bool     isCompute;    // Is this DC a compute context?
+    bool     cleanupState; // True if this is the last draw using an entry in the state ring.
 
-    FE_WORK         FeWork;
+    FE_WORK FeWork;
 
-    SYNC_DESC       retireCallback; // Call this func when this DC is retired.
+    SYNC_DESC retireCallback; // Call this func when this DC is retired.
 
     DRAW_DYNAMIC_STATE dynState;
 
-    volatile OSALIGNLINE(bool)       doneFE;         // Is FE work done for this draw?
-    volatile OSALIGNLINE(uint32_t)   FeLock;
-    volatile OSALIGNLINE(uint32_t)   threadsDone;
+    volatile OSALIGNLINE(bool) doneFE; // Is FE work done for this draw?
+    volatile OSALIGNLINE(uint32_t) FeLock;
+    volatile OSALIGNLINE(uint32_t) threadsDone;
 };
 
 static_assert((sizeof(DRAW_CONTEXT) & 63) == 0, "Invalid size for DRAW_CONTEXT");
@@ -444,14 +473,14 @@ class HotTileMgr;
 struct SWR_CONTEXT
 {
     // Draw Context Ring
-    //  Each draw needs its own state in order to support mulitple draws in flight across multiple threads.
-    //  We maintain N draw contexts configured as a ring. The size of the ring limits the maximum number
-    //  of draws that can be in flight at any given time.
+    //  Each draw needs its own state in order to support mulitple draws in flight across multiple
+    //  threads. We maintain N draw contexts configured as a ring. The size of the ring limits the
+    //  maximum number of draws that can be in flight at any given time.
     //
     //  Description:
     //  1. State - When an application first sets state we'll request a new draw context to use.
-    //     a. If there are no available draw contexts then we'll have to wait until one becomes free.
-    //     b. If one is available then set pCurDrawContext to point to it and mark it in use.
+    //     a. If there are no available draw contexts then we'll have to wait until one becomes
+    //     free. b. If one is available then set pCurDrawContext to point to it and mark it in use.
     //     c. All state calls set state on pCurDrawContext.
     //  2. Draw - Creates submits a work item that is associated with current draw context.
     //     a. Set pPrevDrawContext = pCurDrawContext
@@ -461,10 +490,11 @@ struct SWR_CONTEXT
     //     b. State is copied from prev draw context to current.
     RingBuffer<DRAW_CONTEXT> dcRing;
 
-    DRAW_CONTEXT *pCurDrawContext;    // This points to DC entry in ring for an unsubmitted draw.
-    DRAW_CONTEXT *pPrevDrawContext;   // This points to DC entry for the previous context submitted that we can copy state from.
+    DRAW_CONTEXT* pCurDrawContext;  // This points to DC entry in ring for an unsubmitted draw.
+    DRAW_CONTEXT* pPrevDrawContext; // This points to DC entry for the previous context submitted
+                                    // that we can copy state from.
 
-    MacroTileMgr* pMacroTileManagerArray;
+    MacroTileMgr*  pMacroTileManagerArray;
     DispatchQueue* pDispatchQueueArray;
 
     // Draw State Ring
@@ -474,33 +504,33 @@ struct SWR_CONTEXT
     //  to reference a single entry in the DS ring.
     RingBuffer<DRAW_STATE> dsRing;
 
-    uint32_t curStateId;               // Current index to the next available entry in the DS ring.
+    uint32_t curStateId; // Current index to the next available entry in the DS ring.
 
     uint32_t NumWorkerThreads;
     uint32_t NumFEThreads;
     uint32_t NumBEThreads;
 
-    THREAD_POOL threadPool; // Thread pool associated with this context
-    SWR_THREADING_INFO threadInfo;
-    SWR_API_THREADING_INFO apiThreadInfo;
+    THREAD_POOL              threadPool; // Thread pool associated with this context
+    SWR_THREADING_INFO       threadInfo;
+    SWR_API_THREADING_INFO   apiThreadInfo;
     SWR_WORKER_PRIVATE_STATE workerPrivateState;
 
     uint32_t MAX_DRAWS_IN_FLIGHT;
 
     std::condition_variable FifosNotEmpty;
-    std::mutex WaitLock;
+    std::mutex              WaitLock;
 
     uint32_t privateStateSize;
 
-    HotTileMgr *pHotTileMgr;
+    HotTileMgr* pHotTileMgr;
 
     // Callback functions, passed in at create context time
-    PFN_LOAD_TILE               pfnLoadTile;
-    PFN_STORE_TILE              pfnStoreTile;
-    PFN_CLEAR_TILE              pfnClearTile;
-    PFN_UPDATE_SO_WRITE_OFFSET  pfnUpdateSoWriteOffset;
-    PFN_UPDATE_STATS            pfnUpdateStats;
-    PFN_UPDATE_STATS_FE         pfnUpdateStatsFE;
+    PFN_LOAD_TILE              pfnLoadTile;
+    PFN_STORE_TILE             pfnStoreTile;
+    PFN_CLEAR_TILE             pfnClearTile;
+    PFN_UPDATE_SO_WRITE_OFFSET pfnUpdateSoWriteOffset;
+    PFN_UPDATE_STATS           pfnUpdateStats;
+    PFN_UPDATE_STATS_FE        pfnUpdateStatsFE;
 
 
     // Global Stats
@@ -509,40 +539,48 @@ struct SWR_CONTEXT
     // Scratch space for workers.
     uint8_t** ppScratch;
 
-    volatile OSALIGNLINE(uint32_t)  drawsOutstandingFE;
+    volatile OSALIGNLINE(uint32_t) drawsOutstandingFE;
 
     OSALIGNLINE(CachingAllocator) cachingArenaAllocator;
     uint32_t frameCount;
 
     uint32_t lastFrameChecked;
     uint64_t lastDrawChecked;
-    TileSet singleThreadLockedTiles;
+    TileSet* pSingleThreadLockedTiles;
 
     // ArchRast thread contexts.
     HANDLE* pArContext;
 };
 
-#define UPDATE_STAT_BE(name, count) if (GetApiState(pDC).enableStatsBE) { pDC->dynState.pStats[workerId].name += count; }
-#define UPDATE_STAT_FE(name, count) if (GetApiState(pDC).enableStatsFE) { pDC->dynState.statsFE.name += count; }
+#define UPDATE_STAT_BE(name, count)                   \
+    if (GetApiState(pDC).enableStatsBE)               \
+    {                                                 \
+        pDC->dynState.pStats[workerId].name += count; \
+    }
+#define UPDATE_STAT_FE(name, count)          \
+    if (GetApiState(pDC).enableStatsFE)      \
+    {                                        \
+        pDC->dynState.statsFE.name += count; \
+    }
 
 // ArchRast instrumentation framework
-#define AR_WORKER_CTX  pDC->pContext->pArContext[workerId]
-#define AR_API_CTX     pDC->pContext->pArContext[pContext->NumWorkerThreads]
+#define AR_WORKER_CTX pDC->pContext->pArContext[workerId]
+#define AR_API_CTX pDC->pContext->pArContext[pContext->NumWorkerThreads]
 
 #ifdef KNOB_ENABLE_RDTSC
 #define RDTSC_BEGIN(type, drawid) RDTSC_START(type)
-#define RDTSC_END(type, count)   RDTSC_STOP(type, count, 0)
+#define RDTSC_END(type, count) RDTSC_STOP(type, count, 0)
 #else
 #define RDTSC_BEGIN(type, count)
 #define RDTSC_END(type, count)
 #endif
 
 #ifdef KNOB_ENABLE_AR
-    #define _AR_EVENT(ctx, event)       ArchRast::Dispatch(ctx, ArchRast::event)
-    #define _AR_FLUSH(ctx, id)          ArchRast::FlushDraw(ctx, id)
+#define _AR_EVENT(ctx, event) ArchRast::Dispatch(ctx, ArchRast::event)
+#define _AR_FLUSH(ctx, id) ArchRast::FlushDraw(ctx, id)
 #else
-    #define _AR_EVENT(ctx, event)
-    #define _AR_FLUSH(ctx, id)
+#define _AR_EVENT(ctx, event)
+#define _AR_FLUSH(ctx, id)
 #endif
 
 // Use these macros for api thread.

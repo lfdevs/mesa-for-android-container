@@ -128,7 +128,9 @@ create_version_string(struct gl_context *ctx, const char *prefix)
 		     ,
 		     prefix,
 		     ctx->Version / 10, ctx->Version % 10,
-		     (ctx->API == API_OPENGL_CORE) ? " (Core Profile)" : ""
+		     (ctx->API == API_OPENGL_CORE) ? " (Core Profile)" :
+                     (ctx->API == API_OPENGL_COMPAT && ctx->Version >= 32) ?
+                        " (Compatibility Profile)" : ""
 		     );
    }
 }
@@ -261,15 +263,7 @@ compute_version(const struct gl_extensions *extensions,
                          extensions->ARB_fragment_shader &&
                          extensions->ARB_texture_non_power_of_two &&
                          extensions->EXT_blend_equation_separate &&
-
-                         /* Technically, 2.0 requires the functionality of the
-                          * EXT version.  Enable 2.0 if either extension is
-                          * available, and assume that a driver that only
-                          * exposes the ATI extension will fallback to
-                          * software when necessary.
-                          */
-                         (extensions->EXT_stencil_two_side
-                          || extensions->ATI_separate_stencil));
+                         extensions->EXT_stencil_two_side);
    const bool ver_2_1 = (ver_2_0 &&
                          extensions->EXT_pixel_buffer_object &&
                          extensions->EXT_texture_sRGB);
@@ -375,6 +369,7 @@ compute_version(const struct gl_extensions *extensions,
                          extensions->ARB_texture_view);
    const bool ver_4_4 = (ver_4_3 &&
                          consts->GLSLVersion >= 440 &&
+                         consts->MaxVertexAttribStride >= 2048 &&
                          extensions->ARB_buffer_storage &&
                          extensions->ARB_clear_texture &&
                          extensions->ARB_enhanced_layouts &&
@@ -535,6 +530,7 @@ compute_version_es2(const struct gl_extensions *extensions,
    const bool es31_compute_shader =
       consts->MaxComputeWorkGroupInvocations >= 128;
    const bool ver_3_1 = (ver_3_0 &&
+                         consts->MaxVertexAttribStride >= 2048 &&
                          extensions->ARB_arrays_of_arrays &&
                          es31_compute_shader &&
                          extensions->ARB_draw_indirect &&
@@ -547,7 +543,8 @@ compute_version_es2(const struct gl_extensions *extensions,
                          extensions->ARB_shading_language_packing &&
                          extensions->ARB_stencil_texturing &&
                          extensions->ARB_texture_multisample &&
-                         extensions->ARB_gpu_shader5 &&
+                         extensions->ARB_texture_gather &&
+                         extensions->MESA_shader_integer_functions &&
                          extensions->EXT_shader_integer_mix);
    const bool ver_3_2 = (ver_3_1 &&
                          extensions->EXT_draw_buffers2 &&
@@ -588,9 +585,7 @@ _mesa_get_version(const struct gl_extensions *extensions,
       /* Disable higher GLSL versions for legacy contexts.
        * This disallows creation of higher compatibility contexts. */
       if (!consts->AllowHigherCompatVersion) {
-         if (consts->GLSLVersion > 140) {
-            consts->GLSLVersion = 140;
-         }
+         consts->GLSLVersion = consts->GLSLVersionCompat;
       }
       /* fall through */
    case API_OPENGL_CORE:
@@ -622,6 +617,9 @@ _mesa_compute_version(struct gl_context *ctx)
     */
    if (_mesa_is_desktop_gl(ctx)) {
       switch (ctx->Version) {
+      case 21:
+         ctx->Const.GLSLVersion = 120;
+         break;
       case 30:
          ctx->Const.GLSLVersion = 130;
          break;

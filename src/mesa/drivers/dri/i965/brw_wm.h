@@ -47,6 +47,10 @@ brw_upload_wm_prog(struct brw_context *brw);
 void
 brw_wm_populate_key(struct brw_context *brw,
                     struct brw_wm_prog_key *key);
+void
+brw_wm_populate_default_key(const struct gen_device_info *devinfo,
+                            struct brw_wm_prog_key *key,
+                            struct gl_program *prog);
 
 #ifdef __cplusplus
 } // extern "C"

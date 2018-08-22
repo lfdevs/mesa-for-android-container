@@ -31,6 +31,8 @@
 # amplitude slightly.  Apparently this also minimizes the error function,
 # reducing the maximum error from 0.00006 to about 0.00003.
 
+from __future__ import print_function
+
 import argparse
 import sys
 
@@ -51,9 +53,9 @@ def main():
 def run():
     import nir_algebraic  # pylint: disable=import-error
 
-    print '#include "brw_nir.h"'
-    print nir_algebraic.AlgebraicPass("brw_nir_apply_trig_workarounds",
-                                      TRIG_WORKAROUNDS).render()
+    print('#include "brw_nir.h"')
+    print(nir_algebraic.AlgebraicPass("brw_nir_apply_trig_workarounds",
+                                      TRIG_WORKAROUNDS).render())
 
 
 if __name__ == '__main__':

@@ -1154,14 +1154,21 @@ bool post_scheduler::schedule_alu(container_node *c) {
 
 	assert(!ready.empty() || !ready_copies.empty());
 
-	bool improving = true;
+	/* This number is rather arbitrary, important is that the scheduler has
+	 * more than one try to create an instruction group
+	 */
+	int improving = 10;
 	int last_pending = pending.count();
-	while (improving) {
+	while (improving > 0) {
 		prev_regmap = regmap;
 		if (!prepare_alu_group()) {
 
 			int new_pending = pending.count();
-			improving = (new_pending < last_pending) || (last_pending == 0);
+			if ((new_pending < last_pending) || (last_pending == 0))
+				improving = 10;
+			else
+				--improving;
+
 			last_pending = new_pending;
 
 			if (alu.current_idx[0] || alu.current_idx[1]) {

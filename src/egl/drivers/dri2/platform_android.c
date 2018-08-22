@@ -27,17 +27,25 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#include <cutils/properties.h>
 #include <errno.h>
+#include <dirent.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <xf86drm.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <sync/sync.h>
+#include <sys/types.h>
 
 #include "loader.h"
 #include "egl_dri2.h"
 #include "egl_dri2_fallbacks.h"
+
+#ifdef HAVE_DRM_GRALLOC
+#include <gralloc_drm_handle.h>
 #include "gralloc_drm.h"
+#endif /* HAVE_DRM_GRALLOC */
 
 #define ALIGN(val, align)	(((val) + (align) - 1) & ~((align) - 1))
 
@@ -164,11 +172,13 @@ get_native_buffer_fd(struct ANativeWindowBuffer *buf)
    return (handle && handle->numFds) ? handle->data[0] : -1;
 }
 
+#ifdef HAVE_DRM_GRALLOC
 static int
 get_native_buffer_name(struct ANativeWindowBuffer *buf)
 {
    return gralloc_drm_get_gem_handle(buf->handle);
 }
+#endif /* HAVE_DRM_GRALLOC */
 
 static EGLBoolean
 droid_window_dequeue_buffer(struct dri2_egl_surface *dri2_surf)
@@ -337,8 +347,10 @@ droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 
    config = dri2_get_dri_config(dri2_conf, type,
                                 dri2_surf->base.GLColorspace);
-   if (!config)
+   if (!config) {
+      _eglError(EGL_BAD_MATCH, "Unsupported surfacetype/colorspace configuration");
       goto cleanup_surface;
+   }
 
    if (dri2_dpy->image_driver)
       createNewDrawable = dri2_dpy->image_driver->createNewDrawable;
@@ -836,6 +848,7 @@ droid_create_image_from_prime_fd(_EGLDisplay *disp, _EGLContext *ctx,
    return dri2_create_image_dma_buf(disp, ctx, NULL, attr_list);
 }
 
+#ifdef HAVE_DRM_GRALLOC
 static _EGLImage *
 droid_create_image_from_name(_EGLDisplay *disp, _EGLContext *ctx,
                              struct ANativeWindowBuffer *buf)
@@ -879,6 +892,7 @@ droid_create_image_from_name(_EGLDisplay *disp, _EGLContext *ctx,
 
    return &dri2_img->base;
 }
+#endif /* HAVE_DRM_GRALLOC */
 
 static EGLBoolean
 droid_query_surface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf,
@@ -935,7 +949,11 @@ dri2_create_image_android_native_buffer(_EGLDisplay *disp,
    if (fd >= 0)
       return droid_create_image_from_prime_fd(disp, ctx, buf, fd);
 
+#ifdef HAVE_DRM_GRALLOC
    return droid_create_image_from_name(disp, ctx, buf);
+#else
+   return NULL;
+#endif
 }
 
 static _EGLImage *
@@ -957,6 +975,7 @@ droid_flush_front_buffer(__DRIdrawable * driDrawable, void *loaderPrivate)
 {
 }
 
+#ifdef HAVE_DRM_GRALLOC
 static int
 droid_get_buffers_parse_attachments(struct dri2_egl_surface *dri2_surf,
                                     unsigned int *attachments, int count)
@@ -1032,6 +1051,7 @@ droid_get_buffers_with_format(__DRIdrawable * driDrawable,
 
    return dri2_surf->buffers;
 }
+#endif /* HAVE_DRM_GRALLOC */
 
 static unsigned
 droid_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
@@ -1114,8 +1134,9 @@ droid_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *dpy)
    return (config_count != 0);
 }
 
+#ifdef HAVE_DRM_GRALLOC
 static int
-droid_open_device(struct dri2_egl_display *dri2_dpy)
+droid_open_device_drm_gralloc(struct dri2_egl_display *dri2_dpy)
 {
    int fd = -1, err = -EINVAL;
 
@@ -1130,6 +1151,7 @@ droid_open_device(struct dri2_egl_display *dri2_dpy)
 
    return (fd >= 0) ? fcntl(fd, F_DUPFD_CLOEXEC, 3) : -1;
 }
+#endif /* HAVE_DRM_GRALLOC */
 
 static const struct dri2_egl_display_vtbl droid_display_vtbl = {
    .authenticate = NULL,
@@ -1156,6 +1178,7 @@ static const struct dri2_egl_display_vtbl droid_display_vtbl = {
    .get_dri_drawable = dri2_surface_get_dri_drawable,
 };
 
+#ifdef HAVE_DRM_GRALLOC
 static const __DRIdri2LoaderExtension droid_dri2_loader_extension = {
    .base = { __DRI_DRI2_LOADER, 4 },
 
@@ -1164,6 +1187,7 @@ static const __DRIdri2LoaderExtension droid_dri2_loader_extension = {
    .getBuffersWithFormat = droid_get_buffers_with_format,
    .getCapability        = droid_get_capability,
 };
+#endif /* HAVE_DRM_GRALLOC */
 
 static const __DRIimageLoaderExtension droid_image_loader_extension = {
    .base = { __DRI_IMAGE_LOADER, 2 },
@@ -1173,12 +1197,14 @@ static const __DRIimageLoaderExtension droid_image_loader_extension = {
    .getCapability       = droid_get_capability,
 };
 
+#ifdef HAVE_DRM_GRALLOC
 static const __DRIextension *droid_dri2_loader_extensions[] = {
    &droid_dri2_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
    NULL,
 };
+#endif /* HAVE_DRM_GRALLOC */
 
 static const __DRIextension *droid_image_loader_extensions[] = {
    &droid_image_loader_extension.base,
@@ -1186,6 +1212,169 @@ static const __DRIextension *droid_image_loader_extensions[] = {
    &use_invalidate.base,
    NULL,
 };
+
+EGLBoolean
+droid_load_driver(_EGLDisplay *disp)
+{
+   struct dri2_egl_display *dri2_dpy = disp->DriverData;
+   const char *err;
+
+   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
+   if (dri2_dpy->driver_name == NULL)
+      return false;
+
+   dri2_dpy->is_render_node = drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER;
+
+   if (!dri2_dpy->is_render_node) {
+   #ifdef HAVE_DRM_GRALLOC
+       /* Handle control nodes using __DRI_DRI2_LOADER extension and GEM names
+        * for backwards compatibility with drm_gralloc. (Do not use on new
+        * systems.) */
+       dri2_dpy->loader_extensions = droid_dri2_loader_extensions;
+       if (!dri2_load_driver(disp)) {
+          err = "DRI2: failed to load driver";
+          goto error;
+       }
+   #else
+       err = "DRI2: handle is not for a render node";
+       goto error;
+   #endif
+   } else {
+       dri2_dpy->loader_extensions = droid_image_loader_extensions;
+       if (!dri2_load_driver_dri3(disp)) {
+          err = "DRI3: failed to load driver";
+          goto error;
+       }
+    }
+
+   return true;
+
+error:
+   free(dri2_dpy->driver_name);
+   dri2_dpy->driver_name = NULL;
+   return false;
+}
+
+static bool
+droid_probe_driver(int fd)
+{
+   char *driver_name;
+
+   driver_name = loader_get_driver_for_fd(fd);
+   if (driver_name == NULL)
+      return false;
+
+   free(driver_name);
+   return true;
+}
+
+typedef enum {
+   probe_fail = -1,
+   probe_success = 0,
+   probe_filtered_out = 1,
+} probe_ret_t;
+
+static probe_ret_t
+droid_probe_device(_EGLDisplay *disp, int fd, const char *vendor)
+{
+   int ret;
+
+   drmVersionPtr ver = drmGetVersion(fd);
+   if (!ver)
+      return probe_fail;
+
+   if (!ver->name) {
+      ret = probe_fail;
+      goto cleanup;
+   }
+
+   if (vendor && strncmp(vendor, ver->name, PROPERTY_VALUE_MAX) != 0) {
+      ret = probe_filtered_out;
+      goto cleanup;
+   }
+
+   if (!droid_probe_driver(fd)) {
+      ret = probe_fail;
+      goto cleanup;
+   }
+
+   ret = probe_success;
+
+cleanup:
+   drmFreeVersion(ver);
+   return ret;
+}
+
+static int
+droid_open_device(_EGLDisplay *disp)
+{
+   const int MAX_DRM_DEVICES = 32;
+   int prop_set, num_devices;
+   int fd = -1, fallback_fd = -1;
+
+   char *vendor_name = NULL;
+   char vendor_buf[PROPERTY_VALUE_MAX];
+
+   if (property_get("drm.gpu.vendor_name", vendor_buf, NULL) > 0)
+      vendor_name = vendor_buf;
+
+   const char *drm_dir_name = "/dev/dri";
+   DIR *sysdir = opendir(drm_dir_name);
+
+   if (!sysdir)
+       return -errno;
+
+   struct dirent *dent;
+   while ((dent = readdir(sysdir))) {
+      char dev_path[128];
+      const char render_dev_prefix[] = "renderD";
+      size_t prefix_len = sizeof(render_dev_prefix) - 1;
+
+      if (strncmp(render_dev_prefix, dent->d_name, prefix_len) != 0)
+         continue;
+
+      snprintf(dev_path, sizeof(dev_path), "%s/%s", drm_dir_name, dent->d_name);
+      fd = loader_open_device(dev_path);
+      if (fd < 0) {
+         _eglLog(_EGL_WARNING, "%s() Failed to open DRM device %s",
+                 __func__, dev_path);
+         continue;
+      }
+
+      int ret = droid_probe_device(disp, fd, vendor_name);
+      switch (ret) {
+      case probe_success:
+         goto success;
+      case probe_filtered_out:
+         /* Set as fallback */
+         if (fallback_fd == -1)
+            fallback_fd = fd;
+         break;
+      case probe_fail:
+         break;
+      }
+
+      if (fallback_fd != fd)
+         close(fd);
+      fd = -1;
+   }
+
+success:
+   closedir(sysdir);
+
+   if (fallback_fd < 0 && fd < 0) {
+      _eglLog(_EGL_WARNING, "Failed to open any DRM device");
+      return -1;
+   }
+
+   if (fd < 0) {
+      _eglLog(_EGL_WARNING, "Failed to open desired DRM device, using fallback");
+      return fallback_fd;
+   }
+
+   close(fallback_fd);
+   return fd;
+}
 
 EGLBoolean
 dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
@@ -1214,34 +1403,19 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
 
    disp->DriverData = (void *) dri2_dpy;
 
-   dri2_dpy->fd = droid_open_device(dri2_dpy);
+#ifdef HAVE_DRM_GRALLOC
+   dri2_dpy->fd = droid_open_device_drm_gralloc(dri2_dpy);
+#else
+   dri2_dpy->fd = droid_open_device(disp);
+#endif
    if (dri2_dpy->fd < 0) {
       err = "DRI2: failed to open device";
       goto cleanup;
    }
 
-   dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd);
-   if (dri2_dpy->driver_name == NULL) {
-      err = "DRI2: failed to get driver name";
+   if (!droid_load_driver(disp)) {
+      err = "DRI2: failed to load driver";
       goto cleanup;
-   }
-
-   dri2_dpy->is_render_node = drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER;
-
-   /* render nodes cannot use Gem names, and thus do not support
-    * the __DRI_DRI2_LOADER extension */
-   if (!dri2_dpy->is_render_node) {
-      dri2_dpy->loader_extensions = droid_dri2_loader_extensions;
-      if (!dri2_load_driver(disp)) {
-         err = "DRI2: failed to load driver";
-         goto cleanup;
-      }
-   } else {
-      dri2_dpy->loader_extensions = droid_image_loader_extensions;
-      if (!dri2_load_driver_dri3(disp)) {
-         err = "DRI3: failed to load driver";
-         goto cleanup;
-      }
    }
 
    if (!dri2_create_screen(disp)) {

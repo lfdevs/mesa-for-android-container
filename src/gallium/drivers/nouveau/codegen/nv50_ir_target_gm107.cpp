@@ -153,9 +153,10 @@ TargetGM107::isBarrierRequired(const Instruction *insn) const
       case OP_AFETCH:
       case OP_PFETCH:
       case OP_PIXLD:
-      case OP_RDSV:
       case OP_SHFL:
          return true;
+      case OP_RDSV:
+         return !isCS2RSV(insn->getSrc(0)->reg.data.sv.sv);
       default:
          break;
       }
@@ -232,6 +233,8 @@ TargetGM107::getLatency(const Instruction *insn) const
       if (insn->dType != TYPE_F64)
          return 6;
       break;
+   case OP_RDSV:
+      return isCS2RSV(insn->getSrc(0)->reg.data.sv.sv) ? 6 : 15;
    case OP_ABS:
    case OP_CEIL:
    case OP_CVT:
@@ -319,6 +322,12 @@ TargetGM107::getReadLatency(const Instruction *insn) const
       break;
    }
    return 0;
+}
+
+bool
+TargetGM107::isCS2RSV(SVSemantic sv) const
+{
+   return sv == SV_CLOCK;
 }
 
 bool

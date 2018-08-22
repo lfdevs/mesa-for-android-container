@@ -72,6 +72,7 @@ xform_decl(struct tgsi_transform_context *ctx,
            struct tgsi_full_declaration *decl)
 {
    struct two_side_transform_context *ts = two_side_transform_context(ctx);
+   unsigned range_end = decl->Range.Last + 1;
 
    if (decl->Declaration.File == TGSI_FILE_INPUT) {
       if (decl->Semantic.Name == TGSI_SEMANTIC_COLOR) {
@@ -83,10 +84,10 @@ xform_decl(struct tgsi_transform_context *ctx,
       else if (decl->Semantic.Name == TGSI_SEMANTIC_FACE) {
          ts->face_input = decl->Range.First;
       }
-      ts->num_inputs = MAX2(ts->num_inputs, decl->Range.Last + 1);
+      ts->num_inputs = MAX2(ts->num_inputs, range_end);
    }
    else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
-      ts->num_temps = MAX2(ts->num_temps, decl->Range.Last + 1);
+      ts->num_temps = MAX2(ts->num_temps, range_end);
    }
 
    ctx->emit_declaration(ctx, decl);
@@ -181,7 +182,7 @@ xform_inst(struct tgsi_transform_context *ctx,
    for (i = 0; i < info->num_src; i++) {
       if (inst->Src[i].Register.File == TGSI_FILE_INPUT) {
          for (j = 0; j < 2; j++) {
-            if (inst->Src[i].Register.Index == ts->front_color_input[j]) {
+	    if (inst->Src[i].Register.Index == (int)ts->front_color_input[j]) {
                /* replace color input with temp reg */
                inst->Src[i].Register.File = TGSI_FILE_TEMPORARY;
                inst->Src[i].Register.Index = ts->new_colors[j];

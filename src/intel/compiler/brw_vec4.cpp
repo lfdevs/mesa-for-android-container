@@ -41,7 +41,7 @@ namespace brw {
 void
 src_reg::init()
 {
-   memset(this, 0, sizeof(*this));
+   memset((void*)this, 0, sizeof(*this));
    this->file = BAD_FILE;
    this->type = BRW_REGISTER_TYPE_UD;
 }
@@ -83,7 +83,7 @@ src_reg::src_reg(const dst_reg &reg) :
 void
 dst_reg::init()
 {
-   memset(this, 0, sizeof(*this));
+   memset((void*)this, 0, sizeof(*this));
    this->file = BAD_FILE;
    this->type = BRW_REGISTER_TYPE_UD;
    this->writemask = WRITEMASK_XYZW;
@@ -819,6 +819,14 @@ vec4_visitor::opt_algebraic()
          }
          break;
 
+      case BRW_OPCODE_OR:
+         if (inst->src[1].is_zero()) {
+            inst->opcode = BRW_OPCODE_MOV;
+            inst->src[1] = src_reg();
+            progress = true;
+         }
+         break;
+
       case VEC4_OPCODE_UNPACK_UNIFORM:
          if (inst->src[0].file != UNIFORM) {
             inst->opcode = BRW_OPCODE_MOV;
@@ -1293,6 +1301,15 @@ vec4_visitor::opt_register_coalesce()
                   }
                }
             }
+
+            /* VS_OPCODE_UNPACK_FLAGS_SIMD4X2 generates a bunch of mov(1)
+             * instructions, and this optimization pass is not capable of
+             * handling that.  Bail on these instructions and hope that some
+             * later optimization pass can do the right thing after they are
+             * expanded.
+             */
+            if (scan_inst->opcode == VS_OPCODE_UNPACK_FLAGS_SIMD4X2)
+               break;
 
             /* This doesn't handle saturation on the instruction we
              * want to coalesce away if the register types do not match.
@@ -2819,7 +2836,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    prog_data->double_inputs_read = shader->info.vs.double_inputs;
 
    brw_nir_lower_vs_inputs(shader, key->gl_attrib_wa_flags);
-   brw_nir_lower_vue_outputs(shader, is_scalar);
+   brw_nir_lower_vue_outputs(shader);
    shader = brw_postprocess_nir(shader, compiler, is_scalar);
 
    prog_data->base.clip_distance_mask =
@@ -2834,17 +2851,23 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
     * incoming vertex attribute.  So, add an extra slot.
     */
    if (shader->info.system_values_read &
-       (BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX) |
-        BITFIELD64_BIT(SYSTEM_VALUE_FIRST_VERTEX) |
+       (BITFIELD64_BIT(SYSTEM_VALUE_FIRST_VERTEX) |
         BITFIELD64_BIT(SYSTEM_VALUE_BASE_INSTANCE) |
         BITFIELD64_BIT(SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) |
         BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID))) {
       nr_attribute_slots++;
    }
 
+   /* gl_DrawID and IsIndexedDraw share its very own vec4 */
    if (shader->info.system_values_read &
-       BITFIELD64_BIT(SYSTEM_VALUE_BASE_VERTEX))
-      prog_data->uses_basevertex = true;
+       (BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID) |
+        BITFIELD64_BIT(SYSTEM_VALUE_IS_INDEXED_DRAW))) {
+      nr_attribute_slots++;
+   }
+
+   if (shader->info.system_values_read &
+       BITFIELD64_BIT(SYSTEM_VALUE_IS_INDEXED_DRAW))
+      prog_data->uses_is_indexed_draw = true;
 
    if (shader->info.system_values_read &
        BITFIELD64_BIT(SYSTEM_VALUE_FIRST_VERTEX))
@@ -2862,12 +2885,9 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
        BITFIELD64_BIT(SYSTEM_VALUE_INSTANCE_ID))
       prog_data->uses_instanceid = true;
 
-   /* gl_DrawID has its very own vec4 */
    if (shader->info.system_values_read &
-       BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID)) {
-      prog_data->uses_drawid = true;
-      nr_attribute_slots++;
-   }
+       BITFIELD64_BIT(SYSTEM_VALUE_DRAW_ID))
+          prog_data->uses_drawid = true;
 
    /* The 3DSTATE_VS documentation lists the lower bound on "Vertex URB Entry
     * Read Length" as 1 in vec4 mode, and 0 in SIMD8 mode.  Empirically, in
@@ -2921,7 +2941,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
       prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
 
-      fs_generator g(compiler, log_data, mem_ctx, (void *) key,
+      fs_generator g(compiler, log_data, mem_ctx,
                      &prog_data->base.base, v.promoted_constants,
                      v.runtime_check_aads_emit, MESA_SHADER_VERTEX);
       if (INTEL_DEBUG & DEBUG_VS) {

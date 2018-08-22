@@ -190,6 +190,12 @@ static const struct intel_image_format intel_image_formats[] = {
    { __DRI_IMAGE_FOURCC_XRGB2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB2101010, 4 } } },
 
+   { __DRI_IMAGE_FOURCC_ABGR2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR2101010, 4 } } },
+
+   { __DRI_IMAGE_FOURCC_XBGR2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR2101010, 4 } } },
+
    { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
 
@@ -589,7 +595,7 @@ intel_create_image_from_texture(__DRIcontext *context, int target,
    image->dri_format = driGLFormatToImageFormat(image->format);
    image->has_depthstencil = iobj->mt->stencil_mt? true : false;
    image->planar_format = iobj->planar_format;
-   if (image->dri_format == MESA_FORMAT_NONE) {
+   if (image->dri_format == __DRI_IMAGE_FORMAT_NONE) {
       *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
       free(image);
       return NULL;
@@ -749,6 +755,7 @@ intel_create_image_common(__DRIscreen *dri_screen,
     */
    image->bo = brw_bo_alloc_tiled(screen->bufmgr, "image",
                                   surf.size + aux_surf.size,
+                                  BRW_MEMZONE_OTHER,
                                   isl_tiling_to_i915_tiling(mod_info->tiling),
                                   surf.row_pitch, BO_ALLOC_ZEROED);
    if (image->bo == NULL) {
@@ -1265,22 +1272,39 @@ intel_create_image_from_dma_bufs(__DRIscreen *dri_screen,
 }
 
 static bool
-intel_image_format_is_supported(const struct intel_image_format *fmt)
+intel_image_format_is_supported(const struct gen_device_info *devinfo,
+                                const struct intel_image_format *fmt)
 {
-   if (fmt->fourcc == __DRI_IMAGE_FOURCC_SARGB8888)
+   if (fmt->fourcc == __DRI_IMAGE_FOURCC_SARGB8888 ||
+       fmt->fourcc == __DRI_IMAGE_FOURCC_SABGR8888)
       return false;
+
+#ifndef NDEBUG
+   if (fmt->nplanes == 1) {
+      mesa_format format = driImageFormatToGLFormat(fmt->planes[0].dri_format);
+      /* The images we will create are actually based on the RGBA non-sRGB
+       * version of the format.
+       */
+      format = _mesa_format_fallback_rgbx_to_rgba(format);
+      format = _mesa_get_srgb_format_linear(format);
+      enum isl_format isl_format = brw_isl_format_for_mesa_format(format);
+      assert(isl_format_supports_rendering(devinfo, isl_format));
+   }
+#endif
 
    return true;
 }
 
 static GLboolean
-intel_query_dma_buf_formats(__DRIscreen *screen, int max,
+intel_query_dma_buf_formats(__DRIscreen *_screen, int max,
                             int *formats, int *count)
 {
+   struct intel_screen *screen = _screen->driverPrivate;
    int num_formats = 0, i;
 
    for (i = 0; i < ARRAY_SIZE(intel_image_formats); i++) {
-      if (!intel_image_format_is_supported(&intel_image_formats[i]))
+      if (!intel_image_format_is_supported(&screen->devinfo,
+                                           &intel_image_formats[i]))
          continue;
 
       num_formats++;
@@ -1310,7 +1334,7 @@ intel_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
    if (f == NULL)
       return false;
 
-   if (!intel_image_format_is_supported(f))
+   if (!intel_image_format_is_supported(&screen->devinfo, f))
       return false;
 
    for (i = 0; i < ARRAY_SIZE(supported_modifiers); i++) {
@@ -1855,7 +1879,7 @@ intel_detect_swizzling(struct intel_screen *screen)
    uint32_t swizzle_mode = 0;
    struct brw_bo *buffer =
       brw_bo_alloc_tiled(screen->bufmgr, "swizzle test", 32768,
-                         tiling, 512, 0);
+                         BRW_MEMZONE_OTHER, tiling, 512, 0);
    if (buffer == NULL)
       return false;
 
@@ -1930,11 +1954,11 @@ intel_detect_pipelined_register(struct intel_screen *screen,
    bool success = false;
 
    /* Create a zero'ed temporary buffer for reading our results */
-   results = brw_bo_alloc(screen->bufmgr, "registers", 4096);
+   results = brw_bo_alloc(screen->bufmgr, "registers", 4096, BRW_MEMZONE_OTHER);
    if (results == NULL)
       goto err;
 
-   bo = brw_bo_alloc(screen->bufmgr, "batchbuffer", 4096);
+   bo = brw_bo_alloc(screen->bufmgr, "batchbuffer", 4096, BRW_MEMZONE_OTHER);
    if (bo == NULL)
       goto err_results;
 
@@ -2108,6 +2132,8 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
 
       /* Required by Android, for HAL_PIXEL_FORMAT_RGBX_8888. */
       MESA_FORMAT_R8G8B8X8_UNORM,
+
+      MESA_FORMAT_R8G8B8A8_SRGB,
    };
 
    /* GLX_SWAP_COPY_OML is not supported due to page flipping. */
@@ -2127,7 +2153,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    if (intel_loader_get_cap(dri_screen, DRI_LOADER_CAP_RGBA_ORDERING))
       num_formats = ARRAY_SIZE(formats);
    else
-      num_formats = ARRAY_SIZE(formats) - 2; /* all - RGBA_ORDERING formats */
+      num_formats = ARRAY_SIZE(formats) - 3; /* all - RGBA_ORDERING formats */
 
    /* Shall we expose 10 bpc formats? */
    bool allow_rgb10_configs = driQueryOptionb(&screen->optionCache,
@@ -2740,6 +2766,7 @@ intelAllocateBuffer(__DRIscreen *dri_screen,
                                            width,
                                            height,
                                            cpp,
+                                           BRW_MEMZONE_OTHER,
                                            I915_TILING_X, &pitch,
                                            BO_ALLOC_BUSY);
 

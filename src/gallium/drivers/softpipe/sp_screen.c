@@ -151,6 +151,8 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 0;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
       return 330;
+   case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
+      return 140;
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
    case PIPE_CAP_TGSI_TEX_TXF_LZ:
       return 0;
@@ -309,11 +311,19 @@ softpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
    case PIPE_CAP_TILE_RASTER_ORDER:
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+   case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
    case PIPE_CAP_FENCE_SIGNAL:
    case PIPE_CAP_CONSTBUF0_FLAGS:
    case PIPE_CAP_PACKED_UNIFORMS:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
+   case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+   case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
       return 0;
    case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
       return 4;
@@ -362,6 +372,12 @@ softpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
       return 16.0;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 16.0; /* arbitrary */
+   case PIPE_CAPF_MIN_CONSERVATIVE_RASTER_DILATE:
+      return 0.0;
+   case PIPE_CAPF_MAX_CONSERVATIVE_RASTER_DILATE:
+      return 0.0;
+   case PIPE_CAPF_CONSERVATIVE_RASTER_DILATE_GRANULARITY:
+      return 0.0;
    }
    /* should only get here on unhandled cases */
    debug_printf("Unexpected PIPE_CAPF %d query\n", param);
@@ -378,6 +394,7 @@ softpipe_is_format_supported( struct pipe_screen *screen,
                               enum pipe_format format,
                               enum pipe_texture_target target,
                               unsigned sample_count,
+                              unsigned storage_sample_count,
                               unsigned bind)
 {
    struct sw_winsys *winsys = softpipe_screen(screen)->winsys;
@@ -392,6 +409,9 @@ softpipe_is_format_supported( struct pipe_screen *screen,
           target == PIPE_TEXTURE_3D ||
           target == PIPE_TEXTURE_CUBE ||
           target == PIPE_TEXTURE_CUBE_ARRAY);
+
+   if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+      return false;
 
    format_desc = util_format_description(format);
    if (!format_desc)
@@ -426,8 +446,7 @@ softpipe_is_format_supported( struct pipe_screen *screen,
          return FALSE;
    }
 
-   if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC ||
-       format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
       /* Software decoding is not hooked up. */
       return FALSE;
    }

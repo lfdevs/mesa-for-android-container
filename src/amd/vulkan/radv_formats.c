@@ -224,6 +224,28 @@ uint32_t radv_translate_tex_dataformat(VkFormat format,
 		}
 	}
 
+	if (desc->layout == VK_FORMAT_LAYOUT_ETC) {
+		switch (format) {
+		case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
+		case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+			return V_008F14_IMG_DATA_FORMAT_ETC2_RGB;
+		case VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK:
+		case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+			return V_008F14_IMG_DATA_FORMAT_ETC2_RGBA1;
+		case VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK:
+		case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
+			return V_008F14_IMG_DATA_FORMAT_ETC2_RGBA;
+		case VK_FORMAT_EAC_R11_UNORM_BLOCK:
+		case VK_FORMAT_EAC_R11_SNORM_BLOCK:
+			return V_008F14_IMG_DATA_FORMAT_ETC2_R;
+		case VK_FORMAT_EAC_R11G11_UNORM_BLOCK:
+		case VK_FORMAT_EAC_R11G11_SNORM_BLOCK:
+			return V_008F14_IMG_DATA_FORMAT_ETC2_RG;
+		default:
+			break;
+		}
+	}
+
 	if (format == VK_FORMAT_E5B9G9R9_UFLOAT_PACK32) {
 		return V_008F14_IMG_DATA_FORMAT_5_9_9_9;
 	} else if (format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
@@ -321,10 +343,8 @@ uint32_t radv_translate_tex_dataformat(VkFormat format,
 			return V_008F14_IMG_DATA_FORMAT_32;
 		case 2:
 			return V_008F14_IMG_DATA_FORMAT_32_32;
-#if 0 /* Not supported for render targets */
 		case 3:
 			return V_008F14_IMG_DATA_FORMAT_32_32_32;
-#endif
 		case 4:
 			return V_008F14_IMG_DATA_FORMAT_32_32_32_32;
 		}
@@ -351,10 +371,15 @@ uint32_t radv_translate_tex_numformat(VkFormat format,
 				case VK_FORMAT_BC2_SRGB_BLOCK:
 				case VK_FORMAT_BC3_SRGB_BLOCK:
 				case VK_FORMAT_BC7_SRGB_BLOCK:
+				case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
+				case VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK:
+				case VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK:
 					return V_008F14_IMG_NUM_FORMAT_SRGB;
 				case VK_FORMAT_BC4_SNORM_BLOCK:
 				case VK_FORMAT_BC5_SNORM_BLOCK:
 			        case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+				case VK_FORMAT_EAC_R11_SNORM_BLOCK:
+				case VK_FORMAT_EAC_R11G11_SNORM_BLOCK:
 					return V_008F14_IMG_NUM_FORMAT_SNORM;
 				default:
 					return V_008F14_IMG_NUM_FORMAT_UNORM;
@@ -586,6 +611,16 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 		return;
 	}
 
+	if (desc->layout == VK_FORMAT_LAYOUT_ETC &&
+	    physical_device->rad_info.family != CHIP_VEGA10 &&
+	    physical_device->rad_info.family != CHIP_RAVEN &&
+	    physical_device->rad_info.family != CHIP_STONEY) {
+		out_properties->linearTilingFeatures = linear;
+		out_properties->optimalTilingFeatures = tiled;
+		out_properties->bufferFeatures = buffer;
+		return;
+	}
+
 	if (radv_is_storage_image_format_supported(physical_device, format)) {
 		tiled |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
 		linear |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
@@ -638,13 +673,17 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 				tiled |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
 			}
 		}
-		if (tiled && util_is_power_of_two_or_zero(vk_format_get_blocksize(format)) && !scaled) {
+		if (tiled && !scaled) {
 			tiled |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
 			         VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
 		}
+
+		/* Tiled formatting does not support NPOT pixel sizes */
+		if (!util_is_power_of_two_or_zero(vk_format_get_blocksize(format)))
+			tiled = 0;
 	}
 
-	if (linear && util_is_power_of_two_or_zero(vk_format_get_blocksize(format)) && !scaled) {
+	if (linear && !scaled) {
 		linear |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
 		          VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
 	}
@@ -878,194 +917,87 @@ bool radv_format_pack_clear_color(VkFormat format,
 				  uint32_t clear_vals[2],
 				  VkClearColorValue *value)
 {
-	uint8_t r = 0, g = 0, b = 0, a = 0;
 	const struct vk_format_description *desc = vk_format_description(format);
 
-	if (vk_format_get_component_bits(format, VK_FORMAT_COLORSPACE_RGB, 0) <= 8) {
-		if (desc->colorspace == VK_FORMAT_COLORSPACE_RGB) {
-			r = float_to_ubyte(value->float32[0]);
-			g = float_to_ubyte(value->float32[1]);
-			b = float_to_ubyte(value->float32[2]);
-			a = float_to_ubyte(value->float32[3]);
-		} else if (desc->colorspace == VK_FORMAT_COLORSPACE_SRGB) {
-			r = util_format_linear_float_to_srgb_8unorm(value->float32[0]);
-			g = util_format_linear_float_to_srgb_8unorm(value->float32[1]);
-			b = util_format_linear_float_to_srgb_8unorm(value->float32[2]);
-			a = float_to_ubyte(value->float32[3]);
-		}
-	}
-	switch (format) {
-	case VK_FORMAT_R8_UNORM:
-	case VK_FORMAT_R8_SRGB:
-		clear_vals[0] = r;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8_UNORM:
-	case VK_FORMAT_R8G8_SRGB:
-		clear_vals[0] = r | g << 8;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8B8A8_SRGB:
-	case VK_FORMAT_R8G8B8A8_UNORM:
-		clear_vals[0] = r | g << 8 | b << 16 | a << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_B8G8R8A8_SRGB:
-	case VK_FORMAT_B8G8R8A8_UNORM:
-		clear_vals[0] = b | g << 8 | r << 16 | a << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_A8B8G8R8_UNORM_PACK32:
-	case VK_FORMAT_A8B8G8R8_SRGB_PACK32:
-		clear_vals[0] = r | g << 8 | b << 16 | a << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8_UINT:
-		clear_vals[0] = value->uint32[0] & 0xff;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8_SINT:
-		clear_vals[0] = value->int32[0] & 0xff;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16_UINT:
-		clear_vals[0] = value->uint32[0] & 0xffff;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8_UINT:
-		clear_vals[0] = value->uint32[0] & 0xff;
-		clear_vals[0] |= (value->uint32[1] & 0xff) << 8;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8_SINT:
-		clear_vals[0] = value->int32[0] & 0xff;
-		clear_vals[0] |= (value->int32[1] & 0xff) << 8;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8B8A8_UINT:
-		clear_vals[0] = value->uint32[0] & 0xff;
-		clear_vals[0] |= (value->uint32[1] & 0xff) << 8;
-		clear_vals[0] |= (value->uint32[2] & 0xff) << 16;
-		clear_vals[0] |= (value->uint32[3] & 0xff) << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R8G8B8A8_SINT:
-		clear_vals[0] = value->int32[0] & 0xff;
-		clear_vals[0] |= (value->int32[1] & 0xff) << 8;
-		clear_vals[0] |= (value->int32[2] & 0xff) << 16;
-		clear_vals[0] |= (value->int32[3] & 0xff) << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_A8B8G8R8_UINT_PACK32:
-		clear_vals[0] = value->uint32[0] & 0xff;
-		clear_vals[0] |= (value->uint32[1] & 0xff) << 8;
-		clear_vals[0] |= (value->uint32[2] & 0xff) << 16;
-		clear_vals[0] |= (value->uint32[3] & 0xff) << 24;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16_UINT:
-		clear_vals[0] = value->uint32[0] & 0xffff;
-		clear_vals[0] |= (value->uint32[1] & 0xffff) << 16;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16B16A16_UINT:
-		clear_vals[0] = value->uint32[0] & 0xffff;
-		clear_vals[0] |= (value->uint32[1] & 0xffff) << 16;
-		clear_vals[1] = value->uint32[2] & 0xffff;
-		clear_vals[1] |= (value->uint32[3] & 0xffff) << 16;
-		break;
-	case VK_FORMAT_R32_UINT:
-		clear_vals[0] = value->uint32[0];
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R32G32_UINT:
-		clear_vals[0] = value->uint32[0];
-		clear_vals[1] = value->uint32[1];
-		break;
-	case VK_FORMAT_R32_SINT:
-		clear_vals[0] = value->int32[0];
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16_SFLOAT:
-		clear_vals[0] = util_float_to_half(value->float32[0]);
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16_SFLOAT:
-		clear_vals[0] = util_float_to_half(value->float32[0]);
-		clear_vals[0] |= (uint32_t)util_float_to_half(value->float32[1]) << 16;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16B16A16_SFLOAT:
-		clear_vals[0] = util_float_to_half(value->float32[0]);
-		clear_vals[0] |= (uint32_t)util_float_to_half(value->float32[1]) << 16;
-		clear_vals[1] = util_float_to_half(value->float32[2]);
-		clear_vals[1] |= (uint32_t)util_float_to_half(value->float32[3]) << 16;
-		break;
-	case VK_FORMAT_R16_UNORM:
-		clear_vals[0] = ((uint16_t)util_iround(CLAMP(value->float32[0], 0.0f, 1.0f) * 0xffff)) & 0xffff;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16_UNORM:
-		clear_vals[0] = ((uint16_t)util_iround(CLAMP(value->float32[0], 0.0f, 1.0f) * 0xffff)) & 0xffff;
-		clear_vals[0] |= ((uint16_t)util_iround(CLAMP(value->float32[1], 0.0f, 1.0f) * 0xffff)) << 16;
-		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R16G16B16A16_UNORM:
-		clear_vals[0] = ((uint16_t)util_iround(CLAMP(value->float32[0], 0.0f, 1.0f) * 0xffff)) & 0xffff;
-		clear_vals[0] |= ((uint16_t)util_iround(CLAMP(value->float32[1], 0.0f, 1.0f) * 0xffff)) << 16;
-		clear_vals[1] = ((uint16_t)util_iround(CLAMP(value->float32[2], 0.0f, 1.0f) * 0xffff)) & 0xffff;
-		clear_vals[1] |= ((uint16_t)util_iround(CLAMP(value->float32[3], 0.0f, 1.0f) * 0xffff)) << 16;
-		break;
-	case VK_FORMAT_R16G16B16A16_SNORM:
-		clear_vals[0] = ((uint16_t)util_iround(CLAMP(value->float32[0], -1.0f, 1.0f) * 0x7fff)) & 0xffff;
-		clear_vals[0] |= ((uint16_t)util_iround(CLAMP(value->float32[1], -1.0f, 1.0f) * 0x7fff)) << 16;
-		clear_vals[1] = ((uint16_t)util_iround(CLAMP(value->float32[2], -1.0f, 1.0f) * 0x7fff)) & 0xffff;
-		clear_vals[1] |= ((uint16_t)util_iround(CLAMP(value->float32[3], -1.0f, 1.0f) * 0x7fff)) << 16;
-		break;
-	case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-		clear_vals[0] = ((uint16_t)util_iround(CLAMP(value->float32[0], 0.0f, 1.0f) * 0x3ff)) & 0x3ff;
-		clear_vals[0] |= (((uint16_t)util_iround(CLAMP(value->float32[1], 0.0f, 1.0f) * 0x3ff)) & 0x3ff) << 10;
-		clear_vals[0] |= (((uint16_t)util_iround(CLAMP(value->float32[2], 0.0f, 1.0f) * 0x3ff)) & 0x3ff) << 20;
-		clear_vals[0] |= (((uint16_t)util_iround(CLAMP(value->float32[3], 0.0f, 1.0f) * 0x3)) & 0x3) << 30;
-		clear_vals[1] = 0;
-		return true;
-	case VK_FORMAT_R32G32_SFLOAT:
-		clear_vals[0] = fui(value->float32[0]);
-		clear_vals[1] = fui(value->float32[1]);
-		break;
-	case VK_FORMAT_R32_SFLOAT:
-		clear_vals[1] = 0;
-		clear_vals[0] = fui(value->float32[0]);
-		break;
-	case VK_FORMAT_B10G11R11_UFLOAT_PACK32:
+	if (format == VK_FORMAT_B10G11R11_UFLOAT_PACK32) {
 		clear_vals[0] = float3_to_r11g11b10f(value->float32);
 		clear_vals[1] = 0;
-		break;
-	case VK_FORMAT_R32G32B32A32_SFLOAT:
-		if (value->float32[0] != value->float32[1] ||
-		    value->float32[0] != value->float32[2])
-			return false;
-		clear_vals[0] = fui(value->float32[0]);
-		clear_vals[1] = fui(value->float32[3]);
-		break;
-	case VK_FORMAT_R32G32B32A32_UINT:
-		if (value->uint32[0] != value->uint32[1] ||
-		    value->uint32[0] != value->uint32[2])
-			return false;
-		clear_vals[0] = value->uint32[0];
-		clear_vals[1] = value->uint32[3];
-		break;
-	case VK_FORMAT_R32G32B32A32_SINT:
-		if (value->int32[0] != value->int32[1] ||
-		    value->int32[0] != value->int32[2])
-			return false;
-		clear_vals[0] = value->int32[0];
-		clear_vals[1] = value->int32[3];
-		break;
-	default:
-		fprintf(stderr, "failed to fast clear %d\n", format);
+		return true;
+	}
+
+	if (desc->layout != VK_FORMAT_LAYOUT_PLAIN) {
+		fprintf(stderr, "failed to fast clear for non-plain format %d\n", format);
 		return false;
 	}
+
+	if (!util_is_power_of_two_or_zero(desc->block.bits)) {
+		fprintf(stderr, "failed to fast clear for NPOT format %d\n", format);
+		return false;
+	}
+
+	if (desc->block.bits > 64) {
+		/*
+		 * We have a 128 bits format, check if the first 3 components are the same.
+		 * Every elements has to be 32 bits since we don't support 64-bit formats,
+		 * and we can skip swizzling checks as alpha always comes last for these and
+		 * we do not care about the rest as they have to be the same.
+		 */
+		if (desc->channel[0].type == VK_FORMAT_TYPE_FLOAT) {
+			if (value->float32[0] != value->float32[1] ||
+			    value->float32[0] != value->float32[2])
+				return false;
+		} else {
+			if (value->uint32[0] != value->uint32[1] ||
+			    value->uint32[0] != value->uint32[2])
+				return false;
+		}
+		clear_vals[0] = value->uint32[0];
+		clear_vals[1] = value->uint32[3];
+		return true;
+	}
+	uint64_t clear_val = 0;
+
+	for (unsigned c = 0; c < 4; ++c) {
+		if (desc->swizzle[c] >= 4)
+			continue;
+
+		const struct vk_format_channel_description *channel = &desc->channel[desc->swizzle[c]];
+		assert(channel->size);
+
+		uint64_t v = 0;
+		if (channel->pure_integer) {
+			v = value->uint32[c]  & ((1ULL << channel->size) - 1);
+		} else if (channel->normalized) {
+			if (channel->type == VK_FORMAT_TYPE_UNSIGNED &&
+			    desc->swizzle[c] < 3 &&
+			    desc->colorspace == VK_FORMAT_COLORSPACE_SRGB) {
+				assert(channel->size == 8);
+
+				v = util_format_linear_float_to_srgb_8unorm(value->float32[c]);
+			} else if (channel->type == VK_FORMAT_TYPE_UNSIGNED) {
+				v = MAX2(MIN2(value->float32[c], 1.0f), 0.0f) * ((1ULL << channel->size) - 1);
+			} else  {
+				v = MAX2(MIN2(value->float32[c], 1.0f), -1.0f) * ((1ULL << (channel->size - 1)) - 1);
+			}
+		} else if (channel->type == VK_FORMAT_TYPE_FLOAT) {
+			if (channel->size == 32) {
+				memcpy(&v, &value->float32[c], 4);
+			} else if(channel->size == 16) {
+				v = util_float_to_half(value->float32[c]);
+			} else {
+				fprintf(stderr, "failed to fast clear for unhandled float size in format %d\n", format);
+				return false;
+			}
+		} else {
+			fprintf(stderr, "failed to fast clear for unhandled component type in format %d\n", format);
+			return false;
+		}
+		clear_val |= (v & ((1ULL << channel->size) - 1)) << channel->shift;
+	}
+
+	clear_vals[0] = clear_val;
+	clear_vals[1] = clear_val >> 32;
+
 	return true;
 }
 
@@ -1325,7 +1257,7 @@ VkResult radv_GetPhysicalDeviceImageFormatProperties2(
 			 *    vkGetPhysicalDeviceImageFormatProperties2KHR returns
 			 *    VK_ERROR_FORMAT_NOT_SUPPORTED.
 			 */
-			result = vk_errorf(VK_ERROR_FORMAT_NOT_SUPPORTED,
+			result = vk_errorf(physical_device->instance, VK_ERROR_FORMAT_NOT_SUPPORTED,
 					   "unsupported VkExternalMemoryTypeFlagBitsKHR 0x%x",
 					   external_info->handleType);
 			goto fail;

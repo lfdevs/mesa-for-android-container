@@ -14,8 +14,6 @@ MAIN_FILES = \
 	main/api_exec.h \
 	main/api_loopback.c \
 	main/api_loopback.h \
-	main/api_validate.c \
-	main/api_validate.h \
 	main/arbprogram.c \
 	main/arbprogram.h \
 	main/arrayobj.c \
@@ -49,6 +47,8 @@ MAIN_FILES = \
 	main/condrender.c \
 	main/condrender.h \
 	main/config.h \
+	main/conservativeraster.c \
+	main/conservativeraster.h \
 	main/context.c \
 	main/context.h \
 	main/convolve.c \
@@ -70,6 +70,8 @@ MAIN_FILES = \
 	main/drawpix.h \
 	main/drawtex.c \
 	main/drawtex.h \
+	main/draw_validate.c \
+	main/draw_validate.h \
 	main/enable.c \
 	main/enable.h \
 	main/enums.c \
@@ -212,8 +214,11 @@ MAIN_FILES = \
 	main/syncobj.c \
 	main/syncobj.h \
 	main/texcompress.c \
+	main/texcompress_astc.cpp \
+	main/texcompress_astc.h \
 	main/texcompress_bptc.c \
 	main/texcompress_bptc.h \
+	main/texcompress_bptc_tmp.h \
 	main/texcompress_cpal.c \
 	main/texcompress_cpal.h \
 	main/texcompress_etc.c \

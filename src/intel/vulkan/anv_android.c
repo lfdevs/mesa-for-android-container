@@ -128,7 +128,13 @@ anv_image_from_gralloc(VkDevice device_h,
     */
    int dma_buf = gralloc_info->handle->data[0];
 
-   result = anv_bo_cache_import(device, &device->bo_cache, dma_buf, &bo);
+   uint64_t bo_flags = 0;
+   if (device->instance->physicalDevice.supports_48bit_addresses)
+      bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+   if (device->instance->physicalDevice.use_softpin)
+      bo_flags |= EXEC_OBJECT_PINNED;
+
+   result = anv_bo_cache_import(device, &device->bo_cache, dma_buf, bo_flags, &bo);
    if (result != VK_SUCCESS) {
       return vk_errorf(device->instance, device, result,
                        "failed to import dma-buf from VkNativeBufferANDROID");
@@ -183,9 +189,9 @@ anv_image_from_gralloc(VkDevice device_h,
    }
 
    assert(image->n_planes == 1);
-   assert(image->planes[0].bo_offset == 0);
+   assert(image->planes[0].address.offset == 0);
 
-   image->planes[0].bo = bo;
+   image->planes[0].address.bo = bo;
    image->planes[0].bo_is_owned = true;
 
    /* We need to set the WRITE flag on window system buffers so that GEM will

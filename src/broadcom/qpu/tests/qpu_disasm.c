@@ -40,6 +40,7 @@ static const struct {
         { 33, 0x3c002380b6edb000ull, "or  rf0, r3, r3      ; mov  vpm, r3" },
         { 33, 0x57403006bbb80000ull, "nop                  ; fmul  r0, rf0, r5 ; ldvpm; ldunif" },
         { 33, 0x9c094adef634b000ull, "ffloor.ifb  rf30.l, r3; fmul.pushz  rf43.l, r5, r1.h" },
+        { 33, 0xb0044c56ba326840ull, "flpop  rf22, rf33    ; fmul.pushz  rf49.l, r4.h, r1.abs" },
 
         /* vfmul input packing */
         { 33, 0x101e8b6e8aad4000ull, "fmax.nornn  rf46, r4.l, r2.l; vfmul.ifnb  rf45, r3, r5" },
@@ -83,6 +84,14 @@ static const struct {
         { 41, 0x3de02040f8ff7201ull, "stvpmv  1, rf8       ; mov  r1, 1" },
         { 41, 0xd8000e50bb2d3000ull, "sampid  rf16         ; fmul  rf57.h, r3, r1.l" },
 
+        /* v4.1 SFU instructions. */
+        { 41, 0xe98d60c1ba2aef80ull, "recip  rf1, rf62     ; fmul  r3.h, r2.l, r1.l; ldunifrf.rf53" },
+        { 41, 0x7d87c2debc51c000ull, "rsqrt  rf30, r4      ; fmul  rf11, r4.h, r2.h; ldunifrf.rf31" },
+        { 41, 0xb182475abc2bb000ull, "rsqrt2  rf26, r3     ; fmul  rf29.l, r2.h, r1.abs; ldunifrf.rf9" },
+        { 41, 0x79880808bc0b6900ull, "sin  rf8, rf36       ; fmul  rf32, r2.h, r0.l; ldunifrf.rf32" },
+        { 41, 0x04092094bc5a28c0ull, "exp.ifb  rf20, r2    ; add  r2, rf35, r2" },
+        { 41, 0xe00648bfbc32a000ull, "log  rf63, r2        ; fmul.andnn  rf34.h, r4.l, r1.abs" },
+
         /* v4.2 changes */
         { 42, 0x3c203192bb814000ull, "barrierid  syncb     ; nop               ; thrsw" },
 };
@@ -112,9 +121,10 @@ main(int argc, char **argv)
         for (int i = 0; i < ARRAY_SIZE(tests); i++) {
                 devinfo.ver = tests[i].ver;
 
-                printf("Testing v%d.%d 0x%016llx... ",
+                printf("Testing v%d.%d 0x%016llx (\"%s\")... ",
                        devinfo.ver / 10, devinfo.ver % 10,
-                       (long long)tests[i].inst);
+                       (long long)tests[i].inst,
+                        tests[i].expected);
 
                 const char *disasm_output = v3d_qpu_disasm(&devinfo,
                                                            tests[i].inst);

@@ -152,7 +152,7 @@ namespace clover {
       for (auto f : formats) {
          if (all_of([=](const device &dev) {
                   return dev.pipe->is_format_supported(
-                     dev.pipe, f.second, target, 1, bindings);
+                     dev.pipe, f.second, target, 1, 1, bindings);
                }, ctx.devices()))
             s.insert(f.first);
       }

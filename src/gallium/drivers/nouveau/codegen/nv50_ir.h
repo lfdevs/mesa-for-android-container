@@ -453,6 +453,7 @@ enum SVSemantic
    SV_TESS_INNER,
    SV_TESS_COORD,
    SV_TID,
+   SV_COMBINED_TID,
    SV_CTAID,
    SV_NTID,
    SV_GRIDID,

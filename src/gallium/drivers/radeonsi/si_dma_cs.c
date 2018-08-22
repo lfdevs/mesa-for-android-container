@@ -26,9 +26,9 @@
 
 static void si_dma_emit_wait_idle(struct si_context *sctx)
 {
-	struct radeon_winsys_cs *cs = sctx->dma_cs;
+	struct radeon_cmdbuf *cs = sctx->dma_cs;
 
-	/* NOP waits for idle on Evergreen and later. */
+	/* NOP waits for idle. */
 	if (sctx->chip_class >= CIK)
 		radeon_emit(cs, 0x00000000); /* NOP */
 	else
@@ -93,13 +93,11 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 
 	if (dst) {
 		radeon_add_to_buffer_list(ctx, ctx->dma_cs, dst,
-					  RADEON_USAGE_WRITE,
-					  RADEON_PRIO_SDMA_BUFFER);
+					  RADEON_USAGE_WRITE, 0);
 	}
 	if (src) {
 		radeon_add_to_buffer_list(ctx, ctx->dma_cs, src,
-					  RADEON_USAGE_READ,
-					  RADEON_PRIO_SDMA_BUFFER);
+					  RADEON_USAGE_READ, 0);
 	}
 
 	/* this function is called before all DMA calls, so increment this. */
@@ -109,7 +107,7 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 void si_flush_dma_cs(struct si_context *ctx, unsigned flags,
 		     struct pipe_fence_handle **fence)
 {
-	struct radeon_winsys_cs *cs = ctx->dma_cs;
+	struct radeon_cmdbuf *cs = ctx->dma_cs;
 	struct radeon_saved_cs saved;
 	bool check_vm = (ctx->screen->debug_flags & DBG(CHECK_VM)) != 0;
 

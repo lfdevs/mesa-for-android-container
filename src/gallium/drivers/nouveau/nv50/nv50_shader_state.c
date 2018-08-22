@@ -185,6 +185,7 @@ nv50_fragprog_validate(struct nv50_context *nv50)
                fb->cbufs[0]->format,
                fb->cbufs[0]->texture->target,
                fb->cbufs[0]->texture->nr_samples,
+               fb->cbufs[0]->texture->nr_storage_samples,
                PIPE_BIND_BLENDABLE);
       /* If we already have alphatest code, we have to keep updating
        * it. However we only have to have different code if the current RT0 is

@@ -44,6 +44,12 @@ enum {
 	RADV_DEBUG_NO_SISCHED        = 0x4000,
 	RADV_DEBUG_PREOPTIR          = 0x8000,
 	RADV_DEBUG_NO_DYNAMIC_BOUNDS = 0x10000,
+	RADV_DEBUG_NO_OUT_OF_ORDER   = 0x20000,
+	RADV_DEBUG_INFO              = 0x40000,
+	RADV_DEBUG_ERRORS            = 0x80000,
+	RADV_DEBUG_STARTUP           = 0x100000,
+	RADV_DEBUG_CHECKIR           = 0x200000,
+	RADV_DEBUG_NOTHREADLLVM      = 0x400000,
 };
 
 enum {
@@ -59,7 +65,7 @@ bool
 radv_init_trace(struct radv_device *device);
 
 void
-radv_check_gpu_hangs(struct radv_queue *queue, struct radeon_winsys_cs *cs);
+radv_check_gpu_hangs(struct radv_queue *queue, struct radeon_cmdbuf *cs);
 
 void
 radv_print_spirv(uint32_t *data, uint32_t size, FILE *fp);

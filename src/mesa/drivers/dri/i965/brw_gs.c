@@ -192,10 +192,9 @@ brw_upload_gs_prog(struct brw_context *brw)
 
    brw_gs_populate_key(brw, &key);
 
-   if (brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG,
-                        &key, sizeof(key),
-                        &stage_state->prog_offset,
-                        &brw->gs.base.prog_data))
+   if (brw_search_cache(&brw->cache, BRW_CACHE_GS_PROG, &key, sizeof(key),
+                        &stage_state->prog_offset, &brw->gs.base.prog_data,
+                        true))
       return;
 
    if (brw_disk_cache_upload_program(brw, MESA_SHADER_GEOMETRY))
@@ -206,6 +205,17 @@ brw_upload_gs_prog(struct brw_context *brw)
 
    MAYBE_UNUSED bool success = brw_codegen_gs_prog(brw, gp, &key);
    assert(success);
+}
+
+void
+brw_gs_populate_default_key(const struct gen_device_info *devinfo,
+                            struct brw_gs_prog_key *key,
+                            struct gl_program *prog)
+{
+   memset(key, 0, sizeof(*key));
+
+   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
+   key->program_string_id = brw_program(prog)->id;
 }
 
 bool
@@ -219,10 +229,7 @@ brw_gs_precompile(struct gl_context *ctx, struct gl_program *prog)
 
    struct brw_program *bgp = brw_program(prog);
 
-   memset(&key, 0, sizeof(key));
-
-   brw_setup_tex_for_precompile(brw, &key.tex, prog);
-   key.program_string_id = bgp->id;
+   brw_gs_populate_default_key(&brw->screen->devinfo, &key, prog);
 
    success = brw_codegen_gs_prog(brw, bgp, &key);
 

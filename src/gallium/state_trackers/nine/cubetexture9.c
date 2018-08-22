@@ -90,6 +90,7 @@ NineCubeTexture9_ctor( struct NineCubeTexture9 *This,
         info->last_level = util_logbase2(EdgeLength);
     info->array_size = 6;
     info->nr_samples = 0;
+    info->nr_storage_samples = 0;
     info->bind = PIPE_BIND_SAMPLER_VIEW;
     info->usage = PIPE_USAGE_DEFAULT;
     info->flags = 0;

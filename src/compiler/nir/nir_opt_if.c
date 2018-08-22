@@ -22,7 +22,9 @@
  */
 
 #include "nir.h"
+#include "nir/nir_builder.h"
 #include "nir_control_flow.h"
+#include "nir_loop_analyze.h"
 
 /**
  * Gets the single block that jumps back to the loop header. Already assumes
@@ -222,7 +224,153 @@ opt_peel_loop_initial_if(nir_loop *loop)
 }
 
 static bool
-opt_if_cf_list(struct exec_list *cf_list)
+is_block_empty(nir_block *block)
+{
+   return nir_cf_node_is_last(&block->cf_node) &&
+          exec_list_is_empty(&block->instr_list);
+}
+
+/**
+ * This optimization turns:
+ *
+ *     if (cond) {
+ *     } else {
+ *         do_work();
+ *     }
+ *
+ * into:
+ *
+ *     if (!cond) {
+ *         do_work();
+ *     } else {
+ *     }
+ */
+static bool
+opt_if_simplification(nir_builder *b, nir_if *nif)
+{
+   /* Only simplify if the then block is empty and the else block is not. */
+   if (!is_block_empty(nir_if_first_then_block(nif)) ||
+       is_block_empty(nir_if_first_else_block(nif)))
+      return false;
+
+   /* Make sure the condition is a comparison operation. */
+   nir_instr *src_instr = nif->condition.ssa->parent_instr;
+   if (src_instr->type != nir_instr_type_alu)
+      return false;
+
+   nir_alu_instr *alu_instr = nir_instr_as_alu(src_instr);
+   if (!nir_alu_instr_is_comparison(alu_instr))
+      return false;
+
+   /* Insert the inverted instruction and rewrite the condition. */
+   b->cursor = nir_after_instr(&alu_instr->instr);
+
+   nir_ssa_def *new_condition =
+      nir_inot(b, &alu_instr->dest.dest.ssa);
+
+   nir_if_rewrite_condition(nif, nir_src_for_ssa(new_condition));
+
+   /* Grab pointers to the last then/else blocks for fixing up the phis. */
+   nir_block *then_block = nir_if_last_then_block(nif);
+   nir_block *else_block = nir_if_last_else_block(nif);
+
+   /* Walk all the phis in the block immediately following the if statement and
+    * swap the blocks.
+    */
+   nir_block *after_if_block =
+      nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node));
+
+   nir_foreach_instr(instr, after_if_block) {
+      if (instr->type != nir_instr_type_phi)
+         continue;
+
+      nir_phi_instr *phi = nir_instr_as_phi(instr);
+
+      foreach_list_typed(nir_phi_src, src, node, &phi->srcs) {
+         if (src->pred == else_block) {
+            src->pred = then_block;
+         } else if (src->pred == then_block) {
+            src->pred = else_block;
+         }
+      }
+   }
+
+   /* Finally, move the else block to the then block. */
+   nir_cf_list tmp;
+   nir_cf_extract(&tmp, nir_before_cf_list(&nif->else_list),
+                        nir_after_cf_list(&nif->else_list));
+   nir_cf_reinsert(&tmp, nir_before_cf_list(&nif->then_list));
+
+   return true;
+}
+
+/**
+ * This optimization simplifies potential loop terminators which then allows
+ * other passes such as opt_if_simplification() and loop unrolling to progress
+ * further:
+ *
+ *     if (cond) {
+ *        ... then block instructions ...
+ *     } else {
+ *         ...
+ *        break;
+ *     }
+ *
+ * into:
+ *
+ *     if (cond) {
+ *     } else {
+ *         ...
+ *        break;
+ *     }
+ *     ... then block instructions ...
+ */
+static bool
+opt_if_loop_terminator(nir_if *nif)
+{
+   nir_block *break_blk = NULL;
+   nir_block *continue_from_blk = NULL;
+   bool continue_from_then = true;
+
+   nir_block *last_then = nir_if_last_then_block(nif);
+   nir_block *last_else = nir_if_last_else_block(nif);
+
+   if (nir_block_ends_in_break(last_then)) {
+      break_blk = last_then;
+      continue_from_blk = last_else;
+      continue_from_then = false;
+   } else if (nir_block_ends_in_break(last_else)) {
+      break_blk = last_else;
+      continue_from_blk = last_then;
+   }
+
+   /* Continue if the if-statement contained no jumps at all */
+   if (!break_blk)
+      return false;
+
+   /* If the continue from block is empty then return as there is nothing to
+    * move.
+    */
+   nir_block *first_continue_from_blk = continue_from_then ?
+      nir_if_first_then_block(nif) :
+      nir_if_first_else_block(nif);
+   if (is_block_empty(first_continue_from_blk))
+      return false;
+
+   if (!nir_is_trivial_loop_if(nif, break_blk))
+      return false;
+
+   /* Finally, move the continue from branch after the if-statement. */
+   nir_cf_list tmp;
+   nir_cf_extract(&tmp, nir_before_block(first_continue_from_blk),
+                        nir_after_block(continue_from_blk));
+   nir_cf_reinsert(&tmp, nir_after_cf_node(&nif->cf_node));
+
+   return true;
+}
+
+static bool
+opt_if_cf_list(nir_builder *b, struct exec_list *cf_list)
 {
    bool progress = false;
    foreach_list_typed(nir_cf_node, cf_node, node, cf_list) {
@@ -232,14 +380,16 @@ opt_if_cf_list(struct exec_list *cf_list)
 
       case nir_cf_node_if: {
          nir_if *nif = nir_cf_node_as_if(cf_node);
-         progress |= opt_if_cf_list(&nif->then_list);
-         progress |= opt_if_cf_list(&nif->else_list);
+         progress |= opt_if_cf_list(b, &nif->then_list);
+         progress |= opt_if_cf_list(b, &nif->else_list);
+         progress |= opt_if_loop_terminator(nif);
+         progress |= opt_if_simplification(b, nif);
          break;
       }
 
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(cf_node);
-         progress |= opt_if_cf_list(&loop->body);
+         progress |= opt_if_cf_list(b, &loop->body);
          progress |= opt_peel_loop_initial_if(loop);
          break;
       }
@@ -261,7 +411,10 @@ nir_opt_if(nir_shader *shader)
       if (function->impl == NULL)
          continue;
 
-      if (opt_if_cf_list(&function->impl->body)) {
+      nir_builder b;
+      nir_builder_init(&b, function->impl);
+
+      if (opt_if_cf_list(&b, &function->impl->body)) {
          nir_metadata_preserve(function->impl, nir_metadata_none);
 
          /* If that made progress, we're no longer really in SSA form.  We
@@ -269,6 +422,13 @@ nir_opt_if(nir_shader *shader)
           * that don't dominate their uses.
           */
          nir_lower_regs_to_ssa_impl(function->impl);
+
+         /* Calling nir_convert_loop_to_lcssa() in opt_peel_loop_initial_if()
+          * adds extra phi nodes which may not be valid if they're used for
+          * something such as a deref.  Remove any unneeded phis.
+          */
+         nir_opt_remove_phis_impl(function->impl);
+
          progress = true;
       }
    }

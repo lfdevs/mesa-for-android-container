@@ -122,9 +122,10 @@ static const struct {
 void fs_visitor::setup_fs_payload_gen4()
 {
    assert(stage == MESA_SHADER_FRAGMENT);
+   assert(dispatch_width <= 16);
    struct brw_wm_prog_data *prog_data = brw_wm_prog_data(this->prog_data);
    brw_wm_prog_key *key = (brw_wm_prog_key*) this->key;
-   GLuint reg = 2;
+   GLuint reg = 1;
    bool kill_stats_promoted_workaround = false;
    int lookup = key->iz_lookup;
 
@@ -141,11 +142,13 @@ void fs_visitor::setup_fs_payload_gen4()
       kill_stats_promoted_workaround = true;
    }
 
+   payload.subspan_coord_reg[0] = reg++;
+
    prog_data->uses_src_depth =
       (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
    if (wm_iz_table[lookup].sd_present || prog_data->uses_src_depth ||
        kill_stats_promoted_workaround) {
-      payload.source_depth_reg = reg;
+      payload.source_depth_reg[0] = reg;
       reg += 2;
    }
 
@@ -153,14 +156,14 @@ void fs_visitor::setup_fs_payload_gen4()
       source_depth_to_render_target = true;
 
    if (wm_iz_table[lookup].ds_present || key->line_aa != BRW_WM_AA_NEVER) {
-      payload.aa_dest_stencil_reg = reg;
+      payload.aa_dest_stencil_reg[0] = reg;
       runtime_check_aads_emit =
          !wm_iz_table[lookup].ds_present && key->line_aa == BRW_WM_AA_SOMETIMES;
       reg++;
    }
 
    if (wm_iz_table[lookup].dd_present) {
-      payload.dest_depth_reg = reg;
+      payload.dest_depth_reg[0] = reg;
       reg+=2;
    }
 

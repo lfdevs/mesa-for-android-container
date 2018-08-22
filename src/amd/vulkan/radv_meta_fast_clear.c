@@ -66,19 +66,20 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
 						b.shader->info.cs.local_size[2], 0);
 
 	nir_ssa_def *global_id = nir_iadd(&b, nir_imul(&b, wg_id, block_size), invoc_id);
+	nir_ssa_def *input_img_deref = &nir_build_deref_var(&b, input_img)->dest.ssa;
 
-	nir_tex_instr *tex = nir_tex_instr_create(b.shader, 2);
+	nir_tex_instr *tex = nir_tex_instr_create(b.shader, 3);
 	tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
 	tex->op = nir_texop_txf;
 	tex->src[0].src_type = nir_tex_src_coord;
 	tex->src[0].src = nir_src_for_ssa(nir_channels(&b, global_id, 3));
 	tex->src[1].src_type = nir_tex_src_lod;
 	tex->src[1].src = nir_src_for_ssa(nir_imm_int(&b, 0));
+	tex->src[2].src_type = nir_tex_src_texture_deref;
+	tex->src[2].src = nir_src_for_ssa(input_img_deref);
 	tex->dest_type = nir_type_float;
 	tex->is_array = false;
 	tex->coord_components = 2;
-	tex->texture = nir_deref_var_create(tex, input_img);
-	tex->sampler = NULL;
 
 	nir_ssa_dest_init(&tex->instr, &tex->dest, 4, 32, "tex");
 	nir_builder_instr_insert(&b, &tex->instr);
@@ -90,11 +91,11 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
 	nir_builder_instr_insert(&b, &bar->instr);
 
 	nir_ssa_def *outval = &tex->dest.ssa;
-	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_var_store);
-	store->src[0] = nir_src_for_ssa(global_id);
-	store->src[1] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
-	store->src[2] = nir_src_for_ssa(outval);
-	store->variables[0] = nir_deref_var_create(store, output_img);
+	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
+	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
+	store->src[1] = nir_src_for_ssa(global_id);
+	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
+	store->src[3] = nir_src_for_ssa(outval);
 
 	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
@@ -570,7 +571,7 @@ radv_emit_set_predication_state_from_image(struct radv_cmd_buffer *cmd_buffer,
 		va += image->dcc_pred_offset;
 	}
 
-	si_emit_set_predication_state(cmd_buffer, va);
+	si_emit_set_predication_state(cmd_buffer, true, va);
 }
 
 /**
@@ -585,6 +586,7 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 	VkDevice device_h = radv_device_to_handle(cmd_buffer->device);
 	VkCommandBuffer cmd_buffer_h = radv_cmd_buffer_to_handle(cmd_buffer);
 	uint32_t layer_count = radv_get_layerCount(image, subresourceRange);
+	bool old_predicating = false;
 	VkPipeline pipeline;
 
 	assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
@@ -602,6 +604,8 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 	}
 
 	if (!decompress_dcc && radv_image_has_dcc(image)) {
+		old_predicating = cmd_buffer->state.predicating;
+
 		radv_emit_set_predication_state_from_image(cmd_buffer, image, true);
 		cmd_buffer->state.predicating = true;
 	}
@@ -668,8 +672,21 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 
 	}
 	if (!decompress_dcc && radv_image_has_dcc(image)) {
-		cmd_buffer->state.predicating = false;
+		cmd_buffer->state.predicating = old_predicating;
+
 		radv_emit_set_predication_state_from_image(cmd_buffer, image, false);
+
+		/* Clear the image's fast-clear eliminate predicate because
+		 * FMASK and DCC also imply a fast-clear eliminate.
+		 */
+		radv_set_dcc_need_cmask_elim_pred(cmd_buffer, image, false);
+
+		if (cmd_buffer->state.predication_type != -1) {
+			/* Restore previous conditional rendering user state. */
+			si_emit_set_predication_state(cmd_buffer,
+						      cmd_buffer->state.predication_type,
+						      cmd_buffer->state.predication_va);
+		}
 	}
 	radv_meta_restore(&saved_state, cmd_buffer);
 }

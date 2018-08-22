@@ -27,6 +27,7 @@
 #define PACKED __attribute__((__packed__))
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <assert.h>
 
 /* size of largest OPC field of all the instruction categories: */

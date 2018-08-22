@@ -117,22 +117,26 @@ target_triplet = @target@
 @HAVE_LIBDRM_TRUE@am__append_1 = \
 @HAVE_LIBDRM_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_DRISW_TRUE@am__append_2 = \
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_2 = \
+@HAVE_PLATFORM_ANDROID_TRUE@	$(ANDROID_LIBS) \
+@HAVE_PLATFORM_ANDROID_TRUE@	$(BACKTRACE_LIBS)
+
+@HAVE_DRISW_TRUE@am__append_3 = \
 @HAVE_DRISW_TRUE@	$(top_builddir)/src/gallium/winsys/sw/dri/libswdri.la
 
-@HAVE_DRISW_KMS_TRUE@am__append_3 = \
+@HAVE_DRISW_KMS_TRUE@am__append_4 = \
 @HAVE_DRISW_KMS_TRUE@	$(top_builddir)/src/gallium/winsys/sw/kms-dri/libswkmsdri.la \
 @HAVE_DRISW_KMS_TRUE@	$(LIBDRM_LIBS)
 
-@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_4 = \
+@HAVE_LD_VERSION_SCRIPT_TRUE@am__append_5 = \
 @HAVE_LD_VERSION_SCRIPT_TRUE@	-Wl,--version-script=$(top_srcdir)/src/gallium/targets/osmesa/osmesa.sym
 
-@HAVE_GALLIUM_LLVM_TRUE@am__append_5 = -DGALLIUM_LLVMPIPE
-@HAVE_GALLIUM_LLVM_TRUE@am__append_6 = $(LLVM_LDFLAGS)
-@HAVE_GALLIUM_LLVM_TRUE@am__append_7 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
-@HAVE_GALLIUM_SWR_TRUE@am__append_8 = -DGALLIUM_SWR
-@HAVE_GALLIUM_SWR_TRUE@am__append_9 = $(LLVM_LDFLAGS)
-@HAVE_GALLIUM_SWR_TRUE@am__append_10 = $(top_builddir)/src/gallium/drivers/swr/libmesaswr.la $(LLVM_LIBS)
+@HAVE_GALLIUM_LLVM_TRUE@am__append_6 = -DGALLIUM_LLVMPIPE
+@HAVE_GALLIUM_LLVM_TRUE@am__append_7 = $(LLVM_LDFLAGS)
+@HAVE_GALLIUM_LLVM_TRUE@am__append_8 = $(top_builddir)/src/gallium/drivers/llvmpipe/libllvmpipe.la $(LLVM_LIBS)
+@HAVE_GALLIUM_SWR_TRUE@am__append_9 = -DGALLIUM_SWR
+@HAVE_GALLIUM_SWR_TRUE@am__append_10 = $(LLVM_LDFLAGS)
+@HAVE_GALLIUM_SWR_TRUE@am__append_11 = $(top_builddir)/src/gallium/drivers/swr/libmesaswr.la $(LLVM_LIBS)
 subdir = src/gallium/targets/osmesa
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -285,6 +289,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -465,6 +471,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -472,8 +480,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -487,6 +495,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -507,10 +517,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -568,6 +582,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -630,7 +645,8 @@ GALLIUM_TARGET_CFLAGS = \
 	$(VISIBILITY_CFLAGS)
 
 GALLIUM_COMMON_LIB_DEPS = -lm $(LIBUNWIND_LIBS) $(LIBSENSORS_LIBS) \
-	$(CLOCK_LIB) $(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1)
+	$(CLOCK_LIB) $(PTHREAD_LIBS) $(DLOPEN_LIBS) $(am__append_1) \
+	$(am__append_2)
 GALLIUM_WINSYS_CFLAGS = \
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/include \
@@ -642,7 +658,7 @@ GALLIUM_WINSYS_CFLAGS = \
 GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(top_builddir)/src/gallium/winsys/sw/null/libws_null.la \
 	$(top_builddir)/src/gallium/winsys/sw/wrapper/libwsw.la \
-	$(am__append_2) $(am__append_3)
+	$(am__append_3) $(am__append_4)
 AM_CFLAGS = \
 	$(GALLIUM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
@@ -652,13 +668,13 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/gallium/drivers \
 	-I$(top_srcdir)/src/gallium/winsys \
 	-I$(top_srcdir)/src/gallium/auxiliary -DGALLIUM_SOFTPIPE \
-	$(am__append_5) $(am__append_8)
+	$(am__append_6) $(am__append_9)
 lib_LTLIBRARIES = lib@OSMESA_LIB@.la
 nodist_EXTRA_lib@OSMESA_LIB@_la_SOURCES = dummy.cpp
 lib@OSMESA_LIB@_la_SOURCES = target.c
 lib@OSMESA_LIB@_la_LDFLAGS = -no-undefined -version-number \
 	@OSMESA_VERSION@ $(GC_SECTIONS) $(LD_NO_UNDEFINED) \
-	$(am__append_4) $(am__append_6) $(am__append_9)
+	$(am__append_5) $(am__append_7) $(am__append_10)
 @HAVE_SHARED_GLAPI_TRUE@SHARED_GLAPI_LIB = $(top_builddir)/src/mapi/shared-glapi/libglapi.la
 lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/mesa/libmesagallium.la \
@@ -668,7 +684,7 @@ lib@OSMESA_LIB@_la_LIBADD =  \
 	$(top_builddir)/src/gallium/state_trackers/osmesa/libosmesa.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la $(SHARED_GLAPI_LIB) \
 	$(OSMESA_LIB_DEPS) $(CLOCK_LIB) $(LIBUNWIND_LIBS) \
-	$(am__append_7) $(am__append_10)
+	$(am__append_8) $(am__append_11)
 EXTRA_lib@OSMESA_LIB@_la_DEPENDENCIES = osmesa.sym
 EXTRA_DIST = \
 	osmesa.sym \

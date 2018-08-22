@@ -35,6 +35,7 @@
 
 #include "buffers.h"
 #include "context.h"
+#include "debug_output.h"
 #include "enums.h"
 #include "fbobject.h"
 #include "formats.h"
@@ -1404,14 +1405,45 @@ _mesa_BindRenderbufferEXT(GLenum target, GLuint renderbuffer)
 }
 
 /**
- * ARB_framebuffer_no_attachment - Application passes requested param's
- * here. NOTE: NumSamples requested need not be _NumSamples which is
- * what the hw supports.
+ * ARB_framebuffer_no_attachment and ARB_sample_locations - Application passes
+ * requested param's here. NOTE: NumSamples requested need not be _NumSamples
+ * which is what the hw supports.
  */
 static void
 framebuffer_parameteri(struct gl_context *ctx, struct gl_framebuffer *fb,
                        GLenum pname, GLint param, const char *func)
 {
+   bool cannot_be_winsys_fbo = false;
+
+   switch (pname) {
+   case GL_FRAMEBUFFER_DEFAULT_WIDTH:
+   case GL_FRAMEBUFFER_DEFAULT_HEIGHT:
+   case GL_FRAMEBUFFER_DEFAULT_LAYERS:
+   case GL_FRAMEBUFFER_DEFAULT_SAMPLES:
+   case GL_FRAMEBUFFER_DEFAULT_FIXED_SAMPLE_LOCATIONS:
+      if (!ctx->Extensions.ARB_framebuffer_no_attachments)
+         goto invalid_pname_enum;
+      cannot_be_winsys_fbo = true;
+      break;
+   case GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB:
+   case GL_FRAMEBUFFER_SAMPLE_LOCATION_PIXEL_GRID_ARB:
+      if (!ctx->Extensions.ARB_sample_locations)
+         goto invalid_pname_enum;
+      break;
+   case GL_FRAMEBUFFER_FLIP_Y_MESA:
+      if (!ctx->Extensions.MESA_framebuffer_flip_y)
+         goto invalid_pname_enum;
+      cannot_be_winsys_fbo = true;
+   default:
+      goto invalid_pname_enum;
+   }
+
+   if (cannot_be_winsys_fbo && _mesa_is_winsys_fbo(fb)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(invalid pname=0x%x for default framebuffer)", func, pname);
+      return;
+   }
+
    switch (pname) {
    case GL_FRAMEBUFFER_DEFAULT_WIDTH:
       if (param < 0 || param > ctx->Const.MaxFramebufferWidth)
@@ -1448,13 +1480,33 @@ framebuffer_parameteri(struct gl_context *ctx, struct gl_framebuffer *fb,
    case GL_FRAMEBUFFER_DEFAULT_FIXED_SAMPLE_LOCATIONS:
       fb->DefaultGeometry.FixedSampleLocations = param;
       break;
-   default:
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "%s(pname=0x%x)", func, pname);
+   case GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB:
+      fb->ProgrammableSampleLocations = !!param;
+      break;
+   case GL_FRAMEBUFFER_SAMPLE_LOCATION_PIXEL_GRID_ARB:
+      fb->SampleLocationPixelGrid = !!param;
+      break;
+   case GL_FRAMEBUFFER_FLIP_Y_MESA:
+      fb->FlipY = param;
+      break;
    }
 
-   invalidate_framebuffer(fb);
-   ctx->NewState |= _NEW_BUFFERS;
+   switch (pname) {
+   case GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB:
+   case GL_FRAMEBUFFER_SAMPLE_LOCATION_PIXEL_GRID_ARB:
+      if (fb == ctx->DrawBuffer)
+         ctx->NewDriverState |= ctx->DriverFlags.NewSampleLocations;
+      break;
+   default:
+      invalidate_framebuffer(fb);
+      ctx->NewState |= _NEW_BUFFERS;
+      break;
+   }
+
+   return;
+
+invalid_pname_enum:
+   _mesa_error(ctx, GL_INVALID_ENUM, "%s(pname=0x%x)", func, pname);
 }
 
 void GLAPIENTRY
@@ -1463,10 +1515,12 @@ _mesa_FramebufferParameteri(GLenum target, GLenum pname, GLint param)
    GET_CURRENT_CONTEXT(ctx);
    struct gl_framebuffer *fb;
 
-   if (!ctx->Extensions.ARB_framebuffer_no_attachments) {
+   if (!ctx->Extensions.ARB_framebuffer_no_attachments &&
+       !ctx->Extensions.ARB_sample_locations) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glFramebufferParameteriv not supported "
-                  "(ARB_framebuffer_no_attachments not implemented)");
+                  "(neither ARB_framebuffer_no_attachments nor ARB_sample_locations"
+                  " is available)");
       return;
    }
 
@@ -1474,13 +1528,6 @@ _mesa_FramebufferParameteri(GLenum target, GLenum pname, GLint param)
    if (!fb) {
       _mesa_error(ctx, GL_INVALID_ENUM,
                   "glFramebufferParameteri(target=0x%x)", target);
-      return;
-   }
-
-   /* check framebuffer binding */
-   if (_mesa_is_winsys_fbo(fb)) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glFramebufferParameteri");
       return;
    }
 
@@ -1528,9 +1575,20 @@ validate_get_framebuffer_parameteriv_pname(struct gl_context *ctx,
        */
       cannot_be_winsys_fbo = !_mesa_is_desktop_gl(ctx);
       break;
+   case GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB:
+   case GL_FRAMEBUFFER_SAMPLE_LOCATION_PIXEL_GRID_ARB:
+      if (!ctx->Extensions.ARB_sample_locations)
+         goto invalid_pname_enum;
+      cannot_be_winsys_fbo = false;
+      break;
+   case GL_FRAMEBUFFER_FLIP_Y_MESA:
+      if (!ctx->Extensions.MESA_framebuffer_flip_y) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "%s(pname=0x%x)", func, pname);
+         return false;
+      }
+      break;
    default:
-      _mesa_error(ctx, GL_INVALID_ENUM, "%s(pname=0x%x)", func, pname);
-      return false;
+      goto invalid_pname_enum;
    }
 
    if (cannot_be_winsys_fbo && _mesa_is_winsys_fbo(fb)) {
@@ -1540,6 +1598,10 @@ validate_get_framebuffer_parameteriv_pname(struct gl_context *ctx,
    }
 
    return true;
+
+invalid_pname_enum:
+   _mesa_error(ctx, GL_INVALID_ENUM, "%s(pname=0x%x)", func, pname);
+   return false;
 }
 
 static void
@@ -1583,6 +1645,15 @@ get_framebuffer_parameteriv(struct gl_context *ctx, struct gl_framebuffer *fb,
    case GL_STEREO:
       *params = fb->Visual.stereoMode;
       break;
+   case GL_FRAMEBUFFER_PROGRAMMABLE_SAMPLE_LOCATIONS_ARB:
+      *params = fb->ProgrammableSampleLocations;
+      break;
+   case GL_FRAMEBUFFER_SAMPLE_LOCATION_PIXEL_GRID_ARB:
+      *params = fb->SampleLocationPixelGrid;
+      break;
+   case GL_FRAMEBUFFER_FLIP_Y_MESA:
+      *params = fb->FlipY;
+      break;
    }
 }
 
@@ -1592,10 +1663,12 @@ _mesa_GetFramebufferParameteriv(GLenum target, GLenum pname, GLint *params)
    GET_CURRENT_CONTEXT(ctx);
    struct gl_framebuffer *fb;
 
-   if (!ctx->Extensions.ARB_framebuffer_no_attachments) {
+   if (!ctx->Extensions.ARB_framebuffer_no_attachments &&
+       !ctx->Extensions.ARB_sample_locations) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glGetFramebufferParameteriv not supported "
-                  "(ARB_framebuffer_no_attachments not implemented)");
+                  "(neither ARB_framebuffer_no_attachments nor ARB_sample_locations"
+                  " is available)");
       return;
    }
 
@@ -1870,8 +1943,10 @@ _mesa_base_fbo_format(const struct gl_context *ctx, GLenum internalFormat)
    case GL_RGBA:
    case GL_RGBA2:
    case GL_RGBA12:
-   case GL_RGBA16:
       return _mesa_is_desktop_gl(ctx) ? GL_RGBA : 0;
+   case GL_RGBA16:
+      return _mesa_is_desktop_gl(ctx) || _mesa_has_EXT_texture_norm16(ctx)
+         ? GL_RGBA : 0;
    case GL_RGB10_A2:
    case GL_SRGB8_ALPHA8_EXT:
       return _mesa_is_desktop_gl(ctx) || _mesa_is_gles3(ctx) ? GL_RGBA : 0;
@@ -1906,15 +1981,17 @@ _mesa_base_fbo_format(const struct gl_context *ctx, GLenum internalFormat)
              ctx->Extensions.ARB_depth_buffer_float)
          ? GL_DEPTH_STENCIL : 0;
    case GL_RED:
+      return _mesa_has_ARB_texture_rg(ctx) ? GL_RED : 0;
    case GL_R16:
-      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_rg
+      return _mesa_has_ARB_texture_rg(ctx) || _mesa_has_EXT_texture_norm16(ctx)
          ? GL_RED : 0;
    case GL_R8:
       return ctx->API != API_OPENGLES && ctx->Extensions.ARB_texture_rg
          ? GL_RED : 0;
    case GL_RG:
+      return _mesa_has_ARB_texture_rg(ctx) ? GL_RG : 0;
    case GL_RG16:
-      return _mesa_is_desktop_gl(ctx) && ctx->Extensions.ARB_texture_rg
+      return _mesa_has_ARB_texture_rg(ctx) || _mesa_has_EXT_texture_norm16(ctx)
          ? GL_RG : 0;
    case GL_RG8:
       return ctx->API != API_OPENGLES && ctx->Extensions.ARB_texture_rg
@@ -2694,6 +2771,7 @@ _mesa_bind_framebuffers(struct gl_context *ctx,
 
    if (bindDrawBuf) {
       FLUSH_VERTICES(ctx, _NEW_BUFFERS);
+      ctx->NewDriverState |= ctx->DriverFlags.NewSampleLocations;
 
       /* check if old framebuffer had any texture attachments */
       if (oldDrawFb)
@@ -4234,15 +4312,21 @@ _mesa_NamedFramebufferParameteri(GLuint framebuffer, GLenum pname,
    GET_CURRENT_CONTEXT(ctx);
    struct gl_framebuffer *fb = NULL;
 
-   if (!ctx->Extensions.ARB_framebuffer_no_attachments) {
+   if (!ctx->Extensions.ARB_framebuffer_no_attachments &&
+       !ctx->Extensions.ARB_sample_locations) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glNamedFramebufferParameteri("
-                  "ARB_framebuffer_no_attachments not implemented)");
+                  "neither ARB_framebuffer_no_attachments nor "
+                  "ARB_sample_locations is available)");
       return;
    }
 
-   fb = _mesa_lookup_framebuffer_err(ctx, framebuffer,
-                                     "glNamedFramebufferParameteri");
+   if (framebuffer) {
+      fb = _mesa_lookup_framebuffer_err(ctx, framebuffer,
+                                        "glNamedFramebufferParameteri");
+   } else {
+      fb = ctx->WinSysDrawBuffer;
+   }
 
    if (fb) {
       framebuffer_parameteri(ctx, fb, pname, param,
@@ -4261,16 +4345,16 @@ _mesa_GetNamedFramebufferParameteriv(GLuint framebuffer, GLenum pname,
    if (!ctx->Extensions.ARB_framebuffer_no_attachments) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glNamedFramebufferParameteriv("
-                  "ARB_framebuffer_no_attachments not implemented)");
+                  "neither ARB_framebuffer_no_attachments nor ARB_sample_locations"
+                  " is available)");
       return;
    }
 
-   if (framebuffer) {
+   if (framebuffer)
       fb = _mesa_lookup_framebuffer_err(ctx, framebuffer,
                                         "glGetNamedFramebufferParameteriv");
-   } else {
+   else
       fb = ctx->WinSysDrawBuffer;
-   }
 
    if (fb) {
       get_framebuffer_parameteriv(ctx, fb, pname, param,
@@ -4604,4 +4688,142 @@ invalid_enum:
    _mesa_error(ctx, GL_INVALID_ENUM,
                "glDiscardFramebufferEXT(attachment %s)",
               _mesa_enum_to_string(attachments[i]));
+}
+
+static void
+sample_locations(struct gl_context *ctx, struct gl_framebuffer *fb,
+                 GLuint start, GLsizei count, const GLfloat *v, bool no_error,
+                 const char *name)
+{
+   GLsizei i;
+
+   if (!no_error) {
+      if (!ctx->Extensions.ARB_sample_locations) {
+         _mesa_error(ctx, GL_INVALID_OPERATION,
+                     "%s not supported "
+                     "(ARB_sample_locations not available)", name);
+         return;
+      }
+
+      if (start + count > MAX_SAMPLE_LOCATION_TABLE_SIZE) {
+         _mesa_error(ctx, GL_INVALID_VALUE,
+                     "%s(start+size > sample location table size)", name);
+         return;
+      }
+   }
+
+   if (!fb->SampleLocationTable) {
+      size_t size = MAX_SAMPLE_LOCATION_TABLE_SIZE * 2 * sizeof(GLfloat);
+      fb->SampleLocationTable = malloc(size);
+      if (!fb->SampleLocationTable) {
+         _mesa_error(ctx, GL_OUT_OF_MEMORY,
+                     "Cannot allocate sample location table");
+         return;
+      }
+      for (i = 0; i < MAX_SAMPLE_LOCATION_TABLE_SIZE * 2; i++)
+         fb->SampleLocationTable[i] = 0.5f;
+   }
+
+   for (i = 0; i < count * 2; i++) {
+      /* The ARB_sample_locations spec says:
+       *
+       *    Sample locations outside of [0,1] result in undefined
+       *    behavior.
+       *
+       * To simplify driver implementations, we choose to clamp to
+       * [0,1] and change NaN into 0.5.
+       */
+      if (isnan(v[i]) || v[i] < 0.0f || v[i] > 1.0f) {
+         static GLuint msg_id = 0;
+         static const char* msg = "Invalid sample location specified";
+         _mesa_debug_get_id(&msg_id);
+
+         _mesa_log_msg(ctx, MESA_DEBUG_SOURCE_API, MESA_DEBUG_TYPE_UNDEFINED,
+                       msg_id, MESA_DEBUG_SEVERITY_HIGH, strlen(msg), msg);
+      }
+
+      if (isnan(v[i]))
+         fb->SampleLocationTable[start * 2 + i] = 0.5f;
+      else
+         fb->SampleLocationTable[start * 2 + i] = CLAMP(v[i], 0.0f, 1.0f);
+   }
+
+   if (fb == ctx->DrawBuffer)
+      ctx->NewDriverState |= ctx->DriverFlags.NewSampleLocations;
+}
+
+void GLAPIENTRY
+_mesa_FramebufferSampleLocationsfvARB(GLenum target, GLuint start,
+                                      GLsizei count, const GLfloat *v)
+{
+   struct gl_framebuffer *fb;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   fb = get_framebuffer_target(ctx, target);
+   if (!fb) {
+      _mesa_error(ctx, GL_INVALID_ENUM,
+                  "glFramebufferSampleLocationsfvARB(target %s)",
+                  _mesa_enum_to_string(target));
+      return;
+   }
+
+   sample_locations(ctx, fb, start, count, v, false,
+                    "glFramebufferSampleLocationsfvARB");
+}
+
+void GLAPIENTRY
+_mesa_NamedFramebufferSampleLocationsfvARB(GLuint framebuffer, GLuint start,
+                                           GLsizei count, const GLfloat *v)
+{
+   struct gl_framebuffer *fb;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (framebuffer) {
+      fb = _mesa_lookup_framebuffer_err(ctx, framebuffer,
+                                        "glNamedFramebufferSampleLocationsfvARB");
+      if (!fb)
+         return;
+   }
+   else
+      fb = ctx->WinSysDrawBuffer;
+
+   sample_locations(ctx, fb, start, count, v, false,
+                    "glNamedFramebufferSampleLocationsfvARB");
+}
+
+void GLAPIENTRY
+_mesa_FramebufferSampleLocationsfvARB_no_error(GLenum target, GLuint start,
+                                               GLsizei count, const GLfloat *v)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   sample_locations(ctx, get_framebuffer_target(ctx, target), start,
+                    count, v, true, "glFramebufferSampleLocationsfvARB");
+}
+
+void GLAPIENTRY
+_mesa_NamedFramebufferSampleLocationsfvARB_no_error(GLuint framebuffer,
+                                                    GLuint start, GLsizei count,
+                                                    const GLfloat *v)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   sample_locations(ctx, _mesa_lookup_framebuffer(ctx, framebuffer), start,
+                    count, v, true, "glNamedFramebufferSampleLocationsfvARB");
+}
+
+void GLAPIENTRY
+_mesa_EvaluateDepthValuesARB(void)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!ctx->Extensions.ARB_sample_locations) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "EvaluateDepthValuesARB not supported (neither "
+                  "ARB_sample_locations nor NV_sample_locations is available)");
+      return;
+   }
+
+   if (ctx->Driver.EvaluateDepthValues)
+      ctx->Driver.EvaluateDepthValues(ctx);
 }

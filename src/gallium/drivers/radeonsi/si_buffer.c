@@ -25,6 +25,7 @@
 #include "radeonsi/si_pipe.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
+#include "util/u_transfer.h"
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -103,7 +104,7 @@ void si_init_resource_fields(struct si_screen *sscreen,
 			     struct r600_resource *res,
 			     uint64_t size, unsigned alignment)
 {
-	struct r600_texture *rtex = (struct r600_texture*)res;
+	struct si_texture *tex = (struct si_texture*)res;
 
 	res->bo_size = size;
 	res->bo_alignment = alignment;
@@ -141,8 +142,7 @@ void si_init_resource_fields(struct si_screen *sscreen,
 	}
 
 	if (res->b.b.target == PIPE_BUFFER &&
-	    res->b.b.flags & (PIPE_RESOURCE_FLAG_MAP_PERSISTENT |
-			      PIPE_RESOURCE_FLAG_MAP_COHERENT)) {
+	    res->b.b.flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) {
 		/* Use GTT for all persistent mappings with older
 		 * kernels, because they didn't always flush the HDP
 		 * cache before CS execution.
@@ -160,7 +160,7 @@ void si_init_resource_fields(struct si_screen *sscreen,
 	}
 
 	/* Tiled textures are unmappable. Always put them in VRAM. */
-	if ((res->b.b.target != PIPE_BUFFER && !rtex->surface.is_linear) ||
+	if ((res->b.b.target != PIPE_BUFFER && !tex->surface.is_linear) ||
 	    res->b.b.flags & SI_RESOURCE_FLAG_UNMAPPABLE) {
 		res->domains = RADEON_DOMAIN_VRAM;
 		res->flags |= RADEON_FLAG_NO_CPU_ACCESS |
@@ -341,7 +341,7 @@ static void *si_buffer_get_transfer(struct pipe_context *ctx,
 				    unsigned offset)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
-	struct r600_transfer *transfer;
+	struct si_transfer *transfer;
 
 	if (usage & TC_TRANSFER_MAP_THREADED_UNSYNC)
 		transfer = slab_alloc(&sctx->pool_transfers_unsync);
@@ -479,9 +479,9 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx,
 		struct r600_resource *staging;
 
 		assert(!(usage & TC_TRANSFER_MAP_THREADED_UNSYNC));
-		staging = (struct r600_resource*) pipe_buffer_create(
+		staging = r600_resource(pipe_buffer_create(
 				ctx->screen, 0, PIPE_USAGE_STAGING,
-				box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT));
+				box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT)));
 		if (staging) {
 			/* Copy the VRAM buffer to the staging buffer. */
 			sctx->dma_copy(ctx, &staging->b.b, 0,
@@ -517,17 +517,17 @@ static void si_buffer_do_flush_region(struct pipe_context *ctx,
 				      struct pipe_transfer *transfer,
 				      const struct pipe_box *box)
 {
-	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
+	struct si_transfer *stransfer = (struct si_transfer*)transfer;
 	struct r600_resource *rbuffer = r600_resource(transfer->resource);
 
-	if (rtransfer->staging) {
+	if (stransfer->staging) {
 		struct pipe_resource *dst, *src;
 		unsigned soffset;
 		struct pipe_box dma_box;
 
 		dst = transfer->resource;
-		src = &rtransfer->staging->b.b;
-		soffset = rtransfer->offset + box->x % SI_MAP_BUFFER_ALIGNMENT;
+		src = &stransfer->staging->b.b;
+		soffset = stransfer->offset + box->x % SI_MAP_BUFFER_ALIGNMENT;
 
 		u_box_1d(soffset, box->width, &dma_box);
 
@@ -558,14 +558,14 @@ static void si_buffer_transfer_unmap(struct pipe_context *ctx,
 				     struct pipe_transfer *transfer)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
-	struct r600_transfer *rtransfer = (struct r600_transfer*)transfer;
+	struct si_transfer *stransfer = (struct si_transfer*)transfer;
 
 	if (transfer->usage & PIPE_TRANSFER_WRITE &&
 	    !(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT))
 		si_buffer_do_flush_region(ctx, transfer, &transfer->box);
 
-	r600_resource_reference(&rtransfer->staging, NULL);
-	assert(rtransfer->b.staging == NULL); /* for threaded context only */
+	r600_resource_reference(&stransfer->staging, NULL);
+	assert(stransfer->b.staging == NULL); /* for threaded context only */
 	pipe_resource_reference(&transfer->resource, NULL);
 
 	/* Don't use pool_transfers_unsync. We are always in the driver
@@ -649,11 +649,9 @@ static struct pipe_resource *si_buffer_create(struct pipe_screen *screen,
 	return &rbuffer->b.b;
 }
 
-struct pipe_resource *si_aligned_buffer_create(struct pipe_screen *screen,
-					       unsigned flags,
-					       unsigned usage,
-					       unsigned size,
-					       unsigned alignment)
+struct pipe_resource *pipe_aligned_buffer_create(struct pipe_screen *screen,
+						 unsigned flags, unsigned usage,
+						 unsigned size, unsigned alignment)
 {
 	struct pipe_resource buffer;
 
@@ -668,6 +666,14 @@ struct pipe_resource *si_aligned_buffer_create(struct pipe_screen *screen,
 	buffer.depth0 = 1;
 	buffer.array_size = 1;
 	return si_buffer_create(screen, &buffer, alignment);
+}
+
+struct r600_resource *si_aligned_buffer_create(struct pipe_screen *screen,
+					       unsigned flags, unsigned usage,
+					       unsigned size, unsigned alignment)
+{
+	return r600_resource(pipe_aligned_buffer_create(screen, flags, usage,
+							size, alignment));
 }
 
 static struct pipe_resource *

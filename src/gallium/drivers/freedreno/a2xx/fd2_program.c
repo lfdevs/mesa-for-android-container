@@ -54,6 +54,8 @@ create_shader(enum shader_t type)
 static void
 delete_shader(struct fd2_shader_stateobj *so)
 {
+	if (!so)
+		return;
 	ir2_shader_destroy(so->ir);
 	free(so->tokens);
 	free(so->bin);

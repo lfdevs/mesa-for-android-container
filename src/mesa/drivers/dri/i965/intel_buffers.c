@@ -33,7 +33,7 @@
 #include "main/renderbuffer.h"
 
 static void
-intelDrawBuffer(struct gl_context * ctx, GLenum mode)
+intelDrawBuffer(struct gl_context *ctx)
 {
    if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer)) {
       struct brw_context *const brw = brw_context(ctx);

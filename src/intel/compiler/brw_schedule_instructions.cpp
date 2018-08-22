@@ -763,22 +763,22 @@ vec4_instruction_scheduler::vec4_instruction_scheduler(vec4_visitor *v,
 }
 
 void
-vec4_instruction_scheduler::count_reads_remaining(backend_instruction *be)
+vec4_instruction_scheduler::count_reads_remaining(backend_instruction *)
 {
 }
 
 void
-vec4_instruction_scheduler::setup_liveness(cfg_t *cfg)
+vec4_instruction_scheduler::setup_liveness(cfg_t *)
 {
 }
 
 void
-vec4_instruction_scheduler::update_register_pressure(backend_instruction *be)
+vec4_instruction_scheduler::update_register_pressure(backend_instruction *)
 {
 }
 
 int
-vec4_instruction_scheduler::get_register_pressure_benefit(backend_instruction *be)
+vec4_instruction_scheduler::get_register_pressure_benefit(backend_instruction *)
 {
    return 0;
 }
@@ -1554,7 +1554,7 @@ fs_instruction_scheduler::issue_time(backend_instruction *inst)
 }
 
 int
-vec4_instruction_scheduler::issue_time(backend_instruction *inst)
+vec4_instruction_scheduler::issue_time(backend_instruction *)
 {
    /* We always execute as two vec4s in parallel. */
    return 2;

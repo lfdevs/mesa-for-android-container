@@ -115,6 +115,6 @@ libvc4 = static_library(
 
 driver_vc4 = declare_dependency(
   compile_args : '-DGALLIUM_VC4',
-  link_with : [libvc4, libvc4winsys, libbroadcom_cle],
+  link_with : [libvc4, libvc4winsys, libbroadcom_cle, libbroadcom_v3d],
   dependencies : idep_nir,
 )

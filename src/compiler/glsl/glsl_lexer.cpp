@@ -1,6 +1,6 @@
-#line 1 "glsl/glsl_lexer.cpp"
+#line 2 "glsl/glsl_lexer.cpp"
 
-#line 3 "glsl/glsl_lexer.cpp"
+#line 4 "glsl/glsl_lexer.cpp"
 
 #define  YY_INT_ALIGNED short int
 
@@ -1572,13 +1572,13 @@ literal_integer(char *text, int len, struct _mesa_glsl_parse_state *state,
 #define LITERAL_INTEGER(base) \
    literal_integer(yytext, yyleng, yyextra, yylval, yylloc, base)
 
-#line 1575 "glsl/glsl_lexer.cpp"
+#line 1576 "glsl/glsl_lexer.cpp"
 #line 217 "./glsl/glsl_lexer.ll"
 	/* Note: When adding any start conditions to this list, you must also
 	 * update the "Internal compiler error" catch-all rule near the end of
 	 * this file. */
 
-#line 1581 "glsl/glsl_lexer.cpp"
+#line 1582 "glsl/glsl_lexer.cpp"
 
 #define INITIAL 0
 #define PP 1
@@ -1866,7 +1866,7 @@ YY_DECL
 #line 229 "./glsl/glsl_lexer.ll"
 
 
-#line 1869 "glsl/glsl_lexer.cpp"
+#line 1870 "glsl/glsl_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -3103,7 +3103,7 @@ KEYWORD(110, 100, 0, 0, SHORT_TOK);
 case 211:
 YY_RULE_SETUP
 #line 604 "./glsl/glsl_lexer.ll"
-TYPE_WITH_ALT(130, 300, 130, 300, yyextra->ARB_gpu_shader_fp64_enable, glsl_type::double_type);
+TYPE_WITH_ALT(130, 100, 130, 300, yyextra->ARB_gpu_shader_fp64_enable, glsl_type::double_type);
 	YY_BREAK
 case 212:
 YY_RULE_SETUP
@@ -3440,7 +3440,7 @@ YY_RULE_SETUP
 #line 693 "./glsl/glsl_lexer.ll"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 3443 "glsl/glsl_lexer.cpp"
+#line 3444 "glsl/glsl_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(PP):
 case YY_STATE_EOF(PRAGMA):

@@ -307,6 +307,11 @@ static boolean noop_generate_mipmap(struct pipe_context *ctx,
    return true;
 }
 
+static void noop_invalidate_resource(struct pipe_context *ctx,
+                                     struct pipe_resource *resource)
+{
+}
+
 static struct pipe_context *noop_create_context(struct pipe_screen *screen,
                                                 void *priv, unsigned flags)
 {
@@ -345,6 +350,7 @@ static struct pipe_context *noop_create_context(struct pipe_screen *screen,
    ctx->transfer_unmap = noop_transfer_unmap;
    ctx->buffer_subdata = noop_buffer_subdata;
    ctx->texture_subdata = noop_texture_subdata;
+   ctx->invalidate_resource = noop_invalidate_resource;
    noop_init_state_functions(ctx);
 
    return ctx;
@@ -414,11 +420,13 @@ static boolean noop_is_format_supported(struct pipe_screen* pscreen,
                                         enum pipe_format format,
                                         enum pipe_texture_target target,
                                         unsigned sample_count,
+                                        unsigned storage_sample_count,
                                         unsigned usage)
 {
    struct pipe_screen *screen = ((struct noop_pipe_screen*)pscreen)->oscreen;
 
-   return screen->is_format_supported(screen, format, target, sample_count, usage);
+   return screen->is_format_supported(screen, format, target, sample_count,
+                                      storage_sample_count, usage);
 }
 
 static uint64_t noop_get_timestamp(struct pipe_screen *pscreen)

@@ -26,14 +26,13 @@
 #define SI_STATE_H
 
 #include "si_pm4.h"
-#include "radeon/r600_pipe_common.h"
 
 #include "pipebuffer/pb_slab.h"
+#include "util/u_blitter.h"
 
 #define SI_NUM_GRAPHICS_SHADERS (PIPE_SHADER_TESS_EVAL+1)
 #define SI_NUM_SHADERS (PIPE_SHADER_COMPUTE+1)
 
-#define SI_MAX_ATTRIBS			16
 #define SI_NUM_VERTEX_BUFFERS		SI_MAX_ATTRIBS
 #define SI_NUM_SAMPLERS			32 /* OpenGL textures units per shader */
 #define SI_NUM_CONST_BUFFERS		16
@@ -43,6 +42,15 @@
 struct si_screen;
 struct si_shader;
 struct si_shader_selector;
+struct si_texture;
+struct si_qbo_state;
+
+/* State atoms are callbacks which write a sequence of packets into a GPU
+ * command buffer (AKA indirect buffer, AKA IB, AKA command stream, AKA CS).
+ */
+struct si_atom {
+	void (*emit)(struct si_context *ctx);
+};
 
 struct si_state_blend {
 	struct si_pm4_state	pm4;
@@ -124,7 +132,6 @@ struct si_state_dsa {
 };
 
 struct si_stencil_ref {
-	struct r600_atom		atom;
 	struct pipe_stencil_ref		state;
 	struct si_dsa_stencil_ref_part	dsa_part;
 };
@@ -165,39 +172,122 @@ union si_state {
 	struct si_pm4_state	*array[0];
 };
 
+#define SI_STATE_IDX(name) \
+	(offsetof(union si_state, named.name) / sizeof(struct si_pm4_state *))
+#define SI_STATE_BIT(name) (1 << SI_STATE_IDX(name))
 #define SI_NUM_STATES (sizeof(union si_state) / sizeof(struct si_pm4_state *))
+
+static inline unsigned si_states_that_roll_context(void)
+{
+	return (SI_STATE_BIT(blend) |
+		SI_STATE_BIT(rasterizer) |
+		SI_STATE_BIT(dsa) |
+		SI_STATE_BIT(poly_offset) |
+		SI_STATE_BIT(es) |
+		SI_STATE_BIT(gs) |
+		SI_STATE_BIT(vgt_shader_config) |
+		SI_STATE_BIT(vs) |
+		SI_STATE_BIT(ps));
+}
 
 union si_state_atoms {
 	struct {
 		/* The order matters. */
-		struct r600_atom *render_cond;
-		struct r600_atom *streamout_begin;
-		struct r600_atom *streamout_enable; /* must be after streamout_begin */
-		struct r600_atom *framebuffer;
-		struct r600_atom *msaa_sample_locs;
-		struct r600_atom *db_render_state;
-		struct r600_atom *dpbb_state;
-		struct r600_atom *msaa_config;
-		struct r600_atom *sample_mask;
-		struct r600_atom *cb_render_state;
-		struct r600_atom *blend_color;
-		struct r600_atom *clip_regs;
-		struct r600_atom *clip_state;
-		struct r600_atom *shader_pointers;
-		struct r600_atom *scissors;
-		struct r600_atom *viewports;
-		struct r600_atom *stencil_ref;
-		struct r600_atom *spi_map;
-		struct r600_atom *scratch_state;
+		struct si_atom render_cond;
+		struct si_atom streamout_begin;
+		struct si_atom streamout_enable; /* must be after streamout_begin */
+		struct si_atom framebuffer;
+		struct si_atom msaa_sample_locs;
+		struct si_atom db_render_state;
+		struct si_atom dpbb_state;
+		struct si_atom msaa_config;
+		struct si_atom sample_mask;
+		struct si_atom cb_render_state;
+		struct si_atom blend_color;
+		struct si_atom clip_regs;
+		struct si_atom clip_state;
+		struct si_atom shader_pointers;
+		struct si_atom guardband;
+		struct si_atom scissors;
+		struct si_atom viewports;
+		struct si_atom stencil_ref;
+		struct si_atom spi_map;
+		struct si_atom scratch_state;
 	} s;
-	struct r600_atom *array[0];
+	struct si_atom array[0];
 };
 
-#define SI_NUM_ATOMS (sizeof(union si_state_atoms)/sizeof(struct r600_atom*))
+#define SI_ATOM_BIT(name) (1 << (offsetof(union si_state_atoms, s.name) / \
+			         sizeof(struct si_atom)))
+#define SI_NUM_ATOMS (sizeof(union si_state_atoms)/sizeof(struct si_atom*))
+
+static inline unsigned si_atoms_that_roll_context(void)
+{
+	return (SI_ATOM_BIT(streamout_begin) |
+		SI_ATOM_BIT(streamout_enable) |
+		SI_ATOM_BIT(framebuffer) |
+		SI_ATOM_BIT(msaa_sample_locs) |
+		SI_ATOM_BIT(db_render_state) |
+		SI_ATOM_BIT(dpbb_state) |
+		SI_ATOM_BIT(msaa_config) |
+		SI_ATOM_BIT(sample_mask) |
+		SI_ATOM_BIT(cb_render_state) |
+		SI_ATOM_BIT(blend_color) |
+		SI_ATOM_BIT(clip_regs) |
+		SI_ATOM_BIT(clip_state) |
+		SI_ATOM_BIT(guardband) |
+		SI_ATOM_BIT(scissors) |
+		SI_ATOM_BIT(viewports) |
+		SI_ATOM_BIT(stencil_ref) |
+		SI_ATOM_BIT(spi_map) |
+		SI_ATOM_BIT(scratch_state));
+}
 
 struct si_shader_data {
-	struct r600_atom	atom;
 	uint32_t		sh_base[SI_NUM_SHADERS];
+};
+
+/* The list of registers whose emitted values are remembered by si_context. */
+enum si_tracked_reg {
+	SI_TRACKED_DB_RENDER_CONTROL, /* 2 consecutive registers */
+	SI_TRACKED_DB_COUNT_CONTROL,
+
+	SI_TRACKED_DB_RENDER_OVERRIDE2,
+	SI_TRACKED_DB_SHADER_CONTROL,
+
+	SI_TRACKED_CB_TARGET_MASK,
+	SI_TRACKED_CB_DCC_CONTROL,
+
+	SI_TRACKED_SX_PS_DOWNCONVERT, /* 3 consecutive registers */
+	SI_TRACKED_SX_BLEND_OPT_EPSILON,
+	SI_TRACKED_SX_BLEND_OPT_CONTROL,
+
+	SI_TRACKED_PA_SC_LINE_CNTL, /* 2 consecutive registers */
+	SI_TRACKED_PA_SC_AA_CONFIG,
+
+	SI_TRACKED_DB_EQAA,
+	SI_TRACKED_PA_SC_MODE_CNTL_1,
+
+	SI_TRACKED_PA_SU_SMALL_PRIM_FILTER_CNTL,
+
+	SI_TRACKED_PA_CL_VS_OUT_CNTL,
+	SI_TRACKED_PA_CL_CLIP_CNTL,
+
+	SI_TRACKED_PA_SC_BINNER_CNTL_0,
+	SI_TRACKED_DB_DFSM_CONTROL,
+
+	SI_TRACKED_PA_CL_GB_VERT_CLIP_ADJ, /* 4 consecutive registers */
+	SI_TRACKED_PA_CL_GB_VERT_DISC_ADJ,
+	SI_TRACKED_PA_CL_GB_HORZ_CLIP_ADJ,
+	SI_TRACKED_PA_CL_GB_HORZ_DISC_ADJ,
+
+	SI_NUM_TRACKED_REGS,
+};
+
+struct si_tracked_regs {
+	uint32_t		reg_saved;
+	uint32_t		reg_value[SI_NUM_TRACKED_REGS];
+	uint32_t		spi_ps_input_cntl[32];
 };
 
 /* Private read-write buffer slots. */
@@ -300,9 +390,6 @@ struct si_buffer_resources {
 	unsigned			enabled_mask;
 };
 
-#define si_pm4_block_idx(member) \
-	(offsetof(union si_state, named.member) / sizeof(struct si_pm4_state *))
-
 #define si_pm4_state_changed(sctx, member) \
 	((sctx)->queued.named.member != (sctx)->emitted.named.member)
 
@@ -312,7 +399,7 @@ struct si_buffer_resources {
 #define si_pm4_bind_state(sctx, member, value) \
 	do { \
 		(sctx)->queued.named.member = (value); \
-		(sctx)->dirty_states |= 1 << si_pm4_block_idx(member); \
+		(sctx)->dirty_states |= SI_STATE_BIT(member); \
 	} while(0)
 
 #define si_pm4_delete_state(sctx, member, value) \
@@ -321,12 +408,12 @@ struct si_buffer_resources {
 			(sctx)->queued.named.member = NULL; \
 		} \
 		si_pm4_free_state(sctx, (struct si_pm4_state *)(value), \
-				  si_pm4_block_idx(member)); \
+				  SI_STATE_IDX(member)); \
 	} while(0)
 
 /* si_descriptors.c */
 void si_set_mutable_tex_desc_fields(struct si_screen *sscreen,
-				    struct r600_texture *tex,
+				    struct si_texture *tex,
 				    const struct legacy_surf_level *base_level_info,
 				    unsigned base_level, unsigned first_level,
 				    unsigned block_width, bool is_stencil,
@@ -355,8 +442,7 @@ void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuf
 void si_update_all_texture_descriptors(struct si_context *sctx);
 void si_shader_change_notify(struct si_context *sctx);
 void si_update_needs_color_decompress_masks(struct si_context *sctx);
-void si_emit_graphics_shader_pointers(struct si_context *sctx,
-                                      struct r600_atom *atom);
+void si_emit_graphics_shader_pointers(struct si_context *sctx);
 void si_emit_compute_shader_pointers(struct si_context *sctx);
 void si_set_rw_buffer(struct si_context *sctx,
 		      uint slot, const struct pipe_constant_buffer *input);
@@ -373,11 +459,6 @@ void si_bindless_descriptor_slab_free(void *priv, struct pb_slab *pslab);
 void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf,
 		      uint64_t old_va);
 /* si_state.c */
-struct si_shader_selector;
-
-void si_init_atom(struct si_context *sctx, struct r600_atom *atom,
-		  struct r600_atom **list_elem,
-		  void (*emit_func)(struct si_context *ctx, struct r600_atom *state));
 void si_init_state_functions(struct si_context *sctx);
 void si_init_screen_state_functions(struct si_screen *sscreen);
 void
@@ -387,7 +468,7 @@ si_make_buffer_descriptor(struct si_screen *screen, struct r600_resource *buf,
 			  uint32_t *state);
 void
 si_make_texture_descriptor(struct si_screen *screen,
-			   struct r600_texture *tex,
+			   struct si_texture *tex,
 			   bool sampler,
 			   enum pipe_texture_target target,
 			   enum pipe_format pipe_format,
@@ -410,13 +491,23 @@ void si_set_occlusion_query_state(struct si_context *sctx,
 				  bool old_perfect_enable);
 
 /* si_state_binning.c */
-void si_emit_dpbb_state(struct si_context *sctx, struct r600_atom *state);
+void si_emit_dpbb_state(struct si_context *sctx);
 
 /* si_state_shaders.c */
+void *si_get_ir_binary(struct si_shader_selector *sel);
+bool si_shader_cache_load_shader(struct si_screen *sscreen, void *ir_binary,
+				 struct si_shader *shader);
+bool si_shader_cache_insert_shader(struct si_screen *sscreen, void *ir_binary,
+				   struct si_shader *shader,
+				   bool insert_into_disk_cache);
 bool si_update_shaders(struct si_context *sctx);
 void si_init_shader_functions(struct si_context *sctx);
 bool si_init_shader_cache(struct si_screen *sscreen);
 void si_destroy_shader_cache(struct si_screen *sscreen);
+void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
+				 struct util_queue_fence *ready_fence,
+				 struct si_compiler_ctx_state *compiler_ctx_state,
+				 void *job, util_queue_execute_func execute);
 void si_get_active_slot_masks(const struct tgsi_shader_info *info,
 			      uint32_t *const_and_shader_buffers,
 			      uint64_t *samplers_and_images);
@@ -438,7 +529,7 @@ void si_trace_emit(struct si_context *sctx);
 
 /* si_state_msaa.c */
 void si_init_msaa_functions(struct si_context *sctx);
-void si_emit_sample_locations(struct radeon_winsys_cs *cs, int nr_samples);
+void si_emit_sample_locations(struct radeon_cmdbuf *cs, int nr_samples);
 
 /* si_state_streamout.c */
 void si_streamout_buffers_dirty(struct si_context *sctx);
@@ -447,15 +538,6 @@ void si_update_prims_generated_query_state(struct si_context *sctx,
 					   unsigned type, int diff);
 void si_init_streamout_functions(struct si_context *sctx);
 
-
-static inline unsigned
-si_tile_mode_index(struct r600_texture *rtex, unsigned level, bool stencil)
-{
-	if (stencil)
-		return rtex->surface.u.legacy.stencil_tiling_index[level];
-	else
-		return rtex->surface.u.legacy.tiling_index[level];
-}
 
 static inline unsigned si_get_constbuf_slot(unsigned slot)
 {

@@ -16,6 +16,10 @@
 #include "driver_rbug/rbug_public.h"
 #include "driver_noop/noop_public.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
  * TODO: Audit the following *screen_create() - all of
  * them should return the original screen on failuire.
@@ -34,4 +38,8 @@ debug_screen_wrap(struct pipe_screen *screen)
    return screen;
 }
 
+#endif
+
+#ifdef __cplusplus
+}
 #endif

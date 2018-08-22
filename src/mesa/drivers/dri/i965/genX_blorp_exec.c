@@ -44,7 +44,7 @@ blorp_emit_dwords(struct blorp_batch *batch, unsigned n)
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
 
-   intel_batchbuffer_begin(brw, n, RENDER_RING);
+   intel_batchbuffer_begin(brw, n);
    uint32_t *map = brw->batch.map_next;
    brw->batch.map_next += n;
    intel_batchbuffer_advance(brw);
@@ -189,6 +189,35 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
    return data;
 }
 
+/**
+ * See vf_invalidate_for_vb_48b_transitions in genX_state_upload.c.
+ */
+static void
+blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
+                                           const struct blorp_address *addrs,
+                                           unsigned num_vbs)
+{
+#if GEN_GEN >= 8
+   struct brw_context *brw = batch->driver_batch;
+   bool need_invalidate = false;
+
+   for (unsigned i = 0; i < num_vbs; i++) {
+      struct brw_bo *bo = addrs[i].buffer;
+      uint16_t high_bits =
+         bo && (bo->kflags & EXEC_OBJECT_PINNED) ? bo->gtt_offset >> 32u : 0;
+
+      if (high_bits != brw->vb.last_bo_high_bits[i]) {
+         need_invalidate = true;
+         brw->vb.last_bo_high_bits[i] = high_bits;
+      }
+   }
+
+   if (need_invalidate) {
+      brw_emit_pipe_control_flush(brw, PIPE_CONTROL_VF_CACHE_INVALIDATE);
+   }
+#endif
+}
+
 #if GEN_GEN >= 8
 static struct blorp_address
 blorp_get_workaround_page(struct blorp_batch *batch)
@@ -277,7 +306,7 @@ genX(blorp_exec)(struct blorp_batch *batch,
    brw_select_pipeline(brw, BRW_RENDER_PIPELINE);
 
 retry:
-   intel_batchbuffer_require_space(brw, 1400, RENDER_RING);
+   intel_batchbuffer_require_space(brw, 1400);
    brw_require_statebuffer_space(brw, 600);
    intel_batchbuffer_save_state(brw);
    brw->batch.no_wrap = true;

@@ -388,8 +388,7 @@ test_all(unsigned verbose, FILE *fp)
       }
 
       /* missing fetch funcs */
-      if (format_desc->layout == UTIL_FORMAT_LAYOUT_BPTC ||
-          format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+      if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
          continue;
       }
 

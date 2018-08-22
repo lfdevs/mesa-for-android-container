@@ -1,3 +1,11 @@
+mesa (18.2.0~rc4-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control: Add libxrandr-dev and libwayland-egl-backend-dev to build-
+    depends.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 22 Aug 2018 19:59:55 +0300
+
 mesa (18.1.6-1) unstable; urgency=medium
 
   * New upstream release.

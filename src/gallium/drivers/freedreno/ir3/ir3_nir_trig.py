@@ -20,6 +20,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+from __future__ import print_function
+
 import argparse
 import sys
 
@@ -40,9 +42,9 @@ def main():
 def run():
     import nir_algebraic  # pylint: disable=import-error
 
-    print '#include "ir3_nir.h"'
-    print nir_algebraic.AlgebraicPass("ir3_nir_apply_trig_workarounds",
-                                      trig_workarounds).render()
+    print('#include "ir3_nir.h"')
+    print(nir_algebraic.AlgebraicPass("ir3_nir_apply_trig_workarounds",
+                                      trig_workarounds).render())
 
 
 if __name__ == '__main__':

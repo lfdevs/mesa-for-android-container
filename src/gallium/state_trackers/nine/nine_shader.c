@@ -378,7 +378,7 @@ struct sm1_instruction
     struct sm1_src_param dst_rel[1];
     struct sm1_dst_param dst[1];
 
-    struct sm1_op_info *info;
+    const struct sm1_op_info *info;
 };
 
 static void
@@ -2901,7 +2901,7 @@ DECL_SPECIAL(COMMENT)
 #define _OPI(o,t,vv1,vv2,pv1,pv2,d,s,h) \
     { D3DSIO_##o, TGSI_OPCODE_##t, { vv1, vv2 }, { pv1, pv2, }, d, s, h }
 
-struct sm1_op_info inst_table[] =
+static const struct sm1_op_info inst_table[] =
 {
     _OPI(NOP, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, SPECIAL(NOP)), /* 0 */
     _OPI(MOV, MOV, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL),
@@ -3008,10 +3008,10 @@ struct sm1_op_info inst_table[] =
     _OPI(BREAKP, BRK,  V(0,0), V(3,0), V(2,1), V(3,0), 0, 1, SPECIAL(BREAKP))
 };
 
-struct sm1_op_info inst_phase =
+static const struct sm1_op_info inst_phase =
     _OPI(PHASE, NOP, V(0,0), V(0,0), V(1,4), V(1,4), 0, 0, SPECIAL(PHASE));
 
-struct sm1_op_info inst_comment =
+static const struct sm1_op_info inst_comment =
     _OPI(COMMENT, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 0, 0, SPECIAL(COMMENT));
 
 static void
@@ -3279,7 +3279,7 @@ sm1_parse_instruction(struct shader_translator *tx)
     struct sm1_instruction *insn = &tx->insn;
     HRESULT hr;
     DWORD tok;
-    struct sm1_op_info *info = NULL;
+    const struct sm1_op_info *info = NULL;
     unsigned i;
 
     sm1_parse_comments(tx, TRUE);

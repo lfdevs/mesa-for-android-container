@@ -30,7 +30,6 @@
 #include "drivers/common/meta.h"
 
 #include "intel_batchbuffer.h"
-#include "intel_blit.h"
 #include "intel_fbo.h"
 #include "intel_mipmap_tree.h"
 
@@ -108,7 +107,6 @@ brw_fast_clear_depth(struct gl_context *ctx)
    struct intel_mipmap_tree *mt = depth_irb->mt;
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   bool same_clear_value = true;
 
    if (devinfo->gen < 6)
       return false;
@@ -213,48 +211,8 @@ brw_fast_clear_depth(struct gl_context *ctx)
          }
       }
 
-      intel_miptree_set_depth_clear_value(brw, mt, clear_value);
-      same_clear_value = false;
-   }
-
-   bool need_clear = false;
-   for (unsigned a = 0; a < num_layers; a++) {
-      enum isl_aux_state aux_state =
-         intel_miptree_get_aux_state(mt, depth_irb->mt_level,
-                                     depth_irb->mt_layer + a);
-
-      if (aux_state != ISL_AUX_STATE_CLEAR) {
-         need_clear = true;
-         break;
-      }
-   }
-
-   if (!need_clear) {
-      /* If all of the layers we intend to clear are already in the clear
-       * state then simply updating the miptree fast clear value is sufficient
-       * to change their clear value.
-       */
-      if (devinfo->gen >= 10 && !same_clear_value) {
-         /* Before gen10, it was enough to just update the clear value in the
-          * miptree. But on gen10+, we let blorp update the clear value state
-          * buffer when doing a fast clear. Since we are skipping the fast
-          * clear here, we need to update the clear color ourselves.
-          */
-         uint32_t clear_offset = mt->aux_buf->clear_color_offset;
-         union isl_color_value clear_color = { .f32 = { clear_value, } };
-
-         /* We can't update the clear color while the hardware is still using
-          * the previous one for a resolve or sampling from it. So make sure
-          * that there's no pending commands at this point.
-          */
-         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
-         for (int i = 0; i < 4; i++) {
-            brw_store_data_imm32(brw, mt->aux_buf->clear_color_bo,
-                                 clear_offset + i * 4, clear_color.u32[i]);
-         }
-         brw_emit_pipe_control_flush(brw, PIPE_CONTROL_STATE_CACHE_INVALIDATE);
-      }
-      return true;
+      const union isl_color_value clear_color = { .f32 = {clear_value, } };
+      intel_miptree_set_clear_color(brw, mt, clear_color);
    }
 
    for (unsigned a = 0; a < num_layers; a++) {
@@ -269,13 +227,9 @@ brw_fast_clear_depth(struct gl_context *ctx)
       }
    }
 
-   /* Now, the HiZ buffer contains data that needs to be resolved to the depth
-    * buffer.
-    */
    intel_miptree_set_aux_state(brw, mt, depth_irb->mt_level,
                                depth_irb->mt_layer, num_layers,
                                ISL_AUX_STATE_CLEAR);
-
    return true;
 }
 
@@ -305,14 +259,6 @@ brw_clear(struct gl_context *ctx, GLbitfield mask)
 	 DBG("fast clear: depth\n");
 	 mask &= ~BUFFER_BIT_DEPTH;
       }
-   }
-
-   if (mask & BUFFER_BIT_STENCIL) {
-      struct intel_renderbuffer *stencil_irb =
-         intel_get_renderbuffer(fb, BUFFER_STENCIL);
-      struct intel_mipmap_tree *mt = stencil_irb->mt;
-      if (mt && mt->stencil_mt)
-         mt->stencil_mt->r8stencil_needs_update = true;
    }
 
    if (mask & BUFFER_BITS_COLOR) {

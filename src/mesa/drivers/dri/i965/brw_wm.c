@@ -164,18 +164,20 @@ brw_codegen_wm_prog(struct brw_context *brw,
       start_time = get_time();
    }
 
-   int st_index8 = -1, st_index16 = -1;
+   int st_index8 = -1, st_index16 = -1, st_index32 = -1;
    if (INTEL_DEBUG & DEBUG_SHADER_TIME) {
       st_index8 = brw_get_shader_time_index(brw, &fp->program, ST_FS8,
                                             !fp->program.is_arb_asm);
       st_index16 = brw_get_shader_time_index(brw, &fp->program, ST_FS16,
+                                             !fp->program.is_arb_asm);
+      st_index32 = brw_get_shader_time_index(brw, &fp->program, ST_FS32,
                                              !fp->program.is_arb_asm);
    }
 
    char *error_str = NULL;
    program = brw_compile_fs(brw->screen->compiler, brw, mem_ctx,
                             key, &prog_data, fp->program.nir,
-                            &fp->program, st_index8, st_index16,
+                            &fp->program, st_index8, st_index16, st_index32,
                             true, false, vue_map,
                             &error_str);
 
@@ -588,10 +590,9 @@ brw_upload_wm_prog(struct brw_context *brw)
 
    brw_wm_populate_key(brw, &key);
 
-   if (brw_search_cache(&brw->cache, BRW_CACHE_FS_PROG,
-                        &key, sizeof(key),
-                        &brw->wm.base.prog_offset,
-                        &brw->wm.base.prog_data))
+   if (brw_search_cache(&brw->cache, BRW_CACHE_FS_PROG, &key, sizeof(key),
+                        &brw->wm.base.prog_offset, &brw->wm.base.prog_data,
+                        true))
       return;
 
    if (brw_disk_cache_upload_program(brw, MESA_SHADER_FRAGMENT))
@@ -605,6 +606,45 @@ brw_upload_wm_prog(struct brw_context *brw)
    assert(success);
 }
 
+void
+brw_wm_populate_default_key(const struct gen_device_info *devinfo,
+                            struct brw_wm_prog_key *key,
+                            struct gl_program *prog)
+{
+   memset(key, 0, sizeof(*key));
+
+   uint64_t outputs_written = prog->info.outputs_written;
+
+   if (devinfo->gen < 6) {
+      if (prog->info.fs.uses_discard)
+         key->iz_lookup |= BRW_WM_IZ_PS_KILL_ALPHATEST_BIT;
+
+      if (outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
+         key->iz_lookup |= BRW_WM_IZ_PS_COMPUTES_DEPTH_BIT;
+
+      /* Just assume depth testing. */
+      key->iz_lookup |= BRW_WM_IZ_DEPTH_TEST_ENABLE_BIT;
+      key->iz_lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
+   }
+
+   if (devinfo->gen < 6 || _mesa_bitcount_64(prog->info.inputs_read &
+                                             BRW_FS_VARYING_INPUT_MASK) > 16) {
+      key->input_slots_valid = prog->info.inputs_read | VARYING_BIT_POS;
+   }
+
+   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
+
+   key->nr_color_regions = _mesa_bitcount_64(outputs_written &
+         ~(BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
+           BITFIELD64_BIT(FRAG_RESULT_STENCIL) |
+           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)));
+
+   key->program_string_id = brw_program(prog)->id;
+
+   /* Whether reads from the framebuffer should behave coherently. */
+   key->coherent_fb_fetch = devinfo->gen >= 9;
+}
+
 bool
 brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog)
 {
@@ -614,38 +654,11 @@ brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog)
 
    struct brw_program *bfp = brw_program(prog);
 
-   memset(&key, 0, sizeof(key));
+   brw_wm_populate_default_key(&brw->screen->devinfo, &key, prog);
 
-   uint64_t outputs_written = prog->info.outputs_written;
-
-   if (devinfo->gen < 6) {
-      if (prog->info.fs.uses_discard)
-         key.iz_lookup |= BRW_WM_IZ_PS_KILL_ALPHATEST_BIT;
-
-      if (outputs_written & BITFIELD64_BIT(FRAG_RESULT_DEPTH))
-         key.iz_lookup |= BRW_WM_IZ_PS_COMPUTES_DEPTH_BIT;
-
-      /* Just assume depth testing. */
-      key.iz_lookup |= BRW_WM_IZ_DEPTH_TEST_ENABLE_BIT;
-      key.iz_lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
-   }
-
-   if (devinfo->gen < 6 || _mesa_bitcount_64(prog->info.inputs_read &
-                                             BRW_FS_VARYING_INPUT_MASK) > 16) {
-      key.input_slots_valid = prog->info.inputs_read | VARYING_BIT_POS;
-   }
-
-   brw_setup_tex_for_precompile(brw, &key.tex, prog);
-
-   key.nr_color_regions = _mesa_bitcount_64(outputs_written &
-         ~(BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
-           BITFIELD64_BIT(FRAG_RESULT_STENCIL) |
-           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)));
-
-   key.program_string_id = bfp->id;
-
-   /* Whether reads from the framebuffer should behave coherently. */
-   key.coherent_fb_fetch = ctx->Extensions.EXT_shader_framebuffer_fetch;
+   /* check brw_wm_populate_default_key coherent_fb_fetch setting */
+   assert(key.coherent_fb_fetch ==
+          ctx->Extensions.EXT_shader_framebuffer_fetch);
 
    uint32_t old_prog_offset = brw->wm.base.prog_offset;
    struct brw_stage_prog_data *old_prog_data = brw->wm.base.prog_data;

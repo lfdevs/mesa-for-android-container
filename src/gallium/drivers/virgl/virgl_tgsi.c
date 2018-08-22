@@ -31,6 +31,7 @@
 struct virgl_transform_context {
    struct tgsi_transform_context base;
    bool cull_enabled;
+   bool has_precise;
 };
 
 static void
@@ -76,7 +77,8 @@ static void
 virgl_tgsi_transform_instruction(struct tgsi_transform_context *ctx,
 				 struct tgsi_full_instruction *inst)
 {
-   if (inst->Instruction.Precise)
+   struct virgl_transform_context *vtctx = (struct virgl_transform_context *)ctx;
+   if (!vtctx->has_precise && inst->Instruction.Precise)
       inst->Instruction.Precise = 0;
 
    for (unsigned i = 0; i < inst->Instruction.NumSrcRegs; i++) {
@@ -104,6 +106,7 @@ struct tgsi_token *virgl_tgsi_transform(struct virgl_context *vctx, const struct
    transform.base.transform_property = virgl_tgsi_transform_property;
    transform.base.transform_instruction = virgl_tgsi_transform_instruction;
    transform.cull_enabled = vscreen->caps.caps.v1.bset.has_cull;
+   transform.has_precise = vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_TGSI_PRECISE;
    tgsi_transform_shader(tokens_in, new_tokens, newLen, &transform.base);
 
    return new_tokens;

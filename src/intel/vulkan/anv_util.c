@@ -57,7 +57,7 @@ __anv_perf_warn(struct anv_instance *instance, const void *object,
 {
    va_list ap;
    char buffer[256];
-   char report[256];
+   char report[512];
 
    va_start(ap, format);
    vsnprintf(buffer, sizeof(buffer), format, ap);
@@ -84,7 +84,7 @@ __vk_errorf(struct anv_instance *instance, const void *object,
 {
    va_list ap;
    char buffer[256];
-   char report[256];
+   char report[512];
 
    const char *error_str = vk_Result_to_str(error);
 

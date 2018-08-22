@@ -1,3 +1,4 @@
+from __future__ import print_function
 
 template = """\
 /* Copyright (C) 2015 Broadcom
@@ -33,7 +34,7 @@ def src_list(num_srcs):
    return ', '.join('src' + str(i) if i < num_srcs else 'NULL' for i in range(4))
 %>
 
-% for name, opcode in sorted(opcodes.iteritems()):
+% for name, opcode in sorted(opcodes.items()):
 static inline nir_ssa_def *
 nir_${name}(nir_builder *build, ${src_decl_list(opcode.num_inputs)})
 {
@@ -54,7 +55,7 @@ nir_load_system_value(nir_builder *build, nir_intrinsic_op op, int index)
    return &load->dest.ssa;
 }
 
-% for name, opcode in filter(lambda v: v[1].sysval, sorted(INTR_OPCODES.iteritems())):
+% for name, opcode in filter(lambda v: v[1].sysval, sorted(INTR_OPCODES.items())):
 static inline nir_ssa_def *
 nir_${name}(nir_builder *build)
 {
@@ -68,4 +69,4 @@ from nir_opcodes import opcodes
 from nir_intrinsics import INTR_OPCODES
 from mako.template import Template
 
-print Template(template).render(opcodes=opcodes, INTR_OPCODES=INTR_OPCODES)
+print(Template(template).render(opcodes=opcodes, INTR_OPCODES=INTR_OPCODES))

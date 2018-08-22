@@ -154,7 +154,7 @@ void r600_set_streamout_targets(struct pipe_context *ctx,
 
 static void r600_flush_vgt_streamout(struct r600_common_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	unsigned reg_strmout_cntl;
 
 	/* The register is at different places on different ASICs. */
@@ -180,7 +180,7 @@ static void r600_flush_vgt_streamout(struct r600_common_context *rctx)
 
 static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r600_atom *atom)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct r600_so_target **t = rctx->streamout.targets;
 	uint16_t *stride_in_dw = rctx->streamout.stride_in_dw;
 	unsigned i, update_flags = 0;
@@ -253,7 +253,7 @@ static void r600_emit_streamout_begin(struct r600_common_context *rctx, struct r
 
 void r600_emit_streamout_end(struct r600_common_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->gfx.cs;
 	struct r600_so_target **t = rctx->streamout.targets;
 	unsigned i;
 	uint64_t va;

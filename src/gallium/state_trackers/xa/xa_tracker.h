@@ -37,7 +37,7 @@
 #include <stdint.h>
 
 #define XA_TRACKER_VERSION_MAJOR 2
-#define XA_TRACKER_VERSION_MINOR 3
+#define XA_TRACKER_VERSION_MINOR 4
 #define XA_TRACKER_VERSION_PATCH 0
 
 #define XA_FLAG_SHARED         (1 << 0)

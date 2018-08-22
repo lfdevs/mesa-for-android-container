@@ -63,7 +63,6 @@ files_libradeonsi = files(
   'si_texture.c',
   'si_uvd.c',
   '../radeon/r600_perfcounter.c',
-  '../radeon/r600_pipe_common.h',
   '../radeon/radeon_uvd.c',
   '../radeon/radeon_uvd.h',
   '../radeon/radeon_vcn_enc_1_2.c',

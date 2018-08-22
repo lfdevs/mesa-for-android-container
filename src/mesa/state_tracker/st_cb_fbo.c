@@ -204,6 +204,8 @@ st_renderbuffer_alloc_storage(struct gl_context * ctx,
    templ.depth0 = 1;
    templ.array_size = 1;
    templ.nr_samples = rb->NumSamples;
+   templ.nr_storage_samples = rb->NumSamples;
+
    if (util_format_is_depth_or_stencil(format)) {
       templ.bind = PIPE_BIND_DEPTH_STENCIL;
    }
@@ -614,8 +616,10 @@ st_validate_attachment(struct gl_context *ctx,
    }
 
    valid = screen->is_format_supported(screen, format,
-                                      PIPE_TEXTURE_2D,
-                                      stObj->pt->nr_samples, bindings);
+                                       PIPE_TEXTURE_2D,
+                                       stObj->pt->nr_samples,
+                                       stObj->pt->nr_storage_samples,
+                                       bindings);
    if (!valid) {
       st_fbo_invalid("Invalid format");
    }
@@ -714,12 +718,10 @@ st_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
  * created FBOs.
  */
 static void
-st_DrawBuffer(struct gl_context *ctx, GLenum buffer)
+st_DrawBufferAllocate(struct gl_context *ctx)
 {
    struct st_context *st = st_context(ctx);
    struct gl_framebuffer *fb = ctx->DrawBuffer;
-
-   (void) buffer;
 
    if (_mesa_is_winsys_fbo(fb)) {
       GLuint i;
@@ -736,8 +738,8 @@ st_DrawBuffer(struct gl_context *ctx, GLenum buffer)
 
 
 /**
- * Called via glReadBuffer.  As with st_DrawBuffer, we use this function
- * to check if we need to allocate a renderbuffer on demand.
+ * Called via glReadBuffer.  As with st_DrawBufferAllocate, we use this
+ * function to check if we need to allocate a renderbuffer on demand.
  */
 static void
 st_ReadBuffer(struct gl_context *ctx, GLenum buffer)
@@ -772,7 +774,8 @@ st_MapRenderbuffer(struct gl_context *ctx,
                    struct gl_renderbuffer *rb,
                    GLuint x, GLuint y, GLuint w, GLuint h,
                    GLbitfield mode,
-                   GLubyte **mapOut, GLint *rowStrideOut)
+                   GLubyte **mapOut, GLint *rowStrideOut,
+                   bool flip_y)
 {
    struct st_context *st = st_context(ctx);
    struct st_renderbuffer *strb = st_renderbuffer(rb);
@@ -780,6 +783,9 @@ st_MapRenderbuffer(struct gl_context *ctx,
    const GLboolean invert = rb->Name == 0;
    GLuint y2;
    GLubyte *map;
+
+   /* driver does not support GL_FRAMEBUFFER_FLIP_Y_MESA */
+   assert((rb->Name == 0) == flip_y);
 
    if (strb->software) {
       /* software-allocated renderbuffer (probably an accum buffer) */
@@ -857,6 +863,19 @@ st_UnmapRenderbuffer(struct gl_context *ctx,
 }
 
 
+/**
+ * Called via ctx->Driver.EvaluateDepthValues.
+ */
+static void
+st_EvaluateDepthValues(struct gl_context *ctx)
+{
+   struct st_context *st = st_context(ctx);
+
+   st_validate_state(st, ST_PIPELINE_UPDATE_FRAMEBUFFER);
+
+   st->pipe->evaluate_depth_buffer(st->pipe);
+}
+
 
 void
 st_init_fbo_functions(struct dd_function_table *functions)
@@ -868,9 +887,10 @@ st_init_fbo_functions(struct dd_function_table *functions)
    functions->FinishRenderTexture = st_finish_render_texture;
    functions->ValidateFramebuffer = st_validate_framebuffer;
 
-   functions->DrawBuffer = st_DrawBuffer;
+   functions->DrawBufferAllocate = st_DrawBufferAllocate;
    functions->ReadBuffer = st_ReadBuffer;
 
    functions->MapRenderbuffer = st_MapRenderbuffer;
    functions->UnmapRenderbuffer = st_UnmapRenderbuffer;
+   functions->EvaluateDepthValues = st_EvaluateDepthValues;
 }

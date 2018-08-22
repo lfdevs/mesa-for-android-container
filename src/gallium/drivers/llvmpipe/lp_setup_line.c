@@ -616,8 +616,7 @@ try_setup_line( struct lp_setup_context *setup,
 
    LP_COUNT(nr_tris);
 
-   if (lp_context->active_statistics_queries &&
-       !llvmpipe_rasterization_disabled(lp_context)) {
+   if (lp_context->active_statistics_queries) {
       lp_context->pipeline_statistics.c_primitives++;
    }
 
@@ -759,24 +758,33 @@ try_setup_line( struct lp_setup_context *setup,
 }
 
 
-static void lp_setup_line( struct lp_setup_context *setup,
-                           const float (*v0)[4],
-                           const float (*v1)[4] )
+static void lp_setup_line_discard(struct lp_setup_context *setup,
+                                  const float (*v0)[4],
+                                  const float (*v1)[4])
 {
-   if (!try_setup_line( setup, v0, v1 ))
-   {
+}
+
+static void lp_setup_line(struct lp_setup_context *setup,
+                          const float (*v0)[4],
+                          const float (*v1)[4])
+{
+   if (!try_setup_line(setup, v0, v1)) {
       if (!lp_setup_flush_and_restart(setup))
          return;
 
-      if (!try_setup_line( setup, v0, v1 ))
+      if (!try_setup_line(setup, v0, v1))
          return;
    }
 }
 
 
-void lp_setup_choose_line( struct lp_setup_context *setup ) 
+void lp_setup_choose_line(struct lp_setup_context *setup)
 { 
-   setup->line = lp_setup_line;
+   if (setup->rasterizer_discard) {
+      setup->line = lp_setup_line_discard;
+   } else {
+      setup->line = lp_setup_line;
+   }
 }
 
 

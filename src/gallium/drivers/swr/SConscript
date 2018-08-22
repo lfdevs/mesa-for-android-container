@@ -12,8 +12,8 @@ if not env['llvm']:
     env['swr'] = False
     Return()
 
-if env['LLVM_VERSION'] < distutils.version.LooseVersion('4.0'):
-    print("warning: swr requires LLVM >= 4.0: not building swr")
+if env['LLVM_VERSION'] < distutils.version.LooseVersion('5.0'):
+    print("warning: swr requires LLVM >= 5.0: not building swr")
     env['swr'] = False
     Return()
 

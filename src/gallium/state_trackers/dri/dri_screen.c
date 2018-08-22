@@ -74,6 +74,10 @@ dri_fill_st_options(struct dri_screen *screen)
       driQueryOptioni(optionCache, "force_glsl_version");
    options->allow_glsl_extension_directive_midshader =
       driQueryOptionb(optionCache, "allow_glsl_extension_directive_midshader");
+   options->allow_glsl_builtin_const_expression =
+      driQueryOptionb(optionCache, "allow_glsl_builtin_const_expression");
+   options->allow_glsl_relaxed_es =
+      driQueryOptionb(optionCache, "allow_glsl_relaxed_es");
    options->allow_glsl_builtin_variable_redeclaration =
       driQueryOptionb(optionCache, "allow_glsl_builtin_variable_redeclaration");
    options->allow_higher_compat_version =
@@ -185,22 +189,22 @@ dri_fill_in_modes(struct dri_screen *screen)
       ? MSAA_VISUAL_MAX_SAMPLES : 1;
 
    pf_x8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24X8_UNORM,
-					    PIPE_TEXTURE_2D, 0,
+					    PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z24x8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_X8Z24_UNORM,
-					    PIPE_TEXTURE_2D, 0,
+					    PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_s8z24 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z24_UNORM_S8_UINT,
-					    PIPE_TEXTURE_2D, 0,
+					    PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z24s8 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_S8_UINT_Z24_UNORM,
-					    PIPE_TEXTURE_2D, 0,
+					    PIPE_TEXTURE_2D, 0, 0,
                                             PIPE_BIND_DEPTH_STENCIL);
    pf_z16 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z16_UNORM,
-                                          PIPE_TEXTURE_2D, 0,
+                                          PIPE_TEXTURE_2D, 0, 0,
                                           PIPE_BIND_DEPTH_STENCIL);
    pf_z32 = p_screen->is_format_supported(p_screen, PIPE_FORMAT_Z32_UNORM,
-                                          PIPE_TEXTURE_2D, 0,
+                                          PIPE_TEXTURE_2D, 0, 0,
                                           PIPE_BIND_DEPTH_STENCIL);
 
    if (pf_z16) {
@@ -248,7 +252,7 @@ dri_fill_in_modes(struct dri_screen *screen)
          continue;
 
       if (!p_screen->is_format_supported(p_screen, pipe_formats[format],
-                                         PIPE_TEXTURE_2D, 0,
+                                         PIPE_TEXTURE_2D, 0, 0,
                                          PIPE_BIND_RENDER_TARGET |
                                          PIPE_BIND_DISPLAY_TARGET))
          continue;
@@ -257,7 +261,7 @@ dri_fill_in_modes(struct dri_screen *screen)
          int samples = i > 1 ? i : 0;
 
          if (p_screen->is_format_supported(p_screen, pipe_formats[format],
-                                           PIPE_TEXTURE_2D, samples,
+                                           PIPE_TEXTURE_2D, samples, samples,
                                            PIPE_BIND_RENDER_TARGET)) {
             msaa_modes[num_msaa_modes++] = samples;
          }
@@ -298,7 +302,8 @@ dri_fill_in_modes(struct dri_screen *screen)
  * Roughly the converse of dri_fill_in_modes.
  */
 void
-dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
+dri_fill_st_visual(struct st_visual *stvis,
+                   const struct dri_screen *screen,
                    const struct gl_config *mode)
 {
    memset(stvis, 0, sizeof(*stvis));

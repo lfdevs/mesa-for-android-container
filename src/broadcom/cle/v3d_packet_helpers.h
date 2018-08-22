@@ -26,12 +26,15 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <math.h>
+#include <gallium/auxiliary/util/u_math.h>
 
 #ifdef HAVE_VALGRIND
 #include <valgrind.h>
 #include <memcheck.h>
 #define VG(x) x
+#ifndef NDEBUG
 #define __gen_validate_value(x) VALGRIND_CHECK_MEM_IS_DEFINED(&(x), sizeof(x))
+#endif
 #else
 #define VG(x)
 #endif
@@ -201,5 +204,13 @@ __gen_unpack_float(const uint8_t *restrict cl, uint32_t start, uint32_t end)
    struct PACKED { float f; } *f = (void *)(cl + (start / 8));
 
    return f->f;
+}
+
+static inline float
+__gen_unpack_f187(const uint8_t *restrict cl, uint32_t start, uint32_t end)
+{
+   assert(end - start == 15);
+   uint32_t bits = __gen_unpack_uint(cl, start, end);
+   return uif(bits << 16);
 }
 

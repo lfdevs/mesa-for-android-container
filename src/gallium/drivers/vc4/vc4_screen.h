@@ -98,6 +98,7 @@ struct vc4_screen {
         bool has_madvise;
         bool has_tiling_ioctl;
         bool has_perfmon_ioctl;
+        bool has_syncobj;
 
         struct vc4_simulator_file *sim_file;
 };
@@ -118,9 +119,9 @@ vc4_screen_get_compiler_options(struct pipe_screen *pscreen,
 extern uint32_t vc4_debug;
 
 void
-vc4_fence_init(struct vc4_screen *screen);
+vc4_fence_screen_init(struct vc4_screen *screen);
 
 struct vc4_fence *
-vc4_fence_create(struct vc4_screen *screen, uint64_t seqno);
+vc4_fence_create(struct vc4_screen *screen, uint64_t seqno, int fd);
 
 #endif /* VC4_SCREEN_H */

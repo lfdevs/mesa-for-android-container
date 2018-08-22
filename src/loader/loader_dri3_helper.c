@@ -64,6 +64,55 @@ dri3_flush_present_events(struct loader_dri3_drawable *draw);
 static struct loader_dri3_buffer *
 dri3_find_back_alloc(struct loader_dri3_drawable *draw);
 
+static xcb_screen_t *
+get_screen_for_root(xcb_connection_t *conn, xcb_window_t root)
+{
+   xcb_screen_iterator_t screen_iter =
+   xcb_setup_roots_iterator(xcb_get_setup(conn));
+
+   for (; screen_iter.rem; xcb_screen_next (&screen_iter)) {
+      if (screen_iter.data->root == root)
+         return screen_iter.data;
+   }
+
+   return NULL;
+}
+
+static xcb_visualtype_t *
+get_xcb_visualtype_for_depth(struct loader_dri3_drawable *draw, int depth)
+{
+   xcb_visualtype_iterator_t visual_iter;
+   xcb_screen_t *screen = draw->screen;
+   xcb_depth_iterator_t depth_iter;
+
+   if (!screen)
+      return NULL;
+
+   depth_iter = xcb_screen_allowed_depths_iterator(screen);
+   for (; depth_iter.rem; xcb_depth_next(&depth_iter)) {
+      if (depth_iter.data->depth != depth)
+         continue;
+
+      visual_iter = xcb_depth_visuals_iterator(depth_iter.data);
+      if (visual_iter.rem)
+         return visual_iter.data;
+   }
+
+   return NULL;
+}
+
+/* Get red channel mask for given drawable at given depth. */
+static unsigned int
+dri3_get_red_mask_for_depth(struct loader_dri3_drawable *draw, int depth)
+{
+   xcb_visualtype_t *visual = get_xcb_visualtype_for_depth(draw, depth);
+
+   if (visual)
+      return visual->red_mask;
+
+   return 0;
+}
+
 /**
  * Do we have blit functionality in the image blit extension?
  *
@@ -323,6 +372,7 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
       return 1;
    }
 
+   draw->screen = get_screen_for_root(draw->conn, reply->root);
    draw->width = reply->width;
    draw->height = reply->height;
    draw->depth = reply->depth;
@@ -1022,10 +1072,41 @@ dri3_cpp_for_format(uint32_t format) {
    case  __DRI_IMAGE_FORMAT_XBGR2101010:
    case  __DRI_IMAGE_FORMAT_ABGR2101010:
    case  __DRI_IMAGE_FORMAT_SARGB8:
+   case  __DRI_IMAGE_FORMAT_SABGR8:
       return 4;
    case  __DRI_IMAGE_FORMAT_NONE:
    default:
       return 0;
+   }
+}
+
+/* Map format of render buffer to corresponding format for the linear_buffer
+ * used for sharing with the display gpu of a Prime setup (== is_different_gpu).
+ * Usually linear_format == format, except for depth >= 30 formats, where
+ * different gpu vendors have different preferences wrt. color channel ordering.
+ */
+static uint32_t
+dri3_linear_format_for_format(struct loader_dri3_drawable *draw, uint32_t format)
+{
+   switch (format) {
+      case  __DRI_IMAGE_FORMAT_XRGB2101010:
+      case  __DRI_IMAGE_FORMAT_XBGR2101010:
+         /* Different preferred formats for different hw */
+         if (dri3_get_red_mask_for_depth(draw, 30) == 0x3ff)
+            return __DRI_IMAGE_FORMAT_XBGR2101010;
+         else
+            return __DRI_IMAGE_FORMAT_XRGB2101010;
+
+      case  __DRI_IMAGE_FORMAT_ARGB2101010:
+      case  __DRI_IMAGE_FORMAT_ABGR2101010:
+         /* Different preferred formats for different hw */
+         if (dri3_get_red_mask_for_depth(draw, 30) == 0x3ff)
+            return __DRI_IMAGE_FORMAT_ABGR2101010;
+         else
+            return __DRI_IMAGE_FORMAT_ARGB2101010;
+
+      default:
+         return format;
    }
 }
 
@@ -1041,6 +1122,7 @@ image_format_to_fourcc(int format)
    /* Convert from __DRI_IMAGE_FORMAT to __DRI_IMAGE_FOURCC (sigh) */
    switch (format) {
    case __DRI_IMAGE_FORMAT_SARGB8: return __DRI_IMAGE_FOURCC_SARGB8888;
+   case __DRI_IMAGE_FORMAT_SABGR8: return __DRI_IMAGE_FOURCC_SABGR8888;
    case __DRI_IMAGE_FORMAT_RGB565: return __DRI_IMAGE_FOURCC_RGB565;
    case __DRI_IMAGE_FORMAT_XRGB8888: return __DRI_IMAGE_FOURCC_XRGB8888;
    case __DRI_IMAGE_FORMAT_ARGB8888: return __DRI_IMAGE_FOURCC_ARGB8888;
@@ -1225,7 +1307,8 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
 
       buffer->linear_buffer =
         draw->ext->image->createImage(draw->dri_screen,
-                                      width, height, format,
+                                      width, height,
+                                      dri3_linear_format_for_format(draw, format),
                                       __DRI_IMAGE_USE_SHARE |
                                       __DRI_IMAGE_USE_LINEAR |
                                       __DRI_IMAGE_USE_BACKBUFFER,

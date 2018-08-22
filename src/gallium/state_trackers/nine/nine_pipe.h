@@ -201,7 +201,7 @@ compressed_format( D3DFORMAT fmt )
 static inline boolean
 depth_stencil_format( D3DFORMAT fmt )
 {
-    static D3DFORMAT allowed[] = {
+    static const D3DFORMAT allowed[] = {
         D3DFMT_D16_LOCKABLE,
         D3DFMT_D32,
         D3DFMT_D15S1,
@@ -288,7 +288,7 @@ d3d9_to_pipe_format_internal(D3DFORMAT format)
 
 #define format_check_internal(pipe_format) \
     screen->is_format_supported(screen, pipe_format, target, \
-                                sample_count, bindings)
+                                sample_count, sample_count, bindings)
 
 static inline enum pipe_format
 d3d9_to_pipe_format_checked(struct pipe_screen *screen,

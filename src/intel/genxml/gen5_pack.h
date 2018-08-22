@@ -2826,12 +2826,12 @@ struct GEN5_URB_FENCE {
    bool                                 CLIPUnitURBReallocationRequest;
    bool                                 GSUnitURBReallocationRequest;
    bool                                 VSUnitURBReallocationRequest;
-   bool                                 CLIPFence;
-   bool                                 GSFence;
-   bool                                 VSFence;
-   bool                                 CSFence;
-   bool                                 VFEFence;
-   bool                                 SFFence;
+   uint32_t                             CLIPFence;
+   uint32_t                             GSFence;
+   uint32_t                             VSFence;
+   uint32_t                             CSFence;
+   uint32_t                             VFEFence;
+   uint32_t                             SFFence;
 };
 
 static inline void

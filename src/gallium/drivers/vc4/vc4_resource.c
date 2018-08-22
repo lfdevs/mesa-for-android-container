@@ -28,6 +28,7 @@
 #include "util/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_surface.h"
+#include "util/u_transfer_helper.h"
 #include "util/u_upload_mgr.h"
 
 #include "drm_fourcc.h"
@@ -76,15 +77,8 @@ vc4_resource_transfer_unmap(struct pipe_context *pctx,
         struct vc4_transfer *trans = vc4_transfer(ptrans);
 
         if (trans->map) {
-                struct vc4_resource *rsc;
-                struct vc4_resource_slice *slice;
-                if (trans->ss_resource) {
-                        rsc = vc4_resource(trans->ss_resource);
-                        slice = &rsc->slices[0];
-                } else {
-                        rsc = vc4_resource(ptrans->resource);
-                        slice = &rsc->slices[ptrans->level];
-                }
+                struct vc4_resource *rsc = vc4_resource(ptrans->resource);
+                struct vc4_resource_slice *slice = &rsc->slices[ptrans->level];
 
                 if (ptrans->usage & PIPE_TRANSFER_WRITE) {
                         vc4_store_tiled_image(rsc->bo->map + slice->offset +
@@ -97,49 +91,8 @@ vc4_resource_transfer_unmap(struct pipe_context *pctx,
                 free(trans->map);
         }
 
-        if (trans->ss_resource && (ptrans->usage & PIPE_TRANSFER_WRITE)) {
-                struct pipe_blit_info blit;
-                memset(&blit, 0, sizeof(blit));
-
-                blit.src.resource = trans->ss_resource;
-                blit.src.format = trans->ss_resource->format;
-                blit.src.box.width = trans->ss_box.width;
-                blit.src.box.height = trans->ss_box.height;
-                blit.src.box.depth = 1;
-
-                blit.dst.resource = ptrans->resource;
-                blit.dst.format = ptrans->resource->format;
-                blit.dst.level = ptrans->level;
-                blit.dst.box = trans->ss_box;
-
-                blit.mask = util_format_get_mask(ptrans->resource->format);
-                blit.filter = PIPE_TEX_FILTER_NEAREST;
-
-                pctx->blit(pctx, &blit);
-
-                pipe_resource_reference(&trans->ss_resource, NULL);
-        }
-
         pipe_resource_reference(&ptrans->resource, NULL);
         slab_free(&vc4->transfer_pool, ptrans);
-}
-
-static struct pipe_resource *
-vc4_get_temp_resource(struct pipe_context *pctx,
-                      struct pipe_resource *prsc,
-                      const struct pipe_box *box)
-{
-        struct pipe_resource temp_setup;
-
-        memset(&temp_setup, 0, sizeof(temp_setup));
-        temp_setup.target = prsc->target;
-        temp_setup.format = prsc->format;
-        temp_setup.width0 = box->width;
-        temp_setup.height0 = box->height;
-        temp_setup.depth0 = 1;
-        temp_setup.array_size = 1;
-
-        return pctx->screen->resource_create(pctx->screen, &temp_setup);
 }
 
 static void *
@@ -214,50 +167,6 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
         ptrans->level = level;
         ptrans->usage = usage;
         ptrans->box = *box;
-
-        /* If the resource is multisampled, we need to resolve to single
-         * sample.  This seems like it should be handled at a higher layer.
-         */
-        if (prsc->nr_samples > 1) {
-                trans->ss_resource = vc4_get_temp_resource(pctx, prsc, box);
-                if (!trans->ss_resource)
-                        goto fail;
-                assert(!trans->ss_resource->nr_samples);
-
-                /* The ptrans->box gets modified for tile alignment, so save
-                 * the original box for unmap time.
-                 */
-                trans->ss_box = *box;
-
-                if (usage & PIPE_TRANSFER_READ) {
-                        struct pipe_blit_info blit;
-                        memset(&blit, 0, sizeof(blit));
-
-                        blit.src.resource = ptrans->resource;
-                        blit.src.format = ptrans->resource->format;
-                        blit.src.level = ptrans->level;
-                        blit.src.box = trans->ss_box;
-
-                        blit.dst.resource = trans->ss_resource;
-                        blit.dst.format = trans->ss_resource->format;
-                        blit.dst.box.width = trans->ss_box.width;
-                        blit.dst.box.height = trans->ss_box.height;
-                        blit.dst.box.depth = 1;
-
-                        blit.mask = util_format_get_mask(prsc->format);
-                        blit.filter = PIPE_TEX_FILTER_NEAREST;
-
-                        pctx->blit(pctx, &blit);
-                        vc4_flush_jobs_writing_resource(vc4, blit.dst.resource);
-                }
-
-                /* The rest of the mapping process should use our temporary. */
-                prsc = trans->ss_resource;
-                rsc = vc4_resource(prsc);
-                ptrans->box.x = 0;
-                ptrans->box.y = 0;
-                ptrans->box.z = 0;
-        }
 
         if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
                 buf = vc4_bo_map_unsynchronized(rsc->bo);
@@ -403,7 +312,7 @@ vc4_resource_get_handle(struct pipe_screen *pscreen,
                 whandle->modifier = DRM_FORMAT_MOD_LINEAR;
 
         switch (whandle->type) {
-        case DRM_API_HANDLE_TYPE_SHARED:
+        case WINSYS_HANDLE_TYPE_SHARED:
                 if (screen->ro) {
                         /* This could probably be supported, assuming that a
                          * control node was used for pl111.
@@ -413,12 +322,12 @@ vc4_resource_get_handle(struct pipe_screen *pscreen,
                 }
 
                 return vc4_bo_flink(rsc->bo, &whandle->handle);
-        case DRM_API_HANDLE_TYPE_KMS:
+        case WINSYS_HANDLE_TYPE_KMS:
                 if (screen->ro && renderonly_get_handle(rsc->scanout, whandle))
                         return TRUE;
                 whandle->handle = rsc->bo->handle;
                 return TRUE;
-        case DRM_API_HANDLE_TYPE_FD:
+        case WINSYS_HANDLE_TYPE_FD:
                 /* FDs are cross-device, so we can export directly from vc4.
                  */
                 whandle->handle = vc4_bo_get_dmabuf(rsc->bo);
@@ -708,11 +617,11 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
                 return NULL;
 
         switch (whandle->type) {
-        case DRM_API_HANDLE_TYPE_SHARED:
+        case WINSYS_HANDLE_TYPE_SHARED:
                 rsc->bo = vc4_bo_open_name(screen,
                                            whandle->handle, whandle->stride);
                 break;
-        case DRM_API_HANDLE_TYPE_FD:
+        case WINSYS_HANDLE_TYPE_FD:
                 rsc->bo = vc4_bo_open_dmabuf(screen,
                                              whandle->handle, whandle->stride);
                 break;
@@ -1203,6 +1112,14 @@ vc4_get_shadow_index_buffer(struct pipe_context *pctx,
         return shadow_rsc;
 }
 
+static const struct u_transfer_vtbl transfer_vtbl = {
+        .resource_create          = vc4_resource_create,
+        .resource_destroy         = vc4_resource_destroy,
+        .transfer_map             = vc4_resource_transfer_map,
+        .transfer_unmap           = vc4_resource_transfer_unmap,
+        .transfer_flush_region    = u_default_transfer_flush_region,
+};
+
 void
 vc4_resource_screen_init(struct pipe_screen *pscreen)
 {
@@ -1215,6 +1132,8 @@ vc4_resource_screen_init(struct pipe_screen *pscreen)
         pscreen->resource_destroy = u_resource_destroy_vtbl;
         pscreen->resource_get_handle = vc4_resource_get_handle;
         pscreen->resource_destroy = vc4_resource_destroy;
+        pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
+                                                            false, false, true);
 
         /* Test if the kernel has GET_TILING; it will return -EINVAL if the
          * ioctl does not exist, but -ENOENT if we pass an impossible handle.
@@ -1231,9 +1150,9 @@ vc4_resource_screen_init(struct pipe_screen *pscreen)
 void
 vc4_resource_context_init(struct pipe_context *pctx)
 {
-        pctx->transfer_map = vc4_resource_transfer_map;
-        pctx->transfer_flush_region = u_default_transfer_flush_region;
-        pctx->transfer_unmap = vc4_resource_transfer_unmap;
+        pctx->transfer_map = u_transfer_helper_transfer_map;
+        pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
+        pctx->transfer_unmap = u_transfer_helper_transfer_unmap;
         pctx->buffer_subdata = u_default_buffer_subdata;
         pctx->texture_subdata = u_default_texture_subdata;
         pctx->create_surface = vc4_create_surface;

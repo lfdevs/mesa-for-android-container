@@ -506,7 +506,7 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 		break;
 
 	default:
-		if ((sscreen->info.vce_fw_version & (0xff << 24)) == FW_53) {
+		if ((sscreen->info.vce_fw_version & (0xff << 24)) >= FW_53) {
 			si_vce_52_init(enc);
 			si_get_pic_param = si_vce_52_get_param;
 		} else
@@ -542,7 +542,7 @@ bool si_vce_is_fw_version_supported(struct si_screen *sscreen)
 	case FW_52_8_3:
 		return true;
 	default:
-		if ((sscreen->info.vce_fw_version & (0xff << 24)) == FW_53)
+		if ((sscreen->info.vce_fw_version & (0xff << 24)) >= FW_53)
 			return true;
 		else
 			return false;
@@ -559,7 +559,7 @@ void si_vce_add_buffer(struct rvce_encoder *enc, struct pb_buffer *buf,
 	int reloc_idx;
 
 	reloc_idx = enc->ws->cs_add_buffer(enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
-					   domain, RADEON_PRIO_VCE);
+					   domain, 0);
 	if (enc->use_vm) {
 		uint64_t addr;
 		addr = enc->ws->buffer_get_virtual_address(buf);

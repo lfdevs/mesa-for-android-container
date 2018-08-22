@@ -290,17 +290,6 @@ initialize_ssa_def(nir_ssa_def *def, void *void_state)
    return true;
 }
 
-static inline bool
-ends_in_break(nir_block *block)
-{
-   if (exec_list_is_empty(&block->instr_list))
-      return false;
-
-   nir_instr *instr = nir_block_last_instr(block);
-   return instr->type == nir_instr_type_jump &&
-      nir_instr_as_jump(instr)->type == nir_jump_break;
-}
-
 static bool
 find_loop_terminators(loop_info_state *state)
 {
@@ -315,11 +304,11 @@ find_loop_terminators(loop_info_state *state)
 
          nir_block *last_then = nir_if_last_then_block(nif);
          nir_block *last_else = nir_if_last_else_block(nif);
-         if (ends_in_break(last_then)) {
+         if (nir_block_ends_in_break(last_then)) {
             break_blk = last_then;
             continue_from_blk = last_else;
             continue_from_then = false;
-         } else if (ends_in_break(last_else)) {
+         } else if (nir_block_ends_in_break(last_else)) {
             break_blk = last_else;
             continue_from_blk = last_then;
          }
@@ -630,45 +619,31 @@ find_trip_count(loop_info_state *state)
    state->loop->info->limiting_terminator = limiting_terminator;
 }
 
-/* Checks if we should force the loop to be unrolled regardless of size
- * due to array access heuristics.
- */
 static bool
 force_unroll_array_access(loop_info_state *state, nir_shader *ns,
-                          nir_deref_var *variable)
+                          nir_deref_instr *deref)
 {
-   nir_deref *tail = &variable->deref;
+   for (nir_deref_instr *d = deref; d; d = nir_deref_instr_parent(d)) {
+      if (d->deref_type != nir_deref_type_array)
+         continue;
 
-   while (tail->child != NULL) {
-      tail = tail->child;
+      assert(d->arr.index.is_ssa);
+      nir_loop_variable *array_index = get_loop_var(d->arr.index.ssa, state);
 
-      if (tail->deref_type == nir_deref_type_array) {
+      if (array_index->type != basic_induction)
+         continue;
 
-         nir_deref_array *deref_array = nir_deref_as_array(tail);
-         if (deref_array->deref_array_type != nir_deref_array_type_indirect)
-            continue;
+      nir_deref_instr *parent = nir_deref_instr_parent(d);
+      assert(glsl_type_is_array(parent->type) ||
+             glsl_type_is_matrix(parent->type));
+      if (glsl_get_length(parent->type) == state->loop->info->trip_count) {
+         state->loop->info->force_unroll = true;
+         return true;
+      }
 
-         nir_loop_variable *array_index =
-            get_loop_var(deref_array->indirect.ssa, state);
-
-         if (array_index->type != basic_induction)
-            continue;
-
-         /* If an array is indexed by a loop induction variable, and the
-          * array size is exactly the number of loop iterations, this is
-          * probably a simple for-loop trying to access each element in
-          * turn; the application may expect it to be unrolled.
-          */
-         if (glsl_get_length(variable->deref.type) ==
-             state->loop->info->trip_count) {
-            state->loop->info->force_unroll = true;
-            return state->loop->info->force_unroll;
-         }
-
-         if (variable->var->data.mode & state->indirect_mask) {
-            state->loop->info->force_unroll = true;
-            return state->loop->info->force_unroll;
-         }
+      if (deref->mode & state->indirect_mask) {
+         state->loop->info->force_unroll = true;
+         return true;
       }
    }
 
@@ -688,15 +663,17 @@ force_unroll_heuristics(loop_info_state *state, nir_shader *ns,
       /* Check for arrays variably-indexed by a loop induction variable.
        * Unrolling the loop may convert that access into constant-indexing.
        */
-      if (intrin->intrinsic == nir_intrinsic_load_var ||
-          intrin->intrinsic == nir_intrinsic_store_var ||
-          intrin->intrinsic == nir_intrinsic_copy_var) {
-         unsigned num_vars =
-            nir_intrinsic_infos[intrin->intrinsic].num_variables;
-         for (unsigned i = 0; i < num_vars; i++) {
-            if (force_unroll_array_access(state, ns, intrin->variables[i]))
-               return true;
-         }
+      if (intrin->intrinsic == nir_intrinsic_load_deref ||
+          intrin->intrinsic == nir_intrinsic_store_deref ||
+          intrin->intrinsic == nir_intrinsic_copy_deref) {
+         if (force_unroll_array_access(state, ns,
+                                       nir_src_as_deref(intrin->src[0])))
+            return true;
+
+         if (intrin->intrinsic == nir_intrinsic_copy_deref &&
+             force_unroll_array_access(state, ns,
+                                       nir_src_as_deref(intrin->src[1])))
+            return true;
       }
    }
 

@@ -22,10 +22,14 @@
 
 files_libintel_common = files(
   'gen_clflush.h',
+  'gen_batch_decoder.c',
   'gen_debug.c',
   'gen_debug.h',
   'gen_decoder.c',
   'gen_decoder.h',
+  'gen_disasm.c',
+  'gen_disasm.h',
+  'gen_gem.h',
   'gen_l3_config.c',
   'gen_l3_config.h',
   'gen_urb_config.c',

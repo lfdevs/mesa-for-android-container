@@ -908,20 +908,20 @@ find_format_config(struct vl_mpeg12_decoder *dec, const struct format_config con
 
    for (i = 0; i < num_configs; ++i) {
       if (!screen->is_format_supported(screen, configs[i].zscan_source_format, PIPE_TEXTURE_2D,
-                                       1, PIPE_BIND_SAMPLER_VIEW))
+                                       1, 1, PIPE_BIND_SAMPLER_VIEW))
          continue;
 
       if (configs[i].idct_source_format != PIPE_FORMAT_NONE) {
          if (!screen->is_format_supported(screen, configs[i].idct_source_format, PIPE_TEXTURE_2D,
-                                          1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
+                                          1, 1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
             continue;
 
          if (!screen->is_format_supported(screen, configs[i].mc_source_format, PIPE_TEXTURE_3D,
-                                          1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
+                                          1, 1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
             continue;
       } else {
          if (!screen->is_format_supported(screen, configs[i].mc_source_format, PIPE_TEXTURE_2D,
-                                          1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
+                                          1, 1, PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET))
             continue;
       }
       return &configs[i];

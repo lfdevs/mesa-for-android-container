@@ -271,7 +271,7 @@ dri3_alloc_back_buffer(struct vl_dri3_screen *scrn)
       pixmap_buffer_texture = buffer->texture;
    }
    memset(&whandle, 0, sizeof(whandle));
-   whandle.type= DRM_API_HANDLE_TYPE_FD;
+   whandle.type= WINSYS_HANDLE_TYPE_FD;
    usage = PIPE_HANDLE_USAGE_EXPLICIT_FLUSH | PIPE_HANDLE_USAGE_READ;
    scrn->base.pscreen->resource_get_handle(scrn->base.pscreen, NULL,
                                            pixmap_buffer_texture, &whandle,
@@ -492,7 +492,7 @@ dri3_get_front_buffer(struct vl_dri3_screen *scrn)
       goto free_reply;
 
    memset(&whandle, 0, sizeof(whandle));
-   whandle.type = DRM_API_HANDLE_TYPE_FD;
+   whandle.type = WINSYS_HANDLE_TYPE_FD;
    whandle.handle = (unsigned)fds[0];
    whandle.stride = bp_reply->stride;
    memset(&templ, 0, sizeof(templ));

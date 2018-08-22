@@ -41,7 +41,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 						 const struct pipe_video_buffer *tmpl)
 {
 	struct si_context *ctx = (struct si_context *)pipe;
-	struct r600_texture *resources[VL_NUM_COMPONENTS] = {};
+	struct si_texture *resources[VL_NUM_COMPONENTS] = {};
 	struct radeon_surf *surfaces[VL_NUM_COMPONENTS] = {};
 	struct pb_buffer **pbs[VL_NUM_COMPONENTS] = {};
 	const enum pipe_format *resource_formats;
@@ -68,11 +68,11 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 			vl_video_buffer_template(&templ, &vidtemplate,
 			                         resource_formats[i], 1,
 			                         array_size, PIPE_USAGE_DEFAULT, i);
-			/* Set PIPE_BIND_SHARED to avoid reallocation in r600_texture_get_handle,
+			/* Set PIPE_BIND_SHARED to avoid reallocation in si_texture_get_handle,
 			 * which can't handle joined surfaces. */
 			/* TODO: get tiling working */
 			templ.bind = PIPE_BIND_LINEAR | PIPE_BIND_SHARED;
-			resources[i] = (struct r600_texture *)
+			resources[i] = (struct si_texture *)
 			                pipe->screen->resource_create(pipe->screen, &templ);
 			if (!resources[i])
 				goto error;
@@ -84,7 +84,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 			continue;
 
 		surfaces[i] = & resources[i]->surface;
-		pbs[i] = &resources[i]->resource.buf;
+		pbs[i] = &resources[i]->buffer.buf;
 	}
 
 	si_vid_join_surfaces(ctx, pbs, surfaces);
@@ -94,8 +94,8 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 			continue;
 
 		/* reset the address */
-		resources[i]->resource.gpu_address = ctx->ws->buffer_get_virtual_address(
-			resources[i]->resource.buf);
+		resources[i]->buffer.gpu_address = ctx->ws->buffer_get_virtual_address(
+			resources[i]->buffer.buf);
 	}
 
 	vidtemplate.height *= array_size;
@@ -103,7 +103,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 
 error:
 	for (i = 0; i < VL_NUM_COMPONENTS; ++i)
-		r600_texture_reference(&resources[i], NULL);
+		si_texture_reference(&resources[i], NULL);
 
 	return NULL;
 }
@@ -112,8 +112,8 @@ error:
 static struct pb_buffer* si_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_buffer *buf)
 {
 	struct si_screen *sscreen = (struct si_screen*)buf->base.context->screen;
-	struct r600_texture *luma = (struct r600_texture *)buf->resources[0];
-	struct r600_texture *chroma = (struct r600_texture *)buf->resources[1];
+	struct si_texture *luma = (struct si_texture *)buf->resources[0];
+	struct si_texture *chroma = (struct si_texture *)buf->resources[1];
 	enum ruvd_surface_type type =  (sscreen->info.chip_class >= GFX9) ?
 					RUVD_SURFACE_TYPE_GFX9 :
 					RUVD_SURFACE_TYPE_LEGACY;
@@ -122,7 +122,7 @@ static struct pb_buffer* si_uvd_set_dtb(struct ruvd_msg *msg, struct vl_video_bu
 
 	si_uvd_set_dt_surfaces(msg, &luma->surface, (chroma) ? &chroma->surface : NULL, type);
 
-	return luma->resource.buf;
+	return luma->buffer.buf;
 }
 
 /* get the radeon resources for VCE */
@@ -130,10 +130,10 @@ static void si_vce_get_buffer(struct pipe_resource *resource,
 			      struct pb_buffer **handle,
 			      struct radeon_surf **surface)
 {
-	struct r600_texture *res = (struct r600_texture *)resource;
+	struct si_texture *res = (struct si_texture *)resource;
 
 	if (handle)
-		*handle = res->resource.buf;
+		*handle = res->buffer.buf;
 
 	if (surface)
 		*surface = &res->surface;

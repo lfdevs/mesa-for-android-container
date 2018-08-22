@@ -257,6 +257,7 @@ private:
    private:
       virtual bool visit(BasicBlock *);
 
+      void insertConstraintMove(Instruction *, int s);
       bool insertConstraintMoves();
 
       void condenseDefs(Instruction *);
@@ -1466,17 +1467,36 @@ GCRA::allocateRegisters(ArrayList& insns)
          nodes[i].init(regs, lval);
          RIG.insert(&nodes[i]);
 
-         if (lval->inFile(FILE_GPR) && lval->getInsn() != NULL &&
-             prog->getTarget()->getChipset() < 0xc0) {
+         if (lval->inFile(FILE_GPR) && lval->getInsn() != NULL) {
             Instruction *insn = lval->getInsn();
-            if (insn->op == OP_MAD || insn->op == OP_FMA || insn->op == OP_SAD)
-               // Short encoding only possible if they're all GPRs, no need to
-               // affect them otherwise.
-               if (insn->flagsDef < 0 &&
-                   insn->src(0).getFile() == FILE_GPR &&
-                   insn->src(1).getFile() == FILE_GPR &&
-                   insn->src(2).getFile() == FILE_GPR)
-                  nodes[i].addRegPreference(getNode(insn->getSrc(2)->asLValue()));
+            if (insn->op != OP_MAD && insn->op != OP_FMA && insn->op != OP_SAD)
+               continue;
+            // For both of the cases below, we only want to add the preference
+            // if all arguments are in registers.
+            if (insn->src(0).getFile() != FILE_GPR ||
+                insn->src(1).getFile() != FILE_GPR ||
+                insn->src(2).getFile() != FILE_GPR)
+               continue;
+            if (prog->getTarget()->getChipset() < 0xc0) {
+               // Outputting a flag is not supported with short encodings nor
+               // with immediate arguments.
+               // See handleMADforNV50.
+               if (insn->flagsDef >= 0)
+                  continue;
+            } else {
+               // We can only fold immediate arguments if dst == src2. This
+               // only matters if one of the first two arguments is an
+               // immediate. This form is also only supported for floats.
+               // See handleMADforNVC0.
+               ImmediateValue imm;
+               if (insn->dType != TYPE_F32)
+                  continue;
+               if (!insn->src(0).getImmediate(imm) &&
+                   !insn->src(1).getImmediate(imm))
+                  continue;
+            }
+
+            nodes[i].addRegPreference(getNode(insn->getSrc(2)->asLValue()));
          }
       }
    }
@@ -2216,6 +2236,8 @@ RegAlloc::InsertConstraintsPass::texConstraintNV50(TexInstruction *tex)
    for (c = 0; tex->srcExists(c) || tex->defExists(c); ++c) {
       if (!tex->srcExists(c))
          tex->setSrc(c, new_LValue(func, tex->getSrc(0)->asLValue()));
+      else
+         insertConstraintMove(tex, c);
       if (!tex->defExists(c))
          tex->setDef(c, new_LValue(func, tex->getDef(0)->asLValue()));
    }
@@ -2288,6 +2310,53 @@ RegAlloc::InsertConstraintsPass::visit(BasicBlock *bb)
    return true;
 }
 
+void
+RegAlloc::InsertConstraintsPass::insertConstraintMove(Instruction *cst, int s)
+{
+   const uint8_t size = cst->src(s).getSize();
+
+   assert(cst->getSrc(s)->defs.size() == 1); // still SSA
+
+   Instruction *defi = cst->getSrc(s)->defs.front()->getInsn();
+   bool imm = defi->op == OP_MOV &&
+      defi->src(0).getFile() == FILE_IMMEDIATE;
+   bool load = defi->op == OP_LOAD &&
+      defi->src(0).getFile() == FILE_MEMORY_CONST &&
+      !defi->src(0).isIndirect(0);
+   // catch some cases where don't really need MOVs
+   if (cst->getSrc(s)->refCount() == 1 && !defi->constrainedDefs()) {
+      if (imm || load) {
+         // Move the defi right before the cst. No point in expanding
+         // the range.
+         defi->bb->remove(defi);
+         cst->bb->insertBefore(cst, defi);
+      }
+      return;
+   }
+
+   LValue *lval = new_LValue(func, cst->src(s).getFile());
+   lval->reg.size = size;
+
+   Instruction *mov = new_Instruction(func, OP_MOV, typeOfSize(size));
+   mov->setDef(0, lval);
+   mov->setSrc(0, cst->getSrc(s));
+
+   if (load) {
+      mov->op = OP_LOAD;
+      mov->setSrc(0, defi->getSrc(0));
+   } else if (imm) {
+      mov->setSrc(0, defi->getSrc(0));
+   }
+
+   if (defi->getPredicate())
+      mov->setPredicate(defi->cc, defi->getPredicate());
+
+   cst->setSrc(s, mov->getDef(0));
+   cst->bb->insertBefore(cst, mov);
+
+   cst->getDef(0)->asLValue()->noSpill = 1; // doesn't help
+}
+
 // Insert extra moves so that, if multiple register constraints on a value are
 // in conflict, these conflicts can be resolved.
 bool
@@ -2328,46 +2397,8 @@ RegAlloc::InsertConstraintsPass::insertConstraintMoves()
                cst->bb->insertBefore(cst, mov);
                continue;
             }
-            assert(cst->getSrc(s)->defs.size() == 1); // still SSA
 
-            Instruction *defi = cst->getSrc(s)->defs.front()->getInsn();
-            bool imm = defi->op == OP_MOV &&
-               defi->src(0).getFile() == FILE_IMMEDIATE;
-            bool load = defi->op == OP_LOAD &&
-               defi->src(0).getFile() == FILE_MEMORY_CONST &&
-               !defi->src(0).isIndirect(0);
-            // catch some cases where don't really need MOVs
-            if (cst->getSrc(s)->refCount() == 1 && !defi->constrainedDefs()) {
-               if (imm || load) {
-                  // Move the defi right before the cst. No point in expanding
-                  // the range.
-                  defi->bb->remove(defi);
-                  cst->bb->insertBefore(cst, defi);
-               }
-               continue;
-            }
-
-            LValue *lval = new_LValue(func, cst->src(s).getFile());
-            lval->reg.size = size;
-
-            mov = new_Instruction(func, OP_MOV, typeOfSize(size));
-            mov->setDef(0, lval);
-            mov->setSrc(0, cst->getSrc(s));
-
-            if (load) {
-               mov->op = OP_LOAD;
-               mov->setSrc(0, defi->getSrc(0));
-            } else if (imm) {
-               mov->setSrc(0, defi->getSrc(0));
-            }
-
-            cst->setSrc(s, mov->getDef(0));
-            cst->bb->insertBefore(cst, mov);
-
-            cst->getDef(0)->asLValue()->noSpill = 1; // doesn't help
-
-            if (cst->op == OP_UNION)
-               mov->setPredicate(defi->cc, defi->getPredicate());
+            insertConstraintMove(cst, s);
          }
       }
    }

@@ -449,7 +449,7 @@ struct r300_context {
     /* The submission context. */
     struct radeon_winsys_ctx *ctx;
     /* The command stream. */
-    struct radeon_winsys_cs *cs;
+    struct radeon_cmdbuf *cs;
     /* Screen. */
     struct r300_screen *screen;
 

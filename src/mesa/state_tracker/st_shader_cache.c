@@ -74,6 +74,9 @@ static void
 st_serialise_ir_program(struct gl_context *ctx, struct gl_program *prog,
                         bool nir)
 {
+   if (prog->driver_cache_blob)
+      return;
+
    struct blob blob;
    blob_init(&blob);
 
@@ -84,6 +87,8 @@ st_serialise_ir_program(struct gl_context *ctx, struct gl_program *prog,
       blob_write_uint32(&blob, stvp->num_inputs);
       blob_write_bytes(&blob, stvp->index_to_input,
                        sizeof(stvp->index_to_input));
+      blob_write_bytes(&blob, stvp->input_to_index,
+                       sizeof(stvp->input_to_index));
       blob_write_bytes(&blob, stvp->result_to_output,
                        sizeof(stvp->result_to_output));
 
@@ -206,6 +211,8 @@ st_deserialise_ir_program(struct gl_context *ctx,
       stvp->num_inputs = blob_read_uint32(&blob_reader);
       blob_copy_bytes(&blob_reader, (uint8_t *) stvp->index_to_input,
                       sizeof(stvp->index_to_input));
+      blob_copy_bytes(&blob_reader, (uint8_t *) stvp->input_to_index,
+                      sizeof(stvp->input_to_index));
       blob_copy_bytes(&blob_reader, (uint8_t *) stvp->result_to_output,
                       sizeof(stvp->result_to_output));
 
@@ -408,6 +415,14 @@ st_serialise_tgsi_program(struct gl_context *ctx, struct gl_program *prog)
 }
 
 void
+st_serialise_tgsi_program_binary(struct gl_context *ctx,
+                                 struct gl_shader_program *shProg,
+                                 struct gl_program *prog)
+{
+   st_serialise_ir_program(ctx, prog, false);
+}
+
+void
 st_deserialise_tgsi_program(struct gl_context *ctx,
                             struct gl_shader_program *shProg,
                             struct gl_program *prog)
@@ -417,6 +432,14 @@ st_deserialise_tgsi_program(struct gl_context *ctx,
 
 void
 st_serialise_nir_program(struct gl_context *ctx, struct gl_program *prog)
+{
+   st_serialise_ir_program(ctx, prog, true);
+}
+
+void
+st_serialise_nir_program_binary(struct gl_context *ctx,
+                                struct gl_shader_program *shProg,
+                                struct gl_program *prog)
 {
    st_serialise_ir_program(ctx, prog, true);
 }

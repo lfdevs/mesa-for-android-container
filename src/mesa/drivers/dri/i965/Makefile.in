@@ -146,26 +146,26 @@ am__objects_1 = brw_binding_tables.lo brw_blorp.lo brw_bufmgr.lo \
 	brw_generate_mipmap.lo brw_gs.lo brw_gs_surface_state.lo \
 	brw_link.lo brw_meta_util.lo brw_misc_state.lo \
 	brw_nir_uniforms.lo brw_object_purgeable.lo \
-	brw_pipe_control.lo brw_performance_query.lo brw_program.lo \
+	brw_pipe_control.lo brw_performance_query.lo \
+	brw_performance_query_mdapi.lo brw_program.lo \
 	brw_program_binary.lo brw_program_cache.lo \
 	brw_primitive_restart.lo brw_queryobj.lo brw_reset.lo \
 	brw_sf.lo brw_state_upload.lo brw_surface_formats.lo \
 	brw_sync.lo brw_tcs.lo brw_tcs_surface_state.lo brw_tes.lo \
 	brw_tes_surface_state.lo brw_urb.lo brw_util.lo brw_vs.lo \
 	brw_vs_surface_state.lo brw_wm.lo brw_wm_surface_state.lo \
-	gen6_clip_state.lo gen6_constant_state.lo gen6_depth_state.lo \
+	gen6_clip_state.lo gen6_constant_state.lo \
 	gen6_multisample_state.lo gen6_queryobj.lo \
 	gen6_sampler_state.lo gen6_sol.lo gen6_urb.lo gen7_l3_state.lo \
-	gen7_misc_state.lo gen7_sol_state.lo gen7_urb.lo \
-	gen8_depth_state.lo gen8_multisample_state.lo hsw_queryobj.lo \
-	hsw_sol.lo intel_batchbuffer.lo intel_blit.lo \
-	intel_buffer_objects.lo intel_buffers.lo intel_copy_image.lo \
-	intel_extensions.lo intel_fbo.lo intel_mipmap_tree.lo \
-	intel_pixel_bitmap.lo intel_pixel.lo intel_pixel_copy.lo \
-	intel_pixel_draw.lo intel_pixel_read.lo intel_screen.lo \
-	intel_state.lo intel_tex.lo intel_tex_copy.lo \
-	intel_tex_image.lo intel_tex_validate.lo intel_tiled_memcpy.lo \
-	intel_upload.lo
+	gen7_sol_state.lo gen7_urb.lo gen8_depth_state.lo \
+	gen8_multisample_state.lo hsw_queryobj.lo hsw_sol.lo \
+	intel_batchbuffer.lo intel_blit.lo intel_buffer_objects.lo \
+	intel_buffers.lo intel_copy_image.lo intel_extensions.lo \
+	intel_fbo.lo intel_mipmap_tree.lo intel_pixel_bitmap.lo \
+	intel_pixel.lo intel_pixel_copy.lo intel_pixel_draw.lo \
+	intel_pixel_read.lo intel_screen.lo intel_state.lo \
+	intel_tex.lo intel_tex_copy.lo intel_tex_image.lo \
+	intel_tex_validate.lo intel_tiled_memcpy.lo intel_upload.lo
 am__objects_2 = brw_oa_metrics.lo
 am_libi965_dri_la_OBJECTS = $(am__objects_1) $(am__objects_2)
 libi965_dri_la_OBJECTS = $(am_libi965_dri_la_OBJECTS)
@@ -366,6 +366,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -546,6 +548,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -553,8 +557,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -568,6 +572,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -588,10 +594,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -649,6 +659,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -700,6 +711,8 @@ i965_FILES = \
 	brw_pipe_control.h \
 	brw_performance_query.h \
 	brw_performance_query.c \
+	brw_performance_query_mdapi.c \
+	brw_performance_query_metrics.h \
 	brw_program.c \
 	brw_program.h \
 	brw_program_binary.c \
@@ -729,14 +742,12 @@ i965_FILES = \
 	gen4_blorp_exec.h \
 	gen6_clip_state.c \
 	gen6_constant_state.c \
-	gen6_depth_state.c \
 	gen6_multisample_state.c \
 	gen6_queryobj.c \
 	gen6_sampler_state.c \
 	gen6_sol.c \
 	gen6_urb.c \
 	gen7_l3_state.c \
-	gen7_misc_state.c \
 	gen7_sol_state.c \
 	gen7_urb.c \
 	gen8_depth_state.c \
@@ -1029,6 +1040,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_oa_metrics.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_object_purgeable.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_query.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_performance_query_mdapi.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_pipe_control.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_primitive_restart.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_program.Plo@am__quote@
@@ -1052,14 +1064,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/brw_wm_surface_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_clip_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_constant_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_depth_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_multisample_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_queryobj.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sampler_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_sol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen6_urb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_l3_state.Plo@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_misc_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_sol_state.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen7_urb.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gen8_depth_state.Plo@am__quote@

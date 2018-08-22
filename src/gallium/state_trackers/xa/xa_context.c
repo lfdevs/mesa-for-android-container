@@ -201,7 +201,7 @@ xa_ctx_srf_create(struct xa_context *ctx, struct xa_surface *dst)
     }
 
     if (!screen->is_format_supported(screen,  dst->tex->format,
-				     PIPE_TEXTURE_2D, 0,
+				     PIPE_TEXTURE_2D, 0, 0,
 				     PIPE_BIND_RENDER_TARGET))
 	return -XA_ERR_INVAL;
 

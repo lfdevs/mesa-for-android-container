@@ -19,17 +19,19 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 // @file ${filename}
-// 
+//
 // @brief auto-generated file
-// 
+//
 // DO NOT EDIT
 //
 // Generation Command Line:
 //  ${'\n//    '.join(cmdline)}
 //
 //============================================================================
+
+// clang-format off
 
 %for num in range(numFiles):
 void Init${tableName}${num}();
@@ -41,3 +43,4 @@ static INLINE void Init${tableName}()
     Init${tableName}${num}();
     %endfor
 }
+// clang-format on

@@ -477,6 +477,19 @@ vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
         }
         submit.flags |= job->flags;
 
+        if (vc4->screen->has_syncobj) {
+                submit.out_sync = vc4->job_syncobj;
+
+                if (vc4->in_fence_fd >= 0) {
+                        /* This replaces the fence in the syncobj. */
+                        drmSyncobjImportSyncFile(vc4->fd, vc4->in_syncobj,
+                                                 vc4->in_fence_fd);
+                        submit.in_sync = vc4->in_syncobj;
+                        close(vc4->in_fence_fd);
+                        vc4->in_fence_fd = -1;
+                }
+        }
+
         if (!(vc4_debug & VC4_DEBUG_NORAST)) {
                 int ret;
 
@@ -530,7 +543,7 @@ vc4_job_hash(const void *key)
         return _mesa_hash_data(key, sizeof(struct vc4_job_key));
 }
 
-void
+int
 vc4_job_init(struct vc4_context *vc4)
 {
         vc4->jobs = _mesa_hash_table_create(vc4,
@@ -539,5 +552,24 @@ vc4_job_init(struct vc4_context *vc4)
         vc4->write_jobs = _mesa_hash_table_create(vc4,
                                                   _mesa_hash_pointer,
                                                   _mesa_key_pointer_equal);
+
+        if (vc4->screen->has_syncobj) {
+                /* Create the syncobj as signaled since with no job executed
+                 * there is nothing to wait on.
+                 */
+                int ret = drmSyncobjCreate(vc4->fd,
+                                           DRM_SYNCOBJ_CREATE_SIGNALED,
+                                           &vc4->job_syncobj);
+                if (ret) {
+                        /* If the screen indicated syncobj support, we should
+                         * be able to create a signaled syncobj.
+                         * At this point it is too late to pretend the screen
+                         * has no syncobj support.
+                         */
+                        return ret;
+                }
+        }
+
+        return 0;
 }
 

@@ -78,19 +78,10 @@ const char *si_get_family_name(const struct si_screen *sscreen)
 	case CHIP_VEGAM: return "AMD VEGAM";
 	case CHIP_VEGA10: return "AMD VEGA10";
 	case CHIP_VEGA12: return "AMD VEGA12";
+	case CHIP_VEGA20: return "AMD VEGA20";
 	case CHIP_RAVEN: return "AMD RAVEN";
 	default: return "AMD unknown";
 	}
-}
-
-static bool si_have_tgsi_compute(struct si_screen *sscreen)
-{
-	/* Old kernels disallowed some register writes for SI
-	 * that are used for indirect dispatches. */
-	return (sscreen->info.chip_class >= CIK ||
-		sscreen->info.drm_major == 3 ||
-		(sscreen->info.drm_major == 2 &&
-		 sscreen->info.drm_minor >= 45));
 }
 
 static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
@@ -161,6 +152,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
 	case PIPE_CAP_INVALIDATE_BUFFER:
 	case PIPE_CAP_SURFACE_REINTERPRET_BLOCKS:
+	case PIPE_CAP_QUERY_BUFFER_OBJECT:
 	case PIPE_CAP_QUERY_MEMORY_INFO:
 	case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
 	case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
@@ -192,27 +184,20 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_ALLOW_MAPPED_BUFFERS_DURING_EXECUTION:
 	case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
 	case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
+	case PIPE_CAP_TGSI_BALLOT:
 	case PIPE_CAP_TGSI_VOTE:
 	case PIPE_CAP_TGSI_FS_FBFETCH:
 		return 1;
-
-	case PIPE_CAP_TGSI_BALLOT:
-		return HAVE_LLVM >= 0x0500;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 		return !SI_BIG_ENDIAN && sscreen->info.has_userptr;
 
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
-		return (sscreen->info.drm_major == 2 &&
-			sscreen->info.drm_minor >= 43) ||
-		       sscreen->info.drm_major == 3;
+		return sscreen->info.has_gpu_reset_status_query ||
+		       sscreen->info.has_gpu_reset_counter_query;
 
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
-		/* 2D tiling on CIK is supported since DRM 2.35.0 */
-		return sscreen->info.chip_class < CIK ||
-		       (sscreen->info.drm_major == 2 &&
-			sscreen->info.drm_minor >= 35) ||
-		       sscreen->info.drm_major == 3;
+		return sscreen->info.has_2d_tiling;
 
         case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
                 return SI_MAP_BUFFER_ALIGNMENT;
@@ -226,8 +211,10 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 4;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
-		if (si_have_tgsi_compute(sscreen))
-			return 450;
+	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
+		if (sscreen->info.has_indirect_compute_dispatch)
+			return param == PIPE_CAP_GLSL_FEATURE_LEVEL ?
+				450 : 440;
 		return 420;
 
 	case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
@@ -236,24 +223,11 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-		/* SI doesn't support unaligned loads.
-		 * CIK needs DRM 2.50.0 on radeon. */
-		return sscreen->info.chip_class == SI ||
-		       (sscreen->info.drm_major == 2 &&
-			sscreen->info.drm_minor < 50);
+		return !sscreen->info.has_unaligned_shader_loads;
 
 	case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
-		/* TODO: GFX9 hangs. */
-		if (sscreen->info.chip_class >= GFX9)
-			return 0;
-		/* Disable on SI due to VM faults in CP DMA. Enable once these
-		 * faults are mitigated in software.
-		 */
-		if (sscreen->info.chip_class >= CIK &&
-		    sscreen->info.drm_major == 3 &&
-		    sscreen->info.drm_minor >= 13)
-			return RADEON_SPARSE_PAGE_SIZE;
-		return 0;
+		return sscreen->info.has_sparse_vm_mappings ?
+				RADEON_SPARSE_PAGE_SIZE : 0;
 
 	case PIPE_CAP_PACKED_UNIFORMS:
 		if (sscreen->debug_flags & DBG(NIR))
@@ -277,6 +251,13 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TILE_RASTER_ORDER:
 	case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
 	case PIPE_CAP_CONTEXT_PRIORITY_MASK:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
+	case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+	case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
 		return 0;
 
 	case PIPE_CAP_FENCE_SIGNAL:
@@ -287,9 +268,6 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_NATIVE_FENCE_FD:
 		return sscreen->info.has_fence_to_handle;
-
-	case PIPE_CAP_QUERY_BUFFER_OBJECT:
-		return si_have_tgsi_compute(sscreen);
 
 	case PIPE_CAP_DRAW_PARAMETERS:
 	case PIPE_CAP_MULTI_DRAW_INDIRECT:
@@ -334,6 +312,8 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VIEWPORT_SUBPIXEL_BITS:
 	case PIPE_CAP_MAX_RENDER_TARGETS:
 		return 8;
+	case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
+		return sscreen->info.has_eqaa_surface_allocator ? 2 : 0;
 
 	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
@@ -376,6 +356,10 @@ static float si_get_paramf(struct pipe_screen* pscreen, enum pipe_capf param)
 		return 16.0f;
 	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
 		return 16.0f;
+	case PIPE_CAPF_MIN_CONSERVATIVE_RASTER_DILATE:
+	case PIPE_CAPF_MAX_CONSERVATIVE_RASTER_DILATE:
+	case PIPE_CAPF_CONSERVATIVE_RASTER_DILATE_GRANULARITY:
+		return 0.0f;
 	}
 	return 0.0f;
 }
@@ -399,7 +383,7 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 		case PIPE_SHADER_CAP_SUPPORTED_IRS: {
 			int ir = 1 << PIPE_SHADER_IR_NATIVE;
 
-			if (si_have_tgsi_compute(sscreen))
+			if (sscreen->info.has_indirect_compute_dispatch)
 				ir |= 1 << PIPE_SHADER_IR_TGSI;
 
 			return ir;
@@ -511,6 +495,8 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
 	case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
 		return 0;
+	case PIPE_SHADER_CAP_SCALAR_ISA:
+		return 1;
 	}
 	return 0;
 }
@@ -939,8 +925,8 @@ static void si_query_memory_info(struct pipe_screen *screen,
 	 *
 	 * Instead, return statistics of this process.
 	 */
-	vram_usage = ws->query_value(ws, RADEON_REQUESTED_VRAM_MEMORY) / 1024;
-	gtt_usage =  ws->query_value(ws, RADEON_REQUESTED_GTT_MEMORY) / 1024;
+	vram_usage = ws->query_value(ws, RADEON_VRAM_USAGE) / 1024;
+	gtt_usage =  ws->query_value(ws, RADEON_GTT_USAGE) / 1024;
 
 	info->avail_device_memory =
 		vram_usage <= info->total_device_memory ?

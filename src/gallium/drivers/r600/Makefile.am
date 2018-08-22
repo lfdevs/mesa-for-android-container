@@ -10,7 +10,7 @@ AM_CFLAGS = \
 	$(GALLIUM_DRIVER_CFLAGS) \
 	$(RADEON_CFLAGS) \
 	$(LIBELF_CFLAGS) \
-	-I$(top_srcdir)/src/amd/common
+	-I$(top_srcdir)/src/amd/common -Wstrict-overflow=0
 
 AM_CXXFLAGS = \
 	$(GALLIUM_DRIVER_CXXFLAGS) \

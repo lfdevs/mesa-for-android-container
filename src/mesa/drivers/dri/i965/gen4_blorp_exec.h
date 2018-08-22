@@ -132,17 +132,22 @@ blorp_emit_wm_state(struct blorp_batch *batch,
 
          wm._8PixelDispatchEnable = prog_data->dispatch_8;
          wm._16PixelDispatchEnable = prog_data->dispatch_16;
+         wm._32PixelDispatchEnable = prog_data->dispatch_32;
 
 #if GEN_GEN == 4
          wm.KernelStartPointer0 =
             instruction_state_address(batch, params->wm_prog_kernel);
-         wm.GRFRegisterCount0 = prog_data->reg_blocks_0;
+         wm.GRFRegisterCount0 = brw_wm_prog_data_reg_blocks(prog_data, wm, 0);
 #else
-         wm.KernelStartPointer0 = params->wm_prog_kernel;
-         wm.GRFRegisterCount0 = prog_data->reg_blocks_0;
-         wm.KernelStartPointer2 =
-            params->wm_prog_kernel + prog_data->prog_offset_2;
-         wm.GRFRegisterCount2 = prog_data->reg_blocks_2;
+         wm.KernelStartPointer0 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, wm, 0);
+         wm.KernelStartPointer1 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, wm, 1);
+         wm.KernelStartPointer2 = params->wm_prog_kernel +
+                                  brw_wm_prog_data_prog_offset(prog_data, wm, 2);
+         wm.GRFRegisterCount0 = brw_wm_prog_data_reg_blocks(prog_data, wm, 0);
+         wm.GRFRegisterCount1 = brw_wm_prog_data_reg_blocks(prog_data, wm, 1);
+         wm.GRFRegisterCount2 = brw_wm_prog_data_reg_blocks(prog_data, wm, 2);
 #endif
       }
 

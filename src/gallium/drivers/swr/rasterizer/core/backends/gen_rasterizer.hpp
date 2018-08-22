@@ -19,11 +19,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 // @file gen_rasterizer.hpp
-// 
+//
 // @brief auto-generated file
-// 
+//
 // DO NOT EDIT
 //
 // Generation Command Line:
@@ -45,6 +45,8 @@
 //
 //============================================================================
 
+// clang-format off
+
 void InitRasterizerFuncs0();
 void InitRasterizerFuncs1();
 void InitRasterizerFuncs2();
@@ -57,3 +59,4 @@ static INLINE void InitRasterizerFuncs()
     InitRasterizerFuncs2();
     InitRasterizerFuncs3();
 }
+// clang-format on

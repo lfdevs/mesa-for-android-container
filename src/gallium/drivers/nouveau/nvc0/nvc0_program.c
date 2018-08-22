@@ -481,6 +481,9 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
          }
       }
    }
+   /* GM20x+ needs TGSI_SEMANTIC_POSITION to access sample locations */
+   if (info->prop.fp.readsSampleLocations && info->target >= NVISA_GM200_CHIPSET)
+      fp->hdr[5] |= 0x30000000;
 
    for (i = 0; i < info->numOutputs; ++i) {
       if (info->out[i].sn == TGSI_SEMANTIC_COLOR)

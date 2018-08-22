@@ -417,7 +417,7 @@ renderer_copy_prepare(struct xa_context *r,
     uint32_t fs_traits = FS_COMPOSITE;
 
     assert(screen->is_format_supported(screen, dst_surface->format,
-				       PIPE_TEXTURE_2D, 0,
+				       PIPE_TEXTURE_2D, 0, 0,
 				       PIPE_BIND_RENDER_TARGET));
     (void)screen;
 

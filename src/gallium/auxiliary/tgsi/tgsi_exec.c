@@ -1477,7 +1477,6 @@ micro_sub(union tgsi_exec_channel *dst,
 
 static void
 fetch_src_file_channel(const struct tgsi_exec_machine *mach,
-                       const uint chan_index,
                        const uint file,
                        const uint swizzle,
                        const union tgsi_exec_channel *index,
@@ -1591,8 +1590,7 @@ static void
 fetch_source_d(const struct tgsi_exec_machine *mach,
                union tgsi_exec_channel *chan,
                const struct tgsi_full_src_register *reg,
-               const uint chan_index,
-               enum tgsi_exec_datatype src_datatype)
+	       const uint chan_index)
 {
    union tgsi_exec_channel index;
    union tgsi_exec_channel index2D;
@@ -1634,7 +1632,6 @@ fetch_source_d(const struct tgsi_exec_machine *mach,
       /* get current value of address register[swizzle] */
       swizzle = reg->Indirect.Swizzle;
       fetch_src_file_channel(mach,
-                             chan_index,
                              reg->Indirect.File,
                              swizzle,
                              &index2,
@@ -1694,7 +1691,6 @@ fetch_source_d(const struct tgsi_exec_machine *mach,
 
          swizzle = reg->DimIndirect.Swizzle;
          fetch_src_file_channel(mach,
-                                chan_index,
                                 reg->DimIndirect.File,
                                 swizzle,
                                 &index2,
@@ -1729,7 +1725,6 @@ fetch_source_d(const struct tgsi_exec_machine *mach,
 
    swizzle = tgsi_util_get_full_src_register_swizzle( reg, chan_index );
    fetch_src_file_channel(mach,
-                          chan_index,
                           reg->Register.File,
                           swizzle,
                           &index,
@@ -1744,7 +1739,7 @@ fetch_source(const struct tgsi_exec_machine *mach,
              const uint chan_index,
              enum tgsi_exec_datatype src_datatype)
 {
-   fetch_source_d(mach, chan, reg, chan_index, src_datatype);
+   fetch_source_d(mach, chan, reg, chan_index);
 
    if (reg->Register.Absolute) {
       if (src_datatype == TGSI_EXEC_DATA_FLOAT) {
@@ -1767,7 +1762,6 @@ static union tgsi_exec_channel *
 store_dest_dstret(struct tgsi_exec_machine *mach,
                  const union tgsi_exec_channel *chan,
                  const struct tgsi_full_dst_register *reg,
-                 const struct tgsi_full_instruction *inst,
                  uint chan_index,
                  enum tgsi_exec_datatype dst_datatype)
 {
@@ -1808,7 +1802,6 @@ store_dest_dstret(struct tgsi_exec_machine *mach,
 
       /* fetch values from the address/indirection register */
       fetch_src_file_channel(mach,
-                             chan_index,
                              reg->Indirect.File,
                              swizzle,
                              &index,
@@ -1858,7 +1851,6 @@ store_dest_dstret(struct tgsi_exec_machine *mach,
 
          swizzle = reg->DimIndirect.Swizzle;
          fetch_src_file_channel(mach,
-                                chan_index,
                                 reg->DimIndirect.File,
                                 swizzle,
                                 &index2,
@@ -1937,7 +1929,6 @@ static void
 store_dest_double(struct tgsi_exec_machine *mach,
                  const union tgsi_exec_channel *chan,
                  const struct tgsi_full_dst_register *reg,
-                 const struct tgsi_full_instruction *inst,
                  uint chan_index,
                  enum tgsi_exec_datatype dst_datatype)
 {
@@ -1945,8 +1936,7 @@ store_dest_double(struct tgsi_exec_machine *mach,
    const uint execmask = mach->ExecMask;
    int i;
 
-   dst = store_dest_dstret(mach, chan, reg, inst, chan_index,
-			   dst_datatype);
+   dst = store_dest_dstret(mach, chan, reg, chan_index, dst_datatype);
    if (!dst)
       return;
 
@@ -1968,8 +1958,7 @@ store_dest(struct tgsi_exec_machine *mach,
    const uint execmask = mach->ExecMask;
    int i;
 
-   dst = store_dest_dstret(mach, chan, reg, inst, chan_index,
-                    dst_datatype);
+   dst = store_dest_dstret(mach, chan, reg, chan_index, dst_datatype);
    if (!dst)
       return;
 
@@ -2045,8 +2034,7 @@ exec_kill_if(struct tgsi_exec_machine *mach,
  * Unconditional fragment kill/discard.
  */
 static void
-exec_kill(struct tgsi_exec_machine *mach,
-          const struct tgsi_full_instruction *inst)
+exec_kill(struct tgsi_exec_machine *mach)
 {
    uint kilmask; /* bit 0 = pixel 0, bit 1 = pixel 1, etc */
 
@@ -2156,11 +2144,11 @@ fetch_texel_offsets(struct tgsi_exec_machine *mach,
       union tgsi_exec_channel index;
       union tgsi_exec_channel offset[3];
       index.i[0] = index.i[1] = index.i[2] = index.i[3] = inst->TexOffsets[0].Index;
-      fetch_src_file_channel(mach, 0, inst->TexOffsets[0].File,
+      fetch_src_file_channel(mach, inst->TexOffsets[0].File,
                              inst->TexOffsets[0].SwizzleX, &index, &ZeroVec, &offset[0]);
-      fetch_src_file_channel(mach, 0, inst->TexOffsets[0].File,
+      fetch_src_file_channel(mach, inst->TexOffsets[0].File,
                              inst->TexOffsets[0].SwizzleY, &index, &ZeroVec, &offset[1]);
-      fetch_src_file_channel(mach, 0, inst->TexOffsets[0].File,
+      fetch_src_file_channel(mach, inst->TexOffsets[0].File,
                              inst->TexOffsets[0].SwizzleZ, &index, &ZeroVec, &offset[2]);
      offsets[0] = offset[0].i[0];
      offsets[1] = offset[1].i[0];
@@ -2213,7 +2201,6 @@ fetch_sampler_unit(struct tgsi_exec_machine *mach,
       index2.i[3] = reg->Indirect.Index;
 
       fetch_src_file_channel(mach,
-                             0,
                              reg->Indirect.File,
                              reg->Indirect.Swizzle,
                              &index2,
@@ -2264,7 +2251,7 @@ exec_tex(struct tgsi_exec_machine *mach,
 
    assert(dim <= 4);
    if (shadow_ref >= 0)
-      assert(shadow_ref >= dim && shadow_ref < ARRAY_SIZE(args));
+      assert(shadow_ref >= dim && shadow_ref < (int)ARRAY_SIZE(args));
 
    /* fetch modifier to the last argument */
    if (modifier != TEX_MODIFIER_NONE) {
@@ -2300,7 +2287,7 @@ exec_tex(struct tgsi_exec_machine *mach,
          control = TGSI_SAMPLER_GATHER;
    }
    else {
-      for (i = dim; i < ARRAY_SIZE(args); i++)
+      for (i = dim; i < (int)ARRAY_SIZE(args); i++)
          args[i] = &ZeroVec;
    }
 
@@ -2352,8 +2339,8 @@ exec_lodq(struct tgsi_exec_machine *mach,
           const struct tgsi_full_instruction *inst)
 {
    uint resource_unit, sampler_unit;
-   int dim;
-   int i;
+   unsigned dim;
+   unsigned i;
    union tgsi_exec_channel coords[4];
    const union tgsi_exec_channel *args[ARRAY_SIZE(coords)];
    union tgsi_exec_channel r[2];
@@ -3561,8 +3548,8 @@ fetch_double_channel(struct tgsi_exec_machine *mach,
    union tgsi_exec_channel src[2];
    uint i;
 
-   fetch_source_d(mach, &src[0], reg, chan_0, TGSI_EXEC_DATA_UINT);
-   fetch_source_d(mach, &src[1], reg, chan_1, TGSI_EXEC_DATA_UINT);
+   fetch_source_d(mach, &src[0], reg, chan_0);
+   fetch_source_d(mach, &src[1], reg, chan_1);
 
    for (i = 0; i < TGSI_QUAD_SIZE; i++) {
       chan->u[i][0] = src[0].u[i];
@@ -3611,9 +3598,9 @@ store_double_channel(struct tgsi_exec_machine *mach,
          }
    }
 
-   store_dest_double(mach, &dst[0], reg, inst, chan_0, TGSI_EXEC_DATA_UINT);
-   if (chan_1 != -1)
-      store_dest_double(mach, &dst[1], reg, inst, chan_1, TGSI_EXEC_DATA_UINT);
+   store_dest_double(mach, &dst[0], reg, chan_0, TGSI_EXEC_DATA_UINT);
+   if (chan_1 != (unsigned)-1)
+      store_dest_double(mach, &dst[1], reg, chan_1, TGSI_EXEC_DATA_UINT);
 }
 
 static void
@@ -5146,7 +5133,7 @@ exec_instruction(
       break;
 
    case TGSI_OPCODE_KILL:
-      exec_kill (mach, inst);
+      exec_kill (mach);
       break;
 
    case TGSI_OPCODE_KILL_IF:

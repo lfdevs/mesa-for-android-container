@@ -35,33 +35,50 @@
 
 #include "ir3_compiler.h"
 
+static bool
+valid_sample_count(unsigned sample_count)
+{
+	switch (sample_count) {
+	case 0:
+	case 1:
+	case 2:
+	case 4:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static boolean
 fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
 		unsigned sample_count,
+		unsigned storage_sample_count,
 		unsigned usage)
 {
 	unsigned retval = 0;
 
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
-			(sample_count > 1) || /* TODO add MSAA */
-			!util_format_is_supported(format, usage)) {
+			!valid_sample_count(sample_count)) {
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
 		return FALSE;
 	}
+
+	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+		return false;
 
 	if ((usage & PIPE_BIND_VERTEX_BUFFER) &&
 			(fd5_pipe2vtx(format) != (enum a5xx_vtx_fmt)~0)) {
 		retval |= PIPE_BIND_VERTEX_BUFFER;
 	}
 
-	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
+	if ((usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE)) &&
 			(target == PIPE_BUFFER ||
 			 util_format_get_blocksize(format) != 12) &&
 			(fd5_pipe2tex(format) != (enum a5xx_tex_fmt)~0)) {
-		retval |= PIPE_BIND_SAMPLER_VIEW;
+		retval |= usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE);
 	}
 
 	if ((usage & (PIPE_BIND_RENDER_TARGET |
@@ -103,6 +120,9 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 	return retval == usage;
 }
 
+extern const struct fd_perfcntr_group a5xx_perfcntr_groups[];
+extern const unsigned a5xx_num_perfcntr_groups;
+
 void
 fd5_screen_init(struct pipe_screen *pscreen)
 {
@@ -115,4 +135,9 @@ fd5_screen_init(struct pipe_screen *pscreen)
 	screen->setup_slices = fd5_setup_slices;
 	if (fd_mesa_debug & FD_DBG_TTILE)
 		screen->tile_mode = fd5_tile_mode;
+
+	if (fd_mesa_debug & FD_DBG_PERFC) {
+		screen->perfcntr_groups = a5xx_perfcntr_groups;
+		screen->num_perfcntr_groups = a5xx_num_perfcntr_groups;
+	}
 }

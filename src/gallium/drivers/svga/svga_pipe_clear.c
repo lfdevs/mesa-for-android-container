@@ -422,6 +422,7 @@ svga_clear_texture(struct pipe_context *pipe,
              pipe->screen->is_format_supported(pipe->screen, rtv->format,
                                                rtv->texture->target,
                                                rtv->texture->nr_samples,
+                                               rtv->texture->nr_storage_samples,
                                                PIPE_BIND_RENDER_TARGET)) {
             /* clear with quad drawing */
             util_blitter_save_framebuffer(svga->blitter,

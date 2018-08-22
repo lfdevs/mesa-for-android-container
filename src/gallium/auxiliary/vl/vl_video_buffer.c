@@ -192,11 +192,11 @@ vl_video_buffer_is_format_supported(struct pipe_screen *screen,
          continue;
 
       /* we at least need to sample from it */
-      if (!screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW))
+      if (!screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW))
          return false;
 
       format = vl_video_buffer_surface_format(format);
-      if (!screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, PIPE_BIND_RENDER_TARGET))
+      if (!screen->is_format_supported(screen, format, PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_RENDER_TARGET))
          return false;
    }
 

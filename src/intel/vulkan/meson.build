@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2018 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -81,15 +81,6 @@ dev_icd = custom_target(
   install : false,
 )
 
-# TODO: workaround for anv_entrypoints combining the .h and .c files in it's
-# output. See issue #2346
-block_entrypoints = custom_target(
-  'block_entrypoints',
-  command : [prog_touch, '@OUTPUT@'],
-  output : 'null',
-  depends : anv_entrypoints,
-)
-
 libanv_gen_libs = []
 anv_gen_files = files(
   'genX_blorp_exec.c',
@@ -105,7 +96,7 @@ foreach g : [['70', ['gen7_cmd_buffer.c']], ['75', ['gen7_cmd_buffer.c']],
   _gen = g[0]
   libanv_gen_libs += static_library(
     'anv_gen@0@'.format(_gen),
-    [anv_gen_files, g[1], block_entrypoints],
+    [anv_gen_files, g[1], anv_entrypoints[0], anv_extensions_h],
     include_directories : [
       inc_common, inc_compiler, inc_drm_uapi, inc_intel, inc_vulkan_util,
       inc_vulkan_wsi,
@@ -173,6 +164,16 @@ if with_platform_wayland
   libanv_files += files('anv_wsi_wayland.c')
 endif
 
+if with_platform_drm
+  anv_flags += '-DVK_USE_PLATFORM_DISPLAY_KHR'
+  libanv_files += files('anv_wsi_display.c')
+endif
+
+if with_xlib_lease
+  anv_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
+  anv_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
+endif
+
 libanv_common = static_library(
   'anv_common',
   [libanv_files, anv_entrypoints, anv_extensions_c, anv_extensions_h],
@@ -186,7 +187,7 @@ libanv_common = static_library(
 
 libvulkan_intel = shared_library(
   'vulkan_intel',
-  [files('anv_gem.c'), block_entrypoints, anv_extensions_h],
+  [files('anv_gem.c'), anv_entrypoints[0], anv_extensions_h],
   include_directories : [
     inc_common, inc_intel, inc_compiler, inc_drm_uapi, inc_vulkan_util,
     inc_vulkan_wsi,
@@ -207,7 +208,7 @@ libvulkan_intel = shared_library(
 if with_tests
   libvulkan_intel_test = static_library(
     'vulkan_intel_test',
-    [files('anv_gem_stubs.c'), block_entrypoints, anv_extensions_h],
+    [files('anv_gem_stubs.c'), anv_entrypoints[0], anv_extensions_h],
     include_directories : [
       inc_common, inc_intel, inc_compiler, inc_drm_uapi, inc_vulkan_util,
       inc_vulkan_wsi,
@@ -229,7 +230,7 @@ if with_tests
       'anv_@0@'.format(t),
       executable(
         t,
-        ['tests/@0@.c'.format(t), dummy_cpp, block_entrypoints],
+        ['tests/@0@.c'.format(t), anv_entrypoints[0], anv_extensions_h],
         link_with : libvulkan_intel_test,
         dependencies : [dep_libdrm, dep_thread, dep_m, dep_valgrind],
         include_directories : [

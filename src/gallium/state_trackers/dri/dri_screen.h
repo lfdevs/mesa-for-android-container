@@ -127,7 +127,8 @@ dri_with_format(__DRIscreen * sPriv)
 }
 
 void
-dri_fill_st_visual(struct st_visual *stvis, struct dri_screen *screen,
+dri_fill_st_visual(struct st_visual *stvis,
+                   const struct dri_screen *screen,
                    const struct gl_config *mode);
 
 void

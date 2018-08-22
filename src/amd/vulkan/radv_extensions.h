@@ -26,8 +26,8 @@
 #define RADV_EXTENSIONS_H
 
 enum {
-   RADV_INSTANCE_EXTENSION_COUNT = 11,
-   RADV_DEVICE_EXTENSION_COUNT = 40,
+   RADV_INSTANCE_EXTENSION_COUNT = 16,
+   RADV_DEVICE_EXTENSION_COUNT = 46,
 };
 
 struct radv_instance_extension_table {
@@ -38,12 +38,17 @@ struct radv_instance_extension_table {
         bool KHR_external_fence_capabilities;
         bool KHR_external_memory_capabilities;
         bool KHR_external_semaphore_capabilities;
+        bool KHR_get_display_properties2;
         bool KHR_get_physical_device_properties2;
         bool KHR_get_surface_capabilities2;
         bool KHR_surface;
         bool KHR_wayland_surface;
         bool KHR_xcb_surface;
         bool KHR_xlib_surface;
+        bool KHR_display;
+        bool EXT_direct_mode_display;
+        bool EXT_acquire_xlib_display;
+        bool EXT_display_surface_counter;
         bool EXT_debug_report;
       };
    };
@@ -54,10 +59,13 @@ struct radv_device_extension_table {
       bool extensions[RADV_DEVICE_EXTENSION_COUNT];
       struct {
         bool ANDROID_native_buffer;
+        bool KHR_16bit_storage;
         bool KHR_bind_memory2;
+        bool KHR_create_renderpass2;
         bool KHR_dedicated_allocation;
         bool KHR_descriptor_update_template;
         bool KHR_device_group;
+        bool KHR_draw_indirect_count;
         bool KHR_external_fence;
         bool KHR_external_fence_fd;
         bool KHR_external_memory;
@@ -78,6 +86,8 @@ struct radv_device_extension_table {
         bool KHR_swapchain;
         bool KHR_variable_pointers;
         bool KHR_multiview;
+        bool EXT_conditional_rendering;
+        bool EXT_display_control;
         bool EXT_depth_range_unrestricted;
         bool EXT_descriptor_indexing;
         bool EXT_discard_rectangles;
@@ -86,6 +96,7 @@ struct radv_device_extension_table {
         bool EXT_global_priority;
         bool EXT_sampler_filter_minmax;
         bool EXT_shader_viewport_index_layer;
+        bool EXT_shader_stencil_export;
         bool EXT_vertex_attribute_divisor;
         bool AMD_draw_indirect_count;
         bool AMD_gcn_shader;
@@ -97,9 +108,9 @@ struct radv_device_extension_table {
    };
 };
 
-const VkExtensionProperties radv_instance_extensions[RADV_INSTANCE_EXTENSION_COUNT];
-const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT];
-const struct radv_instance_extension_table radv_supported_instance_extensions;
+extern const VkExtensionProperties radv_instance_extensions[RADV_INSTANCE_EXTENSION_COUNT];
+extern const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT];
+extern const struct radv_instance_extension_table radv_supported_instance_extensions;
 
 
 struct radv_physical_device;

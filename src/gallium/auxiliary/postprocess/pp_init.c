@@ -279,7 +279,7 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
    tmp_res.bind = PIPE_BIND_RENDER_TARGET;
 
    if (!p->screen->is_format_supported(p->screen, tmp_res.format,
-                                       tmp_res.target, 1, tmp_res.bind))
+                                       tmp_res.target, 1, 1, tmp_res.bind))
       pp_debug("Temp buffers' format fail\n");
 
    for (i = 0; i < ppq->n_tmp; i++) {
@@ -305,12 +305,12 @@ pp_init_fbos(struct pp_queue_t *ppq, unsigned int w,
    tmp_res.format = p->surf.format = PIPE_FORMAT_S8_UINT_Z24_UNORM;
 
    if (!p->screen->is_format_supported(p->screen, tmp_res.format,
-                                       tmp_res.target, 1, tmp_res.bind)) {
+                                       tmp_res.target, 1, 1, tmp_res.bind)) {
 
       tmp_res.format = p->surf.format = PIPE_FORMAT_Z24_UNORM_S8_UINT;
 
       if (!p->screen->is_format_supported(p->screen, tmp_res.format,
-                                          tmp_res.target, 1, tmp_res.bind))
+                                          tmp_res.target, 1, 1, tmp_res.bind))
          pp_debug("Temp Sbuffer format fail\n");
    }
 

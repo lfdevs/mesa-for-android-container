@@ -32,6 +32,12 @@ from mako.template import Template
 from mako.exceptions import RichTraceback
 
 #==============================================================================
+def ConcatLists(list_of_lists):
+    output = []
+    for l in list_of_lists: output += l
+    return output
+
+#==============================================================================
 def MakeTmpDir(suffix=''):
     '''
         Create temporary directory for use in codegen scripts.

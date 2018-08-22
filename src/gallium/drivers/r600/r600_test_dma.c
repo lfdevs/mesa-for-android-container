@@ -57,7 +57,7 @@ static void set_random_pixels(struct pipe_context *ctx,
 {
 	struct pipe_transfer *t;
 	uint8_t *map;
-	int x,y,z;
+	unsigned x,y,z;
 
 	map = pipe_transfer_map_3d(ctx, tex, 0, PIPE_TRANSFER_WRITE,
 				   0, 0, 0, tex->width0, tex->height0,

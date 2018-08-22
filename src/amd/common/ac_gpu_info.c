@@ -96,6 +96,7 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 		       struct radeon_info *info,
 		       struct amdgpu_gpu_info *amdinfo)
 {
+	struct drm_amdgpu_info_device device_info = {};
 	struct amdgpu_buffer_size_alignments alignment_info = {};
 	struct drm_amdgpu_info_hw_ip dma = {}, compute = {}, uvd = {};
 	struct drm_amdgpu_info_hw_ip uvd_enc = {}, vce = {}, vcn_dec = {};
@@ -121,6 +122,13 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	r = amdgpu_query_gpu_info(dev, amdinfo);
 	if (r) {
 		fprintf(stderr, "amdgpu: amdgpu_query_gpu_info failed.\n");
+		return false;
+	}
+
+	r = amdgpu_query_info(dev, AMDGPU_INFO_DEV_INFO, sizeof(device_info),
+			      &device_info);
+	if (r) {
+		fprintf(stderr, "amdgpu: amdgpu_query_info(dev_info) failed.\n");
 		return false;
 	}
 
@@ -235,7 +243,7 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	}
 
 	if (info->drm_minor >= 9) {
-		struct drm_amdgpu_memory_info meminfo;
+		struct drm_amdgpu_memory_info meminfo = {};
 
 		r = amdgpu_query_info(dev, AMDGPU_INFO_MEMORY, sizeof(meminfo), &meminfo);
 		if (r) {
@@ -324,6 +332,7 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	info->gds_gfx_partition_size = gds.gds_gfx_partition_size;
 	/* convert the shader clock from KHz to MHz */
 	info->max_shader_clock = amdinfo->max_engine_clk / 1000;
+	info->num_tcc_blocks = device_info.num_tcc_blocks;
 	info->max_se = amdinfo->num_shader_engines;
 	info->max_sh_per_se = amdinfo->num_shader_arrays_per_engine;
 	info->has_hw_decode =
@@ -343,8 +352,34 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	info->has_local_buffers = info->drm_minor >= 20 &&
 				  !info->has_dedicated_vram;
 	info->kernel_flushes_hdp_before_ib = true;
+	info->htile_cmask_support_1d_tiling = true;
+	info->si_TA_CS_BC_BASE_ADDR_allowed = true;
+	info->has_bo_metadata = true;
+	info->has_gpu_reset_status_query = true;
+	info->has_gpu_reset_counter_query = false;
+	info->has_eqaa_surface_allocator = true;
+	info->has_format_bc1_through_bc7 = true;
+	/* DRM 3.1.0 doesn't flush TC for VI correctly. */
+	info->kernel_flushes_tc_l2_after_ib = info->chip_class != VI ||
+					      info->drm_minor >= 2;
+	info->has_indirect_compute_dispatch = true;
+	/* SI doesn't support unaligned loads. */
+	info->has_unaligned_shader_loads = info->chip_class != SI;
+	/* Disable sparse mappings on SI due to VM faults in CP DMA. Enable them once
+	 * these faults are mitigated in software.
+	 * Disable sparse mappings on GFX9 due to hangs.
+	 */
+	info->has_sparse_vm_mappings =
+		info->chip_class >= CIK && info->chip_class <= VI &&
+		info->drm_minor >= 13;
+	info->has_2d_tiling = true;
+	info->has_read_registers_query = true;
 
 	info->num_render_backends = amdinfo->rb_pipes;
+	/* The value returned by the kernel driver was wrong. */
+	if (info->family == CHIP_KAVERI)
+		info->num_render_backends = 2;
+
 	info->clock_crystal_freq = amdinfo->gpu_counter_freq;
 	if (!info->clock_crystal_freq) {
 		fprintf(stderr, "amdgpu: clock crystal frequency is 0, timestamps will be wrong\n");
@@ -477,7 +512,7 @@ void ac_print_gpu_info(struct radeon_info *info)
 	printf("    vce_fw_version = %u\n", info->vce_fw_version);
 	printf("    vce_harvest_config = %i\n", info->vce_harvest_config);
 
-	printf("Kernel info:\n");
+	printf("Kernel & winsys capabilities:\n");
 	printf("    drm = %i.%i.%i\n", info->drm_major,
 	       info->drm_minor, info->drm_patchlevel);
 	printf("    has_userptr = %i\n", info->has_userptr);
@@ -487,10 +522,24 @@ void ac_print_gpu_info(struct radeon_info *info)
 	printf("    has_ctx_priority = %u\n", info->has_ctx_priority);
 	printf("    has_local_buffers = %u\n", info->has_local_buffers);
 	printf("    kernel_flushes_hdp_before_ib = %u\n", info->kernel_flushes_hdp_before_ib);
+	printf("    htile_cmask_support_1d_tiling = %u\n", info->htile_cmask_support_1d_tiling);
+	printf("    si_TA_CS_BC_BASE_ADDR_allowed = %u\n", info->si_TA_CS_BC_BASE_ADDR_allowed);
+	printf("    has_bo_metadata = %u\n", info->has_bo_metadata);
+	printf("    has_gpu_reset_status_query = %u\n", info->has_gpu_reset_status_query);
+	printf("    has_gpu_reset_counter_query = %u\n", info->has_gpu_reset_counter_query);
+	printf("    has_eqaa_surface_allocator = %u\n", info->has_eqaa_surface_allocator);
+	printf("    has_format_bc1_through_bc7 = %u\n", info->has_format_bc1_through_bc7);
+	printf("    kernel_flushes_tc_l2_after_ib = %u\n", info->kernel_flushes_tc_l2_after_ib);
+	printf("    has_indirect_compute_dispatch = %u\n", info->has_indirect_compute_dispatch);
+	printf("    has_unaligned_shader_loads = %u\n", info->has_unaligned_shader_loads);
+	printf("    has_sparse_vm_mappings = %u\n", info->has_sparse_vm_mappings);
+	printf("    has_2d_tiling = %u\n", info->has_2d_tiling);
+	printf("    has_read_registers_query = %u\n", info->has_read_registers_query);
 
 	printf("Shader core info:\n");
 	printf("    max_shader_clock = %i\n", info->max_shader_clock);
 	printf("    num_good_compute_units = %i\n", info->num_good_compute_units);
+	printf("    num_tcc_blocks = %i\n", info->num_tcc_blocks);
 	printf("    max_se = %i\n", info->max_se);
 	printf("    max_sh_per_se = %i\n", info->max_sh_per_se);
 
@@ -548,5 +597,237 @@ void ac_print_gpu_info(struct radeon_info *info)
 		       1024 << G_0098F8_ROW_SIZE(info->gb_addr_config));
 		printf("    num_lower_pipes = %u (raw)\n",
 		       G_0098F8_NUM_LOWER_PIPES(info->gb_addr_config));
+	}
+}
+
+int
+ac_get_gs_table_depth(enum chip_class chip_class, enum radeon_family family)
+{
+	if (chip_class >= GFX9)
+		return -1;
+
+	switch (family) {
+	case CHIP_OLAND:
+	case CHIP_HAINAN:
+	case CHIP_KAVERI:
+	case CHIP_KABINI:
+	case CHIP_MULLINS:
+	case CHIP_ICELAND:
+	case CHIP_CARRIZO:
+	case CHIP_STONEY:
+		return 16;
+	case CHIP_TAHITI:
+	case CHIP_PITCAIRN:
+	case CHIP_VERDE:
+	case CHIP_BONAIRE:
+	case CHIP_HAWAII:
+	case CHIP_TONGA:
+	case CHIP_FIJI:
+	case CHIP_POLARIS10:
+	case CHIP_POLARIS11:
+	case CHIP_POLARIS12:
+	case CHIP_VEGAM:
+		return 32;
+	default:
+		unreachable("Unknown GPU");
+	}
+}
+
+void
+ac_get_raster_config(struct radeon_info *info,
+		     uint32_t *raster_config_p,
+		     uint32_t *raster_config_1_p)
+{
+	unsigned raster_config, raster_config_1;
+
+	switch (info->family) {
+	/* 1 SE / 1 RB */
+	case CHIP_HAINAN:
+	case CHIP_KABINI:
+	case CHIP_MULLINS:
+	case CHIP_STONEY:
+		raster_config = 0x00000000;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 1 SE / 4 RBs */
+	case CHIP_VERDE:
+		raster_config = 0x0000124a;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 1 SE / 2 RBs (Oland is special) */
+	case CHIP_OLAND:
+		raster_config = 0x00000082;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 1 SE / 2 RBs */
+	case CHIP_KAVERI:
+	case CHIP_ICELAND:
+	case CHIP_CARRIZO:
+		raster_config = 0x00000002;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 2 SEs / 4 RBs */
+	case CHIP_BONAIRE:
+	case CHIP_POLARIS11:
+	case CHIP_POLARIS12:
+		raster_config = 0x16000012;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 2 SEs / 8 RBs */
+	case CHIP_TAHITI:
+	case CHIP_PITCAIRN:
+		raster_config = 0x2a00126a;
+		raster_config_1 = 0x00000000;
+		break;
+	/* 4 SEs / 8 RBs */
+	case CHIP_TONGA:
+	case CHIP_POLARIS10:
+		raster_config = 0x16000012;
+		raster_config_1 = 0x0000002a;
+		break;
+	/* 4 SEs / 16 RBs */
+	case CHIP_HAWAII:
+	case CHIP_FIJI:
+	case CHIP_VEGAM:
+		raster_config = 0x3a00161a;
+		raster_config_1 = 0x0000002e;
+		break;
+	default:
+		fprintf(stderr,
+			"ac: Unknown GPU, using 0 for raster_config\n");
+		raster_config = 0x00000000;
+		raster_config_1 = 0x00000000;
+		break;
+	}
+
+	/* drm/radeon on Kaveri is buggy, so disable 1 RB to work around it.
+	 * This decreases performance by up to 50% when the RB is the bottleneck.
+	 */
+	if (info->family == CHIP_KAVERI && info->drm_major == 2)
+		raster_config = 0x00000000;
+
+	/* Fiji: Old kernels have incorrect tiling config. This decreases
+	 * RB performance by 25%. (it disables 1 RB in the second packer)
+	 */
+	if (info->family == CHIP_FIJI &&
+	    info->cik_macrotile_mode_array[0] == 0x000000e8) {
+		raster_config = 0x16000012;
+		raster_config_1 = 0x0000002a;
+	}
+
+	*raster_config_p = raster_config;
+	*raster_config_1_p = raster_config_1;
+}
+
+void
+ac_get_harvested_configs(struct radeon_info *info,
+			 unsigned raster_config,
+			 unsigned *cik_raster_config_1_p,
+			 unsigned *raster_config_se)
+{
+	unsigned sh_per_se = MAX2(info->max_sh_per_se, 1);
+	unsigned num_se = MAX2(info->max_se, 1);
+	unsigned rb_mask = info->enabled_rb_mask;
+	unsigned num_rb = MIN2(info->num_render_backends, 16);
+	unsigned rb_per_pkr = MIN2(num_rb / num_se / sh_per_se, 2);
+	unsigned rb_per_se = num_rb / num_se;
+	unsigned se_mask[4];
+	unsigned se;
+
+	se_mask[0] = ((1 << rb_per_se) - 1) & rb_mask;
+	se_mask[1] = (se_mask[0] << rb_per_se) & rb_mask;
+	se_mask[2] = (se_mask[1] << rb_per_se) & rb_mask;
+	se_mask[3] = (se_mask[2] << rb_per_se) & rb_mask;
+
+	assert(num_se == 1 || num_se == 2 || num_se == 4);
+	assert(sh_per_se == 1 || sh_per_se == 2);
+	assert(rb_per_pkr == 1 || rb_per_pkr == 2);
+
+
+	if (info->chip_class >= CIK) {
+		unsigned raster_config_1 = *cik_raster_config_1_p;
+		if ((num_se > 2) && ((!se_mask[0] && !se_mask[1]) ||
+				     (!se_mask[2] && !se_mask[3]))) {
+			raster_config_1 &= C_028354_SE_PAIR_MAP;
+
+			if (!se_mask[0] && !se_mask[1]) {
+				raster_config_1 |=
+					S_028354_SE_PAIR_MAP(V_028354_RASTER_CONFIG_SE_PAIR_MAP_3);
+			} else {
+				raster_config_1 |=
+					S_028354_SE_PAIR_MAP(V_028354_RASTER_CONFIG_SE_PAIR_MAP_0);
+			}
+			*cik_raster_config_1_p = raster_config_1;
+		}
+	}
+
+	for (se = 0; se < num_se; se++) {
+		unsigned pkr0_mask = ((1 << rb_per_pkr) - 1) << (se * rb_per_se);
+		unsigned pkr1_mask = pkr0_mask << rb_per_pkr;
+		int idx = (se / 2) * 2;
+
+		raster_config_se[se] = raster_config;
+		if ((num_se > 1) && (!se_mask[idx] || !se_mask[idx + 1])) {
+			raster_config_se[se] &= C_028350_SE_MAP;
+
+			if (!se_mask[idx]) {
+				raster_config_se[se] |=
+					S_028350_SE_MAP(V_028350_RASTER_CONFIG_SE_MAP_3);
+			} else {
+				raster_config_se[se] |=
+					S_028350_SE_MAP(V_028350_RASTER_CONFIG_SE_MAP_0);
+			}
+		}
+
+		pkr0_mask &= rb_mask;
+		pkr1_mask &= rb_mask;
+		if (rb_per_se > 2 && (!pkr0_mask || !pkr1_mask)) {
+			raster_config_se[se] &= C_028350_PKR_MAP;
+
+			if (!pkr0_mask) {
+				raster_config_se[se] |=
+					S_028350_PKR_MAP(V_028350_RASTER_CONFIG_PKR_MAP_3);
+			} else {
+				raster_config_se[se] |=
+					S_028350_PKR_MAP(V_028350_RASTER_CONFIG_PKR_MAP_0);
+			}
+		}
+
+		if (rb_per_se >= 2) {
+			unsigned rb0_mask = 1 << (se * rb_per_se);
+			unsigned rb1_mask = rb0_mask << 1;
+
+			rb0_mask &= rb_mask;
+			rb1_mask &= rb_mask;
+			if (!rb0_mask || !rb1_mask) {
+				raster_config_se[se] &= C_028350_RB_MAP_PKR0;
+
+				if (!rb0_mask) {
+					raster_config_se[se] |=
+						S_028350_RB_MAP_PKR0(V_028350_RASTER_CONFIG_RB_MAP_3);
+				} else {
+					raster_config_se[se] |=
+						S_028350_RB_MAP_PKR0(V_028350_RASTER_CONFIG_RB_MAP_0);
+				}
+			}
+
+			if (rb_per_se > 2) {
+				rb0_mask = 1 << (se * rb_per_se + rb_per_pkr);
+				rb1_mask = rb0_mask << 1;
+				rb0_mask &= rb_mask;
+				rb1_mask &= rb_mask;
+				if (!rb0_mask || !rb1_mask) {
+					raster_config_se[se] &= C_028350_RB_MAP_PKR1;
+
+					if (!rb0_mask) {
+						raster_config_se[se] |=
+							S_028350_RB_MAP_PKR1(V_028350_RASTER_CONFIG_RB_MAP_3);
+					} else {
+						raster_config_se[se] |=
+							S_028350_RB_MAP_PKR1(V_028350_RASTER_CONFIG_RB_MAP_0);
+					}
+				}
+			}
+		}
 	}
 }

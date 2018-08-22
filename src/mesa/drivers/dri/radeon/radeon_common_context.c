@@ -352,7 +352,7 @@ void radeon_prepare_render(radeonContextPtr radeon)
      * that will happen next will probably dirty the front buffer.  So
      * mark it as dirty here.
      */
-    if (radeon->is_front_buffer_rendering)
+    if (_mesa_is_front_buffer_drawing(radeon->glCtx.DrawBuffer))
 	radeon->front_buffer_dirty = GL_TRUE;
 }
 
@@ -389,10 +389,10 @@ radeon_update_renderbuffers(__DRIcontext *context, __DRIdrawable *drawable,
 		struct radeon_renderbuffer *stencil_rb;
 
 		i = 0;
-		if ((front_only || radeon->is_front_buffer_rendering ||
-		     radeon->is_front_buffer_reading ||
-		     !draw->color_rb[1])
-		    && draw->color_rb[0]) {
+                if ((front_only || _mesa_is_front_buffer_drawing(&draw->base) ||
+                     _mesa_is_front_buffer_reading(&draw->base) ||
+                     !draw->color_rb[1])
+                    && draw->color_rb[0]) {
 			attachments[i++] = __DRI_BUFFER_FRONT_LEFT;
 			attachments[i++] = radeon_bits_per_pixel(draw->color_rb[0]);
 		}

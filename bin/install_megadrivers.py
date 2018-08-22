@@ -48,23 +48,23 @@ def main():
         os.makedirs(to)
     shutil.copy(args.megadriver, master)
 
-    for each in args.drivers:
-        driver = os.path.join(to, each)
+    for driver in args.drivers:
+        abs_driver = os.path.join(to, driver)
 
-        if os.path.lexists(driver):
-            os.unlink(driver)
-        print('installing {} to {}'.format(args.megadriver, driver))
-        os.link(master, driver)
+        if os.path.lexists(abs_driver):
+            os.unlink(abs_driver)
+        print('installing {} to {}'.format(args.megadriver, abs_driver))
+        os.link(master, abs_driver)
 
         try:
             ret = os.getcwd()
             os.chdir(to)
 
-            name, ext = os.path.splitext(each)
+            name, ext = os.path.splitext(driver)
             while ext != '.so':
                 if os.path.lexists(name):
                     os.unlink(name)
-                os.symlink(each, name)
+                os.symlink(driver, name)
                 name, ext = os.path.splitext(name)
         finally:
             os.chdir(ret)

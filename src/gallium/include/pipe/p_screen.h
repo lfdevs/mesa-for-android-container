@@ -132,6 +132,17 @@ struct pipe_screen {
 			    void *ret);
 
    /**
+    * Get the sample pixel grid's size. This function requires
+    * PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS to be callable.
+    *
+    * \param sample_count - total number of samples
+    * \param out_width - the width of the pixel grid
+    * \param out_height - the height of the pixel grid
+    */
+   void (*get_sample_pixel_grid)(struct pipe_screen *, unsigned sample_count,
+                                 unsigned *out_width, unsigned *out_height);
+
+   /**
     * Query a timestamp in nanoseconds. The returned value should match
     * PIPE_QUERY_TIMESTAMP. This function returns immediately and doesn't
     * wait for rendering to complete (which cannot be achieved with queries).
@@ -157,6 +168,7 @@ struct pipe_screen {
                                    enum pipe_format format,
                                    enum pipe_texture_target target,
                                    unsigned sample_count,
+                                   unsigned storage_sample_count,
                                    unsigned bindings );
 
    /**
@@ -191,7 +203,7 @@ struct pipe_screen {
     * another process by first creating a pipe texture and then calling
     * resource_get_handle.
     *
-    * NOTE: in the case of DRM_API_HANDLE_TYPE_FD handles, the caller
+    * NOTE: in the case of WINSYS_HANDLE_TYPE_FD handles, the caller
     * retains ownership of the FD.  (This is consistent with
     * EGL_EXT_image_dma_buf_import)
     *
@@ -238,7 +250,7 @@ struct pipe_screen {
     * the resource into a format compatible for sharing. The use case is
     * OpenGL-OpenCL interop. The context parameter is allowed to be NULL.
     *
-    * NOTE: in the case of DRM_API_HANDLE_TYPE_FD handles, the caller
+    * NOTE: in the case of WINSYS_HANDLE_TYPE_FD handles, the caller
     * takes ownership of the FD.  (This is consistent with
     * EGL_MESA_image_dma_buf_export)
     *
@@ -389,7 +401,7 @@ struct pipe_screen {
     * Then the underlying memory object is then exported through interfaces
     * compatible with EXT_external_resources.
     *
-    * Note: For DRM_API_HANDLE_TYPE_FD handles, the caller retains ownership
+    * Note: For WINSYS_HANDLE_TYPE_FD handles, the caller retains ownership
     * of the fd.
     *
     * \param handle  A handle representing the memory object to import

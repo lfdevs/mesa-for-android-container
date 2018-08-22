@@ -343,8 +343,9 @@ static inline bool
 CheckSurfaceParams(struct pipe_screen *screen,
                    const struct pipe_resource *templ)
 {
-   return screen->is_format_supported(
-         screen, templ->format, templ->target, templ->nr_samples, templ->bind);
+   return screen->is_format_supported(screen, templ->format, templ->target,
+                                      templ->nr_samples,
+                                      templ->nr_storage_samples, templ->bind);
 }
 
 typedef struct

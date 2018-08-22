@@ -37,6 +37,7 @@
 #include "v3d_decoder.h"
 #include "v3d_packet_helpers.h"
 #include "v3d_xml.h"
+#include "broadcom/clif/clif_private.h"
 
 struct v3d_spec {
         uint32_t ver;
@@ -58,6 +59,7 @@ struct location {
 
 struct parser_context {
         XML_Parser parser;
+        const struct v3d_device_info *devinfo;
         int foo;
         struct location loc;
 
@@ -68,6 +70,9 @@ struct parser_context {
         struct v3d_value *values[256];
 
         struct v3d_spec *spec;
+
+        int parse_depth;
+        int parse_skip_depth;
 };
 
 const char *
@@ -311,6 +316,8 @@ string_to_type(struct parser_context *ctx, const char *s)
                 return (struct v3d_type) { .kind = V3D_TYPE_BOOL };
         else if (strcmp(s, "float") == 0)
                 return (struct v3d_type) { .kind = V3D_TYPE_FLOAT };
+        else if (strcmp(s, "f187") == 0)
+                return (struct v3d_type) { .kind = V3D_TYPE_F187 };
         else if (strcmp(s, "address") == 0)
                 return (struct v3d_type) { .kind = V3D_TYPE_ADDRESS };
         else if (strcmp(s, "offset") == 0)
@@ -359,6 +366,9 @@ create_field(struct parser_context *ctx, const char **atts)
                 else if (strcmp(atts[i], "default") == 0) {
                         field->has_default = true;
                         field->default_value = strtoul(atts[i + 1], &p, 0);
+                } else if (strcmp(atts[i], "minus_one") == 0) {
+                        assert(strcmp(atts[i + 1], "true") == 0);
+                        field->minus_one = true;
                 }
         }
 
@@ -411,6 +421,25 @@ set_group_opcode(struct v3d_group *group, const char **atts)
         return;
 }
 
+static bool
+ver_in_range(int ver, int min_ver, int max_ver)
+{
+        return ((min_ver == 0 || ver >= min_ver) &&
+                (max_ver == 0 || ver <= max_ver));
+}
+
+static bool
+skip_if_ver_mismatch(struct parser_context *ctx, int min_ver, int max_ver)
+{
+        if (!ctx->parse_skip_depth && !ver_in_range(ctx->devinfo->ver,
+                                                    min_ver, max_ver)) {
+                assert(ctx->parse_depth != 0);
+                ctx->parse_skip_depth = ctx->parse_depth;
+        }
+
+        return ctx->parse_skip_depth;
+}
+
 static void
 start_element(void *data, const char *element_name, const char **atts)
 {
@@ -418,19 +447,34 @@ start_element(void *data, const char *element_name, const char **atts)
         int i;
         const char *name = NULL;
         const char *ver = NULL;
+        int min_ver = 0;
+        int max_ver = 0;
 
         ctx->loc.line_number = XML_GetCurrentLineNumber(ctx->parser);
 
         for (i = 0; atts[i]; i += 2) {
-                if (strcmp(atts[i], "name") == 0)
+                if (strcmp(atts[i], "shortname") == 0)
+                        name = atts[i + 1];
+                else if (strcmp(atts[i], "name") == 0 && !name)
                         name = atts[i + 1];
                 else if (strcmp(atts[i], "gen") == 0)
                         ver = atts[i + 1];
+                else if (strcmp(atts[i], "min_ver") == 0)
+                        min_ver = strtoul(atts[i + 1], NULL, 0);
+                else if (strcmp(atts[i], "max_ver") == 0)
+                        max_ver = strtoul(atts[i + 1], NULL, 0);
         }
+
+        if (skip_if_ver_mismatch(ctx, min_ver, max_ver))
+                goto skip;
 
         if (strcmp(element_name, "vcxml") == 0) {
                 if (ver == NULL)
                         fail(&ctx->loc, "no ver given");
+
+                /* Make sure that we picked an XML that matched our version.
+                 */
+                assert(ver_in_range(ctx->devinfo->ver, min_ver, max_ver));
 
                 int major, minor;
                 int n = sscanf(ver, "%d.%d", &major, &minor);
@@ -467,6 +511,15 @@ start_element(void *data, const char *element_name, const char **atts)
                 assert(ctx->nvalues < ARRAY_SIZE(ctx->values));
         }
 
+skip:
+        ctx->parse_depth++;
+}
+
+static int
+field_offset_compare(const void *a, const void *b)
+{
+        return ((*(const struct v3d_field **)a)->start -
+                (*(const struct v3d_field **)b)->start);
 }
 
 static void
@@ -474,6 +527,14 @@ end_element(void *data, const char *name)
 {
         struct parser_context *ctx = data;
         struct v3d_spec *spec = ctx->spec;
+
+        ctx->parse_depth--;
+
+        if (ctx->parse_skip_depth) {
+                if (ctx->parse_skip_depth == ctx->parse_depth)
+                        ctx->parse_skip_depth = 0;
+                return;
+        }
 
         if (strcmp(name, "packet") == 0 ||
             strcmp(name, "struct") == 0 ||
@@ -498,6 +559,13 @@ end_element(void *data, const char *name)
                         spec->structs[spec->nstructs++] = group;
                 else if (strcmp(name, "register") == 0)
                         spec->registers[spec->nregisters++] = group;
+
+                /* Sort the fields in increasing offset order.  The XML might
+                 * be specified in any order, but we'll want to iterate from
+                 * the bottom.
+                 */
+                qsort(group->fields, group->nfields, sizeof(*group->fields),
+                      field_offset_compare);
 
                 assert(spec->ncommands < ARRAY_SIZE(spec->commands));
                 assert(spec->nstructs < ARRAY_SIZE(spec->structs));
@@ -586,10 +654,14 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
         uint32_t text_offset = 0, text_length = 0, total_length;
 
         for (int i = 0; i < ARRAY_SIZE(genxml_files_table); i++) {
-                if (genxml_files_table[i].gen_10 == devinfo->ver) {
+                if (i != 0) {
+                        assert(genxml_files_table[i - 1].gen_10 <
+                               genxml_files_table[i].gen_10);
+                }
+
+                if (genxml_files_table[i].gen_10 <= devinfo->ver) {
                         text_offset = genxml_files_table[i].offset;
                         text_length = genxml_files_table[i].length;
-                        break;
                 }
         }
 
@@ -600,6 +672,7 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
 
         memset(&ctx, 0, sizeof ctx);
         ctx.parser = XML_ParserCreate(NULL);
+        ctx.devinfo = devinfo;
         XML_SetUserData(ctx.parser, &ctx);
         if (ctx.parser == NULL) {
                 fprintf(stderr, "failed to create parser\n");
@@ -687,14 +760,12 @@ v3d_group_get_length(struct v3d_group *group)
 void
 v3d_field_iterator_init(struct v3d_field_iterator *iter,
                         struct v3d_group *group,
-                        const uint8_t *p,
-                        bool print_colors)
+                        const uint8_t *p)
 {
         memset(iter, 0, sizeof(*iter));
 
         iter->group = group;
         iter->p = p;
-        iter->print_colors = print_colors;
 }
 
 static const char *
@@ -763,7 +834,7 @@ iter_advance_field(struct v3d_field_iterator *iter)
 
         iter->field = iter->group->fields[iter->field_iter++];
         if (iter->field->name)
-                strncpy(iter->name, iter->field->name, sizeof(iter->name));
+                snprintf(iter->name, sizeof(iter->name), "%s", iter->field->name);
         else
                 memset(iter->name, 0, sizeof(iter->name));
         iter->offset = iter_group_offset_bits(iter, iter->group_iter) / 8 +
@@ -774,7 +845,7 @@ iter_advance_field(struct v3d_field_iterator *iter)
 }
 
 bool
-v3d_field_iterator_next(struct v3d_field_iterator *iter)
+v3d_field_iterator_next(struct clif_dump *clif, struct v3d_field_iterator *iter)
 {
         if (!iter_advance_field(iter))
                 return false;
@@ -786,33 +857,64 @@ v3d_field_iterator_next(struct v3d_field_iterator *iter)
         int s = group_member_offset + iter->field->start;
         int e = group_member_offset + iter->field->end;
 
+        assert(!iter->field->minus_one ||
+               iter->field->type.kind == V3D_TYPE_INT ||
+               iter->field->type.kind == V3D_TYPE_UINT);
+
         switch (iter->field->type.kind) {
         case V3D_TYPE_UNKNOWN:
         case V3D_TYPE_INT: {
                 uint32_t value = __gen_unpack_sint(iter->p, s, e);
+                if (iter->field->minus_one)
+                        value++;
                 snprintf(iter->value, sizeof(iter->value), "%d", value);
                 enum_name = v3d_get_enum_name(&iter->field->inline_enum, value);
                 break;
         }
         case V3D_TYPE_UINT: {
                 uint32_t value = __gen_unpack_uint(iter->p, s, e);
+                if (iter->field->minus_one)
+                        value++;
+                if (strcmp(iter->field->name, "Vec size") == 0 && value == 0)
+                        value = 1 << (e - s);
                 snprintf(iter->value, sizeof(iter->value), "%u", value);
                 enum_name = v3d_get_enum_name(&iter->field->inline_enum, value);
                 break;
         }
-        case V3D_TYPE_BOOL: {
-                const char *true_string =
-                        iter->print_colors ? "\e[0;35mtrue\e[0m" : "true";
+        case V3D_TYPE_BOOL:
                 snprintf(iter->value, sizeof(iter->value), "%s",
                          __gen_unpack_uint(iter->p, s, e) ?
-                         true_string : "false");
+                         "1 /* true */" : "0 /* false */");
                 break;
-        }
         case V3D_TYPE_FLOAT:
                 snprintf(iter->value, sizeof(iter->value), "%f",
                          __gen_unpack_float(iter->p, s, e));
                 break;
-        case V3D_TYPE_ADDRESS:
+
+        case V3D_TYPE_F187:
+                snprintf(iter->value, sizeof(iter->value), "%f",
+                         __gen_unpack_f187(iter->p, s, e));
+                break;
+
+        case V3D_TYPE_ADDRESS: {
+                uint32_t addr =
+                        __gen_unpack_uint(iter->p, s, e) << (31 - (e - s));
+                struct clif_bo *bo = clif_lookup_bo(clif, addr);
+                if (bo) {
+                        snprintf(iter->value, sizeof(iter->value),
+                                 "[%s+0x%08x] /* 0x%08x */",
+                                 bo->name, addr - bo->offset, addr);
+                } else if (addr) {
+                        snprintf(iter->value, sizeof(iter->value),
+                                 "/* XXX: BO unknown */ 0x%08x", addr);
+                } else {
+                        snprintf(iter->value, sizeof(iter->value),
+                                 "[null]");
+                }
+
+                break;
+        }
+
         case V3D_TYPE_OFFSET:
                 snprintf(iter->value, sizeof(iter->value), "0x%08"PRIx64,
                          __gen_unpack_uint(iter->p, s, e) << (31 - (e - s)));
@@ -825,14 +927,24 @@ v3d_field_iterator_next(struct v3d_field_iterator *iter)
                                              iter->field->type.v3d_struct->name);
                 break;
         case V3D_TYPE_SFIXED:
-                snprintf(iter->value, sizeof(iter->value), "%f",
-                         __gen_unpack_sfixed(iter->p, s, e,
-                                             iter->field->type.f));
+                if (clif->pretty) {
+                        snprintf(iter->value, sizeof(iter->value), "%f",
+                                 __gen_unpack_sfixed(iter->p, s, e,
+                                                     iter->field->type.f));
+                } else {
+                        snprintf(iter->value, sizeof(iter->value), "%u",
+                                 (unsigned)__gen_unpack_uint(iter->p, s, e));
+                }
                 break;
         case V3D_TYPE_UFIXED:
-                snprintf(iter->value, sizeof(iter->value), "%f",
-                         __gen_unpack_ufixed(iter->p, s, e,
-                                             iter->field->type.f));
+                if (clif->pretty) {
+                        snprintf(iter->value, sizeof(iter->value), "%f",
+                                 __gen_unpack_ufixed(iter->p, s, e,
+                                                     iter->field->type.f));
+                } else {
+                        snprintf(iter->value, sizeof(iter->value), "%u",
+                                 (unsigned)__gen_unpack_uint(iter->p, s, e));
+                }
                 break;
         case V3D_TYPE_MBO:
                 break;
@@ -853,26 +965,40 @@ v3d_field_iterator_next(struct v3d_field_iterator *iter)
         if (enum_name) {
                 int length = strlen(iter->value);
                 snprintf(iter->value + length, sizeof(iter->value) - length,
-                         " (%s)", enum_name);
+                         " /* %s */", enum_name);
         }
 
         return true;
 }
 
 void
-v3d_print_group(FILE *outfile, struct v3d_group *group,
-                uint64_t offset, const uint8_t *p, bool color)
+v3d_print_group(struct clif_dump *clif, struct v3d_group *group,
+                uint64_t offset, const uint8_t *p)
 {
         struct v3d_field_iterator iter;
 
-        v3d_field_iterator_init(&iter, group, p, color);
-        while (v3d_field_iterator_next(&iter)) {
-                fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
+        v3d_field_iterator_init(&iter, group, p);
+        while (v3d_field_iterator_next(clif, &iter)) {
+                /* Clif parsing uses the packet name, and expects no
+                 * sub-id.
+                 */
+                if (strcmp(iter.field->name, "sub-id") == 0 ||
+                    strcmp(iter.field->name, "unused") == 0 ||
+                    strcmp(iter.field->name, "Pad") == 0)
+                        continue;
+
+                if (clif->pretty) {
+                        fprintf(clif->out, "    %s: %s\n",
+                                iter.name, iter.value);
+                } else {
+                        fprintf(clif->out, "  /* %30s: */ %s\n",
+                                iter.name, iter.value);
+                }
                 if (iter.struct_desc) {
                         uint64_t struct_offset = offset + iter.offset;
-                        v3d_print_group(outfile, iter.struct_desc,
+                        v3d_print_group(clif, iter.struct_desc,
                                         struct_offset,
-                                        &p[iter.offset], color);
+                                        &p[iter.offset]);
                 }
         }
 }

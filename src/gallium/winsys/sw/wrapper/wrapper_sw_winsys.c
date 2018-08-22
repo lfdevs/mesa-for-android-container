@@ -92,7 +92,7 @@ wsw_is_dt_format_supported(struct sw_winsys *ws,
    struct wrapper_sw_winsys *wsw = wrapper_sw_winsys(ws);
 
    return wsw->screen->is_format_supported(wsw->screen, format,
-                                           PIPE_TEXTURE_2D, 0,
+                                           PIPE_TEXTURE_2D, 0, 0,
                                            PIPE_BIND_RENDER_TARGET |
                                            PIPE_BIND_DISPLAY_TARGET);
 }

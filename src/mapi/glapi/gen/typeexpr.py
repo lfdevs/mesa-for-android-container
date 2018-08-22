@@ -24,7 +24,9 @@
 # Authors:
 #    Ian Romanick <idr@us.ibm.com>
 
-import string, copy
+from __future__ import print_function
+
+import copy
 
 class type_node(object):
     def __init__(self):
@@ -124,7 +126,7 @@ class type_expression(object):
 
         # Replace '*' with ' * ' in type_string.  Then, split the string
         # into tokens, separated by spaces.
-        tokens = string.split( string.replace( type_string, "*", " * " ) )
+        tokens = type_string.replace("*", " * ").split()
 
         const = 0
         t = None
@@ -286,6 +288,6 @@ if __name__ == '__main__':
     create_initial_types()
 
     for t in types_to_try:
-        print 'Trying "%s"...' % (t)
+        print('Trying "%s"...' % (t))
         te = type_expression( t )
-        print 'Got "%s" (%u, %u).' % (te.string(), te.get_stack_size(), te.get_element_size())
+        print('Got "%s" (%u, %u).' % (te.string(), te.get_stack_size(), te.get_element_size()))

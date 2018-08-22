@@ -488,7 +488,7 @@ struct r600_viewports {
 };
 
 struct r600_ring {
-	struct radeon_winsys_cs		*cs;
+	struct radeon_cmdbuf		*cs;
 	void (*flush)(void *ctx, unsigned flags,
 		      struct pipe_fence_handle **fence);
 };
@@ -708,7 +708,7 @@ struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 const char *r600_get_llvm_processor_name(enum radeon_family family);
 void r600_need_dma_space(struct r600_common_context *ctx, unsigned num_dw,
 			 struct r600_resource *dst, struct r600_resource *src);
-void radeon_save_cs(struct radeon_winsys *ws, struct radeon_winsys_cs *cs,
+void radeon_save_cs(struct radeon_winsys *ws, struct radeon_cmdbuf *cs,
 		    struct radeon_saved_cs *saved, bool get_buffer_list);
 void radeon_clear_saved_cs(struct radeon_saved_cs *saved);
 bool r600_check_device_reset(struct r600_common_context *rctx);
@@ -799,7 +799,7 @@ extern const unsigned eg_max_dist_4x;
 void cayman_get_sample_position(struct pipe_context *ctx, unsigned sample_count,
 				unsigned sample_index, float *out_value);
 void cayman_init_msaa(struct pipe_context *ctx);
-void cayman_emit_msaa_state(struct radeon_winsys_cs *cs, int nr_samples,
+void cayman_emit_msaa_state(struct radeon_cmdbuf *cs, int nr_samples,
 			    int ps_iter_samples, int overrast_samples);
 
 

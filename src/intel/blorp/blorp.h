@@ -72,6 +72,11 @@ enum blorp_batch_flags {
 
    /* This flag indicates that the blorp call should be predicated. */
    BLORP_BATCH_PREDICATE_ENABLE      = (1 << 1),
+
+   /* This flag indicates that blorp should *not* update the indirect clear
+    * color buffer.
+    */
+   BLORP_BATCH_NO_UPDATE_CLEAR_COLOR = (1 << 2),
 };
 
 struct blorp_batch {
@@ -114,6 +119,14 @@ struct blorp_surf
    uint32_t tile_x_sa, tile_y_sa;
 };
 
+enum blorp_filter {
+   BLORP_FILTER_NONE,
+   BLORP_FILTER_NEAREST,
+   BLORP_FILTER_BILINEAR,
+   BLORP_FILTER_SAMPLE_0,
+   BLORP_FILTER_AVERAGE,
+};
+
 void
 blorp_blit(struct blorp_batch *batch,
            const struct blorp_surf *src_surf,
@@ -126,7 +139,8 @@ blorp_blit(struct blorp_batch *batch,
            float src_x1, float src_y1,
            float dst_x0, float dst_y0,
            float dst_x1, float dst_y1,
-           uint32_t filter, bool mirror_x, bool mirror_y);
+           enum blorp_filter filter,
+           bool mirror_x, bool mirror_y);
 
 void
 blorp_copy(struct blorp_batch *batch,

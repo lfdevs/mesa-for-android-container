@@ -343,6 +343,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		   return 330;
 		return 140;
 
+	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
+		return 140;
+
 	/* Supported except the original R600. */
 	case PIPE_CAP_INDEP_BLEND_ENABLE:
 	case PIPE_CAP_INDEP_BLEND_FUNC:
@@ -419,6 +422,14 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_FENCE_SIGNAL:
 	case PIPE_CAP_CONSTBUF0_FLAGS:
 	case PIPE_CAP_PACKED_UNIFORMS:
+	case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
+	case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
+	case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+	case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
 		return 0;
 
 	case PIPE_CAP_DOUBLES:
@@ -460,7 +471,8 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return family >= CHIP_CEDAR ? 4 : 1;
 
 	case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
-		return 2047;
+		/* Should be 2047, but 2048 is a requirement for GL 4.4 */
+		return 2048;
 
 	/* Texturing. */
 	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
@@ -642,6 +654,8 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		if (rscreen->b.family >= CHIP_CEDAR && rscreen->has_atomics) {
 			return EG_MAX_ATOMIC_BUFFERS;
 		}
+		return 0;
+	case PIPE_SHADER_CAP_SCALAR_ISA:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		/* due to a bug in the shader compiler, some loops hang

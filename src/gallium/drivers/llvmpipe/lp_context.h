@@ -136,7 +136,6 @@ struct llvmpipe_context {
    struct blitter_context *blitter;
 
    unsigned tex_timestamp;
-   boolean no_rast;
 
    /** List of all fragment shader variants */
    struct lp_fs_variant_list_item fs_variants_list;

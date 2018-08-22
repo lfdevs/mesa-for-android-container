@@ -1,30 +1,30 @@
 /****************************************************************************
-* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file api.cpp
-*
-* @brief API implementation
-*
-******************************************************************************/
+ * Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file api.cpp
+ *
+ * @brief API implementation
+ *
+ ******************************************************************************/
 
 #include <cfloat>
 #include <cmath>
@@ -42,19 +42,20 @@
 #include "core/tilemgr.h"
 #include "core/clip.h"
 #include "core/utils.h"
+#include "core/tileset.h"
 
 #include "common/os.h"
 
-static const SWR_RECT g_MaxScissorRect = { 0, 0, KNOB_MAX_SCISSOR_X, KNOB_MAX_SCISSOR_Y };
+static const SWR_RECT g_MaxScissorRect = {0, 0, KNOB_MAX_SCISSOR_X, KNOB_MAX_SCISSOR_Y};
 
-void SetupDefaultState(SWR_CONTEXT *pContext);
+void SetupDefaultState(SWR_CONTEXT* pContext);
 
 static INLINE SWR_CONTEXT* GetContext(HANDLE hContext)
 {
     return (SWR_CONTEXT*)hContext;
 }
 
-void WakeAllThreads(SWR_CONTEXT *pContext)
+void WakeAllThreads(SWR_CONTEXT* pContext)
 {
     pContext->FifosNotEmpty.notify_all();
 }
@@ -62,15 +63,14 @@ void WakeAllThreads(SWR_CONTEXT *pContext)
 //////////////////////////////////////////////////////////////////////////
 /// @brief Create SWR Context.
 /// @param pCreateInfo - pointer to creation info.
-HANDLE SwrCreateContext(
-    SWR_CREATECONTEXT_INFO* pCreateInfo)
+HANDLE SwrCreateContext(SWR_CREATECONTEXT_INFO* pCreateInfo)
 {
     RDTSC_RESET();
     RDTSC_INIT(0);
 
     void* pContextMem = AlignedMalloc(sizeof(SWR_CONTEXT), KNOB_SIMD_WIDTH * 4);
     memset(pContextMem, 0, sizeof(SWR_CONTEXT));
-    SWR_CONTEXT *pContext = new (pContextMem) SWR_CONTEXT();
+    SWR_CONTEXT* pContext = new (pContextMem) SWR_CONTEXT();
 
     pContext->privateStateSize = pCreateInfo->privateStateSize;
 
@@ -83,8 +83,10 @@ HANDLE SwrCreateContext(
     pContext->dcRing.Init(pContext->MAX_DRAWS_IN_FLIGHT);
     pContext->dsRing.Init(pContext->MAX_DRAWS_IN_FLIGHT);
 
-    pContext->pMacroTileManagerArray = (MacroTileMgr*)AlignedMalloc(sizeof(MacroTileMgr) * pContext->MAX_DRAWS_IN_FLIGHT, 64);
-    pContext->pDispatchQueueArray = (DispatchQueue*)AlignedMalloc(sizeof(DispatchQueue) * pContext->MAX_DRAWS_IN_FLIGHT, 64);
+    pContext->pMacroTileManagerArray =
+        (MacroTileMgr*)AlignedMalloc(sizeof(MacroTileMgr) * pContext->MAX_DRAWS_IN_FLIGHT, 64);
+    pContext->pDispatchQueueArray =
+        (DispatchQueue*)AlignedMalloc(sizeof(DispatchQueue) * pContext->MAX_DRAWS_IN_FLIGHT, 64);
 
     for (uint32_t dc = 0; dc < pContext->MAX_DRAWS_IN_FLIGHT; ++dc)
     {
@@ -101,14 +103,14 @@ HANDLE SwrCreateContext(
     }
     else
     {
-        pContext->threadInfo.MAX_WORKER_THREADS         = KNOB_MAX_WORKER_THREADS;
-        pContext->threadInfo.BASE_NUMA_NODE             = KNOB_BASE_NUMA_NODE;
-        pContext->threadInfo.BASE_CORE                  = KNOB_BASE_CORE;
-        pContext->threadInfo.BASE_THREAD                = KNOB_BASE_THREAD;
-        pContext->threadInfo.MAX_NUMA_NODES             = KNOB_MAX_NUMA_NODES;
-        pContext->threadInfo.MAX_CORES_PER_NUMA_NODE    = KNOB_MAX_CORES_PER_NUMA_NODE;
-        pContext->threadInfo.MAX_THREADS_PER_CORE       = KNOB_MAX_THREADS_PER_CORE;
-        pContext->threadInfo.SINGLE_THREADED            = KNOB_SINGLE_THREADED;
+        pContext->threadInfo.MAX_WORKER_THREADS      = KNOB_MAX_WORKER_THREADS;
+        pContext->threadInfo.BASE_NUMA_NODE          = KNOB_BASE_NUMA_NODE;
+        pContext->threadInfo.BASE_CORE               = KNOB_BASE_CORE;
+        pContext->threadInfo.BASE_THREAD             = KNOB_BASE_THREAD;
+        pContext->threadInfo.MAX_NUMA_NODES          = KNOB_MAX_NUMA_NODES;
+        pContext->threadInfo.MAX_CORES_PER_NUMA_NODE = KNOB_MAX_CORES_PER_NUMA_NODE;
+        pContext->threadInfo.MAX_THREADS_PER_CORE    = KNOB_MAX_THREADS_PER_CORE;
+        pContext->threadInfo.SINGLE_THREADED         = KNOB_SINGLE_THREADED;
     }
 
     if (pCreateInfo->pApiThreadInfo)
@@ -117,9 +119,9 @@ HANDLE SwrCreateContext(
     }
     else
     {
-        pContext->apiThreadInfo.bindAPIThread0          = true;
-        pContext->apiThreadInfo.numAPIReservedThreads   = 1;
-        pContext->apiThreadInfo.numAPIThreadsPerCore    = 1;
+        pContext->apiThreadInfo.bindAPIThread0        = true;
+        pContext->apiThreadInfo.numAPIReservedThreads = 1;
+        pContext->apiThreadInfo.numAPIThreadsPerCore  = 1;
     }
 
     if (pCreateInfo->pWorkerPrivateState)
@@ -139,13 +141,20 @@ HANDLE SwrCreateContext(
         BindApiThread(pContext, 0);
     }
 
+    if (pContext->threadInfo.SINGLE_THREADED)
+    {
+        pContext->pSingleThreadLockedTiles = new TileSet();
+    }
+
     pContext->ppScratch = new uint8_t*[pContext->NumWorkerThreads];
-    pContext->pStats = (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * pContext->NumWorkerThreads, 64);
+    pContext->pStats =
+        (SWR_STATS*)AlignedMalloc(sizeof(SWR_STATS) * pContext->NumWorkerThreads, 64);
 
 #if defined(KNOB_ENABLE_AR)
     // Setup ArchRast thread contexts which includes +1 for API thread.
-    pContext->pArContext = new HANDLE[pContext->NumWorkerThreads+1];
-    pContext->pArContext[pContext->NumWorkerThreads] = ArchRast::CreateThreadContext(ArchRast::AR_THREAD::API);
+    pContext->pArContext = new HANDLE[pContext->NumWorkerThreads + 1];
+    pContext->pArContext[pContext->NumWorkerThreads] =
+        ArchRast::CreateThreadContext(ArchRast::AR_THREAD::API);
 #endif
 
     // Allocate scratch space for workers.
@@ -153,14 +162,17 @@ HANDLE SwrCreateContext(
     for (uint32_t i = 0; i < pContext->NumWorkerThreads; ++i)
     {
 #if defined(_WIN32)
-        uint32_t numaNode = pContext->threadPool.pThreadData ?
-            pContext->threadPool.pThreadData[i].numaId : 0;
-        pContext->ppScratch[i] = (uint8_t*)VirtualAllocExNuma(
-            GetCurrentProcess(), nullptr, 32 * sizeof(KILOBYTE),
-            MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE,
-            numaNode);
+        uint32_t numaNode =
+            pContext->threadPool.pThreadData ? pContext->threadPool.pThreadData[i].numaId : 0;
+        pContext->ppScratch[i] = (uint8_t*)VirtualAllocExNuma(GetCurrentProcess(),
+                                                              nullptr,
+                                                              32 * sizeof(KILOBYTE),
+                                                              MEM_RESERVE | MEM_COMMIT,
+                                                              PAGE_READWRITE,
+                                                              numaNode);
 #else
-        pContext->ppScratch[i] = (uint8_t*)AlignedMalloc(32 * sizeof(KILOBYTE), KNOB_SIMD_WIDTH * 4);
+        pContext->ppScratch[i] =
+            (uint8_t*)AlignedMalloc(32 * sizeof(KILOBYTE), KNOB_SIMD_WIDTH * 4);
 #endif
 
 #if defined(KNOB_ENABLE_AR)
@@ -181,13 +193,13 @@ HANDLE SwrCreateContext(
     pContext->pHotTileMgr = new HotTileMgr();
 
     // initialize callback functions
-    pContext->pfnLoadTile = pCreateInfo->pfnLoadTile;
-    pContext->pfnStoreTile = pCreateInfo->pfnStoreTile;
-    pContext->pfnClearTile = pCreateInfo->pfnClearTile;
+    pContext->pfnLoadTile            = pCreateInfo->pfnLoadTile;
+    pContext->pfnStoreTile           = pCreateInfo->pfnStoreTile;
+    pContext->pfnClearTile           = pCreateInfo->pfnClearTile;
     pContext->pfnUpdateSoWriteOffset = pCreateInfo->pfnUpdateSoWriteOffset;
-    pContext->pfnUpdateStats = pCreateInfo->pfnUpdateStats;
-    pContext->pfnUpdateStatsFE = pCreateInfo->pfnUpdateStatsFE;
-    
+    pContext->pfnUpdateStats         = pCreateInfo->pfnUpdateStats;
+    pContext->pfnUpdateStatsFE       = pCreateInfo->pfnUpdateStatsFE;
+
 
     // pass pointer to bucket manager back to caller
 #ifdef KNOB_ENABLE_RDTSC
@@ -206,11 +218,11 @@ void CopyState(DRAW_STATE& dst, const DRAW_STATE& src)
     memcpy(&dst.state, &src.state, sizeof(API_STATE));
 }
 
-template<bool IsDraw>
-void QueueWork(SWR_CONTEXT *pContext)
+template <bool IsDraw>
+void QueueWork(SWR_CONTEXT* pContext)
 {
-    DRAW_CONTEXT* pDC = pContext->pCurDrawContext;
-    uint32_t dcIndex = pDC->drawId % pContext->MAX_DRAWS_IN_FLIGHT;
+    DRAW_CONTEXT* pDC     = pContext->pCurDrawContext;
+    uint32_t      dcIndex = pDC->drawId % pContext->MAX_DRAWS_IN_FLIGHT;
 
     if (IsDraw)
     {
@@ -243,9 +255,10 @@ void QueueWork(SWR_CONTEXT *pContext)
 
         if (IsDraw)
         {
-            uint32_t curDraw[2] = { pContext->pCurDrawContext->drawId, pContext->pCurDrawContext->drawId };
+            uint32_t curDraw[2] = {pContext->pCurDrawContext->drawId,
+                                   pContext->pCurDrawContext->drawId};
             WorkOnFifoFE(pContext, 0, curDraw[0]);
-            WorkOnFifoBE(pContext, 0, curDraw[1], pContext->singleThreadLockedTiles, 0, 0);
+            WorkOnFifoBE(pContext, 0, curDraw[1], *pContext->pSingleThreadLockedTiles, 0, 0);
         }
         else
         {
@@ -253,8 +266,11 @@ void QueueWork(SWR_CONTEXT *pContext)
             WorkOnCompute(pContext, 0, curDispatch);
         }
 
-        // Dequeue the work here, if not already done, since we're single threaded (i.e. no workers).
-        while (CompleteDrawContext(pContext, pContext->pCurDrawContext) > 0) {}
+        // Dequeue the work here, if not already done, since we're single threaded (i.e. no
+        // workers).
+        while (CompleteDrawContext(pContext, pContext->pCurDrawContext) > 0)
+        {
+        }
 
         // restore csr
         _mm_setcsr(mxcsr);
@@ -266,9 +282,10 @@ void QueueWork(SWR_CONTEXT *pContext)
         RDTSC_END(APIDrawWakeAllThreads, 1);
     }
 
-    // Set current draw context to NULL so that next state call forces a new draw context to be created and populated.
+    // Set current draw context to NULL so that next state call forces a new draw context to be
+    // created and populated.
     pContext->pPrevDrawContext = pContext->pCurDrawContext;
-    pContext->pCurDrawContext = nullptr;
+    pContext->pCurDrawContext  = nullptr;
 }
 
 INLINE void QueueDraw(SWR_CONTEXT* pContext)
@@ -281,7 +298,7 @@ INLINE void QueueDispatch(SWR_CONTEXT* pContext)
     QueueWork<false>(pContext);
 }
 
-DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT *pContext, bool isSplitDraw = false)
+DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT* pContext, bool isSplitDraw = false)
 {
     RDTSC_BEGIN(APIGetDrawContext, 0);
     // If current draw context is null then need to obtain a new draw context to use from ring.
@@ -303,14 +320,14 @@ DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT *pContext, bool isSplitDraw = false)
             pContext->cachingArenaAllocator.FreeOldBlocks();
 
             pContext->lastFrameChecked = pContext->frameCount;
-            pContext->lastDrawChecked = curDraw;
+            pContext->lastDrawChecked  = curDraw;
         }
 
         DRAW_CONTEXT* pCurDrawContext = &pContext->dcRing[dcIndex];
-        pContext->pCurDrawContext = pCurDrawContext;
+        pContext->pCurDrawContext     = pCurDrawContext;
 
         // Assign next available entry in DS ring to this DC.
-        uint32_t dsIndex = pContext->curStateId % pContext->MAX_DRAWS_IN_FLIGHT;
+        uint32_t dsIndex        = pContext->curStateId % pContext->MAX_DRAWS_IN_FLIGHT;
         pCurDrawContext->pState = &pContext->dsRing[dsIndex];
 
         // Copy previous state to current state.
@@ -330,7 +347,7 @@ DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT *pContext, bool isSplitDraw = false)
 
                 pCurDrawContext->pState->pPrivateState = nullptr;
 
-                pContext->curStateId++;  // Progress state ring index forward.
+                pContext->curStateId++; // Progress state ring index forward.
             }
             else
             {
@@ -343,21 +360,21 @@ DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT *pContext, bool isSplitDraw = false)
         else
         {
             SWR_ASSERT(pCurDrawContext->pState->pArena->IsEmpty() == true);
-            pContext->curStateId++;  // Progress state ring index forward.
+            pContext->curStateId++; // Progress state ring index forward.
         }
 
         SWR_ASSERT(pCurDrawContext->pArena->IsEmpty() == true);
 
         // Reset dependency
-        pCurDrawContext->dependent = false;
+        pCurDrawContext->dependent   = false;
         pCurDrawContext->dependentFE = false;
 
-        pCurDrawContext->pContext = pContext;
+        pCurDrawContext->pContext  = pContext;
         pCurDrawContext->isCompute = false; // Dispatch has to set this to true.
 
-        pCurDrawContext->doneFE = false;
-        pCurDrawContext->FeLock = 0;
-        pCurDrawContext->threadsDone = 0;
+        pCurDrawContext->doneFE                         = false;
+        pCurDrawContext->FeLock                         = 0;
+        pCurDrawContext->threadsDone                    = 0;
         pCurDrawContext->retireCallback.pfnCallbackFunc = nullptr;
 
         pCurDrawContext->dynState.Reset(pContext->NumWorkerThreads);
@@ -376,7 +393,7 @@ DRAW_CONTEXT* GetDrawContext(SWR_CONTEXT *pContext, bool isSplitDraw = false)
     return pContext->pCurDrawContext;
 }
 
-API_STATE* GetDrawState(SWR_CONTEXT *pContext)
+API_STATE* GetDrawState(SWR_CONTEXT* pContext)
 {
     DRAW_CONTEXT* pDC = GetDrawContext(pContext);
     SWR_ASSERT(pDC->pState != nullptr);
@@ -386,13 +403,13 @@ API_STATE* GetDrawState(SWR_CONTEXT *pContext)
 
 void SwrDestroyContext(HANDLE hContext)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
-    pDC->FeWork.type = SHUTDOWN;
+    pDC->FeWork.type    = SHUTDOWN;
     pDC->FeWork.pfnWork = ProcessShutdown;
 
-    //enqueue
+    // enqueue
     QueueDraw(pContext);
 
     DestroyThreadPool(pContext, &pContext->threadPool);
@@ -427,7 +444,8 @@ void SwrDestroyContext(HANDLE hContext)
     delete[] pContext->ppScratch;
     AlignedFree(pContext->pStats);
 
-    delete(pContext->pHotTileMgr);
+    delete pContext->pHotTileMgr;
+    delete pContext->pSingleThreadLockedTiles;
 
     pContext->~SWR_CONTEXT();
     AlignedFree(GetContext(hContext));
@@ -435,67 +453,65 @@ void SwrDestroyContext(HANDLE hContext)
 
 void SwrBindApiThread(HANDLE hContext, uint32_t apiThreadId)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
     BindApiThread(pContext, apiThreadId);
 }
 
-void SWR_API SwrSaveState(
-    HANDLE hContext,
-    void* pOutputStateBlock,
-    size_t memSize)
+void SWR_API SwrSaveState(HANDLE hContext, void* pOutputStateBlock, size_t memSize)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    auto pSrc = GetDrawState(pContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
+    auto         pSrc     = GetDrawState(pContext);
     SWR_ASSERT(pOutputStateBlock && memSize >= sizeof(*pSrc));
 
     memcpy(pOutputStateBlock, pSrc, sizeof(*pSrc));
 }
 
-void SWR_API SwrRestoreState(
-    HANDLE hContext,
-    const void* pStateBlock,
-    size_t memSize)
+void SWR_API SwrRestoreState(HANDLE hContext, const void* pStateBlock, size_t memSize)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    auto pDst = GetDrawState(pContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
+    auto         pDst     = GetDrawState(pContext);
     SWR_ASSERT(pStateBlock && memSize >= sizeof(*pDst));
 
     memcpy(pDst, pStateBlock, sizeof(*pDst));
 }
 
-void SetupDefaultState(SWR_CONTEXT *pContext)
+void SetupDefaultState(SWR_CONTEXT* pContext)
 {
     API_STATE* pState = GetDrawState(pContext);
 
-    pState->rastState.cullMode = SWR_CULLMODE_NONE;
+    pState->rastState.cullMode     = SWR_CULLMODE_NONE;
     pState->rastState.frontWinding = SWR_FRONTWINDING_CCW;
 
-    pState->depthBoundsState.depthBoundsTestEnable = false;
+    pState->depthBoundsState.depthBoundsTestEnable   = false;
     pState->depthBoundsState.depthBoundsTestMinValue = 0.0f;
     pState->depthBoundsState.depthBoundsTestMaxValue = 1.0f;
 }
 
-void SwrSync(HANDLE hContext, PFN_CALLBACK_FUNC pfnFunc, uint64_t userData, uint64_t userData2, uint64_t userData3)
+void SWR_API SwrSync(HANDLE            hContext,
+                     PFN_CALLBACK_FUNC pfnFunc,
+                     uint64_t          userData,
+                     uint64_t          userData2,
+                     uint64_t          userData3)
 {
     SWR_ASSERT(pfnFunc != nullptr);
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     RDTSC_BEGIN(APISync, 0);
 
-    pDC->FeWork.type = SYNC;
+    pDC->FeWork.type    = SYNC;
     pDC->FeWork.pfnWork = ProcessSync;
 
     // Setup callback function
     pDC->retireCallback.pfnCallbackFunc = pfnFunc;
-    pDC->retireCallback.userData = userData;
-    pDC->retireCallback.userData2 = userData2;
-    pDC->retireCallback.userData3 = userData3;
+    pDC->retireCallback.userData        = userData;
+    pDC->retireCallback.userData2       = userData2;
+    pDC->retireCallback.userData3       = userData3;
 
     AR_API_EVENT(SwrSyncEvent(pDC->drawId));
 
-    //enqueue
+    // enqueue
     QueueDraw(pContext);
 
     RDTSC_END(APISync, 1);
@@ -503,15 +519,15 @@ void SwrSync(HANDLE hContext, PFN_CALLBACK_FUNC pfnFunc, uint64_t userData, uint
 
 void SwrStallBE(HANDLE hContext)
 {
-    SWR_CONTEXT* pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     pDC->dependent = true;
 }
 
 void SwrWaitForIdle(HANDLE hContext)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
 
     RDTSC_BEGIN(APIWaitForIdle, 0);
 
@@ -525,7 +541,7 @@ void SwrWaitForIdle(HANDLE hContext)
 
 void SwrWaitForIdleFE(HANDLE hContext)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
 
     RDTSC_BEGIN(APIWaitForIdle, 0);
 
@@ -537,42 +553,34 @@ void SwrWaitForIdleFE(HANDLE hContext)
     RDTSC_END(APIWaitForIdle, 1);
 }
 
-void SwrSetVertexBuffers(
-    HANDLE hContext,
-    uint32_t numBuffers,
-    const SWR_VERTEX_BUFFER_STATE* pVertexBuffers)
+void SwrSetVertexBuffers(HANDLE                         hContext,
+                         uint32_t                       numBuffers,
+                         const SWR_VERTEX_BUFFER_STATE* pVertexBuffers)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     for (uint32_t i = 0; i < numBuffers; ++i)
     {
-        const SWR_VERTEX_BUFFER_STATE *pVB = &pVertexBuffers[i];
-        pState->vertexBuffers[pVB->index] = *pVB;
+        const SWR_VERTEX_BUFFER_STATE* pVB = &pVertexBuffers[i];
+        pState->vertexBuffers[pVB->index]  = *pVB;
     }
 }
 
-void SwrSetIndexBuffer(
-    HANDLE hContext,
-    const SWR_INDEX_BUFFER_STATE* pIndexBuffer)
+void SwrSetIndexBuffer(HANDLE hContext, const SWR_INDEX_BUFFER_STATE* pIndexBuffer)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->indexBuffer = *pIndexBuffer;
 }
 
-void SwrSetFetchFunc(
-    HANDLE hContext,
-    PFN_FETCH_FUNC    pfnFetchFunc)
+void SwrSetFetchFunc(HANDLE hContext, PFN_FETCH_FUNC pfnFetchFunc)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->pfnFetchFunc = pfnFetchFunc;
 }
 
-void SwrSetSoFunc(
-    HANDLE hContext,
-    PFN_SO_FUNC    pfnSoFunc,
-    uint32_t streamIndex)
+void SwrSetSoFunc(HANDLE hContext, PFN_SO_FUNC pfnSoFunc, uint32_t streamIndex)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
@@ -581,19 +589,14 @@ void SwrSetSoFunc(
     pState->pfnSoFunc[streamIndex] = pfnSoFunc;
 }
 
-void SwrSetSoState(
-    HANDLE hContext,
-    SWR_STREAMOUT_STATE* pSoState)
+void SwrSetSoState(HANDLE hContext, SWR_STREAMOUT_STATE* pSoState)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->soState = *pSoState;
 }
 
-void SwrSetSoBuffers(
-    HANDLE hContext,
-    SWR_STREAMOUT_BUFFER* pSoBuffer,
-    uint32_t slot)
+void SwrSetSoBuffers(HANDLE hContext, SWR_STREAMOUT_BUFFER* pSoBuffer, uint32_t slot)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
@@ -602,168 +605,136 @@ void SwrSetSoBuffers(
     pState->soBuffer[slot] = *pSoBuffer;
 }
 
-void SwrSetVertexFunc(
-    HANDLE hContext,
-    PFN_VERTEX_FUNC pfnVertexFunc)
+void SwrSetVertexFunc(HANDLE hContext, PFN_VERTEX_FUNC pfnVertexFunc)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->pfnVertexFunc = pfnVertexFunc;
 }
 
-void SwrSetFrontendState(
-    HANDLE hContext,
-    SWR_FRONTEND_STATE *pFEState)
+void SwrSetFrontendState(HANDLE hContext, SWR_FRONTEND_STATE* pFEState)
 {
-    API_STATE* pState = GetDrawState(GetContext(hContext));
+    API_STATE* pState     = GetDrawState(GetContext(hContext));
     pState->frontendState = *pFEState;
 }
 
-void SwrSetGsState(
-    HANDLE hContext,
-    SWR_GS_STATE *pGSState)
+void SwrSetGsState(HANDLE hContext, SWR_GS_STATE* pGSState)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
-    pState->gsState = *pGSState;
+    pState->gsState   = *pGSState;
 }
 
-void SwrSetGsFunc(
-    HANDLE hContext,
-    PFN_GS_FUNC pfnGsFunc)
+void SwrSetGsFunc(HANDLE hContext, PFN_GS_FUNC pfnGsFunc)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
     pState->pfnGsFunc = pfnGsFunc;
 }
 
-void SwrSetCsFunc(
-    HANDLE hContext,
-    PFN_CS_FUNC pfnCsFunc,
-    uint32_t totalThreadsInGroup,
-    uint32_t totalSpillFillSize,
-    uint32_t scratchSpaceSizePerInstance,
-    uint32_t numInstances)
+void SwrSetCsFunc(HANDLE      hContext,
+                  PFN_CS_FUNC pfnCsFunc,
+                  uint32_t    totalThreadsInGroup,
+                  uint32_t    totalSpillFillSize,
+                  uint32_t    scratchSpaceSizePerInstance,
+                  uint32_t    numInstances)
 {
-    API_STATE* pState = GetDrawState(GetContext(hContext));
-    pState->pfnCsFunc = pfnCsFunc;
-    pState->totalThreadsInGroup = totalThreadsInGroup;
-    pState->totalSpillFillSize = totalSpillFillSize;
-    pState->scratchSpaceSize = scratchSpaceSizePerInstance;
+    API_STATE* pState                = GetDrawState(GetContext(hContext));
+    pState->pfnCsFunc                = pfnCsFunc;
+    pState->totalThreadsInGroup      = totalThreadsInGroup;
+    pState->totalSpillFillSize       = totalSpillFillSize;
+    pState->scratchSpaceSize         = scratchSpaceSizePerInstance;
     pState->scratchSpaceNumInstances = numInstances;
 }
 
-void SwrSetTsState(
-    HANDLE hContext,
-    SWR_TS_STATE *pState)
+void SwrSetTsState(HANDLE hContext, SWR_TS_STATE* pState)
 {
     API_STATE* pApiState = GetDrawState(GetContext(hContext));
-    pApiState->tsState = *pState;
+    pApiState->tsState   = *pState;
 }
 
-void SwrSetHsFunc(
-    HANDLE hContext,
-    PFN_HS_FUNC pfnFunc)
+void SwrSetHsFunc(HANDLE hContext, PFN_HS_FUNC pfnFunc)
 {
     API_STATE* pApiState = GetDrawState(GetContext(hContext));
     pApiState->pfnHsFunc = pfnFunc;
 }
 
-void SwrSetDsFunc(
-    HANDLE hContext,
-    PFN_DS_FUNC pfnFunc)
+void SwrSetDsFunc(HANDLE hContext, PFN_DS_FUNC pfnFunc)
 {
     API_STATE* pApiState = GetDrawState(GetContext(hContext));
     pApiState->pfnDsFunc = pfnFunc;
 }
 
-void SwrSetDepthStencilState(
-    HANDLE hContext,
-    SWR_DEPTH_STENCIL_STATE *pDSState)
+void SwrSetDepthStencilState(HANDLE hContext, SWR_DEPTH_STENCIL_STATE* pDSState)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->depthStencilState = *pDSState;
 }
 
-void SwrSetBackendState(
-    HANDLE hContext,
-    SWR_BACKEND_STATE *pBEState)
+void SwrSetBackendState(HANDLE hContext, SWR_BACKEND_STATE* pBEState)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->backendState = *pBEState;
 }
 
-void SwrSetDepthBoundsState(
-    HANDLE hContext,
-    SWR_DEPTH_BOUNDS_STATE *pDBState)
+void SwrSetDepthBoundsState(HANDLE hContext, SWR_DEPTH_BOUNDS_STATE* pDBState)
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
     pState->depthBoundsState = *pDBState;
 }
 
-void SwrSetPixelShaderState(
-    HANDLE hContext,
-    SWR_PS_STATE *pPSState)
+void SwrSetPixelShaderState(HANDLE hContext, SWR_PS_STATE* pPSState)
 {
-    API_STATE *pState = GetDrawState(GetContext(hContext));
-    pState->psState = *pPSState;
+    API_STATE* pState = GetDrawState(GetContext(hContext));
+    pState->psState   = *pPSState;
 }
 
-void SwrSetBlendState(
-    HANDLE hContext,
-    SWR_BLEND_STATE *pBlendState)
+void SwrSetBlendState(HANDLE hContext, SWR_BLEND_STATE* pBlendState)
 {
-    API_STATE *pState = GetDrawState(GetContext(hContext));
+    API_STATE* pState = GetDrawState(GetContext(hContext));
     memcpy(&pState->blendState, pBlendState, sizeof(SWR_BLEND_STATE));
 }
 
-void SwrSetBlendFunc(
-    HANDLE hContext,
-    uint32_t renderTarget,
-    PFN_BLEND_JIT_FUNC pfnBlendFunc)
+void SwrSetBlendFunc(HANDLE hContext, uint32_t renderTarget, PFN_BLEND_JIT_FUNC pfnBlendFunc)
 {
     SWR_ASSERT(renderTarget < SWR_NUM_RENDERTARGETS);
-    API_STATE *pState = GetDrawState(GetContext(hContext));
+    API_STATE* pState                  = GetDrawState(GetContext(hContext));
     pState->pfnBlendFunc[renderTarget] = pfnBlendFunc;
 }
 
 // update guardband multipliers for the viewport
-void updateGuardbands(API_STATE *pState)
+void updateGuardbands(API_STATE* pState)
 {
     uint32_t numGbs = pState->backendState.readViewportArrayIndex ? KNOB_NUM_VIEWPORTS_SCISSORS : 1;
 
-    for(uint32_t i = 0; i < numGbs; ++i)
+    for (uint32_t i = 0; i < numGbs; ++i)
     {
         // guardband center is viewport center
-        pState->gbState.left[i] = KNOB_GUARDBAND_WIDTH / pState->vp[i].width;
-        pState->gbState.right[i] = KNOB_GUARDBAND_WIDTH / pState->vp[i].width;
-        pState->gbState.top[i] = KNOB_GUARDBAND_HEIGHT / pState->vp[i].height;
+        pState->gbState.left[i]   = KNOB_GUARDBAND_WIDTH / pState->vp[i].width;
+        pState->gbState.right[i]  = KNOB_GUARDBAND_WIDTH / pState->vp[i].width;
+        pState->gbState.top[i]    = KNOB_GUARDBAND_HEIGHT / pState->vp[i].height;
         pState->gbState.bottom[i] = KNOB_GUARDBAND_HEIGHT / pState->vp[i].height;
     }
 }
 
-void SwrSetRastState(
-    HANDLE hContext,
-    const SWR_RASTSTATE *pRastState)
+void SwrSetRastState(HANDLE hContext, const SWR_RASTSTATE* pRastState)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    API_STATE* pState = GetDrawState(pContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
+    API_STATE*   pState   = GetDrawState(pContext);
 
     memcpy(&pState->rastState, pRastState, sizeof(SWR_RASTSTATE));
 }
 
-void SwrSetViewports(
-    HANDLE hContext,
-    uint32_t numViewports,
-    const SWR_VIEWPORT* pViewports,
-    const SWR_VIEWPORT_MATRICES* pMatrices)
+void SwrSetViewports(HANDLE                       hContext,
+                     uint32_t                     numViewports,
+                     const SWR_VIEWPORT*          pViewports,
+                     const SWR_VIEWPORT_MATRICES* pMatrices)
 {
-    SWR_ASSERT(numViewports <= KNOB_NUM_VIEWPORTS_SCISSORS,
-        "Invalid number of viewports.");
+    SWR_ASSERT(numViewports <= KNOB_NUM_VIEWPORTS_SCISSORS, "Invalid number of viewports.");
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    API_STATE* pState = GetDrawState(pContext);
+    SWR_CONTEXT* pContext = GetContext(hContext);
+    API_STATE*   pState   = GetDrawState(pContext);
 
     memcpy(&pState->vp[0], pViewports, sizeof(SWR_VIEWPORT) * numViewports);
     // @todo Faster to copy portions of the SOA or just copy all of it?
@@ -772,27 +743,24 @@ void SwrSetViewports(
     updateGuardbands(pState);
 }
 
-void SwrSetScissorRects(
-    HANDLE hContext,
-    uint32_t numScissors,
-    const SWR_RECT* pScissors)
+void SwrSetScissorRects(HANDLE hContext, uint32_t numScissors, const SWR_RECT* pScissors)
 {
-    SWR_ASSERT(numScissors <= KNOB_NUM_VIEWPORTS_SCISSORS,
-        "Invalid number of scissor rects.");
+    SWR_ASSERT(numScissors <= KNOB_NUM_VIEWPORTS_SCISSORS, "Invalid number of scissor rects.");
 
     API_STATE* pState = GetDrawState(GetContext(hContext));
     memcpy(&pState->scissorRects[0], pScissors, numScissors * sizeof(pScissors[0]));
 };
 
-void SetupMacroTileScissors(DRAW_CONTEXT *pDC)
+void SetupMacroTileScissors(DRAW_CONTEXT* pDC)
 {
-    API_STATE *pState = &pDC->pState->state;
-    uint32_t numScissors = pState->backendState.readViewportArrayIndex ? KNOB_NUM_VIEWPORTS_SCISSORS : 1;
+    API_STATE* pState = &pDC->pState->state;
+    uint32_t numScissors =
+        pState->backendState.readViewportArrayIndex ? KNOB_NUM_VIEWPORTS_SCISSORS : 1;
     pState->scissorsTileAligned = true;
 
     for (uint32_t index = 0; index < numScissors; ++index)
     {
-        SWR_RECT &scissorInFixedPoint = pState->scissorsInFixedPoint[index];
+        SWR_RECT& scissorInFixedPoint = pState->scissorsInFixedPoint[index];
 
         // Set up scissor dimensions based on scissor or viewport
         if (pState->rastState.scissorEnable)
@@ -801,8 +769,9 @@ void SetupMacroTileScissors(DRAW_CONTEXT *pDC)
         }
         else
         {
-            // the vp width and height must be added to origin un-rounded then the result round to -inf.
-            // The cast to int works for rounding assuming all [left, right, top, bottom] are positive.
+            // the vp width and height must be added to origin un-rounded then the result round to
+            // -inf. The cast to int works for rounding assuming all [left, right, top, bottom] are
+            // positive.
             scissorInFixedPoint.xmin = (int32_t)pState->vp[index].x;
             scissorInFixedPoint.xmax = (int32_t)(pState->vp[index].x + pState->vp[index].width);
             scissorInFixedPoint.ymin = (int32_t)pState->vp[index].y;
@@ -814,7 +783,7 @@ void SetupMacroTileScissors(DRAW_CONTEXT *pDC)
 
         // Test for tile alignment
         bool tileAligned;
-        tileAligned  = (scissorInFixedPoint.xmin % KNOB_TILE_X_DIM) == 0;
+        tileAligned = (scissorInFixedPoint.xmin % KNOB_TILE_X_DIM) == 0;
         tileAligned &= (scissorInFixedPoint.ymin % KNOB_TILE_Y_DIM) == 0;
         tileAligned &= (scissorInFixedPoint.xmax % KNOB_TILE_X_DIM) == 0;
         tileAligned &= (scissorInFixedPoint.ymax % KNOB_TILE_Y_DIM) == 0;
@@ -836,12 +805,12 @@ void SetupMacroTileScissors(DRAW_CONTEXT *pDC)
 
 // templated backend function tables
 
-void SetupPipeline(DRAW_CONTEXT *pDC)
+void SetupPipeline(DRAW_CONTEXT* pDC)
 {
-    DRAW_STATE* pState = pDC->pState;
-    const SWR_RASTSTATE &rastState = pState->state.rastState;
-    const SWR_PS_STATE &psState = pState->state.psState;
-    BACKEND_FUNCS& backendFuncs = pState->backendFuncs;
+    DRAW_STATE*          pState       = pDC->pState;
+    const SWR_RASTSTATE& rastState    = pState->state.rastState;
+    const SWR_PS_STATE&  psState      = pState->state.psState;
+    BACKEND_FUNCS&       backendFuncs = pState->backendFuncs;
 
     // setup backend
     if (psState.pfnPixelShader == nullptr)
@@ -851,35 +820,46 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
     else
     {
         const uint32_t forcedSampleCount = (rastState.forcedSampleCount) ? 1 : 0;
-        const bool bMultisampleEnable = ((rastState.sampleCount > SWR_MULTISAMPLE_1X) || forcedSampleCount) ? 1 : 0;
-        const uint32_t centroid = ((psState.barycentricsMask & SWR_BARYCENTRIC_CENTROID_MASK) > 0) ? 1 : 0;
-        const uint32_t canEarlyZ = (psState.forceEarlyZ || (!psState.writesODepth && !psState.usesUAV)) ? 1 : 0;
+        const bool     bMultisampleEnable =
+            ((rastState.sampleCount > SWR_MULTISAMPLE_1X) || forcedSampleCount) ? 1 : 0;
+        const uint32_t centroid =
+            ((psState.barycentricsMask & SWR_BARYCENTRIC_CENTROID_MASK) > 0) ? 1 : 0;
+        const uint32_t canEarlyZ =
+            (psState.forceEarlyZ || (!psState.writesODepth && !psState.usesUAV)) ? 1 : 0;
         SWR_BARYCENTRICS_MASK barycentricsMask = (SWR_BARYCENTRICS_MASK)psState.barycentricsMask;
-        
+
         // select backend function
-        switch(psState.shadingRate)
+        switch (psState.shadingRate)
         {
         case SWR_SHADING_RATE_PIXEL:
-            if(bMultisampleEnable)
+            if (bMultisampleEnable)
             {
                 // always need to generate I & J per sample for Z interpolation
-                barycentricsMask = (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_SAMPLE_MASK);
-                backendFuncs.pfnBackend = gBackendPixelRateTable[rastState.sampleCount][rastState.bIsCenterPattern][psState.inputCoverage]
-                                                                [centroid][forcedSampleCount][canEarlyZ]
+                barycentricsMask =
+                    (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_SAMPLE_MASK);
+                backendFuncs.pfnBackend =
+                    gBackendPixelRateTable[rastState.sampleCount][rastState.bIsCenterPattern]
+                                          [psState.inputCoverage][centroid][forcedSampleCount]
+                                          [canEarlyZ]
                     ;
             }
             else
             {
                 // always need to generate I & J per pixel for Z interpolation
-                barycentricsMask = (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_PIXEL_MASK);
-                backendFuncs.pfnBackend = gBackendSingleSample[psState.inputCoverage][centroid][canEarlyZ];
+                barycentricsMask =
+                    (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_PIXEL_MASK);
+                backendFuncs.pfnBackend =
+                    gBackendSingleSample[psState.inputCoverage][centroid][canEarlyZ];
             }
             break;
         case SWR_SHADING_RATE_SAMPLE:
             SWR_ASSERT(rastState.bIsCenterPattern != true);
             // always need to generate I & J per sample for Z interpolation
-            barycentricsMask = (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_SAMPLE_MASK);
-            backendFuncs.pfnBackend = gBackendSampleRateTable[rastState.sampleCount][psState.inputCoverage][centroid][canEarlyZ];
+            barycentricsMask =
+                (SWR_BARYCENTRICS_MASK)(barycentricsMask | SWR_BARYCENTRIC_PER_SAMPLE_MASK);
+            backendFuncs.pfnBackend =
+                gBackendSampleRateTable[rastState.sampleCount][psState.inputCoverage][centroid]
+                                       [canEarlyZ];
             break;
         default:
             SWR_ASSERT(0 && "Invalid shading rate");
@@ -897,10 +877,10 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
     {
     case TOP_POINT_LIST:
         pState->pfnProcessPrims = ClipPoints;
-        pfnBinner = BinPoints;
+        pfnBinner               = BinPoints;
 #if USE_SIMD16_FRONTEND
         pState->pfnProcessPrims_simd16 = ClipPoints_simd16;
-        pfnBinner_simd16 = BinPoints_simd16;
+        pfnBinner_simd16               = BinPoints_simd16;
 #endif
         break;
     case TOP_LINE_LIST:
@@ -909,15 +889,15 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
     case TOP_LINE_LIST_ADJ:
     case TOP_LISTSTRIP_ADJ:
         pState->pfnProcessPrims = ClipLines;
-        pfnBinner = BinLines;
+        pfnBinner               = BinLines;
 #if USE_SIMD16_FRONTEND
         pState->pfnProcessPrims_simd16 = ClipLines_simd16;
-        pfnBinner_simd16 = BinLines_simd16;
+        pfnBinner_simd16               = BinLines_simd16;
 #endif
         break;
     default:
         pState->pfnProcessPrims = ClipTriangles;
-        pfnBinner = GetBinTrianglesFunc((rastState.conservativeRast > 0));
+        pfnBinner               = GetBinTrianglesFunc((rastState.conservativeRast > 0));
 #if USE_SIMD16_FRONTEND
         pState->pfnProcessPrims_simd16 = ClipTriangles_simd16;
         pfnBinner_simd16 = GetBinTrianglesFunc_simd16((rastState.conservativeRast > 0));
@@ -959,14 +939,16 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
 
 
     // set up the frontend attribute count
-    pState->state.feNumAttributes = 0;
+    pState->state.feNumAttributes         = 0;
     const SWR_BACKEND_STATE& backendState = pState->state.backendState;
     if (backendState.swizzleEnable)
     {
         // attribute swizzling is enabled, iterate over the map and record the max attribute used
         for (uint32_t i = 0; i < backendState.numAttributes; ++i)
         {
-            pState->state.feNumAttributes = std::max(pState->state.feNumAttributes, (uint32_t)backendState.swizzleMap[i].sourceAttrib + 1);
+            pState->state.feNumAttributes =
+                std::max(pState->state.feNumAttributes,
+                         (uint32_t)backendState.swizzleMap[i].sourceAttrib + 1);
         }
     }
     else
@@ -976,46 +958,53 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
 
     if (pState->state.soState.soEnable)
     {
-        uint32_t streamMasks = 0;
+        uint64_t streamMasks = 0;
         for (uint32_t i = 0; i < 4; ++i)
         {
             streamMasks |= pState->state.soState.streamMasks[i];
         }
 
         DWORD maxAttrib;
-        if (_BitScanReverse(&maxAttrib, streamMasks))
+        if (_BitScanReverse64(&maxAttrib, streamMasks))
         {
-            pState->state.feNumAttributes = std::max(pState->state.feNumAttributes, (uint32_t)(maxAttrib + 1));
+            pState->state.feNumAttributes =
+                std::max(pState->state.feNumAttributes, (uint32_t)(maxAttrib + 1));
         }
     }
 
     // complicated logic to test for cases where we don't need backing hottile memory for a draw
-    // have to check for the special case where depth/stencil test is enabled but depthwrite is disabled.
-    pState->state.depthHottileEnable = ((!(pState->state.depthStencilState.depthTestEnable &&
-                                           !pState->state.depthStencilState.depthWriteEnable &&
-                                           !pState->state.depthBoundsState.depthBoundsTestEnable &&
-                                           pState->state.depthStencilState.depthTestFunc == ZFUNC_ALWAYS)) && 
-                                        (pState->state.depthStencilState.depthTestEnable || 
-                                         pState->state.depthStencilState.depthWriteEnable ||
-                                         pState->state.depthBoundsState.depthBoundsTestEnable)) ? true : false;
+    // have to check for the special case where depth/stencil test is enabled but depthwrite is
+    // disabled.
+    pState->state.depthHottileEnable =
+        ((!(pState->state.depthStencilState.depthTestEnable &&
+            !pState->state.depthStencilState.depthWriteEnable &&
+            !pState->state.depthBoundsState.depthBoundsTestEnable &&
+            pState->state.depthStencilState.depthTestFunc == ZFUNC_ALWAYS)) &&
+         (pState->state.depthStencilState.depthTestEnable ||
+          pState->state.depthStencilState.depthWriteEnable ||
+          pState->state.depthBoundsState.depthBoundsTestEnable))
+            ? true
+            : false;
 
-    pState->state.stencilHottileEnable = (((!(pState->state.depthStencilState.stencilTestEnable &&
-                                             !pState->state.depthStencilState.stencilWriteEnable &&
-                                              pState->state.depthStencilState.stencilTestFunc == ZFUNC_ALWAYS)) ||
-                                          // for stencil we have to check the double sided state as well
-                                          (!(pState->state.depthStencilState.doubleSidedStencilTestEnable &&
-                                             !pState->state.depthStencilState.stencilWriteEnable &&
-                                              pState->state.depthStencilState.backfaceStencilTestFunc == ZFUNC_ALWAYS))) && 
-                                          (pState->state.depthStencilState.stencilTestEnable  ||
-                                           pState->state.depthStencilState.stencilWriteEnable)) ? true : false;
-
+    pState->state.stencilHottileEnable =
+        (((!(pState->state.depthStencilState.stencilTestEnable &&
+             !pState->state.depthStencilState.stencilWriteEnable &&
+             pState->state.depthStencilState.stencilTestFunc == ZFUNC_ALWAYS)) ||
+          // for stencil we have to check the double sided state as well
+          (!(pState->state.depthStencilState.doubleSidedStencilTestEnable &&
+             !pState->state.depthStencilState.stencilWriteEnable &&
+             pState->state.depthStencilState.backfaceStencilTestFunc == ZFUNC_ALWAYS))) &&
+         (pState->state.depthStencilState.stencilTestEnable ||
+          pState->state.depthStencilState.stencilWriteEnable))
+            ? true
+            : false;
 
     uint32_t hotTileEnable = pState->state.psState.renderTargetMask;
 
     // Disable hottile for surfaces with no writes
     if (psState.pfnPixelShader != nullptr)
     {
-        DWORD rt;
+        DWORD    rt;
         uint32_t rtMask = pState->state.psState.renderTargetMask;
         while (_BitScanForward(&rt, rtMask))
         {
@@ -1033,33 +1022,39 @@ void SetupPipeline(DRAW_CONTEXT *pDC)
 
     pState->state.colorHottileEnable = hotTileEnable;
 
-
     // Setup depth quantization function
     if (pState->state.depthHottileEnable)
     {
         switch (pState->state.rastState.depthFormat)
         {
-        case R32_FLOAT_X8X24_TYPELESS: pState->state.pfnQuantizeDepth = QuantizeDepth < R32_FLOAT_X8X24_TYPELESS > ; break;
-        case R32_FLOAT: pState->state.pfnQuantizeDepth = QuantizeDepth < R32_FLOAT > ; break;
-        case R24_UNORM_X8_TYPELESS: pState->state.pfnQuantizeDepth = QuantizeDepth < R24_UNORM_X8_TYPELESS > ; break;
-        case R16_UNORM: pState->state.pfnQuantizeDepth = QuantizeDepth < R16_UNORM > ; break;
-        default: SWR_INVALID("Unsupported depth format for depth quantiztion.");
-            pState->state.pfnQuantizeDepth = QuantizeDepth < R32_FLOAT > ;
+        case R32_FLOAT_X8X24_TYPELESS:
+            pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT_X8X24_TYPELESS>;
+            break;
+        case R32_FLOAT:
+            pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT>;
+            break;
+        case R24_UNORM_X8_TYPELESS:
+            pState->state.pfnQuantizeDepth = QuantizeDepth<R24_UNORM_X8_TYPELESS>;
+            break;
+        case R16_UNORM:
+            pState->state.pfnQuantizeDepth = QuantizeDepth<R16_UNORM>;
+            break;
+        default:
+            SWR_INVALID("Unsupported depth format for depth quantiztion.");
+            pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT>;
         }
     }
     else
     {
         // set up pass-through quantize if depth isn't enabled
-        pState->state.pfnQuantizeDepth = QuantizeDepth < R32_FLOAT > ;
+        pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT>;
     }
 }
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief InitDraw
 /// @param pDC - Draw context to initialize for this draw.
-void InitDraw(
-    DRAW_CONTEXT *pDC,
-    bool isSplitDraw)
+void InitDraw(DRAW_CONTEXT* pDC, bool isSplitDraw)
 {
     // We don't need to re-setup the scissors/pipeline state again for split draw.
     if (isSplitDraw == false)
@@ -1067,7 +1062,6 @@ void InitDraw(
         SetupMacroTileScissors(pDC);
         SetupPipeline(pDC);
     }
-    
 
 }
 
@@ -1075,10 +1069,7 @@ void InitDraw(
 /// @brief We can split the draw for certain topologies for better performance.
 /// @param totalVerts - Total vertices for draw
 /// @param topology - Topology used for draw
-uint32_t MaxVertsPerDraw(
-    DRAW_CONTEXT* pDC,
-    uint32_t totalVerts,
-    PRIMITIVE_TOPOLOGY topology)
+uint32_t MaxVertsPerDraw(DRAW_CONTEXT* pDC, uint32_t totalVerts, PRIMITIVE_TOPOLOGY topology)
 {
     API_STATE& state = pDC->pState->state;
 
@@ -1145,7 +1136,7 @@ uint32_t MaxVertsPerDraw(
         if (pDC->pState->state.tsState.tsEnable)
         {
             uint32_t vertsPerPrim = topology - TOP_PATCHLIST_BASE;
-            vertsPerDraw = vertsPerPrim * KNOB_MAX_TESS_PRIMS_PER_DRAW;
+            vertsPerDraw          = vertsPerPrim * KNOB_MAX_TESS_PRIMS_PER_DRAW;
         }
         break;
     default:
@@ -1156,7 +1147,6 @@ uint32_t MaxVertsPerDraw(
     return vertsPerDraw;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 /// @brief DrawInstanced
 /// @param hContext - Handle passed back from SwrCreateContext
@@ -1164,31 +1154,31 @@ uint32_t MaxVertsPerDraw(
 /// @param numVerts - How many vertices to read sequentially from vertex data (per instance).
 /// @param startVertex - Specifies start vertex for draw. (vertex data)
 /// @param numInstances - How many instances to render.
-/// @param startInstance - Which instance to start sequentially fetching from in each buffer (instanced data)
-void DrawInstanced(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t numVertices,
-    uint32_t startVertex,
-    uint32_t numInstances = 1,
-    uint32_t startInstance = 0)
+/// @param startInstance - Which instance to start sequentially fetching from in each buffer
+/// (instanced data)
+void DrawInstanced(HANDLE             hContext,
+                   PRIMITIVE_TOPOLOGY topology,
+                   uint32_t           numVertices,
+                   uint32_t           startVertex,
+                   uint32_t           numInstances  = 1,
+                   uint32_t           startInstance = 0)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     RDTSC_BEGIN(APIDraw, pDC->drawId);
 
     uint32_t maxVertsPerDraw = MaxVertsPerDraw(pDC, numVertices, topology);
-    uint32_t primsPerDraw = GetNumPrims(topology, maxVertsPerDraw);
-    uint32_t remainingVerts = numVertices;
+    uint32_t primsPerDraw    = GetNumPrims(topology, maxVertsPerDraw);
+    uint32_t remainingVerts  = numVertices;
 
-    API_STATE    *pState = &pDC->pState->state;
-    pState->topology = topology;
+    API_STATE* pState  = &pDC->pState->state;
+    pState->topology   = topology;
     pState->forceFront = false;
 
     // disable culling for points/lines
@@ -1196,7 +1186,7 @@ void DrawInstanced(
     if (topology == TOP_POINT_LIST)
     {
         pState->rastState.cullMode = SWR_CULLMODE_NONE;
-        pState->forceFront = true;
+        pState->forceFront         = true;
     }
     else if (topology == TOP_RECT_LIST)
     {
@@ -1206,42 +1196,50 @@ void DrawInstanced(
     int draw = 0;
     while (remainingVerts)
     {
-        uint32_t numVertsForDraw = (remainingVerts < maxVertsPerDraw) ?
-        remainingVerts : maxVertsPerDraw;
+        uint32_t numVertsForDraw =
+            (remainingVerts < maxVertsPerDraw) ? remainingVerts : maxVertsPerDraw;
 
-        bool isSplitDraw = (draw > 0) ? true : false;
-        DRAW_CONTEXT* pDC = GetDrawContext(pContext, isSplitDraw);
+        bool          isSplitDraw = (draw > 0) ? true : false;
+        DRAW_CONTEXT* pDC         = GetDrawContext(pContext, isSplitDraw);
         InitDraw(pDC, isSplitDraw);
 
-        pDC->FeWork.type = DRAW;
-        pDC->FeWork.pfnWork = GetProcessDrawFunc(
-            false,  // IsIndexed
-            false, // bEnableCutIndex
-            pState->tsState.tsEnable,
-            pState->gsState.gsEnable,
-            pState->soState.soEnable,
-            pDC->pState->pfnProcessPrims != nullptr);
-        pDC->FeWork.desc.draw.numVerts = numVertsForDraw;
-        pDC->FeWork.desc.draw.startVertex = startVertex;
-        pDC->FeWork.desc.draw.numInstances = numInstances;
+        pDC->FeWork.type                    = DRAW;
+        pDC->FeWork.pfnWork                 = GetProcessDrawFunc(false, // IsIndexed
+                                                 false, // bEnableCutIndex
+                                                 pState->tsState.tsEnable,
+                                                 pState->gsState.gsEnable,
+                                                 pState->soState.soEnable,
+                                                 pDC->pState->pfnProcessPrims != nullptr);
+        pDC->FeWork.desc.draw.numVerts      = numVertsForDraw;
+        pDC->FeWork.desc.draw.startVertex   = startVertex;
+        pDC->FeWork.desc.draw.numInstances  = numInstances;
         pDC->FeWork.desc.draw.startInstance = startInstance;
-        pDC->FeWork.desc.draw.startPrimID = draw * primsPerDraw;
+        pDC->FeWork.desc.draw.startPrimID   = draw * primsPerDraw;
         pDC->FeWork.desc.draw.startVertexID = draw * maxVertsPerDraw;
 
         pDC->cleanupState = (remainingVerts == numVertsForDraw);
 
-        //enqueue DC
+        // enqueue DC
         QueueDraw(pContext);
 
-        AR_API_EVENT(DrawInstancedEvent(pDC->drawId, topology, numVertsForDraw, startVertex, numInstances,
-            startInstance, pState->tsState.tsEnable, pState->gsState.gsEnable, pState->soState.soEnable, pState->gsState.outputTopology, draw));
+        AR_API_EVENT(DrawInstancedEvent(pDC->drawId,
+                                        topology,
+                                        numVertsForDraw,
+                                        startVertex,
+                                        numInstances,
+                                        startInstance,
+                                        pState->tsState.tsEnable,
+                                        pState->gsState.gsEnable,
+                                        pState->soState.soEnable,
+                                        pState->gsState.outputTopology,
+                                        draw));
 
         remainingVerts -= numVertsForDraw;
         draw++;
     }
 
     // restore culling state
-    pDC = GetDrawContext(pContext);
+    pDC                                   = GetDrawContext(pContext);
     pDC->pState->state.rastState.cullMode = oldCullMode;
 
     RDTSC_END(APIDraw, numVertices * numInstances);
@@ -1253,11 +1251,10 @@ void DrawInstanced(
 /// @param topology - Specifies topology for draw.
 /// @param startVertex - Specifies start vertex in vertex buffer for draw.
 /// @param primCount - Number of vertices.
-void SwrDraw(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t startVertex,
-    uint32_t numVertices)
+void SwrDraw(HANDLE             hContext,
+             PRIMITIVE_TOPOLOGY topology,
+             uint32_t           startVertex,
+             uint32_t           numVertices)
 {
     DrawInstanced(hContext, topology, numVertices, startVertex);
 }
@@ -1269,17 +1266,17 @@ void SwrDraw(
 /// @param numVertsPerInstance - How many vertices to read sequentially from vertex data.
 /// @param numInstances - How many instances to render.
 /// @param startVertex - Specifies start vertex for draw. (vertex data)
-/// @param startInstance - Which instance to start sequentially fetching from in each buffer (instanced data)
-void SwrDrawInstanced(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t numVertsPerInstance,
-    uint32_t numInstances,
-    uint32_t startVertex,
-    uint32_t startInstance
-    )
+/// @param startInstance - Which instance to start sequentially fetching from in each buffer
+/// (instanced data)
+void SwrDrawInstanced(HANDLE             hContext,
+                      PRIMITIVE_TOPOLOGY topology,
+                      uint32_t           numVertsPerInstance,
+                      uint32_t           numInstances,
+                      uint32_t           startVertex,
+                      uint32_t           startInstance)
 {
-    DrawInstanced(hContext, topology, numVertsPerInstance, startVertex, numInstances, startInstance);
+    DrawInstanced(
+        hContext, topology, numVertsPerInstance, startVertex, numInstances, startInstance);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1290,46 +1287,52 @@ void SwrDrawInstanced(
 /// @param indexOffset - Starting index into index buffer.
 /// @param baseVertex - Vertex in vertex buffer to consider as index "0". Note value is signed.
 /// @param numInstances - Number of instances to render.
-/// @param startInstance - Which instance to start sequentially fetching from in each buffer (instanced data)
-void DrawIndexedInstance(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t numIndices,
-    uint32_t indexOffset,
-    int32_t baseVertex,
-    uint32_t numInstances = 1,
-    uint32_t startInstance = 0)
+/// @param startInstance - Which instance to start sequentially fetching from in each buffer
+/// (instanced data)
+void DrawIndexedInstance(HANDLE             hContext,
+                         PRIMITIVE_TOPOLOGY topology,
+                         uint32_t           numIndices,
+                         uint32_t           indexOffset,
+                         int32_t            baseVertex,
+                         uint32_t           numInstances  = 1,
+                         uint32_t           startInstance = 0)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
-    API_STATE* pState = &pDC->pState->state;
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
+    API_STATE*    pState   = &pDC->pState->state;
 
     RDTSC_BEGIN(APIDrawIndexed, pDC->drawId);
 
     uint32_t maxIndicesPerDraw = MaxVertsPerDraw(pDC, numIndices, topology);
-    uint32_t primsPerDraw = GetNumPrims(topology, maxIndicesPerDraw);
-    uint32_t remainingIndices = numIndices;
+    uint32_t primsPerDraw      = GetNumPrims(topology, maxIndicesPerDraw);
+    uint32_t remainingIndices  = numIndices;
 
     uint32_t indexSize = 0;
     switch (pState->indexBuffer.format)
     {
-    case R32_UINT: indexSize = sizeof(uint32_t); break;
-    case R16_UINT: indexSize = sizeof(uint16_t); break;
-    case R8_UINT: indexSize = sizeof(uint8_t); break;
+    case R32_UINT:
+        indexSize = sizeof(uint32_t);
+        break;
+    case R16_UINT:
+        indexSize = sizeof(uint16_t);
+        break;
+    case R8_UINT:
+        indexSize = sizeof(uint8_t);
+        break;
     default:
         SWR_INVALID("Invalid index buffer format: %d", pState->indexBuffer.format);
     }
 
-    int draw = 0;
+    int      draw = 0;
     gfxptr_t xpIB = pState->indexBuffer.xpIndices;
     xpIB += (uint64_t)indexOffset * (uint64_t)indexSize;
 
-    pState->topology = topology;
+    pState->topology   = topology;
     pState->forceFront = false;
 
     // disable culling for points/lines
@@ -1337,7 +1340,7 @@ void DrawIndexedInstance(
     if (topology == TOP_POINT_LIST)
     {
         pState->rastState.cullMode = SWR_CULLMODE_NONE;
-        pState->forceFront = true;
+        pState->forceFront         = true;
     }
     else if (topology == TOP_RECT_LIST)
     {
@@ -1346,8 +1349,8 @@ void DrawIndexedInstance(
 
     while (remainingIndices)
     {
-        uint32_t numIndicesForDraw = (remainingIndices < maxIndicesPerDraw) ?
-        remainingIndices : maxIndicesPerDraw;
+        uint32_t numIndicesForDraw =
+            (remainingIndices < maxIndicesPerDraw) ? remainingIndices : maxIndicesPerDraw;
 
         // When breaking up draw, we need to obtain new draw context for each iteration.
         bool isSplitDraw = (draw > 0) ? true : false;
@@ -1355,31 +1358,40 @@ void DrawIndexedInstance(
         pDC = GetDrawContext(pContext, isSplitDraw);
         InitDraw(pDC, isSplitDraw);
 
-        pDC->FeWork.type = DRAW;
-        pDC->FeWork.pfnWork = GetProcessDrawFunc(
-            true,   // IsIndexed
-            pState->frontendState.bEnableCutIndex,
-            pState->tsState.tsEnable,
-            pState->gsState.gsEnable,
-            pState->soState.soEnable,
-            pDC->pState->pfnProcessPrims != nullptr);
-        pDC->FeWork.desc.draw.pDC = pDC;
+        pDC->FeWork.type                 = DRAW;
+        pDC->FeWork.pfnWork              = GetProcessDrawFunc(true, // IsIndexed
+                                                 pState->frontendState.bEnableCutIndex,
+                                                 pState->tsState.tsEnable,
+                                                 pState->gsState.gsEnable,
+                                                 pState->soState.soEnable,
+                                                 pDC->pState->pfnProcessPrims != nullptr);
+        pDC->FeWork.desc.draw.pDC        = pDC;
         pDC->FeWork.desc.draw.numIndices = numIndicesForDraw;
-        pDC->FeWork.desc.draw.xpIB = xpIB;
-        pDC->FeWork.desc.draw.type = pDC->pState->state.indexBuffer.format;
+        pDC->FeWork.desc.draw.xpIB       = xpIB;
+        pDC->FeWork.desc.draw.type       = pDC->pState->state.indexBuffer.format;
 
-        pDC->FeWork.desc.draw.numInstances = numInstances;
+        pDC->FeWork.desc.draw.numInstances  = numInstances;
         pDC->FeWork.desc.draw.startInstance = startInstance;
-        pDC->FeWork.desc.draw.baseVertex = baseVertex;
-        pDC->FeWork.desc.draw.startPrimID = draw * primsPerDraw;
+        pDC->FeWork.desc.draw.baseVertex    = baseVertex;
+        pDC->FeWork.desc.draw.startPrimID   = draw * primsPerDraw;
 
         pDC->cleanupState = (remainingIndices == numIndicesForDraw);
 
-        //enqueue DC
+        // enqueue DC
         QueueDraw(pContext);
 
-        AR_API_EVENT(DrawIndexedInstancedEvent(pDC->drawId, topology, numIndicesForDraw, indexOffset, baseVertex,
-            numInstances, startInstance, pState->tsState.tsEnable, pState->gsState.gsEnable, pState->soState.soEnable, pState->gsState.outputTopology, draw));
+        AR_API_EVENT(DrawIndexedInstancedEvent(pDC->drawId,
+                                               topology,
+                                               numIndicesForDraw,
+                                               indexOffset,
+                                               baseVertex,
+                                               numInstances,
+                                               startInstance,
+                                               pState->tsState.tsEnable,
+                                               pState->gsState.gsEnable,
+                                               pState->soState.soEnable,
+                                               pState->gsState.outputTopology,
+                                               draw));
 
         xpIB += maxIndicesPerDraw * indexSize;
         remainingIndices -= numIndicesForDraw;
@@ -1387,12 +1399,11 @@ void DrawIndexedInstance(
     }
 
     // Restore culling state
-    pDC = GetDrawContext(pContext);
+    pDC                                   = GetDrawContext(pContext);
     pDC->pState->state.rastState.cullMode = oldCullMode;
- 
+
     RDTSC_END(APIDrawIndexed, numIndices * numInstances);
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief DrawIndexed
@@ -1401,13 +1412,11 @@ void DrawIndexedInstance(
 /// @param numIndices - Number of indices to read sequentially from index buffer.
 /// @param indexOffset - Starting index into index buffer.
 /// @param baseVertex - Vertex in vertex buffer to consider as index "0". Note value is signed.
-void SwrDrawIndexed(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t numIndices,
-    uint32_t indexOffset,
-    int32_t baseVertex
-    )
+void SwrDrawIndexed(HANDLE             hContext,
+                    PRIMITIVE_TOPOLOGY topology,
+                    uint32_t           numIndices,
+                    uint32_t           indexOffset,
+                    int32_t            baseVertex)
 {
     DrawIndexedInstance(hContext, topology, numIndices, indexOffset, baseVertex);
 }
@@ -1420,48 +1429,49 @@ void SwrDrawIndexed(
 /// @param numInstances - Number of instances to render.
 /// @param indexOffset - Starting index into index buffer.
 /// @param baseVertex - Vertex in vertex buffer to consider as index "0". Note value is signed.
-/// @param startInstance - Which instance to start sequentially fetching from in each buffer (instanced data)
-void SwrDrawIndexedInstanced(
-    HANDLE hContext,
-    PRIMITIVE_TOPOLOGY topology,
-    uint32_t numIndices,
-    uint32_t numInstances,
-    uint32_t indexOffset,
-    int32_t baseVertex,
-    uint32_t startInstance)
+/// @param startInstance - Which instance to start sequentially fetching from in each buffer
+/// (instanced data)
+void SwrDrawIndexedInstanced(HANDLE             hContext,
+                             PRIMITIVE_TOPOLOGY topology,
+                             uint32_t           numIndices,
+                             uint32_t           numInstances,
+                             uint32_t           indexOffset,
+                             int32_t            baseVertex,
+                             uint32_t           startInstance)
 {
-    DrawIndexedInstance(hContext, topology, numIndices, indexOffset, baseVertex, numInstances, startInstance);
+    DrawIndexedInstance(
+        hContext, topology, numIndices, indexOffset, baseVertex, numInstances, startInstance);
 }
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief SwrInvalidateTiles
 /// @param hContext - Handle passed back from SwrCreateContext
-/// @param attachmentMask - The mask specifies which surfaces attached to the hottiles to invalidate.
+/// @param attachmentMask - The mask specifies which surfaces attached to the hottiles to
+/// invalidate.
 /// @param invalidateRect - The pixel-coordinate rectangle to invalidate.  This will be expanded to
 ///                         be hottile size-aligned.
-void SWR_API SwrInvalidateTiles(
-    HANDLE hContext,
-    uint32_t attachmentMask,
-    const SWR_RECT& invalidateRect)
+void SWR_API SwrInvalidateTiles(HANDLE          hContext,
+                                uint32_t        attachmentMask,
+                                const SWR_RECT& invalidateRect)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
-    pDC->FeWork.type = DISCARDINVALIDATETILES;
-    pDC->FeWork.pfnWork = ProcessDiscardInvalidateTiles;
+    pDC->FeWork.type                                       = DISCARDINVALIDATETILES;
+    pDC->FeWork.pfnWork                                    = ProcessDiscardInvalidateTiles;
     pDC->FeWork.desc.discardInvalidateTiles.attachmentMask = attachmentMask;
-    pDC->FeWork.desc.discardInvalidateTiles.rect = invalidateRect;
+    pDC->FeWork.desc.discardInvalidateTiles.rect           = invalidateRect;
     pDC->FeWork.desc.discardInvalidateTiles.rect &= g_MaxScissorRect;
-    pDC->FeWork.desc.discardInvalidateTiles.newTileState = SWR_TILE_INVALID;
+    pDC->FeWork.desc.discardInvalidateTiles.newTileState   = SWR_TILE_INVALID;
     pDC->FeWork.desc.discardInvalidateTiles.createNewTiles = false;
-    pDC->FeWork.desc.discardInvalidateTiles.fullTilesOnly = false;
+    pDC->FeWork.desc.discardInvalidateTiles.fullTilesOnly  = false;
 
-    //enqueue
+    // enqueue
     QueueDraw(pContext);
 
     AR_API_EVENT(SwrInvalidateTilesEvent(pDC->drawId));
@@ -1473,30 +1483,27 @@ void SWR_API SwrInvalidateTiles(
 /// @param attachmentMask - The mask specifies which surfaces attached to the hottiles to discard.
 /// @param rect - The pixel-coordinate rectangle to discard.  Only fully-covered hottiles will be
 ///               discarded.
-void SWR_API SwrDiscardRect(
-    HANDLE hContext,
-    uint32_t attachmentMask,
-    const SWR_RECT& rect)
+void SWR_API SwrDiscardRect(HANDLE hContext, uint32_t attachmentMask, const SWR_RECT& rect)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     // Queue a load to the hottile
-    pDC->FeWork.type = DISCARDINVALIDATETILES;
-    pDC->FeWork.pfnWork = ProcessDiscardInvalidateTiles;
+    pDC->FeWork.type                                       = DISCARDINVALIDATETILES;
+    pDC->FeWork.pfnWork                                    = ProcessDiscardInvalidateTiles;
     pDC->FeWork.desc.discardInvalidateTiles.attachmentMask = attachmentMask;
-    pDC->FeWork.desc.discardInvalidateTiles.rect = rect;
+    pDC->FeWork.desc.discardInvalidateTiles.rect           = rect;
     pDC->FeWork.desc.discardInvalidateTiles.rect &= g_MaxScissorRect;
-    pDC->FeWork.desc.discardInvalidateTiles.newTileState = SWR_TILE_RESOLVED;
+    pDC->FeWork.desc.discardInvalidateTiles.newTileState   = SWR_TILE_RESOLVED;
     pDC->FeWork.desc.discardInvalidateTiles.createNewTiles = true;
-    pDC->FeWork.desc.discardInvalidateTiles.fullTilesOnly = true;
+    pDC->FeWork.desc.discardInvalidateTiles.fullTilesOnly  = true;
 
-    //enqueue
+    // enqueue
     QueueDraw(pContext);
 
     AR_API_EVENT(SwrDiscardRectEvent(pDC->drawId));
@@ -1508,23 +1515,23 @@ void SWR_API SwrDiscardRect(
 /// @param threadGroupCountX - Number of thread groups dispatched in X direction
 /// @param threadGroupCountY - Number of thread groups dispatched in Y direction
 /// @param threadGroupCountZ - Number of thread groups dispatched in Z direction
-void SwrDispatch(
-    HANDLE hContext,
-    uint32_t threadGroupCountX,
-    uint32_t threadGroupCountY,
-    uint32_t threadGroupCountZ)
+void SwrDispatch(HANDLE   hContext,
+                 uint32_t threadGroupCountX,
+                 uint32_t threadGroupCountY,
+                 uint32_t threadGroupCountZ)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     RDTSC_BEGIN(APIDispatch, pDC->drawId);
-    AR_API_EVENT(DispatchEvent(pDC->drawId, threadGroupCountX, threadGroupCountY, threadGroupCountZ));
-    pDC->isCompute = true;      // This is a compute context.
+    AR_API_EVENT(
+        DispatchEvent(pDC->drawId, threadGroupCountX, threadGroupCountY, threadGroupCountZ));
+    pDC->isCompute = true; // This is a compute context.
 
     COMPUTE_DESC* pTaskData = (COMPUTE_DESC*)pDC->pArena->AllocAligned(sizeof(COMPUTE_DESC), 64);
 
@@ -1533,8 +1540,8 @@ void SwrDispatch(
     pTaskData->threadGroupCountZ = threadGroupCountZ;
 
     uint32_t totalThreadGroups = threadGroupCountX * threadGroupCountY * threadGroupCountZ;
-    uint32_t dcIndex = pDC->drawId % pContext->MAX_DRAWS_IN_FLIGHT;
-    pDC->pDispatch = &pContext->pDispatchQueueArray[dcIndex];
+    uint32_t dcIndex           = pDC->drawId % pContext->MAX_DRAWS_IN_FLIGHT;
+    pDC->pDispatch             = &pContext->pDispatchQueueArray[dcIndex];
     pDC->pDispatch->initialize(totalThreadGroups, pTaskData, &ProcessComputeBE);
 
     QueueDispatch(pContext);
@@ -1543,30 +1550,29 @@ void SwrDispatch(
 
 // Deswizzles, converts and stores current contents of the hot tiles to surface
 // described by pState
-void SWR_API SwrStoreTiles(
-    HANDLE hContext,
-    uint32_t attachmentMask,
-    SWR_TILE_STATE postStoreTileState,
-    const SWR_RECT& storeRect)
+void SWR_API SwrStoreTiles(HANDLE          hContext,
+                           uint32_t        attachmentMask,
+                           SWR_TILE_STATE  postStoreTileState,
+                           const SWR_RECT& storeRect)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     RDTSC_BEGIN(APIStoreTiles, pDC->drawId);
 
-    pDC->FeWork.type = STORETILES;
-    pDC->FeWork.pfnWork = ProcessStoreTiles;
-    pDC->FeWork.desc.storeTiles.attachmentMask = attachmentMask;
+    pDC->FeWork.type                               = STORETILES;
+    pDC->FeWork.pfnWork                            = ProcessStoreTiles;
+    pDC->FeWork.desc.storeTiles.attachmentMask     = attachmentMask;
     pDC->FeWork.desc.storeTiles.postStoreTileState = postStoreTileState;
-    pDC->FeWork.desc.storeTiles.rect = storeRect;
+    pDC->FeWork.desc.storeTiles.rect               = storeRect;
     pDC->FeWork.desc.storeTiles.rect &= g_MaxScissorRect;
 
-    //enqueue
+    // enqueue
     QueueDraw(pContext);
 
     AR_API_EVENT(SwrStoreTilesEvent(pDC->drawId));
@@ -1583,37 +1589,36 @@ void SWR_API SwrStoreTiles(
 /// @param z - depth value use for clearing depth buffer
 /// @param stencil - stencil value used for clearing stencil buffer
 /// @param clearRect - The pixel-coordinate rectangle to clear in all cleared buffers
-void SWR_API SwrClearRenderTarget(
-    HANDLE hContext,
-    uint32_t attachmentMask,
-    uint32_t renderTargetArrayIndex,
-    const float clearColor[4],
-    float z,
-    uint8_t stencil,
-    const SWR_RECT& clearRect)
+void SWR_API SwrClearRenderTarget(HANDLE          hContext,
+                                  uint32_t        attachmentMask,
+                                  uint32_t        renderTargetArrayIndex,
+                                  const float     clearColor[4],
+                                  float           z,
+                                  uint8_t         stencil,
+                                  const SWR_RECT& clearRect)
 {
     if (KNOB_TOSS_DRAW)
     {
         return;
     }
 
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     RDTSC_BEGIN(APIClearRenderTarget, pDC->drawId);
 
-    pDC->FeWork.type = CLEAR;
-    pDC->FeWork.pfnWork = ProcessClear;
+    pDC->FeWork.type            = CLEAR;
+    pDC->FeWork.pfnWork         = ProcessClear;
     pDC->FeWork.desc.clear.rect = clearRect;
     pDC->FeWork.desc.clear.rect &= g_MaxScissorRect;
-    pDC->FeWork.desc.clear.attachmentMask = attachmentMask;
+    pDC->FeWork.desc.clear.attachmentMask         = attachmentMask;
     pDC->FeWork.desc.clear.renderTargetArrayIndex = renderTargetArrayIndex;
-    pDC->FeWork.desc.clear.clearDepth = z;
-    pDC->FeWork.desc.clear.clearRTColor[0] = clearColor[0];
-    pDC->FeWork.desc.clear.clearRTColor[1] = clearColor[1];
-    pDC->FeWork.desc.clear.clearRTColor[2] = clearColor[2];
-    pDC->FeWork.desc.clear.clearRTColor[3] = clearColor[3];
-    pDC->FeWork.desc.clear.clearStencil = stencil;
+    pDC->FeWork.desc.clear.clearDepth             = z;
+    pDC->FeWork.desc.clear.clearRTColor[0]        = clearColor[0];
+    pDC->FeWork.desc.clear.clearRTColor[1]        = clearColor[1];
+    pDC->FeWork.desc.clear.clearRTColor[2]        = clearColor[2];
+    pDC->FeWork.desc.clear.clearRTColor[3]        = clearColor[3];
+    pDC->FeWork.desc.clear.clearStencil           = stencil;
 
     // enqueue draw
     QueueDraw(pContext);
@@ -1627,16 +1632,16 @@ void SWR_API SwrClearRenderTarget(
 ///        sampler.
 ///        SWR is responsible for the allocation of the private context state.
 /// @param hContext - Handle passed back from SwrCreateContext
-VOID* SwrGetPrivateContextState(
-    HANDLE hContext)
+VOID* SwrGetPrivateContextState(HANDLE hContext)
 {
-    SWR_CONTEXT* pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
-    DRAW_STATE* pState = pDC->pState;
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
+    DRAW_STATE*   pState   = pDC->pState;
 
     if (pState->pPrivateState == nullptr)
     {
-        pState->pPrivateState = pState->pArena->AllocAligned(pContext->privateStateSize, KNOB_SIMD_WIDTH*sizeof(float));
+        pState->pPrivateState = pState->pArena->AllocAligned(pContext->privateStateSize,
+                                                             KNOB_SIMD_WIDTH * sizeof(float));
     }
 
     return pState->pPrivateState;
@@ -1650,13 +1655,10 @@ VOID* SwrGetPrivateContextState(
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param size - Size of allocation
 /// @param align - Alignment needed for allocation.
-VOID* SwrAllocDrawContextMemory(
-    HANDLE hContext,
-    uint32_t size,
-    uint32_t align)
+VOID* SwrAllocDrawContextMemory(HANDLE hContext, uint32_t size, uint32_t align)
 {
-    SWR_CONTEXT* pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     return pDC->pState->pArena->AllocAligned(size, align);
 }
@@ -1665,12 +1667,10 @@ VOID* SwrAllocDrawContextMemory(
 /// @brief Enables stats counting
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param enable - If true then counts are incremented.
-void SwrEnableStatsFE(
-    HANDLE hContext,
-    bool enable)
+void SwrEnableStatsFE(HANDLE hContext, bool enable)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     pDC->pState->state.enableStatsFE = enable;
 }
@@ -1679,12 +1679,10 @@ void SwrEnableStatsFE(
 /// @brief Enables stats counting
 /// @param hContext - Handle passed back from SwrCreateContext
 /// @param enable - If true then counts are incremented.
-void SwrEnableStatsBE(
-    HANDLE hContext,
-    bool enable)
+void SwrEnableStatsBE(HANDLE hContext, bool enable)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
 
     pDC->pState->state.enableStatsBE = enable;
 }
@@ -1692,11 +1690,10 @@ void SwrEnableStatsBE(
 //////////////////////////////////////////////////////////////////////////
 /// @brief Mark end of frame - used for performance profiling
 /// @param hContext - Handle passed back from SwrCreateContext
-void SWR_API SwrEndFrame(
-    HANDLE hContext)
+void SWR_API SwrEndFrame(HANDLE hContext)
 {
-    SWR_CONTEXT *pContext = GetContext(hContext);
-    DRAW_CONTEXT* pDC = GetDrawContext(pContext);
+    SWR_CONTEXT*  pContext = GetContext(hContext);
+    DRAW_CONTEXT* pDC      = GetDrawContext(pContext);
     (void)pDC; // var used
 
     RDTSC_ENDFRAME();
@@ -1716,64 +1713,60 @@ void InitBackendFuncTables();
 /// @brief Initialize swr backend and memory internal tables
 void SwrInit()
 {
-    InitSimLoadTilesTable();
-    InitSimStoreTilesTable();
-    InitSimClearTilesTable();
-
     InitClearTilesTable();
     InitBackendFuncTables();
     InitRasterizerFunctions();
 }
 
-void SwrGetInterface(SWR_INTERFACE &out_funcs)
+void SwrGetInterface(SWR_INTERFACE& out_funcs)
 {
-    out_funcs.pfnSwrCreateContext = SwrCreateContext;
-    out_funcs.pfnSwrDestroyContext = SwrDestroyContext;
-    out_funcs.pfnSwrBindApiThread = SwrBindApiThread;
-    out_funcs.pfnSwrSaveState = SwrSaveState;
-    out_funcs.pfnSwrRestoreState = SwrRestoreState;
-    out_funcs.pfnSwrSync = SwrSync;
-    out_funcs.pfnSwrStallBE = SwrStallBE;
-    out_funcs.pfnSwrWaitForIdle = SwrWaitForIdle;
-    out_funcs.pfnSwrWaitForIdleFE = SwrWaitForIdleFE;
-    out_funcs.pfnSwrSetVertexBuffers = SwrSetVertexBuffers;
-    out_funcs.pfnSwrSetIndexBuffer = SwrSetIndexBuffer;
-    out_funcs.pfnSwrSetFetchFunc = SwrSetFetchFunc;
-    out_funcs.pfnSwrSetSoFunc = SwrSetSoFunc;
-    out_funcs.pfnSwrSetSoState = SwrSetSoState;
-    out_funcs.pfnSwrSetSoBuffers = SwrSetSoBuffers;
-    out_funcs.pfnSwrSetVertexFunc = SwrSetVertexFunc;
-    out_funcs.pfnSwrSetFrontendState = SwrSetFrontendState;
-    out_funcs.pfnSwrSetGsState = SwrSetGsState;
-    out_funcs.pfnSwrSetGsFunc = SwrSetGsFunc;
-    out_funcs.pfnSwrSetCsFunc = SwrSetCsFunc;
-    out_funcs.pfnSwrSetTsState = SwrSetTsState;
-    out_funcs.pfnSwrSetHsFunc = SwrSetHsFunc;
-    out_funcs.pfnSwrSetDsFunc = SwrSetDsFunc;
-    out_funcs.pfnSwrSetDepthStencilState = SwrSetDepthStencilState;
-    out_funcs.pfnSwrSetBackendState = SwrSetBackendState;
-    out_funcs.pfnSwrSetDepthBoundsState = SwrSetDepthBoundsState;
-    out_funcs.pfnSwrSetPixelShaderState = SwrSetPixelShaderState;
-    out_funcs.pfnSwrSetBlendState = SwrSetBlendState;
-    out_funcs.pfnSwrSetBlendFunc = SwrSetBlendFunc;
-    out_funcs.pfnSwrDraw = SwrDraw;
-    out_funcs.pfnSwrDrawInstanced = SwrDrawInstanced;
-    out_funcs.pfnSwrDrawIndexed = SwrDrawIndexed;
-    out_funcs.pfnSwrDrawIndexedInstanced = SwrDrawIndexedInstanced;
-    out_funcs.pfnSwrInvalidateTiles = SwrInvalidateTiles;
-    out_funcs.pfnSwrDiscardRect = SwrDiscardRect;
-    out_funcs.pfnSwrDispatch = SwrDispatch;
-    out_funcs.pfnSwrStoreTiles = SwrStoreTiles;
-    out_funcs.pfnSwrClearRenderTarget = SwrClearRenderTarget;
-    out_funcs.pfnSwrSetRastState = SwrSetRastState;
-    out_funcs.pfnSwrSetViewports = SwrSetViewports;
-    out_funcs.pfnSwrSetScissorRects = SwrSetScissorRects;
+    out_funcs.pfnSwrCreateContext          = SwrCreateContext;
+    out_funcs.pfnSwrDestroyContext         = SwrDestroyContext;
+    out_funcs.pfnSwrBindApiThread          = SwrBindApiThread;
+    out_funcs.pfnSwrSaveState              = SwrSaveState;
+    out_funcs.pfnSwrRestoreState           = SwrRestoreState;
+    out_funcs.pfnSwrSync                   = SwrSync;
+    out_funcs.pfnSwrStallBE                = SwrStallBE;
+    out_funcs.pfnSwrWaitForIdle            = SwrWaitForIdle;
+    out_funcs.pfnSwrWaitForIdleFE          = SwrWaitForIdleFE;
+    out_funcs.pfnSwrSetVertexBuffers       = SwrSetVertexBuffers;
+    out_funcs.pfnSwrSetIndexBuffer         = SwrSetIndexBuffer;
+    out_funcs.pfnSwrSetFetchFunc           = SwrSetFetchFunc;
+    out_funcs.pfnSwrSetSoFunc              = SwrSetSoFunc;
+    out_funcs.pfnSwrSetSoState             = SwrSetSoState;
+    out_funcs.pfnSwrSetSoBuffers           = SwrSetSoBuffers;
+    out_funcs.pfnSwrSetVertexFunc          = SwrSetVertexFunc;
+    out_funcs.pfnSwrSetFrontendState       = SwrSetFrontendState;
+    out_funcs.pfnSwrSetGsState             = SwrSetGsState;
+    out_funcs.pfnSwrSetGsFunc              = SwrSetGsFunc;
+    out_funcs.pfnSwrSetCsFunc              = SwrSetCsFunc;
+    out_funcs.pfnSwrSetTsState             = SwrSetTsState;
+    out_funcs.pfnSwrSetHsFunc              = SwrSetHsFunc;
+    out_funcs.pfnSwrSetDsFunc              = SwrSetDsFunc;
+    out_funcs.pfnSwrSetDepthStencilState   = SwrSetDepthStencilState;
+    out_funcs.pfnSwrSetBackendState        = SwrSetBackendState;
+    out_funcs.pfnSwrSetDepthBoundsState    = SwrSetDepthBoundsState;
+    out_funcs.pfnSwrSetPixelShaderState    = SwrSetPixelShaderState;
+    out_funcs.pfnSwrSetBlendState          = SwrSetBlendState;
+    out_funcs.pfnSwrSetBlendFunc           = SwrSetBlendFunc;
+    out_funcs.pfnSwrDraw                   = SwrDraw;
+    out_funcs.pfnSwrDrawInstanced          = SwrDrawInstanced;
+    out_funcs.pfnSwrDrawIndexed            = SwrDrawIndexed;
+    out_funcs.pfnSwrDrawIndexedInstanced   = SwrDrawIndexedInstanced;
+    out_funcs.pfnSwrInvalidateTiles        = SwrInvalidateTiles;
+    out_funcs.pfnSwrDiscardRect            = SwrDiscardRect;
+    out_funcs.pfnSwrDispatch               = SwrDispatch;
+    out_funcs.pfnSwrStoreTiles             = SwrStoreTiles;
+    out_funcs.pfnSwrClearRenderTarget      = SwrClearRenderTarget;
+    out_funcs.pfnSwrSetRastState           = SwrSetRastState;
+    out_funcs.pfnSwrSetViewports           = SwrSetViewports;
+    out_funcs.pfnSwrSetScissorRects        = SwrSetScissorRects;
     out_funcs.pfnSwrGetPrivateContextState = SwrGetPrivateContextState;
     out_funcs.pfnSwrAllocDrawContextMemory = SwrAllocDrawContextMemory;
-    out_funcs.pfnSwrEnableStatsFE = SwrEnableStatsFE;
-    out_funcs.pfnSwrEnableStatsBE = SwrEnableStatsBE;
-    out_funcs.pfnSwrEndFrame = SwrEndFrame;
-    out_funcs.pfnSwrInit = SwrInit;
+    out_funcs.pfnSwrEnableStatsFE          = SwrEnableStatsFE;
+    out_funcs.pfnSwrEnableStatsBE          = SwrEnableStatsBE;
+    out_funcs.pfnSwrEndFrame               = SwrEndFrame;
+    out_funcs.pfnSwrInit                   = SwrInit;
     out_funcs.pfnSwrLoadHotTile = SwrLoadHotTile;
     out_funcs.pfnSwrStoreHotTileToSurface = SwrStoreHotTileToSurface;
     out_funcs.pfnSwrStoreHotTileClear = SwrStoreHotTileClear;

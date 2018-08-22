@@ -55,6 +55,7 @@ util_create_texture2d(struct pipe_screen *screen, unsigned width,
    templ.depth0 = 1;
    templ.array_size = 1;
    templ.nr_samples = num_samples;
+   templ.nr_storage_samples = num_samples;
    templ.format = format;
    templ.usage = PIPE_USAGE_DEFAULT;
    templ.bind = PIPE_BIND_SAMPLER_VIEW |
@@ -649,7 +650,7 @@ test_texture_barrier(struct pipe_context *ctx, bool use_fbfetch,
       /* Vertex shader. */
       void *vs = util_set_passthrough_vertex_shader(cso, ctx, false);
 
-      for (int i = 0; i < num_samples / 2; i++) {
+      for (unsigned i = 0; i < num_samples / 2; i++) {
          float value;
 
          /* 2 consecutive samples should have the same color to test MSAA

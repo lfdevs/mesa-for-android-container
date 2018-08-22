@@ -217,7 +217,7 @@ static const char *shflOpStr[] =
 
 static const char *pixldOpStr[] =
 {
-   "count", "covmask", "offset", "cent_offset", "sampleid"
+   "count", "covmask", "covered", "offset", "cent_offset", "sampleid"
 };
 
 static const char *rcprsqOpStr[] =
@@ -306,6 +306,7 @@ static const char *SemanticStr[SV_LAST + 1] =
    "TESS_INNER",
    "TESS_COORD",
    "TID",
+   "COMBINED_TID",
    "CTAID",
    "NTID",
    "GRIDID",

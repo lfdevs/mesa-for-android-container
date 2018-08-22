@@ -33,6 +33,7 @@
 //    --gen_intrin_h
 //
 //============================================================================
+// clang-format off
 #pragma once
 
 //============================================================================
@@ -42,7 +43,7 @@ Value* CTTZ(Value* a, Value* flag, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::cttz, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::cttz, args);
     return CALL(pFunc, std::initializer_list<Value*>{a, flag}, name);
 }
 
@@ -50,7 +51,7 @@ Value* CTLZ(Value* a, Value* flag, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::ctlz, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::ctlz, args);
     return CALL(pFunc, std::initializer_list<Value*>{a, flag}, name);
 }
 
@@ -58,19 +59,19 @@ Value* VSQRTPS(Value* a, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::sqrt, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::sqrt, args);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
 Value* STACKSAVE(const llvm::Twine& name = "")
 {
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::stacksave);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::stacksave);
     return CALL(pFunc, std::initializer_list<Value*>{}, name);
 }
 
 Value* STACKRESTORE(Value* a, const llvm::Twine& name = "")
 {
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::stackrestore);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::stackrestore);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
@@ -78,7 +79,7 @@ Value* VMINPS(Value* a, Value* b, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::minnum, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::minnum, args);
     return CALL(pFunc, std::initializer_list<Value*>{a, b}, name);
 }
 
@@ -86,13 +87,13 @@ Value* VMAXPS(Value* a, Value* b, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::maxnum, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::maxnum, args);
     return CALL(pFunc, std::initializer_list<Value*>{a, b}, name);
 }
 
 Value* DEBUGTRAP(const llvm::Twine& name = "")
 {
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::debugtrap);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::debugtrap);
     return CALL(pFunc, std::initializer_list<Value*>{}, name);
 }
 
@@ -100,7 +101,7 @@ Value* POPCNT(Value* a, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::ctpop, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::ctpop, args);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
@@ -108,7 +109,7 @@ Value* LOG2(Value* a, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::log2, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::log2, args);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
@@ -116,7 +117,7 @@ Value* FABS(Value* a, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::fabs, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::fabs, args);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
@@ -124,7 +125,7 @@ Value* EXP2(Value* a, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::exp2, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::exp2, args);
     return CALL(pFunc, std::initializer_list<Value*>{a}, name);
 }
 
@@ -132,7 +133,8 @@ Value* POW(Value* a, Value* b, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 1> args;
     args.push_back(a->getType());
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::pow, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::pow, args);
     return CALL(pFunc, std::initializer_list<Value*>{a, b}, name);
 }
 
+    // clang-format on

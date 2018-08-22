@@ -31,9 +31,12 @@
 #include "cle/v3d_packet_v41_pack.h"
 
 static void
-vir_TMU_WRITE(struct v3d_compile *c, enum v3d_qpu_waddr waddr, struct qreg val)
+vir_TMU_WRITE(struct v3d_compile *c, enum v3d_qpu_waddr waddr, struct qreg val,
+              int *tmu_writes)
 {
         vir_MOV_dest(c, vir_reg(QFILE_MAGIC, waddr), val);
+
+        (*tmu_writes)++;
 }
 
 static void
@@ -49,6 +52,10 @@ void
 v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 {
         unsigned unit = instr->texture_index;
+        int tmu_writes = 0;
+        static const struct V3D41_TMU_CONFIG_PARAMETER_2 p2_unpacked_default = {
+                .op = V3D_TMU_OP_REGULAR,
+        };
 
         struct V3D41_TMU_CONFIG_PARAMETER_0 p0_unpacked = {
         };
@@ -82,29 +89,32 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                         if (non_array_components > 1) {
                                 vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUT,
                                               ntq_get_src(c, instr->src[i].src,
-                                                          1));
+                                                          1), &tmu_writes);
                         }
                         if (non_array_components > 2) {
                                 vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUR,
                                               ntq_get_src(c, instr->src[i].src,
-                                                          2));
+                                                          2), &tmu_writes);
                         }
 
                         if (instr->is_array) {
                                 vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUI,
                                               ntq_get_src(c, instr->src[i].src,
-                                                          instr->coord_components - 1));
+                                                          instr->coord_components - 1),
+                                              &tmu_writes);
                         }
                         break;
 
                 case nir_tex_src_bias:
                         vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUB,
-                                      ntq_get_src(c, instr->src[i].src, 0));
+                                      ntq_get_src(c, instr->src[i].src, 0),
+                                      &tmu_writes);
                         break;
 
                 case nir_tex_src_lod:
                         vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUB,
-                                      ntq_get_src(c, instr->src[i].src, 0));
+                                      ntq_get_src(c, instr->src[i].src, 0),
+                                      &tmu_writes);
 
                         if (instr->op != nir_texop_txf &&
                             instr->op != nir_texop_tg4) {
@@ -114,7 +124,8 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 
                 case nir_tex_src_comparator:
                         vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUDREF,
-                                      ntq_get_src(c, instr->src[i].src, 0));
+                                      ntq_get_src(c, instr->src[i].src, 0),
+                                      &tmu_writes);
                         break;
 
                 case nir_tex_src_offset: {
@@ -145,6 +156,14 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                 (1 << MIN2(instr_return_channels,
                            c->key->tex[unit].return_channels)) - 1;
 
+        /* Word enables can't ask for more channels than the output type could
+         * provide (2 for f16, 4 for 32-bit).
+         */
+        assert(!p1_unpacked.output_type_32_bit ||
+               p0_unpacked.return_words_of_texture_data < (1 << 4));
+        assert(p1_unpacked.output_type_32_bit ||
+               p0_unpacked.return_words_of_texture_data < (1 << 2));
+
         uint32_t p0_packed;
         V3D41_TMU_CONFIG_PARAMETER_0_pack(NULL,
                                           (uint8_t *)&p0_packed,
@@ -169,18 +188,25 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 
         vir_WRTMUC(c, QUNIFORM_TMU_CONFIG_P0, p0_packed);
         vir_WRTMUC(c, QUNIFORM_TMU_CONFIG_P1, p1_packed);
-        vir_WRTMUC(c, QUNIFORM_CONSTANT, p2_packed);
+        if (memcmp(&p2_unpacked, &p2_unpacked_default, sizeof(p2_unpacked)) != 0)
+                vir_WRTMUC(c, QUNIFORM_CONSTANT, p2_packed);
 
         if (instr->op == nir_texop_txf) {
                 assert(instr->sampler_dim != GLSL_SAMPLER_DIM_CUBE);
-                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUSF, s);
+                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUSF, s, &tmu_writes);
         } else if (instr->sampler_dim == GLSL_SAMPLER_DIM_CUBE) {
-                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUSCM, s);
+                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUSCM, s, &tmu_writes);
         } else {
-                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUS, s);
+                vir_TMU_WRITE(c, V3D_QPU_WADDR_TMUS, s, &tmu_writes);
         }
 
         vir_emit_thrsw(c);
+
+        /* The input FIFO has 16 slots across all threads, so make sure we
+         * don't overfill our allocation.
+         */
+        while (tmu_writes > 16 / c->threads)
+                c->threads /= 2;
 
         struct qreg return_values[4];
         for (int i = 0; i < 4; i++) {

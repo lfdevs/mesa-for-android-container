@@ -550,3 +550,33 @@ qbw_postclamp:
 qbw_done:
    exit send (extrinsrt 0x0 $r4 0x0 0x10 0x10)
    maddrsend 0x44
+
+/* NVC0_3D_MACRO_CONSERVATIVE_RASTER_STATE:
+ *
+ * This sets basically all the conservative rasterization state. It sets
+ * CONSERVATIVE_RASTER to one while doing so.
+ *
+ * arg = biasx | biasy<<4 | (dilation*4)<<8 | mode<<10
+ */
+.section #mme9097_conservative_raster_state
+   /* Mode and dilation */
+   maddr 0x1d00 /* SCRATCH[0] */
+   send 0x0 /* unknown */
+   send (extrinsrt 0x0 $r1 8 3 23) /* value */
+   mov $r2 0x7
+   send (extrinsrt 0x0 $r2 0 3 23) /* write mask */
+   maddr 0x18c4 /* FIRMWARE[4] */
+   mov $r2 0x831
+   send (extrinsrt 0x0 $r2 0 12 11) /* sends 0x418800 */
+   /* Subpixel precision */
+   mov $r2 (extrinsrt 0x0 $r1 0 4 0)
+   mov $r2 (extrinsrt $r2 $r1 4 4 8)
+   maddr 0x8287 /* SUBPIXEL_PRECISION[0] (incrementing by 8 methods) */
+   mov $r3 16 /* loop counter */
+crs_loop:
+   mov $r3 (add $r3 -1)
+   branz $r3 #crs_loop
+   send $r2
+   /* Enable */
+   exit maddr 0x1452 /* CONSERVATIVE_RASTER */
+   send 0x1

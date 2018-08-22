@@ -140,10 +140,6 @@ tgsi_transform_shader(const struct tgsi_token *tokens_in,
       return -1;
    }
    procType = parse.FullHeader.Processor.Processor;
-   assert(procType == PIPE_SHADER_FRAGMENT ||
-          procType == PIPE_SHADER_VERTEX ||
-          procType == PIPE_SHADER_GEOMETRY);
-
 
    /**
     **  Setup output shader

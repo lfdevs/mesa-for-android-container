@@ -208,7 +208,7 @@ gm107_create_texture_view(struct pipe_context *pipe,
              GM107_TIC2_3_LOD_ANISO_QUALITY_HIGH |
              GM107_TIC2_3_LOD_ISO_QUALITY_HIGH;
 
-   if (flags & NV50_TEXVIEW_ACCESS_RESOLVE) {
+   if (flags & (NV50_TEXVIEW_ACCESS_RESOLVE | NV50_TEXVIEW_IMAGE_GM107)) {
       width = mt->base.base.width0 << mt->ms_x;
       height = mt->base.base.height0 << mt->ms_y;
    } else {
@@ -268,7 +268,7 @@ gm107_create_texture_view_from_image(struct pipe_context *pipe,
       templ.u.tex.first_level = templ.u.tex.last_level = view->u.tex.level;
    }
 
-   flags = NV50_TEXVIEW_SCALED_COORDS;
+   flags = NV50_TEXVIEW_SCALED_COORDS | NV50_TEXVIEW_IMAGE_GM107;
 
    return nvc0_create_texture_view(pipe, &res->base, &templ, flags, target);
 }
@@ -755,7 +755,7 @@ nve4_set_tex_handles(struct nvc0_context *nvc0)
          dirty &= ~(1 << i);
 
          BEGIN_NVC0(push, NVC0_3D(CB_POS), 2);
-         PUSH_DATA (push, (8 + i) * 4);
+         PUSH_DATA (push, NVC0_CB_AUX_TEX_INFO(i));
          PUSH_DATA (push, nvc0->tex_handles[s][i]);
       } while (dirty);
 

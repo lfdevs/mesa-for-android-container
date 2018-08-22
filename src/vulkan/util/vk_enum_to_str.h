@@ -47,6 +47,7 @@
 #define _VK_ANDROID_external_memory_android_hardware_buffer_number (130)
 #define _VK_EXT_acquire_xlib_display_number (90)
 #define _VK_EXT_blend_operation_advanced_number (149)
+#define _VK_EXT_conditional_rendering_number (82)
 #define _VK_EXT_conservative_rasterization_number (102)
 #define _VK_EXT_debug_marker_number (23)
 #define _VK_EXT_debug_report_number (12)
@@ -77,14 +78,17 @@
 #define _VK_IMG_filter_cubic_number (16)
 #define _VK_IMG_format_pvrtc_number (55)
 #define _VK_KHR_16bit_storage_number (84)
+#define _VK_KHR_8bit_storage_number (178)
 #define _VK_KHR_android_surface_number (9)
 #define _VK_KHR_bind_memory2_number (158)
+#define _VK_KHR_create_renderpass2_number (110)
 #define _VK_KHR_dedicated_allocation_number (128)
 #define _VK_KHR_descriptor_update_template_number (86)
 #define _VK_KHR_device_group_number (61)
 #define _VK_KHR_device_group_creation_number (71)
 #define _VK_KHR_display_number (3)
 #define _VK_KHR_display_swapchain_number (4)
+#define _VK_KHR_draw_indirect_count_number (170)
 #define _VK_KHR_external_fence_number (114)
 #define _VK_KHR_external_fence_capabilities_number (113)
 #define _VK_KHR_external_fence_fd_number (116)
@@ -97,6 +101,7 @@
 #define _VK_KHR_external_semaphore_capabilities_number (77)
 #define _VK_KHR_external_semaphore_fd_number (80)
 #define _VK_KHR_external_semaphore_win32_number (79)
+#define _VK_KHR_get_display_properties2_number (122)
 #define _VK_KHR_get_memory_requirements2_number (147)
 #define _VK_KHR_get_physical_device_properties2_number (60)
 #define _VK_KHR_get_surface_capabilities2_number (120)
@@ -202,6 +207,7 @@ const char * vk_SystemAllocationScope_to_str(VkSystemAllocationScope input);
 const char * vk_TessellationDomainOrigin_to_str(VkTessellationDomainOrigin input);
 const char * vk_ValidationCacheHeaderVersionEXT_to_str(VkValidationCacheHeaderVersionEXT input);
 const char * vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input);
+const char * vk_VendorId_to_str(VkVendorId input);
 const char * vk_VertexInputRate_to_str(VkVertexInputRate input);
 const char * vk_ViewportCoordinateSwizzleNV_to_str(VkViewportCoordinateSwizzleNV input);
 

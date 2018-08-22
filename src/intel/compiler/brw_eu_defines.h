@@ -46,6 +46,13 @@
       fieldval & field ## _MASK;                                        \
    })
 
+#define SET_BITS(value, high, low)                                      \
+   ({                                                                   \
+      const uint32_t fieldval = (value) << (low);                       \
+      assert((fieldval & ~INTEL_MASK(high, low)) == 0);                 \
+      fieldval & INTEL_MASK(high, low);                                 \
+   })
+
 #define GET_BITS(data, high, low) ((data & INTEL_MASK((high), (low))) >> (low))
 #define GET_FIELD(word, field) (((word)  & field ## _MASK) >> field ## _SHIFT)
 
@@ -200,7 +207,7 @@ enum opcode {
    BRW_OPCODE_SHR =	8,
    BRW_OPCODE_SHL =	9,
    BRW_OPCODE_DIM =	10,  /**< Gen7.5 only */ /* Reused */
-   // BRW_OPCODE_SMOV =	10,  /**< Gen8+       */ /* Reused */
+   BRW_OPCODE_SMOV =	10,  /**< Gen8+       */ /* Reused */
    /* Reserved - 11 */
    BRW_OPCODE_ASR =	12,
    /* Reserved - 13-15 */
@@ -216,27 +223,27 @@ enum opcode {
    BRW_OPCODE_BFI2 =	26,  /**< Gen7+ */
    /* Reserved - 27-31 */
    BRW_OPCODE_JMPI =	32,
-   // BRW_OPCODE_BRD =	33,  /**< Gen7+ */
+   BRW_OPCODE_BRD =	33,  /**< Gen7+ */
    BRW_OPCODE_IF =	34,
    BRW_OPCODE_IFF =	35,  /**< Pre-Gen6    */ /* Reused */
-   // BRW_OPCODE_BRC =	35,  /**< Gen7+       */ /* Reused */
+   BRW_OPCODE_BRC =	35,  /**< Gen7+       */ /* Reused */
    BRW_OPCODE_ELSE =	36,
    BRW_OPCODE_ENDIF =	37,
    BRW_OPCODE_DO =	38,  /**< Pre-Gen6    */ /* Reused */
-   // BRW_OPCODE_CASE =	38,  /**< Gen6 only   */ /* Reused */
+   BRW_OPCODE_CASE =	38,  /**< Gen6 only   */ /* Reused */
    BRW_OPCODE_WHILE =	39,
    BRW_OPCODE_BREAK =	40,
    BRW_OPCODE_CONTINUE = 41,
    BRW_OPCODE_HALT =	42,
-   // BRW_OPCODE_CALLA =	43,  /**< Gen7.5+     */
-   // BRW_OPCODE_MSAVE =	44,  /**< Pre-Gen6    */ /* Reused */
-   // BRW_OPCODE_CALL =	44,  /**< Gen6+       */ /* Reused */
-   // BRW_OPCODE_MREST =	45,  /**< Pre-Gen6    */ /* Reused */
-   // BRW_OPCODE_RET =	45,  /**< Gen6+       */ /* Reused */
-   // BRW_OPCODE_PUSH =	46,  /**< Pre-Gen6    */ /* Reused */
-   // BRW_OPCODE_FORK =	46,  /**< Gen6 only   */ /* Reused */
-   // BRW_OPCODE_GOTO =	46,  /**< Gen8+       */ /* Reused */
-   // BRW_OPCODE_POP =	47,  /**< Pre-Gen6    */
+   BRW_OPCODE_CALLA =	43,  /**< Gen7.5+     */
+   BRW_OPCODE_MSAVE =	44,  /**< Pre-Gen6    */ /* Reused */
+   BRW_OPCODE_CALL =	44,  /**< Gen6+       */ /* Reused */
+   BRW_OPCODE_MREST =	45,  /**< Pre-Gen6    */ /* Reused */
+   BRW_OPCODE_RET =	45,  /**< Gen6+       */ /* Reused */
+   BRW_OPCODE_PUSH =	46,  /**< Pre-Gen6    */ /* Reused */
+   BRW_OPCODE_FORK =	46,  /**< Gen6 only   */ /* Reused */
+   BRW_OPCODE_GOTO =	46,  /**< Gen8+       */ /* Reused */
+   BRW_OPCODE_POP =	47,  /**< Pre-Gen6    */
    BRW_OPCODE_WAIT =	48,
    BRW_OPCODE_SEND =	49,
    BRW_OPCODE_SENDC =	50,
@@ -273,7 +280,7 @@ enum opcode {
    BRW_OPCODE_PLN =	90,  /**< G45+ */
    BRW_OPCODE_MAD =	91,  /**< Gen6+ */
    BRW_OPCODE_LRP =	92,  /**< Gen6+ */
-   // BRW_OPCODE_MADM =	93,  /**< Gen8+ */
+   BRW_OPCODE_MADM =	93,  /**< Gen8+ */
    /* Reserved 94-124 */
    BRW_OPCODE_NENOP =	125, /**< G45 only */
    BRW_OPCODE_NOP =	126,
@@ -480,6 +487,8 @@ enum opcode {
 
    SHADER_OPCODE_GET_BUFFER_SIZE,
 
+   SHADER_OPCODE_INTERLOCK,
+
    VEC4_OPCODE_MOV_BYTES,
    VEC4_OPCODE_PACK_BYTES,
    VEC4_OPCODE_UNPACK_UNIFORM,
@@ -499,7 +508,6 @@ enum opcode {
     */
    FS_OPCODE_DDY_COARSE,
    FS_OPCODE_DDY_FINE,
-   FS_OPCODE_CINTERP,
    FS_OPCODE_LINTERP,
    FS_OPCODE_PIXEL_X,
    FS_OPCODE_PIXEL_Y,
@@ -508,7 +516,6 @@ enum opcode {
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL,
-   FS_OPCODE_MOV_DISPATCH_TO_FLAGS,
    FS_OPCODE_DISCARD_JUMP,
    FS_OPCODE_SET_SAMPLE_ID,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,

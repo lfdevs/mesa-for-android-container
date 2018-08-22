@@ -90,7 +90,7 @@ brw_upload_sf_prog(struct brw_context *brw)
       return;
 
    /* _NEW_BUFFERS */
-   bool render_to_fbo = _mesa_is_user_fbo(ctx->DrawBuffer);
+   bool flip_y = ctx->DrawBuffer->FlipY;
 
    memset(&key, 0, sizeof(key));
 
@@ -137,7 +137,7 @@ brw_upload_sf_prog(struct brw_context *brw)
     * Window coordinates in a FBO are inverted, which means point
     * sprite origin must be inverted, too.
     */
-   if ((ctx->Point.SpriteOrigin == GL_LOWER_LEFT) != render_to_fbo)
+   if ((ctx->Point.SpriteOrigin == GL_LOWER_LEFT) == flip_y)
       key.sprite_origin_lower_left = true;
 
    /* BRW_NEW_FS_PROG_DATA */
@@ -161,12 +161,11 @@ brw_upload_sf_prog(struct brw_context *brw)
        * face orientation, just as we invert the viewport in
        * sf_unit_create_from_key().
        */
-      key.frontface_ccw = brw->polygon_front_bit == render_to_fbo;
+      key.frontface_ccw = brw->polygon_front_bit != flip_y;
    }
 
-   if (!brw_search_cache(&brw->cache, BRW_CACHE_SF_PROG,
-			 &key, sizeof(key),
-			 &brw->sf.prog_offset, &brw->sf.prog_data)) {
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_SF_PROG, &key, sizeof(key),
+                         &brw->sf.prog_offset, &brw->sf.prog_data, true)) {
       compile_sf_prog( brw, &key );
    }
 }

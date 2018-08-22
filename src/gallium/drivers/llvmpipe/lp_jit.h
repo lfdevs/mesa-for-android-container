@@ -192,6 +192,7 @@ struct lp_jit_thread_data
 {
    struct lp_build_format_cache *cache;
    uint64_t vis_counter;
+   uint64_t ps_invocations;
 
    /*
     * Non-interpolated rasterizer state passed through to the fragment shader.
@@ -205,6 +206,7 @@ struct lp_jit_thread_data
 enum {
    LP_JIT_THREAD_DATA_CACHE = 0,
    LP_JIT_THREAD_DATA_COUNTER,
+   LP_JIT_THREAD_DATA_INVOCATIONS,
    LP_JIT_THREAD_DATA_RASTER_STATE_VIEWPORT_INDEX,
    LP_JIT_THREAD_DATA_COUNT
 };
@@ -215,6 +217,9 @@ enum {
 
 #define lp_jit_thread_data_counter(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_THREAD_DATA_COUNTER, "counter")
+
+#define lp_jit_thread_data_invocations(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_THREAD_DATA_INVOCATIONS, "invocs")
 
 #define lp_jit_thread_data_raster_state_viewport_index(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, \

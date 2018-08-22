@@ -220,8 +220,8 @@ void si_test_dma(struct si_screen *sscreen)
 	 */
 	for (i = 0; i < iterations; i++) {
 		struct pipe_resource tsrc = {}, tdst = {}, *src, *dst;
-		struct r600_texture *rdst;
-		struct r600_texture *rsrc;
+		struct si_texture *sdst;
+		struct si_texture *ssrc;
 		struct cpu_texture src_cpu, dst_cpu;
 		unsigned bpp, max_width, max_height, max_depth, j, num;
 		unsigned gfx_blits = 0, dma_blits = 0, max_tex_side_gen;
@@ -290,24 +290,24 @@ void si_test_dma(struct si_screen *sscreen)
 		dst = screen->resource_create(screen, &tdst);
 		assert(src);
 		assert(dst);
-		rdst = (struct r600_texture*)dst;
-		rsrc = (struct r600_texture*)src;
+		sdst = (struct si_texture*)dst;
+		ssrc = (struct si_texture*)src;
 		alloc_cpu_texture(&src_cpu, &tsrc, bpp);
 		alloc_cpu_texture(&dst_cpu, &tdst, bpp);
 
 		printf("%4u: dst = (%5u x %5u x %u, %s), "
 		       " src = (%5u x %5u x %u, %s), bpp = %2u, ",
 		       i, tdst.width0, tdst.height0, tdst.array_size,
-		       array_mode_to_string(sscreen, &rdst->surface),
+		       array_mode_to_string(sscreen, &sdst->surface),
 		       tsrc.width0, tsrc.height0, tsrc.array_size,
-		       array_mode_to_string(sscreen, &rsrc->surface), bpp);
+		       array_mode_to_string(sscreen, &ssrc->surface), bpp);
 		fflush(stdout);
 
 		/* set src pixels */
 		set_random_pixels(ctx, src, &src_cpu);
 
 		/* clear dst pixels */
-		si_clear_buffer(sctx, dst, 0, rdst->surface.surf_size, 0, true);
+		si_clear_buffer(sctx, dst, 0, sdst->surface.surf_size, 0, true);
 		memset(dst_cpu.ptr, 0, dst_cpu.layer_stride * tdst.array_size);
 
 		/* preparation */
@@ -337,8 +337,8 @@ void si_test_dma(struct si_screen *sscreen)
 				dstz = rand() % (tdst.array_size - depth + 1);
 
 				/* special code path to hit the tiled partial copies */
-				if (!rsrc->surface.is_linear &&
-				    !rdst->surface.is_linear &&
+				if (!ssrc->surface.is_linear &&
+				    !sdst->surface.is_linear &&
 				    rand() & 1) {
 					if (max_width < 8 || max_height < 8)
 						continue;
@@ -365,8 +365,8 @@ void si_test_dma(struct si_screen *sscreen)
 				}
 
 				/* special code path to hit out-of-bounds reads in L2T */
-				if (rsrc->surface.is_linear &&
-				    !rdst->surface.is_linear &&
+				if (ssrc->surface.is_linear &&
+				    !sdst->surface.is_linear &&
 				    rand() % 4 == 0) {
 					srcx = 0;
 					srcy = 0;

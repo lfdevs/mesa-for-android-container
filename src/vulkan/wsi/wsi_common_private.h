@@ -104,8 +104,6 @@ struct wsi_interface {
                            uint32_t queueFamilyIndex,
                            int local_fd,
                            VkBool32* pSupported);
-   VkResult (*get_capabilities)(VkIcdSurfaceBase *surface,
-                                VkSurfaceCapabilitiesKHR* pSurfaceCapabilities);
    VkResult (*get_capabilities2)(VkIcdSurfaceBase *surface,
                                  const void *info_next,
                                  VkSurfaceCapabilities2KHR* pSurfaceCapabilities);
@@ -140,6 +138,15 @@ VkResult wsi_wl_init_wsi(struct wsi_device *wsi_device,
 void wsi_wl_finish_wsi(struct wsi_device *wsi_device,
                        const VkAllocationCallbacks *alloc);
 
+
+VkResult
+wsi_display_init_wsi(struct wsi_device *wsi_device,
+                     const VkAllocationCallbacks *alloc,
+                     int display_fd);
+
+void
+wsi_display_finish_wsi(struct wsi_device *wsi_device,
+                       const VkAllocationCallbacks *alloc);
 
 #define WSI_DEFINE_NONDISP_HANDLE_CASTS(__wsi_type, __VkType)              \
                                                                            \

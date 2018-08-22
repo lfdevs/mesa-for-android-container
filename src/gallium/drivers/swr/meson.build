@@ -131,6 +131,7 @@ files_swr_arch = files(
   'rasterizer/core/threads.h',
   'rasterizer/core/tilemgr.cpp',
   'rasterizer/core/tilemgr.h',
+  'rasterizer/core/tileset.h',
   'rasterizer/core/utils.h',
   'rasterizer/memory/ClearTile.cpp',
   'rasterizer/memory/Convert.h',
@@ -150,6 +151,8 @@ files_swr_arch = files(
   'rasterizer/memory/StoreTile_TileY.cpp',
   'rasterizer/memory/TilingFunctions.h',
   'rasterizer/memory/tilingtraits.h',
+  'rasterizer/memory/InitMemory.h',
+  'rasterizer/memory/InitMemory.cpp',
 )
 
 swr_context_files = files('swr_context.h')

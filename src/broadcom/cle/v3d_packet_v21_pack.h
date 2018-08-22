@@ -9,7 +9,7 @@
 #ifndef V3D21_PACK_H
 #define V3D21_PACK_H
 
-#include "v3d_packet_helpers.h"
+#include "cle/v3d_packet_helpers.h"
 
 
 enum V3D21_Compare_Function {

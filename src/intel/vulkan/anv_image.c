@@ -303,7 +303,7 @@ make_surface(const struct anv_device *dev,
              VkImageAspectFlagBits aspect)
 {
    const VkImageCreateInfo *vk_info = anv_info->vk_info;
-   bool ok UNUSED;
+   bool ok;
 
    static const enum isl_surf_dim vk_to_isl_surf_dim[] = {
       [VK_IMAGE_TYPE_1D] = ISL_SURF_DIM_1D,
@@ -658,8 +658,9 @@ anv_DestroyImage(VkDevice _device, VkImage _image,
 
    for (uint32_t p = 0; p < image->n_planes; ++p) {
       if (image->planes[p].bo_is_owned) {
-         assert(image->planes[p].bo != NULL);
-         anv_bo_cache_release(device, &device->bo_cache, image->planes[p].bo);
+         assert(image->planes[p].address.bo != NULL);
+         anv_bo_cache_release(device, &device->bo_cache,
+                              image->planes[p].address.bo);
       }
    }
 
@@ -675,13 +676,14 @@ static void anv_image_bind_memory_plane(struct anv_device *device,
    assert(!image->planes[plane].bo_is_owned);
 
    if (!memory) {
-      image->planes[plane].bo = NULL;
-      image->planes[plane].bo_offset = 0;
+      image->planes[plane].address = ANV_NULL_ADDRESS;
       return;
    }
 
-   image->planes[plane].bo = memory->bo;
-   image->planes[plane].bo_offset = memory_offset;
+   image->planes[plane].address = (struct anv_address) {
+      .bo = memory->bo,
+      .offset = memory_offset,
+   };
 }
 
 VkResult anv_BindImageMemory(
@@ -762,17 +764,26 @@ void anv_GetImageSubresourceLayout(
 
    assert(__builtin_popcount(subresource->aspectMask) == 1);
 
-   /* If we are on a non-zero mip level or array slice, we need to
-    * calculate a real offset.
-    */
-   anv_assert(subresource->mipLevel == 0);
-   anv_assert(subresource->arrayLayer == 0);
-
    layout->offset = surface->offset;
    layout->rowPitch = surface->isl.row_pitch;
    layout->depthPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->arrayPitch = isl_surf_get_array_pitch(&surface->isl);
-   layout->size = surface->isl.size;
+
+   if (subresource->mipLevel > 0 || subresource->arrayLayer > 0) {
+      assert(surface->isl.tiling == ISL_TILING_LINEAR);
+
+      uint32_t offset_B;
+      isl_surf_get_image_offset_B_tile_sa(&surface->isl,
+                                          subresource->mipLevel,
+                                          subresource->arrayLayer,
+                                          0 /* logical_z_offset_px */,
+                                          &offset_B, NULL, NULL);
+      layout->offset += offset_B;
+      layout->size = layout->rowPitch * anv_minify(image->extent.height,
+                                                   subresource->mipLevel);
+   } else {
+      layout->size = surface->isl.size;
+   }
 }
 
 /**
@@ -1067,20 +1078,8 @@ anv_image_fill_surface_state(struct anv_device *device,
    if (!clear_color)
       clear_color = &default_clear_color;
 
-   const uint64_t address = image->planes[plane].bo_offset + surface->offset;
-   const uint64_t aux_address = aux_usage == ISL_AUX_USAGE_NONE ?
-      0 : (image->planes[plane].bo_offset + aux_surface->offset);
-
-   struct anv_address clear_address = { .bo = NULL };
-   state_inout->clear_address = 0;
-
-   if (device->info.gen >= 10 && aux_usage != ISL_AUX_USAGE_NONE) {
-      if (aux_usage == ISL_AUX_USAGE_HIZ) {
-         clear_address = (struct anv_address) { .bo = &device->hiz_clear_bo };
-      } else {
-         clear_address = anv_image_get_clear_color_addr(device, image, aspect);
-      }
-   }
+   const struct anv_address address =
+      anv_address_add(image->planes[plane].address, surface->offset);
 
    if (view_usage == ISL_SURF_USAGE_STORAGE_BIT &&
        !(flags & ANV_IMAGE_VIEW_STATE_STORAGE_WRITE_ONLY) &&
@@ -1092,14 +1091,14 @@ anv_image_fill_surface_state(struct anv_device *device,
        */
       assert(aux_usage == ISL_AUX_USAGE_NONE);
       isl_buffer_fill_state(&device->isl_dev, state_inout->state.map,
-                            .address = address,
+                            .address = anv_address_physical(address),
                             .size = surface->isl.size,
                             .format = ISL_FORMAT_RAW,
                             .stride = 1,
                             .mocs = device->default_mocs);
       state_inout->address = address,
-      state_inout->aux_address = 0;
-      state_inout->clear_address = 0;
+      state_inout->aux_address = ANV_NULL_ADDRESS;
+      state_inout->clear_address = ANV_NULL_ADDRESS;
    } else {
       if (view_usage == ISL_SURF_USAGE_STORAGE_BIT &&
           !(flags & ANV_IMAGE_VIEW_STATE_STORAGE_WRITE_ONLY)) {
@@ -1165,20 +1164,41 @@ anv_image_fill_surface_state(struct anv_device *device,
          }
       }
 
+      state_inout->address = anv_address_add(address, offset_B);
+
+      struct anv_address aux_address = ANV_NULL_ADDRESS;
+      if (aux_usage != ISL_AUX_USAGE_NONE) {
+         aux_address = anv_address_add(image->planes[plane].address,
+                                       aux_surface->offset);
+      }
+      state_inout->aux_address = aux_address;
+
+      struct anv_address clear_address = ANV_NULL_ADDRESS;
+      if (device->info.gen >= 10 && aux_usage != ISL_AUX_USAGE_NONE) {
+         if (aux_usage == ISL_AUX_USAGE_HIZ) {
+            clear_address = (struct anv_address) {
+               .bo = &device->hiz_clear_bo,
+               .offset = 0,
+            };
+         } else {
+            clear_address = anv_image_get_clear_color_addr(device, image, aspect);
+         }
+      }
+      state_inout->clear_address = clear_address;
+
       isl_surf_fill_state(&device->isl_dev, state_inout->state.map,
                           .surf = isl_surf,
                           .view = &view,
-                          .address = address + offset_B,
+                          .address = anv_address_physical(state_inout->address),
                           .clear_color = *clear_color,
                           .aux_surf = &aux_surface->isl,
                           .aux_usage = aux_usage,
-                          .aux_address = aux_address,
-                          .clear_address = clear_address.offset,
-                          .use_clear_address = clear_address.bo != NULL,
+                          .aux_address = anv_address_physical(aux_address),
+                          .clear_address = anv_address_physical(clear_address),
+                          .use_clear_address = !anv_address_is_null(clear_address),
                           .mocs = device->default_mocs,
                           .x_offset_sa = tile_x_sa,
                           .y_offset_sa = tile_y_sa);
-      state_inout->address = address + offset_B;
 
       /* With the exception of gen8, the bottom 12 bits of the MCS base address
        * are used to store other information.  This should be ok, however,
@@ -1186,15 +1206,14 @@ anv_image_fill_surface_state(struct anv_device *device,
        */
       uint32_t *aux_addr_dw = state_inout->state.map +
          device->isl_dev.ss.aux_addr_offset;
-      assert((aux_address & 0xfff) == 0);
-      assert(aux_address == (*aux_addr_dw & 0xfffff000));
-      state_inout->aux_address = *aux_addr_dw;
+      assert((aux_address.offset & 0xfff) == 0);
+      state_inout->aux_address.offset |= *aux_addr_dw & 0xfff;
 
       if (device->info.gen >= 10 && clear_address.bo) {
          uint32_t *clear_addr_dw = state_inout->state.map +
                                    device->isl_dev.ss.clear_color_state_offset;
          assert((clear_address.offset & 0x3f) == 0);
-         state_inout->clear_address = *clear_addr_dw;
+         state_inout->clear_address.offset |= *clear_addr_dw & 0x3f;
       }
    }
 
@@ -1455,18 +1474,18 @@ anv_CreateBufferView(VkDevice _device,
                                      VK_IMAGE_ASPECT_COLOR_BIT,
                                      VK_IMAGE_TILING_LINEAR);
    const uint32_t format_bs = isl_format_get_layout(view->format)->bpb / 8;
-   view->bo = buffer->bo;
-   view->offset = buffer->offset + pCreateInfo->offset;
    view->range = anv_buffer_get_range(buffer, pCreateInfo->offset,
                                               pCreateInfo->range);
    view->range = align_down_npot_u32(view->range, format_bs);
+
+   view->address = anv_address_add(buffer->address, pCreateInfo->offset);
 
    if (buffer->usage & VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT) {
       view->surface_state = alloc_surface_state(device);
 
       anv_fill_buffer_surface_state(device, view->surface_state,
                                     view->format,
-                                    view->offset, view->range, format_bs);
+                                    view->address, view->range, format_bs);
    } else {
       view->surface_state = (struct anv_state){ 0 };
    }
@@ -1483,14 +1502,14 @@ anv_CreateBufferView(VkDevice _device,
 
       anv_fill_buffer_surface_state(device, view->storage_surface_state,
                                     storage_format,
-                                    view->offset, view->range,
+                                    view->address, view->range,
                                     (storage_format == ISL_FORMAT_RAW ? 1 :
                                      isl_format_get_layout(storage_format)->bpb / 8));
 
       /* Write-only accesses should use the original format. */
       anv_fill_buffer_surface_state(device, view->writeonly_storage_surface_state,
                                     view->format,
-                                    view->offset, view->range,
+                                    view->address, view->range,
                                     isl_format_get_layout(view->format)->bpb / 8);
 
       isl_buffer_fill_image_param(&device->isl_dev,

@@ -1,32 +1,32 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file fetch_jit.h
-*
-* @brief Definition of the fetch jitter
-*
-* Notes:
-*
-******************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file fetch_jit.h
+ *
+ * @brief Definition of the fetch jitter
+ *
+ * Notes:
+ *
+ ******************************************************************************/
 #pragma once
 
 #include "common/formats.h"
@@ -41,17 +41,17 @@ struct INPUT_ELEMENT_DESC
     {
         struct
         {
-            uint32_t            AlignedByteOffset : 12;
-            uint32_t            Format : 10;
-            uint32_t            StreamIndex : 6;
-            uint32_t            InstanceEnable : 1;
-            uint32_t            InstanceStrideEnable : 1;
-            uint32_t            ComponentControl0 : 4;
-            uint32_t            ComponentControl1 : 4;
-            uint32_t            ComponentControl2 : 4;
-            uint32_t            ComponentControl3 : 4;
-            uint32_t            ComponentPacking : 4;
-            uint32_t            _reserved : 14;
+            uint32_t AlignedByteOffset : 12;
+            uint32_t Format : 10;
+            uint32_t StreamIndex : 6;
+            uint32_t InstanceEnable : 1;
+            uint32_t InstanceStrideEnable : 1;
+            uint32_t ComponentControl0 : 4;
+            uint32_t ComponentControl1 : 4;
+            uint32_t ComponentControl2 : 4;
+            uint32_t ComponentControl3 : 4;
+            uint32_t ComponentPacking : 4;
+            uint32_t _reserved : 14;
         };
         uint64_t bits;
     };
@@ -95,40 +95,52 @@ enum ComponentControl
 //////////////////////////////////////////////////////////////////////////
 struct FETCH_COMPILE_STATE
 {
-    uint32_t numAttribs{ 0 };
+    uint32_t           numAttribs{0};
     INPUT_ELEMENT_DESC layout[SWR_VTX_NUM_SLOTS];
-    SWR_FORMAT indexType;
-    uint32_t cutIndex{ 0xffffffff };
+    SWR_FORMAT         indexType;
+    uint32_t           cutIndex{0xffffffff};
 
     // Options that effect the JIT'd code
-    bool bDisableIndexOOBCheck;             // If enabled, FetchJit will exclude index OOB check
-    bool bEnableCutIndex{ false };          // Compares indices with the cut index and returns a cut mask
-    bool bVertexIDOffsetEnable{ false };    // Offset vertexID by StartVertex for non-indexed draws or BaseVertex for indexed draws
-    bool bPartialVertexBuffer{ false };     // for indexed draws, map illegal indices to a known resident vertex
+    bool bDisableIndexOOBCheck;        // If enabled, FetchJit will exclude index OOB check
+    bool bEnableCutIndex{false};       // Compares indices with the cut index and returns a cut mask
+    bool bVertexIDOffsetEnable{false}; // Offset vertexID by StartVertex for non-indexed draws or
+                                       // BaseVertex for indexed draws
+    bool bPartialVertexBuffer{
+        false}; // for indexed draws, map illegal indices to a known resident vertex
 
-    bool bForceSequentialAccessEnable{ false };
-    bool bInstanceIDOffsetEnable{ false };
+    bool bForceSequentialAccessEnable{false};
+    bool bInstanceIDOffsetEnable{false};
 
-    FETCH_COMPILE_STATE(bool diableIndexOOBCheck = false):
-        bDisableIndexOOBCheck(diableIndexOOBCheck){ };
+    FETCH_COMPILE_STATE(bool diableIndexOOBCheck = false) :
+        bDisableIndexOOBCheck(diableIndexOOBCheck){};
 
-    bool operator==(const FETCH_COMPILE_STATE &other) const
+    bool operator==(const FETCH_COMPILE_STATE& other) const
     {
-        if (numAttribs != other.numAttribs) return false;
-        if (indexType != other.indexType) return false;
-        if (bDisableIndexOOBCheck != other.bDisableIndexOOBCheck) return false;
-        if (bEnableCutIndex != other.bEnableCutIndex) return false;
-        if (cutIndex != other.cutIndex) return false;
-        if (bVertexIDOffsetEnable != other.bVertexIDOffsetEnable) return false;
-        if (bPartialVertexBuffer != other.bPartialVertexBuffer) return false;
-        if (bForceSequentialAccessEnable != other.bForceSequentialAccessEnable) return false;
-        if (bInstanceIDOffsetEnable != other.bInstanceIDOffsetEnable) return false;
+        if (numAttribs != other.numAttribs)
+            return false;
+        if (indexType != other.indexType)
+            return false;
+        if (bDisableIndexOOBCheck != other.bDisableIndexOOBCheck)
+            return false;
+        if (bEnableCutIndex != other.bEnableCutIndex)
+            return false;
+        if (cutIndex != other.cutIndex)
+            return false;
+        if (bVertexIDOffsetEnable != other.bVertexIDOffsetEnable)
+            return false;
+        if (bPartialVertexBuffer != other.bPartialVertexBuffer)
+            return false;
+        if (bForceSequentialAccessEnable != other.bForceSequentialAccessEnable)
+            return false;
+        if (bInstanceIDOffsetEnable != other.bInstanceIDOffsetEnable)
+            return false;
 
         for (uint32_t i = 0; i < numAttribs; ++i)
         {
             if ((layout[i].bits != other.layout[i].bits) ||
-               (((layout[i].InstanceEnable == 1) || (layout[i].InstanceStrideEnable == 1)) &&
-                (layout[i].InstanceAdvancementState != other.layout[i].InstanceAdvancementState))){
+                (((layout[i].InstanceEnable == 1) || (layout[i].InstanceStrideEnable == 1)) &&
+                 (layout[i].InstanceAdvancementState != other.layout[i].InstanceAdvancementState)))
+            {
                 return false;
             }
         }

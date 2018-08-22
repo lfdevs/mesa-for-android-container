@@ -19,11 +19,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 // @file gen_rasterizer1.cpp
-// 
+//
 // @brief auto-generated file
-// 
+//
 // DO NOT EDIT
 //
 // Generation Command Line:
@@ -44,6 +44,7 @@
 //    --hpp
 //
 //============================================================================
+// clang-format off
 
 #include "core/rasterizer.h"
 #include "core/rasterizer_impl.h"
@@ -201,3 +202,4 @@ void InitRasterizerFuncs1()
     gRasterizerFuncs[2][0][1][2][4][0] = RasterizeTriangle<RasterizerTraits<2,0,1,2,4,0>>;
     gRasterizerFuncs[2][0][1][2][4][1] = RasterizeTriangle<RasterizerTraits<2,0,1,2,4,1>>;
 }
+// clang-format on

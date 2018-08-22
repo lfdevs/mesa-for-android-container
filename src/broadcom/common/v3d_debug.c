@@ -41,6 +41,7 @@ uint32_t V3D_DEBUG = 0;
 
 static const struct debug_control debug_control[] = {
         { "cl",          V3D_DEBUG_CL},
+        { "clif",        V3D_DEBUG_CLIF},
         { "qpu",         V3D_DEBUG_QPU},
         { "vir",         V3D_DEBUG_VIR},
         { "nir",         V3D_DEBUG_NIR},
@@ -52,6 +53,7 @@ static const struct debug_control debug_control[] = {
         { "fs",          V3D_DEBUG_FS},
         { "vs",          V3D_DEBUG_VS},
         { "cs",          V3D_DEBUG_CS},
+        { "always_flush", V3D_DEBUG_ALWAYS_FLUSH},
         { NULL,    0 }
 };
 

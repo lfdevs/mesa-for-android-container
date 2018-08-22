@@ -25,12 +25,9 @@
 #include "si_shader_internal.h"
 #include "si_pipe.h"
 #include "sid.h"
-#include "gallivm/lp_bld_arit.h"
-#include "gallivm/lp_bld_gather.h"
-#include "gallivm/lp_bld_intr.h"
 #include "tgsi/tgsi_build.h"
-#include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_util.h"
+#include "ac_llvm_util.h"
 
 static void build_tex_intrinsic(const struct lp_build_tgsi_action *action,
 				struct lp_build_tgsi_context *bld_base,
@@ -459,7 +456,7 @@ static void load_emit_memory(
 		derived_ptr = LLVMBuildGEP(ctx->ac.builder, ptr, &index, 1, "");
 		channels[chan] = LLVMBuildLoad(ctx->ac.builder, derived_ptr, "");
 	}
-	emit_data->output[emit_data->chan] = lp_build_gather_values(&ctx->gallivm, channels, 4);
+	emit_data->output[emit_data->chan] = ac_build_gather_values(&ctx->ac, channels, 4);
 }
 
 /**
@@ -605,7 +602,7 @@ static void store_fetch_args(
 	for (chan = 0; chan < 4; ++chan) {
 		chans[chan] = lp_build_emit_fetch(bld_base, inst, 1, chan);
 	}
-	data = lp_build_gather_values(&ctx->gallivm, chans, 4);
+	data = ac_build_gather_values(&ctx->ac, chans, 4);
 
 	emit_data->args[emit_data->arg_count++] = data;
 
@@ -711,8 +708,8 @@ static void store_emit_buffer(
 		emit_data->args[0] = data;
 		emit_data->args[3] = offset;
 
-		lp_build_intrinsic(
-			builder, intrinsic_name, emit_data->dst_type,
+		ac_build_intrinsic(
+			&ctx->ac, intrinsic_name, emit_data->dst_type,
 			emit_data->args, emit_data->arg_count,
 			ac_get_store_intr_attribs(writeonly_memory));
 	}
@@ -747,7 +744,6 @@ static void store_emit(
 		struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->ac.builder;
 	const struct tgsi_full_instruction * inst = emit_data->inst;
 	const struct tgsi_shader_info *info = &ctx->shader->selector->info;
 	unsigned target = inst->Memory.Texture;
@@ -773,8 +769,8 @@ static void store_emit(
 	}
 
 	if (target == TGSI_TEXTURE_BUFFER) {
-		emit_data->output[emit_data->chan] = lp_build_intrinsic(
-			builder, "llvm.amdgcn.buffer.store.format.v4f32",
+		emit_data->output[emit_data->chan] = ac_build_intrinsic(
+			&ctx->ac, "llvm.amdgcn.buffer.store.format.v4f32",
 			emit_data->dst_type, emit_data->args,
 			emit_data->arg_count,
 			ac_get_store_intr_attribs(writeonly_memory));
@@ -928,7 +924,6 @@ static void atomic_emit(
 		struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMBuilderRef builder = ctx->ac.builder;
 	const struct tgsi_full_instruction * inst = emit_data->inst;
 	LLVMValueRef tmp;
 
@@ -942,8 +937,8 @@ static void atomic_emit(
 		char intrinsic_name[40];
 		snprintf(intrinsic_name, sizeof(intrinsic_name),
 			 "llvm.amdgcn.buffer.atomic.%s", action->intr_name);
-		tmp = lp_build_intrinsic(
-			builder, intrinsic_name, ctx->i32,
+		tmp = ac_build_intrinsic(
+			&ctx->ac, intrinsic_name, ctx->i32,
 			emit_data->args, emit_data->arg_count, 0);
 		emit_data->output[emit_data->chan] = ac_to_float(&ctx->ac, tmp);
 	} else {
@@ -1291,8 +1286,7 @@ static void tex_fetch_args(
 						   emit_data->inst, 0,
 						   chan);
 		if (opcode == TGSI_OPCODE_TXP)
-			args.coords[chan] = lp_build_emit_llvm_binary(
-				bld_base, TGSI_OPCODE_DIV,
+			args.coords[chan] = ac_build_fdiv(&ctx->ac,
 				args.coords[chan], args.coords[3]);
 	}
 
@@ -1489,15 +1483,15 @@ static void tex_fetch_args(
 	    opcode == TGSI_OPCODE_TXF_LZ) {
 		/* add tex offsets */
 		if (inst->Texture.NumOffsets) {
-			struct lp_build_context *uint_bld = &bld_base->uint_bld;
 			const struct tgsi_texture_offset *off = inst->TexOffsets;
 
 			assert(inst->Texture.NumOffsets == 1);
 
 			switch (target) {
 			case TGSI_TEXTURE_3D:
-				args.coords[2] = lp_build_add(uint_bld, args.coords[2],
-						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleZ]);
+				args.coords[2] =
+					LLVMBuildAdd(ctx->ac.builder, args.coords[2],
+						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleZ], "");
 				/* fall through */
 			case TGSI_TEXTURE_2D:
 			case TGSI_TEXTURE_SHADOW2D:
@@ -1506,16 +1500,16 @@ static void tex_fetch_args(
 			case TGSI_TEXTURE_2D_ARRAY:
 			case TGSI_TEXTURE_SHADOW2D_ARRAY:
 				args.coords[1] =
-					lp_build_add(uint_bld, args.coords[1],
-						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleY]);
+					LLVMBuildAdd(ctx->ac.builder, args.coords[1],
+						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleY], "");
 				/* fall through */
 			case TGSI_TEXTURE_1D:
 			case TGSI_TEXTURE_SHADOW1D:
 			case TGSI_TEXTURE_1D_ARRAY:
 			case TGSI_TEXTURE_SHADOW1D_ARRAY:
 				args.coords[0] =
-					lp_build_add(uint_bld, args.coords[0],
-						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleX]);
+					LLVMBuildAdd(ctx->ac.builder, args.coords[0],
+						ctx->imms[off->Index * TGSI_NUM_CHANNELS + off->SwizzleX], "");
 				break;
 				/* texture offsets do not apply to other texture targets */
 			}
@@ -1645,9 +1639,7 @@ si_lower_gather4_integer(struct si_shader_context *ctx,
 				LLVMBuildExtractElement(builder, txq_emit_data.output[0],
 							LLVMConstInt(ctx->i32, c, 0), "");
 			half_texel[c] = LLVMBuildUIToFP(builder, half_texel[c], ctx->f32, "");
-			half_texel[c] =
-				lp_build_emit_llvm_unary(&ctx->bld_base,
-							 TGSI_OPCODE_RCP, half_texel[c]);
+			half_texel[c] = ac_build_fdiv(&ctx->ac, ctx->ac.f32_1, half_texel[c]);
 			half_texel[c] = LLVMBuildFMul(builder, half_texel[c],
 						      LLVMConstReal(ctx->f32, -0.5), "");
 		}
@@ -1833,7 +1825,7 @@ static void si_llvm_emit_fbfetch(const struct lp_build_tgsi_action *action,
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	struct ac_image_args args = {};
-	LLVMValueRef ptr, image, fmask, addr_vec;
+	LLVMValueRef ptr, image, fmask;
 
 	/* Ignore src0, because KHR_blend_func_extended disallows multiple render
 	 * targets.
@@ -1865,7 +1857,8 @@ static void si_llvm_emit_fbfetch(const struct lp_build_tgsi_action *action,
 		fmask = ac_build_load_to_sgpr(&ctx->ac, ptr,
 			LLVMConstInt(ctx->i32, SI_PS_IMAGE_COLORBUF0_FMASK / 2, 0));
 
-		ac_apply_fmask_to_sample(&ctx->ac, fmask, args.coords, false);
+		ac_apply_fmask_to_sample(&ctx->ac, fmask, args.coords,
+					 ctx->shader->key.mono.u.ps.fbfetch_layered);
 	}
 
 	args.opcode = ac_image_load;

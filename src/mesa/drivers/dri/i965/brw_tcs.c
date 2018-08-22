@@ -337,10 +337,9 @@ brw_upload_tcs_prog(struct brw_context *brw)
 
    brw_tcs_populate_key(brw, &key);
 
-   if (brw_search_cache(&brw->cache, BRW_CACHE_TCS_PROG,
-                        &key, sizeof(key),
-                        &stage_state->prog_offset,
-                        &brw->tcs.base.prog_data))
+   if (brw_search_cache(&brw->cache, BRW_CACHE_TCS_PROG, &key, sizeof(key),
+                        &stage_state->prog_offset, &brw->tcs.base.prog_data,
+                        true))
       return;
 
    if (brw_disk_cache_upload_program(brw, MESA_SHADER_TESS_CTRL))
@@ -354,6 +353,37 @@ brw_upload_tcs_prog(struct brw_context *brw)
    assert(success);
 }
 
+void
+brw_tcs_populate_default_key(const struct gen_device_info *devinfo,
+                             struct brw_tcs_prog_key *key,
+                             struct gl_shader_program *sh_prog,
+                             struct gl_program *prog)
+{
+   struct brw_program *btcp = brw_program(prog);
+   const struct gl_linked_shader *tes =
+      sh_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
+
+   memset(key, 0, sizeof(*key));
+
+   key->program_string_id = btcp->id;
+   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
+
+   /* Guess that the input and output patches have the same dimensionality. */
+   if (devinfo->gen < 8)
+      key->input_vertices = prog->info.tess.tcs_vertices_out;
+
+   if (tes) {
+      key->tes_primitive_mode = tes->Program->info.tess.primitive_mode;
+      key->quads_workaround = devinfo->gen < 9 &&
+                              tes->Program->info.tess.primitive_mode == GL_QUADS &&
+                              tes->Program->info.tess.spacing == TESS_SPACING_EQUAL;
+   } else {
+      key->tes_primitive_mode = GL_TRIANGLES;
+   }
+
+   key->outputs_written = prog->nir->info.outputs_written;
+   key->patch_outputs_written = prog->nir->info.patch_outputs_written;
+}
 
 bool
 brw_tcs_precompile(struct gl_context *ctx,
@@ -369,31 +399,9 @@ brw_tcs_precompile(struct gl_context *ctx,
    struct brw_program *btcp = brw_program(prog);
    const struct gl_linked_shader *tes =
       shader_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   struct brw_program *btep = tes ? brw_program(tes->Program) : NULL;
 
-   memset(&key, 0, sizeof(key));
-
-   key.program_string_id = btcp->id;
-   brw_setup_tex_for_precompile(brw, &key.tex, prog);
-
-   /* Guess that the input and output patches have the same dimensionality. */
-   if (devinfo->gen < 8)
-      key.input_vertices = prog->info.tess.tcs_vertices_out;
-
-   struct brw_program *btep;
-   if (tes) {
-      btep = brw_program(tes->Program);
-      key.tes_primitive_mode = tes->Program->info.tess.primitive_mode;
-      key.quads_workaround = devinfo->gen < 9 &&
-                             tes->Program->info.tess.primitive_mode == GL_QUADS &&
-                             tes->Program->info.tess.spacing == TESS_SPACING_EQUAL;
-   } else {
-      btep = NULL;
-      key.tes_primitive_mode = GL_TRIANGLES;
-   }
-
-   key.outputs_written = prog->nir->info.outputs_written;
-   key.patch_outputs_written = prog->nir->info.patch_outputs_written;
+   brw_tcs_populate_default_key(&brw->screen->devinfo, &key, shader_prog, prog);
 
    success = brw_codegen_tcs_prog(brw, btcp, btep, &key);
 

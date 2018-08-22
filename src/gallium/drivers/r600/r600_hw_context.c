@@ -31,7 +31,7 @@
 
 
 void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
-			boolean count_draw_in)
+			boolean count_draw_in, unsigned num_atomics)
 {
 	/* Flush the DMA IB if it's not empty. */
 	if (radeon_emitted(ctx->b.dma.cs, 0))
@@ -61,6 +61,9 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 		num_dw += R600_MAX_FLUSH_CS_DWORDS + R600_MAX_DRAW_CS_DWORDS;
 	}
 
+	/* add atomic counters, 8 pre + 8 post per counter + 16 post if any counters */
+	num_dw += (num_atomics * 16) + (num_atomics ? 16 : 0);
+
 	/* Count in r600_suspend_queries. */
 	num_dw += ctx->b.num_cs_dw_queries_suspend;
 
@@ -88,7 +91,7 @@ void r600_need_cs_space(struct r600_context *ctx, unsigned num_dw,
 
 void r600_flush_emit(struct r600_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
 	unsigned cp_coher_cntl = 0;
 	unsigned wait_until = 0;
 
@@ -257,7 +260,7 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 			    struct pipe_fence_handle **fence)
 {
 	struct r600_context *ctx = context;
-	struct radeon_winsys_cs *cs = ctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = ctx->b.gfx.cs;
 	struct radeon_winsys *ws = ctx->b.ws;
 
 	if (!radeon_emitted(cs, ctx->b.initial_gfx_cs_size))
@@ -433,7 +436,7 @@ void r600_begin_new_cs(struct r600_context *ctx)
 
 void r600_emit_pfp_sync_me(struct r600_context *rctx)
 {
-	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
 
 	if (rctx->b.chip_class >= EVERGREEN &&
 	    rctx->b.screen->info.drm_minor >= 46) {
@@ -499,7 +502,7 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 			     struct pipe_resource *src, uint64_t src_offset,
 			     unsigned size)
 {
-	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
 
 	assert(size);
 	assert(rctx->screen->b.has_cp_dma);
@@ -526,7 +529,7 @@ void r600_cp_dma_copy_buffer(struct r600_context *rctx,
 
 		r600_need_cs_space(rctx,
 				   10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0) +
-				   3 + R600_MAX_PFP_SYNC_ME_DWORDS, FALSE);
+				   3 + R600_MAX_PFP_SYNC_ME_DWORDS, FALSE, 0);
 
 		/* Flush the caches for the first copy only. */
 		if (rctx->b.flags) {
@@ -581,7 +584,7 @@ void r600_dma_copy_buffer(struct r600_context *rctx,
 			  uint64_t src_offset,
 			  uint64_t size)
 {
-	struct radeon_winsys_cs *cs = rctx->b.dma.cs;
+	struct radeon_cmdbuf *cs = rctx->b.dma.cs;
 	unsigned i, ncopy, csize;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
@@ -599,10 +602,8 @@ void r600_dma_copy_buffer(struct r600_context *rctx,
 	for (i = 0; i < ncopy; i++) {
 		csize = size < R600_DMA_COPY_MAX_SIZE_DW ? size : R600_DMA_COPY_MAX_SIZE_DW;
 		/* emit reloc before writing cs so that cs is always in consistent state */
-		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rsrc, RADEON_USAGE_READ,
-				      RADEON_PRIO_SDMA_BUFFER);
-		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rdst, RADEON_USAGE_WRITE,
-				      RADEON_PRIO_SDMA_BUFFER);
+		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rsrc, RADEON_USAGE_READ, 0);
+		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rdst, RADEON_USAGE_WRITE, 0);
 		radeon_emit(cs, DMA_PACKET(DMA_PACKET_COPY, 0, 0, csize));
 		radeon_emit(cs, dst_offset & 0xfffffffc);
 		radeon_emit(cs, src_offset & 0xfffffffc);

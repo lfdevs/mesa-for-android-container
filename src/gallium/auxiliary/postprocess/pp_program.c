@@ -119,7 +119,7 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
 
    if (!p->screen->is_format_supported(p->screen,
                                        PIPE_FORMAT_R32G32B32A32_FLOAT,
-                                       PIPE_BUFFER, 1,
+                                       PIPE_BUFFER, 1, 1,
                                        PIPE_BIND_VERTEX_BUFFER))
       pp_debug("Vertex buf format fail\n");
 

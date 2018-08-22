@@ -23,6 +23,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include "main/arrayobj.h"
 #include "main/bufferobj.h"
 #include "main/context.h"
 #include "main/enums.h"
@@ -403,9 +404,8 @@ copy_array_to_vbo_array(struct brw_context *brw,
 			struct brw_vertex_buffer *buffer,
 			GLuint dst_stride)
 {
-   const struct gl_vertex_array *glarray = element->glarray;
-   const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
-   const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+   const struct gl_vertex_buffer_binding *glbinding = element->glbinding;
+   const struct gl_array_attributes *glattrib = element->glattrib;
    const int src_stride = glbinding->Stride;
 
    /* If the source stride is zero, we just want to upload the current
@@ -512,15 +512,15 @@ brw_prepare_vertices(struct brw_context *brw)
 
    for (i = j = 0; i < brw->vb.nr_enabled; i++) {
       struct brw_vertex_element *input = brw->vb.enabled[i];
-      const struct gl_vertex_array *glarray = input->glarray;
-      const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
-      const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+      const struct gl_vertex_buffer_binding *glbinding = input->glbinding;
+      const struct gl_array_attributes *glattrib = input->glattrib;
 
       if (_mesa_is_bufferobj(glbinding->BufferObj)) {
 	 struct intel_buffer_object *intel_buffer =
 	    intel_buffer_object(glbinding->BufferObj);
 
-         const uint32_t offset = glbinding->Offset + glattrib->RelativeOffset;
+         const uint32_t offset = _mesa_draw_binding_offset(glbinding) +
+            _mesa_draw_attributes_relative_offset(glattrib);
 
          /* Start with the worst case */
          uint32_t start = 0;
@@ -546,10 +546,11 @@ brw_prepare_vertices(struct brw_context *brw)
 	  */
 	 unsigned k;
 	 for (k = 0; k < i; k++) {
-	    const struct gl_vertex_array *other = brw->vb.enabled[k]->glarray;
-            const struct gl_vertex_buffer_binding *obind = other->BufferBinding;
-            const struct gl_array_attributes *oattrib = other->VertexAttrib;
-            const uint32_t ooffset = obind->Offset + oattrib->RelativeOffset;
+            struct brw_vertex_element *other = brw->vb.enabled[k];
+            const struct gl_vertex_buffer_binding *obind = other->glbinding;
+            const struct gl_array_attributes *oattrib = other->glattrib;
+            const uint32_t ooffset = _mesa_draw_binding_offset(obind) +
+               _mesa_draw_attributes_relative_offset(oattrib);
 	    if (glbinding->BufferObj == obind->BufferObj &&
 		glbinding->Stride == obind->Stride &&
 		glbinding->InstanceDivisor == obind->InstanceDivisor &&
@@ -658,8 +659,7 @@ brw_prepare_vertices(struct brw_context *brw)
          buffer->step_rate = 0;
 
 	 for (i = 0; i < nr_uploads; i++) {
-            const struct gl_vertex_array *glarray = upload[i]->glarray;
-            const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+            const struct gl_array_attributes *glattrib = upload[i]->glattrib;
 	    /* Then, just point upload[i] at upload[0]'s buffer. */
             upload[i]->offset = ((const unsigned char *)glattrib->Ptr - ptr);
 	    upload[i]->buffer = j;
@@ -672,9 +672,8 @@ brw_prepare_vertices(struct brw_context *brw)
    /* Upload non-interleaved arrays */
    for (i = 0; i < nr_uploads; i++) {
       struct brw_vertex_buffer *buffer = &brw->vb.buffers[j];
-      const struct gl_vertex_array *glarray = upload[i]->glarray;
-      const struct gl_vertex_buffer_binding *glbinding = glarray->BufferBinding;
-      const struct gl_array_attributes *glattrib = glarray->VertexAttrib;
+      const struct gl_vertex_buffer_binding *glbinding = upload[i]->glbinding;
+      const struct gl_array_attributes *glattrib = upload[i]->glattrib;
       if (glbinding->InstanceDivisor == 0) {
          copy_array_to_vbo_array(brw, upload[i], min_index, max_index,
                                  buffer, glattrib->_ElementSize);
@@ -704,11 +703,8 @@ brw_prepare_shader_draw_parameters(struct brw_context *brw)
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
 
-   const bool uses_firstvertex =
-      vs_prog_data->uses_basevertex || vs_prog_data->uses_firstvertex;
-
    /* For non-indirect draws, upload the shader draw parameters */
-   if ((uses_firstvertex || vs_prog_data->uses_baseinstance) &&
+   if ((vs_prog_data->uses_firstvertex || vs_prog_data->uses_baseinstance) &&
        brw->draw.draw_params_bo == NULL) {
       brw_upload_data(&brw->upload,
                       &brw->draw.params, sizeof(brw->draw.params), 4,
@@ -716,11 +712,11 @@ brw_prepare_shader_draw_parameters(struct brw_context *brw)
                       &brw->draw.draw_params_offset);
    }
 
-   if (vs_prog_data->uses_drawid) {
+   if (vs_prog_data->uses_drawid || vs_prog_data->uses_is_indexed_draw) {
       brw_upload_data(&brw->upload,
-                      &brw->draw.gl_drawid, sizeof(brw->draw.gl_drawid), 4,
-                      &brw->draw.draw_id_bo,
-                      &brw->draw.draw_id_offset);
+                      &brw->draw.derived_params, sizeof(brw->draw.derived_params), 4,
+                      &brw->draw.derived_draw_params_bo,
+                      &brw->draw.derived_draw_params_offset);
    }
 }
 

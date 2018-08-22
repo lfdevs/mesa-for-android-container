@@ -112,7 +112,7 @@ TESTS = clear$(EXEEXT) collision$(EXEEXT) delete_and_lookup$(EXEEXT) \
 	delete_management$(EXEEXT) destroy_callback$(EXEEXT) \
 	insert_and_lookup$(EXEEXT) insert_many$(EXEEXT) \
 	null_destroy$(EXEEXT) random_entry$(EXEEXT) \
-	remove_null$(EXEEXT) replacement$(EXEEXT)
+	remove_key$(EXEEXT) remove_null$(EXEEXT) replacement$(EXEEXT)
 check_PROGRAMS = $(am__EXEEXT_1)
 subdir = src/util/tests/hash_table
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -137,7 +137,7 @@ am__EXEEXT_1 = clear$(EXEEXT) collision$(EXEEXT) \
 	delete_and_lookup$(EXEEXT) delete_management$(EXEEXT) \
 	destroy_callback$(EXEEXT) insert_and_lookup$(EXEEXT) \
 	insert_many$(EXEEXT) null_destroy$(EXEEXT) \
-	random_entry$(EXEEXT) remove_null$(EXEEXT) \
+	random_entry$(EXEEXT) remove_key$(EXEEXT) remove_null$(EXEEXT) \
 	replacement$(EXEEXT)
 clear_SOURCES = clear.c
 clear_OBJECTS = clear.$(OBJEXT)
@@ -193,6 +193,11 @@ random_entry_OBJECTS = random_entry.$(OBJEXT)
 random_entry_LDADD = $(LDADD)
 random_entry_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+remove_key_SOURCES = remove_key.c
+remove_key_OBJECTS = remove_key.$(OBJEXT)
+remove_key_LDADD = $(LDADD)
+remove_key_DEPENDENCIES = $(top_builddir)/src/util/libmesautil.la \
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 remove_null_SOURCES = remove_null.c
 remove_null_OBJECTS = remove_null.$(OBJEXT)
 remove_null_LDADD = $(LDADD)
@@ -239,11 +244,12 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = clear.c collision.c delete_and_lookup.c delete_management.c \
 	destroy_callback.c insert_and_lookup.c insert_many.c \
-	null_destroy.c random_entry.c remove_null.c replacement.c
+	null_destroy.c random_entry.c remove_key.c remove_null.c \
+	replacement.c
 DIST_SOURCES = clear.c collision.c delete_and_lookup.c \
 	delete_management.c destroy_callback.c insert_and_lookup.c \
-	insert_many.c null_destroy.c random_entry.c remove_null.c \
-	replacement.c
+	insert_many.c null_destroy.c random_entry.c remove_key.c \
+	remove_null.c replacement.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -487,6 +493,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -667,6 +675,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -674,8 +684,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -689,6 +699,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -709,10 +721,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -770,6 +786,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -872,6 +889,10 @@ random_entry$(EXEEXT): $(random_entry_OBJECTS) $(random_entry_DEPENDENCIES) $(EX
 	@rm -f random_entry$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(random_entry_OBJECTS) $(random_entry_LDADD) $(LIBS)
 
+remove_key$(EXEEXT): $(remove_key_OBJECTS) $(remove_key_DEPENDENCIES) $(EXTRA_remove_key_DEPENDENCIES) 
+	@rm -f remove_key$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(remove_key_OBJECTS) $(remove_key_LDADD) $(LIBS)
+
 remove_null$(EXEEXT): $(remove_null_OBJECTS) $(remove_null_DEPENDENCIES) $(EXTRA_remove_null_DEPENDENCIES) 
 	@rm -f remove_null$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(remove_null_OBJECTS) $(remove_null_LDADD) $(LIBS)
@@ -895,6 +916,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/insert_many.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/null_destroy.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/random_entry.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remove_key.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/remove_null.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/replacement.Po@am__quote@
 
@@ -1180,6 +1202,13 @@ null_destroy.log: null_destroy$(EXEEXT)
 random_entry.log: random_entry$(EXEEXT)
 	@p='random_entry$(EXEEXT)'; \
 	b='random_entry'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+remove_key.log: remove_key$(EXEEXT)
+	@p='remove_key$(EXEEXT)'; \
+	b='remove_key'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

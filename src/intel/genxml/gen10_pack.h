@@ -7826,7 +7826,7 @@ struct GEN10_MI_DISPLAY_FLIP {
    uint32_t                             DWordLength;
    bool                                 Stereoscopic3DMode;
    uint32_t                             DisplayBufferPitch;
-   bool                                 TileParameter;
+   uint32_t                             TileParameter;
    __gen_address_type                   DisplayBufferBaseAddress;
    uint32_t                             VRRMasterFlip;
    uint32_t                             FlipType;
@@ -8057,7 +8057,7 @@ struct GEN10_MI_LOAD_SCAN_LINES_INCL {
 #define DisplayPlane1A                           0
 #define DisplayPlane1B                           1
 #define DisplayPlane1C                           4
-   bool                                 ScanLineEventDoneForward;
+   uint32_t                             ScanLineEventDoneForward;
    uint32_t                             DWordLength;
    uint32_t                             StartScanLineNumber;
    uint32_t                             EndScanLineNumber;
@@ -9911,6 +9911,9 @@ struct GEN10_CS_DEBUG_MODE2 {
    bool                                 _3DRenderingInstructionDisable;
    bool                                 MediaInstructionDisable;
    bool                                 CONSTANT_BUFFERAddressOffsetDisable;
+   bool                                 _3DRenderingInstructionDisableMask;
+   bool                                 MediaInstructionDisableMask;
+   bool                                 CONSTANT_BUFFERAddressOffsetDisableMask;
 };
 
 static inline void
@@ -9923,7 +9926,10 @@ GEN10_CS_DEBUG_MODE2_pack(__attribute__((unused)) __gen_user_data *data,
    dw[0] =
       __gen_uint(values->_3DRenderingInstructionDisable, 0, 0) |
       __gen_uint(values->MediaInstructionDisable, 1, 1) |
-      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 4, 4);
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 4, 4) |
+      __gen_uint(values->_3DRenderingInstructionDisableMask, 16, 16) |
+      __gen_uint(values->MediaInstructionDisableMask, 17, 17) |
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisableMask, 20, 20);
 }
 
 #endif /* GEN10_PACK_H */

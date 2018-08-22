@@ -21,7 +21,7 @@ void radeon_clear_tris(struct gl_context *ctx, GLbitfield mask);
 
 void radeon_window_moved(radeonContextPtr radeon);
 void radeon_draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb);
-void radeonDrawBuffer( struct gl_context *ctx, GLenum mode );
+void radeonDrawBuffer(struct gl_context *ctx);
 void radeonReadBuffer( struct gl_context *ctx, GLenum mode );
 void radeon_viewport(struct gl_context *ctx);
 void radeon_fbo_init(struct radeon_context *radeon);
@@ -37,7 +37,6 @@ radeonReadPixels(struct gl_context * ctx,
 				GLenum format, GLenum type,
 				const struct gl_pixelstore_attrib *pack, GLvoid * pixels);
 
-void radeon_check_front_buffer_rendering(struct gl_context *ctx);
 static inline struct radeon_renderbuffer *radeon_renderbuffer(struct gl_renderbuffer *rb)
 {
 	struct radeon_renderbuffer *rrb = (struct radeon_renderbuffer *)rb;

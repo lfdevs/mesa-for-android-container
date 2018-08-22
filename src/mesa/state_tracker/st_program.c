@@ -388,11 +388,11 @@ st_translate_vertex_program(struct st_context *st,
    enum pipe_error error;
    unsigned num_outputs = 0;
    unsigned attr;
-   ubyte input_to_index[VERT_ATTRIB_MAX] = {0};
    ubyte output_semantic_name[VARYING_SLOT_MAX] = {0};
    ubyte output_semantic_index[VARYING_SLOT_MAX] = {0};
 
    stvp->num_inputs = 0;
+   memset(stvp->input_to_index, ~0, sizeof(stvp->input_to_index));
 
    if (stvp->Base.arb.IsPositionInvariant)
       _mesa_insert_mvp_code(st->ctx, &stvp->Base);
@@ -403,7 +403,7 @@ st_translate_vertex_program(struct st_context *st,
     */
    for (attr = 0; attr < VERT_ATTRIB_MAX; attr++) {
       if ((stvp->Base.info.inputs_read & BITFIELD64_BIT(attr)) != 0) {
-         input_to_index[attr] = stvp->num_inputs;
+         stvp->input_to_index[attr] = stvp->num_inputs;
          stvp->index_to_input[stvp->num_inputs] = attr;
          stvp->num_inputs++;
          if ((stvp->Base.info.vs.double_inputs_read &
@@ -415,7 +415,7 @@ st_translate_vertex_program(struct st_context *st,
       }
    }
    /* bit of a hack, presetup potentially unused edgeflag input */
-   input_to_index[VERT_ATTRIB_EDGEFLAG] = stvp->num_inputs;
+   stvp->input_to_index[VERT_ATTRIB_EDGEFLAG] = stvp->num_inputs;
    stvp->index_to_input[stvp->num_inputs] = VERT_ATTRIB_EDGEFLAG;
 
    /* Compute mapping of vertex program outputs to slots.
@@ -495,7 +495,7 @@ st_translate_vertex_program(struct st_context *st,
                                    &stvp->Base,
                                    /* inputs */
                                    stvp->num_inputs,
-                                   input_to_index,
+                                   stvp->input_to_index,
                                    NULL, /* inputSlotToAttr */
                                    NULL, /* input semantic name */
                                    NULL, /* input semantic index */
@@ -518,7 +518,7 @@ st_translate_vertex_program(struct st_context *st,
                                         &stvp->Base,
                                         /* inputs */
                                         stvp->num_inputs,
-                                        input_to_index,
+                                        stvp->input_to_index,
                                         NULL, /* input semantic name */
                                         NULL, /* input semantic index */
                                         NULL,
@@ -629,6 +629,13 @@ st_get_vp_variant(struct st_context *st,
       /* create now */
       vpv = st_create_vp_variant(st, stvp, key);
       if (vpv) {
+          for (unsigned index = 0; index < vpv->num_inputs; ++index) {
+             unsigned attr = stvp->index_to_input[index];
+             if (attr == ST_DOUBLE_ATTRIB_PLACEHOLDER)
+                continue;
+             vpv->vert_attrib_mask |= 1u << attr;
+          }
+
          /* insert into list */
          vpv->next = stvp->variants;
          stvp->variants = vpv;

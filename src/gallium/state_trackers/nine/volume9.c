@@ -92,6 +92,7 @@ NineVolume9_ctor( struct NineVolume9 *This,
     This->info.last_level = 0;
     This->info.array_size = 1;
     This->info.nr_samples = 0;
+    This->info.nr_storage_samples = 0;
     This->info.usage = PIPE_USAGE_DEFAULT;
     This->info.bind = PIPE_BIND_SAMPLER_VIEW;
     This->info.flags = 0;

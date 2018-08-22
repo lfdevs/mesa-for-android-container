@@ -64,6 +64,7 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return 13;
    case PIPE_CAP_GLSL_FEATURE_LEVEL:
+   case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
       return 120;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
@@ -224,11 +225,19 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
    case PIPE_CAP_TILE_RASTER_ORDER:
    case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+   case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
    case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
    case PIPE_CAP_FENCE_SIGNAL:
    case PIPE_CAP_CONSTBUF0_FLAGS:
    case PIPE_CAP_PACKED_UNIFORMS:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
+   case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
+   case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+   case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -270,6 +279,10 @@ nv30_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
       return (eng3d->oclass >= NV40_3D_CLASS) ? 16.0 : 8.0;
    case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
       return 15.0;
+   case PIPE_CAPF_MIN_CONSERVATIVE_RASTER_DILATE:
+   case PIPE_CAPF_MAX_CONSERVATIVE_RASTER_DILATE:
+   case PIPE_CAPF_CONSERVATIVE_RASTER_DILATE_GRANULARITY:
+      return 0.0;
    default:
       debug_printf("unknown paramf %d\n", param);
       return 0;
@@ -332,6 +345,7 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+      case PIPE_SHADER_CAP_SCALAR_ISA:
          return 0;
       default:
          debug_printf("unknown vertex shader param %d\n", param);
@@ -382,6 +396,9 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
       case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
       case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
+      case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+      case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+      case PIPE_SHADER_CAP_SCALAR_ISA:
          return 0;
       default:
          debug_printf("unknown fragment shader param %d\n", param);
@@ -398,6 +415,7 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
                                 enum pipe_format format,
                                 enum pipe_texture_target target,
                                 unsigned sample_count,
+                                unsigned storage_sample_count,
                                 unsigned bindings)
 {
    if (sample_count > nv30_screen(pscreen)->max_sample_count)
@@ -406,9 +424,8 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
    if (!(0x00000017 & (1 << sample_count)))
       return false;
 
-   if (!util_format_is_supported(format, bindings)) {
+   if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
       return false;
-   }
 
    /* shared is always supported */
    bindings &= ~PIPE_BIND_SHARED;

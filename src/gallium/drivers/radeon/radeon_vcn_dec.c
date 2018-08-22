@@ -66,7 +66,7 @@ struct radeon_decoder {
 
 	struct pipe_screen		*screen;
 	struct radeon_winsys		*ws;
-	struct radeon_winsys_cs		*cs;
+	struct radeon_cmdbuf		*cs;
 
 	void				*msg;
 	uint32_t			*fb;
@@ -759,15 +759,15 @@ static rvcn_dec_message_mpeg4_asp_vld_t get_mpeg4_msg(struct radeon_decoder *dec
 
 	result.vop_time_increment_resolution = pic->vop_time_increment_resolution;
 
-	result.short_video_header |= pic->short_video_header << 0;
-	result.interlaced |= pic->interlaced << 2;
-        result.load_intra_quant_mat |= 1 << 3;
-	result.load_nonintra_quant_mat |= 1 << 4;
-	result.quarter_sample |= pic->quarter_sample << 5;
-	result.complexity_estimation_disable |= 1 << 6;
-	result.resync_marker_disable |= pic->resync_marker_disable << 7;
-	result.newpred_enable |= 0 << 10; //
-	result.reduced_resolution_vop_enable |= 0 << 11;
+	result.short_video_header = pic->short_video_header;
+	result.interlaced = pic->interlaced;
+	result.load_intra_quant_mat = 1;
+	result.load_nonintra_quant_mat = 1;
+	result.quarter_sample = pic->quarter_sample;
+	result.complexity_estimation_disable = 1;
+	result.resync_marker_disable = pic->resync_marker_disable;
+	result.newpred_enable = 0;
+	result.reduced_resolution_vop_enable = 0;
 
 	result.quant_type = pic->quant_type;
 
@@ -808,10 +808,10 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 					struct pipe_video_buffer *target,
 					struct pipe_picture_desc *picture)
 {
-	struct r600_texture *luma = (struct r600_texture *)
-				((struct vl_video_buffer *)target)->resources[0];
-	struct r600_texture *chroma = (struct r600_texture *)
-				((struct vl_video_buffer *)target)->resources[1];
+	struct si_texture *luma = (struct si_texture *)
+				  ((struct vl_video_buffer *)target)->resources[0];
+	struct si_texture *chroma = (struct si_texture *)
+				    ((struct vl_video_buffer *)target)->resources[1];
 	rvcn_dec_message_header_t *header;
 	rvcn_dec_message_index_t *index;
 	rvcn_dec_message_decode_t *decode;
@@ -853,8 +853,8 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	decode->bsd_size = align(dec->bs_size, 128);
 	decode->dpb_size = dec->dpb.res->buf->size;
 	decode->dt_size =
-		((struct r600_resource *)((struct vl_video_buffer *)target)->resources[0])->buf->size +
-		((struct r600_resource *)((struct vl_video_buffer *)target)->resources[1])->buf->size;
+		r600_resource(((struct vl_video_buffer *)target)->resources[0])->buf->size +
+		r600_resource(((struct vl_video_buffer *)target)->resources[1])->buf->size;
 
 	decode->sct_size = 0;
 	decode->sc_coeff_size = 0;
@@ -986,7 +986,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	if (dec->ctx.res)
 		decode->hw_ctxt_size = dec->ctx.res->buf->size;
 
-	return luma->resource.buf;
+	return luma->buffer.buf;
 }
 
 static void rvcn_dec_message_destroy(struct radeon_decoder *dec)
@@ -1033,7 +1033,7 @@ static void send_cmd(struct radeon_decoder *dec, unsigned cmd,
 	uint64_t addr;
 
 	dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
-			   domain, RADEON_PRIO_UVD);
+			   domain, 0);
 	addr = dec->ws->buffer_get_virtual_address(buf);
 	addr = addr + off;
 

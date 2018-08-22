@@ -78,6 +78,21 @@ struct brw_cache_item {
    struct brw_cache_item *next;
 };
 
+enum brw_cache_id
+brw_stage_cache_id(gl_shader_stage stage)
+{
+   static const enum brw_cache_id stage_ids[] = {
+      BRW_CACHE_VS_PROG,
+      BRW_CACHE_TCS_PROG,
+      BRW_CACHE_TES_PROG,
+      BRW_CACHE_GS_PROG,
+      BRW_CACHE_FS_PROG,
+      BRW_CACHE_CS_PROG,
+   };
+   assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_ids));
+   return stage_ids[stage];
+}
+
 static unsigned
 get_program_string_id(enum brw_cache_id cache_id, const void *key)
 {
@@ -179,12 +194,10 @@ rehash(struct brw_cache *cache)
  * Returns the buffer object matching cache_id and key, or NULL.
  */
 bool
-brw_search_cache(struct brw_cache *cache,
-                 enum brw_cache_id cache_id,
-                 const void *key, GLuint key_size,
-                 uint32_t *inout_offset, void *inout_prog_data)
+brw_search_cache(struct brw_cache *cache, enum brw_cache_id cache_id,
+                 const void *key, GLuint key_size, uint32_t *inout_offset,
+                 void *inout_prog_data, bool flag_state)
 {
-   struct brw_context *brw = cache->brw;
    struct brw_cache_item *item;
    struct brw_cache_item lookup;
    GLuint hash;
@@ -204,7 +217,8 @@ brw_search_cache(struct brw_cache *cache,
 
    if (item->offset != *inout_offset ||
        prog_data != *((void **) inout_prog_data)) {
-      brw->ctx.NewDriverState |= (1 << cache_id);
+      if (likely(flag_state))
+         cache->brw->ctx.NewDriverState |= (1 << cache_id);
       *inout_offset = item->offset;
       *((void **) inout_prog_data) = prog_data;
    }
@@ -221,9 +235,10 @@ brw_cache_new_bo(struct brw_cache *cache, uint32_t new_size)
    perf_debug("Copying to larger program cache: %u kB -> %u kB\n",
               (unsigned) cache->bo->size / 1024, new_size / 1024);
 
-   new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size);
+   new_bo = brw_bo_alloc(brw->bufmgr, "program cache", new_size,
+                         BRW_MEMZONE_SHADER);
    if (can_do_exec_capture(brw->screen))
-      new_bo->kflags = EXEC_OBJECT_CAPTURE;
+      new_bo->kflags |= EXEC_OBJECT_CAPTURE;
 
    void *map = brw_bo_map(brw, new_bo, MAP_READ | MAP_WRITE |
                                        MAP_ASYNC | MAP_PERSISTENT);
@@ -388,9 +403,10 @@ brw_init_caches(struct brw_context *brw)
    cache->items =
       calloc(cache->size, sizeof(struct brw_cache_item *));
 
-   cache->bo = brw_bo_alloc(brw->bufmgr, "program cache", 16384);
+   cache->bo = brw_bo_alloc(brw->bufmgr, "program cache", 16384,
+                            BRW_MEMZONE_SHADER);
    if (can_do_exec_capture(brw->screen))
-      cache->bo->kflags = EXEC_OBJECT_CAPTURE;
+      cache->bo->kflags |= EXEC_OBJECT_CAPTURE;
 
    cache->map = brw_bo_map(brw, cache->bo, MAP_READ | MAP_WRITE |
                                            MAP_ASYNC | MAP_PERSISTENT);

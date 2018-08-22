@@ -46,6 +46,7 @@
 
 #include "compiler/glsl/standalone.h"
 #include "compiler/glsl/glsl_to_nir.h"
+#include "compiler/glsl/gl_nir.h"
 #include "compiler/nir_types.h"
 #include "compiler/spirv/nir_spirv.h"
 
@@ -55,7 +56,7 @@ static void dump_info(struct ir3_shader_variant *so, const char *str)
 	const char *type = ir3_shader_stage(so->shader);
 	bin = ir3_shader_assemble(so, so->shader->compiler->gpu_id);
 	debug_printf("; %s: %s\n", type, str);
-	ir3_shader_disasm(so, bin);
+	ir3_shader_disasm(so, bin, stdout);
 	free(bin);
 }
 
@@ -125,7 +126,6 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 
 	NIR_PASS_V(nir, nir_split_var_copies);
 	NIR_PASS_V(nir, nir_lower_var_copies);
-	NIR_PASS_V(nir, nir_lower_io_types);
 
 	switch (stage) {
 	case MESA_SHADER_VERTEX:
@@ -162,7 +162,7 @@ load_glsl(unsigned num_files, char* const* files, gl_shader_stage stage)
 
 	NIR_PASS_V(nir, nir_lower_system_values);
 	NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size, 0);
-	NIR_PASS_V(nir, nir_lower_samplers, prog);
+	NIR_PASS_V(nir, gl_nir_lower_samplers, prog);
 
 	return nir;
 }

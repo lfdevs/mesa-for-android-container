@@ -35,7 +35,7 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 			       uint64_t src_offset,
 			       uint64_t size)
 {
-	struct radeon_winsys_cs *cs = rctx->b.dma.cs;
+	struct radeon_cmdbuf *cs = rctx->b.dma.cs;
 	unsigned i, ncopy, csize, sub_cmd, shift;
 	struct r600_resource *rdst = (struct r600_resource*)dst;
 	struct r600_resource *rsrc = (struct r600_resource*)src;
@@ -64,10 +64,8 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 	for (i = 0; i < ncopy; i++) {
 		csize = size < EG_DMA_COPY_MAX_SIZE ? size : EG_DMA_COPY_MAX_SIZE;
 		/* emit reloc before writing cs so that cs is always in consistent state */
-		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rsrc, RADEON_USAGE_READ,
-				      RADEON_PRIO_SDMA_BUFFER);
-		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rdst, RADEON_USAGE_WRITE,
-				      RADEON_PRIO_SDMA_BUFFER);
+		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rsrc, RADEON_USAGE_READ, 0);
+		radeon_add_to_buffer_list(&rctx->b, &rctx->b.dma, rdst, RADEON_USAGE_WRITE, 0);
 		radeon_emit(cs, DMA_PACKET(DMA_PACKET_COPY, sub_cmd, csize));
 		radeon_emit(cs, dst_offset & 0xffffffff);
 		radeon_emit(cs, src_offset & 0xffffffff);
@@ -87,7 +85,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 				   unsigned size, uint32_t clear_value,
 				   enum r600_coherency coher)
 {
-	struct radeon_winsys_cs *cs = rctx->b.gfx.cs;
+	struct radeon_cmdbuf *cs = rctx->b.gfx.cs;
 
 	assert(size);
 	assert(rctx->screen->b.has_cp_dma);
@@ -111,7 +109,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 
 		r600_need_cs_space(rctx,
 				   10 + (rctx->b.flags ? R600_MAX_FLUSH_CS_DWORDS : 0) +
-				   R600_MAX_PFP_SYNC_ME_DWORDS, FALSE);
+				   R600_MAX_PFP_SYNC_ME_DWORDS, FALSE, 0);
 
 		/* Flush the caches for the first copy only. */
 		if (rctx->b.flags) {

@@ -2205,7 +2205,8 @@ tc_generate_mipmap(struct pipe_context *_pipe,
       bind = PIPE_BIND_RENDER_TARGET;
 
    if (!screen->is_format_supported(screen, format, res->target,
-                                    res->nr_samples, bind))
+                                    res->nr_samples, res->nr_storage_samples,
+                                    bind))
       return false;
 
    struct tc_generate_mipmap *p =
@@ -2566,7 +2567,7 @@ threaded_context_create(struct pipe_context *pipe,
     * from the queue before being executed, so keep one tc_batch slot for that
     * execution. Also, keep one unused slot for an unflushed batch.
     */
-   if (!util_queue_init(&tc->queue, "gallium_drv", TC_MAX_BATCHES - 2, 1, 0))
+   if (!util_queue_init(&tc->queue, "gdrv", TC_MAX_BATCHES - 2, 1, 0))
       goto fail;
 
    for (unsigned i = 0; i < TC_MAX_BATCHES; i++) {

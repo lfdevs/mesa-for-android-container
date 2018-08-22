@@ -471,6 +471,32 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SE, NULL,
                          &ws->info.max_se);
 
+    switch (ws->info.family) {
+    case CHIP_HAINAN:
+    case CHIP_KABINI:
+    case CHIP_MULLINS:
+        ws->info.num_tcc_blocks = 2;
+        break;
+    case CHIP_VERDE:
+    case CHIP_OLAND:
+    case CHIP_BONAIRE:
+    case CHIP_KAVERI:
+        ws->info.num_tcc_blocks = 4;
+        break;
+    case CHIP_PITCAIRN:
+        ws->info.num_tcc_blocks = 8;
+        break;
+    case CHIP_TAHITI:
+        ws->info.num_tcc_blocks = 12;
+        break;
+    case CHIP_HAWAII:
+        ws->info.num_tcc_blocks = 16;
+        break;
+    default:
+        ws->info.num_tcc_blocks = 0;
+        break;
+    }
+
     if (!ws->info.max_se) {
         switch (ws->info.family) {
         default:
@@ -529,6 +555,28 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
     ws->info.ib_start_alignment = 4096;
     ws->info.kernel_flushes_hdp_before_ib = ws->info.drm_minor >= 40;
+    /* HTILE is broken with 1D tiling on old kernels and CIK. */
+    ws->info.htile_cmask_support_1d_tiling = ws->info.chip_class != CIK ||
+                                             ws->info.drm_minor >= 38;
+    ws->info.si_TA_CS_BC_BASE_ADDR_allowed = ws->info.drm_minor >= 48;
+    ws->info.has_bo_metadata = false;
+    ws->info.has_gpu_reset_status_query = false;
+    ws->info.has_gpu_reset_counter_query = ws->info.drm_minor >= 43;
+    ws->info.has_eqaa_surface_allocator = false;
+    ws->info.has_format_bc1_through_bc7 = ws->info.drm_minor >= 31;
+    ws->info.kernel_flushes_tc_l2_after_ib = true;
+    /* Old kernels disallowed register writes via COPY_DATA
+     * that are used for indirect compute dispatches. */
+    ws->info.has_indirect_compute_dispatch = ws->info.chip_class == CIK ||
+                                             (ws->info.chip_class == SI &&
+                                              ws->info.drm_minor >= 45);
+    /* SI doesn't support unaligned loads. */
+    ws->info.has_unaligned_shader_loads = ws->info.chip_class == CIK &&
+                                          ws->info.drm_minor >= 50;
+    ws->info.has_sparse_vm_mappings = false;
+    /* 2D tiling on CIK is supported since DRM 2.35.0 */
+    ws->info.has_2d_tiling = ws->info.chip_class <= SI || ws->info.drm_minor >= 35;
+    ws->info.has_read_registers_query = ws->info.drm_minor >= 42;
 
     ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
 
@@ -573,7 +621,7 @@ static void radeon_query_info(struct radeon_winsys *rws,
     *info = ((struct radeon_drm_winsys *)rws)->info;
 }
 
-static bool radeon_cs_request_feature(struct radeon_winsys_cs *rcs,
+static bool radeon_cs_request_feature(struct radeon_cmdbuf *rcs,
                                       enum radeon_feature_id fid,
                                       bool enable)
 {
@@ -859,7 +907,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
     ws->info.gart_page_size = sysconf(_SC_PAGESIZE);
 
     if (ws->num_cpus > 1 && debug_get_option_thread())
-        util_queue_init(&ws->cs_queue, "radeon_cs", 8, 1, 0);
+        util_queue_init(&ws->cs_queue, "rcs", 8, 1, 0);
 
     /* Create the screen at the end. The winsys must be initialized
      * completely.

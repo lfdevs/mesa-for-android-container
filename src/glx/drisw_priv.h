@@ -23,6 +23,8 @@
  * SOFTWARE.
  */
 
+#include <X11/extensions/XShm.h>
+
 struct drisw_display
 {
    __GLXDRIdisplay base;
@@ -62,6 +64,7 @@ struct drisw_drawable
    __DRIdrawable *driDrawable;
    XVisualInfo *visinfo;
    XImage *ximage;
+   XShmSegmentInfo shminfo;
 };
 
 _X_HIDDEN int

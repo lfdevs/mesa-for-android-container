@@ -29,18 +29,13 @@
 #include "pipe/p_config.h"
 #include "os/os_process.h"
 #include "util/u_memory.h"
+#include "util/u_process.h"
 
 #if defined(PIPE_SUBSYSTEM_WINDOWS_USER)
 #  include <windows.h>
-#elif defined(__GLIBC__) || defined(__CYGWIN__)
-#  include <errno.h>
-#elif defined(PIPE_OS_BSD) || defined(PIPE_OS_APPLE) || defined(PIPE_OS_ANDROID)
-#  include <stdlib.h>
 #elif defined(PIPE_OS_HAIKU)
 #  include <kernel/OS.h>
 #  include <kernel/image.h>
-#else
-#warning unexpected platform in os_process.c
 #endif
 
 #if defined(PIPE_OS_LINUX)
@@ -84,20 +79,13 @@ os_get_process_name(char *procname, size_t size)
 
       name = lpProcessName;
 
-#elif defined(__GLIBC__) || defined(__CYGWIN__)
-      name = program_invocation_short_name;
-#elif defined(PIPE_OS_BSD) || defined(PIPE_OS_APPLE) || defined(PIPE_OS_ANDROID)
-      /* *BSD and OS X */
-      name = getprogname();
 #elif defined(PIPE_OS_HAIKU)
       image_info info;
       get_image_info(B_CURRENT_TEAM, &info);
       name = info.name;
 #else
-#warning unexpected platform in os_process.c
-      return FALSE;
+      name = util_get_process_name();
 #endif
-
    }
 
    assert(size > 0);

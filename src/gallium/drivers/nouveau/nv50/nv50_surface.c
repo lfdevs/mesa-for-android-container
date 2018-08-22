@@ -892,6 +892,10 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
    bool tex_s = false;
    bool cvt_un8 = false;
 
+   bool int_clamp = mode == NV50_BLIT_MODE_INT_CLAMP;
+   if (int_clamp)
+      mode = NV50_BLIT_MODE_PASS;
+
    if (mode != NV50_BLIT_MODE_PASS &&
        mode != NV50_BLIT_MODE_Z24X8 &&
        mode != NV50_BLIT_MODE_X8Z24)
@@ -935,6 +939,10 @@ nv50_blitter_make_fp(struct pipe_context *pipe,
       ureg_TEX(ureg, ureg_writemask(data, mask),
                target, tc, ureg_DECL_sampler(ureg, 0));
    }
+
+   /* handle signed to unsigned integer conversions */
+   if (int_clamp)
+      ureg_UMIN(ureg, data, ureg_src(data), ureg_imm1u(ureg, 0x7fffffff));
 
    if (cvt_un8) {
       struct ureg_src mask;
@@ -1058,6 +1066,9 @@ nv50_blit_select_mode(const struct pipe_blit_info *info)
          return NV50_BLIT_MODE_XS;
       }
    default:
+      if (util_format_is_pure_uint(info->src.format) &&
+          util_format_is_pure_sint(info->dst.format))
+         return NV50_BLIT_MODE_INT_CLAMP;
       return NV50_BLIT_MODE_PASS;
    }
 }

@@ -24,8 +24,9 @@
 # Authors:
 #    Ian Romanick <idr@us.ibm.com>
 
+from __future__ import print_function
+
 import gl_XML, glX_XML
-import string
 
 
 class glx_proto_item_factory(glX_XML.glx_item_factory):
@@ -65,7 +66,7 @@ class glx_print_proto(gl_XML.gl_print_base):
                     return compsize
 
                 elif len(param.count_parameter_list):
-                    parameters = string.join( param.count_parameter_list, "," )
+                    parameters = ",".join( param.count_parameter_list )
                     compsize = "__gl%s_size(%s)" % (func.name, parameters)
 
                     return compsize
@@ -80,12 +81,12 @@ class glx_print_proto(gl_XML.gl_print_base):
 
         compsize = self.size_call(f)
         if compsize:
-            print '    const GLuint compsize = %s;' % (compsize)
+            print('    const GLuint compsize = %s;' % (compsize))
 
         if bias:
-            print '    const GLuint cmdlen = %s - %u;' % (f.command_length(), bias)
+            print('    const GLuint cmdlen = %s - %u;' % (f.command_length(), bias))
         else:
-            print '    const GLuint cmdlen = %s;' % (f.command_length())
+            print('    const GLuint cmdlen = %s;' % (f.command_length()))
 
         #print ''
         return compsize

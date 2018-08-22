@@ -332,7 +332,7 @@ void expr_handler::apply_alu_src_mod(const bc_alu &bc, unsigned src,
 }
 
 void expr_handler::apply_alu_dst_mod(const bc_alu &bc, literal &v) {
-	float omod_coeff[] = {2.0f, 4.0, 0.5f};
+	const float omod_coeff[] = {2.0f, 4.0, 0.5f};
 
 	if (bc.omod)
 		v = v.f * omod_coeff[bc.omod - 1];

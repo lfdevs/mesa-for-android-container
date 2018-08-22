@@ -129,91 +129,76 @@ brw_swizzle_immediate(enum brw_reg_type type, uint32_t x, unsigned swz)
 unsigned
 brw_get_default_exec_size(struct brw_codegen *p)
 {
-   return brw_inst_exec_size(p->devinfo, p->current);
+   return p->current->exec_size;
 }
 
 unsigned
 brw_get_default_group(struct brw_codegen *p)
 {
-   if (p->devinfo->gen >= 6) {
-      unsigned group = brw_inst_qtr_control(p->devinfo, p->current) * 8;
-      if (p->devinfo->gen >= 7)
-         group += brw_inst_nib_control(p->devinfo, p->current) * 4;
-      return group;
-   } else {
-      unsigned qtr_control = brw_inst_qtr_control(p->devinfo, p->current);
-      if (qtr_control == BRW_COMPRESSION_COMPRESSED)
-         return 0;
-      else
-         return qtr_control * 8;
-   }
+   return p->current->group;
 }
 
 unsigned
 brw_get_default_access_mode(struct brw_codegen *p)
 {
-   return brw_inst_access_mode(p->devinfo, p->current);
+   return p->current->access_mode;
 }
 
 void
 brw_set_default_exec_size(struct brw_codegen *p, unsigned value)
 {
-   brw_inst_set_exec_size(p->devinfo, p->current, value);
+   p->current->exec_size = value;
 }
 
 void brw_set_default_predicate_control( struct brw_codegen *p, unsigned pc )
 {
-   brw_inst_set_pred_control(p->devinfo, p->current, pc);
+   p->current->predicate = pc;
 }
 
 void brw_set_default_predicate_inverse(struct brw_codegen *p, bool predicate_inverse)
 {
-   brw_inst_set_pred_inv(p->devinfo, p->current, predicate_inverse);
+   p->current->pred_inv = predicate_inverse;
 }
 
 void brw_set_default_flag_reg(struct brw_codegen *p, int reg, int subreg)
 {
-   if (p->devinfo->gen >= 7)
-      brw_inst_set_flag_reg_nr(p->devinfo, p->current, reg);
-
-   brw_inst_set_flag_subreg_nr(p->devinfo, p->current, subreg);
+   assert(subreg < 2);
+   p->current->flag_subreg = reg * 2 + subreg;
 }
 
 void brw_set_default_access_mode( struct brw_codegen *p, unsigned access_mode )
 {
-   brw_inst_set_access_mode(p->devinfo, p->current, access_mode);
+   p->current->access_mode = access_mode;
 }
 
 void
 brw_set_default_compression_control(struct brw_codegen *p,
 			    enum brw_compression compression_control)
 {
-   if (p->devinfo->gen >= 6) {
-      /* Since we don't use the SIMD32 support in gen6, we translate
-       * the pre-gen6 compression control here.
+   switch (compression_control) {
+   case BRW_COMPRESSION_NONE:
+      /* This is the "use the first set of bits of dmask/vmask/arf
+       * according to execsize" option.
        */
-      switch (compression_control) {
-      case BRW_COMPRESSION_NONE:
-	 /* This is the "use the first set of bits of dmask/vmask/arf
-	  * according to execsize" option.
-	  */
-         brw_inst_set_qtr_control(p->devinfo, p->current, GEN6_COMPRESSION_1Q);
-	 break;
-      case BRW_COMPRESSION_2NDHALF:
-	 /* For SIMD8, this is "use the second set of 8 bits." */
-         brw_inst_set_qtr_control(p->devinfo, p->current, GEN6_COMPRESSION_2Q);
-	 break;
-      case BRW_COMPRESSION_COMPRESSED:
-	 /* For SIMD16 instruction compression, use the first set of 16 bits
-	  * since we don't do SIMD32 dispatch.
-	  */
-         brw_inst_set_qtr_control(p->devinfo, p->current, GEN6_COMPRESSION_1H);
-	 break;
-      default:
-         unreachable("not reached");
-      }
-   } else {
-      brw_inst_set_qtr_control(p->devinfo, p->current, compression_control);
+      p->current->group = 0;
+      break;
+   case BRW_COMPRESSION_2NDHALF:
+      /* For SIMD8, this is "use the second set of 8 bits." */
+      p->current->group = 8;
+      break;
+   case BRW_COMPRESSION_COMPRESSED:
+      /* For SIMD16 instruction compression, use the first set of 16 bits
+       * since we don't do SIMD32 dispatch.
+       */
+      p->current->group = 0;
+      break;
+   default:
+      unreachable("not reached");
+   }
+
+   if (p->devinfo->gen <= 6) {
+      p->current->compressed =
+         (compression_control == BRW_COMPRESSION_COMPRESSED);
    }
 }
 
@@ -246,7 +231,7 @@ brw_inst_set_compression(const struct gen_device_info *devinfo,
 void
 brw_set_default_compression(struct brw_codegen *p, bool on)
 {
-   brw_inst_set_compression(p->devinfo, p->current, on);
+   p->current->compressed = on;
 }
 
 /**
@@ -283,29 +268,28 @@ brw_inst_set_group(const struct gen_device_info *devinfo,
 void
 brw_set_default_group(struct brw_codegen *p, unsigned group)
 {
-   brw_inst_set_group(p->devinfo, p->current, group);
+   p->current->group = group;
 }
 
 void brw_set_default_mask_control( struct brw_codegen *p, unsigned value )
 {
-   brw_inst_set_mask_control(p->devinfo, p->current, value);
+   p->current->mask_control = value;
 }
 
 void brw_set_default_saturate( struct brw_codegen *p, bool enable )
 {
-   brw_inst_set_saturate(p->devinfo, p->current, enable);
+   p->current->saturate = enable;
 }
 
 void brw_set_default_acc_write_control(struct brw_codegen *p, unsigned value)
 {
-   if (p->devinfo->gen >= 6)
-      brw_inst_set_acc_wr_control(p->devinfo, p->current, value);
+   p->current->acc_wr_control = value;
 }
 
 void brw_push_insn_state( struct brw_codegen *p )
 {
    assert(p->current != &p->stack[BRW_EU_MAX_INSN_STACK-1]);
-   memcpy(p->current + 1, p->current, sizeof(brw_inst));
+   *(p->current + 1) = *p->current;
    p->current++;
 }
 

@@ -1201,6 +1201,9 @@ NV50LoweringPreSSA::handleRDSV(Instruction *i)
          bld.mkMov(def, bld.mkImm(0));
       }
       break;
+   case SV_COMBINED_TID:
+      bld.mkMov(def, tid);
+      break;
    case SV_SAMPLE_POS: {
       Value *off = new_LValue(func, FILE_ADDRESS);
       bld.mkOp1(OP_RDSV, TYPE_U32, def, bld.mkSysVal(SV_SAMPLE_INDEX, 0));

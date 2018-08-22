@@ -124,33 +124,52 @@ fd_bc_fini(struct fd_batch_cache *cache)
 	_mesa_hash_table_destroy(cache->ht, NULL);
 }
 
+static void
+bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx, bool deferred)
+{
+	/* fd_batch_flush() (and fd_batch_add_dep() which calls it indirectly)
+	 * can cause batches to be unref'd and freed under our feet, so grab
+	 * a reference to all the batches we need up-front.
+	 */
+	struct fd_batch *batches[ARRAY_SIZE(cache->batches)] = {0};
+	struct fd_batch *batch;
+	unsigned n = 0;
+
+	fd_context_lock(ctx);
+
+	foreach_batch(batch, cache, cache->batch_mask) {
+		if (batch->ctx == ctx) {
+			fd_batch_reference_locked(&batches[n++], batch);
+		}
+	}
+
+	if (deferred) {
+		struct fd_batch *current_batch = ctx->batch;
+
+		for (unsigned i = 0; i < n; i++) {
+			if (batches[i] != current_batch) {
+				fd_batch_add_dep(current_batch, batches[i]);
+			}
+		}
+
+		fd_context_unlock(ctx);
+	} else {
+		fd_context_unlock(ctx);
+
+		for (unsigned i = 0; i < n; i++) {
+			fd_batch_flush(batches[i], false, false);
+		}
+	}
+
+	for (unsigned i = 0; i < n; i++) {
+		fd_batch_reference(&batches[i], NULL);
+	}
+}
+
 void
 fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 {
-	struct hash_entry *entry;
-	struct fd_batch *last_batch = NULL;
-
-	mtx_lock(&ctx->screen->lock);
-
-	hash_table_foreach(cache->ht, entry) {
-		struct fd_batch *batch = NULL;
-		/* hold a reference since we can drop screen->lock: */
-		fd_batch_reference_locked(&batch, (struct fd_batch *)entry->data);
-		if (batch->ctx == ctx) {
-			mtx_unlock(&ctx->screen->lock);
-			fd_batch_reference(&last_batch, batch);
-			fd_batch_flush(batch, false, false);
-			mtx_lock(&ctx->screen->lock);
-		}
-		fd_batch_reference_locked(&batch, NULL);
-	}
-
-	mtx_unlock(&ctx->screen->lock);
-
-	if (last_batch) {
-		fd_batch_sync(last_batch);
-		fd_batch_reference(&last_batch, NULL);
-	}
+	bc_flush(cache, ctx, false);
 }
 
 /* deferred flush doesn't actually flush, but it marks every other
@@ -161,20 +180,7 @@ fd_bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx)
 void
 fd_bc_flush_deferred(struct fd_batch_cache *cache, struct fd_context *ctx)
 {
-	struct fd_batch *current_batch = ctx->batch;
-	struct hash_entry *entry;
-
-	mtx_lock(&ctx->screen->lock);
-
-	hash_table_foreach(cache->ht, entry) {
-		struct fd_batch *batch = entry->data;
-		if (batch == current_batch)
-			continue;
-		if (batch->ctx == ctx)
-			fd_batch_add_dep(current_batch, batch);
-	}
-
-	mtx_unlock(&ctx->screen->lock);
+	bc_flush(cache, ctx, true);
 }
 
 void
@@ -187,14 +193,24 @@ fd_bc_invalidate_context(struct fd_context *ctx)
 
 	foreach_batch(batch, cache, cache->batch_mask) {
 		if (batch->ctx == ctx)
-			fd_batch_reference_locked(&batch, NULL);
+			fd_bc_invalidate_batch(batch, true);
 	}
 
 	mtx_unlock(&ctx->screen->lock);
 }
 
+/**
+ * Note that when batch is flushed, it needs to remain in the cache so
+ * that fd_bc_invalidate_resource() can work.. otherwise we can have
+ * the case where a rsc is destroyed while a batch still has a dangling
+ * reference to it.
+ *
+ * Note that the cmdstream (or, after the SUBMIT ioctl, the kernel)
+ * would have a reference to the underlying bo, so it is ok for the
+ * rsc to be destroyed before the batch.
+ */
 void
-fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy)
+fd_bc_invalidate_batch(struct fd_batch *batch, bool remove)
 {
 	if (!batch)
 		return;
@@ -202,9 +218,9 @@ fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy)
 	struct fd_batch_cache *cache = &batch->ctx->screen->batch_cache;
 	struct key *key = (struct key *)batch->key;
 
-	pipe_mutex_assert_locked(batch->ctx->screen->lock);
+	fd_context_assert_locked(batch->ctx);
 
-	if (destroy) {
+	if (remove) {
 		cache->batches[batch->idx] = NULL;
 		cache->batch_mask &= ~(1 << batch->idx);
 	}
@@ -398,7 +414,7 @@ fd_batch_from_fb(struct fd_batch_cache *cache, struct fd_context *ctx,
 	key->width = pfb->width;
 	key->height = pfb->height;
 	key->layers = pfb->layers;
-	key->samples = pfb->samples;
+	key->samples = util_framebuffer_get_num_samples(pfb);
 	key->ctx = ctx;
 
 	if (pfb->zsbuf)

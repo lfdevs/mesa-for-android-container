@@ -1,30 +1,30 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file clip.h
-*
-* @brief Definitions for clipping
-*
-******************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file clip.h
+ *
+ * @brief Definitions for clipping
+ *
+ ******************************************************************************/
 #pragma once
 
 #include "common/simdintrin.h"
@@ -40,18 +40,19 @@ extern THREAD SIMDVERTEX_T<SIMD512> tlsTempVertices_simd16[7];
 
 enum SWR_CLIPCODES
 {
-    // Shift clip codes out of the mantissa to prevent denormalized values when used in float compare.
-    // Guardband is able to use a single high-bit with 4 separate LSBs, because it computes a union, rather than intersection, of clipcodes.
+// Shift clip codes out of the mantissa to prevent denormalized values when used in float compare.
+// Guardband is able to use a single high-bit with 4 separate LSBs, because it computes a union,
+// rather than intersection, of clipcodes.
 #define CLIPCODE_SHIFT 23
-    FRUSTUM_LEFT    = (0x01 << CLIPCODE_SHIFT),
-    FRUSTUM_TOP     = (0x02 << CLIPCODE_SHIFT),
-    FRUSTUM_RIGHT   = (0x04 << CLIPCODE_SHIFT),
-    FRUSTUM_BOTTOM  = (0x08 << CLIPCODE_SHIFT),
+    FRUSTUM_LEFT   = (0x01 << CLIPCODE_SHIFT),
+    FRUSTUM_TOP    = (0x02 << CLIPCODE_SHIFT),
+    FRUSTUM_RIGHT  = (0x04 << CLIPCODE_SHIFT),
+    FRUSTUM_BOTTOM = (0x08 << CLIPCODE_SHIFT),
 
-    FRUSTUM_NEAR    = (0x10 << CLIPCODE_SHIFT),
-    FRUSTUM_FAR     = (0x20 << CLIPCODE_SHIFT),
+    FRUSTUM_NEAR = (0x10 << CLIPCODE_SHIFT),
+    FRUSTUM_FAR  = (0x20 << CLIPCODE_SHIFT),
 
-    NEGW            = (0x40 << CLIPCODE_SHIFT),
+    NEGW = (0x40 << CLIPCODE_SHIFT),
 
     GUARDBAND_LEFT   = (0x80 << CLIPCODE_SHIFT | 0x1),
     GUARDBAND_TOP    = (0x80 << CLIPCODE_SHIFT | 0x2),
@@ -59,32 +60,41 @@ enum SWR_CLIPCODES
     GUARDBAND_BOTTOM = (0x80 << CLIPCODE_SHIFT | 0x8)
 };
 
-#define GUARDBAND_CLIP_MASK (FRUSTUM_NEAR|FRUSTUM_FAR|GUARDBAND_LEFT|GUARDBAND_TOP|GUARDBAND_RIGHT|GUARDBAND_BOTTOM|NEGW)
-#define FRUSTUM_CLIP_MASK (FRUSTUM_NEAR|FRUSTUM_FAR|FRUSTUM_LEFT|FRUSTUM_RIGHT|FRUSTUM_TOP|FRUSTUM_BOTTOM)
+#define GUARDBAND_CLIP_MASK                                                          \
+    (FRUSTUM_NEAR | FRUSTUM_FAR | GUARDBAND_LEFT | GUARDBAND_TOP | GUARDBAND_RIGHT | \
+     GUARDBAND_BOTTOM | NEGW)
+#define FRUSTUM_CLIP_MASK \
+    (FRUSTUM_NEAR | FRUSTUM_FAR | FRUSTUM_LEFT | FRUSTUM_RIGHT | FRUSTUM_TOP | FRUSTUM_BOTTOM)
 
-template<typename SIMD_T>
-void ComputeClipCodes(const API_STATE &state, const Vec4<SIMD_T> &vertex, Float<SIMD_T> &clipCodes, Integer<SIMD_T> const &viewportIndexes)
+template <typename SIMD_T>
+void ComputeClipCodes(const API_STATE&       state,
+                      const Vec4<SIMD_T>&    vertex,
+                      Float<SIMD_T>&         clipCodes,
+                      Integer<SIMD_T> const& viewportIndexes)
 {
     clipCodes = SIMD_T::setzero_ps();
 
     // -w
-    Float<SIMD_T> vNegW = SIMD_T::mul_ps(vertex.w,SIMD_T::set1_ps(-1.0f));
+    Float<SIMD_T> vNegW = SIMD_T::mul_ps(vertex.w, SIMD_T::set1_ps(-1.0f));
 
     // FRUSTUM_LEFT
     Float<SIMD_T> vRes = SIMD_T::cmplt_ps(vertex.x, vNegW);
-    clipCodes = SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_LEFT)));
+    clipCodes          = SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_LEFT)));
 
     // FRUSTUM_TOP
-    vRes = SIMD_T::cmplt_ps(vertex.y, vNegW);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_TOP))));
+    vRes      = SIMD_T::cmplt_ps(vertex.y, vNegW);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_TOP))));
 
     // FRUSTUM_RIGHT
-    vRes = SIMD_T::cmpgt_ps(vertex.x, vertex.w);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_RIGHT))));
+    vRes      = SIMD_T::cmpgt_ps(vertex.x, vertex.w);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_RIGHT))));
 
     // FRUSTUM_BOTTOM
-    vRes = SIMD_T::cmpgt_ps(vertex.y, vertex.w);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_BOTTOM))));
+    vRes      = SIMD_T::cmpgt_ps(vertex.y, vertex.w);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_BOTTOM))));
 
     if (state.rastState.depthClipEnable)
     {
@@ -98,50 +108,66 @@ void ComputeClipCodes(const API_STATE &state, const Vec4<SIMD_T> &vertex, Float<
         {
             vRes = SIMD_T::cmplt_ps(vertex.z, vNegW);
         }
-        clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_NEAR))));
+        clipCodes = SIMD_T::or_ps(
+            clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_NEAR))));
 
         // FRUSTUM_FAR
-        vRes = SIMD_T::cmpgt_ps(vertex.z, vertex.w);
-        clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_FAR))));
+        vRes      = SIMD_T::cmpgt_ps(vertex.z, vertex.w);
+        clipCodes = SIMD_T::or_ps(
+            clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_FAR))));
     }
 
     // NEGW
     vRes = SIMD_T::cmple_ps(vertex.w, SIMD_T::setzero_ps());
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(NEGW))));
+    clipCodes =
+        SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(NEGW))));
 
     // GUARDBAND_LEFT
-    Float<SIMD_T> gbMult = SIMD_T::mul_ps(vNegW, SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(&state.gbState.left[0], viewportIndexes));
-    vRes = SIMD_T::cmplt_ps(vertex.x, gbMult);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_LEFT))));
+    Float<SIMD_T> gbMult = SIMD_T::mul_ps(vNegW,
+                                          SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(
+                                              &state.gbState.left[0], viewportIndexes));
+    vRes                 = SIMD_T::cmplt_ps(vertex.x, gbMult);
+    clipCodes            = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_LEFT))));
 
     // GUARDBAND_TOP
-    gbMult = SIMD_T::mul_ps(vNegW, SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(&state.gbState.top[0], viewportIndexes));
-    vRes = SIMD_T::cmplt_ps(vertex.y, gbMult);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_TOP))));
+    gbMult    = SIMD_T::mul_ps(vNegW,
+                            SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(
+                                &state.gbState.top[0], viewportIndexes));
+    vRes      = SIMD_T::cmplt_ps(vertex.y, gbMult);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_TOP))));
 
     // GUARDBAND_RIGHT
-    gbMult = SIMD_T::mul_ps(vertex.w, SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(&state.gbState.right[0], viewportIndexes));
-    vRes = SIMD_T::cmpgt_ps(vertex.x, gbMult);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_RIGHT))));
+    gbMult    = SIMD_T::mul_ps(vertex.w,
+                            SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(
+                                &state.gbState.right[0], viewportIndexes));
+    vRes      = SIMD_T::cmpgt_ps(vertex.x, gbMult);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_RIGHT))));
 
     // GUARDBAND_BOTTOM
-    gbMult = SIMD_T::mul_ps(vertex.w, SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(&state.gbState.bottom[0], viewportIndexes));
-    vRes = SIMD_T::cmpgt_ps(vertex.y, gbMult);
-    clipCodes = SIMD_T::or_ps(clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_BOTTOM))));
+    gbMult    = SIMD_T::mul_ps(vertex.w,
+                            SIMD_T::template i32gather_ps<ScaleFactor<SIMD_T>(4)>(
+                                &state.gbState.bottom[0], viewportIndexes));
+    vRes      = SIMD_T::cmpgt_ps(vertex.y, gbMult);
+    clipCodes = SIMD_T::or_ps(
+        clipCodes, SIMD_T::and_ps(vRes, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_BOTTOM))));
 }
 
-template<typename SIMD_T>
+template <typename SIMD_T>
 struct BinnerChooser
 {
 };
 
-template<>
+template <>
 struct BinnerChooser<SIMD256>
 {
     PFN_PROCESS_PRIMS pfnBinFunc;
 
     BinnerChooser(uint32_t numVertsPerPrim, uint32_t conservativeRast)
-        :pfnBinFunc(nullptr)
+        :
+        pfnBinFunc(nullptr)
     {
         if (numVertsPerPrim == 3)
         {
@@ -159,7 +185,8 @@ struct BinnerChooser<SIMD256>
     }
 
     BinnerChooser(PRIMITIVE_TOPOLOGY topology, uint32_t conservativeRast)
-        :pfnBinFunc(nullptr)
+        :
+        pfnBinFunc(nullptr)
     {
         switch (topology)
         {
@@ -179,7 +206,14 @@ struct BinnerChooser<SIMD256>
         };
     }
 
-    void BinFunc(DRAW_CONTEXT *pDC, PA_STATE &pa, uint32_t workerId, SIMD256::Vec4 prims[], uint32_t primMask, SIMD256::Integer const &primID, SIMD256::Integer &viewportIdx, SIMD256::Integer &rtIdx)
+    void BinFunc(DRAW_CONTEXT*           pDC,
+                 PA_STATE&               pa,
+                 uint32_t                workerId,
+                 SIMD256::Vec4           prims[],
+                 uint32_t                primMask,
+                 SIMD256::Integer const& primID,
+                 SIMD256::Integer&       viewportIdx,
+                 SIMD256::Integer&       rtIdx)
     {
         SWR_ASSERT(pfnBinFunc != nullptr);
 
@@ -188,13 +222,14 @@ struct BinnerChooser<SIMD256>
 };
 
 #if USE_SIMD16_FRONTEND
-template<>
+template <>
 struct BinnerChooser<SIMD512>
 {
     PFN_PROCESS_PRIMS_SIMD16 pfnBinFunc;
 
     BinnerChooser(uint32_t numVertsPerPrim, uint32_t conservativeRast)
-        :pfnBinFunc(nullptr)
+        :
+        pfnBinFunc(nullptr)
     {
         if (numVertsPerPrim == 3)
         {
@@ -212,7 +247,8 @@ struct BinnerChooser<SIMD512>
     }
 
     BinnerChooser(PRIMITIVE_TOPOLOGY topology, uint32_t conservativeRast)
-        :pfnBinFunc(nullptr)
+        :
+        pfnBinFunc(nullptr)
     {
         switch (topology)
         {
@@ -232,7 +268,14 @@ struct BinnerChooser<SIMD512>
         };
     }
 
-    void BinFunc(DRAW_CONTEXT *pDC, PA_STATE &pa, uint32_t workerId, SIMD512::Vec4 prims[], uint32_t primMask, SIMD512::Integer const &primID, SIMD512::Integer &viewportIdx, SIMD512::Integer &rtIdx)
+    void BinFunc(DRAW_CONTEXT*           pDC,
+                 PA_STATE&               pa,
+                 uint32_t                workerId,
+                 SIMD512::Vec4           prims[],
+                 uint32_t                primMask,
+                 SIMD512::Integer const& primID,
+                 SIMD512::Integer&       viewportIdx,
+                 SIMD512::Integer&       rtIdx)
     {
         SWR_ASSERT(pfnBinFunc != nullptr);
 
@@ -241,18 +284,15 @@ struct BinnerChooser<SIMD512>
 };
 
 #endif
-template<typename SIMD_T>
+template <typename SIMD_T>
 struct SimdHelper
 {
 };
 
-template<>
+template <>
 struct SimdHelper<SIMD256>
 {
-    static SIMD256::Float insert_lo_ps(SIMD256::Float a)
-    {
-        return a;
-    }
+    static SIMD256::Float insert_lo_ps(SIMD256::Float a) { return a; }
 
     static SIMD256::Mask cmpeq_ps_mask(SIMD256::Float a, SIMD256::Float b)
     {
@@ -261,7 +301,7 @@ struct SimdHelper<SIMD256>
 };
 
 #if USE_SIMD16_FRONTEND
-template<>
+template <>
 struct SimdHelper<SIMD512>
 {
     static SIMD512::Float insert_lo_ps(SIMD256::Float a)
@@ -277,32 +317,26 @@ struct SimdHelper<SIMD512>
 
 #endif
 // Temp storage used by the clipper
-template<typename SIMD_T>
+template <typename SIMD_T>
 struct ClipHelper
 {
 };
 
-template<>
+template <>
 struct ClipHelper<SIMD256>
 {
-    static SIMDVERTEX_T<SIMD256> *GetTempVertices()
-    {
-        return tlsTempVertices;
-    }
+    static SIMDVERTEX_T<SIMD256>* GetTempVertices() { return tlsTempVertices; }
 };
 
 #if USE_SIMD16_FRONTEND
-template<>
+template <>
 struct ClipHelper<SIMD512>
 {
-    static SIMDVERTEX_T<SIMD512> *GetTempVertices()
-    {
-        return tlsTempVertices_simd16;
-    }
+    static SIMDVERTEX_T<SIMD512>* GetTempVertices() { return tlsTempVertices_simd16; }
 };
 
 #endif
-template<typename SIMD_T, uint32_t NumVertsPerPrim>
+template <typename SIMD_T, uint32_t NumVertsPerPrim>
 class Clipper
 {
 public:
@@ -312,7 +346,7 @@ public:
         static_assert(NumVertsPerPrim >= 1 && NumVertsPerPrim <= 3, "Invalid NumVertsPerPrim");
     }
 
-    void ComputeClipCodes(Vec4<SIMD_T> vertex[], const Integer<SIMD_T> &viewportIndexes)
+    void ComputeClipCodes(Vec4<SIMD_T> vertex[], const Integer<SIMD_T>& viewportIndexes)
     {
         for (uint32_t i = 0; i < NumVertsPerPrim; ++i)
         {
@@ -348,7 +382,8 @@ public:
     {
         Float<SIMD_T> clipUnion = ComputeClipCodeUnion();
 
-        clipUnion = SIMD_T::and_ps(clipUnion, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_CLIP_MASK)));
+        clipUnion =
+            SIMD_T::and_ps(clipUnion, SIMD_T::castsi_ps(SIMD_T::set1_epi32(GUARDBAND_CLIP_MASK)));
 
         return SIMD_T::movemask_ps(SIMD_T::cmpneq_ps(clipUnion, SIMD_T::setzero_ps()));
     }
@@ -360,19 +395,21 @@ public:
 
         for (uint32_t e = 0; e < NumVertsPerPrim; ++e)
         {
-            Float<SIMD_T> vNan01 = SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(prim[e].v[0], prim[e].v[1]);
+            Float<SIMD_T> vNan01 =
+                SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(prim[e].v[0], prim[e].v[1]);
             vNanMask = SIMD_T::or_ps(vNanMask, vNan01);
 
-            Float<SIMD_T> vNan23 = SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(prim[e].v[2], prim[e].v[3]);
+            Float<SIMD_T> vNan23 =
+                SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(prim[e].v[2], prim[e].v[3]);
             vNanMask = SIMD_T::or_ps(vNanMask, vNan23);
         }
 
         return SIMD_T::movemask_ps(vNanMask);
     }
 
-    int ComputeUserClipCullMask(PA_STATE &pa, Vec4<SIMD_T> prim[])
+    int ComputeUserClipCullMask(PA_STATE& pa, Vec4<SIMD_T> prim[])
     {
-        uint8_t cullMask = state.backendState.cullDistanceMask;
+        uint8_t  cullMask             = state.backendState.cullDistanceMask;
         uint32_t vertexClipCullOffset = state.backendState.vertexClipCullOffset;
 
         Float<SIMD_T> vClipCullMask = SIMD_T::setzero_ps();
@@ -387,7 +424,7 @@ public:
         while (_BitScanForward(&index, cullMask))
         {
             cullMask &= ~(1 << index);
-            uint32_t slot = index >> 2;
+            uint32_t slot      = index >> 2;
             uint32_t component = index & 0x3;
 
             Float<SIMD_T> vCullMaskElem = SIMD_T::set1_ps(-1.0f);
@@ -404,7 +441,8 @@ public:
                 }
 
                 // cull if cull distance < 0 || NAN
-                Float<SIMD_T> vCull = SIMD_T::template cmp_ps<SIMD_T::CompareType::NLE_UQ>(SIMD_T::setzero_ps(), vCullComp);
+                Float<SIMD_T> vCull = SIMD_T::template cmp_ps<SIMD_T::CompareType::NLE_UQ>(
+                    SIMD_T::setzero_ps(), vCullComp);
                 vCullMaskElem = SIMD_T::and_ps(vCullMaskElem, vCull);
             }
             vClipCullMask = SIMD_T::or_ps(vClipCullMask, vCullMaskElem);
@@ -415,7 +453,7 @@ public:
         while (_BitScanForward(&index, clipMask))
         {
             clipMask &= ~(1 << index);
-            uint32_t slot = index >> 2;
+            uint32_t slot      = index >> 2;
             uint32_t component = index & 0x3;
 
             Float<SIMD_T> vCullMaskElem = SIMD_T::set1_ps(-1.0f);
@@ -431,8 +469,10 @@ public:
                     vClipComp = vClipCullDistHi[e][component];
                 }
 
-                Float<SIMD_T> vClip = SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(vClipComp, vClipComp);
-                Float<SIMD_T> vCull = SIMD_T::template cmp_ps<SIMD_T::CompareType::NLE_UQ>(SIMD_T::setzero_ps(), vClipComp);
+                Float<SIMD_T> vClip =
+                    SIMD_T::template cmp_ps<SIMD_T::CompareType::UNORD_Q>(vClipComp, vClipComp);
+                Float<SIMD_T> vCull = SIMD_T::template cmp_ps<SIMD_T::CompareType::NLE_UQ>(
+                    SIMD_T::setzero_ps(), vClipComp);
                 vCullMaskElem = SIMD_T::and_ps(vCullMaskElem, vCull);
                 vClipCullMask = SIMD_T::or_ps(vClipCullMask, vClip);
             }
@@ -442,14 +482,19 @@ public:
         return SIMD_T::movemask_ps(vClipCullMask);
     }
 
-    void ClipSimd(const Vec4<SIMD_T> prim[], const Float<SIMD_T> &vPrimMask, const Float<SIMD_T> &vClipMask, PA_STATE &pa,
-                  const Integer<SIMD_T> &vPrimId, const Integer<SIMD_T> &vViewportIdx, const Integer<SIMD_T> &vRtIdx)
+    void ClipSimd(const Vec4<SIMD_T>     prim[],
+                  const Float<SIMD_T>&   vPrimMask,
+                  const Float<SIMD_T>&   vClipMask,
+                  PA_STATE&              pa,
+                  const Integer<SIMD_T>& vPrimId,
+                  const Integer<SIMD_T>& vViewportIdx,
+                  const Integer<SIMD_T>& vRtIdx)
     {
         // input/output vertex store for clipper
         SIMDVERTEX_T<SIMD_T> vertices[7]; // maximum 7 verts generated per triangle
 
         uint32_t constantInterpMask = state.backendState.constantInterpolationMask;
-        uint32_t provokingVertex = 0;
+        uint32_t provokingVertex    = 0;
         if (pa.binTopology == TOP_TRIANGLE_FAN)
         {
             provokingVertex = state.frontendState.provokingVertex.triFan;
@@ -470,8 +515,9 @@ public:
         for (uint32_t slot = 0; slot < backendState.numAttributes; ++slot)
         {
             // Compute absolute attrib slot in vertex array
-            uint32_t mapSlot = backendState.swizzleEnable ? backendState.swizzleMap[slot].sourceAttrib : slot;
-            maxSlot = std::max<int32_t>(maxSlot, mapSlot);
+            uint32_t mapSlot =
+                backendState.swizzleEnable ? backendState.swizzleMap[slot].sourceAttrib : slot;
+            maxSlot            = std::max<int32_t>(maxSlot, mapSlot);
             uint32_t inputSlot = backendState.vertexAttribOffset + mapSlot;
 
             pa.Assemble(inputSlot, tmpVector);
@@ -516,9 +562,11 @@ public:
 
         uint32_t numAttribs = maxSlot + 1;
 
-        Integer<SIMD_T> vNumClippedVerts = ClipPrims((float*)&vertices[0], vPrimMask, vClipMask, numAttribs);
+        Integer<SIMD_T> vNumClippedVerts =
+            ClipPrims((float*)&vertices[0], vPrimMask, vClipMask, numAttribs);
 
-        BinnerChooser<SIMD_T> binner(NumVertsPerPrim, pa.pDC->pState->state.rastState.conservativeRast);
+        BinnerChooser<SIMD_T> binner(NumVertsPerPrim,
+                                     pa.pDC->pState->state.rastState.conservativeRast);
 
         // set up new PA for binning clipped primitives
         PRIMITIVE_TOPOLOGY clipTopology = TOP_UNKNOWN;
@@ -531,6 +579,10 @@ public:
             {
                 clipTopology = TOP_POINT_LIST;
             }
+            else if (pa.binTopology == TOP_RECT_LIST)
+            {
+                clipTopology = TOP_RECT_LIST;
+            }
         }
         else if (NumVertsPerPrim == 2)
         {
@@ -541,20 +593,20 @@ public:
             SWR_ASSERT(0 && "Unexpected points in clipper.");
         }
 
-        const uint32_t *pVertexCount = reinterpret_cast<const uint32_t *>(&vNumClippedVerts);
-        const uint32_t *pPrimitiveId = reinterpret_cast<const uint32_t *>(&vPrimId);
-        const uint32_t *pViewportIdx = reinterpret_cast<const uint32_t *>(&vViewportIdx);
-        const uint32_t *pRtIdx = reinterpret_cast<const uint32_t *>(&vRtIdx);
+        const uint32_t* pVertexCount = reinterpret_cast<const uint32_t*>(&vNumClippedVerts);
+        const uint32_t* pPrimitiveId = reinterpret_cast<const uint32_t*>(&vPrimId);
+        const uint32_t* pViewportIdx = reinterpret_cast<const uint32_t*>(&vViewportIdx);
+        const uint32_t* pRtIdx       = reinterpret_cast<const uint32_t*>(&vRtIdx);
 
-        const SIMD256::Integer vOffsets = SIMD256::set_epi32(
-            0 * sizeof(SIMDVERTEX_T<SIMD_T>), // unused lane
-            6 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            5 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            4 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            3 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            2 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            1 * sizeof(SIMDVERTEX_T<SIMD_T>),
-            0 * sizeof(SIMDVERTEX_T<SIMD_T>));
+        const SIMD256::Integer vOffsets =
+            SIMD256::set_epi32(0 * sizeof(SIMDVERTEX_T<SIMD_T>), // unused lane
+                               6 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               5 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               4 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               3 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               2 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               1 * sizeof(SIMDVERTEX_T<SIMD_T>),
+                               0 * sizeof(SIMDVERTEX_T<SIMD_T>));
 
         // only need to gather 7 verts
         // @todo dynamic mask based on actual # of verts generated per lane
@@ -567,14 +619,16 @@ public:
         // for triangle fan
 
 #if defined(_DEBUG)
-        // TODO: need to increase stack size, allocating SIMD16-widened transposedPrims causes stack overflow in debug builds
-        SIMDVERTEX_T<SIMD_T> *transposedPrims = reinterpret_cast<SIMDVERTEX_T<SIMD_T> *>(AlignedMalloc(sizeof(SIMDVERTEX_T<SIMD_T>) * 2, 64));
+        // TODO: need to increase stack size, allocating SIMD16-widened transposedPrims causes stack
+        // overflow in debug builds
+        SIMDVERTEX_T<SIMD_T>* transposedPrims = reinterpret_cast<SIMDVERTEX_T<SIMD_T>*>(
+            AlignedMalloc(sizeof(SIMDVERTEX_T<SIMD_T>) * 2, 64));
 
 #else
-        SIMDVERTEX_T<SIMD_T> transposedPrims[2];
+        SIMDVERTEX_T<SIMD_T>  transposedPrims[2];
 
 #endif
-        uint32_t numInputPrims = pa.NumPrims();
+        uint32_t              numInputPrims = pa.NumPrims();
         for (uint32_t inputPrim = 0; inputPrim < numInputPrims; ++inputPrim)
         {
             uint32_t numEmittedVerts = pVertexCount[inputPrim];
@@ -594,7 +648,8 @@ public:
             // for triangle fan
 
             // transpose pos
-            uint8_t *pBase = reinterpret_cast<uint8_t *>(&vertices[0].attrib[VERTEX_POSITION_SLOT]) + sizeof(float) * inputPrim;
+            uint8_t* pBase = reinterpret_cast<uint8_t*>(&vertices[0].attrib[VERTEX_POSITION_SLOT]) +
+                             sizeof(float) * inputPrim;
 
 #if 0
             // TEMPORARY WORKAROUND for bizarre VS2015 code-gen bug
@@ -603,13 +658,17 @@ public:
 #endif
             for (uint32_t c = 0; c < 4; ++c)
             {
-                SIMD256::Float temp = SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(SIMD256::setzero_ps(), reinterpret_cast<const float *>(pBase), vOffsets, vMask);
-                transposedPrims[0].attrib[VERTEX_POSITION_SLOT][c] = SimdHelper<SIMD_T>::insert_lo_ps(temp);
+                SIMD256::Float temp = SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(
+                    SIMD256::setzero_ps(), reinterpret_cast<const float*>(pBase), vOffsets, vMask);
+                transposedPrims[0].attrib[VERTEX_POSITION_SLOT][c] =
+                    SimdHelper<SIMD_T>::insert_lo_ps(temp);
                 pBase += sizeof(Float<SIMD_T>);
             }
 
             // transpose attribs
-            pBase = reinterpret_cast<uint8_t *>(&vertices[0].attrib[backendState.vertexAttribOffset]) + sizeof(float) * inputPrim;
+            pBase =
+                reinterpret_cast<uint8_t*>(&vertices[0].attrib[backendState.vertexAttribOffset]) +
+                sizeof(float) * inputPrim;
 
             for (uint32_t attrib = 0; attrib < numAttribs; ++attrib)
             {
@@ -617,8 +676,14 @@ public:
 
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    SIMD256::Float temp = SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(SIMD256::setzero_ps(), reinterpret_cast<const float *>(pBase), vOffsets, vMask);
-                    transposedPrims[0].attrib[attribSlot][c] = SimdHelper<SIMD_T>::insert_lo_ps(temp);
+                    SIMD256::Float temp =
+                        SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(
+                            SIMD256::setzero_ps(),
+                            reinterpret_cast<const float*>(pBase),
+                            vOffsets,
+                            vMask);
+                    transposedPrims[0].attrib[attribSlot][c] =
+                        SimdHelper<SIMD_T>::insert_lo_ps(temp);
                     pBase += sizeof(Float<SIMD_T>);
                 }
             }
@@ -627,40 +692,60 @@ public:
             uint32_t vertexClipCullSlot = backendState.vertexClipCullOffset;
             if (state.backendState.clipDistanceMask & 0x0f)
             {
-                pBase = reinterpret_cast<uint8_t *>(&vertices[0].attrib[vertexClipCullSlot]) + sizeof(float) * inputPrim;
+                pBase = reinterpret_cast<uint8_t*>(&vertices[0].attrib[vertexClipCullSlot]) +
+                        sizeof(float) * inputPrim;
 
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    SIMD256::Float temp = SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(SIMD256::setzero_ps(), reinterpret_cast<const float *>(pBase), vOffsets, vMask);
-                    transposedPrims[0].attrib[vertexClipCullSlot][c] = SimdHelper<SIMD_T>::insert_lo_ps(temp);
+                    SIMD256::Float temp =
+                        SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(
+                            SIMD256::setzero_ps(),
+                            reinterpret_cast<const float*>(pBase),
+                            vOffsets,
+                            vMask);
+                    transposedPrims[0].attrib[vertexClipCullSlot][c] =
+                        SimdHelper<SIMD_T>::insert_lo_ps(temp);
                     pBase += sizeof(Float<SIMD_T>);
                 }
             }
 
             if (state.backendState.clipDistanceMask & 0xf0)
             {
-                pBase = reinterpret_cast<uint8_t *>(&vertices[0].attrib[vertexClipCullSlot + 1]) + sizeof(float) * inputPrim;
+                pBase = reinterpret_cast<uint8_t*>(&vertices[0].attrib[vertexClipCullSlot + 1]) +
+                        sizeof(float) * inputPrim;
 
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    SIMD256::Float temp = SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(SIMD256::setzero_ps(), reinterpret_cast<const float *>(pBase), vOffsets, vMask);
-                    transposedPrims[0].attrib[vertexClipCullSlot + 1][c] = SimdHelper<SIMD_T>::insert_lo_ps(temp);
+                    SIMD256::Float temp =
+                        SIMD256::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(
+                            SIMD256::setzero_ps(),
+                            reinterpret_cast<const float*>(pBase),
+                            vOffsets,
+                            vMask);
+                    transposedPrims[0].attrib[vertexClipCullSlot + 1][c] =
+                        SimdHelper<SIMD_T>::insert_lo_ps(temp);
                     pBase += sizeof(Float<SIMD_T>);
                 }
             }
 
-            PA_STATE_OPT clipPA(pDC, numEmittedPrims, reinterpret_cast<uint8_t *>(&transposedPrims[0]), numEmittedVerts, SWR_VTX_NUM_SLOTS, true, NumVertsPerPrim, clipTopology);
+            PA_STATE_OPT clipPA(pDC,
+                                numEmittedPrims,
+                                reinterpret_cast<uint8_t*>(&transposedPrims[0]),
+                                numEmittedVerts,
+                                SWR_VTX_NUM_SLOTS,
+                                true,
+                                NumVertsPerPrim,
+                                clipTopology);
             clipPA.viewportArrayActive = pa.viewportArrayActive;
-            clipPA.rtArrayActive = pa.rtArrayActive;
+            clipPA.rtArrayActive       = pa.rtArrayActive;
 
-            static const uint32_t primMaskMap[] = { 0x0, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f };
+            static const uint32_t primMaskMap[] = {0x0, 0x1, 0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f};
 
             const uint32_t primMask = primMaskMap[numEmittedPrims];
 
-            const Integer<SIMD_T> primID = SIMD_T::set1_epi32(pPrimitiveId[inputPrim]);
+            const Integer<SIMD_T> primID      = SIMD_T::set1_epi32(pPrimitiveId[inputPrim]);
             const Integer<SIMD_T> viewportIdx = SIMD_T::set1_epi32(pViewportIdx[inputPrim]);
-            const Integer<SIMD_T> rtIdx = SIMD_T::set1_epi32(pRtIdx[inputPrim]);
-
+            const Integer<SIMD_T> rtIdx       = SIMD_T::set1_epi32(pRtIdx[inputPrim]);
 
             while (clipPA.GetNextStreamOutput())
             {
@@ -672,7 +757,8 @@ public:
 
                     if (assemble)
                     {
-                        binner.pfnBinFunc(pDC, clipPA, workerId, attrib, primMask, primID, viewportIdx, rtIdx);
+                        binner.pfnBinFunc(
+                            pDC, clipPA, workerId, attrib, primMask, primID, viewportIdx, rtIdx);
                     }
 
                 } while (clipPA.NextPrim());
@@ -687,12 +773,17 @@ public:
         UPDATE_STAT_FE(CPrimitives, numClippedPrims);
     }
 
-    void ExecuteStage(PA_STATE &pa, Vec4<SIMD_T> prim[], uint32_t primMask,
-                      Integer<SIMD_T> const &primId, Integer<SIMD_T> const &viewportIdx, Integer<SIMD_T> const &rtIdx)
+    void ExecuteStage(PA_STATE&              pa,
+                      Vec4<SIMD_T>           prim[],
+                      uint32_t               primMask,
+                      Integer<SIMD_T> const& primId,
+                      Integer<SIMD_T> const& viewportIdx,
+                      Integer<SIMD_T> const& rtIdx)
     {
         SWR_ASSERT(pa.pDC != nullptr);
 
-        BinnerChooser<SIMD_T> binner(pa.binTopology, pa.pDC->pState->state.rastState.conservativeRast);
+        BinnerChooser<SIMD_T> binner(pa.binTopology,
+                                     pa.pDC->pState->state.rastState.conservativeRast);
 
         // update clipper invocations pipeline stat
         uint32_t numInvoc = _mm_popcnt_u32(primMask);
@@ -703,7 +794,7 @@ public:
         // cull prims with NAN coords
         primMask &= ~ComputeNaNMask(prim);
 
-        // user cull distance cull 
+        // user cull distance cull
         if (state.backendState.cullDistanceMask | state.backendState.clipDistanceMask)
         {
             primMask &= ~ComputeUserClipCullMask(pa, prim);
@@ -711,10 +802,12 @@ public:
 
         Float<SIMD_T> clipIntersection = ComputeClipCodeIntersection();
         // Mask out non-frustum codes
-        clipIntersection = SIMD_T::and_ps(clipIntersection, SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_CLIP_MASK)));
+        clipIntersection = SIMD_T::and_ps(clipIntersection,
+                                          SIMD_T::castsi_ps(SIMD_T::set1_epi32(FRUSTUM_CLIP_MASK)));
 
         // cull prims outside view frustum
-        int validMask = primMask & SimdHelper<SIMD_T>::cmpeq_ps_mask(clipIntersection, SIMD_T::setzero_ps());
+        int validMask =
+            primMask & SimdHelper<SIMD_T>::cmpeq_ps_mask(clipIntersection, SIMD_T::setzero_ps());
 
         // skip clipping for points
         uint32_t clipMask = 0;
@@ -730,7 +823,13 @@ public:
             RDTSC_BEGIN(FEGuardbandClip, pa.pDC->drawId);
             // we have to clip tris, execute the clipper, which will also
             // call the binner
-            ClipSimd(prim, SIMD_T::vmask_ps(validMask), SIMD_T::vmask_ps(clipMask), pa, primId, viewportIdx, rtIdx);
+            ClipSimd(prim,
+                     SIMD_T::vmask_ps(validMask),
+                     SIMD_T::vmask_ps(clipMask),
+                     pa,
+                     primId,
+                     viewportIdx,
+                     rtIdx);
             RDTSC_END(FEGuardbandClip, 1);
         }
         else if (validMask)
@@ -739,24 +838,26 @@ public:
             UPDATE_STAT_FE(CPrimitives, _mm_popcnt_u32(validMask));
 
             // forward valid prims directly to binner
-            binner.pfnBinFunc(this->pDC, pa, this->workerId, prim, validMask, primId, viewportIdx, rtIdx);
+            binner.pfnBinFunc(
+                this->pDC, pa, this->workerId, prim, validMask, primId, viewportIdx, rtIdx);
         }
     }
 
 private:
-    Float<SIMD_T> ComputeInterpFactor(Float<SIMD_T> const &boundaryCoord0, Float<SIMD_T> const &boundaryCoord1)
+    Float<SIMD_T> ComputeInterpFactor(Float<SIMD_T> const& boundaryCoord0,
+                                      Float<SIMD_T> const& boundaryCoord1)
     {
         return SIMD_T::div_ps(boundaryCoord0, SIMD_T::sub_ps(boundaryCoord0, boundaryCoord1));
     }
 
-    Integer<SIMD_T> ComputeOffsets(uint32_t attrib, Integer<SIMD_T> const &vIndices, uint32_t component)
+    Integer<SIMD_T>
+    ComputeOffsets(uint32_t attrib, Integer<SIMD_T> const& vIndices, uint32_t component)
     {
         const uint32_t simdVertexStride = sizeof(SIMDVERTEX_T<SIMD_T>);
         const uint32_t componentStride  = sizeof(Float<SIMD_T>);
         const uint32_t attribStride     = sizeof(Vec4<SIMD_T>);
 
-        static const OSALIGNSIMD16(uint32_t) elemOffset[16] =
-        {
+        static const OSALIGNSIMD16(uint32_t) elemOffset[16] = {
             0 * sizeof(float),
             1 * sizeof(float),
             2 * sizeof(float),
@@ -775,15 +876,19 @@ private:
             15 * sizeof(float),
         };
 
-        static_assert(sizeof(Integer<SIMD_T>) <= sizeof(elemOffset), "Clipper::ComputeOffsets, Increase number of element offsets.");
+        static_assert(sizeof(Integer<SIMD_T>) <= sizeof(elemOffset),
+                      "Clipper::ComputeOffsets, Increase number of element offsets.");
 
-        Integer<SIMD_T> vElemOffset = SIMD_T::loadu_si(reinterpret_cast<const Integer<SIMD_T> *>(elemOffset));
+        Integer<SIMD_T> vElemOffset =
+            SIMD_T::loadu_si(reinterpret_cast<const Integer<SIMD_T>*>(elemOffset));
 
         // step to the simdvertex
-        Integer<SIMD_T> vOffsets = SIMD_T::mullo_epi32(vIndices, SIMD_T::set1_epi32(simdVertexStride));
+        Integer<SIMD_T> vOffsets =
+            SIMD_T::mullo_epi32(vIndices, SIMD_T::set1_epi32(simdVertexStride));
 
         // step to the attribute and component
-        vOffsets = SIMD_T::add_epi32(vOffsets, SIMD_T::set1_epi32(attribStride * attrib + componentStride * component));
+        vOffsets = SIMD_T::add_epi32(
+            vOffsets, SIMD_T::set1_epi32(attribStride * attrib + componentStride * component));
 
         // step to the lane
         vOffsets = SIMD_T::add_epi32(vOffsets, vElemOffset);
@@ -791,53 +896,71 @@ private:
         return vOffsets;
     }
 
-    Float<SIMD_T> GatherComponent(const float* pBuffer, uint32_t attrib, Float<SIMD_T> const &vMask, Integer<SIMD_T> const &vIndices, uint32_t component)
+    Float<SIMD_T> GatherComponent(const float*           pBuffer,
+                                  uint32_t               attrib,
+                                  Float<SIMD_T> const&   vMask,
+                                  Integer<SIMD_T> const& vIndices,
+                                  uint32_t               component)
     {
         Integer<SIMD_T> vOffsets = ComputeOffsets(attrib, vIndices, component);
-        Float<SIMD_T> vSrc = SIMD_T::setzero_ps();
+        Float<SIMD_T>   vSrc     = SIMD_T::setzero_ps();
 
-        return SIMD_T::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(vSrc, pBuffer, vOffsets, vMask);
+        return SIMD_T::template mask_i32gather_ps<ScaleFactor<SIMD_T>(1)>(
+            vSrc, pBuffer, vOffsets, vMask);
     }
 
-    void ScatterComponent(const float* pBuffer, uint32_t attrib, Float<SIMD_T> const &vMask, Integer<SIMD_T> const &vIndices, uint32_t component, Float<SIMD_T> const &vSrc)
+    void ScatterComponent(const float*           pBuffer,
+                          uint32_t               attrib,
+                          Float<SIMD_T> const&   vMask,
+                          Integer<SIMD_T> const& vIndices,
+                          uint32_t               component,
+                          Float<SIMD_T> const&   vSrc)
     {
         Integer<SIMD_T> vOffsets = ComputeOffsets(attrib, vIndices, component);
 
-        const uint32_t *pOffsets = reinterpret_cast<const uint32_t *>(&vOffsets);
-        const float *pSrc = reinterpret_cast<const float *>(&vSrc);
-        uint32_t mask = SIMD_T::movemask_ps(vMask);
-        DWORD lane;
+        const uint32_t* pOffsets = reinterpret_cast<const uint32_t*>(&vOffsets);
+        const float*    pSrc     = reinterpret_cast<const float*>(&vSrc);
+        uint32_t        mask     = SIMD_T::movemask_ps(vMask);
+        DWORD           lane;
         while (_BitScanForward(&lane, mask))
         {
             mask &= ~(1 << lane);
-            const uint8_t *pBuf = reinterpret_cast<const uint8_t *>(pBuffer) + pOffsets[lane];
-            *(float *)pBuf = pSrc[lane];
+            const uint8_t* pBuf = reinterpret_cast<const uint8_t*>(pBuffer) + pOffsets[lane];
+            *(float*)pBuf       = pSrc[lane];
         }
     }
 
-    template<SWR_CLIPCODES ClippingPlane>
-    void intersect(
-        const Float<SIMD_T> &vActiveMask,  // active lanes to operate on
-        const Integer<SIMD_T> &s,          // index to first edge vertex v0 in pInPts.
-        const Integer<SIMD_T> &p,          // index to second edge vertex v1 in pInPts.
-        const Vec4<SIMD_T> &v1,            // vertex 0 position
-        const Vec4<SIMD_T> &v2,            // vertex 1 position
-        Integer<SIMD_T> &outIndex,         // output index.
-        const float *pInVerts,                      // array of all the input positions.
-        uint32_t numInAttribs,                      // number of attributes per vertex.
-        float *pOutVerts)                           // array of output positions. We'll write our new intersection point at i*4.
+    template <SWR_CLIPCODES ClippingPlane>
+    void intersect(const Float<SIMD_T>&   vActiveMask,  // active lanes to operate on
+                   const Integer<SIMD_T>& s,            // index to first edge vertex v0 in pInPts.
+                   const Integer<SIMD_T>& p,            // index to second edge vertex v1 in pInPts.
+                   const Vec4<SIMD_T>&    v1,           // vertex 0 position
+                   const Vec4<SIMD_T>&    v2,           // vertex 1 position
+                   Integer<SIMD_T>&       outIndex,     // output index.
+                   const float*           pInVerts,     // array of all the input positions.
+                   uint32_t               numInAttribs, // number of attributes per vertex.
+                   float* pOutVerts) // array of output positions. We'll write our new intersection
+                                     // point at i*4.
     {
-        uint32_t vertexAttribOffset = this->state.backendState.vertexAttribOffset;
+        uint32_t vertexAttribOffset   = this->state.backendState.vertexAttribOffset;
         uint32_t vertexClipCullOffset = this->state.backendState.vertexClipCullOffset;
 
         // compute interpolation factor
         Float<SIMD_T> t;
         switch (ClippingPlane)
         {
-        case FRUSTUM_LEFT:      t = ComputeInterpFactor(SIMD_T::add_ps(v1[3], v1[0]), SIMD_T::add_ps(v2[3], v2[0])); break;
-        case FRUSTUM_RIGHT:     t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[0]), SIMD_T::sub_ps(v2[3], v2[0])); break;
-        case FRUSTUM_TOP:       t = ComputeInterpFactor(SIMD_T::add_ps(v1[3], v1[1]), SIMD_T::add_ps(v2[3], v2[1])); break;
-        case FRUSTUM_BOTTOM:    t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[1]), SIMD_T::sub_ps(v2[3], v2[1])); break;
+        case FRUSTUM_LEFT:
+            t = ComputeInterpFactor(SIMD_T::add_ps(v1[3], v1[0]), SIMD_T::add_ps(v2[3], v2[0]));
+            break;
+        case FRUSTUM_RIGHT:
+            t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[0]), SIMD_T::sub_ps(v2[3], v2[0]));
+            break;
+        case FRUSTUM_TOP:
+            t = ComputeInterpFactor(SIMD_T::add_ps(v1[3], v1[1]), SIMD_T::add_ps(v2[3], v2[1]));
+            break;
+        case FRUSTUM_BOTTOM:
+            t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[1]), SIMD_T::sub_ps(v2[3], v2[1]));
+            break;
         case FRUSTUM_NEAR:
             // DX Znear plane is 0, GL is -w
             if (this->state.rastState.clipHalfZ)
@@ -849,8 +972,11 @@ private:
                 t = ComputeInterpFactor(SIMD_T::add_ps(v1[3], v1[2]), SIMD_T::add_ps(v2[3], v2[2]));
             }
             break;
-        case FRUSTUM_FAR:       t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[2]), SIMD_T::sub_ps(v2[3], v2[2])); break;
-        default: SWR_INVALID("invalid clipping plane: %d", ClippingPlane);
+        case FRUSTUM_FAR:
+            t = ComputeInterpFactor(SIMD_T::sub_ps(v1[3], v1[2]), SIMD_T::sub_ps(v2[3], v2[2]));
+            break;
+        default:
+            SWR_INVALID("invalid clipping plane: %d", ClippingPlane);
         };
 
         // interpolate position and store
@@ -868,7 +994,8 @@ private:
             {
                 Float<SIMD_T> vAttrib0 = GatherComponent(pInVerts, attribSlot, vActiveMask, s, c);
                 Float<SIMD_T> vAttrib1 = GatherComponent(pInVerts, attribSlot, vActiveMask, p, c);
-                Float<SIMD_T> vOutAttrib = SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
+                Float<SIMD_T> vOutAttrib =
+                    SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
                 ScatterComponent(pOutVerts, attribSlot, vActiveMask, outIndex, c, vOutAttrib);
             }
         }
@@ -881,7 +1008,8 @@ private:
             {
                 Float<SIMD_T> vAttrib0 = GatherComponent(pInVerts, attribSlot, vActiveMask, s, c);
                 Float<SIMD_T> vAttrib1 = GatherComponent(pInVerts, attribSlot, vActiveMask, p, c);
-                Float<SIMD_T> vOutAttrib = SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
+                Float<SIMD_T> vOutAttrib =
+                    SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
                 ScatterComponent(pOutVerts, attribSlot, vActiveMask, outIndex, c, vOutAttrib);
             }
         }
@@ -893,44 +1021,58 @@ private:
             {
                 Float<SIMD_T> vAttrib0 = GatherComponent(pInVerts, attribSlot, vActiveMask, s, c);
                 Float<SIMD_T> vAttrib1 = GatherComponent(pInVerts, attribSlot, vActiveMask, p, c);
-                Float<SIMD_T> vOutAttrib = SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
+                Float<SIMD_T> vOutAttrib =
+                    SIMD_T::fmadd_ps(SIMD_T::sub_ps(vAttrib1, vAttrib0), t, vAttrib0);
                 ScatterComponent(pOutVerts, attribSlot, vActiveMask, outIndex, c, vOutAttrib);
             }
         }
     }
 
-    template<SWR_CLIPCODES ClippingPlane>
-    Float<SIMD_T> inside(const Vec4<SIMD_T> &v)
+    template <SWR_CLIPCODES ClippingPlane>
+    Float<SIMD_T> inside(const Vec4<SIMD_T>& v)
     {
         switch (ClippingPlane)
         {
-        case FRUSTUM_LEFT:      return SIMD_T::cmpge_ps(v[0], SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
-        case FRUSTUM_RIGHT:     return SIMD_T::cmple_ps(v[0], v[3]);
-        case FRUSTUM_TOP:       return SIMD_T::cmpge_ps(v[1], SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
-        case FRUSTUM_BOTTOM:    return SIMD_T::cmple_ps(v[1], v[3]);
-        case FRUSTUM_NEAR:      return SIMD_T::cmpge_ps(v[2], this->state.rastState.clipHalfZ ? SIMD_T::setzero_ps() : SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
-        case FRUSTUM_FAR:       return SIMD_T::cmple_ps(v[2], v[3]);
+        case FRUSTUM_LEFT:
+            return SIMD_T::cmpge_ps(v[0], SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
+        case FRUSTUM_RIGHT:
+            return SIMD_T::cmple_ps(v[0], v[3]);
+        case FRUSTUM_TOP:
+            return SIMD_T::cmpge_ps(v[1], SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
+        case FRUSTUM_BOTTOM:
+            return SIMD_T::cmple_ps(v[1], v[3]);
+        case FRUSTUM_NEAR:
+            return SIMD_T::cmpge_ps(v[2],
+                                    this->state.rastState.clipHalfZ
+                                        ? SIMD_T::setzero_ps()
+                                        : SIMD_T::mul_ps(v[3], SIMD_T::set1_ps(-1.0f)));
+        case FRUSTUM_FAR:
+            return SIMD_T::cmple_ps(v[2], v[3]);
         default:
             SWR_INVALID("invalid clipping plane: %d", ClippingPlane);
             return SIMD_T::setzero_ps();
         }
     }
 
-    template<SWR_CLIPCODES ClippingPlane>
-    Integer<SIMD_T> ClipTriToPlane(const float *pInVerts, const Integer<SIMD_T> &vNumInPts, uint32_t numInAttribs, float *pOutVerts)
+    template <SWR_CLIPCODES ClippingPlane>
+    Integer<SIMD_T> ClipTriToPlane(const float*           pInVerts,
+                                   const Integer<SIMD_T>& vNumInPts,
+                                   uint32_t               numInAttribs,
+                                   float*                 pOutVerts)
     {
         uint32_t vertexAttribOffset = this->state.backendState.vertexAttribOffset;
 
-        Integer<SIMD_T> vCurIndex = SIMD_T::setzero_si();
-        Integer<SIMD_T> vOutIndex = SIMD_T::setzero_si();
-        Float<SIMD_T> vActiveMask = SIMD_T::castsi_ps(SIMD_T::cmplt_epi32(vCurIndex, vNumInPts));
+        Integer<SIMD_T> vCurIndex   = SIMD_T::setzero_si();
+        Integer<SIMD_T> vOutIndex   = SIMD_T::setzero_si();
+        Float<SIMD_T>   vActiveMask = SIMD_T::castsi_ps(SIMD_T::cmplt_epi32(vCurIndex, vNumInPts));
 
         while (!SIMD_T::testz_ps(vActiveMask, vActiveMask)) // loop until activeMask is empty
         {
-            Integer<SIMD_T> s = vCurIndex;
-            Integer<SIMD_T> p = SIMD_T::add_epi32(s, SIMD_T::set1_epi32(1));
+            Integer<SIMD_T> s             = vCurIndex;
+            Integer<SIMD_T> p             = SIMD_T::add_epi32(s, SIMD_T::set1_epi32(1));
             Integer<SIMD_T> underFlowMask = SIMD_T::cmpgt_epi32(vNumInPts, p);
-            p = SIMD_T::castps_si(SIMD_T::blendv_ps(SIMD_T::setzero_ps(), SIMD_T::castsi_ps(p), SIMD_T::castsi_ps(underFlowMask)));
+            p                             = SIMD_T::castps_si(SIMD_T::blendv_ps(
+                SIMD_T::setzero_ps(), SIMD_T::castsi_ps(p), SIMD_T::castsi_ps(underFlowMask)));
 
             // gather position
             Vec4<SIMD_T> vInPos0, vInPos1;
@@ -946,7 +1088,7 @@ private:
 
             // compute intersection mask (s_in != p_in)
             Float<SIMD_T> intersectMask = SIMD_T::xor_ps(s_in, p_in);
-            intersectMask = SIMD_T::and_ps(intersectMask, vActiveMask);
+            intersectMask               = SIMD_T::and_ps(intersectMask, vActiveMask);
 
             // store s if inside
             s_in = SIMD_T::and_ps(s_in, vActiveMask);
@@ -955,7 +1097,8 @@ private:
                 // store position
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    ScatterComponent(pOutVerts, VERTEX_POSITION_SLOT, s_in, vOutIndex, c, vInPos0[c]);
+                    ScatterComponent(
+                        pOutVerts, VERTEX_POSITION_SLOT, s_in, vOutIndex, c, vInPos0[c]);
                 }
 
                 // store attribs
@@ -992,34 +1135,47 @@ private:
                 }
 
                 // increment outIndex
-                vOutIndex = SIMD_T::blendv_epi32(vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), s_in);
+                vOutIndex = SIMD_T::blendv_epi32(
+                    vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), s_in);
             }
 
             // compute and store intersection
             if (!SIMD_T::testz_ps(intersectMask, intersectMask))
             {
-                intersect<ClippingPlane>(intersectMask, s, p, vInPos0, vInPos1, vOutIndex, pInVerts, numInAttribs, pOutVerts);
+                intersect<ClippingPlane>(intersectMask,
+                                         s,
+                                         p,
+                                         vInPos0,
+                                         vInPos1,
+                                         vOutIndex,
+                                         pInVerts,
+                                         numInAttribs,
+                                         pOutVerts);
 
                 // increment outIndex for active lanes
-                vOutIndex = SIMD_T::blendv_epi32(vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), intersectMask);
+                vOutIndex = SIMD_T::blendv_epi32(
+                    vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), intersectMask);
             }
 
             // increment loop index and update active mask
-            vCurIndex = SIMD_T::add_epi32(vCurIndex, SIMD_T::set1_epi32(1));
+            vCurIndex   = SIMD_T::add_epi32(vCurIndex, SIMD_T::set1_epi32(1));
             vActiveMask = SIMD_T::castsi_ps(SIMD_T::cmplt_epi32(vCurIndex, vNumInPts));
         }
 
         return vOutIndex;
     }
 
-    template<SWR_CLIPCODES ClippingPlane>
-    Integer<SIMD_T> ClipLineToPlane(const float *pInVerts, const Integer<SIMD_T> &vNumInPts, uint32_t numInAttribs, float *pOutVerts)
+    template <SWR_CLIPCODES ClippingPlane>
+    Integer<SIMD_T> ClipLineToPlane(const float*           pInVerts,
+                                    const Integer<SIMD_T>& vNumInPts,
+                                    uint32_t               numInAttribs,
+                                    float*                 pOutVerts)
     {
         uint32_t vertexAttribOffset = this->state.backendState.vertexAttribOffset;
 
-        Integer<SIMD_T> vCurIndex = SIMD_T::setzero_si();
-        Integer<SIMD_T> vOutIndex = SIMD_T::setzero_si();
-        Float<SIMD_T> vActiveMask = SIMD_T::castsi_ps(SIMD_T::cmplt_epi32(vCurIndex, vNumInPts));
+        Integer<SIMD_T> vCurIndex   = SIMD_T::setzero_si();
+        Integer<SIMD_T> vOutIndex   = SIMD_T::setzero_si();
+        Float<SIMD_T>   vActiveMask = SIMD_T::castsi_ps(SIMD_T::cmplt_epi32(vCurIndex, vNumInPts));
 
         if (!SIMD_T::testz_ps(vActiveMask, vActiveMask))
         {
@@ -1040,7 +1196,7 @@ private:
 
             // compute intersection mask (s_in != p_in)
             Float<SIMD_T> intersectMask = SIMD_T::xor_ps(s_in, p_in);
-            intersectMask = SIMD_T::and_ps(intersectMask, vActiveMask);
+            intersectMask               = SIMD_T::and_ps(intersectMask, vActiveMask);
 
             // store s if inside
             s_in = SIMD_T::and_ps(s_in, vActiveMask);
@@ -1048,7 +1204,8 @@ private:
             {
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    ScatterComponent(pOutVerts, VERTEX_POSITION_SLOT, s_in, vOutIndex, c, vInPos0[c]);
+                    ScatterComponent(
+                        pOutVerts, VERTEX_POSITION_SLOT, s_in, vOutIndex, c, vInPos0[c]);
                 }
 
                 // interpolate attributes and store
@@ -1063,16 +1220,26 @@ private:
                 }
 
                 // increment outIndex
-                vOutIndex = SIMD_T::blendv_epi32(vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), s_in);
+                vOutIndex = SIMD_T::blendv_epi32(
+                    vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), s_in);
             }
 
             // compute and store intersection
             if (!SIMD_T::testz_ps(intersectMask, intersectMask))
             {
-                intersect<ClippingPlane>(intersectMask, s, p, vInPos0, vInPos1, vOutIndex, pInVerts, numInAttribs, pOutVerts);
+                intersect<ClippingPlane>(intersectMask,
+                                         s,
+                                         p,
+                                         vInPos0,
+                                         vInPos1,
+                                         vOutIndex,
+                                         pInVerts,
+                                         numInAttribs,
+                                         pOutVerts);
 
                 // increment outIndex for active lanes
-                vOutIndex = SIMD_T::blendv_epi32(vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), intersectMask);
+                vOutIndex = SIMD_T::blendv_epi32(
+                    vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), intersectMask);
             }
 
             // store p if inside
@@ -1081,7 +1248,8 @@ private:
             {
                 for (uint32_t c = 0; c < 4; ++c)
                 {
-                    ScatterComponent(pOutVerts, VERTEX_POSITION_SLOT, p_in, vOutIndex, c, vInPos1[c]);
+                    ScatterComponent(
+                        pOutVerts, VERTEX_POSITION_SLOT, p_in, vOutIndex, c, vInPos1[c]);
                 }
 
                 // interpolate attributes and store
@@ -1096,17 +1264,21 @@ private:
                 }
 
                 // increment outIndex
-                vOutIndex = SIMD_T::blendv_epi32(vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), p_in);
+                vOutIndex = SIMD_T::blendv_epi32(
+                    vOutIndex, SIMD_T::add_epi32(vOutIndex, SIMD_T::set1_epi32(1)), p_in);
             }
         }
 
         return vOutIndex;
     }
 
-    Integer<SIMD_T> ClipPrims(float *pVertices, const Float<SIMD_T> &vPrimMask, const Float<SIMD_T> &vClipMask, int numAttribs)
+    Integer<SIMD_T> ClipPrims(float*               pVertices,
+                              const Float<SIMD_T>& vPrimMask,
+                              const Float<SIMD_T>& vClipMask,
+                              int                  numAttribs)
     {
         // temp storage
-        float *pTempVerts = reinterpret_cast<float *>(ClipHelper<SIMD_T>::GetTempVertices());
+        float* pTempVerts = reinterpret_cast<float*>(ClipHelper<SIMD_T>::GetTempVertices());
 
         // zero out num input verts for non-active lanes
         Integer<SIMD_T> vNumInPts = SIMD_T::set1_epi32(NumVertsPerPrim);
@@ -1118,43 +1290,109 @@ private:
         {
             vNumOutPts = ClipTriToPlane<FRUSTUM_NEAR>(pVertices, vNumInPts, numAttribs, pTempVerts);
             vNumOutPts = ClipTriToPlane<FRUSTUM_FAR>(pTempVerts, vNumOutPts, numAttribs, pVertices);
-            vNumOutPts = ClipTriToPlane<FRUSTUM_LEFT>(pVertices, vNumOutPts, numAttribs, pTempVerts);
-            vNumOutPts = ClipTriToPlane<FRUSTUM_RIGHT>(pTempVerts, vNumOutPts, numAttribs, pVertices);
-            vNumOutPts = ClipTriToPlane<FRUSTUM_BOTTOM>(pVertices, vNumOutPts, numAttribs, pTempVerts);
+            vNumOutPts =
+                ClipTriToPlane<FRUSTUM_LEFT>(pVertices, vNumOutPts, numAttribs, pTempVerts);
+            vNumOutPts =
+                ClipTriToPlane<FRUSTUM_RIGHT>(pTempVerts, vNumOutPts, numAttribs, pVertices);
+            vNumOutPts =
+                ClipTriToPlane<FRUSTUM_BOTTOM>(pVertices, vNumOutPts, numAttribs, pTempVerts);
             vNumOutPts = ClipTriToPlane<FRUSTUM_TOP>(pTempVerts, vNumOutPts, numAttribs, pVertices);
         }
         else
         {
             SWR_ASSERT(NumVertsPerPrim == 2);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_NEAR>(pVertices, vNumInPts, numAttribs, pTempVerts);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_FAR>(pTempVerts, vNumOutPts, numAttribs, pVertices);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_LEFT>(pVertices, vNumOutPts, numAttribs, pTempVerts);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_RIGHT>(pTempVerts, vNumOutPts, numAttribs, pVertices);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_BOTTOM>(pVertices, vNumOutPts, numAttribs, pTempVerts);
-            vNumOutPts = ClipLineToPlane<FRUSTUM_TOP>(pTempVerts, vNumOutPts, numAttribs, pVertices);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_NEAR>(pVertices, vNumInPts, numAttribs, pTempVerts);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_FAR>(pTempVerts, vNumOutPts, numAttribs, pVertices);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_LEFT>(pVertices, vNumOutPts, numAttribs, pTempVerts);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_RIGHT>(pTempVerts, vNumOutPts, numAttribs, pVertices);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_BOTTOM>(pVertices, vNumOutPts, numAttribs, pTempVerts);
+            vNumOutPts =
+                ClipLineToPlane<FRUSTUM_TOP>(pTempVerts, vNumOutPts, numAttribs, pVertices);
         }
 
         // restore num verts for non-clipped, active lanes
         Float<SIMD_T> vNonClippedMask = SIMD_T::andnot_ps(vClipMask, vPrimMask);
-        vNumOutPts = SIMD_T::blendv_epi32(vNumOutPts, SIMD_T::set1_epi32(NumVertsPerPrim), vNonClippedMask);
+        vNumOutPts =
+            SIMD_T::blendv_epi32(vNumOutPts, SIMD_T::set1_epi32(NumVertsPerPrim), vNonClippedMask);
 
         return vNumOutPts;
     }
 
-    const uint32_t workerId{ 0 };
-    DRAW_CONTEXT *pDC{ nullptr };
-    const API_STATE &state;
-    Float<SIMD_T> clipCodes[NumVertsPerPrim];
+    const uint32_t   workerId{0};
+    DRAW_CONTEXT*    pDC{nullptr};
+    const API_STATE& state;
+    Float<SIMD_T>    clipCodes[NumVertsPerPrim];
 };
 
-
 // pipeline stage functions
-void ClipTriangles(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari const &primId, simdscalari const &viewportIdx, simdscalari const &rtIdx);
-void ClipLines(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari const &primId, simdscalari const &viewportIdx, simdscalari const &rtIdx);
-void ClipPoints(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simdvector prims[], uint32_t primMask, simdscalari const &primId, simdscalari const &viewportIdx, simdscalari const &rtIdx);
+void ClipRectangles(DRAW_CONTEXT*      pDC,
+                    PA_STATE&          pa,
+                    uint32_t           workerId,
+                    simdvector         prims[],
+                    uint32_t           primMask,
+                    simdscalari const& primId,
+                    simdscalari const& viewportIdx,
+                    simdscalari const& rtIdx);
+void ClipTriangles(DRAW_CONTEXT*      pDC,
+                   PA_STATE&          pa,
+                   uint32_t           workerId,
+                   simdvector         prims[],
+                   uint32_t           primMask,
+                   simdscalari const& primId,
+                   simdscalari const& viewportIdx,
+                   simdscalari const& rtIdx);
+void ClipLines(DRAW_CONTEXT*      pDC,
+               PA_STATE&          pa,
+               uint32_t           workerId,
+               simdvector         prims[],
+               uint32_t           primMask,
+               simdscalari const& primId,
+               simdscalari const& viewportIdx,
+               simdscalari const& rtIdx);
+void ClipPoints(DRAW_CONTEXT*      pDC,
+                PA_STATE&          pa,
+                uint32_t           workerId,
+                simdvector         prims[],
+                uint32_t           primMask,
+                simdscalari const& primId,
+                simdscalari const& viewportIdx,
+                simdscalari const& rtIdx);
 #if USE_SIMD16_FRONTEND
-void SIMDCALL ClipTriangles_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari const &primId, simd16scalari const &viewportIdx, simd16scalari const &rtIdx);
-void SIMDCALL ClipLines_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari const &primId, simd16scalari const &viewportIdx, simd16scalari const &rtIdx);
-void SIMDCALL ClipPoints_simd16(DRAW_CONTEXT *pDC, PA_STATE& pa, uint32_t workerId, simd16vector prims[], uint32_t primMask, simd16scalari const &primId, simd16scalari const &viewportIdx, simd16scalari const &rtIdx);
+void SIMDCALL ClipRectangles_simd16(DRAW_CONTEXT*        pDC,
+                                    PA_STATE&            pa,
+                                    uint32_t             workerId,
+                                    simd16vector         prims[],
+                                    uint32_t             primMask,
+                                    simd16scalari const& primId,
+                                    simd16scalari const& viewportIdx,
+                                    simd16scalari const& rtIdx);
+void SIMDCALL ClipTriangles_simd16(DRAW_CONTEXT*        pDC,
+                                   PA_STATE&            pa,
+                                   uint32_t             workerId,
+                                   simd16vector         prims[],
+                                   uint32_t             primMask,
+                                   simd16scalari const& primId,
+                                   simd16scalari const& viewportIdx,
+                                   simd16scalari const& rtIdx);
+void SIMDCALL ClipLines_simd16(DRAW_CONTEXT*        pDC,
+                               PA_STATE&            pa,
+                               uint32_t             workerId,
+                               simd16vector         prims[],
+                               uint32_t             primMask,
+                               simd16scalari const& primId,
+                               simd16scalari const& viewportIdx,
+                               simd16scalari const& rtIdx);
+void SIMDCALL ClipPoints_simd16(DRAW_CONTEXT*        pDC,
+                                PA_STATE&            pa,
+                                uint32_t             workerId,
+                                simd16vector         prims[],
+                                uint32_t             primMask,
+                                simd16scalari const& primId,
+                                simd16scalari const& viewportIdx,
+                                simd16scalari const& rtIdx);
 #endif
-

@@ -2476,6 +2476,11 @@ void r600_vertex_data_type(enum pipe_format pformat,
 		return;
 	}
 
+	if (pformat == PIPE_FORMAT_A1B5G5R5_UNORM) {
+		*format = FMT_5_5_5_1;
+		return;
+	}
+
 	desc = util_format_description(pformat);
 	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN) {
 		goto out_unknown;
@@ -2533,6 +2538,16 @@ void r600_vertex_data_type(enum pipe_format pformat,
 		/* Signed ints */
 	case UTIL_FORMAT_TYPE_SIGNED:
 		switch (desc->channel[i].size) {
+		case 4:
+			switch (desc->nr_channels) {
+			case 2:
+				*format = FMT_4_4;
+				break;
+			case 4:
+				*format = FMT_4_4_4_4;
+				break;
+			}
+			break;
 		case 8:
 			switch (desc->nr_channels) {
 			case 1:

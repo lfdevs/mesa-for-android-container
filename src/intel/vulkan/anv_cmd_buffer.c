@@ -916,11 +916,11 @@ anv_cmd_buffer_get_depth_stencil_view(const struct anv_cmd_buffer *cmd_buffer)
    const struct anv_subpass *subpass = cmd_buffer->state.subpass;
    const struct anv_framebuffer *fb = cmd_buffer->state.framebuffer;
 
-   if (subpass->depth_stencil_attachment.attachment == VK_ATTACHMENT_UNUSED)
+   if (subpass->depth_stencil_attachment == NULL)
       return NULL;
 
    const struct anv_image_view *iview =
-      fb->attachments[subpass->depth_stencil_attachment.attachment];
+      fb->attachments[subpass->depth_stencil_attachment->attachment];
 
    assert(iview->aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT |
                                 VK_IMAGE_ASPECT_STENCIL_BIT));

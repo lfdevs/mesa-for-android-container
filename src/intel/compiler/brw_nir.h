@@ -109,7 +109,7 @@ void brw_nir_lower_tes_inputs(nir_shader *nir, const struct brw_vue_map *vue);
 void brw_nir_lower_fs_inputs(nir_shader *nir,
                              const struct gen_device_info *devinfo,
                              const struct brw_wm_prog_key *key);
-void brw_nir_lower_vue_outputs(nir_shader *nir, bool is_scalar);
+void brw_nir_lower_vue_outputs(nir_shader *nir);
 void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue,
                                GLenum tes_primitive_mode);
 void brw_nir_lower_fs_outputs(nir_shader *nir);
@@ -143,8 +143,6 @@ void brw_nir_setup_glsl_uniforms(void *mem_ctx, nir_shader *shader,
 void brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
                                 struct gl_program *prog,
                                 struct brw_stage_prog_data *stage_prog_data);
-
-void brw_nir_lower_patch_vertices_in_to_uniform(nir_shader *nir);
 
 void brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
                                 nir_shader *nir,

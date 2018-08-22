@@ -86,50 +86,15 @@ struct compute_memory_pool* compute_memory_pool_new(struct r600_screen *rscreen)
 
 void compute_memory_pool_delete(struct compute_memory_pool* pool);
 
-int64_t compute_memory_prealloc_chunk(struct compute_memory_pool* pool,
-	int64_t size_in_dw);
-
-struct list_head *compute_memory_postalloc_chunk(struct compute_memory_pool* pool,
-	int64_t start_in_dw);
-
-int compute_memory_grow_defrag_pool(struct compute_memory_pool* pool,
-	struct pipe_context *pipe, int new_size_in_dw);
-
-void compute_memory_shadow(struct compute_memory_pool* pool,
-	struct pipe_context *pipe, int device_to_host);
-
 int compute_memory_finalize_pending(struct compute_memory_pool* pool,
 	struct pipe_context * pipe);
 
-void compute_memory_defrag(struct compute_memory_pool *pool,
-	struct pipe_resource *src, struct pipe_resource *dst,
-	struct pipe_context *pipe);
-
-int compute_memory_promote_item(struct compute_memory_pool *pool,
-	struct compute_memory_item *item, struct pipe_context *pipe,
-	int64_t allocated);
-
 void compute_memory_demote_item(struct compute_memory_pool *pool,
 	struct compute_memory_item *item, struct pipe_context *pipe);
-
-void compute_memory_move_item(struct compute_memory_pool *pool,
-	struct pipe_resource *src, struct pipe_resource *dst,
-	struct compute_memory_item *item, uint64_t new_start_in_dw,
-	struct pipe_context *pipe);
 
 void compute_memory_free(struct compute_memory_pool* pool, int64_t id);
 
 struct compute_memory_item* compute_memory_alloc(struct compute_memory_pool* pool,
 	int64_t size_in_dw);
-
-void compute_memory_transfer(struct compute_memory_pool* pool,
-	struct pipe_context * pipe, int device_to_host,
-	struct compute_memory_item* chunk, void* data,
-	int offset_in_chunk, int size);
-
-void compute_memory_transfer_direct(struct compute_memory_pool* pool,
-	int chunk_to_data, struct compute_memory_item* chunk,
-	struct r600_resource* data, int offset_in_chunk,
-	int offset_in_data, int size);
 
 #endif

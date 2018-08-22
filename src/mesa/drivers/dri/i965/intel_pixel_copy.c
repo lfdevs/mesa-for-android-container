@@ -170,9 +170,9 @@ do_blit_copypixels(struct gl_context * ctx,
 
    if (!intel_miptree_blit(brw,
                            read_irb->mt, read_irb->mt_level, read_irb->mt_layer,
-                           srcx, srcy, _mesa_is_winsys_fbo(read_fb),
+                           srcx, srcy, read_fb->FlipY,
                            draw_irb->mt, draw_irb->mt_level, draw_irb->mt_layer,
-                           dstx, dsty, _mesa_is_winsys_fbo(fb),
+                           dstx, dsty, fb->FlipY,
                            width, height,
                            (ctx->Color.ColorLogicOpEnabled ?
                             ctx->Color._LogicOp : COLOR_LOGICOP_COPY))) {
@@ -196,12 +196,15 @@ intelCopyPixels(struct gl_context * ctx,
                 GLsizei width, GLsizei height,
                 GLint destx, GLint desty, GLenum type)
 {
+   struct brw_context *brw = brw_context(ctx);
+
    DBG("%s\n", __func__);
 
    if (!_mesa_check_conditional_render(ctx))
       return;
 
-   if (do_blit_copypixels(ctx, srcx, srcy, width, height, destx, desty, type))
+   if (brw->screen->devinfo.gen < 6 &&
+       do_blit_copypixels(ctx, srcx, srcy, width, height, destx, desty, type))
       return;
 
    /* this will use swrast if needed */

@@ -118,10 +118,11 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.KHR_robustness = true;
    ctx->Extensions.AMD_seamless_cubemap_per_texture = true;
    ctx->Extensions.APPLE_object_purgeable = true;
-   ctx->Extensions.ATI_separate_stencil = true;
    ctx->Extensions.ATI_texture_env_combine3 = true;
+   ctx->Extensions.MESA_framebuffer_flip_y = true;
    ctx->Extensions.MESA_pack_invert = true;
    ctx->Extensions.NV_conditional_render = true;
+   ctx->Extensions.NV_fog_distance = true;
    ctx->Extensions.NV_primitive_restart = true;
    ctx->Extensions.NV_texture_barrier = true;
    ctx->Extensions.NV_texture_env_combine4 = true;
@@ -147,6 +148,12 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Const.GLSLVersion = 330;
    else
       ctx->Const.GLSLVersion = 120;
+
+   if (devinfo->gen >= 6)
+      ctx->Const.GLSLVersionCompat = 130;
+   else
+      ctx->Const.GLSLVersionCompat = 120;
+
    _mesa_override_glsl_version(&ctx->Const);
 
    ctx->Extensions.EXT_shader_integer_mix = ctx->Const.GLSLVersion >= 130;
@@ -189,7 +196,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_multisample = true;
       ctx->Extensions.ARB_uniform_buffer_object = true;
 
-      ctx->Extensions.AMD_vertex_shader_layer = true;
+      if (ctx->API != API_OPENGL_COMPAT)
+         ctx->Extensions.AMD_vertex_shader_layer = true;
       ctx->Extensions.EXT_framebuffer_multisample = true;
       ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
       ctx->Extensions.EXT_transform_feedback = true;
@@ -217,8 +225,10 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_conservative_depth = true;
       ctx->Extensions.ARB_derivative_control = true;
       ctx->Extensions.ARB_framebuffer_no_attachments = true;
-      ctx->Extensions.ARB_gpu_shader5 = true;
-      ctx->Extensions.ARB_gpu_shader_fp64 = devinfo->has_64bit_types;
+      if (ctx->API != API_OPENGL_COMPAT) {
+         ctx->Extensions.ARB_gpu_shader5 = true;
+         ctx->Extensions.ARB_gpu_shader_fp64 = devinfo->has_64bit_types;
+      }
       ctx->Extensions.ARB_shader_atomic_counters = true;
       ctx->Extensions.ARB_shader_atomic_counter_ops = true;
       ctx->Extensions.ARB_shader_clock = true;
@@ -226,7 +236,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_shader_image_size = true;
       ctx->Extensions.ARB_shader_precision = true;
       ctx->Extensions.ARB_shader_texture_image_samples = true;
-      ctx->Extensions.ARB_tessellation_shader = true;
+      if (ctx->API != API_OPENGL_COMPAT)
+         ctx->Extensions.ARB_tessellation_shader = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
       ctx->Extensions.ARB_shader_storage_buffer_object = true;
@@ -234,6 +245,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_shader_samples_identical = true;
       ctx->Extensions.OES_primitive_bounding_box = true;
       ctx->Extensions.OES_texture_buffer = true;
+      ctx->Extensions.ARB_fragment_shader_interlock = true;
 
       if (can_do_pipelined_register_writes(brw->screen)) {
          ctx->Extensions.ARB_draw_indirect = true;
@@ -274,9 +286,10 @@ intelInitExtensions(struct gl_context *ctx)
    if (devinfo->gen >= 8 || devinfo->is_baytrail) {
       /* For now, we only enable OES_copy_image on platforms that support
        * ETC2 natively in hardware.  We would need more hacks to support it
-       * elsewhere.
+       * elsewhere. Same with OES_texture_view.
        */
       ctx->Extensions.OES_copy_image = true;
+      ctx->Extensions.OES_texture_view = true;
    }
 
    if (devinfo->gen >= 8) {
@@ -303,7 +316,7 @@ intelInitExtensions(struct gl_context *ctx)
    if (devinfo->gen >= 6)
       ctx->Extensions.INTEL_performance_query = true;
 
-   if (ctx->API == API_OPENGL_CORE)
+   if (ctx->API != API_OPENGL_COMPAT)
       ctx->Extensions.ARB_base_instance = true;
    if (ctx->API != API_OPENGL_CORE)
       ctx->Extensions.ARB_color_buffer_float = true;

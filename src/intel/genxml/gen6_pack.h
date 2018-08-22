@@ -1506,6 +1506,42 @@ GEN6_3DSTATE_CLIP_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->MaximumVPIndex, 0, 3);
 }
 
+#define GEN6_3DSTATE_CONSTANT_BODY_length      4
+struct GEN6_3DSTATE_CONSTANT_BODY {
+   uint64_t                             PointertoConstantBuffer0;
+   uint32_t                             ConstantBuffer0ReadLength;
+   __gen_address_type                   PointertoConstantBuffer1;
+   uint32_t                             ConstantBuffer1ReadLength;
+   __gen_address_type                   PointertoConstantBuffer2;
+   uint32_t                             ConstantBuffer2ReadLength;
+   __gen_address_type                   PointertoConstantBuffer3;
+   uint32_t                             ConstantBuffer3ReadLength;
+};
+
+static inline void
+GEN6_3DSTATE_CONSTANT_BODY_pack(__attribute__((unused)) __gen_user_data *data,
+                                __attribute__((unused)) void * restrict dst,
+                                __attribute__((unused)) const struct GEN6_3DSTATE_CONSTANT_BODY * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   dw[0] =
+      __gen_offset(values->PointertoConstantBuffer0, 5, 31) |
+      __gen_uint(values->ConstantBuffer0ReadLength, 0, 4);
+
+   const uint32_t v1 =
+      __gen_uint(values->ConstantBuffer1ReadLength, 0, 4);
+   dw[1] = __gen_combine_address(data, &dw[1], values->PointertoConstantBuffer1, v1);
+
+   const uint32_t v2 =
+      __gen_uint(values->ConstantBuffer2ReadLength, 0, 4);
+   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoConstantBuffer2, v2);
+
+   const uint32_t v3 =
+      __gen_uint(values->ConstantBuffer3ReadLength, 0, 4);
+   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoConstantBuffer3, v3);
+}
+
 #define GEN6_3DSTATE_CONSTANT_GS_length        5
 #define GEN6_3DSTATE_CONSTANT_GS_length_bias      2
 #define GEN6_3DSTATE_CONSTANT_GS_header         \
@@ -1526,14 +1562,7 @@ struct GEN6_3DSTATE_CONSTANT_GS {
    bool                                 Buffer0Valid;
    struct GEN6_MEMORY_OBJECT_CONTROL_STATE ConstantBufferObjectControlState;
    uint32_t                             DWordLength;
-   uint64_t                             PointertoGSConstantBuffer0;
-   uint32_t                             GSConstantBuffer0ReadLength;
-   __gen_address_type                   PointertoGSConstantBuffer1;
-   uint32_t                             GSConstantBuffer1ReadLength;
-   __gen_address_type                   PointertoGSConstantBuffer2;
-   uint32_t                             GSConstantBuffer2ReadLength;
-   __gen_address_type                   PointertoGSConstantBuffer3;
-   uint32_t                             GSConstantBuffer3ReadLength;
+   struct GEN6_3DSTATE_CONSTANT_BODY    ConstantBody;
 };
 
 static inline void
@@ -1558,21 +1587,7 @@ GEN6_3DSTATE_CONSTANT_GS_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(v0_0, 8, 11) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   dw[1] =
-      __gen_offset(values->PointertoGSConstantBuffer0, 5, 31) |
-      __gen_uint(values->GSConstantBuffer0ReadLength, 0, 4);
-
-   const uint32_t v2 =
-      __gen_uint(values->GSConstantBuffer1ReadLength, 0, 4);
-   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoGSConstantBuffer1, v2);
-
-   const uint32_t v3 =
-      __gen_uint(values->GSConstantBuffer2ReadLength, 0, 4);
-   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoGSConstantBuffer2, v3);
-
-   const uint32_t v4 =
-      __gen_uint(values->GSConstantBuffer3ReadLength, 0, 4);
-   dw[4] = __gen_combine_address(data, &dw[4], values->PointertoGSConstantBuffer3, v4);
+   GEN6_3DSTATE_CONSTANT_BODY_pack(data, &dw[1], &values->ConstantBody);
 }
 
 #define GEN6_3DSTATE_CONSTANT_PS_length        5
@@ -1595,14 +1610,7 @@ struct GEN6_3DSTATE_CONSTANT_PS {
    bool                                 Buffer0Valid;
    struct GEN6_MEMORY_OBJECT_CONTROL_STATE ConstantBufferObjectControlState;
    uint32_t                             DWordLength;
-   uint64_t                             PointertoPSConstantBuffer0;
-   uint32_t                             PSConstantBuffer0ReadLength;
-   __gen_address_type                   PointertoPSConstantBuffer1;
-   uint32_t                             PSConstantBuffer1ReadLength;
-   __gen_address_type                   PointertoPSConstantBuffer2;
-   uint32_t                             PSConstantBuffer2ReadLength;
-   __gen_address_type                   PointertoPSConstantBuffer3;
-   uint32_t                             PSConstantBuffer3ReadLength;
+   struct GEN6_3DSTATE_CONSTANT_BODY    ConstantBody;
 };
 
 static inline void
@@ -1627,21 +1635,7 @@ GEN6_3DSTATE_CONSTANT_PS_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(v0_0, 8, 11) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   dw[1] =
-      __gen_offset(values->PointertoPSConstantBuffer0, 5, 31) |
-      __gen_uint(values->PSConstantBuffer0ReadLength, 0, 4);
-
-   const uint32_t v2 =
-      __gen_uint(values->PSConstantBuffer1ReadLength, 0, 4);
-   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoPSConstantBuffer1, v2);
-
-   const uint32_t v3 =
-      __gen_uint(values->PSConstantBuffer2ReadLength, 0, 4);
-   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoPSConstantBuffer2, v3);
-
-   const uint32_t v4 =
-      __gen_uint(values->PSConstantBuffer3ReadLength, 0, 4);
-   dw[4] = __gen_combine_address(data, &dw[4], values->PointertoPSConstantBuffer3, v4);
+   GEN6_3DSTATE_CONSTANT_BODY_pack(data, &dw[1], &values->ConstantBody);
 }
 
 #define GEN6_3DSTATE_CONSTANT_VS_length        5
@@ -1664,14 +1658,7 @@ struct GEN6_3DSTATE_CONSTANT_VS {
    bool                                 Buffer0Valid;
    struct GEN6_MEMORY_OBJECT_CONTROL_STATE ConstantBufferObjectControlState;
    uint32_t                             DWordLength;
-   uint64_t                             PointertoVSConstantBuffer0;
-   uint32_t                             VSConstantBuffer0ReadLength;
-   __gen_address_type                   PointertoVSConstantBuffer1;
-   uint32_t                             VSConstantBuffer1ReadLength;
-   __gen_address_type                   PointertoVSConstantBuffer2;
-   uint32_t                             VSConstantBuffer2ReadLength;
-   __gen_address_type                   PointertoVSConstantBuffer3;
-   uint32_t                             VSConstantBuffer3ReadLength;
+   struct GEN6_3DSTATE_CONSTANT_BODY    ConstantBody;
 };
 
 static inline void
@@ -1696,21 +1683,7 @@ GEN6_3DSTATE_CONSTANT_VS_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(v0_0, 8, 11) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   dw[1] =
-      __gen_offset(values->PointertoVSConstantBuffer0, 5, 31) |
-      __gen_uint(values->VSConstantBuffer0ReadLength, 0, 4);
-
-   const uint32_t v2 =
-      __gen_uint(values->VSConstantBuffer1ReadLength, 0, 4);
-   dw[2] = __gen_combine_address(data, &dw[2], values->PointertoVSConstantBuffer1, v2);
-
-   const uint32_t v3 =
-      __gen_uint(values->VSConstantBuffer2ReadLength, 0, 4);
-   dw[3] = __gen_combine_address(data, &dw[3], values->PointertoVSConstantBuffer2, v3);
-
-   const uint32_t v4 =
-      __gen_uint(values->VSConstantBuffer3ReadLength, 0, 4);
-   dw[4] = __gen_combine_address(data, &dw[4], values->PointertoVSConstantBuffer3, v4);
+   GEN6_3DSTATE_CONSTANT_BODY_pack(data, &dw[1], &values->ConstantBody);
 }
 
 #define GEN6_3DSTATE_DEPTH_BUFFER_length       7
@@ -5225,7 +5198,7 @@ GEN6_BCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->ValidBit, 0, 0) |
       __gen_uint(values->FaultType, 1, 2) |
       __gen_uint(values->SRCIDofFault, 3, 10) |
-      __gen_uint(values->GTTSEL, 11, 1);
+      __gen_uint(values->GTTSEL, 11, 11);
    dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
 }
 
@@ -5256,7 +5229,7 @@ GEN6_RCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->ValidBit, 0, 0) |
       __gen_uint(values->FaultType, 1, 2) |
       __gen_uint(values->SRCIDofFault, 3, 10) |
-      __gen_uint(values->GTTSEL, 11, 1);
+      __gen_uint(values->GTTSEL, 11, 11);
    dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
 }
 
@@ -5287,7 +5260,7 @@ GEN6_VCS_FAULT_REG_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->ValidBit, 0, 0) |
       __gen_uint(values->FaultType, 1, 2) |
       __gen_uint(values->SRCIDofFault, 3, 10) |
-      __gen_uint(values->GTTSEL, 11, 1);
+      __gen_uint(values->GTTSEL, 11, 11);
    dw[0] = __gen_combine_address(data, &dw[0], values->VirtualAddressofFault, v0);
 }
 
@@ -5388,6 +5361,10 @@ struct GEN6_INSTPM {
    bool                                 _3DRenderingInstructionDisable;
    bool                                 MediaInstructionDisable;
    bool                                 CONSTANT_BUFFERAddressOffsetDisable;
+   bool                                 _3DStateInstructionDisableMask;
+   bool                                 _3DRenderingInstructionDisableMask;
+   bool                                 MediaInstructionDisableMask;
+   bool                                 CONSTANT_BUFFERAddressOffsetDisableMask;
 };
 
 static inline void
@@ -5401,7 +5378,11 @@ GEN6_INSTPM_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DStateInstructionDisable, 1, 1) |
       __gen_uint(values->_3DRenderingInstructionDisable, 2, 2) |
       __gen_uint(values->MediaInstructionDisable, 3, 3) |
-      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 6, 6);
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisable, 6, 6) |
+      __gen_uint(values->_3DStateInstructionDisableMask, 17, 17) |
+      __gen_uint(values->_3DRenderingInstructionDisableMask, 18, 18) |
+      __gen_uint(values->MediaInstructionDisableMask, 19, 19) |
+      __gen_uint(values->CONSTANT_BUFFERAddressOffsetDisableMask, 22, 22);
 }
 
 #endif /* GEN6_PACK_H */

@@ -116,7 +116,7 @@ static void run_test()
    struct anv_block_pool pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_block_pool_init(&pool, &device, 4096, 0);
+   anv_block_pool_init(&pool, &device, 4096, 4096, 0);
 
    for (unsigned i = 0; i < NUM_THREADS; i++) {
       jobs[i].pool = &pool;

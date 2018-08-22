@@ -59,6 +59,8 @@ glsl_get_function_return_type(const struct glsl_type *type);
 const struct glsl_function_param *
 glsl_get_function_param(const struct glsl_type *type, unsigned index);
 
+GLenum glsl_get_gl_type(const struct glsl_type *type);
+
 enum glsl_base_type glsl_get_base_type(const struct glsl_type *type);
 
 unsigned glsl_get_vector_elements(const struct glsl_type *type);
@@ -73,15 +75,19 @@ unsigned glsl_get_aoa_size(const struct glsl_type *type);
 
 unsigned glsl_count_attribute_slots(const struct glsl_type *type,
                                     bool is_vertex_input);
+unsigned glsl_get_component_slots(const struct glsl_type *type);
 
 const char *glsl_get_struct_elem_name(const struct glsl_type *type,
                                       unsigned index);
 
 enum glsl_sampler_dim glsl_get_sampler_dim(const struct glsl_type *type);
 enum glsl_base_type glsl_get_sampler_result_type(const struct glsl_type *type);
+unsigned glsl_get_sampler_target(const struct glsl_type *type);
 
 unsigned glsl_get_record_location_offset(const struct glsl_type *type,
                                          unsigned length);
+
+unsigned glsl_atomic_size(const struct glsl_type *type);
 
 static inline unsigned
 glsl_get_bit_size(const struct glsl_type *type)
@@ -117,6 +123,7 @@ glsl_get_bit_size(const struct glsl_type *type)
    return 0;
 }
 
+bool glsl_type_is_16bit(const struct glsl_type *type);
 bool glsl_type_is_64bit(const struct glsl_type *type);
 bool glsl_type_is_void(const struct glsl_type *type);
 bool glsl_type_is_error(const struct glsl_type *type);
@@ -134,6 +141,7 @@ bool glsl_type_is_numeric(const struct glsl_type *type);
 bool glsl_type_is_boolean(const struct glsl_type *type);
 bool glsl_sampler_type_is_shadow(const struct glsl_type *type);
 bool glsl_sampler_type_is_array(const struct glsl_type *type);
+bool glsl_contains_atomic(const struct glsl_type *type);
 
 const struct glsl_type *glsl_void_type(void);
 const struct glsl_type *glsl_float_type(void);
@@ -181,6 +189,14 @@ const struct glsl_type * glsl_function_type(const struct glsl_type *return_type,
 const struct glsl_type *glsl_transposed_type(const struct glsl_type *type);
 
 const struct glsl_type *glsl_channel_type(const struct glsl_type *type);
+
+typedef void (*glsl_type_size_align_func)(const struct glsl_type *type,
+                                          unsigned *size, unsigned *align);
+
+void glsl_get_natural_size_align_bytes(const struct glsl_type *type,
+                                       unsigned *size, unsigned *align);
+
+const struct glsl_type *glsl_atomic_uint_type(void);
 
 #ifdef __cplusplus
 }

@@ -120,6 +120,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
             return 16;
 
         case PIPE_CAP_GLSL_FEATURE_LEVEL:
+        case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
             return 120;
 
         /* r300 cannot do swizzling of compressed textures. Supported otherwise. */
@@ -246,11 +247,19 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS:
         case PIPE_CAP_TILE_RASTER_ORDER:
         case PIPE_CAP_MAX_COMBINED_SHADER_OUTPUT_RESOURCES:
+        case PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS:
         case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
         case PIPE_CAP_CONTEXT_PRIORITY_MASK:
         case PIPE_CAP_FENCE_SIGNAL:
         case PIPE_CAP_CONSTBUF0_FLAGS:
         case PIPE_CAP_PACKED_UNIFORMS:
+        case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES:
+        case PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES:
+        case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES:
+        case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
+        case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
+        case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+        case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
             return 0;
 
         /* SWTCL-only features. */
@@ -475,6 +484,10 @@ static float r300_get_paramf(struct pipe_screen* pscreen,
             return 16.0f;
         case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:
             return 16.0f;
+        case PIPE_CAPF_MIN_CONSERVATIVE_RASTER_DILATE:
+        case PIPE_CAPF_MAX_CONSERVATIVE_RASTER_DILATE:
+        case PIPE_CAPF_CONSERVATIVE_RASTER_DILATE_GRANULARITY:
+            return 0.0f;
         default:
             debug_printf("r300: Warning: Unknown CAP %d in get_paramf.\n",
                          param);
@@ -578,6 +591,7 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                                         enum pipe_format format,
                                         enum pipe_texture_target target,
                                         unsigned sample_count,
+                                        unsigned storage_sample_count,
                                         unsigned usage)
 {
     uint32_t retval = 0;
@@ -603,8 +617,8 @@ static boolean r300_is_format_supported(struct pipe_screen* screen,
                             format == PIPE_FORMAT_R16G16B16X16_FLOAT;
     const struct util_format_description *desc;
 
-    if (!util_format_is_supported(format, usage))
-       return FALSE;
+    if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+        return false;
 
     /* Check multisampling support. */
     switch (sample_count) {

@@ -211,7 +211,7 @@ static boolean parse_int( const char **pcur, int *val )
 static boolean parse_identifier( const char **pcur, char *ret, size_t len )
 {
    const char *cur = *pcur;
-   int i = 0;
+   size_t i = 0;
    if (is_alpha_underscore( cur )) {
       ret[i++] = *cur++;
       while (is_alpha_underscore( cur ) || is_digit( cur )) {
@@ -866,7 +866,7 @@ parse_optional_swizzle(
 
    eat_opt_white( &cur );
    if (*cur == '.') {
-      uint i;
+      int i;
 
       cur++;
       eat_opt_white( &cur );
@@ -1037,7 +1037,7 @@ parse_instruction(
    struct translate_ctx *ctx,
    boolean has_label )
 {
-   uint i;
+   int i;
    uint saturate = 0;
    uint precise = 0;
    const struct tgsi_opcode_info *info;
@@ -1586,10 +1586,6 @@ static boolean parse_declaration( struct translate_ctx *ctx )
             break;
          }
       }
-      if (i == TGSI_INTERPOLATE_COUNT) {
-         report_error( ctx, "Expected semantic or interpolate attribute" );
-         return FALSE;
-      }
    }
 
    cur = ctx->cur;
@@ -1606,6 +1602,20 @@ static boolean parse_declaration( struct translate_ctx *ctx )
             ctx->cur = cur;
             break;
          }
+      }
+   }
+
+   cur = ctx->cur;
+   eat_opt_white( &cur );
+   if (*cur == ',' && !is_vs_input) {
+      cur++;
+      eat_opt_white( &cur );
+      if (str_match_nocase_whole( &cur, tgsi_invariant_name )) {
+         decl.Declaration.Invariant = 1;
+         ctx->cur = cur;
+      } else {
+         report_error( ctx, "Expected semantic, interpolate attribute, or invariant ");
+         return FALSE;
       }
    }
 
@@ -1626,7 +1636,7 @@ static boolean parse_immediate( struct translate_ctx *ctx )
 {
    struct tgsi_full_immediate imm;
    uint advance;
-   int type;
+   uint type;
 
    if (*ctx->cur == '[') {
       uint uindex;

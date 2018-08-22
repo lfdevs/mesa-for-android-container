@@ -169,8 +169,7 @@ vec4_visitor::nir_emit_instr(nir_instr *instr)
       break;
 
    default:
-      fprintf(stderr, "VS instruction not yet implemented by NIR->vec4\n");
-      break;
+      unreachable("VS instruction not yet implemented by NIR->vec4");
    }
 }
 

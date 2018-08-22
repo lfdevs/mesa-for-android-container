@@ -40,7 +40,7 @@ lower_tg4(nir_block *block, nir_builder *b, void *mem_ctx)
 		if (instr->type != nir_instr_type_tex)
 			continue;
 
-        nir_tex_instr *tg4 = (nir_tex_instr *)instr;
+		nir_tex_instr *tg4 = (nir_tex_instr *)instr;
 
 		if (tg4->op != nir_texop_tg4)
 			continue;
@@ -62,9 +62,7 @@ lower_tg4(nir_block *block, nir_builder *b, void *mem_ctx)
 			tex->is_shadow = tg4->is_shadow;
 			tex->is_new_style_shadow = tg4->is_new_style_shadow;
 			tex->texture_index = tg4->texture_index;
-			tex->texture = nir_deref_var_clone(tg4->texture, tex);
 			tex->sampler_index = tg4->sampler_index;
-			tex->sampler = nir_deref_var_clone(tg4->sampler, tex);
 			tex->dest_type = tg4->dest_type;
 
 			for (int j = 0; j < tg4->num_srcs; j++) {

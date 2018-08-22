@@ -1170,7 +1170,7 @@ emit_twoside(struct tgsi_transform_context *tctx)
    struct tgsi_full_declaration decl;
    struct tgsi_full_instruction new_inst;
    unsigned inbase, tmpbase;
-   int i;
+   unsigned i;
 
    inbase  = info->file_max[TGSI_FILE_INPUT] + 1;
    tmpbase = info->file_max[TGSI_FILE_TEMPORARY] + 1;
@@ -1254,7 +1254,7 @@ emit_decls(struct tgsi_transform_context *tctx)
    struct tgsi_full_declaration decl;
    struct tgsi_full_immediate immed;
    unsigned tmpbase;
-   int i;
+   unsigned i;
 
    tmpbase = info->file_max[TGSI_FILE_TEMPORARY] + 1;
 
@@ -1308,7 +1308,7 @@ rename_color_inputs(struct tgsi_lowering_context *ctx,
       struct tgsi_src_register *src = &inst->Src[i].Register;
       if (src->File == TGSI_FILE_INPUT) {
          for (j = 0; j < ctx->two_side_colors; j++) {
-            if (src->Index == ctx->two_side_idx[j]) {
+	    if (src->Index == (int)ctx->two_side_idx[j]) {
                src->File = TGSI_FILE_TEMPORARY;
                src->Index = ctx->color_base + j;
                break;

@@ -16,7 +16,9 @@
 #define NVE4_IMG_MAX_HANDLES 512
 
 /* doesn't count driver-reserved slot */
-#define NVC0_MAX_PIPE_CONSTBUFS         15
+#define NVC0_MAX_PIPE_CONSTBUFS 15
+#define NVC0_MAX_CONST_BUFFERS  16
+#define NVC0_MAX_CONSTBUF_SIZE  65536
 
 #define NVC0_MAX_SURFACE_SLOTS 16
 
@@ -53,10 +55,15 @@ struct nvc0_graph_state {
    uint8_t tls_required; /* bitmask of shader types using l[] */
    uint8_t clip_enable;
    uint32_t clip_mode;
-   uint32_t uniform_buffer_bound[6];
+   bool uniform_buffer_bound[6];
    struct nvc0_transform_feedback_state *tfb;
    bool seamless_cube_map;
    bool post_depth_coverage;
+};
+
+struct nvc0_cb_binding {
+   uint64_t addr;
+   int size;
 };
 
 struct nvc0_screen {
@@ -114,6 +121,9 @@ struct nvc0_screen {
       bool mp_counters_enabled;
    } pm;
 
+   /* only maintained on Maxwell+ */
+   struct nvc0_cb_binding cb_bindings[5][NVC0_MAX_CONST_BUFFERS];
+
    struct nouveau_object *eng3d; /* sqrt(1/2)|kepler> + sqrt(1/2)|fermi> */
    struct nouveau_object *eng2d;
    struct nouveau_object *m2mf;
@@ -145,6 +155,9 @@ int nve4_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 int nvc0_screen_compute_setup(struct nvc0_screen *, struct nouveau_pushbuf *);
 
 int nvc0_screen_resize_text_area(struct nvc0_screen *, uint64_t);
+
+// 3D Only
+void nvc0_screen_bind_cb_3d(struct nvc0_screen *, bool *, int, int, int, uint64_t);
 
 static inline void
 nvc0_resource_fence(struct nv04_resource *res, uint32_t flags)

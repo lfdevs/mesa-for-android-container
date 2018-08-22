@@ -226,7 +226,8 @@ radeon_map_renderbuffer(struct gl_context *ctx,
 		       GLuint x, GLuint y, GLuint w, GLuint h,
 		       GLbitfield mode,
 		       GLubyte **out_map,
-		       GLint *out_stride)
+		       GLint *out_stride,
+		       bool flip_y)
 {
    struct radeon_context *const rmesa = RADEON_CONTEXT(ctx);
    struct radeon_renderbuffer *rrb = radeon_renderbuffer(rb);
@@ -235,6 +236,9 @@ radeon_map_renderbuffer(struct gl_context *ctx,
    int stride, flip_stride;
    int ret;
    int src_x, src_y;
+
+   /* driver does not support GL_FRAMEBUFFER_FLIP_Y_MESA */
+   assert((rb->Name == 0) == flip_y);
 
    if (!rrb || !rrb->bo) {
 	   *out_map = NULL;

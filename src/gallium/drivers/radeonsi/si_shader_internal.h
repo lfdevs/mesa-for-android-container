@@ -31,8 +31,6 @@
 #include "gallivm/lp_bld_tgsi.h"
 #include "tgsi/tgsi_parse.h"
 #include "ac_shader_abi.h"
-#include "ac_llvm_util.h"
-#include "ac_llvm_build.h"
 
 #include <llvm-c/Core.h>
 #include <llvm-c/TargetMachine.h>
@@ -61,9 +59,6 @@ struct si_shader_context {
 	unsigned num_shader_buffers;
 	unsigned num_images;
 	unsigned num_samplers;
-
-	/* Whether the prolog will be compiled separately. */
-	bool separate_prolog;
 
 	struct ac_shader_abi abi;
 
@@ -179,7 +174,7 @@ struct si_shader_context {
 	/* CS */
 	int param_block_size;
 
-	LLVMTargetMachineRef tm;
+	struct ac_llvm_compiler *compiler;
 
 	/* Preloaded descriptors. */
 	LLVMValueRef esgs_ring;
@@ -221,8 +216,9 @@ si_shader_context_from_abi(struct ac_shader_abi *abi)
 }
 
 unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
-			 LLVMTargetMachineRef tm,
-			 struct pipe_debug_callback *debug);
+			 struct ac_llvm_compiler *compiler,
+			 struct pipe_debug_callback *debug,
+			 bool less_optimized);
 
 LLVMTypeRef tgsi2llvmtype(struct lp_build_tgsi_context *bld_base,
 			  enum tgsi_opcode_type type);
@@ -236,7 +232,7 @@ LLVMValueRef si_llvm_bound_index(struct si_shader_context *ctx,
 
 void si_llvm_context_init(struct si_shader_context *ctx,
 			  struct si_screen *sscreen,
-			  LLVMTargetMachineRef tm);
+			  struct ac_llvm_compiler *compiler);
 void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
 			      struct si_shader *shader);
 

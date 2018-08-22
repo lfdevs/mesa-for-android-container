@@ -25,6 +25,7 @@
 #include "si_build_pm4.h"
 
 #include "util/u_memory.h"
+#include "util/u_suballoc.h"
 
 static void si_set_streamout_enable(struct si_context *sctx, bool enable);
 
@@ -42,7 +43,7 @@ si_create_so_target(struct pipe_context *ctx,
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_streamout_target *t;
-	struct r600_resource *rbuffer = (struct r600_resource*)buffer;
+	struct r600_resource *rbuffer = r600_resource(buffer);
 
 	t = CALLOC_STRUCT(si_streamout_target);
 	if (!t) {
@@ -82,7 +83,7 @@ void si_streamout_buffers_dirty(struct si_context *sctx)
 	if (!sctx->streamout.enabled_mask)
 		return;
 
-	si_mark_atom_dirty(sctx, &sctx->streamout.begin_atom);
+	si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_begin);
 	si_set_streamout_enable(sctx, true);
 }
 
@@ -115,9 +116,9 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 		/* Invalidate the scalar cache in case a streamout buffer is
 		 * going to be used as a constant buffer.
 		 *
-		 * Invalidate TC L1, because streamout bypasses it (done by
-		 * setting GLC=1 in the store instruction), but it can contain
-		 * outdated data of streamout buffers.
+		 * Invalidate vL1, because streamout bypasses it (done by
+		 * setting GLC=1 in the store instruction), but vL1 in other
+		 * CUs can contain outdated data of streamout buffers.
 		 *
 		 * VS_PARTIAL_FLUSH is required if the buffers are going to be
 		 * used as an input immediately.
@@ -168,7 +169,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 	if (num_targets) {
 		si_streamout_buffers_dirty(sctx);
 	} else {
-		si_set_atom_dirty(sctx, &sctx->streamout.begin_atom, false);
+		si_set_atom_dirty(sctx, &sctx->atoms.s.streamout_begin, false);
 		si_set_streamout_enable(sctx, false);
 	}
 
@@ -200,7 +201,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 			pipe_resource_reference(&buffers->buffers[bufidx],
 						buffer);
 			radeon_add_to_gfx_buffer_list_check_mem(sctx,
-							    (struct r600_resource*)buffer,
+							    r600_resource(buffer),
 							    buffers->shader_usage,
 							    RADEON_PRIO_SHADER_RW_BUFFER,
 							    true);
@@ -229,7 +230,7 @@ static void si_set_streamout_targets(struct pipe_context *ctx,
 
 static void si_flush_vgt_streamout(struct si_context *sctx)
 {
-	struct radeon_winsys_cs *cs = sctx->gfx_cs;
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	unsigned reg_strmout_cntl;
 
 	/* The register is at different places on different ASICs. */
@@ -253,9 +254,9 @@ static void si_flush_vgt_streamout(struct si_context *sctx)
 	radeon_emit(cs, 4); /* poll interval */
 }
 
-static void si_emit_streamout_begin(struct si_context *sctx, struct r600_atom *atom)
+static void si_emit_streamout_begin(struct si_context *sctx)
 {
-	struct radeon_winsys_cs *cs = sctx->gfx_cs;
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	struct si_streamout_target **t = sctx->streamout.targets;
 	uint16_t *stride_in_dw = sctx->streamout.stride_in_dw;
 	unsigned i;
@@ -310,7 +311,7 @@ static void si_emit_streamout_begin(struct si_context *sctx, struct r600_atom *a
 
 void si_emit_streamout_end(struct si_context *sctx)
 {
-	struct radeon_winsys_cs *cs = sctx->gfx_cs;
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	struct si_streamout_target **t = sctx->streamout.targets;
 	unsigned i;
 	uint64_t va;
@@ -355,8 +356,7 @@ void si_emit_streamout_end(struct si_context *sctx)
  * are no buffers bound.
  */
 
-static void si_emit_streamout_enable(struct si_context *sctx,
-				     struct r600_atom *atom)
+static void si_emit_streamout_enable(struct si_context *sctx)
 {
 	radeon_set_context_reg_seq(sctx->gfx_cs, R_028B94_VGT_STRMOUT_CONFIG, 2);
 	radeon_emit(sctx->gfx_cs,
@@ -384,7 +384,7 @@ static void si_set_streamout_enable(struct si_context *sctx, bool enable)
 
 	if ((old_strmout_en != si_get_strmout_en(sctx)) ||
             (old_hw_enabled_mask != sctx->streamout.hw_enabled_mask))
-		si_mark_atom_dirty(sctx, &sctx->streamout.enable_atom);
+		si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
 }
 
 void si_update_prims_generated_query_state(struct si_context *sctx,
@@ -400,7 +400,7 @@ void si_update_prims_generated_query_state(struct si_context *sctx,
 			sctx->streamout.num_prims_gen_queries != 0;
 
 		if (old_strmout_en != si_get_strmout_en(sctx))
-			si_mark_atom_dirty(sctx, &sctx->streamout.enable_atom);
+			si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
 	}
 }
 
@@ -409,6 +409,6 @@ void si_init_streamout_functions(struct si_context *sctx)
 	sctx->b.create_stream_output_target = si_create_so_target;
 	sctx->b.stream_output_target_destroy = si_so_target_destroy;
 	sctx->b.set_stream_output_targets = si_set_streamout_targets;
-	sctx->streamout.begin_atom.emit = si_emit_streamout_begin;
-	sctx->streamout.enable_atom.emit = si_emit_streamout_enable;
+	sctx->atoms.s.streamout_begin.emit = si_emit_streamout_begin;
+	sctx->atoms.s.streamout_enable.emit = si_emit_streamout_enable;
 }

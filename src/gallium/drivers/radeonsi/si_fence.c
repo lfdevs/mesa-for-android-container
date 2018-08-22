@@ -70,7 +70,7 @@ void si_gfx_write_event_eop(struct si_context *ctx,
 			    struct r600_resource *buf, uint64_t va,
 			    uint32_t new_fence, unsigned query_type)
 {
-	struct radeon_winsys_cs *cs = ctx->gfx_cs;
+	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 	unsigned op = EVENT_TYPE(event) |
 		      EVENT_INDEX(5) |
 		      event_flags;
@@ -163,7 +163,7 @@ unsigned si_gfx_write_fence_dwords(struct si_screen *screen)
 void si_gfx_wait_fence(struct si_context *ctx,
 		       uint64_t va, uint32_t ref, uint32_t mask)
 {
-	struct radeon_winsys_cs *cs = ctx->gfx_cs;
+	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 
 	radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
 	radeon_emit(cs, WAIT_REG_MEM_EQUAL | WAIT_REG_MEM_MEM_SPACE(1));
@@ -266,7 +266,7 @@ static void si_fine_fence_set(struct si_context *ctx,
 	radeon_add_to_buffer_list(ctx, ctx->gfx_cs, fine->buf,
 				  RADEON_USAGE_WRITE, RADEON_PRIO_QUERY);
 	if (flags & PIPE_FLUSH_TOP_OF_PIPE) {
-		struct radeon_winsys_cs *cs = ctx->gfx_cs;
+		struct radeon_cmdbuf *cs = ctx->gfx_cs;
 		radeon_emit(cs, PKT3(PKT3_WRITE_DATA, 3, 0));
 		radeon_emit(cs, S_370_DST_SEL(V_370_MEM_ASYNC) |
 			S_370_WR_CONFIRM(1) |

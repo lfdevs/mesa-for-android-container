@@ -127,11 +127,11 @@ get_depth_format(struct anv_cmd_buffer *cmd_buffer)
    const struct anv_render_pass *pass = cmd_buffer->state.pass;
    const struct anv_subpass *subpass = cmd_buffer->state.subpass;
 
-   if (subpass->depth_stencil_attachment.attachment >= pass->attachment_count)
+   if (!subpass->depth_stencil_attachment)
       return D16_UNORM;
 
    struct anv_render_pass_attachment *att =
-      &pass->attachments[subpass->depth_stencil_attachment.attachment];
+      &pass->attachments[subpass->depth_stencil_attachment->attachment];
 
    switch (att->format) {
    case VK_FORMAT_D16_UNORM:
@@ -247,10 +247,10 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          ib.IndexFormat                = cmd_buffer->state.gfx.gen7.index_type;
          ib.MemoryObjectControlState   = GENX(MOCS);
 
-         ib.BufferStartingAddress =
-            (struct anv_address) { buffer->bo, buffer->offset + offset };
-         ib.BufferEndingAddress =
-            (struct anv_address) { buffer->bo, buffer->offset + buffer->size };
+         ib.BufferStartingAddress      = anv_address_add(buffer->address,
+                                                         offset);
+         ib.BufferEndingAddress        = anv_address_add(buffer->address,
+                                                         buffer->size);
       }
    }
 

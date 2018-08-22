@@ -1182,7 +1182,7 @@ void util_blitter_cache_all_shaders(struct blitter_context *blitter)
             /* MSAA resolve shaders. */
             for (j = 2; j < 32; j++) {
                if (!screen->is_format_supported(screen, PIPE_FORMAT_R32_FLOAT,
-                                                target, j,
+                                                target, j, j,
                                                 PIPE_BIND_SAMPLER_VIEW)) {
                   continue;
                }
@@ -1258,8 +1258,20 @@ static void blitter_draw(struct blitter_context_priv *ctx,
    pipe->set_vertex_buffers(pipe, ctx->base.vb_slot, 1, &vb);
    pipe->bind_vertex_elements_state(pipe, vertex_elements_cso);
    pipe->bind_vs_state(pipe, get_vs(&ctx->base));
-   util_draw_arrays_instanced(pipe, PIPE_PRIM_TRIANGLE_FAN, 0, 4,
-                              0, num_instances);
+
+   if (ctx->base.use_index_buffer) {
+      /* Note that for V3D,
+       * dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_* require
+       * that the last vert of the two tris be the same.
+       */
+      static uint8_t indices[6] = { 0, 1, 2, 0, 3, 2 };
+      util_draw_elements_instanced(pipe, indices, 1, 0,
+                                   PIPE_PRIM_TRIANGLES, 0, 6,
+                                   0, num_instances);
+   } else {
+      util_draw_arrays_instanced(pipe, PIPE_PRIM_TRIANGLE_FAN, 0, 4,
+                                 0, num_instances);
+   }
    pipe_resource_reference(&vb.buffer.resource, NULL);
 }
 
@@ -1527,7 +1539,8 @@ static bool is_blit_generic_supported(struct blitter_context *blitter,
          bind = PIPE_BIND_RENDER_TARGET;
 
       if (!screen->is_format_supported(screen, dst_format, dst->target,
-                                       dst->nr_samples, bind)) {
+                                       dst->nr_samples, dst->nr_storage_samples,
+                                       bind)) {
          return false;
       }
    }
@@ -1538,7 +1551,8 @@ static bool is_blit_generic_supported(struct blitter_context *blitter,
       }
 
       if (!screen->is_format_supported(screen, src_format, src->target,
-                                 src->nr_samples, PIPE_BIND_SAMPLER_VIEW)) {
+                                       src->nr_samples, src->nr_storage_samples,
+                                       PIPE_BIND_SAMPLER_VIEW)) {
          return false;
       }
 
@@ -1552,6 +1566,7 @@ static bool is_blit_generic_supported(struct blitter_context *blitter,
             if (stencil_format != src_format &&
                 !screen->is_format_supported(screen, stencil_format,
                                              src->target, src->nr_samples,
+                                             src->nr_storage_samples,
                                              PIPE_BIND_SAMPLER_VIEW)) {
                return false;
             }

@@ -1,46 +1,48 @@
 /****************************************************************************
-* Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file gen_swr_context_llvm.h
-*
-* @brief auto-generated file
-*
-* DO NOT EDIT
-*
-* Generation Command Line:
-*   ./rasterizer/codegen/gen_llvm_types.py
-*     --input
-*     ./swr_context.h
-*     --output
-*     ./gen_swr_context_llvm.h
-*
-******************************************************************************/
+ * Copyright (C) 2014-2018 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file gen_swr_context_llvm.h
+ *
+ * @brief auto-generated file
+ *
+ * DO NOT EDIT
+ *
+ * Generation Command Line:
+ *   ./rasterizer/codegen/gen_llvm_types.py
+ *     --input
+ *     ./swr_context.h
+ *     --output
+ *     ./gen_swr_context_llvm.h
+ *
+ ******************************************************************************/
+// clang-format off
+
 #pragma once
 
 namespace SwrJit
 {
     using namespace llvm;
 
-    INLINE static StructType *Gen_swr_jit_texture(JitManager* pJitMgr)
+    INLINE static StructType* Gen_swr_jit_texture(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
 
@@ -94,7 +96,7 @@ namespace SwrJit
     static const uint32_t swr_jit_texture_img_stride  = 7;
     static const uint32_t swr_jit_texture_mip_offsets = 8;
 
-    INLINE static StructType *Gen_swr_jit_sampler(JitManager* pJitMgr)
+    INLINE static StructType* Gen_swr_jit_sampler(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
 
@@ -133,7 +135,7 @@ namespace SwrJit
     static const uint32_t swr_jit_sampler_lod_bias     = 2;
     static const uint32_t swr_jit_sampler_border_color = 3;
 
-    INLINE static StructType *Gen_swr_draw_context(JitManager* pJitMgr)
+    INLINE static StructType* Gen_swr_draw_context(JitManager* pJitMgr)
     {
         LLVMContext& ctx = pJitMgr->mContext;
 
@@ -211,6 +213,7 @@ namespace SwrJit
     static const uint32_t swr_draw_context_swr_query_result = 15;
     static const uint32_t swr_draw_context_pAPI             = 16;
 
-} // ns SwrJit
+} // namespace SwrJit
 
 
+// clang-format on

@@ -51,6 +51,18 @@
 #else
 #   define VK_USE_PLATFORM_XLIB_KHR false
 #endif
+#ifdef VK_USE_PLATFORM_DISPLAY_KHR
+#   undef VK_USE_PLATFORM_DISPLAY_KHR
+#   define VK_USE_PLATFORM_DISPLAY_KHR true
+#else
+#   define VK_USE_PLATFORM_DISPLAY_KHR false
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+#   undef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+#   define VK_USE_PLATFORM_XLIB_XRANDR_EXT true
+#else
+#   define VK_USE_PLATFORM_XLIB_XRANDR_EXT false
+#endif
 
 /* And ANDROID too */
 #ifdef ANDROID
@@ -60,28 +72,37 @@
 #   define ANDROID false
 #endif
 
-#define RADV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR ||                          VK_USE_PLATFORM_XCB_KHR ||                          VK_USE_PLATFORM_XLIB_KHR)
+#define RADV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR ||                          VK_USE_PLATFORM_XCB_KHR ||                          VK_USE_PLATFORM_XLIB_KHR ||                          VK_USE_PLATFORM_DISPLAY_KHR)
+
 
 const VkExtensionProperties radv_instance_extensions[RADV_INSTANCE_EXTENSION_COUNT] = {
    {"VK_KHR_device_group_creation", 1},
    {"VK_KHR_external_fence_capabilities", 1},
    {"VK_KHR_external_memory_capabilities", 1},
    {"VK_KHR_external_semaphore_capabilities", 1},
+   {"VK_KHR_get_display_properties2", 1},
    {"VK_KHR_get_physical_device_properties2", 1},
    {"VK_KHR_get_surface_capabilities2", 1},
    {"VK_KHR_surface", 25},
    {"VK_KHR_wayland_surface", 6},
    {"VK_KHR_xcb_surface", 6},
    {"VK_KHR_xlib_surface", 6},
+   {"VK_KHR_display", 23},
+   {"VK_EXT_direct_mode_display", 1},
+   {"VK_EXT_acquire_xlib_display", 1},
+   {"VK_EXT_display_surface_counter", 1},
    {"VK_EXT_debug_report", 9},
 };
 
 const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] = {
    {"VK_ANDROID_native_buffer", 5},
+   {"VK_KHR_16bit_storage", 1},
    {"VK_KHR_bind_memory2", 1},
+   {"VK_KHR_create_renderpass2", 1},
    {"VK_KHR_dedicated_allocation", 1},
    {"VK_KHR_descriptor_update_template", 1},
    {"VK_KHR_device_group", 1},
+   {"VK_KHR_draw_indirect_count", 1},
    {"VK_KHR_external_fence", 1},
    {"VK_KHR_external_fence_fd", 1},
    {"VK_KHR_external_memory", 1},
@@ -102,6 +123,8 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_KHR_swapchain", 68},
    {"VK_KHR_variable_pointers", 1},
    {"VK_KHR_multiview", 1},
+   {"VK_EXT_conditional_rendering", 1},
+   {"VK_EXT_display_control", 1},
    {"VK_EXT_depth_range_unrestricted", 1},
    {"VK_EXT_descriptor_indexing", 2},
    {"VK_EXT_discard_rectangles", 1},
@@ -110,7 +133,8 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_EXT_global_priority", 1},
    {"VK_EXT_sampler_filter_minmax", 1},
    {"VK_EXT_shader_viewport_index_layer", 1},
-   {"VK_EXT_vertex_attribute_divisor", 1},
+   {"VK_EXT_shader_stencil_export", 1},
+   {"VK_EXT_vertex_attribute_divisor", 2},
    {"VK_AMD_draw_indirect_count", 1},
    {"VK_AMD_gcn_shader", 1},
    {"VK_AMD_rasterization_order", 1},
@@ -124,12 +148,17 @@ const struct radv_instance_extension_table radv_supported_instance_extensions = 
    .KHR_external_fence_capabilities = true,
    .KHR_external_memory_capabilities = true,
    .KHR_external_semaphore_capabilities = true,
+   .KHR_get_display_properties2 = VK_USE_PLATFORM_DISPLAY_KHR,
    .KHR_get_physical_device_properties2 = true,
    .KHR_get_surface_capabilities2 = RADV_HAS_SURFACE,
    .KHR_surface = RADV_HAS_SURFACE,
    .KHR_wayland_surface = VK_USE_PLATFORM_WAYLAND_KHR,
    .KHR_xcb_surface = VK_USE_PLATFORM_XCB_KHR,
    .KHR_xlib_surface = VK_USE_PLATFORM_XLIB_KHR,
+   .KHR_display = VK_USE_PLATFORM_DISPLAY_KHR,
+   .EXT_direct_mode_display = VK_USE_PLATFORM_DISPLAY_KHR,
+   .EXT_acquire_xlib_display = VK_USE_PLATFORM_XLIB_XRANDR_EXT,
+   .EXT_display_surface_counter = VK_USE_PLATFORM_DISPLAY_KHR,
    .EXT_debug_report = true,
 };
 
@@ -137,10 +166,13 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
                                       struct radv_device_extension_table* table)
 {
    table->ANDROID_native_buffer = ANDROID && device->rad_info.has_syncobj_wait_for_submit;
+   table->KHR_16bit_storage = HAVE_LLVM >= 0x0700;
    table->KHR_bind_memory2 = true;
+   table->KHR_create_renderpass2 = true;
    table->KHR_dedicated_allocation = true;
    table->KHR_descriptor_update_template = true;
    table->KHR_device_group = true;
+   table->KHR_draw_indirect_count = true;
    table->KHR_external_fence = device->rad_info.has_syncobj_wait_for_submit;
    table->KHR_external_fence_fd = device->rad_info.has_syncobj_wait_for_submit;
    table->KHR_external_memory = true;
@@ -161,6 +193,8 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->KHR_swapchain = RADV_HAS_SURFACE;
    table->KHR_variable_pointers = true;
    table->KHR_multiview = true;
+   table->EXT_conditional_rendering = true;
+   table->EXT_display_control = VK_USE_PLATFORM_DISPLAY_KHR;
    table->EXT_depth_range_unrestricted = true;
    table->EXT_descriptor_indexing = true;
    table->EXT_discard_rectangles = true;
@@ -169,6 +203,7 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->EXT_global_priority = device->rad_info.has_ctx_priority;
    table->EXT_sampler_filter_minmax = device->rad_info.chip_class >= CIK;
    table->EXT_shader_viewport_index_layer = true;
+   table->EXT_shader_stencil_export = true;
    table->EXT_vertex_attribute_divisor = true;
    table->AMD_draw_indirect_count = true;
    table->AMD_gcn_shader = true;

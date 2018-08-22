@@ -30,7 +30,6 @@
 
 #include "etnaviv_debug.h"
 #include "etnaviv_format.h"
-#include "etnaviv_tiling.h"
 #include "etnaviv_util.h"
 #include "hw/cmdstream.xml.h"
 #include "hw/common_3d.xml.h"
@@ -39,8 +38,6 @@
 
 #include "util/u_format.h"
 #include "util/u_math.h"
-
-#include <stdio.h>
 
 /* Returned when there is no match of pipe value to etna value */
 #define ETNA_NO_MATCH (~0)

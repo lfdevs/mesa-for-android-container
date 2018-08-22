@@ -51,8 +51,15 @@ isl_gen4_filter_tiling(const struct isl_device *dev,
       /* From the g35 PRM Vol. 2, 3DSTATE_DEPTH_BUFFER::Tile Walk:
        *
        *    "The Depth Buffer, if tiled, must use Y-Major tiling"
+       *
+       *    Errata   Description    Project
+       *    BWT014   The Depth Buffer Must be Tiled, it cannot be linear. This
+       *    field must be set to 1 on DevBW-A.  [DevBW -A,B]
+       *
+       * In testing, the linear configuration doesn't seem to work on gen4.
        */
-      *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_Y0_BIT);
+      *flags &= (ISL_DEV_GEN(dev) == 4 && !ISL_DEV_IS_G4X(dev)) ?
+                ISL_TILING_Y0_BIT : (ISL_TILING_Y0_BIT | ISL_TILING_LINEAR_BIT);
    }
 
    if (info->usage & (ISL_SURF_USAGE_DISPLAY_ROTATE_90_BIT |

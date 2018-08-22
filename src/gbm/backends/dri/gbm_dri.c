@@ -580,6 +580,14 @@ static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
      GBM_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ARGB2101010,
      { 0x3ff00000, 0x000ffc00, 0x000003ff, 0xc0000000 },
    },
+   {
+     GBM_FORMAT_XBGR2101010, __DRI_IMAGE_FORMAT_XBGR2101010,
+     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0x00000000 },
+   },
+   {
+     GBM_FORMAT_ABGR2101010, __DRI_IMAGE_FORMAT_ABGR2101010,
+     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0xc0000000 },
+   },
 };
 
 /* The two GBM_BO_FORMAT_[XA]RGB8888 formats alias the GBM_FORMAT_*

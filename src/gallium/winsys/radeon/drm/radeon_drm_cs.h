@@ -33,7 +33,7 @@ struct radeon_bo_item {
     struct radeon_bo    *bo;
     union {
         struct {
-            uint64_t    priority_usage;
+            uint32_t    priority_usage;
         } real;
         struct {
             unsigned    real_idx;
@@ -65,7 +65,7 @@ struct radeon_cs_context {
 };
 
 struct radeon_drm_cs {
-    struct radeon_winsys_cs base;
+    struct radeon_cmdbuf base;
     enum ring_type          ring_type;
 
     /* We flip between these two CS. While one is being consumed
@@ -92,7 +92,7 @@ struct radeon_drm_cs {
 int radeon_lookup_buffer(struct radeon_cs_context *csc, struct radeon_bo *bo);
 
 static inline struct radeon_drm_cs *
-radeon_drm_cs(struct radeon_winsys_cs *base)
+radeon_drm_cs(struct radeon_cmdbuf *base)
 {
     return (struct radeon_drm_cs*)base;
 }
@@ -131,7 +131,7 @@ radeon_bo_is_referenced_by_any_cs(struct radeon_bo *bo)
     return bo->num_cs_references != 0;
 }
 
-void radeon_drm_cs_sync_flush(struct radeon_winsys_cs *rcs);
+void radeon_drm_cs_sync_flush(struct radeon_cmdbuf *rcs);
 void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws);
 void radeon_drm_cs_emit_ioctl_oneshot(void *job, int thread_index);
 

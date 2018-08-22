@@ -62,6 +62,8 @@
 #define NVC0_NEW_3D_DRIVERCONST  (1 << 27)
 #define NVC0_NEW_3D_WINDOW_RECTS (1 << 28)
 
+#define NVC0_NEW_3D_SAMPLE_LOCATIONS (1 << 29)
+
 #define NVC0_NEW_CP_PROGRAM   (1 << 0)
 #define NVC0_NEW_CP_SURFACES  (1 << 1)
 #define NVC0_NEW_CP_TEXTURES  (1 << 2)
@@ -134,20 +136,21 @@
 #define NVC0_CB_AUX_UBO_SIZE        ((NVC0_MAX_PIPE_CONSTBUFS - 1) * 4 * 4)
 /* 8 sets of 32-bits integer pairs sample offsets */
 #define NVC0_CB_AUX_SAMPLE_INFO     0x1a0 /* FP */
-#define NVC0_CB_AUX_SAMPLE_SIZE     (8 * 4 * 2)
+/* 256 bytes, though only 64 bytes used before GM200 */
+#define NVC0_CB_AUX_SAMPLE_SIZE     (8 * 2 * 4 * 4)
 /* draw parameters (index bais, base instance, drawid) */
 #define NVC0_CB_AUX_DRAW_INFO       0x1a0 /* VP */
 /* 32 user buffers, at 4 32-bits integers each */
-#define NVC0_CB_AUX_BUF_INFO(i)     0x220 + (i) * 4 * 4
+#define NVC0_CB_AUX_BUF_INFO(i)     0x2a0 + (i) * 4 * 4
 #define NVC0_CB_AUX_BUF_SIZE        (NVC0_MAX_BUFFERS * 4 * 4)
 /* 8 surfaces, at 16 32-bits integers each */
-#define NVC0_CB_AUX_SU_INFO(i)      0x420 + (i) * 16 * 4
+#define NVC0_CB_AUX_SU_INFO(i)      0x4a0 + (i) * 16 * 4
 #define NVC0_CB_AUX_SU_SIZE         (NVC0_MAX_IMAGES * 16 * 4)
 /* 1 64-bits address and 1 32-bits sequence */
-#define NVC0_CB_AUX_MP_INFO         0x620
+#define NVC0_CB_AUX_MP_INFO         0x6a0
 #define NVC0_CB_AUX_MP_SIZE         3 * 4
 /* 512 64-byte blocks for bindless image handles */
-#define NVC0_CB_AUX_BINDLESS_INFO(i) 0x630 + (i) * 16 * 4
+#define NVC0_CB_AUX_BINDLESS_INFO(i) 0x6b0 + (i) * 16 * 4
 #define NVC0_CB_AUX_BINDLESS_SIZE   (NVE4_IMG_MAX_HANDLES * 16 * 4)
 /* 4 32-bits floats for the vertex runout, put at the end */
 #define NVC0_CB_AUX_RUNOUT_INFO     NVC0_CB_USR_SIZE + (NVC0_CB_AUX_SIZE * 6)
@@ -229,6 +232,8 @@ struct nvc0_context {
    struct list_head img_head;
 
    struct pipe_framebuffer_state framebuffer;
+   bool sample_locations_enabled;
+   uint8_t sample_locations[2 * 4 * 8];
    struct pipe_blend_color blend_colour;
    struct pipe_stencil_ref stencil_ref;
    struct pipe_poly_stipple stipple;

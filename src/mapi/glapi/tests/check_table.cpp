@@ -1260,7 +1260,6 @@ const struct name_offset known_dispatch[] = {
    { "glTextureStorage1DEXT", _O(TextureStorage1DEXT) },
    { "glTextureStorage2DEXT", _O(TextureStorage2DEXT) },
    { "glTextureStorage3DEXT", _O(TextureStorage3DEXT) },
-   { "glPolygonOffsetEXT", _O(PolygonOffsetEXT) },
    { "glSampleMaskSGIS", _O(SampleMaskSGIS) },
    { "glSamplePatternSGIS", _O(SamplePatternSGIS) },
    { "glColorPointerEXT", _O(ColorPointerEXT) },

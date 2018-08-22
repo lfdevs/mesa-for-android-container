@@ -157,17 +157,10 @@ libglx = static_library(
   build_by_default : false,
 )
 
-# workaround for bug #2180
-dummy_c = custom_target(
-  'dummy_c',
-  output : 'dummy.c',
-  command : [prog_touch, '@OUTPUT@'],
-)
-
 if with_glx == 'dri'
   libgl = shared_library(
     gl_lib_name,
-    dummy_c,  # workaround for bug #2180
+    [],
     include_directories : [inc_common, inc_glapi, inc_loader, inc_gl_internal],
     link_with : [libglapi_static, libglapi],
     link_whole : libglx,

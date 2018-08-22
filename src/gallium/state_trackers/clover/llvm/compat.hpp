@@ -54,15 +54,8 @@
 #include <llvm/Support/ErrorOr.h>
 #endif
 
-#if HAVE_LLVM >= 0x0307
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
-#else
-#include <llvm/PassManager.h>
-#include <llvm/Target/TargetLibraryInfo.h>
-#include <llvm/Target/TargetSubtargetInfo.h>
-#include <llvm/Support/FormattedStream.h>
-#endif
 
 #include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/CodeGenOptions.h>
@@ -71,12 +64,6 @@
 namespace clover {
    namespace llvm {
       namespace compat {
-#if HAVE_LLVM >= 0x0307
-         typedef ::llvm::TargetLibraryInfoImpl target_library_info;
-#else
-         typedef ::llvm::TargetLibraryInfo target_library_info;
-#endif
-
          template<typename T, typename AS>
          unsigned target_address_space(const T &target, const AS lang_as) {
             const auto &map = target.getAddressSpaceMap();
@@ -96,19 +83,6 @@ namespace clover {
 #endif
 
          inline void
-         set_lang_defaults(clang::CompilerInvocation &inv,
-                           clang::LangOptions &lopts, clang::InputKind ik,
-                           const ::llvm::Triple &t,
-                           clang::PreprocessorOptions &ppopts,
-                           clang::LangStandard::Kind std) {
-#if HAVE_LLVM >= 0x0309
-            inv.setLangDefaults(lopts, ik, t, ppopts, std);
-#else
-            inv.setLangDefaults(lopts, ik, std);
-#endif
-         }
-
-         inline void
          add_link_bitcode_file(clang::CodeGenOptions &opts,
                                const std::string &path) {
 #if HAVE_LLVM >= 0x0500
@@ -118,78 +92,8 @@ namespace clover {
             F.PropagateAttrs = true;
             F.LinkFlags = ::llvm::Linker::Flags::None;
             opts.LinkBitcodeFiles.emplace_back(F);
-#elif HAVE_LLVM >= 0x0308
+#else
             opts.LinkBitcodeFiles.emplace_back(::llvm::Linker::Flags::None, path);
-#else
-            opts.LinkBitcodeFile = path;
-#endif
-         }
-
-#if HAVE_LLVM >= 0x0307
-         typedef ::llvm::legacy::PassManager pass_manager;
-#else
-         typedef ::llvm::PassManager pass_manager;
-#endif
-
-         inline void
-         add_data_layout_pass(pass_manager &pm) {
-#if HAVE_LLVM < 0x0307
-            pm.add(new ::llvm::DataLayoutPass());
-#endif
-         }
-
-         inline void
-         add_internalize_pass(pass_manager &pm,
-                              const std::vector<std::string> &names) {
-#if HAVE_LLVM >= 0x0309
-            pm.add(::llvm::createInternalizePass(
-                      [=](const ::llvm::GlobalValue &gv) {
-                         return std::find(names.begin(), names.end(),
-                                          gv.getName()) != names.end();
-                      }));
-#else
-            pm.add(::llvm::createInternalizePass(std::vector<const char *>(
-                      map(std::mem_fn(&std::string::data), names))));
-#endif
-         }
-
-         inline std::unique_ptr< ::llvm::Linker>
-         create_linker(::llvm::Module &mod) {
-#if HAVE_LLVM >= 0x0308
-            return std::unique_ptr< ::llvm::Linker>(new ::llvm::Linker(mod));
-#else
-            return std::unique_ptr< ::llvm::Linker>(new ::llvm::Linker(&mod));
-#endif
-         }
-
-         inline bool
-         link_in_module(::llvm::Linker &linker,
-                        std::unique_ptr< ::llvm::Module> mod) {
-#if HAVE_LLVM >= 0x0308
-            return linker.linkInModule(std::move(mod));
-#else
-            return linker.linkInModule(mod.get());
-#endif
-         }
-
-#if HAVE_LLVM >= 0x0307
-         typedef ::llvm::raw_svector_ostream &raw_ostream_to_emit_file;
-#else
-         typedef ::llvm::formatted_raw_ostream raw_ostream_to_emit_file;
-#endif
-
-#if HAVE_LLVM >= 0x0307
-         typedef ::llvm::DataLayout data_layout;
-#else
-         typedef const ::llvm::DataLayout *data_layout;
-#endif
-
-         inline data_layout
-         get_data_layout(::llvm::TargetMachine &tm) {
-#if HAVE_LLVM >= 0x0307
-            return tm.createDataLayout();
-#else
-            return tm.getSubtargetImpl()->getDataLayout();
 #endif
          }
 
@@ -197,12 +101,6 @@ namespace clover {
          const auto default_code_model = ::llvm::None;
 #else
          const auto default_code_model = ::llvm::CodeModel::Default;
-#endif
-
-#if HAVE_LLVM >= 0x0309
-         const auto default_reloc_model = ::llvm::None;
-#else
-         const auto default_reloc_model = ::llvm::Reloc::Default;
 #endif
 
          template<typename M, typename F> void
@@ -245,6 +143,16 @@ namespace clover {
 		::llvm::WriteBitcodeToFile(mod, os);
 #else
 		::llvm::WriteBitcodeToFile(&mod, os);
+#endif
+	}
+
+	template<typename TM, typename PM, typename OS, typename FT>
+	bool add_passes_to_emit_file(TM &tm, PM &pm, OS &os, FT &ft)
+	{
+#if HAVE_LLVM >= 0x0700
+		return tm.addPassesToEmitFile(pm, os, nullptr, ft);
+#else
+		return tm.addPassesToEmitFile(pm, os, ft);
 #endif
 	}
 

@@ -151,7 +151,8 @@ static struct gen_group *
 create_group(struct parser_context *ctx,
              const char *name,
              const char **atts,
-             struct gen_group *parent)
+             struct gen_group *parent,
+             bool fixed_length)
 {
    struct gen_group *group;
 
@@ -161,6 +162,7 @@ create_group(struct parser_context *ctx,
 
    group->spec = ctx->spec;
    group->variable = false;
+   group->fixed_length = fixed_length;
 
    for (int i = 0; atts[i]; i += 2) {
       char *p;
@@ -370,18 +372,19 @@ start_element(void *data, const char *element_name, const char **atts)
          minor = 0;
 
       ctx->spec->gen = gen_make_gen(major, minor);
-   } else if (strcmp(element_name, "instruction") == 0 ||
-              strcmp(element_name, "struct") == 0) {
-      ctx->group = create_group(ctx, name, atts, NULL);
+   } else if (strcmp(element_name, "instruction") == 0) {
+      ctx->group = create_group(ctx, name, atts, NULL, false);
+   } else if (strcmp(element_name, "struct") == 0) {
+      ctx->group = create_group(ctx, name, atts, NULL, true);
    } else if (strcmp(element_name, "register") == 0) {
-      ctx->group = create_group(ctx, name, atts, NULL);
+      ctx->group = create_group(ctx, name, atts, NULL, true);
       get_register_offset(atts, &ctx->group->register_offset);
    } else if (strcmp(element_name, "group") == 0) {
       struct gen_group *previous_group = ctx->group;
       while (previous_group->next)
          previous_group = previous_group->next;
 
-      struct gen_group *group = create_group(ctx, "", atts, ctx->group);
+      struct gen_group *group = create_group(ctx, "", atts, ctx->group, false);
       previous_group->next = group;
       ctx->group = group;
    } else if (strcmp(element_name, "field") == 0) {
@@ -713,6 +716,9 @@ gen_group_find_field(struct gen_group *group, const char *name)
 int
 gen_group_get_length(struct gen_group *group, const uint32_t *p)
 {
+   if (group && group->fixed_length)
+      return group->dw_length;
+
    uint32_t h = p[0];
    uint32_t type = field_value(h, 29, 31);
 
@@ -835,7 +841,7 @@ iter_advance_field(struct gen_field_iterator *iter)
    }
 
    if (iter->field->name)
-      strncpy(iter->name, iter->field->name, sizeof(iter->name));
+      snprintf(iter->name, sizeof(iter->name), "%s", iter->field->name);
    else
       memset(iter->name, 0, sizeof(iter->name));
 
@@ -888,7 +894,7 @@ iter_decode_field(struct gen_field_iterator *iter)
    } v;
 
    if (iter->field->name)
-      strncpy(iter->name, iter->field->name, sizeof(iter->name));
+      snprintf(iter->name, sizeof(iter->name), "%s", iter->field->name);
    else
       memset(iter->name, 0, sizeof(iter->name));
 
@@ -981,25 +987,31 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
    memset(iter, 0, sizeof(*iter));
 
    iter->group = group;
-   if (group->fields)
-      iter->field = group->fields;
-   else
-      iter->field = group->next->fields;
    iter->p = p;
    iter->p_bit = p_bit;
 
    int length = gen_group_get_length(iter->group, iter->p);
    iter->p_end = length > 0 ? &p[length] : NULL;
    iter->print_colors = print_colors;
-
-   bool result = iter_decode_field(iter);
-   if (length >= 0)
-      assert(result);
 }
 
 bool
 gen_field_iterator_next(struct gen_field_iterator *iter)
 {
+   /* Initial condition */
+   if (!iter->field) {
+      if (iter->group->fields)
+         iter->field = iter->group->fields;
+      else
+         iter->field = iter->group->next->fields;
+
+      bool result = iter_decode_field(iter);
+      if (iter->p_end)
+         assert(result);
+
+      return true;
+   }
+
    if (!iter_advance_field(iter))
       return false;
 
@@ -1040,7 +1052,7 @@ gen_print_group(FILE *outfile, struct gen_group *group, uint64_t offset,
    int last_dword = -1;
 
    gen_field_iterator_init(&iter, group, p, p_bit, color);
-   do {
+   while (gen_field_iterator_next(&iter)) {
       int iter_dword = iter.end_bit / 32;
       if (last_dword != iter_dword) {
          for (int i = last_dword + 1; i <= iter_dword; i++)
@@ -1050,10 +1062,11 @@ gen_print_group(FILE *outfile, struct gen_group *group, uint64_t offset,
       if (!gen_field_is_header(iter.field)) {
          fprintf(outfile, "    %s: %s\n", iter.name, iter.value);
          if (iter.struct_desc) {
-            uint64_t struct_offset = offset + 4 * iter_dword;
+            int struct_dword = iter.start_bit / 32;
+            uint64_t struct_offset = offset + 4 * struct_dword;
             gen_print_group(outfile, iter.struct_desc, struct_offset,
-                            &p[iter_dword], iter.start_bit % 32, color);
+                            &p[struct_dword], iter.start_bit % 32, color);
          }
       }
-   } while (gen_field_iterator_next(&iter));
+   }
 }

@@ -22,7 +22,12 @@
 SUBDIRS = . \
 	xmlpool \
 	tests/hash_table \
-	tests/string_buffer
+	tests/string_buffer \
+	tests/set
+
+if HAVE_STD_CXX11
+SUBDIRS += tests/vma
+endif
 
 include Makefile.sources
 

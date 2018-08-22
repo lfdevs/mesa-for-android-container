@@ -191,17 +191,15 @@ void TargetNVC0::initOpInfo()
 {
    unsigned int i, j;
 
-   static const uint32_t commutative[(OP_LAST + 31) / 32] =
+   static const operation commutative[] =
    {
-      // ADD, MUL, MAD, FMA, AND, OR, XOR, MAX, MIN, SET_AND, SET_OR, SET_XOR,
-      // SET, SELP, SLCT
-      0x0ce0ca00, 0x0000007e, 0x00000000, 0x00000000
+      OP_ADD, OP_MUL, OP_MAD, OP_FMA, OP_AND, OP_OR, OP_XOR, OP_MAX, OP_MIN,
+      OP_SET_AND, OP_SET_OR, OP_SET_XOR, OP_SET, OP_SELP, OP_SLCT
    };
 
-   static const uint32_t shortForm[(OP_LAST + 31) / 32] =
+   static const operation shortForm[] =
    {
-      // ADD, MUL, MAD, FMA, AND, OR, XOR, MAX, MIN
-      0x0ce0ca00, 0x00000000, 0x00000000, 0x00000000
+      OP_ADD, OP_MUL, OP_MAD, OP_FMA, OP_AND, OP_OR, OP_XOR, OP_MAX, OP_MIN
    };
 
    static const operation noDest[] =
@@ -240,15 +238,19 @@ void TargetNVC0::initOpInfo()
 
       opInfo[i].hasDest = 1;
       opInfo[i].vector = (i >= OP_TEX && i <= OP_TEXCSAA);
-      opInfo[i].commutative = (commutative[i / 32] >> (i % 32)) & 1;
+      opInfo[i].commutative = false; /* set below */
       opInfo[i].pseudo = (i < OP_MOV);
       opInfo[i].predicate = !opInfo[i].pseudo;
       opInfo[i].flow = (i >= OP_BRA && i <= OP_JOIN);
-      opInfo[i].minEncSize = (shortForm[i / 32] & (1 << (i % 32))) ? 4 : 8;
+      opInfo[i].minEncSize = 8; /* set below */
    }
-   for (i = 0; i < sizeof(noDest) / sizeof(noDest[0]); ++i)
+   for (i = 0; i < ARRAY_SIZE(commutative); ++i)
+      opInfo[commutative[i]].commutative = true;
+   for (i = 0; i < ARRAY_SIZE(shortForm); ++i)
+      opInfo[shortForm[i]].minEncSize = 4;
+   for (i = 0; i < ARRAY_SIZE(noDest); ++i)
       opInfo[noDest[i]].hasDest = 0;
-   for (i = 0; i < sizeof(noPred) / sizeof(noPred[0]); ++i)
+   for (i = 0; i < ARRAY_SIZE(noPred); ++i)
       opInfo[noPred[i]].predicate = 0;
 
    initProps(_initProps, ARRAY_SIZE(_initProps));

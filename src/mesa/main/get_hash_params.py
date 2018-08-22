@@ -355,6 +355,19 @@ descriptor=[
 # GL_ARB_robustness / GL_KHR_robustness
   [ "CONTEXT_ROBUST_ACCESS", "CONTEXT_ENUM16(Const.RobustAccess), extra_KHR_robustness" ],
   [ "RESET_NOTIFICATION_STRATEGY_ARB", "CONTEXT_ENUM16(Const.ResetStrategy), extra_KHR_robustness_or_GL" ],
+
+# GL_NV_conservative_raster
+  [ "SUBPIXEL_PRECISION_BIAS_X_BITS_NV", "CONTEXT_UINT(SubpixelPrecisionBias[0]), extra_NV_conservative_raster" ],
+  [ "SUBPIXEL_PRECISION_BIAS_Y_BITS_NV", "CONTEXT_UINT(SubpixelPrecisionBias[1]), extra_NV_conservative_raster" ],
+  [ "MAX_SUBPIXEL_PRECISION_BIAS_BITS_NV", "CONTEXT_UINT(Const.MaxSubpixelPrecisionBiasBits), extra_NV_conservative_raster" ],
+
+# GL_NV_conservative_raster_dilate
+  [ "CONSERVATIVE_RASTER_DILATE_RANGE_NV", "CONTEXT_FLOAT2(Const.ConservativeRasterDilateRange), extra_NV_conservative_raster_dilate" ],
+  [ "CONSERVATIVE_RASTER_DILATE_GRANULARITY_NV", "CONTEXT_FLOAT(Const.ConservativeRasterDilateGranularity), extra_NV_conservative_raster_dilate" ],
+  [ "CONSERVATIVE_RASTER_DILATE_NV", "CONTEXT_FLOAT(ConservativeRasterDilate), extra_NV_conservative_raster_dilate" ],
+
+# GL_NV_conservative_raster_pre_snap_triangles
+  [ "CONSERVATIVE_RASTER_MODE_NV", "CONTEXT_ENUM16(ConservativeRasterMode), extra_NV_conservative_raster_pre_snap_triangles" ],
 ]},
 
 # GLES3 is not a typo.
@@ -438,6 +451,11 @@ descriptor=[
   [ "MAX_WINDOW_RECTANGLES_EXT", "CONTEXT_INT(Const.MaxWindowRectangles), extra_EXT_window_rectangles" ],
   [ "NUM_WINDOW_RECTANGLES_EXT", "CONTEXT_INT(Scissor.NumWindowRects), extra_EXT_window_rectangles" ],
   [ "WINDOW_RECTANGLE_MODE_EXT", "CONTEXT_ENUM16(Scissor.WindowRectMode), extra_EXT_window_rectangles" ],
+
+  # GL_ARB_gpu_shader5 / GL_OES_shader_multisample_interpolation
+  [ "MIN_FRAGMENT_INTERPOLATION_OFFSET", "CONTEXT_FLOAT(Const.MinFragmentInterpolationOffset), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
+  [ "MAX_FRAGMENT_INTERPOLATION_OFFSET", "CONTEXT_FLOAT(Const.MaxFragmentInterpolationOffset), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
+  [ "FRAGMENT_INTERPOLATION_OFFSET_BITS", "CONST(FRAGMENT_INTERPOLATION_OFFSET_BITS), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
 ]},
 
 { "apis": ["GLES", "GLES2"], "params": [
@@ -545,18 +563,13 @@ descriptor=[
 
   # GL_NUM_SHADING_LANGUAGE_VERSIONS
   [ "NUM_SHADING_LANGUAGE_VERSIONS", "LOC_CUSTOM, TYPE_INT, 0, extra_version_43" ],
-]},
 
-# Enums in OpenGL Core profile and ES 3.0
-{ "apis": ["GL_CORE", "GLES3"], "params": [
-  # GL_ARB_gpu_shader5 / GL_OES_shader_multisample_interpolation
-  [ "MIN_FRAGMENT_INTERPOLATION_OFFSET", "CONTEXT_FLOAT(Const.MinFragmentInterpolationOffset), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
-  [ "MAX_FRAGMENT_INTERPOLATION_OFFSET", "CONTEXT_FLOAT(Const.MaxFragmentInterpolationOffset), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
-  [ "FRAGMENT_INTERPOLATION_OFFSET_BITS", "CONST(FRAGMENT_INTERPOLATION_OFFSET_BITS), extra_ARB_gpu_shader5_or_OES_sample_variables" ],
-]},
+  # GL_ARB_sample_locations
+  [ "SAMPLE_LOCATION_SUBPIXEL_BITS_ARB", "LOC_CUSTOM, TYPE_UINT, 0, extra_ARB_sample_locations" ],
+  [ "SAMPLE_LOCATION_PIXEL_GRID_WIDTH_ARB", "LOC_CUSTOM, TYPE_UINT, 0, extra_ARB_sample_locations" ],
+  [ "SAMPLE_LOCATION_PIXEL_GRID_HEIGHT_ARB", "LOC_CUSTOM, TYPE_UINT, 0, extra_ARB_sample_locations" ],
+  [ "PROGRAMMABLE_SAMPLE_LOCATION_TABLE_SIZE_ARB", "LOC_CUSTOM, TYPE_UINT, 0, extra_ARB_sample_locations" ],
 
-# Enums in OpenGL Core profile and ES 3.1
-{ "apis": ["GL_CORE", "GLES31"], "params": [
 # GL_ARB_draw_indirect / GLES 3.1
   [ "DRAW_INDIRECT_BUFFER_BINDING", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_draw_indirect" ],
 
@@ -637,12 +650,11 @@ descriptor=[
   [ "CONSERVATIVE_RASTERIZATION_INTEL", "CONTEXT_BOOL(IntelConservativeRasterization), extra_INTEL_conservative_rasterization" ],
 ]},
 
-{ "apis": ["GL_CORE", "GLES32"], "params": [
+# Enums in OpenGL and ES 3.2
+{ "apis": ["GL", "GL_CORE", "GLES32"], "params": [
   [ "MULTISAMPLE_LINE_WIDTH_RANGE_ARB", "CONTEXT_FLOAT2(Const.MinLineWidthAA), extra_ES32" ],
   [ "MULTISAMPLE_LINE_WIDTH_GRANULARITY_ARB", "CONTEXT_FLOAT(Const.LineWidthGranularity), extra_ES32" ],
-]},
 
-{ "apis": ["GL", "GL_CORE", "GLES32"], "params": [
 # GL 3.0 or ES 3.2
   [ "CONTEXT_FLAGS", "CONTEXT_INT(Const.ContextFlags), extra_version_30" ],
 ]},
@@ -746,7 +758,6 @@ descriptor=[
   [ "PIXEL_MAP_S_TO_S_SIZE", "CONTEXT_INT(PixelMaps.StoS.Size), NO_EXTRA" ],
   [ "POINT_SIZE_GRANULARITY", "CONTEXT_FLOAT(Const.PointSizeGranularity), NO_EXTRA" ],
   [ "POLYGON_MODE", "CONTEXT_ENUM2(Polygon.FrontMode), NO_EXTRA" ],
-  [ "POLYGON_OFFSET_BIAS_EXT", "CONTEXT_FLOAT(Polygon.OffsetUnits), NO_EXTRA" ],
   [ "POLYGON_OFFSET_POINT", "CONTEXT_BOOL(Polygon.OffsetPoint), NO_EXTRA" ],
   [ "POLYGON_OFFSET_LINE", "CONTEXT_BOOL(Polygon.OffsetLine), NO_EXTRA" ],
   [ "POLYGON_SMOOTH", "CONTEXT_BOOL(Polygon.SmoothFlag), NO_EXTRA" ],
@@ -964,17 +975,13 @@ descriptor=[
 
 # GL_ARB_sparse_buffer
   [ "SPARSE_BUFFER_PAGE_SIZE_ARB", "CONTEXT_INT(Const.SparseBufferPageSize), extra_ARB_sparse_buffer" ],
-]},
 
-# Enums restricted to OpenGL Core profile
-{ "apis": ["GL_CORE"], "params": [
 # GL_ARB_shader_subroutine
   [ "MAX_SUBROUTINES", "CONST(MAX_SUBROUTINES), NO_EXTRA" ],
   [ "MAX_SUBROUTINE_UNIFORM_LOCATIONS", "CONST(MAX_SUBROUTINE_UNIFORM_LOCATIONS), NO_EXTRA" ],
 
 # GL_ARB_indirect_parameters
   [ "PARAMETER_BUFFER_BINDING_ARB", "LOC_CUSTOM, TYPE_INT, 0, extra_ARB_indirect_parameters" ],
-
-]}
+]},
 
 ]

@@ -284,7 +284,11 @@ extern int INTEL_DEBUG;
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
+#if ANDROID_API_LEVEL >= 26
+#include <log/log.h>
+#else
 #include <cutils/log.h>
+#endif /* use log/log.h start from android 8 major version */
 #ifndef ALOGW
 #define ALOGW LOGW
 #endif

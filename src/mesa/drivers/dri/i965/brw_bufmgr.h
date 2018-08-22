@@ -37,6 +37,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
+
 #include "util/u_atomic.h"
 #include "util/list.h"
 
@@ -46,6 +48,42 @@ extern "C" {
 
 struct gen_device_info;
 struct brw_context;
+
+/**
+ * Memory zones.  When allocating a buffer, you can request that it is
+ * placed into a specific region of the virtual address space (PPGTT).
+ *
+ * Most buffers can go anywhere (BRW_MEMZONE_OTHER).  Some buffers are
+ * accessed via an offset from a base address.  STATE_BASE_ADDRESS has
+ * a maximum 4GB size for each region, so we need to restrict those
+ * buffers to be within 4GB of the base.  Each memory zone corresponds
+ * to a particular base address.
+ *
+ * Currently, i965 partitions the address space into two regions:
+ *
+ * - Low 4GB
+ * - Full 48-bit address space
+ *
+ * Eventually, we hope to carve out 4GB of VMA for each base address.
+ */
+enum brw_memory_zone {
+   BRW_MEMZONE_LOW_4G,
+   BRW_MEMZONE_OTHER,
+
+   /* Shaders - Instruction State Base Address */
+   BRW_MEMZONE_SHADER  = BRW_MEMZONE_LOW_4G,
+
+   /* Scratch - General State Base Address */
+   BRW_MEMZONE_SCRATCH = BRW_MEMZONE_LOW_4G,
+
+   /* Surface State Base Address */
+   BRW_MEMZONE_SURFACE = BRW_MEMZONE_LOW_4G,
+
+   /* Dynamic State Base Address */
+   BRW_MEMZONE_DYNAMIC = BRW_MEMZONE_LOW_4G,
+};
+
+#define BRW_MEMZONE_COUNT (BRW_MEMZONE_OTHER + 1)
 
 struct brw_bo {
    /**
@@ -168,7 +206,7 @@ struct brw_bo {
  * using brw_bo_map() to be used by the CPU.
  */
 struct brw_bo *brw_bo_alloc(struct brw_bufmgr *bufmgr, const char *name,
-                            uint64_t size);
+                            uint64_t size, enum brw_memory_zone memzone);
 
 /**
  * Allocate a tiled buffer object.
@@ -184,6 +222,7 @@ struct brw_bo *brw_bo_alloc(struct brw_bufmgr *bufmgr, const char *name,
 struct brw_bo *brw_bo_alloc_tiled(struct brw_bufmgr *bufmgr,
                                   const char *name,
                                   uint64_t size,
+                                  enum brw_memory_zone memzone,
                                   uint32_t tiling_mode,
                                   uint32_t pitch,
                                   unsigned flags);
@@ -206,6 +245,7 @@ struct brw_bo *brw_bo_alloc_tiled(struct brw_bufmgr *bufmgr,
 struct brw_bo *brw_bo_alloc_tiled_2d(struct brw_bufmgr *bufmgr,
                                      const char *name,
                                      int x, int y, int cpp,
+                                     enum brw_memory_zone memzone,
                                      uint32_t tiling_mode,
                                      uint32_t *pitch,
                                      unsigned flags);
@@ -331,6 +371,8 @@ uint32_t brw_bo_export_gem_handle(struct brw_bo *bo);
 
 int brw_reg_read(struct brw_bufmgr *bufmgr, uint32_t offset,
                  uint64_t *result);
+
+bool brw_using_softpin(struct brw_bufmgr *bufmgr);
 
 /** @{ */
 

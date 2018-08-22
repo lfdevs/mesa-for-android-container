@@ -557,7 +557,7 @@ NineBaseTexture9_UpdateSamplerView( struct NineBaseTexture9 *This,
     srgb_format = util_format_srgb(resource->format);
     if (sRGB && srgb_format != PIPE_FORMAT_NONE &&
         screen->is_format_supported(screen, srgb_format,
-                                    resource->target, 0, resource->bind))
+                                    resource->target, 0, 0, resource->bind))
         templ.format = srgb_format;
     else
         templ.format = resource->format;

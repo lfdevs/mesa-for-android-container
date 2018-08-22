@@ -43,7 +43,7 @@ int main(int argc, char **argv)
    pthread_mutex_init(&device.mutex, NULL);
 
    for (unsigned i = 0; i < NUM_RUNS; i++) {
-      anv_state_pool_init(&state_pool, &device, 256, 0);
+      anv_state_pool_init(&state_pool, &device, 4096, 256, 0);
 
       /* Grab one so a zero offset is impossible */
       anv_state_pool_alloc(&state_pool, 16, 16);

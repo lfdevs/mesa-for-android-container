@@ -429,7 +429,8 @@ struct dd_function_table {
 			   struct gl_renderbuffer *rb,
 			   GLuint x, GLuint y, GLuint w, GLuint h,
 			   GLbitfield mode,
-			   GLubyte **mapOut, GLint *rowStrideOut);
+			   GLubyte **mapOut, GLint *rowStrideOut,
+			   bool flip_y);
 
    void (*UnmapRenderbuffer)(struct gl_context *ctx,
 			     struct gl_renderbuffer *rb);
@@ -611,7 +612,9 @@ struct dd_function_table {
    /** Specify mapping of depth values from NDC to window coordinates */
    void (*DepthRange)(struct gl_context *ctx);
    /** Specify the current buffer for writing */
-   void (*DrawBuffer)( struct gl_context *ctx, GLenum buffer );
+   void (*DrawBuffer)(struct gl_context *ctx);
+   /** Used to allocated any buffers with on-demand creation */
+   void (*DrawBufferAllocate)(struct gl_context *ctx);
    /** Enable or disable server-side gl capabilities */
    void (*Enable)(struct gl_context *ctx, GLenum cap, GLboolean state);
    /** Specify fog parameters */
@@ -784,6 +787,14 @@ struct dd_function_table {
    void (*DiscardFramebuffer)(struct gl_context *ctx,
                               GLenum target, GLsizei numAttachments,
                               const GLenum *attachments);
+
+   /**
+    * \name Functions for GL_ARB_sample_locations
+    */
+   void (*GetProgrammableSampleCaps)(struct gl_context *ctx,
+                                     const struct gl_framebuffer *fb,
+                                     GLuint *bits, GLuint *width, GLuint *height);
+   void (*EvaluateDepthValues)(struct gl_context *ctx);
 
    /**
     * \name Query objects
@@ -1208,6 +1219,7 @@ struct dd_function_table {
    void (*GetProgramBinaryDriverSHA1)(struct gl_context *ctx, uint8_t *sha1);
 
    void (*ProgramBinarySerializeDriverBlob)(struct gl_context *ctx,
+                                            struct gl_shader_program *shProg,
                                             struct gl_program *prog);
 
    void (*ProgramBinaryDeserializeDriverBlob)(struct gl_context *ctx,
@@ -1271,6 +1283,21 @@ struct dd_function_table {
    void (*ImportSemaphoreFd)(struct gl_context *ctx,
                                 struct gl_semaphore_object *semObj,
                                 int fd);
+   /*@}*/
+
+   /**
+    * \name Disk shader cache functions
+    */
+   /*@{*/
+   /**
+    * Called to initialize gl_program::driver_cache_blob (and size) with a
+    * ralloc allocated buffer.
+    *
+    * This buffer will be saved and restored as part of the gl_program
+    * serialization and deserialization.
+    */
+   void (*ShaderCacheSerializeDriverBlob)(struct gl_context *ctx,
+                                          struct gl_program *prog);
    /*@}*/
 };
 

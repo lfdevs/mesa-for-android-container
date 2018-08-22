@@ -40,9 +40,6 @@ if with_platform_haiku
   subdir('winsys/sw/hgl')
 endif
 if with_gallium_swr
-  if meson.version().version_compare('< 0.44.0')
-    error('SWR requires meson 0.44.0 or greater.')
-  endif
   subdir('drivers/swr')
 else
   driver_swr = declare_dependency()
@@ -97,11 +94,11 @@ if with_gallium_pl111
 else
   driver_pl111 = declare_dependency()
 endif
-if with_gallium_vc5
-  subdir('winsys/vc5/drm')
-  subdir('drivers/vc5')
+if with_gallium_v3d
+  subdir('winsys/v3d/drm')
+  subdir('drivers/v3d')
 else
-  driver_vc5 = declare_dependency()
+  driver_v3d = declare_dependency()
 endif
 if with_gallium_etnaviv
   subdir('winsys/etnaviv/drm')
@@ -144,9 +141,6 @@ if with_gallium_opencl
   # consumer
   subdir('targets/pipe-loader')
 
-  if meson.version().version_compare('< 0.44.0')
-    error('OpenCL requires meson 0.44.0 or greater.')
-  endif
   subdir('state_trackers/clover')
   subdir('targets/opencl')
 endif

@@ -290,13 +290,13 @@ vmw_ioctl_surface_req(const struct vmw_winsys_screen *vws,
    int ret;
 
    switch(whandle->type) {
-   case DRM_API_HANDLE_TYPE_SHARED:
-   case DRM_API_HANDLE_TYPE_KMS:
+   case WINSYS_HANDLE_TYPE_SHARED:
+   case WINSYS_HANDLE_TYPE_KMS:
       *needs_unref = FALSE;
       req->handle_type = DRM_VMW_HANDLE_LEGACY;
       req->sid = whandle->handle;
       break;
-   case DRM_API_HANDLE_TYPE_FD:
+   case WINSYS_HANDLE_TYPE_FD:
       if (!vws->ioctl.have_drm_2_6) {
          uint32_t handle;
 

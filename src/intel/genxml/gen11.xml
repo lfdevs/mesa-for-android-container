@@ -2934,7 +2934,7 @@
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
     <field name="Stereoscopic 3D Mode" start="63" end="63" type="bool"/>
     <field name="Display Buffer Pitch" start="38" end="47" type="uint"/>
-    <field name="Tile Parameter" start="32" end="34" type="bool"/>
+    <field name="Tile Parameter" start="32" end="34" type="uint"/>
     <field name="Display Buffer Base Address" start="76" end="95" type="address"/>
     <field name="VRR Master Flip" start="75" end="75" type="uint"/>
     <field name="Flip Type" start="64" end="65" type="uint">
@@ -3016,7 +3016,7 @@
       <value name="Display Plane 1 C" value="4"/>
       <value name="Display Plane 1 D" value="5"/>
     </field>
-    <field name="Scan Line Event Done Forward" start="17" end="18" type="bool"/>
+    <field name="Scan Line Event Done Forward" start="17" end="18" type="uint"/>
     <field name="DWord Length" start="0" end="5" type="uint" default="0"/>
     <field name="Start Scan Line Number" start="48" end="60" type="uint"/>
     <field name="End Scan Line Number" start="32" end="44" type="uint"/>
@@ -3250,9 +3250,9 @@
   <instruction name="MI_WAIT_FOR_EVENT_2" bias="1" length="1">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="4"/>
-    <field name="Display Pipe Scan Line Wait Enable" start="12" end="14" type="bool"/>
-    <field name="Display Pipe Vertical Blank Wait Enable" start="8" end="10" type="bool"/>
-    <field name="Display Plane Flip Pending Wait Enable" start="0" end="5" type="bool"/>
+    <field name="Display Pipe Scan Line Wait Enable" start="12" end="14" type="uint"/>
+    <field name="Display Pipe Vertical Blank Wait Enable" start="8" end="10" type="uint"/>
+    <field name="Display Plane Flip Pending Wait Enable" start="0" end="5" type="uint"/>
   </instruction>
 
   <instruction name="PIPELINE_SELECT" bias="1" length="1">
@@ -3629,6 +3629,10 @@
     <field name="3D Rendering Instruction Disable" start="0" end="0" type="bool"/>
     <field name="Media Instruction Disable" start="1" end="1" type="bool"/>
     <field name="CONSTANT_BUFFER Address Offset Disable" start="4" end="4" type="bool"/>
+
+    <field name="3D Rendering Instruction Disable Mask" start="16" end="16" type="bool"/>
+    <field name="Media Instruction Disable Mask" start="17" end="17" type="bool"/>
+    <field name="CONSTANT_BUFFER Address Offset Disable Mask" start="20" end="20" type="bool"/>
   </register>
 
 </genxml>

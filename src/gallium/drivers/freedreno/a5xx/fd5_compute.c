@@ -70,13 +70,28 @@ fd5_delete_compute_state(struct pipe_context *pctx, void *hwcso)
 
 /* maybe move to fd5_program? */
 static void
-cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v)
+cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v,
+		const struct pipe_grid_info *info)
 {
+	const unsigned *local_size = info->block;
 	const struct ir3_info *i = &v->info;
 	enum a3xx_threadsize thrsz;
+	unsigned instrlen = v->instrlen;
 
-	/* note: blob uses local_size_x/y/z threshold to choose threadsize: */
-	thrsz = FOUR_QUADS;
+	/* if shader is more than 32*16 instructions, don't preload it.  Similar
+	 * to the combined restriction of 64*16 for VS+FS
+	 */
+	if (instrlen > 32)
+		instrlen = 0;
+
+	/* maybe the limit should be 1024.. basically if we can't have full
+	 * occupancy, use TWO_QUAD mode to reduce divergence penalty.
+	 */
+	if ((local_size[0] * local_size[1] * local_size[2]) < 512) {
+		thrsz = TWO_QUADS;
+	} else {
+		thrsz = FOUR_QUADS;
+	}
 
 	OUT_PKT4(ring, REG_A5XX_SP_SP_CNTL, 1);
 	OUT_RING(ring, 0x00000000);        /* SP_SP_CNTL */
@@ -99,7 +114,7 @@ cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v)
 		A5XX_HLSQ_CS_CONFIG_ENABLED);
 
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_CNTL, 1);
-	OUT_RING(ring, A5XX_HLSQ_CS_CNTL_INSTRLEN(v->instrlen) |
+	OUT_RING(ring, A5XX_HLSQ_CS_CNTL_INSTRLEN(instrlen) |
 		COND(v->has_ssbo, A5XX_HLSQ_CS_CNTL_SSBO_ENABLE));
 
 	OUT_PKT4(ring, REG_A5XX_SP_CS_CONFIG, 1);
@@ -110,7 +125,7 @@ cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v)
 	unsigned constlen = align(v->constlen, 4) / 4;
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_CONSTLEN, 2);
 	OUT_RING(ring, constlen);          /* HLSQ_CS_CONSTLEN */
-	OUT_RING(ring, v->instrlen);       /* HLSQ_CS_INSTRLEN */
+	OUT_RING(ring, instrlen);          /* HLSQ_CS_INSTRLEN */
 
 	OUT_PKT4(ring, REG_A5XX_SP_CS_OBJ_START_LO, 2);
 	OUT_RELOC(ring, v->bo, 0, 0, 0);   /* SP_CS_OBJ_START_LO/HI */
@@ -129,7 +144,8 @@ cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v)
 		A5XX_HLSQ_CS_CNTL_0_LOCALIDREGID(local_invocation_id));
 	OUT_RING(ring, 0x1);               /* HLSQ_CS_CNTL_1 */
 
-	fd5_emit_shader(ring, v);
+	if (instrlen > 0)
+		fd5_emit_shader(ring, v);
 }
 
 static void
@@ -144,7 +160,7 @@ emit_setup(struct fd_context *ctx)
 	OUT_RING(ring, 0x0);
 
 	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, UNK_19);
+	OUT_RING(ring, PC_CCU_INVALIDATE_COLOR);
 
 	OUT_PKT4(ring, REG_A5XX_PC_POWER_CNTL, 1);
 	OUT_RING(ring, 0x00000003);   /* PC_POWER_CNTL */
@@ -173,9 +189,11 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 	emit_setup(ctx);
 
 	v = ir3_shader_variant(so->shader, key, &ctx->debug);
+	if (!v)
+		return;
 
 	if (ctx->dirty_shader[PIPE_SHADER_COMPUTE] & FD_DIRTY_SHADER_PROG)
-		cs_program_emit(ring, v);
+		cs_program_emit(ring, v, info);
 
 	fd5_emit_cs_state(ctx, ring, v);
 	ir3_emit_cs_consts(v, ring, ctx, info);
@@ -206,12 +224,12 @@ fd5_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 		A5XX_HLSQ_CS_NDRANGE_0_LOCALSIZEX(local_size[0] - 1) |
 		A5XX_HLSQ_CS_NDRANGE_0_LOCALSIZEY(local_size[1] - 1) |
 		A5XX_HLSQ_CS_NDRANGE_0_LOCALSIZEZ(local_size[2] - 1));
-	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_1_SIZE_X(local_size[0] * num_groups[0]));
-	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_2 */
-	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_3_SIZE_Y(local_size[1] * num_groups[1]));
-	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_4 */
-	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_5_SIZE_Z(local_size[2] * num_groups[2]));
-	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_6 */
+	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_1_GLOBALSIZE_X(local_size[0] * num_groups[0]));
+	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_2_GLOBALOFF_X */
+	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_3_GLOBALSIZE_Y(local_size[1] * num_groups[1]));
+	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_4_GLOBALOFF_Y */
+	OUT_RING(ring, A5XX_HLSQ_CS_NDRANGE_5_GLOBALSIZE_Z(local_size[2] * num_groups[2]));
+	OUT_RING(ring, 0);            /* HLSQ_CS_NDRANGE_6_GLOBALOFF_Z */
 
 	OUT_PKT4(ring, REG_A5XX_HLSQ_CS_KERNEL_GROUP_X, 3);
 	OUT_RING(ring, 1);            /* HLSQ_CS_KERNEL_GROUP_X */

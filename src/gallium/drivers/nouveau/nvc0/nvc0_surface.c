@@ -754,6 +754,16 @@ nvc0_clear(struct pipe_context *pipe, unsigned buffers,
    }
 }
 
+static void
+gm200_evaluate_depth_buffer(struct pipe_context *pipe)
+{
+   struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+
+   nvc0_state_validate_3d(nvc0, NVC0_NEW_3D_FRAMEBUFFER);
+   IMMED_NVC0(push, SUBC_3D(0x11fc), 1);
+}
+
 
 /* =============================== BLIT CODE ===================================
  */
@@ -1720,4 +1730,6 @@ nvc0_init_surface_functions(struct nvc0_context *nvc0)
    pipe->clear_depth_stencil = nvc0_clear_depth_stencil;
    pipe->clear_texture = nv50_clear_texture;
    pipe->clear_buffer = nvc0_clear_buffer;
+   if (nvc0->screen->base.class_3d >= GM200_3D_CLASS)
+      pipe->evaluate_depth_buffer = gm200_evaluate_depth_buffer;
 }

@@ -85,7 +85,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					psurf->u.tex.first_layer);
 
 			if (gmem) {
-				stride = gmem->bin_w * rsc->cpp;
+				stride = gmem->bin_w * gmem->cbuf_cpp[i];
 				size = stride * gmem->bin_h;
 				base = gmem->cbuf_base[i];
 			} else {
@@ -580,21 +580,23 @@ fd5_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	emit_zs(ring, pfb->zsbuf, gmem);
 	emit_mrt(ring, pfb->nr_cbufs, pfb->cbufs, gmem);
 
-	// TODO MSAA
+	enum a3xx_msaa_samples samples = fd_msaa_samples(pfb->samples);
+
 	OUT_PKT4(ring, REG_A5XX_TPL1_TP_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A5XX_TPL1_TP_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A5XX_TPL1_TP_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			A5XX_TPL1_TP_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A5XX_TPL1_TP_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A5XX_TPL1_TP_DEST_MSAA_CNTL_SAMPLES(samples) |
+			COND(samples == MSAA_ONE, A5XX_TPL1_TP_DEST_MSAA_CNTL_MSAA_DISABLE));
 
 	OUT_PKT4(ring, REG_A5XX_RB_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A5XX_RB_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A5XX_RB_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			A5XX_RB_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A5XX_RB_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A5XX_RB_DEST_MSAA_CNTL_SAMPLES(samples) |
+			COND(samples == MSAA_ONE, A5XX_RB_DEST_MSAA_CNTL_MSAA_DISABLE));
+
 
 	OUT_PKT4(ring, REG_A5XX_GRAS_SC_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A5XX_GRAS_SC_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A5XX_GRAS_SC_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			A5XX_GRAS_SC_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A5XX_GRAS_SC_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A5XX_GRAS_SC_DEST_MSAA_CNTL_SAMPLES(samples) |
+			COND(samples == MSAA_ONE, A5XX_GRAS_SC_DEST_MSAA_CNTL_MSAA_DISABLE));
 }
 
 
@@ -639,6 +641,11 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 
 	OUT_PKT4(ring, REG_A5XX_RB_BLIT_CNTL, 1);
 	OUT_RING(ring, A5XX_RB_BLIT_CNTL_BUF(buf));
+
+//	bool msaa_resolve = pfb->samples > 1;
+	bool msaa_resolve = false;
+	OUT_PKT4(ring, REG_A5XX_RB_CLEAR_CNTL, 1);
+	OUT_RING(ring, COND(msaa_resolve, A5XX_RB_CLEAR_CNTL_MSAA_RESOLVE));
 
 	fd5_emit_blit(batch->ctx, ring);
 }
@@ -700,7 +707,7 @@ fd5_emit_sysmem_prep(struct fd_batch *batch)
 	OUT_RING(ring, 0x0);
 
 	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, UNK_19);
+	OUT_RING(ring, PC_CCU_INVALIDATE_COLOR);
 
 	OUT_PKT4(ring, REG_A5XX_PC_POWER_CNTL, 1);
 	OUT_RING(ring, 0x00000003);   /* PC_POWER_CNTL */
@@ -742,7 +749,6 @@ fd5_emit_sysmem_prep(struct fd_batch *batch)
 	emit_zs(ring, pfb->zsbuf, NULL);
 	emit_mrt(ring, pfb->nr_cbufs, pfb->cbufs, NULL);
 
-	// TODO MSAA
 	OUT_PKT4(ring, REG_A5XX_TPL1_TP_RAS_MSAA_CNTL, 2);
 	OUT_RING(ring, A5XX_TPL1_TP_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
 	OUT_RING(ring, A5XX_TPL1_TP_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |

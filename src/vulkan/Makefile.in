@@ -95,15 +95,24 @@ target_triplet = @target@
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
 @HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_3 = \
+@HAVE_PLATFORM_DRM_TRUE@am__append_3 = \
+@HAVE_PLATFORM_DRM_TRUE@	-DVK_USE_PLATFORM_DISPLAY_KHR
+
+@HAVE_PLATFORM_DRM_TRUE@am__append_4 = $(VULKAN_WSI_DISPLAY_FILES)
+@HAVE_XLIB_LEASE_TRUE@am__append_5 = \
+@HAVE_XLIB_LEASE_TRUE@	$(XCB_RANDR_CFLAGS) \
+@HAVE_XLIB_LEASE_TRUE@	$(XLIB_RANDR_CFLAGS) \
+@HAVE_XLIB_LEASE_TRUE@	-DVK_USE_PLATFORM_XLIB_XRANDR_EXT
+
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-I$(top_builddir)/src/vulkan/wsi \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_7 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(VULKAN_WSI_WAYLAND_FILES)
 
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(VULKAN_WSI_WAYLAND_GENERATED_FILES)
 
 subdir = src/vulkan
@@ -141,19 +150,23 @@ libvulkan_wsi_la_LIBADD =
 am__libvulkan_wsi_la_SOURCES_DIST = wsi/wsi_common.c wsi/wsi_common.h \
 	wsi/wsi_common_private.h wsi/wsi_common_queue.h \
 	wsi/wsi_common_x11.c wsi/wsi_common_x11.h \
+	wsi/wsi_common_display.c wsi/wsi_common_display.h \
 	wsi/wsi_common_wayland.c wsi/wsi_common_wayland.h
 am__objects_4 = wsi/wsi_common.lo
 am__objects_5 = wsi/wsi_common_x11.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_6 = $(am__objects_5)
-am__objects_7 = wsi/wsi_common_wayland.lo
-@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_8 = $(am__objects_7)
-am__objects_9 = $(am__objects_4) $(am__objects_6) $(am__objects_8)
-am_libvulkan_wsi_la_OBJECTS = $(am__objects_9)
-am__objects_10 = wsi/wayland-drm-protocol.lo \
+am__objects_7 = wsi/wsi_common_display.lo
+@HAVE_PLATFORM_DRM_TRUE@am__objects_8 = $(am__objects_7)
+am__objects_9 = wsi/wsi_common_wayland.lo
+@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_10 = $(am__objects_9)
+am__objects_11 = $(am__objects_4) $(am__objects_6) $(am__objects_8) \
+	$(am__objects_10)
+am_libvulkan_wsi_la_OBJECTS = $(am__objects_11)
+am__objects_12 = wsi/wayland-drm-protocol.lo \
 	wsi/linux-dmabuf-unstable-v1-protocol.lo
-@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_11 = $(am__objects_10)
-am__objects_12 = $(am__objects_11)
-nodist_libvulkan_wsi_la_OBJECTS = $(am__objects_12)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_13 = $(am__objects_12)
+am__objects_14 = $(am__objects_13)
+nodist_libvulkan_wsi_la_OBJECTS = $(am__objects_14)
 libvulkan_wsi_la_OBJECTS = $(am_libvulkan_wsi_la_OBJECTS) \
 	$(nodist_libvulkan_wsi_la_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
@@ -233,6 +246,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -413,6 +428,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -420,8 +437,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -435,6 +452,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -455,10 +474,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -516,6 +539,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -547,6 +571,10 @@ VULKAN_WSI_WAYLAND_GENERATED_FILES := \
 VULKAN_WSI_X11_FILES := \
 	wsi/wsi_common_x11.c \
 	wsi/wsi_common_x11.h
+
+VULKAN_WSI_DISPLAY_FILES := \
+	wsi/wsi_common_display.c \
+	wsi/wsi_common_display.h
 
 VULKAN_UTIL_FILES := \
 	util/vk_alloc.h \
@@ -580,14 +608,14 @@ AM_CPPFLAGS = $(DEFINES) -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/vulkan/util \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include $(am__append_1) \
-	$(am__append_3)
+	$(am__append_3) $(am__append_5) $(am__append_6)
 AM_CFLAGS = \
 	$(LIBDRM_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-VULKAN_WSI_GENERATED_SOURCES = $(am__append_5)
+VULKAN_WSI_GENERATED_SOURCES = $(am__append_8)
 VULKAN_WSI_SOURCES = $(VULKAN_WSI_FILES) $(am__append_2) \
-	$(am__append_4)
+	$(am__append_4) $(am__append_7)
 CLEANFILES = \
 	$(VULKAN_UTIL_GENERATED_FILES) \
 	$(VULKAN_WSI_WAYLAND_GENERATED_FILES)
@@ -664,6 +692,8 @@ wsi/$(DEPDIR)/$(am__dirstamp):
 wsi/wsi_common.lo: wsi/$(am__dirstamp) wsi/$(DEPDIR)/$(am__dirstamp)
 wsi/wsi_common_x11.lo: wsi/$(am__dirstamp) \
 	wsi/$(DEPDIR)/$(am__dirstamp)
+wsi/wsi_common_display.lo: wsi/$(am__dirstamp) \
+	wsi/$(DEPDIR)/$(am__dirstamp)
 wsi/wsi_common_wayland.lo: wsi/$(am__dirstamp) \
 	wsi/$(DEPDIR)/$(am__dirstamp)
 wsi/wayland-drm-protocol.lo: wsi/$(am__dirstamp) \
@@ -690,6 +720,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/linux-dmabuf-unstable-v1-protocol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wayland-drm-protocol.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common_display.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common_wayland.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@wsi/$(DEPDIR)/wsi_common_x11.Plo@am__quote@
 

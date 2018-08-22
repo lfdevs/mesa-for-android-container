@@ -105,6 +105,7 @@ static const struct gen_device_info gen_device_info_i965 = {
       .size = 256,
    },
    .timestamp_frequency = 12500000,
+   .simulator_id = -1,
 };
 
 static const struct gen_device_info gen_device_info_g4x = {
@@ -124,6 +125,7 @@ static const struct gen_device_info gen_device_info_g4x = {
       .size = 384,
    },
    .timestamp_frequency = 12500000,
+   .simulator_id = -1,
 };
 
 static const struct gen_device_info gen_device_info_ilk = {
@@ -142,6 +144,7 @@ static const struct gen_device_info gen_device_info_ilk = {
       .size = 1024,
    },
    .timestamp_frequency = 12500000,
+   .simulator_id = -1,
 };
 
 static const struct gen_device_info gen_device_info_snb_gt1 = {
@@ -170,6 +173,7 @@ static const struct gen_device_info gen_device_info_snb_gt1 = {
       },
    },
    .timestamp_frequency = 12500000,
+   .simulator_id = -1,
 };
 
 static const struct gen_device_info gen_device_info_snb_gt2 = {
@@ -198,6 +202,7 @@ static const struct gen_device_info gen_device_info_snb_gt2 = {
       },
    },
    .timestamp_frequency = 12500000,
+   .simulator_id = -1,
 };
 
 #define GEN7_FEATURES                               \
@@ -236,6 +241,7 @@ static const struct gen_device_info gen_device_info_ivb_gt1 = {
          [MESA_SHADER_GEOMETRY]  = 192,
       },
    },
+   .simulator_id = 7,
 };
 
 static const struct gen_device_info gen_device_info_ivb_gt2 = {
@@ -265,6 +271,7 @@ static const struct gen_device_info gen_device_info_ivb_gt2 = {
          [MESA_SHADER_GEOMETRY]  = 320,
       },
    },
+   .simulator_id = 7,
 };
 
 static const struct gen_device_info gen_device_info_byt = {
@@ -294,6 +301,7 @@ static const struct gen_device_info gen_device_info_byt = {
          [MESA_SHADER_GEOMETRY]  = 192,
       },
    },
+   .simulator_id = 10,
 };
 
 #define HSW_FEATURES             \
@@ -328,6 +336,7 @@ static const struct gen_device_info gen_device_info_hsw_gt1 = {
          [MESA_SHADER_GEOMETRY]  = 256,
       },
    },
+   .simulator_id = 9,
 };
 
 static const struct gen_device_info gen_device_info_hsw_gt2 = {
@@ -356,6 +365,7 @@ static const struct gen_device_info gen_device_info_hsw_gt2 = {
          [MESA_SHADER_GEOMETRY]  = 640,
       },
    },
+   .simulator_id = 9,
 };
 
 static const struct gen_device_info gen_device_info_hsw_gt3 = {
@@ -384,6 +394,7 @@ static const struct gen_device_info gen_device_info_hsw_gt3 = {
          [MESA_SHADER_GEOMETRY]  = 640,
       },
    },
+   .simulator_id = 9,
 };
 
 /* It's unclear how well supported sampling from the hiz buffer is on GEN8,
@@ -429,7 +440,8 @@ static const struct gen_device_info gen_device_info_bdw_gt1 = {
          [MESA_SHADER_TESS_EVAL] = 1536,
          [MESA_SHADER_GEOMETRY]  = 960,
       },
-   }
+   },
+   .simulator_id = 11,
 };
 
 static const struct gen_device_info gen_device_info_bdw_gt2 = {
@@ -453,7 +465,8 @@ static const struct gen_device_info gen_device_info_bdw_gt2 = {
          [MESA_SHADER_TESS_EVAL] = 1536,
          [MESA_SHADER_GEOMETRY]  = 960,
       },
-   }
+   },
+   .simulator_id = 11,
 };
 
 static const struct gen_device_info gen_device_info_bdw_gt3 = {
@@ -477,7 +490,8 @@ static const struct gen_device_info gen_device_info_bdw_gt3 = {
          [MESA_SHADER_TESS_EVAL] = 1536,
          [MESA_SHADER_GEOMETRY]  = 960,
       },
-   }
+   },
+   .simulator_id = 11,
 };
 
 static const struct gen_device_info gen_device_info_chv = {
@@ -507,7 +521,8 @@ static const struct gen_device_info gen_device_info_chv = {
          [MESA_SHADER_TESS_EVAL] = 384,
          [MESA_SHADER_GEOMETRY]  = 256,
       },
-   }
+   },
+   .simulator_id = 13,
 };
 
 #define GEN9_HW_INFO                                \
@@ -603,6 +618,7 @@ static const struct gen_device_info gen_device_info_skl_gt1 = {
    .num_eu_per_subslice = 6,
    .l3_banks = 2,
    .urb.size = 192,
+   .simulator_id = 12,
 };
 
 static const struct gen_device_info gen_device_info_skl_gt2 = {
@@ -612,6 +628,7 @@ static const struct gen_device_info gen_device_info_skl_gt2 = {
    .num_subslices = { 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 4,
+   .simulator_id = 12,
 };
 
 static const struct gen_device_info gen_device_info_skl_gt3 = {
@@ -621,6 +638,7 @@ static const struct gen_device_info gen_device_info_skl_gt3 = {
    .num_subslices = { 3, 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 8,
+   .simulator_id = 12,
 };
 
 static const struct gen_device_info gen_device_info_skl_gt4 = {
@@ -639,18 +657,21 @@ static const struct gen_device_info gen_device_info_skl_gt4 = {
     * only 1008KB of this will be used."
     */
    .urb.size = 1008 / 3,
+   .simulator_id = 12,
 };
 
 static const struct gen_device_info gen_device_info_bxt = {
    GEN9_LP_FEATURES_3X6,
    .is_broxton = true,
    .l3_banks = 2,
+   .simulator_id = 14,
 };
 
 static const struct gen_device_info gen_device_info_bxt_2x6 = {
    GEN9_LP_FEATURES_2X6,
    .is_broxton = true,
    .l3_banks = 1,
+   .simulator_id = 14,
 };
 /*
  * Note: for all KBL SKUs, the PRM says SKL for GS entries, not SKL+.
@@ -668,6 +689,7 @@ static const struct gen_device_info gen_device_info_kbl_gt1 = {
    .num_subslices = { 2, },
    .num_eu_per_subslice = 6,
    .l3_banks = 2,
+   .simulator_id = 16,
 };
 
 static const struct gen_device_info gen_device_info_kbl_gt1_5 = {
@@ -680,6 +702,7 @@ static const struct gen_device_info gen_device_info_kbl_gt1_5 = {
    .num_subslices = { 3, },
    .num_eu_per_subslice = 6,
    .l3_banks = 4,
+   .simulator_id = 16,
 };
 
 static const struct gen_device_info gen_device_info_kbl_gt2 = {
@@ -691,6 +714,7 @@ static const struct gen_device_info gen_device_info_kbl_gt2 = {
    .num_subslices = { 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 4,
+   .simulator_id = 16,
 };
 
 static const struct gen_device_info gen_device_info_kbl_gt3 = {
@@ -702,6 +726,7 @@ static const struct gen_device_info gen_device_info_kbl_gt3 = {
    .num_subslices = { 3, 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 8,
+   .simulator_id = 16,
 };
 
 static const struct gen_device_info gen_device_info_kbl_gt4 = {
@@ -724,18 +749,21 @@ static const struct gen_device_info gen_device_info_kbl_gt4 = {
    .num_subslices = { 3, 3, 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 12,
+   .simulator_id = 16,
 };
 
 static const struct gen_device_info gen_device_info_glk = {
    GEN9_LP_FEATURES_3X6,
    .is_geminilake = true,
    .l3_banks = 2,
+   .simulator_id = 17,
 };
 
 static const struct gen_device_info gen_device_info_glk_2x6 = {
    GEN9_LP_FEATURES_2X6,
    .is_geminilake = true,
    .l3_banks = 2,
+   .simulator_id = 17,
 };
 
 static const struct gen_device_info gen_device_info_cfl_gt1 = {
@@ -747,6 +775,7 @@ static const struct gen_device_info gen_device_info_cfl_gt1 = {
    .num_subslices = { 2, },
    .num_eu_per_subslice = 6,
    .l3_banks = 2,
+   .simulator_id = 24,
 };
 static const struct gen_device_info gen_device_info_cfl_gt2 = {
    GEN9_FEATURES,
@@ -757,6 +786,7 @@ static const struct gen_device_info gen_device_info_cfl_gt2 = {
    .num_subslices = { 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 4,
+   .simulator_id = 24,
 };
 
 static const struct gen_device_info gen_device_info_cfl_gt3 = {
@@ -768,6 +798,7 @@ static const struct gen_device_info gen_device_info_cfl_gt3 = {
    .num_subslices = { 3, 3, },
    .num_eu_per_subslice = 8,
    .l3_banks = 8,
+   .simulator_id = 24,
 };
 
 #define GEN10_HW_INFO                               \
@@ -809,24 +840,28 @@ static const struct gen_device_info gen_device_info_cnl_2x8 = {
    /* GT0.5 */
    GEN10_FEATURES(1, 1, subslices(2), 2),
    .is_cannonlake = true,
+   .simulator_id = 15,
 };
 
 static const struct gen_device_info gen_device_info_cnl_3x8 = {
    /* GT1 */
    GEN10_FEATURES(1, 1, subslices(3), 3),
    .is_cannonlake = true,
+   .simulator_id = 15,
 };
 
 static const struct gen_device_info gen_device_info_cnl_4x8 = {
    /* GT 1.5 */
    GEN10_FEATURES(1, 2, subslices(2, 2), 6),
    .is_cannonlake = true,
+   .simulator_id = 15,
 };
 
 static const struct gen_device_info gen_device_info_cnl_5x8 = {
    /* GT2 */
    GEN10_FEATURES(2, 2, subslices(3, 2), 6),
    .is_cannonlake = true,
+   .simulator_id = 15,
 };
 
 #define GEN11_HW_INFO                               \
@@ -863,18 +898,22 @@ static const struct gen_device_info gen_device_info_cnl_5x8 = {
 
 static const struct gen_device_info gen_device_info_icl_8x8 = {
    GEN11_FEATURES(2, 1, subslices(8), 8),
+   .simulator_id = 19,
 };
 
 static const struct gen_device_info gen_device_info_icl_6x8 = {
    GEN11_FEATURES(1, 1, subslices(6), 6),
+   .simulator_id = 19,
 };
 
 static const struct gen_device_info gen_device_info_icl_4x8 = {
    GEN11_FEATURES(1, 1, subslices(4), 6),
+   .simulator_id = 19,
 };
 
 static const struct gen_device_info gen_device_info_icl_1x8 = {
    GEN11_FEATURES(1, 1, subslices(1), 6),
+   .simulator_id = 19,
 };
 
 static void
@@ -1034,6 +1073,7 @@ gen_device_info_update_from_topology(struct gen_device_info *devinfo,
       }
       n_subslices += devinfo->num_subslices[s];
    }
+   assert(n_subslices > 0);
 
    uint32_t eu_mask_len =
       topology->eu_stride * topology->max_subslices * topology->max_slices;

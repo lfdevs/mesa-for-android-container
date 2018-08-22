@@ -2005,6 +2005,12 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_SEMAPHORE_GET_FD_INFO_KHR";
         case 1000080000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PUSH_DESCRIPTOR_PROPERTIES_KHR";
+        case 1000081000:
+            return "VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT";
+        case 1000081001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT";
+        case 1000081002:
+            return "VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT";
         case 1000083000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES";
         case 1000084000:
@@ -2053,6 +2059,20 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT";
         case 1000105000:
             return "VK_STRUCTURE_TYPE_HDR_METADATA_EXT";
+        case 1000109000:
+            return "VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2_KHR";
+        case 1000109001:
+            return "VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR";
+        case 1000109002:
+            return "VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2_KHR";
+        case 1000109003:
+            return "VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2_KHR";
+        case 1000109004:
+            return "VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2_KHR";
+        case 1000109005:
+            return "VK_STRUCTURE_TYPE_SUBPASS_BEGIN_INFO_KHR";
+        case 1000109006:
+            return "VK_STRUCTURE_TYPE_SUBPASS_END_INFO_KHR";
         case 1000111000:
             return "VK_STRUCTURE_TYPE_SHARED_PRESENT_SURFACE_CAPABILITIES_KHR";
         case 1000112000:
@@ -2087,6 +2107,16 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR";
         case 1000120000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES";
+        case 1000121000:
+            return "VK_STRUCTURE_TYPE_DISPLAY_PROPERTIES_2_KHR";
+        case 1000121001:
+            return "VK_STRUCTURE_TYPE_DISPLAY_PLANE_PROPERTIES_2_KHR";
+        case 1000121002:
+            return "VK_STRUCTURE_TYPE_DISPLAY_MODE_PROPERTIES_2_KHR";
+        case 1000121003:
+            return "VK_STRUCTURE_TYPE_DISPLAY_PLANE_INFO_2_KHR";
+        case 1000121004:
+            return "VK_STRUCTURE_TYPE_DISPLAY_PLANE_CAPABILITIES_2_KHR";
         case 1000122000:
             return "VK_STRUCTURE_TYPE_IOS_SURFACE_CREATE_INFO_MVK";
         case 1000123000:
@@ -2197,6 +2227,8 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT";
         case 1000174000:
             return "VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT";
+        case 1000177000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR";
         case 1000178000:
             return "VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT";
         case 1000178001:
@@ -2278,6 +2310,21 @@ vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input)
             return "VK_VALIDATION_CHECK_ALL_EXT";
         case 1:
             return "VK_VALIDATION_CHECK_SHADERS_EXT";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_VendorId_to_str(VkVendorId input)
+{
+    switch(input) {
+        case 65537:
+            return "VK_VENDOR_ID_VIV";
+        case 65538:
+            return "VK_VENDOR_ID_VSI";
+        case 65539:
+            return "VK_VENDOR_ID_KAZAN";
     default:
         unreachable("Undefined enum value.");
     }

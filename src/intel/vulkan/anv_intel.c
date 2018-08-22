@@ -73,8 +73,14 @@ VkResult anv_CreateDmaBufImageINTEL(
 
    image = anv_image_from_handle(image_h);
 
+   uint64_t bo_flags = 0;
+   if (device->instance->physicalDevice.supports_48bit_addresses)
+      bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+   if (device->instance->physicalDevice.use_softpin)
+      bo_flags |= EXEC_OBJECT_PINNED;
+
    result = anv_bo_cache_import(device, &device->bo_cache,
-                                pCreateInfo->fd, &mem->bo);
+                                pCreateInfo->fd, bo_flags, &mem->bo);
    if (result != VK_SUCCESS)
       goto fail_import;
 
@@ -90,11 +96,10 @@ VkResult anv_CreateDmaBufImageINTEL(
       goto fail_import;
    }
 
-   if (device->instance->physicalDevice.supports_48bit_addresses)
-      mem->bo->flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
-
-   image->planes[0].bo = mem->bo;
-   image->planes[0].bo_offset = 0;
+   image->planes[0].address = (struct anv_address) {
+      .bo = mem->bo,
+      .offset = 0,
+   };
 
    assert(image->extent.width > 0);
    assert(image->extent.height > 0);

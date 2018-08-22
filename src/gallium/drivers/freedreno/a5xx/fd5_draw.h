@@ -32,6 +32,7 @@
 #include "freedreno_draw.h"
 
 #include "fd5_context.h"
+#include "fd5_screen.h"
 
 /* some bits in common w/ a4xx: */
 #include "a4xx/fd4_draw.h"

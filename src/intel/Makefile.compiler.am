@@ -50,8 +50,8 @@ TEST_LIBS = \
 	common/libintel_common.la \
 	dev/libintel_dev.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
-	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/intel/isl/libisl.la \
+	$(top_builddir)/src/util/libmesautil.la \
 	$(PTHREAD_LIBS) \
 	$(DLOPEN_LIBS)
 

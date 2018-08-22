@@ -120,6 +120,7 @@ struct st_context
    boolean has_shader_model3;
    boolean has_etc1;
    boolean has_etc2;
+   boolean has_astc_2d_ldr;
    boolean prefer_blit_based_texture_transfer;
    boolean force_persample_in_shader;
    boolean has_shareable_shaders;
@@ -178,6 +179,12 @@ struct st_context
       GLuint poly_stipple[32];  /**< In OpenGL's bottom-to-top order */
 
       GLuint fb_orientation;
+
+      bool enable_sample_locations;
+      unsigned sample_locations_samples;
+      uint8_t sample_locations[
+         PIPE_MAX_SAMPLE_LOCATION_GRID_SIZE *
+         PIPE_MAX_SAMPLE_LOCATION_GRID_SIZE * 32];
    } state;
 
    uint64_t dirty; /**< dirty states */
@@ -295,9 +302,6 @@ struct st_context
 
    /* Winsys buffers */
    struct list_head winsys_buffers;
-
-   /* For the initial pushdown, keep the list of vbo inputs. */
-   struct vbo_inputs draw_arrays;
 };
 
 

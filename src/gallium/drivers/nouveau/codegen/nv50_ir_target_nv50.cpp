@@ -111,16 +111,15 @@ void TargetNV50::initOpInfo()
 {
    unsigned int i, j;
 
-   static const uint32_t commutative[(OP_LAST + 31) / 32] =
+   static const operation commutativeList[] =
    {
-      // ADD, MUL, MAD, FMA, AND, OR, XOR, MAX, MIN, SET_AND, SET_OR, SET_XOR,
-      // SET, SELP, SLCT
-      0x0ce0ca00, 0x0000007e, 0x00000000, 0x00000000
+      OP_ADD, OP_MUL, OP_MAD, OP_FMA, OP_AND, OP_OR, OP_XOR, OP_MAX, OP_MIN,
+      OP_SET_AND, OP_SET_OR, OP_SET_XOR, OP_SET, OP_SELP, OP_SLCT
    };
-   static const uint32_t shortForm[(OP_LAST + 31) / 32] =
+   static const operation shortFormList[] =
    {
-      // MOV, ADD, SUB, MUL, MAD, SAD, RCP, L/PINTERP, TEX, TXF
-      0x00014e40, 0x00000080, 0x00001260, 0x00000000
+      OP_MOV, OP_ADD, OP_SUB, OP_MUL, OP_MAD, OP_SAD, OP_RCP, OP_LINTERP,
+      OP_PINTERP, OP_TEX, OP_TXF
    };
    static const operation noDestList[] =
    {
@@ -157,18 +156,22 @@ void TargetNV50::initOpInfo()
 
       opInfo[i].hasDest = 1;
       opInfo[i].vector = (i >= OP_TEX && i <= OP_TEXCSAA);
-      opInfo[i].commutative = (commutative[i / 32] >> (i % 32)) & 1;
+      opInfo[i].commutative = false; /* set below */
       opInfo[i].pseudo = (i < OP_MOV);
       opInfo[i].predicate = !opInfo[i].pseudo;
       opInfo[i].flow = (i >= OP_BRA && i <= OP_JOIN);
-      opInfo[i].minEncSize = (shortForm[i / 32] & (1 << (i % 32))) ? 4 : 8;
+      opInfo[i].minEncSize = 8; /* set below */
    }
-   for (i = 0; i < sizeof(noDestList) / sizeof(noDestList[0]); ++i)
+   for (i = 0; i < ARRAY_SIZE(commutativeList); ++i)
+      opInfo[commutativeList[i]].commutative = true;
+   for (i = 0; i < ARRAY_SIZE(shortFormList); ++i)
+      opInfo[shortFormList[i]].minEncSize = 4;
+   for (i = 0; i < ARRAY_SIZE(noDestList); ++i)
       opInfo[noDestList[i]].hasDest = 0;
-   for (i = 0; i < sizeof(noPredList) / sizeof(noPredList[0]); ++i)
+   for (i = 0; i < ARRAY_SIZE(noPredList); ++i)
       opInfo[noPredList[i]].predicate = 0;
 
-   for (i = 0; i < sizeof(_initProps) / sizeof(_initProps[0]); ++i) {
+   for (i = 0; i < ARRAY_SIZE(_initProps); ++i) {
       const struct opProperties *prop = &_initProps[i];
 
       for (int s = 0; s < 3; ++s) {
@@ -254,6 +257,7 @@ TargetNV50::getSVAddress(DataFile shaderFile, const Symbol *sym) const
    case SV_NTID:
       return 0x2 + 2 * sym->reg.data.sv.index;
    case SV_TID:
+   case SV_COMBINED_TID:
       return 0;
    case SV_SAMPLE_POS:
       return 0; /* sample position is handled differently */

@@ -73,6 +73,7 @@ struct nv50_ir_prog_symbol
 #define NVISA_GK104_CHIPSET    0xe0
 #define NVISA_GK20A_CHIPSET    0xea
 #define NVISA_GM107_CHIPSET    0x110
+#define NVISA_GM200_CHIPSET    0x120
 
 struct nv50_ir_prog_info
 {
@@ -145,6 +146,7 @@ struct nv50_ir_prog_info
          bool persampleInvocation;
          bool usesSampleMaskIn;
          bool readsFramebuffer;
+         bool readsSampleLocations;
       } fp;
       struct {
          uint32_t inputOffset; /* base address for user args */

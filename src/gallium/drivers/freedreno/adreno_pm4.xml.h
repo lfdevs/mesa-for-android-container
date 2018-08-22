@@ -8,15 +8,17 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    431 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  37162 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13612 bytes, from 2017-12-19 18:19:46)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  34499 bytes, from 2018-01-03 15:58:51)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2017-05-17 13:21:27)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2017-12-19 18:19:46)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 146261 bytes, from 2018-01-03 15:58:51)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2017-05-17 13:21:27)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-01-31 18:26:32)
+- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  36805 bytes, from 2018-05-20 19:03:35)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13634 bytes, from 2018-06-10 17:35:36)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  41584 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-01-10 16:21:40)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 147158 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx.xml          (  88437 bytes, from 2018-06-18 14:25:44)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-06-10 17:37:04)
+- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-01-08 14:56:24)
 
 Copyright (C) 2013-2018 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -71,7 +73,8 @@ enum vgt_event_type {
 	FLUSH_SO_1 = 18,
 	FLUSH_SO_2 = 19,
 	FLUSH_SO_3 = 20,
-	UNK_19 = 25,
+	PC_CCU_INVALIDATE_DEPTH = 24,
+	PC_CCU_INVALIDATE_COLOR = 25,
 	UNK_1C = 28,
 	UNK_1D = 29,
 	BLIT = 30,
@@ -203,6 +206,8 @@ enum adreno_pm4_type3_packets {
 	CP_EXEC_CS = 51,
 	CP_PERFCOUNTER_ACTION = 80,
 	CP_SMMU_TABLE_UPDATE = 83,
+	CP_SET_MARKER = 101,
+	CP_SET_PSEUDO_REG = 86,
 	CP_CONTEXT_REG_BUNCH = 92,
 	CP_YIELD_ENABLE = 28,
 	CP_SKIP_IB2_ENABLE_GLOBAL = 29,
@@ -216,7 +221,7 @@ enum adreno_pm4_type3_packets {
 	CP_COMPUTE_CHECKPOINT = 110,
 	CP_MEM_TO_MEM = 115,
 	CP_BLIT = 44,
-	CP_UNK_39 = 57,
+	CP_REG_TEST = 57,
 	IN_IB_PREFETCH_END = 23,
 	IN_SUBBLK_PREFETCH = 31,
 	IN_INSTR_PREFETCH = 32,
@@ -353,7 +358,7 @@ static inline uint32_t CP_LOAD_STATE_1_EXT_SRC_ADDR(uint32_t val)
 }
 
 #define REG_CP_LOAD_STATE4_0					0x00000000
-#define CP_LOAD_STATE4_0_DST_OFF__MASK				0x0000ffff
+#define CP_LOAD_STATE4_0_DST_OFF__MASK				0x00003fff
 #define CP_LOAD_STATE4_0_DST_OFF__SHIFT				0
 static inline uint32_t CP_LOAD_STATE4_0_DST_OFF(uint32_t val)
 {
@@ -1105,14 +1110,14 @@ static inline uint32_t CP_COMPUTE_CHECKPOINT_1_ADDR_0_HI(uint32_t val)
 #define REG_CP_COMPUTE_CHECKPOINT_2				0x00000002
 
 #define REG_CP_COMPUTE_CHECKPOINT_3				0x00000003
+#define CP_COMPUTE_CHECKPOINT_3_ADDR_1_LEN__MASK		0xffffffff
+#define CP_COMPUTE_CHECKPOINT_3_ADDR_1_LEN__SHIFT		0
+static inline uint32_t CP_COMPUTE_CHECKPOINT_3_ADDR_1_LEN(uint32_t val)
+{
+	return ((val) << CP_COMPUTE_CHECKPOINT_3_ADDR_1_LEN__SHIFT) & CP_COMPUTE_CHECKPOINT_3_ADDR_1_LEN__MASK;
+}
 
 #define REG_CP_COMPUTE_CHECKPOINT_4				0x00000004
-#define CP_COMPUTE_CHECKPOINT_4_ADDR_1_LEN__MASK		0xffffffff
-#define CP_COMPUTE_CHECKPOINT_4_ADDR_1_LEN__SHIFT		0
-static inline uint32_t CP_COMPUTE_CHECKPOINT_4_ADDR_1_LEN(uint32_t val)
-{
-	return ((val) << CP_COMPUTE_CHECKPOINT_4_ADDR_1_LEN__SHIFT) & CP_COMPUTE_CHECKPOINT_4_ADDR_1_LEN__MASK;
-}
 
 #define REG_CP_COMPUTE_CHECKPOINT_5				0x00000005
 #define CP_COMPUTE_CHECKPOINT_5_ADDR_1_LO__MASK			0xffffffff
@@ -1129,6 +1134,8 @@ static inline uint32_t CP_COMPUTE_CHECKPOINT_6_ADDR_1_HI(uint32_t val)
 {
 	return ((val) << CP_COMPUTE_CHECKPOINT_6_ADDR_1_HI__SHIFT) & CP_COMPUTE_CHECKPOINT_6_ADDR_1_HI__MASK;
 }
+
+#define REG_CP_COMPUTE_CHECKPOINT_7				0x00000007
 
 #define REG_CP_PERFCOUNTER_ACTION_0				0x00000000
 

@@ -114,6 +114,7 @@ psprite_decl(struct tgsi_transform_context *ctx,
              struct tgsi_full_declaration *decl)
 {
    struct psprite_transform_context *ts = psprite_transform_context(ctx);
+   unsigned range_end = decl->Range.Last + 1;
 
    if (decl->Declaration.File == TGSI_FILE_INPUT) {
       if (decl->Semantic.Name == TGSI_SEMANTIC_PSIZE) {
@@ -135,13 +136,13 @@ psprite_decl(struct tgsi_transform_context *ctx,
          ts->point_coord_decl |= 1 << decl->Semantic.Index;
          ts->max_generic = MAX2(ts->max_generic, (int)decl->Semantic.Index);
       }
-      ts->num_out = MAX2(ts->num_out, decl->Range.Last + 1);
+      ts->num_out = MAX2(ts->num_out, range_end);
    }
    else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
-      ts->num_tmp = MAX2(ts->num_tmp, decl->Range.Last + 1);
+      ts->num_tmp = MAX2(ts->num_tmp, range_end);
    }
    else if (decl->Declaration.File == TGSI_FILE_CONSTANT) {
-      ts->num_const = MAX2(ts->num_const, decl->Range.Last + 1);
+      ts->num_const = MAX2(ts->num_const, range_end);
    }
 
    ctx->emit_declaration(ctx, decl);
@@ -169,7 +170,7 @@ psprite_prolog(struct tgsi_transform_context *ctx)
 {
    struct psprite_transform_context *ts = psprite_transform_context(ctx);
    unsigned point_coord_enable, en;
-   int i;
+   unsigned i;
 
    /* Replace output registers with temporary registers */
    for (i = 0; i < ts->num_out; i++) {
@@ -427,7 +428,7 @@ psprite_inst(struct tgsi_transform_context *ctx,
       psprite_emit_vertex_inst(ctx, inst);
    }
    else if (inst->Dst[0].Register.File == TGSI_FILE_OUTPUT &&
-            inst->Dst[0].Register.Index == ts->point_size_out) {
+	    inst->Dst[0].Register.Index == (int)ts->point_size_out) {
       /**
        * Replace point size output reg with tmp reg.
        * The tmp reg will be later used as a src reg for computing
@@ -451,7 +452,7 @@ psprite_inst(struct tgsi_transform_context *ctx,
                  TGSI_FILE_CONSTANT, ts->point_ivp, TGSI_SWIZZLE_W, false);
    }
    else if (inst->Dst[0].Register.File == TGSI_FILE_OUTPUT &&
-            inst->Dst[0].Register.Index == ts->point_pos_out) {
+	    inst->Dst[0].Register.Index == (int)ts->point_pos_out) {
       /**
        * Replace point pos output reg with tmp reg.
        */

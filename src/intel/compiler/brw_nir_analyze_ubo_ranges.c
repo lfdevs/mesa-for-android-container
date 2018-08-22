@@ -126,17 +126,17 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
       case nir_intrinsic_load_uniform:
-      case nir_intrinsic_image_var_load:
-      case nir_intrinsic_image_var_store:
-      case nir_intrinsic_image_var_atomic_add:
-      case nir_intrinsic_image_var_atomic_min:
-      case nir_intrinsic_image_var_atomic_max:
-      case nir_intrinsic_image_var_atomic_and:
-      case nir_intrinsic_image_var_atomic_or:
-      case nir_intrinsic_image_var_atomic_xor:
-      case nir_intrinsic_image_var_atomic_exchange:
-      case nir_intrinsic_image_var_atomic_comp_swap:
-      case nir_intrinsic_image_var_size:
+      case nir_intrinsic_image_deref_load:
+      case nir_intrinsic_image_deref_store:
+      case nir_intrinsic_image_deref_atomic_add:
+      case nir_intrinsic_image_deref_atomic_min:
+      case nir_intrinsic_image_deref_atomic_max:
+      case nir_intrinsic_image_deref_atomic_and:
+      case nir_intrinsic_image_deref_atomic_or:
+      case nir_intrinsic_image_deref_atomic_xor:
+      case nir_intrinsic_image_deref_atomic_exchange:
+      case nir_intrinsic_image_deref_atomic_comp_swap:
+      case nir_intrinsic_image_deref_size:
          state->uses_regular_uniforms = true;
          continue;
 
@@ -154,14 +154,26 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          const int block = block_const->u32[0];
          const int offset = offset_const->u32[0] / 32;
 
-         /* Won't fit in our bitfield */
+         /* Avoid shifting by larger than the width of our bitfield, as this
+          * is undefined in C.  Even if we require multiple bits to represent
+          * the entire value, it's OK to record a partial value - the backend
+          * is capable of falling back to pull loads for later components of
+          * vectors, as it has to shrink ranges for other reasons anyway.
+          */
          if (offset >= 64)
             continue;
+
+         /* The value might span multiple 32-byte chunks. */
+         const int bytes = nir_intrinsic_dest_components(intrin) *
+                           (nir_dest_bit_size(intrin->dest) / 8);
+         const int start = ROUND_DOWN_TO(offset_const->u32[0], 32);
+         const int end = ALIGN(offset_const->u32[0] + bytes, 32);
+         const int chunks = (end - start) / 32;
 
          /* TODO: should we count uses in loops as higher benefit? */
 
          struct ubo_block_info *info = get_block_info(state, block);
-         info->offsets |= 1ull << offset;
+         info->offsets |= ((1ull << chunks) - 1) << offset;
          info->uses[offset]++;
       }
    }

@@ -62,7 +62,7 @@ static void si_emit_cp_dma(struct si_context *sctx, uint64_t dst_va,
 			   uint64_t src_va, unsigned size, unsigned flags,
 			   enum si_coherency coher)
 {
-	struct radeon_winsys_cs *cs = sctx->gfx_cs;
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	uint32_t header = 0, command = 0;
 
 	assert(size <= cp_dma_max_byte_count(sctx));
@@ -88,9 +88,9 @@ static void si_emit_cp_dma(struct si_context *sctx, uint64_t dst_va,
 	/* Src and dst flags. */
 	if (sctx->chip_class >= GFX9 && !(flags & CP_DMA_CLEAR) &&
 	    src_va == dst_va)
-		header |= S_411_DSL_SEL(V_411_NOWHERE); /* prefetch only */
+		header |= S_411_DST_SEL(V_411_NOWHERE); /* prefetch only */
 	else if (flags & CP_DMA_USE_L2)
-		header |= S_411_DSL_SEL(V_411_DST_ADDR_TC_L2);
+		header |= S_411_DST_SEL(V_411_DST_ADDR_TC_L2);
 
 	if (flags & CP_DMA_CLEAR)
 		header |= S_411_SRC_SEL(V_411_DATA);
@@ -186,11 +186,11 @@ static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst
 	/* This must be done after need_cs_space. */
 	if (!(user_flags & SI_CPDMA_SKIP_BO_LIST_UPDATE)) {
 		radeon_add_to_buffer_list(sctx, sctx->gfx_cs,
-					  (struct r600_resource*)dst,
+					  r600_resource(dst),
 					  RADEON_USAGE_WRITE, RADEON_PRIO_CP_DMA);
 		if (src)
 			radeon_add_to_buffer_list(sctx, sctx->gfx_cs,
-						  (struct r600_resource*)src,
+						  r600_resource(src),
 						  RADEON_USAGE_READ, RADEON_PRIO_CP_DMA);
 	}
 
@@ -380,7 +380,7 @@ static void si_cp_dma_realign_engine(struct si_context *sctx, unsigned size,
 	if (!sctx->scratch_buffer ||
 	    sctx->scratch_buffer->b.b.width0 < scratch_size) {
 		r600_resource_reference(&sctx->scratch_buffer, NULL);
-		sctx->scratch_buffer = (struct r600_resource*)
+		sctx->scratch_buffer =
 			si_aligned_buffer_create(&sctx->screen->b,
 						   SI_RESOURCE_FLAG_UNMAPPABLE,
 						   PIPE_USAGE_DEFAULT,
@@ -388,7 +388,7 @@ static void si_cp_dma_realign_engine(struct si_context *sctx, unsigned size,
 		if (!sctx->scratch_buffer)
 			return;
 
-		si_mark_atom_dirty(sctx, &sctx->scratch_state);
+		si_mark_atom_dirty(sctx, &sctx->atoms.s.scratch_state);
 	}
 
 	si_cp_dma_prepare(sctx, &sctx->scratch_buffer->b.b,

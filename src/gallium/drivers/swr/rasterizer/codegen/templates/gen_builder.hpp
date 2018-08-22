@@ -30,6 +30,7 @@
 //  ${'\n//    '.join(cmdline)}
 //
 //============================================================================
+// clang-format off
 #pragma once
 
 //============================================================================
@@ -57,10 +58,10 @@ ${func['decl']}
     %for arg in func['types']:
     args.push_back(${arg}->getType());
     %endfor
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::${func['intrin']}, args);
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::${func['intrin']}, args);
     return CALL(pFunc, std::initializer_list<Value*>{${argList}}, name);
     %else:
-    Function * pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::${func['intrin']});
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::${func['intrin']});
     return CALL(pFunc, std::initializer_list<Value*>{${argList}}, name);
     %endif
 %else:
@@ -68,4 +69,5 @@ ${func['decl']}
 %endif
 }
 
-%endfor
+% endfor
+    // clang-format on

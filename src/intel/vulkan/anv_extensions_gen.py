@@ -103,12 +103,12 @@ _TEMPLATE_C = Template(COPYRIGHT + """
 #include "vk_util.h"
 
 /* Convert the VK_USE_PLATFORM_* defines to booleans */
-%for platform in ['ANDROID', 'WAYLAND', 'XCB', 'XLIB']:
-#ifdef VK_USE_PLATFORM_${platform}_KHR
-#   undef VK_USE_PLATFORM_${platform}_KHR
-#   define VK_USE_PLATFORM_${platform}_KHR true
+%for platform in ['ANDROID_KHR', 'WAYLAND_KHR', 'XCB_KHR', 'XLIB_KHR', 'DISPLAY_KHR', 'XLIB_XRANDR_EXT']:
+#ifdef VK_USE_PLATFORM_${platform}
+#   undef VK_USE_PLATFORM_${platform}
+#   define VK_USE_PLATFORM_${platform} true
 #else
-#   define VK_USE_PLATFORM_${platform}_KHR false
+#   define VK_USE_PLATFORM_${platform} false
 #endif
 %endfor
 
@@ -122,7 +122,8 @@ _TEMPLATE_C = Template(COPYRIGHT + """
 
 #define ANV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR || \\
                          VK_USE_PLATFORM_XCB_KHR || \\
-                         VK_USE_PLATFORM_XLIB_KHR)
+                         VK_USE_PLATFORM_XLIB_KHR || \\
+                         VK_USE_PLATFORM_DISPLAY_KHR)
 
 static const uint32_t MAX_API_VERSION = ${MAX_API_VERSION.c_vk_version()};
 
@@ -157,7 +158,7 @@ anv_physical_device_api_version(struct anv_physical_device *device)
 %for version in API_VERSIONS:
     if (!(${version.enable}))
         return version;
-    version = ${version.max_patch_version.c_vk_version()};
+    version = ${version.version.c_vk_version()};
 
 %endfor
     return version;

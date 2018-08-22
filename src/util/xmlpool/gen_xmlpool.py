@@ -7,6 +7,8 @@
 # `{localedir}/{language}/LC_MESSAGES/options.mo`.
 #
 
+from __future__ import print_function
+
 import sys
 import gettext
 import re
@@ -40,7 +42,7 @@ def escapeCString (s):
                 # open quote
                 q = u'\u201d'
             r = r + q
-        elif escapeSeqs.has_key(s[i]):
+        elif s[i] in escapeSeqs:
             r = r + escapeSeqs[s[i]]
         else:
             r = r + s[i]
@@ -88,7 +90,7 @@ def expandCString (s):
                 escape = False
                 r = r + chr(num)
         else:
-            if escapeSeqs.has_key(s[i]):
+            if s[i] in escapeSeqs:
                 r = r + escapeSeqs[s[i]]
                 escape = False
             elif s[i] >= '0' and s[i] <= '7':
@@ -130,16 +132,16 @@ def expandMatches (matches, translations, end=None):
         # non-ascii unicode chars in the original English descriptions.
         text = escapeCString (trans.ugettext (unicode (expandCString (
             matches[0].expand (r'\5')), "utf-8"))).encode("utf-8")
-        print matches[0].expand (r'\1' + lang + r'\3"' + text + r'"\7') + suffix
+        print(matches[0].expand (r'\1' + lang + r'\3"' + text + r'"\7') + suffix)
         # Expand any subsequent enum lines
         for match in matches[1:]:
             text = escapeCString (trans.ugettext (unicode (expandCString (
                 match.expand (r'\3')), "utf-8"))).encode("utf-8")
-            print match.expand (r'\1"' + text + r'"\5')
+            print(match.expand (r'\1"' + text + r'"\5'))
 
         # Expand description end
         if end:
-            print end,
+            print(end, end='')
 
 # Compile a list of translation classes to all supported languages.
 # The first translation is always a NullTranslations.
@@ -160,14 +162,13 @@ reENUM       = re.compile (r'(\s*DRI_CONF_ENUM\s*\([^,]+,\s*)(gettext\s*\(\s*")(
 reDESC_END   = re.compile (r'\s*DRI_CONF_DESC_END')
 
 # Print a header
-print \
-"/***********************************************************************\n" \
+print("/***********************************************************************\n" \
 " ***        THIS FILE IS GENERATED AUTOMATICALLY. DON'T EDIT!        ***\n" \
-" ***********************************************************************/"
+" ***********************************************************************/")
 
 # Process the options template and generate options.h with all
 # translations.
-template = file (template_header_path, "r")
+template = open (template_header_path, "r")
 descMatches = []
 for line in template:
     if len(descMatches) > 0:
@@ -185,7 +186,7 @@ for line in template:
         continue
     if reLibintl_h.search (line):
         # Ignore (comment out) #include <libintl.h>
-        print "/* %s * commented out by gen_xmlpool.py */" % line
+        print("/* %s * commented out by gen_xmlpool.py */" % line)
         continue
     matchDESC       = reDESC      .match (line)
     matchDESC_BEGIN = reDESC_BEGIN.match (line)
@@ -196,7 +197,9 @@ for line in template:
         assert len(descMatches) == 0
         descMatches = [matchDESC_BEGIN]
     else:
-        print line,
+        print(line, end='')
+
+template.close()
 
 if len(descMatches) > 0:
     sys.stderr.write ("Warning: unterminated description at end of file.\n")

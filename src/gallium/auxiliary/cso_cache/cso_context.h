@@ -87,11 +87,6 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
                             unsigned start_slot, unsigned count,
                             const struct pipe_vertex_buffer *buffers);
 
-/* One vertex buffer slot is provided with the save/restore functionality.
- * cso_context chooses the slot, it can be non-zero. */
-unsigned cso_get_aux_vertex_buffer_slot(struct cso_context *ctx);
-
-
 void cso_set_stream_outputs(struct cso_context *ctx,
                             unsigned num_targets,
                             struct pipe_stream_output_target **targets,

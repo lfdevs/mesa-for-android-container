@@ -46,7 +46,6 @@ vc4_nir_lower_txf_ms_instr(struct vc4_compile *c, nir_builder *b,
 
         nir_tex_instr *txf = nir_tex_instr_create(c->s, 1);
         txf->op = nir_texop_txf;
-        txf->texture = txf_ms->texture;
         txf->texture_index = txf_ms->texture_index;
         txf->coord_components = txf_ms->coord_components;
         txf->is_shadow = txf_ms->is_shadow;

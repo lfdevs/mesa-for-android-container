@@ -78,7 +78,7 @@ static void print_named_value(FILE *file, const char *name, uint32_t value,
 static void eg_dump_reg(FILE *file, unsigned offset, uint32_t value,
 			uint32_t field_mask)
 {
-	int r, f;
+	unsigned r, f;
 
 	for (r = 0; r < ARRAY_SIZE(egd_reg_table); r++) {
 		const struct eg_reg *reg = &egd_reg_table[r];
@@ -134,7 +134,7 @@ static void ac_parse_set_reg_packet(FILE *f, uint32_t *ib, unsigned count,
 				    unsigned reg_offset)
 {
 	unsigned reg = (ib[1] << 2) + reg_offset;
-	int i;
+	unsigned i;
 
 	for (i = 0; i < count; i++)
 		eg_dump_reg(f, reg + i*4, ib[2+i], ~0);
@@ -149,7 +149,7 @@ static uint32_t *ac_parse_packet3(FILE *f, uint32_t *ib, int *num_dw,
 	unsigned op = PKT3_IT_OPCODE_G(ib[0]);
 	const char *predicate = PKT3_PREDICATE(ib[0]) ? "(predicate)" : "";
 	const char *compute_mode = (ib[0] & 0x2) ? "(C)" : "";
-	int i;
+	unsigned i;
 
 	/* Print the name first. */
 	for (i = 0; i < ARRAY_SIZE(packet3_table); i++)

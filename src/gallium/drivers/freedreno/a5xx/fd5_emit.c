@@ -42,6 +42,7 @@
 #include "fd5_program.h"
 #include "fd5_rasterizer.h"
 #include "fd5_texture.h"
+#include "fd5_screen.h"
 #include "fd5_format.h"
 #include "fd5_zsa.h"
 
@@ -135,6 +136,7 @@ struct PACKED bcolor_entry {
 	uint32_t fp32[4];
 	uint16_t ui16[4];
 	int16_t  si16[4];
+
 	uint16_t fp16[4];
 	uint16_t rgb565;
 	uint16_t rgb5a1;
@@ -144,7 +146,9 @@ struct PACKED bcolor_entry {
 	int8_t   si8[4];
 	uint32_t rgb10a2;
 	uint32_t z24; /* also s8? */
-	uint8_t  __pad1[32];
+
+	uint16_t srgb[4];      /* appears to duplicate fp16[], but clamped, used for srgb */
+	uint8_t  __pad1[24];
 };
 
 #define FD5_BORDER_COLOR_SIZE        0x60
@@ -178,8 +182,9 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 		if ((i >= tex->num_textures) || !tex->textures[i])
 			continue;
 
+		enum pipe_format format = tex->textures[i]->format;
 		const struct util_format_description *desc =
-				util_format_description(tex->textures[i]->format);
+				util_format_description(format);
 
 		e->rgb565 = 0;
 		e->rgb5a1 = 0;
@@ -189,6 +194,24 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 
 		for (j = 0; j < 4; j++) {
 			int c = desc->swizzle[j];
+			int cd = c;
+
+			/*
+			 * HACK: for PIPE_FORMAT_X24S8_UINT we end up w/ the
+			 * stencil border color value in bc->ui[0] but according
+			 * to desc->swizzle and desc->channel, the .x component
+			 * is NONE and the stencil value is in the y component.
+			 * Meanwhile the hardware wants this in the .x componetn.
+			 */
+			if ((format == PIPE_FORMAT_X24S8_UINT) ||
+					(format == PIPE_FORMAT_X32_S8X24_UINT)) {
+				if (j == 0) {
+					c = 1;
+					cd = 0;
+				} else {
+					continue;
+				}
+			}
 
 			if (c >= 4)
 				continue;
@@ -222,8 +245,8 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 					clamped = 0;
 					break;
 				}
-				e->fp32[c] = bc->ui[j];
-				e->fp16[c] = clamped;
+				e->fp32[cd] = bc->ui[j];
+				e->fp16[cd] = clamped;
 			} else {
 				float f = bc->f[j];
 				float f_u = CLAMP(f, 0, 1);
@@ -231,6 +254,7 @@ setup_border_colors(struct fd_texture_stateobj *tex, struct bcolor_entry *entrie
 
 				e->fp32[c] = fui(f);
 				e->fp16[c] = util_float_to_half(f);
+				e->srgb[c] = util_float_to_half(f_u);
 				e->ui16[c] = f_u * 0xffff;
 				e->si16[c] = f_s * 0x7fff;
 				e->ui8[c]  = f_u * 0xff;
@@ -455,6 +479,13 @@ fd5_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd5_emit *emit)
 			uint32_t size = fd_bo_size(rsc->bo) - off;
 			debug_assert(fmt != ~0);
 
+#ifdef DEBUG
+			/* see dEQP-GLES31.stress.vertex_attribute_binding.buffer_bounds.bind_vertex_buffer_offset_near_wrap_10
+			 */
+			if (off > fd_bo_size(rsc->bo))
+				continue;
+#endif
+
 			OUT_PKT4(ring, REG_A5XX_VFD_FETCH(j), 4);
 			OUT_RELOC(ring, rsc->bo, off, 0, 0);
 			OUT_RING(ring, size);           /* VFD_FETCH[j].SIZE */
@@ -610,7 +641,8 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				fd5_rasterizer_stateobj(ctx->rasterizer);
 
 		OUT_PKT4(ring, REG_A5XX_GRAS_SU_CNTL, 1);
-		OUT_RING(ring, rasterizer->gras_su_cntl);
+		OUT_RING(ring, rasterizer->gras_su_cntl |
+				COND(pfb->samples > 1, A5XX_GRAS_SU_CNTL_MSAA_ENABLE));
 
 		OUT_PKT4(ring, REG_A5XX_GRAS_SU_POINT_MINMAX, 2);
 		OUT_RING(ring, rasterizer->gras_su_point_minmax);
@@ -667,43 +699,41 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 				A5XX_SP_FS_OUTPUT_CNTL_SAMPLEMASK_REGID(regid(63, 0)));
 	}
 
-	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
-		ir3_emit_vs_consts(vp, ring, ctx, emit->info);
-		if (!emit->key.binning_pass)
-			ir3_emit_fs_consts(fp, ring, ctx);
+	ir3_emit_vs_consts(vp, ring, ctx, emit->info);
+	if (!emit->key.binning_pass)
+		ir3_emit_fs_consts(fp, ring, ctx);
 
-		struct pipe_stream_output_info *info = &vp->shader->stream_output;
-		if (info->num_outputs) {
-			struct fd_streamout_stateobj *so = &ctx->streamout;
+	struct pipe_stream_output_info *info = &vp->shader->stream_output;
+	if (info->num_outputs) {
+		struct fd_streamout_stateobj *so = &ctx->streamout;
 
-			for (unsigned i = 0; i < so->num_targets; i++) {
-				struct pipe_stream_output_target *target = so->targets[i];
+		for (unsigned i = 0; i < so->num_targets; i++) {
+			struct pipe_stream_output_target *target = so->targets[i];
 
-				if (!target)
-					continue;
+			if (!target)
+				continue;
 
-				unsigned offset = (so->offsets[i] * info->stride[i] * 4) +
-						target->buffer_offset;
+			unsigned offset = (so->offsets[i] * info->stride[i] * 4) +
+					target->buffer_offset;
 
-				OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_BASE_LO(i), 3);
-				/* VPC_SO[i].BUFFER_BASE_LO: */
-				OUT_RELOCW(ring, fd_resource(target->buffer)->bo, 0, 0, 0);
-				OUT_RING(ring, target->buffer_size + offset);
+			OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_BASE_LO(i), 3);
+			/* VPC_SO[i].BUFFER_BASE_LO: */
+			OUT_RELOCW(ring, fd_resource(target->buffer)->bo, 0, 0, 0);
+			OUT_RING(ring, target->buffer_size + offset);
 
-				OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_OFFSET(i), 3);
-				OUT_RING(ring, offset);
-				/* VPC_SO[i].FLUSH_BASE_LO/HI: */
-				// TODO just give hw a dummy addr for now.. we should
-				// be using this an then CP_MEM_TO_REG to set the
-				// VPC_SO[i].BUFFER_OFFSET for the next draw..
-				OUT_RELOCW(ring, fd5_context(ctx)->blit_mem, 0x100, 0, 0);
+			OUT_PKT4(ring, REG_A5XX_VPC_SO_BUFFER_OFFSET(i), 3);
+			OUT_RING(ring, offset);
+			/* VPC_SO[i].FLUSH_BASE_LO/HI: */
+			// TODO just give hw a dummy addr for now.. we should
+			// be using this an then CP_MEM_TO_REG to set the
+			// VPC_SO[i].BUFFER_OFFSET for the next draw..
+			OUT_RELOCW(ring, fd5_context(ctx)->blit_mem, 0x100, 0, 0);
 
-				emit->streamout_mask |= (1 << i);
-			}
+			emit->streamout_mask |= (1 << i);
 		}
 	}
 
-	if ((dirty & FD_DIRTY_BLEND)) {
+	if (dirty & FD_DIRTY_BLEND) {
 		struct fd5_blend_stateobj *blend = fd5_blend_stateobj(ctx->blend);
 		uint32_t i;
 
@@ -733,12 +763,16 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			OUT_RING(ring, blend_control);
 		}
 
-		OUT_PKT4(ring, REG_A5XX_RB_BLEND_CNTL, 1);
-		OUT_RING(ring, blend->rb_blend_cntl |
-				A5XX_RB_BLEND_CNTL_SAMPLE_MASK(0xffff));
-
 		OUT_PKT4(ring, REG_A5XX_SP_BLEND_CNTL, 1);
 		OUT_RING(ring, blend->sp_blend_cntl);
+	}
+
+	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_SAMPLE_MASK)) {
+		struct fd5_blend_stateobj *blend = fd5_blend_stateobj(ctx->blend);
+
+		OUT_PKT4(ring, REG_A5XX_RB_BLEND_CNTL, 1);
+		OUT_RING(ring, blend->rb_blend_cntl |
+				A5XX_RB_BLEND_CNTL_SAMPLE_MASK(ctx->sample_mask));
 	}
 
 	if (dirty & FD_DIRTY_BLEND_COLOR) {
@@ -1018,10 +1052,10 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E5DB, 1);
 	OUT_RING(ring, 0x00000000);
 
-	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E600, 1);
+	OUT_PKT4(ring, REG_A5XX_SP_HS_CTRL_REG0, 1);
 	OUT_RING(ring, 0x00000000);
 
-	OUT_PKT4(ring, REG_A5XX_UNKNOWN_E640, 1);
+	OUT_PKT4(ring, REG_A5XX_SP_GS_CTRL_REG0, 1);
 	OUT_RING(ring, 0x00000000);
 
 	OUT_PKT4(ring, REG_A5XX_TPL1_VS_TEX_COUNT, 4);
@@ -1071,7 +1105,15 @@ t7              opcode: CP_WAIT_FOR_IDLE (26) (1 dwords)
 static void
 fd5_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
 {
+	/* for debug after a lock up, write a unique counter value
+	 * to scratch6 for each IB, to make it easier to match up
+	 * register dumps to cmdstream.  The combination of IB and
+	 * DRAW (scratch7) is enough to "triangulate" the particular
+	 * draw that caused lockup.
+	 */
+	emit_marker5(ring, 6);
 	__OUT_IB5(ring, target);
+	emit_marker5(ring, 6);
 }
 
 static void

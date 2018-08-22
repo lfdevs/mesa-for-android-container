@@ -245,8 +245,8 @@ static int r600_init_surface(struct r600_common_screen *rscreen,
 	if (!(ptex->flags & R600_RESOURCE_FLAG_FORCE_TILING))
 		flags |= RADEON_SURF_OPTIMIZE_FOR_SPACE;
 
-	r = rscreen->ws->surface_init(rscreen->ws, ptex, flags, bpe,
-				      array_mode, surface);
+	r = rscreen->ws->surface_init(rscreen->ws, ptex,
+				      flags, bpe, array_mode, surface);
 	if (r) {
 		return r;
 	}
@@ -616,8 +616,8 @@ void r600_texture_get_fmask_info(struct r600_common_screen *rscreen,
 		bpe *= 2;
 	}
 
-	if (rscreen->ws->surface_init(rscreen->ws, &templ, flags, bpe,
-				      RADEON_SURF_MODE_2D, &fmask)) {
+	if (rscreen->ws->surface_init(rscreen->ws, &templ,
+				      flags, bpe, RADEON_SURF_MODE_2D, &fmask)) {
 		R600_ERR("Got error in surface_init while allocating FMASK.\n");
 		return;
 	}
@@ -1636,7 +1636,7 @@ static void r600_clear_texture(struct pipe_context *pipe,
 			desc->unpack_rgba_float(color.f, 0, data, 0, 1, 1);
 
 		if (screen->is_format_supported(screen, tex->format,
-						tex->target, 0,
+						tex->target, 0, 0,
 						PIPE_BIND_RENDER_TARGET)) {
 			pipe->clear_render_target(pipe, sf, &color,
 						  box->x, box->y,
@@ -1792,6 +1792,16 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 		 */
 		if (tex->resource.b.is_shared &&
 		    !(tex->resource.external_usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH))
+			continue;
+
+		/* Use a slow clear for small surfaces where the cost of
+		 * the eliminate pass can be higher than the benefit of fast
+		 * clear. AMDGPU-pro does this, but the numbers may differ.
+		 *
+		 * This helps on both dGPUs and APUs, even small ones.
+		 */
+		if (tex->resource.b.b.nr_samples <= 1 &&
+		    tex->resource.b.b.width0 * tex->resource.b.b.height0 <= 300 * 300)
 			continue;
 
 		{

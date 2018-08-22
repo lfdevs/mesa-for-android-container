@@ -70,6 +70,7 @@ i915_is_format_supported(struct pipe_screen *screen,
                          enum pipe_format format,
                          enum pipe_texture_target target,
                          unsigned sample_count,
+                         unsigned storage_sample_count,
                          unsigned tex_usage);
 
 #endif /* I915_SCREEN_H */

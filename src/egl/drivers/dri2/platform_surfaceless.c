@@ -130,8 +130,10 @@ dri2_surfaceless_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
    config = dri2_get_dri_config(dri2_conf, type,
                                 dri2_surf->base.GLColorspace);
 
-   if (!config)
+   if (!config) {
+      _eglError(EGL_BAD_MATCH, "Unsupported surfacetype/colorspace configuration");
       goto cleanup_surface;
+   }
 
    dri2_surf->dri_drawable =
       dri2_dpy->image_driver->createNewDrawable(dri2_dpy->dri_screen, config,
@@ -258,9 +260,24 @@ static const __DRIimageLoaderExtension image_loader_extension = {
    .flushFrontBuffer = surfaceless_flush_front_buffer,
 };
 
+static const __DRIswrastLoaderExtension swrast_loader_extension = {
+   .base            = { __DRI_SWRAST_LOADER, 1 },
+   .getDrawableInfo = NULL,
+   .putImage        = NULL,
+   .getImage        = NULL,
+};
+
 #define DRM_RENDER_DEV_NAME  "%s/renderD%d"
 
 static const __DRIextension *image_loader_extensions[] = {
+   &image_loader_extension.base,
+   &image_lookup_extension.base,
+   &use_invalidate.base,
+   NULL,
+};
+
+static const __DRIextension *swrast_loader_extensions[] = {
+   &swrast_loader_extension.base,
    &image_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
@@ -276,6 +293,7 @@ surfaceless_probe_device(_EGLDisplay *dpy, bool swrast)
    int fd;
    int i;
 
+   /* Attempt to find DRM device. */
    for (i = 0; i < limit; ++i) {
       char *card_path;
       if (asprintf(&card_path, DRM_RENDER_DEV_NAME, DRM_DIR_NAME, base + i) < 0)
@@ -286,10 +304,13 @@ surfaceless_probe_device(_EGLDisplay *dpy, bool swrast)
       if (fd < 0)
          continue;
 
-      if (swrast)
+      if (swrast) {
          dri2_dpy->driver_name = strdup("kms_swrast");
-      else
+         dri2_dpy->loader_extensions = swrast_loader_extensions;
+      } else {
          dri2_dpy->driver_name = loader_get_driver_for_fd(fd);
+         dri2_dpy->loader_extensions = image_loader_extensions;
+      }
       if (!dri2_dpy->driver_name) {
          close(fd);
          continue;
@@ -301,6 +322,25 @@ surfaceless_probe_device(_EGLDisplay *dpy, bool swrast)
 
       close(fd);
       dri2_dpy->fd = -1;
+      free(dri2_dpy->driver_name);
+      dri2_dpy->driver_name = NULL;
+      dri2_dpy->loader_extensions = NULL;
+   }
+
+   /* No DRM device, so attempt to fall back to software path w/o DRM. */
+   if (swrast) {
+      _eglLog(_EGL_DEBUG, "Falling back to surfaceless swrast without DRM.");
+      dri2_dpy->fd = -1;
+      dri2_dpy->driver_name = strdup("swrast");
+      if (!dri2_dpy->driver_name) {
+         return false;
+      }
+
+      if (dri2_load_driver_swrast(dpy)) {
+         dri2_dpy->loader_extensions = swrast_loader_extensions;
+         return true;
+      }
+
       free(dri2_dpy->driver_name);
       dri2_dpy->driver_name = NULL;
    }
@@ -335,8 +375,6 @@ dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
       err = "DRI2: failed to load driver";
       goto cleanup;
    }
-
-   dri2_dpy->loader_extensions = image_loader_extensions;
 
    if (!dri2_create_screen(disp)) {
       err = "DRI2: failed to create screen";

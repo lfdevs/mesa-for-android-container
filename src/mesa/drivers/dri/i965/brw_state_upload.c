@@ -64,10 +64,6 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
    brw_upload_invariant_state(brw);
 
    if (devinfo->gen == 10 || devinfo->gen == 11) {
-      brw_load_register_imm32(brw, GEN10_CACHE_MODE_SS,
-                              REG_MASK(GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE) |
-                              GEN10_FLOAT_BLEND_OPTIMIZATION_ENABLE);
-
       /* From gen10 workaround table in h/w specs:
        *
        *    "On 3DSTATE_3D_MODE, driver must always program bits 31:16 of DW1

@@ -398,7 +398,7 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
 
    mtx_lock(&qdws->bo_handles_mutex);
 
-   if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
+   if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       res = util_hash_table_get(qdws->bo_names, (void*)(uintptr_t)handle);
       if (res) {
          struct virgl_hw_res *r = NULL;
@@ -407,7 +407,7 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
       }
    }
 
-   if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
+   if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
       int r;
       r = drmPrimeFDToHandle(qdws->fd, whandle->handle, &handle);
       if (r) {
@@ -427,7 +427,7 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    if (!res)
       goto done;
 
-   if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
+   if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
       res->bo_handle = handle;
    } else {
       memset(&open_arg, 0, sizeof(open_arg));
@@ -476,7 +476,7 @@ static boolean virgl_drm_winsys_resource_get_handle(struct virgl_winsys *qws,
    if (!res)
        return FALSE;
 
-   if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
+   if (whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
       if (!res->flinked) {
          memset(&flink, 0, sizeof(flink));
          flink.handle = res->bo_handle;
@@ -492,9 +492,9 @@ static boolean virgl_drm_winsys_resource_get_handle(struct virgl_winsys *qws,
          mtx_unlock(&qdws->bo_handles_mutex);
       }
       whandle->handle = res->flink;
-   } else if (whandle->type == DRM_API_HANDLE_TYPE_KMS) {
+   } else if (whandle->type == WINSYS_HANDLE_TYPE_KMS) {
       whandle->handle = res->bo_handle;
-   } else if (whandle->type == DRM_API_HANDLE_TYPE_FD) {
+   } else if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
       if (drmPrimeHandleToFD(qdws->fd, res->bo_handle, DRM_CLOEXEC, (int*)&whandle->handle))
             return FALSE;
       mtx_lock(&qdws->bo_handles_mutex);
@@ -798,7 +798,14 @@ virgl_drm_winsys_create(int drmFD)
 {
    struct virgl_drm_winsys *qdws;
    int ret;
+   int gl = 0;
    struct drm_virtgpu_getparam getparam = {0};
+
+   getparam.param = VIRTGPU_PARAM_3D_FEATURES;
+   getparam.value = (uint64_t)(uintptr_t)&gl;
+   ret = drmIoctl(drmFD, DRM_IOCTL_VIRTGPU_GETPARAM, &getparam);
+   if (ret < 0 || !gl)
+      return NULL;
 
    qdws = CALLOC_STRUCT(virgl_drm_winsys);
    if (!qdws)
@@ -912,6 +919,10 @@ virgl_drm_screen_create(int fd)
       int dup_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
 
       vws = virgl_drm_winsys_create(dup_fd);
+      if (!vws) {
+         close(dup_fd);
+         goto unlock;
+      }
 
       pscreen = virgl_create_screen(vws);
       if (pscreen) {

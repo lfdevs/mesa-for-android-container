@@ -45,8 +45,6 @@ if with_platform_wayland
   incs_gbm += inc_wayland_drm
 endif
 
-# TODO: wayland support (requires egl)
-
 libgbm = shared_library(
   'gbm',
   files_gbm,

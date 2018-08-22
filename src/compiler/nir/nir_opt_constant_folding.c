@@ -41,7 +41,7 @@ struct constant_fold_state {
 static bool
 constant_fold_alu_instr(nir_alu_instr *instr, void *mem_ctx)
 {
-   nir_const_value src[4];
+   nir_const_value src[NIR_MAX_VEC_COMPONENTS];
 
    if (!instr->dest.dest.is_ssa)
       return false;
@@ -76,10 +76,20 @@ constant_fold_alu_instr(nir_alu_instr *instr, void *mem_ctx)
 
       for (unsigned j = 0; j < nir_ssa_alu_instr_src_components(instr, i);
            j++) {
-         if (load_const->def.bit_size == 64)
+         switch(load_const->def.bit_size) {
+         case 64:
             src[i].u64[j] = load_const->value.u64[instr->src[i].swizzle[j]];
-         else
+            break;
+         case 32:
             src[i].u32[j] = load_const->value.u32[instr->src[i].swizzle[j]];
+            break;
+         case 16:
+            src[i].u16[j] = load_const->value.u16[instr->src[i].swizzle[j]];
+            break;
+         case 8:
+            src[i].u8[j] = load_const->value.u8[instr->src[i].swizzle[j]];
+            break;
+         }
       }
 
       /* We shouldn't have any source modifiers in the optimization loop. */
@@ -115,67 +125,32 @@ constant_fold_alu_instr(nir_alu_instr *instr, void *mem_ctx)
 }
 
 static bool
-constant_fold_deref(nir_instr *instr, nir_deref_var *deref)
-{
-   bool progress = false;
-
-   for (nir_deref *tail = deref->deref.child; tail; tail = tail->child) {
-      if (tail->deref_type != nir_deref_type_array)
-         continue;
-
-      nir_deref_array *arr = nir_deref_as_array(tail);
-
-      if (arr->deref_array_type == nir_deref_array_type_indirect &&
-          arr->indirect.is_ssa &&
-          arr->indirect.ssa->parent_instr->type == nir_instr_type_load_const) {
-         nir_load_const_instr *indirect =
-            nir_instr_as_load_const(arr->indirect.ssa->parent_instr);
-
-         arr->base_offset += indirect->value.u32[0];
-
-         /* Clear out the source */
-         nir_instr_rewrite_src(instr, &arr->indirect, nir_src_for_ssa(NULL));
-
-         arr->deref_array_type = nir_deref_array_type_direct;
-
-         progress = true;
-      }
-   }
-
-   return progress;
-}
-
-static bool
 constant_fold_intrinsic_instr(nir_intrinsic_instr *instr)
 {
    bool progress = false;
 
-   unsigned num_vars = nir_intrinsic_infos[instr->intrinsic].num_variables;
-   for (unsigned i = 0; i < num_vars; i++) {
-      progress |= constant_fold_deref(&instr->instr, instr->variables[i]);
-   }
-
    if (instr->intrinsic == nir_intrinsic_discard_if) {
       nir_const_value *src_val = nir_src_as_const_value(instr->src[0]);
-      if (src_val && src_val->u32[0] == 0) {
+      if (src_val && src_val->u32[0] == NIR_FALSE) {
+         nir_instr_remove(&instr->instr);
+         progress = true;
+      } else if (src_val && src_val->u32[0] == NIR_TRUE) {
+         /* This method of getting a nir_shader * from a nir_instr is
+          * admittedly gross, but given the rarity of hitting this case I think
+          * it's preferable to plumbing an otherwise unused nir_shader *
+          * parameter through four functions to get here.
+          */
+         nir_cf_node *cf_node = &instr->instr.block->cf_node;
+         nir_function_impl *impl = nir_cf_node_get_function(cf_node);
+         nir_shader *shader = impl->function->shader;
+
+         nir_intrinsic_instr *discard =
+            nir_intrinsic_instr_create(shader, nir_intrinsic_discard);
+         nir_instr_insert_before(&instr->instr, &discard->instr);
          nir_instr_remove(&instr->instr);
          progress = true;
       }
    }
-
-   return progress;
-}
-
-static bool
-constant_fold_tex_instr(nir_tex_instr *instr)
-{
-   bool progress = false;
-
-   if (instr->texture)
-      progress |= constant_fold_deref(&instr->instr, instr->texture);
-
-   if (instr->sampler)
-      progress |= constant_fold_deref(&instr->instr, instr->sampler);
 
    return progress;
 }
@@ -193,9 +168,6 @@ constant_fold_block(nir_block *block, void *mem_ctx)
       case nir_instr_type_intrinsic:
          progress |=
             constant_fold_intrinsic_instr(nir_instr_as_intrinsic(instr));
-         break;
-      case nir_instr_type_tex:
-         progress |= constant_fold_tex_instr(nir_instr_as_tex(instr));
          break;
       default:
          /* Don't know how to constant fold */

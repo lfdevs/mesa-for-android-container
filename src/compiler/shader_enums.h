@@ -518,6 +518,13 @@ typedef enum
    SYSTEM_VALUE_FIRST_VERTEX,
 
    /**
+    * If the Draw command used to start the rendering was an indexed draw
+    * or not (~0/0). Useful to calculate \c SYSTEM_VALUE_BASE_VERTEX as
+    * \c SYSTEM_VALUE_IS_INDEXED_DRAW & \c SYSTEM_VALUE_FIRST_VERTEX.
+    */
+   SYSTEM_VALUE_IS_INDEXED_DRAW,
+
+   /**
     * Value of \c baseinstance passed to instanced draw entry points
     *
     * \sa SYSTEM_VALUE_INSTANCE_ID
@@ -578,6 +585,8 @@ typedef enum
    SYSTEM_VALUE_WORK_GROUP_ID,
    SYSTEM_VALUE_NUM_WORK_GROUPS,
    SYSTEM_VALUE_LOCAL_GROUP_SIZE,
+   SYSTEM_VALUE_GLOBAL_GROUP_SIZE,
+   SYSTEM_VALUE_WORK_DIM,
    /*@}*/
 
    /** Required for VK_KHR_device_group */

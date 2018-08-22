@@ -1,32 +1,32 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-* 
-* @file builder_misc.cpp
-* 
-* @brief Implementation for miscellaneous builder functions
-* 
-* Notes:
-* 
-******************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file builder_misc.cpp
+ *
+ * @brief Implementation for miscellaneous builder functions
+ *
+ * Notes:
+ *
+ ******************************************************************************/
 #include "jit_pch.hpp"
 #include "builder.h"
 #include "common/rdtsc_buckets.h"
@@ -50,25 +50,25 @@ namespace SwrJit
 
         // Extract the sign, exponent, and mantissa
         uint32_t uf = *(uint32_t*)&val;
-        sign = (uf & 0x80000000) >> 31;
-        exp = (uf & 0x7F800000) >> 23;
-        mant = uf & 0x007FFFFF;
+        sign        = (uf & 0x80000000) >> 31;
+        exp         = (uf & 0x7F800000) >> 23;
+        mant        = uf & 0x007FFFFF;
 
         // Check for out of range
         if (std::isnan(val))
         {
-            exp = 0x1F;
+            exp  = 0x1F;
             mant = 0x200;
-            sign = 1;                     // set the sign bit for NANs
+            sign = 1; // set the sign bit for NANs
         }
         else if (std::isinf(val))
         {
-            exp = 0x1f;
+            exp  = 0x1f;
             mant = 0x0;
         }
         else if (exp > (0x70 + 0x1E)) // Too big to represent -> max representable value
         {
-            exp = 0x1E;
+            exp  = 0x1E;
             mant = 0x3FF;
         }
         else if ((exp <= 0x70) && (exp >= 0x66)) // It's a denorm
@@ -76,12 +76,12 @@ namespace SwrJit
             mant |= 0x00800000;
             for (; exp <= 0x70; mant >>= 1, exp++)
                 ;
-            exp = 0;
+            exp  = 0;
             mant = mant >> 13;
         }
         else if (exp < 0x66) // Too small to represent -> Zero
         {
-            exp = 0;
+            exp  = 0;
             mant = 0;
         }
         else
@@ -89,7 +89,7 @@ namespace SwrJit
             // Saves bits that will be shifted off for rounding
             roundBits = mant & 0x1FFFu;
             // convert exponent and mantissa to 16 bit format
-            exp = exp - 0x70;
+            exp  = exp - 0x70;
             mant = mant >> 13;
 
             // Essentially RTZ, but round up if off by only 1 lsb
@@ -129,7 +129,7 @@ namespace SwrJit
         {
             uint32_t sign = (val & 0x8000) << 16;
             uint32_t mant = (val & 0x3ff) << 13;
-            uint32_t exp = (val >> 10) & 0x1f;
+            uint32_t exp  = (val >> 10) & 0x1f;
             if ((exp == 0) && (mant != 0)) // Adjust exponent and mantissa for denormals
             {
                 mant <<= 1;
@@ -140,134 +140,94 @@ namespace SwrJit
                 }
                 mant &= (0x3ff << 13);
             }
-            exp = ((exp - 15 + 127) & 0xff) << 23;
+            exp    = ((exp - 15 + 127) & 0xff) << 23;
             result = sign | exp | mant;
         }
 
         return *(float*)&result;
     }
 
-    Constant *Builder::C(bool i)
-    {
-        return ConstantInt::get(IRB()->getInt1Ty(), (i ? 1 : 0));
-    }
+    Constant* Builder::C(bool i) { return ConstantInt::get(IRB()->getInt1Ty(), (i ? 1 : 0)); }
 
-    Constant *Builder::C(char i)
-    {
-        return ConstantInt::get(IRB()->getInt8Ty(), i);
-    }
+    Constant* Builder::C(char i) { return ConstantInt::get(IRB()->getInt8Ty(), i); }
 
-    Constant *Builder::C(uint8_t i)
-    {
-        return ConstantInt::get(IRB()->getInt8Ty(), i);
-    }
+    Constant* Builder::C(uint8_t i) { return ConstantInt::get(IRB()->getInt8Ty(), i); }
 
-    Constant *Builder::C(int i)
-    {
-        return ConstantInt::get(IRB()->getInt32Ty(), i);
-    }
+    Constant* Builder::C(int i) { return ConstantInt::get(IRB()->getInt32Ty(), i); }
 
-    Constant *Builder::C(int64_t i)
-    {
-        return ConstantInt::get(IRB()->getInt64Ty(), i);
-    }
+    Constant* Builder::C(int64_t i) { return ConstantInt::get(IRB()->getInt64Ty(), i); }
 
-    Constant *Builder::C(uint16_t i)
-    {
-        return ConstantInt::get(mInt16Ty,i);
-    }
+    Constant* Builder::C(uint16_t i) { return ConstantInt::get(mInt16Ty, i); }
 
-    Constant *Builder::C(uint32_t i)
-    {
-        return ConstantInt::get(IRB()->getInt32Ty(), i);
-    }
+    Constant* Builder::C(uint32_t i) { return ConstantInt::get(IRB()->getInt32Ty(), i); }
 
-    Constant *Builder::C(float i)
-    {
-        return ConstantFP::get(IRB()->getFloatTy(), i);
-    }
+    Constant* Builder::C(uint64_t i) { return ConstantInt::get(IRB()->getInt64Ty(), i); }
 
-    Constant *Builder::PRED(bool pred)
+    Constant* Builder::C(float i) { return ConstantFP::get(IRB()->getFloatTy(), i); }
+
+    Constant* Builder::PRED(bool pred)
     {
         return ConstantInt::get(IRB()->getInt1Ty(), (pred ? 1 : 0));
     }
 
-    Value *Builder::VIMMED1(int i)
+    Value* Builder::VIMMED1(int i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VIMMED1_16(int i)
+    Value* Builder::VIMMED1_16(int i)
     {
         return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VIMMED1(uint32_t i)
+    Value* Builder::VIMMED1(uint32_t i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VIMMED1_16(uint32_t i)
+    Value* Builder::VIMMED1_16(uint32_t i)
     {
         return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VIMMED1(float i)
+    Value* Builder::VIMMED1(float i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantFP>(C(i)));
     }
 
-    Value *Builder::VIMMED1_16(float i)
+    Value* Builder::VIMMED1_16(float i)
     {
         return ConstantVector::getSplat(mVWidth16, cast<ConstantFP>(C(i)));
     }
 
-    Value *Builder::VIMMED1(bool i)
+    Value* Builder::VIMMED1(bool i)
     {
         return ConstantVector::getSplat(mVWidth, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VIMMED1_16(bool i)
+    Value* Builder::VIMMED1_16(bool i)
     {
         return ConstantVector::getSplat(mVWidth16, cast<ConstantInt>(C(i)));
     }
 
-    Value *Builder::VUNDEF_IPTR()
-    {
-        return UndefValue::get(VectorType::get(mInt32PtrTy,mVWidth));
-    }
+    Value* Builder::VUNDEF_IPTR() { return UndefValue::get(VectorType::get(mInt32PtrTy, mVWidth)); }
 
-    Value *Builder::VUNDEF(Type* t)
-    {
-        return UndefValue::get(VectorType::get(t, mVWidth));
-    }
+    Value* Builder::VUNDEF(Type* t) { return UndefValue::get(VectorType::get(t, mVWidth)); }
 
-    Value *Builder::VUNDEF_I()
-    {
-        return UndefValue::get(VectorType::get(mInt32Ty, mVWidth));
-    }
+    Value* Builder::VUNDEF_I() { return UndefValue::get(VectorType::get(mInt32Ty, mVWidth)); }
 
-    Value *Builder::VUNDEF_I_16()
-    {
-        return UndefValue::get(VectorType::get(mInt32Ty, mVWidth16));
-    }
+    Value* Builder::VUNDEF_I_16() { return UndefValue::get(VectorType::get(mInt32Ty, mVWidth16)); }
 
-    Value *Builder::VUNDEF_F()
-    {
-        return UndefValue::get(VectorType::get(mFP32Ty, mVWidth));
-    }
+    Value* Builder::VUNDEF_F() { return UndefValue::get(VectorType::get(mFP32Ty, mVWidth)); }
 
-    Value *Builder::VUNDEF_F_16()
-    {
-        return UndefValue::get(VectorType::get(mFP32Ty, mVWidth16));
-    }
+    Value* Builder::VUNDEF_F_16() { return UndefValue::get(VectorType::get(mFP32Ty, mVWidth16)); }
 
-    Value *Builder::VUNDEF(Type *ty, uint32_t size)
+    Value* Builder::VUNDEF(Type* ty, uint32_t size)
     {
         return UndefValue::get(VectorType::get(ty, size));
     }
 
-    Value *Builder::VBROADCAST(Value *src, const llvm::Twine& name)
+    Value* Builder::VBROADCAST(Value* src, const llvm::Twine& name)
     {
         // check if src is already a vector
         if (src->getType()->isVectorTy())
@@ -278,7 +238,7 @@ namespace SwrJit
         return VECTOR_SPLAT(mVWidth, src, name);
     }
 
-    Value *Builder::VBROADCAST_16(Value *src)
+    Value* Builder::VBROADCAST_16(Value* src)
     {
         // check if src is already a vector
         if (src->getType()->isVectorTy())
@@ -292,18 +252,20 @@ namespace SwrJit
     uint32_t Builder::IMMED(Value* v)
     {
         SWR_ASSERT(isa<ConstantInt>(v));
-        ConstantInt *pValConst = cast<ConstantInt>(v);
+        ConstantInt* pValConst = cast<ConstantInt>(v);
         return pValConst->getZExtValue();
     }
 
     int32_t Builder::S_IMMED(Value* v)
     {
         SWR_ASSERT(isa<ConstantInt>(v));
-        ConstantInt *pValConst = cast<ConstantInt>(v);
+        ConstantInt* pValConst = cast<ConstantInt>(v);
         return pValConst->getSExtValue();
     }
 
-    CallInst *Builder::CALL(Value *Callee, const std::initializer_list<Value*> &argsList, const llvm::Twine& name)
+    CallInst* Builder::CALL(Value*                               Callee,
+                            const std::initializer_list<Value*>& argsList,
+                            const llvm::Twine&                   name)
     {
         std::vector<Value*> args;
         for (auto arg : argsList)
@@ -311,14 +273,14 @@ namespace SwrJit
         return CALLA(Callee, args, name);
     }
 
-    CallInst *Builder::CALL(Value *Callee, Value* arg)
+    CallInst* Builder::CALL(Value* Callee, Value* arg)
     {
         std::vector<Value*> args;
         args.push_back(arg);
         return CALLA(Callee, args);
     }
 
-    CallInst *Builder::CALL2(Value *Callee, Value* arg1, Value* arg2)
+    CallInst* Builder::CALL2(Value* Callee, Value* arg1, Value* arg2)
     {
         std::vector<Value*> args;
         args.push_back(arg1);
@@ -326,7 +288,7 @@ namespace SwrJit
         return CALLA(Callee, args);
     }
 
-    CallInst *Builder::CALL3(Value *Callee, Value* arg1, Value* arg2, Value* arg3)
+    CallInst* Builder::CALL3(Value* Callee, Value* arg1, Value* arg2, Value* arg3)
     {
         std::vector<Value*> args;
         args.push_back(arg1);
@@ -335,15 +297,15 @@ namespace SwrJit
         return CALLA(Callee, args);
     }
 
-    Value *Builder::VRCP(Value *va, const llvm::Twine& name)
+    Value* Builder::VRCP(Value* va, const llvm::Twine& name)
     {
-        return FDIV(VIMMED1(1.0f), va, name);  // 1 / a
+        return FDIV(VIMMED1(1.0f), va, name); // 1 / a
     }
 
-    Value *Builder::VPLANEPS(Value* vA, Value* vB, Value* vC, Value* &vX, Value* &vY)
+    Value* Builder::VPLANEPS(Value* vA, Value* vB, Value* vC, Value*& vX, Value*& vY)
     {
         Value* vOut = FMADDPS(vA, vX, vC);
-        vOut = FMADDPS(vB, vY, vOut);
+        vOut        = FMADDPS(vB, vY, vOut);
         return vOut;
     }
 
@@ -357,7 +319,8 @@ namespace SwrJit
     ///   result from a GEP, printing out the pointer to memory
     /// @param printStr - constant string to print, which includes format specifiers
     /// @param printArgs - initializer list of Value*'s to print to std out
-    CallInst *Builder::PRINT(const std::string &printStr,const std::initializer_list<Value*> &printArgs)
+    CallInst* Builder::PRINT(const std::string&                   printStr,
+                             const std::initializer_list<Value*>& printArgs)
     {
         // push the arguments to CallPrint into a vector
         std::vector<Value*> printCallArgs;
@@ -365,15 +328,15 @@ namespace SwrJit
         printCallArgs.resize(1);
 
         // search through the format string for special processing
-        size_t pos = 0;
+        size_t      pos = 0;
         std::string tempStr(printStr);
-        pos = tempStr.find('%', pos);
+        pos    = tempStr.find('%', pos);
         auto v = printArgs.begin();
 
         while ((pos != std::string::npos) && (v != printArgs.end()))
         {
-            Value* pArg = *v;
-            Type* pType = pArg->getType();
+            Value* pArg  = *v;
+            Type*  pType = pArg->getType();
 
             if (pType->isVectorTy())
             {
@@ -381,7 +344,7 @@ namespace SwrJit
 
                 if (toupper(tempStr[pos + 1]) == 'X')
                 {
-                    tempStr[pos] = '0';
+                    tempStr[pos]     = '0';
                     tempStr[pos + 1] = 'x';
                     tempStr.insert(pos + 2, "%08X ");
                     pos += 7;
@@ -405,9 +368,11 @@ namespace SwrJit
                     {
                         tempStr.insert(pos, std::string("%f "));
                         pos += 3;
-                        printCallArgs.push_back(FP_EXT(VEXTRACT(pArg, C(i)), Type::getDoubleTy(JM()->mContext)));
+                        printCallArgs.push_back(
+                            FP_EXT(VEXTRACT(pArg, C(i)), Type::getDoubleTy(JM()->mContext)));
                     }
-                    printCallArgs.push_back(FP_EXT(VEXTRACT(pArg, C(i)), Type::getDoubleTy(JM()->mContext)));
+                    printCallArgs.push_back(
+                        FP_EXT(VEXTRACT(pArg, C(i)), Type::getDoubleTy(JM()->mContext)));
                 }
                 else if ((tempStr[pos + 1] == 'd') && (pContainedType->isIntegerTy()))
                 {
@@ -416,9 +381,24 @@ namespace SwrJit
                     {
                         tempStr.insert(pos, std::string("%d "));
                         pos += 3;
-                        printCallArgs.push_back(VEXTRACT(pArg, C(i)));
+                        printCallArgs.push_back(
+                            S_EXT(VEXTRACT(pArg, C(i)), Type::getInt32Ty(JM()->mContext)));
                     }
-                    printCallArgs.push_back(VEXTRACT(pArg, C(i)));
+                    printCallArgs.push_back(
+                        S_EXT(VEXTRACT(pArg, C(i)), Type::getInt32Ty(JM()->mContext)));
+                }
+                else if ((tempStr[pos + 1] == 'u') && (pContainedType->isIntegerTy()))
+                {
+                    uint32_t i = 0;
+                    for (; i < (pArg->getType()->getVectorNumElements()) - 1; i++)
+                    {
+                        tempStr.insert(pos, std::string("%d "));
+                        pos += 3;
+                        printCallArgs.push_back(
+                            Z_EXT(VEXTRACT(pArg, C(i)), Type::getInt32Ty(JM()->mContext)));
+                    }
+                    printCallArgs.push_back(
+                        Z_EXT(VEXTRACT(pArg, C(i)), Type::getInt32Ty(JM()->mContext)));
                 }
             }
             else
@@ -448,89 +428,82 @@ namespace SwrJit
         }
 
         // create global variable constant string
-        Constant *constString = ConstantDataArray::getString(JM()->mContext,tempStr,true);
-        GlobalVariable *gvPtr = new GlobalVariable(constString->getType(),true,GlobalValue::InternalLinkage,constString,"printStr");
+        Constant*       constString = ConstantDataArray::getString(JM()->mContext, tempStr, true);
+        GlobalVariable* gvPtr       = new GlobalVariable(
+            constString->getType(), true, GlobalValue::InternalLinkage, constString, "printStr");
         JM()->mpCurrentModule->getGlobalList().push_back(gvPtr);
 
         // get a pointer to the first character in the constant string array
-        std::vector<Constant*> geplist{C(0),C(0)};
-        Constant *strGEP = ConstantExpr::getGetElementPtr(nullptr, gvPtr,geplist,false);
+        std::vector<Constant*> geplist{C(0), C(0)};
+        Constant* strGEP = ConstantExpr::getGetElementPtr(nullptr, gvPtr, geplist, false);
 
         // insert the pointer to the format string in the argument vector
         printCallArgs[0] = strGEP;
 
         // get pointer to CallPrint function and insert decl into the module if needed
         std::vector<Type*> args;
-        args.push_back(PointerType::get(mInt8Ty,0));
-        FunctionType* callPrintTy = FunctionType::get(Type::getVoidTy(JM()->mContext),args,true);
-        Function *callPrintFn = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("CallPrint", callPrintTy));
+        args.push_back(PointerType::get(mInt8Ty, 0));
+        FunctionType* callPrintTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, true);
+        Function*     callPrintFn =
+            cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("CallPrint", callPrintTy));
 
         // if we haven't yet added the symbol to the symbol table
-        if((sys::DynamicLibrary::SearchForAddressOfSymbol("CallPrint")) == nullptr)
+        if ((sys::DynamicLibrary::SearchForAddressOfSymbol("CallPrint")) == nullptr)
         {
-            sys::DynamicLibrary::AddSymbol("CallPrint", (void *)&CallPrint);
+            sys::DynamicLibrary::AddSymbol("CallPrint", (void*)&CallPrint);
         }
 
         // insert a call to CallPrint
-        return CALLA(callPrintFn,printCallArgs);
+        return CALLA(callPrintFn, printCallArgs);
     }
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief Wrapper around PRINT with initializer list.
-    CallInst* Builder::PRINT(const std::string &printStr)
-    {
-        return PRINT(printStr, {});
-    }
+    CallInst* Builder::PRINT(const std::string& printStr) { return PRINT(printStr, {}); }
 
-    Value *Builder::EXTRACT_16(Value *x, uint32_t imm)
+    Value* Builder::EXTRACT_16(Value* x, uint32_t imm)
     {
         if (imm == 0)
         {
-            return VSHUFFLE(x, UndefValue::get(x->getType()), { 0, 1, 2, 3, 4, 5, 6, 7 });
+            return VSHUFFLE(x, UndefValue::get(x->getType()), {0, 1, 2, 3, 4, 5, 6, 7});
         }
         else
         {
-            return VSHUFFLE(x, UndefValue::get(x->getType()), { 8, 9, 10, 11, 12, 13, 14, 15 });
+            return VSHUFFLE(x, UndefValue::get(x->getType()), {8, 9, 10, 11, 12, 13, 14, 15});
         }
     }
 
-    Value *Builder::JOIN_16(Value *a, Value *b)
+    Value* Builder::JOIN_16(Value* a, Value* b)
     {
-        return VSHUFFLE(a, b, { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 });
+        return VSHUFFLE(a, b, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15});
     }
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief convert x86 <N x float> mask to llvm <N x i1> mask
-    Value *Builder::MASK(Value *vmask)
+    Value* Builder::MASK(Value* vmask)
     {
-        Value *src = BITCAST(vmask, mSimdInt32Ty);
+        Value* src = BITCAST(vmask, mSimdInt32Ty);
         return ICMP_SLT(src, VIMMED1(0));
     }
 
-    Value *Builder::MASK_16(Value *vmask)
+    Value* Builder::MASK_16(Value* vmask)
     {
-        Value *src = BITCAST(vmask, mSimd16Int32Ty);
+        Value* src = BITCAST(vmask, mSimd16Int32Ty);
         return ICMP_SLT(src, VIMMED1_16(0));
     }
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief convert llvm <N x i1> mask to x86 <N x i32> mask
-    Value *Builder::VMASK(Value *mask)
-    {
-        return S_EXT(mask, mSimdInt32Ty);
-    }
+    Value* Builder::VMASK(Value* mask) { return S_EXT(mask, mSimdInt32Ty); }
 
-    Value *Builder::VMASK_16(Value *mask)
-    {
-        return S_EXT(mask, mSimd16Int32Ty);
-    }
+    Value* Builder::VMASK_16(Value* mask) { return S_EXT(mask, mSimd16Int32Ty); }
 
     /// @brief Convert <Nxi1> llvm mask to integer
-    Value *Builder::VMOVMSK(Value* mask)
+    Value* Builder::VMOVMSK(Value* mask)
     {
         SWR_ASSERT(mask->getType()->getVectorElementType() == mInt1Ty);
         uint32_t numLanes = mask->getType()->getVectorNumElements();
-        Value* i32Result;
+        Value*   i32Result;
         if (numLanes == 8)
         {
             i32Result = BITCAST(mask, mInt8Ty);
@@ -548,18 +521,18 @@ namespace SwrJit
     }
 
     //////////////////////////////////////////////////////////////////////////
-    /// @brief Generate a VPSHUFB operation in LLVM IR.  If not  
+    /// @brief Generate a VPSHUFB operation in LLVM IR.  If not
     /// supported on the underlying platform, emulate it
     /// @param a - 256bit SIMD(32x8bit) of 8bit integer values
     /// @param b - 256bit SIMD(32x8bit) of 8bit integer mask values
-    /// Byte masks in lower 128 lane of b selects 8 bit values from lower 
-    /// 128bits of a, and vice versa for the upper lanes.  If the mask 
+    /// Byte masks in lower 128 lane of b selects 8 bit values from lower
+    /// 128bits of a, and vice versa for the upper lanes.  If the mask
     /// value is negative, '0' is inserted.
-    Value *Builder::PSHUFB(Value* a, Value* b)
+    Value* Builder::PSHUFB(Value* a, Value* b)
     {
         Value* res;
         // use avx2 pshufb instruction if available
-        if(JM()->mArch.AVX2())
+        if (JM()->mArch.AVX2())
         {
             res = VPSHUFB(a, b);
         }
@@ -573,22 +546,26 @@ namespace SwrJit
 
             // insert an 8 bit value from the high and low lanes of a per loop iteration
             numElms /= 2;
-            for(uint32_t i = 0; i < numElms; i++)
+            for (uint32_t i = 0; i < numElms; i++)
             {
-                ConstantInt* cLow128b = cast<ConstantInt>(cB->getAggregateElement(i));
+                ConstantInt* cLow128b  = cast<ConstantInt>(cB->getAggregateElement(i));
                 ConstantInt* cHigh128b = cast<ConstantInt>(cB->getAggregateElement(i + numElms));
 
                 // extract values from constant mask
-                char valLow128bLane =  (char)(cLow128b->getSExtValue());
+                char valLow128bLane  = (char)(cLow128b->getSExtValue());
                 char valHigh128bLane = (char)(cHigh128b->getSExtValue());
 
                 Value* insertValLow128b;
                 Value* insertValHigh128b;
 
                 // if the mask value is negative, insert a '0' in the respective output position
-                // otherwise, lookup the value at mask position (bits 3..0 of the respective mask byte) in a and insert in output vector
-                insertValLow128b = (valLow128bLane < 0) ? C((char)0) : VEXTRACT(a, C((valLow128bLane & 0xF)));
-                insertValHigh128b = (valHigh128bLane < 0) ? C((char)0) : VEXTRACT(a, C((valHigh128bLane & 0xF) + numElms));
+                // otherwise, lookup the value at mask position (bits 3..0 of the respective mask
+                // byte) in a and insert in output vector
+                insertValLow128b =
+                    (valLow128bLane < 0) ? C((char)0) : VEXTRACT(a, C((valLow128bLane & 0xF)));
+                insertValHigh128b = (valHigh128bLane < 0)
+                                        ? C((char)0)
+                                        : VEXTRACT(a, C((valHigh128bLane & 0xF) + numElms));
 
                 vShuf = VINSERT(vShuf, insertValLow128b, i);
                 vShuf = VINSERT(vShuf, insertValHigh128b, (i + numElms));
@@ -599,11 +576,11 @@ namespace SwrJit
     }
 
     //////////////////////////////////////////////////////////////////////////
-    /// @brief Generate a VPSHUFB operation (sign extend 8 8bit values to 32 
+    /// @brief Generate a VPSHUFB operation (sign extend 8 8bit values to 32
     /// bits)in LLVM IR.  If not supported on the underlying platform, emulate it
-    /// @param a - 128bit SIMD lane(16x8bit) of 8bit integer values.  Only 
+    /// @param a - 128bit SIMD lane(16x8bit) of 8bit integer values.  Only
     /// lower 8 values are used.
-    Value *Builder::PMOVSXBD(Value* a)
+    Value* Builder::PMOVSXBD(Value* a)
     {
         // VPMOVSXBD output type
         Type* v8x32Ty = VectorType::get(mInt32Ty, 8);
@@ -612,10 +589,10 @@ namespace SwrJit
     }
 
     //////////////////////////////////////////////////////////////////////////
-    /// @brief Generate a VPSHUFB operation (sign extend 8 16bit values to 32 
+    /// @brief Generate a VPSHUFB operation (sign extend 8 16bit values to 32
     /// bits)in LLVM IR.  If not supported on the underlying platform, emulate it
     /// @param a - 128bit SIMD lane(8x16bit) of 16bit integer values.
-    Value *Builder::PMOVSXWD(Value* a)
+    Value* Builder::PMOVSXWD(Value* a)
     {
         // VPMOVSXWD output type
         Type* v8x32Ty = VectorType::get(mInt32Ty, 8);
@@ -627,7 +604,7 @@ namespace SwrJit
     /// @brief Generate a VCVTPH2PS operation (float16->float32 conversion)
     /// in LLVM IR.  If not supported on the underlying platform, emulate it
     /// @param a - 128bit SIMD lane(8x16bit) of float16 in int16 format.
-    Value *Builder::CVTPH2PS(Value* a, const llvm::Twine& name)
+    Value* Builder::CVTPH2PS(Value* a, const llvm::Twine& name)
     {
         if (JM()->mArch.F16C())
         {
@@ -635,20 +612,22 @@ namespace SwrJit
         }
         else
         {
-            FunctionType* pFuncTy = FunctionType::get(mFP32Ty, mInt16Ty);
-            Function* pCvtPh2Ps = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat16ToFloat32", pFuncTy));
+            FunctionType* pFuncTy   = FunctionType::get(mFP32Ty, mInt16Ty);
+            Function*     pCvtPh2Ps = cast<Function>(
+                JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat16ToFloat32", pFuncTy));
 
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("ConvertFloat16ToFloat32") == nullptr)
             {
-                sys::DynamicLibrary::AddSymbol("ConvertFloat16ToFloat32", (void *)&ConvertFloat16ToFloat32);
+                sys::DynamicLibrary::AddSymbol("ConvertFloat16ToFloat32",
+                                               (void*)&ConvertFloat16ToFloat32);
             }
 
             Value* pResult = UndefValue::get(mSimdFP32Ty);
             for (uint32_t i = 0; i < mVWidth; ++i)
             {
-                Value* pSrc = VEXTRACT(a, C(i));
+                Value* pSrc  = VEXTRACT(a, C(i));
                 Value* pConv = CALL(pCvtPh2Ps, std::initializer_list<Value*>{pSrc});
-                pResult = VINSERT(pResult, pConv, C(i));
+                pResult      = VINSERT(pResult, pConv, C(i));
             }
 
             pResult->setName(name);
@@ -660,7 +639,7 @@ namespace SwrJit
     /// @brief Generate a VCVTPS2PH operation (float32->float16 conversion)
     /// in LLVM IR.  If not supported on the underlying platform, emulate it
     /// @param a - 128bit SIMD lane(8x16bit) of float16 in int16 format.
-    Value *Builder::CVTPS2PH(Value* a, Value* rounding)
+    Value* Builder::CVTPS2PH(Value* a, Value* rounding)
     {
         if (JM()->mArch.F16C())
         {
@@ -669,45 +648,47 @@ namespace SwrJit
         else
         {
             // call scalar C function for now
-            FunctionType* pFuncTy = FunctionType::get(mInt16Ty, mFP32Ty);
-            Function* pCvtPs2Ph = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat32ToFloat16", pFuncTy));
+            FunctionType* pFuncTy   = FunctionType::get(mInt16Ty, mFP32Ty);
+            Function*     pCvtPs2Ph = cast<Function>(
+                JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat32ToFloat16", pFuncTy));
 
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("ConvertFloat32ToFloat16") == nullptr)
             {
-                sys::DynamicLibrary::AddSymbol("ConvertFloat32ToFloat16", (void *)&ConvertFloat32ToFloat16);
+                sys::DynamicLibrary::AddSymbol("ConvertFloat32ToFloat16",
+                                               (void*)&ConvertFloat32ToFloat16);
             }
 
             Value* pResult = UndefValue::get(mSimdInt16Ty);
             for (uint32_t i = 0; i < mVWidth; ++i)
             {
-                Value* pSrc = VEXTRACT(a, C(i));
+                Value* pSrc  = VEXTRACT(a, C(i));
                 Value* pConv = CALL(pCvtPs2Ph, std::initializer_list<Value*>{pSrc});
-                pResult = VINSERT(pResult, pConv, C(i));
+                pResult      = VINSERT(pResult, pConv, C(i));
             }
 
             return pResult;
         }
     }
 
-    Value *Builder::PMAXSD(Value* a, Value* b)
+    Value* Builder::PMAXSD(Value* a, Value* b)
     {
         Value* cmp = ICMP_SGT(a, b);
         return SELECT(cmp, a, b);
     }
 
-    Value *Builder::PMINSD(Value* a, Value* b)
+    Value* Builder::PMINSD(Value* a, Value* b)
     {
         Value* cmp = ICMP_SLT(a, b);
         return SELECT(cmp, a, b);
     }
 
-    Value *Builder::PMAXUD(Value* a, Value* b)
+    Value* Builder::PMAXUD(Value* a, Value* b)
     {
         Value* cmp = ICMP_UGT(a, b);
         return SELECT(cmp, a, b);
     }
 
-    Value *Builder::PMINUD(Value* a, Value* b)
+    Value* Builder::PMINUD(Value* a, Value* b)
     {
         Value* cmp = ICMP_ULT(a, b);
         return SELECT(cmp, a, b);
@@ -717,65 +698,65 @@ namespace SwrJit
     Value* Builder::CreateEntryAlloca(Function* pFunc, Type* pType)
     {
         auto saveIP = IRB()->saveIP();
-        IRB()->SetInsertPoint(&pFunc->getEntryBlock(),
-                              pFunc->getEntryBlock().begin());
+        IRB()->SetInsertPoint(&pFunc->getEntryBlock(), pFunc->getEntryBlock().begin());
         Value* pAlloca = ALLOCA(pType);
-        if (saveIP.isSet()) IRB()->restoreIP(saveIP);
+        if (saveIP.isSet())
+            IRB()->restoreIP(saveIP);
         return pAlloca;
     }
 
     Value* Builder::CreateEntryAlloca(Function* pFunc, Type* pType, Value* pArraySize)
     {
         auto saveIP = IRB()->saveIP();
-        IRB()->SetInsertPoint(&pFunc->getEntryBlock(),
-            pFunc->getEntryBlock().begin());
+        IRB()->SetInsertPoint(&pFunc->getEntryBlock(), pFunc->getEntryBlock().begin());
         Value* pAlloca = ALLOCA(pType, pArraySize);
-        if (saveIP.isSet()) IRB()->restoreIP(saveIP);
+        if (saveIP.isSet())
+            IRB()->restoreIP(saveIP);
         return pAlloca;
     }
 
     Value* Builder::VABSPS(Value* a)
     {
-        Value* asInt = BITCAST(a, mSimdInt32Ty);
+        Value* asInt  = BITCAST(a, mSimdInt32Ty);
         Value* result = BITCAST(AND(asInt, VIMMED1(0x7fffffff)), mSimdFP32Ty);
         return result;
     }
 
-    Value *Builder::ICLAMP(Value* src, Value* low, Value* high, const llvm::Twine& name)
+    Value* Builder::ICLAMP(Value* src, Value* low, Value* high, const llvm::Twine& name)
     {
-        Value *lowCmp = ICMP_SLT(src, low);
-        Value *ret = SELECT(lowCmp, low, src);
+        Value* lowCmp = ICMP_SLT(src, low);
+        Value* ret    = SELECT(lowCmp, low, src);
 
-        Value *highCmp = ICMP_SGT(ret, high);
-        ret = SELECT(highCmp, high, ret, name);
+        Value* highCmp = ICMP_SGT(ret, high);
+        ret            = SELECT(highCmp, high, ret, name);
 
         return ret;
     }
 
-    Value *Builder::FCLAMP(Value* src, Value* low, Value* high)
+    Value* Builder::FCLAMP(Value* src, Value* low, Value* high)
     {
-        Value *lowCmp = FCMP_OLT(src, low);
-        Value *ret = SELECT(lowCmp, low, src);
+        Value* lowCmp = FCMP_OLT(src, low);
+        Value* ret    = SELECT(lowCmp, low, src);
 
-        Value *highCmp = FCMP_OGT(ret, high);
-        ret = SELECT(highCmp, high, ret);
+        Value* highCmp = FCMP_OGT(ret, high);
+        ret            = SELECT(highCmp, high, ret);
 
         return ret;
     }
 
-    Value *Builder::FCLAMP(Value* src, float low, float high)
+    Value* Builder::FCLAMP(Value* src, float low, float high)
     {
         Value* result = VMAXPS(src, VIMMED1(low));
-        result = VMINPS(result, VIMMED1(high));
+        result        = VMINPS(result, VIMMED1(high));
 
         return result;
     }
 
-    Value *Builder::FMADDPS(Value* a, Value* b, Value* c)
+    Value* Builder::FMADDPS(Value* a, Value* b, Value* c)
     {
         Value* vOut;
         // use FMADs if available
-        if(JM()->mArch.AVX2())
+        if (JM()->mArch.AVX2())
         {
             vOut = VFMADDPS(a, b, c);
         }
@@ -788,39 +769,40 @@ namespace SwrJit
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief pop count on vector mask (e.g. <8 x i1>)
-    Value* Builder::VPOPCNT(Value* a)
-    {
-        return POPCNT(VMOVMSK(a));
-    }
+    Value* Builder::VPOPCNT(Value* a) { return POPCNT(VMOVMSK(a)); }
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief C functions called by LLVM IR
     //////////////////////////////////////////////////////////////////////////
 
-    Value *Builder::VEXTRACTI128(Value* a, Constant* imm8)
+    Value* Builder::VEXTRACTI128(Value* a, Constant* imm8)
     {
-        bool flag = !imm8->isZeroValue();
-        SmallVector<Constant*,8> idx;
-        for (unsigned i = 0; i < mVWidth / 2; i++) {
+        bool                      flag = !imm8->isZeroValue();
+        SmallVector<Constant*, 8> idx;
+        for (unsigned i = 0; i < mVWidth / 2; i++)
+        {
             idx.push_back(C(flag ? i + mVWidth / 2 : i));
         }
         return VSHUFFLE(a, VUNDEF_I(), ConstantVector::get(idx));
     }
 
-    Value *Builder::VINSERTI128(Value* a, Value* b, Constant* imm8)
+    Value* Builder::VINSERTI128(Value* a, Value* b, Constant* imm8)
     {
-        bool flag = !imm8->isZeroValue();
-        SmallVector<Constant*,8> idx;
-        for (unsigned i = 0; i < mVWidth; i++) {
+        bool                      flag = !imm8->isZeroValue();
+        SmallVector<Constant*, 8> idx;
+        for (unsigned i = 0; i < mVWidth; i++)
+        {
             idx.push_back(C(i));
         }
-        Value *inter = VSHUFFLE(b, VUNDEF_I(), ConstantVector::get(idx));
+        Value* inter = VSHUFFLE(b, VUNDEF_I(), ConstantVector::get(idx));
 
-        SmallVector<Constant*,8> idx2;
-        for (unsigned i = 0; i < mVWidth / 2; i++) {
+        SmallVector<Constant*, 8> idx2;
+        for (unsigned i = 0; i < mVWidth / 2; i++)
+        {
             idx2.push_back(C(flag ? i : i + mVWidth));
         }
-        for (unsigned i = mVWidth / 2; i < mVWidth; i++) {
+        for (unsigned i = mVWidth / 2; i < mVWidth; i++)
+        {
             idx2.push_back(C(flag ? i + mVWidth / 2 : i));
         }
         return VSHUFFLE(a, inter, ConstantVector::get(idx2));
@@ -829,45 +811,51 @@ namespace SwrJit
     // rdtsc buckets macros
     void Builder::RDTSC_START(Value* pBucketMgr, Value* pId)
     {
-        // @todo due to an issue with thread local storage propagation in llvm, we can only safely call into
-        // buckets framework when single threaded
+        // @todo due to an issue with thread local storage propagation in llvm, we can only safely
+        // call into buckets framework when single threaded
         if (KNOB_SINGLE_THREADED)
         {
             std::vector<Type*> args{
-                PointerType::get(mInt32Ty, 0),   // pBucketMgr
-                mInt32Ty                        // id
+                PointerType::get(mInt32Ty, 0), // pBucketMgr
+                mInt32Ty                       // id
             };
 
             FunctionType* pFuncTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, false);
-            Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StartBucket", pFuncTy));
-            if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StartBucket") == nullptr)
+            Function*     pFunc   = cast<Function>(
+                JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StartBucket", pFuncTy));
+            if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StartBucket") ==
+                nullptr)
             {
-                sys::DynamicLibrary::AddSymbol("BucketManager_StartBucket", (void*)&BucketManager_StartBucket);
+                sys::DynamicLibrary::AddSymbol("BucketManager_StartBucket",
+                                               (void*)&BucketManager_StartBucket);
             }
 
-            CALL(pFunc, { pBucketMgr, pId });
+            CALL(pFunc, {pBucketMgr, pId});
         }
     }
 
     void Builder::RDTSC_STOP(Value* pBucketMgr, Value* pId)
     {
-        // @todo due to an issue with thread local storage propagation in llvm, we can only safely call into
-        // buckets framework when single threaded
+        // @todo due to an issue with thread local storage propagation in llvm, we can only safely
+        // call into buckets framework when single threaded
         if (KNOB_SINGLE_THREADED)
         {
             std::vector<Type*> args{
-                PointerType::get(mInt32Ty, 0),   // pBucketMgr
-                mInt32Ty                        // id
+                PointerType::get(mInt32Ty, 0), // pBucketMgr
+                mInt32Ty                       // id
             };
 
             FunctionType* pFuncTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, false);
-            Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StopBucket", pFuncTy));
-            if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StopBucket") == nullptr)
+            Function*     pFunc   = cast<Function>(
+                JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StopBucket", pFuncTy));
+            if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StopBucket") ==
+                nullptr)
             {
-                sys::DynamicLibrary::AddSymbol("BucketManager_StopBucket", (void*)&BucketManager_StopBucket);
+                sys::DynamicLibrary::AddSymbol("BucketManager_StopBucket",
+                                               (void*)&BucketManager_StopBucket);
             }
 
-            CALL(pFunc, { pBucketMgr, pId });
+            CALL(pFunc, {pBucketMgr, pId});
         }
     }
 
@@ -876,14 +864,14 @@ namespace SwrJit
         if (pType->isStructTy())
         {
             uint32_t numElems = pType->getStructNumElements();
-            Type* pElemTy = pType->getStructElementType(0);
+            Type*    pElemTy  = pType->getStructElementType(0);
             return numElems * GetTypeSize(pElemTy);
         }
 
         if (pType->isArrayTy())
         {
             uint32_t numElems = pType->getArrayNumElements();
-            Type* pElemTy = pType->getArrayElementType();
+            Type*    pElemTy  = pType->getArrayElementType();
             return numElems * GetTypeSize(pElemTy);
         }
 
@@ -911,4 +899,4 @@ namespace SwrJit
         SWR_ASSERT(false, "Unimplemented type.");
         return 0;
     }
-}
+} // namespace SwrJit

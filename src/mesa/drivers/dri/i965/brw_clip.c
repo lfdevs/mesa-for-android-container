@@ -203,9 +203,8 @@ brw_upload_clip_prog(struct brw_context *brw)
       }
    }
 
-   if (!brw_search_cache(&brw->cache, BRW_CACHE_CLIP_PROG,
-			 &key, sizeof(key),
-			 &brw->clip.prog_offset, &brw->clip.prog_data)) {
+   if (!brw_search_cache(&brw->cache, BRW_CACHE_CLIP_PROG, &key, sizeof(key),
+                         &brw->clip.prog_offset, &brw->clip.prog_data, true)) {
       compile_clip_prog( brw, &key );
    }
 }

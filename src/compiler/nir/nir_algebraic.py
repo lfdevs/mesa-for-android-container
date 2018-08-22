@@ -25,6 +25,7 @@
 
 from __future__ import print_function
 import ast
+from collections import OrderedDict
 import itertools
 import struct
 import sys
@@ -55,7 +56,7 @@ class VarSet(object):
    def __getitem__(self, name):
       if name not in self.names:
          assert not self.immutable, "Unknown replacement variable: " + name
-         self.names[name] = self.ids.next()
+         self.names[name] = next(self.ids)
 
       return self.names[name]
 
@@ -78,7 +79,7 @@ class Value(object):
 static const ${val.c_type} ${val.name} = {
    { ${val.type_enum}, ${val.bit_size} },
 % if isinstance(val, Constant):
-   ${val.type()}, { ${hex(val)} /* ${val.value} */ },
+   ${val.type()}, { ${val.hex()} /* ${val.value} */ },
 % elif isinstance(val, Variable):
    ${val.index}, /* ${val.var_name} */
    ${'true' if val.is_constant else 'false'},
@@ -132,13 +133,22 @@ class Constant(Value):
          assert self.bit_size == 0 or self.bit_size == 32
          self.bit_size = 32
 
-   def __hex__(self):
+   def hex(self):
       if isinstance(self.value, (bool)):
          return 'NIR_TRUE' if self.value else 'NIR_FALSE'
       if isinstance(self.value, (int, long)):
          return hex(self.value)
       elif isinstance(self.value, float):
-         return hex(struct.unpack('Q', struct.pack('d', self.value))[0])
+         i = struct.unpack('Q', struct.pack('d', self.value))[0]
+         h = hex(i)
+
+         # On Python 2 this 'L' suffix is automatically added, but not on Python 3
+         # Adding it explicitly makes the generated file identical, regardless
+         # of the Python version running this script.
+         if h[-1] != 'L' and i > sys.maxsize:
+            h += 'L'
+
+         return h
       else:
          assert False
 
@@ -467,7 +477,7 @@ condition_list = ['true']
 
 class SearchAndReplace(object):
    def __init__(self, transform):
-      self.id = _optimization_ids.next()
+      self.id = next(_optimization_ids)
 
       search = transform[0]
       replace = transform[1]
@@ -511,7 +521,7 @@ struct transform {
 
 #endif
 
-% for (opcode, xform_list) in xform_dict.iteritems():
+% for (opcode, xform_list) in xform_dict.items():
 % for xform in xform_list:
    ${xform.search.render()}
    ${xform.replace.render()}
@@ -601,7 +611,7 @@ ${pass_name}(nir_shader *shader)
 
 class AlgebraicPass(object):
    def __init__(self, pass_name, transforms):
-      self.xform_dict = {}
+      self.xform_dict = OrderedDict()
       self.pass_name = pass_name
 
       error = False

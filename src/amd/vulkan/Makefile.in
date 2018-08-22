@@ -136,25 +136,35 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
-@HAVE_PLATFORM_X11_TRUE@am__append_1 = \
+@HAVE_PLATFORM_DRM_TRUE@am__append_1 = \
+@HAVE_PLATFORM_DRM_TRUE@	-DVK_USE_PLATFORM_DISPLAY_KHR
+
+@HAVE_PLATFORM_DRM_TRUE@am__append_2 = $(VULKAN_WSI_DISPLAY_FILES)
+@HAVE_XLIB_LEASE_TRUE@am__append_3 = \
+@HAVE_XLIB_LEASE_TRUE@	-DVK_USE_PLATFORM_XLIB_XRANDR_EXT \
+@HAVE_XLIB_LEASE_TRUE@	$(XCB_RANDR_CFLAGS) \
+@HAVE_XLIB_LEASE_TRUE@	$(XLIB_RANDR_CFLAGS)
+
+@HAVE_XLIB_LEASE_TRUE@am__append_4 = $(XCB_RANDR_LIBS)
+@HAVE_PLATFORM_X11_TRUE@am__append_5 = \
 @HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI3_CFLAGS) \
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XCB_KHR \
 @HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
-@HAVE_PLATFORM_X11_TRUE@am__append_2 = $(VULKAN_WSI_X11_FILES)
-@HAVE_PLATFORM_X11_TRUE@am__append_3 = $(XCB_DRI3_LIBS)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_4 = \
+@HAVE_PLATFORM_X11_TRUE@am__append_6 = $(VULKAN_WSI_X11_FILES)
+@HAVE_PLATFORM_X11_TRUE@am__append_7 = $(XCB_DRI3_LIBS)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_8 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_CFLAGS) \
 @HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_5 = $(VULKAN_WSI_WAYLAND_FILES)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__append_6 = \
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_9 = $(VULKAN_WSI_WAYLAND_FILES)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__append_10 = \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_LIBS)
 
-@HAVE_PLATFORM_ANDROID_TRUE@am__append_7 = $(ANDROID_CPPFLAGS)
-@HAVE_PLATFORM_ANDROID_TRUE@am__append_8 = $(ANDROID_CFLAGS)
-@HAVE_PLATFORM_ANDROID_TRUE@am__append_9 = $(ANDROID_LIBS)
-@HAVE_PLATFORM_ANDROID_TRUE@am__append_10 = $(VULKAN_ANDROID_FILES)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_11 = $(ANDROID_CPPFLAGS) -DVK_USE_PLATFORM_ANDROID_KHR
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_12 = $(ANDROID_CFLAGS)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_13 = $(ANDROID_LIBS)
+@HAVE_PLATFORM_ANDROID_TRUE@am__append_14 = $(VULKAN_ANDROID_FILES)
 subdir = src/amd/vulkan
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -214,10 +224,11 @@ am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
 	radv_meta_buffer.c radv_meta_bufimage.c radv_meta_clear.c \
 	radv_meta_copy.c radv_meta_decompress.c radv_meta_fast_clear.c \
 	radv_meta_resolve.c radv_meta_resolve_cs.c \
-	radv_meta_resolve_fs.c radv_nir_to_llvm.c radv_pass.c \
-	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
-	radv_radeon_winsys.h radv_shader.c radv_shader_info.c \
-	radv_shader.h radv_query.c radv_util.c radv_util.h radv_wsi.c \
+	radv_meta_resolve_fs.c radv_nir_to_llvm.c radv_llvm_helper.cpp \
+	radv_pass.c radv_pipeline.c radv_pipeline_cache.c \
+	radv_private.h radv_radeon_winsys.h radv_shader.c \
+	radv_shader_info.c radv_shader.h radv_shader_helper.h \
+	radv_query.c radv_util.c radv_util.h radv_wsi.c \
 	si_cmd_buffer.c vk_format.h winsys/amdgpu/radv_amdgpu_bo.c \
 	winsys/amdgpu/radv_amdgpu_bo.h winsys/amdgpu/radv_amdgpu_cs.c \
 	winsys/amdgpu/radv_amdgpu_cs.h \
@@ -225,8 +236,8 @@ am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
 	winsys/amdgpu/radv_amdgpu_surface.h \
 	winsys/amdgpu/radv_amdgpu_winsys.c \
 	winsys/amdgpu/radv_amdgpu_winsys.h \
-	winsys/amdgpu/radv_amdgpu_winsys_public.h radv_wsi_x11.c \
-	radv_wsi_wayland.c radv_android.c
+	winsys/amdgpu/radv_amdgpu_winsys_public.h radv_wsi_display.c \
+	radv_wsi_x11.c radv_wsi_wayland.c radv_android.c
 am__objects_1 = radv_entrypoints.lo radv_extensions.lo \
 	vk_format_table.lo
 am__dirstamp = $(am__leading_dot)dirstamp
@@ -241,31 +252,34 @@ am__objects_3 = radv_cmd_buffer.lo radv_debug.lo radv_device.lo \
 	radv_meta_copy.lo radv_meta_decompress.lo \
 	radv_meta_fast_clear.lo radv_meta_resolve.lo \
 	radv_meta_resolve_cs.lo radv_meta_resolve_fs.lo \
-	radv_nir_to_llvm.lo radv_pass.lo radv_pipeline.lo \
-	radv_pipeline_cache.lo radv_shader.lo radv_shader_info.lo \
-	radv_query.lo radv_util.lo radv_wsi.lo si_cmd_buffer.lo \
-	$(am__objects_2)
-am__objects_4 = radv_wsi_x11.lo
-@HAVE_PLATFORM_X11_TRUE@am__objects_5 = $(am__objects_4)
-am__objects_6 = radv_wsi_wayland.lo
-@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_7 = $(am__objects_6)
-am__objects_8 = radv_android.lo
-@HAVE_PLATFORM_ANDROID_TRUE@am__objects_9 = $(am__objects_8)
-am__objects_10 = $(am__objects_1) $(am__objects_3) $(am__objects_5) \
-	$(am__objects_7) $(am__objects_9)
-am_libvulkan_common_la_OBJECTS = $(am__objects_10)
+	radv_nir_to_llvm.lo radv_llvm_helper.lo radv_pass.lo \
+	radv_pipeline.lo radv_pipeline_cache.lo radv_shader.lo \
+	radv_shader_info.lo radv_query.lo radv_util.lo radv_wsi.lo \
+	si_cmd_buffer.lo $(am__objects_2)
+am__objects_4 = radv_wsi_display.lo
+@HAVE_PLATFORM_DRM_TRUE@am__objects_5 = $(am__objects_4)
+am__objects_6 = radv_wsi_x11.lo
+@HAVE_PLATFORM_X11_TRUE@am__objects_7 = $(am__objects_6)
+am__objects_8 = radv_wsi_wayland.lo
+@HAVE_PLATFORM_WAYLAND_TRUE@am__objects_9 = $(am__objects_8)
+am__objects_10 = radv_android.lo
+@HAVE_PLATFORM_ANDROID_TRUE@am__objects_11 = $(am__objects_10)
+am__objects_12 = $(am__objects_1) $(am__objects_3) $(am__objects_5) \
+	$(am__objects_7) $(am__objects_9) $(am__objects_11)
+am_libvulkan_common_la_OBJECTS = $(am__objects_12)
 libvulkan_common_la_OBJECTS = $(am_libvulkan_common_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
 am__DEPENDENCIES_1 =
-@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
-@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_3 =  \
+@HAVE_XLIB_LEASE_TRUE@am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1)
+@HAVE_PLATFORM_X11_TRUE@am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1)
+@HAVE_PLATFORM_WAYLAND_TRUE@am__DEPENDENCIES_4 =  \
 @HAVE_PLATFORM_WAYLAND_TRUE@	$(am__DEPENDENCIES_1)
-@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_4 =  \
+@HAVE_PLATFORM_ANDROID_TRUE@am__DEPENDENCIES_5 =  \
 @HAVE_PLATFORM_ANDROID_TRUE@	$(am__DEPENDENCIES_1)
-am__DEPENDENCIES_5 = libvulkan_common.la \
+am__DEPENDENCIES_6 = libvulkan_common.la \
 	$(top_builddir)/src/vulkan/libvulkan_util.la \
 	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
 	$(top_builddir)/src/amd/common/libamd_common.la \
@@ -276,8 +290,8 @@ am__DEPENDENCIES_5 = libvulkan_common.la \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2) $(am__DEPENDENCIES_3) \
-	$(am__DEPENDENCIES_4)
-libvulkan_radeon_la_DEPENDENCIES = $(am__DEPENDENCIES_5)
+	$(am__DEPENDENCIES_4) $(am__DEPENDENCIES_5)
+libvulkan_radeon_la_DEPENDENCIES = $(am__DEPENDENCIES_6)
 am_libvulkan_radeon_la_OBJECTS =
 libvulkan_radeon_la_OBJECTS = $(am_libvulkan_radeon_la_OBJECTS)
 libvulkan_radeon_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CXX \
@@ -382,6 +396,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -562,6 +578,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -569,8 +587,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -584,6 +602,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -604,10 +624,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -665,6 +689,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -712,6 +737,7 @@ VULKAN_FILES := \
 	radv_meta_resolve_cs.c \
 	radv_meta_resolve_fs.c \
 	radv_nir_to_llvm.c \
+	radv_llvm_helper.cpp \
 	radv_pass.c \
 	radv_pipeline.c \
 	radv_pipeline_cache.c \
@@ -720,6 +746,7 @@ VULKAN_FILES := \
 	radv_shader.c \
 	radv_shader_info.c \
 	radv_shader.h \
+	radv_shader_helper.h \
 	radv_query.c \
 	radv_util.c \
 	radv_util.h \
@@ -736,6 +763,9 @@ VULKAN_WSI_WAYLAND_FILES := \
 
 VULKAN_WSI_X11_FILES := \
 	radv_wsi_x11.c
+
+VULKAN_WSI_DISPLAY_FILES := \
+	radv_wsi_display.c
 
 VULKAN_GENERATED_FILES := \
 	radv_entrypoints.c \
@@ -766,12 +796,17 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_builddir)/src \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gallium/auxiliary \
 	-I$(top_srcdir)/src/gallium/include $(AMDGPU_CFLAGS) \
-	$(VALGRIND_CFLAGS) $(DEFINES) $(am__append_1) $(am__append_4) \
-	$(am__append_7)
+	$(VALGRIND_CFLAGS) $(DEFINES) $(am__append_1) $(am__append_3) \
+	$(am__append_5) $(am__append_8) $(am__append_11)
 AM_CFLAGS = $(VISIBILITY_CFLAGS) $(PTHREAD_CFLAGS) $(LLVM_CFLAGS) \
-	$(am__append_8)
+	$(am__append_12)
+AM_CXXFLAGS = \
+	$(VISIBILITY_CXXFLAGS) \
+	$(LLVM_CXXFLAGS)
+
 VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) $(VULKAN_FILES) \
-	$(am__append_2) $(am__append_5) $(am__append_10)
+	$(am__append_2) $(am__append_6) $(am__append_9) \
+	$(am__append_14)
 VULKAN_LIB_DEPS = libvulkan_common.la \
 	$(top_builddir)/src/vulkan/libvulkan_util.la \
 	$(top_builddir)/src/vulkan/libvulkan_wsi.la \
@@ -780,8 +815,8 @@ VULKAN_LIB_DEPS = libvulkan_common.la \
 	$(top_builddir)/src/compiler/nir/libnir.la \
 	$(top_builddir)/src/util/libmesautil.la $(LLVM_LIBS) \
 	$(LIBELF_LIBS) $(PTHREAD_LIBS) $(AMDGPU_LIBS) $(LIBDRM_LIBS) \
-	$(PTHREAD_LIBS) $(DLOPEN_LIBS) -lm $(am__append_3) \
-	$(am__append_6) $(am__append_9)
+	$(PTHREAD_LIBS) $(DLOPEN_LIBS) -lm $(am__append_4) \
+	$(am__append_7) $(am__append_10) $(am__append_13)
 noinst_LTLIBRARIES = libvulkan_common.la
 libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 nodist_EXTRA_libvulkan_radeon_la_SOURCES = dummy.cpp
@@ -911,7 +946,7 @@ winsys/amdgpu/radv_amdgpu_winsys.lo: winsys/amdgpu/$(am__dirstamp) \
 	winsys/amdgpu/$(DEPDIR)/$(am__dirstamp)
 
 libvulkan_common.la: $(libvulkan_common_la_OBJECTS) $(libvulkan_common_la_DEPENDENCIES) $(EXTRA_libvulkan_common_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(LINK)  $(libvulkan_common_la_OBJECTS) $(libvulkan_common_la_LIBADD) $(LIBS)
+	$(AM_V_CXXLD)$(CXXLINK)  $(libvulkan_common_la_OBJECTS) $(libvulkan_common_la_LIBADD) $(LIBS)
 
 libvulkan_radeon.la: $(libvulkan_radeon_la_OBJECTS) $(libvulkan_radeon_la_DEPENDENCIES) $(EXTRA_libvulkan_radeon_la_DEPENDENCIES) 
 	$(AM_V_CXXLD)$(libvulkan_radeon_la_LINK) -rpath $(libdir) $(libvulkan_radeon_la_OBJECTS) $(libvulkan_radeon_la_LIBADD) $(LIBS)
@@ -934,6 +969,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_extensions.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_formats.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_image.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_llvm_helper.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_blit.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_blit2d.Plo@am__quote@
@@ -955,6 +991,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_shader_info.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_util.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi_display.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi_wayland.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_wsi_x11.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_cmd_buffer.Plo@am__quote@

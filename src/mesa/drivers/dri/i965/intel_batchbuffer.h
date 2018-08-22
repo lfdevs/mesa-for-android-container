@@ -25,8 +25,7 @@ void intel_batchbuffer_init(struct brw_context *brw);
 void intel_batchbuffer_free(struct intel_batchbuffer *batch);
 void intel_batchbuffer_save_state(struct brw_context *brw);
 void intel_batchbuffer_reset_to_saved(struct brw_context *brw);
-void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz,
-                                     enum brw_gpu_ring ring);
+void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz);
 int _intel_batchbuffer_flush_fence(struct brw_context *brw,
                                    int in_fence_fd, int *out_fence_fd,
                                    const char *file, int line);
@@ -43,8 +42,7 @@ int _intel_batchbuffer_flush_fence(struct brw_context *brw,
  * intel_buffer_dword() calls.
  */
 void intel_batchbuffer_data(struct brw_context *brw,
-                            const void *data, GLuint bytes,
-                            enum brw_gpu_ring ring);
+                            const void *data, GLuint bytes);
 
 bool brw_batch_has_aperture_space(struct brw_context *brw,
                                   unsigned extra_space_in_bytes);
@@ -55,6 +53,10 @@ bool brw_batch_references(struct intel_batchbuffer *batch, struct brw_bo *bo);
 #define RELOC_NEEDS_GGTT EXEC_OBJECT_NEEDS_GTT
 /* Inverted meaning, but using the same bit...emit_reloc will flip it. */
 #define RELOC_32BIT EXEC_OBJECT_SUPPORTS_48B_ADDRESS
+
+void brw_use_pinned_bo(struct intel_batchbuffer *batch, struct brw_bo *bo,
+                       unsigned writeable_flag);
+
 uint64_t brw_batch_reloc(struct intel_batchbuffer *batch,
                          uint32_t batch_offset,
                          struct brw_bo *target,
@@ -81,9 +83,9 @@ static inline uint32_t float_as_int(float f)
 }
 
 static inline void
-intel_batchbuffer_begin(struct brw_context *brw, int n, enum brw_gpu_ring ring)
+intel_batchbuffer_begin(struct brw_context *brw, int n)
 {
-   intel_batchbuffer_require_space(brw, n * 4, ring);
+   intel_batchbuffer_require_space(brw, n * 4);
 
 #ifdef DEBUG
    brw->batch.emit = USED_BATCH(brw->batch);
@@ -117,12 +119,13 @@ brw_ptr_in_state_buffer(struct intel_batchbuffer *batch, void *p)
 }
 
 #define BEGIN_BATCH(n) do {                            \
-   intel_batchbuffer_begin(brw, (n), RENDER_RING);     \
+   intel_batchbuffer_begin(brw, (n));                  \
    uint32_t *__map = brw->batch.map_next;              \
    brw->batch.map_next += (n)
 
 #define BEGIN_BATCH_BLT(n) do {                        \
-   intel_batchbuffer_begin(brw, (n), BLT_RING);        \
+   assert(brw->screen->devinfo.gen < 6);               \
+   intel_batchbuffer_begin(brw, (n));                  \
    uint32_t *__map = brw->batch.map_next;              \
    brw->batch.map_next += (n)
 

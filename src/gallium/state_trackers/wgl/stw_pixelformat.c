@@ -254,7 +254,7 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
 
       for (cfmt = 0; cfmt < num_color_formats; cfmt++) {
          if (!screen->is_format_supported(screen, color_formats[cfmt].format,
-                                          PIPE_TEXTURE_2D, samples,
+                                          PIPE_TEXTURE_2D, samples, samples,
                                           bind_flags)) {
             continue;
          }
@@ -267,6 +267,7 @@ add_color_format_variants(const struct stw_pf_color_info *color_formats,
 
                if (!screen->is_format_supported(screen, depth->format,
                                                 PIPE_TEXTURE_2D, samples,
+                                                samples,
                                                 PIPE_BIND_DEPTH_STENCIL)) {
                   continue;
                }

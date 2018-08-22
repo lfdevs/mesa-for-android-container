@@ -62,9 +62,6 @@ fd5_pipe_sampler_view(struct pipe_sampler_view *pview)
 	return (struct fd5_pipe_sampler_view *)pview;
 }
 
-unsigned fd5_get_const_idx(struct fd_context *ctx,
-		struct fd_texture_stateobj *tex, unsigned samp_id);
-
 void fd5_texture_init(struct pipe_context *pctx);
 
 

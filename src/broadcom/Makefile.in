@@ -137,7 +137,7 @@ host_triplet = @host@
 target_triplet = @target@
 noinst_PROGRAMS =
 check_PROGRAMS = qpu/tests/qpu_disasm$(EXEEXT)
-@USE_VC5_SIMULATOR_TRUE@am__append_1 = $(VC5_SIMULATOR_CFLAGS)
+@USE_V3D_SIMULATOR_TRUE@am__append_1 = $(V3D_SIMULATOR_CFLAGS)
 subdir = src/broadcom
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -206,6 +206,7 @@ am__objects_2 = clif/clif_dump.lo common/v3d_debug.lo \
 	compiler/vir_live_variables.lo compiler/vir_lower_uniforms.lo \
 	compiler/vir_opt_copy_propagate.lo \
 	compiler/vir_opt_dead_code.lo \
+	compiler/vir_opt_small_immediates.lo \
 	compiler/vir_register_allocate.lo compiler/vir_to_qpu.lo \
 	compiler/qpu_schedule.lo compiler/qpu_validate.lo \
 	compiler/v3d33_tex.lo compiler/v3d33_vpm_setup.lo \
@@ -495,7 +496,7 @@ TEST_LOG_COMPILE = $(TEST_LOG_COMPILER) $(AM_TEST_LOG_FLAGS) \
 	$(TEST_LOG_FLAGS)
 am__DIST_COMMON = $(srcdir)/Makefile.cle.am \
 	$(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.in \
-	$(srcdir)/Makefile.sources $(srcdir)/Makefile.vc5.am \
+	$(srcdir)/Makefile.sources $(srcdir)/Makefile.v3d.am \
 	$(top_srcdir)/bin/depcomp $(top_srcdir)/bin/test-driver
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
@@ -510,6 +511,8 @@ AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
 AWK = @AWK@
+BACKTRACE_CFLAGS = @BACKTRACE_CFLAGS@
+BACKTRACE_LIBS = @BACKTRACE_LIBS@
 BSYMBOLIC = @BSYMBOLIC@
 CC = @CC@
 CCAS = @CCAS@
@@ -690,6 +693,8 @@ SWR_AVX2_CXXFLAGS = @SWR_AVX2_CXXFLAGS@
 SWR_AVX_CXXFLAGS = @SWR_AVX_CXXFLAGS@
 SWR_KNL_CXXFLAGS = @SWR_KNL_CXXFLAGS@
 SWR_SKX_CXXFLAGS = @SWR_SKX_CXXFLAGS@
+V3D_SIMULATOR_CFLAGS = @V3D_SIMULATOR_CFLAGS@
+V3D_SIMULATOR_LIBS = @V3D_SIMULATOR_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VA_CFLAGS = @VA_CFLAGS@
@@ -697,8 +702,8 @@ VA_LIBS = @VA_LIBS@
 VA_LIB_INSTALL_DIR = @VA_LIB_INSTALL_DIR@
 VA_MAJOR = @VA_MAJOR@
 VA_MINOR = @VA_MINOR@
-VC5_SIMULATOR_CFLAGS = @VC5_SIMULATOR_CFLAGS@
-VC5_SIMULATOR_LIBS = @VC5_SIMULATOR_LIBS@
+VC4_CFLAGS = @VC4_CFLAGS@
+VC4_LIBS = @VC4_LIBS@
 VDPAU_CFLAGS = @VDPAU_CFLAGS@
 VDPAU_LIBS = @VDPAU_LIBS@
 VDPAU_LIB_INSTALL_DIR = @VDPAU_LIB_INSTALL_DIR@
@@ -712,6 +717,8 @@ VL_LIBS = @VL_LIBS@
 VULKAN_ICD_INSTALL_DIR = @VULKAN_ICD_INSTALL_DIR@
 WAYLAND_CLIENT_CFLAGS = @WAYLAND_CLIENT_CFLAGS@
 WAYLAND_CLIENT_LIBS = @WAYLAND_CLIENT_LIBS@
+WAYLAND_EGL_CFLAGS = @WAYLAND_EGL_CFLAGS@
+WAYLAND_EGL_LIBS = @WAYLAND_EGL_LIBS@
 WAYLAND_PROTOCOLS_CFLAGS = @WAYLAND_PROTOCOLS_CFLAGS@
 WAYLAND_PROTOCOLS_DATADIR = @WAYLAND_PROTOCOLS_DATADIR@
 WAYLAND_PROTOCOLS_LIBS = @WAYLAND_PROTOCOLS_LIBS@
@@ -732,10 +739,14 @@ XCB_DRI3_CFLAGS = @XCB_DRI3_CFLAGS@
 XCB_DRI3_LIBS = @XCB_DRI3_LIBS@
 XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
+XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
+XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
 XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
 XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
+XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
+XLIB_RANDR_LIBS = @XLIB_RANDR_LIBS@
 XVMC_CFLAGS = @XVMC_CFLAGS@
 XVMC_LIBS = @XVMC_LIBS@
 XVMC_LIB_INSTALL_DIR = @XVMC_LIB_INSTALL_DIR@
@@ -793,6 +804,7 @@ pdfdir = @pdfdir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
+runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -830,8 +842,6 @@ BROADCOM_GENXML_GENERATED_FILES = \
 BROADCOM_GENXML_XML_FILES = \
 	cle/v3d_packet_v21.xml \
 	cle/v3d_packet_v33.xml \
-	cle/v3d_packet_v41.xml \
-	cle/v3d_packet_v42.xml \
 	$()
 
 BROADCOM_FILES = \
@@ -851,6 +861,7 @@ BROADCOM_FILES = \
 	compiler/vir_lower_uniforms.c \
 	compiler/vir_opt_copy_propagate.c \
 	compiler/vir_opt_dead_code.c \
+	compiler/vir_opt_small_immediates.c \
 	compiler/vir_register_allocate.c \
 	compiler/vir_to_qpu.c \
 	compiler/qpu_schedule.c \
@@ -899,7 +910,7 @@ cle_libbroadcom_cle_la_CFLAGS = \
 	$(AM_CFLAGS)
 
 cle_libbroadcom_cle_la_SOURCES = $(BROADCOM_DECODER_FILES)
-@USE_VC5_SIMULATOR_TRUE@libbroadcom_la_LDFLAGS = $(VC5_SIMULATOR_LIBS)
+@USE_V3D_SIMULATOR_TRUE@libbroadcom_la_LDFLAGS = $(V3D_SIMULATOR_LIBS)
 libbroadcom_v33_la_SOURCES = $(BROADCOM_PER_VERSION_SOURCES)
 libbroadcom_v33_la_CFLAGS = -DV3D_VERSION=33
 libbroadcom_v41_la_SOURCES = $(BROADCOM_PER_VERSION_SOURCES)
@@ -918,7 +929,7 @@ all: $(BUILT_SOURCES)
 
 .SUFFIXES:
 .SUFFIXES: _pack.h .xml .c .lo .log .o .obj .test .test$(EXEEXT) .trs
-$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.cle.am $(srcdir)/Makefile.vc5.am $(am__configure_deps)
+$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am $(srcdir)/Makefile.sources $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.cle.am $(srcdir)/Makefile.v3d.am $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -938,7 +949,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
 	esac;
-$(srcdir)/Makefile.sources $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.cle.am $(srcdir)/Makefile.vc5.am $(am__empty):
+$(srcdir)/Makefile.sources $(srcdir)/Makefile.genxml.am $(srcdir)/Makefile.cle.am $(srcdir)/Makefile.v3d.am $(am__empty):
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -1050,6 +1061,8 @@ compiler/vir_lower_uniforms.lo: compiler/$(am__dirstamp) \
 compiler/vir_opt_copy_propagate.lo: compiler/$(am__dirstamp) \
 	compiler/$(DEPDIR)/$(am__dirstamp)
 compiler/vir_opt_dead_code.lo: compiler/$(am__dirstamp) \
+	compiler/$(DEPDIR)/$(am__dirstamp)
+compiler/vir_opt_small_immediates.lo: compiler/$(am__dirstamp) \
 	compiler/$(DEPDIR)/$(am__dirstamp)
 compiler/vir_register_allocate.lo: compiler/$(am__dirstamp) \
 	compiler/$(DEPDIR)/$(am__dirstamp)
@@ -1164,6 +1177,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_lower_uniforms.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_opt_copy_propagate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_opt_dead_code.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_opt_small_immediates.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_register_allocate.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/vir_to_qpu.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@qpu/$(DEPDIR)/qpu_disasm.Plo@am__quote@
@@ -1634,9 +1648,21 @@ uninstall-am: uninstall-libLTLIBRARIES
 
 $(BROADCOM_GENXML_GENERATED_FILES): cle/gen_pack_header.py
 
-.xml_pack.h:
+cle/v3d_packet_v21_pack.h: $(srcdir)/cle/v3d_packet_v21.xml $(srcdir)/cle/gen_pack_header.py
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/cle/gen_pack_header.py $< > $@ || ($(RM) $@; false)
+	$(PYTHON_GEN) $(srcdir)/cle/gen_pack_header.py $< 21 > $@ || ($(RM) $@; false)
+
+cle/v3d_packet_v33_pack.h: $(srcdir)/cle/v3d_packet_v33.xml $(srcdir)/cle/gen_pack_header.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/cle/gen_pack_header.py $< 33 > $@ || ($(RM) $@; false)
+
+cle/v3d_packet_v41_pack.h: $(srcdir)/cle/v3d_packet_v33.xml $(srcdir)/cle/gen_pack_header.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/cle/gen_pack_header.py $< 41 > $@ || ($(RM) $@; false)
+
+cle/v3d_packet_v42_pack.h: $(srcdir)/cle/v3d_packet_v33.xml $(srcdir)/cle/gen_pack_header.py
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/cle/gen_pack_header.py $< 42 > $@ || ($(RM) $@; false)
 cle/v3d_xml.h: $(GEN_ZIPPED) $(BROADCOM_GENXML_XML_FILES)
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(GEN_ZIPPED) $(BROADCOM_GENXML_XML_FILES:%=$(srcdir)/%) > $@ || ($(RM) $@; false)

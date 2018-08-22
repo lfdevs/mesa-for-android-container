@@ -46,6 +46,36 @@ extern "C" {
 
 #define BRW_EU_MAX_INSN_STACK 5
 
+struct brw_insn_state {
+   /* One of BRW_EXECUTE_* */
+   unsigned exec_size:3;
+
+   /* Group in units of channels */
+   unsigned group:5;
+
+   /* Compression control on gen4-5 */
+   bool compressed:1;
+
+   /* One of BRW_MASK_* */
+   unsigned mask_control:1;
+
+   bool saturate:1;
+
+   /* One of BRW_ALIGN_* */
+   unsigned access_mode:1;
+
+   /* One of BRW_PREDICATE_* */
+   enum brw_predicate predicate:4;
+
+   bool pred_inv:1;
+
+   /* Flag subreg.  Bottom bit is subreg, top bit is reg */
+   unsigned flag_subreg:2;
+
+   bool acc_wr_control:1;
+};
+
+
 /* A helper for accessing the last instruction emitted.  This makes it easy
  * to set various bits on an instruction without having to create temporary
  * variable and assign the emitted instruction to those.
@@ -62,9 +92,8 @@ struct brw_codegen {
 
    /* Allow clients to push/pop instruction state:
     */
-   brw_inst stack[BRW_EU_MAX_INSN_STACK];
-   bool compressed_stack[BRW_EU_MAX_INSN_STACK];
-   brw_inst *current;
+   struct brw_insn_state stack[BRW_EU_MAX_INSN_STACK];
+   struct brw_insn_state *current;
 
    /** Whether or not the user wants automatic exec sizes
     *
@@ -216,47 +245,141 @@ ROUND(RNDE)
 
 /* Helpers for SEND instruction:
  */
-void brw_set_sampler_message(struct brw_codegen *p,
-                             brw_inst *insn,
-                             unsigned binding_table_index,
-                             unsigned sampler,
-                             unsigned msg_type,
-                             unsigned response_length,
-                             unsigned msg_length,
-                             unsigned header_present,
-                             unsigned simd_mode,
-                             unsigned return_format);
 
-void brw_set_message_descriptor(struct brw_codegen *p,
-                                brw_inst *inst,
-                                enum brw_message_target sfid,
-                                unsigned msg_length,
-                                unsigned response_length,
-                                bool header_present,
-                                bool end_of_thread);
+/**
+ * Construct a message descriptor immediate with the specified common
+ * descriptor controls.
+ */
+static inline uint32_t
+brw_message_desc(const struct gen_device_info *devinfo,
+                 unsigned msg_length,
+                 unsigned response_length,
+                 bool header_present)
+{
+   if (devinfo->gen >= 5) {
+      return (SET_BITS(msg_length, 28, 25) |
+              SET_BITS(response_length, 24, 20) |
+              SET_BITS(header_present, 19, 19));
+   } else {
+      return (SET_BITS(msg_length, 23, 20) |
+              SET_BITS(response_length, 19, 16));
+   }
+}
 
-void brw_set_dp_read_message(struct brw_codegen *p,
-			     brw_inst *insn,
-			     unsigned binding_table_index,
-			     unsigned msg_control,
-			     unsigned msg_type,
-			     unsigned target_cache,
-			     unsigned msg_length,
-                             bool header_present,
-			     unsigned response_length);
+/**
+ * Construct a message descriptor immediate with the specified sampler
+ * function controls.
+ */
+static inline uint32_t
+brw_sampler_desc(const struct gen_device_info *devinfo,
+                 unsigned binding_table_index,
+                 unsigned sampler,
+                 unsigned msg_type,
+                 unsigned simd_mode,
+                 unsigned return_format)
+{
+   const unsigned desc = (SET_BITS(binding_table_index, 7, 0) |
+                          SET_BITS(sampler, 11, 8));
+   if (devinfo->gen >= 7)
+      return (desc | SET_BITS(msg_type, 16, 12) |
+              SET_BITS(simd_mode, 18, 17));
+   else if (devinfo->gen >= 5)
+      return (desc | SET_BITS(msg_type, 15, 12) |
+              SET_BITS(simd_mode, 17, 16));
+   else if (devinfo->is_g4x)
+      return desc | SET_BITS(msg_type, 15, 12);
+   else
+      return (desc | SET_BITS(return_format, 13, 12) |
+              SET_BITS(msg_type, 15, 14));
+}
 
-void brw_set_dp_write_message(struct brw_codegen *p,
-			      brw_inst *insn,
-			      unsigned binding_table_index,
-			      unsigned msg_control,
-			      unsigned msg_type,
-                              unsigned target_cache,
-			      unsigned msg_length,
-			      bool header_present,
-			      unsigned last_render_target,
-			      unsigned response_length,
-			      unsigned end_of_thread,
-			      unsigned send_commit_msg);
+/**
+ * Construct a message descriptor immediate with the specified dataport read
+ * function controls.
+ */
+static inline uint32_t
+brw_dp_read_desc(const struct gen_device_info *devinfo,
+                 unsigned binding_table_index,
+                 unsigned msg_control,
+                 unsigned msg_type,
+                 unsigned target_cache)
+{
+   const unsigned desc = SET_BITS(binding_table_index, 7, 0);
+   if (devinfo->gen >= 7)
+      return (desc | SET_BITS(msg_control, 13, 8) |
+              SET_BITS(msg_type, 17, 14));
+   else if (devinfo->gen >= 6)
+      return (desc | SET_BITS(msg_control, 12, 8) |
+              SET_BITS(msg_type, 16, 13));
+   else if (devinfo->gen >= 5 || devinfo->is_g4x)
+      return (desc | SET_BITS(msg_control, 10, 8) |
+              SET_BITS(msg_type, 13, 11) |
+              SET_BITS(target_cache, 15, 14));
+   else
+      return (desc | SET_BITS(msg_control, 11, 8) |
+              SET_BITS(msg_type, 13, 12) |
+              SET_BITS(target_cache, 15, 14));
+}
+
+/**
+ * Construct a message descriptor immediate with the specified dataport write
+ * function controls.
+ */
+static inline uint32_t
+brw_dp_write_desc(const struct gen_device_info *devinfo,
+                  unsigned binding_table_index,
+                  unsigned msg_control,
+                  unsigned msg_type,
+                  unsigned last_render_target,
+                  unsigned send_commit_msg)
+{
+   const unsigned desc = SET_BITS(binding_table_index, 7, 0);
+   if (devinfo->gen >= 7)
+      return (desc | SET_BITS(msg_control, 13, 8) |
+              SET_BITS(last_render_target, 12, 12) |
+              SET_BITS(msg_type, 17, 14));
+   else if (devinfo->gen >= 6)
+      return (desc | SET_BITS(msg_control, 12, 8) |
+              SET_BITS(last_render_target, 12, 12) |
+              SET_BITS(msg_type, 16, 13) |
+              SET_BITS(send_commit_msg, 17, 17));
+   else
+      return (desc | SET_BITS(msg_control, 11, 8) |
+              SET_BITS(last_render_target, 11, 11) |
+              SET_BITS(msg_type, 14, 12) |
+              SET_BITS(send_commit_msg, 15, 15));
+}
+
+/**
+ * Construct a message descriptor immediate with the specified dataport
+ * surface function controls.
+ */
+static inline uint32_t
+brw_dp_surface_desc(const struct gen_device_info *devinfo,
+                    unsigned msg_type,
+                    unsigned msg_control)
+{
+   assert(devinfo->gen >= 7);
+   return (SET_BITS(msg_control, 13, 8) |
+           SET_BITS(msg_type, 17, 14));
+}
+
+/**
+ * Construct a message descriptor immediate with the specified pixel
+ * interpolator function controls.
+ */
+static inline uint32_t
+brw_pixel_interp_desc(const struct gen_device_info *devinfo,
+                      unsigned msg_type,
+                      bool noperspective,
+                      unsigned simd_mode,
+                      unsigned slot_group)
+{
+   return (SET_BITS(slot_group, 11, 11) |
+           SET_BITS(msg_type, 13, 12) |
+           SET_BITS(!!noperspective, 14, 14) |
+           SET_BITS(simd_mode, 16, 16));
+}
 
 void brw_urb_WRITE(struct brw_codegen *p,
 		   struct brw_reg dest,
@@ -271,18 +394,15 @@ void brw_urb_WRITE(struct brw_codegen *p,
 /**
  * Send message to shared unit \p sfid with a possibly indirect descriptor \p
  * desc.  If \p desc is not an immediate it will be transparently loaded to an
- * address register using an OR instruction.  The returned instruction can be
- * passed as argument to the usual brw_set_*_message() functions in order to
- * specify any additional descriptor bits -- If \p desc is an immediate this
- * will be the SEND instruction itself, otherwise it will be the OR
- * instruction.
+ * address register using an OR instruction.
  */
-struct brw_inst *
+void
 brw_send_indirect_message(struct brw_codegen *p,
                           unsigned sfid,
                           struct brw_reg dst,
                           struct brw_reg payload,
-                          struct brw_reg desc);
+                          struct brw_reg desc,
+                          unsigned desc_imm);
 
 void brw_ff_sync(struct brw_codegen *p,
 		   struct brw_reg dest,
@@ -299,16 +419,16 @@ void brw_svb_write(struct brw_codegen *p,
                    unsigned binding_table_index,
                    bool   send_commit_msg);
 
-void brw_fb_WRITE(struct brw_codegen *p,
-		   struct brw_reg payload,
-		   struct brw_reg implied_header,
-		   unsigned msg_control,
-		   unsigned binding_table_index,
-		   unsigned msg_length,
-		   unsigned response_length,
-		   bool eot,
-		   bool last_render_target,
-		   bool header_present);
+brw_inst *brw_fb_WRITE(struct brw_codegen *p,
+                       struct brw_reg payload,
+                       struct brw_reg implied_header,
+                       unsigned msg_control,
+                       unsigned binding_table_index,
+                       unsigned msg_length,
+                       unsigned response_length,
+                       bool eot,
+                       bool last_render_target,
+                       bool header_present);
 
 brw_inst *gen9_fb_READ(struct brw_codegen *p,
                        struct brw_reg dst,
@@ -513,7 +633,8 @@ brw_byte_scattered_write(struct brw_codegen *p,
 
 void
 brw_memory_fence(struct brw_codegen *p,
-                 struct brw_reg dst);
+                 struct brw_reg dst,
+                 enum opcode send_op);
 
 void
 brw_pixel_interpolator_query(struct brw_codegen *p,
@@ -569,6 +690,15 @@ void brw_math_invert( struct brw_codegen *p,
 		      struct brw_reg src);
 
 void brw_set_src1(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
+
+void brw_set_desc_ex(struct brw_codegen *p, brw_inst *insn,
+                     unsigned desc, unsigned ex_desc);
+
+static inline void
+brw_set_desc(struct brw_codegen *p, brw_inst *insn, unsigned desc)
+{
+   brw_set_desc_ex(p, insn, desc, 0);
+}
 
 void brw_set_uip_jip(struct brw_codegen *p, int start_offset);
 

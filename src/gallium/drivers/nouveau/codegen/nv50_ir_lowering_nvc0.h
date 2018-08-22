@@ -23,6 +23,35 @@
 #include "codegen/nv50_ir.h"
 #include "codegen/nv50_ir_build_util.h"
 
+/* On nvc0, surface info is obtained via the surface binding points passed
+ * to the SULD/SUST instructions.
+ * On nve4, surface info is stored in c[] and is used by various special
+ * instructions, e.g. for clamping coordinates or generating an address.
+ * They couldn't just have added an equivalent to TIC now, couldn't they ?
+ */
+#define NVC0_SU_INFO_ADDR   0x00
+#define NVC0_SU_INFO_FMT    0x04
+#define NVC0_SU_INFO_DIM_X  0x08
+#define NVC0_SU_INFO_PITCH  0x0c
+#define NVC0_SU_INFO_DIM_Y  0x10
+#define NVC0_SU_INFO_ARRAY  0x14
+#define NVC0_SU_INFO_DIM_Z  0x18
+#define NVC0_SU_INFO_UNK1C  0x1c
+#define NVC0_SU_INFO_WIDTH  0x20
+#define NVC0_SU_INFO_HEIGHT 0x24
+#define NVC0_SU_INFO_DEPTH  0x28
+#define NVC0_SU_INFO_TARGET 0x2c
+#define NVC0_SU_INFO_BSIZE  0x30
+#define NVC0_SU_INFO_RAW_X  0x34
+#define NVC0_SU_INFO_MS_X   0x38
+#define NVC0_SU_INFO_MS_Y   0x3c
+
+#define NVC0_SU_INFO__STRIDE 0x40
+
+#define NVC0_SU_INFO_DIM(i)  (0x08 + (i) * 8)
+#define NVC0_SU_INFO_SIZE(i) (0x20 + (i) * 4)
+#define NVC0_SU_INFO_MS(i)   (0x38 + (i) * 4)
+
 namespace nv50_ir {
 
 class NVC0LegalizeSSA : public Pass
@@ -116,8 +145,10 @@ protected:
    void handleSharedATOMNVE4(Instruction *);
    void handleLDST(Instruction *);
    bool handleBUFQ(Instruction *);
+   void handlePIXLD(Instruction *);
 
    void checkPredicate(Instruction *);
+   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless);
 
    virtual bool visit(Instruction *);
 
@@ -130,7 +161,6 @@ private:
    Value *loadResInfo32(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResInfo64(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResLength32(Value *ptr, uint32_t off, uint16_t base);
-   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless);
    Value *loadBufInfo64(Value *ptr, uint32_t off);
    Value *loadBufLength32(Value *ptr, uint32_t off);
    Value *loadUboInfo64(Value *ptr, uint32_t off);
@@ -143,6 +173,7 @@ private:
    void processSurfaceCoordsNVC0(TexInstruction *);
    void convertSurfaceFormat(TexInstruction *);
    void insertOOBSurfaceOpResult(TexInstruction *);
+   Value *calculateSampleOffset(Value *sampleID);
 
 protected:
    Value *loadTexHandle(Value *ptr, unsigned int slot);

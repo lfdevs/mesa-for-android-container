@@ -82,6 +82,7 @@ TESTS += $(check_PROGRAMS)
 isl_tests_isl_surf_get_image_offset_test_LDADD = \
 	dev/libintel_dev.la \
 	isl/libisl.la \
+	$(top_builddir)/src/util/libmesautil.la \
 	-lm
 
 # ----------------------------------------------------------------------------

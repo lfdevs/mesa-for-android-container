@@ -64,6 +64,12 @@ fd_query(struct pipe_query *pq)
 #define FD_QUERY_BATCH_RESTORE   (PIPE_QUERY_DRIVER_SPECIFIC + 5)  /* batches requiring GMEM restore */
 #define FD_QUERY_STAGING_UPLOADS (PIPE_QUERY_DRIVER_SPECIFIC + 6)  /* texture/buffer uploads using staging blit */
 #define FD_QUERY_SHADOW_UPLOADS  (PIPE_QUERY_DRIVER_SPECIFIC + 7)  /* texture/buffer uploads that shadowed rsc */
+#define FD_QUERY_VS_REGS         (PIPE_QUERY_DRIVER_SPECIFIC + 8)  /* avg # of VS registers (scaled up by 100x) */
+#define FD_QUERY_FS_REGS         (PIPE_QUERY_DRIVER_SPECIFIC + 9)  /* avg # of VS registers (scaled up by 100x) */
+/* insert any new non-perfcntr queries here, the first perfcntr index
+ * needs to come last!
+ */
+#define FD_QUERY_FIRST_PERFCNTR  (PIPE_QUERY_DRIVER_SPECIFIC + 10)
 
 void fd_query_screen_init(struct pipe_screen *pscreen);
 void fd_query_context_init(struct pipe_context *pctx);

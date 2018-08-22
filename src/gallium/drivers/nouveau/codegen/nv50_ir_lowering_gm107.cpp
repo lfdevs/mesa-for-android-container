@@ -315,6 +315,19 @@ GM107LoweringPass::handleSUQ(TexInstruction *suq)
       samples->tex.query = TXQ_TYPE;
    }
 
+   if (suq->tex.target.isMS()) {
+      bld.setPosition(suq, true);
+
+      if (mask & 0x1)
+         bld.mkOp2(OP_SHR, TYPE_U32, suq->getDef(0), suq->getDef(0),
+                   loadSuInfo32(ind, slot, NVC0_SU_INFO_MS(0), suq->tex.bindless));
+      if (mask & 0x2) {
+         int d = util_bitcount(mask & 0x1);
+         bld.mkOp2(OP_SHR, TYPE_U32, suq->getDef(d), suq->getDef(d),
+                   loadSuInfo32(ind, slot, NVC0_SU_INFO_MS(1), suq->tex.bindless));
+      }
+   }
+
    return true;
 }
 

@@ -60,6 +60,13 @@ vbo_context(struct gl_context *ctx)
 }
 
 
+static inline const struct vbo_context *
+vbo_context_const(const struct gl_context *ctx)
+{
+   return ctx->vbo_context;
+}
+
+
 /**
  * Array to apply the fixed function material aliasing map to
  * an attribute value used in vbo processing inputs to an attribute
@@ -207,9 +214,17 @@ _vbo_set_attrib_format(struct gl_context *ctx,
 {
    const GLboolean integer = vbo_attrtype_to_integer_flag(type);
    const GLboolean doubles = vbo_attrtype_to_double_flag(type);
+
+   if (doubles)
+      size /= 2;
    _mesa_update_array_format(ctx, vao, attr, size, type, GL_RGBA,
                              GL_FALSE, integer, doubles, offset);
-   /* Ptr for userspace arrays */
+   /* Ptr for userspace arrays.
+    * For updating the pointer we would need to add the vao->NewArrays flag
+    * to the VAO. But but that is done already unconditionally in
+    * _mesa_update_array_format called above.
+    */
+   assert((vao->NewArrays | ~vao->_Enabled) & VERT_BIT(attr));
    vao->VertexAttrib[attr].Ptr = ADD_POINTERS(buffer_offset, offset);
 }
 

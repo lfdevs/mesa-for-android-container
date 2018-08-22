@@ -589,7 +589,7 @@ struct __DRIdamageExtensionRec {
  * SWRast Loader extension.
  */
 #define __DRI_SWRAST_LOADER "DRI_SWRastLoader"
-#define __DRI_SWRAST_LOADER_VERSION 3
+#define __DRI_SWRAST_LOADER_VERSION 4
 struct __DRIswrastLoaderExtensionRec {
     __DRIextension base;
 
@@ -631,6 +631,24 @@ struct __DRIswrastLoaderExtensionRec {
    void (*getImage2)(__DRIdrawable *readable,
 		     int x, int y, int width, int height, int stride,
 		     char *data, void *loaderPrivate);
+
+    /**
+     * Put shm image to drawable
+     *
+     * \since 4
+     */
+    void (*putImageShm)(__DRIdrawable *drawable, int op,
+                        int x, int y, int width, int height, int stride,
+                        int shmid, char *shmaddr, unsigned offset,
+                        void *loaderPrivate);
+    /**
+     * Get shm image from readable
+     *
+     * \since 4
+     */
+    void (*getImageShm)(__DRIdrawable *readable,
+                        int x, int y, int width, int height,
+                        int shmid, void *loaderPrivate);
 };
 
 /**
@@ -1253,6 +1271,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_YUYV         0x100f
 #define __DRI_IMAGE_FORMAT_XBGR2101010  0x1010
 #define __DRI_IMAGE_FORMAT_ABGR2101010  0x1011
+#define __DRI_IMAGE_FORMAT_SABGR8       0x1012
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002
@@ -1289,6 +1308,7 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FOURCC_ABGR8888	0x34324241
 #define __DRI_IMAGE_FOURCC_XBGR8888	0x34324258
 #define __DRI_IMAGE_FOURCC_SARGB8888	0x83324258
+#define __DRI_IMAGE_FOURCC_SABGR8888	0x84324258
 #define __DRI_IMAGE_FOURCC_ARGB2101010	0x30335241
 #define __DRI_IMAGE_FOURCC_XRGB2101010	0x30335258
 #define __DRI_IMAGE_FOURCC_ABGR2101010	0x30334241

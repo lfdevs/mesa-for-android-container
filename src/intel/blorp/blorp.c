@@ -75,18 +75,6 @@ brw_blorp_surface_info_init(struct blorp_context *blorp,
    if (format == ISL_FORMAT_UNSUPPORTED)
       format = surf->surf->format;
 
-   if (format == ISL_FORMAT_R24_UNORM_X8_TYPELESS) {
-      /* Unfortunately, ISL_FORMAT_R24_UNORM_X8_TYPELESS it isn't supported as
-       * a render target, which would prevent us from blitting to 24-bit
-       * depth.  The miptree consists of 32 bits per pixel, arranged as 24-bit
-       * depth values interleaved with 8 "don't care" bits.  Since depth
-       * values don't require any blending, it doesn't matter how we interpret
-       * the bit pattern as long as we copy the right amount of data, so just
-       * map it as 8-bit BGRA.
-       */
-      format = ISL_FORMAT_B8G8R8A8_UNORM;
-   }
-
    info->surf = *surf->surf;
    info->addr = surf->addr;
 
@@ -217,7 +205,7 @@ blorp_compile_fs(struct blorp_context *blorp, void *mem_ctx,
 
    const unsigned *program =
       brw_compile_fs(compiler, blorp->driver_ctx, mem_ctx, wm_key,
-                     wm_prog_data, nir, NULL, -1, -1, false, use_repclear,
+                     wm_prog_data, nir, NULL, -1, -1, -1, false, use_repclear,
                      NULL, NULL);
 
    return program;

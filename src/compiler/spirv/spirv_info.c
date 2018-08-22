@@ -108,6 +108,9 @@ spirv_capability_to_string(SpvCapability v)
    case SpvCapabilityVariablePointers: return "SpvCapabilityVariablePointers";
    case SpvCapabilityAtomicStorageOps: return "SpvCapabilityAtomicStorageOps";
    case SpvCapabilitySampleMaskPostDepthCoverage: return "SpvCapabilitySampleMaskPostDepthCoverage";
+   case SpvCapabilityStorageBuffer8BitAccess: return "SpvCapabilityStorageBuffer8BitAccess";
+   case SpvCapabilityUniformAndStorageBuffer8BitAccess: return "SpvCapabilityUniformAndStorageBuffer8BitAccess";
+   case SpvCapabilityStoragePushConstant8: return "SpvCapabilityStoragePushConstant8";
    case SpvCapabilityFloat16ImageAMD: return "SpvCapabilityFloat16ImageAMD";
    case SpvCapabilityImageGatherBiasLodAMD: return "SpvCapabilityImageGatherBiasLodAMD";
    case SpvCapabilityFragmentMaskAMD: return "SpvCapabilityFragmentMaskAMD";

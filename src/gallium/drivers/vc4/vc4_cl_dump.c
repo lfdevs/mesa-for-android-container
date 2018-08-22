@@ -28,6 +28,7 @@
 #include "kernel/vc4_packet.h"
 
 #include "broadcom/cle/v3d_decoder.h"
+#include "broadcom/clif/clif_dump.h"
 
 void
 vc4_dump_cl(void *cl, uint32_t size, bool is_render)
@@ -40,6 +41,8 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
                 .ver = 21,
         };
         struct v3d_spec *spec = v3d_spec_load(&devinfo);
+
+        struct clif_dump *clif = clif_dump_init(&devinfo, stderr, true);
 
         uint32_t offset = 0, hw_offset = 0;
         uint8_t *p = cl;
@@ -60,7 +63,7 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
                 fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s\n",
                         offset, hw_offset, header, v3d_group_get_name(inst));
 
-                v3d_print_group(stderr, inst, offset, p, "");
+                v3d_print_group(clif, inst, offset, p);
 
                 switch (header) {
                 case VC4_PACKET_HALT:
@@ -75,5 +78,7 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
                         hw_offset += length;
                 p += length;
         }
+
+        clif_dump_destroy(clif);
 }
 

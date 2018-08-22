@@ -121,6 +121,7 @@ NineBuffer9_ctor( struct NineBuffer9 *This,
     info->array_size = 1;
     info->last_level = 0;
     info->nr_samples = 0;
+    info->nr_storage_samples = 0;
 
     hr = NineResource9_ctor(&This->base, pParams, NULL, TRUE,
                             Type, Pool, Usage);

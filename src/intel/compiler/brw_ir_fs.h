@@ -374,6 +374,7 @@ public:
 
    uint8_t sources; /**< Number of fs_reg sources. */
 
+   bool last_rt:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
 };
 

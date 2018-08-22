@@ -29,7 +29,6 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/egl \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
-	-I$(top_srcdir)/src/egl/wayland/wayland-egl \
 	-I$(top_srcdir)/src/egl/main \
 	-I$(top_srcdir)/src/gbm/main \
 	-I$(top_srcdir)/src/loader \
@@ -38,6 +37,7 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/state_trackers/omx \
 	$(GALLIUM_CFLAGS) \
 	$(LIBDRM_CFLAGS) \
+	$(WAYLAND_EGL_CFLAGS) \
 	$(VISIBILITY_CFLAGS) \
 	$(VL_CFLAGS) \
 	$(XCB_DRI3_CFLAGS) \

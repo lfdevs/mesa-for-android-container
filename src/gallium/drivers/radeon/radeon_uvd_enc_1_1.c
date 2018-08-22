@@ -55,7 +55,7 @@ radeon_uvd_enc_add_buffer(struct radeon_uvd_encoder *enc,
                           enum radeon_bo_domain domain, signed offset)
 {
    enc->ws->cs_add_buffer(enc->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
-                          domain, RADEON_PRIO_VCE);
+                          domain, 0);
    uint64_t addr;
    addr = enc->ws->buffer_get_virtual_address(buf);
    addr = addr + offset;

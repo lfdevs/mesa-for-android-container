@@ -53,7 +53,7 @@ intel_check_front_buffer_rendering(struct intel_context *intel)
 }
 
 static void
-intelDrawBuffer(struct gl_context * ctx, GLenum mode)
+intelDrawBuffer(struct gl_context * ctx)
 {
    if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer)) {
       struct intel_context *const intel = intel_context(ctx);

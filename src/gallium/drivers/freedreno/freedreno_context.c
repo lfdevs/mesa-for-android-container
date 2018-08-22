@@ -101,6 +101,8 @@ fd_emit_string_marker(struct pipe_context *pctx, const char *string, int len)
 	if (!ctx->batch)
 		return;
 
+	ctx->batch->needs_flush = true;
+
 	ring = ctx->batch->draw;
 
 	/* max packet size is 0x3fff dwords: */

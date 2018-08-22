@@ -1,77 +1,82 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-*
-* @file blend.cpp
-*
-* @brief Implementation for blending operations.
-*
-******************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ * @file blend.cpp
+ *
+ * @brief Implementation for blending operations.
+ *
+ ******************************************************************************/
 #include "state.h"
 
-template<bool Color, bool Alpha>
-INLINE
-void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdvector &src, simdvector &src1, simdvector &dst, simdvector &out)
+template <bool Color, bool Alpha>
+INLINE void GenerateBlendFactor(SWR_BLEND_FACTOR func,
+                                simdvector&      constantColor,
+                                simdvector&      src,
+                                simdvector&      src1,
+                                simdvector&      dst,
+                                simdvector&      out)
 {
     simdvector result;
 
     switch (func)
     {
-    case BLENDFACTOR_ZERO: 
+    case BLENDFACTOR_ZERO:
         result.x = _simd_setzero_ps();
         result.y = _simd_setzero_ps();
         result.z = _simd_setzero_ps();
         result.w = _simd_setzero_ps();
         break;
 
-    case BLENDFACTOR_ONE: 
+    case BLENDFACTOR_ONE:
         result.x = _simd_set1_ps(1.0);
         result.y = _simd_set1_ps(1.0);
         result.z = _simd_set1_ps(1.0);
         result.w = _simd_set1_ps(1.0);
         break;
 
-    case BLENDFACTOR_SRC_COLOR: 
+    case BLENDFACTOR_SRC_COLOR:
         result = src;
         break;
 
-    case BLENDFACTOR_DST_COLOR: 
+    case BLENDFACTOR_DST_COLOR:
         result = dst;
         break;
 
-    case BLENDFACTOR_INV_SRC_COLOR: 
+    case BLENDFACTOR_INV_SRC_COLOR:
         result.x = _simd_sub_ps(_simd_set1_ps(1.0), src.x);
         result.y = _simd_sub_ps(_simd_set1_ps(1.0), src.y);
         result.z = _simd_sub_ps(_simd_set1_ps(1.0), src.z);
         result.w = _simd_sub_ps(_simd_set1_ps(1.0), src.w);
         break;
 
-    case BLENDFACTOR_INV_DST_COLOR: 
+    case BLENDFACTOR_INV_DST_COLOR:
         result.x = _simd_sub_ps(_simd_set1_ps(1.0), dst.x);
         result.y = _simd_sub_ps(_simd_set1_ps(1.0), dst.y);
         result.z = _simd_sub_ps(_simd_set1_ps(1.0), dst.z);
         result.w = _simd_sub_ps(_simd_set1_ps(1.0), dst.w);
         break;
 
-    case BLENDFACTOR_SRC_ALPHA: result.x = src.w;
+    case BLENDFACTOR_SRC_ALPHA:
+        result.x = src.w;
         result.y = src.w;
         result.z = src.w;
         result.w = src.w;
@@ -80,14 +85,15 @@ void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdv
     case BLENDFACTOR_INV_SRC_ALPHA:
     {
         simdscalar oneMinusSrcA = _simd_sub_ps(_simd_set1_ps(1.0), src.w);
-        result.x = oneMinusSrcA;
-        result.y = oneMinusSrcA;
-        result.z = oneMinusSrcA;
-        result.w = oneMinusSrcA;
+        result.x                = oneMinusSrcA;
+        result.y                = oneMinusSrcA;
+        result.z                = oneMinusSrcA;
+        result.w                = oneMinusSrcA;
         break;
     }
 
-    case BLENDFACTOR_DST_ALPHA: result.x = dst.w;
+    case BLENDFACTOR_DST_ALPHA:
+        result.x = dst.w;
         result.y = dst.w;
         result.z = dst.w;
         result.w = dst.w;
@@ -96,20 +102,20 @@ void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdv
     case BLENDFACTOR_INV_DST_ALPHA:
     {
         simdscalar oneMinusDstA = _simd_sub_ps(_simd_set1_ps(1.0), dst.w);
-        result.x = oneMinusDstA;
-        result.y = oneMinusDstA;
-        result.z = oneMinusDstA;
-        result.w = oneMinusDstA;
+        result.x                = oneMinusDstA;
+        result.y                = oneMinusDstA;
+        result.z                = oneMinusDstA;
+        result.w                = oneMinusDstA;
         break;
     }
 
     case BLENDFACTOR_SRC_ALPHA_SATURATE:
     {
         simdscalar sat = _simd_min_ps(src.w, _simd_sub_ps(_simd_set1_ps(1.0), dst.w));
-        result.x = sat;
-        result.y = sat;
-        result.z = sat;
-        result.w = _simd_set1_ps(1.0);
+        result.x       = sat;
+        result.y       = sat;
+        result.z       = sat;
+        result.w       = _simd_set1_ps(1.0);
         break;
     }
 
@@ -135,7 +141,8 @@ void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdv
 
     case BLENDFACTOR_INV_CONST_ALPHA:
     {
-        result.x = result.y = result.z = result.w = _simd_sub_ps(_simd_set1_ps(1.0f), constantColor[3]);
+        result.x = result.y = result.z = result.w =
+            _simd_sub_ps(_simd_set1_ps(1.0f), constantColor[3]);
         break;
     }
 
@@ -161,7 +168,8 @@ void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdv
         result.x = result.y = result.z = result.w = _simd_sub_ps(_simd_set1_ps(1.0f), src1.w);
         break;
 
-    default: SWR_INVALID("Unimplemented blend factor: %d", func);
+    default:
+        SWR_INVALID("Unimplemented blend factor: %d", func);
     }
 
     if (Color)
@@ -174,11 +182,15 @@ void GenerateBlendFactor(SWR_BLEND_FACTOR func, simdvector &constantColor, simdv
     {
         out.w = result.w;
     }
-
 }
 
-template<bool Color, bool Alpha>
-INLINE void BlendFunc(SWR_BLEND_OP blendOp, simdvector &src, simdvector &srcFactor, simdvector &dst, simdvector &dstFactor, simdvector &out)
+template <bool Color, bool Alpha>
+INLINE void BlendFunc(SWR_BLEND_OP blendOp,
+                      simdvector&  src,
+                      simdvector&  srcFactor,
+                      simdvector&  dst,
+                      simdvector&  dstFactor,
+                      simdvector&  out)
 {
     simdvector result;
 
@@ -204,21 +216,21 @@ INLINE void BlendFunc(SWR_BLEND_OP blendOp, simdvector &src, simdvector &srcFact
         result.z = _simd_fmsub_ps(dstFactor.z, dst.z, _simd_mul_ps(srcFactor.z, src.z));
         result.w = _simd_fmsub_ps(dstFactor.w, dst.w, _simd_mul_ps(srcFactor.w, src.w));
         break;
-        
+
     case BLENDOP_MIN:
         result.x = _simd_min_ps(_simd_mul_ps(srcFactor.x, src.x), _simd_mul_ps(dstFactor.x, dst.x));
         result.y = _simd_min_ps(_simd_mul_ps(srcFactor.y, src.y), _simd_mul_ps(dstFactor.y, dst.y));
         result.z = _simd_min_ps(_simd_mul_ps(srcFactor.z, src.z), _simd_mul_ps(dstFactor.z, dst.z));
         result.w = _simd_min_ps(_simd_mul_ps(srcFactor.w, src.w), _simd_mul_ps(dstFactor.w, dst.w));
         break;
-        
+
     case BLENDOP_MAX:
         result.x = _simd_max_ps(_simd_mul_ps(srcFactor.x, src.x), _simd_mul_ps(dstFactor.x, dst.x));
         result.y = _simd_max_ps(_simd_mul_ps(srcFactor.y, src.y), _simd_mul_ps(dstFactor.y, dst.y));
         result.z = _simd_max_ps(_simd_mul_ps(srcFactor.z, src.z), _simd_mul_ps(dstFactor.z, dst.z));
         result.w = _simd_max_ps(_simd_mul_ps(srcFactor.w, src.w), _simd_mul_ps(dstFactor.w, dst.w));
         break;
-        
+
     default:
         SWR_INVALID("Unimplemented blend function: %d", blendOp);
     }
@@ -235,8 +247,8 @@ INLINE void BlendFunc(SWR_BLEND_OP blendOp, simdvector &src, simdvector &srcFact
     }
 }
 
-template<SWR_TYPE type>
-INLINE void Clamp(simdvector &src)
+template <SWR_TYPE type>
+INLINE void Clamp(simdvector& src)
 {
     switch (type)
     {
@@ -277,8 +289,13 @@ INLINE void Clamp(simdvector &src)
     }
 }
 
-template<SWR_TYPE type>
-void Blend(const SWR_BLEND_STATE *pBlendState, const SWR_RENDER_TARGET_BLEND_STATE *pState, simdvector &src, simdvector& src1, uint8_t *pDst, simdvector &result)
+template <SWR_TYPE type>
+void Blend(const SWR_BLEND_STATE*               pBlendState,
+           const SWR_RENDER_TARGET_BLEND_STATE* pState,
+           simdvector&                          src,
+           simdvector&                          src1,
+           uint8_t*                             pDst,
+           simdvector&                          result)
 {
     // load render target
     simdvector dst;
@@ -299,20 +316,33 @@ void Blend(const SWR_BLEND_STATE *pBlendState, const SWR_RENDER_TARGET_BLEND_STA
     simdvector srcFactor, dstFactor;
     if (pBlendState->independentAlphaBlendEnable)
     {
-        GenerateBlendFactor<true, false>((SWR_BLEND_FACTOR)pState->sourceBlendFactor, constColor, src, src1, dst, srcFactor);
-        GenerateBlendFactor<false, true>((SWR_BLEND_FACTOR)pState->sourceAlphaBlendFactor, constColor, src, src1, dst, srcFactor);
+        GenerateBlendFactor<true, false>(
+            (SWR_BLEND_FACTOR)pState->sourceBlendFactor, constColor, src, src1, dst, srcFactor);
+        GenerateBlendFactor<false, true>((SWR_BLEND_FACTOR)pState->sourceAlphaBlendFactor,
+                                         constColor,
+                                         src,
+                                         src1,
+                                         dst,
+                                         srcFactor);
 
-        GenerateBlendFactor<true, false>((SWR_BLEND_FACTOR)pState->destBlendFactor, constColor, src, src1, dst, dstFactor);
-        GenerateBlendFactor<false, true>((SWR_BLEND_FACTOR)pState->destAlphaBlendFactor, constColor, src, src1, dst, dstFactor);
+        GenerateBlendFactor<true, false>(
+            (SWR_BLEND_FACTOR)pState->destBlendFactor, constColor, src, src1, dst, dstFactor);
+        GenerateBlendFactor<false, true>(
+            (SWR_BLEND_FACTOR)pState->destAlphaBlendFactor, constColor, src, src1, dst, dstFactor);
 
-        BlendFunc<true, false>((SWR_BLEND_OP)pState->colorBlendFunc, src, srcFactor, dst, dstFactor, result);
-        BlendFunc<false, true>((SWR_BLEND_OP)pState->alphaBlendFunc, src, srcFactor, dst, dstFactor, result);
+        BlendFunc<true, false>(
+            (SWR_BLEND_OP)pState->colorBlendFunc, src, srcFactor, dst, dstFactor, result);
+        BlendFunc<false, true>(
+            (SWR_BLEND_OP)pState->alphaBlendFunc, src, srcFactor, dst, dstFactor, result);
     }
     else
     {
-        GenerateBlendFactor<true, true>((SWR_BLEND_FACTOR)pState->sourceBlendFactor, constColor, src, src1, dst, srcFactor);
-        GenerateBlendFactor<true, true>((SWR_BLEND_FACTOR)pState->destBlendFactor, constColor, src, src1, dst, dstFactor);
+        GenerateBlendFactor<true, true>(
+            (SWR_BLEND_FACTOR)pState->sourceBlendFactor, constColor, src, src1, dst, srcFactor);
+        GenerateBlendFactor<true, true>(
+            (SWR_BLEND_FACTOR)pState->destBlendFactor, constColor, src, src1, dst, dstFactor);
 
-        BlendFunc<true, true>((SWR_BLEND_OP)pState->colorBlendFunc, src, srcFactor, dst, dstFactor, result);
+        BlendFunc<true, true>(
+            (SWR_BLEND_OP)pState->colorBlendFunc, src, srcFactor, dst, dstFactor, result);
     }
 }

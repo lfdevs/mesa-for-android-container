@@ -519,8 +519,7 @@ get_image_format_features(const struct gen_device_info *devinfo,
       return 0;
 
    if (isl_format_supports_sampling(devinfo, plane_format.isl_format)) {
-      flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-               VK_FORMAT_FEATURE_BLIT_SRC_BIT;
+      flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
       if (isl_format_supports_filtering(devinfo, plane_format.isl_format))
          flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
@@ -532,8 +531,7 @@ get_image_format_features(const struct gen_device_info *devinfo,
     */
    if (isl_format_supports_rendering(devinfo, plane_format.isl_format) &&
        plane_format.swizzle.a == ISL_CHANNEL_SELECT_ALPHA) {
-      flags |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-               VK_FORMAT_FEATURE_BLIT_DST_BIT;
+      flags |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
 
       if (isl_format_supports_alpha_blending(devinfo, plane_format.isl_format))
          flags |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
@@ -550,7 +548,9 @@ get_image_format_features(const struct gen_device_info *devinfo,
       flags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
 
    if (flags) {
-      flags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+      flags |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+               VK_FORMAT_FEATURE_BLIT_DST_BIT |
+               VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
    }
 
@@ -724,7 +724,8 @@ void anv_GetPhysicalDeviceFormatProperties2(
                                          &pFormatProperties->formatProperties);
 
    vk_foreach_struct(ext, pFormatProperties->pNext) {
-      switch (ext->sType) {
+      /* Use unsigned since some cases are not in the VkStructureType enum. */
+      switch ((unsigned)ext->sType) {
       case VK_STRUCTURE_TYPE_WSI_FORMAT_MODIFIER_PROPERTIES_LIST_MESA:
          get_wsi_format_modifier_properties_list(physical_device, format,
                                                  (void *)ext);

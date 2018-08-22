@@ -937,6 +937,7 @@ init_fbconfig_for_chooser(struct glx_config * config,
    config->fbconfigID = (GLXFBConfigID) (GLX_DONT_CARE);
 
    config->swapMethod = GLX_DONT_CARE;
+   config->sRGBCapable = GLX_DONT_CARE;
 }
 
 #define MATCH_DONT_CARE( param )        \

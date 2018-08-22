@@ -28,6 +28,7 @@
  **************************************************************************/
 
 #include "u_format.h"
+#include "u_format_bptc.h"
 #include "u_format_s3tc.h"
 #include "u_format_rgtc.h"
 #include "u_format_latc.h"
@@ -39028,12 +39029,12 @@ util_format_bptc_rgba_unorm_description = {
       PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
-   NULL, /* unpack_rgba_8unorm */
-   NULL, /* pack_rgba_8unorm */
+   &util_format_bptc_rgba_unorm_unpack_rgba_8unorm,
+   &util_format_bptc_rgba_unorm_pack_rgba_8unorm,
    NULL, /* fetch_rgba_8unorm */
-   NULL, /* unpack_rgba_float */
-   NULL, /* pack_rgba_float */
-   NULL, /* fetch_rgba_float */
+   &util_format_bptc_rgba_unorm_unpack_rgba_float,
+   &util_format_bptc_rgba_unorm_pack_rgba_float,
+   &util_format_bptc_rgba_unorm_fetch_rgba_float,
    NULL, /* unpack_z_32unorm */
    NULL, /* pack_z_32unorm */
    NULL, /* unpack_z_float */
@@ -39072,12 +39073,12 @@ util_format_bptc_srgba_description = {
       PIPE_SWIZZLE_W	/* a */
    },
    UTIL_FORMAT_COLORSPACE_SRGB,
-   NULL, /* unpack_rgba_8unorm */
-   NULL, /* pack_rgba_8unorm */
+   &util_format_bptc_srgba_unpack_rgba_8unorm,
+   &util_format_bptc_srgba_pack_rgba_8unorm,
    NULL, /* fetch_rgba_8unorm */
-   NULL, /* unpack_rgba_float */
-   NULL, /* pack_rgba_float */
-   NULL, /* fetch_rgba_float */
+   &util_format_bptc_srgba_unpack_rgba_float,
+   &util_format_bptc_srgba_pack_rgba_float,
+   &util_format_bptc_srgba_fetch_rgba_float,
    NULL, /* unpack_z_32unorm */
    NULL, /* pack_z_32unorm */
    NULL, /* unpack_z_float */
@@ -39116,12 +39117,12 @@ util_format_bptc_rgb_float_description = {
       PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
-   NULL, /* unpack_rgba_8unorm */
-   NULL, /* pack_rgba_8unorm */
+   &util_format_bptc_rgb_float_unpack_rgba_8unorm,
+   &util_format_bptc_rgb_float_pack_rgba_8unorm,
    NULL, /* fetch_rgba_8unorm */
-   NULL, /* unpack_rgba_float */
-   NULL, /* pack_rgba_float */
-   NULL, /* fetch_rgba_float */
+   &util_format_bptc_rgb_float_unpack_rgba_float,
+   &util_format_bptc_rgb_float_pack_rgba_float,
+   &util_format_bptc_rgb_float_fetch_rgba_float,
    NULL, /* unpack_z_32unorm */
    NULL, /* pack_z_32unorm */
    NULL, /* unpack_z_float */
@@ -39160,12 +39161,12 @@ util_format_bptc_rgb_ufloat_description = {
       PIPE_SWIZZLE_1	/* a */
    },
    UTIL_FORMAT_COLORSPACE_RGB,
-   NULL, /* unpack_rgba_8unorm */
-   NULL, /* pack_rgba_8unorm */
+   &util_format_bptc_rgb_ufloat_unpack_rgba_8unorm,
+   &util_format_bptc_rgb_ufloat_pack_rgba_8unorm,
    NULL, /* fetch_rgba_8unorm */
-   NULL, /* unpack_rgba_float */
-   NULL, /* pack_rgba_float */
-   NULL, /* fetch_rgba_float */
+   &util_format_bptc_rgb_ufloat_unpack_rgba_float,
+   &util_format_bptc_rgb_ufloat_pack_rgba_float,
+   &util_format_bptc_rgb_ufloat_fetch_rgba_float,
    NULL, /* unpack_z_32unorm */
    NULL, /* pack_z_32unorm */
    NULL, /* unpack_z_float */

@@ -172,7 +172,7 @@ st_invalidate_buffers(struct st_context *st)
    st->dirty |= ST_NEW_BLEND |
                 ST_NEW_DSA |
                 ST_NEW_FB_STATE |
-                ST_NEW_SAMPLE_MASK |
+                ST_NEW_SAMPLE_STATE |
                 ST_NEW_SAMPLE_SHADING |
                 ST_NEW_FS_STATE |
                 ST_NEW_POLY_STIPPLE |
@@ -323,9 +323,10 @@ st_init_driver_flags(struct st_context *st)
    f->NewLogicOp = ST_NEW_BLEND;
    f->NewStencil = ST_NEW_DSA;
    f->NewMultisampleEnable = ST_NEW_BLEND | ST_NEW_RASTERIZER |
-                             ST_NEW_SAMPLE_MASK | ST_NEW_SAMPLE_SHADING;
+                             ST_NEW_SAMPLE_STATE | ST_NEW_SAMPLE_SHADING;
    f->NewSampleAlphaToXEnable = ST_NEW_BLEND;
-   f->NewSampleMask = ST_NEW_SAMPLE_MASK;
+   f->NewSampleMask = ST_NEW_SAMPLE_STATE;
+   f->NewSampleLocations = ST_NEW_SAMPLE_STATE;
    f->NewSampleShading = ST_NEW_SAMPLE_SHADING;
 
    /* This depends on what the gallium driver wants. */
@@ -344,6 +345,8 @@ st_init_driver_flags(struct st_context *st)
    f->NewPolygonState = ST_NEW_RASTERIZER;
    f->NewPolygonStipple = ST_NEW_POLY_STIPPLE;
    f->NewViewport = ST_NEW_VIEWPORT;
+   f->NewNvConservativeRasterization = ST_NEW_RASTERIZER;
+   f->NewNvConservativeRasterizationParams = ST_NEW_RASTERIZER;
 }
 
 
@@ -393,26 +396,17 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    /* Setup vertex element info for 'struct st_util_vertex'.
     */
    {
-      const unsigned slot = cso_get_aux_vertex_buffer_slot(st->cso_context);
-
-      /* If this assertion ever fails all state tracker calls to
-       * cso_get_aux_vertex_buffer_slot() should be audited.  This
-       * particular call would have to be moved to just before each
-       * drawing call.
-       */
-      assert(slot == 0);
-
       STATIC_ASSERT(sizeof(struct st_util_vertex) == 9 * sizeof(float));
 
       memset(&st->util_velems, 0, sizeof(st->util_velems));
       st->util_velems[0].src_offset = 0;
-      st->util_velems[0].vertex_buffer_index = slot;
+      st->util_velems[0].vertex_buffer_index = 0;
       st->util_velems[0].src_format = PIPE_FORMAT_R32G32B32_FLOAT;
       st->util_velems[1].src_offset = 3 * sizeof(float);
-      st->util_velems[1].vertex_buffer_index = slot;
+      st->util_velems[1].vertex_buffer_index = 0;
       st->util_velems[1].src_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
       st->util_velems[2].src_offset = 7 * sizeof(float);
-      st->util_velems[2].vertex_buffer_index = slot;
+      st->util_velems[2].vertex_buffer_index = 0;
       st->util_velems[2].src_format = PIPE_FORMAT_R32G32_FLOAT;
    }
 
@@ -439,11 +433,14 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       screen->get_param(screen, PIPE_CAP_SHADER_STENCIL_EXPORT);
    st->has_shader_model3 = screen->get_param(screen, PIPE_CAP_SM3);
    st->has_etc1 = screen->is_format_supported(screen, PIPE_FORMAT_ETC1_RGB8,
-                                              PIPE_TEXTURE_2D, 0,
+                                              PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
    st->has_etc2 = screen->is_format_supported(screen, PIPE_FORMAT_ETC2_RGB8,
-                                              PIPE_TEXTURE_2D, 0,
+                                              PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
+   st->has_astc_2d_ldr =
+      screen->is_format_supported(screen, PIPE_FORMAT_ASTC_4x4_SRGB,
+                                  PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
    st->prefer_blit_based_texture_transfer = screen->get_param(screen,
                               PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER);
    st->force_persample_in_shader =
@@ -549,9 +546,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
 
    /* Initialize context's winsys buffers list */
    LIST_INITHEAD(&st->winsys_buffers);
-
-   /* Keep our list of gl_vertex_array inputs */
-   _vbo_init_inputs(&st->draw_arrays);
 
    return st;
 }
@@ -768,11 +762,15 @@ st_init_driver_functions(struct pipe_screen *screen,
       screen->get_shader_param(screen, PIPE_SHADER_VERTEX,
                                PIPE_SHADER_CAP_PREFERRED_IR);
    if (preferred_ir == PIPE_SHADER_IR_NIR) {
-      functions->ProgramBinarySerializeDriverBlob = st_serialise_nir_program;
+      functions->ShaderCacheSerializeDriverBlob =  st_serialise_nir_program;
+      functions->ProgramBinarySerializeDriverBlob =
+         st_serialise_nir_program_binary;
       functions->ProgramBinaryDeserializeDriverBlob =
          st_deserialise_nir_program;
    } else {
-      functions->ProgramBinarySerializeDriverBlob = st_serialise_tgsi_program;
+      functions->ShaderCacheSerializeDriverBlob =  st_serialise_tgsi_program;
+      functions->ProgramBinarySerializeDriverBlob =
+         st_serialise_tgsi_program_binary;
       functions->ProgramBinaryDeserializeDriverBlob =
          st_deserialise_tgsi_program;
    }

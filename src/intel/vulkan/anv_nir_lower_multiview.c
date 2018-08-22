@@ -134,18 +134,11 @@ build_view_index(struct lower_multiview_state *state)
          if (b->shader->info.stage == MESA_SHADER_FRAGMENT)
             idx_var->data.interpolation = INTERP_MODE_FLAT;
 
-         if (glsl_type_is_array(type)) {
-            nir_deref_var *deref = nir_deref_var_create(b->shader, idx_var);
-            nir_deref_array *arr = nir_deref_array_create(b->shader);
-            arr->deref.type = glsl_int_type();
-            arr->deref_array_type = nir_deref_array_type_direct;
-            arr->base_offset = 0;
-            deref->deref.child = &arr->deref;
+         nir_deref_instr *deref = nir_build_deref_var(b, idx_var);
+         if (glsl_type_is_array(type))
+            deref = nir_build_deref_array(b, deref, nir_imm_int(b, 0));
 
-            state->view_index = nir_load_deref_var(b, deref);
-         } else {
-            state->view_index = nir_load_var(b, idx_var);
-         }
+         state->view_index = nir_load_deref(b, deref);
       }
    }
 

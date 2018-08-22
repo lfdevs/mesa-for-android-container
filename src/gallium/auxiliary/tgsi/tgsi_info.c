@@ -153,6 +153,8 @@ tgsi_opcode_infer_type(enum tgsi_opcode opcode)
    case TGSI_OPCODE_POPC:
    case TGSI_OPCODE_LSB:
    case TGSI_OPCODE_UMSB:
+   case TGSI_OPCODE_IMG2HND:
+   case TGSI_OPCODE_SAMP2HND:
       return TGSI_TYPE_UNSIGNED;
    case TGSI_OPCODE_ARL:
    case TGSI_OPCODE_ARR:

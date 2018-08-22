@@ -115,6 +115,7 @@ static inline struct qreg vir_reg(enum qfile file, uint32_t index)
  */
 struct qpu_reg {
         bool magic;
+        bool smimm;
         int index;
 };
 
@@ -244,8 +245,6 @@ enum quniform_contents {
 
         QUNIFORM_TEXTURE_BORDER_COLOR,
 
-        QUNIFORM_STENCIL,
-
         QUNIFORM_ALPHA_REF,
         QUNIFORM_SAMPLE_MASK,
 
@@ -302,18 +301,11 @@ struct v3d_key {
                 uint8_t swizzle[4];
                 uint8_t return_size;
                 uint8_t return_channels;
-                union {
-                        struct {
-                                unsigned compare_mode:1;
-                                unsigned compare_func:3;
-                                bool clamp_s:1;
-                                bool clamp_t:1;
-                                bool clamp_r:1;
-                        };
-                        struct {
-                                uint16_t msaa_width, msaa_height;
-                        };
-                };
+                unsigned compare_mode:1;
+                unsigned compare_func:3;
+                bool clamp_s:1;
+                bool clamp_t:1;
+                bool clamp_r:1;
         } tex[V3D_MAX_TEXTURE_SAMPLERS];
         uint8_t ucp_enables;
 };
@@ -485,6 +477,12 @@ struct v3d_compile {
          */
         uint32_t flat_shade_flags[BITSET_WORDS(V3D_MAX_FS_INPUTS)];
 
+        uint32_t noperspective_flags[BITSET_WORDS(V3D_MAX_FS_INPUTS)];
+
+        uint32_t centroid_flags[BITSET_WORDS(V3D_MAX_FS_INPUTS)];
+
+        bool uses_center_w;
+
         struct v3d_ubo_range *ubo_ranges;
         bool *ubo_range_used;
         uint32_t ubo_ranges_array_size;
@@ -650,6 +648,9 @@ struct v3d_vs_prog_data {
 
         /* Total number of components written, for the shader state record. */
         uint32_t vpm_output_size;
+
+        /* Value to be programmed in VCM_CACHE_SIZE. */
+        uint8_t vcm_cache_size;
 };
 
 struct v3d_fs_prog_data {
@@ -664,8 +665,13 @@ struct v3d_fs_prog_data {
          */
         uint32_t flat_shade_flags[((V3D_MAX_FS_INPUTS - 1) / 24) + 1];
 
+        uint32_t noperspective_flags[((V3D_MAX_FS_INPUTS - 1) / 24) + 1];
+
+        uint32_t centroid_flags[((V3D_MAX_FS_INPUTS - 1) / 24) + 1];
+
         bool writes_z;
         bool discard;
+        bool uses_center_w;
 };
 
 /* Special nir_load_input intrinsic index for loading the current TLB
@@ -865,6 +871,33 @@ vir_##name(struct v3d_compile *c, struct qreg a, struct qreg b)         \
                                            a, b));                      \
 }
 
+#define VIR_SFU(name)                                                      \
+static inline struct qreg                                                \
+vir_##name(struct v3d_compile *c, struct qreg a)                         \
+{                                                                        \
+        if (c->devinfo->ver >= 41) {                                     \
+                return vir_emit_def(c, vir_add_inst(V3D_QPU_A_##name,    \
+                                                    c->undef,            \
+                                                    a, c->undef));       \
+        } else {                                                         \
+                vir_FMOV_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_##name), a); \
+                return vir_FMOV(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_R4)); \
+        }                                                                \
+}                                                                        \
+static inline struct qinst *                                             \
+vir_##name##_dest(struct v3d_compile *c, struct qreg dest,               \
+                  struct qreg a)                                         \
+{                                                                        \
+        if (c->devinfo->ver >= 41) {                                     \
+                return vir_emit_nondef(c, vir_add_inst(V3D_QPU_A_##name, \
+                                                       dest,             \
+                                                       a, c->undef));    \
+        } else {                                                         \
+                vir_FMOV_dest(c, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_##name), a); \
+                return vir_FMOV_dest(c, dest, vir_reg(QFILE_MAGIC, V3D_QPU_WADDR_R4)); \
+        }                                                                \
+}
+
 #define VIR_A_ALU2(name) VIR_ALU2(name, vir_add_inst, V3D_QPU_A_##name)
 #define VIR_M_ALU2(name) VIR_ALU2(name, vir_mul_inst, V3D_QPU_M_##name)
 #define VIR_A_ALU1(name) VIR_ALU1(name, vir_add_inst, V3D_QPU_A_##name)
@@ -898,18 +931,19 @@ VIR_A_ALU2(OR)
 VIR_A_ALU2(XOR)
 VIR_A_ALU2(VADD)
 VIR_A_ALU2(VSUB)
-VIR_A_ALU2(STVPMV)
+VIR_A_NODST_2(STVPMV)
 VIR_A_ALU1(NOT)
 VIR_A_ALU1(NEG)
 VIR_A_ALU1(FLAPUSH)
 VIR_A_ALU1(FLBPUSH)
-VIR_A_ALU1(FLBPOP)
+VIR_A_ALU1(FLPOP)
 VIR_A_ALU1(SETMSF)
 VIR_A_ALU1(SETREVF)
 VIR_A_ALU0(TIDX)
 VIR_A_ALU0(EIDX)
 VIR_A_ALU1(LDVPMV_IN)
 VIR_A_ALU1(LDVPMV_OUT)
+VIR_A_ALU0(TMUWT)
 
 VIR_A_ALU0(FXCD)
 VIR_A_ALU0(XCD)
@@ -945,6 +979,13 @@ VIR_M_NODST_2(MULTOP)
 
 VIR_M_ALU1(MOV)
 VIR_M_ALU1(FMOV)
+
+VIR_SFU(RECIP)
+VIR_SFU(RSQRT)
+VIR_SFU(EXP)
+VIR_SFU(LOG)
+VIR_SFU(SIN)
+VIR_SFU(RSQRT2)
 
 static inline struct qinst *
 vir_MOV_cond(struct v3d_compile *c, enum v3d_qpu_cond cond,

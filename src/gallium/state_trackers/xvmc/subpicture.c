@@ -62,14 +62,14 @@ static enum pipe_format XvIDToPipe(struct pipe_screen *screen,
    case FOURCC_AI44:
       ret = PIPE_FORMAT_R4A4_UNORM;
       if (!screen->is_format_supported(
-                screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW))
+                screen, ret, PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW))
          ret = PIPE_FORMAT_B4G4R4A4_UNORM;
       break;
 
    case FOURCC_IA44:
       ret = PIPE_FORMAT_A4R4_UNORM;
       if (!screen->is_format_supported(
-                screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW))
+                screen, ret, PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW))
          ret = PIPE_FORMAT_B4G4R4A4_UNORM;
       break;
 
@@ -79,7 +79,7 @@ static enum pipe_format XvIDToPipe(struct pipe_screen *screen,
    }
 
    if (!screen->is_format_supported(
-             screen, ret, PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW)) {
+             screen, ret, PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW)) {
       XVMC_MSG(XVMC_ERR, "[XvMC] Unsupported 2D format %s for Xv image ID 0x%08X.\n", util_format_name(ret), xvimage_id);
       ret = PIPE_FORMAT_NONE;
    }
@@ -125,7 +125,7 @@ static int PipeToComponentOrder(struct pipe_screen *screen,
       component_order[2] = 'V';
       component_order[3] = 'A';
       if (!screen->is_format_supported(
-                screen, *palette_format, PIPE_TEXTURE_1D, 0,
+                screen, *palette_format, PIPE_TEXTURE_1D, 0, 0,
                 PIPE_BIND_SAMPLER_VIEW)) {
          /* One of these formats better be supported... */
          *palette_format = PIPE_FORMAT_B8G8R8X8_UNORM;

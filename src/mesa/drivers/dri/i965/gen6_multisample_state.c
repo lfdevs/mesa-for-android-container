@@ -68,10 +68,10 @@ gen6_get_sample_position(struct gl_context *ctx,
  * index layout in case of 2X and 4x MSAA, but they are different in
  * case of 8X MSAA.
  *
- * 2X MSAA sample index / number layout
- *           ---------
- *           | 0 | 1 |
- *           ---------
+ * 8X MSAA sample index layout    8x MSAA sample number layout
+ *           ---------                      ---------
+ *           | 0 | 1 |                      | 1 | 0 |
+ *           ---------                      ---------
  *
  * 4X MSAA sample index / number layout
  *           ---------
@@ -107,7 +107,7 @@ gen6_get_sample_position(struct gl_context *ctx,
 void
 gen6_set_sample_maps(struct gl_context *ctx)
 {
-   uint8_t map_2x[2] = {0, 1};
+   uint8_t map_2x[2] = {1, 0};
    uint8_t map_4x[4] = {0, 1, 2, 3};
    uint8_t map_8x[8] = {3, 7, 5, 0, 1, 2, 4, 6};
    uint8_t map_16x[16] = { 15, 10, 9, 7, 4, 1, 3, 13,

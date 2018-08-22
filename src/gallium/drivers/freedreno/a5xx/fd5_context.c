@@ -101,6 +101,8 @@ fd5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 	if (!pctx)
 		return NULL;
 
+	util_blitter_set_texture_multisample(fd5_ctx->base.blitter, true);
+
 	fd5_ctx->vs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
 			DRM_FREEDRENO_GEM_TYPE_KMEM);
 

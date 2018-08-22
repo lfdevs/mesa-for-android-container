@@ -780,9 +780,8 @@ anv_descriptor_set_write_buffer(struct anv_descriptor_set *set,
          &set->buffer_views[bind_layout->buffer_index + element];
 
       bview->format = anv_isl_format_for_descriptor_type(type);
-      bview->bo = buffer->bo;
-      bview->offset = buffer->offset + offset;
       bview->range = anv_buffer_get_range(buffer, offset, range);
+      bview->address = anv_address_add(buffer->address, offset);
 
       /* If we're writing descriptors through a push command, we need to
        * allocate the surface state from the command buffer. Otherwise it will
@@ -793,7 +792,7 @@ anv_descriptor_set_write_buffer(struct anv_descriptor_set *set,
 
       anv_fill_buffer_surface_state(device, bview->surface_state,
                                     bview->format,
-                                    bview->offset, bview->range, 1);
+                                    bview->address, bview->range, 1);
 
       *desc = (struct anv_descriptor) {
          .type = type,
@@ -903,15 +902,9 @@ anv_descriptor_set_write_template(struct anv_descriptor_set *set,
                                   const struct anv_descriptor_update_template *template,
                                   const void *data)
 {
-   const struct anv_descriptor_set_layout *layout = set->layout;
-
    for (uint32_t i = 0; i < template->entry_count; i++) {
       const struct anv_descriptor_template_entry *entry =
          &template->entries[i];
-      const struct anv_descriptor_set_binding_layout *bind_layout =
-         &layout->binding[entry->binding];
-      struct anv_descriptor *desc = &set->descriptors[bind_layout->descriptor_index];
-      desc += entry->array_element;
 
       switch (entry->type) {
       case VK_DESCRIPTOR_TYPE_SAMPLER:

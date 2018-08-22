@@ -1402,7 +1402,7 @@ BuilderSWR::CompileFS(struct swr_context *ctx, swr_jit_fs_key &key)
 
    // after the gallivm passes, we have to lower the core's intrinsics
    llvm::legacy::FunctionPassManager lowerPass(JM()->mpCurrentModule);
-   lowerPass.add(createLowerX86Pass(mpJitMgr, this));
+   lowerPass.add(createLowerX86Pass(this));
    lowerPass.run(*pFunction);
 
    PFN_PIXEL_KERNEL kernel =

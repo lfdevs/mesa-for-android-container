@@ -1,25 +1,25 @@
 /****************************************************************************
-* Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
-*
-* Permission is hereby granted, free of charge, to any person obtaining a
-* copy of this software and associated documentation files (the "Software"),
-* to deal in the Software without restriction, including without limitation
-* the rights to use, copy, modify, merge, publish, distribute, sublicense,
-* and/or sell copies of the Software, and to permit persons to whom the
-* Software is furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice (including the next
-* paragraph) shall be included in all copies or substantial portions of the
-* Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
-* THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-* IN THE SOFTWARE.
-****************************************************************************/
+ * Copyright (C) 2014-2015 Intel Corporation.   All Rights Reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ ****************************************************************************/
 
 #pragma once
 
@@ -44,7 +44,7 @@
 class InstructionSet
 {
 public:
-    InstructionSet() : CPU_Rep() {};
+    InstructionSet() : CPU_Rep(){};
 
     // getters
     std::string Vendor(void) { return CPU_Rep.vendor_; }
@@ -113,21 +113,11 @@ private:
     class InstructionSet_Internal
     {
     public:
-        InstructionSet_Internal()
-            : nIds_{ 0 },
-            nExIds_{ 0 },
-            isIntel_{ false },
-            isAMD_{ false },
-            f_1_ECX_{ 0 },
-            f_1_EDX_{ 0 },
-            f_7_EBX_{ 0 },
-            f_7_ECX_{ 0 },
-            f_81_ECX_{ 0 },
-            f_81_EDX_{ 0 },
-            data_{},
-            extdata_{}
+        InstructionSet_Internal() :
+            nIds_{0}, nExIds_{0}, isIntel_{false}, isAMD_{false}, f_1_ECX_{0}, f_1_EDX_{0},
+            f_7_EBX_{0}, f_7_ECX_{0}, f_81_ECX_{0}, f_81_EDX_{0}, data_{}, extdata_{}
         {
-            //int cpuInfo[4] = {-1};
+            // int cpuInfo[4] = {-1};
             std::array<int, 4> cpui;
 
             // Calling __cpuid with 0x0 as the function_id argument
@@ -144,7 +134,7 @@ private:
 #if defined(_MSC_VER) && !defined(__clang__)
                 __cpuidex(cpui.data(), i, 0);
 #else
-                int *data = cpui.data();
+                int* data = cpui.data();
                 __cpuid_count(i, 0, data[0], data[1], data[2], data[3]);
 #endif
                 data_.push_back(cpui);
@@ -153,10 +143,10 @@ private:
             // Capture vendor string
             char vendor[0x20];
             memset(vendor, 0, sizeof(vendor));
-            *reinterpret_cast<int*>(vendor) = data_[0][1];
+            *reinterpret_cast<int*>(vendor)     = data_[0][1];
             *reinterpret_cast<int*>(vendor + 4) = data_[0][3];
             *reinterpret_cast<int*>(vendor + 8) = data_[0][2];
-            vendor_ = vendor;
+            vendor_                             = vendor;
             if (vendor_ == "GenuineIntel")
             {
                 isIntel_ = true;
@@ -197,7 +187,7 @@ private:
 #if defined(_MSC_VER) && !defined(__clang__)
                 __cpuidex(cpui.data(), i, 0);
 #else
-                int *data = cpui.data();
+                int* data = cpui.data();
                 __cpuid_count(i, 0, data[0], data[1], data[2], data[3]);
 #endif
                 extdata_.push_back(cpui);
@@ -220,18 +210,18 @@ private:
             }
         };
 
-        int nIds_;
-        unsigned nExIds_;
-        std::string vendor_;
-        std::string brand_;
-        bool isIntel_;
-        bool isAMD_;
-        std::bitset<32> f_1_ECX_;
-        std::bitset<32> f_1_EDX_;
-        std::bitset<32> f_7_EBX_;
-        std::bitset<32> f_7_ECX_;
-        std::bitset<32> f_81_ECX_;
-        std::bitset<32> f_81_EDX_;
+        int                             nIds_;
+        unsigned                        nExIds_;
+        std::string                     vendor_;
+        std::string                     brand_;
+        bool                            isIntel_;
+        bool                            isAMD_;
+        std::bitset<32>                 f_1_ECX_;
+        std::bitset<32>                 f_1_EDX_;
+        std::bitset<32>                 f_7_EBX_;
+        std::bitset<32>                 f_7_ECX_;
+        std::bitset<32>                 f_81_ECX_;
+        std::bitset<32>                 f_81_EDX_;
         std::vector<std::array<int, 4>> data_;
         std::vector<std::array<int, 4>> extdata_;
     };

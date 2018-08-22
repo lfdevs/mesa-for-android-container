@@ -260,7 +260,7 @@ static bool amdgpu_fence_wait_rel_timeout(struct radeon_winsys *rws,
 }
 
 static struct pipe_fence_handle *
-amdgpu_cs_get_next_fence(struct radeon_winsys_cs *rcs)
+amdgpu_cs_get_next_fence(struct radeon_cmdbuf *rcs)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);
    struct pipe_fence_handle *fence = NULL;
@@ -608,7 +608,7 @@ static int amdgpu_lookup_or_add_sparse_buffer(struct amdgpu_cs *acs,
    return idx;
 }
 
-static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
+static unsigned amdgpu_cs_add_buffer(struct radeon_cmdbuf *rcs,
                                     struct pb_buffer *buf,
                                     enum radeon_bo_usage usage,
                                     enum radeon_bo_domain domains,
@@ -629,7 +629,7 @@ static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
     */
    if (bo == cs->last_added_bo &&
        (usage & cs->last_added_bo_usage) == usage &&
-       (1ull << priority) & cs->last_added_bo_priority_usage)
+       (1u << priority) & cs->last_added_bo_priority_usage)
       return cs->last_added_bo_index;
 
    if (!bo->sparse) {
@@ -658,7 +658,7 @@ static unsigned amdgpu_cs_add_buffer(struct radeon_winsys_cs *rcs,
       buffer = &cs->sparse_buffers[index];
    }
 
-   buffer->u.real.priority_usage |= 1ull << priority;
+   buffer->u.real.priority_usage |= 1u << priority;
    buffer->usage |= usage;
 
    cs->last_added_bo = bo;
@@ -902,9 +902,7 @@ static void amdgpu_cs_context_cleanup(struct amdgpu_cs_context *cs)
 static void amdgpu_destroy_cs_context(struct amdgpu_cs_context *cs)
 {
    amdgpu_cs_context_cleanup(cs);
-   FREE(cs->flags);
    FREE(cs->real_buffers);
-   FREE(cs->handles);
    FREE(cs->slab_buffers);
    FREE(cs->sparse_buffers);
    FREE(cs->fence_dependencies);
@@ -912,7 +910,7 @@ static void amdgpu_destroy_cs_context(struct amdgpu_cs_context *cs)
 }
 
 
-static struct radeon_winsys_cs *
+static struct radeon_cmdbuf *
 amdgpu_cs_create(struct radeon_winsys_ctx *rwctx,
                  enum ring_type ring_type,
                  void (*flush)(void *ctx, unsigned flags,
@@ -967,12 +965,12 @@ amdgpu_cs_create(struct radeon_winsys_ctx *rwctx,
    return &cs->main.base;
 }
 
-static bool amdgpu_cs_validate(struct radeon_winsys_cs *rcs)
+static bool amdgpu_cs_validate(struct radeon_cmdbuf *rcs)
 {
    return true;
 }
 
-static bool amdgpu_cs_check_space(struct radeon_winsys_cs *rcs, unsigned dw)
+static bool amdgpu_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw)
 {
    struct amdgpu_ib *ib = amdgpu_ib(rcs);
    struct amdgpu_cs *cs = amdgpu_cs_from_ib(ib);
@@ -996,7 +994,7 @@ static bool amdgpu_cs_check_space(struct radeon_winsys_cs *rcs, unsigned dw)
    /* Allocate a new chunk */
    if (rcs->num_prev >= rcs->max_prev) {
       unsigned new_max_prev = MAX2(1, 2 * rcs->max_prev);
-      struct radeon_winsys_cs_chunk *new_prev;
+      struct radeon_cmdbuf_chunk *new_prev;
 
       new_prev = REALLOC(rcs->prev,
                          sizeof(*new_prev) * rcs->max_prev,
@@ -1053,7 +1051,7 @@ static bool amdgpu_cs_check_space(struct radeon_winsys_cs *rcs, unsigned dw)
    return true;
 }
 
-static unsigned amdgpu_cs_get_buffer_list(struct radeon_winsys_cs *rcs,
+static unsigned amdgpu_cs_get_buffer_list(struct radeon_cmdbuf *rcs,
                                           struct radeon_bo_list_item *list)
 {
     struct amdgpu_cs_context *cs = amdgpu_cs(rcs)->csc;
@@ -1102,7 +1100,7 @@ static bool is_noop_fence_dependency(struct amdgpu_cs *acs,
    return amdgpu_fence_wait((void *)fence, 0, false);
 }
 
-static void amdgpu_cs_add_fence_dependency(struct radeon_winsys_cs *rws,
+static void amdgpu_cs_add_fence_dependency(struct radeon_cmdbuf *rws,
                                            struct pipe_fence_handle *pfence)
 {
    struct amdgpu_cs *acs = amdgpu_cs(rws);
@@ -1236,7 +1234,7 @@ static unsigned add_syncobj_to_signal_entry(struct amdgpu_cs_context *cs)
    return idx;
 }
 
-static void amdgpu_cs_add_syncobj_signal(struct radeon_winsys_cs *rws,
+static void amdgpu_cs_add_syncobj_signal(struct radeon_cmdbuf *rws,
                                          struct pipe_fence_handle *fence)
 {
    struct amdgpu_cs *acs = amdgpu_cs(rws);
@@ -1302,14 +1300,7 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
       unsigned num = 0;
 
       simple_mtx_lock(&ws->global_bo_list_lock);
-
-      handles = malloc(sizeof(handles[0]) * ws->num_buffers);
-      if (!handles) {
-         simple_mtx_unlock(&ws->global_bo_list_lock);
-         amdgpu_cs_context_cleanup(cs);
-         cs->error_code = -ENOMEM;
-         return;
-      }
+      handles = alloca(sizeof(handles[0]) * ws->num_buffers);
 
       LIST_FOR_EACH_ENTRY(bo, &ws->global_bo_list, u.real.global_list_item) {
          assert(num < ws->num_buffers);
@@ -1318,29 +1309,22 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
 
       r = amdgpu_bo_list_create(ws->dev, ws->num_buffers,
                                 handles, NULL, &bo_list);
-      free(handles);
       simple_mtx_unlock(&ws->global_bo_list_lock);
+      if (r) {
+         fprintf(stderr, "amdgpu: buffer list creation failed (%d)\n", r);
+         goto cleanup;
+      }
    } else {
       unsigned num_handles;
 
       if (!amdgpu_add_sparse_backing_buffers(cs)) {
+         fprintf(stderr, "amdgpu: amdgpu_add_sparse_backing_buffers failed\n");
          r = -ENOMEM;
-         goto bo_list_error;
+         goto cleanup;
       }
 
-      if (cs->max_real_submit < cs->num_real_buffers) {
-         FREE(cs->handles);
-         FREE(cs->flags);
-
-         cs->handles = MALLOC(sizeof(*cs->handles) * cs->num_real_buffers);
-         cs->flags = MALLOC(sizeof(*cs->flags) * cs->num_real_buffers);
-
-         if (!cs->handles || !cs->flags) {
-            cs->max_real_submit = 0;
-            r = -ENOMEM;
-            goto bo_list_error;
-         }
-      }
+      amdgpu_bo_handle *handles = alloca(sizeof(*handles) * cs->num_real_buffers);
+      uint8_t *flags = alloca(sizeof(*flags) * cs->num_real_buffers);
 
       num_handles = 0;
       for (i = 0; i < cs->num_real_buffers; ++i) {
@@ -1351,29 +1335,23 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
 
          assert(buffer->u.real.priority_usage != 0);
 
-         cs->handles[num_handles] = buffer->bo->bo;
-         cs->flags[num_handles] = (util_last_bit64(buffer->u.real.priority_usage) - 1) / 4;
+         handles[num_handles] = buffer->bo->bo;
+         flags[num_handles] = (util_last_bit(buffer->u.real.priority_usage) - 1) / 2;
 	 ++num_handles;
       }
 
-      if (acs->ring_type == RING_GFX)
-         ws->gfx_bo_list_counter += cs->num_real_buffers;
-
       if (num_handles) {
          r = amdgpu_bo_list_create(ws->dev, num_handles,
-                                   cs->handles, cs->flags, &bo_list);
-      } else {
-         r = 0;
+                                   handles, flags, &bo_list);
+         if (r) {
+            fprintf(stderr, "amdgpu: buffer list creation failed (%d)\n", r);
+            goto cleanup;
+         }
       }
    }
-bo_list_error:
 
-   if (r) {
-      fprintf(stderr, "amdgpu: buffer list creation failed (%d)\n", r);
-      amdgpu_fence_signalled(cs->fence);
-      cs->error_code = r;
-      goto cleanup;
-   }
+   if (acs->ring_type == RING_GFX)
+      ws->gfx_bo_list_counter += cs->num_real_buffers;
 
    if (acs->ctx->num_rejected_cs) {
       r = -ECANCELED;
@@ -1475,7 +1453,6 @@ bo_list_error:
                                num_chunks, chunks, &seq_no);
    }
 
-   cs->error_code = r;
    if (r) {
       if (r == -ENOMEM)
          fprintf(stderr, "amdgpu: Not enough memory for command submission.\n");
@@ -1484,8 +1461,6 @@ bo_list_error:
       else
          fprintf(stderr, "amdgpu: The CS has been rejected, "
                  "see dmesg for more information (%i).\n", r);
-
-      amdgpu_fence_signalled(cs->fence);
 
       acs->ctx->num_rejected_cs++;
       ws->num_total_rejected_cs++;
@@ -1503,6 +1478,13 @@ bo_list_error:
       amdgpu_bo_list_destroy(bo_list);
 
 cleanup:
+   /* If there was an error, signal the fence, because it won't be signalled
+    * by the hardware. */
+   if (r)
+      amdgpu_fence_signalled(cs->fence);
+
+   cs->error_code = r;
+
    for (i = 0; i < cs->num_real_buffers; i++)
       p_atomic_dec(&cs->real_buffers[i].bo->num_active_ioctls);
    for (i = 0; i < cs->num_slab_buffers; i++)
@@ -1514,7 +1496,7 @@ cleanup:
 }
 
 /* Make sure the previous submission is completed. */
-void amdgpu_cs_sync_flush(struct radeon_winsys_cs *rcs)
+void amdgpu_cs_sync_flush(struct radeon_cmdbuf *rcs)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);
 
@@ -1522,7 +1504,7 @@ void amdgpu_cs_sync_flush(struct radeon_winsys_cs *rcs)
    util_queue_fence_wait(&cs->flush_completed);
 }
 
-static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
+static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
                            unsigned flags,
                            struct pipe_fence_handle **fence)
 {
@@ -1639,7 +1621,7 @@ static int amdgpu_cs_flush(struct radeon_winsys_cs *rcs,
    return error_code;
 }
 
-static void amdgpu_cs_destroy(struct radeon_winsys_cs *rcs)
+static void amdgpu_cs_destroy(struct radeon_cmdbuf *rcs)
 {
    struct amdgpu_cs *cs = amdgpu_cs(rcs);
 
@@ -1654,7 +1636,7 @@ static void amdgpu_cs_destroy(struct radeon_winsys_cs *rcs)
    FREE(cs);
 }
 
-static bool amdgpu_bo_is_referenced(struct radeon_winsys_cs *rcs,
+static bool amdgpu_bo_is_referenced(struct radeon_cmdbuf *rcs,
                                     struct pb_buffer *_buf,
                                     enum radeon_bo_usage usage)
 {

@@ -39,22 +39,13 @@
 #include "fd4_texture.h"
 #include "fd4_format.h"
 
-static void
-delete_shader_stateobj(struct fd4_shader_stateobj *so)
-{
-	ir3_shader_destroy(so->shader);
-	free(so);
-}
-
-static struct fd4_shader_stateobj *
+static struct ir3_shader *
 create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
 		enum shader_t type)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct ir3_compiler *compiler = ctx->screen->compiler;
-	struct fd4_shader_stateobj *so = CALLOC_STRUCT(fd4_shader_stateobj);
-	so->shader = ir3_shader_create(compiler, cso, type, &ctx->debug);
-	return so;
+	return ir3_shader_create(compiler, cso, type, &ctx->debug);
 }
 
 static void *
@@ -67,8 +58,8 @@ fd4_fp_state_create(struct pipe_context *pctx,
 static void
 fd4_fp_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	struct fd4_shader_stateobj *so = hwcso;
-	delete_shader_stateobj(so);
+	struct ir3_shader *so = hwcso;
+	ir3_shader_destroy(so);
 }
 
 static void *
@@ -81,8 +72,8 @@ fd4_vp_state_create(struct pipe_context *pctx,
 static void
 fd4_vp_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	struct fd4_shader_stateobj *so = hwcso;
-	delete_shader_stateobj(so);
+	struct ir3_shader *so = hwcso;
+	ir3_shader_destroy(so);
 }
 
 static void

@@ -1656,6 +1656,18 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define CS_DEBUG_MODE2                     0x20d8 /* Gen9+ */
 # define CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 4)
 
+#define GEN7_RPSTAT1                       0xA01C
+#define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
+#define  GEN7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
+#define  GEN7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
+#define  GEN7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
+
+#define GEN9_RPSTAT0                       0xA01C
+#define  GEN9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
+#define  GEN9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
+#define  GEN9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
+#define  GEN9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
+
 #define SLICE_COMMON_ECO_CHICKEN1          0x731c /* Gen9+ */
 # define GLK_SCEC_BARRIER_MODE_GPGPU       (0 << 7)
 # define GLK_SCEC_BARRIER_MODE_3D_HULL     (1 << 7)

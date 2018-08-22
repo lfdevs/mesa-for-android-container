@@ -1397,8 +1397,7 @@ ast_expression::do_hir(exec_list *instructions,
 
    switch (this->oper) {
    case ast_aggregate:
-      assert(!"ast_aggregate: Should never get here.");
-      break;
+      unreachable("ast_aggregate: Should never get here.");
 
    case ast_assign: {
       this->subexpressions[0]->set_is_lhs(true);
@@ -1851,9 +1850,11 @@ ast_expression::do_hir(exec_list *instructions,
        *   expressions; such use results in a compile-time error."
        */
       if (type->contains_opaque()) {
-         _mesa_glsl_error(&loc, state, "opaque variables cannot be operands "
-                          "of the ?: operator");
-         error_emitted = true;
+         if (!(state->has_bindless() && (type->is_image() || type->is_sampler()))) {
+            _mesa_glsl_error(&loc, state, "variables of type %s cannot be "
+                             "operands of the ?: operator", type->name);
+            error_emitted = true;
+         }
       }
 
       ir_constant *cond_val = op[0]->constant_expression_value(ctx);
@@ -1979,15 +1980,13 @@ ast_expression::do_hir(exec_list *instructions,
    }
 
    case ast_unsized_array_dim:
-      assert(!"ast_unsized_array_dim: Should never get here.");
-      break;
+      unreachable("ast_unsized_array_dim: Should never get here.");
 
    case ast_function_call:
       /* Should *NEVER* get here.  ast_function_call should always be handled
        * by ast_function_expression::hir.
        */
-      assert(0);
-      break;
+      unreachable("ast_function_call: handled elsewhere ");
 
    case ast_identifier: {
       /* ast_identifier can appear several places in a full abstract syntax
@@ -3905,6 +3904,16 @@ apply_layout_qualifier_to_variable(const struct ast_type_qualifier *qual,
 
    if (state->has_bindless())
       apply_bindless_qualifier_to_variable(qual, var, state, loc);
+
+   if (qual->flags.q.pixel_interlock_ordered ||
+       qual->flags.q.pixel_interlock_unordered ||
+       qual->flags.q.sample_interlock_ordered ||
+       qual->flags.q.sample_interlock_unordered) {
+      _mesa_glsl_error(loc, state, "interlock layout qualifiers: "
+                       "pixel_interlock_ordered, pixel_interlock_unordered, "
+                       "sample_interlock_ordered and sample_interlock_unordered, "
+                       "only valid in fragment shader input layout declaration.");
+   }
 }
 
 static void

@@ -31,6 +31,7 @@
 #include "amdgpu_public.h"
 
 #include "util/u_hash_table.h"
+#include "util/hash_table.h"
 #include <amdgpu_drm.h>
 #include <xf86drm.h>
 #include <stdio.h>
@@ -53,13 +54,6 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info, &ws->amdinfo))
       goto fail;
 
-   /* LLVM 5.0 is required for GFX9. */
-   if (ws->info.chip_class >= GFX9 && HAVE_LLVM < 0x0500) {
-      fprintf(stderr, "amdgpu: LLVM 5.0 is required, got LLVM %i.%i\n",
-              HAVE_LLVM >> 8, HAVE_LLVM & 255);
-      goto fail;
-   }
-
    ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);
    if (!ws->addrlib) {
       fprintf(stderr, "amdgpu: Cannot create addrlib.\n");
@@ -69,6 +63,7 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
    ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
    ws->debug_all_bos = debug_get_option_all_bos();
    ws->reserve_vmid = strstr(debug_get_option("R600_DEBUG", ""), "reserve_vmid") != NULL;
+   ws->zero_all_vram_allocs = strstr(debug_get_option("R600_DEBUG", ""), "zerovram") != NULL;
 
    return true;
 
@@ -97,7 +92,9 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
    simple_mtx_destroy(&ws->bo_fence_lock);
    pb_slabs_deinit(&ws->bo_slabs);
    pb_cache_deinit(&ws->bo_cache);
+   util_hash_table_destroy(ws->bo_export_table);
    simple_mtx_destroy(&ws->global_bo_list_lock);
+   simple_mtx_destroy(&ws->bo_export_table_lock);
    do_winsys_deinit(ws);
    FREE(rws);
 }
@@ -108,7 +105,7 @@ static void amdgpu_winsys_query_info(struct radeon_winsys *rws,
    *info = ((struct amdgpu_winsys *)rws)->info;
 }
 
-static bool amdgpu_cs_request_feature(struct radeon_winsys_cs *rcs,
+static bool amdgpu_cs_request_feature(struct radeon_cmdbuf *rcs,
                                       enum radeon_feature_id fid,
                                       bool enable)
 {
@@ -193,16 +190,12 @@ static bool amdgpu_read_registers(struct radeon_winsys *rws,
                                    0xffffffff, 0, out) == 0;
 }
 
-static unsigned hash_dev(void *key)
+static unsigned hash_pointer(void *key)
 {
-#if defined(PIPE_ARCH_X86_64)
-   return pointer_to_intptr(key) ^ (pointer_to_intptr(key) >> 32);
-#else
-   return pointer_to_intptr(key);
-#endif
+   return _mesa_hash_pointer(key);
 }
 
-static int compare_dev(void *key1, void *key2)
+static int compare_pointers(void *key1, void *key2)
 {
    return key1 != key2;
 }
@@ -258,7 +251,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    /* Look up the winsys from the dev table. */
    simple_mtx_lock(&dev_tab_mutex);
    if (!dev_tab)
-      dev_tab = util_hash_table_create(hash_dev, compare_dev);
+      dev_tab = util_hash_table_create(hash_pointer, compare_pointers);
 
    /* Initialize the amdgpu device. This should always return the same pointer
     * for the same fd. */
@@ -323,10 +316,13 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    amdgpu_surface_init_functions(ws);
 
    LIST_INITHEAD(&ws->global_bo_list);
+   ws->bo_export_table = util_hash_table_create(hash_pointer, compare_pointers);
+
    (void) simple_mtx_init(&ws->global_bo_list_lock, mtx_plain);
    (void) simple_mtx_init(&ws->bo_fence_lock, mtx_plain);
+   (void) simple_mtx_init(&ws->bo_export_table_lock, mtx_plain);
 
-   if (!util_queue_init(&ws->cs_queue, "amdgpu_cs", 8, 1,
+   if (!util_queue_init(&ws->cs_queue, "cs", 8, 1,
                         UTIL_QUEUE_INIT_RESIZE_IF_FULL)) {
       amdgpu_winsys_destroy(&ws->base);
       simple_mtx_unlock(&dev_tab_mutex);

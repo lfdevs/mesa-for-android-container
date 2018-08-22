@@ -20,8 +20,7 @@
 
 aubinator = executable(
   'aubinator',
-  files('aubinator.c', 'disasm.c', 'gen_batch_decoder.c',
-        'gen_disasm.h', 'intel_aub.h'),
+  files('aubinator.c', 'intel_aub.h'),
   dependencies : [dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
   include_directories : [inc_common, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
@@ -32,11 +31,21 @@ aubinator = executable(
 
 aubinator_error_decode = executable(
   'aubinator_error_decode',
-  files('aubinator_error_decode.c', 'disasm.c', 'gen_disasm.h',
-        'gen_batch_decoder.c'),
+  files('aubinator_error_decode.c'),
   dependencies : [dep_zlib, dep_thread],
   include_directories : [inc_common, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
+  c_args : [c_vis_args, no_override_init_args],
+  build_by_default : with_tools.contains('intel'),
+  install : with_tools.contains('intel'),
+)
+
+error2aub = executable(
+  'intel_error2aub',
+  files('aub_write.h', 'aub_write.c', 'error2aub.c'),
+  dependencies : [dep_zlib, dep_dl, dep_thread, dep_m],
+  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  link_with : [libintel_dev],
   c_args : [c_vis_args, no_override_init_args],
   build_by_default : with_tools.contains('intel'),
   install : with_tools.contains('intel'),
@@ -64,5 +73,24 @@ if with_tools.contains('intel')
     c_args : [c_vis_args, no_override_init_args],
     install_dir: get_option('libexecdir'),
     install: true,
+  )
+
+  configure_file(
+    input : 'intel_dump_gpu.in',
+    output : '@BASENAME@',
+    install_dir: get_option('bindir'),
+    configuration: sanitize_data,
+  )
+
+  libintel_dump_gpu = shared_library(
+    'intel_dump_gpu',
+    files('gen_context.h', 'gen8_context.h', 'gen10_context.h',
+          'intel_aub.h', 'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c'),
+    dependencies : dep_dl,
+    include_directories : [inc_common, inc_intel, inc_drm_uapi],
+    link_with : libintel_dev,
+    c_args : [c_vis_args, no_override_init_args],
+    install_dir: get_option('libexecdir'),
+    install : true
   )
 endif

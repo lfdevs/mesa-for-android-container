@@ -114,8 +114,7 @@ namespace {
 
       std::unique_ptr<TargetMachine> tm {
          t->createTargetMachine(target.triple, target.cpu, "", {},
-                                compat::default_reloc_model,
-                                compat::default_code_model,
+                                ::llvm::None, compat::default_code_model,
                                 ::llvm::CodeGenOpt::Default) };
       if (!tm)
          fail(r_log, build_error(),
@@ -124,15 +123,14 @@ namespace {
       ::llvm::SmallVector<char, 1024> data;
 
       {
-         compat::pass_manager pm;
+         ::llvm::legacy::PassManager pm;
          ::llvm::raw_svector_ostream os { data };
-         compat::raw_ostream_to_emit_file fos(os);
 
-         mod.setDataLayout(compat::get_data_layout(*tm));
+         mod.setDataLayout(tm->createDataLayout());
          tm->Options.MCOptions.AsmVerbose =
             (ft == TargetMachine::CGFT_AssemblyFile);
 
-         if (tm->addPassesToEmitFile(pm, fos, ft))
+         if (compat::add_passes_to_emit_file(*tm, pm, os, ft))
             fail(r_log, build_error(), "TargetMachine can't emit this file");
 
          pm.run(mod);

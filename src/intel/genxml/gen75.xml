@@ -2546,7 +2546,7 @@
   <instruction name="MI_SET_PREDICATE" bias="1" length="1">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="1"/>
-    <field name="PREDICATE ENABLE" start="0" end="1" type="bool" default="6"/>
+    <field name="PREDICATE ENABLE" start="0" end="1" type="uint"/>
   </instruction>
 
   <instruction name="MI_STORE_DATA_IMM" bias="2" length="4">
@@ -3021,7 +3021,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -3037,7 +3037,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -3053,7 +3053,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -3069,7 +3069,7 @@
       <value name="Invalid and Unloaded PD fault" value="3"/>
     </field>
     <field name= "SRCID of Fault" start="3" end="10" type="uint"/>
-    <field name="GTTSEL" start="11" end="1" type="uint">
+    <field name="GTTSEL" start="11" end="11" type="uint">
       <value name="PPGTT" value="0"/>
       <value name="GGTT" value="1"/>
     </field>
@@ -3135,6 +3135,11 @@
     <field name="3D Rendering Instruction Disable" start="2" end="2" type="bool"/>
     <field name="Media Instruction Disable" start="3" end="3" type="bool"/>
     <field name="CONSTANT_BUFFER Address Offset Disable" start="6" end="6" type="bool"/>
+
+    <field name="3D State Instruction Disable Mask" start="17" end="17" type="bool"/>
+    <field name="3D Rendering Instruction Disable Mask" start="18" end="18" type="bool"/>
+    <field name="Media Instruction Disable Mask" start="19" end="19" type="bool"/>
+    <field name="CONSTANT_BUFFER Address Offset Disable Mask" start="22" end="22" type="bool"/>
   </register>
 
 </genxml>

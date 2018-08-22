@@ -63,7 +63,6 @@ struct fd_gmem_stateobj {
 struct fd_batch;
 
 void fd_gmem_render_tiles(struct fd_batch *batch);
-void fd_gmem_render_noop(struct fd_batch *batch);
 
 bool fd_gmem_needs_restore(struct fd_batch *batch, struct fd_tile *tile,
 		uint32_t buffers);
