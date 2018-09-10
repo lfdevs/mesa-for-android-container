@@ -191,7 +191,7 @@ nir_format_unpack_11f11f10f(nir_builder *b, nir_ssa_def *packed)
 {
    nir_ssa_def *chans[3];
    chans[0] = nir_mask_shift(b, packed, 0x000007ff, 4);
-   chans[1] = nir_mask_shift(b, packed, 0x003ff100, -7);
+   chans[1] = nir_mask_shift(b, packed, 0x003ff800, -7);
    chans[2] = nir_mask_shift(b, packed, 0xffc00000, -17);
 
    for (unsigned i = 0; i < 3; i++)

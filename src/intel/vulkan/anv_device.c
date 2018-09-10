@@ -610,12 +610,25 @@ VkResult anv_CreateInstance(
    else
       instance->alloc = default_alloc;
 
-   if (pCreateInfo->pApplicationInfo &&
-       pCreateInfo->pApplicationInfo->apiVersion != 0) {
-      instance->apiVersion = pCreateInfo->pApplicationInfo->apiVersion;
-   } else {
-      anv_EnumerateInstanceVersion(&instance->apiVersion);
+   instance->app_info = (struct anv_app_info) { .api_version = 0 };
+   if (pCreateInfo->pApplicationInfo) {
+      const VkApplicationInfo *app = pCreateInfo->pApplicationInfo;
+
+      instance->app_info.app_name =
+         vk_strdup(&instance->alloc, app->pApplicationName,
+                   VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+      instance->app_info.app_version = app->applicationVersion;
+
+      instance->app_info.engine_name =
+         vk_strdup(&instance->alloc, app->pEngineName,
+                   VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+      instance->app_info.engine_version = app->engineVersion;
+
+      instance->app_info.api_version = app->apiVersion;
    }
+
+   if (instance->app_info.api_version == 0)
+      anv_EnumerateInstanceVersion(&instance->app_info.api_version);
 
    instance->enabled_extensions = enabled_extensions;
 
@@ -623,7 +636,7 @@ VkResult anv_CreateInstance(
       /* Vulkan requires that entrypoints for extensions which have not been
        * enabled must not be advertised.
        */
-      if (!anv_entrypoint_is_enabled(i, instance->apiVersion,
+      if (!anv_entrypoint_is_enabled(i, instance->app_info.api_version,
                                      &instance->enabled_extensions, NULL)) {
          instance->dispatch.entrypoints[i] = NULL;
       } else if (anv_dispatch_table.entrypoints[i] != NULL) {
@@ -668,6 +681,9 @@ void anv_DestroyInstance(
       assert(instance->physicalDeviceCount == 1);
       anv_physical_device_finish(&instance->physicalDevice);
    }
+
+   vk_free(&instance->alloc, instance->app_info.app_name);
+   vk_free(&instance->alloc, instance->app_info.engine_name);
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
@@ -841,6 +857,15 @@ void anv_GetPhysicalDeviceFeatures(
    pFeatures->vertexPipelineStoresAndAtomics =
       pdevice->compiler->scalar_stage[MESA_SHADER_VERTEX] &&
       pdevice->compiler->scalar_stage[MESA_SHADER_GEOMETRY];
+
+   struct anv_app_info *app_info = &pdevice->instance->app_info;
+
+   /* The new DOOM and Wolfenstein games require depthBounds without
+    * checking for it.  They seem to run fine without it so just claim it's
+    * there and accept the consequences.
+    */
+   if (app_info->engine_name && strcmp(app_info->engine_name, "idTech") == 0)
+      pFeatures->depthBounds = true;
 }
 
 void anv_GetPhysicalDeviceFeatures2(
@@ -1489,7 +1514,7 @@ anv_device_init_dispatch(struct anv_device *device)
       /* Vulkan requires that entrypoints for extensions which have not been
        * enabled must not be advertised.
        */
-      if (!anv_entrypoint_is_enabled(i, device->instance->apiVersion,
+      if (!anv_entrypoint_is_enabled(i, device->instance->app_info.api_version,
                                      &device->instance->enabled_extensions,
                                      &device->enabled_extensions)) {
          device->dispatch.entrypoints[i] = NULL;

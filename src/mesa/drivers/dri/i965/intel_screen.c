@@ -1275,9 +1275,9 @@ static bool
 intel_image_format_is_supported(const struct gen_device_info *devinfo,
                                 const struct intel_image_format *fmt)
 {
-   if (fmt->fourcc == __DRI_IMAGE_FOURCC_SARGB8888 ||
-       fmt->fourcc == __DRI_IMAGE_FOURCC_SABGR8888)
-      return false;
+   /* Currently, all formats with an intel_image_format are available on all
+    * platforms so there's really nothing to check there.
+    */
 
 #ifndef NDEBUG
    if (fmt->nplanes == 1) {
@@ -1303,6 +1303,14 @@ intel_query_dma_buf_formats(__DRIscreen *_screen, int max,
    int num_formats = 0, i;
 
    for (i = 0; i < ARRAY_SIZE(intel_image_formats); i++) {
+      /* These two formats are valid DRI formats but do not exist in
+       * drm_fourcc.h in the Linux kernel.  We don't want to accidentally
+       * advertise them through the EGL layer.
+       */
+      if (intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SARGB8888 ||
+          intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SABGR8888)
+         continue;
+
       if (!intel_image_format_is_supported(&screen->devinfo,
                                            &intel_image_formats[i]))
          continue;

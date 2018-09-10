@@ -929,8 +929,21 @@ generate_tes_add_indirect_urb_offset(struct brw_codegen *p,
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
 
    brw_MOV(p, dst, header);
+
+   /* Uniforms will have a stride <0;4,1>, and we need to convert to <0;1,0>.
+    * Other values get <4;1,0>.
+    */
+   struct brw_reg restrided_offset;
+   if (offset.vstride == BRW_VERTICAL_STRIDE_0 &&
+       offset.width == BRW_WIDTH_4 &&
+       offset.hstride == BRW_HORIZONTAL_STRIDE_1) {
+      restrided_offset = stride(offset, 0, 1, 0);
+   } else {
+      restrided_offset = stride(offset, 4, 1, 0);
+   }
+
    /* m0.3-0.4: 128-bit-granular offsets into the URB from the handles */
-   brw_MOV(p, vec2(get_element_ud(dst, 3)), stride(offset, 4, 1, 0));
+   brw_MOV(p, vec2(get_element_ud(dst, 3)), restrided_offset);
 
    brw_pop_insn_state(p);
 }

@@ -25402,7 +25402,7 @@ static const nir_search_variable replace256 = {
 };
    
 static const nir_search_variable search314_0 = {
-   { nir_search_value_variable, 0 },
+   { nir_search_value_variable, 32 },
    0, /* a */
    false,
    nir_type_invalid,
@@ -25442,7 +25442,7 @@ static const nir_search_expression replace314 = {
 };
    
 static const nir_search_variable search318_0 = {
-   { nir_search_value_variable, 0 },
+   { nir_search_value_variable, 32 },
    0, /* a */
    false,
    nir_type_invalid,

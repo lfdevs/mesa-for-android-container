@@ -7002,9 +7002,9 @@ GEN8_MI_BATCH_BUFFER_END_pack(__attribute__((unused)) __gen_user_data *data,
 struct GEN8_MI_BATCH_BUFFER_START {
    uint32_t                             CommandType;
    uint32_t                             MICommandOpcode;
-   uint32_t                             _2ndLevelBatchBuffer;
-#define _1stlevelbatch                           0
-#define _2ndlevelbatch                           1
+   uint32_t                             SecondLevelBatchBuffer;
+#define Firstlevelbatch                          0
+#define Secondlevelbatch                         1
    bool                                 AddOffsetEnable;
    bool                                 PredicationEnable;
    bool                                 ResourceStreamerEnable;
@@ -7025,7 +7025,7 @@ GEN8_MI_BATCH_BUFFER_START_pack(__attribute__((unused)) __gen_user_data *data,
    dw[0] =
       __gen_uint(values->CommandType, 29, 31) |
       __gen_uint(values->MICommandOpcode, 23, 28) |
-      __gen_uint(values->_2ndLevelBatchBuffer, 22, 22) |
+      __gen_uint(values->SecondLevelBatchBuffer, 22, 22) |
       __gen_uint(values->AddOffsetEnable, 16, 16) |
       __gen_uint(values->PredicationEnable, 15, 15) |
       __gen_uint(values->ResourceStreamerEnable, 10, 10) |

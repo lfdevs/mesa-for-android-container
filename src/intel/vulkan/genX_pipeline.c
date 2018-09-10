@@ -115,7 +115,34 @@ emit_vertex_input(struct anv_pipeline *pipeline,
                        GENX(3DSTATE_VERTEX_ELEMENTS));
    if (!p)
       return;
-   memset(p + 1, 0, (num_dwords - 1) * 4);
+
+   for (uint32_t i = 0; i < total_elems; i++) {
+      /* The SKL docs for VERTEX_ELEMENT_STATE say:
+       *
+       *    "All elements must be valid from Element[0] to the last valid
+       *    element. (I.e. if Element[2] is valid then Element[1] and
+       *    Element[0] must also be valid)."
+       *
+       * The SKL docs for 3D_Vertex_Component_Control say:
+       *
+       *    "Don't store this component. (Not valid for Component 0, but can
+       *    be used for Component 1-3)."
+       *
+       * So we can't just leave a vertex element blank and hope for the best.
+       * We have to tell the VF hardware to put something in it; so we just
+       * store a bunch of zero.
+       *
+       * TODO: Compact vertex elements so we never end up with holes.
+       */
+      struct GENX(VERTEX_ELEMENT_STATE) element = {
+         .Valid = true,
+         .Component0Control = VFCOMP_STORE_0,
+         .Component1Control = VFCOMP_STORE_0,
+         .Component2Control = VFCOMP_STORE_0,
+         .Component3Control = VFCOMP_STORE_0,
+      };
+      GENX(VERTEX_ELEMENT_STATE_pack)(NULL, &p[1 + i * 2], &element);
+   }
 
    for (uint32_t i = 0; i < info->vertexAttributeDescriptionCount; i++) {
       const VkVertexInputAttributeDescription *desc =

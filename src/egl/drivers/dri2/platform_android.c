@@ -1226,7 +1226,7 @@ droid_load_driver(_EGLDisplay *disp)
    dri2_dpy->is_render_node = drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER;
 
    if (!dri2_dpy->is_render_node) {
-   #ifdef HAVE_DRM_GRALLOC
+#ifdef HAVE_DRM_GRALLOC
        /* Handle control nodes using __DRI_DRI2_LOADER extension and GEM names
         * for backwards compatibility with drm_gralloc. (Do not use on new
         * systems.) */
@@ -1235,10 +1235,10 @@ droid_load_driver(_EGLDisplay *disp)
           err = "DRI2: failed to load driver";
           goto error;
        }
-   #else
+#else
        err = "DRI2: handle is not for a render node";
        goto error;
-   #endif
+#endif
    } else {
        dri2_dpy->loader_extensions = droid_image_loader_extensions;
        if (!dri2_load_driver_dri3(disp)) {

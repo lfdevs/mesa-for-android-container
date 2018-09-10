@@ -2106,9 +2106,10 @@ handle_fs_input_decl(struct radv_shader_context *ctx,
 	int idx = variable->data.location;
 	unsigned attrib_count = glsl_count_attribute_slots(variable->type, false);
 	LLVMValueRef interp = NULL;
+	uint64_t mask;
 
 	variable->data.driver_location = idx * 4;
-	ctx->input_mask |= ((1ull << attrib_count) - 1) << variable->data.location;
+	mask = ((1ull << attrib_count) - 1) << variable->data.location;
 
 	if (glsl_get_base_type(glsl_without_array(variable->type)) == GLSL_TYPE_FLOAT) {
 		unsigned interp_type;
@@ -2129,6 +2130,15 @@ handle_fs_input_decl(struct radv_shader_context *ctx,
 	for (unsigned i = 0; i < attrib_count; ++i)
 		ctx->inputs[ac_llvm_reg_index_soa(idx + i, 0)] = interp;
 
+	if (idx == VARYING_SLOT_CLIP_DIST0) {
+		/* Do not account for the number of components inside the array
+		 * of clip/cull distances because this might wrongly set other
+		 * bits like primitive ID or layer.
+		 */
+		mask = 1ull << VARYING_SLOT_CLIP_DIST0;
+	}
+
+	ctx->input_mask |= mask;
 }
 
 static void
@@ -2195,6 +2205,17 @@ handle_fs_inputs(struct radv_shader_context *ctx,
 			if (LLVMIsUndef(interp_param))
 				ctx->shader_info->fs.flat_shaded_mask |= 1u << index;
 			++index;
+		} else if (i == VARYING_SLOT_CLIP_DIST0) {
+			int length = ctx->shader_info->info.ps.num_input_clips_culls;
+
+			for (unsigned j = 0; j < length; j += 4) {
+				inputs = ctx->inputs + ac_llvm_reg_index_soa(i, j);
+
+				interp_param = *inputs;
+				interp_fs_input(ctx, index, interp_param,
+						ctx->abi.prim_mask, inputs);
+				++index;
+			}
 		} else if (i == VARYING_SLOT_POS) {
 			for(int i = 0; i < 3; ++i)
 				inputs[i] = ctx->abi.frag_pos[i];
@@ -2490,6 +2511,13 @@ handle_vs_outputs_post(struct radv_shader_context *ctx,
 		memcpy(&pos_args[target - V_008DFC_SQ_EXP_POS],
 		       &args, sizeof(args));
 
+		/* Export the clip/cull distances values to the next stage. */
+		radv_export_param(ctx, param_count, &slots[0], 0xf);
+		outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST0] = param_count++;
+		if (ctx->num_output_clips + ctx->num_output_culls > 4) {
+			radv_export_param(ctx, param_count, &slots[4], 0xf);
+			outinfo->vs_output_param_offset[VARYING_SLOT_CLIP_DIST1] = param_count++;
+		}
 	}
 
 	LLVMValueRef pos_values[4] = {ctx->ac.f32_0, ctx->ac.f32_0, ctx->ac.f32_0, ctx->ac.f32_1};

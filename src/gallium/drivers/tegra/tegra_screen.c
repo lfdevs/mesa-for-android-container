@@ -203,6 +203,7 @@ static int tegra_open_render_node(void)
          }
 
          if (strcmp(version->name, "nouveau") != 0) {
+            drmFreeVersion(version);
             close(fd);
             continue;
          }

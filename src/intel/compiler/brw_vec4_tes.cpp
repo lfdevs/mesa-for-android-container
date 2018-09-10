@@ -185,9 +185,19 @@ vec4_tes_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          first_component /= 2;
 
       if (indirect_offset.file != BAD_FILE) {
+         src_reg clamped_indirect_offset = src_reg(this, glsl_type::uvec4_type);
+
+         /* Page 190 of "Volume 7: 3D Media GPGPU Engine (Haswell)" says the
+          * valid range of the offset is [0, 0FFFFFFFh].
+          */
+         emit_minmax(BRW_CONDITIONAL_L,
+                     dst_reg(clamped_indirect_offset),
+                     retype(indirect_offset, BRW_REGISTER_TYPE_UD),
+                     brw_imm_ud(0x0fffffffu));
+
          header = src_reg(this, glsl_type::uvec4_type);
          emit(TES_OPCODE_ADD_INDIRECT_URB_OFFSET, dst_reg(header),
-              input_read_header, indirect_offset);
+              input_read_header, clamped_indirect_offset);
       } else {
          /* Arbitrarily only push up to 24 vec4 slots worth of data,
           * which is 12 registers (since each holds 2 vec4 slots).

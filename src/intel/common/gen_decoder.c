@@ -812,6 +812,18 @@ iter_more_groups(const struct gen_field_iterator *iter)
 }
 
 static void
+iter_start_field(struct gen_field_iterator *iter, struct gen_field *field)
+{
+   iter->field = field;
+
+   int group_member_offset = iter_group_offset_bits(iter, iter->group_iter);
+
+   iter->start_bit = group_member_offset + iter->field->start;
+   iter->end_bit = group_member_offset + iter->field->end;
+   iter->struct_desc = NULL;
+}
+
+static void
 iter_advance_group(struct gen_field_iterator *iter)
 {
    if (iter->group->variable)
@@ -825,32 +837,20 @@ iter_advance_group(struct gen_field_iterator *iter)
       }
    }
 
-   iter->field = iter->group->fields;
+   iter_start_field(iter, iter->group->fields);
 }
 
 static bool
 iter_advance_field(struct gen_field_iterator *iter)
 {
    if (iter_more_fields(iter)) {
-      iter->field = iter->field->next;
+      iter_start_field(iter, iter->field->next);
    } else {
       if (!iter_more_groups(iter))
          return false;
 
       iter_advance_group(iter);
    }
-
-   if (iter->field->name)
-      snprintf(iter->name, sizeof(iter->name), "%s", iter->field->name);
-   else
-      memset(iter->name, 0, sizeof(iter->name));
-
-   int group_member_offset = iter_group_offset_bits(iter, iter->group_iter);
-
-   iter->start_bit = group_member_offset + iter->field->start;
-   iter->end_bit = group_member_offset + iter->field->end;
-   iter->struct_desc = NULL;
-
    return true;
 }
 
@@ -991,7 +991,7 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
    iter->p_bit = p_bit;
 
    int length = gen_group_get_length(iter->group, iter->p);
-   iter->p_end = length > 0 ? &p[length] : NULL;
+   iter->p_end = length >= 0 ? &p[length] : NULL;
    iter->print_colors = print_colors;
 }
 
@@ -1001,15 +1001,19 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
    /* Initial condition */
    if (!iter->field) {
       if (iter->group->fields)
-         iter->field = iter->group->fields;
+         iter_start_field(iter, iter->group->fields);
       else
-         iter->field = iter->group->next->fields;
+         iter_start_field(iter, iter->group->next->fields);
 
       bool result = iter_decode_field(iter);
-      if (iter->p_end)
-         assert(result);
+      if (!result && iter->p_end) {
+         /* We're dealing with a non empty struct of length=0 (BLEND_STATE on
+          * Gen 7.5)
+          */
+         assert(iter->group->dw_length == 0);
+      }
 
-      return true;
+      return result;
    }
 
    if (!iter_advance_field(iter))

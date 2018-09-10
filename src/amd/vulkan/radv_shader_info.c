@@ -341,6 +341,7 @@ static void
 gather_info_input_decl_ps(const nir_shader *nir, const nir_variable *var,
 			  struct radv_shader_info *info)
 {
+	unsigned attrib_count = glsl_count_attribute_slots(var->type, false);
 	const struct glsl_type *type = glsl_without_array(var->type);
 	int idx = var->data.location;
 
@@ -353,6 +354,9 @@ gather_info_input_decl_ps(const nir_shader *nir, const nir_variable *var,
 		break;
 	case VARYING_SLOT_LAYER:
 		info->ps.layer_input = true;
+		break;
+	case VARYING_SLOT_CLIP_DIST0:
+		info->ps.num_input_clips_culls = attrib_count;
 		break;
 	default:
 		break;

@@ -118,6 +118,33 @@ gen7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    unsigned offset = 0;
 
+   /* From the SKL PRM, Workarounds section (#878):
+    *
+    *    Push constant buffer corruption possible. WA: Insert 2 zero-length
+    *    PushConst_PS before every intended PushConst_PS update, issue a
+    *    NULLPRIM after each of the zero len PC update to make sure CS commits
+    *    them.
+    *
+    * This workaround is attempting to solve a pixel shader push constant
+    * synchronization issue.
+    *
+    * There's an unpublished WA that involves re-emitting
+    * 3DSTATE_PUSH_CONSTANT_ALLOC_PS for every 500-ish 3DSTATE_CONSTANT_PS
+    * packets. Since our counting methods may not be reliable due to
+    * context-switching and pre-emption, we instead choose to approximate this
+    * behavior by re-emitting the packet at the top of the batch.
+    */
+   if (brw->ctx.NewDriverState == BRW_NEW_BATCH) {
+       /* SKL GT2 and GLK 2x6 have reliably demonstrated this issue thus far.
+        * We've also seen some intermittent failures from SKL GT4 and BXT in
+        * the past.
+        */
+      if (!devinfo->is_skylake &&
+          !devinfo->is_broxton &&
+          !devinfo->is_geminilake)
+         return;
+   }
+
    BEGIN_BATCH(10);
    OUT_BATCH(_3DSTATE_PUSH_CONSTANT_ALLOC_VS << 16 | (2 - 2));
    OUT_BATCH(vs_size | offset << GEN7_PUSH_CONSTANT_BUFFER_OFFSET_SHIFT);
@@ -154,6 +181,7 @@ const struct brw_tracked_state gen7_push_constant_space = {
    .dirty = {
       .mesa = 0,
       .brw = BRW_NEW_CONTEXT |
+             BRW_NEW_BATCH | /* Push constant workaround */
              BRW_NEW_GEOMETRY_PROGRAM |
              BRW_NEW_TESS_PROGRAMS,
    },

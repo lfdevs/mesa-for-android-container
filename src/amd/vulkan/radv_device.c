@@ -60,7 +60,7 @@ radv_device_get_cache_uuid(enum radeon_family family, void *uuid)
 	memcpy(uuid, &mesa_timestamp, 4);
 	memcpy((char*)uuid + 4, &llvm_timestamp, 4);
 	memcpy((char*)uuid + 8, &f, 2);
-	snprintf((char*)uuid + 10, VK_UUID_SIZE - 10, "radv");
+	snprintf((char*)uuid + 10, VK_UUID_SIZE - 10, "radv%zd", sizeof(void *));
 	return 0;
 }
 
@@ -1895,10 +1895,30 @@ radv_get_hs_offchip_param(struct radv_device *device, uint32_t *max_offchip_buff
 		device->physical_device->rad_info.family != CHIP_CARRIZO &&
 		device->physical_device->rad_info.family != CHIP_STONEY;
 	unsigned max_offchip_buffers_per_se = double_offchip_buffers ? 128 : 64;
-	unsigned max_offchip_buffers = max_offchip_buffers_per_se *
-		device->physical_device->rad_info.max_se;
+	unsigned max_offchip_buffers;
 	unsigned offchip_granularity;
 	unsigned hs_offchip_param;
+
+	/*
+	 * Per RadeonSI:
+	 * This must be one less than the maximum number due to a hw limitation.
+         * Various hardware bugs in SI, CIK, and GFX9 need this.
+	 *
+	 * Per AMDVLK:
+	 * Vega10 should limit max_offchip_buffers to 508 (4 * 127).
+	 * Gfx7 should limit max_offchip_buffers to 508
+	 * Gfx6 should limit max_offchip_buffers to 126 (2 * 63)
+	 *
+	 * Follow AMDVLK here.
+	 */
+	if (device->physical_device->rad_info.family == CHIP_VEGA10 ||
+	    device->physical_device->rad_info.chip_class == CIK ||
+	    device->physical_device->rad_info.chip_class == SI)
+		--max_offchip_buffers_per_se;
+
+	max_offchip_buffers = max_offchip_buffers_per_se *
+		device->physical_device->rad_info.max_se;
+
 	switch (device->tess_offchip_block_dw_size) {
 	default:
 		assert(0);

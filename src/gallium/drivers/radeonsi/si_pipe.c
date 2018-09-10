@@ -114,7 +114,6 @@ static void si_init_compiler(struct si_screen *sscreen,
 				       sscreen->info.chip_class <= VI;
 
 	enum ac_target_machine_options tm_options =
-		AC_TM_AUTO_WAITCNT_BEFORE_BARRIER |
 		(sscreen->debug_flags & DBG(SI_SCHED) ? AC_TM_SISCHED : 0) |
 		(sscreen->debug_flags & DBG(GISEL) ? AC_TM_ENABLE_GLOBAL_ISEL : 0) |
 		(sscreen->info.chip_class >= GFX9 ? AC_TM_FORCE_ENABLE_XNACK : 0) |

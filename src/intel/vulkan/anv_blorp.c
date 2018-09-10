@@ -532,81 +532,86 @@ void anv_CmdBlitImage(
       const VkImageSubresourceLayers *src_res = &pRegions[r].srcSubresource;
       const VkImageSubresourceLayers *dst_res = &pRegions[r].dstSubresource;
 
-      get_blorp_surf_for_anv_image(cmd_buffer->device,
-                                   src_image, src_res->aspectMask,
-                                   srcImageLayout, ISL_AUX_USAGE_NONE, &src);
-      get_blorp_surf_for_anv_image(cmd_buffer->device,
-                                   dst_image, dst_res->aspectMask,
-                                   dstImageLayout, ISL_AUX_USAGE_NONE, &dst);
+      assert(anv_image_aspects_compatible(src_res->aspectMask,
+                                          dst_res->aspectMask));
 
-      struct anv_format_plane src_format =
-         anv_get_format_plane(&cmd_buffer->device->info, src_image->vk_format,
-                              src_res->aspectMask, src_image->tiling);
-      struct anv_format_plane dst_format =
-         anv_get_format_plane(&cmd_buffer->device->info, dst_image->vk_format,
-                              dst_res->aspectMask, dst_image->tiling);
+      uint32_t aspect_bit;
+      anv_foreach_image_aspect_bit(aspect_bit, src_image, src_res->aspectMask) {
+         get_blorp_surf_for_anv_image(cmd_buffer->device,
+                                      src_image, 1U << aspect_bit,
+                                      srcImageLayout, ISL_AUX_USAGE_NONE, &src);
+         get_blorp_surf_for_anv_image(cmd_buffer->device,
+                                      dst_image, 1U << aspect_bit,
+                                      dstImageLayout, ISL_AUX_USAGE_NONE, &dst);
 
-      unsigned dst_start, dst_end;
-      if (dst_image->type == VK_IMAGE_TYPE_3D) {
-         assert(dst_res->baseArrayLayer == 0);
-         dst_start = pRegions[r].dstOffsets[0].z;
-         dst_end = pRegions[r].dstOffsets[1].z;
-      } else {
-         dst_start = dst_res->baseArrayLayer;
-         dst_end = dst_start + anv_get_layerCount(dst_image, dst_res);
+         struct anv_format_plane src_format =
+            anv_get_format_plane(&cmd_buffer->device->info, src_image->vk_format,
+                                 1U << aspect_bit, src_image->tiling);
+         struct anv_format_plane dst_format =
+            anv_get_format_plane(&cmd_buffer->device->info, dst_image->vk_format,
+                                 1U << aspect_bit, dst_image->tiling);
+
+         unsigned dst_start, dst_end;
+         if (dst_image->type == VK_IMAGE_TYPE_3D) {
+            assert(dst_res->baseArrayLayer == 0);
+            dst_start = pRegions[r].dstOffsets[0].z;
+            dst_end = pRegions[r].dstOffsets[1].z;
+         } else {
+            dst_start = dst_res->baseArrayLayer;
+            dst_end = dst_start + anv_get_layerCount(dst_image, dst_res);
+         }
+
+         unsigned src_start, src_end;
+         if (src_image->type == VK_IMAGE_TYPE_3D) {
+            assert(src_res->baseArrayLayer == 0);
+            src_start = pRegions[r].srcOffsets[0].z;
+            src_end = pRegions[r].srcOffsets[1].z;
+         } else {
+            src_start = src_res->baseArrayLayer;
+            src_end = src_start + anv_get_layerCount(src_image, src_res);
+         }
+
+         bool flip_z = flip_coords(&src_start, &src_end, &dst_start, &dst_end);
+         float src_z_step = (float)(src_end + 1 - src_start) /
+            (float)(dst_end + 1 - dst_start);
+
+         if (flip_z) {
+            src_start = src_end;
+            src_z_step *= -1;
+         }
+
+         unsigned src_x0 = pRegions[r].srcOffsets[0].x;
+         unsigned src_x1 = pRegions[r].srcOffsets[1].x;
+         unsigned dst_x0 = pRegions[r].dstOffsets[0].x;
+         unsigned dst_x1 = pRegions[r].dstOffsets[1].x;
+         bool flip_x = flip_coords(&src_x0, &src_x1, &dst_x0, &dst_x1);
+
+         unsigned src_y0 = pRegions[r].srcOffsets[0].y;
+         unsigned src_y1 = pRegions[r].srcOffsets[1].y;
+         unsigned dst_y0 = pRegions[r].dstOffsets[0].y;
+         unsigned dst_y1 = pRegions[r].dstOffsets[1].y;
+         bool flip_y = flip_coords(&src_y0, &src_y1, &dst_y0, &dst_y1);
+
+         const unsigned num_layers = dst_end - dst_start;
+         anv_cmd_buffer_mark_image_written(cmd_buffer, dst_image,
+                                           1U << aspect_bit,
+                                           dst.aux_usage,
+                                           dst_res->mipLevel,
+                                           dst_start, num_layers);
+
+         for (unsigned i = 0; i < num_layers; i++) {
+            unsigned dst_z = dst_start + i;
+            unsigned src_z = src_start + i * src_z_step;
+
+            blorp_blit(&batch, &src, src_res->mipLevel, src_z,
+                       src_format.isl_format, src_format.swizzle,
+                       &dst, dst_res->mipLevel, dst_z,
+                       dst_format.isl_format, dst_format.swizzle,
+                       src_x0, src_y0, src_x1, src_y1,
+                       dst_x0, dst_y0, dst_x1, dst_y1,
+                       blorp_filter, flip_x, flip_y);
+         }
       }
-
-      unsigned src_start, src_end;
-      if (src_image->type == VK_IMAGE_TYPE_3D) {
-         assert(src_res->baseArrayLayer == 0);
-         src_start = pRegions[r].srcOffsets[0].z;
-         src_end = pRegions[r].srcOffsets[1].z;
-      } else {
-         src_start = src_res->baseArrayLayer;
-         src_end = src_start + anv_get_layerCount(src_image, src_res);
-      }
-
-      bool flip_z = flip_coords(&src_start, &src_end, &dst_start, &dst_end);
-      float src_z_step = (float)(src_end + 1 - src_start) /
-                         (float)(dst_end + 1 - dst_start);
-
-      if (flip_z) {
-         src_start = src_end;
-         src_z_step *= -1;
-      }
-
-      unsigned src_x0 = pRegions[r].srcOffsets[0].x;
-      unsigned src_x1 = pRegions[r].srcOffsets[1].x;
-      unsigned dst_x0 = pRegions[r].dstOffsets[0].x;
-      unsigned dst_x1 = pRegions[r].dstOffsets[1].x;
-      bool flip_x = flip_coords(&src_x0, &src_x1, &dst_x0, &dst_x1);
-
-      unsigned src_y0 = pRegions[r].srcOffsets[0].y;
-      unsigned src_y1 = pRegions[r].srcOffsets[1].y;
-      unsigned dst_y0 = pRegions[r].dstOffsets[0].y;
-      unsigned dst_y1 = pRegions[r].dstOffsets[1].y;
-      bool flip_y = flip_coords(&src_y0, &src_y1, &dst_y0, &dst_y1);
-
-      const unsigned num_layers = dst_end - dst_start;
-      anv_cmd_buffer_mark_image_written(cmd_buffer, dst_image,
-                                        dst_res->aspectMask,
-                                        dst.aux_usage,
-                                        dst_res->mipLevel,
-                                        dst_start, num_layers);
-
-      for (unsigned i = 0; i < num_layers; i++) {
-         unsigned dst_z = dst_start + i;
-         unsigned src_z = src_start + i * src_z_step;
-
-         blorp_blit(&batch, &src, src_res->mipLevel, src_z,
-                    src_format.isl_format, src_format.swizzle,
-                    &dst, dst_res->mipLevel, dst_z,
-                    dst_format.isl_format, dst_format.swizzle,
-                    src_x0, src_y0, src_x1, src_y1,
-                    dst_x0, dst_y0, dst_x1, dst_y1,
-                    blorp_filter, flip_x, flip_y);
-      }
-
    }
 
    blorp_batch_finish(&batch);
@@ -1599,6 +1604,24 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
                                    ISL_AUX_USAGE_NONE, &stencil);
    }
 
+   /* From the Sky Lake PRM Volume 7, "Depth Buffer Clear":
+    *
+    *    "The following is required when performing a depth buffer clear with
+    *    using the WM_STATE or 3DSTATE_WM:
+    *
+    *       * If other rendering operations have preceded this clear, a
+    *         PIPE_CONTROL with depth cache flush enabled, Depth Stall bit
+    *         enabled must be issued before the rectangle primitive used for
+    *         the depth buffer clear operation.
+    *       * [...]"
+    *
+    * Even though the PRM only says that this is required if using 3DSTATE_WM
+    * and a 3DPRIMITIVE, it appears to also sometimes hang when doing a clear
+    * with WM_HZ_OP.
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_DEPTH_STALL_BIT;
+
    blorp_hiz_clear_depth_stencil(&batch, &depth, &stencil,
                                  level, base_layer, layer_count,
                                  area.offset.x, area.offset.y,
@@ -1613,18 +1636,22 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
 
    /* From the SKL PRM, Depth Buffer Clear:
     *
-    * Depth Buffer Clear Workaround
-    * Depth buffer clear pass using any of the methods (WM_STATE, 3DSTATE_WM
-    * or 3DSTATE_WM_HZ_OP) must be followed by a PIPE_CONTROL command with
-    * DEPTH_STALL bit and Depth FLUSH bits “set” before starting to render.
-    * DepthStall and DepthFlush are not needed between consecutive depth clear
-    * passes nor is it required if the depth-clear pass was done with
-    * “full_surf_clear” bit set in the 3DSTATE_WM_HZ_OP.
+    *    "Depth Buffer Clear Workaround
+    *
+    *    Depth buffer clear pass using any of the methods (WM_STATE,
+    *    3DSTATE_WM or 3DSTATE_WM_HZ_OP) must be followed by a PIPE_CONTROL
+    *    command with DEPTH_STALL bit and Depth FLUSH bits “set” before
+    *    starting to render.  DepthStall and DepthFlush are not needed between
+    *    consecutive depth clear passes nor is it required if the depth-clear
+    *    pass was done with “full_surf_clear” bit set in the
+    *    3DSTATE_WM_HZ_OP."
+    *
+    * Even though the PRM provides a bunch of conditions under which this is
+    * supposedly unnecessary, we choose to perform the flush unconditionally
+    * just to be safe.
     */
-   if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
-      cmd_buffer->state.pending_pipe_bits |=
-         ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_DEPTH_STALL_BIT;
-   }
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_DEPTH_STALL_BIT;
 }
 
 void

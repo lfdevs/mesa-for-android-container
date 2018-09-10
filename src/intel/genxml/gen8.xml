@@ -2553,9 +2553,9 @@
   <instruction name="MI_BATCH_BUFFER_START" bias="2" length="3">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="49"/>
-    <field name="2nd Level Batch Buffer" start="22" end="22" type="uint">
-      <value name="1st level batch" value="0"/>
-      <value name="2nd level batch" value="1"/>
+    <field name="Second Level Batch Buffer" start="22" end="22" type="uint">
+      <value name="First level batch" value="0"/>
+      <value name="Second level batch" value="1"/>
     </field>
     <field name="Add Offset Enable" start="16" end="16" type="bool"/>
     <field name="Predication Enable" start="15" end="15" type="bool"/>

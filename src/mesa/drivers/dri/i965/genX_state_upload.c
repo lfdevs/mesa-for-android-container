@@ -2806,7 +2806,7 @@ genX(upload_gs_state)(struct brw_context *brw)
 #if GEN_GEN < 7
          gs.SOStatisticsEnable = true;
          if (gs_prog->info.has_transform_feedback_varyings)
-            gs.SVBIPayloadEnable = true;
+            gs.SVBIPayloadEnable = _mesa_is_xfb_active_and_unpaused(ctx);
 
          /* GEN6_GS_SPF_MODE and GEN6_GS_VECTOR_MASK_ENABLE are enabled as it
           * was previously done for gen6.

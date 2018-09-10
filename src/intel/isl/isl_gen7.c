@@ -294,6 +294,29 @@ isl_gen6_filter_tiling(const struct isl_device *dev,
     */
    if (ISL_DEV_GEN(dev) < 7 && isl_format_get_layout(info->format)->bpb >= 128)
       *flags &= ~ISL_TILING_Y0_BIT;
+
+   /* From the BDW and SKL PRMs, Volume 2d,
+    * RENDER_SURFACE_STATE::Width - Programming Notes:
+    *
+    *   A known issue exists if a primitive is rendered to the first 2 rows and
+    *   last 2 columns of a 16K width surface. If any geometry is drawn inside
+    *   this square it will be copied to column X=2 and X=3 (arrangement on Y
+    *   position will stay the same). If any geometry exceeds the boundaries of
+    *   this 2x2 region it will be drawn normally. The issue also only occurs
+    *   if the surface has TileMode != Linear.
+    *
+    * [Internal documentation notes that this issue isn't present on SKL GT4.]
+    * To prevent this rendering corruption, only allow linear tiling for
+    * surfaces with widths greater than 16K-2 pixels.
+    *
+    * TODO: Is this an issue for multisampled surfaces as well?
+    */
+   if (info->width > 16382 && info->samples == 1 &&
+       info->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT &&
+       (ISL_DEV_GEN(dev) == 8 ||
+        (dev->info->is_skylake && dev->info->gt != 4))) {
+          *flags &= ISL_TILING_LINEAR_BIT;
+   }
 }
 
 void

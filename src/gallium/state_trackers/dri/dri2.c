@@ -1485,6 +1485,12 @@ dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
 
    for (i = 0, j = 0; (i < ARRAY_SIZE(fourcc_formats)) &&
          (j < max || max == 0); i++) {
+      /* The sRGB format is not a real FourCC as defined by drm_fourcc.h, so we
+       * must not leak it out to clients.
+       */
+      if (fourcc_formats[i] == __DRI_IMAGE_FOURCC_SARGB8888)
+         continue;
+
       if (pscreen->is_format_supported(pscreen,
                                        fourcc_to_pipe_format(
                                           fourcc_formats[i]),

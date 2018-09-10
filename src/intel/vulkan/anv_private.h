@@ -882,12 +882,21 @@ struct anv_physical_device {
     int                                         master_fd;
 };
 
+struct anv_app_info {
+   const char*        app_name;
+   uint32_t           app_version;
+   const char*        engine_name;
+   uint32_t           engine_version;
+   uint32_t           api_version;
+};
+
 struct anv_instance {
     VK_LOADER_DATA                              _loader_data;
 
     VkAllocationCallbacks                       alloc;
 
-    uint32_t                                    apiVersion;
+    struct anv_app_info                         app_info;
+
     struct anv_instance_extension_table         enabled_extensions;
     struct anv_dispatch_table                   dispatch;
 

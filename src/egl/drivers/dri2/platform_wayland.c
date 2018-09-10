@@ -182,9 +182,12 @@ wl_buffer_release(void *data, struct wl_buffer *buffer)
       if (dri2_surf->color_buffers[i].wl_buffer == buffer)
          break;
 
-   if (i == ARRAY_SIZE(dri2_surf->color_buffers)) {
+   assert (i < ARRAY_SIZE(dri2_surf->color_buffers));
+
+   if (dri2_surf->color_buffers[i].wl_release) {
       wl_buffer_destroy(buffer);
-      return;
+      dri2_surf->color_buffers[i].wl_release = false;
+      dri2_surf->color_buffers[i].wl_buffer = NULL;
    }
 
    dri2_surf->color_buffers[i].locked = false;
@@ -425,9 +428,14 @@ dri2_wl_release_buffers(struct dri2_egl_surface *dri2_surf)
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
    for (int i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
-      if (dri2_surf->color_buffers[i].wl_buffer &&
-          !dri2_surf->color_buffers[i].locked)
-         wl_buffer_destroy(dri2_surf->color_buffers[i].wl_buffer);
+      if (dri2_surf->color_buffers[i].wl_buffer) {
+         if (dri2_surf->color_buffers[i].locked) {
+            dri2_surf->color_buffers[i].wl_release = true;
+         } else {
+            wl_buffer_destroy(dri2_surf->color_buffers[i].wl_buffer);
+            dri2_surf->color_buffers[i].wl_buffer = NULL;
+         }
+      }
       if (dri2_surf->color_buffers[i].dri_image)
          dri2_dpy->image->destroyImage(dri2_surf->color_buffers[i].dri_image);
       if (dri2_surf->color_buffers[i].linear_copy)
@@ -436,11 +444,9 @@ dri2_wl_release_buffers(struct dri2_egl_surface *dri2_surf)
          munmap(dri2_surf->color_buffers[i].data,
                 dri2_surf->color_buffers[i].data_size);
 
-      dri2_surf->color_buffers[i].wl_buffer = NULL;
       dri2_surf->color_buffers[i].dri_image = NULL;
       dri2_surf->color_buffers[i].linear_copy = NULL;
       dri2_surf->color_buffers[i].data = NULL;
-      dri2_surf->color_buffers[i].locked = false;
    }
 
    if (dri2_dpy->dri2)
@@ -968,6 +974,8 @@ dri2_wl_swap_buffers_with_damage(_EGLDriver *drv,
 
       dri2_surf->current->wl_buffer =
          create_wl_buffer(dri2_dpy, dri2_surf, image);
+
+      dri2_surf->current->wl_release = false;
 
       wl_buffer_add_listener(dri2_surf->current->wl_buffer,
                              &wl_buffer_listener, dri2_surf);

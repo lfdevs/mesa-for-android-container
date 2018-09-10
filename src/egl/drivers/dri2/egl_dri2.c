@@ -2195,13 +2195,13 @@ dri2_check_dma_buf_attribs(const _EGLImageAttribs *attrs)
    return EGL_TRUE;
 }
 
-/* Returns the total number of file descriptors. Zero indicates an error. */
+/* Returns the total number of planes for the format or zero if it isn't a
+ * valid fourcc format.
+ */
 static unsigned
-dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
+dri2_num_fourcc_format_planes(EGLint format)
 {
-   unsigned plane_n;
-
-   switch (attrs->DMABufFourCC.Value) {
+   switch (format) {
    case DRM_FORMAT_R8:
    case DRM_FORMAT_RG88:
    case DRM_FORMAT_GR88:
@@ -2249,14 +2249,14 @@ dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
    case DRM_FORMAT_YVYU:
    case DRM_FORMAT_UYVY:
    case DRM_FORMAT_VYUY:
-      plane_n = 1;
-      break;
+      return 1;
+
    case DRM_FORMAT_NV12:
    case DRM_FORMAT_NV21:
    case DRM_FORMAT_NV16:
    case DRM_FORMAT_NV61:
-      plane_n = 2;
-      break;
+      return 2;
+
    case DRM_FORMAT_YUV410:
    case DRM_FORMAT_YVU410:
    case DRM_FORMAT_YUV411:
@@ -2267,9 +2267,19 @@ dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
    case DRM_FORMAT_YVU422:
    case DRM_FORMAT_YUV444:
    case DRM_FORMAT_YVU444:
-      plane_n = 3;
-      break;
+      return 3;
+
    default:
+      return 0;
+   }
+}
+
+/* Returns the total number of file descriptors. Zero indicates an error. */
+static unsigned
+dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
+{
+   unsigned plane_n = dri2_num_fourcc_format_planes(attrs->DMABufFourCC.Value);
+   if (plane_n == 0) {
       _eglError(EGL_BAD_ATTRIBUTE, "invalid format");
       return 0;
    }
@@ -2343,6 +2353,18 @@ dri2_query_dma_buf_formats(_EGLDriver *drv, _EGLDisplay *disp,
                                             formats, count))
       return EGL_FALSE;
 
+   if (max > 0) {
+      /* Assert that all of the formats returned are actually fourcc formats.
+       * Some day, if we want the internal interface function to be able to
+       * return the fake fourcc formats defined in dri_interface.h, we'll have
+       * to do something more clever here to pair the list down to just real
+       * fourcc formats so that we don't leak the fake internal ones.
+       */
+      for (int i = 0; i < *count; i++) {
+         assert(dri2_num_fourcc_format_planes(formats[i]) > 0);
+      }
+   }
+
    return EGL_TRUE;
 }
 
@@ -2352,6 +2374,9 @@ dri2_query_dma_buf_modifiers(_EGLDriver *drv, _EGLDisplay *disp, EGLint format,
                              EGLBoolean *external_only, EGLint *count)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+
+   if (dri2_num_fourcc_format_planes(format) == 0)
+      return _eglError(EGL_BAD_PARAMETER, "invalid fourcc format");
 
    if (max < 0)
       return _eglError(EGL_BAD_PARAMETER, "invalid value for max count of formats");
