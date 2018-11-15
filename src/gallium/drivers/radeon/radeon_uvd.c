@@ -1003,25 +1003,35 @@ static void get_mjpeg_slice_header(struct ruvd_decoder *dec, struct pipe_mjpeg_p
 	size++;
 
 	for (i = 0; i < 2; ++i) {
+		int num = 0, j;
+
 		if (pic->huffman_table.load_huffman_table[i] == 0)
 			continue;
 
 		buf[size++] = 0x00 | i;
 		memcpy((buf + size), &pic->huffman_table.table[i].num_dc_codes, 16);
 		size += 16;
-		memcpy((buf + size), &pic->huffman_table.table[i].dc_values, 12);
-		size += 12;
+		for (j = 0; j < 16; ++j)
+			num += pic->huffman_table.table[i].num_dc_codes[j];
+		assert(num <= 12);
+		memcpy((buf + size), &pic->huffman_table.table[i].dc_values, num);
+		size += num;
 	}
 
 	for (i = 0; i < 2; ++i) {
+		int num = 0, j;
+
 		if (pic->huffman_table.load_huffman_table[i] == 0)
 			continue;
 
 		buf[size++] = 0x10 | i;
 		memcpy((buf + size), &pic->huffman_table.table[i].num_ac_codes, 16);
 		size += 16;
-		memcpy((buf + size), &pic->huffman_table.table[i].ac_values, 162);
-		size += 162;
+		for (j = 0; j < 16; ++j)
+			num += pic->huffman_table.table[i].num_ac_codes[j];
+		assert(num <= 162);
+		memcpy((buf + size), &pic->huffman_table.table[i].ac_values, num);
+		size += num;
 	}
 
 	bs = (uint16_t*)&buf[len_pos];

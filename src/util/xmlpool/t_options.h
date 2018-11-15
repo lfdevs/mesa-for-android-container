@@ -150,6 +150,11 @@ DRI_CONF_OPT_BEGIN_B(allow_glsl_cross_stage_interpolation_mismatch, def) \
         DRI_CONF_DESC(en,gettext("Allow interpolation qualifier mismatch across shader stages")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
+DRI_CONF_OPT_BEGIN_B(force_compat_profile, def) \
+        DRI_CONF_DESC(en,gettext("Force an OpenGL compatibility context")) \
+DRI_CONF_OPT_END
+
 /**
  * \brief Image quality-related options
  */

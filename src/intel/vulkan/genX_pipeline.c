@@ -91,7 +91,8 @@ emit_vertex_input(struct anv_pipeline *pipeline,
 
    /* Pull inputs_read out of the VS prog data */
    const uint64_t inputs_read = vs_prog_data->inputs_read;
-   const uint64_t double_inputs_read = vs_prog_data->double_inputs_read;
+   const uint64_t double_inputs_read =
+      vs_prog_data->double_inputs_read & inputs_read;
    assert((inputs_read & ((1 << VERT_ATTRIB_GENERIC0) - 1)) == 0);
    const uint32_t elements = inputs_read >> VERT_ATTRIB_GENERIC0;
    const uint32_t elements_double = double_inputs_read >> VERT_ATTRIB_GENERIC0;
@@ -754,14 +755,14 @@ sanitize_ds_state(VkPipelineDepthStencilStateCreateInfo *state,
 {
    *stencilWriteEnable = state->stencilTestEnable;
 
-   /* If the depth test is disabled, we won't be writing anything. */
-   if (!state->depthTestEnable)
-      state->depthWriteEnable = false;
-
-   /* The Vulkan spec requires that if either depth or stencil is not present,
-    * the pipeline is to act as if the test silently passes.
+   /* If the depth test is disabled, we won't be writing anything. Make sure we
+    * treat the test as always passing later on as well.
+    *
+    * Also, the Vulkan spec requires that if either depth or stencil is not
+    * present, the pipeline is to act as if the test silently passes. In that
+    * case we won't write either.
     */
-   if (!(ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
+   if (!state->depthTestEnable || !(ds_aspects & VK_IMAGE_ASPECT_DEPTH_BIT)) {
       state->depthWriteEnable = false;
       state->depthCompareOp = VK_COMPARE_OP_ALWAYS;
    }
@@ -1168,7 +1169,28 @@ emit_3dstate_vs(struct anv_pipeline *pipeline)
       vs.IllegalOpcodeExceptionEnable = false;
       vs.SoftwareExceptionEnable    = false;
       vs.MaximumNumberofThreads     = devinfo->max_vs_threads - 1;
-      vs.VertexCacheDisable         = false;
+
+      if (GEN_GEN == 9 && devinfo->gt == 4 &&
+          anv_pipeline_has_stage(pipeline, MESA_SHADER_TESS_EVAL)) {
+         /* On Sky Lake GT4, we have experienced some hangs related to the VS
+          * cache and tessellation.  It is unknown exactly what is happening
+          * but the Haswell docs for the "VS Reference Count Full Force Miss
+          * Enable" field of the "Thread Mode" register refer to a HSW bug in
+          * which the VUE handle reference count would overflow resulting in
+          * internal reference counting bugs.  My (Jason's) best guess is that
+          * this bug cropped back up on SKL GT4 when we suddenly had more
+          * threads in play than any previous gen9 hardware.
+          *
+          * What we do know for sure is that setting this bit when
+          * tessellation shaders are in use fixes a GPU hang in Batman: Arkham
+          * City when playing with DXVK (https://bugs.freedesktop.org/107280).
+          * Disabling the vertex cache with tessellation shaders should only
+          * have a minor performance impact as the tessellation shaders are
+          * likely generating and processing far more geometry than the vertex
+          * stage.
+          */
+         vs.VertexCacheDisable = true;
+      }
 
       vs.VertexURBEntryReadLength      = vs_prog_data->base.urb_read_length;
       vs.VertexURBEntryReadOffset      = 0;

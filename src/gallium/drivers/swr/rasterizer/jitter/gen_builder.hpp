@@ -66,16 +66,6 @@ CallInst* MEMCOPY(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVo
     return IRB()->CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 }
 
-CallInst* ELEMENT_UNORDERED_ATOMIC_MEM_CPY(Value *Dst, Value *Src, uint64_t Size, uint32_t ElementSize, MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
-{
-    return IRB()->CreateElementUnorderedAtomicMemCpy(Dst, Src, Size, ElementSize, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-}
-
-CallInst* ELEMENT_UNORDERED_ATOMIC_MEM_CPY(Value *Dst, Value *Src, Value *Size, uint32_t ElementSize, MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
-{
-    return IRB()->CreateElementUnorderedAtomicMemCpy(Dst, Src, Size, ElementSize, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
-}
-
 CallInst* MEMMOVE(Value *Dst, Value *Src, uint64_t Size, unsigned Align, bool isVolatile = false, MDNode *TBAATag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
 {
     return IRB()->CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);

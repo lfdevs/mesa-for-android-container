@@ -176,7 +176,7 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_EXT_global_priority", 1},
    {"VK_EXT_shader_viewport_index_layer", 1},
    {"VK_EXT_shader_stencil_export", 1},
-   {"VK_EXT_vertex_attribute_divisor", 2},
+   {"VK_EXT_vertex_attribute_divisor", 3},
    {"VK_EXT_post_depth_coverage", 1},
 };
 

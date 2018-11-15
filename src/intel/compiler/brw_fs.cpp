@@ -394,6 +394,25 @@ fs_inst::can_do_source_mods(const struct gen_device_info *devinfo)
 }
 
 bool
+fs_inst::can_do_cmod()
+{
+   if (!backend_instruction::can_do_cmod())
+      return false;
+
+   /* The accumulator result appears to get used for the conditional modifier
+    * generation.  When negating a UD value, there is a 33rd bit generated for
+    * the sign in the accumulator value, so now you can't check, for example,
+    * equality with a 32-bit value.  See piglit fs-op-neg-uvec4.
+    */
+   for (unsigned i = 0; i < sources; i++) {
+      if (type_is_unsigned_int(src[i].type) && src[i].negate)
+         return false;
+   }
+
+   return true;
+}
+
+bool
 fs_inst::can_change_types() const
 {
    return dst.type == src[0].type &&

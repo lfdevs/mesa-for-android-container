@@ -36,7 +36,8 @@ static void kill_if_fetch_args(struct lp_build_tgsi_context *bld_base,
 
 	for (i = 0; i < TGSI_NUM_CHANNELS; i++) {
 		LLVMValueRef value = lp_build_emit_fetch(bld_base, inst, 0, i);
-		conds[i] = LLVMBuildFCmp(builder, LLVMRealOGE, value,
+		/* UGE because NaN shouldn't get killed */
+		conds[i] = LLVMBuildFCmp(builder, LLVMRealUGE, value,
 					ctx->ac.f32_0, "");
 	}
 
@@ -505,18 +506,37 @@ static void emit_bfe(const struct lp_build_tgsi_action *action,
 		     struct lp_build_emit_data *emit_data)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef bfe_sm5;
-	LLVMValueRef cond;
 
-	bfe_sm5 = ac_build_bfe(&ctx->ac, emit_data->args[0],
-			       emit_data->args[1], emit_data->args[2],
-			       emit_data->info->opcode == TGSI_OPCODE_IBFE);
+	if (HAVE_LLVM < 0x0700) {
+		LLVMValueRef bfe_sm5 =
+			ac_build_bfe(&ctx->ac, emit_data->args[0],
+				     emit_data->args[1], emit_data->args[2],
+				     emit_data->info->opcode == TGSI_OPCODE_IBFE);
 
-	/* Correct for GLSL semantics. */
-	cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntUGE, emit_data->args[2],
-			     LLVMConstInt(ctx->i32, 32, 0), "");
-	emit_data->output[emit_data->chan] =
-		LLVMBuildSelect(ctx->ac.builder, cond, emit_data->args[0], bfe_sm5, "");
+		/* Correct for GLSL semantics. */
+		LLVMValueRef cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntUGE, emit_data->args[2],
+						  LLVMConstInt(ctx->i32, 32, 0), "");
+		emit_data->output[emit_data->chan] =
+			LLVMBuildSelect(ctx->ac.builder, cond, emit_data->args[0], bfe_sm5, "");
+	} else {
+		/* FIXME: LLVM 7 returns incorrect result when count is 0.
+		 * https://bugs.freedesktop.org/show_bug.cgi?id=107276
+		 */
+		LLVMValueRef zero = ctx->i32_0;
+		LLVMValueRef bfe_sm5 =
+			ac_build_bfe(&ctx->ac, emit_data->args[0],
+				     emit_data->args[1], emit_data->args[2],
+				     emit_data->info->opcode == TGSI_OPCODE_IBFE);
+
+		/* Correct for GLSL semantics. */
+		LLVMValueRef cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntUGE, emit_data->args[2],
+						  LLVMConstInt(ctx->i32, 32, 0), "");
+		LLVMValueRef cond2 = LLVMBuildICmp(ctx->ac.builder, LLVMIntEQ, emit_data->args[2],
+						   zero, "");
+		bfe_sm5 = LLVMBuildSelect(ctx->ac.builder, cond, emit_data->args[0], bfe_sm5, "");
+		emit_data->output[emit_data->chan] =
+			LLVMBuildSelect(ctx->ac.builder, cond2, zero, bfe_sm5, "");
+	}
 }
 
 /* this is ffs in C */

@@ -29,7 +29,7 @@
 
 #include "si_shader.h"
 
-#define MAX_GLOBAL_BUFFERS 22
+#define MAX_GLOBAL_BUFFERS 32
 
 struct si_compute {
 	struct pipe_reference reference;

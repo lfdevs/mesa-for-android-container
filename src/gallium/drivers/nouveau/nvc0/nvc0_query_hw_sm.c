@@ -429,9 +429,9 @@ static const uint64_t nve4_read_hw_sm_counters_code[] =
     * mov b32 $r6 $pm6
     * mov b32 $r7 $pm7
     * set $p0 0x1 eq u32 $r8 0x0
-    * mov b32 $r10 c7[0x620]
+    * mov b32 $r10 c7[0x6a0]
     * ext u32 $r8 $r12 0x414
-    * mov b32 $r11 c7[0x624]
+    * mov b32 $r11 c7[0x6a4]
     * sched 0x04 0x2e 0x04 0x20 0x20 0x28 0x04
     * ext u32 $r9 $r12 0x208
     * (not $p0) exit
@@ -449,7 +449,7 @@ static const uint64_t nve4_read_hw_sm_counters_code[] =
     * add b32 $r12 $c $r12 $r9
     * st b128 wt g[$r10d] $r0q
     * sched 0x4 0x2c 0x20 0x04 0x2e 0x00 0x00
-    * mov b32 $r0 c7[0x628]
+    * mov b32 $r0 c7[0x6a8]
     * add b32 $r13 $r13 0x0 $c
     * $p1 st b128 wt g[$r12d+0x40] $r4q
     * st b32 wt g[$r12d+0x50] $r0
@@ -467,9 +467,9 @@ static const uint64_t nve4_read_hw_sm_counters_code[] =
    0x2c00000028019c04ULL,
    0x2c0000002c01dc04ULL,
    0x190e0000fc81dc03ULL,
-   0x28005c1880029de4ULL,
+   0x28005c1a80029de4ULL,
    0x7000c01050c21c03ULL,
-   0x28005c189002dde4ULL,
+   0x28005c1a9002dde4ULL,
    0x204282020042e047ULL,
    0x7000c00820c25c03ULL,
    0x80000000000021e7ULL,
@@ -487,7 +487,7 @@ static const uint64_t nve4_read_hw_sm_counters_code[] =
    0x4801000024c31c03ULL,
    0x9400000000a01fc5ULL,
    0x200002e04202c047ULL,
-   0x28005c18a0001de4ULL,
+   0x28005c1aa0001de4ULL,
    0x0800000000d35c42ULL,
    0x9400000100c107c5ULL,
    0x9400000140c01f85ULL,
@@ -510,9 +510,9 @@ static const uint64_t nvf0_read_hw_sm_counters_code[] =
    0x86400000051c001aULL,
    0x86400000059c001eULL,
    0xdb201c007f9c201eULL,
-   0x64c03ce0c41c002aULL,
+   0x64c03ce0d41c002aULL,
    0xc00000020a1c3021ULL,
-   0x64c03ce0c49c002eULL,
+   0x64c03ce0d49c002eULL,
    0x0810a0808010b810ULL,
    0xc0000001041c3025ULL,
    0x180000000020003cULL,
@@ -530,7 +530,7 @@ static const uint64_t nvf0_read_hw_sm_counters_code[] =
    0xe0840000049c3032ULL,
    0xfe800000001c2800ULL,
    0x080000b81080b010ULL,
-   0x64c03ce0c51c0002ULL,
+   0x64c03ce0d51c0002ULL,
    0xe08040007f9c3436ULL,
    0xfe80000020043010ULL,
    0xfc800000281c3000ULL,
@@ -554,10 +554,10 @@ static const uint64_t gm107_read_hw_sm_counters_code[] =
    0x001f8401fc2007a1ULL, /* sched (st 0x1 wr 0x5) (st 0x1 wt 0x1) (st 0x1)         */
    0xf0c8000000b70007ULL, /* mov $r7 $pm7                                           */
    0x5b6403800087ff07ULL, /* isetp eq u32 and $p0 0x1 0x0 $r8 0x1                   */
-   0x4c98079c1887000aULL, /* mov $r10 c7[0x620] 0xf                                 */
+   0x4c98079c1a87000aULL, /* mov $r10 c7[0x6a0] 0xf                                 */
    0x001fa400fc2017e1ULL, /* sched (st 0x1 wt 0x2) (st 0x1) (st 0x9)                */
    0x3800000091470c08ULL, /* bfe u32 $r8 $r12 0x914                                 */
-   0x4c98079c1897000bULL, /* mov $r11 c7[0x624] 0xf                                 */
+   0x4c98079c1a97000bULL, /* mov $r11 c7[0x6a4] 0xf                                 */
    0x3800000020870c09ULL, /* bfe u32 $r9 $r12 0x208                                 */
    0x001c1800fc2007edULL, /* sched (st 0xd) (st 0x1) (st 0x6 wr 0x0)                */
    0xe30000000008000fULL, /* not $p0 exit                                           */
@@ -578,7 +578,7 @@ static const uint64_t gm107_read_hw_sm_counters_code[] =
    0x003f983c1c4007e1ULL, /* sched (st 0x1) (st 0x2 rd 0x0 wt 0x3c) (st 0x6 wt 0x1) */
    0x5c1008000ff70d0dULL, /* iadd x $r13 $r13 0x0                                   */
    0xbfd0000000070a00ULL, /* st e wt b128 g[$r10] $r0 0x1                           */
-   0x4c98079c18a70000ULL, /* mov $r0 c7[0x628] 0xf                                  */
+   0x4c98079c1aa70000ULL, /* mov $r0 c7[0x6a8] 0xf                                  */
    0x001fbc00fc2007e6ULL, /* sched (st 0x1) (st 0x1) (st 0xf)                       */
    0xbfd0000004010c04ULL, /* $p1 st e wt b128 g[$r12+0x40] $r4 0x1                  */
    0xbf90000005070c00ULL, /* st e wt b32 g[$r12+0x50] $r0 0x1                       */
@@ -1760,14 +1760,14 @@ static const uint64_t nvc0_read_hw_sm_counters_code[] =
     * mov b32 $r6 $pm6
     * mov b32 $r7 $pm7
     * set $p0 0x1 eq u32 $r8 0x0
-    * mov b32 $r10 c15[0x620]
-    * mov b32 $r11 c15[0x624]
+    * mov b32 $r10 c15[0x6a0]
+    * mov b32 $r11 c15[0x6a4]
     * ext u32 $r8 $r9 0x414
     * (not $p0) exit
     * mul $r8 u32 $r8 u32 48
     * add b32 $r10 $c $r10 $r8
     * add b32 $r11 $r11 0x0 $c
-    * mov b32 $r8 c15[0x628]
+    * mov b32 $r8 c15[0x6a8]
     * st b128 wt g[$r10d+0x00] $r0q
     * st b128 wt g[$r10d+0x10] $r4q
     * st b32 wt g[$r10d+0x20] $r8
@@ -1783,14 +1783,14 @@ static const uint64_t nvc0_read_hw_sm_counters_code[] =
    0x2c00000028019c04ULL,
    0x2c0000002c01dc04ULL,
    0x190e0000fc81dc03ULL,
-   0x28007c1880029de4ULL,
-   0x28007c189002dde4ULL,
+   0x28007c1a80029de4ULL,
+   0x28007c1a9002dde4ULL,
    0x7000c01050921c03ULL,
    0x80000000000021e7ULL,
    0x10000000c0821c02ULL,
    0x4801000020a29c03ULL,
    0x0800000000b2dc42ULL,
-   0x28007c18a0021de4ULL,
+   0x28007c1aa0021de4ULL,
    0x9400000000a01fc5ULL,
    0x9400000040a11fc5ULL,
    0x9400000080a21f85ULL,

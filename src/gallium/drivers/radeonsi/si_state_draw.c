@@ -383,7 +383,7 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		 * Polaris supports primitive restart with WD_SWITCH_ON_EOP=0
 		 * for points, line strips, and tri strips.
 		 */
-		if (sscreen->info.max_se < 4 ||
+		if (sscreen->info.max_se <= 2 ||
 		    key->u.prim == PIPE_PRIM_POLYGON ||
 		    key->u.prim == PIPE_PRIM_LINE_LOOP ||
 		    key->u.prim == PIPE_PRIM_TRIANGLE_FAN ||
@@ -414,7 +414,7 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 			wd_switch_on_eop = true;
 
 		/* Required on CIK and later. */
-		if (sscreen->info.max_se > 2 && !wd_switch_on_eop)
+		if (sscreen->info.max_se == 4 && !wd_switch_on_eop)
 			ia_switch_on_eoi = true;
 
 		/* Required by Hawaii and, for some special cases, by VI. */
@@ -427,6 +427,12 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		/* Instancing bug on Bonaire. */
 		if (sscreen->info.family == CHIP_BONAIRE && ia_switch_on_eoi &&
 		    key->u.uses_instancing)
+			partial_vs_wave = true;
+
+		/* This only applies to Polaris10 and later 4 SE chips.
+		 * wd_switch_on_eop is already true on all other chips.
+		 */
+		if (!wd_switch_on_eop && key->u.primitive_restart)
 			partial_vs_wave = true;
 
 		/* If the WD switch is false, the IA switch must be false too. */

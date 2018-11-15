@@ -104,7 +104,7 @@ noinst_LTLIBRARIES += $(VULKAN_PER_GEN_LIBS)
 
 VULKAN_CFLAGS = \
 	$(AM_CFLAGS) \
-	-msse2
+	-msse2 -mstackrealign
 
 VULKAN_CPPFLAGS = \
 	-I$(top_srcdir)/src/compiler \

@@ -585,7 +585,7 @@ v3d_get_device_info(struct v3d_screen *screen)
         uint32_t minor = (ident1.value >> 0) & 0xf;
         screen->devinfo.ver = major * 10 + minor;
 
-        screen->devinfo.vpm_size = (ident1.value >> 28 & 0xf) * 1024;
+        screen->devinfo.vpm_size = (ident1.value >> 28 & 0xf) * 8192;
 
         switch (screen->devinfo.ver) {
         case 33:

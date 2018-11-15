@@ -62,6 +62,7 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       __DRIVER_CONTEXT_ATTRIB_RELEASE_BEHAVIOR;
    const __DRIbackgroundCallableExtension *backgroundCallable =
       screen->sPriv->dri2.backgroundCallable;
+   const struct driOptionCache *optionCache = &screen->dev->option_cache;
 
    if (screen->has_reset_status_query) {
       allowed_flags |= __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS;
@@ -88,8 +89,13 @@ dri_create_context(gl_api api, const struct gl_config * visual,
       break;
    case API_OPENGL_COMPAT:
    case API_OPENGL_CORE:
-      attribs.profile = api == API_OPENGL_COMPAT ? ST_PROFILE_DEFAULT
-                                                 : ST_PROFILE_OPENGL_CORE;
+      if (driQueryOptionb(optionCache, "force_compat_profile")) {
+         attribs.profile = ST_PROFILE_DEFAULT;
+      } else {
+         attribs.profile = api == API_OPENGL_COMPAT ? ST_PROFILE_DEFAULT
+                                                    : ST_PROFILE_OPENGL_CORE;
+      }
+
       attribs.major = ctx_config->major_version;
       attribs.minor = ctx_config->minor_version;
 

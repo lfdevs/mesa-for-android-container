@@ -26,11 +26,14 @@
 
 #ifdef HAVE_DLFCN_H
 #include <dlfcn.h>
+#include <stdio.h>
+#include "util/build_id.h"
 #endif
 #include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/stat.h>
+#include "util/mesa-sha1.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,7 +103,33 @@ disk_cache_get_function_timestamp(void *ptr, uint32_t* timestamp)
    if (stat(info.dli_fname, &st)) {
       return false;
    }
+
+   if (!st.st_mtime) {
+      fprintf(stderr, "Mesa: The provided filesystem timestamp for the cache "
+              "is bogus! Disabling On-disk cache.\n");
+      return false;
+   }
+
    *timestamp = st.st_mtime;
+
+   return true;
+}
+
+static inline bool
+disk_cache_get_function_identifier(void *ptr, struct mesa_sha1 *ctx)
+{
+   uint32_t timestamp;
+
+#ifdef HAVE_DL_ITERATE_PHDR
+   const struct build_id_note *note = NULL;
+   if ((note = build_id_find_nhdr_for_addr(ptr))) {
+      _mesa_sha1_update(ctx, build_id_data(note), build_id_length(note));
+   } else
+#endif
+   if (disk_cache_get_function_timestamp(ptr, &timestamp)) {
+      _mesa_sha1_update(ctx, &timestamp, sizeof(timestamp));
+   } else
+      return false;
    return true;
 }
 #endif

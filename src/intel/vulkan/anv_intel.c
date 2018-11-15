@@ -73,7 +73,7 @@ VkResult anv_CreateDmaBufImageINTEL(
 
    image = anv_image_from_handle(image_h);
 
-   uint64_t bo_flags = 0;
+   uint64_t bo_flags = ANV_BO_EXTERNAL;
    if (device->instance->physicalDevice.supports_48bit_addresses)
       bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
    if (device->instance->physicalDevice.use_softpin)

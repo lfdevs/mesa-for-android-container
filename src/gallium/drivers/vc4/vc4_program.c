@@ -687,24 +687,44 @@ ntq_fceil(struct vc4_compile *c, struct qreg src)
 }
 
 static struct qreg
+ntq_shrink_sincos_input_range(struct vc4_compile *c, struct qreg x)
+{
+        /* Since we're using a Taylor approximation, we want to have a small
+         * number of coefficients and take advantage of sin/cos repeating
+         * every 2pi.  We keep our x as close to 0 as we can, since the series
+         * will be less accurate as |x| increases.  (Also, be careful of
+         * shifting the input x value to be tricky with sin/cos relations,
+         * because getting accurate values for x==0 is very important for SDL
+         * rendering)
+         */
+        struct qreg scaled_x =
+                qir_FMUL(c, x,
+                         qir_uniform_f(c, 1.0f / (M_PI * 2.0f)));
+        /* Note: FTOI truncates toward 0. */
+        struct qreg x_frac = qir_FSUB(c, scaled_x,
+                                      qir_ITOF(c, qir_FTOI(c, scaled_x)));
+        /* Map [0.5, 1] to [-0.5, 0] */
+        qir_SF(c, qir_FSUB(c, x_frac, qir_uniform_f(c, 0.5)));
+        qir_FSUB_dest(c, x_frac, x_frac, qir_uniform_f(c, 1.0))->cond = QPU_COND_NC;
+        /* Map [-1, -0.5] to [0, 0.5] */
+        qir_SF(c, qir_FADD(c, x_frac, qir_uniform_f(c, 0.5)));
+        qir_FADD_dest(c, x_frac, x_frac, qir_uniform_f(c, 1.0))->cond = QPU_COND_NS;
+
+        return x_frac;
+}
+
+static struct qreg
 ntq_fsin(struct vc4_compile *c, struct qreg src)
 {
         float coeff[] = {
-                -2.0 * M_PI,
-                pow(2.0 * M_PI, 3) / (3 * 2 * 1),
-                -pow(2.0 * M_PI, 5) / (5 * 4 * 3 * 2 * 1),
-                pow(2.0 * M_PI, 7) / (7 * 6 * 5 * 4 * 3 * 2 * 1),
-                -pow(2.0 * M_PI, 9) / (9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
+                2.0 * M_PI,
+                -pow(2.0 * M_PI, 3) / (3 * 2 * 1),
+                pow(2.0 * M_PI, 5) / (5 * 4 * 3 * 2 * 1),
+                -pow(2.0 * M_PI, 7) / (7 * 6 * 5 * 4 * 3 * 2 * 1),
+                pow(2.0 * M_PI, 9) / (9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
         };
 
-        struct qreg scaled_x =
-                qir_FMUL(c,
-                         src,
-                         qir_uniform_f(c, 1.0 / (M_PI * 2.0)));
-
-        struct qreg x = qir_FADD(c,
-                                 ntq_ffract(c, scaled_x),
-                                 qir_uniform_f(c, -0.5));
+        struct qreg x = ntq_shrink_sincos_input_range(c, src);
         struct qreg x2 = qir_FMUL(c, x, x);
         struct qreg sum = qir_FMUL(c, x, qir_uniform_f(c, coeff[0]));
         for (int i = 1; i < ARRAY_SIZE(coeff); i++) {
@@ -722,21 +742,15 @@ static struct qreg
 ntq_fcos(struct vc4_compile *c, struct qreg src)
 {
         float coeff[] = {
-                -1.0f,
-                pow(2.0 * M_PI, 2) / (2 * 1),
-                -pow(2.0 * M_PI, 4) / (4 * 3 * 2 * 1),
-                pow(2.0 * M_PI, 6) / (6 * 5 * 4 * 3 * 2 * 1),
-                -pow(2.0 * M_PI, 8) / (8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
-                pow(2.0 * M_PI, 10) / (10 * 9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
+                1.0f,
+                -pow(2.0 * M_PI, 2) / (2 * 1),
+                pow(2.0 * M_PI, 4) / (4 * 3 * 2 * 1),
+                -pow(2.0 * M_PI, 6) / (6 * 5 * 4 * 3 * 2 * 1),
+                pow(2.0 * M_PI, 8) / (8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
+                -pow(2.0 * M_PI, 10) / (10 * 9 * 8 * 7 * 6 * 5 * 4 * 3 * 2 * 1),
         };
 
-        struct qreg scaled_x =
-                qir_FMUL(c, src,
-                         qir_uniform_f(c, 1.0f / (M_PI * 2.0f)));
-        struct qreg x_frac = qir_FADD(c,
-                                      ntq_ffract(c, scaled_x),
-                                      qir_uniform_f(c, -0.5));
-
+        struct qreg x_frac = ntq_shrink_sincos_input_range(c, src);
         struct qreg sum = qir_uniform_f(c, coeff[0]);
         struct qreg x2 = qir_FMUL(c, x_frac, x_frac);
         struct qreg x = x2; /* Current x^2, x^4, or x^6 */

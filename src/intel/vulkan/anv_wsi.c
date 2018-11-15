@@ -216,28 +216,45 @@ VkResult anv_GetSwapchainImagesKHR(
 }
 
 VkResult anv_AcquireNextImageKHR(
-    VkDevice                                     _device,
+    VkDevice                                     device,
     VkSwapchainKHR                               swapchain,
     uint64_t                                     timeout,
     VkSemaphore                                  semaphore,
     VkFence                                      fence,
     uint32_t*                                    pImageIndex)
 {
+   VkAcquireNextImageInfoKHR acquire_info = {
+      .sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
+      .swapchain = swapchain,
+      .timeout = timeout,
+      .semaphore = semaphore,
+      .fence = fence,
+      .deviceMask = 0,
+   };
+
+   return anv_AcquireNextImage2KHR(device, &acquire_info, pImageIndex);
+}
+
+VkResult anv_AcquireNextImage2KHR(
+    VkDevice                                     _device,
+    const VkAcquireNextImageInfoKHR*             pAcquireInfo,
+    uint32_t*                                    pImageIndex)
+{
    ANV_FROM_HANDLE(anv_device, device, _device);
    struct anv_physical_device *pdevice = &device->instance->physicalDevice;
 
-   VkResult result = wsi_common_acquire_next_image(&pdevice->wsi_device,
-                                                   _device,
-                                                   swapchain,
-                                                   timeout,
-                                                   semaphore,
-                                                   pImageIndex);
+   VkResult result = wsi_common_acquire_next_image2(&pdevice->wsi_device,
+                                                    _device,
+                                                    pAcquireInfo,
+                                                    pImageIndex);
 
    /* Thanks to implicit sync, the image is ready immediately.  However, we
     * should wait for the current GPU state to finish.
     */
-   if (fence != VK_NULL_HANDLE)
-      anv_QueueSubmit(anv_queue_to_handle(&device->queue), 0, NULL, fence);
+   if (pAcquireInfo->fence != VK_NULL_HANDLE) {
+      anv_QueueSubmit(anv_queue_to_handle(&device->queue), 0, NULL,
+                      pAcquireInfo->fence);
+   }
 
    return result;
 }

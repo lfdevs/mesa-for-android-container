@@ -49,6 +49,9 @@
 static void
 loop_prepare_for_unroll(nir_loop *loop)
 {
+   nir_rematerialize_derefs_in_use_blocks_impl(
+      nir_cf_node_get_function(&loop->cf_node));
+
    nir_convert_loop_to_lcssa(loop);
 
    /* Lower phis at the top level of the loop body */

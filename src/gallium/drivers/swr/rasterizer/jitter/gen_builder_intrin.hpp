@@ -91,6 +91,14 @@ Value* VMAXPS(Value* a, Value* b, const llvm::Twine& name = "")
     return CALL(pFunc, std::initializer_list<Value*>{a, b}, name);
 }
 
+Value* VFMADDPS(Value* a, Value* b, Value* c, const llvm::Twine& name = "")
+{
+    SmallVector<Type*, 1> args;
+    args.push_back(a->getType());
+    Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::fmuladd, args);
+    return CALL(pFunc, std::initializer_list<Value*>{a, b, c}, name);
+}
+
 Value* DEBUGTRAP(const llvm::Twine& name = "")
 {
     Function* pFunc = Intrinsic::getDeclaration(JM()->mpCurrentModule, Intrinsic::debugtrap);

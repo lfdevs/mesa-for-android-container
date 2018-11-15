@@ -1737,6 +1737,7 @@ dri3_get_buffer(__DRIdrawable *driDrawable,
                 struct loader_dri3_drawable *draw)
 {
    struct loader_dri3_buffer *buffer;
+   bool fence_await = buffer_type == loader_dri3_buffer_back;
    int buf_id;
 
    if (buffer_type == loader_dri3_buffer_back) {
@@ -1793,6 +1794,7 @@ dri3_get_buffer(__DRIdrawable *driDrawable,
                            0, 0, 0, 0,
                            draw->width, draw->height);
             dri3_fence_trigger(draw->conn, new_buffer);
+            fence_await = true;
          }
          dri3_free_render_buffer(draw, buffer);
       } else if (buffer_type == loader_dri3_buffer_front) {
@@ -1814,12 +1816,15 @@ dri3_get_buffer(__DRIdrawable *driDrawable,
                                           new_buffer->linear_buffer,
                                           0, 0, draw->width, draw->height,
                                           0, 0, 0);
-         }
+         } else
+            fence_await = true;
       }
       buffer = new_buffer;
       draw->buffers[buf_id] = buffer;
    }
-   dri3_fence_await(draw->conn, draw, buffer);
+
+   if (fence_await)
+      dri3_fence_await(draw->conn, draw, buffer);
 
    /*
     * Do we need to preserve the content of a previous buffer?

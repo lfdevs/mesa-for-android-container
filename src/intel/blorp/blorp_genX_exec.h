@@ -1628,6 +1628,29 @@ blorp_emit_gen8_hiz_op(struct blorp_batch *batch,
     */
    blorp_emit_3dstate_multisample(batch, params);
 
+   /* According to the SKL PRM formula for WM_INT::ThreadDispatchEnable, the
+    * 3DSTATE_WM::ForceThreadDispatchEnable field can force WM thread dispatch
+    * even when WM_HZ_OP is active.  However, WM thread dispatch is normally
+    * disabled for HiZ ops and it appears that force-enabling it can lead to
+    * GPU hangs on at least Skylake.  Since we don't know the current state of
+    * the 3DSTATE_WM packet, just emit a dummy one prior to 3DSTATE_WM_HZ_OP.
+    */
+   blorp_emit(batch, GENX(3DSTATE_WM), wm);
+
+   /* From the BDW PRM Volume 7, Depth Buffer Clear:
+    *
+    *    The clear value must be between the min and max depth values
+    *    (inclusive) defined in the CC_VIEWPORT. If the depth buffer format is
+    *    D32_FLOAT, then +/-DENORM values are also allowed.
+    *
+    * Set the bounds to match our hardware limits, [0.0, 1.0].
+    */
+   if (params->depth.enabled && params->hiz_op == ISL_AUX_OP_FAST_CLEAR) {
+      assert(params->depth.clear_color.f32[0] >= 0.0f);
+      assert(params->depth.clear_color.f32[0] <= 1.0f);
+      blorp_emit_cc_viewport(batch);
+   }
+
    /* If we can't alter the depth stencil config and multiple layers are
     * involved, the HiZ op will fail. This is because the op requires that a
     * new config is emitted for each additional layer.

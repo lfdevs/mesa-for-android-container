@@ -1434,6 +1434,7 @@ framebuffer_parameteri(struct gl_context *ctx, struct gl_framebuffer *fb,
       if (!ctx->Extensions.MESA_framebuffer_flip_y)
          goto invalid_pname_enum;
       cannot_be_winsys_fbo = true;
+      break;
    default:
       goto invalid_pname_enum;
    }

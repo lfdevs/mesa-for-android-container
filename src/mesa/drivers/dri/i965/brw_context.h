@@ -168,6 +168,11 @@ enum brw_cache_id {
    BRW_MAX_CACHE
 };
 
+enum gen9_astc5x5_wa_tex_type {
+   GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5 = 1 << 0,
+   GEN9_ASTC5X5_WA_TEX_TYPE_AUX     = 1 << 1,
+};
+
 enum brw_state_id {
    /* brw_cache_ids must come first - see brw_program_cache.c */
    BRW_STATE_URB_FENCE = BRW_MAX_CACHE,
@@ -1315,6 +1320,8 @@ struct brw_context
     */
    enum isl_aux_usage draw_aux_usage[MAX_DRAW_BUFFERS];
 
+   enum gen9_astc5x5_wa_tex_type gen9_astc5x5_wa_tex_mask;
+
    __DRIcontext *driContext;
    struct intel_screen *screen;
 };
@@ -1338,6 +1345,10 @@ enum {
 void intel_update_renderbuffers(__DRIcontext *context,
                                 __DRIdrawable *drawable);
 void intel_prepare_render(struct brw_context *brw);
+
+void gen9_apply_single_tex_astc5x5_wa(struct brw_context *brw,
+                                      mesa_format format,
+                                      enum isl_aux_usage aux_usage);
 
 void brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
                                 bool *draw_aux_buffer_disabled);

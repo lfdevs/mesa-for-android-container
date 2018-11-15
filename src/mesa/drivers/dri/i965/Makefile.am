@@ -44,7 +44,7 @@ AM_CFLAGS = \
 	$(WNO_OVERRIDE_INIT) \
 	$(LIBDRM_CFLAGS) \
 	$(VALGRIND_CFLAGS) \
-	-msse2
+	-msse2 -mstackrealign
 
 AM_CXXFLAGS = $(AM_CFLAGS)
 

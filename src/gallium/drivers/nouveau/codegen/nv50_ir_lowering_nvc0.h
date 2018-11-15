@@ -148,7 +148,7 @@ protected:
    void handlePIXLD(Instruction *);
 
    void checkPredicate(Instruction *);
-   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless);
+   Value *loadMsAdjInfo32(TexInstruction::Target targ, uint32_t index, int slot, Value *ind, bool bindless);
 
    virtual bool visit(Instruction *);
 
@@ -161,6 +161,7 @@ private:
    Value *loadResInfo32(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResInfo64(Value *ptr, uint32_t off, uint16_t base);
    Value *loadResLength32(Value *ptr, uint32_t off, uint16_t base);
+   Value *loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless);
    Value *loadBufInfo64(Value *ptr, uint32_t off);
    Value *loadBufLength32(Value *ptr, uint32_t off);
    Value *loadUboInfo64(Value *ptr, uint32_t off);

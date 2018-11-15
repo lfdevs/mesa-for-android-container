@@ -347,6 +347,11 @@ emit_zero_queries(struct anv_cmd_buffer *cmd_buffer,
             sdi.Address.offset = slot_offset + j * sizeof(uint64_t);
             sdi.ImmediateData = 0ull;
          }
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
+            sdi.Address.bo = &pool->bo;
+            sdi.Address.offset = slot_offset + j * sizeof(uint64_t) + 4;
+            sdi.ImmediateData = 0ull;
+         }
       }
       emit_query_availability(cmd_buffer, &pool->bo, slot_offset);
    }

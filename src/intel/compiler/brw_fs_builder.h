@@ -795,7 +795,7 @@ namespace brw {
              !gen_device_info_is_9lp(shader->devinfo))
             return false;
 
-         if (type_sz(type > 4))
+         if (type_sz(type) > 4)
             return true;
 
          if (opcode == BRW_OPCODE_MUL &&

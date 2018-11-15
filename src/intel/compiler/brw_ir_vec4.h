@@ -291,6 +291,7 @@ public:
                       int swizzle, int swizzle_mask);
    void reswizzle(int dst_writemask, int swizzle);
    bool can_do_source_mods(const struct gen_device_info *devinfo);
+   bool can_do_cmod();
    bool can_do_writemask(const struct gen_device_info *devinfo);
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;

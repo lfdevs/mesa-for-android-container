@@ -187,6 +187,9 @@ blorp_surf_for_miptree(struct brw_context *brw,
    assert((surf->aux_usage == ISL_AUX_USAGE_NONE) ==
           (surf->aux_addr.buffer == NULL));
 
+   if (!is_render_target && brw->screen->devinfo.gen == 9)
+      gen9_apply_single_tex_astc5x5_wa(brw, mt->format, surf->aux_usage);
+
    /* ISL wants real levels, not offset ones. */
    *level -= mt->first_level;
 }
@@ -382,7 +385,8 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
    enum isl_format src_isl_format =
       brw_blorp_to_isl_format(brw, src_format, false);
    enum isl_aux_usage src_aux_usage =
-      intel_miptree_texture_aux_usage(brw, src_mt, src_isl_format);
+      intel_miptree_texture_aux_usage(brw, src_mt, src_isl_format,
+                                      0 /* The astc5x5 WA isn't needed */);
    /* We do format workarounds for some depth formats so we can't reliably
     * sample with HiZ.  One of these days, we should fix that.
     */
@@ -1220,12 +1224,12 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
 
    x0 = fb->_Xmin;
    x1 = fb->_Xmax;
-   if (rb->Name != 0) {
-      y0 = fb->_Ymin;
-      y1 = fb->_Ymax;
-   } else {
+   if (fb->FlipY) {
       y0 = rb->Height - fb->_Ymax;
       y1 = rb->Height - fb->_Ymin;
+   } else {
+      y0 = fb->_Ymin;
+      y1 = fb->_Ymax;
    }
 
    /* If the clear region is empty, just return. */
@@ -1411,9 +1415,8 @@ brw_blorp_clear_depth_stencil(struct brw_context *brw,
    if (!(mask & (BUFFER_BITS_DEPTH_STENCIL)))
       return;
 
-   uint32_t x0, x1, y0, y1, rb_name, rb_height;
+   uint32_t x0, x1, y0, y1, rb_height;
    if (depth_rb) {
-      rb_name = depth_rb->Name;
       rb_height = depth_rb->Height;
       if (stencil_rb) {
          assert(depth_rb->Width == stencil_rb->Width);
@@ -1421,18 +1424,17 @@ brw_blorp_clear_depth_stencil(struct brw_context *brw,
       }
    } else {
       assert(stencil_rb);
-      rb_name = stencil_rb->Name;
       rb_height = stencil_rb->Height;
    }
 
    x0 = fb->_Xmin;
    x1 = fb->_Xmax;
-   if (rb_name != 0) {
-      y0 = fb->_Ymin;
-      y1 = fb->_Ymax;
-   } else {
+   if (fb->FlipY) {
       y0 = rb_height - fb->_Ymax;
       y1 = rb_height - fb->_Ymin;
+   } else {
+      y0 = fb->_Ymin;
+      y1 = fb->_Ymax;
    }
 
    /* If the clear region is empty, just return. */

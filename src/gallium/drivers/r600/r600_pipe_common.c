@@ -854,27 +854,28 @@ static void r600_disk_cache_create(struct r600_common_screen *rscreen)
 	if (rscreen->debug_flags & DBG_ALL_SHADERS)
 		return;
 
-	uint32_t mesa_timestamp;
-	if (disk_cache_get_function_timestamp(r600_disk_cache_create,
-					      &mesa_timestamp)) {
-		char *timestamp_str;
-		int res = -1;
+	struct mesa_sha1 ctx;
+	unsigned char sha1[20];
+	char cache_id[20 * 2 + 1];
 
-		res = asprintf(&timestamp_str, "%u",mesa_timestamp);
-		if (res != -1) {
-			/* These flags affect shader compilation. */
-			uint64_t shader_debug_flags =
-				rscreen->debug_flags &
-				(DBG_FS_CORRECT_DERIVS_AFTER_KILL |
-				 DBG_UNSAFE_MATH);
+	_mesa_sha1_init(&ctx);
+	if (!disk_cache_get_function_identifier(r600_disk_cache_create,
+						&ctx))
+		return;
 
-			rscreen->disk_shader_cache =
-				disk_cache_create(r600_get_family_name(rscreen),
-						  timestamp_str,
-						  shader_debug_flags);
-			free(timestamp_str);
-		}
-	}
+	_mesa_sha1_final(&ctx, sha1);
+	disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
+
+	/* These flags affect shader compilation. */
+	uint64_t shader_debug_flags =
+		rscreen->debug_flags &
+		(DBG_FS_CORRECT_DERIVS_AFTER_KILL |
+		 DBG_UNSAFE_MATH);
+
+	rscreen->disk_shader_cache =
+		disk_cache_create(r600_get_family_name(rscreen),
+				  cache_id,
+				  shader_debug_flags);
 }
 
 static struct disk_cache *r600_get_disk_shader_cache(struct pipe_screen *pscreen)

@@ -211,9 +211,17 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
       /* A CMP with a second source of zero can match with anything.  A CMP
        * with a second source that is not zero can only match with an ADD
        * instruction.
+       *
+       * Only apply this optimization to float-point sources.  It can fail for
+       * integers.  For inputs a = 0x80000000, b = 4, int(0x80000000) < 4, but
+       * int(0x80000000) - 4 overflows and results in 0x7ffffffc.  that's not
+       * less than zero, so the flags get set differently than for (a < b).
        */
       if (inst->opcode == BRW_OPCODE_CMP && !inst->src[1].is_zero()) {
-         progress = cmod_propagate_cmp_to_add(devinfo, block, inst) || progress;
+         if (brw_reg_type_is_floating_point(inst->src[0].type) &&
+             cmod_propagate_cmp_to_add(devinfo, block, inst))
+            progress = true;
+
          continue;
       }
 

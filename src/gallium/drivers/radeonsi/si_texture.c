@@ -931,8 +931,8 @@ static void si_texture_get_htile_size(struct si_screen *sscreen,
 		return;
 	}
 
-	width = align(tex->buffer.b.b.width0, cl_width * 8);
-	height = align(tex->buffer.b.b.height0, cl_height * 8);
+	width = align(tex->surface.u.legacy.level[0].nblk_x, cl_width * 8);
+	height = align(tex->surface.u.legacy.level[0].nblk_y, cl_height * 8);
 
 	slice_elements = (width * height) / (8 * 8);
 	slice_bytes = slice_elements * 4;

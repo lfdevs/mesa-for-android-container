@@ -148,20 +148,21 @@ nouveau_screen_bo_get_handle(struct pipe_screen *pscreen,
 static void
 nouveau_disk_cache_create(struct nouveau_screen *screen)
 {
-   uint32_t mesa_timestamp;
-   char *timestamp_str;
-   int res;
+   struct mesa_sha1 ctx;
+   unsigned char sha1[20];
+   char cache_id[20 * 2 + 1];
 
-   if (disk_cache_get_function_timestamp(nouveau_disk_cache_create,
-                                         &mesa_timestamp)) {
-      res = asprintf(&timestamp_str, "%u", mesa_timestamp);
-      if (res != -1) {
-         screen->disk_shader_cache =
-            disk_cache_create(nouveau_screen_get_name(&screen->base),
-                              timestamp_str, 0);
-         free(timestamp_str);
-      }
-   }
+   _mesa_sha1_init(&ctx);
+   if (!disk_cache_get_function_identifier(nouveau_disk_cache_create,
+                                           &ctx))
+      return;
+
+   _mesa_sha1_final(&ctx, sha1);
+   disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
+
+   screen->disk_shader_cache =
+      disk_cache_create(nouveau_screen_get_name(&screen->base),
+                        cache_id, 0);
 }
 
 int

@@ -57,7 +57,6 @@ intrinsics = [
     ['VHSUBPS',     ['a', 'b'], 'a'],
     ['VPTESTC',     ['a', 'b'], 'mInt32Ty'],
     ['VPTESTZ',     ['a', 'b'], 'mInt32Ty'],
-    ['VFMADDPS',    ['a', 'b', 'c'], 'a'],
     ['VPHADDD',     ['a', 'b'], 'a'],
     ['PDEP32',      ['a', 'b'], 'a'],
     ['RDTSC',       [], 'mInt64Ty'],
@@ -71,6 +70,7 @@ llvm_intrinsics = [
     ['STACKRESTORE', 'stackrestore', ['a'], []],
     ['VMINPS', 'minnum', ['a', 'b'], ['a']],
     ['VMAXPS', 'maxnum', ['a', 'b'], ['a']],
+    ['VFMADDPS', 'fmuladd', ['a', 'b', 'c'], ['a']],
     ['DEBUGTRAP', 'debugtrap', [], []],
     ['POPCNT', 'ctpop', ['a'], ['a']],
     ['LOG2', 'log2', ['a'], ['a']],
@@ -161,7 +161,8 @@ def parse_ir_builder(input_file):
                         func_name == 'CreateAlignmentAssumptionHelper' or
                         func_name == 'CreateGEP' or
                         func_name == 'CreateLoad' or
-                        func_name == 'CreateMaskedLoad'):
+                        func_name == 'CreateMaskedLoad' or
+                        func_name == 'CreateElementUnorderedAtomicMemCpy'):
                         ignore = True
 
                     # Convert CamelCase to CAMEL_CASE

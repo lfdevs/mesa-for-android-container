@@ -56,14 +56,9 @@ else
 		GALLIUM_DRIVERS += freedreno
 	endif
 
-	# tegra and vc4 kernel support are only available on armhf and arm64
+	# etnaviv, imx, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += tegra vc4
-	endif
-
-	# etnaviv kernel support is currently only available on armhf
-	ifneq (,$(filter $(DEB_HOST_ARCH), armhf))
-		GALLIUM_DRIVERS += etnaviv imx
+		GALLIUM_DRIVERS += etnaviv imx tegra vc4 v3d
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
@@ -99,8 +94,13 @@ else
 	GALLIUM_DRIVERS += radeonsi
 	confflags_GALLIUM += --enable-llvm
 	confflags_GALLIUM += --enable-opencl --enable-opencl-icd
-	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-6.0
+	confflags_GALLIUM += ac_cv_path_LLVM_CONFIG=llvm-config-7
 	GALLIUM_DRIVERS += swrast
+
+	# nine makes sense only on archs that build wine
+	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-i386 powerpc))
+		confflags_GALLIUM += --enable-nine
+	endif
   else
 	DRI_DRIVERS += swrast
 	confflags_GALLIUM += --disable-llvm
@@ -141,7 +141,6 @@ confflags += \
 	--enable-osmesa \
 	--enable-glx-tls \
 	--enable-shared-glapi \
-	--enable-texture-float \
 	--disable-xvmc \
 	--disable-omx-bellagio \
 	$(confflags_DIRECT_RENDERING) \

@@ -2542,8 +2542,19 @@ can_texture_with_ccs(struct brw_context *brw,
 enum isl_aux_usage
 intel_miptree_texture_aux_usage(struct brw_context *brw,
                                 struct intel_mipmap_tree *mt,
-                                enum isl_format view_format)
+                                enum isl_format view_format,
+                                enum gen9_astc5x5_wa_tex_type astc5x5_wa_bits)
 {
+   assert(brw->screen->devinfo.gen == 9 || astc5x5_wa_bits == 0);
+
+   /* On gen9, ASTC 5x5 textures cannot live in the sampler cache along side
+    * CCS or HiZ compressed textures.  See gen9_apply_astc5x5_wa_flush() for
+    * details.
+    */
+   if ((astc5x5_wa_bits & GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5) &&
+       mt->aux_usage != ISL_AUX_USAGE_MCS)
+      return ISL_AUX_USAGE_NONE;
+
    switch (mt->aux_usage) {
    case ISL_AUX_USAGE_HIZ:
       if (intel_miptree_sample_with_hiz(brw, mt))
@@ -2601,10 +2612,12 @@ intel_miptree_prepare_texture(struct brw_context *brw,
                               struct intel_mipmap_tree *mt,
                               enum isl_format view_format,
                               uint32_t start_level, uint32_t num_levels,
-                              uint32_t start_layer, uint32_t num_layers)
+                              uint32_t start_layer, uint32_t num_layers,
+                              enum gen9_astc5x5_wa_tex_type astc5x5_wa_bits)
 {
    enum isl_aux_usage aux_usage =
-      intel_miptree_texture_aux_usage(brw, mt, view_format);
+      intel_miptree_texture_aux_usage(brw, mt, view_format, astc5x5_wa_bits);
+
    bool clear_supported = aux_usage != ISL_AUX_USAGE_NONE;
 
    /* Clear color is specified as ints or floats and the conversion is done by

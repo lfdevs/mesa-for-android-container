@@ -257,8 +257,8 @@ static void si_compute_cmask(const struct radeon_info *info,
 
 	unsigned base_align = num_pipes * pipe_interleave_bytes;
 
-	unsigned width = align(config->info.width, cl_width*8);
-	unsigned height = align(config->info.height, cl_height*8);
+	unsigned width = align(surf->u.legacy.level[0].nblk_x, cl_width*8);
+	unsigned height = align(surf->u.legacy.level[0].nblk_y, cl_height*8);
 	unsigned slice_elements = (width * height) / (8*8);
 
 	/* Each element of CMASK is a nibble. */

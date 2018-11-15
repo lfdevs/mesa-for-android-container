@@ -133,12 +133,13 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 
 	if (ctx->current_saved_cs) {
 		si_trace_emit(ctx);
-		si_log_hw_flush(ctx);
 
 		/* Save the IB for debug contexts. */
 		si_save_cs(ws, cs, &ctx->current_saved_cs->gfx, true);
 		ctx->current_saved_cs->flushed = true;
 		ctx->current_saved_cs->time_flush = os_time_get_nano();
+
+		si_log_hw_flush(ctx);
 	}
 
 	/* Flush the CS. */
@@ -146,8 +147,6 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	if (fence)
 		ws->fence_reference(fence, ctx->last_gfx_fence);
 
-	/* This must be after cs_flush returns, since the context's API
-	 * thread can concurrently read this value in si_fence_finish. */
 	ctx->num_gfx_cs_flushes++;
 
 	/* Check VM faults if needed. */

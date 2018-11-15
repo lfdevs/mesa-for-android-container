@@ -3337,6 +3337,17 @@ radv_compute_ia_multi_vgt_param_helpers(struct radv_pipeline *pipeline,
 		}
 	}
 
+	/* Workaround for a VGT hang when strip primitive types are used with
+	 * primitive restart.
+	 */
+	if (pipeline->graphics.prim_restart_enable &&
+	    (prim == V_008958_DI_PT_LINESTRIP ||
+	     prim == V_008958_DI_PT_TRISTRIP ||
+	     prim == V_008958_DI_PT_LINESTRIP_ADJ ||
+	     prim == V_008958_DI_PT_TRISTRIP_ADJ)) {
+		ia_multi_vgt_param.partial_vs_wave = true;
+	}
+
 	ia_multi_vgt_param.base =
 		S_028AA8_PRIMGROUP_SIZE(ia_multi_vgt_param.primgroup_size - 1) |
 		/* The following field was moved to VGT_SHADER_STAGES_EN in GFX9. */

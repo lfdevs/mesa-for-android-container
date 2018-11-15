@@ -774,8 +774,8 @@ static void r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 		return;
 	}
 
-	width = align(rtex->resource.b.b.width0, cl_width * 8);
-	height = align(rtex->resource.b.b.height0, cl_height * 8);
+	width = align(rtex->surface.u.legacy.level[0].nblk_x, cl_width * 8);
+	height = align(rtex->surface.u.legacy.level[0].nblk_y, cl_height * 8);
 
 	slice_elements = (width * height) / (8 * 8);
 	slice_bytes = slice_elements * 4;

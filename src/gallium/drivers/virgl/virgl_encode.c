@@ -284,7 +284,7 @@ int virgl_encode_shader_state(struct virgl_context *ctx,
    while (left_bytes) {
       uint32_t length, offlen;
       int hdr_len = base_hdr_size + (first_pass ? strm_hdr_size : 0);
-      if (ctx->cbuf->cdw + hdr_len + 1 > VIRGL_MAX_CMDBUF_DWORDS)
+      if (ctx->cbuf->cdw + hdr_len + 1 >= VIRGL_MAX_CMDBUF_DWORDS)
          ctx->base.flush(&ctx->base, NULL, 0);
 
       thispass = (VIRGL_MAX_CMDBUF_DWORDS - ctx->cbuf->cdw - hdr_len - 1) * 4;

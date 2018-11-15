@@ -134,7 +134,7 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_EXT_sampler_filter_minmax", 1},
    {"VK_EXT_shader_viewport_index_layer", 1},
    {"VK_EXT_shader_stencil_export", 1},
-   {"VK_EXT_vertex_attribute_divisor", 2},
+   {"VK_EXT_vertex_attribute_divisor", 3},
    {"VK_AMD_draw_indirect_count", 1},
    {"VK_AMD_gcn_shader", 1},
    {"VK_AMD_rasterization_order", 1},

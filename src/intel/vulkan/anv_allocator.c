@@ -1253,7 +1253,8 @@ anv_bo_cache_lookup(struct anv_bo_cache *cache, uint32_t gem_handle)
    (EXEC_OBJECT_WRITE | \
     EXEC_OBJECT_ASYNC | \
     EXEC_OBJECT_SUPPORTS_48B_ADDRESS | \
-    EXEC_OBJECT_PINNED)
+    EXEC_OBJECT_PINNED | \
+    ANV_BO_EXTERNAL)
 
 VkResult
 anv_bo_cache_alloc(struct anv_device *device,
@@ -1311,6 +1312,7 @@ anv_bo_cache_import(struct anv_device *device,
                     struct anv_bo **bo_out)
 {
    assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
+   assert(bo_flags & ANV_BO_EXTERNAL);
 
    pthread_mutex_lock(&cache->mutex);
 
@@ -1327,7 +1329,7 @@ anv_bo_cache_import(struct anv_device *device,
        * client has imported a BO twice in different ways and they get what
        * they have coming.
        */
-      uint64_t new_flags = 0;
+      uint64_t new_flags = ANV_BO_EXTERNAL;
       new_flags |= (bo->bo.flags | bo_flags) & EXEC_OBJECT_WRITE;
       new_flags |= (bo->bo.flags & bo_flags) & EXEC_OBJECT_ASYNC;
       new_flags |= (bo->bo.flags & bo_flags) & EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
@@ -1356,6 +1358,7 @@ anv_bo_cache_import(struct anv_device *device,
       if ((new_flags & EXEC_OBJECT_PINNED) &&
           (bo->bo.flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS) !=
           (bo_flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS)) {
+         pthread_mutex_unlock(&cache->mutex);
          return vk_errorf(device->instance, NULL,
                           VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "The same BO was imported on two different heaps");
@@ -1410,6 +1413,12 @@ anv_bo_cache_export(struct anv_device *device,
 {
    assert(anv_bo_cache_lookup(cache, bo_in->gem_handle) == bo_in);
    struct anv_cached_bo *bo = (struct anv_cached_bo *)bo_in;
+
+   /* This BO must have been flagged external in order for us to be able
+    * to export it.  This is done based on external options passed into
+    * anv_AllocateMemory.
+    */
+   assert(bo->bo.flags & ANV_BO_EXTERNAL);
 
    int fd = anv_gem_handle_to_fd(device, bo->bo.gem_handle);
    if (fd < 0)

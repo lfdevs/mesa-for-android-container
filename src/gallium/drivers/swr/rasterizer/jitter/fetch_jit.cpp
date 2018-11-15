@@ -294,7 +294,6 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
     optPasses.add(createCFGSimplificationPass());
     optPasses.add(createEarlyCSEPass());
     optPasses.add(createInstructionCombiningPass());
-    optPasses.add(createInstructionSimplifierPass());
     optPasses.add(createConstantPropagationPass());
     optPasses.add(createSCCPPass());
     optPasses.add(createAggressiveDCEPass());

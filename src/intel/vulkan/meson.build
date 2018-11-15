@@ -102,7 +102,7 @@ foreach g : [['70', ['gen7_cmd_buffer.c']], ['75', ['gen7_cmd_buffer.c']],
       inc_vulkan_wsi,
     ],
     c_args : [
-      c_vis_args, no_override_init_args, '-msse2',
+      c_vis_args, no_override_init_args, c_sse2_args,
       '-DGEN_VERSIONx10=@0@'.format(_gen),
     ],
     dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
@@ -146,7 +146,7 @@ anv_deps = [
 anv_flags = [
   c_vis_args,
   no_override_init_args,
-  '-msse2',
+  c_sse2_args,
 ]
 
 if with_platform_x11

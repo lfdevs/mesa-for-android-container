@@ -751,42 +751,39 @@ static void si_disk_cache_create(struct si_screen *sscreen)
 	if (sscreen->debug_flags & DBG_ALL_SHADERS)
 		return;
 
-	uint32_t mesa_timestamp;
-	if (disk_cache_get_function_timestamp(si_disk_cache_create,
-					      &mesa_timestamp)) {
-		char *timestamp_str;
-		int res = -1;
-		uint32_t llvm_timestamp;
+	struct mesa_sha1 ctx;
+	unsigned char sha1[20];
+	char cache_id[20 * 2 + 1];
 
-		if (disk_cache_get_function_timestamp(LLVMInitializeAMDGPUTargetInfo,
-						      &llvm_timestamp)) {
-			res = asprintf(&timestamp_str, "%u_%u",
-				       mesa_timestamp, llvm_timestamp);
-		}
+	_mesa_sha1_init(&ctx);
 
-		if (res != -1) {
-			/* These flags affect shader compilation. */
-			#define ALL_FLAGS (DBG(FS_CORRECT_DERIVS_AFTER_KILL) | \
-					   DBG(SI_SCHED) | \
-					   DBG(GISEL) | \
-					   DBG(UNSAFE_MATH) | \
-					   DBG(NIR))
-			uint64_t shader_debug_flags = sscreen->debug_flags &
-						      ALL_FLAGS;
+	if (!disk_cache_get_function_identifier(si_disk_cache_create, &ctx) ||
+	    !disk_cache_get_function_identifier(LLVMInitializeAMDGPUTargetInfo,
+						&ctx))
+		return;
 
-			/* Add the high bits of 32-bit addresses, which affects
-			 * how 32-bit addresses are expanded to 64 bits.
-			 */
-			STATIC_ASSERT(ALL_FLAGS <= UINT_MAX);
-			shader_debug_flags |= (uint64_t)sscreen->info.address32_hi << 32;
+	_mesa_sha1_final(&ctx, sha1);
+	disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 
-			sscreen->disk_shader_cache =
-				disk_cache_create(si_get_family_name(sscreen),
-						  timestamp_str,
-						  shader_debug_flags);
-			free(timestamp_str);
-		}
-	}
+	/* These flags affect shader compilation. */
+	#define ALL_FLAGS (DBG(FS_CORRECT_DERIVS_AFTER_KILL) |	\
+			   DBG(SI_SCHED) |			\
+			   DBG(GISEL) |				\
+			   DBG(UNSAFE_MATH) |			\
+			   DBG(NIR))
+	uint64_t shader_debug_flags = sscreen->debug_flags &
+		ALL_FLAGS;
+
+	/* Add the high bits of 32-bit addresses, which affects
+	 * how 32-bit addresses are expanded to 64 bits.
+	 */
+	STATIC_ASSERT(ALL_FLAGS <= UINT_MAX);
+	shader_debug_flags |= (uint64_t)sscreen->info.address32_hi << 32;
+
+	sscreen->disk_shader_cache =
+		disk_cache_create(si_get_family_name(sscreen),
+				  cache_id,
+				  shader_debug_flags);
 }
 
 struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws,

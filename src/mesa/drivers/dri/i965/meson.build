@@ -142,7 +142,7 @@ foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
     ['genX_blorp_exec.c', 'genX_state_upload.c', gen_xml_pack],
     include_directories : [inc_common, inc_intel, inc_dri_common],
     c_args : [
-      c_vis_args, no_override_init_args, '-msse2',
+      c_vis_args, no_override_init_args, c_sse2_args,
       '-DGEN_VERSIONx10=@0@'.format(v),
     ],
     dependencies : [dep_libdrm, idep_nir_headers],
@@ -183,8 +183,8 @@ libi965 = static_library(
   include_directories : [
     inc_common, inc_intel, inc_dri_common, inc_util, inc_drm_uapi,
   ],
-  c_args : [c_vis_args, no_override_init_args, '-msse2'],
-  cpp_args : [cpp_vis_args, '-msse2'],
+  c_args : [c_vis_args, no_override_init_args, c_sse2_args],
+  cpp_args : [cpp_vis_args, c_sse2_args],
   link_with : [
     i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
     libblorp,

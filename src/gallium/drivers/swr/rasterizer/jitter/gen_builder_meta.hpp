@@ -195,17 +195,6 @@ Value* VPTESTZ(Value* a, Value* b, const llvm::Twine& name = "")
     return CALL(pFunc, std::initializer_list<Value*>{a, b}, name);
 }
 
-Value* VFMADDPS(Value* a, Value* b, Value* c, const llvm::Twine& name = "")
-{
-    SmallVector<Type*, 3> argTypes;
-    argTypes.push_back(a->getType());
-    argTypes.push_back(b->getType());
-    argTypes.push_back(c->getType());
-    FunctionType* pFuncTy = FunctionType::get(a->getType(), argTypes, false);
-    Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("meta.intrinsic.VFMADDPS", pFuncTy));
-    return CALL(pFunc, std::initializer_list<Value*>{a, b, c}, name);
-}
-
 Value* VPHADDD(Value* a, Value* b, const llvm::Twine& name = "")
 {
     SmallVector<Type*, 2> argTypes;

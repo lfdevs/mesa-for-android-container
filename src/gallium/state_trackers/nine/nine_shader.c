@@ -483,7 +483,7 @@ struct shader_translator
         struct ureg_dst a0;
         struct ureg_dst tS[8]; /* texture stage registers */
         struct ureg_dst tdst; /* scratch dst if we need extra modifiers */
-        struct ureg_dst t[5]; /* scratch TEMPs */
+        struct ureg_dst t[8]; /* scratch TEMPs */
         struct ureg_src vC[2]; /* PS color in */
         struct ureg_src vT[8]; /* PS texcoord in */
         struct ureg_dst rL[NINE_MAX_LOOP_DEPTH]; /* loop ctr */
@@ -2273,6 +2273,18 @@ DECL_SPECIAL(POW)
     return D3D_OK;
 }
 
+DECL_SPECIAL(RCP)
+{
+    struct ureg_program *ureg = tx->ureg;
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
+    struct ureg_dst tmp = tx_scratch(tx);
+    ureg_RCP(ureg, tmp, src);
+    ureg_MIN(ureg, tmp, ureg_imm1f(ureg, FLT_MAX), ureg_src(tmp));
+    ureg_MAX(ureg, dst, ureg_imm1f(ureg, -FLT_MAX), ureg_src(tmp));
+    return D3D_OK;
+}
+
 DECL_SPECIAL(RSQ)
 {
     struct ureg_program *ureg = tx->ureg;
@@ -2909,7 +2921,7 @@ static const struct sm1_op_info inst_table[] =
     _OPI(SUB, NOP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, SPECIAL(SUB)), /* 3 */
     _OPI(MAD, MAD, V(0,0), V(3,0), V(0,0), V(3,0), 1, 3, NULL), /* 4 */
     _OPI(MUL, MUL, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 5 */
-    _OPI(RCP, RCP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, NULL), /* 6 */
+    _OPI(RCP, RCP, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(RCP)), /* 6 */
     _OPI(RSQ, RSQ, V(0,0), V(3,0), V(0,0), V(3,0), 1, 1, SPECIAL(RSQ)), /* 7 */
     _OPI(DP3, DP3, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 8 */
     _OPI(DP4, DP4, V(0,0), V(3,0), V(0,0), V(3,0), 1, 2, NULL), /* 9 */

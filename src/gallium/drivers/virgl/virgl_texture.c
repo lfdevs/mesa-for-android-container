@@ -177,6 +177,8 @@ static void *virgl_texture_transfer_map(struct pipe_context *ctx,
       /* we want to do a resolve blit into the temporary */
       hw_res = trans->resolve_tmp->hw_res;
       offset = 0;
+      trans->base.stride = ((struct virgl_texture*)trans->resolve_tmp)->stride[level];
+      trans->base.layer_stride = trans->base.stride * nblocksy;
    } else {
       offset = vrend_get_tex_image_offset(vtex, level, box->z);
 

@@ -934,6 +934,14 @@ void anv_GetPhysicalDeviceFeatures2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT: {
+         VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT *features =
+            (VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT *)ext;
+         features->vertexAttributeInstanceRateDivisor = VK_TRUE;
+         features->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
+         break;
+      }
+
       default:
          anv_debug_ignored_stype(ext->sType);
          break;
@@ -1172,6 +1180,13 @@ void anv_GetPhysicalDeviceProperties2(
             (VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT *)ext;
          /* We have to restrict this a bit for multiview */
          props->maxVertexAttribDivisor = UINT32_MAX / 16;
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES: {
+         VkPhysicalDeviceProtectedMemoryProperties *props =
+            (VkPhysicalDeviceProtectedMemoryProperties *)ext;
+         props->protectedNoFault = false;
          break;
       }
 
@@ -2201,8 +2216,8 @@ VkResult anv_AllocateMemory(
              fd_info->handleType ==
                VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT);
 
-      result = anv_bo_cache_import(device, &device->bo_cache,
-                                   fd_info->fd, bo_flags, &mem->bo);
+      result = anv_bo_cache_import(device, &device->bo_cache, fd_info->fd,
+                                   bo_flags | ANV_BO_EXTERNAL, &mem->bo);
       if (result != VK_SUCCESS)
          goto fail;
 
@@ -2239,6 +2254,11 @@ VkResult anv_AllocateMemory(
        */
       close(fd_info->fd);
    } else {
+      const VkExportMemoryAllocateInfoKHR *fd_info =
+         vk_find_struct_const(pAllocateInfo->pNext, EXPORT_MEMORY_ALLOCATE_INFO_KHR);
+      if (fd_info && fd_info->handleTypes)
+         bo_flags |= ANV_BO_EXTERNAL;
+
       result = anv_bo_cache_alloc(device, &device->bo_cache,
                                   pAllocateInfo->allocationSize, bo_flags,
                                   &mem->bo);

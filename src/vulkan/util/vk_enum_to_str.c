@@ -268,7 +268,7 @@ vk_ColorSpaceKHR_to_str(VkColorSpaceKHR input)
 {
     switch(input) {
         case 0:
-            return "VK_COLOR_SPACE_SRGB_NONLINEAR_KHR";
+            return "VK_COLORSPACE_SRGB_NONLINEAR_KHR";
         case 1000104001:
             return "VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT";
         case 1000104002:
@@ -456,7 +456,7 @@ vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input)
         case 27:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT";
         case 28:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_EXT";
         case 29:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT";
         case 30:
@@ -466,7 +466,7 @@ vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input)
         case 32:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NVX_EXT";
         case 33:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT";
         case 1000085000:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT";
         case 1000156000:
@@ -502,6 +502,8 @@ vk_DescriptorType_to_str(VkDescriptorType input)
             return "VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC";
         case 10:
             return "VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT";
+        case 1000138000:
+            return "VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1866,7 +1868,7 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000009000:
             return "VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR";
         case 1000011000:
-            return "VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT";
+            return "VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT";
         case 1000018000:
             return "VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD";
         case 1000022000:
@@ -1949,6 +1951,10 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_VI_SURFACE_CREATE_INFO_NN";
         case 1000063000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES";
+        case 1000067000:
+            return "VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT";
+        case 1000067001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ASTC_DECODE_FEATURES_EXT";
         case 1000070000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES";
         case 1000070001:
@@ -2032,7 +2038,7 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000087000:
             return "VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_W_SCALING_STATE_CREATE_INFO_NV";
         case 1000090000:
-            return "VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT";
+            return "VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES2_EXT";
         case 1000091000:
             return "VK_STRUCTURE_TYPE_DISPLAY_POWER_INFO_EXT";
         case 1000091001:
@@ -2151,6 +2157,14 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT";
         case 1000130001:
             return "VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT";
+        case 1000138000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES_EXT";
+        case 1000138001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES_EXT";
+        case 1000138002:
+            return "VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT";
+        case 1000138003:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_INLINE_UNIFORM_BLOCK_CREATE_INFO_EXT";
         case 1000143000:
             return "VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT";
         case 1000143001:
@@ -2241,6 +2255,14 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT";
         case 1000190001:
             return "VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT";
+        case 1000190002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT";
+        case 1000206000:
+            return "VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV";
+        case 1000206001:
+            return "VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV";
+        case 1000211000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR";
     default:
         unreachable("Undefined enum value.");
     }

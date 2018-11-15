@@ -1732,6 +1732,45 @@ NVC0LoweringPass::loadSuInfo32(Value *ptr, int slot, uint32_t off, bool bindless
                         prog->driver->io.suInfoBase);
 }
 
+Value *
+NVC0LoweringPass::loadMsAdjInfo32(TexInstruction::Target target, uint32_t index, int slot, Value *ind, bool bindless)
+{
+   if (!bindless || targ->getChipset() < NVISA_GM107_CHIPSET)
+      return loadSuInfo32(ind, slot, NVC0_SU_INFO_MS(index), bindless);
+
+   assert(bindless);
+
+   Value *samples = bld.getSSA();
+   // this shouldn't be lowered because it's being inserted before the current instruction
+   TexInstruction *tex = new_TexInstruction(func, OP_TXQ);
+   tex->tex.target = target;
+   tex->tex.query = TXQ_TYPE;
+   tex->tex.mask = 0x4;
+   tex->tex.r = 0xff;
+   tex->tex.s = 0x1f;
+   tex->tex.rIndirectSrc = 0;
+   tex->setDef(0, samples);
+   tex->setSrc(0, ind);
+   tex->setSrc(1, bld.loadImm(NULL, 0));
+   bld.insert(tex);
+
+   // doesn't work with sample counts other than 1/2/4/8 but they aren't supported
+   switch (index) {
+   case 0: {
+      Value *tmp = bld.mkOp2v(OP_ADD, TYPE_U32, bld.getSSA(), samples, bld.mkImm(2));
+      return bld.mkOp2v(OP_SHR, TYPE_U32, bld.getSSA(), tmp, bld.mkImm(2));
+   }
+   case 1: {
+      Value *tmp = bld.mkCmp(OP_SET, CC_GT, TYPE_U32, bld.getSSA(), TYPE_U32, samples, bld.mkImm(2))->getDef(0);
+      return bld.mkOp2v(OP_AND, TYPE_U32, bld.getSSA(), tmp, bld.mkImm(1));
+   }
+   default: {
+      assert(false);
+      return NULL;
+   }
+   }
+}
+
 static inline uint16_t getSuClampSubOp(const TexInstruction *su, int c)
 {
    switch (su->tex.target.getEnum()) {
@@ -1817,8 +1856,8 @@ NVC0LoweringPass::adjustCoordinatesMS(TexInstruction *tex)
    Value *tx = bld.getSSA(), *ty = bld.getSSA(), *ts = bld.getSSA();
    Value *ind = tex->getIndirectR();
 
-   Value *ms_x = loadSuInfo32(ind, slot, NVC0_SU_INFO_MS(0), tex->tex.bindless);
-   Value *ms_y = loadSuInfo32(ind, slot, NVC0_SU_INFO_MS(1), tex->tex.bindless);
+   Value *ms_x = loadMsAdjInfo32(tex->tex.target, 0, slot, ind, tex->tex.bindless);
+   Value *ms_y = loadMsAdjInfo32(tex->tex.target, 1, slot, ind, tex->tex.bindless);
 
    bld.mkOp2(OP_SHL, TYPE_U32, tx, x, ms_x);
    bld.mkOp2(OP_SHL, TYPE_U32, ty, y, ms_y);

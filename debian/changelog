@@ -1,3 +1,48 @@
+mesa (18.2.4-1) experimental; urgency=medium
+
+  [ Andreas Boll ]
+  * New upstream release.
+    - vulkan: Disable randr lease for libxcb < 1.13 (Closes: #908827,
+    #909720).
+  * Drop version from build-deps libxcb-dri3-dev and libxcb-present-dev.
+  * Bump libdrm-dev dependency to 2.4.92.
+  * Enable building etnaviv and imx on arm64 (Closes: #907136).
+
+  [ Timo Aaltonen ]
+  * copyright: Rewrite for format 1.0.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 15 Nov 2018 11:20:08 +0200
+
+mesa (18.2.1-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control: Add libd3dadapter9-mesa to -dev depends.
+  * control: Fix libd3dadapter9-mesa-dev section, and drop
+    shlibs:Depends.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 24 Sep 2018 15:28:35 +0300
+
+mesa (18.2.0-3) experimental; urgency=medium
+
+  * control, rules: Nine needs llvmpipe, and also makes sense to build it
+    only on archs that have wine.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 19 Sep 2018 13:41:29 +0300
+
+mesa (18.2.0-2) experimental; urgency=medium
+
+  * control: Bump build-dep on libxcb-dri3-dev and libxcb-present-dev to
+    1.13. (Closes: #908827)
+  * control: Build-depend on x11proto-dev, modify libegl1-mesa-dev and
+    libgl1-mesa-dev depends.
+  * Migrate to llvm/clang-7.
+  * Enable gallium D3D state tracker, thanks Antonio Russo and Andrew
+    Cook! (Closes: #863972)
+  * rules: Enable v3d on arm. Thanks, Fabio Pedretti!
+  * rules: Drop enabling texture float, it's enabled by default now.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 18 Sep 2018 14:49:24 +0300
+
 mesa (18.2.0-1) experimental; urgency=medium
 
   * New upstream release.
@@ -11,6 +56,15 @@ mesa (18.2.0~rc4-1) experimental; urgency=medium
     depends.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Wed, 22 Aug 2018 19:59:55 +0300
+
+mesa (18.1.9-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Cherry-pick 2f1ad72ac17 (clover: Add explicit virtual destructor to
+    argument class) from upstream master branch. Fixes memory leaks with
+    some OpenCL apps (Closes: #909741). Thanks, David Kuehling!
+
+ -- Andreas Boll <aboll@debian.org>  Wed, 10 Oct 2018 16:54:18 +0200
 
 mesa (18.1.8-1) unstable; urgency=medium
 

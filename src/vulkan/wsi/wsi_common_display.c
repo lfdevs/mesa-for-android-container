@@ -1197,8 +1197,7 @@ wsi_display_wait_for_event(struct wsi_display *wsi,
 
 static VkResult
 wsi_display_acquire_next_image(struct wsi_swapchain *drv_chain,
-                               uint64_t timeout,
-                               VkSemaphore semaphore,
+                               const VkAcquireNextImageInfoKHR *info,
                                uint32_t *image_index)
 {
    struct wsi_display_swapchain *chain =
@@ -1211,6 +1210,7 @@ wsi_display_acquire_next_image(struct wsi_swapchain *drv_chain,
    if (chain->status != VK_SUCCESS)
       return chain->status;
 
+   uint64_t timeout = info->timeout;
    if (timeout != 0 && timeout != UINT64_MAX)
       timeout = wsi_rel_to_abs_time(timeout);
 
@@ -1712,6 +1712,10 @@ wsi_display_surface_create_swapchain(
 
    VkResult result = wsi_swapchain_init(wsi_device, &chain->base, device,
                                         create_info, allocator);
+   if (result != VK_SUCCESS) {
+      vk_free(allocator, chain);
+      return result;
+   }
 
    chain->base.destroy = wsi_display_swapchain_destroy;
    chain->base.get_wsi_image = wsi_display_get_wsi_image;
@@ -2304,6 +2308,7 @@ wsi_acquire_xlib_display(VkPhysicalDevice physical_device,
    if (!crtc)
       return VK_ERROR_INITIALIZATION_FAILED;
 
+#ifdef HAVE_DRI3_MODIFIERS
    xcb_randr_lease_t lease = xcb_generate_id(connection);
    xcb_randr_create_lease_cookie_t cl_c =
       xcb_randr_create_lease(connection, root, lease, 1, 1,
@@ -2324,6 +2329,7 @@ wsi_acquire_xlib_display(VkPhysicalDevice physical_device,
       return VK_ERROR_INITIALIZATION_FAILED;
 
    wsi->fd = fd;
+#endif
 
    return VK_SUCCESS;
 }

@@ -308,8 +308,10 @@ dri_fill_st_visual(struct st_visual *stvis,
 {
    memset(stvis, 0, sizeof(*stvis));
 
-   if (!mode)
+   if (!mode) {
+      stvis->no_config = true;
       return;
+   }
 
    /* Deduce the color format. */
    switch (mode->redMask) {

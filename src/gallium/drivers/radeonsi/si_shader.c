@@ -4388,9 +4388,12 @@ static void si_llvm_emit_vertex(struct ac_shader_abi *abi,
 	gs_next_vertex = LLVMBuildAdd(ctx->ac.builder, gs_next_vertex, ctx->i32_1, "");
 	LLVMBuildStore(ctx->ac.builder, gs_next_vertex, ctx->gs_next_vertex[stream]);
 
-	/* Signal vertex emission */
-	ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_OP_EMIT | AC_SENDMSG_GS | (stream << 8),
-			 si_get_gs_wave_id(ctx));
+	/* Signal vertex emission if vertex data was written. */
+	if (offset) {
+		ac_build_sendmsg(&ctx->ac, AC_SENDMSG_GS_OP_EMIT | AC_SENDMSG_GS | (stream << 8),
+				 si_get_gs_wave_id(ctx));
+	}
+
 	if (!use_kill)
 		lp_build_endif(&if_state);
 }

@@ -8,9 +8,8 @@ Build-Depends:
  debhelper (>= 11),
  quilt (>= 0.63-8.2~),
  pkg-config,
- libdrm-dev (>= 2.4.91) [!hurd-any],
+ libdrm-dev (>= 2.4.92) [!hurd-any],
  libx11-dev,
- x11proto-gl-dev (>= 1.4.14),
  libxxf86vm-dev,
  libexpat1-dev,
  libsensors4-dev [!hurd-any],
@@ -23,9 +22,7 @@ Build-Depends:
  autoconf,
  automake,
  libtool,
- x11proto-dri2-dev (>= 2.6),
- x11proto-dri3-dev (>= 1.0),
- x11proto-present-dev (>= 1.0),
+ x11proto-dev,
  linux-libc-dev (>= 2.6.31) [linux-any],
  libx11-xcb-dev,
  libxcb-dri2-0-dev (>= 1.8),
@@ -41,12 +38,12 @@ Build-Depends:
  python-mako,
  flex,
  bison,
- llvm-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ llvm-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  libwayland-dev (>= 1.15.0) [linux-any],
  libwayland-egl-backend-dev (>= 1.15.0) [linux-any],
- libclang-6.0-dev (>= 1:6.0~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libclc-dev (>= 0.2.0+git20180312-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclang-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclc-dev (>= 0.2.0+git20180917-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
  wayland-protocols (>= 1.9),
  zlib1g-dev,
  libglvnd-core-dev,
@@ -83,6 +80,36 @@ Description: X acceleration library -- development files
  .
  This package provides the development environment for compiling programs
  against the xatracker library.
+
+Package: libd3dadapter9-mesa
+Section: libs
+Architecture: amd64 arm64 armel armhf i386 kfreebsd-i386 powerpc
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ libudev1 [linux-any],
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: state-tracker for Direct3D9
+ This package contains a Gallium3D state tracker that implements the Direct3D9
+ API.  Combined with the gallium-nine branch of Wine, programs using D3D9 can
+ achieve native (or better) graphics performance.
+
+Package: libd3dadapter9-mesa-dev
+Section: libdevel
+Architecture: amd64 arm64 armel armhf i386 kfreebsd-i386 powerpc
+Depends:
+ libd3dadapter9-mesa (= ${binary:Version}),
+ libudev1 [linux-any],
+ ${misc:Depends},
+Pre-Depends: ${misc:Pre-Depends}
+Multi-Arch: same
+Description: state-tracker for Direct3D9 -- development files
+ This package contains a Gallium3D state tracker that implements the Direct3D9
+ API.  Combined with the gallium-nine branch of Wine, programs using D3D9 can
+ achieve native (or better) graphics performance.
+ .
+ Development files
 
 Package: libgbm1
 Section: libs
@@ -146,9 +173,7 @@ Section: libdevel
 Architecture: any
 Depends:
  libglvnd-dev,
- libdrm-dev (>= 2.4.91) [!hurd-any],
- x11proto-dri2-dev (>= 2.6),
- x11proto-gl-dev (>= 1.4.14),
+ libdrm-dev (>= 2.4.92) [!hurd-any],
  libx11-dev,
  libxext-dev,
  libxxf86vm-dev,
@@ -162,6 +187,7 @@ Depends:
  libxshmfence-dev,
  libx11-xcb-dev,
  libwayland-dev (>= 1.15.0) [linux-any],
+ x11proto-dev,
  ${misc:Depends},
 Multi-Arch: same
 Description: free implementation of the EGL API -- development files
@@ -293,7 +319,7 @@ Architecture: any
 Depends:
  mesa-common-dev (= ${binary:Version}),
  libglvnd-dev,
- libdrm-dev (>= 2.4.91) [!hurd-any],
+ libdrm-dev (>= 2.4.92) [!hurd-any],
  libx11-dev,
  libx11-xcb-dev,
  libxcb-dri3-dev,
@@ -306,8 +332,7 @@ Depends:
  libxext-dev,
  libxfixes-dev,
  libxxf86vm-dev,
- x11proto-dri2-dev (>= 2.6),
- x11proto-gl-dev (>= 1.4.14),
+ x11proto-dev,
  ${misc:Depends},
 Conflicts: libgl-dev
 Replaces: libgl-dev
@@ -329,7 +354,7 @@ Section: libdevel
 Architecture: any
 Depends:
  libx11-dev,
- libdrm-dev (>= 2.4.91) [!hurd-any],
+ libdrm-dev (>= 2.4.92) [!hurd-any],
  ${misc:Depends},
 Multi-Arch: same
 Description: Developer documentation for Mesa

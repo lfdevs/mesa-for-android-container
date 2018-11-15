@@ -45,22 +45,29 @@
 #include "sid.h"
 #include "gfx9d.h"
 #include "addrlib/gfx9/chip/gfx9_enum.h"
+#include "util/build_id.h"
 #include "util/debug.h"
+#include "util/mesa-sha1.h"
 
 static int
 radv_device_get_cache_uuid(enum radeon_family family, void *uuid)
 {
-	uint32_t mesa_timestamp, llvm_timestamp;
-	uint16_t f = family;
+	struct mesa_sha1 ctx;
+	unsigned char sha1[20];
+	unsigned ptr_size = sizeof(void*);
+
 	memset(uuid, 0, VK_UUID_SIZE);
-	if (!disk_cache_get_function_timestamp(radv_device_get_cache_uuid, &mesa_timestamp) ||
-	    !disk_cache_get_function_timestamp(LLVMInitializeAMDGPUTargetInfo, &llvm_timestamp))
+	_mesa_sha1_init(&ctx);
+
+	if (!disk_cache_get_function_identifier(radv_device_get_cache_uuid, &ctx) ||
+	    !disk_cache_get_function_identifier(LLVMInitializeAMDGPUTargetInfo, &ctx))
 		return -1;
 
-	memcpy(uuid, &mesa_timestamp, 4);
-	memcpy((char*)uuid + 4, &llvm_timestamp, 4);
-	memcpy((char*)uuid + 8, &f, 2);
-	snprintf((char*)uuid + 10, VK_UUID_SIZE - 10, "radv%zd", sizeof(void *));
+	_mesa_sha1_update(&ctx, &family, sizeof(family));
+	_mesa_sha1_update(&ctx, &ptr_size, sizeof(ptr_size));
+	_mesa_sha1_final(&ctx, sha1);
+
+	memcpy(uuid, sha1, VK_UUID_SIZE);
 	return 0;
 }
 
@@ -459,7 +466,7 @@ static const struct debug_control radv_perftest_options[] = {
 const char *
 radv_get_perftest_option_name(int id)
 {
-	assert(id < ARRAY_SIZE(radv_debug_options) - 1);
+	assert(id < ARRAY_SIZE(radv_perftest_options) - 1);
 	return radv_perftest_options[id].string;
 }
 
@@ -819,6 +826,13 @@ void radv_GetPhysicalDeviceFeatures2(
 				(VkPhysicalDeviceConditionalRenderingFeaturesEXT*)ext;
 			features->conditionalRendering = true;
 			features->inheritedConditionalRendering = false;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT: {
+			VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT *features =
+				(VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT *)ext;
+			features->vertexAttributeInstanceRateDivisor = VK_TRUE;
+			features->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
 			break;
 		}
 		default:

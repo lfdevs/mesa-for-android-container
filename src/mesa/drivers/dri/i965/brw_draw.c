@@ -378,6 +378,68 @@ intel_disable_rb_aux_buffer(struct brw_context *brw,
    return found;
 }
 
+/** Implement the ASTC 5x5 sampler workaround
+ *
+ * Gen9 sampling hardware has a bug where an ASTC 5x5 compressed surface
+ * cannot live in the sampler cache at the same time as an aux compressed
+ * surface.  In order to work around the bug we have to stall rendering with a
+ * CS and pixel scoreboard stall (implicit in the CS stall) and invalidate the
+ * texture cache whenever one of ASTC 5x5 or aux compressed may be in the
+ * sampler cache and we're about to render with something which samples from
+ * the other.
+ *
+ * In the case of a single shader which textures from both ASTC 5x5 and
+ * a texture which is CCS or HiZ compressed, we have to resolve the aux
+ * compressed texture prior to rendering.  This second part is handled in
+ * brw_predraw_resolve_inputs() below.
+ *
+ * We have observed this issue to affect CCS and HiZ sampling but whether or
+ * not it also affects MCS is unknown.  Because MCS has no concept of a
+ * resolve (and doing one would be stupid expensive), we choose to simply
+ * ignore the possibility and hope for the best.
+ */
+static void
+gen9_apply_astc5x5_wa_flush(struct brw_context *brw,
+                            enum gen9_astc5x5_wa_tex_type curr_mask)
+{
+   assert(brw->screen->devinfo.gen == 9);
+
+   if (((brw->gen9_astc5x5_wa_tex_mask & GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5) &&
+        (curr_mask & GEN9_ASTC5X5_WA_TEX_TYPE_AUX)) ||
+       ((brw->gen9_astc5x5_wa_tex_mask & GEN9_ASTC5X5_WA_TEX_TYPE_AUX) &&
+        (curr_mask & GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5))) {
+      brw_emit_pipe_control_flush(brw, PIPE_CONTROL_CS_STALL);
+      brw_emit_pipe_control_flush(brw, PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
+   }
+
+   brw->gen9_astc5x5_wa_tex_mask = curr_mask;
+}
+
+static enum gen9_astc5x5_wa_tex_type
+gen9_astc5x5_wa_bits(mesa_format format, enum isl_aux_usage aux_usage)
+{
+   if (aux_usage != ISL_AUX_USAGE_NONE &&
+       aux_usage != ISL_AUX_USAGE_MCS)
+      return GEN9_ASTC5X5_WA_TEX_TYPE_AUX;
+
+   if (format == MESA_FORMAT_RGBA_ASTC_5x5 ||
+       format == MESA_FORMAT_SRGB8_ALPHA8_ASTC_5x5)
+      return GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5;
+
+   return 0;
+}
+
+/* Helper for the gen9 ASTC 5x5 workaround.  This version exists for BLORP's
+ * use-cases where only a single texture is bound.
+ */
+void
+gen9_apply_single_tex_astc5x5_wa(struct brw_context *brw,
+                                 mesa_format format,
+                                 enum isl_aux_usage aux_usage)
+{
+   gen9_apply_astc5x5_wa_flush(brw, gen9_astc5x5_wa_bits(format, aux_usage));
+}
+
 static void
 mark_textures_used_for_txf(BITSET_WORD *used_for_txf,
                            const struct gl_program *prog)
@@ -417,8 +479,30 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
       mark_textures_used_for_txf(used_for_txf, ctx->ComputeProgram._Current);
    }
 
-   /* Resolve depth buffer and render cache of each enabled texture. */
    int maxEnabledUnit = ctx->Texture._MaxEnabledTexImageUnit;
+
+   enum gen9_astc5x5_wa_tex_type astc5x5_wa_bits = 0;
+   if (brw->screen->devinfo.gen == 9) {
+      /* In order to properly implement the ASTC 5x5 workaround for an
+       * arbitrary draw or dispatch call, we have to walk the entire list of
+       * textures looking for ASTC 5x5.  If there is any ASTC 5x5 in this draw
+       * call, all aux compressed textures must be resolved and have aux
+       * compression disabled while sampling.
+       */
+      for (int i = 0; i <= maxEnabledUnit; i++) {
+         if (!ctx->Texture.Unit[i]._Current)
+            continue;
+         tex_obj = intel_texture_object(ctx->Texture.Unit[i]._Current);
+         if (!tex_obj || !tex_obj->mt)
+            continue;
+
+         astc5x5_wa_bits |= gen9_astc5x5_wa_bits(tex_obj->_Format,
+                                                 tex_obj->mt->aux_usage);
+      }
+      gen9_apply_astc5x5_wa_flush(brw, astc5x5_wa_bits);
+   }
+
+   /* Resolve depth buffer and render cache of each enabled texture. */
    for (int i = 0; i <= maxEnabledUnit; i++) {
       if (!ctx->Texture.Unit[i]._Current)
 	 continue;
@@ -452,7 +536,8 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
 
       intel_miptree_prepare_texture(brw, tex_obj->mt, view_format,
                                     min_level, num_levels,
-                                    min_layer, num_layers);
+                                    min_layer, num_layers,
+                                    astc5x5_wa_bits);
 
       /* If any programs are using it with texelFetch, we may need to also do
        * a prepare with an sRGB format to ensure texelFetch works "properly".
@@ -463,7 +548,8 @@ brw_predraw_resolve_inputs(struct brw_context *brw, bool rendering,
          if (txf_format != view_format) {
             intel_miptree_prepare_texture(brw, tex_obj->mt, txf_format,
                                           min_level, num_levels,
-                                          min_layer, num_layers);
+                                          min_layer, num_layers,
+                                          astc5x5_wa_bits);
          }
       }
 
@@ -535,7 +621,8 @@ brw_predraw_resolve_framebuffer(struct brw_context *brw,
          if (irb) {
             intel_miptree_prepare_texture(brw, irb->mt, irb->mt->surf.format,
                                           irb->mt_level, 1,
-                                          irb->mt_layer, irb->layer_count);
+                                          irb->mt_layer, irb->layer_count,
+                                          brw->gen9_astc5x5_wa_tex_mask);
          }
       }
    }

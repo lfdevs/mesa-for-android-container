@@ -306,7 +306,6 @@ struct StreamOutJit : public Builder
         passes.add(createCFGSimplificationPass());
         passes.add(createEarlyCSEPass());
         passes.add(createInstructionCombiningPass());
-        passes.add(createInstructionSimplifierPass());
         passes.add(createConstantPropagationPass());
         passes.add(createSCCPPass());
         passes.add(createAggressiveDCEPass());

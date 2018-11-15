@@ -297,7 +297,10 @@ endif
 
 _egl = get_option('egl')
 if _egl == 'auto'
-  with_egl = with_dri and with_shared_glapi and with_platforms
+  with_egl = (
+    not ['darwin', 'windows'].contains(host_machine.system()) and
+    with_dri and with_shared_glapi and with_platforms
+  )
 elif _egl == 'true'
   if not with_dri
     error('EGL requires dri')
@@ -307,6 +310,8 @@ elif _egl == 'true'
     error('No platforms specified, consider -Dplatforms=drm,x11 at least')
   elif not ['disabled', 'dri'].contains(with_glx)
     error('EGL requires dri, but a GLX is being built without dri')
+  elif ['darwin', 'windows'].contains(host_machine.system())
+    error('EGL is not available on Windows or MacOS')
   endif
   with_egl = true
 else
@@ -1056,14 +1061,6 @@ dep_thread = dependency('threads')
 if dep_thread.found() and host_machine.system() != 'windows'
   pre_args += '-DHAVE_PTHREAD'
 endif
-if with_amd_vk or with_gallium_radeonsi or with_gallium_r600 or with_gallium_opencl
-  dep_elf = dependency('libelf', required : false)
-  if not dep_elf.found()
-    dep_elf = cc.find_library('elf')
-  endif
-else
-  dep_elf = null_dep
-endif
 dep_expat = dependency('expat')
 # this only exists on linux so either this is linux and it will be found, or
 # its not linux and and wont
@@ -1106,12 +1103,17 @@ endif
 
 # Loop over the enables versions and get the highest libdrm requirement for all
 # active drivers.
+_drm_blame = ''
 foreach d : _libdrm_checks
   ver = get_variable('_drm_@0@_ver'.format(d[0]))
   if d[1] and ver.version_compare('>' + _drm_ver)
     _drm_ver = ver
+    _drm_blame = d[0]
   endif
 endforeach
+if _drm_blame != ''
+  message('libdrm @0@ needed because @1@ has the highest requirement'.format(_drm_ver, _drm_blame))
+endif
 
 # Then get each libdrm module
 foreach d : _libdrm_checks
@@ -1213,6 +1215,16 @@ if with_llvm
   endif
 elif with_amd_vk or with_gallium_radeonsi or with_gallium_swr
   error('The following drivers require LLVM: Radv, RadeonSI, SWR. One of these is enabled, but LLVM is disabled.')
+endif
+
+if (with_amd_vk or with_gallium_radeonsi or with_gallium_opencl or
+    (with_gallium_r600 and with_llvm))
+  dep_elf = dependency('libelf', required : false)
+  if not dep_elf.found()
+    dep_elf = cc.find_library('elf')
+  endif
+else
+  dep_elf = null_dep
 endif
 
 dep_glvnd = null_dep

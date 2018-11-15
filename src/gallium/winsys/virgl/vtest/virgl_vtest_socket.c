@@ -243,8 +243,10 @@ int virgl_vtest_send_transfer_cmd(struct virgl_vtest_winsys *vws,
    vtest_hdr[VTEST_CMD_LEN] = VCMD_TRANSFER_HDR_SIZE;
    vtest_hdr[VTEST_CMD_ID] = vcmd;
 
+   /* The host expects the size in dwords so calculate the rounded up
+    * value here. */
    if (vcmd == VCMD_TRANSFER_PUT)
-      vtest_hdr[VTEST_CMD_LEN] += data_size + 3 / 4;
+      vtest_hdr[VTEST_CMD_LEN] += (data_size + 3) / 4;
 
    cmd[0] = handle;
    cmd[1] = level;

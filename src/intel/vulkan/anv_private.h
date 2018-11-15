@@ -555,6 +555,10 @@ anv_multialloc_alloc2(struct anv_multialloc *ma,
    return anv_multialloc_alloc(ma, alloc ? alloc : parent_alloc, scope);
 }
 
+/* Extra ANV-defined BO flags which won't be passed to the kernel */
+#define ANV_BO_EXTERNAL    (1ull << 31)
+#define ANV_BO_FLAG_MASK   (1ull << 31)
+
 struct anv_bo {
    uint32_t gem_handle;
 
@@ -1012,6 +1016,7 @@ struct anv_device {
     struct anv_scratch_pool                     scratch_pool;
 
     uint32_t                                    default_mocs;
+    uint32_t                                    external_mocs;
 
     pthread_mutex_t                             mutex;
     pthread_cond_t                              queue_submit;
@@ -1039,6 +1044,15 @@ anv_binding_table_pool_alloc(struct anv_device *device) {
 static inline void
 anv_binding_table_pool_free(struct anv_device *device, struct anv_state state) {
    anv_state_pool_free(anv_binding_table_pool(device), state);
+}
+
+static inline uint32_t
+anv_mocs_for_bo(const struct anv_device *device, const struct anv_bo *bo)
+{
+   if (bo->flags & ANV_BO_EXTERNAL)
+      return device->external_mocs;
+   else
+      return device->default_mocs;
 }
 
 static void inline
@@ -1322,6 +1336,12 @@ _anv_combine_address(struct anv_batch *batch, void *location,
       .AgeforQUADLRU = 0                                       \
    }
 
+#define GEN8_EXTERNAL_MOCS (struct GEN8_MEMORY_OBJECT_CONTROL_STATE) {     \
+      .MemoryTypeLLCeLLCCacheabilityControl = UCwithFenceifcoherentcycle,  \
+      .TargetCache = L3DefertoPATforLLCeLLCselection,                      \
+      .AgeforQUADLRU = 0                                                   \
+   }
+
 /* Skylake: MOCS is now an index into an array of 62 different caching
  * configurations programmed by the kernel.
  */
@@ -1331,9 +1351,9 @@ _anv_combine_address(struct anv_batch *batch, void *location,
       .IndextoMOCSTables                           = 2         \
    }
 
-#define GEN9_MOCS_PTE {                                 \
-      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */       \
-      .IndextoMOCSTables                           = 1  \
+#define GEN9_EXTERNAL_MOCS (struct GEN9_MEMORY_OBJECT_CONTROL_STATE) {  \
+      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */                       \
+      .IndextoMOCSTables                           = 1                  \
    }
 
 /* Cannonlake MOCS defines are duplicates of Skylake MOCS defines. */
@@ -1342,9 +1362,9 @@ _anv_combine_address(struct anv_batch *batch, void *location,
       .IndextoMOCSTables                           = 2         \
    }
 
-#define GEN10_MOCS_PTE {                                 \
-      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */       \
-      .IndextoMOCSTables                           = 1  \
+#define GEN10_EXTERNAL_MOCS (struct GEN10_MEMORY_OBJECT_CONTROL_STATE) {   \
+      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */                          \
+      .IndextoMOCSTables                           = 1                     \
    }
 
 /* Ice Lake MOCS defines are duplicates of Skylake MOCS defines. */
@@ -1353,9 +1373,9 @@ _anv_combine_address(struct anv_batch *batch, void *location,
       .IndextoMOCSTables                           = 2         \
    }
 
-#define GEN11_MOCS_PTE {                                 \
-      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */       \
-      .IndextoMOCSTables                           = 1  \
+#define GEN11_EXTERNAL_MOCS (struct GEN11_MEMORY_OBJECT_CONTROL_STATE) {   \
+      /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */                          \
+      .IndextoMOCSTables                           = 1                     \
    }
 
 struct anv_device_memory {

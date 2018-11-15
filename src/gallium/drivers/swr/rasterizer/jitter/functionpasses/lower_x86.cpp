@@ -76,7 +76,6 @@ namespace SwrJit
         {"meta.intrinsic.VCVTPS2PH", Intrinsic::x86_vcvtps2ph_256},
         {"meta.intrinsic.VPTESTC", Intrinsic::x86_avx_ptestc_256},
         {"meta.intrinsic.VPTESTZ", Intrinsic::x86_avx_ptestz_256},
-        {"meta.intrinsic.VFMADDPS", Intrinsic::x86_fma_vfmadd_ps_256},
         {"meta.intrinsic.VPHADDD", Intrinsic::x86_avx2_phadd_d},
         {"meta.intrinsic.PDEP32", Intrinsic::x86_bmi_pdep_32},
         {"meta.intrinsic.RDTSC", Intrinsic::x86_rdtsc},
