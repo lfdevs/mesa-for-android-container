@@ -115,7 +115,7 @@ clover_files = files(
 
 libclover = static_library(
   'clover',
-  clover_files,
+  [clover_files, sha1_h],
   include_directories : clover_incs,
   cpp_args : [clover_cpp_args, cpp_vis_args],
   link_with : [libcltgsi, libclllvm],

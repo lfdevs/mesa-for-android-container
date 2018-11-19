@@ -79,7 +79,7 @@ files_svga = files(
 
 libsvga = static_library(
   'svga',
-  files_svga,
+  [files_svga, sha1_h],
   c_args : [c_vis_args, c_msvc_compat_args],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux,

@@ -37,6 +37,7 @@
 #include "os/os_thread.h"
 #include "threadpool.h"
 
+/* POSIX thread function */
 static void *
 threadpool_worker(void *data)
 {
@@ -76,6 +77,15 @@ threadpool_worker(void *data)
     return NULL;
 }
 
+/* Windows thread function */
+static DWORD NINE_WINAPI
+wthreadpool_worker(void *data)
+{
+    threadpool_worker(data);
+
+    return 0;
+}
+
 struct threadpool *
 _mesa_threadpool_create(struct NineSwapChain9 *swapchain)
 {
@@ -87,7 +97,9 @@ _mesa_threadpool_create(struct NineSwapChain9 *swapchain)
     pthread_mutex_init(&pool->m, NULL);
     pthread_cond_init(&pool->new_work, NULL);
 
-    pool->wthread = NineSwapChain9_CreateThread(swapchain, threadpool_worker, pool);
+    /* This uses WINE's CreateThread, so the thread function needs to use
+     * the Windows ABI */
+    pool->wthread = NineSwapChain9_CreateThread(swapchain, wthreadpool_worker, pool);
     if (!pool->wthread) {
         /* using pthread as fallback */
         pthread_create(&pool->pthread, NULL, threadpool_worker, pool);

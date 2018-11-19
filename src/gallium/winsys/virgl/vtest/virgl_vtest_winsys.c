@@ -536,7 +536,7 @@ virgl_cs_create_fence(struct virgl_winsys *vws)
    res = virgl_vtest_winsys_resource_cache_create(vws,
                                                 PIPE_BUFFER,
                                                 PIPE_FORMAT_R8_UNORM,
-                                                PIPE_BIND_CUSTOM,
+                                                VIRGL_BIND_CUSTOM,
                                                 8, 1, 1, 0, 0, 0, 8);
 
    return (struct pipe_fence_handle *)res;

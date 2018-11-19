@@ -176,9 +176,12 @@ nir_remove_unused_varyings(nir_shader *producer, nir_shader *consumer)
 }
 
 static uint8_t
-get_interp_type(nir_variable *var, bool default_to_smooth_interp)
+get_interp_type(nir_variable *var, const struct glsl_type *type,
+                bool default_to_smooth_interp)
 {
-   if (var->data.interpolation != INTERP_MODE_NONE)
+   if (glsl_type_is_integer(type))
+      return INTERP_MODE_FLAT;
+   else if (var->data.interpolation != INTERP_MODE_NONE)
       return var->data.interpolation;
    else if (default_to_smooth_interp)
       return INTERP_MODE_SMOOTH;
@@ -233,7 +236,7 @@ get_slot_component_masks_and_interp_types(struct exec_list *var_list,
          unsigned comps_slot2 = 0;
          for (unsigned i = 0; i < slots; i++) {
             interp_type[location + i] =
-               get_interp_type(var, default_to_smooth_interp);
+               get_interp_type(var, type, default_to_smooth_interp);
             interp_loc[location + i] = get_interp_loc(var);
 
             if (dual_slot) {
@@ -405,7 +408,7 @@ compact_components(nir_shader *producer, nir_shader *consumer, uint8_t *comps,
             continue;
 
          bool found_new_offset = false;
-         uint8_t interp = get_interp_type(var, default_to_smooth_interp);
+         uint8_t interp = get_interp_type(var, type, default_to_smooth_interp);
          for (; cursor[interp] < 32; cursor[interp]++) {
             uint8_t cursor_used_comps = comps[cursor[interp]];
 

@@ -567,7 +567,7 @@ int bc_builder::build_fetch_gds(fetch_node *n) {
 	const fetch_op_info *fop = bc.op_ptr;
 	unsigned gds_op = (ctx.fetch_opcode(bc.op) >> 8) & 0x3f;
 	unsigned mem_op = 4;
-	assert(fop->flags && FF_GDS);
+	assert(fop->flags & FF_GDS);
 
 	if (bc.op == FETCH_OP_TF_WRITE) {
 		mem_op = 5;

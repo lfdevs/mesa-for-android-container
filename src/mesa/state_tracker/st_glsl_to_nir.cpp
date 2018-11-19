@@ -388,7 +388,7 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
          ~prev_stages & shader_program->data->linked_stages;
 
       nir->info.next_stage = stages_mask ?
-         (gl_shader_stage) ffs(stages_mask) : MESA_SHADER_FRAGMENT;
+         (gl_shader_stage) u_bit_scan(&stages_mask) : MESA_SHADER_FRAGMENT;
    } else {
       nir->info.next_stage = MESA_SHADER_FRAGMENT;
    }

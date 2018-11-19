@@ -1654,8 +1654,8 @@ swrast_update_buffers(struct dri2_egl_surface *dri2_surf)
    if (dri2_surf->back)
       return 0;
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
+   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
+       dri2_surf->base.Height != dri2_surf->wl_win->height) {
 
       dri2_wl_release_buffers(dri2_surf);
 

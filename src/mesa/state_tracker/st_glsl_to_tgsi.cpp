@@ -1227,6 +1227,10 @@ glsl_to_tgsi_visitor::try_emit_mad(ir_expression *ir, int mul_operand)
    st_src_reg a, b, c;
    st_dst_reg result_dst;
 
+   // there is no TGSI opcode for this
+   if (ir->type->is_integer_64())
+      return false;
+
    ir_expression *expr = ir->operands[mul_operand]->as_expression();
    if (!expr || expr->operation != ir_binop_mul)
       return false;

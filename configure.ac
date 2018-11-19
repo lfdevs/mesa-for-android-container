@@ -295,6 +295,12 @@ esac
 
 AM_CONDITIONAL(HAVE_ANDROID, test "x$android" = xyes)
 
+# Toggle Werror since at some point clang started treating unknown -W
+# flags as warnings, succeeding with the build, yet issuing an annoying
+# warning.
+save_CFLAGS="$CFLAGS"
+export CFLAGS="$CFLAGS -Werror"
+
 dnl
 dnl Check compiler flags
 dnl
@@ -309,6 +315,11 @@ AX_CHECK_COMPILE_FLAG([-fno-math-errno],                       [CFLAGS="$CFLAGS 
 AX_CHECK_COMPILE_FLAG([-fno-trapping-math],                    [CFLAGS="$CFLAGS -fno-trapping-math"])
 AX_CHECK_COMPILE_FLAG([-fvisibility=hidden],                   [VISIBILITY_CFLAGS="-fvisibility=hidden"])
 
+CFLAGS="$save_CFLAGS"
+
+# Toggle Werror since at some point clang started treating unknown -W
+# flags as warnings, succeeding with the build, yet issuing an annoying
+# warning.
 dnl
 dnl Check C++ compiler flags
 dnl
@@ -1415,6 +1426,7 @@ AM_CONDITIONAL(NEED_OPENGL_COMMON, test "x$enable_opengl" = xyes -o \
                                         "x$enable_gles1" = xyes -o \
                                         "x$enable_gles2" = xyes)
 AM_CONDITIONAL(NEED_KHRPLATFORM, test "x$enable_egl" = xyes -o \
+                                      "x$enable_opengl" = xyes -o \
                                       "x$enable_gles1" = xyes -o \
                                       "x$enable_gles2" = xyes)
 

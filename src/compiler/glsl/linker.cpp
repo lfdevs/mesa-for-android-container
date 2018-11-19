@@ -2208,10 +2208,11 @@ link_output_variables(struct gl_linked_shader *linked_shader,
          if (ir->ir_type != ir_type_variable)
             continue;
 
-         ir_variable *const var = (ir_variable *) ir;
+         ir_variable *var = (ir_variable *) ir;
 
          if (var->data.mode == ir_var_shader_out &&
                !symbols->get_variable(var->name)) {
+            var = var->clone(linked_shader, NULL);
             symbols->add_variable(var);
             linked_shader->ir->push_head(var);
          }

@@ -59,6 +59,11 @@ static __eglMustCastToProperFunctionPointerType FetchVendorFunc(__EGLvendorInfo 
     }
     if (func == NULL) {
         if (errorCode != EGL_SUCCESS) {
+            // Since we have no vendor, the follow-up eglGetError() call will
+            // end up using the GLVND error code. Set it here.
+            if (vendor == NULL) {
+                exports->setEGLError(errorCode);
+            }
             _eglError(errorCode, __EGL_DISPATCH_FUNC_NAMES[index]);
         }
         return NULL;

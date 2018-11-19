@@ -598,10 +598,8 @@ surface_from_external_memory(VADriverContextP ctx, vlVaSurface *surface,
    return VA_STATUS_SUCCESS;
 
 fail:
-   for (i = 0; i < VL_NUM_COMPONENTS; i++) {
-      if (resources[i])
-         pscreen->resource_destroy(pscreen, resources[i]);
-   }
+   for (i = 0; i < VL_NUM_COMPONENTS; i++)
+      pipe_resource_reference(&resources[i], NULL);
    return result;
 }
 

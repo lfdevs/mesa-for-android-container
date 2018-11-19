@@ -53,7 +53,7 @@ libgallium_nine = shared_library(
     libswkmsdri,
   ],
   dependencies : [
-    dep_selinux, dep_expat, dep_libdrm, dep_llvm,
+    dep_selinux, dep_expat, dep_libdrm, dep_llvm, dep_thread,
     driver_swrast, driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
     driver_i915, driver_svga,
   ],
