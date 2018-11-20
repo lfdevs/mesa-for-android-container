@@ -1,3 +1,11 @@
+mesa (18.2.5-2) unstable; urgency=medium
+
+  * Move KHR/khrplatform.h from libegl1-mesa-dev to mesa-common-dev
+    because GL/glcorearb.h and GL/glext.h started to depend on this
+    header too (Closes: #914167).
+
+ -- Andreas Boll <aboll@debian.org>  Tue, 20 Nov 2018 21:20:51 +0100
+
 mesa (18.2.5-1) unstable; urgency=medium
 
   * New upstream release.

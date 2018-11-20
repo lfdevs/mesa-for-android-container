@@ -1,3 +1,2 @@
 usr/include/EGL
-usr/include/KHR
 usr/lib/*/pkgconfig/egl.pc

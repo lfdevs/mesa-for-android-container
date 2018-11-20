@@ -172,6 +172,7 @@ Package: libegl1-mesa-dev
 Section: libdevel
 Architecture: any
 Depends:
+ mesa-common-dev (= ${binary:Version}),
  libglvnd-dev,
  libdrm-dev (>= 2.4.92) [!hurd-any],
  libx11-dev,
@@ -356,6 +357,8 @@ Depends:
  libx11-dev,
  libdrm-dev (>= 2.4.92) [!hurd-any],
  ${misc:Depends},
+Breaks: libegl1-mesa-dev (<< 18.2.5-2)
+Replaces: libegl1-mesa-dev (<< 18.2.5-2)
 Multi-Arch: same
 Description: Developer documentation for Mesa
  This package includes the specifications for the Mesa-specific OpenGL
