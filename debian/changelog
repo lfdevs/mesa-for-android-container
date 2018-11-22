@@ -1,3 +1,12 @@
+mesa (18.2.5-3) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * Force compilation against gcc-7, gcc-8 miscompiles mesa
+    See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=87859
+    (Closes: #914267).
+
+ -- Andreas Boll <aboll@debian.org>  Thu, 22 Nov 2018 21:18:39 +0100
+
 mesa (18.2.5-2) unstable; urgency=medium
 
   * Move KHR/khrplatform.h from libegl1-mesa-dev to mesa-common-dev

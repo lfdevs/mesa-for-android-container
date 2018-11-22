@@ -6,6 +6,9 @@ Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
  debhelper (>= 11),
+ gcc-7,
+ g++-7,
+ cpp-7,
  quilt (>= 0.63-8.2~),
  pkg-config,
  libdrm-dev (>= 2.4.92) [!hurd-any],
