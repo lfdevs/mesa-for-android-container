@@ -707,7 +707,7 @@ FF(dp_msg_type,
    -1, -1, -1, -1, -1, -1,
    /* 6:   */ MD(16), MD(13),
    /* 7:   */ MD(17), MD(14),
-   /* 8:   */ MD(17), MD(14))
+   /* 8:   */ MD(18), MD(14))
 FF(dp_msg_control,
    /* 4:   */ MD(11), MD( 8),
    /* 4.5-5: use dp_read_msg_control or dp_write_msg_control */ -1, -1, -1, -1,

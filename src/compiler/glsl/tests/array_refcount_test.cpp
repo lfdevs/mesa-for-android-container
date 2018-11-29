@@ -160,7 +160,6 @@ validate_variables_in_hash_table(struct hash_table *ht,
 
    va_end(args);
 
-   struct hash_entry *entry;
    hash_table_foreach(ht, entry) {
       const ir_instruction *const ir = (ir_instruction *) entry->key;
       const ir_variable *const v = ir->as_variable();

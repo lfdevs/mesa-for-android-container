@@ -44,6 +44,10 @@ fd5_context_destroy(struct pipe_context *pctx)
 {
 	struct fd5_context *fd5_ctx = fd5_context(fd_context(pctx));
 
+	u_upload_destroy(fd5_ctx->border_color_uploader);
+
+	fd_context_destroy(pctx);
+
 	fd_bo_del(fd5_ctx->vs_pvt_mem);
 	fd_bo_del(fd5_ctx->fs_pvt_mem);
 	fd_bo_del(fd5_ctx->vsc_size_mem);
@@ -51,9 +55,7 @@ fd5_context_destroy(struct pipe_context *pctx)
 
 	fd_context_cleanup_common_vbos(&fd5_ctx->base);
 
-	u_upload_destroy(fd5_ctx->border_color_uploader);
-
-	fd_context_destroy(pctx);
+	free(fd5_ctx);
 }
 
 static const uint8_t primtypes[] = {

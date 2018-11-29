@@ -54,6 +54,8 @@ struct _egl_global
    /* the list of all displays */
    _EGLDisplay *DisplayList;
 
+   _EGLDevice *DeviceList;
+
    EGLint NumAtExitCalls;
    void (*AtExitCalls[10])(void);
 

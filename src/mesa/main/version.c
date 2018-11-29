@@ -64,10 +64,10 @@ get_gl_override(gl_api api, int *version, bool *fwd_context,
       bool fc_suffix;
       bool compat_suffix;
    } override[] = {
-      { -1, false, false},
-      { -1, false, false},
-      { -1, false, false},
-      { -1, false, false},
+      [API_OPENGL_COMPAT] = { -1, false, false},
+      [API_OPENGLES]      = { -1, false, false},
+      [API_OPENGLES2]     = { -1, false, false},
+      [API_OPENGL_CORE]   = { -1, false, false},
    };
 
    STATIC_ASSERT(ARRAY_SIZE(override) == API_OPENGL_LAST + 1);
@@ -121,11 +121,7 @@ create_version_string(struct gl_context *ctx, const char *prefix)
    ctx->VersionString = malloc(max);
    if (ctx->VersionString) {
       _mesa_snprintf(ctx->VersionString, max,
-		     "%s%u.%u%s Mesa " PACKAGE_VERSION
-#ifdef MESA_GIT_SHA1
-		     " (" MESA_GIT_SHA1 ")"
-#endif
-		     ,
+		     "%s%u.%u%s Mesa " PACKAGE_VERSION MESA_GIT_SHA1,
 		     prefix,
 		     ctx->Version / 10, ctx->Version % 10,
 		     (ctx->API == API_OPENGL_CORE) ? " (Core Profile)" :
@@ -617,6 +613,8 @@ _mesa_compute_version(struct gl_context *ctx)
     */
    if (_mesa_is_desktop_gl(ctx)) {
       switch (ctx->Version) {
+      case 20:
+         /* fall-through, GLSL 1.20 is the minimum we support */
       case 21:
          ctx->Const.GLSLVersion = 120;
          break;

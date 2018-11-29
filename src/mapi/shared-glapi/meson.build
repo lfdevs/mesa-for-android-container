@@ -31,7 +31,7 @@ shared_glapi_mapi_tmp_h = custom_target(
   'shared_glapi_mapi_tmp.h',
   input : [mapi_abi_py, gl_and_es_api_files],
   output : 'glapi_mapi_tmp.h',
-  command : [prog_python2, '@INPUT0@', '--printer', 'shared-glapi', '@INPUT1@'],
+  command : [prog_python, '@INPUT0@', '--printer', 'shared-glapi', '@INPUT1@'],
   depend_files : api_xml_files,
   capture : true,
 )
@@ -50,7 +50,7 @@ libglapi = shared_library(
   install : true,
 )
 
-if with_tests
+if with_any_opengl and with_tests
   test(
     'shared-glapi-test',
     executable(

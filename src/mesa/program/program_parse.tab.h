@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.0.4.  */
+/* A Bison parser, made by GNU Bison 3.1.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015, 2018 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -157,7 +157,7 @@ extern int _mesa_program_debug;
 
 union YYSTYPE
 {
-#line 127 "./program/program_parse.y" /* yacc.c:1909  */
+#line 129 "./program/program_parse.y" /* yacc.c:1913  */
 
    struct asm_instruction *inst;
    struct asm_symbol *sym;
@@ -183,7 +183,7 @@ union YYSTYPE
       unsigned negate:1;
    } ext_swizzle;
 
-#line 187 "./program/program_parse.tab.h" /* yacc.c:1909  */
+#line 187 "./program/program_parse.tab.h" /* yacc.c:1913  */
 };
 
 typedef union YYSTYPE YYSTYPE;

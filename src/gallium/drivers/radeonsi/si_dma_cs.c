@@ -23,6 +23,7 @@
  */
 
 #include "si_pipe.h"
+#include "sid.h"
 
 static void si_dma_emit_wait_idle(struct si_context *sctx)
 {
@@ -33,6 +34,93 @@ static void si_dma_emit_wait_idle(struct si_context *sctx)
 		radeon_emit(cs, 0x00000000); /* NOP */
 	else
 		radeon_emit(cs, 0xf0000000); /* NOP */
+}
+
+void si_dma_emit_timestamp(struct si_context *sctx, struct r600_resource *dst,
+			   uint64_t offset)
+{
+	struct radeon_cmdbuf *cs = sctx->dma_cs;
+	uint64_t va = dst->gpu_address + offset;
+
+	if (sctx->chip_class == SI) {
+		unreachable("SI DMA doesn't support the timestamp packet.");
+		return;
+	}
+
+	/* Mark the buffer range of destination as valid (initialized),
+	 * so that transfer_map knows it should wait for the GPU when mapping
+	 * that range. */
+	util_range_add(&dst->valid_buffer_range, offset, offset + 8);
+
+	assert(va % 8 == 0);
+
+	si_need_dma_space(sctx, 4, dst, NULL);
+	si_dma_emit_wait_idle(sctx);
+
+	radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_TIMESTAMP,
+					SDMA_TS_SUB_OPCODE_GET_GLOBAL_TIMESTAMP,
+					0));
+	radeon_emit(cs, va);
+	radeon_emit(cs, va >> 32);
+}
+
+void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
+			  uint64_t offset, uint64_t size, unsigned clear_value)
+{
+	struct radeon_cmdbuf *cs = sctx->dma_cs;
+	unsigned i, ncopy, csize;
+	struct r600_resource *rdst = r600_resource(dst);
+
+	assert(offset % 4 == 0);
+	assert(size);
+	assert(size % 4 == 0);
+
+	if (!cs || dst->flags & PIPE_RESOURCE_FLAG_SPARSE) {
+		sctx->b.clear_buffer(&sctx->b, dst, offset, size, &clear_value, 4);
+		return;
+	}
+
+	/* Mark the buffer range of destination as valid (initialized),
+	 * so that transfer_map knows it should wait for the GPU when mapping
+	 * that range. */
+	util_range_add(&rdst->valid_buffer_range, offset, offset + size);
+
+	offset += rdst->gpu_address;
+
+	if (sctx->chip_class == SI) {
+		/* the same maximum size as for copying */
+		ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
+		si_need_dma_space(sctx, ncopy * 4, rdst, NULL);
+
+		for (i = 0; i < ncopy; i++) {
+			csize = MIN2(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
+			radeon_emit(cs, SI_DMA_PACKET(SI_DMA_PACKET_CONSTANT_FILL, 0,
+						      csize / 4));
+			radeon_emit(cs, offset);
+			radeon_emit(cs, clear_value);
+			radeon_emit(cs, (offset >> 32) << 16);
+			offset += csize;
+			size -= csize;
+		}
+		return;
+	}
+
+	/* The following code is for CI, VI, Vega/Raven, etc. */
+	/* the same maximum size as for copying */
+	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
+	si_need_dma_space(sctx, ncopy * 5, rdst, NULL);
+
+	for (i = 0; i < ncopy; i++) {
+		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
+		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_PACKET_CONSTANT_FILL, 0,
+						0x8000 /* dword copy */));
+		radeon_emit(cs, offset);
+		radeon_emit(cs, offset >> 32);
+		radeon_emit(cs, clear_value);
+		radeon_emit(cs, sctx->chip_class >= GFX9 ? csize - 1 : csize);
+		offset += csize;
+		size -= csize;
+	}
 }
 
 void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
@@ -141,7 +229,7 @@ void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst
 	struct si_context *ctx = (struct si_context*)sscreen->aux_context;
 
 	mtx_lock(&sscreen->aux_context_lock);
-	ctx->dma_clear_buffer(ctx, dst, offset, size, value);
+	si_sdma_clear_buffer(ctx, dst, offset, size, value);
 	sscreen->aux_context->flush(sscreen->aux_context, NULL, 0);
 	mtx_unlock(&sscreen->aux_context_lock);
 }

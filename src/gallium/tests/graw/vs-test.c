@@ -447,7 +447,8 @@ static void init( void )
       rasterizer.point_size = 8.0;
       rasterizer.half_pixel_center = 1;
       rasterizer.bottom_edge_rule = 1;
-      rasterizer.depth_clip = 1;
+      rasterizer.depth_clip_near = 1;
+      rasterizer.depth_clip_far = 1;
       handle = ctx->create_rasterizer_state(ctx, &rasterizer);
       ctx->bind_rasterizer_state(ctx, handle);
    }

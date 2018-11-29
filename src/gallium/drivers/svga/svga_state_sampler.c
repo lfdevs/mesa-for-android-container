@@ -149,12 +149,21 @@ svga_validate_pipe_sampler_view(struct svga_context *svga,
          viewFormat = PIPE_FORMAT_B8G8R8X8_UNORM;
       }
 
-      format = svga_translate_format(ss, viewFormat,
-                                     PIPE_BIND_SAMPLER_VIEW);
-      assert(format != SVGA3D_FORMAT_INVALID);
+      if (texture->target == PIPE_BUFFER) {
+         unsigned pf_flags;
+         svga_translate_texture_buffer_view_format(viewFormat,
+                                                   &format,
+                                                   &pf_flags);
+      }
+      else {
+         format = svga_translate_format(ss, viewFormat,
+                                        PIPE_BIND_SAMPLER_VIEW);
 
-      /* Convert the format to a sampler-friendly format, if needed */
-      format = svga_sampler_format(format);
+         /* Convert the format to a sampler-friendly format, if needed */
+         format = svga_sampler_format(format);
+      }
+
+      assert(format != SVGA3D_FORMAT_INVALID);
 
       if (texture->target == PIPE_BUFFER) {
          unsigned elem_size = util_format_get_blocksize(sv->base.format);

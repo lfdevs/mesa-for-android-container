@@ -191,9 +191,17 @@ void
 LoadPropagation::checkSwapSrc01(Instruction *insn)
 {
    const Target *targ = prog->getTarget();
-   if (!targ->getOpInfo(insn).commutative)
-      if (insn->op != OP_SET && insn->op != OP_SLCT && insn->op != OP_SUB)
+   if (!targ->getOpInfo(insn).commutative) {
+      if (insn->op != OP_SET && insn->op != OP_SLCT &&
+          insn->op != OP_SUB && insn->op != OP_XMAD)
          return;
+      // XMAD is only commutative if both the CBCC and MRG flags are not set.
+      if (insn->op == OP_XMAD &&
+          (insn->subOp & NV50_IR_SUBOP_XMAD_CMODE_MASK) == NV50_IR_SUBOP_XMAD_CBCC)
+         return;
+      if (insn->op == OP_XMAD && (insn->subOp & NV50_IR_SUBOP_XMAD_MRG))
+         return;
+   }
    if (insn->src(1).getFile() != FILE_GPR)
       return;
    // This is the special OP_SET used for alphatesting, we can't reverse its
@@ -236,6 +244,12 @@ LoadPropagation::checkSwapSrc01(Instruction *insn)
    if (insn->op == OP_SUB) {
       insn->src(0).mod = insn->src(0).mod ^ Modifier(NV50_IR_MOD_NEG);
       insn->src(1).mod = insn->src(1).mod ^ Modifier(NV50_IR_MOD_NEG);
+   } else
+   if (insn->op == OP_XMAD) {
+      // swap h1 flags
+      uint16_t h1 = (insn->subOp >> 1 & NV50_IR_SUBOP_XMAD_H1(0)) |
+                    (insn->subOp << 1 & NV50_IR_SUBOP_XMAD_H1(1));
+      insn->subOp = (insn->subOp & ~NV50_IR_SUBOP_XMAD_H1_MASK) | h1;
    }
 }
 
@@ -364,6 +378,8 @@ private:
    void tryCollapseChainedMULs(Instruction *, const int s, ImmediateValue&);
 
    CmpInstruction *findOriginForTestWithZero(Value *);
+
+   bool createMul(DataType ty, Value *def, Value *a, int64_t b, Value *c);
 
    unsigned int foldCount;
 
@@ -939,10 +955,64 @@ ConstantFolding::opnd3(Instruction *i, ImmediateValue &imm2)
    }
 }
 
+bool
+ConstantFolding::createMul(DataType ty, Value *def, Value *a, int64_t b, Value *c)
+{
+   const Target *target = prog->getTarget();
+   int64_t absB = llabs(b);
+
+   //a * (2^shl) -> a << shl
+   if (b >= 0 && util_is_power_of_two_or_zero64(b)) {
+      int shl = util_logbase2_64(b);
+
+      Value *res = c ? bld.getSSA(typeSizeof(ty)) : def;
+      bld.mkOp2(OP_SHL, ty, res, a, bld.mkImm(shl));
+      if (c)
+         bld.mkOp2(OP_ADD, ty, def, res, c);
+
+      return true;
+   }
+
+   //a * (2^shl + 1) -> a << shl + a
+   //a * -(2^shl + 1) -> -a << shl + a
+   //a * (2^shl - 1) -> a << shl - a
+   //a * -(2^shl - 1) -> -a << shl - a
+   if (typeSizeof(ty) == 4 &&
+       (util_is_power_of_two_or_zero64(absB - 1) ||
+        util_is_power_of_two_or_zero64(absB + 1)) &&
+       target->isOpSupported(OP_SHLADD, TYPE_U32)) {
+      bool subA = util_is_power_of_two_or_zero64(absB + 1);
+      int shl = subA ? util_logbase2_64(absB + 1) : util_logbase2_64(absB - 1);
+
+      Value *res = c ? bld.getSSA() : def;
+      Instruction *insn = bld.mkOp3(OP_SHLADD, TYPE_U32, res, a, bld.mkImm(shl), a);
+      if (b < 0)
+         insn->src(0).mod = Modifier(NV50_IR_MOD_NEG);
+      if (subA)
+         insn->src(2).mod = Modifier(NV50_IR_MOD_NEG);
+
+      if (c)
+         bld.mkOp2(OP_ADD, TYPE_U32, def, res, c);
+
+      return true;
+   }
+
+   if (typeSizeof(ty) == 4 && b >= 0 && b <= 0xffff &&
+       target->isOpSupported(OP_XMAD, TYPE_U32)) {
+      Value *tmp = bld.mkOp3v(OP_XMAD, TYPE_U32, bld.getSSA(),
+                              a, bld.mkImm((uint32_t)b), c ? c : bld.mkImm(0));
+      bld.mkOp3(OP_XMAD, TYPE_U32, def, a, bld.mkImm((uint32_t)b), tmp)->subOp =
+         NV50_IR_SUBOP_XMAD_PSL | NV50_IR_SUBOP_XMAD_H1(0);
+
+      return true;
+   }
+
+   return false;
+}
+
 void
 ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
 {
-   const Target *target = prog->getTarget();
    const int t = !s;
    const operation op = i->op;
    Instruction *newi = i;
@@ -1026,13 +1096,11 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->setSrc(s, i->getSrc(t));
          i->src(s).mod = i->src(t).mod;
       } else
-      if (!isFloatType(i->sType) && !imm0.isNegative() && imm0.isPow2()) {
-         i->op = OP_SHL;
-         imm0.applyLog2();
-         i->setSrc(0, i->getSrc(t));
-         i->src(0).mod = i->src(t).mod;
-         i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
-         i->src(1).mod = 0;
+      if (!isFloatType(i->dType) && !i->src(t).mod) {
+         bld.setPosition(i, false);
+         int64_t b = typeSizeof(i->dType) == 8 ? imm0.reg.data.s64 : imm0.reg.data.s32;
+         if (createMul(i->dType, i->getDef(0), i->getSrc(t), b, NULL))
+            delete_Instruction(prog, i);
       } else
       if (i->postFactor && i->sType == TYPE_F32) {
          /* Can't emit a postfactor with an immediate, have to fold it in */
@@ -1065,13 +1133,11 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
          i->setSrc(2, NULL);
          i->op = OP_ADD;
       } else
-      if (s == 1 && !imm0.isNegative() && imm0.isPow2() &&
-          !isFloatType(i->dType) &&
-          target->isOpSupported(OP_SHLADD, i->dType) &&
-          !i->subOp) {
-         i->op = OP_SHLADD;
-         imm0.applyLog2();
-         i->setSrc(1, new_ImmediateValue(prog, imm0.reg.data.u32));
+      if (!isFloatType(i->dType) && !i->subOp && !i->src(t).mod && !i->src(2).mod) {
+         bld.setPosition(i, false);
+         int64_t b = typeSizeof(i->dType) == 8 ? imm0.reg.data.s64 : imm0.reg.data.s32;
+         if (createMul(i->dType, i->getDef(0), i->getSrc(t), b, i->getSrc(2)))
+            delete_Instruction(prog, i);
       }
       break;
    case OP_SUB:
@@ -1848,15 +1914,24 @@ AlgebraicOpt::handleMINMAX(Instruction *minmax)
    }
 }
 
+// rcp(rcp(a)) = a
+// rcp(sqrt(a)) = rsq(a)
 void
 AlgebraicOpt::handleRCP(Instruction *rcp)
 {
    Instruction *si = rcp->getSrc(0)->getUniqueInsn();
 
-   if (si && si->op == OP_RCP) {
+   if (!si)
+      return;
+
+   if (si->op == OP_RCP) {
       Modifier mod = rcp->src(0).mod * si->src(0).mod;
       rcp->op = mod.getOp();
       rcp->setSrc(0, si->getSrc(0));
+   } else if (si->op == OP_SQRT) {
+      rcp->op = OP_RSQ;
+      rcp->setSrc(0, si->getSrc(0));
+      rcp->src(0).mod = rcp->src(0).mod * si->src(0).mod;
    }
 }
 
@@ -2278,13 +2353,18 @@ AlgebraicOpt::visit(BasicBlock *bb)
 // =============================================================================
 
 // ADD(SHL(a, b), c) -> SHLADD(a, b, c)
+// MUL(a, b) -> a few XMADs
+// MAD/FMA(a, b, c) -> a few XMADs
 class LateAlgebraicOpt : public Pass
 {
 private:
    virtual bool visit(Instruction *);
 
    void handleADD(Instruction *);
+   void handleMULMAD(Instruction *);
    bool tryADDToSHLADD(Instruction *);
+
+   BuildUtil bld;
 };
 
 void
@@ -2345,12 +2425,63 @@ LateAlgebraicOpt::tryADDToSHLADD(Instruction *add)
    return true;
 }
 
+// MUL(a, b) -> a few XMADs
+// MAD/FMA(a, b, c) -> a few XMADs
+void
+LateAlgebraicOpt::handleMULMAD(Instruction *i)
+{
+   // TODO: handle NV50_IR_SUBOP_MUL_HIGH
+   if (!prog->getTarget()->isOpSupported(OP_XMAD, TYPE_U32))
+      return;
+   if (isFloatType(i->dType) || typeSizeof(i->dType) != 4)
+      return;
+   if (i->subOp || i->usesFlags() || i->flagsDef >= 0)
+      return;
+
+   assert(!i->src(0).mod);
+   assert(!i->src(1).mod);
+   assert(i->op == OP_MUL ? 1 : !i->src(2).mod);
+
+   bld.setPosition(i, false);
+
+   Value *a = i->getSrc(0);
+   Value *b = i->getSrc(1);
+   Value *c = i->op == OP_MUL ? bld.mkImm(0) : i->getSrc(2);
+
+   Value *tmp0 = bld.getSSA();
+   Value *tmp1 = bld.getSSA();
+
+   Instruction *insn = bld.mkOp3(OP_XMAD, TYPE_U32, tmp0, b, a, c);
+   insn->setPredicate(i->cc, i->getPredicate());
+
+   insn = bld.mkOp3(OP_XMAD, TYPE_U32, tmp1, b, a, bld.mkImm(0));
+   insn->setPredicate(i->cc, i->getPredicate());
+   insn->subOp = NV50_IR_SUBOP_XMAD_MRG | NV50_IR_SUBOP_XMAD_H1(1);
+
+   Value *pred = i->getPredicate();
+   i->setPredicate(i->cc, NULL);
+
+   i->op = OP_XMAD;
+   i->setSrc(0, b);
+   i->setSrc(1, tmp1);
+   i->setSrc(2, tmp0);
+   i->subOp = NV50_IR_SUBOP_XMAD_PSL | NV50_IR_SUBOP_XMAD_CBCC;
+   i->subOp |= NV50_IR_SUBOP_XMAD_H1(0) | NV50_IR_SUBOP_XMAD_H1(1);
+
+   i->setPredicate(i->cc, pred);
+}
+
 bool
 LateAlgebraicOpt::visit(Instruction *i)
 {
    switch (i->op) {
    case OP_ADD:
       handleADD(i);
+      break;
+   case OP_MUL:
+   case OP_MAD:
+   case OP_FMA:
+      handleMULMAD(i);
       break;
    default:
       break;

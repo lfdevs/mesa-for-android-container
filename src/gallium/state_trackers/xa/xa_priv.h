@@ -74,8 +74,6 @@ struct xa_surface {
 struct xa_tracker {
     enum xa_formats *supported_formats;
     unsigned int format_map[XA_LAST_SURFACE_TYPE][2];
-    int d_depth_bits_last;
-    int ds_depth_bits_last;
     struct pipe_loader_device *dev;
     struct pipe_screen *screen;
     struct xa_context *default_ctx;

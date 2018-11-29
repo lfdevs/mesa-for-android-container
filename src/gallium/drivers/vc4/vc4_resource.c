@@ -181,9 +181,6 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
 
         struct vc4_resource_slice *slice = &rsc->slices[level];
         if (rsc->tiled) {
-                uint32_t utile_w = vc4_utile_width(rsc->cpp);
-                uint32_t utile_h = vc4_utile_height(rsc->cpp);
-
                 /* No direct mappings of tiled, since we need to manually
                  * tile/untile.
                  */
@@ -204,49 +201,12 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                         ptrans->box.height = (ptrans->box.height + 3) >> 2;
                 }
 
-                /* We need to align the box to utile boundaries, since that's
-                 * what load/store operates on.  This may cause us to need to
-                 * read out the original contents in that border area.  Right
-                 * now we just read out the entire contents, including the
-                 * middle area that will just get overwritten.
-                 */
-                uint32_t box_start_x = ptrans->box.x & (utile_w - 1);
-                uint32_t box_start_y = ptrans->box.y & (utile_h - 1);
-                bool needs_load = (usage & PIPE_TRANSFER_READ) != 0;
-
-                if (box_start_x) {
-                        ptrans->box.width += box_start_x;
-                        ptrans->box.x -= box_start_x;
-                        needs_load = true;
-                }
-                if (box_start_y) {
-                        ptrans->box.height += box_start_y;
-                        ptrans->box.y -= box_start_y;
-                        needs_load = true;
-                }
-                if (ptrans->box.width & (utile_w - 1)) {
-                        /* We only need to force a load if our border region
-                         * we're extending into is actually part of the
-                         * texture.
-                         */
-                        uint32_t slice_width = u_minify(prsc->width0, level);
-                        if (ptrans->box.x + ptrans->box.width != slice_width)
-                                needs_load = true;
-                        ptrans->box.width = align(ptrans->box.width, utile_w);
-                }
-                if (ptrans->box.height & (utile_h - 1)) {
-                        uint32_t slice_height = u_minify(prsc->height0, level);
-                        if (ptrans->box.y + ptrans->box.height != slice_height)
-                                needs_load = true;
-                        ptrans->box.height = align(ptrans->box.height, utile_h);
-                }
-
                 ptrans->stride = ptrans->box.width * rsc->cpp;
                 ptrans->layer_stride = ptrans->stride * ptrans->box.height;
 
                 trans->map = malloc(ptrans->layer_stride * ptrans->box.depth);
 
-                if (needs_load) {
+                if (usage & PIPE_TRANSFER_READ) {
                         vc4_load_tiled_image(trans->map, ptrans->stride,
                                              buf + slice->offset +
                                              ptrans->box.z * rsc->cube_map_stride,
@@ -254,9 +214,7 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
                                              slice->tiling, rsc->cpp,
                                              &ptrans->box);
                 }
-                return (trans->map +
-                        box_start_x * rsc->cpp +
-                        box_start_y * ptrans->stride);
+                return trans->map;
         } else {
                 ptrans->stride = slice->stride;
                 ptrans->layer_stride = ptrans->stride;
@@ -271,6 +229,44 @@ vc4_resource_transfer_map(struct pipe_context *pctx,
 fail:
         vc4_resource_transfer_unmap(pctx, ptrans);
         return NULL;
+}
+
+static void
+vc4_texture_subdata(struct pipe_context *pctx,
+                    struct pipe_resource *prsc,
+                    unsigned level,
+                    unsigned usage,
+                    const struct pipe_box *box,
+                    const void *data,
+                    unsigned stride,
+                    unsigned layer_stride)
+{
+        struct vc4_resource *rsc = vc4_resource(prsc);
+        struct vc4_resource_slice *slice = &rsc->slices[level];
+
+        /* For a direct mapping, we can just take the u_transfer path. */
+        if (!rsc->tiled ||
+            box->depth != 1 ||
+            (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)) {
+                return u_default_texture_subdata(pctx, prsc, level, usage, box,
+                                                 data, stride, layer_stride);
+        }
+
+        /* Otherwise, map and store the texture data directly into the tiled
+         * texture.
+         */
+        void *buf;
+        if (usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+                buf = vc4_bo_map_unsynchronized(rsc->bo);
+        else
+                buf = vc4_bo_map(rsc->bo);
+
+        vc4_store_tiled_image(buf + slice->offset +
+                              box->z * rsc->cube_map_stride,
+                              slice->stride,
+                              (void *)data, stride,
+                              slice->tiling, rsc->cpp,
+                              box);
 }
 
 static void
@@ -576,7 +572,15 @@ vc4_resource_create_with_modifiers(struct pipe_screen *pscreen,
                         goto fail;
         }
 
-        if (screen->ro && tmpl->bind & PIPE_BIND_SCANOUT) {
+        /* Set up the "scanout resource" (the dmabuf export of our buffer to
+         * the KMS handle) if the buffer might ever have
+         * resource_get_handle(WINSYS_HANDLE_TYPE_KMS) called on it.
+         * create_with_modifiers() doesn't give us usage flags, so we have to
+         * assume that all calls with modifiers are scanout-possible.
+         */
+        if (screen->ro &&
+            ((tmpl->bind & PIPE_BIND_SCANOUT) ||
+             !(count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID))) {
                 rsc->scanout =
                         renderonly_scanout_for_resource(prsc, screen->ro, NULL);
                 if (!rsc->scanout)
@@ -1133,7 +1137,8 @@ vc4_resource_screen_init(struct pipe_screen *pscreen)
         pscreen->resource_get_handle = vc4_resource_get_handle;
         pscreen->resource_destroy = vc4_resource_destroy;
         pscreen->transfer_helper = u_transfer_helper_create(&transfer_vtbl,
-                                                            false, false, true);
+                                                            false, false,
+                                                            false, true);
 
         /* Test if the kernel has GET_TILING; it will return -EINVAL if the
          * ioctl does not exist, but -ENOENT if we pass an impossible handle.
@@ -1154,7 +1159,7 @@ vc4_resource_context_init(struct pipe_context *pctx)
         pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
         pctx->transfer_unmap = u_transfer_helper_transfer_unmap;
         pctx->buffer_subdata = u_default_buffer_subdata;
-        pctx->texture_subdata = u_default_texture_subdata;
+        pctx->texture_subdata = vc4_texture_subdata;
         pctx->create_surface = vc4_create_surface;
         pctx->surface_destroy = vc4_surface_destroy;
         pctx->resource_copy_region = util_resource_copy_region;

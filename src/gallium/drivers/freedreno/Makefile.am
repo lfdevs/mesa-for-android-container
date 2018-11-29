@@ -7,21 +7,24 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/compiler/nir \
 	$(GALLIUM_DRIVER_CFLAGS) \
-	$(FREEDRENO_CFLAGS)
+	$(LIBDRM_CFLAGS) \
+	$(VALGRIND_CFLAGS)
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 ir3/ir3_nir_trig.c: ir3/ir3_nir_trig.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
+	$(AM_V_GEN) $(PYTHON) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
 
 noinst_LTLIBRARIES = libfreedreno.la
 
 libfreedreno_la_SOURCES = \
 	$(C_SOURCES) \
+	$(drm_SOURCES) \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
 	$(a4xx_SOURCES) \
 	$(a5xx_SOURCES) \
+	$(a6xx_SOURCES) \
 	$(ir3_SOURCES) \
 	$(ir3_GENERATED_FILES)
 
@@ -44,6 +47,6 @@ ir3_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
-	$(FREEDRENO_LIBS)
+	$(LIBDRM_LIBS)
 
 EXTRA_DIST += meson.build

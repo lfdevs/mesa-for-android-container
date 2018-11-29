@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -93,9 +91,6 @@ struct fd2_compile_context {
 	unsigned position, psize;
 
 	uint64_t need_sync;
-
-	/* current exec CF instruction */
-	struct ir2_cf *cf;
 };
 
 static int
@@ -130,7 +125,6 @@ compile_init(struct fd2_compile_context *ctx, struct fd_program_stateobj *prog,
 
 	ctx->prog = prog;
 	ctx->so = so;
-	ctx->cf = NULL;
 	ctx->pred_depth = 0;
 
 	ret = tgsi_parse_init(&ctx->parser, so->tokens);
@@ -236,15 +230,6 @@ compile_free(struct fd2_compile_context *ctx)
 	tgsi_parse_free(&ctx->parser);
 }
 
-static struct ir2_cf *
-next_exec_cf(struct fd2_compile_context *ctx)
-{
-	struct ir2_cf *cf = ctx->cf;
-	if (!cf || cf->exec.instrs_count >= ARRAY_SIZE(ctx->cf->exec.instrs))
-		ctx->cf = cf = ir2_cf_create(ctx->so->ir, EXEC);
-	return cf;
-}
-
 static void
 compile_vtx_fetch(struct fd2_compile_context *ctx)
 {
@@ -252,13 +237,13 @@ compile_vtx_fetch(struct fd2_compile_context *ctx)
 	int i;
 	for (i = 0; i < ctx->num_regs[TGSI_FILE_INPUT]; i++) {
 		struct ir2_instruction *instr = ir2_instr_create(
-				next_exec_cf(ctx), IR2_FETCH);
+				ctx->so->ir, IR2_FETCH);
 		instr->fetch.opc = VTX_FETCH;
 
 		ctx->need_sync |= 1 << (i+1);
 
-		ir2_reg_create(instr, i+1, "xyzw", 0);
-		ir2_reg_create(instr, 0, "x", 0);
+		ir2_dst_create(instr, i+1, "xyzw", 0);
+		ir2_reg_create(instr, 0, "x", IR2_REG_INPUT);
 
 		if (i == 0)
 			instr->sync = true;
@@ -266,7 +251,6 @@ compile_vtx_fetch(struct fd2_compile_context *ctx)
 		vfetch_instrs[i] = instr;
 	}
 	ctx->so->num_vfetch_instrs = i;
-	ctx->cf = NULL;
 }
 
 /*
@@ -312,7 +296,7 @@ get_temp_gpr(struct fd2_compile_context *ctx, int idx)
 	return num;
 }
 
-static struct ir2_register *
+static struct ir2_dst_register *
 add_dst_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 		const struct tgsi_dst_register *dst)
 {
@@ -351,10 +335,10 @@ add_dst_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 	swiz[3] = (dst->WriteMask & TGSI_WRITEMASK_W) ? 'w' : '_';
 	swiz[4] = '\0';
 
-	return ir2_reg_create(alu, num, swiz, flags);
+	return ir2_dst_create(alu, num, swiz, flags);
 }
 
-static struct ir2_register *
+static struct ir2_src_register *
 add_src_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 		const struct tgsi_src_register *src)
 {
@@ -373,6 +357,7 @@ add_src_reg(struct fd2_compile_context *ctx, struct ir2_instruction *alu,
 		if (ctx->type == PIPE_SHADER_VERTEX) {
 			num = src->Index + 1;
 		} else {
+			flags |= IR2_REG_INPUT;
 			num = export_linkage(ctx,
 					ctx->input_export_idx[src->Index]);
 		}
@@ -415,7 +400,7 @@ static void
 add_vector_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu)
 {
 	if (inst->Instruction.Saturate) {
-		alu->alu.vector_clamp = true;
+		alu->alu_vector.clamp = true;
 	}
 }
 
@@ -423,7 +408,7 @@ static void
 add_scalar_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu)
 {
 	if (inst->Instruction.Saturate) {
-		alu->alu.scalar_clamp = true;
+		alu->alu_scalar.clamp = true;
 	}
 }
 
@@ -461,25 +446,10 @@ add_regs_vector_3(struct fd2_compile_context *ctx,
 	assert(inst->Instruction.NumDstRegs == 1);
 
 	add_dst_reg(ctx, alu, &inst->Dst[0].Register);
-	/* maybe should re-arrange the syntax some day, but
-	 * in assembler/disassembler and what ir.c expects
-	 * is: MULADDv Rdst = Rsrc2 + Rsrc0 * Rscr1
-	 */
-	add_src_reg(ctx, alu, &inst->Src[2].Register);
 	add_src_reg(ctx, alu, &inst->Src[0].Register);
 	add_src_reg(ctx, alu, &inst->Src[1].Register);
+	add_src_reg(ctx, alu, &inst->Src[2].Register);
 	add_vector_clamp(inst, alu);
-}
-
-static void
-add_regs_dummy_vector(struct ir2_instruction *alu)
-{
-	/* create dummy, non-written vector dst/src regs
-	 * for unused vector instr slot:
-	 */
-	ir2_reg_create(alu, 0, "____", 0); /* vector dst */
-	ir2_reg_create(alu, 0, NULL, 0);   /* vector src1 */
-	ir2_reg_create(alu, 0, NULL, 0);   /* vector src2 */
 }
 
 static void
@@ -488,8 +458,6 @@ add_regs_scalar_1(struct fd2_compile_context *ctx,
 {
 	assert(inst->Instruction.NumSrcRegs == 1);
 	assert(inst->Instruction.NumDstRegs == 1);
-
-	add_regs_dummy_vector(alu);
 
 	add_dst_reg(ctx, alu, &inst->Dst[0].Register);
 	add_src_reg(ctx, alu, &inst->Src[0].Register);
@@ -567,19 +535,13 @@ push_predicate(struct fd2_compile_context *ctx, struct tgsi_src_register *src)
 	struct ir2_instruction *alu;
 	struct tgsi_dst_register pred_dst;
 
-	/* NOTE blob compiler seems to always puts PRED_* instrs in a CF by
-	 * themselves:
-	 */
-	ctx->cf = NULL;
-
 	if (ctx->pred_depth == 0) {
 		/* assign predicate register: */
 		ctx->pred_reg = ctx->num_regs[TGSI_FILE_TEMPORARY];
 
 		get_predicate(ctx, &pred_dst, NULL);
 
-		alu = ir2_instr_create_alu(next_exec_cf(ctx), ~0, PRED_SETNEs);
-		add_regs_dummy_vector(alu);
+		alu = ir2_instr_create_alu_s(ctx->so->ir, PRED_SETNEs);
 		add_dst_reg(ctx, alu, &pred_dst);
 		add_src_reg(ctx, alu, src);
 	} else {
@@ -587,7 +549,7 @@ push_predicate(struct fd2_compile_context *ctx, struct tgsi_src_register *src)
 
 		get_predicate(ctx, &pred_dst, &pred_src);
 
-		alu = ir2_instr_create_alu(next_exec_cf(ctx), MULv, ~0);
+		alu = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 		add_dst_reg(ctx, alu, &pred_dst);
 		add_src_reg(ctx, alu, &pred_src);
 		add_src_reg(ctx, alu, src);
@@ -600,18 +562,11 @@ push_predicate(struct fd2_compile_context *ctx, struct tgsi_src_register *src)
 
 	/* save previous pred state to restore in pop_predicate(): */
 	ctx->pred_stack[ctx->pred_depth++] = ctx->so->ir->pred;
-
-	ctx->cf = NULL;
 }
 
 static void
 pop_predicate(struct fd2_compile_context *ctx)
 {
-	/* NOTE blob compiler seems to always puts PRED_* instrs in a CF by
-	 * themselves:
-	 */
-	ctx->cf = NULL;
-
 	/* restore previous predicate state: */
 	ctx->so->ir->pred = ctx->pred_stack[--ctx->pred_depth];
 
@@ -622,8 +577,7 @@ pop_predicate(struct fd2_compile_context *ctx)
 
 		get_predicate(ctx, &pred_dst, &pred_src);
 
-		alu = ir2_instr_create_alu(next_exec_cf(ctx), ~0, PRED_SET_POPs);
-		add_regs_dummy_vector(alu);
+		alu = ir2_instr_create_alu_s(ctx->so->ir, PRED_SET_POPs);
 		add_dst_reg(ctx, alu, &pred_dst);
 		add_src_reg(ctx, alu, &pred_src);
 		alu->pred = IR2_PRED_NONE;
@@ -631,8 +585,6 @@ pop_predicate(struct fd2_compile_context *ctx)
 		/* predicate register no longer needed: */
 		ctx->pred_reg = -1;
 	}
-
-	ctx->cf = NULL;
 }
 
 static void
@@ -693,12 +645,11 @@ translate_pow(struct fd2_compile_context *ctx,
 
 	get_internal_temp(ctx, &tmp_dst, &tmp_src);
 
-	alu = ir2_instr_create_alu(next_exec_cf(ctx), ~0, LOG_CLAMP);
-	add_regs_dummy_vector(alu);
+	alu = ir2_instr_create_alu_s(ctx->so->ir, LOG_CLAMP);
 	add_dst_reg(ctx, alu, &tmp_dst);
 	add_src_reg(ctx, alu, &inst->Src[0].Register);
 
-	alu = ir2_instr_create_alu(next_exec_cf(ctx), MULv, ~0);
+	alu = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 	add_dst_reg(ctx, alu, &tmp_dst);
 	add_src_reg(ctx, alu, &tmp_src);
 	add_src_reg(ctx, alu, &inst->Src[1].Register);
@@ -725,8 +676,7 @@ translate_pow(struct fd2_compile_context *ctx,
 		break;
 	}
 
-	alu = ir2_instr_create_alu(next_exec_cf(ctx), ~0, EXP_IEEE);
-	add_regs_dummy_vector(alu);
+	alu = ir2_instr_create_alu_s(ctx->so->ir, EXP_IEEE);
 	add_dst_reg(ctx, alu, &inst->Dst[0].Register);
 	add_src_reg(ctx, alu, &tmp_src);
 	add_scalar_clamp(inst, alu);
@@ -737,7 +687,7 @@ translate_tex(struct fd2_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned opc)
 {
 	struct ir2_instruction *instr;
-	struct ir2_register *reg;
+	struct ir2_src_register *reg;
 	struct tgsi_dst_register tmp_dst;
 	struct tgsi_src_register tmp_src;
 	const struct tgsi_src_register *coord;
@@ -766,19 +716,18 @@ translate_tex(struct fd2_compile_context *ctx,
 		 *
 		 *  dst = texture_sample(unit, coord, bias)
 		 */
-		instr = ir2_instr_create_alu(next_exec_cf(ctx), MAXv, RECIP_IEEE);
 
-		/* MAXv: */
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MAXv);
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "___w";
 		add_src_reg(ctx, instr, &inst->Src[0].Register);
 		add_src_reg(ctx, instr, &inst->Src[0].Register);
 
-		/* RECIP_IEEE: */
+		instr = ir2_instr_create_alu_s(ctx->so->ir, RECIP_IEEE);
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "x___";
-		add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle =
-				swiz[inst->Src[0].Register.SwizzleW];
+		memcpy(add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle,
+			   swiz[inst->Src[0].Register.SwizzleW], 4);
 
-		instr = ir2_instr_create_alu(next_exec_cf(ctx), MULv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "xyz_";
 		add_src_reg(ctx, instr, &tmp_src)->swizzle = "xxxx";
 		add_src_reg(ctx, instr, &inst->Src[0].Register);
@@ -788,7 +737,7 @@ translate_tex(struct fd2_compile_context *ctx,
 		coord = &inst->Src[0].Register;
 	}
 
-	instr = ir2_instr_create(next_exec_cf(ctx), IR2_FETCH);
+	instr = ir2_instr_create(ctx->so->ir, IR2_FETCH);
 	instr->fetch.opc = TEX_FETCH;
 	instr->fetch.is_cube = (inst->Texture.Texture == TGSI_TEXTURE_3D);
 	instr->fetch.is_rect = (inst->Texture.Texture == TGSI_TEXTURE_RECT);
@@ -807,7 +756,7 @@ translate_tex(struct fd2_compile_context *ctx,
 		reg->swizzle[2] = reg->swizzle[0];
 
 	/* dst register needs to be marked for sync: */
-	ctx->need_sync |= 1 << instr->regs[0]->num;
+	ctx->need_sync |= 1 << instr->dst_reg.num;
 
 	/* TODO we need some way to know if the tex fetch needs to sync on alu pipe.. */
 	instr->sync = true;
@@ -818,7 +767,7 @@ translate_tex(struct fd2_compile_context *ctx,
 		 * the texture to a temp and the use ALU instruction to move
 		 * to output
 		 */
-		instr = ir2_instr_create_alu(next_exec_cf(ctx), MAXv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MAXv);
 
 		add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 		add_src_reg(ctx, instr, &tmp_src);
@@ -869,21 +818,17 @@ translate_sge_slt_seq_sne(struct fd2_compile_context *ctx,
 
 	get_internal_temp(ctx, &tmp_dst, &tmp_src);
 
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), ADDv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, ADDv);
 	add_dst_reg(ctx, instr, &tmp_dst);
 	add_src_reg(ctx, instr, &inst->Src[0].Register)->flags |= IR2_REG_NEGATE;
 	add_src_reg(ctx, instr, &inst->Src[1].Register);
 
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), vopc, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, vopc);
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
-	/* maybe should re-arrange the syntax some day, but
-	 * in assembler/disassembler and what ir.c expects
-	 * is: MULADDv Rdst = Rsrc2 + Rsrc0 * Rscr1
-	 */
-	get_immediate(ctx, &tmp_const, fui(c0));
-	add_src_reg(ctx, instr, &tmp_const);
 	add_src_reg(ctx, instr, &tmp_src);
 	get_immediate(ctx, &tmp_const, fui(c1));
+	add_src_reg(ctx, instr, &tmp_const);
+	get_immediate(ctx, &tmp_const, fui(c0));
 	add_src_reg(ctx, instr, &tmp_const);
 }
 
@@ -904,25 +849,25 @@ translate_lrp(struct fd2_compile_context *ctx,
 	get_immediate(ctx, &tmp_const, fui(1.0));
 
 	/* tmp1 = (a * b) */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), MULv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 	add_dst_reg(ctx, instr, &tmp_dst1);
 	add_src_reg(ctx, instr, &inst->Src[0].Register);
 	add_src_reg(ctx, instr, &inst->Src[1].Register);
 
 	/* tmp2 = (1 - a) */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), ADDv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, ADDv);
 	add_dst_reg(ctx, instr, &tmp_dst2);
 	add_src_reg(ctx, instr, &tmp_const);
 	add_src_reg(ctx, instr, &inst->Src[0].Register)->flags |= IR2_REG_NEGATE;
 
 	/* tmp2 = tmp2 * c */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), MULv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 	add_dst_reg(ctx, instr, &tmp_dst2);
 	add_src_reg(ctx, instr, &tmp_src2);
 	add_src_reg(ctx, instr, &inst->Src[2].Register);
 
 	/* dst = tmp1 + tmp2 */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), ADDv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, ADDv);
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 	add_src_reg(ctx, instr, &tmp_src1);
 	add_src_reg(ctx, instr, &tmp_src2);
@@ -956,33 +901,28 @@ translate_trig(struct fd2_compile_context *ctx,
 	tmp_src.SwizzleX = tmp_src.SwizzleY =
 			tmp_src.SwizzleZ = tmp_src.SwizzleW = TGSI_SWIZZLE_X;
 
-	/* maybe should re-arrange the syntax some day, but
-	 * in assembler/disassembler and what ir.c expects
-	 * is: MULADDv Rdst = Rsrc2 + Rsrc0 * Rscr1
-	 */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), MULADDv, ~0);
+	instr = ir2_instr_create_alu_v(ctx->so->ir, MULADDv);
 	add_dst_reg(ctx, instr, &tmp_dst);
-	get_immediate(ctx, &tmp_const, fui(0.5));
-	add_src_reg(ctx, instr, &tmp_const);
 	add_src_reg(ctx, instr, &inst->Src[0].Register);
 	get_immediate(ctx, &tmp_const, fui(0.159155));
 	add_src_reg(ctx, instr, &tmp_const);
-
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), FRACv, ~0);
-	add_dst_reg(ctx, instr, &tmp_dst);
-	add_src_reg(ctx, instr, &tmp_src);
-	add_src_reg(ctx, instr, &tmp_src);
-
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), MULADDv, ~0);
-	add_dst_reg(ctx, instr, &tmp_dst);
-	get_immediate(ctx, &tmp_const, fui(-3.141593));
+	get_immediate(ctx, &tmp_const, fui(0.5));
 	add_src_reg(ctx, instr, &tmp_const);
+
+	instr = ir2_instr_create_alu_v(ctx->so->ir, FRACv);
+	add_dst_reg(ctx, instr, &tmp_dst);
+	add_src_reg(ctx, instr, &tmp_src);
+	add_src_reg(ctx, instr, &tmp_src);
+
+	instr = ir2_instr_create_alu_v(ctx->so->ir, MULADDv);
+	add_dst_reg(ctx, instr, &tmp_dst);
 	add_src_reg(ctx, instr, &tmp_src);
 	get_immediate(ctx, &tmp_const, fui(6.283185));
 	add_src_reg(ctx, instr, &tmp_const);
+	get_immediate(ctx, &tmp_const, fui(-3.141593));
+	add_src_reg(ctx, instr, &tmp_const);
 
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), ~0, op);
-	add_regs_dummy_vector(instr);
+	instr = ir2_instr_create_alu_s(ctx->so->ir, op);
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 	add_src_reg(ctx, instr, &tmp_src);
 }
@@ -996,12 +936,12 @@ translate_dp2(struct fd2_compile_context *ctx,
 	struct ir2_instruction *instr;
 	/* DP2ADD c,a,b -> dot2(a,b) + c */
 	/* for c we use the constant 0.0 */
-	instr = ir2_instr_create_alu(next_exec_cf(ctx), DOT2ADDv, ~0);
-	get_immediate(ctx, &tmp_const, fui(0.0f));
+	instr = ir2_instr_create_alu_v(ctx->so->ir, DOT2ADDv);
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
-	add_src_reg(ctx, instr, &tmp_const);
 	add_src_reg(ctx, instr, &inst->Src[0].Register);
 	add_src_reg(ctx, instr, &inst->Src[1].Register);
+	get_immediate(ctx, &tmp_const, fui(0.0f));
+	add_src_reg(ctx, instr, &tmp_const);
 	add_vector_clamp(inst, instr);
 }
 
@@ -1015,80 +955,53 @@ translate_instruction(struct fd2_compile_context *ctx,
 {
 	unsigned opc = inst->Instruction.Opcode;
 	struct ir2_instruction *instr;
-	static struct ir2_cf *cf;
 
 	if (opc == TGSI_OPCODE_END)
 		return;
 
-	if (inst->Dst[0].Register.File == TGSI_FILE_OUTPUT) {
-		unsigned num = inst->Dst[0].Register.Index;
-		/* seems like we need to ensure that position vs param/pixel
-		 * exports don't end up in the same EXEC clause..  easy way
-		 * to do this is force a new EXEC clause on first appearance
-		 * of an position or param/pixel export.
-		 */
-		if ((num == ctx->position) || (num == ctx->psize)) {
-			if (ctx->num_position > 0) {
-				ctx->cf = NULL;
-				ir2_cf_create_alloc(ctx->so->ir, SQ_POSITION,
-						ctx->num_position - 1);
-				ctx->num_position = 0;
-			}
-		} else {
-			if (ctx->num_param > 0) {
-				ctx->cf = NULL;
-				ir2_cf_create_alloc(ctx->so->ir, SQ_PARAMETER_PIXEL,
-						ctx->num_param - 1);
-				ctx->num_param = 0;
-			}
-		}
-	}
-
-	cf = next_exec_cf(ctx);
-
 	/* TODO turn this into a table: */
 	switch (opc) {
 	case TGSI_OPCODE_MOV:
-		instr = ir2_instr_create_alu(cf, MAXv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MAXv);
 		add_regs_vector_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_RCP:
-		instr = ir2_instr_create_alu(cf, ~0, RECIP_IEEE);
+		instr = ir2_instr_create_alu_s(ctx->so->ir, RECIP_IEEE);
 		add_regs_scalar_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_RSQ:
-		instr = ir2_instr_create_alu(cf, ~0, RECIPSQ_IEEE);
+		instr = ir2_instr_create_alu_s(ctx->so->ir, RECIPSQ_IEEE);
 		add_regs_scalar_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_SQRT:
-		instr = ir2_instr_create_alu(cf, ~0, SQRT_IEEE);
+		instr = ir2_instr_create_alu_s(ctx->so->ir, SQRT_IEEE);
 		add_regs_scalar_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_MUL:
-		instr = ir2_instr_create_alu(cf, MULv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MULv);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_ADD:
-		instr = ir2_instr_create_alu(cf, ADDv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, ADDv);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_DP2:
 		translate_dp2(ctx, inst, opc);
 		break;
 	case TGSI_OPCODE_DP3:
-		instr = ir2_instr_create_alu(cf, DOT3v, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, DOT3v);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_DP4:
-		instr = ir2_instr_create_alu(cf, DOT4v, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, DOT4v);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_MIN:
-		instr = ir2_instr_create_alu(cf, MINv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MINv);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_MAX:
-		instr = ir2_instr_create_alu(cf, MAXv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MAXv);
 		add_regs_vector_2(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_SLT:
@@ -1098,22 +1011,22 @@ translate_instruction(struct fd2_compile_context *ctx,
 		translate_sge_slt_seq_sne(ctx, inst, opc);
 		break;
 	case TGSI_OPCODE_MAD:
-		instr = ir2_instr_create_alu(cf, MULADDv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, MULADDv);
 		add_regs_vector_3(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_LRP:
 		translate_lrp(ctx, inst, opc);
 		break;
 	case TGSI_OPCODE_FRC:
-		instr = ir2_instr_create_alu(cf, FRACv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, FRACv);
 		add_regs_vector_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_FLR:
-		instr = ir2_instr_create_alu(cf, FLOORv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, FLOORv);
 		add_regs_vector_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_EX2:
-		instr = ir2_instr_create_alu(cf, ~0, EXP_IEEE);
+		instr = ir2_instr_create_alu_s(ctx->so->ir, EXP_IEEE);
 		add_regs_scalar_1(ctx, inst, instr);
 		break;
 	case TGSI_OPCODE_POW:
@@ -1128,10 +1041,9 @@ translate_instruction(struct fd2_compile_context *ctx,
 		translate_tex(ctx, inst, opc);
 		break;
 	case TGSI_OPCODE_CMP:
-		instr = ir2_instr_create_alu(cf, CNDGTEv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, CNDGTEv);
 		add_regs_vector_3(ctx, inst, instr);
-		// TODO this should be src0 if regs where in sane order..
-		instr->regs[2]->flags ^= IR2_REG_NEGATE; /* src1 */
+		instr->src_reg[0].flags ^= IR2_REG_NEGATE; /* src1 */
 		break;
 	case TGSI_OPCODE_IF:
 		push_predicate(ctx, &inst->Src[0].Register);
@@ -1139,16 +1051,12 @@ translate_instruction(struct fd2_compile_context *ctx,
 		break;
 	case TGSI_OPCODE_ELSE:
 		ctx->so->ir->pred = IR2_PRED_NE;
-		/* not sure if this is required in all cases, but blob compiler
-		 * won't combine EQ and NE in same CF:
-		 */
-		ctx->cf = NULL;
 		break;
 	case TGSI_OPCODE_ENDIF:
 		pop_predicate(ctx);
 		break;
 	case TGSI_OPCODE_F2I:
-		instr = ir2_instr_create_alu(cf, TRUNCv, ~0);
+		instr = ir2_instr_create_alu_v(ctx->so->ir, TRUNCv);
 		add_regs_vector_1(ctx, inst, instr);
 		break;
 	default:
@@ -1179,8 +1087,6 @@ compile_instructions(struct fd2_compile_context *ctx)
 			break;
 		}
 	}
-
-	ctx->cf->cf_type = EXEC_END;
 }
 
 int

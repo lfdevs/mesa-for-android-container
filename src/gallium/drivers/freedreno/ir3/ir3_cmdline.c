@@ -289,7 +289,7 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[n], "--binning-pass")) {
 			debug_printf(" %s", argv[n]);
-			key.binning_pass = true;
+			v.binning_pass = true;
 			n++;
 			continue;
 		}
@@ -379,7 +379,7 @@ int main(int argc, char **argv)
 
 	while (n < argc) {
 		char *filename = argv[n];
-		char *ext = rindex(filename, '.');
+		char *ext = strrchr(filename, '.');
 
 		if (strcmp(ext, ".tgsi") == 0) {
 			if (num_files != 0)

@@ -103,6 +103,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_pixel_buffer_object = true;
    ctx->Extensions.EXT_point_parameters = true;
    ctx->Extensions.EXT_provoking_vertex = true;
+   ctx->Extensions.EXT_render_snorm = true;
    ctx->Extensions.EXT_stencil_two_side = true;
    ctx->Extensions.EXT_texture_array = true;
    ctx->Extensions.EXT_texture_env_dot3 = true;
@@ -246,6 +247,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.OES_primitive_bounding_box = true;
       ctx->Extensions.OES_texture_buffer = true;
       ctx->Extensions.ARB_fragment_shader_interlock = true;
+      ctx->Extensions.INTEL_fragment_shader_ordering = true;
 
       if (can_do_pipelined_register_writes(brw->screen)) {
          ctx->Extensions.ARB_draw_indirect = true;
@@ -301,13 +303,15 @@ intelInitExtensions(struct gl_context *ctx)
 
    if (devinfo->gen >= 9) {
       ctx->Extensions.ANDROID_extension_pack_es31a = true;
+      ctx->Extensions.AMD_depth_clamp_separate = true;
+      ctx->Extensions.ARB_post_depth_coverage = true;
       ctx->Extensions.ARB_shader_stencil_export = true;
+      ctx->Extensions.EXT_shader_framebuffer_fetch = true;
+      ctx->Extensions.INTEL_conservative_rasterization = true;
+      ctx->Extensions.INTEL_shader_atomic_float_minmax = true;
       ctx->Extensions.KHR_blend_equation_advanced_coherent = true;
       ctx->Extensions.KHR_texture_compression_astc_ldr = true;
       ctx->Extensions.KHR_texture_compression_astc_sliced_3d = true;
-      ctx->Extensions.INTEL_conservative_rasterization = true;
-      ctx->Extensions.EXT_shader_framebuffer_fetch = true;
-      ctx->Extensions.ARB_post_depth_coverage = true;
    }
 
    if (gen_device_info_is_9lp(devinfo))

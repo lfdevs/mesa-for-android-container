@@ -27,7 +27,8 @@
 #include "common/gen_debug.h"
 #include "compiler/nir/nir.h"
 
-__attribute__((weak)) void nir_print_instr(const nir_instr *instr, FILE *fp) {}
+__attribute__((weak)) void nir_print_instr(UNUSED const nir_instr *instr,
+                                           UNUSED FILE *fp) {}
 
 void
 dump_assembly(void *assembly, struct disasm_info *disasm)

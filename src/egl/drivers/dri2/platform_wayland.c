@@ -205,7 +205,7 @@ resize_callback(struct wl_egl_window *wl_win, void *data)
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
    /* Update the surface size as soon as native window is resized; from user
-    * pov, this makes the effect that resize is done inmediately after native
+    * pov, this makes the effect that resize is done immediately after native
     * window resize, without requiring to wait until the first draw.
     *
     * A more detailed and lengthy explanation can be found at
@@ -230,7 +230,7 @@ get_wl_surface_proxy(struct wl_egl_window *window)
 {
     /* Version 3 of wl_egl_window introduced a version field at the same
      * location where a pointer to wl_surface was stored. Thus, if
-     * window->version is dereferencable, we've been given an older version of
+     * window->version is dereferenceable, we've been given an older version of
      * wl_egl_window, and window->version points to wl_surface */
    if (_eglPointerIsDereferencable((void *)(window->version))) {
       return wl_proxy_create_wrapper((void *)(window->version));
@@ -475,7 +475,7 @@ get_back_bo(struct dri2_egl_surface *dri2_surf)
 
    while (dri2_surf->back == NULL) {
       for (int i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
-         /* Get an unlocked buffer, preferrably one with a dri_buffer
+         /* Get an unlocked buffer, preferably one with a dri_buffer
           * already allocated. */
          if (dri2_surf->color_buffers[i].locked)
             continue;
@@ -824,8 +824,7 @@ create_wl_buffer(struct dri2_egl_display *dri2_dpy,
                                            __DRI_IMAGE_ATTRIB_MODIFIER_LOWER,
                                            &mod_lo);
       if (query) {
-         modifier = (uint64_t) mod_hi << 32;
-         modifier |= (uint64_t) (mod_lo & 0xffffffff);
+         modifier = combine_u32_into_u64(mod_hi, mod_lo);
       }
    }
 
@@ -1067,7 +1066,7 @@ dri2_wl_create_wayland_buffer_from_image(_EGLDriver *drv,
    if (visual_idx == -1)
       goto bad_format;
 
-   if (!(dri2_dpy->formats & (1 << visual_idx)))
+   if (!(dri2_dpy->formats & (1u << visual_idx)))
       goto bad_format;
 
    buffer = create_wl_buffer(dri2_dpy, NULL, image);
@@ -1148,7 +1147,7 @@ drm_handle_format(void *data, struct wl_drm *drm, uint32_t format)
    if (visual_idx == -1)
       return;
 
-   dri2_dpy->formats |= (1 << visual_idx);
+   dri2_dpy->formats |= (1u << visual_idx);
 }
 
 static void
@@ -1197,11 +1196,10 @@ dmabuf_handle_modifier(void *data, struct zwp_linux_dmabuf_v1 *dmabuf,
        modifier_lo == (DRM_FORMAT_MOD_INVALID & 0xffffffff))
       return;
 
-   dri2_dpy->formats |= (1 << visual_idx);
+   dri2_dpy->formats |= (1u << visual_idx);
 
    mod = u_vector_add(&dri2_dpy->wl_modifiers[visual_idx]);
-   *mod = (uint64_t) modifier_hi << 32;
-   *mod |= (uint64_t) (modifier_lo & 0xffffffff);
+   *mod = combine_u32_into_u64(modifier_hi, modifier_lo);
 }
 
 static const struct zwp_linux_dmabuf_v1_listener dmabuf_listener = {
@@ -1296,7 +1294,7 @@ dri2_wl_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
       for (unsigned j = 0; j < ARRAY_SIZE(dri2_wl_visuals); j++) {
          struct dri2_egl_config *dri2_conf;
 
-         if (!(dri2_dpy->formats & (1 << j)))
+         if (!(dri2_dpy->formats & (1u << j)))
             continue;
 
          dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
@@ -1322,6 +1320,7 @@ dri2_wl_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
 static EGLBoolean
 dri2_initialize_wayland_drm(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
 
    loader_set_logger(_eglLog);
@@ -1376,6 +1375,14 @@ dri2_initialize_wayland_drm(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_dpy->fd = loader_get_user_preferred_fd(dri2_dpy->fd,
                                                &dri2_dpy->is_different_gpu);
+   dev = _eglAddDevice(dri2_dpy->fd, false);
+   if (!dev) {
+      _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+      goto cleanup;
+   }
+
+   disp->Device = dev;
+
    if (dri2_dpy->is_different_gpu) {
       free(dri2_dpy->device_name);
       dri2_dpy->device_name = loader_get_device_name_for_fd(dri2_dpy->fd);
@@ -1563,7 +1570,7 @@ create_tmpfile_cloexec(char *tmpname)
  *
  * If the C library implements posix_fallocate(), it is used to
  * guarantee that disk space is available for the file at the
- * given size. If disk space is insufficent, errno is set to ENOSPC.
+ * given size. If disk space is insufficient, errno is set to ENOSPC.
  * If posix_fallocate() is not supported, program may receive
  * SIGBUS on accessing mmap()'ed file contents instead.
  */
@@ -1621,7 +1628,7 @@ dri2_wl_swrast_allocate_buffer(struct dri2_egl_surface *dri2_surf,
    stride = dri2_wl_swrast_get_stride_for_format(format, w);
    size_map = h * stride;
 
-   /* Create a sharable buffer */
+   /* Create a shareable buffer */
    fd = os_create_anonymous_file(size_map);
    if (fd < 0)
       return EGL_FALSE;
@@ -1914,7 +1921,7 @@ shm_handle_format(void *data, struct wl_shm *shm, uint32_t format)
    if (visual_idx == -1)
       return;
 
-   dri2_dpy->formats |= (1 << visual_idx);
+   dri2_dpy->formats |= (1u << visual_idx);
 }
 
 static const struct wl_shm_listener shm_listener = {
@@ -1976,6 +1983,7 @@ static const __DRIextension *swrast_loader_extensions[] = {
 static EGLBoolean
 dri2_initialize_wayland_swrast(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
 
    loader_set_logger(_eglLog);
@@ -1994,6 +2002,14 @@ dri2_initialize_wayland_swrast(_EGLDriver *drv, _EGLDisplay *disp)
    } else {
       dri2_dpy->wl_dpy = disp->PlatformDisplay;
    }
+
+   dev = _eglAddDevice(dri2_dpy->fd, true);
+   if (!dev) {
+      _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+      goto cleanup;
+   }
+
+   disp->Device = dev;
 
    dri2_dpy->wl_queue = wl_display_create_queue(dri2_dpy->wl_dpy);
 

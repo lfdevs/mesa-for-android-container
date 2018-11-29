@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -54,6 +52,8 @@ delete_variant(struct ir3_shader_variant *v)
 		ir3_destroy(v->ir);
 	if (v->bo)
 		fd_bo_del(v->bo);
+	if (v->immediates)
+		free(v->immediates);
 	free(v);
 }
 
@@ -96,18 +96,6 @@ fixup_regfootprint(struct ir3_shader_variant *v)
 	for (i = 0; i < v->outputs_count; i++) {
 		int32_t regid = (v->outputs[i].regid + 3) >> 2;
 		v->info.max_reg = MAX2(v->info.max_reg, regid);
-	}
-
-	if (v->type == SHADER_FRAGMENT) {
-		/* NOTE: not sure how to turn pos_regid off..  but this could
-		 * be, for example, r1.x while max reg used by the shader is
-		 * r0.*, in which case we need to fixup the reg footprint:
-		 */
-		v->info.max_reg = MAX2(v->info.max_reg, v->pos_regid >> 2);
-		if (v->frag_coord)
-			debug_assert(v->info.max_reg >= 0); /* hard coded r0.x */
-		if (v->frag_face)
-			debug_assert(v->info.max_half_reg >= 0); /* hr0.x */
 	}
 }
 
@@ -158,7 +146,7 @@ assemble_variant(struct ir3_shader_variant *v)
 	if (fd_mesa_debug & FD_DBG_DISASM) {
 		struct ir3_shader_key key = v->key;
 		printf("disassemble: type=%d, k={bp=%u,cts=%u,hp=%u}", v->type,
-			key.binning_pass, key.color_two_side, key.half_precision);
+			v->binning_pass, key.color_two_side, key.half_precision);
 		ir3_shader_disasm(v, bin, stdout);
 	}
 
@@ -206,7 +194,8 @@ dump_shader_info(struct ir3_shader_variant *v, struct pipe_debug_callback *debug
 }
 
 static struct ir3_shader_variant *
-create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
+create_variant(struct ir3_shader *shader, struct ir3_shader_key key,
+		bool binning_pass)
 {
 	struct ir3_shader_variant *v = CALLOC_STRUCT(ir3_shader_variant);
 	int ret;
@@ -216,6 +205,7 @@ create_variant(struct ir3_shader *shader, struct ir3_shader_key key)
 
 	v->id = ++shader->variant_count;
 	v->shader = shader;
+	v->binning_pass = binning_pass;
 	v->key = key;
 	v->type = shader->type;
 
@@ -238,8 +228,8 @@ fail:
 	return NULL;
 }
 
-struct ir3_shader_variant *
-ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
+static inline struct ir3_shader_variant *
+shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
 		struct pipe_debug_callback *debug)
 {
 	struct ir3_shader_variant *v;
@@ -250,7 +240,6 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
 	 */
 	switch (shader->type) {
 	case SHADER_FRAGMENT:
-		key.binning_pass = false;
 		if (key.has_per_samp) {
 			key.vsaturate_s = 0;
 			key.vsaturate_t = 0;
@@ -281,7 +270,7 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
 			return v;
 
 	/* compile new variant if it doesn't exist already: */
-	v = create_variant(shader, key);
+	v = create_variant(shader, key, false);
 	if (v) {
 		v->next = shader->variants;
 		shader->variants = v;
@@ -291,6 +280,22 @@ ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
 	return v;
 }
 
+
+struct ir3_shader_variant *
+ir3_shader_variant(struct ir3_shader *shader, struct ir3_shader_key key,
+		bool binning_pass, struct pipe_debug_callback *debug)
+{
+	struct ir3_shader_variant *v =
+			shader_variant(shader, key, debug);
+
+	if (binning_pass) {
+		if (!v->binning)
+			v->binning = create_variant(shader, key, true);
+		return v->binning;
+	}
+
+	return v;
+}
 
 void
 ir3_shader_destroy(struct ir3_shader *shader)
@@ -319,9 +324,6 @@ ir3_shader_create(struct ir3_compiler *compiler,
 	if (cso->type == PIPE_SHADER_IR_NIR) {
 		/* we take ownership of the reference: */
 		nir = cso->ir.nir;
-
-		NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
-			   (nir_lower_io_options)0);
 	} else {
 		debug_assert(cso->type == PIPE_SHADER_IR_TGSI);
 		if (fd_mesa_debug & FD_DBG_DISASM) {
@@ -330,6 +332,8 @@ ir3_shader_create(struct ir3_compiler *compiler,
 		}
 		nir = ir3_tgsi_to_nir(cso->tokens);
 	}
+	NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
+			   (nir_lower_io_options)0);
 	/* do first pass optimization, ignoring the key: */
 	shader->nir = ir3_optimize_nir(shader, nir, NULL);
 	if (fd_mesa_debug & FD_DBG_DISASM) {
@@ -345,7 +349,7 @@ ir3_shader_create(struct ir3_compiler *compiler,
 		 */
 		static struct ir3_shader_key key;
 		memset(&key, 0, sizeof(key));
-		ir3_shader_variant(shader, key, debug);
+		ir3_shader_variant(shader, key, false, debug);
 	}
 	return shader;
 }
@@ -518,7 +522,8 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 		dump_output(out, so, VARYING_SLOT_PSIZ, "psize");
 		break;
 	case SHADER_FRAGMENT:
-		dump_reg(out, "pos (bary)", so->pos_regid);
+		dump_reg(out, "pos (bary)",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_VARYING_COORD));
 		dump_output(out, so, FRAG_RESULT_DEPTH, "posz");
 		if (so->color0_mrt) {
 			dump_output(out, so, FRAG_RESULT_COLOR, "color");
@@ -564,6 +569,25 @@ ir3_shader_outputs(const struct ir3_shader *so)
 
 #include "freedreno_resource.h"
 
+static inline bool
+is_stateobj(struct fd_ringbuffer *ring)
+{
+	/* XXX this is an ugly way to differentiate.. */
+	return !!(ring->flags & FD_RINGBUFFER_STREAMING);
+}
+
+static inline void
+ring_wfi(struct fd_batch *batch, struct fd_ringbuffer *ring)
+{
+	/* when we emit const state via ring (IB2) we need a WFI, but when
+	 * it is emit'd via stateobj, we don't
+	 */
+	if (is_stateobj(ring))
+		return;
+
+	fd_wfi(batch, ring);
+}
+
 static void
 emit_user_consts(struct fd_context *ctx, const struct ir3_shader_variant *v,
 		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf)
@@ -591,7 +615,7 @@ emit_user_consts(struct fd_context *ctx, const struct ir3_shader_variant *v,
 		size = MIN2(size, 4 * max_const);
 
 		if (size > 0) {
-			fd_wfi(ctx->batch, ring);
+			ring_wfi(ctx->batch, ring);
 			ctx->emit_const(ring, v->type, 0,
 					cb->buffer_offset, size,
 					cb->user_buffer, cb->buffer);
@@ -623,7 +647,7 @@ emit_ubos(struct fd_context *ctx, const struct ir3_shader_variant *v,
 			}
 		}
 
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 		ctx->emit_const_bo(ring, v->type, false, offset * 4, params, prscs, offsets);
 	}
 }
@@ -643,7 +667,7 @@ emit_ssbo_sizes(struct fd_context *ctx, const struct ir3_shader_variant *v,
 			sizes[off] = sb->sb[index].buffer_size;
 		}
 
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 		ctx->emit_const(ring, v->type, offset * 4,
 			0, ARRAY_SIZE(sizes), sizes, NULL);
 	}
@@ -682,10 +706,20 @@ emit_image_dims(struct fd_context *ctx, const struct ir3_shader_variant *v,
 				} else {
 					dims[off + 2] = rsc->slices[lvl].size0;
 				}
+			} else {
+				/* For buffer-backed images, the log2 of the format's
+				 * bytes-per-pixel is placed on the 2nd slot. This is useful
+				 * when emitting image_size instructions, for which we need
+				 * to divide by bpp for image buffers. Since the bpp
+				 * can only be power-of-two, the division is implemented
+				 * as a SHR, and for that it is handy to have the log2 of
+				 * bpp as a constant. (log2 = first-set-bit - 1)
+				 */
+				dims[off + 1] = ffs(dims[off + 0]) - 1;
 			}
 		}
 
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 		ctx->emit_const(ring, v->type, offset * 4,
 			0, ARRAY_SIZE(dims), dims, NULL);
 	}
@@ -708,7 +742,7 @@ emit_immediates(struct fd_context *ctx, const struct ir3_shader_variant *v,
 	size *= 4;
 
 	if (size > 0) {
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 		ctx->emit_const(ring, v->type, base,
 			0, size, v->immediates[0].val, NULL);
 	}
@@ -741,7 +775,7 @@ emit_tfbos(struct fd_context *ctx, const struct ir3_shader_variant *v,
 			}
 		}
 
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 		ctx->emit_const_bo(ring, v->type, true, offset * 4, params, prscs, offsets);
 	}
 }
@@ -755,7 +789,7 @@ max_tf_vtx(struct fd_context *ctx, const struct ir3_shader_variant *v)
 
 	if (ctx->screen->gpu_id >= 500)
 		return 0;
-	if (v->key.binning_pass)
+	if (v->binning_pass)
 		return 0;
 	if (v->shader->stream_output.num_outputs == 0)
 		return 0;
@@ -798,6 +832,19 @@ emit_common_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *rin
 		struct fd_context *ctx, enum pipe_shader_type t)
 {
 	enum fd_dirty_shader_state dirty = ctx->dirty_shader[t];
+
+	/* When we use CP_SET_DRAW_STATE objects to emit constant state,
+	 * if we emit any of it we need to emit all.  This is because
+	 * we are using the same state-group-id each time for uniform
+	 * state, and if previous update is never evaluated (due to no
+	 * visible primitives in the current tile) then the new stateobj
+	 * completely replaces the old one.
+	 *
+	 * Possibly if we split up different parts of the const state to
+	 * different state-objects we could avoid this.
+	 */
+	if (dirty && is_stateobj(ring))
+		dirty = ~0;
 
 	if (dirty & (FD_DIRTY_SHADER_PROG | FD_DIRTY_SHADER_CONST)) {
 		struct fd_constbuf_stateobj *constbuf;
@@ -858,7 +905,7 @@ ir3_emit_vs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *rin
 				vertex_params_size = ARRAY_SIZE(vertex_params);
 			}
 
-			fd_wfi(ctx->batch, ring);
+			ring_wfi(ctx->batch, ring);
 
 			bool needs_vtxid_base =
 				ir3_find_sysval_regid(v, SYSTEM_VALUE_VERTEX_ID_ZERO_BASE) != regid(63, 0);
@@ -930,7 +977,7 @@ ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *rin
 	/* emit compute-shader driver-params: */
 	uint32_t offset = v->constbase.driver_param;
 	if (v->constlen > offset) {
-		fd_wfi(ctx->batch, ring);
+		ring_wfi(ctx->batch, ring);
 
 		if (info->indirect) {
 			struct pipe_resource *indirect = NULL;

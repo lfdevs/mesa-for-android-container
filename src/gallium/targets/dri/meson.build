@@ -84,6 +84,7 @@ foreach d : [[with_gallium_pl111, 'pl111_dri.so'],
 endforeach
 
 meson.add_install_script(
+  prog_python.path(),
   join_paths(meson.source_root(), 'bin/install_megadrivers.py'),
   libgallium_dri.full_path(),
   dri_drivers_path,

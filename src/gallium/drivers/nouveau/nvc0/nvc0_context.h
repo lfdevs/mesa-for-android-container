@@ -138,7 +138,9 @@
 #define NVC0_CB_AUX_SAMPLE_INFO     0x1a0 /* FP */
 /* 256 bytes, though only 64 bytes used before GM200 */
 #define NVC0_CB_AUX_SAMPLE_SIZE     (8 * 2 * 4 * 4)
-/* draw parameters (index bais, base instance, drawid) */
+/* draw parameters (index bias, base instance, drawid)
+ * be sure to update the indirect draw macros in com9097.mme when changing this
+ */
 #define NVC0_CB_AUX_DRAW_INFO       0x1a0 /* VP */
 /* 32 user buffers, at 4 32-bits integers each */
 #define NVC0_CB_AUX_BUF_INFO(i)     0x2a0 + (i) * 4 * 4
@@ -146,7 +148,9 @@
 /* 8 surfaces, at 16 32-bits integers each */
 #define NVC0_CB_AUX_SU_INFO(i)      0x4a0 + (i) * 16 * 4
 #define NVC0_CB_AUX_SU_SIZE         (NVC0_MAX_IMAGES * 16 * 4)
-/* 1 64-bits address and 1 32-bits sequence */
+/* 1 64-bits address and 1 32-bits sequence
+ * be sure to update the shaders in nvc0_query_hw_sm.c when changing this
+ */
 #define NVC0_CB_AUX_MP_INFO         0x6a0
 #define NVC0_CB_AUX_MP_SIZE         3 * 4
 /* 512 64-byte blocks for bindless image handles */

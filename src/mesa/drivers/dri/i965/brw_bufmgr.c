@@ -195,7 +195,7 @@ bo_tile_size(struct brw_bufmgr *bufmgr, uint64_t size, uint32_t tiling)
       return size;
 
    /* 965+ just need multiples of page size for tiling */
-   return ALIGN(size, 4096);
+   return ALIGN(size, PAGE_SIZE);
 }
 
 /*
@@ -980,7 +980,6 @@ brw_bo_map_cpu(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
       };
       int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
       if (ret != 0) {
-         ret = -errno;
          DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
              __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
          return NULL;
@@ -1044,7 +1043,6 @@ brw_bo_map_wc(struct brw_context *brw, struct brw_bo *bo, unsigned flags)
       };
       int ret = drmIoctl(bufmgr->fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
       if (ret != 0) {
-         ret = -errno;
          DBG("%s:%d: Error mapping buffer %d (%s): %s .\n",
              __FILE__, __LINE__, bo->gem_handle, bo->name, strerror(errno));
          return NULL;
@@ -1577,12 +1575,12 @@ init_cache_buckets(struct brw_bufmgr *bufmgr)
     * width/height alignment and rounding of sizes to pages will
     * get us useful cache hit rates anyway)
     */
-   add_bucket(bufmgr, 4096);
-   add_bucket(bufmgr, 4096 * 2);
-   add_bucket(bufmgr, 4096 * 3);
+   add_bucket(bufmgr, PAGE_SIZE);
+   add_bucket(bufmgr, PAGE_SIZE * 2);
+   add_bucket(bufmgr, PAGE_SIZE * 3);
 
    /* Initialize the linked lists for BO reuse cache. */
-   for (size = 4 * 4096; size <= cache_max_size; size *= 2) {
+   for (size = 4 * PAGE_SIZE; size <= cache_max_size; size *= 2) {
       add_bucket(bufmgr, size);
 
       add_bucket(bufmgr, size + size * 1 / 4);
@@ -1728,7 +1726,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd)
          bufmgr->initial_kflags |= EXEC_OBJECT_PINNED;
 
          util_vma_heap_init(&bufmgr->vma_allocator[BRW_MEMZONE_LOW_4G],
-                            4096, _4GB);
+                            PAGE_SIZE, _4GB);
          util_vma_heap_init(&bufmgr->vma_allocator[BRW_MEMZONE_OTHER],
                             1 * _4GB, gtt_size - 1 * _4GB);
       } else if (devinfo->gen >= 10) {

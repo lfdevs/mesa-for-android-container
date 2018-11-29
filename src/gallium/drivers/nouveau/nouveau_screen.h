@@ -26,6 +26,8 @@ struct nouveau_screen {
 
    int refcount;
 
+   unsigned transfer_pushbuf_threshold;
+
    unsigned vidmem_bindings; /* PIPE_BIND_* where VRAM placement is desired */
    unsigned sysmem_bindings; /* PIPE_BIND_* where GART placement is desired */
    unsigned lowmem_bindings; /* PIPE_BIND_* that require an address < 4 GiB */

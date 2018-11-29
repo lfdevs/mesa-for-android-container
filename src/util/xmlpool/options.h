@@ -1,6 +1,4 @@
-/***********************************************************************
- ***        THIS FILE IS GENERATED AUTOMATICALLY. DON'T EDIT!        ***
- ***********************************************************************/
+/* This is file is generated automatically. Don't edit!  */
 /*
  * XML DRI client-side driver configuration
  * Copyright (C) 2003 Felix Kuehling
@@ -57,35 +55,13 @@
  */
 #define DRI_CONF_SECTION_DEBUG \
 DRI_CONF_SECTION_BEGIN \
-	DRI_CONF_DESC(en,"Debugging") \
-	DRI_CONF_DESC(ca,"Depuració") \
-	DRI_CONF_DESC(de,"Fehlersuche") \
-	DRI_CONF_DESC(es,"Depuración") \
-	DRI_CONF_DESC(nl,"Debuggen") \
-	DRI_CONF_DESC(fr,"Debogage") \
-	DRI_CONF_DESC(sv,"Felsökning")
-
-#define DRI_CONF_NO_RAST(def) \
-DRI_CONF_OPT_BEGIN_B(no_rast, def) \
-        DRI_CONF_DESC(en,"Disable 3D acceleration") \
-        DRI_CONF_DESC(ca,"Deshabilita l'acceleració 3D") \
-        DRI_CONF_DESC(de,"3D-Beschleunigung abschalten") \
-        DRI_CONF_DESC(es,"Deshabilitar aceleración 3D") \
-        DRI_CONF_DESC(nl,"3D versnelling uitschakelen") \
-        DRI_CONF_DESC(fr,"Désactiver l'accélération 3D") \
-        DRI_CONF_DESC(sv,"Inaktivera 3D-accelerering") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_PERFORMANCE_BOXES(def) \
-DRI_CONF_OPT_BEGIN_B(performance_boxes, def) \
-        DRI_CONF_DESC(en,"Show performance boxes") \
-        DRI_CONF_DESC(ca,"Mostra les caixes de rendiment") \
-        DRI_CONF_DESC(de,"Zeige Performanceboxen") \
-        DRI_CONF_DESC(es,"Mostrar cajas de rendimiento") \
-        DRI_CONF_DESC(nl,"Laat prestatie boxjes zien") \
-        DRI_CONF_DESC(fr,"Afficher les boîtes de performance") \
-        DRI_CONF_DESC(sv,"Visa prestandarutor") \
-DRI_CONF_OPT_END
+        DRI_CONF_DESC(en,"Debugging") \
+        DRI_CONF_DESC(ca,"Depuració") \
+        DRI_CONF_DESC(de,"Fehlersuche") \
+        DRI_CONF_DESC(es,"Depuración") \
+        DRI_CONF_DESC(nl,"Debuggen") \
+        DRI_CONF_DESC(fr,"Debogage") \
+        DRI_CONF_DESC(sv,"Felsökning")
 
 #define DRI_CONF_ALWAYS_FLUSH_BATCH(def) \
 DRI_CONF_OPT_BEGIN_B(always_flush_batch, def) \
@@ -111,13 +87,13 @@ DRI_CONF_OPT_END
 
 #define DRI_CONF_DISABLE_THROTTLING(def) \
 DRI_CONF_OPT_BEGIN_B(disable_throttling, def) \
-	DRI_CONF_DESC(en,"Disable throttling on first batch after flush") \
-	DRI_CONF_DESC(ca,"Deshabilita la regulació en el primer lot després de buidar") \
-	DRI_CONF_DESC(de,"Disable throttling on first batch after flush") \
-	DRI_CONF_DESC(es,"Deshabilitar regulación del primer lote después de vaciar") \
-	DRI_CONF_DESC(nl,"Disable throttling on first batch after flush") \
-	DRI_CONF_DESC(fr,"Disable throttling on first batch after flush") \
-	DRI_CONF_DESC(sv,"Disable throttling on first batch after flush") \
+        DRI_CONF_DESC(en,"Disable throttling on first batch after flush") \
+        DRI_CONF_DESC(ca,"Deshabilita la regulació en el primer lot després de buidar") \
+        DRI_CONF_DESC(de,"Disable throttling on first batch after flush") \
+        DRI_CONF_DESC(es,"Deshabilitar regulación del primer lote después de vaciar") \
+        DRI_CONF_DESC(nl,"Disable throttling on first batch after flush") \
+        DRI_CONF_DESC(fr,"Disable throttling on first batch after flush") \
+        DRI_CONF_DESC(sv,"Disable throttling on first batch after flush") \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN(def) \
@@ -162,17 +138,6 @@ DRI_CONF_OPT_BEGIN_B(disable_glsl_line_continuations, def) \
         DRI_CONF_DESC(nl,"Disable backslash-based line continuations in GLSL source") \
         DRI_CONF_DESC(fr,"Disable backslash-based line continuations in GLSL source") \
         DRI_CONF_DESC(sv,"Disable backslash-based line continuations in GLSL source") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DISABLE_SHADER_BIT_ENCODING(def) \
-DRI_CONF_OPT_BEGIN_B(disable_shader_bit_encoding, def) \
-        DRI_CONF_DESC(en,"Disable GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(ca,"Deshabilita el GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(de,"Disable GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(es,"Deshabilitar GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(nl,"Disable GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(fr,"Disable GL_ARB_shader_bit_encoding") \
-        DRI_CONF_DESC(sv,"Disable GL_ARB_shader_bit_encoding") \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_FORCE_GLSL_VERSION(def) \
@@ -274,6 +239,17 @@ DRI_CONF_OPT_BEGIN_B(allow_glsl_cross_stage_interpolation_mismatch, def) \
         DRI_CONF_DESC(sv,"Allow interpolation qualifier mismatch across shader stages") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_GLSL_LAYOUT_QUALIFIER_ON_FUNCTION_PARAMETERS(def) \
+DRI_CONF_OPT_BEGIN_B(allow_glsl_layout_qualifier_on_function_parameters, def) \
+        DRI_CONF_DESC(en,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(ca,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(de,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(es,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(nl,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(fr,"Allow layout qualifiers on function parameters.") \
+        DRI_CONF_DESC(sv,"Allow layout qualifiers on function parameters.") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
 DRI_CONF_OPT_BEGIN_B(force_compat_profile, def) \
         DRI_CONF_DESC(en,"Force an OpenGL compatibility context") \
@@ -290,90 +266,13 @@ DRI_CONF_OPT_END
  */
 #define DRI_CONF_SECTION_QUALITY \
 DRI_CONF_SECTION_BEGIN \
-	DRI_CONF_DESC(en,"Image Quality") \
-	DRI_CONF_DESC(ca,"Qualitat d'imatge") \
-	DRI_CONF_DESC(de,"Bildqualität") \
-	DRI_CONF_DESC(es,"Calidad de imagen") \
-	DRI_CONF_DESC(nl,"Beeldkwaliteit") \
-	DRI_CONF_DESC(fr,"Qualité d'image") \
-	DRI_CONF_DESC(sv,"Bildkvalitet")
-
-#define DRI_CONF_EXCESS_MIPMAP(def) \
-DRI_CONF_OPT_BEGIN_B(excess_mipmap, def) \
-	DRI_CONF_DESC(en,"Enable extra mipmap level") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_DEPTH_FB       0
-#define DRI_CONF_TEXTURE_DEPTH_32       1
-#define DRI_CONF_TEXTURE_DEPTH_16       2
-#define DRI_CONF_TEXTURE_DEPTH_FORCE_16 3
-#define DRI_CONF_TEXTURE_DEPTH(def) \
-DRI_CONF_OPT_BEGIN_V(texture_depth,enum,def,"0:3") \
-	DRI_CONF_DESC_BEGIN(en,"Texture color depth") \
-                DRI_CONF_ENUM(0,"Prefer frame buffer color depth") \
-                DRI_CONF_ENUM(1,"Prefer 32 bits per texel") \
-                DRI_CONF_ENUM(2,"Prefer 16 bits per texel") \
-                DRI_CONF_ENUM(3,"Force 16 bits per texel") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(ca,"Profunditat de color de textura") \
-                DRI_CONF_ENUM(0,"Prefereix profunditat de color del framebuffer") \
-                DRI_CONF_ENUM(1,"Prefereix 32 bits per texel") \
-                DRI_CONF_ENUM(2,"Prefereix 16 bits per texel") \
-                DRI_CONF_ENUM(3,"Força 16 bits per texel") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(de,"Texturfarbtiefe") \
-                DRI_CONF_ENUM(0,"Bevorzuge Farbtiefe des Framebuffers") \
-                DRI_CONF_ENUM(1,"Bevorzuge 32 bits pro Texel") \
-                DRI_CONF_ENUM(2,"Bevorzuge 16 bits pro Texel") \
-                DRI_CONF_ENUM(3,"Erzwinge 16 bits pro Texel") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(es,"Profundidad de color de textura") \
-                DRI_CONF_ENUM(0,"Preferir profundidad de color del framebuffer") \
-                DRI_CONF_ENUM(1,"Preferir 32 bits por texel") \
-                DRI_CONF_ENUM(2,"Preferir 16 bits por texel") \
-                DRI_CONF_ENUM(3,"Forzar a 16 bits por texel") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(nl,"Textuurkleurendiepte") \
-                DRI_CONF_ENUM(0,"Prefereer kaderbufferkleurdiepte") \
-                DRI_CONF_ENUM(1,"Prefereer 32 bits per texel") \
-                DRI_CONF_ENUM(2,"Prefereer 16 bits per texel") \
-                DRI_CONF_ENUM(3,"Dwing 16 bits per texel af") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(fr,"Profondeur de texture") \
-                DRI_CONF_ENUM(0,"Profondeur de couleur") \
-                DRI_CONF_ENUM(1,"Préférer 32 bits par texel") \
-                DRI_CONF_ENUM(2,"Prérérer 16 bits par texel") \
-                DRI_CONF_ENUM(3,"Forcer 16 bits par texel") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(sv,"Färgdjup för texturer") \
-                DRI_CONF_ENUM(0,"Föredra färgdjupet för framebuffer") \
-                DRI_CONF_ENUM(1,"Föredra 32 bitar per texel") \
-                DRI_CONF_ENUM(2,"Föredra 16 bitar per texel") \
-                DRI_CONF_ENUM(3,"Tvinga 16 bitar per texel") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DEF_MAX_ANISOTROPY(def,range) \
-DRI_CONF_OPT_BEGIN_V(def_max_anisotropy,float,def,range) \
-        DRI_CONF_DESC(en,"Initial maximum value for anisotropic texture filtering") \
-        DRI_CONF_DESC(ca,"Valor màxim inicial per a la filtració de textura anisòtropa") \
-        DRI_CONF_DESC(de,"Initialer Maximalwert für anisotropische Texturfilterung") \
-        DRI_CONF_DESC(es,"Valor máximo inicial para filtrado anisotrópico de textura") \
-        DRI_CONF_DESC(nl,"Initïele maximum waarde voor anisotrophische textuur filtering") \
-        DRI_CONF_DESC(fr,"Valeur maximale initiale pour le filtrage anisotropique de texture") \
-        DRI_CONF_DESC(sv,"Initialt maximalt värde för anisotropisk texturfiltrering") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_NO_NEG_LOD_BIAS(def) \
-DRI_CONF_OPT_BEGIN_B(no_neg_lod_bias, def) \
-        DRI_CONF_DESC(en,"Forbid negative texture LOD bias") \
-        DRI_CONF_DESC(ca,"Prohibeix una parcialitat negativa del Nivell de Detalle (LOD) de les textures") \
-        DRI_CONF_DESC(de,"Verbiete negative Textur-Detailgradverschiebung") \
-        DRI_CONF_DESC(es,"Prohibir valores negativos de Nivel De Detalle (LOD) de texturas") \
-        DRI_CONF_DESC(nl,"Verbied negatief niveau detailonderscheid (LOD) van texturen") \
-        DRI_CONF_DESC(fr,"Interdire le LOD bias negatif") \
-        DRI_CONF_DESC(sv,"Förbjud negativ LOD-kompensation för texturer") \
-DRI_CONF_OPT_END
+        DRI_CONF_DESC(en,"Image Quality") \
+        DRI_CONF_DESC(ca,"Qualitat d'imatge") \
+        DRI_CONF_DESC(de,"Bildqualität") \
+        DRI_CONF_DESC(es,"Calidad de imagen") \
+        DRI_CONF_DESC(nl,"Beeldkwaliteit") \
+        DRI_CONF_DESC(fr,"Qualité d'image") \
+        DRI_CONF_DESC(sv,"Bildkvalitet")
 
 #define DRI_CONF_PRECISE_TRIG(def) \
 DRI_CONF_OPT_BEGIN_B(precise_trig, def) \
@@ -384,127 +283,6 @@ DRI_CONF_OPT_BEGIN_B(precise_trig, def) \
         DRI_CONF_DESC(nl,"Prefer accuracy over performance in trig functions") \
         DRI_CONF_DESC(fr,"Prefer accuracy over performance in trig functions") \
         DRI_CONF_DESC(sv,"Prefer accuracy over performance in trig functions") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_COLOR_REDUCTION_ROUND 0
-#define DRI_CONF_COLOR_REDUCTION_DITHER 1
-#define DRI_CONF_COLOR_REDUCTION(def) \
-DRI_CONF_OPT_BEGIN_V(color_reduction,enum,def,"0:1") \
-        DRI_CONF_DESC_BEGIN(en,"Initial color reduction method") \
-                DRI_CONF_ENUM(0,"Round colors") \
-                DRI_CONF_ENUM(1,"Dither colors") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(ca,"Mètode inicial de reducció de color") \
-                DRI_CONF_ENUM(0,"Colors arrodonits") \
-                DRI_CONF_ENUM(1,"Colors tramats") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(de,"Initiale Farbreduktionsmethode") \
-                DRI_CONF_ENUM(0,"Farben runden") \
-                DRI_CONF_ENUM(1,"Farben rastern") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(es,"Método inicial de reducción de color") \
-                DRI_CONF_ENUM(0,"Colores redondeados") \
-                DRI_CONF_ENUM(1,"Colores suavizados") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(nl,"Initïele kleurreductie methode") \
-                DRI_CONF_ENUM(0,"Rond kleuren af") \
-                DRI_CONF_ENUM(1,"Rasteriseer kleuren") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(fr,"Technique de réduction de couleurs") \
-                DRI_CONF_ENUM(0,"Arrondir les valeurs de couleur") \
-                DRI_CONF_ENUM(1,"Tramer les couleurs") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(sv,"Initial färgminskningsmetod") \
-                DRI_CONF_ENUM(0,"Avrunda färger") \
-                DRI_CONF_ENUM(1,"Utjämna färger") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_ROUND_TRUNC 0
-#define DRI_CONF_ROUND_ROUND 1
-#define DRI_CONF_ROUND_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(round_mode,enum,def,"0:1") \
-	DRI_CONF_DESC_BEGIN(en,"Color rounding method") \
-                DRI_CONF_ENUM(0,"Round color components downward") \
-                DRI_CONF_ENUM(1,"Round to nearest color") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(ca,"Mètode d'arrodoniment de color") \
-                DRI_CONF_ENUM(0,"Arrodoneix els components de color a baix") \
-                DRI_CONF_ENUM(1,"Arrodoneix al color més proper") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(de,"Farbrundungsmethode") \
-                DRI_CONF_ENUM(0,"Farbkomponenten abrunden") \
-                DRI_CONF_ENUM(1,"Zur ähnlichsten Farbe runden") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(es,"Método de redondeo de colores") \
-                DRI_CONF_ENUM(0,"Redondear hacia abajo los componentes de color") \
-                DRI_CONF_ENUM(1,"Redondear al color más cercano") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(nl,"Kleurafrondingmethode") \
-                DRI_CONF_ENUM(0,"Rond kleurencomponenten af naar beneden") \
-                DRI_CONF_ENUM(1,"Rond af naar dichtsbijzijnde kleur") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(fr,"Méthode d'arrondi des couleurs") \
-                DRI_CONF_ENUM(0,"Arrondi à l'inférieur") \
-                DRI_CONF_ENUM(1,"Arrondi au plus proche") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(sv,"Färgavrundningsmetod") \
-                DRI_CONF_ENUM(0,"Avrunda färdkomponenter nedåt") \
-                DRI_CONF_ENUM(1,"Avrunda till närmsta färg") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DITHER_XERRORDIFF 0
-#define DRI_CONF_DITHER_XERRORDIFFRESET 1
-#define DRI_CONF_DITHER_ORDERED 2
-#define DRI_CONF_DITHER_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(dither_mode,enum,def,"0:2") \
-	DRI_CONF_DESC_BEGIN(en,"Color dithering method") \
-                DRI_CONF_ENUM(0,"Horizontal error diffusion") \
-                DRI_CONF_ENUM(1,"Horizontal error diffusion, reset error at line start") \
-                DRI_CONF_ENUM(2,"Ordered 2D color dithering") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(ca,"Mètode de tramat de color") \
-                DRI_CONF_ENUM(0,"Difusió d'error horitzontal") \
-                DRI_CONF_ENUM(1,"Difusió d'error horitzontal, reinicia l'error a l'inici de la línia") \
-                DRI_CONF_ENUM(2,"Tramat de color 2D ordenat") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(de,"Farbrasterungsmethode") \
-                DRI_CONF_ENUM(0,"Horizontale Fehlerstreuung") \
-                DRI_CONF_ENUM(1,"Horizontale Fehlerstreuung, Fehler am Zeilenanfang zurücksetzen") \
-                DRI_CONF_ENUM(2,"Geordnete 2D Farbrasterung") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(es,"Método de suavizado de color") \
-                DRI_CONF_ENUM(0,"Difusión de error horizontal") \
-                DRI_CONF_ENUM(1,"Difusión de error horizontal, reiniciar error al comienzo de línea") \
-                DRI_CONF_ENUM(2,"Suavizado de color 2D ordenado") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(nl,"Kleurrasteriseringsmethode") \
-                DRI_CONF_ENUM(0,"Horizontale foutdiffusie") \
-                DRI_CONF_ENUM(1,"Horizontale foutdiffusie, zet fout bij lijnbegin terug") \
-                DRI_CONF_ENUM(2,"Geordende 2D kleurrasterisering") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(fr,"Méthode de tramage") \
-                DRI_CONF_ENUM(0,"Diffusion d'erreur horizontale") \
-                DRI_CONF_ENUM(1,"Diffusion d'erreur horizontale, réinitialisé pour chaque ligne") \
-                DRI_CONF_ENUM(2,"Tramage ordonné des couleurs") \
-        DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(sv,"Färgutjämningsmetod") \
-                DRI_CONF_ENUM(0,"Horisontell felspridning") \
-                DRI_CONF_ENUM(1,"Horisontell felspridning, återställ fel vid radbörjan") \
-                DRI_CONF_ENUM(2,"Ordnad 2D-färgutjämning") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_FLOAT_DEPTH(def) \
-DRI_CONF_OPT_BEGIN_B(float_depth, def) \
-        DRI_CONF_DESC(en,"Floating point depth buffer") \
-        DRI_CONF_DESC(ca,"Buffer de profunditat de punt flotant") \
-        DRI_CONF_DESC(de,"Fließkomma z-Puffer") \
-        DRI_CONF_DESC(es,"Búfer de profundidad en coma flotante") \
-        DRI_CONF_DESC(nl,"Dieptebuffer als commagetal") \
-        DRI_CONF_DESC(fr,"Z-buffer en virgule flottante") \
-        DRI_CONF_DESC(sv,"Buffert för flytande punktdjup") \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_PP_CELSHADE(def) \
@@ -588,98 +366,6 @@ DRI_CONF_SECTION_BEGIN \
         DRI_CONF_DESC(fr,"Performance") \
         DRI_CONF_DESC(sv,"Prestanda")
 
-#define DRI_CONF_TCL_SW 0
-#define DRI_CONF_TCL_PIPELINED 1
-#define DRI_CONF_TCL_VTXFMT 2
-#define DRI_CONF_TCL_CODEGEN 3
-#define DRI_CONF_TCL_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(tcl_mode,enum,def,"0:3") \
-        DRI_CONF_DESC_BEGIN(en,"TCL mode (Transformation, Clipping, Lighting)") \
-                DRI_CONF_ENUM(0,"Use software TCL pipeline") \
-                DRI_CONF_ENUM(1,"Use hardware TCL as first TCL pipeline stage") \
-                DRI_CONF_ENUM(2,"Bypass the TCL pipeline") \
-                DRI_CONF_ENUM(3,"Bypass the TCL pipeline with state-based machine code generated on-the-fly") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(ca,"Mode TCL (Transformació, Retall, Il·luminació)") \
-                DRI_CONF_ENUM(0,"Utilitza la canonada TCL de programari") \
-                DRI_CONF_ENUM(1,"Utilitza el TCL de maquinari com a la primera fase de la canonada TCL") \
-                DRI_CONF_ENUM(2,"Passa per alt la canonada TCL") \
-                DRI_CONF_ENUM(3,"Passa per alt la canonada TCL amb codi de màquina basat en estats, generat sobre la marxa") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(de,"TCL-Modus (Transformation, Clipping, Licht)") \
-                DRI_CONF_ENUM(0,"Benutze die Software-TCL-Pipeline") \
-                DRI_CONF_ENUM(1,"Benutze Hardware TCL als erste Stufe der TCL-Pipeline") \
-                DRI_CONF_ENUM(2,"Umgehe die TCL-Pipeline") \
-                DRI_CONF_ENUM(3,"Umgehe die TCL-Pipeline mit zur Laufzeit erzeugtem, zustandsbasiertem Maschinencode") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(es,"Modo TCL (Transformación, Recorte, Iluminación)") \
-                DRI_CONF_ENUM(0,"Usar tubería TCL por software") \
-                DRI_CONF_ENUM(1,"Usar TCL por hardware en la primera fase de la tubería TCL") \
-                DRI_CONF_ENUM(2,"Pasar por alto la tubería TCL") \
-                DRI_CONF_ENUM(3,"Pasar por alto la tubería TCL con código máquina basado en estados, generado al vuelo") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(nl,"TCL-modus (Transformatie, Clipping, Licht)") \
-                DRI_CONF_ENUM(0,"Gebruik software TCL pijpleiding") \
-                DRI_CONF_ENUM(1,"Gebruik hardware TCL as eerste TCL pijpleiding trap") \
-                DRI_CONF_ENUM(2,"Omzeil de TCL pijpleiding") \
-                DRI_CONF_ENUM(3,"Omzeil de TCL pijpleiding met staatgebaseerde machinecode die tijdens executie gegenereerd wordt") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(fr,"Mode de TCL (Transformation, Clipping, Eclairage)") \
-                DRI_CONF_ENUM(0,"Utiliser un pipeline TCL logiciel") \
-                DRI_CONF_ENUM(1,"Utiliser le TCL matériel pour le premier niveau de pipeline") \
-                DRI_CONF_ENUM(2,"Court-circuiter le pipeline TCL") \
-                DRI_CONF_ENUM(3,"Court-circuiter le pipeline TCL par une machine à états qui génère le codede TCL à la volée") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(sv,"TCL-läge (Transformation, Clipping, Lighting)") \
-                DRI_CONF_ENUM(0,"Använd programvaru-TCL-rörledning") \
-                DRI_CONF_ENUM(1,"Använd maskinvaru-TCL som första TCL-rörledningssteg") \
-                DRI_CONF_ENUM(2,"Kringgå TCL-rörledningen") \
-                DRI_CONF_ENUM(3,"Kringgå TCL-rörledningen med tillståndsbaserad maskinkod som direktgenereras") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_FTHROTTLE_BUSY 0
-#define DRI_CONF_FTHROTTLE_USLEEPS 1
-#define DRI_CONF_FTHROTTLE_IRQS 2
-#define DRI_CONF_FTHROTTLE_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(fthrottle_mode,enum,def,"0:2") \
-        DRI_CONF_DESC_BEGIN(en,"Method to limit rendering latency") \
-                DRI_CONF_ENUM(0,"Busy waiting for the graphics hardware") \
-                DRI_CONF_ENUM(1,"Sleep for brief intervals while waiting for the graphics hardware") \
-                DRI_CONF_ENUM(2,"Let the graphics hardware emit a software interrupt and sleep") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(ca,"Mètode per a limitar la latència de renderització") \
-                DRI_CONF_ENUM(0,"Espera activa pel maquinari de gràfics") \
-                DRI_CONF_ENUM(1,"Dorm per intervals breus mentre s'espera al maquinari de gràfics") \
-                DRI_CONF_ENUM(2,"Deixa que el maquinari de gràfics emeti una interrupció de programari i dormi") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(de,"Methode zur Begrenzung der Bildverzögerung") \
-                DRI_CONF_ENUM(0,"Aktives Warten auf die Grafikhardware") \
-                DRI_CONF_ENUM(1,"Kurze Schlafintervalle beim Warten auf die Grafikhardware") \
-                DRI_CONF_ENUM(2,"Die Grafikhardware eine Softwareunterbrechnung erzeugen lassen und schlafen") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(es,"Método para limitar la latencia de renderización") \
-                DRI_CONF_ENUM(0,"Esperar activamente al hardware gráfico") \
-                DRI_CONF_ENUM(1,"Dormir en intervalos cortos mientras se espera al hardware gráfico") \
-                DRI_CONF_ENUM(2,"Permitir que el hardware gráfico emita una interrupción de software y duerma") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(nl,"Methode om beeldopbouwvertraging te onderdrukken") \
-                DRI_CONF_ENUM(0,"Actief wachten voor de grafische hardware") \
-                DRI_CONF_ENUM(1,"Slaap voor korte intervallen tijdens het wachten op de grafische hardware") \
-                DRI_CONF_ENUM(2,"Laat de grafische hardware een software onderbreking uitzenden en in slaap vallen") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(fr,"Méthode d'attente de la carte graphique") \
-                DRI_CONF_ENUM(0,"Attente active de la carte graphique") \
-                DRI_CONF_ENUM(1,"Attente utilisant usleep()") \
-                DRI_CONF_ENUM(2,"Utiliser les interruptions") \
-        DRI_CONF_DESC_END \
-        DRI_CONF_DESC_BEGIN(sv,"Metod för att begränsa renderingslatens") \
-                DRI_CONF_ENUM(0,"Upptagen med att vänta på grafikhårdvaran") \
-                DRI_CONF_ENUM(1,"Sov i korta intervall under väntan på grafikhårdvaran") \
-                DRI_CONF_ENUM(2,"Låt grafikhårdvaran sända ut ett programvaruavbrott och sov") \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
 #define DRI_CONF_VBLANK_NEVER 0
 #define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
 #define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
@@ -728,83 +414,6 @@ DRI_CONF_OPT_BEGIN_V(vblank_mode,enum,def,"0:3") \
                 DRI_CONF_ENUM(2,"Initialt växlingsintervall 1, följ programmets val") \
                 DRI_CONF_ENUM(3,"Synkronisera alltid med vertikal uppdatering, programmet väljer den minsta växlingsintervallen") \
         DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_HYPERZ_DISABLED 0
-#define DRI_CONF_HYPERZ_ENABLED 1
-#define DRI_CONF_HYPERZ(def) \
-DRI_CONF_OPT_BEGIN_B(hyperz, def) \
-        DRI_CONF_DESC(en,"Use HyperZ to boost performance") \
-        DRI_CONF_DESC(ca,"Utilitza el HyperZ per a augmentar el rendiment") \
-        DRI_CONF_DESC(de,"HyperZ zur Leistungssteigerung verwenden") \
-        DRI_CONF_DESC(es,"Usar HyperZ para potenciar rendimiento") \
-        DRI_CONF_DESC(nl,"Gebruik HyperZ om de prestaties te verbeteren") \
-        DRI_CONF_DESC(fr,"Utiliser le HyperZ pour améliorer les performances") \
-        DRI_CONF_DESC(sv,"Använd HyperZ för att maximera prestandan") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_MAX_TEXTURE_UNITS(def,min,max) \
-DRI_CONF_OPT_BEGIN_V(texture_units,int,def, # min ":" # max ) \
-        DRI_CONF_DESC(en,"Number of texture units used") \
-        DRI_CONF_DESC(ca,"Nombre d'unitats de textura utilitzades") \
-        DRI_CONF_DESC(de,"Anzahl der benutzten Textureinheiten") \
-        DRI_CONF_DESC(es,"Número de unidades de textura usadas") \
-        DRI_CONF_DESC(nl,"Aantal textuureenheden in gebruik") \
-        DRI_CONF_DESC(fr,"Nombre d'unités de texture") \
-        DRI_CONF_DESC(sv,"Antal använda texturenheter") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_BLEND_QUALITY(def,range) \
-DRI_CONF_OPT_BEGIN_V(texture_blend_quality,float,def,range) \
-	DRI_CONF_DESC(en,"Texture filtering quality vs. speed, AKA “brilinear” texture filtering") \
-	DRI_CONF_DESC(ca,"Qualitat vs. velocitat de filtració de textura, àlies filtració ”brilinear“ de textura") \
-	DRI_CONF_DESC(de,"Texturfilterqualität versus -geschwindigkeit, auch bekannt als „brilineare“ Texturfilterung") \
-	DRI_CONF_DESC(es,"Calidad de filtrado de textura vs. velocidad, alias filtrado ”brilinear“ de textura") \
-	DRI_CONF_DESC(nl,"Textuurfilterkwaliteit versus -snelheid, ookwel bekend als “brilineaire” textuurfiltering") \
-	DRI_CONF_DESC(fr,"Qualité/performance du filtrage trilinéaire de texture (filtrage brilinéaire)") \
-	DRI_CONF_DESC(sv,"Texturfiltreringskvalitet mot hastighet, även kallad ”brilinear”-texturfiltrering") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_HEAPS_ALL 0
-#define DRI_CONF_TEXTURE_HEAPS_CARD 1
-#define DRI_CONF_TEXTURE_HEAPS_GART 2
-#define DRI_CONF_TEXTURE_HEAPS(def) \
-DRI_CONF_OPT_BEGIN_V(texture_heaps,enum,def,"0:2") \
-	DRI_CONF_DESC_BEGIN(en,"Used types of texture memory") \
-		DRI_CONF_ENUM(0,"All available memory") \
-		DRI_CONF_ENUM(1,"Only card memory (if available)") \
-		DRI_CONF_ENUM(2,"Only GART (AGP/PCIE) memory (if available)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(ca,"Tipus utilitzats de memòria de textura") \
-		DRI_CONF_ENUM(0,"Tota la memòria disponible") \
-		DRI_CONF_ENUM(1,"Només memòria de targeta (si està disponible)") \
-		DRI_CONF_ENUM(2,"Només memòria GART (AGP/PCIE) (si està disponible)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(de,"Benutzte Arten von Texturspeicher") \
-		DRI_CONF_ENUM(0,"Aller verfügbarer Speicher") \
-		DRI_CONF_ENUM(1,"Nur Grafikspeicher (falls verfügbar)") \
-		DRI_CONF_ENUM(2,"Nur GART-Speicher (AGP/PCIE) (falls verfügbar)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(es,"Tipos de memoria de textura usados") \
-		DRI_CONF_ENUM(0,"Toda la memoria disponible") \
-		DRI_CONF_ENUM(1,"Solo memoria de tarjeta (si está disponible)") \
-		DRI_CONF_ENUM(2,"Solo memoria GART (AGP/PCIE) (si está disponible)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(nl,"Gebruikte soorten textuurgeheugen") \
-		DRI_CONF_ENUM(0,"Al het beschikbaar geheugen") \
-		DRI_CONF_ENUM(1,"Alleen geheugen op de kaart (als het aanwezig is)") \
-		DRI_CONF_ENUM(2,"Alleen GART (AGP/PCIE) geheugen (als het aanwezig is)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(fr,"Types de mémoire de texture") \
-		DRI_CONF_ENUM(0,"Utiliser toute la mémoire disponible") \
-		DRI_CONF_ENUM(1,"Utiliser uniquement la mémoire graphique (si disponible)") \
-		DRI_CONF_ENUM(2,"Utiliser uniquement la mémoire GART (AGP/PCIE) (si disponible)") \
-	DRI_CONF_DESC_END \
-	DRI_CONF_DESC_BEGIN(sv,"Använda typer av texturminne") \
-		DRI_CONF_ENUM(0,"Allt tillgängligt minne") \
-		DRI_CONF_ENUM(1,"Endast kortminne (om tillgängligt)") \
-		DRI_CONF_ENUM(2,"Endast GART-minne (AGP/PCIE) (om tillgängligt)") \
-	DRI_CONF_DESC_END \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_MESA_GLTHREAD(def) \
@@ -860,32 +469,6 @@ DRI_CONF_OPT_BEGIN_B(glx_disable_sgi_video_sync, def) \
    DRI_CONF_DESC(nl, "Disable the GLX_SGI_video_sync extension") \
    DRI_CONF_DESC(fr, "Disable the GLX_SGI_video_sync extension") \
    DRI_CONF_DESC(sv, "Disable the GLX_SGI_video_sync extension") \
-DRI_CONF_OPT_END
-
-
-/**
- * \brief Software-fallback options.  To allow using features (like
- * GL_ARB_vertex_program) on GPUs that don't otherwise support the feature.
- */
-#define DRI_CONF_SECTION_SOFTWARE \
-DRI_CONF_SECTION_BEGIN \
-        DRI_CONF_DESC(en,"Features that are not hardware-accelerated") \
-        DRI_CONF_DESC(ca,"Característiques no accelerades per maquinari") \
-        DRI_CONF_DESC(de,"Funktionalität, die nicht hardwarebeschleunigt ist") \
-        DRI_CONF_DESC(es,"Características no aceleradas por hardware") \
-        DRI_CONF_DESC(nl,"Eigenschappen die niet hardwareversneld zijn") \
-        DRI_CONF_DESC(fr,"Fonctionnalités ne bénéficiant pas d'une accélération matérielle") \
-        DRI_CONF_DESC(sv,"Funktioner som inte är hårdvaruaccelererade")
-
-#define DRI_CONF_ARB_VERTEX_PROGRAM(def) \
-DRI_CONF_OPT_BEGIN_B(arb_vertex_program, def) \
-        DRI_CONF_DESC(en,"Enable extension GL_ARB_vertex_program") \
-        DRI_CONF_DESC(ca,"Habilita l'extensió GL_ARB_vertex_program") \
-        DRI_CONF_DESC(de,"Erweiterung GL_ARB_vertex_program aktivieren") \
-        DRI_CONF_DESC(es,"Habilitar la extensión GL_ARB_vertex_program") \
-        DRI_CONF_DESC(nl,"Zet uitbreiding GL_ARB_vertex_program aan") \
-        DRI_CONF_DESC(fr,"Activer l'extension GL_ARB_vertex_program") \
-        DRI_CONF_DESC(sv,"Aktivera tillägget GL_ARB_vertex_program") \
 DRI_CONF_OPT_END
 
 
@@ -958,6 +541,17 @@ DRI_CONF_OPT_BEGIN(device_id, string, def) \
         DRI_CONF_DESC(nl,"Define the graphic device to use if possible") \
         DRI_CONF_DESC(fr,"Define the graphic device to use if possible") \
         DRI_CONF_DESC(sv,"Define the graphic device to use if possible") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_DRI_DRIVER(def) \
+DRI_CONF_OPT_BEGIN(dri_driver, string, def) \
+        DRI_CONF_DESC(en,"Override the DRI driver to load") \
+        DRI_CONF_DESC(ca,"Override the DRI driver to load") \
+        DRI_CONF_DESC(de,"Override the DRI driver to load") \
+        DRI_CONF_DESC(es,"Override the DRI driver to load") \
+        DRI_CONF_DESC(nl,"Override the DRI driver to load") \
+        DRI_CONF_DESC(fr,"Override the DRI driver to load") \
+        DRI_CONF_DESC(sv,"Override the DRI driver to load") \
 DRI_CONF_OPT_END
 
 /**
@@ -1080,4 +674,9 @@ DRI_CONF_OPT_END
 #define DRI_CONF_RADEONSI_CLEAR_DB_CACHE_BEFORE_CLEAR(def) \
 DRI_CONF_OPT_BEGIN_B(radeonsi_clear_db_cache_before_clear, def) \
         DRI_CONF_DESC(en,"Clear DB cache before fast depth clear") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_RADEONSI_ZERO_ALL_VRAM_ALLOCS(def) \
+DRI_CONF_OPT_BEGIN_B(radeonsi_zerovram, def) \
+        DRI_CONF_DESC(en,"Zero all vram allocations") \
 DRI_CONF_OPT_END

@@ -830,7 +830,6 @@ place_phi_read(nir_shader *shader, nir_register *reg,
    if (block != def->parent_instr->block) {
       /* Try to go up the single-successor tree */
       bool all_single_successors = true;
-      struct set_entry *entry;
       set_foreach(block->predecessors, entry) {
          nir_block *pred = (nir_block *)entry->key;
          if (pred->successors[0] && pred->successors[1]) {
@@ -901,6 +900,8 @@ nir_lower_phis_to_regs_block(nir_block *block)
 
       nir_foreach_phi_src(src, phi) {
          assert(src->src.is_ssa);
+         /* We don't want derefs ending up in phi sources */
+         assert(!nir_src_as_deref(src->src));
          place_phi_read(shader, reg, src->src.ssa, src->pred);
       }
 

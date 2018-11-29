@@ -92,6 +92,7 @@ build_dcc_decompress_compute_shader(struct radv_device *dev)
 
 	nir_ssa_def *outval = &tex->dest.ssa;
 	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_image_deref_store);
+	store->num_components = 4;
 	store->src[0] = nir_src_for_ssa(&nir_build_deref_var(&b, output_img)->dest.ssa);
 	store->src[1] = nir_src_for_ssa(global_id);
 	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
@@ -489,10 +490,16 @@ radv_device_finish_meta_fast_clear_flush_state(struct radv_device *device)
 	                                &state->alloc);
 }
 
-VkResult
-radv_device_init_meta_fast_clear_flush_state(struct radv_device *device)
+static VkResult
+radv_device_init_meta_fast_clear_flush_state_internal(struct radv_device *device)
 {
 	VkResult res = VK_SUCCESS;
+
+	mtx_lock(&device->meta_state.mtx);
+	if (device->meta_state.fast_clear_flush.cmask_eliminate_pipeline) {
+		mtx_unlock(&device->meta_state.mtx);
+		return VK_SUCCESS;
+	}
 
 	struct radv_shader_module vs_module = { .nir = radv_meta_build_nir_vs_generate_vertices() };
 	if (!vs_module.nir) {
@@ -527,8 +534,19 @@ fail:
 
 cleanup:
 	ralloc_free(vs_module.nir);
+	mtx_unlock(&device->meta_state.mtx);
 
 	return res;
+}
+
+
+VkResult
+radv_device_init_meta_fast_clear_flush_state(struct radv_device *device, bool on_demand)
+{
+	if (on_demand)
+		return VK_SUCCESS;
+
+	return radv_device_init_meta_fast_clear_flush_state_internal(device);
 }
 
 static void
@@ -590,6 +608,14 @@ radv_emit_color_decompress(struct radv_cmd_buffer *cmd_buffer,
 	VkPipeline pipeline;
 
 	assert(cmd_buffer->queue_family_index == RADV_QUEUE_GENERAL);
+
+	if (!cmd_buffer->device->meta_state.fast_clear_flush.cmask_eliminate_pipeline) {
+		VkResult ret = radv_device_init_meta_fast_clear_flush_state_internal(cmd_buffer->device);
+		if (ret != VK_SUCCESS) {
+			cmd_buffer->record_result = ret;
+			return;
+		}
+	}
 
 	radv_meta_save(&saved_state, cmd_buffer,
 		       RADV_META_SAVE_GRAPHICS_PIPELINE |

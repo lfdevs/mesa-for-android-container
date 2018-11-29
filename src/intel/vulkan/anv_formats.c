@@ -489,6 +489,9 @@ get_image_format_features(const struct gen_device_info *devinfo,
       if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT || devinfo->gen >= 8)
          flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
+      if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && devinfo->gen >= 9)
+         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
+
       flags |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
                VK_FORMAT_FEATURE_BLIT_DST_BIT |
                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
@@ -518,8 +521,19 @@ get_image_format_features(const struct gen_device_info *devinfo,
        isl_format_get_layout(plane_format.isl_format)->txc == ISL_TXC_ASTC)
       return 0;
 
+   /* ASTC requires nasty workarounds on BSW so we just disable it for now.
+    *
+    * TODO: Figure out the ASTC workarounds and re-enable on BSW.
+    */
+   if (devinfo->gen < 9 &&
+       isl_format_get_layout(plane_format.isl_format)->txc == ISL_TXC_ASTC)
+      return 0;
+
    if (isl_format_supports_sampling(devinfo, plane_format.isl_format)) {
       flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+
+      if (devinfo->gen >= 9)
+         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
 
       if (isl_format_supports_filtering(devinfo, plane_format.isl_format))
          flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;

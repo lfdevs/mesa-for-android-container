@@ -120,13 +120,7 @@ svga_delete_gs_state(struct pipe_context *pipe, void *shader)
             svga->state.hw_draw.gs = NULL;
          }
 
-         ret = svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_GS, variant);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret = svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_GS,
-                                              variant);
-            assert(ret == PIPE_OK);
-         }
+         svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_GS, variant);
       }
 
       FREE((void *)gs->base.tokens);

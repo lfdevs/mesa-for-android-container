@@ -25,6 +25,7 @@
 #ifndef EGL_DRI2_FALLBACKS_INCLUDED
 #define EGL_DRI2_FALLBACKS_INCLUDED
 
+#include "eglcurrent.h"
 #include "egltypedefs.h"
 
 struct wl_buffer;
@@ -86,7 +87,7 @@ dri2_fallback_copy_buffers(_EGLDriver *drv, _EGLDisplay *dpy,
                            _EGLSurface *surf,
                            void *native_pixmap_target)
 {
-   return EGL_FALSE;
+   return _eglError(EGL_BAD_NATIVE_PIXMAP, "no support for native pixmaps");
 }
 
 static inline EGLBoolean

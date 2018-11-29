@@ -115,7 +115,12 @@ static uint32_t reg(struct ir3_register *reg, struct ir3_info *info,
 			/* ignore writes to dummy register r63.x */
 		} else if (max < 48) {
 			if (reg->flags & IR3_REG_HALF) {
-				info->max_half_reg = MAX2(info->max_half_reg, max);
+				if (info->gpu_id >= 600) {
+					/* starting w/ a6xx, half regs conflict with full regs: */
+					info->max_reg = MAX2(info->max_reg, (max+1)/2);
+				} else {
+					info->max_half_reg = MAX2(info->max_half_reg, max);
+				}
 			} else {
 				info->max_reg = MAX2(info->max_reg, max);
 			}

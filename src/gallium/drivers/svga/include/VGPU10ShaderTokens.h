@@ -175,6 +175,10 @@ typedef enum {
    VGPU10_OPCODE_DCL_INDEXABLE_TEMP                = 105,
    VGPU10_OPCODE_DCL_GLOBAL_FLAGS                  = 106,
    VGPU10_OPCODE_IDIV                              = 107,
+   VGPU10_OPCODE_LOD                               = 108,
+   VGPU10_OPCODE_GATHER4                           = 109,
+   VGPU10_OPCODE_SAMPLE_POS                        = 110,
+   VGPU10_OPCODE_SAMPLE_INFO                       = 111,
    VGPU10_NUM_OPCODES                  /* Should be the last entry. */
 } VGPU10_OPCODE_TYPE;
 
@@ -254,6 +258,12 @@ typedef enum {
    VGPU10_RESINFO_RETURN_UINT       = 2
 } VGPU10_RESINFO_RETURN_TYPE;
 
+
+typedef enum {
+   VGPU10_INSTRUCTION_RETURN_FLOAT  = 0,
+   VGPU10_INSTRUCTION_RETURN_UINT   = 1
+} VGPU10_INSTRUCTION_RETURN_TYPE;
+
 typedef union {
    struct {
       unsigned int opcodeType          : 11; /* VGPU10_OPCODE_TYPE */
@@ -267,6 +277,7 @@ typedef union {
    struct {
       unsigned int                     : 11;
       unsigned int resourceDimension   : 5;  /* VGPU10_RESOURCE_DIMENSION */
+      unsigned int sampleCount         : 7;
    };
    struct {
       unsigned int                     : 11;
@@ -296,6 +307,10 @@ typedef union {
    struct {
       unsigned int                     : 11;
       unsigned int refactoringAllowed  : 1;
+   };
+   struct {
+      unsigned int                     : 11;
+      unsigned int instReturnType      : 2;  /* VGPU10_INSTRUCTION_RETURN_TYPE */
    };
    uint32 value;
 } VGPU10OpcodeToken0;
@@ -446,12 +461,14 @@ typedef union {
 
 
 typedef enum {
-   VGPU10_RETURN_TYPE_UNORM = 1,
-   VGPU10_RETURN_TYPE_SNORM = 2,
-   VGPU10_RETURN_TYPE_SINT = 3,
-   VGPU10_RETURN_TYPE_UINT = 4,
-   VGPU10_RETURN_TYPE_FLOAT = 5,
-   VGPU10_RETURN_TYPE_MIXED = 6
+   VGPU10_RETURN_TYPE_MIN     = 1,
+   VGPU10_RETURN_TYPE_UNORM   = 1,
+   VGPU10_RETURN_TYPE_SNORM   = 2,
+   VGPU10_RETURN_TYPE_SINT    = 3,
+   VGPU10_RETURN_TYPE_UINT    = 4,
+   VGPU10_RETURN_TYPE_FLOAT   = 5,
+   VGPU10_RETURN_TYPE_MIXED   = 6,
+   VGPU10_RETURN_TYPE_MAX     = 6
 } VGPU10_RESOURCE_RETURN_TYPE;
 
 typedef union {
@@ -466,17 +483,19 @@ typedef union {
 
 
 typedef enum {
-   VGPU10_NAME_UNDEFINED = 0,
-   VGPU10_NAME_POSITION = 1,
-   VGPU10_NAME_CLIP_DISTANCE = 2,
-   VGPU10_NAME_CULL_DISTANCE = 3,
-   VGPU10_NAME_RENDER_TARGET_ARRAY_INDEX = 4,
-   VGPU10_NAME_VIEWPORT_ARRAY_INDEX = 5,
-   VGPU10_NAME_VERTEX_ID = 6,
-   VGPU10_NAME_PRIMITIVE_ID = 7,
-   VGPU10_NAME_INSTANCE_ID = 8,
-   VGPU10_NAME_IS_FRONT_FACE = 9,
-   VGPU10_NAME_SAMPLE_INDEX = 10,
+   VGPU10_NAME_MIN                        = 0,
+   VGPU10_NAME_UNDEFINED                  = 0,
+   VGPU10_NAME_POSITION                   = 1,
+   VGPU10_NAME_CLIP_DISTANCE              = 2,
+   VGPU10_NAME_CULL_DISTANCE              = 3,
+   VGPU10_NAME_RENDER_TARGET_ARRAY_INDEX  = 4,
+   VGPU10_NAME_VIEWPORT_ARRAY_INDEX       = 5,
+   VGPU10_NAME_VERTEX_ID                  = 6,
+   VGPU10_NAME_PRIMITIVE_ID               = 7,
+   VGPU10_NAME_INSTANCE_ID                = 8,
+   VGPU10_NAME_IS_FRONT_FACE              = 9,
+   VGPU10_NAME_SAMPLE_INDEX               = 10,
+   VGPU10_NAME_MAX                        = 10
 } VGPU10_SYSTEM_NAME;
 
 typedef union {

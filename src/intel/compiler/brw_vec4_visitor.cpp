@@ -24,6 +24,7 @@
 #include "brw_vec4.h"
 #include "brw_cfg.h"
 #include "brw_eu.h"
+#include "util/u_math.h"
 
 namespace brw {
 
@@ -1317,7 +1318,7 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
        * determine which edges should be drawn as wireframe.
        */
       current_annotation = "edge flag";
-      int edge_attr = _mesa_bitcount_64(nir->info.inputs_read &
+      int edge_attr = util_bitcount64(nir->info.inputs_read &
                                         BITFIELD64_MASK(VERT_ATTRIB_EDGEFLAG));
       emit(MOV(reg, src_reg(dst_reg(ATTR, edge_attr,
                                     glsl_type::float_type, WRITEMASK_XYZW))));

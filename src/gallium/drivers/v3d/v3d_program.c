@@ -193,9 +193,6 @@ v3d_shader_state_create(struct pipe_context *pctx,
                  */
                 s = cso->ir.nir;
 
-                NIR_PASS_V(s, nir_lower_io, nir_var_all & ~nir_var_uniform,
-                           type_size,
-                           (nir_lower_io_options)0);
                 NIR_PASS_V(s, nir_lower_io, nir_var_uniform,
                            uniforms_type_size,
                            (nir_lower_io_options)0);
@@ -212,6 +209,13 @@ v3d_shader_state_create(struct pipe_context *pctx,
 
                 so->was_tgsi = true;
         }
+
+        nir_variable_mode lower_mode = nir_var_all & ~nir_var_uniform;
+        if (s->info.stage == MESA_SHADER_VERTEX)
+                lower_mode &= ~(nir_var_shader_in | nir_var_shader_out);
+        NIR_PASS_V(s, nir_lower_io, lower_mode,
+                   type_size,
+                   (nir_lower_io_options)0);
 
         NIR_PASS_V(s, nir_opt_global_to_local);
         NIR_PASS_V(s, nir_lower_regs_to_ssa);
@@ -617,7 +621,6 @@ v3d_shader_state_delete(struct pipe_context *pctx, void *hwcso)
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_uncompiled_shader *so = hwcso;
 
-        struct hash_entry *entry;
         hash_table_foreach(v3d->fs_cache, entry) {
                 delete_from_cache_if_matches(v3d->fs_cache, &v3d->prog.fs,
                                              entry, so);
@@ -672,7 +675,6 @@ v3d_program_fini(struct pipe_context *pctx)
 {
         struct v3d_context *v3d = v3d_context(pctx);
 
-        struct hash_entry *entry;
         hash_table_foreach(v3d->fs_cache, entry) {
                 struct v3d_compiled_shader *shader = entry->data;
                 v3d_bo_unreference(&shader->bo);

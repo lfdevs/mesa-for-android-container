@@ -343,9 +343,12 @@ static GLint
 convert_from_x_visual_type(int visualType)
 {
    static const int glx_visual_types[] = {
-      GLX_STATIC_GRAY, GLX_GRAY_SCALE,
-      GLX_STATIC_COLOR, GLX_PSEUDO_COLOR,
-      GLX_TRUE_COLOR, GLX_DIRECT_COLOR
+      [StaticGray]  = GLX_STATIC_GRAY,
+      [GrayScale]   = GLX_GRAY_SCALE,
+      [StaticColor] = GLX_STATIC_COLOR,
+      [PseudoColor] = GLX_PSEUDO_COLOR,
+      [TrueColor]   = GLX_TRUE_COLOR,
+      [DirectColor] = GLX_DIRECT_COLOR,
    };
 
    if (visualType < ARRAY_SIZE(glx_visual_types))

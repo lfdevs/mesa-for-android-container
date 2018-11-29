@@ -29,8 +29,6 @@
 
 #include "util/u_upload_mgr.h"
 
-#include "freedreno_drmif.h"
-
 #include "freedreno_context.h"
 
 #include "ir3_shader.h"

@@ -514,7 +514,7 @@ struct intel_batchbuffer {
    int exec_array_size;
 
    /** The amount of aperture space (in bytes) used by all exec_bos */
-   int aperture_space;
+   uint64_t aperture_space;
 
    struct {
       uint32_t *map_next;
@@ -796,6 +796,18 @@ struct brw_context
     */
    bool front_buffer_dirty;
 
+   /**
+    * True if the __DRIdrawable's current __DRIimageBufferMask is
+    * __DRI_IMAGE_BUFFER_SHARED.
+    */
+   bool is_shared_buffer_bound;
+
+   /**
+    * True if a shared buffer is bound and it has received any rendering since
+    * the previous __DRImutableRenderBufferLoaderExtension::displaySharedBuffer().
+    */
+   bool is_shared_buffer_dirty;
+
    /** Framerate throttling: @{ */
    struct brw_bo *throttle_batch[2];
 
@@ -819,7 +831,6 @@ struct brw_context
     * drirc options:
     * @{
     */
-   bool no_rast;
    bool always_flush_batch;
    bool always_flush_cache;
    bool disable_throttling;

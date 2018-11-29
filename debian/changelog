@@ -1,3 +1,15 @@
+mesa (18.3.0~rc4-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control: Bump libdrm-dev dependency to 2.4.95.
+  * libgl1-mesa-dri.install: Updated, etc/drirc is now
+    usr/share/drirc.d/00-mesa-defaults.conf.
+  * libegl-mesa0.symbols: Updated.
+  * Build with gcc8 again.
+  * control, rules: Build with meson.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 29 Nov 2018 15:35:41 +0200
+
 mesa (18.2.5-3) unstable; urgency=medium
 
   [ Michael Biebl ]

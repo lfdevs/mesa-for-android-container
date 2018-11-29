@@ -252,7 +252,6 @@ get_pointer_into_array(struct si_shader_context *ctx,
 {
 	unsigned array_id;
 	struct tgsi_array_info *array;
-	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef idxs[2];
 	LLVMValueRef index;
 	LLVMValueRef alloca;
@@ -290,15 +289,10 @@ get_pointer_into_array(struct si_shader_context *ctx,
 	 */
 	index = si_llvm_bound_index(ctx, index, array->range.Last - array->range.First + 1);
 
-	index = LLVMBuildMul(
-		builder, index,
-		LLVMConstInt(ctx->i32, util_bitcount(array->writemask), 0),
-		"");
-	index = LLVMBuildAdd(
-		builder, index,
-		LLVMConstInt(ctx->i32,
-			     util_bitcount(array->writemask & ((1 << swizzle) - 1)), 0),
-		"");
+	index = ac_build_imad(&ctx->ac, index,
+			      LLVMConstInt(ctx->i32, util_bitcount(array->writemask), 0),
+			      LLVMConstInt(ctx->i32,
+					   util_bitcount(array->writemask & ((1 << swizzle) - 1)), 0));
 	idxs[0] = ctx->i32_0;
 	idxs[1] = index;
 	return LLVMBuildGEP(ctx->ac.builder, alloca, idxs, 2, "");
@@ -311,18 +305,11 @@ si_llvm_emit_fetch_64bit(struct lp_build_tgsi_context *bld_base,
 			 LLVMValueRef ptr2)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef result;
-
-	result = LLVMGetUndef(LLVMVectorType(ctx->i32, 2));
-
-	result = LLVMBuildInsertElement(ctx->ac.builder,
-					result,
-					ac_to_integer(&ctx->ac, ptr),
-					ctx->i32_0, "");
-	result = LLVMBuildInsertElement(ctx->ac.builder,
-					result,
-					ac_to_integer(&ctx->ac, ptr2),
-					ctx->i32_1, "");
+	LLVMValueRef values[2] = {
+		ac_to_integer(&ctx->ac, ptr),
+		ac_to_integer(&ctx->ac, ptr2),
+	};
+	LLVMValueRef result = ac_build_gather_values(&ctx->ac, values, 2);
 	return LLVMBuildBitCast(ctx->ac.builder, result, type, "");
 }
 
@@ -330,18 +317,21 @@ static LLVMValueRef
 emit_array_fetch(struct lp_build_tgsi_context *bld_base,
 		 unsigned File, enum tgsi_opcode_type type,
 		 struct tgsi_declaration_range range,
-		 unsigned swizzle)
+		 unsigned swizzle_in)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	unsigned i, size = range.Last - range.First + 1;
 	LLVMTypeRef vec = LLVMVectorType(tgsi2llvmtype(bld_base, type), size);
 	LLVMValueRef result = LLVMGetUndef(vec);
-
+	unsigned swizzle = swizzle_in;
 	struct tgsi_full_src_register tmp_reg = {};
 	tmp_reg.Register.File = File;
+	if (tgsi_type_is_64bit(type))
+		swizzle |= (swizzle_in + 1) << 16;
 
 	for (i = 0; i < size; ++i) {
 		tmp_reg.Register.Index = i + range.First;
+
 		LLVMValueRef temp = si_llvm_emit_fetch(bld_base, &tmp_reg, type, swizzle);
 		result = LLVMBuildInsertElement(ctx->ac.builder, result, temp,
 			LLVMConstInt(ctx->i32, i, 0), "array_vector");
@@ -458,13 +448,14 @@ get_output_ptr(struct lp_build_tgsi_context *bld_base, unsigned index,
 LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 				const struct tgsi_full_src_register *reg,
 				enum tgsi_opcode_type type,
-				unsigned swizzle)
+				unsigned swizzle_in)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef result = NULL, ptr, ptr2;
+	unsigned swizzle = swizzle_in & 0xffff;
 
-	if (swizzle == ~0) {
+	if (swizzle_in == ~0) {
 		LLVMValueRef values[TGSI_NUM_CHANNELS];
 		unsigned chan;
 		for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
@@ -489,7 +480,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 							ctx->imms[reg->Register.Index * TGSI_NUM_CHANNELS + swizzle],
 							ctx->i32_0);
 			result = LLVMConstInsertElement(result,
-							ctx->imms[reg->Register.Index * TGSI_NUM_CHANNELS + swizzle + 1],
+							ctx->imms[reg->Register.Index * TGSI_NUM_CHANNELS + (swizzle_in >> 16)],
 							ctx->i32_1);
 			return LLVMConstBitCast(result, ctype);
 		} else {
@@ -516,7 +507,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 
 		if (tgsi_type_is_64bit(type)) {
 			ptr = result;
-			ptr2 = input[swizzle + 1];
+			ptr2 = input[swizzle_in >> 16];
 			return si_llvm_emit_fetch_64bit(bld_base, tgsi2llvmtype(bld_base, type),
 							ptr, ptr2);
 		}
@@ -528,7 +519,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 			return LLVMGetUndef(tgsi2llvmtype(bld_base, type));
 		ptr = ctx->temps[reg->Register.Index * TGSI_NUM_CHANNELS + swizzle];
 		if (tgsi_type_is_64bit(type)) {
-			ptr2 = ctx->temps[reg->Register.Index * TGSI_NUM_CHANNELS + swizzle + 1];
+			ptr2 = ctx->temps[reg->Register.Index * TGSI_NUM_CHANNELS + (swizzle_in >> 16)];
 			return si_llvm_emit_fetch_64bit(bld_base, tgsi2llvmtype(bld_base, type),
 							LLVMBuildLoad(builder, ptr, ""),
 							LLVMBuildLoad(builder, ptr2, ""));
@@ -539,7 +530,7 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 	case TGSI_FILE_OUTPUT:
 		ptr = get_output_ptr(bld_base, reg->Register.Index, swizzle);
 		if (tgsi_type_is_64bit(type)) {
-			ptr2 = get_output_ptr(bld_base, reg->Register.Index, swizzle + 1);
+			ptr2 = get_output_ptr(bld_base, reg->Register.Index, (swizzle_in >> 16));
 			return si_llvm_emit_fetch_64bit(bld_base, tgsi2llvmtype(bld_base, type),
 							LLVMBuildLoad(builder, ptr, ""),
 							LLVMBuildLoad(builder, ptr2, ""));
@@ -557,11 +548,12 @@ LLVMValueRef si_llvm_emit_fetch(struct lp_build_tgsi_context *bld_base,
 static LLVMValueRef fetch_system_value(struct lp_build_tgsi_context *bld_base,
 				       const struct tgsi_full_src_register *reg,
 				       enum tgsi_opcode_type type,
-				       unsigned swizzle)
+				       unsigned swizzle_in)
 {
 	struct si_shader_context *ctx = si_shader_context(bld_base);
 	LLVMBuilderRef builder = ctx->ac.builder;
 	LLVMValueRef cval = ctx->system_values[reg->Register.Index];
+	unsigned swizzle = swizzle_in & 0xffff;
 
 	if (tgsi_type_is_64bit(type)) {
 		LLVMValueRef lo, hi;
@@ -571,7 +563,7 @@ static LLVMValueRef fetch_system_value(struct lp_build_tgsi_context *bld_base,
 		lo = LLVMBuildExtractElement(
 			builder, cval, LLVMConstInt(ctx->i32, swizzle, 0), "");
 		hi = LLVMBuildExtractElement(
-			builder, cval, LLVMConstInt(ctx->i32, swizzle + 1, 0), "");
+			builder, cval, LLVMConstInt(ctx->i32, (swizzle_in >> 16), 0), "");
 
 		return si_llvm_emit_fetch_64bit(bld_base, tgsi2llvmtype(bld_base, type),
 						lo, hi);
@@ -1021,6 +1013,8 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 
 	ctx->i32_0 = LLVMConstInt(ctx->i32, 0, 0);
 	ctx->i32_1 = LLVMConstInt(ctx->i32, 1, 0);
+	ctx->i1false = LLVMConstInt(ctx->i1, 0, 0);
+	ctx->i1true = LLVMConstInt(ctx->i1, 1, 0);
 }
 
 /* Set the context to a certain TGSI shader. Can be called repeatedly

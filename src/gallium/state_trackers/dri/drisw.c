@@ -42,7 +42,6 @@
 #include "dri_query_renderer.h"
 
 DEBUG_GET_ONCE_BOOL_OPTION(swrast_no_present, "SWRAST_NO_PRESENT", FALSE);
-static boolean swrast_no_present = FALSE;
 
 static inline void
 get_drawable_info(__DRIdrawable *dPriv, int *x, int *y, int *w, int *h)
@@ -130,7 +129,7 @@ get_image_shm(__DRIdrawable *dPriv, int x, int y, int width, int height,
    if (loader->base.version < 4 || !loader->getImageShm)
       return FALSE;
 
-   if (!res->screen->resource_get_handle(res->screen, NULL, res, &whandle, PIPE_HANDLE_USAGE_WRITE))
+   if (!res->screen->resource_get_handle(res->screen, NULL, res, &whandle, PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE))
       return FALSE;
 
    loader->getImageShm(dPriv, x, y, width, height, whandle.handle, dPriv->loaderPrivate);
@@ -195,7 +194,7 @@ drisw_present_texture(__DRIdrawable *dPriv,
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct dri_screen *screen = dri_screen(drawable->sPriv);
 
-   if (swrast_no_present)
+   if (screen->swrast_no_present)
       return;
 
    screen->base.screen->flush_frontbuffer(screen->base.screen, ptex, 0, 0, drawable, sub_box);
@@ -338,7 +337,7 @@ drisw_allocate_textures(struct dri_context *stctx,
       dri_drawable_get_format(drawable, statts[i], &format, &bind);
 
       /* if we don't do any present, no need for display targets */
-      if (statts[i] != ST_ATTACHMENT_DEPTH_STENCIL && !swrast_no_present)
+      if (statts[i] != ST_ATTACHMENT_DEPTH_STENCIL && !screen->swrast_no_present)
          bind |= PIPE_BIND_DISPLAY_TARGET;
 
       if (format == PIPE_FORMAT_NONE)
@@ -443,7 +442,7 @@ drisw_init_screen(__DRIscreen * sPriv)
    screen->sPriv = sPriv;
    screen->fd = -1;
 
-   swrast_no_present = debug_get_option_swrast_no_present();
+   screen->swrast_no_present = debug_get_option_swrast_no_present();
 
    sPriv->driverPrivate = (void *)screen;
    sPriv->extensions = drisw_screen_extensions;

@@ -28,6 +28,7 @@
 #ifndef TGSI_UREG_H
 #define TGSI_UREG_H
 
+#include "pipe/p_format.h"
 #include "pipe/p_compiler.h"
 #include "pipe/p_shader_tokens.h"
 #include "util/u_debug.h"

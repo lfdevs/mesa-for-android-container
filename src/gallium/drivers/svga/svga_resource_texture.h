@@ -125,6 +125,7 @@ struct svga_transfer
    struct pipe_transfer base;
 
    unsigned slice;  /**< array slice or cube face */
+   SVGA3dBox box;   /* The adjusted box with slice index removed from z */
 
    struct svga_winsys_buffer *hwbuf;
 

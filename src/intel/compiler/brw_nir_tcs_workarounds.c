@@ -138,7 +138,6 @@ brw_nir_apply_tcs_quads_workaround(nir_shader *nir)
    const unsigned num_end_preds = impl->end_block->predecessors->entries;
    nir_block *end_preds[num_end_preds];
    unsigned i = 0;
-   struct set_entry *entry;
 
    set_foreach(impl->end_block->predecessors, entry) {
       end_preds[i++] = (nir_block *) entry->key;

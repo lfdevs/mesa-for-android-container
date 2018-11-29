@@ -184,7 +184,6 @@ protected:
 private:
    const Target *const targ;
 
-   Symbol *gMemBase;
    LValue *gpEmitAddress;
 };
 

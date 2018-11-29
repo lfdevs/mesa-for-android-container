@@ -256,7 +256,7 @@ void vi_dcc_clear_level(struct si_context *sctx,
 	}
 
 	si_clear_buffer(sctx, dcc_buffer, dcc_offset, clear_size,
-			clear_value, SI_COHERENCY_CB_META);
+			&clear_value, 4, SI_COHERENCY_CB_META);
 }
 
 /* Set the same micro tile mode as the destination of the last MSAA resolve.
@@ -432,8 +432,6 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 		    !sctx->screen->info.htile_cmask_support_1d_tiling)
 			continue;
 
-		bool need_decompress_pass = false;
-
 		/* Use a slow clear for small surfaces where the cost of
 		 * the eliminate pass can be higher than the benefit of fast
 		 * clear. The closed driver does this, but the numbers may differ.
@@ -443,6 +441,8 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 		bool too_small = tex->buffer.b.b.nr_samples <= 1 &&
 				 tex->buffer.b.b.width0 *
 				 tex->buffer.b.b.height0 <= 512 * 512;
+		bool eliminate_needed = false;
+		bool fmask_decompress_needed = false;
 
 		/* Fast clear is the most appropriate place to enable DCC for
 		 * displayable surfaces.
@@ -462,7 +462,6 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 		/* Try to clear DCC first, otherwise try CMASK. */
 		if (vi_dcc_enabled(tex, 0)) {
 			uint32_t reset_value;
-			bool eliminate_needed;
 
 			if (sctx->screen->debug_flags & DBG(NO_DCC_CLEAR))
 				continue;
@@ -487,17 +486,14 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 				if (eliminate_needed)
 					continue;
 
+				uint32_t clear_value = 0xCCCCCCCC;
 				si_clear_buffer(sctx, &tex->cmask_buffer->b.b,
 						tex->cmask_offset, tex->surface.cmask_size,
-						0xCCCCCCCC, SI_COHERENCY_CB_META);
-				need_decompress_pass = true;
+						&clear_value, 4, SI_COHERENCY_CB_META);
+				fmask_decompress_needed = true;
 			}
 
 			vi_dcc_clear_level(sctx, tex, 0, reset_value);
-
-			if (eliminate_needed)
-				need_decompress_pass = true;
-
 			tex->separate_dcc_dirty = true;
 		} else {
 			if (too_small)
@@ -518,13 +514,14 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 				continue;
 
 			/* Do the fast clear. */
+			uint32_t clear_value = 0;
 			si_clear_buffer(sctx, &tex->cmask_buffer->b.b,
-					tex->cmask_offset, tex->surface.cmask_size, 0,
-					SI_COHERENCY_CB_META);
-			need_decompress_pass = true;
+					tex->cmask_offset, tex->surface.cmask_size,
+					&clear_value, 4, SI_COHERENCY_CB_META);
+			eliminate_needed = true;
 		}
 
-		if (need_decompress_pass &&
+		if ((eliminate_needed || fmask_decompress_needed) &&
 		    !(tex->dirty_level_mask & (1 << level))) {
 			tex->dirty_level_mask |= 1 << level;
 			p_atomic_inc(&sctx->screen->compressed_colortex_counter);
@@ -533,11 +530,12 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 		/* We can change the micro tile mode before a full clear. */
 		si_set_optimal_micro_tile_mode(sctx->screen, tex);
 
+		*buffers &= ~clear_bit;
+
 		if (si_set_clear_color(tex, fb->cbufs[i]->format, color)) {
 			sctx->framebuffer.dirty_cbufs |= 1 << i;
 			si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
 		}
-		*buffers &= ~clear_bit;
 	}
 }
 

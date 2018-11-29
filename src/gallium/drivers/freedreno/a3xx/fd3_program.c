@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -83,7 +81,7 @@ fd3_needs_manual_clipping(const struct ir3_shader *shader,
 {
 	uint64_t outputs = ir3_shader_outputs(shader);
 
-	return (!rast->depth_clip ||
+	return (!rast->depth_clip_near ||
 			util_bitcount(rast->clip_plane_enable) > 6 ||
 			outputs & ((1ULL << VARYING_SLOT_CLIP_VERTEX) |
 					   (1ULL << VARYING_SLOT_CLIP_DIST0) |
@@ -140,7 +138,9 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	const struct ir3_info *vsi, *fsi;
 	enum a3xx_instrbuffermode fpbuffer, vpbuffer;
 	uint32_t fpbuffersz, vpbuffersz, fsoff;
-	uint32_t pos_regid, posz_regid, psize_regid, color_regid[4] = {0};
+	uint32_t pos_regid, posz_regid, psize_regid;
+	uint32_t vcoord_regid, face_regid, coord_regid, zwcoord_regid;
+	uint32_t color_regid[4] = {0};
 	int constmode;
 	int i, j;
 
@@ -208,6 +208,11 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 		color_regid[3] = ir3_find_output_regid(fp, FRAG_RESULT_DATA3);
 	}
 
+	face_regid      = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRONT_FACE);
+	coord_regid     = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRAG_COORD);
+	zwcoord_regid   = (coord_regid == regid(63,0)) ? regid(63,0) : (coord_regid + 2);
+	vcoord_regid    = ir3_find_sysval_regid(fp, SYSTEM_VALUE_VARYING_COORD);
+
 	/* adjust regids for alpha output formats. there is no alpha render
 	 * format, so it's just treated like red
 	 */
@@ -230,10 +235,11 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			A3XX_HLSQ_CONTROL_0_REG_SPCONSTFULLUPDATE);
 	OUT_RING(ring, A3XX_HLSQ_CONTROL_1_REG_VSTHREADSIZE(TWO_QUADS) |
 			A3XX_HLSQ_CONTROL_1_REG_VSSUPERTHREADENABLE |
-			COND(fp->frag_coord, A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDXYREGID(regid(0,0)) |
-					A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDZWREGID(regid(0,2))));
-	OUT_RING(ring, A3XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(31));
-	OUT_RING(ring, A3XX_HLSQ_CONTROL_3_REG_REGID(fp->pos_regid));
+			A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDXYREGID(coord_regid) |
+			A3XX_HLSQ_CONTROL_1_REG_FRAGCOORDZWREGID(zwcoord_regid));
+	OUT_RING(ring, A3XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(31) |
+			A3XX_HLSQ_CONTROL_2_REG_FACENESSREGID(face_regid));
+	OUT_RING(ring, A3XX_HLSQ_CONTROL_3_REG_REGID(vcoord_regid));
 	OUT_RING(ring, A3XX_HLSQ_VS_CONTROL_REG_CONSTLENGTH(vp->constlen) |
 			A3XX_HLSQ_VS_CONTROL_REG_CONSTSTARTOFFSET(0) |
 			A3XX_HLSQ_VS_CONTROL_REG_INSTRLENGTH(vpbuffersz));
@@ -243,7 +249,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 
 	OUT_PKT0(ring, REG_A3XX_SP_SP_CTRL_REG, 1);
 	OUT_RING(ring, A3XX_SP_SP_CTRL_REG_CONSTMODE(constmode) |
-			COND(emit->key.binning_pass, A3XX_SP_SP_CTRL_REG_BINNING) |
+			COND(emit->binning_pass, A3XX_SP_SP_CTRL_REG_BINNING) |
 			A3XX_SP_SP_CTRL_REG_SLEEPMODE(1) |
 			A3XX_SP_SP_CTRL_REG_L0MODE(0));
 
@@ -303,7 +309,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 			A3XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(0));
 	OUT_RELOC(ring, vp->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
 
-	if (emit->key.binning_pass) {
+	if (emit->binning_pass) {
 		OUT_PKT0(ring, REG_A3XX_SP_FS_LENGTH_REG, 1);
 		OUT_RING(ring, 0x00000000);
 
@@ -328,7 +334,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 				A3XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP |
 				A3XX_SP_FS_CTRL_REG0_THREADSIZE(FOUR_QUADS) |
 				A3XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
-				COND(fp->has_samp > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
+				COND(fp->num_samp > 0, A3XX_SP_FS_CTRL_REG0_PIXLODENABLE) |
 				A3XX_SP_FS_CTRL_REG0_LENGTH(fpbuffersz));
 		OUT_RING(ring, A3XX_SP_FS_CTRL_REG1_CONSTLENGTH(fp->constlen) |
 				A3XX_SP_FS_CTRL_REG1_INITIALOUTSTANDING(fp->total_in) |
@@ -361,7 +367,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 		OUT_RING(ring, mrt_reg);
 	}
 
-	if (emit->key.binning_pass) {
+	if (emit->binning_pass) {
 		OUT_PKT0(ring, REG_A3XX_VPC_ATTR, 2);
 		OUT_RING(ring, A3XX_VPC_ATTR_THRDASSIGN(1) |
 				A3XX_VPC_ATTR_LMSIZE(1) |
@@ -466,7 +472,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	OUT_PKT0(ring, REG_A3XX_VFD_PERFCOUNTER0_SELECT, 1);
 	OUT_RING(ring, 0x00000000);        /* VFD_PERFCOUNTER0_SELECT */
 
-	if (!emit->key.binning_pass) {
+	if (!emit->binning_pass) {
 		if (fpbuffer == BUFFER)
 			emit_shader(ring, fp);
 

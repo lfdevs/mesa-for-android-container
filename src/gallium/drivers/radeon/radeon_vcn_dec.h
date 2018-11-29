@@ -43,6 +43,15 @@
 
 #define RDECODE_PKT2()				(RDECODE_PKT_TYPE_S(2))
 
+#define RDECODE_PKT_REG_J(x)			((unsigned)(x) & 0x3FFFF)
+#define RDECODE_PKT_RES_J(x)			(((unsigned)(x)	& 0x3F) << 18)
+#define RDECODE_PKT_COND_J(x)			(((unsigned)(x)	& 0xF) << 24)
+#define RDECODE_PKT_TYPE_J(x)			(((unsigned)(x)	& 0xF) << 28)
+#define RDECODE_PKTJ(reg, cond, type)		(RDECODE_PKT_REG_J(reg) | \
+						RDECODE_PKT_RES_J(0) | \
+						RDECODE_PKT_COND_J(cond) | \
+						RDECODE_PKT_TYPE_J(type))
+
 #define RDECODE_CMD_MSG_BUFFER				0x00000000
 #define RDECODE_CMD_DPB_BUFFER				0x00000001
 #define RDECODE_CMD_DECODING_TARGET_BUFFER		0x00000002
@@ -62,6 +71,7 @@
 #define RDECODE_CODEC_MPEG2_VLD 			0x00000003
 #define RDECODE_CODEC_MPEG4				0x00000004
 #define RDECODE_CODEC_H264_PERF 			0x00000007
+#define RDECODE_CODEC_JPEG				0x00000008
 #define RDECODE_CODEC_H265				0x00000010
 #define RDECODE_CODEC_VP9				0x00000011
 
@@ -108,7 +118,80 @@
 
 #define RDECODE_SPS_INFO_H264_EXTENSION_SUPPORT_FLAG_SHIFT	7
 
+#define NUM_BUFFERS			4
+
 #define RDECODE_VP9_PROBS_DATA_SIZE			2304
+
+#define mmUVD_JPEG_CNTL 				0x0200
+#define mmUVD_JPEG_CNTL_BASE_IDX			1
+#define mmUVD_JPEG_RB_BASE				0x0201
+#define mmUVD_JPEG_RB_BASE_BASE_IDX			1
+#define mmUVD_JPEG_RB_WPTR				0x0202
+#define mmUVD_JPEG_RB_WPTR_BASE_IDX			1
+#define mmUVD_JPEG_RB_RPTR				0x0203
+#define mmUVD_JPEG_RB_RPTR_BASE_IDX			1
+#define mmUVD_JPEG_RB_SIZE				0x0204
+#define mmUVD_JPEG_RB_SIZE_BASE_IDX			1
+#define mmUVD_JPEG_TIER_CNTL2				0x021a
+#define mmUVD_JPEG_TIER_CNTL2_BASE_IDX			1
+#define mmUVD_JPEG_UV_TILING_CTRL			0x021c
+#define mmUVD_JPEG_UV_TILING_CTRL_BASE_IDX		1
+#define mmUVD_JPEG_TILING_CTRL				0x021e
+#define mmUVD_JPEG_TILING_CTRL_BASE_IDX 		1
+#define mmUVD_JPEG_OUTBUF_RPTR				0x0220
+#define mmUVD_JPEG_OUTBUF_RPTR_BASE_IDX 		1
+#define mmUVD_JPEG_OUTBUF_WPTR				0x0221
+#define mmUVD_JPEG_OUTBUF_WPTR_BASE_IDX 		1
+#define mmUVD_JPEG_PITCH				0x0222
+#define mmUVD_JPEG_PITCH_BASE_IDX			1
+#define mmUVD_JPEG_INT_EN				0x0229
+#define mmUVD_JPEG_INT_EN_BASE_IDX			1
+#define mmUVD_JPEG_UV_PITCH				0x022b
+#define mmUVD_JPEG_UV_PITCH_BASE_IDX			1
+#define mmUVD_JPEG_INDEX				0x023e
+#define mmUVD_JPEG_INDEX_BASE_IDX			1
+#define mmUVD_JPEG_DATA 				0x023f
+#define mmUVD_JPEG_DATA_BASE_IDX			1
+#define mmUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH		0x0438
+#define mmUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH_BASE_IDX	1
+#define mmUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW		0x0439
+#define mmUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW_BASE_IDX	1
+#define mmUVD_LMI_JPEG_READ_64BIT_BAR_HIGH		0x045a
+#define mmUVD_LMI_JPEG_READ_64BIT_BAR_HIGH_BASE_IDX	1
+#define mmUVD_LMI_JPEG_READ_64BIT_BAR_LOW		0x045b
+#define mmUVD_LMI_JPEG_READ_64BIT_BAR_LOW_BASE_IDX	1
+#define mmUVD_CTX_INDEX 				0x0528
+#define mmUVD_CTX_INDEX_BASE_IDX			1
+#define mmUVD_CTX_DATA  				0x0529
+#define mmUVD_CTX_DATA_BASE_IDX 			1
+#define mmUVD_SOFT_RESET				0x05a0
+#define mmUVD_SOFT_RESET_BASE_IDX			1
+
+#define UVD_BASE_INST0_SEG0				0x00007800
+#define UVD_BASE_INST0_SEG1				0x00007E00
+#define UVD_BASE_INST0_SEG2				0
+#define UVD_BASE_INST0_SEG3				0
+#define UVD_BASE_INST0_SEG4				0
+
+#define SOC15_REG_ADDR(reg)			(UVD_BASE_INST0_SEG1 + reg)
+
+#define COND0	0
+#define COND1	1
+#define COND2	2
+#define COND3	3
+#define COND4	4
+#define COND5	5
+#define COND6	6
+#define COND7	7
+
+#define TYPE0	0
+#define TYPE1	1
+#define TYPE2	2
+#define TYPE3	3
+#define TYPE4	4
+#define TYPE5	5
+#define TYPE6	6
+#define TYPE7	7
 
 /* VP9 Frame header flags */
 #define RDECODE_FRAME_HDR_INFO_VP9_USE_PREV_IN_FIND_MV_REFS_SHIFT              (13)
@@ -638,6 +721,56 @@ typedef struct rvcn_dec_vp9_probs_segment_s {
         unsigned char	segment_data[256];
     };
 } rvcn_dec_vp9_probs_segment_t;
+
+struct jpeg_params {
+	unsigned			bsd_size;
+	unsigned			dt_pitch;
+	unsigned			dt_uv_pitch;
+	unsigned			dt_luma_top_offset;
+	unsigned			dt_chroma_top_offset;
+};
+
+struct radeon_decoder {
+	struct pipe_video_codec		base;
+
+	unsigned			stream_handle;
+	unsigned			stream_type;
+	unsigned			frame_number;
+
+	struct pipe_screen		*screen;
+	struct radeon_winsys		*ws;
+	struct radeon_cmdbuf		*cs;
+
+	void				*msg;
+	uint32_t			*fb;
+	uint8_t				*it;
+	uint8_t				*probs;
+	void				*bs_ptr;
+
+	struct rvid_buffer		msg_fb_it_probs_buffers[NUM_BUFFERS];
+	struct rvid_buffer		bs_buffers[NUM_BUFFERS];
+	struct rvid_buffer		dpb;
+	struct rvid_buffer		ctx;
+	struct rvid_buffer		sessionctx;
+
+	unsigned			bs_size;
+	unsigned			cur_buffer;
+	void				*render_pic_list[16];
+	bool				show_frame;
+	unsigned			ref_idx;
+	struct jpeg_params		jpg;
+	void (*send_cmd)(struct radeon_decoder *dec,
+			 struct pipe_video_buffer *target,
+			 struct pipe_picture_desc *picture);
+};
+
+void send_cmd_dec(struct radeon_decoder *dec,
+		  struct pipe_video_buffer *target,
+		  struct pipe_picture_desc *picture);
+
+void send_cmd_jpeg(struct radeon_decoder *dec,
+		  struct pipe_video_buffer *target,
+		  struct pipe_picture_desc *picture);
 
 struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 		const struct pipe_video_codec *templat);

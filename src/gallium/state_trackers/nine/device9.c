@@ -331,6 +331,13 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->cursor.software = FALSE;
     This->cursor.hotspot.x = -1;
     This->cursor.hotspot.y = -1;
+    This->cursor.w = This->cursor.h = 0;
+    This->cursor.visible = FALSE;
+    if (ID3DPresent_GetCursorPos(This->swapchains[0]->present, &This->cursor.pos) != S_OK) {
+        This->cursor.pos.x = 0;
+        This->cursor.pos.y = 0;
+    }
+
     {
         struct pipe_resource tmpl;
         memset(&tmpl, 0, sizeof(tmpl));
@@ -803,7 +810,14 @@ NineDevice9_ShowCursor( struct NineDevice9 *This,
 
     DBG("This=%p bShow=%d\n", This, (int) bShow);
 
-    This->cursor.visible = bShow && (This->cursor.hotspot.x != -1);
+    /* No-op until a cursor is set in d3d */
+    if (This->cursor.hotspot.x == -1)
+        return old;
+
+    This->cursor.visible = bShow;
+    /* Note: Don't optimize by avoiding the call if This->cursor.visible
+     * hasn't changed. One has to keep in mind the app may do SetCursor
+     * calls outside d3d, thus such an optimization affects behaviour. */
     if (!This->cursor.software)
         This->cursor.software = ID3DPresent_SetCursor(This->swapchains[0]->present, NULL, NULL, bShow) != D3D_OK;
 
@@ -1971,6 +1985,19 @@ NineDevice9_Clear( struct NineDevice9 *This,
     return D3D_OK;
 }
 
+static void
+nine_D3DMATRIX_print(const D3DMATRIX *M)
+{
+    DBG("\n(%f %f %f %f)\n"
+        "(%f %f %f %f)\n"
+        "(%f %f %f %f)\n"
+        "(%f %f %f %f)\n",
+        M->m[0][0], M->m[0][1], M->m[0][2], M->m[0][3],
+        M->m[1][0], M->m[1][1], M->m[1][2], M->m[1][3],
+        M->m[2][0], M->m[2][1], M->m[2][2], M->m[2][3],
+        M->m[3][0], M->m[3][1], M->m[3][2], M->m[3][3]);
+}
+
 HRESULT NINE_WINAPI
 NineDevice9_SetTransform( struct NineDevice9 *This,
                           D3DTRANSFORMSTATETYPE State,
@@ -1982,11 +2009,12 @@ NineDevice9_SetTransform( struct NineDevice9 *This,
     DBG("This=%p State=%d pMatrix=%p\n", This, State, pMatrix);
 
     user_assert(M, D3DERR_INVALIDCALL);
+    nine_D3DMATRIX_print(pMatrix);
 
     *M = *pMatrix;
     if (unlikely(This->is_recording)) {
         state->ff.changed.transform[State / 32] |= 1 << (State % 32);
-        state->changed.group |= NINE_STATE_FF;
+        state->changed.group |= NINE_STATE_FF_VSTRANSF;
     } else
         nine_context_set_transform(This, State, pMatrix);
 
@@ -2150,9 +2178,11 @@ NineDevice9_LightEnable( struct NineDevice9 *This,
         NineDevice9_SetLight(This, Index, &light);
     }
 
-    nine_state_light_enable(&state->ff, &state->changed.group, Index, Enable);
+    nine_state_light_enable(&state->ff, Index, Enable);
     if (likely(!This->is_recording))
         nine_context_light_enable(This, Index, Enable);
+    else
+        state->changed.group |= NINE_STATE_FF_LIGHTING;
 
     return D3D_OK;
 }
@@ -2231,7 +2261,6 @@ NineDevice9_SetRenderState( struct NineDevice9 *This,
         state->rs_advertised[State] = Value;
         /* only need to record changed render states for stateblocks */
         state->changed.rs[State / 32] |= 1 << (State % 32);
-        state->changed.group |= nine_render_state_group[State];
         return D3D_OK;
     }
 
@@ -2286,9 +2315,7 @@ NineDevice9_CreateStateBlock( struct NineDevice9 *This,
     *ppSB = (IDirect3DStateBlock9 *)nsb;
     dst = &nsb->state;
 
-    dst->changed.group =
-       NINE_STATE_TEXTURE |
-       NINE_STATE_SAMPLER;
+    dst->changed.group = NINE_STATE_SAMPLER;
 
     if (Type == D3DSBT_ALL || Type == D3DSBT_VERTEXSTATE) {
        dst->changed.group |=
@@ -2321,10 +2348,7 @@ NineDevice9_CreateStateBlock( struct NineDevice9 *This,
     }
     if (Type == D3DSBT_ALL || Type == D3DSBT_PIXELSTATE) {
        dst->changed.group |=
-          NINE_STATE_PS | NINE_STATE_PS_CONST | NINE_STATE_BLEND |
-          NINE_STATE_FF_OTHER | NINE_STATE_FF_PSSTAGES | NINE_STATE_PS_CONST |
-          NINE_STATE_FB | NINE_STATE_DSA | NINE_STATE_MULTISAMPLE |
-          NINE_STATE_RASTERIZER | NINE_STATE_STENCIL_REF;
+          NINE_STATE_PS | NINE_STATE_PS_CONST | NINE_STATE_FF_PS_CONSTS;
        memcpy(dst->changed.rs,
               nine_render_states_pixel, sizeof(dst->changed.rs));
        nine_ranges_insert(&dst->changed.ps_const_f, 0, This->max_ps_const_f,
@@ -2342,19 +2366,25 @@ NineDevice9_CreateStateBlock( struct NineDevice9 *This,
        dst->changed.group |=
           NINE_STATE_VIEWPORT |
           NINE_STATE_SCISSOR |
-          NINE_STATE_RASTERIZER |
-          NINE_STATE_BLEND |
-          NINE_STATE_DSA |
           NINE_STATE_IDXBUF |
-          NINE_STATE_MATERIAL |
-          NINE_STATE_BLEND_COLOR |
-          NINE_STATE_SAMPLE_MASK;
+          NINE_STATE_FF_MATERIAL |
+          NINE_STATE_FF_VSTRANSF;
        memset(dst->changed.rs, ~0, (D3DRS_COUNT / 32) * sizeof(uint32_t));
        dst->changed.rs[D3DRS_LAST / 32] |= (1 << (D3DRS_COUNT % 32)) - 1;
        dst->changed.vtxbuf = (1ULL << This->caps.MaxStreams) - 1;
        dst->changed.stream_freq = dst->changed.vtxbuf;
        dst->changed.ucp = (1 << PIPE_MAX_CLIP_PLANES) - 1;
        dst->changed.texture = (1 << NINE_MAX_SAMPLERS) - 1;
+       /* The doc says the projection, world, view and texture matrices
+        * are saved, which would translate to:
+        * dst->ff.changed.transform[0] = 0x00FF000C;
+        * dst->ff.changed.transform[D3DTS_WORLD / 32] |= 1 << (D3DTS_WORLD % 32);
+        * However we assume they meant save everything (which is basically just the
+        * above plus the other world matrices).
+        */
+       dst->ff.changed.transform[0] = 0x00FF000C;
+       for (s = 0; s < 8; s++)
+           dst->ff.changed.transform[8+s] = ~0;
     }
     NineStateBlock9_Capture(NineStateBlock9(*ppSB));
 
@@ -2421,7 +2451,7 @@ NineDevice9_GetTexture( struct NineDevice9 *This,
                         DWORD Stage,
                         IDirect3DBaseTexture9 **ppTexture )
 {
-    user_assert(Stage < This->caps.MaxSimultaneousTextures ||
+    user_assert(Stage < NINE_MAX_SAMPLERS_PS ||
                 Stage == D3DDMAPSAMPLER ||
                 (Stage >= D3DVERTEXTEXTURESAMPLER0 &&
                  Stage <= D3DVERTEXTEXTURESAMPLER3), D3DERR_INVALIDCALL);
@@ -2448,7 +2478,7 @@ NineDevice9_SetTexture( struct NineDevice9 *This,
 
     DBG("This=%p Stage=%u pTexture=%p\n", This, Stage, pTexture);
 
-    user_assert(Stage < This->caps.MaxSimultaneousTextures ||
+    user_assert(Stage < NINE_MAX_SAMPLERS_PS ||
                 Stage == D3DDMAPSAMPLER ||
                 (Stage >= D3DVERTEXTEXTURESAMPLER0 &&
                  Stage <= D3DVERTEXTEXTURESAMPLER3), D3DERR_INVALIDCALL);
@@ -2460,7 +2490,6 @@ NineDevice9_SetTexture( struct NineDevice9 *This,
 
     if (This->is_recording) {
         state->changed.texture |= 1 << Stage;
-        state->changed.group |= NINE_STATE_TEXTURE;
         nine_bind(&state->texture[Stage], pTexture);
         return D3D_OK;
     }
@@ -2509,9 +2538,7 @@ NineDevice9_SetTextureStageState( struct NineDevice9 *This,
     state->ff.tex_stage[Stage][Type] = Value;
 
     if (unlikely(This->is_recording)) {
-        if (Type == D3DTSS_TEXTURETRANSFORMFLAGS)
-            state->changed.group |= NINE_STATE_PS1X_SHADER;
-        state->changed.group |= NINE_STATE_FF_PSSTAGES;
+        state->changed.group |= NINE_STATE_FF_PS_CONSTS;
         state->ff.changed.tex_stage[Stage][Type / 32] |= 1 << (Type % 32);
     } else
         nine_context_set_texture_stage_state(This, Stage, Type, Value);
@@ -2525,7 +2552,7 @@ NineDevice9_GetSamplerState( struct NineDevice9 *This,
                              D3DSAMPLERSTATETYPE Type,
                              DWORD *pValue )
 {
-    user_assert(Sampler < This->caps.MaxSimultaneousTextures ||
+    user_assert(Sampler < NINE_MAX_SAMPLERS_PS ||
                 Sampler == D3DDMAPSAMPLER ||
                 (Sampler >= D3DVERTEXTEXTURESAMPLER0 &&
                  Sampler <= D3DVERTEXTEXTURESAMPLER3), D3DERR_INVALIDCALL);
@@ -2548,7 +2575,7 @@ NineDevice9_SetSamplerState( struct NineDevice9 *This,
     DBG("This=%p Sampler=%u Type=%s Value=%08x\n", This,
         Sampler, nine_D3DSAMP_to_str(Type), Value);
 
-    user_assert(Sampler < This->caps.MaxSimultaneousTextures ||
+    user_assert(Sampler < NINE_MAX_SAMPLERS_PS ||
                 Sampler == D3DDMAPSAMPLER ||
                 (Sampler >= D3DVERTEXTEXTURESAMPLER0 &&
                  Sampler <= D3DVERTEXTEXTURESAMPLER3), D3DERR_INVALIDCALL);
@@ -3504,8 +3531,6 @@ NineDevice9_SetStreamSourceFreq( struct NineDevice9 *This,
     if (unlikely(This->is_recording)) {
         state->stream_freq[StreamNumber] = Setting;
         state->changed.stream_freq |= 1 << StreamNumber;
-        if (StreamNumber != 0)
-            state->changed.group |= NINE_STATE_STREAMFREQ;
         return D3D_OK;
     }
 
@@ -3594,11 +3619,8 @@ NineDevice9_SetPixelShader( struct NineDevice9 *This,
     DBG("This=%p pShader=%p\n", This, pShader);
 
     if (unlikely(This->is_recording)) {
-        /* Technically we need NINE_STATE_FB only
-         * if the ps mask changes, but put it always
-         * to be safe */
         nine_bind(&state->ps, pShader);
-        state->changed.group |= NINE_STATE_PS | NINE_STATE_FB;
+        state->changed.group |= NINE_STATE_PS;
         return D3D_OK;
     }
 

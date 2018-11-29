@@ -74,11 +74,10 @@ AC_SUBST([OPENCL_VERSION])
 # in the first entry.
 LIBDRM_REQUIRED=2.4.75
 LIBDRM_RADEON_REQUIRED=2.4.71
-LIBDRM_AMDGPU_REQUIRED=2.4.91
+LIBDRM_AMDGPU_REQUIRED=2.4.95
 LIBDRM_INTEL_REQUIRED=2.4.75
 LIBDRM_NVVIEUX_REQUIRED=2.4.66
 LIBDRM_NOUVEAU_REQUIRED=2.4.66
-LIBDRM_FREEDRENO_REQUIRED=2.4.92
 LIBDRM_ETNAVIV_REQUIRED=2.4.89
 LIBDRM_VC4_REQUIRED=2.4.89
 
@@ -108,9 +107,9 @@ dnl LLVM versions
 LLVM_REQUIRED_GALLIUM=3.3.0
 LLVM_REQUIRED_OPENCL=3.9.0
 LLVM_REQUIRED_R600=3.9.0
-LLVM_REQUIRED_RADEONSI=5.0.0
-LLVM_REQUIRED_RADV=5.0.0
-LLVM_REQUIRED_SWR=5.0.0
+LLVM_REQUIRED_RADEONSI=6.0.0
+LLVM_REQUIRED_RADV=6.0.0
+LLVM_REQUIRED_SWR=6.0.0
 
 dnl Check for progs
 AC_PROG_CPP
@@ -125,7 +124,8 @@ AC_PROG_GREP
 AC_PROG_NM
 AM_PROG_AS
 AX_CHECK_GNU_MAKE
-AC_CHECK_PROGS([PYTHON2], [python2.7 python2 python])
+AM_PATH_PYTHON([2.7],, [AM_PATH_PYTHON([3.4],, [:])])
+
 AC_PROG_SED
 AC_PROG_MKDIR_P
 
@@ -157,7 +157,7 @@ fi
 
 AX_CHECK_PYTHON_MAKO_MODULE($PYTHON_MAKO_REQUIRED)
 
-if test -z "$PYTHON2"; then
+if test "$PYTHON" = ":"; then
     if test ! -f "$srcdir/src/util/format_srgb.c"; then
         AC_MSG_ERROR([Python not found - unable to generate sources])
     fi
@@ -310,6 +310,7 @@ AX_CHECK_COMPILE_FLAG([-Werror=missing-prototypes],            [CFLAGS="$CFLAGS 
 AX_CHECK_COMPILE_FLAG([-Wmissing-prototypes],                  [CFLAGS="$CFLAGS -Wmissing-prototypes"])
 dnl Dylan Baker: gcc and clang always accepr -Wno-*, hence check for the original warning, then set the no-* flag
 AX_CHECK_COMPILE_FLAG([-Wmissing-field-initializers],          [CFLAGS="$CFLAGS -Wno-missing-field-initializers"])
+AX_CHECK_COMPILE_FLAG([-Wformat-truncation],                   [CFLAGS="$CFLAGS -Wno-format-truncation"])
 AX_CHECK_COMPILE_FLAG([-fno-math-errno],                       [CFLAGS="$CFLAGS -fno-math-errno"])
 
 AX_CHECK_COMPILE_FLAG([-fno-trapping-math],                    [CFLAGS="$CFLAGS -fno-trapping-math"])
@@ -329,6 +330,7 @@ AX_CHECK_COMPILE_FLAG([-fno-math-errno],                       [CXXFLAGS="$CXXFL
 AX_CHECK_COMPILE_FLAG([-fno-trapping-math],                    [CXXFLAGS="$CXXFLAGS -fno-trapping-math"])
 AX_CHECK_COMPILE_FLAG([-fvisibility=hidden],                   [VISIBILITY_CXXFLAGS="-fvisibility=hidden"])
 AX_CHECK_COMPILE_FLAG([-Wmissing-field-initializers],          [CXXFLAGS="$CXXFLAGS -Wno-missing-field-initializers"])
+AX_CHECK_COMPILE_FLAG([-Wformat-truncation],                   [CXXFLAGS="$CXXFLAGS -Wno-format-truncation"])
 AC_LANG_POP([C++])
 
 # Flags to help ensure that certain portions of the code -- and only those
@@ -975,6 +977,22 @@ esac
 if test "x$pthread_stubs_possible" = xyes; then
     PKG_CHECK_MODULES(PTHREADSTUBS, pthread-stubs >= 0.4)
 fi
+
+save_LIBS="$LIBS"
+LIBS="$PTHREAD_LIBS"
+AC_MSG_CHECKING(whether pthread_setaffinity_np is supported)
+AC_LINK_IFELSE([AC_LANG_SOURCE([[
+    #define _GNU_SOURCE
+    #include <pthread.h>
+    int main() {
+       void *a = (void*) &pthread_setaffinity_np;
+       long b = (long) a;
+       return (int) b;
+    }]])],
+  [DEFINES="$DEFINES -DHAVE_PTHREAD_SETAFFINITY"];
+   AC_MSG_RESULT([yes]),
+   AC_MSG_RESULT([no]))
+LIBS="$save_LIBS"
 
 dnl Check for futex for fast inline simple_mtx_t.
 AC_CHECK_HEADER([linux/futex.h], [DEFINES="$DEFINES -DHAVE_LINUX_FUTEX_H"])
@@ -1707,11 +1725,7 @@ xdri)
         fi
     fi
 
-    # add xf86vidmode if available
-    PKG_CHECK_MODULES([XF86VIDMODE], [xxf86vm], HAVE_XF86VIDMODE=yes, HAVE_XF86VIDMODE=no)
-    if test "$HAVE_XF86VIDMODE" = yes ; then
-        dri_modules="$dri_modules xxf86vm"
-    fi
+    dri_modules="$dri_modules xxf86vm"
 
     PKG_CHECK_MODULES([DRIGL], [$dri_modules])
     GL_PC_REQ_PRIV="$GL_PC_REQ_PRIV $dri_modules"
@@ -1723,10 +1737,6 @@ xdri)
     GL_PC_LIB_PRIV="-lm $PTHREAD_LIBS $DLOPEN_LIBS"
     ;;
 esac
-
-# This is outside the case (above) so that it is invoked even for non-GLX
-# builds.
-AM_CONDITIONAL(HAVE_XF86VIDMODE, test "x$HAVE_XF86VIDMODE" = xyes)
 
 GLESv1_CM_LIB_DEPS="$LIBDRM_LIBS -lm $PTHREAD_LIBS $DLOPEN_LIBS"
 GLESv1_CM_PC_LIB_PRIV="-lm $PTHREAD_LIBS $DLOPEN_LIBS"
@@ -1743,8 +1753,6 @@ AC_SUBST([GLESv1_CM_LIB_DEPS])
 AC_SUBST([GLESv1_CM_PC_LIB_PRIV])
 AC_SUBST([GLESv2_LIB_DEPS])
 AC_SUBST([GLESv2_PC_LIB_PRIV])
-
-AC_SUBST([HAVE_XF86VIDMODE])
 
 dnl
 dnl More GLX setup
@@ -1836,6 +1844,10 @@ for plat in $platforms; do
         PKG_CHECK_MODULES([WAYLAND_SCANNER], [wayland-scanner],
                           WAYLAND_SCANNER=`$PKG_CONFIG --variable=wayland_scanner wayland-scanner`,
                           WAYLAND_SCANNER='')
+        PKG_CHECK_EXISTS([wayland-scanner >= 1.15],
+                          AC_SUBST(SCANNER_ARG, 'private-code'),
+                          AC_SUBST(SCANNER_ARG, 'code'))
+
         if test "x$WAYLAND_SCANNER" = x; then
             AC_PATH_PROG([WAYLAND_SCANNER], [wayland-scanner], [:])
         fi
@@ -2708,7 +2720,6 @@ if test -n "$with_gallium_drivers"; then
             ;;
         xfreedreno)
             HAVE_GALLIUM_FREEDRENO=yes
-            PKG_CHECK_MODULES([FREEDRENO], [libdrm >= $LIBDRM_FREEDRENO_REQUIRED libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
             require_libdrm "freedreno"
             ;;
         xetnaviv)
@@ -2823,9 +2834,8 @@ if test -n "$with_gallium_drivers"; then
 fi
 
 # XXX: Keep in sync with LLVM_REQUIRED_SWR
-AM_CONDITIONAL(SWR_INVALID_LLVM_VERSION, test "x$LLVM_VERSION" != x5.0.0 -a \
-                                              "x$LLVM_VERSION" != x5.0.1 -a \
-                                              "x$LLVM_VERSION" != x5.0.2)
+AM_CONDITIONAL(SWR_INVALID_LLVM_VERSION, test "x$LLVM_VERSION" != x6.0.0 -a \
+                                              "x$LLVM_VERSION" != x6.0.1)
 
 if test "x$enable_llvm" = "xyes" -a "$with_gallium_drivers"; then
     llvm_require_version $LLVM_REQUIRED_GALLIUM "gallium"
@@ -3182,6 +3192,7 @@ AC_CONFIG_FILES([Makefile
                  src/mesa/main/tests/Makefile
                  src/mesa/state_tracker/tests/Makefile
                  src/util/Makefile
+                 src/util/tests/fast_idiv_by_const/Makefile
                  src/util/tests/hash_table/Makefile
                  src/util/tests/set/Makefile
                  src/util/tests/string_buffer/Makefile
@@ -3353,7 +3364,7 @@ if test "x$enable_llvm" = xyes; then
     echo "        LLVM_LDFLAGS:    $LLVM_LDFLAGS"
     echo ""
 fi
-echo "        PYTHON2:         $PYTHON2"
+echo "        PYTHON:         $PYTHON"
 
 echo ""
 echo "        Run '${MAKE-make}' to build Mesa"

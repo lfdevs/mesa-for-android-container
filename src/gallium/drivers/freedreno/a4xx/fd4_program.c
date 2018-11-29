@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -202,14 +200,14 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 {
 	struct stage s[MAX_STAGES];
 	uint32_t pos_regid, posz_regid, psize_regid, color_regid[8];
-	uint32_t face_regid, coord_regid, zwcoord_regid;
+	uint32_t face_regid, coord_regid, zwcoord_regid, vcoord_regid;
 	enum a3xx_threadsize fssz;
 	int constmode;
 	int i, j;
 
 	debug_assert(nr <= ARRAY_SIZE(color_regid));
 
-	if (emit->key.binning_pass)
+	if (emit->binning_pass)
 		nr = 0;
 
 	setup_stages(emit, s);
@@ -244,10 +242,10 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 		color_regid[7] = ir3_find_output_regid(s[FS].v, FRAG_RESULT_DATA7);
 	}
 
-	/* TODO get these dynamically: */
-	face_regid = s[FS].v->frag_face ? regid(0,0) : regid(63,0);
-	coord_regid = s[FS].v->frag_coord ? regid(0,0) : regid(63,0);
-	zwcoord_regid = s[FS].v->frag_coord ? regid(0,2) : regid(63,0);
+	face_regid      = ir3_find_sysval_regid(s[FS].v, SYSTEM_VALUE_FRONT_FACE);
+	coord_regid     = ir3_find_sysval_regid(s[FS].v, SYSTEM_VALUE_FRAG_COORD);
+	zwcoord_regid   = (coord_regid == regid(63,0)) ? regid(63,0) : (coord_regid + 2);
+	vcoord_regid    = ir3_find_sysval_regid(s[FS].v, SYSTEM_VALUE_VARYING_COORD);
 
 	/* we could probably divide this up into things that need to be
 	 * emitted if frag-prog is dirty vs if vert-prog is dirty..
@@ -273,7 +271,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	OUT_RING(ring, A4XX_HLSQ_CONTROL_2_REG_PRIMALLOCTHRESHOLD(63) |
 			0x3f3f000 |           /* XXX */
 			A4XX_HLSQ_CONTROL_2_REG_FACEREGID(face_regid));
-	OUT_RING(ring, A4XX_HLSQ_CONTROL_3_REG_REGID(s[FS].v->pos_regid) |
+	OUT_RING(ring, A4XX_HLSQ_CONTROL_3_REG_REGID(vcoord_regid) |
 			0xfcfcfc00);
 	OUT_RING(ring, 0x00fcfcfc);   /* XXX HLSQ_CONTROL_4 */
 
@@ -301,7 +299,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 
 	OUT_PKT0(ring, REG_A4XX_SP_SP_CTRL_REG, 1);
 	OUT_RING(ring, 0x140010 | /* XXX */
-			COND(emit->key.binning_pass, A4XX_SP_SP_CTRL_REG_BINNING_PASS));
+			COND(emit->binning_pass, A4XX_SP_SP_CTRL_REG_BINNING_PASS));
 
 	OUT_PKT0(ring, REG_A4XX_SP_INSTR_CACHE_CTRL, 1);
 	OUT_RING(ring, 0x7f | /* XXX */
@@ -320,7 +318,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_VS_CTRL_REG0_INOUTREGOVERLAP(0) |
 			A4XX_SP_VS_CTRL_REG0_THREADSIZE(TWO_QUADS) |
 			A4XX_SP_VS_CTRL_REG0_SUPERTHREADMODE |
-			COND(s[VS].v->has_samp, A4XX_SP_VS_CTRL_REG0_PIXLODENABLE));
+			COND(s[VS].v->num_samp > 0, A4XX_SP_VS_CTRL_REG0_PIXLODENABLE));
 	OUT_RING(ring, A4XX_SP_VS_CTRL_REG1_CONSTLENGTH(s[VS].constlen) |
 			A4XX_SP_VS_CTRL_REG1_INITIALOUTSTANDING(s[VS].v->total_in));
 	OUT_RING(ring, A4XX_SP_VS_PARAM_REG_POSREGID(pos_regid) |
@@ -364,7 +362,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 			A4XX_SP_VS_OBJ_OFFSET_REG_SHADEROBJOFFSET(s[VS].instroff));
 	OUT_RELOC(ring, s[VS].v->bo, 0, 0, 0);  /* SP_VS_OBJ_START_REG */
 
-	if (emit->key.binning_pass) {
+	if (emit->binning_pass) {
 		OUT_PKT0(ring, REG_A4XX_SP_FS_LENGTH_REG, 1);
 		OUT_RING(ring, 0x00000000);         /* SP_FS_LENGTH_REG */
 
@@ -395,7 +393,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 				A4XX_SP_FS_CTRL_REG0_INOUTREGOVERLAP(1) |
 				A4XX_SP_FS_CTRL_REG0_THREADSIZE(fssz) |
 				A4XX_SP_FS_CTRL_REG0_SUPERTHREADMODE |
-				COND(s[FS].v->has_samp, A4XX_SP_FS_CTRL_REG0_PIXLODENABLE));
+				COND(s[FS].v->num_samp > 0, A4XX_SP_FS_CTRL_REG0_PIXLODENABLE));
 		OUT_RING(ring, A4XX_SP_FS_CTRL_REG1_CONSTLENGTH(s[FS].constlen) |
 				0x80000000 |      /* XXX */
 				COND(s[FS].v->frag_face, A4XX_SP_FS_CTRL_REG1_FACENESS) |
@@ -454,7 +452,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 					A4XX_SP_FS_MRT_REG_HALF_PRECISION));
 	}
 
-	if (emit->key.binning_pass) {
+	if (emit->binning_pass) {
 		OUT_PKT0(ring, REG_A4XX_VPC_ATTR, 2);
 		OUT_RING(ring, A4XX_VPC_ATTR_THRDASSIGN(1) |
 				0x40000000 |      /* XXX */
@@ -563,7 +561,7 @@ fd4_program_emit(struct fd_ringbuffer *ring, struct fd4_emit *emit,
 	if (s[VS].instrlen)
 		emit_shader(ring, s[VS].v);
 
-	if (!emit->key.binning_pass)
+	if (!emit->binning_pass)
 		if (s[FS].instrlen)
 			emit_shader(ring, s[FS].v);
 }

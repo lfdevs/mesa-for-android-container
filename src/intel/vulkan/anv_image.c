@@ -32,6 +32,7 @@
 #include "anv_private.h"
 #include "util/debug.h"
 #include "vk_util.h"
+#include "util/u_math.h"
 
 #include "vk_format_info.h"
 
@@ -134,24 +135,25 @@ get_surface(struct anv_image *image, VkImageAspectFlagBits aspect)
 static void
 add_surface(struct anv_image *image, struct anv_surface *surf, uint32_t plane)
 {
-   assert(surf->isl.size > 0); /* isl surface must be initialized */
+   assert(surf->isl.size_B > 0); /* isl surface must be initialized */
 
    if (image->disjoint) {
-      surf->offset = align_u32(image->planes[plane].size, surf->isl.alignment);
+      surf->offset = align_u32(image->planes[plane].size,
+                               surf->isl.alignment_B);
       /* Plane offset is always 0 when it's disjoint. */
    } else {
-      surf->offset = align_u32(image->size, surf->isl.alignment);
+      surf->offset = align_u32(image->size, surf->isl.alignment_B);
       /* Determine plane's offset only once when the first surface is added. */
       if (image->planes[plane].size == 0)
          image->planes[plane].offset = image->size;
    }
 
-   image->size = surf->offset + surf->isl.size;
-   image->planes[plane].size = (surf->offset + surf->isl.size) - image->planes[plane].offset;
+   image->size = surf->offset + surf->isl.size_B;
+   image->planes[plane].size = (surf->offset + surf->isl.size_B) - image->planes[plane].offset;
 
-   image->alignment = MAX2(image->alignment, surf->isl.alignment);
+   image->alignment = MAX2(image->alignment, surf->isl.alignment_B);
    image->planes[plane].alignment = MAX2(image->planes[plane].alignment,
-                                         surf->isl.alignment);
+                                         surf->isl.alignment_B);
 }
 
 
@@ -248,7 +250,7 @@ add_aux_state_tracking_buffer(struct anv_image *image,
                               const struct anv_device *device)
 {
    assert(image && device);
-   assert(image->planes[plane].aux_surface.isl.size > 0 &&
+   assert(image->planes[plane].aux_surface.isl.size_B > 0 &&
           image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
 
    /* Compressed images must be tiled and therefore everything should be 4K
@@ -347,8 +349,8 @@ make_surface(const struct anv_device *dev,
       .levels = vk_info->mipLevels,
       .array_len = vk_info->arrayLayers,
       .samples = vk_info->samples,
-      .min_alignment = 0,
-      .row_pitch = anv_info->stride,
+      .min_alignment_B = 0,
+      .row_pitch_B = anv_info->stride,
       .usage = usage,
       .tiling_flags = tiling_flags);
 
@@ -376,8 +378,8 @@ make_surface(const struct anv_device *dev,
          .levels = vk_info->mipLevels,
          .array_len = vk_info->arrayLayers,
          .samples = vk_info->samples,
-         .min_alignment = 0,
-         .row_pitch = anv_info->stride,
+         .min_alignment_B = 0,
+         .row_pitch_B = anv_info->stride,
          .usage = usage,
          .tiling_flags = ISL_TILING_ANY_MASK);
 
@@ -412,7 +414,7 @@ make_surface(const struct anv_device *dev,
       } else if (dev->info.gen == 8 && vk_info->samples > 1) {
          anv_perf_warn(dev->instance, image, "Enable gen8 multisampled HiZ");
       } else if (!unlikely(INTEL_DEBUG & DEBUG_NO_HIZ)) {
-         assert(image->planes[plane].aux_surface.isl.size == 0);
+         assert(image->planes[plane].aux_surface.isl.size_B == 0);
          ok = isl_surf_get_hiz_surf(&dev->isl_dev,
                                     &image->planes[plane].surface.isl,
                                     &image->planes[plane].aux_surface.isl);
@@ -438,7 +440,7 @@ make_surface(const struct anv_device *dev,
          likely((INTEL_DEBUG & DEBUG_NO_RBC) == 0);
 
       if (allow_compression) {
-         assert(image->planes[plane].aux_surface.isl.size == 0);
+         assert(image->planes[plane].aux_surface.isl.size_B == 0);
          ok = isl_surf_get_ccs_surf(&dev->isl_dev,
                                     &image->planes[plane].surface.isl,
                                     &image->planes[plane].aux_surface.isl, 0);
@@ -456,7 +458,7 @@ make_surface(const struct anv_device *dev,
                anv_perf_warn(dev->instance, image,
                              "This image format doesn't support rendering. "
                              "Not allocating an CCS buffer.");
-               image->planes[plane].aux_surface.isl.size = 0;
+               image->planes[plane].aux_surface.isl.size_B = 0;
                return VK_SUCCESS;
             }
 
@@ -479,7 +481,7 @@ make_surface(const struct anv_device *dev,
       }
    } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && vk_info->samples > 1) {
       assert(!(vk_info->usage & VK_IMAGE_USAGE_STORAGE_BIT));
-      assert(image->planes[plane].aux_surface.isl.size == 0);
+      assert(image->planes[plane].aux_surface.isl.size_B == 0);
       ok = isl_surf_get_mcs_surf(&dev->isl_dev,
                                  &image->planes[plane].surface.isl,
                                  &image->planes[plane].aux_surface.isl);
@@ -497,14 +499,14 @@ make_surface(const struct anv_device *dev,
     */
    assert((MAX2(image->planes[plane].surface.offset,
                 image->planes[plane].aux_surface.offset) +
-           (image->planes[plane].aux_surface.isl.size > 0 ?
-            image->planes[plane].aux_surface.isl.size :
-            image->planes[plane].surface.isl.size)) <=
+           (image->planes[plane].aux_surface.isl.size_B > 0 ?
+            image->planes[plane].aux_surface.isl.size_B :
+            image->planes[plane].surface.isl.size_B)) <=
           (image->planes[plane].offset + image->planes[plane].size));
 
-   if (image->planes[plane].aux_surface.isl.size) {
+   if (image->planes[plane].aux_surface.isl.size_B) {
       /* assert(image->planes[plane].fast_clear_state_offset == */
-      /*        (image->planes[plane].aux_surface.offset + image->planes[plane].aux_surface.isl.size)); */
+      /*        (image->planes[plane].aux_surface.offset + image->planes[plane].aux_surface.isl.size_B)); */
       assert(image->planes[plane].fast_clear_state_offset <
              (image->planes[plane].offset + image->planes[plane].size));
    }
@@ -765,7 +767,7 @@ void anv_GetImageSubresourceLayout(
    assert(__builtin_popcount(subresource->aspectMask) == 1);
 
    layout->offset = surface->offset;
-   layout->rowPitch = surface->isl.row_pitch;
+   layout->rowPitch = surface->isl.row_pitch_B;
    layout->depthPitch = isl_surf_get_array_pitch(&surface->isl);
    layout->arrayPitch = isl_surf_get_array_pitch(&surface->isl);
 
@@ -782,7 +784,7 @@ void anv_GetImageSubresourceLayout(
       layout->size = layout->rowPitch * anv_minify(image->extent.height,
                                                    subresource->mipLevel);
    } else {
-      layout->size = surface->isl.size;
+      layout->size = surface->isl.size_B;
    }
 }
 
@@ -814,7 +816,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    assert(image != NULL);
 
    /* The aspect must be exactly one of the image aspects. */
-   assert(_mesa_bitcount(aspect) == 1 && (aspect & image->aspects));
+   assert(util_bitcount(aspect) == 1 && (aspect & image->aspects));
 
    /* Determine the optimal buffer. */
 
@@ -823,7 +825,7 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
    /* If there is no auxiliary surface allocated, we must use the one and only
     * main buffer.
     */
-   if (image->planes[plane].aux_surface.isl.size == 0)
+   if (image->planes[plane].aux_surface.isl.size_B == 0)
       return ISL_AUX_USAGE_NONE;
 
    /* All images that use an auxiliary surface are required to be tiled. */
@@ -918,6 +920,9 @@ anv_layout_to_aux_usage(const struct gen_device_info * const devinfo,
 
    case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
       unreachable("VK_KHR_shared_presentable_image is unsupported");
+
+   case VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV:
+      unreachable("VK_NV_shading_rate_image is unsupported");
    }
 
    /* If the layout isn't recognized in the exhaustive switch above, the
@@ -942,12 +947,12 @@ anv_layout_to_fast_clear_type(const struct gen_device_info * const devinfo,
                               const VkImageLayout layout)
 {
    /* The aspect must be exactly one of the image aspects. */
-   assert(_mesa_bitcount(aspect) == 1 && (aspect & image->aspects));
+   assert(util_bitcount(aspect) == 1 && (aspect & image->aspects));
 
    uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
 
    /* If there is no auxiliary surface allocated, there are no fast-clears */
-   if (image->planes[plane].aux_surface.isl.size == 0)
+   if (image->planes[plane].aux_surface.isl.size_B == 0)
       return ANV_FAST_CLEAR_NONE;
 
    /* All images that use an auxiliary surface are required to be tiled. */
@@ -1057,7 +1062,7 @@ anv_image_fill_surface_state(struct anv_device *device,
     * the primary surface.  The shadow surface will be tiled, unlike the main
     * surface, so it should get significantly better performance.
     */
-   if (image->planes[plane].shadow_surface.isl.size > 0 &&
+   if (image->planes[plane].shadow_surface.isl.size_B > 0 &&
        isl_format_is_compressed(view.format) &&
        (flags & ANV_IMAGE_VIEW_STATE_TEXTURE_OPTIMAL)) {
       assert(isl_format_is_compressed(surface->isl.format));
@@ -1092,9 +1097,9 @@ anv_image_fill_surface_state(struct anv_device *device,
       assert(aux_usage == ISL_AUX_USAGE_NONE);
       isl_buffer_fill_state(&device->isl_dev, state_inout->state.map,
                             .address = anv_address_physical(address),
-                            .size = surface->isl.size,
+                            .size_B = surface->isl.size_B,
                             .format = ISL_FORMAT_RAW,
-                            .stride = 1,
+                            .stride_B = 1,
                             .mocs = anv_mocs_for_bo(device, address.bo));
       state_inout->address = address,
       state_inout->aux_address = ANV_NULL_ADDRESS;
@@ -1231,11 +1236,11 @@ static VkImageAspectFlags
 remap_aspect_flags(VkImageAspectFlags view_aspects)
 {
    if (view_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) {
-      if (_mesa_bitcount(view_aspects) == 1)
+      if (util_bitcount(view_aspects) == 1)
          return VK_IMAGE_ASPECT_COLOR_BIT;
 
       VkImageAspectFlags color_aspects = 0;
-      for (uint32_t i = 0; i < _mesa_bitcount(view_aspects); i++)
+      for (uint32_t i = 0; i < util_bitcount(view_aspects); i++)
          color_aspects |= VK_IMAGE_ASPECT_PLANE_0_BIT << i;
       return color_aspects;
    }

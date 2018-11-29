@@ -60,9 +60,9 @@ draw_impl(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
 			info->restart_index : 0xffffffff);
 
-	fd5_emit_render_cntl(ctx, false, emit->key.binning_pass);
+	fd5_emit_render_cntl(ctx, false, emit->binning_pass);
 	fd5_draw_emit(ctx->batch, ring, primtype,
-			emit->key.binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
+			emit->binning_pass ? IGNORE_VISIBILITY : USE_VISIBILITY,
 			info, index_offset);
 }
 
@@ -144,13 +144,13 @@ fd5_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	 */
 	emit.no_lrz_write = fp->writes_pos || fp->has_kill;
 
-	emit.key.binning_pass = false;
+	emit.binning_pass = false;
 	emit.dirty = dirty;
 
 	draw_impl(ctx, ctx->batch->draw, &emit, index_offset);
 
 	/* and now binning pass: */
-	emit.key.binning_pass = true;
+	emit.binning_pass = true;
 	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
 	emit.vp = NULL;   /* we changed key so need to refetch vp */
 	emit.fp = NULL;
@@ -197,8 +197,7 @@ fd5_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	// draw
 
 	if (!batch->lrz_clear) {
-		batch->lrz_clear = fd_ringbuffer_new(batch->ctx->pipe, 0x1000);
-		fd_ringbuffer_set_parent(batch->lrz_clear, batch->gmem);
+		batch->lrz_clear = fd_submit_new_ringbuffer(batch->submit, 0x1000, 0);
 	}
 
 	ring = batch->lrz_clear;
@@ -271,16 +270,10 @@ fd5_clear(struct fd_context *ctx, unsigned buffers,
 {
 	struct fd_ringbuffer *ring = ctx->batch->draw;
 	struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
-	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
 
 	if ((buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) &&
 			is_z32(pfb->zsbuf->format))
 		return false;
-
-	ctx->batch->max_scissor.minx = MIN2(ctx->batch->max_scissor.minx, scissor->minx);
-	ctx->batch->max_scissor.miny = MIN2(ctx->batch->max_scissor.miny, scissor->miny);
-	ctx->batch->max_scissor.maxx = MAX2(ctx->batch->max_scissor.maxx, scissor->maxx);
-	ctx->batch->max_scissor.maxy = MAX2(ctx->batch->max_scissor.maxy, scissor->maxy);
 
 	fd5_emit_render_cntl(ctx, true, false);
 

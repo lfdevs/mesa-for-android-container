@@ -26,6 +26,7 @@
 #include "nir_deref.h"
 
 #include "util/bitscan.h"
+#include "util/u_dynarray.h"
 
 /**
  * Variable-based copy propagation
@@ -38,20 +39,24 @@
  *  1) Copy-propagation on variables that have indirect access.  This includes
  *     propagating from indirect stores into indirect loads.
  *
- *  2) Dead code elimination of store_var and copy_var intrinsics based on
- *     killed destination values.
- *
- *  3) Removal of redundant load_deref intrinsics.  We can't trust regular CSE
+ *  2) Removal of redundant load_deref intrinsics.  We can't trust regular CSE
  *     to do this because it isn't aware of variable writes that may alias the
  *     value and make the former load invalid.
  *
- * Unfortunately, properly handling all of those cases makes this path rather
- * complex.  In order to avoid additional complexity, this pass is entirely
- * block-local.  If we tried to make it global, the data-flow analysis would
- * rapidly get out of hand.  Fortunately, for anything that is only ever
- * accessed directly, we get SSA based copy-propagation which is extremely
- * powerful so this isn't that great a loss.
+ * This pass uses an intermediate solution between being local / "per-block"
+ * and a complete data-flow analysis.  It follows the control flow graph, and
+ * propagate the available copy information forward, invalidating data at each
+ * cf_node.
+ *
+ * Removal of dead writes to variables is handled by another pass.
  */
+
+struct vars_written {
+   nir_variable_mode modes;
+
+   /* Key is deref and value is the uintptr_t with the write mask. */
+   struct hash_table *derefs;
+};
 
 struct value {
    bool is_ssa;
@@ -62,310 +67,286 @@ struct value {
 };
 
 struct copy_entry {
-   struct list_head link;
-
-   nir_instr *store_instr[4];
-
-   unsigned comps_may_be_read;
    struct value src;
 
    nir_deref_instr *dst;
 };
 
 struct copy_prop_var_state {
-   nir_shader *shader;
+   nir_function_impl *impl;
 
    void *mem_ctx;
+   void *lin_ctx;
 
-   struct list_head copies;
-
-   /* We're going to be allocating and deleting a lot of copy entries so we'll
-    * keep a free list to avoid thrashing malloc too badly.
+   /* Maps nodes to vars_written.  Used to invalidate copy entries when
+    * visiting each node.
     */
-   struct list_head copy_free_list;
+   struct hash_table *vars_written_map;
 
    bool progress;
 };
 
+static struct vars_written *
+create_vars_written(struct copy_prop_var_state *state)
+{
+   struct vars_written *written =
+      linear_zalloc_child(state->lin_ctx, sizeof(struct vars_written));
+   written->derefs = _mesa_hash_table_create(state->mem_ctx, _mesa_hash_pointer,
+                                             _mesa_key_pointer_equal);
+   return written;
+}
+
+static void
+gather_vars_written(struct copy_prop_var_state *state,
+                    struct vars_written *written,
+                    nir_cf_node *cf_node)
+{
+   struct vars_written *new_written = NULL;
+
+   switch (cf_node->type) {
+   case nir_cf_node_function: {
+      nir_function_impl *impl = nir_cf_node_as_function(cf_node);
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &impl->body)
+         gather_vars_written(state, NULL, cf_node);
+      break;
+   }
+
+   case nir_cf_node_block: {
+      if (!written)
+         break;
+
+      nir_block *block = nir_cf_node_as_block(cf_node);
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_call) {
+            written->modes |= nir_var_shader_out |
+                              nir_var_global |
+                              nir_var_local |
+                              nir_var_shader_storage |
+                              nir_var_shared;
+            continue;
+         }
+
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         switch (intrin->intrinsic) {
+         case nir_intrinsic_barrier:
+         case nir_intrinsic_memory_barrier:
+            written->modes |= nir_var_shader_out |
+                              nir_var_shader_storage |
+                              nir_var_shared;
+            break;
+
+         case nir_intrinsic_emit_vertex:
+         case nir_intrinsic_emit_vertex_with_counter:
+            written->modes = nir_var_shader_out;
+            break;
+
+         case nir_intrinsic_store_deref:
+         case nir_intrinsic_copy_deref: {
+            /* Destination in _both_ store_deref and copy_deref is src[0]. */
+            nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
+
+            uintptr_t mask = intrin->intrinsic == nir_intrinsic_store_deref ?
+               nir_intrinsic_write_mask(intrin) : (1 << glsl_get_vector_elements(dst->type)) - 1;
+
+            struct hash_entry *ht_entry = _mesa_hash_table_search(written->derefs, dst);
+            if (ht_entry)
+               ht_entry->data = (void *)(mask | (uintptr_t)ht_entry->data);
+            else
+               _mesa_hash_table_insert(written->derefs, dst, (void *)mask);
+
+            break;
+         }
+
+         default:
+            break;
+         }
+      }
+
+      break;
+   }
+
+   case nir_cf_node_if: {
+      nir_if *if_stmt = nir_cf_node_as_if(cf_node);
+
+      new_written = create_vars_written(state);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &if_stmt->then_list)
+         gather_vars_written(state, new_written, cf_node);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &if_stmt->else_list)
+         gather_vars_written(state, new_written, cf_node);
+
+      break;
+   }
+
+   case nir_cf_node_loop: {
+      nir_loop *loop = nir_cf_node_as_loop(cf_node);
+
+      new_written = create_vars_written(state);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &loop->body)
+         gather_vars_written(state, new_written, cf_node);
+
+      break;
+   }
+
+   default:
+      unreachable("Invalid CF node type");
+   }
+
+   if (new_written) {
+      /* Merge new information to the parent control flow node. */
+      if (written) {
+         written->modes |= new_written->modes;
+         hash_table_foreach(new_written->derefs, new_entry) {
+            struct hash_entry *old_entry =
+               _mesa_hash_table_search_pre_hashed(written->derefs, new_entry->hash,
+                                                  new_entry->key);
+            if (old_entry) {
+               nir_component_mask_t merged = (uintptr_t) new_entry->data |
+                                             (uintptr_t) old_entry->data;
+               old_entry->data = (void *) ((uintptr_t) merged);
+            } else {
+               _mesa_hash_table_insert_pre_hashed(written->derefs, new_entry->hash,
+                                                  new_entry->key, new_entry->data);
+            }
+         }
+      }
+      _mesa_hash_table_insert(state->vars_written_map, cf_node, new_written);
+   }
+}
+
 static struct copy_entry *
-copy_entry_create(struct copy_prop_var_state *state,
+copy_entry_create(struct util_dynarray *copies,
                   nir_deref_instr *dst_deref)
 {
-   struct copy_entry *entry;
-   if (!list_empty(&state->copy_free_list)) {
-      struct list_head *item = state->copy_free_list.next;
-      list_del(item);
-      entry = LIST_ENTRY(struct copy_entry, item, link);
-      memset(entry, 0, sizeof(*entry));
-   } else {
-      entry = rzalloc(state->mem_ctx, struct copy_entry);
-   }
-
-   entry->dst = dst_deref;
-   list_add(&entry->link, &state->copies);
-
-   return entry;
+   struct copy_entry new_entry = {
+      .dst = dst_deref,
+   };
+   util_dynarray_append(copies, struct copy_entry, new_entry);
+   return util_dynarray_top_ptr(copies, struct copy_entry);
 }
 
-static void
-copy_entry_remove(struct copy_prop_var_state *state, struct copy_entry *entry)
-{
-   list_del(&entry->link);
-   list_add(&entry->link, &state->copy_free_list);
-}
-
-enum deref_compare_result {
-   derefs_equal_bit = (1 << 0),
-   derefs_may_alias_bit = (1 << 1),
-   derefs_a_contains_b_bit = (1 << 2),
-   derefs_b_contains_a_bit = (1 << 3),
-};
-
-/** Returns true if the storage referrenced to by deref completely contains
- * the storage referenced by sub.
- *
- * NOTE: This is fairly general and could be moved to core NIR if someone else
- * ever needs it.
+/* Remove copy entry by swapping it with the last element and reducing the
+ * size.  If used inside an iteration on copies, it must be a reverse
+ * (backwards) iteration.  It is safe to use in those cases because the swap
+ * will not affect the rest of the iteration.
  */
-static enum deref_compare_result
-compare_deref_paths(nir_deref_path *a_path,
-                    nir_deref_path *b_path)
-{
-   if (a_path->path[0]->var != b_path->path[0]->var)
-      return 0;
-
-   /* Start off assuming they fully compare.  We ignore equality for now.  In
-    * the end, we'll determine that by containment.
-    */
-   enum deref_compare_result result = derefs_may_alias_bit |
-                                      derefs_a_contains_b_bit |
-                                      derefs_b_contains_a_bit;
-
-   nir_deref_instr **a_p = &a_path->path[1];
-   nir_deref_instr **b_p = &b_path->path[1];
-   while (*a_p != NULL && *b_p != NULL) {
-      nir_deref_instr *a_tail = *(a_p++);
-      nir_deref_instr *b_tail = *(b_p++);
-
-      switch (a_tail->deref_type) {
-      case nir_deref_type_array:
-      case nir_deref_type_array_wildcard: {
-         assert(b_tail->deref_type == nir_deref_type_array ||
-                b_tail->deref_type == nir_deref_type_array_wildcard);
-
-         if (a_tail->deref_type == nir_deref_type_array_wildcard) {
-            if (b_tail->deref_type != nir_deref_type_array_wildcard)
-               result &= ~derefs_b_contains_a_bit;
-         } else if (b_tail->deref_type == nir_deref_type_array_wildcard) {
-            if (a_tail->deref_type != nir_deref_type_array_wildcard)
-               result &= ~derefs_a_contains_b_bit;
-         } else {
-            assert(a_tail->deref_type == nir_deref_type_array &&
-                   b_tail->deref_type == nir_deref_type_array);
-            assert(a_tail->arr.index.is_ssa && b_tail->arr.index.is_ssa);
-
-            nir_const_value *a_index_const =
-               nir_src_as_const_value(a_tail->arr.index);
-            nir_const_value *b_index_const =
-               nir_src_as_const_value(b_tail->arr.index);
-            if (a_index_const && b_index_const) {
-               /* If they're both direct and have different offsets, they
-                * don't even alias much less anything else.
-                */
-               if (a_index_const->u32[0] != b_index_const->u32[0])
-                  return 0;
-            } else if (a_tail->arr.index.ssa == b_tail->arr.index.ssa) {
-               /* They're the same indirect, continue on */
-            } else {
-               /* They're not the same index so we can't prove anything about
-                * containment.
-                */
-               result &= ~(derefs_a_contains_b_bit | derefs_b_contains_a_bit);
-            }
-         }
-         break;
-      }
-
-      case nir_deref_type_struct: {
-         /* If they're different struct members, they don't even alias */
-         if (a_tail->strct.index != b_tail->strct.index)
-            return 0;
-         break;
-      }
-
-      default:
-         unreachable("Invalid deref type");
-      }
-   }
-
-   /* If a is longer than b, then it can't contain b */
-   if (*a_p != NULL)
-      result &= ~derefs_a_contains_b_bit;
-   if (*b_p != NULL)
-      result &= ~derefs_b_contains_a_bit;
-
-   /* If a contains b and b contains a they must be equal. */
-   if ((result & derefs_a_contains_b_bit) && (result & derefs_b_contains_a_bit))
-      result |= derefs_equal_bit;
-
-   return result;
-}
-
-static enum deref_compare_result
-compare_derefs(nir_deref_instr *a, nir_deref_instr *b)
-{
-   if (a == b) {
-      return derefs_equal_bit | derefs_may_alias_bit |
-             derefs_a_contains_b_bit | derefs_b_contains_a_bit;
-   }
-
-   nir_deref_path a_path, b_path;
-   nir_deref_path_init(&a_path, a, NULL);
-   nir_deref_path_init(&b_path, b, NULL);
-   assert(a_path.path[0]->deref_type == nir_deref_type_var);
-   assert(b_path.path[0]->deref_type == nir_deref_type_var);
-
-   enum deref_compare_result result = compare_deref_paths(&a_path, &b_path);
-
-   nir_deref_path_finish(&a_path);
-   nir_deref_path_finish(&b_path);
-
-   return result;
-}
-
 static void
-remove_dead_writes(struct copy_prop_var_state *state,
-                   struct copy_entry *entry, unsigned write_mask)
+copy_entry_remove(struct util_dynarray *copies,
+                  struct copy_entry *entry)
 {
-   /* We're overwriting another entry.  Some of it's components may not
-    * have been read yet and, if that's the case, we may be able to delete
-    * some instructions but we have to be careful.
+   /* This also works when removing the last element since pop don't shrink
+    * the memory used by the array, so the swap is useless but not invalid.
     */
-   unsigned dead_comps = write_mask & ~entry->comps_may_be_read;
-
-   for (unsigned mask = dead_comps; mask;) {
-      unsigned i = u_bit_scan(&mask);
-
-      nir_instr *instr = entry->store_instr[i];
-
-      /* We may have already deleted it on a previous iteration */
-      if (!instr)
-         continue;
-
-      /* See if this instr is used anywhere that it's not dead */
-      bool keep = false;
-      for (unsigned j = 0; j < 4; j++) {
-         if (entry->store_instr[j] == instr) {
-            if (dead_comps & (1 << j)) {
-               entry->store_instr[j] = NULL;
-            } else {
-               keep = true;
-            }
-         }
-      }
-
-      if (!keep) {
-         nir_instr_remove(instr);
-         state->progress = true;
-      }
-   }
+   *entry = util_dynarray_pop(copies, struct copy_entry);
 }
 
 static struct copy_entry *
-lookup_entry_for_deref(struct copy_prop_var_state *state,
+lookup_entry_for_deref(struct util_dynarray *copies,
                        nir_deref_instr *deref,
-                       enum deref_compare_result allowed_comparisons)
+                       nir_deref_compare_result allowed_comparisons)
 {
-   list_for_each_entry(struct copy_entry, iter, &state->copies, link) {
-      if (compare_derefs(iter->dst, deref) & allowed_comparisons)
+   util_dynarray_foreach(copies, struct copy_entry, iter) {
+      if (nir_compare_derefs(iter->dst, deref) & allowed_comparisons)
          return iter;
    }
 
    return NULL;
 }
 
-static void
-mark_aliased_entries_as_read(struct copy_prop_var_state *state,
-                             nir_deref_instr *deref, unsigned components)
-{
-   list_for_each_entry(struct copy_entry, iter, &state->copies, link) {
-      if (compare_derefs(iter->dst, deref) & derefs_may_alias_bit)
-         iter->comps_may_be_read |= components;
-   }
-}
-
 static struct copy_entry *
-get_entry_and_kill_aliases(struct copy_prop_var_state *state,
-                           nir_deref_instr *deref,
-                           unsigned write_mask)
+lookup_entry_and_kill_aliases(struct util_dynarray *copies,
+                              nir_deref_instr *deref,
+                              unsigned write_mask)
 {
+   /* TODO: Take into account the write_mask. */
+
    struct copy_entry *entry = NULL;
-   list_for_each_entry_safe(struct copy_entry, iter, &state->copies, link) {
+   util_dynarray_foreach_reverse(copies, struct copy_entry, iter) {
       if (!iter->src.is_ssa) {
          /* If this write aliases the source of some entry, get rid of it */
-         if (compare_derefs(iter->src.deref, deref) & derefs_may_alias_bit) {
-            copy_entry_remove(state, iter);
+         if (nir_compare_derefs(iter->src.deref, deref) & nir_derefs_may_alias_bit) {
+            copy_entry_remove(copies, iter);
             continue;
          }
       }
 
-      enum deref_compare_result comp = compare_derefs(iter->dst, deref);
-      /* This is a store operation.  If we completely overwrite some value, we
-       * want to delete any dead writes that may be present.
-       */
-      if (comp & derefs_b_contains_a_bit)
-         remove_dead_writes(state, iter, write_mask);
+      nir_deref_compare_result comp = nir_compare_derefs(iter->dst, deref);
 
-      if (comp & derefs_equal_bit) {
+      if (comp & nir_derefs_equal_bit) {
          assert(entry == NULL);
          entry = iter;
-      } else if (comp & derefs_may_alias_bit) {
-         copy_entry_remove(state, iter);
+      } else if (comp & nir_derefs_may_alias_bit) {
+         copy_entry_remove(copies, iter);
       }
    }
-
-   if (entry == NULL)
-      entry = copy_entry_create(state, deref);
 
    return entry;
 }
 
 static void
-apply_barrier_for_modes(struct copy_prop_var_state *state,
+kill_aliases(struct util_dynarray *copies,
+             nir_deref_instr *deref,
+             unsigned write_mask)
+{
+   /* TODO: Take into account the write_mask. */
+
+   struct copy_entry *entry =
+      lookup_entry_and_kill_aliases(copies, deref, write_mask);
+   if (entry)
+      copy_entry_remove(copies, entry);
+}
+
+static struct copy_entry *
+get_entry_and_kill_aliases(struct util_dynarray *copies,
+                           nir_deref_instr *deref,
+                           unsigned write_mask)
+{
+   /* TODO: Take into account the write_mask. */
+
+   struct copy_entry *entry =
+      lookup_entry_and_kill_aliases(copies, deref, write_mask);
+
+   if (entry == NULL)
+      entry = copy_entry_create(copies, deref);
+
+   return entry;
+}
+
+static void
+apply_barrier_for_modes(struct util_dynarray *copies,
                         nir_variable_mode modes)
 {
-   list_for_each_entry_safe(struct copy_entry, iter, &state->copies, link) {
+   util_dynarray_foreach_reverse(copies, struct copy_entry, iter) {
       nir_variable *dst_var = nir_deref_instr_get_variable(iter->dst);
       nir_variable *src_var = iter->src.is_ssa ? NULL :
          nir_deref_instr_get_variable(iter->src.deref);
 
       if ((dst_var->data.mode & modes) ||
           (src_var && (src_var->data.mode & modes)))
-         copy_entry_remove(state, iter);
+         copy_entry_remove(copies, iter);
    }
 }
 
 static void
 store_to_entry(struct copy_prop_var_state *state, struct copy_entry *entry,
-               const struct value *value, unsigned write_mask,
-               nir_instr *store_instr)
+               const struct value *value, unsigned write_mask)
 {
-   entry->comps_may_be_read &= ~write_mask;
    if (value->is_ssa) {
       entry->src.is_ssa = true;
       /* Only overwrite the written components */
       for (unsigned i = 0; i < 4; i++) {
-         if (write_mask & (1 << i)) {
-            entry->store_instr[i] = store_instr;
+         if (write_mask & (1 << i))
             entry->src.ssa[i] = value->ssa[i];
-         }
       }
    } else {
       /* Non-ssa stores always write everything */
       entry->src.is_ssa = false;
       entry->src.deref = value->deref;
-      for (unsigned i = 0; i < 4; i++)
-         entry->store_instr[i] = store_instr;
    }
 }
 
@@ -578,14 +559,42 @@ try_load_from_entry(struct copy_prop_var_state *state, struct copy_entry *entry,
 }
 
 static void
-copy_prop_vars_block(struct copy_prop_var_state *state,
-                     nir_builder *b, nir_block *block)
+invalidate_copies_for_cf_node(struct copy_prop_var_state *state,
+                              struct util_dynarray *copies,
+                              nir_cf_node *cf_node)
 {
-   /* Start each block with a blank slate */
-   list_for_each_entry_safe(struct copy_entry, iter, &state->copies, link)
-      copy_entry_remove(state, iter);
+   struct hash_entry *ht_entry = _mesa_hash_table_search(state->vars_written_map, cf_node);
+   assert(ht_entry);
 
+   struct vars_written *written = ht_entry->data;
+   if (written->modes) {
+      util_dynarray_foreach_reverse(copies, struct copy_entry, entry) {
+         if (entry->dst->mode & written->modes)
+            copy_entry_remove(copies, entry);
+      }
+   }
+
+   hash_table_foreach (written->derefs, entry) {
+      nir_deref_instr *deref_written = (nir_deref_instr *)entry->key;
+      kill_aliases(copies, deref_written, (uintptr_t)entry->data);
+   }
+}
+
+static void
+copy_prop_vars_block(struct copy_prop_var_state *state,
+                     nir_builder *b, nir_block *block,
+                     struct util_dynarray *copies)
+{
    nir_foreach_instr_safe(instr, block) {
+      if (instr->type == nir_instr_type_call) {
+         apply_barrier_for_modes(copies, nir_var_shader_out |
+                                         nir_var_global |
+                                         nir_var_local |
+                                         nir_var_shader_storage |
+                                         nir_var_shared);
+         continue;
+      }
+
       if (instr->type != nir_instr_type_intrinsic)
          continue;
 
@@ -593,27 +602,21 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
       switch (intrin->intrinsic) {
       case nir_intrinsic_barrier:
       case nir_intrinsic_memory_barrier:
-         /* If we hit a barrier, we need to trash everything that may possibly
-          * be accessible to another thread.  Locals, globals, and things of
-          * the like are safe, however.
-          */
-         apply_barrier_for_modes(state, ~(nir_var_local | nir_var_global |
-                                          nir_var_shader_in | nir_var_uniform));
+         apply_barrier_for_modes(copies, nir_var_shader_out |
+                                         nir_var_shader_storage |
+                                         nir_var_shared);
          break;
 
       case nir_intrinsic_emit_vertex:
       case nir_intrinsic_emit_vertex_with_counter:
-         apply_barrier_for_modes(state, nir_var_shader_out);
+         apply_barrier_for_modes(copies, nir_var_shader_out);
          break;
 
       case nir_intrinsic_load_deref: {
          nir_deref_instr *src = nir_src_as_deref(intrin->src[0]);
 
-         uint8_t comps_read = nir_ssa_def_components_read(&intrin->dest.ssa);
-         mark_aliased_entries_as_read(state, src, comps_read);
-
          struct copy_entry *src_entry =
-            lookup_entry_for_deref(state, src, derefs_a_contains_b_bit);
+            lookup_entry_for_deref(copies, src, nir_derefs_a_contains_b_bit);
          struct value value;
          if (try_load_from_entry(state, src_entry, b, intrin, src, &value)) {
             if (value.is_ssa) {
@@ -658,9 +661,9 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
           * contains what we're looking for.
           */
          struct copy_entry *store_entry =
-            lookup_entry_for_deref(state, src, derefs_equal_bit);
+            lookup_entry_for_deref(copies, src, nir_derefs_equal_bit);
          if (!store_entry)
-            store_entry = copy_entry_create(state, src);
+            store_entry = copy_entry_create(copies, src);
 
          /* Set up a store to this entry with the value of the load.  This way
           * we can potentially remove subsequent loads.  However, we use a
@@ -668,7 +671,7 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
           * subsequent store.
           */
          store_to_entry(state, store_entry, &value,
-                        ((1 << intrin->num_components) - 1), NULL);
+                        ((1 << intrin->num_components) - 1));
          break;
       }
 
@@ -683,8 +686,8 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
          unsigned wrmask = nir_intrinsic_write_mask(intrin);
          struct copy_entry *entry =
-            get_entry_and_kill_aliases(state, dst, wrmask);
-         store_to_entry(state, entry, &value, wrmask, &intrin->instr);
+            get_entry_and_kill_aliases(copies, dst, wrmask);
+         store_to_entry(state, entry, &value, wrmask);
          break;
       }
 
@@ -692,16 +695,14 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
          nir_deref_instr *src = nir_src_as_deref(intrin->src[1]);
 
-         if (compare_derefs(src, dst) & derefs_equal_bit) {
+         if (nir_compare_derefs(src, dst) & nir_derefs_equal_bit) {
             /* This is a no-op self-copy.  Get rid of it */
             nir_instr_remove(instr);
             continue;
          }
 
-         mark_aliased_entries_as_read(state, src, 0xf);
-
          struct copy_entry *src_entry =
-            lookup_entry_for_deref(state, src, derefs_a_contains_b_bit);
+            lookup_entry_for_deref(copies, src, nir_derefs_a_contains_b_bit);
          struct value value;
          if (try_load_from_entry(state, src_entry, b, intrin, src, &value)) {
             if (value.is_ssa) {
@@ -709,7 +710,7 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
                intrin = nir_instr_as_intrinsic(nir_builder_last_instr(b));
             } else {
                /* If this would be a no-op self-copy, don't bother. */
-               if (compare_derefs(value.deref, dst) & derefs_equal_bit)
+               if (nir_compare_derefs(value.deref, dst) & nir_derefs_equal_bit)
                   continue;
 
                /* Just turn it into a copy of a different deref */
@@ -728,8 +729,8 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          }
 
          struct copy_entry *dst_entry =
-            get_entry_and_kill_aliases(state, dst, 0xf);
-         store_to_entry(state, dst_entry, &value, 0xf, &intrin->instr);
+            get_entry_and_kill_aliases(copies, dst, 0xf);
+         store_to_entry(state, dst_entry, &value, 0xf);
          break;
       }
 
@@ -739,36 +740,121 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
    }
 }
 
+static void
+copy_prop_vars_cf_node(struct copy_prop_var_state *state,
+                       struct util_dynarray *copies,
+                       nir_cf_node *cf_node)
+{
+   switch (cf_node->type) {
+   case nir_cf_node_function: {
+      nir_function_impl *impl = nir_cf_node_as_function(cf_node);
+
+      struct util_dynarray impl_copies;
+      util_dynarray_init(&impl_copies, state->mem_ctx);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &impl->body)
+         copy_prop_vars_cf_node(state, &impl_copies, cf_node);
+
+      break;
+   }
+
+   case nir_cf_node_block: {
+      nir_block *block = nir_cf_node_as_block(cf_node);
+      nir_builder b;
+      nir_builder_init(&b, state->impl);
+      copy_prop_vars_block(state, &b, block, copies);
+      break;
+   }
+
+   case nir_cf_node_if: {
+      nir_if *if_stmt = nir_cf_node_as_if(cf_node);
+
+      /* Clone the copies for each branch of the if statement.  The idea is
+       * that they both see the same state of available copies, but do not
+       * interfere to each other.
+       */
+
+      struct util_dynarray then_copies;
+      util_dynarray_clone(&then_copies, state->mem_ctx, copies);
+
+      struct util_dynarray else_copies;
+      util_dynarray_clone(&else_copies, state->mem_ctx, copies);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &if_stmt->then_list)
+         copy_prop_vars_cf_node(state, &then_copies, cf_node);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &if_stmt->else_list)
+         copy_prop_vars_cf_node(state, &else_copies, cf_node);
+
+      /* Both branches copies can be ignored, since the effect of running both
+       * branches was captured in the first pass that collects vars_written.
+       */
+
+      invalidate_copies_for_cf_node(state, copies, cf_node);
+
+      break;
+   }
+
+   case nir_cf_node_loop: {
+      nir_loop *loop = nir_cf_node_as_loop(cf_node);
+
+      /* Invalidate before cloning the copies for the loop, since the loop
+       * body can be executed more than once.
+       */
+
+      invalidate_copies_for_cf_node(state, copies, cf_node);
+
+      struct util_dynarray loop_copies;
+      util_dynarray_clone(&loop_copies, state->mem_ctx, copies);
+
+      foreach_list_typed_safe(nir_cf_node, cf_node, node, &loop->body)
+         copy_prop_vars_cf_node(state, &loop_copies, cf_node);
+
+      break;
+   }
+
+   default:
+      unreachable("Invalid CF node type");
+   }
+}
+
+static bool
+nir_copy_prop_vars_impl(nir_function_impl *impl)
+{
+   void *mem_ctx = ralloc_context(NULL);
+
+   struct copy_prop_var_state state = {
+      .impl = impl,
+      .mem_ctx = mem_ctx,
+      .lin_ctx = linear_zalloc_parent(mem_ctx, 0),
+
+      .vars_written_map = _mesa_hash_table_create(mem_ctx, _mesa_hash_pointer,
+                                                  _mesa_key_pointer_equal),
+   };
+
+   gather_vars_written(&state, NULL, &impl->cf_node);
+
+   copy_prop_vars_cf_node(&state, NULL, &impl->cf_node);
+
+   if (state.progress) {
+      nir_metadata_preserve(impl, nir_metadata_block_index |
+                                  nir_metadata_dominance);
+   }
+
+   ralloc_free(mem_ctx);
+   return state.progress;
+}
+
 bool
 nir_opt_copy_prop_vars(nir_shader *shader)
 {
-   struct copy_prop_var_state state;
+   bool progress = false;
 
-   state.shader = shader;
-   state.mem_ctx = ralloc_context(NULL);
-   list_inithead(&state.copies);
-   list_inithead(&state.copy_free_list);
-
-   bool global_progress = false;
    nir_foreach_function(function, shader) {
       if (!function->impl)
          continue;
-
-      nir_builder b;
-      nir_builder_init(&b, function->impl);
-
-      state.progress = false;
-      nir_foreach_block(block, function->impl)
-         copy_prop_vars_block(&state, &b, block);
-
-      if (state.progress) {
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
-         global_progress = true;
-      }
+      progress |= nir_copy_prop_vars_impl(function->impl);
    }
 
-   ralloc_free(state.mem_ctx);
-
-   return global_progress;
+   return progress;
 }

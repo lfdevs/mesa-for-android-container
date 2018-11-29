@@ -2407,8 +2407,8 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
 
    if (_mesa_is_gles(ctx)) {
       bool valid = true;
-      if (_mesa_base_format_component_count(baseFormat) >
-          _mesa_base_format_component_count(rb_base_format)) {
+      if (_mesa_components_in_format(baseFormat) >
+          _mesa_components_in_format(rb_base_format)) {
          valid = false;
       }
       if (baseFormat == GL_DEPTH_COMPONENT ||
@@ -2468,7 +2468,8 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
        * types for SNORM formats. Also, conversion to SNORM formats is not
        * allowed by Table 3.2 on Page 110.
        */
-      if (_mesa_is_enum_format_snorm(internalFormat)) {
+      if (!_mesa_has_EXT_render_snorm(ctx) &&
+          _mesa_is_enum_format_snorm(internalFormat)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glCopyTexImage%dD(internalFormat=%s)", dimensions,
                      _mesa_enum_to_string(internalFormat));
@@ -5850,7 +5851,7 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
    }
 
    sample_count_error = _mesa_check_sample_count(ctx, target,
-         internalformat, samples);
+         internalformat, samples, samples);
    samplesOK = sample_count_error == GL_NO_ERROR;
 
    /* Page 254 of OpenGL 4.4 spec says:

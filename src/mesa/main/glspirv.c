@@ -73,8 +73,6 @@ _mesa_spirv_shader_binary(struct gl_context *ctx,
    struct gl_spirv_module *module;
    struct gl_shader_spirv_data *spirv_data;
 
-   assert(length >= 0);
-
    module = malloc(sizeof(*module) + length);
    if (!module) {
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glShaderBinary");
@@ -236,15 +234,34 @@ _mesa_spirv_to_nir(struct gl_context *ctx,
       ralloc_asprintf(nir, "SPIRV:%s:%d",
                       _mesa_shader_stage_to_abbrev(nir->info.stage),
                       prog->Name);
-   nir_validate_shader(nir);
+   nir_validate_shader(nir, "after spirv_to_nir");
 
+   nir->info.separate_shader = linked_shader->Program->info.separate_shader;
+
+   /* We have to lower away local constant initializers right before we
+    * inline functions.  That way they get properly initialized at the top
+    * of the function and not at the top of its caller.
+    */
+   NIR_PASS_V(nir, nir_lower_constant_initializers, nir_var_local);
+   NIR_PASS_V(nir, nir_lower_returns);
+   NIR_PASS_V(nir, nir_inline_functions);
    NIR_PASS_V(nir, nir_copy_prop);
+
+   /* Pick off the single entrypoint that we want */
+   foreach_list_typed_safe(nir_function, func, node, &nir->functions) {
+      if (func != entry_point)
+         exec_node_remove(&func->node);
+   }
+   assert(exec_list_length(&nir->functions) == 1);
 
    /* Split member structs.  We do this before lower_io_to_temporaries so that
     * it doesn't lower system values to temporaries by accident.
     */
    NIR_PASS_V(nir, nir_split_var_copies);
    NIR_PASS_V(nir, nir_split_per_member_structs);
+
+   if (nir->info.stage == MESA_SHADER_VERTEX)
+      nir_remap_dual_slot_attributes(nir, &linked_shader->Program->DualSlotInputs);
 
    return nir;
 }

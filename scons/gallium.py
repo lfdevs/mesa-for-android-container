@@ -29,6 +29,7 @@ Frontend-tool for Gallium3D architecture.
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
 
+from __future__ import print_function
 
 import distutils.version
 import os
@@ -221,10 +222,6 @@ def generate(env):
     env['suncc'] = env['platform'] == 'sunos' and os.path.basename(env['CC']) == 'cc'
     env['icc'] = 'icc' == os.path.basename(env['CC'])
 
-    if env['msvc'] and env['toolchain'] == 'default' and env['machine'] == 'x86_64':
-        # MSVC x64 support is broken in earlier versions of scons
-        env.EnsurePythonVersion(2, 0)
-
     # shortcuts
     machine = env['machine']
     platform = env['platform']
@@ -282,7 +279,7 @@ def generate(env):
         if env['build'] == 'profile':
             env['debug'] = False
             env['profile'] = True
-        if env['build'] in ('release', 'opt'):
+        if env['build'] == 'release':
             env['debug'] = False
             env['profile'] = False
 
@@ -328,8 +325,6 @@ def generate(env):
         cppdefines += ['NDEBUG']
     if env['build'] == 'profile':
         cppdefines += ['PROFILE']
-    if env['build'] in ('opt', 'profile'):
-        cppdefines += ['VMX86_STATS']
     if env['platform'] in ('posix', 'linux', 'freebsd', 'darwin'):
         cppdefines += [
             '_POSIX_SOURCE',
@@ -480,7 +475,7 @@ def generate(env):
             ccflags += [
                 '/O2', # optimize for speed
             ]
-        if env['build'] in ('release', 'opt'):
+        if env['build'] == 'release':
             if not env['clang']:
                 ccflags += [
                     '/GL', # enable whole program optimization
@@ -591,7 +586,7 @@ def generate(env):
             shlinkflags += ['-Wl,--enable-stdcall-fixup']
             #shlinkflags += ['-Wl,--kill-at']
     if msvc:
-        if env['build'] in ('release', 'opt') and not env['clang']:
+        if env['build'] == 'release' and not env['clang']:
             # enable Link-time Code Generation
             linkflags += ['/LTCG']
             env.Append(ARFLAGS = ['/LTCG'])
@@ -680,6 +675,18 @@ def generate(env):
     env.PkgCheckModules('XCB', ['x11-xcb', 'xcb-glx >= 1.8.1', 'xcb-dri2 >= 1.8'])
     env.PkgCheckModules('XF86VIDMODE', ['xxf86vm'])
     env.PkgCheckModules('DRM', ['libdrm >= 2.4.75'])
+
+    if not os.path.exists("src/util/format_srgb.c"):
+        print("Checking for Python Mako module (>= 0.8.0)... ", end='')
+        try:
+            import mako
+        except ImportError:
+            print("no")
+            exit(1)
+        if distutils.version.StrictVersion(mako.__version__) < distutils.version.StrictVersion('0.8.0'):
+            print("no")
+            exit(1)
+        print("yes")
 
     if env['x11']:
         env.Append(CPPPATH = env['X11_CPPPATH'])

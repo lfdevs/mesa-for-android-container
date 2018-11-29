@@ -29,6 +29,19 @@
 
 
 const char *
+vk_AccelerationStructureTypeNVX_to_str(VkAccelerationStructureTypeNVX input)
+{
+    switch(input) {
+        case 0:
+            return "VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NVX";
+        case 1:
+            return "VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NVX";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_AttachmentLoadOp_to_str(VkAttachmentLoadOp input)
 {
     switch(input) {
@@ -264,6 +277,23 @@ vk_ChromaLocation_to_str(VkChromaLocation input)
 }
 
 const char *
+vk_CoarseSampleOrderTypeNV_to_str(VkCoarseSampleOrderTypeNV input)
+{
+    switch(input) {
+        case 0:
+            return "VK_COARSE_SAMPLE_ORDER_TYPE_DEFAULT_NV";
+        case 1:
+            return "VK_COARSE_SAMPLE_ORDER_TYPE_CUSTOM_NV";
+        case 2:
+            return "VK_COARSE_SAMPLE_ORDER_TYPE_PIXEL_MAJOR_NV";
+        case 3:
+            return "VK_COARSE_SAMPLE_ORDER_TYPE_SAMPLE_MAJOR_NV";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_ColorSpaceKHR_to_str(VkColorSpaceKHR input)
 {
     switch(input) {
@@ -379,6 +409,19 @@ vk_ConservativeRasterizationModeEXT_to_str(VkConservativeRasterizationModeEXT in
 }
 
 const char *
+vk_CopyAccelerationStructureModeNVX_to_str(VkCopyAccelerationStructureModeNVX input)
+{
+    switch(input) {
+        case 0:
+            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_NVX";
+        case 1:
+            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_NVX";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_CoverageModulationModeNV_to_str(VkCoverageModulationModeNV input)
 {
     switch(input) {
@@ -471,6 +514,8 @@ vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input)
             return "VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT";
         case 1000156000:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT";
+        case 1000165000:
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NVX_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -504,6 +549,8 @@ vk_DescriptorType_to_str(VkDescriptorType input)
             return "VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT";
         case 1000138000:
             return "VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT";
+        case 1000165000:
+            return "VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NVX";
     default:
         unreachable("Undefined enum value.");
     }
@@ -573,6 +620,33 @@ vk_DisplayPowerStateEXT_to_str(VkDisplayPowerStateEXT input)
 }
 
 const char *
+vk_DriverIdKHR_to_str(VkDriverIdKHR input)
+{
+    switch(input) {
+        case 1:
+            return "VK_DRIVER_ID_AMD_PROPRIETARY_KHR";
+        case 2:
+            return "VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR";
+        case 3:
+            return "VK_DRIVER_ID_MESA_RADV_KHR";
+        case 4:
+            return "VK_DRIVER_ID_NVIDIA_PROPRIETARY_KHR";
+        case 5:
+            return "VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS_KHR";
+        case 6:
+            return "VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR";
+        case 7:
+            return "VK_DRIVER_ID_IMAGINATION_PROPRIETARY_KHR";
+        case 8:
+            return "VK_DRIVER_ID_QUALCOMM_PROPRIETARY_KHR";
+        case 9:
+            return "VK_DRIVER_ID_ARM_PROPRIETARY_KHR";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_DynamicState_to_str(VkDynamicState input)
 {
     switch(input) {
@@ -600,6 +674,12 @@ vk_DynamicState_to_str(VkDynamicState input)
             return "VK_DYNAMIC_STATE_DISCARD_RECTANGLE_EXT";
         case 1000143000:
             return "VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT";
+        case 1000164004:
+            return "VK_DYNAMIC_STATE_VIEWPORT_SHADING_RATE_PALETTE_NV";
+        case 1000164006:
+            return "VK_DYNAMIC_STATE_VIEWPORT_COARSE_SAMPLE_ORDER_NV";
+        case 1000205001:
+            return "VK_DYNAMIC_STATE_EXCLUSIVE_SCISSOR_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1097,6 +1177,19 @@ vk_FrontFace_to_str(VkFrontFace input)
 }
 
 const char *
+vk_GeometryTypeNVX_to_str(VkGeometryTypeNVX input)
+{
+    switch(input) {
+        case 0:
+            return "VK_GEOMETRY_TYPE_TRIANGLES_NVX";
+        case 1:
+            return "VK_GEOMETRY_TYPE_AABBS_NVX";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_ImageLayout_to_str(VkImageLayout input)
 {
     switch(input) {
@@ -1126,6 +1219,8 @@ vk_ImageLayout_to_str(VkImageLayout input)
             return "VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL";
         case 1000117001:
             return "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL";
+        case 1000164003:
+            return "VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1139,6 +1234,8 @@ vk_ImageTiling_to_str(VkImageTiling input)
             return "VK_IMAGE_TILING_OPTIMAL";
         case 1:
             return "VK_IMAGE_TILING_LINEAR";
+        case 1000158000:
+            return "VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1369,6 +1466,8 @@ vk_ObjectType_to_str(VkObjectType input)
             return "VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION";
         case 1000160000:
             return "VK_OBJECT_TYPE_VALIDATION_CACHE_EXT";
+        case 1000165000:
+            return "VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NVX";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1401,6 +1500,8 @@ vk_PipelineBindPoint_to_str(VkPipelineBindPoint input)
             return "VK_PIPELINE_BIND_POINT_GRAPHICS";
         case 1:
             return "VK_PIPELINE_BIND_POINT_COMPUTE";
+        case 1000165000:
+            return "VK_PIPELINE_BIND_POINT_RAYTRACING_NVX";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1509,6 +1610,10 @@ vk_QueryType_to_str(VkQueryType input)
             return "VK_QUERY_TYPE_PIPELINE_STATISTICS";
         case 2:
             return "VK_QUERY_TYPE_TIMESTAMP";
+        case 1000028004:
+            return "VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT";
+        case 1000165000:
+            return "VK_QUERY_TYPE_COMPACTED_SIZE_NVX";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1552,6 +1657,8 @@ vk_Result_to_str(VkResult input)
             return "VK_ERROR_NOT_PERMITTED_EXT";
         case -1000161000:
             return "VK_ERROR_FRAGMENTATION_EXT";
+        case -1000158000:
+            return "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT";
         case -1000072003:
             return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
         case -1000069000:
@@ -1700,6 +1807,39 @@ vk_ShaderInfoTypeAMD_to_str(VkShaderInfoTypeAMD input)
             return "VK_SHADER_INFO_TYPE_BINARY_AMD";
         case 2:
             return "VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_ShadingRatePaletteEntryNV_to_str(VkShadingRatePaletteEntryNV input)
+{
+    switch(input) {
+        case 0:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_NO_INVOCATIONS_NV";
+        case 1:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_16_INVOCATIONS_PER_PIXEL_NV";
+        case 2:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_8_INVOCATIONS_PER_PIXEL_NV";
+        case 3:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_4_INVOCATIONS_PER_PIXEL_NV";
+        case 4:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_2_INVOCATIONS_PER_PIXEL_NV";
+        case 5:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_PIXEL_NV";
+        case 6:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X1_PIXELS_NV";
+        case 7:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_1X2_PIXELS_NV";
+        case 8:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X2_PIXELS_NV";
+        case 9:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X2_PIXELS_NV";
+        case 10:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_2X4_PIXELS_NV";
+        case 11:
+            return "VK_SHADING_RATE_PALETTE_ENTRY_1_INVOCATION_PER_4X4_PIXELS_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1883,8 +2023,16 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_BUFFER_CREATE_INFO_NV";
         case 1000026002:
             return "VK_STRUCTURE_TYPE_DEDICATED_ALLOCATION_MEMORY_ALLOCATE_INFO_NV";
+        case 1000028000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT";
+        case 1000028001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT";
+        case 1000028002:
+            return "VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT";
         case 1000041000:
             return "VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD";
+        case 1000050000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV";
         case 1000053000:
             return "VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO";
         case 1000053001:
@@ -2221,6 +2369,18 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO";
         case 1000157001:
             return "VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO";
+        case 1000158000:
+            return "VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT";
+        case 1000158001:
+            return "VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT";
+        case 1000158002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT";
+        case 1000158003:
+            return "VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT";
+        case 1000158004:
+            return "VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT";
+        case 1000158005:
+            return "VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT";
         case 1000160000:
             return "VK_STRUCTURE_TYPE_VALIDATION_CACHE_CREATE_INFO_EXT";
         case 1000160001:
@@ -2235,6 +2395,40 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT";
         case 1000161004:
             return "VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT";
+        case 1000164000:
+            return "VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_SHADING_RATE_IMAGE_STATE_CREATE_INFO_NV";
+        case 1000164001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_FEATURES_NV";
+        case 1000164002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADING_RATE_IMAGE_PROPERTIES_NV";
+        case 1000164005:
+            return "VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV";
+        case 1000165000:
+            return "VK_STRUCTURE_TYPE_RAYTRACING_PIPELINE_CREATE_INFO_NVX";
+        case 1000165001:
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NVX";
+        case 1000165002:
+            return "VK_STRUCTURE_TYPE_GEOMETRY_INSTANCE_NVX";
+        case 1000165003:
+            return "VK_STRUCTURE_TYPE_GEOMETRY_NVX";
+        case 1000165004:
+            return "VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NVX";
+        case 1000165005:
+            return "VK_STRUCTURE_TYPE_GEOMETRY_AABB_NVX";
+        case 1000165006:
+            return "VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NVX";
+        case 1000165007:
+            return "VK_STRUCTURE_TYPE_DESCRIPTOR_ACCELERATION_STRUCTURE_INFO_NVX";
+        case 1000165008:
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NVX";
+        case 1000165009:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAYTRACING_PROPERTIES_NVX";
+        case 1000165010:
+            return "VK_STRUCTURE_TYPE_HIT_SHADER_MODULE_CREATE_INFO_NVX";
+        case 1000166000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV";
+        case 1000166001:
+            return "VK_STRUCTURE_TYPE_PIPELINE_REPRESENTATIVE_FRAGMENT_TEST_STATE_CREATE_INFO_NV";
         case 1000168000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES";
         case 1000168001:
@@ -2249,6 +2443,10 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_MEMORY_HOST_POINTER_PROPERTIES_EXT";
         case 1000178002:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT";
+        case 1000180000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR";
+        case 1000184000:
+            return "VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT";
         case 1000185000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD";
         case 1000190000:
@@ -2257,12 +2455,32 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT";
         case 1000190002:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT";
+        case 1000196000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR";
+        case 1000201000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV";
+        case 1000202000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_NV";
+        case 1000202001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_PROPERTIES_NV";
+        case 1000203000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_BARYCENTRIC_FEATURES_NV";
+        case 1000204000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_FOOTPRINT_FEATURES_NV";
+        case 1000205000:
+            return "VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_EXCLUSIVE_SCISSOR_STATE_CREATE_INFO_NV";
+        case 1000205002:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXCLUSIVE_SCISSOR_FEATURES_NV";
         case 1000206000:
             return "VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV";
         case 1000206001:
             return "VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV";
         case 1000211000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR";
+        case 1000212000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT";
+        case 1000214000:
+            return "VK_STRUCTURE_TYPE_IMAGEPIPE_SURFACE_CREATE_INFO_FUCHSIA";
     default:
         unreachable("Undefined enum value.");
     }
@@ -2308,6 +2526,23 @@ vk_TessellationDomainOrigin_to_str(VkTessellationDomainOrigin input)
             return "VK_TESSELLATION_DOMAIN_ORIGIN_UPPER_LEFT";
         case 1:
             return "VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_TimeDomainEXT_to_str(VkTimeDomainEXT input)
+{
+    switch(input) {
+        case 0:
+            return "VK_TIME_DOMAIN_DEVICE_EXT";
+        case 1:
+            return "VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT";
+        case 2:
+            return "VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT";
+        case 3:
+            return "VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT";
     default:
         unreachable("Undefined enum value.");
     }

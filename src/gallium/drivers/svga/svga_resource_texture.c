@@ -121,8 +121,8 @@ svga_transfer_dma(struct svga_context *svga,
    if (!st->swbuf) {
       /* Do the DMA transfer in a single go */
       svga_transfer_dma_band(svga, st, transfer,
-                             st->base.box.x, st->base.box.y, st->base.box.z,
-                             st->base.box.width, st->base.box.height, st->base.box.depth,
+                             st->box.x, st->box.y, st->box.z,
+                             st->box.w, st->box.h, st->box.d,
                              0, 0, 0,
                              flags);
 
@@ -140,12 +140,12 @@ svga_transfer_dma(struct svga_context *svga,
       h = st->hw_nblocksy * blockheight;
       srcy = 0;
 
-      for (y = 0; y < st->base.box.height; y += h) {
+      for (y = 0; y < st->box.h; y += h) {
          unsigned offset, length;
          void *hw, *sw;
 
-         if (y + h > st->base.box.height)
-            h = st->base.box.height - y;
+         if (y + h > st->box.h)
+            h = st->box.h - y;
 
          /* Transfer band must be aligned to pixel block boundaries */
          assert(y % blockheight == 0);
@@ -175,8 +175,8 @@ svga_transfer_dma(struct svga_context *svga,
          }
 
          svga_transfer_dma_band(svga, st, transfer,
-                                st->base.box.x, y, st->base.box.z,
-                                st->base.box.width, h, st->base.box.depth,
+                                st->box.x, y, st->box.z,
+                                st->box.w, h, st->box.d,
                                 0, srcy, 0, flags);
 
          /*
@@ -256,39 +256,18 @@ svga_texture_destroy(struct pipe_screen *screen,
 
 
 /**
- * Determine if the resource was rendered to
- */
-static inline boolean
-was_tex_rendered_to(struct pipe_resource *resource,
-                    const struct pipe_transfer *transfer)
-{
-   unsigned face;
-
-   if (resource->target == PIPE_TEXTURE_CUBE) {
-      assert(transfer->box.depth == 1);
-      face = transfer->box.z;
-   }
-   else {
-      face = 0;
-   }
-
-   return svga_was_texture_rendered_to(svga_texture(resource),
-                                       face, transfer->level);
-}
-
-
-/**
  * Determine if we need to read back a texture image before mapping it.
  */
 static inline boolean
-need_tex_readback(struct pipe_transfer *transfer)
+need_tex_readback(struct svga_transfer *st)
 {
-   if (transfer->usage & PIPE_TRANSFER_READ)
+   if (st->base.usage & PIPE_TRANSFER_READ)
       return TRUE;
 
-   if ((transfer->usage & PIPE_TRANSFER_WRITE) &&
-       ((transfer->usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) == 0)) {
-      return was_tex_rendered_to(transfer->resource, transfer);
+   if ((st->base.usage & PIPE_TRANSFER_WRITE) &&
+       ((st->base.usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) == 0)) {
+      return svga_was_texture_rendered_to(svga_texture(st->base.resource),
+                                          st->slice, st->base.level);
    }
 
    return FALSE;
@@ -346,9 +325,9 @@ svga_texture_transfer_map_dma(struct svga_context *svga,
    unsigned usage = st->base.usage;
 
    /* we'll put the data into a tightly packed buffer */
-   nblocksx = util_format_get_nblocksx(texture->format, st->base.box.width);
-   nblocksy = util_format_get_nblocksy(texture->format, st->base.box.height);
-   d = st->base.box.depth;
+   nblocksx = util_format_get_nblocksx(texture->format, st->box.w);
+   nblocksy = util_format_get_nblocksy(texture->format, st->box.h);
+   d = st->box.d;
 
    st->base.stride = nblocksx*util_format_get_blocksize(texture->format);
    st->base.layer_stride = st->base.stride * nblocksy;
@@ -417,12 +396,12 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
    unsigned w, h, nblocksx, nblocksy, i;
    unsigned usage = st->base.usage;
 
-   if (need_tex_readback(transfer)) {
+   if (need_tex_readback(st)) {
       enum pipe_error ret;
 
       svga_surfaces_flush(svga);
 
-      for (i = 0; i < st->base.box.depth; i++) {
+      for (i = 0; i < st->box.d; i++) {
          if (svga_have_vgpu10(svga)) {
             ret = readback_image_vgpu10(svga, surf, st->slice + i, level,
                                         tex->b.b.last_level + 1);
@@ -505,7 +484,8 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
       baseLevelSize.depth = tex->b.b.depth0;
 
       if ((tex->b.b.target == PIPE_TEXTURE_1D_ARRAY) ||
-          (tex->b.b.target == PIPE_TEXTURE_2D_ARRAY)) {
+          (tex->b.b.target == PIPE_TEXTURE_2D_ARRAY) ||
+          (tex->b.b.target == PIPE_TEXTURE_CUBE_ARRAY)) {
          st->base.layer_stride =
             svga3dsurface_get_image_offset(tex->key.format, baseLevelSize,
                                            tex->b.b.last_level + 1, 1, 0);
@@ -523,9 +503,10 @@ svga_texture_transfer_map_direct(struct svga_context *svga,
 
       offset += svga3dsurface_get_pixel_offset(tex->key.format,
                                                mip_width, mip_height,
-                                               st->base.box.x,
-                                               st->base.box.y,
-                                               st->base.box.z);
+                                               st->box.x,
+                                               st->box.y,
+                                               st->box.z);
+
       return (void *) (map + offset);
    }
 }
@@ -573,15 +554,26 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    st->base.usage = usage;
    st->base.box = *box;
 
+   /* The modified transfer map box with the array index removed from z.
+    * The array index is specified in slice.
+    */
+   st->box.x = box->x;
+   st->box.y = box->y;
+   st->box.z = box->z;
+   st->box.w = box->width;
+   st->box.h = box->height;
+   st->box.d = box->depth;
+
    switch (tex->b.b.target) {
    case PIPE_TEXTURE_CUBE:
       st->slice = st->base.box.z;
-      st->base.box.z = 0;   /* so we don't apply double offsets below */
+      st->box.z = 0;   /* so we don't apply double offsets below */
       break;
-   case PIPE_TEXTURE_2D_ARRAY:
    case PIPE_TEXTURE_1D_ARRAY:
+   case PIPE_TEXTURE_2D_ARRAY:
+   case PIPE_TEXTURE_CUBE_ARRAY:
       st->slice = st->base.box.z;
-      st->base.box.z = 0;   /* so we don't apply double offsets below */
+      st->box.z = 0;   /* so we don't apply double offsets below */
 
       /* Force direct map for transfering multiple slices */
       if (st->base.box.depth > 1)
@@ -591,6 +583,13 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    default:
       st->slice = 0;
       break;
+   }
+
+   /* Force direct map for multisample surface */
+   if (texture->nr_samples > 1) {
+      assert(svga_have_gb_objects(svga));
+      assert(sws->have_sm4_1);
+      use_direct_map = TRUE;
    }
 
    st->use_direct_map = use_direct_map;
@@ -610,7 +609,9 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    else {
       boolean can_use_upload = tex->can_use_upload &&
                                !(st->base.usage & PIPE_TRANSFER_READ);
-      boolean was_rendered_to = was_tex_rendered_to(texture, &st->base);
+      boolean was_rendered_to =
+         svga_was_texture_rendered_to(svga_texture(texture),
+                                      st->slice, st->base.level);
 
       /* If the texture was already rendered to and upload buffer
        * is supported, then we will use upload buffer to
@@ -655,7 +656,7 @@ svga_texture_transfer_map(struct pipe_context *pipe,
       if (usage & PIPE_TRANSFER_WRITE) {
          /* record texture upload for HUD */
          svga->hud.num_bytes_uploaded +=
-            st->base.layer_stride * st->base.box.depth;
+            st->base.layer_stride * st->box.d;
 
          /* mark this texture level as dirty */
          svga_set_texture_dirty(tex, st->slice, level);
@@ -727,6 +728,7 @@ update_image_vgpu10(struct svga_context *svga,
    unsigned subResource;
 
    subResource = slice * numMipLevels + level;
+
    ret = SVGA3D_vgpu10_UpdateSubResource(svga->swc, surf, box, subResource);
    if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
@@ -783,37 +785,26 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
    /* Now send an update command to update the content in the backend. */
    if (st->base.usage & PIPE_TRANSFER_WRITE) {
       struct svga_winsys_surface *surf = tex->handle;
-      SVGA3dBox box;
       enum pipe_error ret;
-      unsigned nlayers = 1;
 
       assert(svga_have_gb_objects(svga));
 
       /* update the effected region */
-      box.x = transfer->box.x;
-      box.y = transfer->box.y;
-      box.w = transfer->box.width;
-      box.h = transfer->box.height;
-      box.d = transfer->box.depth;
+      SVGA3dBox box = st->box;
+      unsigned nlayers;
 
       switch (tex->b.b.target) {
-      case PIPE_TEXTURE_CUBE:
-         box.z = 0;
-         break;
       case PIPE_TEXTURE_2D_ARRAY:
-         nlayers = box.d;
-         box.z = 0;
-         box.d = 1;
-         break;
+      case PIPE_TEXTURE_CUBE_ARRAY:
       case PIPE_TEXTURE_1D_ARRAY:
          nlayers = box.d;
-         box.y = box.z = 0;
          box.d = 1;
          break;
       default:
-         box.z = transfer->box.z;
+         nlayers = 1;
          break;
       }
+
 
       if (0)
          debug_printf("%s %d, %d, %d  %d x %d x %d\n",
@@ -823,6 +814,7 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
 
       if (svga_have_vgpu10(svga)) {
          unsigned i;
+
          for (i = 0; i < nlayers; i++) {
             ret = update_image_vgpu10(svga, surf, &box,
                                       st->slice + i, transfer->level,
@@ -990,7 +982,8 @@ svga_texture_create(struct pipe_screen *screen,
       tex->b.b.nr_samples = 0;
    }
    else if (tex->b.b.nr_samples > 1) {
-      tex->key.flags |= SVGA3D_SURFACE_MASKABLE_ANTIALIAS;
+      assert(svgascreen->sws->have_sm4_1);
+      tex->key.flags |= SVGA3D_SURFACE_MULTISAMPLE;
    }
 
    tex->key.sampleCount = tex->b.b.nr_samples;
@@ -1013,6 +1006,12 @@ svga_texture_create(struct pipe_screen *screen,
       case PIPE_TEXTURE_CUBE:
          tex->key.flags |= (SVGA3D_SURFACE_CUBEMAP | SVGA3D_SURFACE_ARRAY);
          tex->key.numFaces = 6;
+         break;
+      case PIPE_TEXTURE_CUBE_ARRAY:
+         assert(svgascreen->sws->have_sm4_1);
+         tex->key.flags |= (SVGA3D_SURFACE_CUBEMAP | SVGA3D_SURFACE_ARRAY);
+         tex->key.numFaces = 1;  // arraySize already includes the 6 faces
+         tex->key.arraySize = template->array_size;
          break;
       default:
          break;
@@ -1408,6 +1407,7 @@ svga_texture_transfer_map_upload(struct svga_context *svga,
       st->upload.box.z = 0;
       break;
    case PIPE_TEXTURE_2D_ARRAY:
+   case PIPE_TEXTURE_CUBE_ARRAY:
       st->upload.nlayers = st->base.box.depth;
       st->upload.box.z = 0;
       st->upload.box.d = 1;

@@ -1631,33 +1631,6 @@ _mesa_base_format_has_channel(GLenum base_format, GLenum pname)
 
 
 /**
- * Returns the number of channels/components for a base format.
- */
-GLint
-_mesa_base_format_component_count(GLenum base_format)
-{
-   switch (base_format) {
-   case GL_LUMINANCE:
-   case GL_RED:
-   case GL_ALPHA:
-   case GL_INTENSITY:
-   case GL_DEPTH_COMPONENT:
-      return 1;
-   case GL_RG:
-   case GL_LUMINANCE_ALPHA:
-   case GL_DEPTH_STENCIL:
-      return 2;
-   case GL_RGB:
-      return 3;
-   case GL_RGBA:
-      return 4;
-   default:
-      return -1;
-   }
-}
-
-
-/**
  * If format is a generic compressed format, return the corresponding
  * non-compressed format.  For other formats, return the format as-is.
  */
@@ -2830,6 +2803,17 @@ _mesa_es3_error_check_format_and_type(const struct gl_context *ctx,
       internalFormat = effectiveInternalFormat;
    }
 
+   /* The GLES variant of EXT_texture_compression_s3tc is very vague and
+    * doesn't list valid types. Just do exactly what the spec says.
+    */
+   if (ctx->Extensions.EXT_texture_compression_s3tc &&
+       (internalFormat == GL_COMPRESSED_RGB_S3TC_DXT1_EXT ||
+        internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT ||
+        internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT3_EXT ||
+        internalFormat == GL_COMPRESSED_RGBA_S3TC_DXT5_EXT))
+      return format == GL_RGB || format == GL_RGBA ? GL_NO_ERROR :
+                                                     GL_INVALID_OPERATION;
+
    switch (format) {
    case GL_BGRA_EXT:
       if (type != GL_UNSIGNED_BYTE || internalFormat != GL_BGRA)
@@ -3794,6 +3778,15 @@ _mesa_is_es3_color_renderable(const struct gl_context *ctx,
    case GL_RG16:
    case GL_RGBA16:
       return _mesa_has_EXT_texture_norm16(ctx);
+   case GL_R8_SNORM:
+   case GL_RG8_SNORM:
+   case GL_RGBA8_SNORM:
+      return _mesa_has_EXT_render_snorm(ctx);
+   case GL_R16_SNORM:
+   case GL_RG16_SNORM:
+   case GL_RGBA16_SNORM:
+      return _mesa_has_EXT_texture_norm16(ctx) &&
+             _mesa_has_EXT_render_snorm(ctx);
    default:
       return false;
    }

@@ -36,9 +36,6 @@ static unsigned
 get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
               unsigned *element_index, nir_ssa_def **vertex_index)
 {
-   bool vs_in = (b->shader->info.stage == MESA_SHADER_VERTEX) &&
-                (var->data.mode == nir_var_shader_in);
-
    nir_deref_path path;
    nir_deref_path_init(&path, deref, NULL);
 
@@ -56,12 +53,11 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
    unsigned offset = 0;
    for (; *p; p++) {
       if ((*p)->deref_type == nir_deref_type_array) {
-         nir_const_value *c = nir_src_as_const_value((*p)->arr.index);
+         /* must not be indirect dereference */
+         unsigned index = nir_src_as_uint((*p)->arr.index);
 
-         assert(c);     /* must not be indirect dereference */
-
-         unsigned size = glsl_count_attribute_slots((*p)->type, vs_in);
-         offset += size * c->u32[0];
+         unsigned size = glsl_count_attribute_slots((*p)->type, false);
+         offset += size * index;
 
          unsigned num_elements = glsl_type_is_array((*p)->type) ?
             glsl_get_aoa_size((*p)->type) : 1;
@@ -69,7 +65,7 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref, nir_variable *var,
          num_elements *= glsl_type_is_matrix(glsl_without_array((*p)->type)) ?
             glsl_get_matrix_columns(glsl_without_array((*p)->type)) : 1;
 
-         *element_index += num_elements * c->u32[0];
+         *element_index += num_elements * index;
       } else if ((*p)->deref_type == nir_deref_type_struct) {
          /* TODO: we could also add struct splitting support to this pass */
          break;
@@ -198,7 +194,7 @@ deref_has_indirect(nir_builder *b, nir_variable *var, nir_deref_path *path)
       if ((*p)->deref_type != nir_deref_type_array)
          continue;
 
-      if (!nir_src_as_const_value((*p)->arr.index))
+      if (!nir_src_is_const((*p)->arr.index))
          return true;
    }
 
@@ -363,7 +359,6 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
                                   patch_indirects, split_inputs, true);
 
       /* Remove old input from the shaders inputs list */
-      struct hash_entry *entry;
       hash_table_foreach(split_inputs, entry) {
          nir_variable *var = (nir_variable *) entry->key;
          exec_node_remove(&var->node);
@@ -373,7 +368,6 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
    }
 
    /* Remove old output from the shaders outputs list */
-   struct hash_entry *entry;
    hash_table_foreach(split_outputs, entry) {
       nir_variable *var = (nir_variable *) entry->key;
       exec_node_remove(&var->node);
@@ -410,7 +404,6 @@ nir_lower_io_arrays_to_elements(nir_shader *producer, nir_shader *consumer)
                                patch_indirects, split_inputs, false);
 
    /* Remove old input from the shaders inputs list */
-   struct hash_entry *entry;
    hash_table_foreach(split_inputs, entry) {
       nir_variable *var = (nir_variable *) entry->key;
       exec_node_remove(&var->node);

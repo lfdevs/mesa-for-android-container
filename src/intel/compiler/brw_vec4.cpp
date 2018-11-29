@@ -31,6 +31,7 @@
 #include "brw_dead_control_flow.h"
 #include "common/gen_debug.h"
 #include "program/prog_parameter.h"
+#include "util/u_math.h"
 
 #define MAX_INSTRUCTION (1 << 30)
 
@@ -2865,7 +2866,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       ((1 << shader->info.cull_distance_array_size) - 1) <<
       shader->info.clip_distance_array_size;
 
-   unsigned nr_attribute_slots = _mesa_bitcount_64(prog_data->inputs_read);
+   unsigned nr_attribute_slots = util_bitcount64(prog_data->inputs_read);
 
    /* gl_VertexID and gl_InstanceID are system values, but arrive via an
     * incoming vertex attribute.  So, add an extra slot.

@@ -31,6 +31,9 @@
 #include <limits.h>
 #include <assert.h>
 #include <math.h>
+#include "util/u_math.h"
+
+#include "main/menums.h" /* BITFIELD64_MASK */
 
 nir_shader *
 nir_shader_create(void *mem_ctx,
@@ -162,6 +165,7 @@ nir_variable_create(nir_shader *shader, nir_variable_mode mode,
    var->name = ralloc_strdup(var, name);
    var->type = type;
    var->data.mode = mode;
+   var->data.how_declared = nir_var_declared_normally;
 
    if ((mode == nir_var_shader_in &&
         shader->info.stage != MESA_SHADER_VERTEX) ||
@@ -1194,6 +1198,98 @@ nir_foreach_src(nir_instr *instr, nir_foreach_src_cb cb, void *state)
    return nir_foreach_dest(instr, visit_dest_indirect, &dest_state);
 }
 
+int64_t
+nir_src_comp_as_int(nir_src src, unsigned comp)
+{
+   assert(nir_src_is_const(src));
+   nir_load_const_instr *load = nir_instr_as_load_const(src.ssa->parent_instr);
+
+   assert(comp < load->def.num_components);
+   switch (load->def.bit_size) {
+   case 8:  return load->value.i8[comp];
+   case 16: return load->value.i16[comp];
+   case 32: return load->value.i32[comp];
+   case 64: return load->value.i64[comp];
+   default:
+      unreachable("Invalid bit size");
+   }
+}
+
+uint64_t
+nir_src_comp_as_uint(nir_src src, unsigned comp)
+{
+   assert(nir_src_is_const(src));
+   nir_load_const_instr *load = nir_instr_as_load_const(src.ssa->parent_instr);
+
+   assert(comp < load->def.num_components);
+   switch (load->def.bit_size) {
+   case 8:  return load->value.u8[comp];
+   case 16: return load->value.u16[comp];
+   case 32: return load->value.u32[comp];
+   case 64: return load->value.u64[comp];
+   default:
+      unreachable("Invalid bit size");
+   }
+}
+
+bool
+nir_src_comp_as_bool(nir_src src, unsigned comp)
+{
+   assert(nir_src_is_const(src));
+   nir_load_const_instr *load = nir_instr_as_load_const(src.ssa->parent_instr);
+
+   assert(comp < load->def.num_components);
+   assert(load->def.bit_size == 32);
+   assert(load->value.u32[comp] == NIR_TRUE ||
+          load->value.u32[comp] == NIR_FALSE);
+
+   return load->value.u32[comp];
+}
+
+double
+nir_src_comp_as_float(nir_src src, unsigned comp)
+{
+   assert(nir_src_is_const(src));
+   nir_load_const_instr *load = nir_instr_as_load_const(src.ssa->parent_instr);
+
+   assert(comp < load->def.num_components);
+   switch (load->def.bit_size) {
+   case 16: return _mesa_half_to_float(load->value.u16[comp]);
+   case 32: return load->value.f32[comp];
+   case 64: return load->value.f64[comp];
+   default:
+      unreachable("Invalid bit size");
+   }
+}
+
+int64_t
+nir_src_as_int(nir_src src)
+{
+   assert(nir_src_num_components(src) == 1);
+   return nir_src_comp_as_int(src, 0);
+}
+
+uint64_t
+nir_src_as_uint(nir_src src)
+{
+   assert(nir_src_num_components(src) == 1);
+   return nir_src_comp_as_uint(src, 0);
+}
+
+bool
+nir_src_as_bool(nir_src src)
+{
+   assert(nir_src_num_components(src) == 1);
+   return nir_src_comp_as_bool(src, 0);
+}
+
+double
+nir_src_as_float(nir_src src)
+{
+   assert(nir_src_num_components(src) == 1);
+   return nir_src_comp_as_float(src, 0);
+}
+
 nir_const_value *
 nir_src_as_const_value(nir_src src)
 {
@@ -1637,7 +1733,10 @@ nir_index_blocks(nir_function_impl *impl)
       block->index = index++;
    }
 
-   impl->num_blocks = index;
+   /* The end_block isn't really part of the program, which is why its index
+    * is >= num_blocks.
+    */
+   impl->num_blocks = impl->end_block->index = index;
 }
 
 static bool
@@ -1845,4 +1944,48 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
    default:
       unreachable("intrinsic doesn't produce a system value");
    }
+}
+
+/* OpenGL utility method that remaps the location attributes if they are
+ * doubles. Not needed for vulkan due the differences on the input location
+ * count for doubles on vulkan vs OpenGL
+ *
+ * The bitfield returned in dual_slot is one bit for each double input slot in
+ * the original OpenGL single-slot input numbering.  The mapping from old
+ * locations to new locations is as follows:
+ *
+ *    new_loc = loc + util_bitcount(dual_slot & BITFIELD64_MASK(loc))
+ */
+void
+nir_remap_dual_slot_attributes(nir_shader *shader, uint64_t *dual_slot)
+{
+   assert(shader->info.stage == MESA_SHADER_VERTEX);
+
+   *dual_slot = 0;
+   nir_foreach_variable(var, &shader->inputs) {
+      if (glsl_type_is_dual_slot(glsl_without_array(var->type))) {
+         unsigned slots = glsl_count_attribute_slots(var->type, true);
+         *dual_slot |= BITFIELD64_MASK(slots) << var->data.location;
+      }
+   }
+
+   nir_foreach_variable(var, &shader->inputs) {
+      var->data.location +=
+         util_bitcount64(*dual_slot & BITFIELD64_MASK(var->data.location));
+   }
+}
+
+/* Returns an attribute mask that has been re-compacted using the given
+ * dual_slot mask.
+ */
+uint64_t
+nir_get_single_slot_attribs_mask(uint64_t attribs, uint64_t dual_slot)
+{
+   while (dual_slot) {
+      unsigned loc = u_bit_scan64(&dual_slot);
+      /* mask of all bits up to and including loc */
+      uint64_t mask = BITFIELD64_MASK(loc + 1);
+      attribs = (attribs & mask) | ((attribs & ~mask) >> 1);
+   }
+   return attribs;
 }

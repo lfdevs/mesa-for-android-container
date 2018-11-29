@@ -287,6 +287,9 @@ dump_sampleinfo(struct sh_sampleinfo sampleinfo)
    case SVGA3DSAMP_2D:
       _debug_printf( "_2d" );
       break;
+   case SVGA3DSAMP_2D_SHADOW:
+      _debug_printf( "_2dshadow" );
+      break;
    case SVGA3DSAMP_CUBE:
       _debug_printf( "_cube" );
       break;

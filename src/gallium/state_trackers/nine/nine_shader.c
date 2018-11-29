@@ -460,6 +460,7 @@ struct shader_translator
     boolean shift_wpos;
     boolean wpos_is_sysval;
     boolean face_is_sysval_integer;
+    boolean mul_zero_wins;
     unsigned texcoord_sn;
 
     struct sm1_instruction insn; /* current instruction */
@@ -481,6 +482,9 @@ struct shader_translator
         struct ureg_dst p;
         struct ureg_dst address;
         struct ureg_dst a0;
+        struct ureg_dst predicate;
+        struct ureg_dst predicate_tmp;
+        struct ureg_dst predicate_dst;
         struct ureg_dst tS[8]; /* texture stage registers */
         struct ureg_dst tdst; /* scratch dst if we need extra modifiers */
         struct ureg_dst t[8]; /* scratch TEMPs */
@@ -496,6 +500,7 @@ struct shader_translator
     unsigned loop_labels[NINE_MAX_LOOP_DEPTH];
     unsigned cond_labels[NINE_MAX_COND_DEPTH];
     boolean loop_or_rep[NINE_MAX_LOOP_DEPTH]; /* true: loop, false: rep */
+    boolean predicated_activated;
 
     unsigned *inst_labels; /* LABEL op */
     unsigned num_inst_labels;
@@ -766,12 +771,13 @@ TEX_with_ps1x_projection(struct shader_translator *tx, struct ureg_dst dst,
 {
     unsigned dim = 1 + ((tx->info->projected >> (2 * idx)) & 3);
     struct ureg_dst tmp;
+    boolean shadow = !!(tx->info->sampler_mask_shadow & (1 << idx));
 
     /* dim == 1: no projection
      * Looks like must be disabled when it makes no
      * sense according the texture dimensions
      */
-    if (dim == 1 || dim <= target) {
+    if (dim == 1 || (dim <= target && !shadow)) {
         ureg_TEX(tx->ureg, dst, target, src0, src1);
     } else if (dim == 4) {
         ureg_TXP(tx->ureg, dst, target, src0, src1);
@@ -975,7 +981,12 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         }
         break;
     case D3DSPR_PREDICATE:
-        assert(!"D3DSPR_PREDICATE");
+        if (ureg_dst_is_undef(tx->regs.predicate)) {
+            /* Forbidden to use the predicate register before being set */
+            tx->failure = TRUE;
+            tx->regs.predicate = ureg_DECL_temporary(tx->ureg);
+        }
+        src = ureg_src(tx->regs.predicate);
         break;
     case D3DSPR_SAMPLER:
         assert(param->mod == NINED3DSPSM_NONE);
@@ -1157,11 +1168,15 @@ tx_src_param(struct shader_translator *tx, const struct sm1_src_param *param)
         src = ureg_src(tmp);
         break;
     case NINED3DSPSM_NOT:
-        if (tx->native_integers) {
+        if (tx->native_integers && param->file == D3DSPR_CONSTBOOL) {
             tmp = tx_scratch(tx);
             ureg_NOT(ureg, tmp, src);
             src = ureg_src(tmp);
             break;
+        } else { /* predicate */
+            tmp = tx_scratch(tx);
+            ureg_ADD(ureg, tmp, ureg_imm1f(ureg, 1.0f), ureg_negate(src));
+            src = ureg_src(tmp);
         }
         /* fall through */
     case NINED3DSPSM_COMP:
@@ -1292,7 +1307,9 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         dst = tx->regs.oDepth; /* XXX: must write .z component */
         break;
     case D3DSPR_PREDICATE:
-        assert(!"D3DSPR_PREDICATE");
+        if (ureg_dst_is_undef(tx->regs.predicate))
+            tx->regs.predicate = ureg_DECL_temporary(tx->ureg);
+        dst = tx->regs.predicate;
         break;
     case D3DSPR_TEMPFLOAT16:
         DBG("unhandled D3DSPR: %u\n", param->file);
@@ -1308,6 +1325,11 @@ _tx_dst_param(struct shader_translator *tx, const struct sm1_dst_param *param)
         dst = ureg_writemask(dst, param->mask);
     if (param->mod & NINED3DSPDM_SATURATE)
         dst = ureg_saturate(dst);
+
+    if (tx->predicated_activated) {
+        tx->regs.predicate_dst = dst;
+        dst = tx->regs.predicate_tmp;
+    }
 
     return dst;
 }
@@ -2086,9 +2108,10 @@ d3dstt_to_tgsi_tex_shadow(BYTE sampler_type)
 static inline unsigned
 ps1x_sampler_type(const struct nine_shader_info *info, unsigned stage)
 {
+    boolean shadow = !!(info->sampler_mask_shadow & (1 << stage));
     switch ((info->sampler_ps1xtypes >> (stage * 2)) & 0x3) {
-    case 1: return TGSI_TEXTURE_1D;
-    case 0: return TGSI_TEXTURE_2D;
+    case 1: return shadow ? TGSI_TEXTURE_SHADOW1D : TGSI_TEXTURE_1D;
+    case 0: return shadow ? TGSI_TEXTURE_SHADOW2D : TGSI_TEXTURE_2D;
     case 3: return TGSI_TEXTURE_3D;
     default:
         return TGSI_TEXTURE_CUBE;
@@ -2273,15 +2296,46 @@ DECL_SPECIAL(POW)
     return D3D_OK;
 }
 
+/* Tests results on Win 10:
+ * NV (NVIDIA GeForce GT 635M)
+ * AMD (AMD Radeon HD 7730M)
+ * INTEL (Intel(R) HD Graphics 4000)
+ * PS2 and PS3:
+ * RCP and RSQ can generate inf on NV and AMD.
+ * RCP and RSQ are clamped on INTEL (+- FLT_MAX),
+ * NV: log not clamped
+ * AMD: log(0) is -FLT_MAX (but log(inf) is inf)
+ * INTEL: log(0) is -FLT_MAX and log(inf) is 127
+ * All devices have 0*anything = 0
+ *
+ * INTEL VS2 and VS3: same behaviour.
+ * Some differences VS2 and VS3 for constants defined with inf/NaN.
+ * While PS3, VS3 and PS2 keep NaN and Inf shader constants without change,
+ * VS2 seems to clamp to zero (may be test failure).
+ * AMD VS2: unknown, VS3: very likely behaviour of PS3
+ * NV VS2 and VS3: very likely behaviour of PS3
+ * For both, Inf in VS becomes NaN is PS
+ * "Very likely" because the test was less extensive.
+ *
+ * Thus all clamping can be removed for shaders 2 and 3,
+ * as long as 0*anything = 0.
+ * Else clamps to enforce 0*anything = 0 (anything being then
+ * neither inf or NaN, the user being unlikely to pass them
+ * as constant).
+ * The status for VS1 and PS1 is unknown.
+ */
+
 DECL_SPECIAL(RCP)
 {
     struct ureg_program *ureg = tx->ureg;
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
-    struct ureg_dst tmp = tx_scratch(tx);
+    struct ureg_dst tmp = tx->mul_zero_wins ? dst : tx_scratch(tx);
     ureg_RCP(ureg, tmp, src);
-    ureg_MIN(ureg, tmp, ureg_imm1f(ureg, FLT_MAX), ureg_src(tmp));
-    ureg_MAX(ureg, dst, ureg_imm1f(ureg, -FLT_MAX), ureg_src(tmp));
+    if (!tx->mul_zero_wins) {
+        ureg_MIN(ureg, tmp, ureg_imm1f(ureg, FLT_MAX), ureg_src(tmp));
+        ureg_MAX(ureg, dst, ureg_imm1f(ureg, -FLT_MAX), ureg_src(tmp));
+    }
     return D3D_OK;
 }
 
@@ -2290,9 +2344,10 @@ DECL_SPECIAL(RSQ)
     struct ureg_program *ureg = tx->ureg;
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
-    struct ureg_dst tmp = tx_scratch(tx);
+    struct ureg_dst tmp = tx->mul_zero_wins ? dst : tx_scratch(tx);
     ureg_RSQ(ureg, tmp, ureg_abs(src));
-    ureg_MIN(ureg, dst, ureg_imm1f(ureg, FLT_MAX), ureg_src(tmp));
+    if (!tx->mul_zero_wins)
+        ureg_MIN(ureg, dst, ureg_imm1f(ureg, FLT_MAX), ureg_src(tmp));
     return D3D_OK;
 }
 
@@ -2303,7 +2358,11 @@ DECL_SPECIAL(LOG)
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
     ureg_LG2(ureg, tmp, ureg_abs(src));
-    ureg_MAX(ureg, dst, ureg_imm1f(ureg, -FLT_MAX), tx_src_scalar(tmp));
+    if (tx->mul_zero_wins) {
+        ureg_MOV(ureg, dst, tx_src_scalar(tmp));
+    } else {
+        ureg_MAX(ureg, dst, ureg_imm1f(ureg, -FLT_MAX), tx_src_scalar(tmp));
+    }
     return D3D_OK;
 }
 
@@ -2333,7 +2392,8 @@ DECL_SPECIAL(NRM)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
     ureg_DP3(ureg, tmp, src, src);
     ureg_RSQ(ureg, tmp, nrm);
-    ureg_MIN(ureg, tmp, ureg_imm1f(ureg, FLT_MAX), nrm);
+    if (!tx->mul_zero_wins)
+        ureg_MIN(ureg, tmp, ureg_imm1f(ureg, FLT_MAX), nrm);
     ureg_MUL(ureg, dst, src, nrm);
     return D3D_OK;
 }
@@ -2891,12 +2951,24 @@ DECL_SPECIAL(TEXLDL)
 
 DECL_SPECIAL(SETP)
 {
-    STUB(D3DERR_INVALIDCALL);
+    const unsigned cmp_op = sm1_insn_flags_to_tgsi_setop(tx->insn.flags);
+    struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
+    struct ureg_src src[2] = {
+       tx_src_param(tx, &tx->insn.src[0]),
+       tx_src_param(tx, &tx->insn.src[1])
+    };
+    ureg_insn(tx->ureg, cmp_op, &dst, 1, src, 2, 0);
+    return D3D_OK;
 }
 
 DECL_SPECIAL(BREAKP)
 {
-    STUB(D3DERR_INVALIDCALL);
+    struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]);
+    ureg_IF(tx->ureg, src, tx_cond(tx));
+    ureg_BRK(tx->ureg);
+    tx_endcond(tx);
+    ureg_ENDIF(tx->ureg);
+    return D3D_OK;
 }
 
 DECL_SPECIAL(PHASE)
@@ -3323,8 +3395,6 @@ sm1_parse_instruction(struct shader_translator *tx)
     insn->ndst = info->ndst;
     insn->nsrc = info->nsrc;
 
-    assert(!insn->predicated && "TODO: predicated instructions");
-
     /* check version */
     {
         unsigned min = IS_VS ? info->vert_version.min : info->frag_version.min;
@@ -3353,11 +3423,29 @@ sm1_parse_instruction(struct shader_translator *tx)
     sm1_dump_instruction(insn, tx->cond_depth + tx->loop_depth);
     sm1_instruction_check(insn);
 
+    if (insn->predicated) {
+        tx->predicated_activated = true;
+        if (ureg_dst_is_undef(tx->regs.predicate_tmp)) {
+            tx->regs.predicate_tmp = ureg_DECL_temporary(tx->ureg);
+            tx->regs.predicate_dst = ureg_DECL_temporary(tx->ureg);
+        }
+    }
+
     if (info->handler)
         hr = info->handler(tx);
     else
         hr = NineTranslateInstruction_Generic(tx);
     tx_apply_dst0_modifiers(tx);
+
+    if (insn->predicated) {
+        tx->predicated_activated = false;
+        /* TODO: predicate might be allowed on outputs,
+         * which cannot be src. Workaround it. */
+        ureg_CMP(tx->ureg, tx->regs.predicate_dst,
+                 ureg_negate(tx_src_param(tx, &insn->pred)),
+                 ureg_src(tx->regs.predicate_tmp),
+                 ureg_src(tx->regs.predicate_dst));
+    }
 
     if (hr != D3D_OK)
         tx->failure = TRUE;
@@ -3458,8 +3546,8 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
     struct ureg_program *ureg = tx->ureg;
     struct ureg_dst oCol0 = ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0);
     struct ureg_src fog_end, fog_coeff, fog_density;
-    struct ureg_src fog_vs, depth, fog_color;
-    struct ureg_dst fog_factor;
+    struct ureg_src fog_vs, fog_color;
+    struct ureg_dst fog_factor, depth;
 
     if (!tx->info->fog_enable) {
         ureg_MOV(ureg, oCol0, src_col);
@@ -3467,8 +3555,10 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
     }
 
     if (tx->info->fog_mode != D3DFOG_NONE) {
-        depth = nine_get_position_input(tx);
-        depth = ureg_scalar(depth, TGSI_SWIZZLE_Z);
+        depth = tx_scratch_scalar(tx);
+        /* Depth used for fog is perspective interpolated */
+        ureg_RCP(ureg, depth, ureg_scalar(nine_get_position_input(tx), TGSI_SWIZZLE_W));
+        ureg_MUL(ureg, depth, ureg_src(depth), ureg_scalar(nine_get_position_input(tx), TGSI_SWIZZLE_Z));
     }
 
     nine_info_mark_const_f_used(tx->info, 33);
@@ -3478,16 +3568,16 @@ shader_add_ps_fog_stage(struct shader_translator *tx, struct ureg_src src_col)
     if (tx->info->fog_mode == D3DFOG_LINEAR) {
         fog_end = NINE_CONSTANT_SRC_SWIZZLE(33, X);
         fog_coeff = NINE_CONSTANT_SRC_SWIZZLE(33, Y);
-        ureg_ADD(ureg, fog_factor, fog_end, ureg_negate(depth));
+        ureg_ADD(ureg, fog_factor, fog_end, ureg_negate(ureg_src(depth)));
         ureg_MUL(ureg, ureg_saturate(fog_factor), tx_src_scalar(fog_factor), fog_coeff);
     } else if (tx->info->fog_mode == D3DFOG_EXP) {
         fog_density = NINE_CONSTANT_SRC_SWIZZLE(33, X);
-        ureg_MUL(ureg, fog_factor, depth, fog_density);
+        ureg_MUL(ureg, fog_factor, ureg_src(depth), fog_density);
         ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), ureg_imm1f(ureg, -1.442695f));
         ureg_EX2(ureg, fog_factor, tx_src_scalar(fog_factor));
     } else if (tx->info->fog_mode == D3DFOG_EXP2) {
         fog_density = NINE_CONSTANT_SRC_SWIZZLE(33, X);
-        ureg_MUL(ureg, fog_factor, depth, fog_density);
+        ureg_MUL(ureg, fog_factor, ureg_src(depth), fog_density);
         ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), tx_src_scalar(fog_factor));
         ureg_MUL(ureg, fog_factor, tx_src_scalar(fog_factor), ureg_imm1f(ureg, -1.442695f));
         ureg_EX2(ureg, fog_factor, tx_src_scalar(fog_factor));
@@ -3587,7 +3677,8 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
             ureg_property(tx->ureg, TGSI_PROPERTY_FS_COORD_PIXEL_CENTER, TGSI_FS_COORD_PIXEL_CENTER_INTEGER);
     }
 
-    if (GET_CAP(TGSI_MUL_ZERO_WINS))
+    tx->mul_zero_wins = GET_CAP(TGSI_MUL_ZERO_WINS);
+    if (tx->mul_zero_wins)
        ureg_property(tx->ureg, TGSI_PROPERTY_MUL_ZERO_WINS, 1);
 
     while (!sm1_parse_eof(tx) && !tx->failure)

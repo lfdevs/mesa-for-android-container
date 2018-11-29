@@ -238,8 +238,6 @@ struct intel_context
     */
    bool front_buffer_dirty;
 
-   bool use_early_z;
-
    __DRIcontext *driContext;
    struct intel_screen *intelScreen;
 

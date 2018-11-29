@@ -232,7 +232,6 @@ static int
 v3d_simulator_pin_bos(int fd, struct v3d_job *job)
 {
         struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
-        struct set_entry *entry;
 
         set_foreach(job->bos, entry) {
                 struct v3d_bo *bo = (struct v3d_bo *)entry->key;
@@ -250,7 +249,6 @@ static int
 v3d_simulator_unpin_bos(int fd, struct v3d_job *job)
 {
         struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
-        struct set_entry *entry;
 
         set_foreach(job->bos, entry) {
                 struct v3d_bo *bo = (struct v3d_bo *)entry->key;

@@ -188,7 +188,7 @@ nv30_rasterizer_state_create(struct pipe_context *pipe,
    SB_DATA  (so, cso->flatshade_first);
 
    SB_MTHD30(so, DEPTH_CONTROL, 1);
-   SB_DATA  (so, cso->depth_clip ? 0x00000001 : 0x00000010);
+   SB_DATA  (so, cso->depth_clip_near ? 0x00000001 : 0x00000010);
    return so;
 }
 

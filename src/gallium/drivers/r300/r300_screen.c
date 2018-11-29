@@ -23,6 +23,7 @@
 
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
+#include "util/u_screen.h"
 #include "util/u_memory.h"
 #include "util/os_time.h"
 #include "vl/vl_decoder.h"
@@ -100,6 +101,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_POINT_SPRITE:
         case PIPE_CAP_OCCLUSION_QUERY:
         case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
+        case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
         case PIPE_CAP_BLEND_EQUATION_SEPARATE:
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
@@ -145,6 +147,7 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_INDEP_BLEND_ENABLE:
         case PIPE_CAP_INDEP_BLEND_FUNC:
         case PIPE_CAP_DEPTH_CLIP_DISABLE:
+        case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
         case PIPE_CAP_SHADER_STENCIL_EXPORT:
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
         case PIPE_CAP_TGSI_INSTANCEID:
@@ -260,7 +263,13 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
         case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
         case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
         case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
+        case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
             return 0;
+
+        case PIPE_CAP_MAX_GS_INVOCATIONS:
+            return 32;
+       case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
+            return 1 << 27;
 
         /* SWTCL-only features. */
         case PIPE_CAP_PRIMITIVE_RESTART:
@@ -313,8 +322,9 @@ static int r300_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
             return r300screen->info.pci_dev;
         case PIPE_CAP_PCI_FUNCTION:
             return r300screen->info.pci_func;
+        default:
+            return u_pipe_screen_get_param_defaults(pscreen, param);
     }
-    return 0;
 }
 
 static int r300_get_shader_param(struct pipe_screen *pscreen,
@@ -387,6 +397,8 @@ static int r300_get_shader_param(struct pipe_screen *pscreen,
             return PIPE_SHADER_IR_TGSI;
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
             return 0;
+        case PIPE_SHADER_CAP_SCALAR_ISA:
+            return 0;
         }
         break;
     case PIPE_SHADER_VERTEX:
@@ -452,6 +464,8 @@ static int r300_get_shader_param(struct pipe_screen *pscreen,
         case PIPE_SHADER_CAP_PREFERRED_IR:
             return PIPE_SHADER_IR_TGSI;
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
+            return 0;
+        case PIPE_SHADER_CAP_SCALAR_ISA:
             return 0;
         }
         break;

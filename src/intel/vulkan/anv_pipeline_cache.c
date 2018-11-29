@@ -237,7 +237,6 @@ anv_pipeline_cache_finish(struct anv_pipeline_cache *cache)
        * going away, the shader cache has to hold a reference to all shader
        * binaries it contains.  We unref them when we destroy the cache.
        */
-      struct hash_entry *entry;
       hash_table_foreach(cache->cache, entry)
          anv_shader_bin_unref(cache->device, entry->data);
 
@@ -499,7 +498,6 @@ VkResult anv_GetPipelineCacheData(
 
    VkResult result = VK_SUCCESS;
    if (cache->cache) {
-      struct hash_entry *entry;
       hash_table_foreach(cache->cache, entry) {
          struct anv_shader_bin *shader = entry->data;
 
@@ -540,7 +538,6 @@ VkResult anv_MergePipelineCaches(
       if (!src->cache)
          continue;
 
-      struct hash_entry *entry;
       hash_table_foreach(src->cache, entry) {
          struct anv_shader_bin *bin = entry->data;
          assert(bin);

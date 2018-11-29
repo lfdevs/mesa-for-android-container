@@ -41,7 +41,7 @@ static bool etna_icache_upload_shader(struct etna_context *ctx, struct etna_shad
 {
    if (v->bo)
       return true;
-   v->bo = etna_bo_new(ctx->screen->dev, v->code_size*4, DRM_ETNA_GEM_CACHE_UNCACHED);
+   v->bo = etna_bo_new(ctx->screen->dev, v->code_size*4, DRM_ETNA_GEM_CACHE_WC);
    if (!v->bo)
       return false;
 

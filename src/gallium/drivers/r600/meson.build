@@ -109,7 +109,7 @@ egd_tables_h = custom_target(
   'egd_tables.h',
   input : ['egd_tables.py', 'evergreend.h'],
   output : 'egd_tables.h',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
 )
 

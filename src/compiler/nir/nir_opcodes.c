@@ -3088,10 +3088,10 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
 {
    .name = "unpack_half_2x16_split_x",
    .num_inputs = 1,
-   .output_size = 1,
+   .output_size = 0,
    .output_type = nir_type_float32,
    .input_sizes = {
-      1
+      0
    },
    .input_types = {
       nir_type_uint32
@@ -3102,10 +3102,10 @@ const nir_op_info nir_op_infos[nir_num_opcodes] = {
 {
    .name = "unpack_half_2x16_split_y",
    .num_inputs = 1,
-   .output_size = 1,
+   .output_size = 0,
    .output_type = nir_type_float32,
    .input_sizes = {
-      1
+      0
    },
    .input_types = {
       nir_type_uint32

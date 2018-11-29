@@ -103,6 +103,7 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_KHR_descriptor_update_template", 1},
    {"VK_KHR_device_group", 1},
    {"VK_KHR_draw_indirect_count", 1},
+   {"VK_KHR_driver_properties", 1},
    {"VK_KHR_external_fence", 1},
    {"VK_KHR_external_fence_fd", 1},
    {"VK_KHR_external_memory", 1},
@@ -123,7 +124,9 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_KHR_swapchain", 68},
    {"VK_KHR_variable_pointers", 1},
    {"VK_KHR_multiview", 1},
+   {"VK_EXT_calibrated_timestamps", 1},
    {"VK_EXT_conditional_rendering", 1},
+   {"VK_EXT_conservative_rasterization", 1},
    {"VK_EXT_display_control", 1},
    {"VK_EXT_depth_range_unrestricted", 1},
    {"VK_EXT_descriptor_indexing", 2},
@@ -131,9 +134,11 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_EXT_external_memory_dma_buf", 1},
    {"VK_EXT_external_memory_host", 1},
    {"VK_EXT_global_priority", 1},
+   {"VK_EXT_pci_bus_info", 1},
    {"VK_EXT_sampler_filter_minmax", 1},
    {"VK_EXT_shader_viewport_index_layer", 1},
    {"VK_EXT_shader_stencil_export", 1},
+   {"VK_EXT_transform_feedback", 1},
    {"VK_EXT_vertex_attribute_divisor", 3},
    {"VK_AMD_draw_indirect_count", 1},
    {"VK_AMD_gcn_shader", 1},
@@ -141,6 +146,8 @@ const VkExtensionProperties radv_device_extensions[RADV_DEVICE_EXTENSION_COUNT] 
    {"VK_AMD_shader_core_properties", 1},
    {"VK_AMD_shader_info", 1},
    {"VK_AMD_shader_trinary_minmax", 1},
+   {"VK_GOOGLE_decorate_string", 1},
+   {"VK_GOOGLE_hlsl_functionality1", 1},
 };
 
 const struct radv_instance_extension_table radv_supported_instance_extensions = {
@@ -173,6 +180,7 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->KHR_descriptor_update_template = true;
    table->KHR_device_group = true;
    table->KHR_draw_indirect_count = true;
+   table->KHR_driver_properties = true;
    table->KHR_external_fence = device->rad_info.has_syncobj_wait_for_submit;
    table->KHR_external_fence_fd = device->rad_info.has_syncobj_wait_for_submit;
    table->KHR_external_memory = true;
@@ -193,7 +201,9 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->KHR_swapchain = RADV_HAS_SURFACE;
    table->KHR_variable_pointers = true;
    table->KHR_multiview = true;
+   table->EXT_calibrated_timestamps = true;
    table->EXT_conditional_rendering = true;
+   table->EXT_conservative_rasterization = device->rad_info.chip_class >= GFX9;
    table->EXT_display_control = VK_USE_PLATFORM_DISPLAY_KHR;
    table->EXT_depth_range_unrestricted = true;
    table->EXT_descriptor_indexing = true;
@@ -201,9 +211,11 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->EXT_external_memory_dma_buf = true;
    table->EXT_external_memory_host = device->rad_info.has_userptr;
    table->EXT_global_priority = device->rad_info.has_ctx_priority;
+   table->EXT_pci_bus_info = true;
    table->EXT_sampler_filter_minmax = device->rad_info.chip_class >= CIK;
    table->EXT_shader_viewport_index_layer = true;
    table->EXT_shader_stencil_export = true;
+   table->EXT_transform_feedback = true;
    table->EXT_vertex_attribute_divisor = true;
    table->AMD_draw_indirect_count = true;
    table->AMD_gcn_shader = true;
@@ -211,6 +223,8 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->AMD_shader_core_properties = true;
    table->AMD_shader_info = true;
    table->AMD_shader_trinary_minmax = true;
+   table->GOOGLE_decorate_string = true;
+   table->GOOGLE_hlsl_functionality1 = true;
 }
 
 VkResult radv_EnumerateInstanceVersion(

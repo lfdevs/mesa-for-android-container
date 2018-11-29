@@ -144,10 +144,11 @@ bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx, bool deferred)
 	}
 
 	if (deferred) {
-		struct fd_batch *current_batch = ctx->batch;
+		struct fd_batch *current_batch = fd_context_batch(ctx);
 
 		for (unsigned i = 0; i < n; i++) {
-			if (batches[i] != current_batch) {
+			if (batches[i] && (batches[i]->ctx == ctx) &&
+					(batches[i] != current_batch)) {
 				fd_batch_add_dep(current_batch, batches[i]);
 			}
 		}
@@ -269,7 +270,7 @@ fd_bc_invalidate_resource(struct fd_resource *rsc, bool destroy)
 }
 
 struct fd_batch *
-fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx)
+fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool nondraw)
 {
 	struct fd_batch *batch;
 	uint32_t idx;
@@ -281,7 +282,6 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx)
 		for (unsigned i = 0; i < ARRAY_SIZE(cache->batches); i++) {
 			batch = cache->batches[i];
 			debug_printf("%d: needs_flush=%d, depends:", batch->idx, batch->needs_flush);
-			struct set_entry *entry;
 			set_foreach(batch->dependencies, entry) {
 				struct fd_batch *dep = (struct fd_batch *)entry->key;
 				debug_printf(" %d", dep->idx);
@@ -332,7 +332,7 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx)
 
 	idx--;              /* bit zero returns 1 for ffs() */
 
-	batch = fd_batch_create(ctx, false);
+	batch = fd_batch_create(ctx, nondraw);
 	if (!batch)
 		goto out;
 
@@ -364,7 +364,7 @@ batch_from_key(struct fd_batch_cache *cache, struct key *key,
 		return batch;
 	}
 
-	batch = fd_bc_alloc_batch(cache, ctx);
+	batch = fd_bc_alloc_batch(cache, ctx, false);
 #ifdef DEBUG
 	DBG("%p: hash=0x%08x, %ux%u, %u layers, %u samples", batch, hash,
 			key->width, key->height, key->layers, key->samples);

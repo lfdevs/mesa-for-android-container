@@ -190,7 +190,9 @@ enum {
    SVGA_REG_SCREENTARGET_MAX_WIDTH = 55,
    SVGA_REG_SCREENTARGET_MAX_HEIGHT = 56,
    SVGA_REG_MOB_MAX_SIZE = 57,
-   SVGA_REG_TOP = 58,               /* Must be 1 more than the last register */
+   SVGA_REG_BLANK_SCREEN_TARGETS = 58,
+   SVGA_REG_CAP2 = 59,
+   SVGA_REG_TOP = 60,               /* Must be 1 more than the last register */
 
    SVGA_PALETTE_BASE = 1024,        /* Base of SVGA color map */
    /* Next 768 (== 256*3) registers exist for colormap */
@@ -646,8 +648,26 @@ struct {
 #define SVGA_CAP_GBOBJECTS          0x08000000
 #define SVGA_CAP_CMD_BUFFERS_3      0x10000000
 
-#define SVGA_CAP_CMD_RESERVED       0x80000000
+#define SVGA_CAP_CAP2_REGISTER      0x80000000
 
+
+/*
+ * The SVGA_REG_CAP2 register is an additional set of SVGA capability bits.
+ *
+ * SVGA_CAP2_GROW_OTABLE --
+ *      Allow the GrowOTable/DXGrowCOTable commands.
+ *
+ * SVGA_CAP2_INTRA_SURFACE_COPY --
+ *      Allow the IntraSurfaceCopy command.
+ *
+ * SVGA_CAP2_RESERVED --
+ *      Reserve the last bit for extending the SVGA capabilities to some
+ *      future mechanisms.
+ */
+#define SVGA_CAP2_NONE               0x00000000
+#define SVGA_CAP2_GROW_OTABLE        0x00000001
+#define SVGA_CAP2_INTRA_SURFACE_COPY 0x00000002
+#define SVGA_CAP2_RESERVED           0x80000000
 
 /*
  * The Guest can optionally read some SVGA device capabilities through

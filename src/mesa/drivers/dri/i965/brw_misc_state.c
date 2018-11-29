@@ -291,7 +291,7 @@ brw_emit_depth_stencil_hiz(struct brw_context *brw,
 
    BEGIN_BATCH(len);
    OUT_BATCH(_3DSTATE_DEPTH_BUFFER << 16 | (len - 2));
-   OUT_BATCH((depth_mt ? depth_mt->surf.row_pitch - 1 : 0) |
+   OUT_BATCH((depth_mt ? depth_mt->surf.row_pitch_B - 1 : 0) |
              (depthbuffer_format << 18) |
              (BRW_TILEWALK_YMAJOR << 26) |
              (tiled_surface << 27) |
@@ -688,7 +688,7 @@ brw_upload_state_base_address(struct brw_context *brw)
        * to the bottom 4GB.
        */
       uint32_t mocs_wb = devinfo->gen >= 9 ? SKL_MOCS_WB : BDW_MOCS_WB;
-      int pkt_len = devinfo->gen >= 9 ? 19 : 16;
+      int pkt_len = devinfo->gen >= 10 ? 22 : (devinfo->gen >= 9 ? 19 : 16);
 
       BEGIN_BATCH(pkt_len);
       OUT_BATCH(CMD_STATE_BASE_ADDRESS << 16 | (pkt_len - 2));
@@ -714,6 +714,11 @@ brw_upload_state_base_address(struct brw_context *brw)
       /* Instruction access upper bound */
       OUT_BATCH(ALIGN(brw->cache.bo->size, 4096) | 1);
       if (devinfo->gen >= 9) {
+         OUT_BATCH(1);
+         OUT_BATCH(0);
+         OUT_BATCH(0);
+      }
+      if (devinfo->gen >= 10) {
          OUT_BATCH(1);
          OUT_BATCH(0);
          OUT_BATCH(0);

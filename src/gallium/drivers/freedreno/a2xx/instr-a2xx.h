@@ -147,15 +147,25 @@ typedef struct PACKED {
 	uint8_t             const_1_rel_abs          : 1;
 	uint8_t             const_0_rel_abs          : 1;
 	/* dword2: */
-	uint8_t             src3_reg                 : 6;
-	uint8_t             src3_reg_select          : 1;
-	uint8_t             src3_reg_abs             : 1;
-	uint8_t             src2_reg                 : 6;
-	uint8_t             src2_reg_select          : 1;
-	uint8_t             src2_reg_abs             : 1;
-	uint8_t             src1_reg                 : 6;
-	uint8_t             src1_reg_select          : 1;
-	uint8_t             src1_reg_abs             : 1;
+	union {
+		struct {
+			uint8_t             src3_reg         : 6;
+			uint8_t             src3_reg_select  : 1;
+			uint8_t             src3_reg_abs     : 1;
+			uint8_t             src2_reg         : 6;
+			uint8_t             src2_reg_select  : 1;
+			uint8_t             src2_reg_abs     : 1;
+			uint8_t             src1_reg         : 6;
+			uint8_t             src1_reg_select  : 1;
+			uint8_t             src1_reg_abs     : 1;
+		};
+		/* constants have full 8-bit index */
+		struct {
+			uint8_t             src3_reg_const   : 8;
+			uint8_t             src2_reg_const   : 8;
+			uint8_t             src1_reg_const   : 8;
+		};
+	};
 	instr_vector_opc_t  vector_opc               : 5;
 	uint8_t             src3_sel                 : 1;
 	uint8_t             src2_sel                 : 1;

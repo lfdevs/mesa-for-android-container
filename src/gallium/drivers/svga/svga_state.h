@@ -105,6 +105,4 @@ enum pipe_error svga_reemit_vs_bindings(struct svga_context *svga);
 
 enum pipe_error svga_reemit_fs_bindings(struct svga_context *svga);
 
-enum pipe_error svga_reemit_gs_bindings(struct svga_context *svga);
-
 #endif

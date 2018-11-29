@@ -41,7 +41,7 @@ ir_expression_operation_constant_h = custom_target(
   'ir_expression_operation_constant.h',
   input : 'ir_expression_operation.py',
   output : 'ir_expression_operation_constant.h',
-  command : [prog_python2, '@INPUT@', 'constant'],
+  command : [prog_python, '@INPUT@', 'constant'],
   capture : true,
 )
 
@@ -49,7 +49,7 @@ ir_expression_operation_strings_h = custom_target(
   'ir_expression_operation_strings.h',
   input : 'ir_expression_operation.py',
   output : 'ir_expression_operation_strings.h',
-  command : [prog_python2, '@INPUT@', 'strings'],
+  command : [prog_python, '@INPUT@', 'strings'],
   capture : true,
 )
 
@@ -258,6 +258,6 @@ glsl_test = executable(
   install : with_tools.contains('glsl'),
 )
 
-if with_tests
+if with_any_opengl and with_tests
   subdir('tests')
 endif

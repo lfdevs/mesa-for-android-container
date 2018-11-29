@@ -468,6 +468,7 @@ EXTRA_EXT(NV_texture_rectangle);
 EXTRA_EXT(EXT_stencil_two_side);
 EXTRA_EXT(EXT_depth_bounds_test);
 EXTRA_EXT(ARB_depth_clamp);
+EXTRA_EXT(AMD_depth_clamp_separate);
 EXTRA_EXT(ATI_fragment_shader);
 EXTRA_EXT(EXT_provoking_vertex);
 EXTRA_EXT(ARB_fragment_shader);
@@ -518,6 +519,7 @@ EXTRA_EXT(NV_conservative_raster);
 EXTRA_EXT(NV_conservative_raster_dilate);
 EXTRA_EXT(NV_conservative_raster_pre_snap_triangles);
 EXTRA_EXT(ARB_sample_locations);
+EXTRA_EXT(AMD_framebuffer_multisample_advanced);
 
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
@@ -695,6 +697,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       v->value_int_4[1] = GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 1);
       v->value_int_4[2] = GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 2);
       v->value_int_4[3] = GET_COLORMASK_BIT(ctx->Color.ColorMask, 0, 3);
+      break;
+
+   case GL_DEPTH_CLAMP:
+      v->value_bool = ctx->Transform.DepthClampNear || ctx->Transform.DepthClampFar;
       break;
 
    case GL_EDGE_FLAG:
@@ -1227,6 +1233,13 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
       break;
    case GL_PROGRAMMABLE_SAMPLE_LOCATION_TABLE_SIZE_ARB:
       v->value_uint = MAX_SAMPLE_LOCATION_TABLE_SIZE;
+      break;
+
+   /* GL_AMD_framebuffer_multisample_advanced */
+   case GL_SUPPORTED_MULTISAMPLE_MODES_AMD:
+      v->value_int_n.n = ctx->Const.NumSupportedMultisampleModes * 3;
+      memcpy(v->value_int_n.ints, ctx->Const.SupportedMultisampleModes,
+             v->value_int_n.n * sizeof(GLint));
       break;
    }
 }

@@ -331,10 +331,7 @@ make_fs_key(const struct svga_context *svga,
    }
 
    /* sprite coord gen state */
-   for (i = 0; i < svga->curr.num_samplers[shader]; ++i) {
-      key->tex[i].sprite_texgen =
-         svga->curr.rast->templ.sprite_coord_enable & (1 << i);
-   }
+   key->sprite_coord_enable = svga->curr.rast->templ.sprite_coord_enable;
 
    key->sprite_origin_lower_left = (svga->curr.rast->templ.sprite_coord_mode
                                     == PIPE_SPRITE_COORD_LOWER_LEFT);

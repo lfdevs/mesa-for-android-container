@@ -28,7 +28,7 @@ CLEANFILES = \
 	wayland-drm-server-protocol.h
 
 %-protocol.c : %.xml
-	$(AM_V_GEN)$(WAYLAND_SCANNER) code $< $@
+	$(AM_V_GEN)$(WAYLAND_SCANNER) $(SCANNER_ARG) $< $@
 
 %-server-protocol.h : %.xml
 	$(AM_V_GEN)$(WAYLAND_SCANNER) server-header $< $@

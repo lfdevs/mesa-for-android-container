@@ -41,6 +41,24 @@
 extern "C" {
 #endif
 
+struct _egl_xy
+{
+   EGLint x;
+   EGLint y;
+};
+
+struct _egl_hdr_metadata
+{
+   struct _egl_xy display_primary_r;
+   struct _egl_xy display_primary_g;
+   struct _egl_xy display_primary_b;
+   struct _egl_xy white_point;
+   EGLint max_luminance;
+   EGLint min_luminance;
+   EGLint max_cll;
+   EGLint max_fall;
+};
+
 /**
  * "Base" class for device driver surfaces.
  */
@@ -67,7 +85,59 @@ struct _egl_surface
    EGLenum TextureTarget;
    EGLBoolean MipmapTexture;
    EGLBoolean LargestPbuffer;
-   EGLenum RenderBuffer;
+
+   /**
+    * Value of EGL_RENDER_BUFFER selected at creation.
+    *
+    * The user may select, for window surfaces, the EGL_RENDER_BUFFER through
+    * the attribute list of eglCreateWindowSurface(). The EGL spec allows the
+    * implementation to ignore request, though; hence why we maintain both
+    * RequestedRenderBuffer and ActiveRenderBuffer. For pbuffer and pixmap
+    * surfaces, the EGL spec hard-codes the EGL_RENDER_BUFFER value and the
+    * user must not provide it in the attribute list.
+    *
+    * Normally, the attribute is immutable and after surface creation.
+    * However, EGL_KHR_mutable_render_buffer allows the user to change it in
+    * window surfaces via eglSurfaceAttrib, in which case
+    * eglQuerySurface(EGL_RENDER_BUFFER) will immediately afterwards return
+    * the requested value but the actual render buffer used by the context
+    * does not change until completion of the next eglSwapBuffers call.
+    *
+    * From the EGL_KHR_mutable_render_buffer spec (v12):
+    *
+    *    Querying EGL_RENDER_BUFFER returns the buffer which client API
+    *    rendering is requested to use. For a window surface, this is the
+    *    attribute value specified when the surface was created or last set
+    *    via eglSurfaceAttrib.
+    *
+    * eglQueryContext(EGL_RENDER_BUFFER) ignores this.
+    */
+   EGLenum RequestedRenderBuffer;
+
+   /**
+    * The EGL_RENDER_BUFFER in use by the context.
+    *
+    * This is valid only when bound as the draw surface.  This may differ from
+    * the RequestedRenderBuffer.
+    *
+    * Refer to eglQueryContext(EGL_RENDER_BUFFER) in the EGL spec.
+    * eglQuerySurface(EGL_RENDER_BUFFER) ignores this.
+    *
+    * If a window surface is bound as the draw surface and has a pending,
+    * user-requested change to EGL_RENDER_BUFFER, then the next eglSwapBuffers
+    * will flush the pending change. (The flush of EGL_RENDER_BUFFER state may
+    * occur without the implicit glFlush induced by eglSwapBuffers). The spec
+    * requires that the flush occur at that time and nowhere else. During the
+    * state-flush, we copy RequestedRenderBuffer to ActiveRenderBuffer.
+    *
+    * From the EGL_KHR_mutable_render_buffer spec (v12):
+    *
+    *    If [...] there is a pending change to the EGL_RENDER_BUFFER
+    *    attribute, eglSwapBuffers performs an implicit flush operation on the
+    *    context and effects the attribute change.
+    */
+   EGLenum ActiveRenderBuffer;
+
    EGLenum VGAlphaFormat;
    EGLenum VGColorspace;
    EGLenum GLColorspace;
@@ -98,6 +168,8 @@ struct _egl_surface
    EGLBoolean BoundToTexture;
 
    EGLBoolean PostSubBufferSupportedNV;
+
+   struct _egl_hdr_metadata HdrMetadata;
 };
 
 
@@ -124,6 +196,11 @@ _eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLin
 extern EGLBoolean
 _eglSwapInterval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint interval);
 
+extern EGLBoolean
+_eglSurfaceHasMutableRenderBuffer(_EGLSurface *surf);
+
+extern EGLBoolean
+_eglSurfaceInSharedBufferMode(_EGLSurface *surf);
 
 /**
  * Increment reference count for the surface.

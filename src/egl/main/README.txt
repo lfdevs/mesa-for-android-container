@@ -19,13 +19,12 @@ Bootstrapping:
 When the apps calls eglInitialize() a device driver is selected and loaded
 (look for _eglAddDrivers() and _eglLoadModule() in egldriver.c).
 
-The built-in driver's entry point function is then called.  This driver function
-allocates, initializes and returns a new _EGLDriver object (usually a
-subclass of that type).
+The built-in driver's entry point function is then called and given
+a freshly allocated and initialised _EGLDriver, with default fallback
+entrypoints set.
 
 As part of initialization, the dispatch table in _EGLDriver->API must be
-populated with all the EGL entrypoints.  Typically, _eglInitDriverFallbacks()
-can be used to plug in default/fallback functions.  Some functions like
+populated with all the EGL entrypoints. Some functions like
 driver->API.Initialize and driver->API.Terminate _must_ be implemented
 with driver-specific code (no default/fallback function is possible).
 

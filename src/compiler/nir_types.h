@@ -48,6 +48,7 @@ const struct glsl_type *glsl_get_struct_field(const struct glsl_type *type,
 
 const struct glsl_type *glsl_get_array_element(const struct glsl_type *type);
 const struct glsl_type *glsl_without_array(const struct glsl_type *type);
+const struct glsl_type *glsl_without_array_or_matrix(const struct glsl_type *type);
 const struct glsl_type *glsl_get_array_instance(const struct glsl_type *type,
                                                 unsigned array_size);
 
@@ -83,6 +84,7 @@ const char *glsl_get_struct_elem_name(const struct glsl_type *type,
 enum glsl_sampler_dim glsl_get_sampler_dim(const struct glsl_type *type);
 enum glsl_base_type glsl_get_sampler_result_type(const struct glsl_type *type);
 unsigned glsl_get_sampler_target(const struct glsl_type *type);
+int glsl_get_sampler_coordinate_components(const struct glsl_type *type);
 
 unsigned glsl_get_record_location_offset(const struct glsl_type *type,
                                          unsigned length);
@@ -133,6 +135,7 @@ bool glsl_type_is_vector_or_scalar(const struct glsl_type *type);
 bool glsl_type_is_matrix(const struct glsl_type *type);
 bool glsl_type_is_array(const struct glsl_type *type);
 bool glsl_type_is_array_of_arrays(const struct glsl_type *type);
+bool glsl_type_is_array_or_matrix(const struct glsl_type *type);
 bool glsl_type_is_struct(const struct glsl_type *type);
 bool glsl_type_is_sampler(const struct glsl_type *type);
 bool glsl_type_is_image(const struct glsl_type *type);

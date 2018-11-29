@@ -154,7 +154,8 @@ static void init_prog(struct program *p)
 	p->rasterizer.cull_face = PIPE_FACE_NONE;
 	p->rasterizer.half_pixel_center = 1;
 	p->rasterizer.bottom_edge_rule = 1;
-	p->rasterizer.depth_clip = 1;
+	p->rasterizer.depth_clip_near = 1;
+	p->rasterizer.depth_clip_far = 1;
 
 	surf_tmpl.format = PIPE_FORMAT_B8G8R8A8_UNORM;
 	surf_tmpl.u.tex.level = 0;

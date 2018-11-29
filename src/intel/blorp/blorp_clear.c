@@ -1089,7 +1089,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
    isl_surf_get_image_offset_el(surf->aux_surf, level, layer, z,
                                 &x_offset_el, &y_offset_el);
    isl_tiling_get_intratile_offset_el(surf->aux_surf->tiling, aux_fmtl->bpb,
-                                      surf->aux_surf->row_pitch,
+                                      surf->aux_surf->row_pitch_B,
                                       x_offset_el, y_offset_el,
                                       &offset_B, &x_offset_el, &y_offset_el);
    params.dst.addr.offset += offset_B;
@@ -1178,7 +1178,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
                     .levels = 1,
                     .array_len = 1,
                     .samples = 1,
-                    .row_pitch = surf->aux_surf->row_pitch,
+                    .row_pitch_B = surf->aux_surf->row_pitch_B,
                     .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT,
                     .tiling_flags = ISL_TILING_Y0_BIT);
    assert(ok);

@@ -129,10 +129,18 @@ files_i965 = files(
   'intel_tex_image.c',
   'intel_tex_obj.h',
   'intel_tex_validate.c',
-  'intel_tiled_memcpy.c',
-  'intel_tiled_memcpy.h',
   'intel_upload.c',
   'libdrm_macros.h',
+)
+
+files_intel_tiled_memcpy = files(
+  'intel_tiled_memcpy_normal.c',
+  'intel_tiled_memcpy.h',
+)
+
+files_intel_tiled_memcpy_sse41 = files(
+  'intel_tiled_memcpy_sse41.c',
+  'intel_tiled_memcpy_sse41.h',
 )
 
 i965_gen_libs = []
@@ -170,11 +178,37 @@ i965_oa_sources = custom_target(
   input : i965_hw_metrics_xml_files,
   output : [ 'brw_oa_metrics.c', 'brw_oa_metrics.h' ],
   command : [
-    prog_python2, files('brw_oa.py'),
+    prog_python, files('brw_oa.py'),
     '--code', '@OUTPUT0@', '--header', '@OUTPUT1@',
     '@INPUT@',
   ],
 )
+
+intel_tiled_memcpy = static_library(
+  'intel_tiled_memcpy',
+  [files_intel_tiled_memcpy],
+  include_directories : [
+    inc_common, inc_intel, inc_dri_common, inc_drm_uapi,
+  ],
+  c_args : [c_vis_args, no_override_init_args, '-msse2'],
+  extra_files : ['intel_tiled_memcpy.c']
+)
+
+if with_sse41
+  intel_tiled_memcpy_sse41 = static_library(
+    'intel_tiled_memcpy_sse41',
+    [files_intel_tiled_memcpy_sse41],
+    include_directories : [
+      inc_common, inc_intel, inc_dri_common, inc_drm_uapi,
+    ],
+    link_args : ['-Wl,--exclude-libs=ALL'],
+    c_args : [c_vis_args, no_override_init_args, '-Wl,--exclude-libs=ALL', '-msse2', sse41_args],
+    extra_files : ['intel_tiled_memcpy.c']
+  )
+else
+  intel_tiled_memcpy_sse41 = []
+endif
+
 
 libi965 = static_library(
   'i965',
@@ -187,7 +221,7 @@ libi965 = static_library(
   cpp_args : [cpp_vis_args, c_sse2_args],
   link_with : [
     i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
-    libblorp,
+    libblorp, intel_tiled_memcpy, intel_tiled_memcpy_sse41
   ],
   dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
 )

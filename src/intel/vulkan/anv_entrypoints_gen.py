@@ -50,11 +50,11 @@ LAYERS = [
 TEMPLATE_H = Template("""\
 /* This file generated from ${filename}, don't edit directly. */
 
-struct anv_dispatch_table {
+struct anv_instance_dispatch_table {
    union {
-      void *entrypoints[${len(entrypoints)}];
+      void *entrypoints[${len(instance_entrypoints)}];
       struct {
-      % for e in entrypoints:
+      % for e in instance_entrypoints:
         % if e.guard is not None:
 #ifdef ${e.guard}
           PFN_${e.name} ${e.name};
@@ -69,12 +69,44 @@ struct anv_dispatch_table {
    };
 };
 
-%for layer in LAYERS:
-extern const struct anv_dispatch_table ${layer}_dispatch_table;
-%endfor
-extern const struct anv_dispatch_table anv_tramp_dispatch_table;
+struct anv_device_dispatch_table {
+   union {
+      void *entrypoints[${len(device_entrypoints)}];
+      struct {
+      % for e in device_entrypoints:
+        % if e.guard is not None:
+#ifdef ${e.guard}
+          PFN_${e.name} ${e.name};
+#else
+          void *${e.name};
+# endif
+        % else:
+          PFN_${e.name} ${e.name};
+        % endif
+      % endfor
+      };
+   };
+};
 
-% for e in entrypoints:
+extern const struct anv_instance_dispatch_table anv_instance_dispatch_table;
+%for layer in LAYERS:
+extern const struct anv_device_dispatch_table ${layer}_device_dispatch_table;
+%endfor
+
+% for e in instance_entrypoints:
+  % if e.alias:
+    <% continue %>
+  % endif
+  % if e.guard is not None:
+#ifdef ${e.guard}
+  % endif
+  ${e.return_type} ${e.prefixed_name('anv')}(${e.decl_params()});
+  % if e.guard is not None:
+#endif // ${e.guard}
+  % endif
+% endfor
+
+% for e in device_entrypoints:
   % if e.alias:
     <% continue %>
   % endif
@@ -129,13 +161,14 @@ struct string_map_entry {
  * store the index into this big string.
  */
 
-static const char strings[] =
+<%def name="strmap(strmap, prefix)">
+static const char ${prefix}_strings[] =
 % for s in strmap.sorted_strings:
     "${s.string}\\0"
 % endfor
 ;
 
-static const struct string_map_entry string_map_entries[] = {
+static const struct string_map_entry ${prefix}_string_map_entries[] = {
 % for s in strmap.sorted_strings:
     { ${s.offset}, ${'{:0=#8x}'.format(s.hash)}, ${s.num} }, /* ${s.string} */
 % endfor
@@ -150,14 +183,14 @@ static const struct string_map_entry string_map_entries[] = {
  */
 
 #define none 0xffff
-static const uint16_t string_map[${strmap.hash_size}] = {
+static const uint16_t ${prefix}_string_map[${strmap.hash_size}] = {
 % for e in strmap.mapping:
     ${ '{:0=#6x}'.format(e) if e >= 0 else 'none' },
 % endfor
 };
 
 static int
-string_map_lookup(const char *str)
+${prefix}_string_map_lookup(const char *str)
 {
     static const uint32_t prime_factor = ${strmap.prime_factor};
     static const uint32_t prime_step = ${strmap.prime_step};
@@ -172,39 +205,87 @@ string_map_lookup(const char *str)
 
     h = hash;
     while (1) {
-        i = string_map[h & ${strmap.hash_mask}];
+        i = ${prefix}_string_map[h & ${strmap.hash_mask}];
         if (i == none)
            return -1;
-        e = &string_map_entries[i];
-        if (e->hash == hash && strcmp(str, strings + e->name) == 0)
+        e = &${prefix}_string_map_entries[i];
+        if (e->hash == hash && strcmp(str, ${prefix}_strings + e->name) == 0)
             return e->num;
         h += prime_step;
     }
 
     return -1;
 }
+</%def>
+
+${strmap(instance_strmap, 'instance')}
+${strmap(device_strmap, 'device')}
 
 /* Weak aliases for all potential implementations. These will resolve to
  * NULL if they're not defined, which lets the resolve_entrypoint() function
  * either pick the correct entry point.
  */
 
+% for e in instance_entrypoints:
+  % if e.alias:
+    <% continue %>
+  % endif
+  % if e.guard is not None:
+#ifdef ${e.guard}
+  % endif
+  ${e.return_type} ${e.prefixed_name('anv')}(${e.decl_params()}) __attribute__ ((weak));
+  % if e.guard is not None:
+#endif // ${e.guard}
+  % endif
+% endfor
+
+const struct anv_instance_dispatch_table anv_instance_dispatch_table = {
+% for e in instance_entrypoints:
+  % if e.guard is not None:
+#ifdef ${e.guard}
+  % endif
+  .${e.name} = ${e.prefixed_name('anv')},
+  % if e.guard is not None:
+#endif // ${e.guard}
+  % endif
+% endfor
+};
+
 % for layer in LAYERS:
-  % for e in entrypoints:
+  % for e in device_entrypoints:
     % if e.alias:
       <% continue %>
     % endif
     % if e.guard is not None:
 #ifdef ${e.guard}
     % endif
-    ${e.return_type} ${e.prefixed_name(layer)}(${e.decl_params()}) __attribute__ ((weak));
+    % if layer == 'anv':
+      ${e.return_type} __attribute__ ((weak))
+      ${e.prefixed_name('anv')}(${e.decl_params()})
+      {
+        % if e.params[0].type == 'VkDevice':
+          ANV_FROM_HANDLE(anv_device, anv_device, ${e.params[0].name});
+          return anv_device->dispatch.${e.name}(${e.call_params()});
+        % elif e.params[0].type == 'VkCommandBuffer':
+          ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, ${e.params[0].name});
+          return anv_cmd_buffer->device->dispatch.${e.name}(${e.call_params()});
+        % elif e.params[0].type == 'VkQueue':
+          ANV_FROM_HANDLE(anv_queue, anv_queue, ${e.params[0].name});
+          return anv_queue->device->dispatch.${e.name}(${e.call_params()});
+        % else:
+          assert(!"Unhandled device child trampoline case: ${e.params[0].type}");
+        % endif
+      }
+    % else:
+      ${e.return_type} ${e.prefixed_name(layer)}(${e.decl_params()}) __attribute__ ((weak));
+    % endif
     % if e.guard is not None:
 #endif // ${e.guard}
     % endif
   % endfor
 
-  const struct anv_dispatch_table ${layer}_dispatch_table = {
-  % for e in entrypoints:
+  const struct anv_device_dispatch_table ${layer}_device_dispatch_table = {
+  % for e in device_entrypoints:
     % if e.guard is not None:
 #ifdef ${e.guard}
     % endif
@@ -217,51 +298,39 @@ string_map_lookup(const char *str)
 % endfor
 
 
-/** Trampoline entrypoints for all device functions */
-
-% for e in entrypoints:
-  % if e.alias or not e.is_device_entrypoint():
-    <% continue %>
-  % endif
-  % if e.guard is not None:
-#ifdef ${e.guard}
-  % endif
-  static ${e.return_type}
-  ${e.prefixed_name('anv_tramp')}(${e.decl_params()})
-  {
-    % if e.params[0].type == 'VkDevice':
-      ANV_FROM_HANDLE(anv_device, anv_device, ${e.params[0].name});
-      return anv_device->dispatch.${e.name}(${e.call_params()});
-    % elif e.params[0].type == 'VkCommandBuffer':
-      ANV_FROM_HANDLE(anv_cmd_buffer, anv_cmd_buffer, ${e.params[0].name});
-      return anv_cmd_buffer->device->dispatch.${e.name}(${e.call_params()});
-    % elif e.params[0].type == 'VkQueue':
-      ANV_FROM_HANDLE(anv_queue, anv_queue, ${e.params[0].name});
-      return anv_queue->device->dispatch.${e.name}(${e.call_params()});
-    % else:
-      assert(!"Unhandled device child trampoline case: ${e.params[0].type}");
-    % endif
-  }
-  % if e.guard is not None:
-#endif // ${e.guard}
-  % endif
+/** Return true if the core version or extension in which the given entrypoint
+ * is defined is enabled.
+ *
+ * If device is NULL, all device extensions are considered enabled.
+ */
+bool
+anv_instance_entrypoint_is_enabled(int index, uint32_t core_version,
+                                   const struct anv_instance_extension_table *instance)
+{
+   switch (index) {
+% for e in instance_entrypoints:
+   case ${e.num}:
+      /* ${e.name} */
+   % if e.core_version:
+      return ${e.core_version.c_vk_version()} <= core_version;
+   % elif e.extensions:
+     % for ext in e.extensions:
+        % if ext.type == 'instance':
+      if (instance->${ext.name[3:]}) return true;
+        % else:
+      /* All device extensions are considered enabled at the instance level */
+      return true;
+        % endif
+     % endfor
+      return false;
+   % else:
+      return true;
+   % endif
 % endfor
-
-const struct anv_dispatch_table anv_tramp_dispatch_table = {
-% for e in entrypoints:
-  % if not e.is_device_entrypoint():
-    <% continue %>
-  % endif
-  % if e.guard is not None:
-#ifdef ${e.guard}
-  % endif
-    .${e.name} = ${e.prefixed_name('anv_tramp')},
-  % if e.guard is not None:
-#endif // ${e.guard}
-  % endif
-% endfor
-};
-
+   default:
+      return false;
+   }
+}
 
 /** Return true if the core version or extension in which the given entrypoint
  * is defined is enabled.
@@ -269,24 +338,20 @@ const struct anv_dispatch_table anv_tramp_dispatch_table = {
  * If device is NULL, all device extensions are considered enabled.
  */
 bool
-anv_entrypoint_is_enabled(int index, uint32_t core_version,
-                          const struct anv_instance_extension_table *instance,
-                          const struct anv_device_extension_table *device)
+anv_device_entrypoint_is_enabled(int index, uint32_t core_version,
+                                 const struct anv_instance_extension_table *instance,
+                                 const struct anv_device_extension_table *device)
 {
    switch (index) {
-% for e in entrypoints:
+% for e in device_entrypoints:
    case ${e.num}:
       /* ${e.name} */
    % if e.core_version:
-      % if e.is_device_entrypoint():
-         return ${e.core_version.c_vk_version()} <= core_version;
-      % else:
-         return !device && ${e.core_version.c_vk_version()} <= core_version;
-      % endif
+      return ${e.core_version.c_vk_version()} <= core_version;
    % elif e.extensions:
      % for ext in e.extensions:
-       % if ext.type == 'instance':
-      if (!device && instance->${ext.name[3:]}) return true;
+        % if ext.type == 'instance':
+           <% assert False %>
         % else:
       if (!device || device->${ext.name[3:]}) return true;
         % endif
@@ -301,32 +366,40 @@ anv_entrypoint_is_enabled(int index, uint32_t core_version,
    }
 }
 
-static void * __attribute__ ((noinline))
-anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
+int
+anv_get_instance_entrypoint_index(const char *name)
 {
-   if (devinfo == NULL) {
-      return anv_dispatch_table.entrypoints[index];
-   }
+   return instance_string_map_lookup(name);
+}
 
-   const struct anv_dispatch_table *genX_table;
+int
+anv_get_device_entrypoint_index(const char *name)
+{
+   return device_string_map_lookup(name);
+}
+
+static void * __attribute__ ((noinline))
+anv_resolve_device_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
+{
+   const struct anv_device_dispatch_table *genX_table;
    switch (devinfo->gen) {
    case 11:
-      genX_table = &gen11_dispatch_table;
+      genX_table = &gen11_device_dispatch_table;
       break;
    case 10:
-      genX_table = &gen10_dispatch_table;
+      genX_table = &gen10_device_dispatch_table;
       break;
    case 9:
-      genX_table = &gen9_dispatch_table;
+      genX_table = &gen9_device_dispatch_table;
       break;
    case 8:
-      genX_table = &gen8_dispatch_table;
+      genX_table = &gen8_device_dispatch_table;
       break;
    case 7:
       if (devinfo->is_haswell)
-         genX_table = &gen75_dispatch_table;
+         genX_table = &gen75_device_dispatch_table;
       else
-         genX_table = &gen7_dispatch_table;
+         genX_table = &gen7_device_dispatch_table;
       break;
    default:
       unreachable("unsupported gen\\n");
@@ -335,22 +408,21 @@ anv_resolve_entrypoint(const struct gen_device_info *devinfo, uint32_t index)
    if (genX_table->entrypoints[index])
       return genX_table->entrypoints[index];
    else
-      return anv_dispatch_table.entrypoints[index];
-}
-
-int
-anv_get_entrypoint_index(const char *name)
-{
-   return string_map_lookup(name);
+      return anv_device_dispatch_table.entrypoints[index];
 }
 
 void *
 anv_lookup_entrypoint(const struct gen_device_info *devinfo, const char *name)
 {
-   int idx = anv_get_entrypoint_index(name);
-   if (idx < 0)
-      return NULL;
-   return anv_resolve_entrypoint(devinfo, idx);
+   int idx = anv_get_instance_entrypoint_index(name);
+   if (idx >= 0)
+      return anv_instance_dispatch_table.entrypoints[idx];
+
+   idx = anv_get_device_entrypoint_index(name);
+   if (idx >= 0)
+      return anv_resolve_device_entrypoint(devinfo, idx);
+
+   return NULL;
 }""", output_encoding='utf-8')
 
 U32_MASK = 2**32 - 1
@@ -554,23 +626,40 @@ def main():
         EntrypointParam('VkImage', 'pImage', 'VkImage* pImage')
     ]))
 
-    strmap = StringIntMap()
-    for num, e in enumerate(entrypoints):
-        strmap.add_string(e.name, num)
+    device_entrypoints = []
+    instance_entrypoints = []
+    for e in entrypoints:
+        if e.is_device_entrypoint():
+            device_entrypoints.append(e)
+        else:
+            instance_entrypoints.append(e)
+
+    device_strmap = StringIntMap()
+    for num, e in enumerate(device_entrypoints):
+        device_strmap.add_string(e.name, num)
         e.num = num
-    strmap.bake()
+    device_strmap.bake()
+
+    instance_strmap = StringIntMap()
+    for num, e in enumerate(instance_entrypoints):
+        instance_strmap.add_string(e.name, num)
+        e.num = num
+    instance_strmap.bake()
 
     # For outputting entrypoints.h we generate a anv_EntryPoint() prototype
     # per entry point.
     try:
         with open(os.path.join(args.outdir, 'anv_entrypoints.h'), 'wb') as f:
-            f.write(TEMPLATE_H.render(entrypoints=entrypoints,
+            f.write(TEMPLATE_H.render(instance_entrypoints=instance_entrypoints,
+                                      device_entrypoints=device_entrypoints,
                                       LAYERS=LAYERS,
                                       filename=os.path.basename(__file__)))
         with open(os.path.join(args.outdir, 'anv_entrypoints.c'), 'wb') as f:
-            f.write(TEMPLATE_C.render(entrypoints=entrypoints,
+            f.write(TEMPLATE_C.render(instance_entrypoints=instance_entrypoints,
+                                      device_entrypoints=device_entrypoints,
                                       LAYERS=LAYERS,
-                                      strmap=strmap,
+                                      instance_strmap=instance_strmap,
+                                      device_strmap=device_strmap,
                                       filename=os.path.basename(__file__)))
     except Exception:
         # In the even there's an error this imports some helpers from mako

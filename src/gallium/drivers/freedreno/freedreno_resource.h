@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -96,6 +94,9 @@ struct fd_resource {
 	 * shadowed.
 	 */
 	uint32_t bc_batch_mask;
+
+	/* Sequence # incremented each time bo changes: */
+	uint16_t seqno;
 
 	unsigned tile_mode : 2;
 	unsigned preferred_tile_mode : 2;

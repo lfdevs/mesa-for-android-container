@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -116,7 +114,6 @@ struct ir3_shader_key {
 			/*
 			 * Vertex shader variant parameters:
 			 */
-			unsigned binning_pass : 1;
 			unsigned vclamp_color : 1;
 
 			/*
@@ -220,6 +217,12 @@ struct ir3_shader_variant {
 
 	struct ir3_shader_key key;
 
+	/* vertex shaders can have an extra version for hwbinning pass,
+	 * which is pointed to by so->binning:
+	 */
+	bool binning_pass;
+	struct ir3_shader_variant *binning;
+
 	struct ir3_driver_const_layout const_layout;
 	struct ir3_info info;
 	struct ir3 *ir;
@@ -251,10 +254,6 @@ struct ir3_shader_variant {
 	 *   + From the vert shader, we only need the output regid
 	 */
 
-	/* for frag shader, pos_regid holds the frag_pos, ie. what is passed
-	 * to bary.f instructions
-	 */
-	uint8_t pos_regid;
 	bool frag_coord, frag_face, color0_mrt;
 
 	/* NOTE: for input/outputs, slot is:
@@ -304,8 +303,8 @@ struct ir3_shader_variant {
 	 */
 	unsigned varying_in;
 
-	/* do we have one or more texture sample instructions: */
-	bool has_samp;
+	/* number of samplers/textures (which are currently 1:1): */
+	int num_samp;
 
 	/* do we have one or more SSBO instructions: */
 	bool has_ssbo;
@@ -329,9 +328,10 @@ struct ir3_shader_variant {
 	} constbase;
 
 	unsigned immediates_count;
+	unsigned immediates_size;
 	struct {
 		uint32_t val[4];
-	} immediates[64];
+	} *immediates;
 
 	/* for astc srgb workaround, the number/base of additional
 	 * alpha tex states we need, and index of original tex states
@@ -349,8 +349,6 @@ struct ir3_shader_variant {
 	struct ir3_shader *shader;
 };
 
-typedef struct nir_shader nir_shader;
-
 struct ir3_shader {
 	enum shader_t type;
 
@@ -363,7 +361,7 @@ struct ir3_shader {
 
 	struct ir3_compiler *compiler;
 
-	nir_shader *nir;
+	struct nir_shader *nir;
 	struct pipe_stream_output_info stream_output;
 
 	struct ir3_shader_variant *variants;
@@ -380,7 +378,8 @@ ir3_shader_create_compute(struct ir3_compiler *compiler,
 		struct pipe_debug_callback *debug);
 void ir3_shader_destroy(struct ir3_shader *shader);
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
-		struct ir3_shader_key key, struct pipe_debug_callback *debug);
+		struct ir3_shader_key key, bool binning_pass,
+		struct pipe_debug_callback *debug);
 void ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out);
 uint64_t ir3_shader_outputs(const struct ir3_shader *so);
 

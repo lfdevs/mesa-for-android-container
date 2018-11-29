@@ -25,7 +25,6 @@ from __future__ import (
 
 import argparse
 import os
-import sys
 import xml.parsers.expat
 
 from mako.template import Template

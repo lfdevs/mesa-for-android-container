@@ -39,6 +39,7 @@
 #include "compiler/glsl_types.h"
 #include "compiler/nir/nir_builder.h"
 #include "program/prog_parameter.h"
+#include "util/u_math.h"
 
 using namespace brw;
 
@@ -242,6 +243,7 @@ fs_inst::is_send_from_grf() const
    case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
    case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
    case SHADER_OPCODE_BYTE_SCATTERED_WRITE:
@@ -512,16 +514,14 @@ type_size_scalar(const struct glsl_type *type)
       }
       return size;
    case GLSL_TYPE_SAMPLER:
-      /* Samplers take up no register space, since they're baked in at
-       * link time.
-       */
-      return 0;
    case GLSL_TYPE_ATOMIC_UINT:
+   case GLSL_TYPE_IMAGE:
+      /* Samplers, atomics, and images take up no register space, since
+       * they're baked in at link time.
+       */
       return 0;
    case GLSL_TYPE_SUBROUTINE:
       return 1;
-   case GLSL_TYPE_IMAGE:
-      return BRW_IMAGE_PARAM_SIZE;
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
    case GLSL_TYPE_INTERFACE:
@@ -827,6 +827,20 @@ fs_inst::components_read(unsigned i) const
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
       return (i == 0 ? 2 : 1);
 
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL: {
+      assert(src[3].file == IMM &&
+             src[4].file == IMM);
+      const unsigned op = src[4].ud;
+      /* Surface coordinates. */
+      if (i == 0)
+         return src[3].ud;
+      /* Surface operation source. */
+      else if (i == 1 && op == BRW_AOP_FCMPWR)
+         return 2;
+      else
+         return 1;
+   }
+
    default:
       return 1;
    }
@@ -854,6 +868,7 @@ fs_inst::size_read(int arg) const
    case SHADER_OPCODE_URB_READ_SIMD8:
    case SHADER_OPCODE_URB_READ_SIMD8_PER_SLOT:
    case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
    case SHADER_OPCODE_TYPED_ATOMIC:
@@ -1539,7 +1554,7 @@ fs_visitor::calculate_urb_setup()
    int urb_next = 0;
    /* Figure out where each of the incoming setup attributes lands. */
    if (devinfo->gen >= 6) {
-      if (_mesa_bitcount_64(nir->info.inputs_read &
+      if (util_bitcount64(nir->info.inputs_read &
                             BRW_FS_VARYING_INPUT_MASK) <= 16) {
          /* The SF/SBE pipeline stage can do arbitrary rearrangement of the
           * first 16 varying inputs, so we can put them wherever we want.
@@ -4995,6 +5010,12 @@ fs_visitor::lower_logical_sends()
                                     ibld.sample_mask_reg());
          break;
 
+      case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+         lower_surface_logical_send(ibld, inst,
+                                    SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT,
+                                    ibld.sample_mask_reg());
+         break;
+
       case SHADER_OPCODE_TYPED_SURFACE_READ_LOGICAL:
          lower_surface_logical_send(ibld, inst,
                                     SHADER_OPCODE_TYPED_SURFACE_READ,
@@ -5498,6 +5519,7 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
       return 8;
 
    case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
    case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
    case SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL:
@@ -6000,6 +6022,12 @@ fs_visitor::dump_instruction(backend_instruction *be_inst, FILE *file)
          case BRW_REGISTER_TYPE_UW:
          case BRW_REGISTER_TYPE_UD:
             fprintf(file, "%uu", inst->src[i].ud);
+            break;
+         case BRW_REGISTER_TYPE_Q:
+            fprintf(file, "%" PRId64 "q", inst->src[i].d64);
+            break;
+         case BRW_REGISTER_TYPE_UQ:
+            fprintf(file, "%" PRIu64 "uq", inst->src[i].u64);
             break;
          case BRW_REGISTER_TYPE_VF:
             fprintf(file, "[%-gF, %-gF, %-gF, %-gF]",
@@ -6571,14 +6599,18 @@ fs_visitor::run_tcs_single_patch()
    if (tcs_prog_data->instances == 1) {
       invocation_id = channels_ud;
    } else {
+      const unsigned invocation_id_mask = devinfo->gen >= 11 ?
+         INTEL_MASK(22, 16) : INTEL_MASK(23, 17);
+      const unsigned invocation_id_shift = devinfo->gen >= 11 ? 16 : 17;
+
       invocation_id = bld.vgrf(BRW_REGISTER_TYPE_UD);
 
       /* Get instance number from g0.2 bits 23:17, and multiply it by 8. */
       fs_reg t = bld.vgrf(BRW_REGISTER_TYPE_UD);
       fs_reg instance_times_8 = bld.vgrf(BRW_REGISTER_TYPE_UD);
       bld.AND(t, fs_reg(retype(brw_vec1_grf(0, 2), BRW_REGISTER_TYPE_UD)),
-              brw_imm_ud(INTEL_MASK(23, 17)));
-      bld.SHR(instance_times_8, t, brw_imm_ud(17 - 3));
+              brw_imm_ud(invocation_id_mask));
+      bld.SHR(instance_times_8, t, brw_imm_ud(invocation_id_shift - 3));
 
       bld.ADD(invocation_id, instance_times_8, channels_ud);
    }
@@ -6779,9 +6811,6 @@ fs_visitor::run_fs(bool allow_spilling, bool do_rep_send)
                  retype(dispatch_mask, BRW_REGISTER_TYPE_UW));
       }
 
-      /* Generate FS IR for main().  (the visitor only descends into
-       * functions called "main").
-       */
       emit_nir_code();
 
       if (failed)

@@ -245,7 +245,6 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
    struct util_dynarray ranges;
    util_dynarray_init(&ranges, mem_ctx);
 
-   struct hash_entry *entry;
    hash_table_foreach(state.blocks, entry) {
       const int b = entry->hash - 1;
       const struct ubo_block_info *info = entry->data;

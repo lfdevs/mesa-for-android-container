@@ -13,4 +13,4 @@ if [ -z "$srcdir" -o -z "$abs_builddir" ]; then
     abs_builddir=`pwd`/../../../
 fi
 
-$PYTHON2 $srcdir/glsl/glcpp/tests/glcpp_test.py $abs_builddir/glsl/glcpp/glcpp $srcdir/glsl/glcpp/tests --unix --windows --oldmac --bizarro
+$PYTHON $srcdir/glsl/glcpp/tests/glcpp_test.py $abs_builddir/glsl/glcpp/glcpp $srcdir/glsl/glcpp/tests --unix --windows --oldmac --bizarro

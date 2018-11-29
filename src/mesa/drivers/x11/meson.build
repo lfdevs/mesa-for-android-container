@@ -32,7 +32,7 @@ libgl = shared_library(
   include_directories : [
     inc_include, inc_src, inc_mesa, inc_mapi, inc_gallium, inc_gallium_aux
   ],
-  link_with : [libmesa_classic, libglapi_static, gl_link_with],
+  link_with : [libmesa_classic, libglapi_static, libmesa_util, gl_link_with],
   dependencies : [dep_x11, dep_xext, dep_xcb, dep_thread],
   version : '1.6.0',
   install : true,

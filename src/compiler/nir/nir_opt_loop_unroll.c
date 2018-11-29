@@ -70,7 +70,6 @@ loop_prepare_for_unroll(nir_loop *loop)
    /* Remove continue if its the last instruction in the loop */
    nir_instr *last_instr = nir_block_last_instr(nir_loop_last_block(loop));
    if (last_instr && last_instr->type == nir_instr_type_jump) {
-      assert(nir_instr_as_jump(last_instr)->type == nir_jump_continue);
       nir_instr_remove(last_instr);
    }
 }
@@ -468,6 +467,102 @@ complex_unroll(nir_loop *loop, nir_loop_terminator *unlimit_term,
    _mesa_hash_table_destroy(remap_table, NULL);
 }
 
+/* Unrolls the classic wrapper loops e.g
+ *
+ *    do {
+ *        // ...
+ *    } while (false)
+ */
+static bool
+wrapper_unroll(nir_loop *loop)
+{
+   if (!list_empty(&loop->info->loop_terminator_list)) {
+
+      /* Unrolling a loop with a large number of exits can result in a
+       * large inrease in register pressure. For now we just skip
+       * unrolling if we have more than 3 exits (not including the break
+       * at the end of the loop).
+       *
+       * TODO: Most loops that fit this pattern are simply switch
+       * statements that are converted to a loop to take advantage of
+       * exiting jump instruction handling. In this case we could make
+       * use of a binary seach pattern like we do in
+       * nir_lower_indirect_derefs(), this should allow us to unroll the
+       * loops in an optimal way and should also avoid some of the
+       * register pressure that comes from simply nesting the
+       * terminators one after the other.
+       */
+      if (list_length(&loop->info->loop_terminator_list) > 3)
+         return false;
+
+      loop_prepare_for_unroll(loop);
+
+      nir_cursor loop_end = nir_after_block(nir_loop_last_block(loop));
+      list_for_each_entry(nir_loop_terminator, terminator,
+                          &loop->info->loop_terminator_list,
+                          loop_terminator_link) {
+
+         /* Remove break from the terminator */
+         nir_instr *break_instr =
+            nir_block_last_instr(terminator->break_block);
+         nir_instr_remove(break_instr);
+
+         /* Pluck out the loop body. */
+         nir_cf_list loop_body;
+         nir_cf_extract(&loop_body,
+                        nir_after_cf_node(&terminator->nif->cf_node),
+                        loop_end);
+
+         /* Reinsert loop body into continue from block */
+         nir_cf_reinsert(&loop_body,
+                         nir_after_block(terminator->continue_from_block));
+
+         loop_end = terminator->continue_from_then ?
+           nir_after_block(nir_if_last_then_block(terminator->nif)) :
+           nir_after_block(nir_if_last_else_block(terminator->nif));
+      }
+   } else {
+      nir_block *blk_after_loop =
+         nir_cursor_current_block(nir_after_cf_node(&loop->cf_node));
+
+      /* There may still be some single src phis following the loop that
+       * have not yet been cleaned up by another pass. Tidy those up
+       * before unrolling the loop.
+       */
+      nir_foreach_instr_safe(instr, blk_after_loop) {
+         if (instr->type != nir_instr_type_phi)
+            break;
+
+         nir_phi_instr *phi = nir_instr_as_phi(instr);
+         assert(exec_list_length(&phi->srcs) == 1);
+
+         nir_phi_src *phi_src =
+            exec_node_data(nir_phi_src, exec_list_get_head(&phi->srcs), node);
+
+         nir_ssa_def_rewrite_uses(&phi->dest.ssa, phi_src->src);
+         nir_instr_remove(instr);
+      }
+
+      /* Remove break at end of the loop */
+      nir_block *last_loop_blk = nir_loop_last_block(loop);
+      nir_instr *break_instr = nir_block_last_instr(last_loop_blk);
+      nir_instr_remove(break_instr);
+   }
+
+   /* Pluck out the loop body. */
+   nir_cf_list loop_body;
+   nir_cf_extract(&loop_body, nir_before_block(nir_loop_first_block(loop)),
+                  nir_after_block(nir_loop_last_block(loop)));
+
+   /* Reinsert loop body after the loop */
+   nir_cf_reinsert(&loop_body, nir_after_cf_node(&loop->cf_node));
+
+   /* The loop has been unrolled so remove it. */
+   nir_cf_node_remove(&loop->cf_node);
+
+   return true;
+}
+
 static bool
 is_loop_small_enough_to_unroll(nir_shader *shader, nir_loop_info *li)
 {
@@ -486,9 +581,10 @@ is_loop_small_enough_to_unroll(nir_shader *shader, nir_loop_info *li)
 }
 
 static bool
-process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *innermost_loop)
+process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *has_nested_loop_out)
 {
    bool progress = false;
+   bool has_nested_loop = false;
    nir_loop *loop;
 
    switch (cf_node->type) {
@@ -497,32 +593,53 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *innermost_loop)
    case nir_cf_node_if: {
       nir_if *if_stmt = nir_cf_node_as_if(cf_node);
       foreach_list_typed_safe(nir_cf_node, nested_node, node, &if_stmt->then_list)
-         progress |= process_loops(sh, nested_node, innermost_loop);
+         progress |= process_loops(sh, nested_node, has_nested_loop_out);
       foreach_list_typed_safe(nir_cf_node, nested_node, node, &if_stmt->else_list)
-         progress |= process_loops(sh, nested_node, innermost_loop);
+         progress |= process_loops(sh, nested_node, has_nested_loop_out);
       return progress;
    }
    case nir_cf_node_loop: {
       loop = nir_cf_node_as_loop(cf_node);
       foreach_list_typed_safe(nir_cf_node, nested_node, node, &loop->body)
-         progress |= process_loops(sh, nested_node, innermost_loop);
+         progress |= process_loops(sh, nested_node, &has_nested_loop);
+
       break;
    }
    default:
       unreachable("unknown cf node type");
    }
 
-   if (*innermost_loop) {
-      /* Don't attempt to unroll outer loops or a second inner loop in
-       * this pass wait until the next pass as we have altered the cf.
-       */
-      *innermost_loop = false;
+   /* Don't attempt to unroll a second inner loop in this pass, wait until the
+    * next pass as we have altered the cf.
+    */
+   if (!progress) {
 
-      if (loop->info->limiting_terminator == NULL)
-         return progress;
+      /* Check for the classic
+       *
+       *    do {
+       *        // ...
+       *    } while (false)
+       *
+       * that is used to wrap multi-line macros. GLSL IR also wraps switch
+       * statements in a loop like this.
+       */
+      if (loop->info->limiting_terminator == NULL &&
+          !loop->info->complex_loop) {
+
+         nir_block *last_loop_blk = nir_loop_last_block(loop);
+         if (!nir_block_ends_in_break(last_loop_blk))
+            goto exit;
+
+         progress = wrapper_unroll(loop);
+
+         goto exit;
+      }
+
+      if (has_nested_loop || loop->info->limiting_terminator == NULL)
+         goto exit;
 
       if (!is_loop_small_enough_to_unroll(sh, loop->info))
-         return progress;
+         goto exit;
 
       if (loop->info->is_trip_count_known) {
          simple_unroll(loop);
@@ -558,6 +675,8 @@ process_loops(nir_shader *sh, nir_cf_node *cf_node, bool *innermost_loop)
       }
    }
 
+exit:
+   *has_nested_loop_out = true;
    return progress;
 }
 
@@ -570,9 +689,9 @@ nir_opt_loop_unroll_impl(nir_function_impl *impl,
    nir_metadata_require(impl, nir_metadata_block_index);
 
    foreach_list_typed_safe(nir_cf_node, node, node, &impl->body) {
-      bool innermost_loop = true;
+      bool has_nested_loop = false;
       progress |= process_loops(impl->function->shader, node,
-                                &innermost_loop);
+                                &has_nested_loop);
    }
 
    if (progress)

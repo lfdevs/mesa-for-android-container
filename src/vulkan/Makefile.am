@@ -6,7 +6,7 @@ vulkan_includedir = $(includedir)/vulkan
 vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 
 EXTRA_DIST = \
 	util/gen_enum_to_str.py \
@@ -76,7 +76,7 @@ WL_DRM_XML = $(top_srcdir)/src/egl/wayland/wayland-drm/wayland-drm.xml
 
 wsi/wayland-drm-protocol.c : $(WL_DRM_XML)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(WAYLAND_SCANNER) code $< $@
+	$(AM_V_GEN)$(WAYLAND_SCANNER) $(SCANNER_ARG) $< $@
 
 wsi/wayland-drm-client-protocol.h : $(WL_DRM_XML)
 	$(MKDIR_GEN)
@@ -86,7 +86,7 @@ WL_DMABUF_XML = $(WAYLAND_PROTOCOLS_DATADIR)/unstable/linux-dmabuf/linux-dmabuf-
 
 wsi/linux-dmabuf-unstable-v1-protocol.c : $(WL_DMABUF_XML)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(WAYLAND_SCANNER) code $< $@
+	$(AM_V_GEN)$(WAYLAND_SCANNER) $(SCANNER_ARG) $< $@
 
 wsi/linux-dmabuf-unstable-v1-client-protocol.h : $(WL_DMABUF_XML)
 	$(MKDIR_GEN)

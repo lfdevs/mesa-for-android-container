@@ -238,7 +238,7 @@ dri3_alloc_back_buffer(struct vl_dri3_screen *scrn)
 
    memset(&templ, 0, sizeof(templ));
    templ.bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
-   templ.format = PIPE_FORMAT_B8G8R8X8_UNORM;
+   templ.format = vl_dri2_format_for_depth(&scrn->base, scrn->depth);
    templ.target = PIPE_TEXTURE_2D;
    templ.last_level = 0;
    templ.width0 = (scrn->output_texture) ?
@@ -272,7 +272,7 @@ dri3_alloc_back_buffer(struct vl_dri3_screen *scrn)
    }
    memset(&whandle, 0, sizeof(whandle));
    whandle.type= WINSYS_HANDLE_TYPE_FD;
-   usage = PIPE_HANDLE_USAGE_EXPLICIT_FLUSH | PIPE_HANDLE_USAGE_READ;
+   usage = PIPE_HANDLE_USAGE_EXPLICIT_FLUSH;
    scrn->base.pscreen->resource_get_handle(scrn->base.pscreen, NULL,
                                            pixmap_buffer_texture, &whandle,
                                            usage);
@@ -497,7 +497,7 @@ dri3_get_front_buffer(struct vl_dri3_screen *scrn)
    whandle.stride = bp_reply->stride;
    memset(&templ, 0, sizeof(templ));
    templ.bind = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
-   templ.format = PIPE_FORMAT_B8G8R8X8_UNORM;
+   templ.format = vl_dri2_format_for_depth(&scrn->base, bp_reply->depth);
    templ.target = PIPE_TEXTURE_2D;
    templ.last_level = 0;
    templ.width0 = bp_reply->width;
@@ -507,7 +507,7 @@ dri3_get_front_buffer(struct vl_dri3_screen *scrn)
    scrn->front_buffer->texture =
       scrn->base.pscreen->resource_from_handle(scrn->base.pscreen,
                                                &templ, &whandle,
-                                               PIPE_HANDLE_USAGE_READ_WRITE);
+                                               PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE);
    close(fds[0]);
    if (!scrn->front_buffer->texture)
       goto free_reply;
@@ -536,6 +536,20 @@ close_fd:
    close(fence_fd);
 free_buffer:
    FREE(scrn->front_buffer);
+   return NULL;
+}
+
+static xcb_screen_t *
+dri3_get_screen_for_root(xcb_connection_t *conn, xcb_window_t root)
+{
+   xcb_screen_iterator_t screen_iter =
+   xcb_setup_roots_iterator(xcb_get_setup(conn));
+
+   for (; screen_iter.rem; xcb_screen_next (&screen_iter)) {
+      if (screen_iter.data->root == root)
+         return screen_iter.data;
+   }
+
    return NULL;
 }
 
@@ -808,11 +822,19 @@ vl_dri3_screen_create(Display *display, int screen)
    geom_reply = xcb_get_geometry_reply(scrn->conn, geom_cookie, NULL);
    if (!geom_reply)
       goto close_fd;
-   /* TODO support depth other than 24 */
-   if (geom_reply->depth != 24) {
+
+   scrn->base.xcb_screen = dri3_get_screen_for_root(scrn->conn, geom_reply->root);
+   if (!scrn->base.xcb_screen) {
       free(geom_reply);
       goto close_fd;
    }
+
+   /* TODO support depth other than 24 or 30 */
+   if (geom_reply->depth != 24 && geom_reply->depth != 30) {
+      free(geom_reply);
+      goto close_fd;
+   }
+   scrn->base.color_depth = geom_reply->depth;
    free(geom_reply);
 
    if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd))

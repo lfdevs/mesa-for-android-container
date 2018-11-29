@@ -478,7 +478,7 @@ aub_write_trace_block(struct aub_file *aub,
                                            ppgtt_lookup(aub, gtt_offset + offset),
                                            block_size,
                                            AUB_MEM_TRACE_MEMORY_ADDRESS_SPACE_PHYSICAL,
-                                           "legacy");
+                                           "Trace Block");
       } else {
          dword_out(aub, CMD_AUB_TRACE_HEADER_BLOCK |
                         ((aub->addr_bits > 32 ? 6 : 5) - 2));

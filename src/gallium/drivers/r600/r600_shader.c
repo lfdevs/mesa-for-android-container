@@ -3879,6 +3879,9 @@ static int r600_shader_from_tgsi(struct r600_context *rctx,
 				ctx.inst_info = &eg_shader_tgsi_instruction[opcode];
 			else
 				ctx.inst_info = &r600_shader_tgsi_instruction[opcode];
+
+			ctx.bc->precise |= ctx.parse.FullToken.FullInstruction.Instruction.Precise;
+
 			r = ctx.inst_info->process(&ctx);
 			if (r)
 				goto out_err;

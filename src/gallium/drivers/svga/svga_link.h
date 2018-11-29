@@ -9,6 +9,7 @@ struct svga_context;
 struct shader_linkage
 {
    unsigned num_inputs;
+   unsigned input_map_max;  /* highest index of mapped inputs */
    ubyte input_map[PIPE_MAX_SHADER_INPUTS];
 };
 

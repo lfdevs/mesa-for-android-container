@@ -58,28 +58,28 @@ struct si_multi_fence {
  *
  * \param event		EVENT_TYPE_*
  * \param event_flags	Optional cache flush flags (TC)
- * \param data_sel	1 = fence, 3 = timestamp
+ * \param dst_sel       MEM or TC_L2
+ * \param int_sel       NONE or SEND_DATA_AFTER_WR_CONFIRM
+ * \param data_sel	DISCARD, VALUE_32BIT, TIMESTAMP, or GDS
  * \param buf		Buffer
  * \param va		GPU address
  * \param old_value	Previous fence value (for a bug workaround)
  * \param new_value	Fence value to write for this event.
  */
-void si_gfx_write_event_eop(struct si_context *ctx,
-			    unsigned event, unsigned event_flags,
-			    unsigned data_sel,
-			    struct r600_resource *buf, uint64_t va,
-			    uint32_t new_fence, unsigned query_type)
+void si_cp_release_mem(struct si_context *ctx,
+		       unsigned event, unsigned event_flags,
+		       unsigned dst_sel, unsigned int_sel, unsigned data_sel,
+		       struct r600_resource *buf, uint64_t va,
+		       uint32_t new_fence, unsigned query_type)
 {
 	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 	unsigned op = EVENT_TYPE(event) |
-		      EVENT_INDEX(5) |
+		      EVENT_INDEX(event == V_028A90_CS_DONE ||
+				  event == V_028A90_PS_DONE ? 6 : 5) |
 		      event_flags;
-	unsigned sel = EOP_DATA_SEL(data_sel);
-
-	/* Wait for write confirmation before writing data, but don't send
-	 * an interrupt. */
-	if (data_sel != EOP_DATA_SEL_DISCARD)
-		sel |= EOP_INT_SEL(EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM);
+	unsigned sel = EOP_DST_SEL(dst_sel) |
+		       EOP_INT_SEL(int_sel) |
+		       EOP_DATA_SEL(data_sel);
 
 	if (ctx->chip_class >= GFX9) {
 		/* A ZPASS_DONE or PIXEL_STAT_DUMP_EVENT (of the DB occlusion
@@ -149,7 +149,7 @@ void si_gfx_write_event_eop(struct si_context *ctx,
 	}
 }
 
-unsigned si_gfx_write_fence_dwords(struct si_screen *screen)
+unsigned si_cp_write_fence_dwords(struct si_screen *screen)
 {
 	unsigned dwords = 6;
 
@@ -160,13 +160,13 @@ unsigned si_gfx_write_fence_dwords(struct si_screen *screen)
 	return dwords;
 }
 
-void si_gfx_wait_fence(struct si_context *ctx,
-		       uint64_t va, uint32_t ref, uint32_t mask)
+void si_cp_wait_mem(struct si_context *ctx,
+		    uint64_t va, uint32_t ref, uint32_t mask, unsigned flags)
 {
 	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 
 	radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, 0));
-	radeon_emit(cs, WAIT_REG_MEM_EQUAL | WAIT_REG_MEM_MEM_SPACE(1));
+	radeon_emit(cs, WAIT_REG_MEM_EQUAL | WAIT_REG_MEM_MEM_SPACE(1) | flags);
 	radeon_emit(cs, va);
 	radeon_emit(cs, va >> 32);
 	radeon_emit(cs, ref); /* reference value */
@@ -275,10 +275,13 @@ static void si_fine_fence_set(struct si_context *ctx,
 		radeon_emit(cs, fence_va >> 32);
 		radeon_emit(cs, 0x80000000);
 	} else if (flags & PIPE_FLUSH_BOTTOM_OF_PIPE) {
-		si_gfx_write_event_eop(ctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
-				       EOP_DATA_SEL_VALUE_32BIT,
-				       NULL, fence_va, 0x80000000,
-				       PIPE_QUERY_GPU_FINISHED);
+		si_cp_release_mem(ctx,
+				  V_028A90_BOTTOM_OF_PIPE_TS, 0,
+				  EOP_DST_SEL_MEM,
+				  EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM,
+				  EOP_DATA_SEL_VALUE_32BIT,
+				  NULL, fence_va, 0x80000000,
+				  PIPE_QUERY_GPU_FINISHED);
 	} else {
 		assert(false);
 	}

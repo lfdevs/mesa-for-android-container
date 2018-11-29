@@ -123,11 +123,13 @@ static void si_create_compute_state_async(void *job, int thread_index)
 	program->shader.selector = &sel;
 	program->shader.is_monolithic = true;
 	program->uses_grid_size = sel.info.uses_grid_size;
-	program->uses_block_size = sel.info.uses_block_size;
 	program->uses_bindless_samplers = sel.info.uses_bindless_samplers;
 	program->uses_bindless_images = sel.info.uses_bindless_images;
-	program->variable_group_size =
+	program->reads_variable_block_size =
+		sel.info.uses_block_size &&
 		sel.info.properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] == 0;
+	program->num_cs_user_data_dwords =
+		sel.info.properties[TGSI_PROPERTY_CS_USER_DATA_DWORDS];
 
 	void *ir_binary = si_get_ir_binary(&sel);
 
@@ -159,7 +161,8 @@ static void si_create_compute_state_async(void *job, int thread_index)
 		bool scratch_enabled = shader->config.scratch_bytes_per_wave > 0;
 		unsigned user_sgprs = SI_NUM_RESOURCE_SGPRS +
 				      (sel.info.uses_grid_size ? 3 : 0) +
-				      (sel.info.uses_block_size ? 3 : 0);
+				      (program->reads_variable_block_size ? 3 : 0) +
+				      program->num_cs_user_data_dwords;
 
 		shader->config.rsrc1 =
 			S_00B848_VGPRS((shader->config.num_vgprs - 1) / 4) |
@@ -706,7 +709,7 @@ static bool si_upload_compute_input(struct si_context *sctx,
 	return true;
 }
 
-static void si_setup_tgsi_grid(struct si_context *sctx,
+static void si_setup_tgsi_user_data(struct si_context *sctx,
                                 const struct pipe_grid_info *info)
 {
 	struct si_compute *program = sctx->cs_shader_state.program;
@@ -716,6 +719,8 @@ static void si_setup_tgsi_grid(struct si_context *sctx,
 	unsigned block_size_reg = grid_size_reg +
 				  /* 12 bytes = 3 dwords. */
 				  12 * program->uses_grid_size;
+	unsigned cs_user_data_reg = block_size_reg +
+				    12 * program->reads_variable_block_size;
 
 	if (info->indirect) {
 		if (program->uses_grid_size) {
@@ -729,7 +734,7 @@ static void si_setup_tgsi_grid(struct si_context *sctx,
 
 			for (i = 0; i < 3; ++i) {
 				radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-				radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_MEM) |
+				radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_SRC_MEM) |
 						COPY_DATA_DST_SEL(COPY_DATA_REG));
 				radeon_emit(cs, (va + 4 * i));
 				radeon_emit(cs, (va + 4 * i) >> 32);
@@ -744,12 +749,17 @@ static void si_setup_tgsi_grid(struct si_context *sctx,
 			radeon_emit(cs, info->grid[1]);
 			radeon_emit(cs, info->grid[2]);
 		}
-		if (program->variable_group_size && program->uses_block_size) {
+		if (program->reads_variable_block_size) {
 			radeon_set_sh_reg_seq(cs, block_size_reg, 3);
 			radeon_emit(cs, info->block[0]);
 			radeon_emit(cs, info->block[1]);
 			radeon_emit(cs, info->block[2]);
 		}
+	}
+
+	if (program->num_cs_user_data_dwords) {
+		radeon_set_sh_reg_seq(cs, cs_user_data_reg, program->num_cs_user_data_dwords);
+		radeon_emit_array(cs, sctx->cs_user_data, program->num_cs_user_data_dwords);
 	}
 }
 
@@ -774,6 +784,14 @@ static void si_emit_dispatch_packets(struct si_context *sctx,
 		 */
 		if (num_cu_per_se % 4 && waves_per_threadgroup == 1)
 			compute_resource_limits |= S_00B854_FORCE_SIMD_DIST(1);
+
+		compute_resource_limits |= S_00B854_WAVES_PER_SH(sctx->cs_max_waves_per_sh);
+	} else {
+		/* SI */
+		if (sctx->cs_max_waves_per_sh) {
+			unsigned limit_div16 = DIV_ROUND_UP(sctx->cs_max_waves_per_sh, 16);
+			compute_resource_limits |= S_00B854_WAVES_PER_SH_SI(limit_div16);
+		}
 	}
 
 	radeon_set_sh_reg(cs, R_00B854_COMPUTE_RESOURCE_LIMITS,
@@ -908,7 +926,7 @@ static void si_launch_grid(
 	}
 
 	if (program->ir_type != PIPE_SHADER_IR_NATIVE)
-		si_setup_tgsi_grid(sctx, info);
+		si_setup_tgsi_user_data(sctx, info);
 
 	si_emit_dispatch_packets(sctx, info);
 

@@ -224,14 +224,16 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                                       uinfo->num_texture_samples);
 
         for (int i = 0; i < uinfo->count; i++) {
+                enum quniform_contents contents = uinfo->contents[i];
+                uint32_t data = uinfo->data[i];
 
-                switch (uinfo->contents[i]) {
+                switch (contents) {
                 case QUNIFORM_CONSTANT:
-                        cl_aligned_u32(&uniforms, uinfo->data[i]);
+                        cl_aligned_u32(&uniforms, data);
                         break;
                 case QUNIFORM_UNIFORM:
                         cl_aligned_u32(&uniforms,
-                                       gallium_uniforms[uinfo->data[i]]);
+                                       gallium_uniforms[data]);
                         break;
                 case QUNIFORM_VIEWPORT_X_SCALE:
                         cl_aligned_f(&uniforms, vc4->viewport.scale[0] * 16.0f);
@@ -249,36 +251,33 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
 
                 case QUNIFORM_USER_CLIP_PLANE:
                         cl_aligned_f(&uniforms,
-                                     vc4->clip.ucp[uinfo->data[i] / 4][uinfo->data[i] % 4]);
+                                     vc4->clip.ucp[data / 4][data % 4]);
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P0:
-                        write_texture_p0(job, &uniforms, texstate,
-                                         uinfo->data[i]);
+                        write_texture_p0(job, &uniforms, texstate, data);
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P1:
-                        write_texture_p1(job, &uniforms, texstate,
-                                         uinfo->data[i]);
+                        write_texture_p1(job, &uniforms, texstate, data);
                         break;
 
                 case QUNIFORM_TEXTURE_CONFIG_P2:
-                        write_texture_p2(job, &uniforms, texstate,
-                                         uinfo->data[i]);
+                        write_texture_p2(job, &uniforms, texstate, data);
                         break;
 
                 case QUNIFORM_TEXTURE_FIRST_LEVEL:
                         write_texture_first_level(job, &uniforms, texstate,
-                                                  uinfo->data[i]);
+                                                  data);
                         break;
 
                 case QUNIFORM_UBO_ADDR:
-                        if (uinfo->data[i] == 0) {
+                        if (data == 0) {
                                 cl_aligned_reloc(job, &job->uniforms,
                                                  &uniforms, ubo, 0);
                         } else {
                                 struct pipe_constant_buffer *c =
-                                        &cb->cb[uinfo->data[i]];
+                                        &cb->cb[data];
                                 struct vc4_resource *rsc =
                                         vc4_resource(c->buffer);
 
@@ -289,13 +288,12 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         break;
 
                 case QUNIFORM_TEXTURE_MSAA_ADDR:
-                        write_texture_msaa_addr(job, &uniforms,
-                                                texstate, uinfo->data[i]);
+                        write_texture_msaa_addr(job, &uniforms, texstate, data);
                         break;
 
                 case QUNIFORM_TEXTURE_BORDER_COLOR:
                         write_texture_border_color(job, &uniforms,
-                                                   texstate, uinfo->data[i]);
+                                                   texstate, data);
                         break;
 
                 case QUNIFORM_TEXRECT_SCALE_X:
@@ -303,7 +301,7 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         cl_aligned_u32(&uniforms,
                                        get_texrect_scale(texstate,
                                                          uinfo->contents[i],
-                                                         uinfo->data[i]));
+                                                         data));
                         break;
 
                 case QUNIFORM_BLEND_CONST_COLOR_X:
@@ -342,9 +340,9 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
 
                 case QUNIFORM_STENCIL:
                         cl_aligned_u32(&uniforms,
-                                       vc4->zsa->stencil_uniforms[uinfo->data[i]] |
-                                       (uinfo->data[i] <= 1 ?
-                                        (vc4->stencil_ref.ref_value[uinfo->data[i]] << 8) :
+                                       vc4->zsa->stencil_uniforms[data] |
+                                       (data <= 1 ?
+                                        (vc4->stencil_ref.ref_value[data] << 8) :
                                         0));
                         break;
 
@@ -362,11 +360,18 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                         cl_aligned_u32(&uniforms, 0xd0d0d0d0);
                         break;
                 }
-#if 0
-                uint32_t written_val = *((uint32_t *)uniforms - 1);
-                fprintf(stderr, "%p: %d / 0x%08x (%f)\n",
-                        shader, i, written_val, uif(written_val));
-#endif
+
+                if (false) {
+                        uint32_t written_val = *((uint32_t *)uniforms - 1);
+                        char *desc = qir_describe_uniform(uinfo->contents[i],
+                                                          uinfo->data[i],
+                                                          gallium_uniforms);
+
+                        fprintf(stderr, "%p/%d: 0x%08x %s\n",
+                                shader, i, written_val, desc);
+
+                        ralloc_free(desc);
+                }
         }
 
         cl_end(&job->uniforms, uniforms);

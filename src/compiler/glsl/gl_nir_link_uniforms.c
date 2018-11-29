@@ -365,6 +365,10 @@ nir_link_uniform(struct gl_context *ctx,
          uniform->remap_location = UNMAPPED_UNIFORM_LOC;
       }
 
+      uniform->hidden = state->current_var->data.how_declared == nir_var_hidden;
+      if (uniform->hidden)
+         state->num_hidden_uniforms++;
+
       /* @FIXME: the initialization of the following will be done as we
        * implement support for their specific features, like SSBO, atomics,
        * etc.
@@ -374,7 +378,6 @@ nir_link_uniform(struct gl_context *ctx,
       uniform->matrix_stride = -1;
       uniform->array_stride = -1;
       uniform->row_major = false;
-      uniform->hidden = false;
       uniform->builtin = false;
       uniform->is_shader_storage = false;
       uniform->atomic_buffer_index = -1;
@@ -421,10 +424,14 @@ nir_link_uniform(struct gl_context *ctx,
          uniform->opaque[stage].index = image_index;
 
          /* Set image access qualifiers */
+         enum gl_access_qualifier image_access =
+            state->current_var->data.image.access;
          const GLenum access =
-            (state->current_var->data.image.read_only ? GL_READ_ONLY :
-             state->current_var->data.image.write_only ? GL_WRITE_ONLY :
-             GL_READ_WRITE);
+            (image_access & ACCESS_NON_WRITEABLE) ?
+            ((image_access & ACCESS_NON_READABLE) ? GL_NONE :
+                                                    GL_READ_ONLY) :
+            ((image_access & ACCESS_NON_READABLE) ? GL_WRITE_ONLY :
+                                                    GL_READ_WRITE);
          for (unsigned i = image_index;
               i < MIN2(state->next_image_index, MAX_IMAGE_UNIFORMS);
               i++) {

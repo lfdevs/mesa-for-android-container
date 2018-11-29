@@ -478,7 +478,7 @@ svga_screen_surface_create(struct svga_screen *svgascreen,
    if (cachable) {
       /* Try to re-cycle a previously freed, cached surface */
       if (key->format == SVGA3D_BUFFER) {
-         SVGA3dSurfaceFlags hint_flag;
+         SVGA3dSurfaceAllFlags hint_flag;
 
          /* For buffers, round the buffer size up to the nearest power
           * of two to increase the probability of cache hits.  Keep

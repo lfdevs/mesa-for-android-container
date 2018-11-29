@@ -55,6 +55,14 @@
 #define UINT_TO_PTR(x) ((void*)(uintptr_t)(x))
 #define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
 
+#define SOI 2
+#define DQT (4 + 4 * 65)
+#define DHT (4 + 2 * 29 + 2 * 179)
+#define DRI 6
+#define SOF (10 + 255 * 3)
+#define SOS (8 + 4 * 2)
+#define MAX_MJPEG_SLICE_HEADER_SIZE (SOI + DQT + DHT + DRI + SOF + SOS)
+
 static inline unsigned handle_hash(void *key)
 {
     return PTR_TO_UINT(key);
@@ -294,6 +302,8 @@ typedef struct {
 
    struct {
       unsigned sampling_factor;
+      uint8_t slice_header[MAX_MJPEG_SLICE_HEADER_SIZE];
+      unsigned int slice_header_size;
    } mjpeg;
 
    struct vl_deint_filter *deint;
@@ -430,6 +440,7 @@ void vlVaHandlePictureParameterBufferMPEG4(vlVaDriver *drv, vlVaContext *context
 void vlVaHandleIQMatrixBufferMPEG4(vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleSliceParameterBufferMPEG4(vlVaContext *context, vlVaBuffer *buf);
 void vlVaDecoderFixMPEG4Startcode(vlVaContext *context);
+void vlVaGetJpegSliceHeader(vlVaContext *context);
 void vlVaHandlePictureParameterBufferHEVC(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleIQMatrixBufferHEVC(vlVaContext *context, vlVaBuffer *buf);
 void vlVaHandleSliceParameterBufferHEVC(vlVaContext *context, vlVaBuffer *buf);

@@ -91,16 +91,19 @@ brw_create_nir(struct brw_context *brw,
 
       nir_remove_dead_variables(nir, nir_var_shader_in | nir_var_shader_out);
       nir_lower_returns(nir);
-      nir_validate_shader(nir);
+      nir_validate_shader(nir, "after glsl_to_nir or spirv_to_nir and "
+                               "return lowering");
       NIR_PASS_V(nir, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(nir), true, false);
    } else {
       nir = prog_to_nir(prog, options);
       NIR_PASS_V(nir, nir_lower_regs_to_ssa); /* turn registers into SSA */
    }
-   nir_validate_shader(nir);
+   nir_validate_shader(nir, "before brw_preprocess_nir");
 
    nir = brw_preprocess_nir(brw->screen->compiler, nir);
+
+   NIR_PASS_V(nir, brw_nir_lower_image_load_store, devinfo);
 
    if (stage == MESA_SHADER_TESS_CTRL) {
       /* Lower gl_PatchVerticesIn from a sys. value to a uniform on Gen8+. */
@@ -116,7 +119,7 @@ brw_create_nir(struct brw_context *brw,
       struct gl_linked_shader *tcs =
          shader_prog->_LinkedShaders[MESA_SHADER_TESS_CTRL];
       uint32_t static_patch_vertices =
-         tcs ? tcs->Program->info.tess.tcs_vertices_out : 0;
+         tcs ? tcs->Program->nir->info.tess.tcs_vertices_out : 0;
       static const gl_state_index16 tokens[STATE_LENGTH] =
          { STATE_INTERNAL, STATE_TES_PATCH_VERTICES_IN };
       nir_lower_patch_vertices(nir, static_patch_vertices, tokens);

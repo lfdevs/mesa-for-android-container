@@ -48,7 +48,7 @@ GEN_DRIINFO_INPUTS = \
 	$(top_srcdir)/src/gallium/auxiliary/pipe-loader/driinfo_gallium.h \
 	$(srcdir)/driinfo_radeonsi.h
 
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 MERGE_DRIINFO = $(top_srcdir)/src/util/merge_driinfo.py
 
 si_driinfo.h: $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS)

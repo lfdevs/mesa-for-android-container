@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -284,6 +282,13 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_register *reg, unsigned new_flags
 	if (new_flags & IR3_REG_FNEG) {
 		reg->fim_val = -reg->fim_val;
 		new_flags &= ~IR3_REG_FNEG;
+	}
+
+	/* Reallocate for 4 more elements whenever it's necessary */
+	if (ctx->immediate_idx == ctx->so->immediates_size * 4) {
+		ctx->so->immediates_size += 4;
+		ctx->so->immediates = realloc (ctx->so->immediates,
+			ctx->so->immediates_size * sizeof (ctx->so->immediates[0]));
 	}
 
 	for (i = 0; i < ctx->immediate_idx; i++) {

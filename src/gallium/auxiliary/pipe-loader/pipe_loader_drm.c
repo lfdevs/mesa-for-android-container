@@ -35,6 +35,7 @@
 #include <string.h>
 #include <xf86drm.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "loader.h"
 #include "target-helpers/drm_helper_public.h"
@@ -168,8 +169,8 @@ get_driver_descriptor(const char *driver_name, struct util_dl_library **plib)
    return NULL;
 }
 
-bool
-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
+static bool
+pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd)
 {
    struct pipe_loader_drm_device *ddev = CALLOC_STRUCT(pipe_loader_drm_device);
    int vendor_id, chip_id;
@@ -212,6 +213,22 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
    return false;
 }
 
+bool
+pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
+{
+   bool ret;
+   int new_fd;
+
+   if (fd < 0 || (new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3)) < 0)
+     return false;
+
+   ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd);
+   if (!ret)
+      close(new_fd);
+
+   return ret;
+}
+
 static int
 open_drm_render_node_minor(int minor)
 {
@@ -234,7 +251,7 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
       if (fd < 0)
          continue;
 
-      if (!pipe_loader_drm_probe_fd(&dev, fd)) {
+      if (!pipe_loader_drm_probe_fd_nodup(&dev, fd)) {
          close(fd);
          continue;
       }

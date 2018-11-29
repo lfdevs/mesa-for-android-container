@@ -734,7 +734,8 @@ floor_pot(uint32_t n)
 
    __asm__("bsr %1,%0"
           : "=r" (n)
-          : "rm" (n));
+          : "rm" (n)
+          : "cc");
    return 1 << n;
 #else
    n |= (n >>  1);

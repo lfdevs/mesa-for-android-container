@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -46,25 +44,43 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct pipe_fence_handle *fence = NULL;
+	// TODO we want to lookup batch if it exists, but not create one if not.
+	struct fd_batch *batch = fd_context_batch(ctx);
 
 	DBG("%p: flush: flags=%x\n", ctx->batch, flags);
 
-	/* Take a ref to the batch's fence (batch can be unref'd when flushed: */
-	fd_fence_ref(pctx->screen, &fence, ctx->batch->fence);
+	/* if no rendering since last flush, ie. app just decided it needed
+	 * a fence, re-use the last one:
+	 */
+	if (ctx->last_fence) {
+		fd_fence_ref(pctx->screen, &fence, ctx->last_fence);
+		goto out;
+	}
 
-	if (flags & PIPE_FLUSH_FENCE_FD)
-		ctx->batch->needs_out_fence_fd = true;
+	if (!batch)
+		return;
+
+	/* Take a ref to the batch's fence (batch can be unref'd when flushed: */
+	fd_fence_ref(pctx->screen, &fence, batch->fence);
+
+	/* TODO is it worth trying to figure out if app is using fence-fd's, to
+	 * avoid requesting one every batch?
+	 */
+	batch->needs_out_fence_fd = true;
 
 	if (!ctx->screen->reorder) {
-		fd_batch_flush(ctx->batch, true, false);
+		fd_batch_flush(batch, true, false);
 	} else if (flags & PIPE_FLUSH_DEFERRED) {
 		fd_bc_flush_deferred(&ctx->screen->batch_cache, ctx);
 	} else {
 		fd_bc_flush(&ctx->screen->batch_cache, ctx);
 	}
 
+out:
 	if (fencep)
 		fd_fence_ref(pctx->screen, fencep, fence);
+
+	fd_fence_ref(pctx->screen, &ctx->last_fence, fence);
 
 	fd_fence_ref(pctx->screen, &fence, NULL);
 }
@@ -134,9 +150,12 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	DBG("");
 
+	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
+
 	if (ctx->screen->reorder && util_queue_is_initialized(&ctx->flush_queue))
 		util_queue_destroy(&ctx->flush_queue);
 
+	util_copy_framebuffer_state(&ctx->framebuffer, NULL);
 	fd_batch_reference(&ctx->batch, NULL);  /* unref current batch */
 	fd_bc_invalidate_context(ctx);
 
@@ -172,8 +191,6 @@ fd_context_destroy(struct pipe_context *pctx)
 			(uint32_t)ctx->stats.batch_gmem, (uint32_t)ctx->stats.batch_nondraw,
 			(uint32_t)ctx->stats.batch_restore);
 	}
-
-	FREE(ctx);
 }
 
 static void
@@ -311,7 +328,8 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 		goto fail;
 	pctx->const_uploader = pctx->stream_uploader;
 
-	ctx->batch = fd_bc_alloc_batch(&screen->batch_cache, ctx);
+	if (!ctx->screen->reorder)
+		ctx->batch = fd_bc_alloc_batch(&screen->batch_cache, ctx, false);
 
 	slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
 

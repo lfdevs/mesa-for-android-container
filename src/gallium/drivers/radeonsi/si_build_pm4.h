@@ -116,12 +116,11 @@ static inline void radeon_opt_set_context_reg(struct si_context *sctx, unsigned 
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	if (!(sctx->tracked_regs.reg_saved & (1 << reg)) ||
-	    sctx->tracked_regs.reg_value[reg] != value ) {
-
+	if (((sctx->tracked_regs.reg_saved >> reg) & 0x1) != 0x1 ||
+	    sctx->tracked_regs.reg_value[reg] != value) {
 		radeon_set_context_reg(cs, offset, value);
 
-		sctx->tracked_regs.reg_saved |= 1 << reg;
+		sctx->tracked_regs.reg_saved |= 0x1ull << reg;
 		sctx->tracked_regs.reg_value[reg] = value;
 	}
 }
@@ -138,18 +137,16 @@ static inline void radeon_opt_set_context_reg2(struct si_context *sctx, unsigned
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	if (!(sctx->tracked_regs.reg_saved & (1 << reg)) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 1))) ||
+	if (((sctx->tracked_regs.reg_saved >> reg) & 0x3) != 0x3 ||
 	    sctx->tracked_regs.reg_value[reg] != value1 ||
-	    sctx->tracked_regs.reg_value[reg+1] != value2 ) {
-
+	    sctx->tracked_regs.reg_value[reg+1] != value2) {
 		radeon_set_context_reg_seq(cs, offset, 2);
 		radeon_emit(cs, value1);
 		radeon_emit(cs, value2);
 
 		sctx->tracked_regs.reg_value[reg] = value1;
 		sctx->tracked_regs.reg_value[reg+1] = value2;
-		sctx->tracked_regs.reg_saved |= 3 << reg;
+		sctx->tracked_regs.reg_saved |= 0x3ull << reg;
 	}
 }
 
@@ -162,13 +159,10 @@ static inline void radeon_opt_set_context_reg3(struct si_context *sctx, unsigned
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	if (!(sctx->tracked_regs.reg_saved & (1 << reg)) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 1))) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 2))) ||
+	if (((sctx->tracked_regs.reg_saved >> reg) & 0x7) != 0x7 ||
 	    sctx->tracked_regs.reg_value[reg] != value1 ||
 	    sctx->tracked_regs.reg_value[reg+1] != value2 ||
-	    sctx->tracked_regs.reg_value[reg+2] != value3 ) {
-
+	    sctx->tracked_regs.reg_value[reg+2] != value3) {
 		radeon_set_context_reg_seq(cs, offset, 3);
 		radeon_emit(cs, value1);
 		radeon_emit(cs, value2);
@@ -177,7 +171,7 @@ static inline void radeon_opt_set_context_reg3(struct si_context *sctx, unsigned
 		sctx->tracked_regs.reg_value[reg] = value1;
 		sctx->tracked_regs.reg_value[reg+1] = value2;
 		sctx->tracked_regs.reg_value[reg+2] = value3;
-		sctx->tracked_regs.reg_saved |= 7 << reg;
+		sctx->tracked_regs.reg_saved |= 0x7ull << reg;
 	}
 }
 
@@ -191,15 +185,11 @@ static inline void radeon_opt_set_context_reg4(struct si_context *sctx, unsigned
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	if (!(sctx->tracked_regs.reg_saved & (1 << reg)) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 1))) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 2))) ||
-	    !(sctx->tracked_regs.reg_saved & (1 << (reg + 3))) ||
+	if (((sctx->tracked_regs.reg_saved >> reg) & 0xf) != 0xf ||
 	    sctx->tracked_regs.reg_value[reg] != value1 ||
 	    sctx->tracked_regs.reg_value[reg+1] != value2 ||
 	    sctx->tracked_regs.reg_value[reg+2] != value3 ||
-	    sctx->tracked_regs.reg_value[reg+3] != value4 ) {
-
+	    sctx->tracked_regs.reg_value[reg+3] != value4) {
 		radeon_set_context_reg_seq(cs, offset, 4);
 		radeon_emit(cs, value1);
 		radeon_emit(cs, value2);
@@ -210,7 +200,7 @@ static inline void radeon_opt_set_context_reg4(struct si_context *sctx, unsigned
 		sctx->tracked_regs.reg_value[reg+1] = value2;
 		sctx->tracked_regs.reg_value[reg+2] = value3;
 		sctx->tracked_regs.reg_value[reg+3] = value4;
-		sctx->tracked_regs.reg_saved |= 0xf << reg;
+		sctx->tracked_regs.reg_saved |= 0xfull << reg;
 	}
 }
 

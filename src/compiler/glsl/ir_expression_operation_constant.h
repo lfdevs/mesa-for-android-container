@@ -997,10 +997,10 @@
       for (unsigned c = 0; c < op[0]->type->components(); c++) {
          switch (op[0]->type->base_type) {
          case GLSL_TYPE_UINT:
-            data.i[c] = _mesa_bitcount(op[0]->value.u[c]);
+            data.i[c] = util_bitcount(op[0]->value.u[c]);
             break;
          case GLSL_TYPE_INT:
-            data.i[c] = _mesa_bitcount(op[0]->value.i[c]);
+            data.i[c] = util_bitcount(op[0]->value.i[c]);
             break;
          default:
             unreachable("invalid type");

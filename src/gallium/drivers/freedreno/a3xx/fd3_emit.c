@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -511,7 +509,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	}
 
 	if ((dirty & (FD_DIRTY_ZSA | FD_DIRTY_PROG | FD_DIRTY_BLEND_DUAL)) &&
-		!emit->key.binning_pass) {
+		!emit->binning_pass) {
 		uint32_t val = fd3_zsa_stateobj(ctx->zsa)->rb_render_control |
 			fd3_blend_stateobj(ctx->blend)->rb_render_control;
 
@@ -557,7 +555,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		if (fp->has_kill) {
 			val |= A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 		}
-		if (!ctx->rasterizer->depth_clip) {
+		if (!ctx->rasterizer->depth_clip_near) {
 			val |= A3XX_RB_DEPTH_CONTROL_Z_CLAMP_ENABLE;
 		}
 		OUT_PKT0(ring, REG_A3XX_RB_DEPTH_CONTROL, 1);
@@ -624,7 +622,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		uint32_t val = fd3_rasterizer_stateobj(ctx->rasterizer)
 				->pc_prim_vtx_cntl;
 
-		if (!emit->key.binning_pass) {
+		if (!emit->binning_pass) {
 			uint32_t stride_in_vpc = align(fp->total_in, 4) / 4;
 			if (stride_in_vpc > 0)
 				stride_in_vpc = MAX2(stride_in_vpc, 2);
@@ -652,7 +650,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		 * or nothing deal. So when we disable clipping, we must handle the
 		 * viewport clip via scissors.
 		 */
-		if (!ctx->rasterizer->depth_clip) {
+		if (!ctx->rasterizer->depth_clip_near) {
 			struct pipe_viewport_state *vp = &ctx->viewport;
 			minx = MAX2(minx, (int)floorf(vp->translate[0] - fabsf(vp->scale[0])));
 			miny = MAX2(miny, (int)floorf(vp->translate[1] - fabsf(vp->scale[1])));
@@ -723,7 +721,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 	if (emit->prog == &ctx->prog) { /* evil hack to deal sanely with clear path */
 		ir3_emit_vs_consts(vp, ring, ctx, emit->info);
-		if (!emit->key.binning_pass)
+		if (!emit->binning_pass)
 			ir3_emit_fs_consts(fp, ring, ctx);
 	}
 

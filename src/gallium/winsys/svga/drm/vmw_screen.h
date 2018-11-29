@@ -76,6 +76,7 @@ struct vmw_winsys_screen
       boolean have_drm_2_6;
       boolean have_drm_2_9;
       uint32_t drm_execbuf_version;
+      boolean have_drm_2_15;
    } ioctl;
 
    struct {
@@ -128,7 +129,7 @@ vmw_ioctl_context_destroy(struct vmw_winsys_screen *vws,
 
 uint32
 vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
-                         SVGA3dSurfaceFlags flags,
+                         SVGA3dSurface1Flags flags,
                          SVGA3dSurfaceFormat format,
                          unsigned usage,
                          SVGA3dSize size,
@@ -137,20 +138,22 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
                          unsigned sampleCount);
 uint32
 vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
-			    SVGA3dSurfaceFlags flags,
-			    SVGA3dSurfaceFormat format,
+                            SVGA3dSurfaceAllFlags flags,
+                            SVGA3dSurfaceFormat format,
                             unsigned usage,
-			    SVGA3dSize size,
-			    uint32 numFaces,
-			    uint32 numMipLevels,
+                            SVGA3dSize size,
+                            uint32 numFaces,
+                            uint32 numMipLevels,
                             unsigned sampleCount,
                             uint32 buffer_handle,
-			    struct vmw_region **p_region);
+                            SVGA3dMSPattern multisamplePattern,
+                            SVGA3dMSQualityLevel qualityLevel,
+                            struct vmw_region **p_region);
 
 int
 vmw_ioctl_gb_surface_ref(struct vmw_winsys_screen *vws,
                          const struct winsys_handle *whandle,
-                         SVGA3dSurfaceFlags *flags,
+                         SVGA3dSurfaceAllFlags *flags,
                          SVGA3dSurfaceFormat *format,
                          uint32_t *numMipLevels,
                          uint32_t *handle,

@@ -55,7 +55,7 @@ try_lower_input_load(nir_function_impl *impl, nir_intrinsic_instr *load)
 
    nir_builder b;
    nir_builder_init(&b, impl);
-   b.cursor = nir_before_instr(&load->instr);
+   b.cursor = nir_instr_remove(&load->instr);
 
    nir_ssa_def *frag_coord = nir_f2i32(&b, load_frag_coord(&b));
    nir_ssa_def *offset = nir_ssa_for_src(&b, load->src[1], 2);
@@ -122,7 +122,7 @@ anv_nir_lower_input_attachments(nir_shader *shader)
          continue;
 
       nir_foreach_block(block, function->impl) {
-         nir_foreach_instr(instr, block) {
+         nir_foreach_instr_safe(instr, block) {
             if (instr->type != nir_instr_type_intrinsic)
                continue;
 

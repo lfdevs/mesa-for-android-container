@@ -71,6 +71,7 @@ struct zwp_linux_dmabuf_v1;
 
 #include "eglconfig.h"
 #include "eglcontext.h"
+#include "egldevice.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglcurrent.h"
@@ -151,6 +152,12 @@ struct dri2_egl_display_vtbl {
    __DRIdrawable *(*get_dri_drawable)(_EGLSurface *surf);
 
    void (*close_screen_notify)(_EGLDisplay *dpy);
+
+   /* Used in EGL_KHR_mutable_render_buffer to update the native window's
+    * shared buffer mode.
+    */
+   bool (*set_shared_buffer_mode)(_EGLDisplay *dpy, _EGLSurface *surf,
+                                  bool mode);
 };
 
 struct dri2_egl_display
@@ -178,6 +185,7 @@ struct dri2_egl_display
    const __DRI2blobExtension *blob;
    const __DRI2rendererQueryExtension *rendererQuery;
    const __DRI2interopExtension *interop;
+   const __DRImutableRenderBufferDriverExtension *mutable_render_buffer;
    int                       fd;
 
    /* dri2_initialize/dri2_terminate increment/decrement this count, so does
@@ -223,7 +231,7 @@ struct dri2_egl_display
    struct zwp_linux_dmabuf_v1 *wl_dmabuf;
    struct u_vector          *wl_modifiers;
    bool                      authenticated;
-   int                       formats;
+   unsigned                  formats;
    uint32_t                  capabilities;
    char                     *device_name;
 #endif
@@ -528,5 +536,11 @@ dri2_init_surface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
 
 void
 dri2_fini_surface(_EGLSurface *surf);
+
+static inline uint64_t
+combine_u32_into_u64(uint32_t hi, uint32_t lo)
+{
+   return (((uint64_t) hi) << 32) | (((uint64_t) lo) & 0xffffffff);
+}
 
 #endif /* EGL_DRI2_INCLUDED */

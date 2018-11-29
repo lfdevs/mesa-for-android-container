@@ -259,11 +259,12 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
 {
    enum pipe_video_format format;
    unsigned num_buffers = 0;
-   void * const *buffers[2];
-   unsigned sizes[2];
+   void * const *buffers[3];
+   unsigned sizes[3];
    static const uint8_t start_code_h264[] = { 0x00, 0x00, 0x01 };
    static const uint8_t start_code_h265[] = { 0x00, 0x00, 0x01 };
    static const uint8_t start_code_vc1[] = { 0x00, 0x00, 0x01, 0x0d };
+   static const uint8_t eoi_jpeg[] = { 0xff, 0xd9 };
 
    format = u_reduce_video_profile(context->templat.profile);
    switch (format) {
@@ -301,6 +302,9 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
       sizes[num_buffers++] = context->mpeg4.start_code_size;
       break;
    case PIPE_VIDEO_FORMAT_JPEG:
+      vlVaGetJpegSliceHeader(context);
+      buffers[num_buffers] = (void *)context->mjpeg.slice_header;
+      sizes[num_buffers++] = context->mjpeg.slice_header_size;
       break;
    case PIPE_VIDEO_FORMAT_VP9:
       vlVaDecoderVP9BitstreamHeader(context, buf);
@@ -312,6 +316,11 @@ handleVASliceDataBufferType(vlVaContext *context, vlVaBuffer *buf)
    buffers[num_buffers] = buf->data;
    sizes[num_buffers] = buf->size;
    ++num_buffers;
+
+   if (format == PIPE_VIDEO_FORMAT_JPEG) {
+      buffers[num_buffers] = (void *const)&eoi_jpeg;
+      sizes[num_buffers++] = sizeof(eoi_jpeg);
+   }
 
    if (context->needs_begin_frame) {
       context->decoder->begin_frame(context->decoder, context->target,

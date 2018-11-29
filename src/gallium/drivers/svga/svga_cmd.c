@@ -273,7 +273,7 @@ SVGA3D_DestroyContext(struct svga_winsys_context *swc)  // IN
 enum pipe_error
 SVGA3D_BeginDefineSurface(struct svga_winsys_context *swc,
                           struct svga_winsys_surface *sid, // IN
-                          SVGA3dSurfaceFlags flags,    // IN
+                          SVGA3dSurface1Flags flags,    // IN
                           SVGA3dSurfaceFormat format,  // IN
                           SVGA3dSurfaceFace **faces,   // OUT
                           SVGA3dSize **mipSizes,       // OUT

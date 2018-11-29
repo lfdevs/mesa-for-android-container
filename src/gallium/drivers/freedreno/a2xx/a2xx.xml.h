@@ -8,17 +8,17 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-01-31 18:26:32)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-01-08 14:56:24)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  36805 bytes, from 2018-05-20 19:03:35)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13634 bytes, from 2018-06-10 17:35:36)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  41584 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-01-10 16:21:40)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-01-08 14:56:24)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 147158 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx.xml          (  88437 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-06-10 17:37:04)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a2xx.xml          (  37936 bytes, from 2018-10-08 11:43:51)
+- /home/robclark/src/envytools/rnndb/adreno/adreno_common.xml (  14201 bytes, from 2018-10-08 11:43:51)
+- /home/robclark/src/envytools/rnndb/adreno/adreno_pm4.xml    (  42864 bytes, from 2018-10-08 21:57:22)
+- /home/robclark/src/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a5xx.xml          ( 147240 bytes, from 2018-10-08 21:57:22)
+- /home/robclark/src/envytools/rnndb/adreno/a6xx.xml          ( 140514 bytes, from 2018-10-08 21:57:35)
+- /home/robclark/src/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-09-14 13:03:07)
+- /home/robclark/src/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-07-03 19:37:13)
 
 Copyright (C) 2013-2018 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -323,6 +323,18 @@ static inline uint32_t A2XX_MH_MMU_CONFIG_PA_W_CLNT_BEHAVIOR(enum adreno_mmu_cln
 }
 
 #define REG_A2XX_MH_MMU_VA_RANGE				0x00000041
+#define A2XX_MH_MMU_VA_RANGE_NUM_64KB_REGIONS__MASK		0x00000fff
+#define A2XX_MH_MMU_VA_RANGE_NUM_64KB_REGIONS__SHIFT		0
+static inline uint32_t A2XX_MH_MMU_VA_RANGE_NUM_64KB_REGIONS(uint32_t val)
+{
+	return ((val) << A2XX_MH_MMU_VA_RANGE_NUM_64KB_REGIONS__SHIFT) & A2XX_MH_MMU_VA_RANGE_NUM_64KB_REGIONS__MASK;
+}
+#define A2XX_MH_MMU_VA_RANGE_VA_BASE__MASK			0xfffff000
+#define A2XX_MH_MMU_VA_RANGE_VA_BASE__SHIFT			12
+static inline uint32_t A2XX_MH_MMU_VA_RANGE_VA_BASE(uint32_t val)
+{
+	return ((val) << A2XX_MH_MMU_VA_RANGE_VA_BASE__SHIFT) & A2XX_MH_MMU_VA_RANGE_VA_BASE__MASK;
+}
 
 #define REG_A2XX_MH_MMU_PT_BASE					0x00000042
 
@@ -331,6 +343,8 @@ static inline uint32_t A2XX_MH_MMU_CONFIG_PA_W_CLNT_BEHAVIOR(enum adreno_mmu_cln
 #define REG_A2XX_MH_MMU_TRAN_ERROR				0x00000044
 
 #define REG_A2XX_MH_MMU_INVALIDATE				0x00000045
+#define A2XX_MH_MMU_INVALIDATE_INVALIDATE_ALL			0x00000001
+#define A2XX_MH_MMU_INVALIDATE_INVALIDATE_TC			0x00000002
 
 #define REG_A2XX_MH_MMU_MPU_BASE				0x00000046
 
@@ -389,12 +403,19 @@ static inline uint32_t A2XX_MH_MMU_CONFIG_PA_W_CLNT_BEHAVIOR(enum adreno_mmu_cln
 #define REG_A2XX_RBBM_READ_ERROR				0x000003b3
 
 #define REG_A2XX_RBBM_INT_CNTL					0x000003b4
+#define A2XX_RBBM_INT_CNTL_RDERR_INT_MASK			0x00000001
+#define A2XX_RBBM_INT_CNTL_DISPLAY_UPDATE_INT_MASK		0x00000002
+#define A2XX_RBBM_INT_CNTL_GUI_IDLE_INT_MASK			0x00080000
 
 #define REG_A2XX_RBBM_INT_STATUS				0x000003b5
 
 #define REG_A2XX_RBBM_INT_ACK					0x000003b6
 
 #define REG_A2XX_MASTER_INT_SIGNAL				0x000003b7
+#define A2XX_MASTER_INT_SIGNAL_MH_INT_STAT			0x00000020
+#define A2XX_MASTER_INT_SIGNAL_SQ_INT_STAT			0x04000000
+#define A2XX_MASTER_INT_SIGNAL_CP_INT_STAT			0x40000000
+#define A2XX_MASTER_INT_SIGNAL_RBBM_INT_STAT			0x80000000
 
 #define REG_A2XX_RBBM_PERIPHID1					0x000003f9
 
@@ -466,6 +487,19 @@ static inline uint32_t A2XX_MH_ARBITER_CONFIG_IN_FLIGHT_LIMIT(uint32_t val)
 #define A2XX_MH_ARBITER_CONFIG_TC_CLNT_ENABLE			0x01000000
 #define A2XX_MH_ARBITER_CONFIG_RB_CLNT_ENABLE			0x02000000
 #define A2XX_MH_ARBITER_CONFIG_PA_CLNT_ENABLE			0x04000000
+
+#define REG_A2XX_MH_INTERRUPT_MASK				0x00000a42
+#define A2XX_MH_INTERRUPT_MASK_AXI_READ_ERROR			0x00000001
+#define A2XX_MH_INTERRUPT_MASK_AXI_WRITE_ERROR			0x00000002
+#define A2XX_MH_INTERRUPT_MASK_MMU_PAGE_FAULT			0x00000004
+
+#define REG_A2XX_MH_INTERRUPT_STATUS				0x00000a43
+
+#define REG_A2XX_MH_INTERRUPT_CLEAR				0x00000a44
+
+#define REG_A2XX_MH_CLNT_INTF_CTRL_CONFIG1			0x00000a54
+
+#define REG_A2XX_MH_CLNT_INTF_CTRL_CONFIG2			0x00000a55
 
 #define REG_A2XX_A220_VSC_BIN_SIZE				0x00000c01
 #define A2XX_A220_VSC_BIN_SIZE_WIDTH__MASK			0x0000001f
@@ -696,8 +730,8 @@ static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(enum adreno_rb_depth_form
 #define A2XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT			12
 static inline uint32_t A2XX_RB_DEPTH_INFO_DEPTH_BASE(uint32_t val)
 {
-	assert(!(val & 0x3ff));
-	return ((val >> 10) << A2XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT) & A2XX_RB_DEPTH_INFO_DEPTH_BASE__MASK;
+	assert(!(val & 0xfff));
+	return ((val >> 12) << A2XX_RB_DEPTH_INFO_DEPTH_BASE__SHIFT) & A2XX_RB_DEPTH_INFO_DEPTH_BASE__MASK;
 }
 
 #define REG_A2XX_A225_RB_COLOR_INFO3				0x00002005

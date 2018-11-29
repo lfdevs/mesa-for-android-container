@@ -113,11 +113,4 @@ if env['platform'] == 'windows':
 else:
     shared_glapi = env.FindIxes(shared_glapi, 'SHLIBPREFIX', 'SHLIBSUFFIX')
 
-# build glapi bridge as a convenience libarary for libgl-xlib/libgl-gdi
-bridge_glapi_objects = mapi_objects(env, 'glapi', 'bridge')
-bridge_glapi = env.ConvenienceLibrary(
-    target = 'glapi_bridge',
-    source = bridge_glapi_objects,
-)
-
-Export(['shared_glapi', 'bridge_glapi'])
+Export(['shared_glapi'])

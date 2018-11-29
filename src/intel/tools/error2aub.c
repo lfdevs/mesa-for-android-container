@@ -207,7 +207,7 @@ main(int argc, char *argv[])
       BO_TYPE_BATCH,
       BO_TYPE_USER,
    } bo_type = BO_TYPE_UNKNOWN;
-   uint64_t bo_addr;
+   uint64_t bo_addr = 0;
 
    char *line = NULL;
    size_t line_size;
@@ -327,6 +327,16 @@ main(int argc, char *argv[])
 
    aub_write_exec(&aub, batch_addr, aub_gtt_size(&aub), I915_EXEC_RENDER);
 
+   free(out_filename);
+   free(line);
+   if(err_file) {
+      fclose(err_file);
+   }
+   if(aub.file) {
+      aub_file_finish(&aub);
+   } else if(aub_file) {
+      fclose(aub_file);
+   }
    return EXIT_SUCCESS;
 }
 

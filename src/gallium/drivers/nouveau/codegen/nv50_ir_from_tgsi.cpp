@@ -2640,7 +2640,7 @@ Converter::getResourceCoords(std::vector<Value *> &coords, int r, int s)
       coords[0] = mkOp1v(OP_MOV, TYPE_U32, getScratch(4, FILE_ADDRESS),
                          coords[0]);
 }
-*/
+
 static inline int
 partitionLoadStore(uint8_t comp[2], uint8_t size[2], uint8_t mask)
 {
@@ -2665,7 +2665,7 @@ partitionLoadStore(uint8_t comp[2], uint8_t size[2], uint8_t mask)
    }
    return n + 1;
 }
-
+*/
 void
 Converter::getImageCoords(std::vector<Value *> &coords, int s)
 {

@@ -552,6 +552,30 @@ nve4_compute_derive_cache_split(struct nvc0_context *nvc0, uint32_t shared_size)
 }
 
 static void
+nve4_compute_setup_buf_cb(struct nvc0_context *nvc0, bool gp100, void *desc)
+{
+   // only user constant buffers 1-6 can be put in the descriptor, the rest are
+   // loaded through global memory
+   for (int i = 1; i <= 6; i++) {
+      if (nvc0->constbuf[5][i].user || !nvc0->constbuf[5][i].u.buf)
+         continue;
+
+      struct nv04_resource *res =
+         nv04_resource(nvc0->constbuf[5][i].u.buf);
+
+      uint32_t base = res->offset + nvc0->constbuf[5][i].offset;
+      uint32_t size = nvc0->constbuf[5][i].size;
+      if (gp100)
+         gp100_cp_launch_desc_set_cb(desc, i, res->bo, base, size);
+      else
+         nve4_cp_launch_desc_set_cb(desc, i, res->bo, base, size);
+   }
+
+   // there is no need to do FLUSH(NVE4_COMPUTE_FLUSH_CB) because
+   // nve4_compute_upload_input() does it later
+}
+
+static void
 nve4_compute_setup_launch_desc(struct nvc0_context *nvc0,
                                struct nve4_cp_launch_desc *desc,
                                const struct pipe_grid_info *info)
@@ -588,6 +612,8 @@ nve4_compute_setup_launch_desc(struct nvc0_context *nvc0,
    }
    nve4_cp_launch_desc_set_cb(desc, 7, screen->uniform_bo,
                               NVC0_CB_AUX_INFO(5), 1 << 11);
+
+   nve4_compute_setup_buf_cb(nvc0, false, desc);
 }
 
 static void
@@ -626,6 +652,8 @@ gp100_compute_setup_launch_desc(struct nvc0_context *nvc0,
    }
    gp100_cp_launch_desc_set_cb(desc, 7, screen->uniform_bo,
                                NVC0_CB_AUX_INFO(5), 1 << 11);
+
+   nve4_compute_setup_buf_cb(nvc0, true, desc);
 }
 
 static inline void *

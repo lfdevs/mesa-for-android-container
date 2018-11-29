@@ -32,6 +32,7 @@
 #include <tegra_drm.h>
 #include <xf86drm.h>
 
+#include "loader/loader.h"
 #include "pipe/p_state.h"
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
@@ -163,68 +164,9 @@ tegra_screen_can_create_resource(struct pipe_screen *pscreen,
    return screen->gpu->can_create_resource(screen->gpu, template);
 }
 
-static int tegra_open_render_node(void)
-{
-   drmDevicePtr *devices, device;
-   int err, render = -ENOENT, fd;
-   unsigned int num, i;
-
-   err = drmGetDevices2(0, NULL, 0);
-   if (err < 0)
-      return err;
-
-   num = err;
-
-   devices = calloc(num, sizeof(*devices));
-   if (!devices)
-      return -ENOMEM;
-
-   err = drmGetDevices2(0, devices, num);
-   if (err < 0) {
-      render = err;
-      goto free;
-   }
-
-   for (i = 0; i < num; i++) {
-      device = devices[i];
-
-      if ((device->available_nodes & (1 << DRM_NODE_RENDER)) &&
-          (device->bustype == DRM_BUS_PLATFORM)) {
-         drmVersionPtr version;
-
-         fd = open(device->nodes[DRM_NODE_RENDER], O_RDWR | O_CLOEXEC);
-         if (fd < 0)
-            continue;
-
-         version = drmGetVersion(fd);
-         if (!version) {
-            close(fd);
-            continue;
-         }
-
-         if (strcmp(version->name, "nouveau") != 0) {
-            drmFreeVersion(version);
-            close(fd);
-            continue;
-         }
-
-         drmFreeVersion(version);
-         render = fd;
-         break;
-      }
-   }
-
-   drmFreeDevices(devices, num);
-
-free:
-   free(devices);
-   return render;
-}
-
 static int tegra_screen_import_resource(struct tegra_screen *screen,
                                         struct tegra_resource *resource)
 {
-   unsigned usage = PIPE_HANDLE_USAGE_READ;
    struct winsys_handle handle;
    boolean status;
    int fd, err;
@@ -234,7 +176,7 @@ static int tegra_screen_import_resource(struct tegra_screen *screen,
    handle.type = WINSYS_HANDLE_TYPE_FD;
 
    status = screen->gpu->resource_get_handle(screen->gpu, NULL, resource->gpu,
-                                             &handle, usage);
+                                             &handle, 0);
    if (!status)
       return -EINVAL;
 
@@ -594,7 +536,7 @@ tegra_screen_create(int fd)
 
    screen->fd = fd;
 
-   screen->gpu_fd = tegra_open_render_node();
+   screen->gpu_fd = loader_open_render_node("nouveau");
    if (screen->gpu_fd < 0) {
       if (errno != ENOENT)
          fprintf(stderr, "failed to open GPU device: %s\n", strerror(errno));

@@ -41,6 +41,7 @@
 void
 fs_visitor::validate()
 {
+#ifndef NDEBUG
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
       if (inst->dst.file == VGRF) {
          fsv_assert(inst->dst.offset / REG_SIZE + regs_written(inst) <=
@@ -54,4 +55,5 @@ fs_visitor::validate()
          }
       }
    }
+#endif
 }

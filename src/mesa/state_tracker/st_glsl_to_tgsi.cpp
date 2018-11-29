@@ -66,6 +66,49 @@
 
 #define MAX_GLSL_TEXTURE_OFFSET 4
 
+#ifndef NDEBUG
+#include "util/u_atomic.h"
+#include "util/simple_mtx.h"
+#include <fstream>
+#include <ios>
+
+/* Prepare to make it possible to specify log file */
+static std::ofstream stats_log;
+
+/* Helper function to check whether we want to write some statistics
+ * of the shader conversion.
+ */
+
+static simple_mtx_t print_stats_mutex = _SIMPLE_MTX_INITIALIZER_NP;
+
+static inline bool print_stats_enabled ()
+{
+   static int stats_enabled = 0;
+
+   if (!stats_enabled) {
+      simple_mtx_lock(&print_stats_mutex);
+      if (!stats_enabled) {
+	 const char *stats_filename = getenv("GLSL_TO_TGSI_PRINT_STATS");
+	 if (stats_filename) {
+	    bool write_header = std::ifstream(stats_filename).fail();
+	    stats_log.open(stats_filename, std::ios_base::out | std::ios_base::app);
+	    stats_enabled = stats_log.good() ? 1 : -1;
+	    if (write_header)
+	       stats_log << "arrays,temps,temps in arrays,total,instructions\n";
+	 } else {
+	    stats_enabled = -1;
+	 }
+      }
+      simple_mtx_unlock(&print_stats_mutex);
+   }
+   return stats_enabled > 0;
+}
+#define PRINT_STATS(X) if (print_stats_enabled()) do { X; } while (false);
+#else
+#define PRINT_STATS(X)
+#endif
+
+
 static unsigned is_precise(const ir_variable *ir)
 {
    if (!ir)
@@ -194,6 +237,7 @@ public:
    int images_used;
    enum tgsi_texture_type image_targets[PIPE_MAX_SHADER_IMAGES];
    enum pipe_format image_formats[PIPE_MAX_SHADER_IMAGES];
+   bool image_wr[PIPE_MAX_SHADER_IMAGES];
    bool indirect_addr_consts;
    int wpos_transform_const;
 
@@ -339,6 +383,7 @@ public:
    void copy_propagate(void);
    int eliminate_dead_code(void);
 
+   void split_arrays(void);
    void merge_two_dsts(void);
    void merge_registers(void);
    void renumber_registers(void);
@@ -346,6 +391,8 @@ public:
    void emit_block_mov(ir_assignment *ir, const struct glsl_type *type,
                        st_dst_reg *l, st_src_reg *r,
                        st_src_reg *cond, bool cond_swap);
+
+   void print_stats();
 
    void *mem_ctx;
 };
@@ -2041,7 +2088,7 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
             emit_asm(ir, TGSI_OPCODE_USHR, st_dst_reg(index_reg), offset,
                  st_src_reg_for_int(4));
             cbuf.reladdr = ralloc(mem_ctx, st_src_reg);
-            memcpy(cbuf.reladdr, &index_reg, sizeof(index_reg));
+            *cbuf.reladdr = index_reg;
          }
 
          if (const_uniform_block) {
@@ -2050,7 +2097,7 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
          } else {
             /* Relative/variable constant buffer */
             cbuf.reladdr2 = ralloc(mem_ctx, st_src_reg);
-            memcpy(cbuf.reladdr2, &op[0], sizeof(st_src_reg));
+            *cbuf.reladdr2 = op[0];
          }
          cbuf.has_index2 = true;
 
@@ -2761,12 +2808,12 @@ glsl_to_tgsi_visitor::visit(ir_dereference_array *ir)
 
       if (is_2D) {
          src.reladdr2 = ralloc(mem_ctx, st_src_reg);
-         memcpy(src.reladdr2, &index_reg, sizeof(index_reg));
+         *src.reladdr2 = index_reg;
          src.index2D = 0;
          src.has_index2 = true;
       } else {
          src.reladdr = ralloc(mem_ctx, st_src_reg);
-         memcpy(src.reladdr, &index_reg, sizeof(index_reg));
+         *src.reladdr = index_reg;
       }
    }
 
@@ -3682,7 +3729,8 @@ glsl_to_tgsi_visitor::visit_shared_intrinsic(ir_call *ir)
 static void
 get_image_qualifiers(ir_dereference *ir, const glsl_type **type,
                      bool *memory_coherent, bool *memory_volatile,
-                     bool *memory_restrict, unsigned *image_format)
+                     bool *memory_restrict, bool *memory_read_only,
+                     unsigned *image_format)
 {
 
    switch (ir->ir_type) {
@@ -3698,6 +3746,8 @@ get_image_qualifiers(ir_dereference *ir, const glsl_type **type,
          struct_type->fields.structure[fild_idx].memory_volatile;
       *memory_restrict =
          struct_type->fields.structure[fild_idx].memory_restrict;
+      *memory_read_only =
+         struct_type->fields.structure[fild_idx].memory_read_only;
       *image_format =
          struct_type->fields.structure[fild_idx].image_format;
       break;
@@ -3707,7 +3757,7 @@ get_image_qualifiers(ir_dereference *ir, const glsl_type **type,
       ir_dereference_array *deref_arr = ir->as_dereference_array();
       get_image_qualifiers((ir_dereference *)deref_arr->array, type,
                            memory_coherent, memory_volatile, memory_restrict,
-                           image_format);
+                           memory_read_only, image_format);
       break;
    }
 
@@ -3718,6 +3768,7 @@ get_image_qualifiers(ir_dereference *ir, const glsl_type **type,
       *memory_coherent = var->data.memory_coherent;
       *memory_volatile = var->data.memory_volatile;
       *memory_restrict = var->data.memory_restrict;
+      *memory_read_only = var->data.memory_read_only;
       *image_format = var->data.image_format;
       break;
    }
@@ -3735,12 +3786,13 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
    ir_dereference *img = (ir_dereference *)param;
    const ir_variable *imgvar = img->variable_referenced();
    unsigned sampler_array_size = 1, sampler_base = 0;
-   bool memory_coherent = false, memory_volatile = false, memory_restrict = false;
+   bool memory_coherent = false, memory_volatile = false,
+        memory_restrict = false, memory_read_only = false;
    unsigned image_format = 0;
    const glsl_type *type = NULL;
 
    get_image_qualifiers(img, &type, &memory_coherent, &memory_volatile,
-                        &memory_restrict, &image_format);
+                        &memory_restrict, &memory_read_only, &image_format);
 
    st_src_reg reladdr;
    st_src_reg image(PROGRAM_IMAGE, 0, GLSL_TYPE_UINT);
@@ -3879,6 +3931,7 @@ glsl_to_tgsi_visitor::visit_image_intrinsic(ir_call *ir)
    inst->tex_target = type->sampler_index();
    inst->image_format = st_mesa_format_to_pipe_format(st_context(ctx),
          _mesa_get_shader_image_format(image_format));
+   inst->read_only = memory_read_only;
 
    if (memory_coherent)
       inst->buffer_access |= TGSI_MEMORY_COHERENT;
@@ -4019,6 +4072,7 @@ glsl_to_tgsi_visitor::visit(ir_call *ir)
    case ir_intrinsic_generic_atomic_comp_swap:
    case ir_intrinsic_begin_invocation_interlock:
    case ir_intrinsic_end_invocation_interlock:
+   case ir_intrinsic_begin_fragment_shader_ordering:
       unreachable("Invalid intrinsic");
    }
 }
@@ -4096,8 +4150,7 @@ glsl_to_tgsi_visitor::get_deref_offsets(ir_dereference *ir,
    unsigned location = 0;
    ir_variable *var = ir->variable_referenced();
 
-   memset(reladdr, 0, sizeof(*reladdr));
-   reladdr->file = PROGRAM_UNDEFINED;
+   reladdr->reset();
 
    *base = 0;
    *array_size = 1;
@@ -4606,6 +4659,7 @@ glsl_to_tgsi_visitor::glsl_to_tgsi_visitor()
    ctx = NULL;
    prog = NULL;
    precise = 0;
+   need_uarl = false;
    shader_program = NULL;
    shader = NULL;
    options = NULL;
@@ -4679,6 +4733,7 @@ count_resources(glsl_to_tgsi_visitor *v, gl_program *prog)
                v->image_targets[idx] =
                   st_translate_texture_target(inst->tex_target, false);
                v->image_formats[idx] = inst->image_format;
+               v->image_wr[idx] = !inst->read_only;
             }
          }
       }
@@ -5434,6 +5489,107 @@ glsl_to_tgsi_visitor::merge_two_dsts(void)
    }
 }
 
+template <typename st_reg>
+void test_indirect_access(const st_reg& reg, bool *has_indirect_access)
+{
+   if (reg.file == PROGRAM_ARRAY) {
+      if (reg.reladdr || reg.reladdr2 || reg.has_index2) {
+	 has_indirect_access[reg.array_id] = true;
+	 if (reg.reladdr)
+	    test_indirect_access(*reg.reladdr, has_indirect_access);
+	 if (reg.reladdr2)
+	    test_indirect_access(*reg.reladdr2, has_indirect_access);
+      }
+   }
+}
+
+template <typename st_reg>
+void remap_array(st_reg& reg, const int *array_remap_info,
+		 const bool *has_indirect_access)
+{
+   if (reg.file == PROGRAM_ARRAY) {
+      if (!has_indirect_access[reg.array_id]) {
+	 reg.file = PROGRAM_TEMPORARY;
+	 reg.index = reg.index + array_remap_info[reg.array_id];
+	 reg.array_id = 0;
+      } else {
+	 reg.array_id = array_remap_info[reg.array_id];
+      }
+
+      if (reg.reladdr)
+	 remap_array(*reg.reladdr, array_remap_info, has_indirect_access);
+
+      if (reg.reladdr2)
+	 remap_array(*reg.reladdr2, array_remap_info, has_indirect_access);
+   }
+}
+
+/* One-dimensional arrays whose elements are only accessed directly are
+ * replaced by an according set of temporary registers that then can become
+ * subject to further optimization steps like copy propagation and
+ * register merging.
+ */
+void
+glsl_to_tgsi_visitor::split_arrays(void)
+{
+   if (!next_array)
+      return;
+
+   bool *has_indirect_access = rzalloc_array(mem_ctx, bool, next_array + 1);
+
+   foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
+      for (unsigned j = 0; j < num_inst_src_regs(inst); j++)
+	 test_indirect_access(inst->src[j], has_indirect_access);
+
+      for (unsigned j = 0; j < inst->tex_offset_num_offset; j++)
+	 test_indirect_access(inst->tex_offsets[j], has_indirect_access);
+
+      for (unsigned j = 0; j < num_inst_dst_regs(inst); j++)
+	 test_indirect_access(inst->dst[j], has_indirect_access);
+
+      test_indirect_access(inst->resource, has_indirect_access);
+   }
+
+   unsigned array_offset = 0;
+   unsigned n_remaining_arrays = 0;
+
+   /* Double use: For arrays that get split this value will contain
+    * the base index of the temporary registers this array is replaced
+    * with. For arrays that remain it contains the new array ID.
+    */
+   int *array_remap_info = rzalloc_array(has_indirect_access, int,
+					 next_array + 1);
+
+   for (unsigned i = 1; i <= next_array; ++i) {
+      if (!has_indirect_access[i]) {
+	 array_remap_info[i] = this->next_temp + array_offset;
+	 array_offset += array_sizes[i - 1];
+      } else {
+	 array_sizes[n_remaining_arrays] = array_sizes[i-1];
+	 array_remap_info[i] = ++n_remaining_arrays;
+      }
+   }
+
+   if (next_array !=  n_remaining_arrays) {
+      foreach_in_list(glsl_to_tgsi_instruction, inst, &this->instructions) {
+	 for (unsigned j = 0; j < num_inst_src_regs(inst); j++)
+	    remap_array(inst->src[j], array_remap_info, has_indirect_access);
+
+	 for (unsigned j = 0; j < inst->tex_offset_num_offset; j++)
+	    remap_array(inst->tex_offsets[j], array_remap_info, has_indirect_access);
+
+	 for (unsigned j = 0; j < num_inst_dst_regs(inst); j++) {
+	    remap_array(inst->dst[j], array_remap_info, has_indirect_access);
+	 }
+	 remap_array(inst->resource, array_remap_info, has_indirect_access);
+      }
+   }
+
+   ralloc_free(has_indirect_access);
+   this->next_temp += array_offset;
+   next_array = n_remaining_arrays;
+}
+
 /* Merges temporary registers together where possible to reduce the number of
  * registers needed to run a program.
  *
@@ -5442,19 +5598,35 @@ glsl_to_tgsi_visitor::merge_two_dsts(void)
 void
 glsl_to_tgsi_visitor::merge_registers(void)
 {
-   struct lifetime *lifetimes =
-         rzalloc_array(mem_ctx, struct lifetime, this->next_temp);
+   class array_live_range *arr_live_ranges = NULL;
 
-   if (get_temp_registers_required_lifetimes(mem_ctx, &this->instructions,
-                                             this->next_temp, lifetimes)) {
-      struct rename_reg_pair *renames =
-            rzalloc_array(mem_ctx, struct rename_reg_pair, this->next_temp);
-      get_temp_registers_remapping(mem_ctx, this->next_temp, lifetimes, renames);
-      rename_temp_registers(renames);
-      ralloc_free(renames);
+   struct register_live_range *reg_live_ranges =
+	 rzalloc_array(mem_ctx, struct register_live_range, this->next_temp);
+
+   if (this->next_array > 0) {
+      arr_live_ranges = new array_live_range[this->next_array];
+      for (unsigned i = 0; i < this->next_array; ++i)
+         arr_live_ranges[i] = array_live_range(i+1, this->array_sizes[i]);
    }
 
-   ralloc_free(lifetimes);
+
+   if (get_temp_registers_required_live_ranges(reg_live_ranges, &this->instructions,
+					       this->next_temp, reg_live_ranges,
+					       this->next_array, arr_live_ranges)) {
+      struct rename_reg_pair *renames =
+	    rzalloc_array(reg_live_ranges, struct rename_reg_pair, this->next_temp);
+      get_temp_registers_remapping(reg_live_ranges, this->next_temp,
+				   reg_live_ranges, renames);
+      rename_temp_registers(renames);
+
+      this->next_array =  merge_arrays(this->next_array, this->array_sizes,
+				       &this->instructions, arr_live_ranges);
+   }
+
+   if (arr_live_ranges)
+      delete[] arr_live_ranges;
+
+   ralloc_free(reg_live_ranges);
 }
 
 /* Reassign indices to temporary registers by reusing unused indices created
@@ -5487,6 +5659,27 @@ glsl_to_tgsi_visitor::renumber_registers(void)
    ralloc_free(first_writes);
 }
 
+#ifndef NDEBUG
+void glsl_to_tgsi_visitor::print_stats()
+{
+   int narray_registers = 0;
+   for (unsigned i = 0; i < this->next_array; ++i)
+      narray_registers += this->array_sizes[i];
+
+   int ninstructions = 0;
+   foreach_in_list(glsl_to_tgsi_instruction, inst, &instructions) {
+      ++ninstructions;
+   }
+
+   simple_mtx_lock(&print_stats_mutex);
+   stats_log << next_array << ", "
+	     << next_temp << ", "
+	     << narray_registers << ", "
+	     << next_temp + narray_registers << ", "
+	     << ninstructions << "\n";
+   simple_mtx_unlock(&print_stats_mutex);
+}
+#endif
 /* ------------------------- TGSI conversion stuff -------------------------- */
 
 /**
@@ -5605,6 +5798,7 @@ _mesa_sysval_to_semantic(unsigned sysval)
    case SYSTEM_VALUE_LOCAL_INVOCATION_INDEX:
    case SYSTEM_VALUE_GLOBAL_INVOCATION_ID:
    case SYSTEM_VALUE_VERTEX_CNT:
+   case SYSTEM_VALUE_VARYING_COORD:
    default:
       assert(!"Unexpected SYSTEM_VALUE_ enum");
       return TGSI_SEMANTIC_COUNT;
@@ -6806,7 +7000,8 @@ st_translate_program(
          t->images[i] = ureg_DECL_image(ureg, i,
                                         program->image_targets[i],
                                         program->image_formats[i],
-                                        true, false);
+                                        program->image_wr[i],
+                                        false);
       }
    }
 
@@ -6942,8 +7137,17 @@ get_mesa_program_tgsi(struct gl_context *ctx,
    while (v->eliminate_dead_code());
 
    v->merge_two_dsts();
-   if (!skip_merge_registers)
+
+   if (!skip_merge_registers) {
+      v->split_arrays();
+      v->copy_propagate();
+      while (v->eliminate_dead_code());
+
       v->merge_registers();
+      v->copy_propagate();
+      while (v->eliminate_dead_code());
+   }
+
    v->renumber_registers();
 
    /* Write the END instruction. */
@@ -6962,7 +7166,7 @@ get_mesa_program_tgsi(struct gl_context *ctx,
    _mesa_copy_linked_program_data(shader_program, shader);
    shrink_array_declarations(v->inputs, v->num_inputs,
                              &prog->info.inputs_read,
-                             prog->info.vs.double_inputs_read,
+                             prog->DualSlotInputs,
                              &prog->info.patch_inputs_read);
    shrink_array_declarations(v->outputs, v->num_outputs,
                              &prog->info.outputs_written, 0ULL,
@@ -7031,6 +7235,8 @@ get_mesa_program_tgsi(struct gl_context *ctx,
       assert(!"should not be reached");
       return NULL;
    }
+
+   PRINT_STATS(v->print_stats());
 
    return prog;
 }

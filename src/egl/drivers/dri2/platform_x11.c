@@ -898,10 +898,6 @@ dri2_x11_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
    xcb_dri2_swap_buffers_reply_t *reply;
    int64_t swap_count = -1;
 
-   /* No-op for a pixmap or pbuffer surface */
-   if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
-      return 0;
-
    if (draw->SwapBehavior == EGL_BUFFER_PRESERVED || !dri2_dpy->swap_available) {
       swap_count = dri2_copy_region(drv, disp, draw, dri2_surf->region) ? 0 : -1;
    } else {
@@ -915,7 +911,7 @@ dri2_x11_swap_buffers_msc(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw,
       reply = xcb_dri2_swap_buffers_reply(dri2_dpy->conn, cookie, NULL);
 
       if (reply) {
-         swap_count = (((int64_t)reply->swap_hi) << 32) | reply->swap_lo;
+         swap_count = combine_u32_into_u64(reply->swap_hi, reply->swap_lo);
          free(reply);
       }
    }
@@ -1189,7 +1185,8 @@ static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .set_damage_region = dri2_fallback_set_damage_region,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,
    .post_sub_buffer = dri2_fallback_post_sub_buffer,
-   .copy_buffers = dri2_x11_copy_buffers,
+   /* XXX: should really implement this since X11 has pixmaps */
+   .copy_buffers = dri2_fallback_copy_buffers,
    .query_buffer_age = dri2_fallback_query_buffer_age,
    .query_surface = dri2_query_surface,
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
@@ -1274,6 +1271,7 @@ disconnect:
 static EGLBoolean
 dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
 
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
@@ -1283,6 +1281,14 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
    dri2_dpy->fd = -1;
    if (!dri2_get_xcb_connection(drv, disp, dri2_dpy))
       goto cleanup;
+
+   dev = _eglAddDevice(dri2_dpy->fd, true);
+   if (!dev) {
+      _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+      goto cleanup;
+   }
+
+   disp->Device = dev;
 
    /*
     * Every hardware driver_name is set using strdup. Doing the same in
@@ -1352,6 +1358,7 @@ static const __DRIextension *dri3_image_loader_extensions[] = {
 static EGLBoolean
 dri2_initialize_x11_dri3(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
 
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
@@ -1364,6 +1371,14 @@ dri2_initialize_x11_dri3(_EGLDriver *drv, _EGLDisplay *disp)
 
    if (!dri3_x11_connect(dri2_dpy))
       goto cleanup;
+
+   dev = _eglAddDevice(dri2_dpy->fd, false);
+   if (!dev) {
+      _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+      goto cleanup;
+   }
+
+   disp->Device = dev;
 
    if (!dri2_load_driver_dri3(disp))
       goto cleanup;
@@ -1450,6 +1465,7 @@ static const __DRIextension *dri2_loader_extensions[] = {
 static EGLBoolean
 dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
 
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
@@ -1462,6 +1478,14 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 
    if (!dri2_x11_connect(dri2_dpy))
       goto cleanup;
+
+   dev = _eglAddDevice(dri2_dpy->fd, false);
+   if (!dev) {
+      _eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+      goto cleanup;
+   }
+
+   disp->Device = dev;
 
    if (!dri2_load_driver(disp))
       goto cleanup;

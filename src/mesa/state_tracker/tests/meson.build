@@ -35,6 +35,20 @@ test(
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
       libmesa_util,
     ],
-    dependencies : [idep_gtest, dep_thread, dep_llvm]
+    dependencies : [idep_gtest, dep_thread]
+  )
+)
+
+test(
+  'st-array-merge-test',
+  executable(
+    'st_array_merge_test',
+    ['test_glsl_to_tgsi_array_merge.cpp', ir_expression_operation_h],
+    include_directories : inc_common,
+    link_with : [
+      libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
+      libmesa_util,
+    ],
+    dependencies : [idep_gtest, dep_thread]
   )
 )

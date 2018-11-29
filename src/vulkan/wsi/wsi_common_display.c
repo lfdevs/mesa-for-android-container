@@ -802,9 +802,7 @@ wsi_create_display_surface(VkInstance instance,
 static VkResult
 wsi_display_surface_get_support(VkIcdSurfaceBase *surface,
                                 struct wsi_device *wsi_device,
-                                const VkAllocationCallbacks *allocator,
                                 uint32_t queueFamilyIndex,
-                                int local_fd,
                                 VkBool32* pSupported)
 {
    *pSupported = VK_TRUE;
@@ -933,6 +931,28 @@ wsi_display_surface_get_present_modes(VkIcdSurfaceBase *surface,
    }
 
    return vk_outarray_status(&conn);
+}
+
+static VkResult
+wsi_display_surface_get_present_rectangles(VkIcdSurfaceBase *surface_base,
+                                           struct wsi_device *wsi_device,
+                                           uint32_t* pRectCount,
+                                           VkRect2D* pRects)
+{
+   VkIcdSurfaceDisplay *surface = (VkIcdSurfaceDisplay *) surface_base;
+   wsi_display_mode *mode = wsi_display_mode_from_handle(surface->displayMode);
+   VK_OUTARRAY_MAKE(out, pRects, pRectCount);
+
+   if (wsi_device_matches_drm_fd(wsi_device, mode->connector->wsi->fd)) {
+      vk_outarray_append(&out, rect) {
+         *rect = (VkRect2D) {
+            .offset = { 0, 0 },
+            .extent = { mode->hdisplay, mode->vdisplay },
+         };
+      }
+   }
+
+   return vk_outarray_status(&out);
 }
 
 static void
@@ -1297,7 +1317,7 @@ wsi_display_crtc_solo(struct wsi_display *wsi,
  * which is currently idle.
  */
 static uint32_t
-wsi_display_select_crtc(struct wsi_display_connector *connector,
+wsi_display_select_crtc(const struct wsi_display_connector *connector,
                         drmModeResPtr mode_res,
                         drmModeConnectorPtr drm_connector)
 {
@@ -1517,7 +1537,7 @@ wsi_register_vblank_event(struct wsi_display_fence *fence,
                                      flags,
                                      frame_requested,
                                      frame_queued,
-                                     (uint64_t) fence);
+                                     (uintptr_t) fence);
 
       if (!ret)
          return VK_SUCCESS;
@@ -1691,7 +1711,6 @@ wsi_display_surface_create_swapchain(
    VkIcdSurfaceBase *icd_surface,
    VkDevice device,
    struct wsi_device *wsi_device,
-   int local_fd,
    const VkSwapchainCreateInfoKHR *create_info,
    const VkAllocationCallbacks *allocator,
    struct wsi_swapchain **swapchain_out)
@@ -1811,6 +1830,7 @@ wsi_display_init_wsi(struct wsi_device *wsi_device,
    wsi->base.get_formats = wsi_display_surface_get_formats;
    wsi->base.get_formats2 = wsi_display_surface_get_formats2;
    wsi->base.get_present_modes = wsi_display_surface_get_present_modes;
+   wsi->base.get_present_rectangles = wsi_display_surface_get_present_rectangles;
    wsi->base.create_swapchain = wsi_display_surface_create_swapchain;
 
    wsi_device->wsi[VK_ICD_WSI_PLATFORM_DISPLAY] = &wsi->base;
@@ -2348,7 +2368,7 @@ wsi_get_randr_output_display(VkPhysicalDevice physical_device,
    if (connector)
       *display = wsi_display_connector_to_handle(connector);
    else
-      *display = NULL;
+      *display = VK_NULL_HANDLE;
    return VK_SUCCESS;
 }
 

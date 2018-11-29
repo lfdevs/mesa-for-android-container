@@ -29,6 +29,11 @@
 #include <stdio.h>
 
 #include "dev/gen_device_info.h"
+#include "common/gen_gem.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct aub_ppgtt_table {
    uint64_t phys_addr;
@@ -63,23 +68,7 @@ static inline void
 aub_write_reloc(const struct gen_device_info *devinfo, void *p, uint64_t v)
 {
    if (devinfo->gen >= 8) {
-      /* From the Broadwell PRM Vol. 2a,
-       * MI_LOAD_REGISTER_MEM::MemoryAddress:
-       *
-       *   "This field specifies the address of the memory
-       *   location where the register value specified in the
-       *   DWord above will read from.  The address specifies
-       *   the DWord location of the data. Range =
-       *   GraphicsVirtualAddress[63:2] for a DWord register
-       *   GraphicsAddress [63:48] are ignored by the HW and
-       *   assumed to be in correct canonical form [63:48] ==
-       *   [47]."
-       *
-       * In practice, this will always mean the top bits are zero
-       * because of the GTT size limitation of the aubdump tool.
-       */
-      const int shift = 63 - 47;
-      *(uint64_t *)p = (((int64_t)v) << shift) >> shift;
+      *(uint64_t *)p = gen_canonical_address(v);
    } else {
       *(uint32_t *)p = v;
    }
@@ -92,5 +81,9 @@ void aub_write_trace_block(struct aub_file *aub,
                            uint32_t size, uint64_t gtt_offset);
 void aub_write_exec(struct aub_file *aub, uint64_t batch_addr,
                     uint64_t offset, int ring_flag);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* INTEL_AUB_WRITE */

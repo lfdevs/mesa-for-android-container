@@ -360,8 +360,13 @@ brw_dp_surface_desc(const struct gen_device_info *devinfo,
                     unsigned msg_control)
 {
    assert(devinfo->gen >= 7);
-   return (SET_BITS(msg_control, 13, 8) |
-           SET_BITS(msg_type, 17, 14));
+   if (devinfo->gen >= 8) {
+      return (SET_BITS(msg_control, 13, 8) |
+              SET_BITS(msg_type, 18, 14));
+   } else {
+      return (SET_BITS(msg_control, 13, 8) |
+              SET_BITS(msg_type, 17, 14));
+   }
 }
 
 /**
@@ -369,7 +374,7 @@ brw_dp_surface_desc(const struct gen_device_info *devinfo,
  * interpolator function controls.
  */
 static inline uint32_t
-brw_pixel_interp_desc(const struct gen_device_info *devinfo,
+brw_pixel_interp_desc(UNUSED const struct gen_device_info *devinfo,
                       unsigned msg_type,
                       bool noperspective,
                       unsigned simd_mode,
@@ -571,6 +576,17 @@ brw_untyped_atomic(struct brw_codegen *p,
                    unsigned msg_length,
                    bool response_expected,
                    bool header_present);
+
+void
+brw_untyped_atomic_float(struct brw_codegen *p,
+                         struct brw_reg dst,
+                         struct brw_reg payload,
+                         struct brw_reg surface,
+                         unsigned atomic_op,
+                         unsigned msg_length,
+                         bool response_expected,
+                         bool header_present);
+
 
 void
 brw_untyped_surface_read(struct brw_codegen *p,

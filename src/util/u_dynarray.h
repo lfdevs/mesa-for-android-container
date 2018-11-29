@@ -102,6 +102,15 @@ util_dynarray_resize(struct util_dynarray *buf, unsigned newsize)
    return p;
 }
 
+static inline void
+util_dynarray_clone(struct util_dynarray *buf, void *mem_ctx,
+                    struct util_dynarray *from_buf)
+{
+   util_dynarray_init(buf, mem_ctx);
+   util_dynarray_resize(buf, from_buf->size);
+   memcpy(buf->data, from_buf->data, from_buf->size);
+}
+
 static inline void *
 util_dynarray_grow(struct util_dynarray *buf, int diff)
 {
@@ -125,7 +134,7 @@ util_dynarray_trim(struct util_dynarray *buf)
          } else {
             free(buf->data);
          }
-         buf->data = 0;
+         buf->data = NULL;
          buf->capacity = 0;
       }
    }
@@ -140,10 +149,17 @@ util_dynarray_trim(struct util_dynarray *buf)
 #define util_dynarray_element(buf, type, idx) ((type*)(buf)->data + (idx))
 #define util_dynarray_begin(buf) ((buf)->data)
 #define util_dynarray_end(buf) ((void*)util_dynarray_element((buf), char, (buf)->size))
+#define util_dynarray_num_elements(buf, type) ((buf)->size / sizeof(type))
 
 #define util_dynarray_foreach(buf, type, elem) \
    for (type *elem = (type *)(buf)->data; \
         elem < (type *)((char *)(buf)->data + (buf)->size); elem++)
+
+#define util_dynarray_foreach_reverse(buf, type, elem)          \
+   if ((buf)->size > 0)                                         \
+      for (type *elem = util_dynarray_top_ptr(buf, type);       \
+           elem;                                                \
+           elem = elem > (type *)(buf)->data ? elem - 1 : NULL)
 
 #define util_dynarray_delete_unordered(buf, type, v)                    \
    do {                                                                 \

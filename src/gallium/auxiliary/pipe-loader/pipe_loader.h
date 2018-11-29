@@ -135,6 +135,9 @@ pipe_loader_release(struct pipe_loader_device **devs, int ndev);
  *
  * This function is platform-specific.
  *
+ * Function does not take ownership of the fd, but duplicates it locally.
+ * The local fd is closed during pipe_loader_release.
+ *
  * \sa pipe_loader_probe
  */
 bool
@@ -145,6 +148,9 @@ pipe_loader_sw_probe_dri(struct pipe_loader_device **devs,
  * Initialize a kms backed sw device given an fd.
  *
  * This function is platform-specific.
+ *
+ * Function does not take ownership of the fd, but duplicates it locally.
+ * The local fd is closed during pipe_loader_release.
  *
  * \sa pipe_loader_probe
  */

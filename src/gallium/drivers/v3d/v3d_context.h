@@ -301,15 +301,7 @@ struct v3d_job {
         bool needs_flush;
 
         /**
-         * Set if there is a nonzero address for OCCLUSION_QUERY_COUNTER.  If
-         * so, we need to disable it and flush before ending the CL, to keep
-         * the next tile from starting with it enabled.
-         */
-        bool oq_enabled;
-
-        /**
-         * Set when a packet enabling TF on all further primitives has been
-         * emitted.
+         * Set if a packet enabling TF has been emitted in the job (V3D 4.x).
          */
         bool tf_enabled;
 

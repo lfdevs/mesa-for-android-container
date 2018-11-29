@@ -231,6 +231,14 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
         user_warn(OffsetToLock != 0);
     }
 
+    /* Write out of bound seems to have to be taken into account for these.
+     * TODO: Do more tests (is it only at buffer first lock ? etc).
+     * Since these buffers are supposed to be locked once and never
+     * writen again (MANAGED or DYNAMIC is used for the other uses cases),
+     * performance should be unaffected. */
+    if (!(This->base.usage & D3DUSAGE_DYNAMIC) && This->base.pool != D3DPOOL_MANAGED)
+        SizeToLock = This->size - OffsetToLock;
+
     u_box_1d(OffsetToLock, SizeToLock, &box);
 
     if (This->base.pool == D3DPOOL_MANAGED) {

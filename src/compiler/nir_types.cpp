@@ -51,6 +51,15 @@ glsl_without_array(const glsl_type *type)
 }
 
 const glsl_type *
+glsl_without_array_or_matrix(const glsl_type *type)
+{
+   type = type->without_array();
+   if (type->is_matrix())
+      type = type->column_type();
+   return type;
+}
+
+const glsl_type *
 glsl_get_array_instance(const glsl_type *type,
                         unsigned array_size)
 {
@@ -163,6 +172,13 @@ glsl_get_sampler_target(const struct glsl_type *type)
    return type->sampler_index();
 }
 
+int
+glsl_get_sampler_coordinate_components(const struct glsl_type *type)
+{
+   assert(glsl_type_is_sampler(type) || glsl_type_is_image(type));
+   return type->coordinate_components();
+}
+
 unsigned
 glsl_get_record_location_offset(const struct glsl_type *type,
                                 unsigned length)
@@ -228,6 +244,12 @@ bool
 glsl_type_is_array_of_arrays(const struct glsl_type *type)
 {
    return type->is_array_of_arrays();
+}
+
+bool
+glsl_type_is_array_or_matrix(const struct glsl_type *type)
+{
+   return type->is_array() || type->is_matrix();
 }
 
 bool

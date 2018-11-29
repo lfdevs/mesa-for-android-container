@@ -28,7 +28,7 @@ files_swr_common += custom_target(
     'gen_BackendPixelRate.hpp',
   ],
   command : [
-    prog_python2, '@INPUT@',
+    prog_python, '@INPUT@',
     '--outdir', '@OUTDIR@',
     '--dim', '5', '2', '3', '2', '2', '2',
     '--numfiles', '4',
@@ -46,7 +46,7 @@ files_swr_common += custom_target(
     'gen_rasterizer.hpp',
   ],
   command : [
-    prog_python2, '@INPUT@',
+    prog_python, '@INPUT@',
     '--outdir', '@OUTDIR@',
     '--rast',
     '--dim', '5', '2', '2', '3', '5', '2',

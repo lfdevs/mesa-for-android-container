@@ -262,5 +262,9 @@ NineVertexShader9_new( struct NineDevice9 *pDevice,
                        struct NineVertexShader9 **ppOut,
                        const DWORD *pFunction, void *cso )
 {
-    NINE_DEVICE_CHILD_NEW(VertexShader9, ppOut, pDevice, pFunction, cso);
+    if (cso) {
+        NINE_DEVICE_CHILD_BIND_NEW(VertexShader9, ppOut, pDevice, pFunction, cso);
+    } else {
+        NINE_DEVICE_CHILD_NEW(VertexShader9, ppOut, pDevice, pFunction, cso);
+    }
 }

@@ -3,7 +3,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 
 egd_tables.h: $(srcdir)/egd_tables.py $(srcdir)/evergreend.h
 	$(AM_V_at)$(MKDIR_P) $(@D)
-	$(AM_V_GEN) $(PYTHON2) $(srcdir)/egd_tables.py $(srcdir)/evergreend.h > $@
+	$(AM_V_GEN) $(PYTHON) $(srcdir)/egd_tables.py $(srcdir)/evergreend.h > $@
 
 BUILT_SOURCES = $(R600_GENERATED_FILES)
 AM_CFLAGS = \

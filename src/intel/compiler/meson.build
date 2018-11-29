@@ -77,6 +77,7 @@ libintel_compiler_files = files(
   'brw_nir_analyze_ubo_ranges.c',
   'brw_nir_attribute_workarounds.c',
   'brw_nir_lower_cs_intrinsics.c',
+  'brw_nir_lower_image_load_store.c',
   'brw_nir_opt_peephole_ffma.c',
   'brw_nir_tcs_workarounds.c',
   'brw_packed_float.c',
@@ -122,7 +123,7 @@ brw_nir_trig = custom_target(
   input : 'brw_nir_trig_workarounds.py',
   output : 'brw_nir_trig_workarounds.c',
   command : [
-    prog_python2, '@INPUT@',
+    prog_python, '@INPUT@',
     '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
   ],
   depend_files : nir_algebraic_py,

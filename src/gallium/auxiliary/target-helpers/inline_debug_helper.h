@@ -38,8 +38,8 @@ debug_screen_wrap(struct pipe_screen *screen)
    return screen;
 }
 
-#endif
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif // INLINE_DEBUG_HELPER_H

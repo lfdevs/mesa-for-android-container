@@ -87,6 +87,7 @@ enum ring_type {
     RING_UVD_ENC,
     RING_VCN_DEC,
     RING_VCN_ENC,
+    RING_VCN_JPEG,
     RING_LAST,
 };
 
@@ -256,6 +257,14 @@ struct radeon_winsys {
      */
     void (*query_info)(struct radeon_winsys *ws,
                        struct radeon_info *info);
+
+    /**
+     * A hint for the winsys that it should pin its execution threads to
+     * a group of cores sharing a specific L3 cache if the CPU has multiple
+     * L3 caches. This is needed for good multithreading performance on
+     * AMD Zen CPUs.
+     */
+    void (*pin_threads_to_L3_cache)(struct radeon_winsys *ws, unsigned cache);
 
     /**************************************************************************
      * Buffer management. Buffer attributes are mostly fixed over its lifetime.

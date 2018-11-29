@@ -9067,7 +9067,7 @@ GEN8_SAMPLER_INSTDONE_pack(__attribute__((unused)) __gen_user_data *data,
 #define GEN8_L3CNTLREG_num                0x7034
 #define GEN8_L3CNTLREG_length                  1
 struct GEN8_L3CNTLREG {
-   uint32_t                             SLMEnable;
+   bool                                 SLMEnable;
    uint32_t                             URBAllocation;
    uint32_t                             ROAllocation;
    uint32_t                             DCAllocation;

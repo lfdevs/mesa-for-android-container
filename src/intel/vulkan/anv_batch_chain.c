@@ -89,7 +89,6 @@ anv_reloc_list_init_clone(struct anv_reloc_list *list,
              list->array_length * sizeof(*list->relocs));
       memcpy(list->reloc_bos, other_list->reloc_bos,
              list->array_length * sizeof(*list->reloc_bos));
-      struct set_entry *entry;
       set_foreach(other_list->deps, entry) {
          _mesa_set_add_pre_hashed(list->deps, entry->hash, entry->key);
       }
@@ -205,7 +204,6 @@ anv_reloc_list_append(struct anv_reloc_list *list,
 
    list->num_relocs += other->num_relocs;
 
-   struct set_entry *entry;
    set_foreach(other->deps, entry) {
       _mesa_set_add_pre_hashed(list->deps, entry->hash, entry->key);
    }
@@ -1135,7 +1133,6 @@ anv_execbuf_add_bo(struct anv_execbuf *exec,
          if (bos == NULL)
             return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-         struct set_entry *entry;
          struct anv_bo **bo = bos;
          set_foreach(relocs->deps, entry) {
             *bo++ = (void *)entry->key;

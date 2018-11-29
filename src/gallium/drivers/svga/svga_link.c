@@ -96,11 +96,13 @@ svga_link_shaders(const struct tgsi_shader_info *outshader_info,
          linkage->input_map[i] = j;
       }
    }
+   linkage->input_map_max = free_slot - 1;
 
    /* Debug */
    if (SVGA_DEBUG & DEBUG_TGSI) {
       unsigned reg = 0;
-      debug_printf("### linkage info:\n");
+      debug_printf("### linkage info: num_inputs=%d input_map_max=%d\n",
+                   linkage->num_inputs, linkage->input_map_max);
 
       for (i = 0; i < linkage->num_inputs; i++) {
 

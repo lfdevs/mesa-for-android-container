@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -194,9 +192,9 @@ build_q_values(unsigned int **q_values, unsigned off,
  * really just four scalar registers.  Don't let that confuse you.)
  */
 struct ir3_ra_reg_set *
-ir3_ra_alloc_reg_set(void *memctx)
+ir3_ra_alloc_reg_set(struct ir3_compiler *compiler)
 {
-	struct ir3_ra_reg_set *set = rzalloc(memctx, struct ir3_ra_reg_set);
+	struct ir3_ra_reg_set *set = rzalloc(compiler, struct ir3_ra_reg_set);
 	unsigned ra_reg_count, reg, first_half_reg, first_high_reg, base;
 	unsigned int **q_values;
 
@@ -285,8 +283,25 @@ ir3_ra_alloc_reg_set(void *memctx)
 		}
 	}
 
+	/* starting a6xx, half precision regs conflict w/ full precision regs: */
+	if (compiler->gpu_id >= 600) {
+		/* because of transitivity, we can get away with just setting up
+		 * conflicts between the first class of full and half regs:
+		 */
+		for (unsigned j = 0; j < CLASS_REGS(0) / 2; j++) {
+			unsigned freg  = set->gpr_to_ra_reg[0][j];
+			unsigned hreg0 = set->gpr_to_ra_reg[HALF_OFFSET][(j * 2) + 0];
+			unsigned hreg1 = set->gpr_to_ra_reg[HALF_OFFSET][(j * 2) + 1];
 
-	ra_set_finalize(set->regs, q_values);
+			ra_add_transitive_reg_conflict(set->regs, freg, hreg0);
+			ra_add_transitive_reg_conflict(set->regs, freg, hreg1);
+		}
+
+		// TODO also need to update q_values, but for now:
+		ra_set_finalize(set->regs, NULL);
+	} else {
+		ra_set_finalize(set->regs, q_values);
+	}
 
 	ralloc_free(q_values);
 
@@ -365,23 +380,18 @@ size_to_class(unsigned sz, bool half, bool high)
 }
 
 static bool
-is_temp(struct ir3_register *reg)
+writes_gpr(struct ir3_instruction *instr)
 {
+	if (is_store(instr))
+		return false;
+	/* is dest a normal temp register: */
+	struct ir3_register *reg = instr->regs[0];
 	if (reg->flags & (IR3_REG_CONST | IR3_REG_IMMED))
 		return false;
 	if ((reg->num == regid(REG_A0, 0)) ||
 			(reg->num == regid(REG_P0, 0)))
 		return false;
 	return true;
-}
-
-static bool
-writes_gpr(struct ir3_instruction *instr)
-{
-	if (is_store(instr))
-		return false;
-	/* is dest a normal temp register: */
-	return is_temp(instr->regs[0]);
 }
 
 static bool
@@ -1047,49 +1057,10 @@ ra_block_alloc(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 static int
 ra_alloc(struct ir3_ra_ctx *ctx)
 {
-	unsigned n = 0;
-
-	/* frag shader inputs get pre-assigned, since we have some
-	 * constraints/unknowns about setup for some of these regs:
-	 */
-	if (ctx->type == SHADER_FRAGMENT) {
-		struct ir3 *ir = ctx->ir;
-		unsigned i = 0, j;
-		if (ctx->frag_face && (i < ir->ninputs) && ir->inputs[i]) {
-			struct ir3_instruction *instr = ir->inputs[i];
-			int cls = size_to_class(1, true, false);
-			unsigned name = __ra_name(ctx, cls, instr);
-			unsigned reg = ctx->set->gpr_to_ra_reg[cls][0];
-
-			/* if we have frag_face, it gets hr0.x */
-			ra_set_node_reg(ctx->g, name, reg);
-			i += 4;
-		}
-
-		j = 0;
-		for (; i < ir->ninputs; i++) {
-			struct ir3_instruction *instr = ir->inputs[i];
-			if (instr) {
-				struct ir3_ra_instr_data *id = &ctx->instrd[instr->ip];
-
-				if (id->defn == instr) {
-					unsigned name, reg;
-
-					name = ra_name(ctx, id);
-					reg = ctx->set->gpr_to_ra_reg[id->cls][j];
-
-					ra_set_node_reg(ctx->g, name, reg);
-					j += id->sz;
-				}
-			}
-		}
-		n = j;
-	}
-
 	/* pre-assign array elements:
 	 */
 	list_for_each_entry (struct ir3_array, arr, &ctx->ir->array_list, node) {
-		unsigned base = n;
+		unsigned base = 0;
 
 		if (arr->end_ip == 0)
 			continue;

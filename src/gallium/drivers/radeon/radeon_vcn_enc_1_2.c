@@ -48,7 +48,6 @@ RADEON_ENC_CS(cmd)
 #define RADEON_ENC_END() *begin = (&enc->cs->current.buf[enc->cs->current.cdw] - begin) * 4; \
 	enc->total_task_size += *begin;}
 
-static const unsigned profiles[7] = { 66, 77, 88, 100, 110, 122, 244 };
 static const unsigned index_to_shifts[4] = {24, 16, 8, 0};
 
 static void radeon_enc_add_buffer(struct radeon_encoder *enc, struct pb_buffer *buf,
@@ -303,7 +302,7 @@ static void radeon_enc_spec_misc(struct radeon_encoder *enc)
 	enc->enc_pic.spec_misc.cabac_init_idc = 0;
 	enc->enc_pic.spec_misc.half_pel_enabled = 1;
 	enc->enc_pic.spec_misc.quarter_pel_enabled = 1;
-	enc->enc_pic.spec_misc.profile_idc = profiles[enc->base.profile - PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE];
+	enc->enc_pic.spec_misc.profile_idc = u_get_h264_profile_idc(enc->base.profile);
 	enc->enc_pic.spec_misc.level_idc = enc->base.level;
 
 	RADEON_ENC_BEGIN(RENCODE_H264_IB_PARAM_SPEC_MISC);

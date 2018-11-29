@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2015 Rob Clark <robclark@freedesktop.org>
  *
@@ -33,8 +31,26 @@
 struct ir3_compiler * ir3_compiler_create(struct fd_device *dev, uint32_t gpu_id)
 {
 	struct ir3_compiler *compiler = rzalloc(NULL, struct ir3_compiler);
+
 	compiler->dev = dev;
 	compiler->gpu_id = gpu_id;
 	compiler->set = ir3_ra_alloc_reg_set(compiler);
+
+	if (compiler->gpu_id >= 400) {
+		/* need special handling for "flat" */
+		compiler->flat_bypass = true;
+		compiler->levels_add_one = false;
+		compiler->unminify_coords = false;
+		compiler->txf_ms_with_isaml = false;
+		compiler->array_index_add_half = true;
+	} else {
+		/* no special handling for "flat" */
+		compiler->flat_bypass = false;
+		compiler->levels_add_one = true;
+		compiler->unminify_coords = true;
+		compiler->txf_ms_with_isaml = true;
+		compiler->array_index_add_half = false;
+	}
+
 	return compiler;
 }

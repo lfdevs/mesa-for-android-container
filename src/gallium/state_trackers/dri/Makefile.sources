@@ -11,8 +11,7 @@ common_SOURCES := \
 	dri_screen.h
 
 dri2_SOURCES := \
-	dri2.c \
-	dri2_buffer.h
+	dri2.c
 
 drisw_SOURCES := \
 	drisw.c

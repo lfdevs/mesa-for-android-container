@@ -78,6 +78,8 @@ struct dri_screen
    boolean has_reset_status_query;
    enum pipe_texture_target target;
 
+   boolean swrast_no_present;
+
    /* hooks filled in by dri2 & drisw */
    __DRIimage * (*lookup_egl_image)(struct dri_screen *ctx, void *handle);
 

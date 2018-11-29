@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -199,7 +197,7 @@ patch_vtx_fetches(struct fd_context *ctx, struct fd2_shader_stateobj *so,
 		instr->fetch.offset = elem->src_offset;
 
 		for (j = 0; j < 4; j++)
-			instr->regs[0]->swizzle[j] = "xyzw01__"[desc->swizzle[j]];
+			instr->dst_reg.swizzle[j] = "xyzw01__"[desc->swizzle[j]];
 
 		assert(instr->fetch.fmt != ~0);
 
@@ -210,7 +208,7 @@ patch_vtx_fetches(struct fd_context *ctx, struct fd2_shader_stateobj *so,
 				instr->fetch.const_idx,
 				instr->fetch.const_idx_sel,
 				elem->instance_divisor,
-				instr->regs[0]->swizzle,
+				instr->dst_reg.swizzle,
 				instr->fetch.stride,
 				instr->fetch.offset);
 	}
@@ -307,7 +305,6 @@ static struct fd2_shader_stateobj *
 create_blit_fp(void)
 {
 	struct fd2_shader_stateobj *so = create_shader(SHADER_FRAGMENT);
-	struct ir2_cf *cf;
 	struct ir2_instruction *instr;
 
 	if (!so)
@@ -315,18 +312,13 @@ create_blit_fp(void)
 
 	so->ir = ir2_shader_create();
 
-	cf = ir2_cf_create(so->ir, EXEC);
-
-	instr = ir2_instr_create_tex_fetch(cf, 0);
-	ir2_reg_create(instr, 0, "xyzw", 0);
-	ir2_reg_create(instr, 0, "xyx", 0);
+	instr = ir2_instr_create_tex_fetch(so->ir, 0);
+	ir2_dst_create(instr, 0, "xyzw", 0);
+	ir2_reg_create(instr, 0, "xyx", IR2_REG_INPUT);
 	instr->sync = true;
 
-	cf = ir2_cf_create_alloc(so->ir, SQ_PARAMETER_PIXEL, 0);
-	cf = ir2_cf_create(so->ir, EXEC_END);
-
-	instr = ir2_instr_create_alu(cf, MAXv, ~0);
-	ir2_reg_create(instr, 0, NULL, IR2_REG_EXPORT);
+	instr = ir2_instr_create_alu_v(so->ir, MAXv);
+	ir2_dst_create(instr, 0, NULL, IR2_REG_EXPORT);
 	ir2_reg_create(instr, 0, NULL, 0);
 	ir2_reg_create(instr, 0, NULL, 0);
 
@@ -349,7 +341,6 @@ static struct fd2_shader_stateobj *
 create_blit_vp(void)
 {
 	struct fd2_shader_stateobj *so = create_shader(SHADER_VERTEX);
-	struct ir2_cf *cf;
 	struct ir2_instruction *instr;
 
 	if (!so)
@@ -357,31 +348,23 @@ create_blit_vp(void)
 
 	so->ir = ir2_shader_create();
 
-	cf = ir2_cf_create(so->ir, EXEC);
-
-	instr = ir2_instr_create_vtx_fetch(cf, 26, 1, FMT_32_32_FLOAT, false, 8);
+	instr = ir2_instr_create_vtx_fetch(so->ir, 26, 1, FMT_32_32_FLOAT, false, 8);
 	instr->fetch.is_normalized = true;
-	ir2_reg_create(instr, 1, "xy01", 0);
-	ir2_reg_create(instr, 0, "x", 0);
+	ir2_dst_create(instr, 1, "xy01", 0);
+	ir2_reg_create(instr, 0, "x", IR2_REG_INPUT);
 
-	instr = ir2_instr_create_vtx_fetch(cf, 26, 0, FMT_32_32_32_FLOAT, false, 12);
+	instr = ir2_instr_create_vtx_fetch(so->ir, 26, 0, FMT_32_32_32_FLOAT, false, 12);
 	instr->fetch.is_normalized = true;
-	ir2_reg_create(instr, 2, "xyz1", 0);
-	ir2_reg_create(instr, 0, "x", 0);
+	ir2_dst_create(instr, 2, "xyz1", 0);
+	ir2_reg_create(instr, 0, "x", IR2_REG_INPUT);
 
-	cf = ir2_cf_create_alloc(so->ir, SQ_POSITION, 0);
-	cf = ir2_cf_create(so->ir, EXEC);
-
-	instr = ir2_instr_create_alu(cf, MAXv, ~0);
-	ir2_reg_create(instr, 62, NULL, IR2_REG_EXPORT);
+	instr = ir2_instr_create_alu_v(so->ir, MAXv);
+	ir2_dst_create(instr, 62, NULL, IR2_REG_EXPORT);
 	ir2_reg_create(instr, 2, NULL, 0);
 	ir2_reg_create(instr, 2, NULL, 0);
 
-	cf = ir2_cf_create_alloc(so->ir, SQ_PARAMETER_PIXEL, 0);
-	cf = ir2_cf_create(so->ir, EXEC_END);
-
-	instr = ir2_instr_create_alu(cf, MAXv, ~0);
-	ir2_reg_create(instr, 0, NULL, IR2_REG_EXPORT);
+	instr = ir2_instr_create_alu_v(so->ir, MAXv);
+	ir2_dst_create(instr, 0, NULL, IR2_REG_EXPORT);
 	ir2_reg_create(instr, 1, NULL, 0);
 	ir2_reg_create(instr, 1, NULL, 0);
 
@@ -397,7 +380,6 @@ static struct fd2_shader_stateobj *
 create_solid_fp(void)
 {
 	struct fd2_shader_stateobj *so = create_shader(SHADER_FRAGMENT);
-	struct ir2_cf *cf;
 	struct ir2_instruction *instr;
 
 	if (!so)
@@ -405,11 +387,8 @@ create_solid_fp(void)
 
 	so->ir = ir2_shader_create();
 
-	cf = ir2_cf_create_alloc(so->ir, SQ_PARAMETER_PIXEL, 0);
-	cf = ir2_cf_create(so->ir, EXEC_END);
-
-	instr = ir2_instr_create_alu(cf, MAXv, ~0);
-	ir2_reg_create(instr, 0, NULL, IR2_REG_EXPORT);
+	instr = ir2_instr_create_alu_v(so->ir, MAXv);
+	ir2_dst_create(instr, 0, NULL, IR2_REG_EXPORT);
 	ir2_reg_create(instr, 0, NULL, IR2_REG_CONST);
 	ir2_reg_create(instr, 0, NULL, IR2_REG_CONST);
 
@@ -430,7 +409,6 @@ static struct fd2_shader_stateobj *
 create_solid_vp(void)
 {
 	struct fd2_shader_stateobj *so = create_shader(SHADER_VERTEX);
-	struct ir2_cf *cf;
 	struct ir2_instruction *instr;
 
 	if (!so)
@@ -438,22 +416,15 @@ create_solid_vp(void)
 
 	so->ir = ir2_shader_create();
 
-	cf = ir2_cf_create(so->ir, EXEC);
+	instr = ir2_instr_create_vtx_fetch(so->ir, 26, 0, FMT_32_32_32_FLOAT, false, 12);
+	ir2_dst_create(instr, 1, "xyz1", 0);
+	ir2_reg_create(instr, 0, "x", IR2_REG_INPUT);
 
-	instr = ir2_instr_create_vtx_fetch(cf, 26, 0, FMT_32_32_32_FLOAT, false, 12);
-	ir2_reg_create(instr, 1, "xyz1", 0);
-	ir2_reg_create(instr, 0, "x", 0);
-
-	cf = ir2_cf_create_alloc(so->ir, SQ_POSITION, 0);
-	cf = ir2_cf_create(so->ir, EXEC);
-
-	instr = ir2_instr_create_alu(cf, MAXv, ~0);
-	ir2_reg_create(instr, 62, NULL, IR2_REG_EXPORT);
+	instr = ir2_instr_create_alu_v(so->ir, MAXv);
+	ir2_dst_create(instr, 62, NULL, IR2_REG_EXPORT);
 	ir2_reg_create(instr, 1, NULL, 0);
 	ir2_reg_create(instr, 1, NULL, 0);
 
-	cf = ir2_cf_create_alloc(so->ir, SQ_PARAMETER_PIXEL, 0);
-	cf = ir2_cf_create(so->ir, EXEC_END);
 
 	return assemble(so);
 }

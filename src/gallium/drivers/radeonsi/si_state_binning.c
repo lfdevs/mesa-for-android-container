@@ -310,6 +310,8 @@ static struct uvec2 si_get_depth_bin_size(struct si_context *sctx)
 
 static void si_emit_dpbb_disable(struct si_context *sctx)
 {
+	unsigned initial_cdw = sctx->gfx_cs->current.cdw;
+
 	radeon_opt_set_context_reg(sctx, R_028C44_PA_SC_BINNER_CNTL_0,
 		SI_TRACKED_PA_SC_BINNER_CNTL_0,
 		S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_LEGACY_SC) |
@@ -318,6 +320,8 @@ static void si_emit_dpbb_disable(struct si_context *sctx)
 				   SI_TRACKED_DB_DFSM_CONTROL,
 				   S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
+	if (initial_cdw != sctx->gfx_cs->current.cdw)
+		sctx->context_roll_counter++;
 }
 
 void si_emit_dpbb_state(struct si_context *sctx)
@@ -403,6 +407,7 @@ void si_emit_dpbb_state(struct si_context *sctx)
 	case CHIP_VEGA12:
 	case CHIP_VEGA20:
 	case CHIP_RAVEN:
+	case CHIP_RAVEN2:
 		/* Tuned for Raven. Vega might need different values. */
 		context_states_per_bin = 5;
 		persistent_states_per_bin = 31;
@@ -419,6 +424,7 @@ void si_emit_dpbb_state(struct si_context *sctx)
 	if (bin_size.y >= 32)
 		bin_size_extend.y = util_logbase2(bin_size.y) - 5;
 
+	unsigned initial_cdw = sctx->gfx_cs->current.cdw;
 	radeon_opt_set_context_reg(
 		sctx, R_028C44_PA_SC_BINNER_CNTL_0,
 		SI_TRACKED_PA_SC_BINNER_CNTL_0,
@@ -436,4 +442,6 @@ void si_emit_dpbb_state(struct si_context *sctx)
 				   SI_TRACKED_DB_DFSM_CONTROL,
 				   S_028060_PUNCHOUT_MODE(punchout_mode) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
+	if (initial_cdw != sctx->gfx_cs->current.cdw)
+		sctx->context_roll_counter++;
 }

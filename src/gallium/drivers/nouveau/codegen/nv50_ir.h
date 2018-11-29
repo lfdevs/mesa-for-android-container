@@ -58,6 +58,9 @@ enum operation
    OP_FMA,
    OP_SAD, // abs(src0 - src1) + src2
    OP_SHLADD,
+   // extended multiply-add (GM107+), does a lot of things.
+   // see envytools for detailed documentation
+   OP_XMAD,
    OP_ABS,
    OP_NEG,
    OP_NOT,
@@ -255,6 +258,29 @@ enum operation
 #define NV50_IR_SUBOP_MINMAX_LOW  1
 #define NV50_IR_SUBOP_MINMAX_MED  2
 #define NV50_IR_SUBOP_MINMAX_HIGH 3
+
+// xmad(src0, src1, 0) << 16 + src2
+#define NV50_IR_SUBOP_XMAD_PSL (1 << 0)
+// (xmad(src0, src1, src2) & 0xffff) | (src1 << 16)
+#define NV50_IR_SUBOP_XMAD_MRG (1 << 1)
+// xmad(src0, src1, src2.lo)
+#define NV50_IR_SUBOP_XMAD_CLO (1 << 2)
+// xmad(src0, src1, src2.hi)
+#define NV50_IR_SUBOP_XMAD_CHI (2 << 2)
+// if both operands to the multiplication are non-zero, subtract 65536 for each
+// negative operand
+#define NV50_IR_SUBOP_XMAD_CSFU (3 << 2)
+// xmad(src0, src1, src2) + src1 << 16
+#define NV50_IR_SUBOP_XMAD_CBCC (4 << 2)
+#define NV50_IR_SUBOP_XMAD_CMODE_SHIFT 2
+#define NV50_IR_SUBOP_XMAD_CMODE_MASK (0x7 << NV50_IR_SUBOP_XMAD_CMODE_SHIFT)
+
+// use the high 16 bits instead of the low 16 bits for the multiplication.
+// if the instruction's sType is signed, sign extend the operand from 16 bits
+// to 32 before multiplication.
+#define NV50_IR_SUBOP_XMAD_H1_SHIFT 5
+#define NV50_IR_SUBOP_XMAD_H1(i) (1 << (NV50_IR_SUBOP_XMAD_H1_SHIFT + (i)))
+#define NV50_IR_SUBOP_XMAD_H1_MASK (0x3 << NV50_IR_SUBOP_XMAD_H1_SHIFT)
 
 enum DataType
 {

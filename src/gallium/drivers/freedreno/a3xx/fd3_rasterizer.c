@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -98,7 +96,7 @@ fd3_rasterizer_state_create(struct pipe_context *pctx,
 
 	if (cso->offset_tri)
 		so->gras_su_mode_control |= A3XX_GRAS_SU_MODE_CONTROL_POLY_OFFSET;
-	if (!cso->depth_clip)
+	if (!cso->depth_clip_near)
 		so->gras_cl_clip_cntl |= A3XX_GRAS_CL_CLIP_CNTL_CLIP_DISABLE;
 
 	return so;

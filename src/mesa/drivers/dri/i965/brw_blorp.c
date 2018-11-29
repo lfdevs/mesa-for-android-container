@@ -1195,7 +1195,7 @@ set_write_disables(const struct intel_renderbuffer *irb,
     * RGB we can treat alpha as not used and write whatever we like into it.
     */
    const GLenum base_format = irb->Base.Base._BaseFormat;
-   const int components = _mesa_base_format_component_count(base_format);
+   const int components = _mesa_components_in_format(base_format);
    bool disables = false;
 
    assert(components > 0);

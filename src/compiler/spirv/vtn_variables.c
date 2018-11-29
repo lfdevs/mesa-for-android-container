@@ -89,6 +89,7 @@ vtn_access_chain_pointer_dereference(struct vtn_builder *b,
    struct vtn_access_chain *chain =
       vtn_access_chain_extend(b, base->chain, deref_chain->length);
    struct vtn_type *type = base->type;
+   enum gl_access_qualifier access = base->access;
 
    /* OpPtrAccessChain is only allowed on things which support variable
     * pointers.  For everything else, the client is expected to just pass us
@@ -106,6 +107,8 @@ vtn_access_chain_pointer_dereference(struct vtn_builder *b,
       } else {
          type = type->array_element;
       }
+
+      access |= type->access;
    }
 
    struct vtn_pointer *ptr = rzalloc(b, struct vtn_pointer);
@@ -114,6 +117,7 @@ vtn_access_chain_pointer_dereference(struct vtn_builder *b,
    ptr->var = base->var;
    ptr->deref = base->deref;
    ptr->chain = chain;
+   ptr->access = access;
 
    return ptr;
 }
@@ -184,6 +188,7 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
    nir_ssa_def *block_index = base->block_index;
    nir_ssa_def *offset = base->offset;
    struct vtn_type *type = base->type;
+   enum gl_access_qualifier access = base->access;
 
    unsigned idx = 0;
    if (base->mode == vtn_variable_mode_ubo ||
@@ -198,6 +203,7 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
                idx++;
                /* This consumes a level of type */
                type = type->array_element;
+               access |= type->access;
             } else {
                /* This is annoying.  We've been asked for a pointer to the
                 * array of UBOs/SSBOs and not a specifc buffer.  Return a
@@ -319,6 +325,7 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
             vtn_access_link_as_ssa(b, deref_chain->link[idx], type->stride);
          offset = nir_iadd(&b->nb, offset, elem_offset);
          type = type->array_element;
+         access |= type->access;
          break;
       }
 
@@ -328,6 +335,7 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
          nir_ssa_def *mem_offset = nir_imm_int(&b->nb, type->offsets[member]);
          offset = nir_iadd(&b->nb, offset, mem_offset);
          type = type->members[member];
+         access |= type->access;
          break;
       }
 
@@ -341,6 +349,7 @@ vtn_ssa_offset_pointer_dereference(struct vtn_builder *b,
    ptr->type = type;
    ptr->block_index = block_index;
    ptr->offset = offset;
+   ptr->access = access;
 
    return ptr;
 }
@@ -370,6 +379,7 @@ vtn_pointer_for_variable(struct vtn_builder *b,
    vtn_assert(ptr_type->deref->type == var->type->type);
    pointer->ptr_type = ptr_type;
    pointer->var = var;
+   pointer->access = var->access | var->type->access;
 
    return pointer;
 }
@@ -608,7 +618,8 @@ static void
 _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                      nir_ssa_def *index, nir_ssa_def *offset,
                      unsigned access_offset, unsigned access_size,
-                     struct vtn_ssa_value **inout, const struct glsl_type *type)
+                     struct vtn_ssa_value **inout, const struct glsl_type *type,
+                     enum gl_access_qualifier access)
 {
    nir_intrinsic_instr *instr = nir_intrinsic_instr_create(b->nb.shader, op);
    instr->num_components = glsl_get_vector_elements(type);
@@ -622,6 +633,11 @@ _vtn_load_store_tail(struct vtn_builder *b, nir_intrinsic_op op, bool load,
    if (op == nir_intrinsic_load_push_constant) {
       nir_intrinsic_set_base(instr, access_offset);
       nir_intrinsic_set_range(instr, access_size);
+   }
+
+   if (op == nir_intrinsic_load_ssbo ||
+       op == nir_intrinsic_store_ssbo) {
+      nir_intrinsic_set_access(instr, access);
    }
 
    if (index)
@@ -654,7 +670,8 @@ static void
 _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                       nir_ssa_def *index, nir_ssa_def *offset,
                       unsigned access_offset, unsigned access_size,
-                      struct vtn_type *type, struct vtn_ssa_value **inout)
+                      struct vtn_type *type, enum gl_access_qualifier access,
+                      struct vtn_ssa_value **inout)
 {
    if (load && *inout == NULL)
       *inout = vtn_create_ssa_value(b, type->type);
@@ -704,7 +721,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
             _vtn_load_store_tail(b, op, load, index, elem_offset,
                                  access_offset, access_size,
                                  &(*inout)->elems[i],
-                                 glsl_vector_type(base_type, vec_width));
+                                 glsl_vector_type(base_type, vec_width),
+                                 type->access | access);
          }
 
          if (load && type->row_major)
@@ -717,7 +735,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
             vtn_assert(glsl_type_is_vector_or_scalar(type->type));
             _vtn_load_store_tail(b, op, load, index, offset,
                                  access_offset, access_size,
-                                 inout, type->type);
+                                 inout, type->type,
+                                 type->access | access);
          } else {
             /* This is a strided load.  We have to load N things separately.
              * This is the single column of a row-major matrix case.
@@ -738,7 +757,8 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
                comp = &temp_val;
                _vtn_load_store_tail(b, op, load, index, elem_offset,
                                     access_offset, access_size,
-                                    &comp, glsl_scalar_type(base_type));
+                                    &comp, glsl_scalar_type(base_type),
+                                    type->access | access);
                per_comp[i] = comp->def;
             }
 
@@ -758,7 +778,9 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
             nir_iadd(&b->nb, offset, nir_imm_int(&b->nb, i * type->stride));
          _vtn_block_load_store(b, op, load, index, elem_off,
                                access_offset, access_size,
-                               type->array_element, &(*inout)->elems[i]);
+                               type->array_element,
+                               type->array_element->access | access,
+                               &(*inout)->elems[i]);
       }
       return;
    }
@@ -770,7 +792,9 @@ _vtn_block_load_store(struct vtn_builder *b, nir_intrinsic_op op, bool load,
             nir_iadd(&b->nb, offset, nir_imm_int(&b->nb, type->offsets[i]));
          _vtn_block_load_store(b, op, load, index, elem_off,
                                access_offset, access_size,
-                               type->members[i], &(*inout)->elems[i]);
+                               type->members[i],
+                               type->members[i]->access | access,
+                               &(*inout)->elems[i]);
       }
       return;
    }
@@ -809,7 +833,7 @@ vtn_block_load(struct vtn_builder *b, struct vtn_pointer *src)
    struct vtn_ssa_value *value = NULL;
    _vtn_block_load_store(b, op, true, index, offset,
                          access_offset, access_size,
-                         src->type, &value);
+                         src->type, src->access, &value);
    return value;
 }
 
@@ -833,7 +857,7 @@ vtn_block_store(struct vtn_builder *b, struct vtn_ssa_value *src,
    offset = vtn_pointer_to_offset(b, dst, &index);
 
    _vtn_block_load_store(b, op, false, index, offset,
-                         0, 0, dst->type, &src);
+                         0, 0, dst->type, dst->access, &src);
 }
 
 static void
@@ -1011,15 +1035,15 @@ vtn_get_builtin_location(struct vtn_builder *b,
    case SpvBuiltInCullDistance:
       *location = VARYING_SLOT_CULL_DIST0;
       break;
-   case SpvBuiltInVertexIndex:
-      *location = SYSTEM_VALUE_VERTEX_ID;
-      set_mode_system_value(b, mode);
-      break;
    case SpvBuiltInVertexId:
-      /* Vulkan defines VertexID to be zero-based and reserves the new
-       * builtin keyword VertexIndex to indicate the non-zero-based value.
+   case SpvBuiltInVertexIndex:
+      /* The Vulkan spec defines VertexIndex to be non-zero-based and doesn't
+       * allow VertexId.  The ARB_gl_spirv spec defines VertexId to be the
+       * same as gl_VertexID, which is non-zero-based, and removes
+       * VertexIndex.  Since they're both defined to be non-zero-based, we use
+       * SYSTEM_VALUE_VERTEX_ID for both.
        */
-      *location = SYSTEM_VALUE_VERTEX_ID_ZERO_BASE;
+      *location = SYSTEM_VALUE_VERTEX_ID;
       set_mode_system_value(b, mode);
       break;
    case SpvBuiltInInstanceIndex:
@@ -1248,20 +1272,20 @@ apply_var_decoration(struct vtn_builder *b,
       var_data->read_only = true;
       break;
    case SpvDecorationNonReadable:
-      var_data->image.write_only = true;
+      var_data->image.access |= ACCESS_NON_READABLE;
       break;
    case SpvDecorationNonWritable:
       var_data->read_only = true;
-      var_data->image.read_only = true;
+      var_data->image.access |= ACCESS_NON_WRITEABLE;
       break;
    case SpvDecorationRestrict:
-      var_data->image.restrict_flag = true;
+      var_data->image.access |= ACCESS_RESTRICT;
       break;
    case SpvDecorationVolatile:
-      var_data->image._volatile = true;
+      var_data->image.access |= ACCESS_VOLATILE;
       break;
    case SpvDecorationCoherent:
-      var_data->image.coherent = true;
+      var_data->image.access |= ACCESS_COHERENT;
       break;
    case SpvDecorationComponent:
       var_data->location_frac = dec->literals[0];
@@ -1326,6 +1350,7 @@ apply_var_decoration(struct vtn_builder *b,
    case SpvDecorationXfbBuffer:
       var_data->explicit_xfb_buffer = true;
       var_data->xfb_buffer = dec->literals[0];
+      var_data->always_active_io = true;
       break;
    case SpvDecorationXfbStride:
       var_data->explicit_xfb_stride = true;
@@ -1348,6 +1373,10 @@ apply_var_decoration(struct vtn_builder *b,
    case SpvDecorationAlignment:
       vtn_warn("Decoration only allowed for CL-style kernels: %s",
                spirv_decoration_to_string(dec->decoration));
+      break;
+
+   case SpvDecorationHlslSemanticGOOGLE:
+      /* HLSL semantic decorations can safely be ignored by the driver. */
       break;
 
    default:
@@ -1387,6 +1416,21 @@ var_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
       break;
    case SpvDecorationOffset:
       vtn_var->offset = dec->literals[0];
+      break;
+   case SpvDecorationNonWritable:
+      vtn_var->access |= ACCESS_NON_WRITEABLE;
+      break;
+   case SpvDecorationNonReadable:
+      vtn_var->access |= ACCESS_NON_READABLE;
+      break;
+   case SpvDecorationVolatile:
+      vtn_var->access |= ACCESS_VOLATILE;
+      break;
+   case SpvDecorationCoherent:
+      vtn_var->access |= ACCESS_COHERENT;
+      break;
+   case SpvDecorationHlslCounterBufferGOOGLE:
+      /* HLSL semantic decorations can safely be ignored by the driver. */
       break;
    default:
       break;

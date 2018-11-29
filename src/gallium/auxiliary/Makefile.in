@@ -197,8 +197,8 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	hud/hud_private.h indices/u_indices.h indices/u_indices_priv.h \
 	indices/u_primconvert.c indices/u_primconvert.h \
 	os/os_memory_aligned.h os/os_memory_debug.h \
-	os/os_memory_stdc.h os/os_memory.h os/os_misc.c os/os_misc.h \
-	os/os_mman.h os/os_process.c os/os_process.h os/os_thread.h \
+	os/os_memory_stdc.h os/os_memory.h os/os_mman.h \
+	os/os_process.c os/os_process.h os/os_thread.h \
 	pipebuffer/pb_buffer_fenced.c pipebuffer/pb_buffer_fenced.h \
 	pipebuffer/pb_buffer.h pipebuffer/pb_buffer_malloc.c \
 	pipebuffer/pb_bufmgr_alt.c pipebuffer/pb_bufmgr_cache.c \
@@ -243,84 +243,84 @@ am__libgallium_la_SOURCES_DIST = cso_cache/cso_cache.c \
 	util/u_async_debug.c util/u_bitcast.h util/u_bitmask.c \
 	util/u_bitmask.h util/u_blend.h util/u_blit.c util/u_blit.h \
 	util/u_blitter.c util/u_blitter.h util/u_box.h util/u_cache.c \
-	util/u_cache.h util/u_cpu_detect.c util/u_cpu_detect.h \
-	util/u_debug.c util/u_debug.h util/u_debug_describe.c \
-	util/u_debug_describe.h util/u_debug_flush.c \
-	util/u_debug_flush.h util/u_debug_image.c util/u_debug_image.h \
-	util/u_debug_memory.c util/u_debug_refcnt.c \
-	util/u_debug_refcnt.h util/u_debug_stack.c \
-	util/u_debug_stack.h util/u_debug_symbol.c \
-	util/u_debug_symbol.h util/u_dirty_flags.h \
-	util/u_dirty_surfaces.h util/u_dl.c util/u_dl.h util/u_draw.c \
-	util/u_draw.h util/u_draw_quad.c util/u_draw_quad.h \
-	util/u_dual_blend.h util/u_dump_defines.c util/u_dump.h \
-	util/u_dump_state.c util/u_fifo.h util/u_format.c \
-	util/u_format.h util/u_format_bptc.c util/u_format_bptc.h \
-	util/u_format_etc.c util/u_format_etc.h util/u_format_latc.c \
-	util/u_format_latc.h util/u_format_other.c \
-	util/u_format_other.h util/u_format_rgtc.c \
-	util/u_format_rgtc.h util/u_format_s3tc.c util/u_format_s3tc.h \
-	util/u_format_tests.c util/u_format_tests.h \
-	util/u_format_yuv.c util/u_format_yuv.h util/u_format_zs.c \
-	util/u_format_zs.h util/u_framebuffer.c util/u_framebuffer.h \
-	util/u_gen_mipmap.c util/u_gen_mipmap.h util/u_half.h \
-	util/u_handle_table.c util/u_handle_table.h \
+	util/u_cache.h util/u_debug_gallium.h util/u_debug_gallium.c \
+	util/u_debug_describe.c util/u_debug_describe.h \
+	util/u_debug_flush.c util/u_debug_flush.h util/u_debug_image.c \
+	util/u_debug_image.h util/u_debug_memory.c \
+	util/u_debug_refcnt.c util/u_debug_refcnt.h \
+	util/u_debug_stack.c util/u_debug_stack.h \
+	util/u_debug_symbol.c util/u_debug_symbol.h \
+	util/u_dirty_flags.h util/u_dirty_surfaces.h util/u_dl.c \
+	util/u_dl.h util/u_draw.c util/u_draw.h util/u_draw_quad.c \
+	util/u_draw_quad.h util/u_dual_blend.h util/u_dump_defines.c \
+	util/u_dump.h util/u_dump_state.c util/u_fifo.h \
+	util/u_format.c util/u_format.h util/u_format_bptc.c \
+	util/u_format_bptc.h util/u_format_etc.c util/u_format_etc.h \
+	util/u_format_latc.c util/u_format_latc.h \
+	util/u_format_other.c util/u_format_other.h \
+	util/u_format_rgtc.c util/u_format_rgtc.h util/u_format_s3tc.c \
+	util/u_format_s3tc.h util/u_format_tests.c \
+	util/u_format_tests.h util/u_format_yuv.c util/u_format_yuv.h \
+	util/u_format_zs.c util/u_format_zs.h util/u_framebuffer.c \
+	util/u_framebuffer.h util/u_gen_mipmap.c util/u_gen_mipmap.h \
+	util/u_half.h util/u_handle_table.c util/u_handle_table.h \
 	util/u_hash_table.c util/u_hash_table.h util/u_helpers.c \
 	util/u_helpers.h util/u_idalloc.c util/u_idalloc.h \
 	util/u_index_modify.c util/u_index_modify.h util/u_inlines.h \
 	util/u_linear.c util/u_linear.h util/u_log.c util/u_log.h \
-	util/u_math.c util/u_math.h util/u_memory.h util/u_mm.c \
-	util/u_mm.h util/u_network.c util/u_network.h \
-	util/u_pack_color.h util/u_pointer.h util/u_prim.h \
-	util/u_prim_restart.c util/u_prim_restart.h util/u_pstipple.c \
-	util/u_pstipple.h util/u_pwr8.h util/u_range.h util/u_rect.h \
-	util/u_resource.c util/u_resource.h util/u_ringbuffer.c \
-	util/u_ringbuffer.h util/u_sampler.c util/u_sampler.h \
-	util/u_simple_shaders.c util/u_simple_shaders.h \
-	util/u_split_prim.h util/u_sse.h util/u_suballoc.c \
-	util/u_suballoc.h util/u_surface.c util/u_surface.h \
-	util/u_surfaces.c util/u_surfaces.h util/u_tests.c \
-	util/u_tests.h util/u_texture.c util/u_texture.h util/u_tile.c \
-	util/u_tile.h util/u_transfer.c util/u_transfer.h \
-	util/u_transfer_helper.c util/u_transfer_helper.h \
-	util/u_threaded_context.c util/u_threaded_context.h \
-	util/u_threaded_context_calls.h util/u_upload_mgr.c \
-	util/u_upload_mgr.h util/u_vbuf.c util/u_vbuf.h util/u_video.h \
-	util/u_viewport.h nir/tgsi_to_nir.c nir/tgsi_to_nir.h \
-	indices/u_indices_gen.c indices/u_unfilled_gen.c \
-	util/u_format_table.c util/u_debug_stack_android.cpp \
-	renderonly/renderonly.c renderonly/renderonly.h \
-	gallivm/lp_bld_arit.c gallivm/lp_bld_arit.h \
-	gallivm/lp_bld_arit_overflow.c gallivm/lp_bld_arit_overflow.h \
-	gallivm/lp_bld_assert.c gallivm/lp_bld_assert.h \
-	gallivm/lp_bld_bitarit.c gallivm/lp_bld_bitarit.h \
-	gallivm/lp_bld_const.c gallivm/lp_bld_const.h \
-	gallivm/lp_bld_conv.c gallivm/lp_bld_conv.h \
-	gallivm/lp_bld_debug.cpp gallivm/lp_bld_debug.h \
-	gallivm/lp_bld_flow.c gallivm/lp_bld_flow.h \
-	gallivm/lp_bld_format_aos_array.c gallivm/lp_bld_format_aos.c \
-	gallivm/lp_bld_format_cached.c gallivm/lp_bld_format_float.c \
-	gallivm/lp_bld_format.c gallivm/lp_bld_format.h \
-	gallivm/lp_bld_format_soa.c gallivm/lp_bld_format_srgb.c \
-	gallivm/lp_bld_format_yuv.c gallivm/lp_bld_gather.c \
-	gallivm/lp_bld_gather.h gallivm/lp_bld.h gallivm/lp_bld_init.c \
-	gallivm/lp_bld_init.h gallivm/lp_bld_intr.c \
-	gallivm/lp_bld_intr.h gallivm/lp_bld_limits.h \
-	gallivm/lp_bld_logic.c gallivm/lp_bld_logic.h \
-	gallivm/lp_bld_misc.cpp gallivm/lp_bld_misc.h \
-	gallivm/lp_bld_pack.c gallivm/lp_bld_pack.h \
-	gallivm/lp_bld_printf.c gallivm/lp_bld_printf.h \
-	gallivm/lp_bld_quad.c gallivm/lp_bld_quad.h \
-	gallivm/lp_bld_sample_aos.c gallivm/lp_bld_sample_aos.h \
-	gallivm/lp_bld_sample.c gallivm/lp_bld_sample.h \
-	gallivm/lp_bld_sample_soa.c gallivm/lp_bld_struct.c \
-	gallivm/lp_bld_struct.h gallivm/lp_bld_swizzle.c \
-	gallivm/lp_bld_swizzle.h gallivm/lp_bld_tgsi_action.c \
-	gallivm/lp_bld_tgsi_action.h gallivm/lp_bld_tgsi_aos.c \
-	gallivm/lp_bld_tgsi.c gallivm/lp_bld_tgsi.h \
-	gallivm/lp_bld_tgsi_info.c gallivm/lp_bld_tgsi_soa.c \
-	gallivm/lp_bld_type.c gallivm/lp_bld_type.h draw/draw_llvm.c \
-	draw/draw_llvm.h draw/draw_llvm_sample.c \
+	util/u_memory.h util/u_mm.c util/u_mm.h util/u_network.c \
+	util/u_network.h util/u_pack_color.h util/u_pointer.h \
+	util/u_prim.h util/u_prim.c util/u_prim_restart.c \
+	util/u_prim_restart.h util/u_pstipple.c util/u_pstipple.h \
+	util/u_pwr8.h util/u_range.h util/u_rect.h util/u_resource.c \
+	util/u_resource.h util/u_ringbuffer.c util/u_ringbuffer.h \
+	util/u_sampler.c util/u_sampler.h util/u_screen.c \
+	util/u_screen.h util/u_simple_shaders.c \
+	util/u_simple_shaders.h util/u_split_prim.h util/u_sse.h \
+	util/u_suballoc.c util/u_suballoc.h util/u_surface.c \
+	util/u_surface.h util/u_surfaces.c util/u_surfaces.h \
+	util/u_tests.c util/u_tests.h util/u_texture.c \
+	util/u_texture.h util/u_tile.c util/u_tile.h util/u_transfer.c \
+	util/u_transfer.h util/u_transfer_helper.c \
+	util/u_transfer_helper.h util/u_threaded_context.c \
+	util/u_threaded_context.h util/u_threaded_context_calls.h \
+	util/u_upload_mgr.c util/u_upload_mgr.h util/u_vbuf.c \
+	util/u_vbuf.h util/u_video.h util/u_viewport.h \
+	nir/tgsi_to_nir.c nir/tgsi_to_nir.h indices/u_indices_gen.c \
+	indices/u_unfilled_gen.c util/u_format_table.c \
+	util/u_debug_stack_android.cpp renderonly/renderonly.c \
+	renderonly/renderonly.h gallivm/lp_bld_arit.c \
+	gallivm/lp_bld_arit.h gallivm/lp_bld_arit_overflow.c \
+	gallivm/lp_bld_arit_overflow.h gallivm/lp_bld_assert.c \
+	gallivm/lp_bld_assert.h gallivm/lp_bld_bitarit.c \
+	gallivm/lp_bld_bitarit.h gallivm/lp_bld_const.c \
+	gallivm/lp_bld_const.h gallivm/lp_bld_conv.c \
+	gallivm/lp_bld_conv.h gallivm/lp_bld_debug.cpp \
+	gallivm/lp_bld_debug.h gallivm/lp_bld_flow.c \
+	gallivm/lp_bld_flow.h gallivm/lp_bld_format_aos_array.c \
+	gallivm/lp_bld_format_aos.c gallivm/lp_bld_format_cached.c \
+	gallivm/lp_bld_format_float.c gallivm/lp_bld_format.c \
+	gallivm/lp_bld_format.h gallivm/lp_bld_format_soa.c \
+	gallivm/lp_bld_format_srgb.c gallivm/lp_bld_format_yuv.c \
+	gallivm/lp_bld_gather.c gallivm/lp_bld_gather.h \
+	gallivm/lp_bld.h gallivm/lp_bld_init.c gallivm/lp_bld_init.h \
+	gallivm/lp_bld_intr.c gallivm/lp_bld_intr.h \
+	gallivm/lp_bld_limits.h gallivm/lp_bld_logic.c \
+	gallivm/lp_bld_logic.h gallivm/lp_bld_misc.cpp \
+	gallivm/lp_bld_misc.h gallivm/lp_bld_pack.c \
+	gallivm/lp_bld_pack.h gallivm/lp_bld_printf.c \
+	gallivm/lp_bld_printf.h gallivm/lp_bld_quad.c \
+	gallivm/lp_bld_quad.h gallivm/lp_bld_sample_aos.c \
+	gallivm/lp_bld_sample_aos.h gallivm/lp_bld_sample.c \
+	gallivm/lp_bld_sample.h gallivm/lp_bld_sample_soa.c \
+	gallivm/lp_bld_struct.c gallivm/lp_bld_struct.h \
+	gallivm/lp_bld_swizzle.c gallivm/lp_bld_swizzle.h \
+	gallivm/lp_bld_tgsi_action.c gallivm/lp_bld_tgsi_action.h \
+	gallivm/lp_bld_tgsi_aos.c gallivm/lp_bld_tgsi.c \
+	gallivm/lp_bld_tgsi.h gallivm/lp_bld_tgsi_info.c \
+	gallivm/lp_bld_tgsi_soa.c gallivm/lp_bld_type.c \
+	gallivm/lp_bld_type.h draw/draw_llvm.c draw/draw_llvm.h \
+	draw/draw_llvm_sample.c \
 	draw/draw_pt_fetch_shade_pipeline_llvm.c draw/draw_vs_llvm.c
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
@@ -350,7 +350,7 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	hud/font.lo hud/hud_context.lo hud/hud_cpu.lo hud/hud_nic.lo \
 	hud/hud_cpufreq.lo hud/hud_diskstat.lo hud/hud_sensors_temp.lo \
 	hud/hud_driver_query.lo hud/hud_fps.lo \
-	indices/u_primconvert.lo os/os_misc.lo os/os_process.lo \
+	indices/u_primconvert.lo os/os_process.lo \
 	pipebuffer/pb_buffer_fenced.lo pipebuffer/pb_buffer_malloc.lo \
 	pipebuffer/pb_bufmgr_alt.lo pipebuffer/pb_bufmgr_cache.lo \
 	pipebuffer/pb_bufmgr_debug.lo pipebuffer/pb_bufmgr_mm.lo \
@@ -374,7 +374,7 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	translate/translate_cache.lo translate/translate_generic.lo \
 	translate/translate_sse.lo util/u_async_debug.lo \
 	util/u_bitmask.lo util/u_blit.lo util/u_blitter.lo \
-	util/u_cache.lo util/u_cpu_detect.lo util/u_debug.lo \
+	util/u_cache.lo util/u_debug_gallium.lo \
 	util/u_debug_describe.lo util/u_debug_flush.lo \
 	util/u_debug_image.lo util/u_debug_memory.lo \
 	util/u_debug_refcnt.lo util/u_debug_stack.lo \
@@ -388,9 +388,9 @@ am__objects_1 = cso_cache/cso_cache.lo cso_cache/cso_context.lo \
 	util/u_gen_mipmap.lo util/u_handle_table.lo \
 	util/u_hash_table.lo util/u_helpers.lo util/u_idalloc.lo \
 	util/u_index_modify.lo util/u_linear.lo util/u_log.lo \
-	util/u_math.lo util/u_mm.lo util/u_network.lo \
+	util/u_mm.lo util/u_network.lo util/u_prim.lo \
 	util/u_prim_restart.lo util/u_pstipple.lo util/u_resource.lo \
-	util/u_ringbuffer.lo util/u_sampler.lo \
+	util/u_ringbuffer.lo util/u_sampler.lo util/u_screen.lo \
 	util/u_simple_shaders.lo util/u_suballoc.lo util/u_surface.lo \
 	util/u_surfaces.lo util/u_tests.lo util/u_texture.lo \
 	util/u_tile.lo util/u_transfer.lo util/u_transfer_helper.lo \
@@ -596,8 +596,7 @@ am__depfiles_remade = cso_cache/$(DEPDIR)/cso_cache.Plo \
 	indices/$(DEPDIR)/u_indices_gen.Plo \
 	indices/$(DEPDIR)/u_primconvert.Plo \
 	indices/$(DEPDIR)/u_unfilled_gen.Plo \
-	nir/$(DEPDIR)/tgsi_to_nir.Plo os/$(DEPDIR)/os_misc.Plo \
-	os/$(DEPDIR)/os_process.Plo \
+	nir/$(DEPDIR)/tgsi_to_nir.Plo os/$(DEPDIR)/os_process.Plo \
 	pipebuffer/$(DEPDIR)/pb_buffer_fenced.Plo \
 	pipebuffer/$(DEPDIR)/pb_buffer_malloc.Plo \
 	pipebuffer/$(DEPDIR)/pb_bufmgr_alt.Plo \
@@ -640,9 +639,9 @@ am__depfiles_remade = cso_cache/$(DEPDIR)/cso_cache.Plo \
 	translate/$(DEPDIR)/translate_sse.Plo \
 	util/$(DEPDIR)/u_async_debug.Plo util/$(DEPDIR)/u_bitmask.Plo \
 	util/$(DEPDIR)/u_blit.Plo util/$(DEPDIR)/u_blitter.Plo \
-	util/$(DEPDIR)/u_cache.Plo util/$(DEPDIR)/u_cpu_detect.Plo \
-	util/$(DEPDIR)/u_debug.Plo util/$(DEPDIR)/u_debug_describe.Plo \
+	util/$(DEPDIR)/u_cache.Plo util/$(DEPDIR)/u_debug_describe.Plo \
 	util/$(DEPDIR)/u_debug_flush.Plo \
+	util/$(DEPDIR)/u_debug_gallium.Plo \
 	util/$(DEPDIR)/u_debug_image.Plo \
 	util/$(DEPDIR)/u_debug_memory.Plo \
 	util/$(DEPDIR)/u_debug_refcnt.Plo \
@@ -667,10 +666,11 @@ am__depfiles_remade = cso_cache/$(DEPDIR)/cso_cache.Plo \
 	util/$(DEPDIR)/u_hash_table.Plo util/$(DEPDIR)/u_helpers.Plo \
 	util/$(DEPDIR)/u_idalloc.Plo util/$(DEPDIR)/u_index_modify.Plo \
 	util/$(DEPDIR)/u_linear.Plo util/$(DEPDIR)/u_log.Plo \
-	util/$(DEPDIR)/u_math.Plo util/$(DEPDIR)/u_mm.Plo \
-	util/$(DEPDIR)/u_network.Plo util/$(DEPDIR)/u_prim_restart.Plo \
+	util/$(DEPDIR)/u_mm.Plo util/$(DEPDIR)/u_network.Plo \
+	util/$(DEPDIR)/u_prim.Plo util/$(DEPDIR)/u_prim_restart.Plo \
 	util/$(DEPDIR)/u_pstipple.Plo util/$(DEPDIR)/u_resource.Plo \
 	util/$(DEPDIR)/u_ringbuffer.Plo util/$(DEPDIR)/u_sampler.Plo \
+	util/$(DEPDIR)/u_screen.Plo \
 	util/$(DEPDIR)/u_simple_shaders.Plo \
 	util/$(DEPDIR)/u_suballoc.Plo util/$(DEPDIR)/u_surface.Plo \
 	util/$(DEPDIR)/u_surfaces.Plo util/$(DEPDIR)/u_tests.Plo \
@@ -830,8 +830,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -852,7 +850,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -945,11 +942,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -1011,8 +1013,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -1071,10 +1071,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1195,8 +1198,6 @@ C_SOURCES := \
 	os/os_memory_debug.h \
 	os/os_memory_stdc.h \
 	os/os_memory.h \
-	os/os_misc.c \
-	os/os_misc.h \
 	os/os_mman.h \
 	os/os_process.c \
 	os/os_process.h \
@@ -1313,10 +1314,8 @@ C_SOURCES := \
 	util/u_box.h \
 	util/u_cache.c \
 	util/u_cache.h \
-	util/u_cpu_detect.c \
-	util/u_cpu_detect.h \
-	util/u_debug.c \
-	util/u_debug.h \
+	util/u_debug_gallium.h \
+	util/u_debug_gallium.c \
 	util/u_debug_describe.c \
 	util/u_debug_describe.h \
 	util/u_debug_flush.c \
@@ -1383,8 +1382,6 @@ C_SOURCES := \
 	util/u_linear.h \
 	util/u_log.c \
 	util/u_log.h \
-	util/u_math.c \
-	util/u_math.h \
 	util/u_memory.h \
 	util/u_mm.c \
 	util/u_mm.h \
@@ -1393,6 +1390,7 @@ C_SOURCES := \
 	util/u_pack_color.h \
 	util/u_pointer.h \
 	util/u_prim.h \
+	util/u_prim.c \
 	util/u_prim_restart.c \
 	util/u_prim_restart.h \
 	util/u_pstipple.c \
@@ -1406,6 +1404,8 @@ C_SOURCES := \
 	util/u_ringbuffer.h \
 	util/u_sampler.c \
 	util/u_sampler.h \
+	util/u_screen.c \
+	util/u_screen.h \
 	util/u_simple_shaders.c \
 	util/u_simple_shaders.h \
 	util/u_split_prim.h \
@@ -1646,7 +1646,7 @@ libgallium_la_SOURCES = $(C_SOURCES) $(NIR_SOURCES) \
 	$(GENERATED_SOURCES) $(am__append_6) $(am__append_8) \
 	$(am__append_11)
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 libgalliumvl_stub_la_SOURCES = \
 	$(VL_STUB_SOURCES)
 
@@ -1896,7 +1896,6 @@ os/$(am__dirstamp):
 os/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) os/$(DEPDIR)
 	@: > os/$(DEPDIR)/$(am__dirstamp)
-os/os_misc.lo: os/$(am__dirstamp) os/$(DEPDIR)/$(am__dirstamp)
 os/os_process.lo: os/$(am__dirstamp) os/$(DEPDIR)/$(am__dirstamp)
 pipebuffer/$(am__dirstamp):
 	@$(MKDIR_P) pipebuffer
@@ -2038,9 +2037,8 @@ util/u_bitmask.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_blit.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_blitter.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_cache.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
-util/u_cpu_detect.lo: util/$(am__dirstamp) \
+util/u_debug_gallium.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
-util/u_debug.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug_describe.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_debug_flush.lo: util/$(am__dirstamp) \
@@ -2096,9 +2094,9 @@ util/u_index_modify.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_linear.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_log.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
-util/u_math.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_mm.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_network.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_prim.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_prim_restart.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_pstipple.lo: util/$(am__dirstamp) \
@@ -2108,6 +2106,7 @@ util/u_resource.lo: util/$(am__dirstamp) \
 util/u_ringbuffer.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_sampler.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
+util/u_screen.lo: util/$(am__dirstamp) util/$(DEPDIR)/$(am__dirstamp)
 util/u_simple_shaders.lo: util/$(am__dirstamp) \
 	util/$(DEPDIR)/$(am__dirstamp)
 util/u_suballoc.lo: util/$(am__dirstamp) \
@@ -2436,7 +2435,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_primconvert.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@indices/$(DEPDIR)/u_unfilled_gen.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/tgsi_to_nir.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@os/$(DEPDIR)/os_misc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@os/$(DEPDIR)/os_process.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_buffer_fenced.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@pipebuffer/$(DEPDIR)/pb_buffer_malloc.Plo@am__quote@ # am--include-marker
@@ -2494,10 +2492,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_blit.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_blitter.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_cache.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_cpu_detect.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_describe.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_flush.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_gallium.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_image.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_memory.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_debug_refcnt.Plo@am__quote@ # am--include-marker
@@ -2529,14 +2526,15 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_index_modify.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_linear.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_log.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_math.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_mm.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_network.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_prim.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_prim_restart.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_pstipple.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_resource.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_ringbuffer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_sampler.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_screen.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_simple_shaders.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_suballoc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@util/$(DEPDIR)/u_surface.Plo@am__quote@ # am--include-marker
@@ -3035,7 +3033,6 @@ distclean: distclean-am
 	-rm -f indices/$(DEPDIR)/u_primconvert.Plo
 	-rm -f indices/$(DEPDIR)/u_unfilled_gen.Plo
 	-rm -f nir/$(DEPDIR)/tgsi_to_nir.Plo
-	-rm -f os/$(DEPDIR)/os_misc.Plo
 	-rm -f os/$(DEPDIR)/os_process.Plo
 	-rm -f pipebuffer/$(DEPDIR)/pb_buffer_fenced.Plo
 	-rm -f pipebuffer/$(DEPDIR)/pb_buffer_malloc.Plo
@@ -3093,10 +3090,9 @@ distclean: distclean-am
 	-rm -f util/$(DEPDIR)/u_blit.Plo
 	-rm -f util/$(DEPDIR)/u_blitter.Plo
 	-rm -f util/$(DEPDIR)/u_cache.Plo
-	-rm -f util/$(DEPDIR)/u_cpu_detect.Plo
-	-rm -f util/$(DEPDIR)/u_debug.Plo
 	-rm -f util/$(DEPDIR)/u_debug_describe.Plo
 	-rm -f util/$(DEPDIR)/u_debug_flush.Plo
+	-rm -f util/$(DEPDIR)/u_debug_gallium.Plo
 	-rm -f util/$(DEPDIR)/u_debug_image.Plo
 	-rm -f util/$(DEPDIR)/u_debug_memory.Plo
 	-rm -f util/$(DEPDIR)/u_debug_refcnt.Plo
@@ -3128,14 +3124,15 @@ distclean: distclean-am
 	-rm -f util/$(DEPDIR)/u_index_modify.Plo
 	-rm -f util/$(DEPDIR)/u_linear.Plo
 	-rm -f util/$(DEPDIR)/u_log.Plo
-	-rm -f util/$(DEPDIR)/u_math.Plo
 	-rm -f util/$(DEPDIR)/u_mm.Plo
 	-rm -f util/$(DEPDIR)/u_network.Plo
+	-rm -f util/$(DEPDIR)/u_prim.Plo
 	-rm -f util/$(DEPDIR)/u_prim_restart.Plo
 	-rm -f util/$(DEPDIR)/u_pstipple.Plo
 	-rm -f util/$(DEPDIR)/u_resource.Plo
 	-rm -f util/$(DEPDIR)/u_ringbuffer.Plo
 	-rm -f util/$(DEPDIR)/u_sampler.Plo
+	-rm -f util/$(DEPDIR)/u_screen.Plo
 	-rm -f util/$(DEPDIR)/u_simple_shaders.Plo
 	-rm -f util/$(DEPDIR)/u_suballoc.Plo
 	-rm -f util/$(DEPDIR)/u_surface.Plo
@@ -3314,7 +3311,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f indices/$(DEPDIR)/u_primconvert.Plo
 	-rm -f indices/$(DEPDIR)/u_unfilled_gen.Plo
 	-rm -f nir/$(DEPDIR)/tgsi_to_nir.Plo
-	-rm -f os/$(DEPDIR)/os_misc.Plo
 	-rm -f os/$(DEPDIR)/os_process.Plo
 	-rm -f pipebuffer/$(DEPDIR)/pb_buffer_fenced.Plo
 	-rm -f pipebuffer/$(DEPDIR)/pb_buffer_malloc.Plo
@@ -3372,10 +3368,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f util/$(DEPDIR)/u_blit.Plo
 	-rm -f util/$(DEPDIR)/u_blitter.Plo
 	-rm -f util/$(DEPDIR)/u_cache.Plo
-	-rm -f util/$(DEPDIR)/u_cpu_detect.Plo
-	-rm -f util/$(DEPDIR)/u_debug.Plo
 	-rm -f util/$(DEPDIR)/u_debug_describe.Plo
 	-rm -f util/$(DEPDIR)/u_debug_flush.Plo
+	-rm -f util/$(DEPDIR)/u_debug_gallium.Plo
 	-rm -f util/$(DEPDIR)/u_debug_image.Plo
 	-rm -f util/$(DEPDIR)/u_debug_memory.Plo
 	-rm -f util/$(DEPDIR)/u_debug_refcnt.Plo
@@ -3407,14 +3402,15 @@ maintainer-clean: maintainer-clean-am
 	-rm -f util/$(DEPDIR)/u_index_modify.Plo
 	-rm -f util/$(DEPDIR)/u_linear.Plo
 	-rm -f util/$(DEPDIR)/u_log.Plo
-	-rm -f util/$(DEPDIR)/u_math.Plo
 	-rm -f util/$(DEPDIR)/u_mm.Plo
 	-rm -f util/$(DEPDIR)/u_network.Plo
+	-rm -f util/$(DEPDIR)/u_prim.Plo
 	-rm -f util/$(DEPDIR)/u_prim_restart.Plo
 	-rm -f util/$(DEPDIR)/u_pstipple.Plo
 	-rm -f util/$(DEPDIR)/u_resource.Plo
 	-rm -f util/$(DEPDIR)/u_ringbuffer.Plo
 	-rm -f util/$(DEPDIR)/u_sampler.Plo
+	-rm -f util/$(DEPDIR)/u_screen.Plo
 	-rm -f util/$(DEPDIR)/u_simple_shaders.Plo
 	-rm -f util/$(DEPDIR)/u_suballoc.Plo
 	-rm -f util/$(DEPDIR)/u_surface.Plo

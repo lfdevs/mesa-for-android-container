@@ -37,6 +37,8 @@
 #include "util/build_id.h"
 #include "util/disk_cache.h"
 #include "util/mesa-sha1.h"
+#include "util/u_string.h"
+#include "git_sha1.h"
 #include "vk_util.h"
 #include "common/gen_defines.h"
 
@@ -308,9 +310,10 @@ anv_physical_device_free_disk_cache(struct anv_physical_device *device)
 static VkResult
 anv_physical_device_init(struct anv_physical_device *device,
                          struct anv_instance *instance,
-                         const char *primary_path,
-                         const char *path)
+                         drmDevicePtr drm_device)
 {
+   const char *primary_path = drm_device->nodes[DRM_NODE_PRIMARY];
+   const char *path = drm_device->nodes[DRM_NODE_RENDER];
    VkResult result;
    int fd;
    int master_fd = -1;
@@ -325,7 +328,7 @@ anv_physical_device_init(struct anv_physical_device *device,
    device->instance = instance;
 
    assert(strlen(path) < ARRAY_SIZE(device->path));
-   strncpy(device->path, path, ARRAY_SIZE(device->path));
+   snprintf(device->path, ARRAY_SIZE(device->path), "%s", path);
 
    device->no_hw = getenv("INTEL_NO_HW") != NULL;
 
@@ -340,6 +343,11 @@ anv_physical_device_init(struct anv_physical_device *device,
       device->chipset_id = pci_id_override;
       device->no_hw = true;
    }
+
+   device->pci_info.domain = drm_device->businfo.pci->domain;
+   device->pci_info.bus = drm_device->businfo.pci->bus;
+   device->pci_info.device = drm_device->businfo.pci->dev;
+   device->pci_info.function = drm_device->businfo.pci->func;
 
    device->name = gen_get_device_name(device->chipset_id);
    if (!gen_get_device_info(device->chipset_id, &device->info)) {
@@ -636,14 +644,25 @@ VkResult anv_CreateInstance(
       /* Vulkan requires that entrypoints for extensions which have not been
        * enabled must not be advertised.
        */
-      if (!anv_entrypoint_is_enabled(i, instance->app_info.api_version,
-                                     &instance->enabled_extensions, NULL)) {
+      if (!anv_instance_entrypoint_is_enabled(i, instance->app_info.api_version,
+                                              &instance->enabled_extensions)) {
          instance->dispatch.entrypoints[i] = NULL;
-      } else if (anv_dispatch_table.entrypoints[i] != NULL) {
-         instance->dispatch.entrypoints[i] = anv_dispatch_table.entrypoints[i];
       } else {
          instance->dispatch.entrypoints[i] =
-            anv_tramp_dispatch_table.entrypoints[i];
+            anv_instance_dispatch_table.entrypoints[i];
+      }
+   }
+
+   for (unsigned i = 0; i < ARRAY_SIZE(instance->device_dispatch.entrypoints); i++) {
+      /* Vulkan requires that entrypoints for extensions which have not been
+       * enabled must not be advertised.
+       */
+      if (!anv_device_entrypoint_is_enabled(i, instance->app_info.api_version,
+                                            &instance->enabled_extensions, NULL)) {
+         instance->device_dispatch.entrypoints[i] = NULL;
+      } else {
+         instance->device_dispatch.entrypoints[i] =
+            anv_device_dispatch_table.entrypoints[i];
       }
    }
 
@@ -682,8 +701,8 @@ void anv_DestroyInstance(
       anv_physical_device_finish(&instance->physicalDevice);
    }
 
-   vk_free(&instance->alloc, instance->app_info.app_name);
-   vk_free(&instance->alloc, instance->app_info.engine_name);
+   vk_free(&instance->alloc, (char *)instance->app_info.app_name);
+   vk_free(&instance->alloc, (char *)instance->app_info.engine_name);
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
@@ -714,9 +733,7 @@ anv_enumerate_devices(struct anv_instance *instance)
           devices[i]->deviceinfo.pci->vendor_id == 0x8086) {
 
          result = anv_physical_device_init(&instance->physicalDevice,
-                        instance,
-                        devices[i]->nodes[DRM_NODE_PRIMARY],
-                        devices[i]->nodes[DRM_NODE_RENDER]);
+                                           instance, devices[i]);
          if (result != VK_ERROR_INCOMPATIBLE_DRIVER)
             break;
       }
@@ -1068,7 +1085,7 @@ void anv_GetPhysicalDeviceProperties(
       .maxClipDistances                         = 8,
       .maxCullDistances                         = 8,
       .maxCombinedClipAndCullDistances          = 8,
-      .discreteQueuePriorities                  = 1,
+      .discreteQueuePriorities                  = 2,
       .pointSizeRange                           = { 0.125, 255.875 },
       .lineWidthRange                           = { 0.0, 7.9921875 },
       .pointSizeGranularity                     = (1.0 / 8.0),
@@ -1114,6 +1131,26 @@ void anv_GetPhysicalDeviceProperties2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR: {
+         VkPhysicalDeviceDriverPropertiesKHR *driver_props =
+            (VkPhysicalDeviceDriverPropertiesKHR *) ext;
+
+         driver_props->driverID = VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR;
+         util_snprintf(driver_props->driverName, VK_MAX_DRIVER_NAME_SIZE_KHR,
+                "Intel open-source Mesa driver");
+
+         util_snprintf(driver_props->driverInfo, VK_MAX_DRIVER_INFO_SIZE_KHR,
+                "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
+
+         driver_props->conformanceVersion = (VkConformanceVersionKHR) {
+            .major = 1,
+            .minor = 1,
+            .subminor = 2,
+            .patch = 0,
+         };
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES: {
          VkPhysicalDeviceIDProperties *id_props =
             (VkPhysicalDeviceIDProperties *)ext;
@@ -1143,11 +1180,29 @@ void anv_GetPhysicalDeviceProperties2(
          break;
       }
 
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT: {
+         VkPhysicalDevicePCIBusInfoPropertiesEXT *properties =
+            (VkPhysicalDevicePCIBusInfoPropertiesEXT *)ext;
+         properties->pciDomain = pdevice->pci_info.domain;
+         properties->pciBus = pdevice->pci_info.bus;
+         properties->pciDevice = pdevice->pci_info.device;
+         properties->pciFunction = pdevice->pci_info.function;
+         break;
+      }
+
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES: {
          VkPhysicalDevicePointClippingProperties *properties =
             (VkPhysicalDevicePointClippingProperties *) ext;
          properties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
          anv_finishme("Implement pop-free point clipping");
+         break;
+      }
+
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT: {
+         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *properties =
+            (VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *)ext;
+         properties->filterMinmaxImageComponentMapping = pdevice->info.gen >= 9;
+         properties->filterMinmaxSingleComponentFormats = true;
          break;
       }
 
@@ -1318,11 +1373,15 @@ PFN_vkVoidFunction anv_GetInstanceProcAddr(
    if (instance == NULL)
       return NULL;
 
-   int idx = anv_get_entrypoint_index(pName);
-   if (idx < 0)
-      return NULL;
+   int idx = anv_get_instance_entrypoint_index(pName);
+   if (idx >= 0)
+      return instance->dispatch.entrypoints[idx];
 
-   return instance->dispatch.entrypoints[idx];
+   idx = anv_get_device_entrypoint_index(pName);
+   if (idx >= 0)
+      return instance->device_dispatch.entrypoints[idx];
+
+   return NULL;
 }
 
 /* With version 1+ of the loader interface the ICD should expose
@@ -1350,7 +1409,7 @@ PFN_vkVoidFunction anv_GetDeviceProcAddr(
    if (!device || !pName)
       return NULL;
 
-   int idx = anv_get_entrypoint_index(pName);
+   int idx = anv_get_device_entrypoint_index(pName);
    if (idx < 0)
       return NULL;
 
@@ -1485,7 +1544,6 @@ VkResult anv_EnumerateDeviceExtensionProperties(
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
    VK_OUTARRAY_MAKE(out, pProperties, pPropertyCount);
-   (void)device;
 
    for (int i = 0; i < ANV_DEVICE_EXTENSION_COUNT; i++) {
       if (device->supported_extensions.extensions[i]) {
@@ -1501,25 +1559,25 @@ VkResult anv_EnumerateDeviceExtensionProperties(
 static void
 anv_device_init_dispatch(struct anv_device *device)
 {
-   const struct anv_dispatch_table *genX_table;
+   const struct anv_device_dispatch_table *genX_table;
    switch (device->info.gen) {
    case 11:
-      genX_table = &gen11_dispatch_table;
+      genX_table = &gen11_device_dispatch_table;
       break;
    case 10:
-      genX_table = &gen10_dispatch_table;
+      genX_table = &gen10_device_dispatch_table;
       break;
    case 9:
-      genX_table = &gen9_dispatch_table;
+      genX_table = &gen9_device_dispatch_table;
       break;
    case 8:
-      genX_table = &gen8_dispatch_table;
+      genX_table = &gen8_device_dispatch_table;
       break;
    case 7:
       if (device->info.is_haswell)
-         genX_table = &gen75_dispatch_table;
+         genX_table = &gen75_device_dispatch_table;
       else
-         genX_table = &gen7_dispatch_table;
+         genX_table = &gen7_device_dispatch_table;
       break;
    default:
       unreachable("unsupported gen\n");
@@ -1529,14 +1587,15 @@ anv_device_init_dispatch(struct anv_device *device)
       /* Vulkan requires that entrypoints for extensions which have not been
        * enabled must not be advertised.
        */
-      if (!anv_entrypoint_is_enabled(i, device->instance->app_info.api_version,
-                                     &device->instance->enabled_extensions,
-                                     &device->enabled_extensions)) {
+      if (!anv_device_entrypoint_is_enabled(i, device->instance->app_info.api_version,
+                                            &device->instance->enabled_extensions,
+                                            &device->enabled_extensions)) {
          device->dispatch.entrypoints[i] = NULL;
       } else if (genX_table->entrypoints[i]) {
          device->dispatch.entrypoints[i] = genX_table->entrypoints[i];
       } else {
-         device->dispatch.entrypoints[i] = anv_dispatch_table.entrypoints[i];
+         device->dispatch.entrypoints[i] =
+            anv_device_dispatch_table.entrypoints[i];
       }
    }
 }
@@ -1559,9 +1618,18 @@ vk_priority_to_gen(int priority)
 }
 
 static void
-anv_device_init_hiz_clear_batch(struct anv_device *device)
+anv_device_init_hiz_clear_value_bo(struct anv_device *device)
 {
    anv_bo_init_new(&device->hiz_clear_bo, device, 4096);
+
+   if (device->instance->physicalDevice.has_exec_async)
+      device->hiz_clear_bo.flags |= EXEC_OBJECT_ASYNC;
+
+   if (device->instance->physicalDevice.use_softpin)
+      device->hiz_clear_bo.flags |= EXEC_OBJECT_PINNED;
+
+   anv_vma_alloc(device, &device->hiz_clear_bo);
+
    uint32_t *map = anv_gem_mmap(device, device->hiz_clear_bo.gem_handle,
                                 0, 4096, 0);
 
@@ -1643,7 +1711,7 @@ VkResult anv_CreateDevice(
    device->instance = physical_device->instance;
    device->chipset_id = physical_device->chipset_id;
    device->no_hw = physical_device->no_hw;
-   device->lost = false;
+   device->_lost = false;
 
    if (pAllocator)
       device->alloc = *pAllocator;
@@ -1795,7 +1863,7 @@ VkResult anv_CreateDevice(
    anv_device_init_trivial_batch(device);
 
    if (device->info.gen >= 10)
-      anv_device_init_hiz_clear_batch(device);
+      anv_device_init_hiz_clear_value_bo(device);
 
    anv_scratch_pool_init(device, &device->scratch_pool);
 
@@ -1981,32 +2049,48 @@ void anv_GetDeviceQueue2(
 }
 
 VkResult
+_anv_device_set_lost(struct anv_device *device,
+                     const char *file, int line,
+                     const char *msg, ...)
+{
+   VkResult err;
+   va_list ap;
+
+   device->_lost = true;
+
+   va_start(ap, msg);
+   err = __vk_errorv(device->instance, device,
+                     VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT,
+                     VK_ERROR_DEVICE_LOST, file, line, msg, ap);
+   va_end(ap);
+
+   if (env_var_as_boolean("ANV_ABORT_ON_DEVICE_LOSS", false))
+      abort();
+
+   return err;
+}
+
+VkResult
 anv_device_query_status(struct anv_device *device)
 {
    /* This isn't likely as most of the callers of this function already check
     * for it.  However, it doesn't hurt to check and it potentially lets us
     * avoid an ioctl.
     */
-   if (unlikely(device->lost))
+   if (anv_device_is_lost(device))
       return VK_ERROR_DEVICE_LOST;
 
    uint32_t active, pending;
    int ret = anv_gem_gpu_get_reset_stats(device, &active, &pending);
    if (ret == -1) {
       /* We don't know the real error. */
-      device->lost = true;
-      return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
-                       "get_reset_stats failed: %m");
+      return anv_device_set_lost(device, "get_reset_stats failed: %m");
    }
 
    if (active) {
-      device->lost = true;
-      return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
-                       "GPU hung on one of our command buffers");
+      return anv_device_set_lost(device, "GPU hung on one of our command buffers");
    } else if (pending) {
-      device->lost = true;
-      return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
-                       "GPU hung with commands in-flight");
+      return anv_device_set_lost(device, "GPU hung with commands in-flight");
    }
 
    return VK_SUCCESS;
@@ -2024,9 +2108,7 @@ anv_device_bo_busy(struct anv_device *device, struct anv_bo *bo)
       return VK_NOT_READY;
    } else if (ret == -1) {
       /* We don't know the real error. */
-      device->lost = true;
-      return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
-                       "gem wait failed: %m");
+      return anv_device_set_lost(device, "gem wait failed: %m");
    }
 
    /* Query for device status after the busy call.  If the BO we're checking
@@ -2047,9 +2129,7 @@ anv_device_wait(struct anv_device *device, struct anv_bo *bo,
       return VK_TIMEOUT;
    } else if (ret == -1) {
       /* We don't know the real error. */
-      device->lost = true;
-      return vk_errorf(device->instance, device, VK_ERROR_DEVICE_LOST,
-                       "gem wait failed: %m");
+      return anv_device_set_lost(device, "gem wait failed: %m");
    }
 
    /* Query for device status after the wait.  If the BO we're waiting on got
@@ -2064,7 +2144,7 @@ VkResult anv_DeviceWaitIdle(
     VkDevice                                    _device)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   if (unlikely(device->lost))
+   if (anv_device_is_lost(device))
       return VK_ERROR_DEVICE_LOST;
 
    struct anv_batch batch;
@@ -2277,7 +2357,7 @@ VkResult anv_AllocateMemory(
             const uint32_t i915_tiling =
                isl_tiling_to_i915_tiling(image->planes[0].surface.isl.tiling);
             int ret = anv_gem_set_tiling(device, mem->bo->gem_handle,
-                                         image->planes[0].surface.isl.row_pitch,
+                                         image->planes[0].surface.isl.row_pitch_B,
                                          i915_tiling);
             if (ret) {
                anv_bo_cache_release(device, &device->bo_cache, mem->bo);
@@ -2738,7 +2818,7 @@ VkResult anv_QueueBindSparse(
     VkFence                                     fence)
 {
    ANV_FROM_HANDLE(anv_queue, queue, _queue);
-   if (unlikely(queue->device->lost))
+   if (anv_device_is_lost(queue->device))
       return VK_ERROR_DEVICE_LOST;
 
    return vk_error(VK_ERROR_FEATURE_NOT_PRESENT);
@@ -2796,7 +2876,7 @@ VkResult anv_GetEventStatus(
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
-   if (unlikely(device->lost))
+   if (anv_device_is_lost(device))
       return VK_ERROR_DEVICE_LOST;
 
    if (!device->info.has_llc) {
@@ -2895,9 +2975,9 @@ anv_fill_buffer_surface_state(struct anv_device *device, struct anv_state state,
    isl_buffer_fill_state(&device->isl_dev, state.map,
                          .address = anv_address_physical(address),
                          .mocs = device->default_mocs,
-                         .size = range,
+                         .size_B = range,
                          .format = format,
-                         .stride = stride);
+                         .stride_B = stride);
 
    anv_state_flush(device, state);
 }
@@ -2961,6 +3041,133 @@ void anv_DestroyFramebuffer(
       return;
 
    vk_free2(&device->alloc, pAllocator, fb);
+}
+
+static const VkTimeDomainEXT anv_time_domains[] = {
+   VK_TIME_DOMAIN_DEVICE_EXT,
+   VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
+   VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT,
+};
+
+VkResult anv_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
+   VkPhysicalDevice                             physicalDevice,
+   uint32_t                                     *pTimeDomainCount,
+   VkTimeDomainEXT                              *pTimeDomains)
+{
+   int d;
+   VK_OUTARRAY_MAKE(out, pTimeDomains, pTimeDomainCount);
+
+   for (d = 0; d < ARRAY_SIZE(anv_time_domains); d++) {
+      vk_outarray_append(&out, i) {
+         *i = anv_time_domains[d];
+      }
+   }
+
+   return vk_outarray_status(&out);
+}
+
+static uint64_t
+anv_clock_gettime(clockid_t clock_id)
+{
+   struct timespec current;
+   int ret;
+
+   ret = clock_gettime(clock_id, &current);
+   if (ret < 0 && clock_id == CLOCK_MONOTONIC_RAW)
+      ret = clock_gettime(CLOCK_MONOTONIC, &current);
+   if (ret < 0)
+      return 0;
+
+   return (uint64_t) current.tv_sec * 1000000000ULL + current.tv_nsec;
+}
+
+#define TIMESTAMP 0x2358
+
+VkResult anv_GetCalibratedTimestampsEXT(
+   VkDevice                                     _device,
+   uint32_t                                     timestampCount,
+   const VkCalibratedTimestampInfoEXT           *pTimestampInfos,
+   uint64_t                                     *pTimestamps,
+   uint64_t                                     *pMaxDeviation)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   uint64_t timestamp_frequency = device->info.timestamp_frequency;
+   int  ret;
+   int d;
+   uint64_t begin, end;
+   uint64_t max_clock_period = 0;
+
+   begin = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
+
+   for (d = 0; d < timestampCount; d++) {
+      switch (pTimestampInfos[d].timeDomain) {
+      case VK_TIME_DOMAIN_DEVICE_EXT:
+         ret = anv_gem_reg_read(device, TIMESTAMP | 1,
+                                &pTimestamps[d]);
+
+         if (ret != 0) {
+            return anv_device_set_lost(device, "Failed to read the TIMESTAMP "
+                                               "register: %m");
+         }
+         uint64_t device_period = DIV_ROUND_UP(1000000000, timestamp_frequency);
+         max_clock_period = MAX2(max_clock_period, device_period);
+         break;
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT:
+         pTimestamps[d] = anv_clock_gettime(CLOCK_MONOTONIC);
+         max_clock_period = MAX2(max_clock_period, 1);
+         break;
+
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
+         pTimestamps[d] = begin;
+         break;
+      default:
+         pTimestamps[d] = 0;
+         break;
+      }
+   }
+
+   end = anv_clock_gettime(CLOCK_MONOTONIC_RAW);
+
+    /*
+     * The maximum deviation is the sum of the interval over which we
+     * perform the sampling and the maximum period of any sampled
+     * clock. That's because the maximum skew between any two sampled
+     * clock edges is when the sampled clock with the largest period is
+     * sampled at the end of that period but right at the beginning of the
+     * sampling interval and some other clock is sampled right at the
+     * begining of its sampling period and right at the end of the
+     * sampling interval. Let's assume the GPU has the longest clock
+     * period and that the application is sampling GPU and monotonic:
+     *
+     *                               s                 e
+     *			 w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e f
+     *	Raw              -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+     *
+     *                               g
+     *		  0         1         2         3
+     *	GPU       -----_____-----_____-----_____-----_____
+     *
+     *                                                m
+     *					    x y z 0 1 2 3 4 5 6 7 8 9 a b c
+     *	Monotonic                           -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+     *
+     *	Interval                     <----------------->
+     *	Deviation           <-------------------------->
+     *
+     *		s  = read(raw)       2
+     *		g  = read(GPU)       1
+     *		m  = read(monotonic) 2
+     *		e  = read(raw)       b
+     *
+     * We round the sample interval up by one tick to cover sampling error
+     * in the interval clock
+     */
+
+   uint64_t sample_interval = end - begin + 1;
+
+   *pMaxDeviation = sample_interval + max_clock_period;
+
+   return VK_SUCCESS;
 }
 
 /* vk_icd.h does not declare this function, so we declare it here to

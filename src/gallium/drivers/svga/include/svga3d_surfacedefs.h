@@ -31,6 +31,9 @@
  *       Surface/format/image helper code.
  */
 
+#ifndef SVGA3D_SURFACEDEFS_H
+#define SVGA3D_SURFACEDEFS_H
+
 #include "svga3d_reg.h"
 
 #define max_t(type, x, y)  ((x) > (y) ? (x) : (y))
@@ -1102,6 +1105,30 @@ svga3dsurface_get_serialized_size(SVGA3dSurfaceFormat format,
 
 
 /**
+ * svga3dsurface_get_serialized_size_extended - Returns the number of bytes
+ * required for a surface with given parameters. Support for sample count.
+ *
+ */
+static inline uint32
+svga3dsurface_get_serialized_size_extended(SVGA3dSurfaceFormat format,
+                                           SVGA3dSize base_level_size,
+                                           uint32 num_mip_levels,
+                                           uint32 num_layers,
+                                           uint32 num_samples)
+{
+   uint64_t total_size = svga3dsurface_get_serialized_size(format,
+                                                           base_level_size,
+                                                           num_mip_levels,
+                                                           num_layers);
+
+   total_size *= (num_samples > 1 ? num_samples : 1);
+
+   return (total_size > (uint64_t) MAX_UINT32) ? MAX_UINT32 :
+      (uint32) total_size;
+}
+
+
+/**
  * Compute the offset (in bytes) to a pixel in an image (or volume).
  * 'width' is the image width in pixels
  * 'height' is the image height in pixels
@@ -1121,3 +1148,5 @@ svga3dsurface_get_pixel_offset(SVGA3dSurfaceFormat format,
                           x / bw * desc->bytes_per_block);
    return offset;
 }
+
+#endif

@@ -75,6 +75,8 @@ struct virgl_context {
    int num_draws;
    struct list_head to_flush_bufs;
 
+   struct pipe_resource *atomic_buffers[PIPE_MAX_HW_ATOMIC_BUFFERS];
+
    struct primconvert_context *primconvert;
    uint32_t hw_sub_ctx_id;
 };

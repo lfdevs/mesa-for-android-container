@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -70,7 +68,7 @@
 
 static uint32_t bin_width(struct fd_screen *screen)
 {
-	if (is_a4xx(screen) || is_a5xx(screen))
+	if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
 		return 1024;
 	if (is_a3xx(screen))
 		return 992;
@@ -107,17 +105,18 @@ static void
 calculate_tiles(struct fd_batch *batch)
 {
 	struct fd_context *ctx = batch->ctx;
+	struct fd_screen *screen = ctx->screen;
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct pipe_scissor_state *scissor = &batch->max_scissor;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	const uint32_t gmem_alignw = ctx->screen->gmem_alignw;
-	const uint32_t gmem_alignh = ctx->screen->gmem_alignh;
-	const unsigned npipes = ctx->screen->num_vsc_pipes;
-	const uint32_t gmem_size = ctx->screen->gmemsize_bytes;
+	const uint32_t gmem_alignw = screen->gmem_alignw;
+	const uint32_t gmem_alignh = screen->gmem_alignh;
+	const unsigned npipes = screen->num_vsc_pipes;
+	const uint32_t gmem_size = screen->gmemsize_bytes;
 	uint32_t minx, miny, width, height;
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
-	uint32_t max_width = bin_width(ctx->screen);
+	uint32_t max_width = bin_width(screen);
 	uint8_t cbuf_cpp[MAX_RENDER_TARGETS] = {0}, zsbuf_cpp[2] = {0};
 	uint32_t i, j, t, xoff, yoff;
 	uint32_t tpp_x, tpp_y;
@@ -216,10 +215,10 @@ calculate_tiles(struct fd_batch *batch)
 #define div_round_up(v, a)  (((v) + (a) - 1) / (a))
 	/* figure out number of tiles per pipe: */
 	tpp_x = tpp_y = 1;
-	while (div_round_up(nbins_y, tpp_y) > 8)
+	while (div_round_up(nbins_y, tpp_y) > screen->num_vsc_pipes)
 		tpp_y += 2;
 	while ((div_round_up(nbins_y, tpp_y) *
-			div_round_up(nbins_x, tpp_x)) > 8)
+			div_round_up(nbins_x, tpp_x)) > screen->num_vsc_pipes)
 		tpp_x += 1;
 
 	gmem->maxpw = tpp_x;
@@ -374,15 +373,13 @@ render_sysmem(struct fd_batch *batch)
 static void
 flush_ring(struct fd_batch *batch)
 {
-	/* for compute/blit batch, there is no batch->gmem, only batch->draw: */
-	struct fd_ringbuffer *ring = batch->nondraw ? batch->draw : batch->gmem;
 	uint32_t timestamp;
 	int out_fence_fd = -1;
 
-	fd_ringbuffer_flush2(ring, batch->in_fence_fd,
-			batch->needs_out_fence_fd ? &out_fence_fd : NULL);
+	fd_submit_flush(batch->submit, batch->in_fence_fd,
+			batch->needs_out_fence_fd ? &out_fence_fd : NULL,
+			&timestamp);
 
-	timestamp = fd_ringbuffer_timestamp(ring);
 	fd_fence_populate(batch->fence, timestamp, out_fence_fd);
 }
 
@@ -442,20 +439,6 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 	flush_ring(batch);
 }
 
-/* tile needs restore if it isn't completely contained within the
- * cleared scissor:
- */
-static bool
-skip_restore(struct pipe_scissor_state *scissor, struct fd_tile *tile)
-{
-	unsigned minx = tile->xoff;
-	unsigned maxx = tile->xoff + tile->bin_w;
-	unsigned miny = tile->yoff;
-	unsigned maxy = tile->yoff + tile->bin_h;
-	return (minx >= scissor->minx) && (maxx <= scissor->maxx) &&
-			(miny >= scissor->miny) && (maxy <= scissor->maxy);
-}
-
 /* When deciding whether a tile needs mem2gmem, we need to take into
  * account the scissor rect(s) that were cleared.  To simplify we only
  * consider the last scissor rect for each buffer, since the common
@@ -466,22 +449,6 @@ fd_gmem_needs_restore(struct fd_batch *batch, struct fd_tile *tile,
 		uint32_t buffers)
 {
 	if (!(batch->restore & buffers))
-		return false;
-
-	/* if buffers partially cleared, then slow-path to figure out
-	 * if this particular tile needs restoring:
-	 */
-	if ((buffers & FD_BUFFER_COLOR) &&
-			(batch->partial_cleared & FD_BUFFER_COLOR) &&
-			skip_restore(&batch->cleared_scissor.color, tile))
-		return false;
-	if ((buffers & FD_BUFFER_DEPTH) &&
-			(batch->partial_cleared & FD_BUFFER_DEPTH) &&
-			skip_restore(&batch->cleared_scissor.depth, tile))
-		return false;
-	if ((buffers & FD_BUFFER_STENCIL) &&
-			(batch->partial_cleared & FD_BUFFER_STENCIL) &&
-			skip_restore(&batch->cleared_scissor.stencil, tile))
 		return false;
 
 	return true;

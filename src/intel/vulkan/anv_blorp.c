@@ -168,7 +168,7 @@ get_blorp_surf_for_anv_buffer(struct anv_device *device,
                      .levels = 1,
                      .array_len = 1,
                      .samples = 1,
-                     .row_pitch = row_pitch,
+                     .row_pitch_B = row_pitch,
                      .usage = ISL_SURF_USAGE_TEXTURE_BIT |
                               ISL_SURF_USAGE_RENDER_TARGET_BIT,
                      .tiling_flags = ISL_TILING_LINEAR_BIT);
@@ -296,7 +296,7 @@ void anv_CmdCopyImage(
 
       assert(anv_image_aspects_compatible(src_mask, dst_mask));
 
-      if (_mesa_bitcount(src_mask) > 1) {
+      if (util_bitcount(src_mask) > 1) {
          uint32_t aspect_bit;
          anv_foreach_image_aspect_bit(aspect_bit, src_image, src_mask) {
             struct blorp_surf src_surf, dst_surf;
@@ -1617,8 +1617,8 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
     *       * [...]"
     *
     * Even though the PRM only says that this is required if using 3DSTATE_WM
-    * and a 3DPRIMITIVE, it appears to also sometimes hang when doing a clear
-    * with WM_HZ_OP.
+    * and a 3DPRIMITIVE, the GPU appears to also need this to avoid occasional
+    * hangs when doing a clear with WM_HZ_OP.
     */
    cmd_buffer->state.pending_pipe_bits |=
       ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_DEPTH_STALL_BIT;

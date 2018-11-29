@@ -216,7 +216,7 @@ GLboolean r200CreateContext( gl_api api,
     * the default textures.
     */
    driParseConfigFiles (&rmesa->radeon.optionCache, &screen->optionCache,
-			screen->driScreen->myNum, "r200");
+			screen->driScreen->myNum, "r200", NULL);
    rmesa->radeon.initialMaxAnisotropy = driQueryOptionf(&rmesa->radeon.optionCache,
 							"def_max_anisotropy");
 
@@ -383,7 +383,7 @@ GLboolean r200CreateContext( gl_api api,
       (getenv("R200_GART_CLIENT_TEXTURES") != 0);
 
    tcl_mode = driQueryOptioni(&rmesa->radeon.optionCache, "tcl_mode");
-   if (driQueryOptionb(&rmesa->radeon.optionCache, "no_rast")) {
+   if (getenv("R200_NO_RAST")) {
       fprintf(stderr, "disabling 3D acceleration\n");
       FALLBACK(rmesa, R200_FALLBACK_DISABLE, 1);
    }

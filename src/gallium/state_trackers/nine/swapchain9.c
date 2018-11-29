@@ -100,9 +100,8 @@ D3DWindowBuffer_create(struct NineSwapChain9 *This,
     This->screen->resource_get_handle(This->screen, pipe, resource,
                                       &whandle,
                                       for_frontbuffer_reading ?
-                                          PIPE_HANDLE_USAGE_WRITE :
-                                          PIPE_HANDLE_USAGE_EXPLICIT_FLUSH |
-                                          PIPE_HANDLE_USAGE_READ);
+                                          PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE :
+                                          PIPE_HANDLE_USAGE_EXPLICIT_FLUSH);
     nine_context_get_pipe_release(This->base.device);
     stride = whandle.stride;
     dmaBufFd = whandle.handle;
@@ -662,6 +661,7 @@ present( struct NineSwapChain9 *This,
     struct pipe_fence_handle *fence;
     HRESULT hr;
     struct pipe_blit_info blit;
+    int target_width, target_height, target_depth;
 
     DBG("present: This=%p pSourceRect=%p pDestRect=%p "
         "pDirtyRegion=%p hDestWindowOverride=%p"
@@ -696,6 +696,9 @@ present( struct NineSwapChain9 *This,
     if (This->params.SwapEffect == D3DSWAPEFFECT_DISCARD)
         handle_draw_cursor_and_hud(This, resource);
 
+    ID3DPresent_GetWindowInfo(This->present, hDestWindowOverride, &target_width, &target_height, &target_depth);
+    (void)target_depth;
+
     pipe = NineDevice9_GetPipe(This->base.device);
 
     if (This->present_buffers[0]) {
@@ -710,6 +713,29 @@ present( struct NineSwapChain9 *This,
         blit.src.box.width = resource->width0;
         blit.src.box.height = resource->height0;
 
+        /* Reallocate a new presentation buffer if the target window
+         * size has changed */
+        if (target_width != This->present_buffers[0]->width0 ||
+            target_height != This->present_buffers[0]->height0) {
+            struct pipe_resource *new_resource;
+            D3DWindowBuffer *new_handle;
+
+            create_present_buffer(This, target_width, target_height, &new_resource, &new_handle);
+            /* Switch to the new buffer */
+            if (new_handle) {
+                /* WaitBufferReleased also waits the presentation feedback,
+                 * while IsBufferReleased doesn't. DestroyD3DWindowBuffer unfortunately
+                 * checks it to release immediately all data, else the release
+                 * is postponed for This->present release. To avoid leaks (we may handle
+                 * a lot of resize), call WaitBufferReleased. */
+                ID3DPresent_WaitBufferReleased(This->present, This->present_handles[0]);
+                ID3DPresent_DestroyD3DWindowBuffer(This->present, This->present_handles[0]);
+                This->present_handles[0] = new_handle;
+                pipe_resource_reference(&This->present_buffers[0], new_resource);
+                pipe_resource_reference(&new_resource, NULL);
+            }
+        }
+
         resource = This->present_buffers[0];
 
         blit.dst.resource = resource;
@@ -723,7 +749,9 @@ present( struct NineSwapChain9 *This,
         blit.dst.box.height = resource->height0;
 
         blit.mask = PIPE_MASK_RGBA;
-        blit.filter = PIPE_TEX_FILTER_NEAREST;
+        blit.filter = (blit.dst.box.width == blit.src.box.width &&
+                       blit.dst.box.height == blit.src.box.height) ?
+                          PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR;
         blit.scissor_enable = FALSE;
         blit.alpha_blend = FALSE;
 

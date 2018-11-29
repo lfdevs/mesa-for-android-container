@@ -300,8 +300,6 @@ struct svga_state
    struct {
       unsigned flag_1d;
       unsigned flag_srgb;
-      unsigned flag_rect;  /* sampler views with rectangular texture target */
-      unsigned flag_buf;   /* sampler views with texture buffer target */
    } tex_flags;
 
    unsigned sample_mask;
@@ -717,6 +715,12 @@ static inline boolean
 svga_have_vgpu10(const struct svga_context *svga)
 {
    return svga_screen(svga->pipe.screen)->sws->have_vgpu10;
+}
+
+static inline boolean
+svga_have_sm4_1(const struct svga_context *svga)
+{
+   return svga_screen(svga->pipe.screen)->sws->have_sm4_1;
 }
 
 static inline boolean

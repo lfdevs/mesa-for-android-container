@@ -41,6 +41,7 @@
 #include "xm_api.h"
 #include "main/imports.h"
 #include "main/errors.h"
+#include "util/u_math.h"
 
 /* An "Atrribs/Attribs" typo was fixed in glxproto.h in Nov 2014.
  * This is in case we don't have the updated header.
@@ -419,9 +420,9 @@ get_visual( Display *dpy, int scr, unsigned int depth, int xclass )
     * 10 bits per color channel.  Mesa's limited to a max of 8 bits/channel.
     */
    if (vis && depth > 24 && (xclass==TrueColor || xclass==DirectColor)) {
-      if (_mesa_bitcount((GLuint) vis->red_mask  ) <= 8 &&
-          _mesa_bitcount((GLuint) vis->green_mask) <= 8 &&
-          _mesa_bitcount((GLuint) vis->blue_mask ) <= 8) {
+      if (util_bitcount((GLuint) vis->red_mask  ) <= 8 &&
+          util_bitcount((GLuint) vis->green_mask) <= 8 &&
+          util_bitcount((GLuint) vis->blue_mask ) <= 8) {
          return vis;
       }
       else {

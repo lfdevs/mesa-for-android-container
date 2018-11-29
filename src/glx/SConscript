@@ -36,10 +36,7 @@ env.Prepend(LIBS = [
 env.PkgUseModules('X11')
 env.PkgUseModules('XCB')
 env.PkgUseModules('DRM')
-
-if env['HAVE_XF86VIDMODE']:
-    env.Append(CPPDEFINES = ['XF86VIDMODE'])
-    env.PkgUseModules('XF86VIDMODE')
+env.PkgUseModules('XF86VIDMODE')
 
 sources = [
     'clientattrib.c',

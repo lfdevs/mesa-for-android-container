@@ -315,7 +315,7 @@ nv50_rasterizer_state_create(struct pipe_context *pipe,
       SB_DATA    (so, fui(cso->offset_clamp));
    }
 
-   if (cso->depth_clip) {
+   if (cso->depth_clip_near) {
       reg = 0;
    } else {
       reg =

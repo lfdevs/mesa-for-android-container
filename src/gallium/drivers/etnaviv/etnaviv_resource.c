@@ -254,7 +254,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
       handle.modifier = modifier;
       rsc = etna_resource(pscreen->resource_from_handle(pscreen, templat,
                                                         &handle,
-                                                        PIPE_HANDLE_USAGE_WRITE));
+                                                        PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE));
       close(handle.handle);
       if (!rsc)
          return NULL;

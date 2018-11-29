@@ -303,6 +303,32 @@ droid_window_cancel_buffer(struct dri2_egl_surface *dri2_surf)
    }
 }
 
+static bool
+droid_set_shared_buffer_mode(_EGLDisplay *disp, _EGLSurface *surf, bool mode)
+{
+#if ANDROID_API_LEVEL >= 24
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   struct dri2_egl_surface *dri2_surf = dri2_egl_surface(surf);
+   struct ANativeWindow *window = dri2_surf->window;
+
+   assert(surf->Type == EGL_WINDOW_BIT);
+   assert(_eglSurfaceHasMutableRenderBuffer(&dri2_surf->base));
+
+   _eglLog(_EGL_DEBUG, "%s: mode=%d", __func__, mode);
+
+   if (native_window_set_shared_buffer_mode(window, mode)) {
+      _eglLog(_EGL_WARNING, "failed native_window_set_shared_buffer_mode"
+              "(window=%p, mode=%d)", window, mode);
+      return false;
+   }
+
+   return true;
+#else
+   _eglLog(_EGL_FATAL, "%s:%d: internal error: unreachable", __FILE__, __LINE__);
+   return false;
+#endif
+}
+
 static _EGLSurface *
 droid_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
 		    _EGLConfig *conf, void *native_window,
@@ -593,6 +619,21 @@ droid_image_get_buffers(__DRIdrawable *driDrawable,
    if (update_buffers(dri2_surf) < 0)
       return 0;
 
+   if (_eglSurfaceInSharedBufferMode(&dri2_surf->base)) {
+      if (get_back_bo(dri2_surf) < 0)
+         return 0;
+
+      /* We have dri_image_back because this is a window surface and
+       * get_back_bo() succeeded.
+       */
+      assert(dri2_surf->dri_image_back);
+      images->back = dri2_surf->dri_image_back;
+      images->image_mask |= __DRI_IMAGE_BUFFER_SHARED;
+
+      /* There exists no accompanying back nor front buffer. */
+      return 1;
+   }
+
    if (buffer_mask & __DRI_IMAGE_BUFFER_FRONT) {
       if (get_front_bo(dri2_surf, format) < 0)
          return 0;
@@ -635,9 +676,20 @@ droid_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_surface *dri2_surf = dri2_egl_surface(draw);
+   const bool has_mutable_rb = _eglSurfaceHasMutableRenderBuffer(draw);
 
-   if (dri2_surf->base.Type != EGL_WINDOW_BIT)
+   /* From the EGL_KHR_mutable_render_buffer spec (v12):
+    *
+    *    If surface is a single-buffered window, pixmap, or pbuffer surface
+    *    for which there is no pending change to the EGL_RENDER_BUFFER
+    *    attribute, eglSwapBuffers has no effect.
+    */
+   if (has_mutable_rb &&
+       draw->RequestedRenderBuffer == EGL_SINGLE_BUFFER &&
+       draw->ActiveRenderBuffer == EGL_SINGLE_BUFFER) {
+      _eglLog(_EGL_DEBUG, "%s: remain in shared buffer mode", __func__);
       return EGL_TRUE;
+   }
 
    for (int i = 0; i < ARRAY_SIZE(dri2_surf->color_buffers); i++) {
       if (dri2_surf->color_buffers[i].age > 0)
@@ -662,6 +714,18 @@ droid_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
       droid_window_enqueue_buffer(disp, dri2_surf);
 
    dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
+
+   /* Update the shared buffer mode */
+   if (has_mutable_rb &&
+       draw->ActiveRenderBuffer != draw->RequestedRenderBuffer) {
+       bool mode = (draw->RequestedRenderBuffer == EGL_SINGLE_BUFFER);
+      _eglLog(_EGL_DEBUG, "%s: change to shared buffer mode %d",
+              __func__, mode);
+
+      if (!droid_set_shared_buffer_mode(disp, draw, mode))
+         return EGL_FALSE;
+      draw->ActiveRenderBuffer = draw->RequestedRenderBuffer;
+   }
 
    return EGL_TRUE;
 }
@@ -1134,10 +1198,14 @@ droid_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *dpy)
    return (config_count != 0);
 }
 
+static EGLBoolean
+droid_probe_device(_EGLDisplay *disp);
+
 #ifdef HAVE_DRM_GRALLOC
-static int
-droid_open_device_drm_gralloc(struct dri2_egl_display *dri2_dpy)
+static EGLBoolean
+droid_open_device_drm_gralloc(_EGLDisplay *disp)
 {
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    int fd = -1, err = -EINVAL;
 
    if (dri2_dpy->gralloc->perform)
@@ -1146,10 +1214,14 @@ droid_open_device_drm_gralloc(struct dri2_egl_display *dri2_dpy)
                                           &fd);
    if (err || fd < 0) {
       _eglLog(_EGL_WARNING, "fail to get drm fd");
-      fd = -1;
+      return EGL_FALSE;
    }
 
-   return (fd >= 0) ? fcntl(fd, F_DUPFD_CLOEXEC, 3) : -1;
+   dri2_dpy->fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+   if (dri2_dpy->fd < 0)
+     return EGL_FALSE;
+
+   return droid_probe_device(disp);
 }
 #endif /* HAVE_DRM_GRALLOC */
 
@@ -1176,6 +1248,7 @@ static const struct dri2_egl_display_vtbl droid_display_vtbl = {
    .create_wayland_buffer_from_image = dri2_fallback_create_wayland_buffer_from_image,
    .get_sync_values = dri2_fallback_get_sync_values,
    .get_dri_drawable = dri2_surface_get_dri_drawable,
+   .set_shared_buffer_mode = droid_set_shared_buffer_mode,
 };
 
 #ifdef HAVE_DRM_GRALLOC
@@ -1202,18 +1275,98 @@ static const __DRIextension *droid_dri2_loader_extensions[] = {
    &droid_dri2_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   /* No __DRI_MUTABLE_RENDER_BUFFER_LOADER because it requires
+    * __DRI_IMAGE_LOADER.
+    */
    NULL,
 };
 #endif /* HAVE_DRM_GRALLOC */
+
+static void
+droid_display_shared_buffer(__DRIdrawable *driDrawable, int fence_fd,
+                            void *loaderPrivate)
+{
+   struct dri2_egl_surface *dri2_surf = loaderPrivate;
+   struct ANativeWindowBuffer *old_buffer UNUSED = dri2_surf->buffer;
+
+   if (!_eglSurfaceInSharedBufferMode(&dri2_surf->base)) {
+      _eglLog(_EGL_WARNING, "%s: internal error: buffer is not shared",
+              __func__);
+      return;
+   }
+
+   if (fence_fd >= 0) {
+      /* The driver's fence is more recent than the surface's out fence, if it
+       * exists at all. So use the driver's fence.
+       */
+      if (dri2_surf->out_fence_fd >= 0) {
+         close(dri2_surf->out_fence_fd);
+         dri2_surf->out_fence_fd = -1;
+      }
+   } else if (dri2_surf->out_fence_fd >= 0) {
+      fence_fd = dri2_surf->out_fence_fd;
+      dri2_surf->out_fence_fd = -1;
+   }
+
+   if (dri2_surf->window->queueBuffer(dri2_surf->window, dri2_surf->buffer,
+                                      fence_fd)) {
+      _eglLog(_EGL_WARNING, "%s: ANativeWindow::queueBuffer failed", __func__);
+      close(fence_fd);
+      return;
+   }
+
+   fence_fd = -1;
+
+   if (dri2_surf->window->dequeueBuffer(dri2_surf->window, &dri2_surf->buffer,
+                                        &fence_fd)) {
+      /* Tear down the surface because it no longer has a back buffer. */
+      struct dri2_egl_display *dri2_dpy =
+         dri2_egl_display(dri2_surf->base.Resource.Display);
+
+      _eglLog(_EGL_WARNING, "%s: ANativeWindow::dequeueBuffer failed", __func__);
+
+      dri2_surf->base.Lost = true;
+      dri2_surf->buffer = NULL;
+      dri2_surf->back = NULL;
+
+      if (dri2_surf->dri_image_back) {
+         dri2_dpy->image->destroyImage(dri2_surf->dri_image_back);
+         dri2_surf->dri_image_back = NULL;
+      }
+
+      dri2_dpy->flush->invalidate(dri2_surf->dri_drawable);
+      return;
+   }
+
+   if (fence_fd < 0)
+      return;
+
+   /* Access to the buffer is controlled by a sync fence. Block on it.
+    *
+    * Ideally, we would submit the fence to the driver, and the driver would
+    * postpone command execution until it signalled. But DRI lacks API for
+    * that (as of 2018-04-11).
+    *
+    *  SYNC_IOC_WAIT waits forever if timeout < 0
+    */
+   sync_wait(fence_fd, -1);
+   close(fence_fd);
+}
+
+static const __DRImutableRenderBufferLoaderExtension droid_mutable_render_buffer_extension = {
+   .base = { __DRI_MUTABLE_RENDER_BUFFER_LOADER, 1 },
+   .displaySharedBuffer = droid_display_shared_buffer,
+};
 
 static const __DRIextension *droid_image_loader_extensions[] = {
    &droid_image_loader_extension.base,
    &image_lookup_extension.base,
    &use_invalidate.base,
+   &droid_mutable_render_buffer_extension.base,
    NULL,
 };
 
-EGLBoolean
+static EGLBoolean
 droid_load_driver(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = disp->DriverData;
@@ -1255,62 +1408,58 @@ error:
    return false;
 }
 
-static bool
-droid_probe_driver(int fd)
+static void
+droid_unload_driver(_EGLDisplay *disp)
 {
-   char *driver_name;
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
-   driver_name = loader_get_driver_for_fd(fd);
-   if (driver_name == NULL)
-      return false;
-
-   free(driver_name);
-   return true;
-}
-
-typedef enum {
-   probe_fail = -1,
-   probe_success = 0,
-   probe_filtered_out = 1,
-} probe_ret_t;
-
-static probe_ret_t
-droid_probe_device(_EGLDisplay *disp, int fd, const char *vendor)
-{
-   int ret;
-
-   drmVersionPtr ver = drmGetVersion(fd);
-   if (!ver)
-      return probe_fail;
-
-   if (!ver->name) {
-      ret = probe_fail;
-      goto cleanup;
-   }
-
-   if (vendor && strncmp(vendor, ver->name, PROPERTY_VALUE_MAX) != 0) {
-      ret = probe_filtered_out;
-      goto cleanup;
-   }
-
-   if (!droid_probe_driver(fd)) {
-      ret = probe_fail;
-      goto cleanup;
-   }
-
-   ret = probe_success;
-
-cleanup:
-   drmFreeVersion(ver);
-   return ret;
+   dlclose(dri2_dpy->driver);
+   dri2_dpy->driver = NULL;
+   free(dri2_dpy->driver_name);
+   dri2_dpy->driver_name = NULL;
 }
 
 static int
+droid_filter_device(_EGLDisplay *disp, int fd, const char *vendor)
+{
+   drmVersionPtr ver = drmGetVersion(fd);
+   if (!ver)
+      return -1;
+
+   if (strcmp(vendor, ver->name) != 0) {
+      drmFreeVersion(ver);
+      return -1;
+   }
+
+   drmFreeVersion(ver);
+   return 0;
+}
+
+static EGLBoolean
+droid_probe_device(_EGLDisplay *disp)
+{
+  /* Check that the device is supported, by attempting to:
+   * - load the dri module
+   * - and, create a screen
+   */
+   if (!droid_load_driver(disp))
+      return EGL_FALSE;
+
+   if (!dri2_create_screen(disp)) {
+      _eglLog(_EGL_WARNING, "DRI2: failed to create screen");
+      droid_unload_driver(disp);
+      return EGL_FALSE;
+   }
+   return EGL_TRUE;
+}
+
+static EGLBoolean
 droid_open_device(_EGLDisplay *disp)
 {
-   const int MAX_DRM_DEVICES = 32;
-   int prop_set, num_devices;
-   int fd = -1, fallback_fd = -1;
+#define MAX_DRM_DEVICES 32
+   struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   drmDevicePtr device, devices[MAX_DRM_DEVICES] = { NULL };
+   int num_devices;
 
    char *vendor_name = NULL;
    char vendor_buf[PROPERTY_VALUE_MAX];
@@ -1318,67 +1467,66 @@ droid_open_device(_EGLDisplay *disp)
    if (property_get("drm.gpu.vendor_name", vendor_buf, NULL) > 0)
       vendor_name = vendor_buf;
 
-   const char *drm_dir_name = "/dev/dri";
-   DIR *sysdir = opendir(drm_dir_name);
+   num_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
+   if (num_devices < 0)
+      return EGL_FALSE;
 
-   if (!sysdir)
-       return -errno;
+   for (int i = 0; i < num_devices; i++) {
+      device = devices[i];
 
-   struct dirent *dent;
-   while ((dent = readdir(sysdir))) {
-      char dev_path[128];
-      const char render_dev_prefix[] = "renderD";
-      size_t prefix_len = sizeof(render_dev_prefix) - 1;
-
-      if (strncmp(render_dev_prefix, dent->d_name, prefix_len) != 0)
+      if (!(device->available_nodes & (1 << DRM_NODE_RENDER)))
          continue;
 
-      snprintf(dev_path, sizeof(dev_path), "%s/%s", drm_dir_name, dent->d_name);
-      fd = loader_open_device(dev_path);
-      if (fd < 0) {
+      dri2_dpy->fd = loader_open_device(device->nodes[DRM_NODE_RENDER]);
+      if (dri2_dpy->fd < 0) {
          _eglLog(_EGL_WARNING, "%s() Failed to open DRM device %s",
-                 __func__, dev_path);
+                 __func__, device->nodes[DRM_NODE_RENDER]);
          continue;
       }
 
-      int ret = droid_probe_device(disp, fd, vendor_name);
-      switch (ret) {
-      case probe_success:
-         goto success;
-      case probe_filtered_out:
-         /* Set as fallback */
-         if (fallback_fd == -1)
-            fallback_fd = fd;
-         break;
-      case probe_fail:
+      /* If a vendor is explicitly provided, we use only that.
+       * Otherwise we fall-back the first device that is supported.
+       */
+      if (vendor_name) {
+         if (droid_filter_device(disp, dri2_dpy->fd, vendor_name)) {
+            /* Device does not match - try next device */
+            close(dri2_dpy->fd);
+            dri2_dpy->fd = -1;
+            continue;
+         }
+         /* If the requested device matches - use it. Regardless if
+          * init fails, do not fall-back to any other device.
+          */
+         if (!droid_probe_device(disp)) {
+            close(dri2_dpy->fd);
+            dri2_dpy->fd = -1;
+         }
+
          break;
       }
+      if (droid_probe_device(disp))
+         break;
 
-      if (fallback_fd != fd)
-         close(fd);
-      fd = -1;
+      /* No explicit request - attempt the next device */
+      close(dri2_dpy->fd);
+      dri2_dpy->fd = -1;
+   }
+   drmFreeDevices(devices, num_devices);
+
+   if (dri2_dpy->fd < 0) {
+      _eglLog(_EGL_WARNING, "Failed to open %s DRM device",
+            vendor_name ? "desired": "any");
+      return EGL_FALSE;
    }
 
-success:
-   closedir(sysdir);
-
-   if (fallback_fd < 0 && fd < 0) {
-      _eglLog(_EGL_WARNING, "Failed to open any DRM device");
-      return -1;
-   }
-
-   if (fd < 0) {
-      _eglLog(_EGL_WARNING, "Failed to open desired DRM device, using fallback");
-      return fallback_fd;
-   }
-
-   close(fallback_fd);
-   return fd;
+   return EGL_TRUE;
+#undef MAX_DRM_DEVICES
 }
 
 EGLBoolean
 dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
 {
+   _EGLDevice *dev;
    struct dri2_egl_display *dri2_dpy;
    const char *err;
    int ret;
@@ -1404,24 +1552,21 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
    disp->DriverData = (void *) dri2_dpy;
 
 #ifdef HAVE_DRM_GRALLOC
-   dri2_dpy->fd = droid_open_device_drm_gralloc(dri2_dpy);
+   if (!droid_open_device_drm_gralloc(disp)) {
 #else
-   dri2_dpy->fd = droid_open_device(disp);
+   if (!droid_open_device(disp)) {
 #endif
-   if (dri2_dpy->fd < 0) {
       err = "DRI2: failed to open device";
       goto cleanup;
    }
 
-   if (!droid_load_driver(disp)) {
-      err = "DRI2: failed to load driver";
+   dev = _eglAddDevice(dri2_dpy->fd, false);
+   if (!dev) {
+      err = "DRI2: failed to find EGLDevice";
       goto cleanup;
    }
 
-   if (!dri2_create_screen(disp)) {
-      err = "DRI2: failed to create screen";
-      goto cleanup;
-   }
+   disp->Device = dev;
 
    if (!dri2_setup_extensions(disp)) {
       err = "DRI2: failed to setup extensions";
@@ -1436,11 +1581,6 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
     */
    dri2_setup_swap_interval(disp, 1);
 
-   if (!droid_add_configs_for_visuals(drv, disp)) {
-      err = "DRI2: failed to add configs";
-      goto cleanup;
-   }
-
    disp->Extensions.ANDROID_framebuffer_target = EGL_TRUE;
    disp->Extensions.ANDROID_image_native_buffer = EGL_TRUE;
    disp->Extensions.ANDROID_recordable = EGL_TRUE;
@@ -1449,6 +1589,20 @@ dri2_initialize_android(_EGLDriver *drv, _EGLDisplay *disp)
    disp->Extensions.KHR_partial_update = EGL_TRUE;
 #endif
    disp->Extensions.KHR_image = EGL_TRUE;
+#if ANDROID_API_LEVEL >= 24
+   if (dri2_dpy->mutable_render_buffer &&
+       dri2_dpy->loader_extensions == droid_image_loader_extensions) {
+      disp->Extensions.KHR_mutable_render_buffer = EGL_TRUE;
+   }
+#endif
+
+   /* Create configs *after* enabling extensions because presence of DRI
+    * driver extensions can affect the capabilities of EGLConfigs.
+    */
+   if (!droid_add_configs_for_visuals(drv, disp)) {
+      err = "DRI2: failed to add configs";
+      goto cleanup;
+   }
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
     * initialization.

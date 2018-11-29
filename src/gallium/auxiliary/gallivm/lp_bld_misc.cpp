@@ -650,26 +650,11 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * which are fixed in LLVM 4.0.
     *
     * With LLVM 4.0 or higher:
-    * Make sure VSX instructions are ENABLED, unless
-    * a) the entire -mattr option is overridden via GALLIVM_MATTRS, or
-    * b) VSX instructions are explicitly enabled/disabled via GALLIVM_VSX=1 or 0.
+    * Make sure VSX instructions are ENABLED (if supported), unless
+    * VSX instructions are explicitly enabled/disabled via GALLIVM_VSX=1 or 0.
     */
    if (util_cpu_caps.has_altivec) {
-      char *env_mattrs = getenv("GALLIVM_MATTRS");
-      if (env_mattrs) {
-         MAttrs.push_back(env_mattrs);
-      }
-      else {
-         boolean enable_vsx = true;
-         char *env_vsx = getenv("GALLIVM_VSX");
-         if (env_vsx && env_vsx[0] == '0') {
-            enable_vsx = false;
-         }
-         if (enable_vsx)
-            MAttrs.push_back("+vsx");
-         else
-            MAttrs.push_back("-vsx");
-      }
+      MAttrs.push_back(util_cpu_caps.has_vsx ? "+vsx" : "-vsx");
    }
 #endif
 #endif

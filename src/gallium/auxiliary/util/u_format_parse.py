@@ -29,6 +29,9 @@
 '''
 
 
+from __future__ import division
+
+
 VOID, UNSIGNED, SIGNED, FIXED, FLOAT = range(5)
 
 SWIZZLE_X, SWIZZLE_Y, SWIZZLE_Z, SWIZZLE_W, SWIZZLE_0, SWIZZLE_1, SWIZZLE_NONE, = range(7)
@@ -69,14 +72,20 @@ class Channel:
         return s
 
     def __eq__(self, other):
+        if other is None:
+            return False
+
         return self.type == other.type and self.norm == other.norm and self.pure == other.pure and self.size == other.size
+
+    def __ne__(self, other):
+        return not self == other
 
     def max(self):
         '''Maximum representable number.'''
         if self.type == FLOAT:
             return VERY_LARGE
         if self.type == FIXED:
-            return (1 << (self.size/2)) - 1
+            return (1 << (self.size // 2)) - 1
         if self.norm:
             return 1
         if self.type == UNSIGNED:
@@ -90,7 +99,7 @@ class Channel:
         if self.type == FLOAT:
             return -VERY_LARGE
         if self.type == FIXED:
-            return -(1 << (self.size/2))
+            return -(1 << (self.size // 2))
         if self.type == UNSIGNED:
             return 0
         if self.norm:

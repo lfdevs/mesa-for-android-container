@@ -13946,19 +13946,15 @@ evaluate_unpack_half_2x16_split_x(MAYBE_UNUSED unsigned num_components,
       
    
 
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
 
-      const struct uint32_vec src0 = {
-            _src[0].u32[0],
-         0,
-         0,
-         0,
-      };
+            float32_t dst = unpack_half_1x16((uint16_t)(src0 & 0xffff));
 
-      struct float32_vec dst;
-
-         dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x & 0xffff));
-
-            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[_i] = dst;
+      }
 
 
    return _dst_val;
@@ -13973,19 +13969,15 @@ evaluate_unpack_half_2x16_split_y(MAYBE_UNUSED unsigned num_components,
       
    
 
+         
+      for (unsigned _i = 0; _i < num_components; _i++) {
+               const uint32_t src0 =
+                  _src[0].u32[_i];
 
-      const struct uint32_vec src0 = {
-            _src[0].u32[0],
-         0,
-         0,
-         0,
-      };
+            float32_t dst = unpack_half_1x16((uint16_t)(src0 >> 16));
 
-      struct float32_vec dst;
-
-         dst.x = dst.y = dst.z = dst.w = unpack_half_1x16((uint16_t)(src0.x >> 16));
-
-            _dst_val.f32[0] = dst.x;
+            _dst_val.f32[_i] = dst;
+      }
 
 
    return _dst_val;

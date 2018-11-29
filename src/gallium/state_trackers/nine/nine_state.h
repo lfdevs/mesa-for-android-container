@@ -70,26 +70,27 @@
 #define NINE_STATE_VDECL       (1 << 12)
 #define NINE_STATE_IDXBUF      (1 << 13)
 #define NINE_STATE_STREAMFREQ  (1 << 14)
-#define NINE_STATE_PRIM        (1 << 15)
-#define NINE_STATE_MATERIAL    (1 << 16)
 #define NINE_STATE_BLEND_COLOR (1 << 17)
 #define NINE_STATE_STENCIL_REF (1 << 18)
 #define NINE_STATE_SAMPLE_MASK (1 << 19)
 #define NINE_STATE_FF          (0x1f << 20)
 #define NINE_STATE_FF_VS       (0x17 << 20)
-#define NINE_STATE_FF_PS       (0x18 << 20)
+#define NINE_STATE_FF_PS       (0x08 << 20)
 #define NINE_STATE_FF_LIGHTING (1 << 20)
 #define NINE_STATE_FF_MATERIAL (1 << 21)
 #define NINE_STATE_FF_VSTRANSF (1 << 22)
-#define NINE_STATE_FF_PSSTAGES (1 << 23)
-#define NINE_STATE_FF_OTHER    (1 << 24)
-#define NINE_STATE_FOG_SHADER  (1 << 25)
-#define NINE_STATE_PS1X_SHADER (1 << 26)
-#define NINE_STATE_POINTSIZE_SHADER (1 << 27)
-#define NINE_STATE_MULTISAMPLE (1 << 28)
-#define NINE_STATE_SWVP        (1 << 29)
-#define NINE_STATE_ALL          0x3fffffff
-#define NINE_STATE_UNHANDLED   (1 << 30)
+#define NINE_STATE_FF_PS_CONSTS (1 << 23)
+#define NINE_STATE_FF_VS_OTHER  (1 << 24)
+#define NINE_STATE_VS_PARAMS_MISC  (1 << 25)
+#define NINE_STATE_PS_PARAMS_MISC (1 << 26)
+#define NINE_STATE_MULTISAMPLE (1 << 27)
+#define NINE_STATE_SWVP        (1 << 28)
+#define NINE_STATE_ALL          0x1fffffff
+#define NINE_STATE_UNHANDLED   (1 << 29)
+
+/* These states affect the ff shader key,
+ * which we recompute everytime. */
+#define NINE_STATE_FF_SHADER    0
 
 #define NINE_STATE_COMMIT_DSA  (1 << 0)
 #define NINE_STATE_COMMIT_RASTERIZER (1 << 1)
@@ -608,6 +609,9 @@ void nine_state_prepare_draw_sw(struct NineDevice9 *device,
 void nine_state_after_draw_sw(struct NineDevice9 *device);
 void nine_state_destroy_sw(struct NineDevice9 *device);
 
+void
+nine_state_resize_transform(struct nine_ff_state *ff_state, unsigned N);
+
 /* If @alloc is FALSE, the return value may be a const identity matrix.
  * Therefore, do not modify if you set alloc to FALSE !
  */
@@ -619,7 +623,7 @@ HRESULT
 nine_state_set_light(struct nine_ff_state *, DWORD, const D3DLIGHT9 *);
 
 HRESULT
-nine_state_light_enable(struct nine_ff_state *, uint32_t *,
+nine_state_light_enable(struct nine_ff_state *,
                         DWORD, BOOL);
 
 const char *nine_d3drs_to_string(DWORD State);

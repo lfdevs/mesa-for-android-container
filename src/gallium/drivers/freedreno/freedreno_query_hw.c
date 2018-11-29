@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2014 Rob Clark <robclark@freedesktop.org>
  *
@@ -137,7 +135,7 @@ fd_hw_destroy_query(struct fd_context *ctx, struct fd_query *q)
 static boolean
 fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct fd_hw_query *hq = fd_hw_query(q);
 
 	DBG("%p: active=%d", q, q->active);
@@ -158,7 +156,7 @@ fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 static void
 fd_hw_end_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct fd_hw_query *hq = fd_hw_query(q);
 
 	DBG("%p: active=%d", q, q->active);

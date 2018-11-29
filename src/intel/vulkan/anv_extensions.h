@@ -59,7 +59,7 @@ struct anv_instance_extension_table {
 extern const struct anv_instance_extension_table anv_instance_extensions_supported;
 
 
-#define ANV_DEVICE_EXTENSION_COUNT 36
+#define ANV_DEVICE_EXTENSION_COUNT 42
 
 extern const VkExtensionProperties anv_device_extensions[];
 
@@ -75,6 +75,7 @@ struct anv_device_extension_table {
         bool KHR_dedicated_allocation;
         bool KHR_descriptor_update_template;
         bool KHR_device_group;
+        bool KHR_driver_properties;
         bool KHR_external_fence;
         bool KHR_external_fence_fd;
         bool KHR_external_memory;
@@ -99,10 +100,15 @@ struct anv_device_extension_table {
         bool EXT_display_control;
         bool EXT_external_memory_dma_buf;
         bool EXT_global_priority;
+        bool EXT_pci_bus_info;
         bool EXT_shader_viewport_index_layer;
         bool EXT_shader_stencil_export;
         bool EXT_vertex_attribute_divisor;
         bool EXT_post_depth_coverage;
+        bool EXT_sampler_filter_minmax;
+        bool EXT_calibrated_timestamps;
+        bool GOOGLE_decorate_string;
+        bool GOOGLE_hlsl_functionality1;
       };
    };
 };

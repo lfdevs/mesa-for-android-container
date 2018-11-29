@@ -196,7 +196,7 @@ GL 4.4, GLSL 4.40 -- all DONE: i965/gen8+, nvc0, r600, radeonsi
   GL_MAX_VERTEX_ATTRIB_STRIDE                           DONE (all drivers)
   GL_ARB_buffer_storage                                 DONE (freedreno, i965, nv50, llvmpipe, swr)
   GL_ARB_clear_texture                                  DONE (i965, nv50, llvmpipe, softpipe, swr)
-  GL_ARB_enhanced_layouts                               DONE (i965, nv50, llvmpipe, softpipe)
+  GL_ARB_enhanced_layouts                               DONE (i965, nv50, llvmpipe, softpipe, virgl)
   - compile-time constant expressions                   DONE
   - explicit byte offsets for blocks                    DONE
   - forced alignment within blocks                      DONE
@@ -219,7 +219,7 @@ GL 4.5, GLSL 4.50 -- all DONE: nvc0, radeonsi
   GL_ARB_direct_state_access                            DONE (all drivers)
   GL_ARB_get_texture_sub_image                          DONE (all drivers)
   GL_ARB_shader_texture_image_samples                   DONE (i965, nv50, r600, virgl)
-  GL_ARB_texture_barrier                                DONE (freedreno, i965, nv50, r600)
+  GL_ARB_texture_barrier                                DONE (freedreno, i965, nv50, r600, virgl)
   GL_KHR_context_flush_control                          DONE (all - but needs GLX/EGL extension to be useful)
   GL_KHR_robustness                                     DONE (i965)
   GL_EXT_shader_integer_mix                             DONE (all drivers that support GLSL)
@@ -308,7 +308,7 @@ Khronos, ARB, and OES extensions that are not part of any OpenGL or OpenGL ES ve
   GL_ARB_sample_locations                               DONE (nvc0)
   GL_ARB_seamless_cubemap_per_texture                   DONE (freedreno, i965, nvc0, radeonsi, r600, softpipe, swr, virgl)
   GL_ARB_shader_ballot                                  DONE (i965/gen8+, nvc0, radeonsi)
-  GL_ARB_shader_clock                                   DONE (i965/gen7+, nv50, nvc0, r600, radeonsi)
+  GL_ARB_shader_clock                                   DONE (i965/gen7+, nv50, nvc0, r600, radeonsi, virgl)
   GL_ARB_shader_stencil_export                          DONE (i965/gen9+, r600, radeonsi, softpipe, llvmpipe, swr, virgl)
   GL_ARB_shader_viewport_layer_array                    DONE (i965/gen6+, nvc0, radeonsi)
   GL_ARB_sparse_buffer                                  DONE (radeonsi/CIK+)
@@ -319,13 +319,14 @@ Khronos, ARB, and OES extensions that are not part of any OpenGL or OpenGL ES ve
   GL_EXT_memory_object                                  DONE (radeonsi)
   GL_EXT_memory_object_fd                               DONE (radeonsi)
   GL_EXT_memory_object_win32                            not started
+  GL_EXT_render_snorm                                   DONE (i965)
   GL_EXT_semaphore                                      DONE (radeonsi)
   GL_EXT_semaphore_fd                                   DONE (radeonsi)
   GL_EXT_semaphore_win32                                not started
   GL_EXT_texture_norm16                                 DONE (i965, r600, radeonsi, nvc0)
   GL_KHR_blend_equation_advanced_coherent               DONE (i965/gen9+)
   GL_KHR_texture_compression_astc_hdr                   DONE (i965/bxt)
-  GL_KHR_texture_compression_astc_sliced_3d             DONE (i965/gen9+)
+  GL_KHR_texture_compression_astc_sliced_3d             DONE (i965/gen9+, radeonsi)
   GL_OES_depth_texture_cube_map                         DONE (all drivers that support GLSL 1.30+)
   GL_OES_EGL_image                                      DONE (all drivers)
   GL_OES_EGL_image_external                             DONE (all drivers)
@@ -342,6 +343,63 @@ Khronos, ARB, and OES extensions that are not part of any OpenGL or OpenGL ES ve
   GLX_ARB_context_flush_control                         not started
   GLX_ARB_robustness_application_isolation              not started
   GLX_ARB_robustness_share_group_isolation              not started
+
+GL_EXT_direct_state_access subfeatures (in the spec order):
+  GL 1.1: Client commands                               not started
+  GL 1.0-1.3: Matrix and transpose matrix commands      not started
+  GL 1.1-1.2: Texture commands                          not started
+  GL 1.2: 3D texture commands                           not started
+  GL 1.2.1: Multitexture commands                       not started
+  GL 1.2.1-3.0: Indexed texture commands                not started
+  GL 1.2.1-3.0: Indexed generic queries                 not started
+  GL 1.2.1: EnableIndexed.. Get*Indexed                 not started
+  GL_ARB_vertex_program                                 not started
+  GL 1.3: Compressed texture and multitexture commands  not started
+  GL 1.5: Buffer commands                               not started
+  GL 2.0-2.1: Uniform and uniform matrix commands       not started
+  GL_EXT_texture_buffer_object                          not started
+  GL_EXT_texture_integer                                not started
+  GL_EXT_gpu_shader4                                    not started
+  GL_EXT_gpu_program_parameters                         not started
+  GL_NV_gpu_program4                                    n/a
+  GL_NV_framebuffer_multisample_coverage                n/a
+  GL 3.0: Renderbuffer/framebuffer commands, Gen*Mipmap not started
+  GL 3.0: CopyBuffer command                            not started
+  GL_EXT_geometry_shader4 commands (expose in GL 3.2)   not started
+  GL_NV_explicit_multisample                            n/a
+  GL 3.0: Vertex array/attrib/query/map commands        not started
+  Matrix GL tokens                                      not started
+
+GL_EXT_direct_state_access additions from other extensions (complete list):
+  GL_AMD_framebuffer_sample_positions                   n/a
+  GL_AMD_gpu_shader_int64                               not started
+  GL_ARB_bindless_texture                               not started
+  GL_ARB_buffer_storage                                 not started
+  GL_ARB_clear_buffer_object                            not started
+  GL_ARB_framebuffer_no_attachments                     not started
+  GL_ARB_gpu_shader_fp64                                not started
+  GL_ARB_instanced_arrays                               not started
+  GL_ARB_internalformat_query2                          not started
+  GL_ARB_sparse_texture                                 n/a
+  GL_ARB_sparse_buffer                                  not started
+  GL_ARB_texture_buffer_range                           not started
+  GL_ARB_texture_storage                                not started
+  GL_ARB_texture_storage_multisample                    not started
+  GL_ARB_vertex_attrib_64bit                            not started
+  GL_ARB_vertex_attrib_binding                          not started
+  GL_EXT_buffer_storage                                 not started
+  GL_EXT_external_buffer                                not started
+  GL_EXT_separate_shader_objects                        n/a
+  GL_EXT_sparse_texture                                 n/a
+  GL_EXT_texture_storage                                n/a
+  GL_EXT_vertex_attrib_64bit                            not started
+  GL_EXT_EGL_image_storage                              n/a
+  GL_NV_bindless_texture                                n/a
+  GL_NV_gpu_shader5                                     n/a
+  GL_NV_texture_multisample                             n/a
+  GL_NV_vertex_buffer_unified_memory                    n/a
+  GL_NVX_linked_gpu_multicast                           n/a
+  GLX_NV_copy_buffer                                    n/a
 
 The following extensions are not part of any OpenGL or OpenGL ES version, and
 we DO NOT WANT implementations of these extensions for Mesa.

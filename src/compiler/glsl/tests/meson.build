@@ -85,7 +85,7 @@ test(
 
 test(
   'glsl compiler warnings',
-  prog_python2,
+  prog_python,
   args : [
     join_paths(meson.current_source_dir(), 'warnings_test.py'),
     '--glsl-compiler', glsl_compiler,
@@ -96,7 +96,7 @@ test(
 )
 test(
   'glsl optimization',
-  prog_python2,
+  prog_python,
   args : [
     join_paths(meson.current_source_dir(), 'optimization_test.py'),
     '--test-runner', glsl_test

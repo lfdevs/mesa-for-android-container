@@ -27,7 +27,6 @@
  */
 
 #include <unistd.h>
-#include <fcntl.h>
 #include "xa_tracker.h"
 #include "xa_priv.h"
 #include "pipe/p_state.h"
@@ -153,15 +152,11 @@ xa_tracker_create(int drm_fd)
     struct xa_tracker *xa = calloc(1, sizeof(struct xa_tracker));
     enum xa_surface_type stype;
     unsigned int num_formats;
-    int fd;
 
     if (!xa)
 	return NULL;
 
-    if (drm_fd < 0 || (fd = fcntl(drm_fd, F_DUPFD_CLOEXEC, 3)) < 0)
-	goto out_no_fd;
-
-    if (pipe_loader_drm_probe_fd(&xa->dev, fd))
+    if (pipe_loader_drm_probe_fd(&xa->dev, drm_fd))
 	xa->screen = pipe_loader_create_screen(xa->dev);
 
     if (!xa->screen)
@@ -213,9 +208,7 @@ xa_tracker_create(int drm_fd)
  out_no_screen:
     if (xa->dev)
 	pipe_loader_release(&xa->dev, 1);
-    else
-	close(fd);
- out_no_fd:
+
     free(xa);
     return NULL;
 }
@@ -227,6 +220,7 @@ xa_tracker_destroy(struct xa_tracker *xa)
     xa_context_destroy(xa->default_ctx);
     xa->screen->destroy(xa->screen);
     pipe_loader_release(&xa->dev, 1);
+    /* CHECK: The XA API user preserves ownership of the original fd */
     free(xa);
 }
 
@@ -364,7 +358,7 @@ surface_create(struct xa_tracker *xa,
 
     if (whandle)
 	srf->tex = xa->screen->resource_from_handle(xa->screen, template, whandle,
-                                                    PIPE_HANDLE_USAGE_READ_WRITE);
+                                                    PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE);
     else
 	srf->tex = xa->screen->resource_create(xa->screen, template);
     if (!srf->tex)
@@ -552,7 +546,7 @@ xa_surface_handle(struct xa_surface *srf,
     whandle.type = handle_type(type);
     res = screen->resource_get_handle(screen, srf->xa->default_ctx->pipe,
                                       srf->tex, &whandle,
-                                      PIPE_HANDLE_USAGE_READ_WRITE);
+                                      PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE);
     if (!res)
 	return -XA_ERR_INVAL;
 

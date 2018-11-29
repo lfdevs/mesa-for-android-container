@@ -137,10 +137,6 @@ gl_lib_cargs = [
   '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
 ]
 
-if dep_xxf86vm.found()
-  gl_lib_cargs += '-DHAVE_XF86VIDMODE'
-endif
-
 libglx = static_library(
   'glx',
   [files_libglx, glx_generated],
@@ -167,7 +163,7 @@ if with_glx == 'dri'
     link_args : [ld_args_bsymbolic, ld_args_gc_sections, extra_ld_args_libgl],
     dependencies : [
       dep_libdrm, dep_dl, dep_m, dep_thread, dep_x11, dep_xcb_glx, dep_xcb,
-      dep_x11_xcb, dep_xcb_dri2, dep_xext, dep_xfixes, dep_xdamage,
+      dep_x11_xcb, dep_xcb_dri2, dep_xext, dep_xfixes, dep_xdamage, dep_xxf86vm,
       extra_deps_libgl,
     ],
     version : gl_lib_version,

@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -29,8 +27,8 @@
 #ifndef FREEDRENO_SCREEN_H_
 #define FREEDRENO_SCREEN_H_
 
-#include <freedreno_drmif.h>
-#include <freedreno_ringbuffer.h>
+#include "drm/freedreno_drmif.h"
+#include "drm/freedreno_ringbuffer.h"
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
@@ -97,6 +95,8 @@ struct fd_screen {
 	struct fd_batch_cache batch_cache;
 
 	bool reorder;
+
+	uint16_t rsc_seqno;
 };
 
 static inline struct fd_screen *
@@ -146,11 +146,17 @@ is_a5xx(struct fd_screen *screen)
 	return (screen->gpu_id >= 500) && (screen->gpu_id < 600);
 }
 
+static inline boolean
+is_a6xx(struct fd_screen *screen)
+{
+	return (screen->gpu_id >= 600) && (screen->gpu_id < 700);
+}
+
 /* is it using the ir3 compiler (shader isa introduced with a3xx)? */
 static inline boolean
 is_ir3(struct fd_screen *screen)
 {
-	return is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen);
+	return is_a3xx(screen) || is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen);
 }
 
 static inline bool

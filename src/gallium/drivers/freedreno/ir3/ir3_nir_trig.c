@@ -1,6 +1,7 @@
 #include "ir3_nir.h"
 
 #include "nir.h"
+#include "nir_builder.h"
 #include "nir_search.h"
 #include "nir_search_helpers.h"
 
@@ -195,8 +196,8 @@ static const struct transform ir3_nir_apply_trig_workarounds_fcos_xforms[] = {
 };
 
 static bool
-ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_flags,
-                   void *mem_ctx)
+ir3_nir_apply_trig_workarounds_block(nir_builder *build, nir_block *block,
+                   const bool *condition_flags)
 {
    bool progress = false;
 
@@ -213,8 +214,7 @@ ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_fla
          for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fsin_xforms); i++) {
             const struct transform *xform = &ir3_nir_apply_trig_workarounds_fsin_xforms[i];
             if (condition_flags[xform->condition_offset] &&
-                nir_replace_instr(alu, xform->search, xform->replace,
-                                  mem_ctx)) {
+                nir_replace_instr(build, alu, xform->search, xform->replace)) {
                progress = true;
                break;
             }
@@ -224,8 +224,7 @@ ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_fla
          for (unsigned i = 0; i < ARRAY_SIZE(ir3_nir_apply_trig_workarounds_fcos_xforms); i++) {
             const struct transform *xform = &ir3_nir_apply_trig_workarounds_fcos_xforms[i];
             if (condition_flags[xform->condition_offset] &&
-                nir_replace_instr(alu, xform->search, xform->replace,
-                                  mem_ctx)) {
+                nir_replace_instr(build, alu, xform->search, xform->replace)) {
                progress = true;
                break;
             }
@@ -242,11 +241,13 @@ ir3_nir_apply_trig_workarounds_block(nir_block *block, const bool *condition_fla
 static bool
 ir3_nir_apply_trig_workarounds_impl(nir_function_impl *impl, const bool *condition_flags)
 {
-   void *mem_ctx = ralloc_parent(impl);
    bool progress = false;
 
+   nir_builder build;
+   nir_builder_init(&build, impl);
+
    nir_foreach_block_reverse(block, impl) {
-      progress |= ir3_nir_apply_trig_workarounds_block(block, condition_flags, mem_ctx);
+      progress |= ir3_nir_apply_trig_workarounds_block(&build, block, condition_flags);
    }
 
    if (progress)

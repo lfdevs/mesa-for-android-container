@@ -146,7 +146,7 @@ vmw_drm_gb_surface_from_handle(struct svga_winsys_screen *sws,
     struct vmw_svga_winsys_surface *vsrf;
     struct svga_winsys_surface *ssrf;
     struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
-    SVGA3dSurfaceFlags flags;
+    SVGA3dSurfaceAllFlags flags;
     uint32_t mip_levels;
     struct vmw_buffer_desc desc;
     struct pb_manager *provider = vws->pools.gmr;

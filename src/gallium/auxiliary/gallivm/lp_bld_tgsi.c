@@ -353,6 +353,15 @@ lp_build_emit_fetch_src(
          assert(0 && "invalid swizzle in emit_fetch()");
          return bld_base->base.undef;
       }
+      if (tgsi_type_is_64bit(stype)) {
+        unsigned swizzle2;
+        swizzle2 = tgsi_util_get_full_src_register_swizzle(reg, chan_index + 1);
+        if (swizzle2 > 3) {
+           assert(0 && "invalid swizzle in emit_fetch()");
+           return bld_base->base.undef;
+        }
+        swizzle |= (swizzle2 << 16);
+      }
    }
 
    assert(reg->Register.Index <= bld_base->info->file_max[reg->Register.File]);

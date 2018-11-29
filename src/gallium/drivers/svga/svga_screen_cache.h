@@ -60,7 +60,7 @@ struct svga_context;
  */
 struct svga_host_surface_cache_key
 {
-   SVGA3dSurfaceFlags flags;
+   SVGA3dSurfaceAllFlags flags;
    SVGA3dSurfaceFormat format;
    SVGA3dSize size;
    uint32_t numFaces:3;

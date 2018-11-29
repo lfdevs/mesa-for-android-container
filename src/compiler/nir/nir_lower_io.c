@@ -112,10 +112,8 @@ get_io_offset(nir_builder *b, nir_deref_instr *deref,
       assert(glsl_type_is_scalar((*p)->type));
 
       /* We always lower indirect dereferences for "compact" array vars. */
-      nir_const_value *const_index = nir_src_as_const_value((*p)->arr.index);
-      assert(const_index);
-
-      const unsigned total_offset = *component + const_index->u32[0];
+      const unsigned index = nir_src_as_uint((*p)->arr.index);
+      const unsigned total_offset = *component + index;
       const unsigned slot_offset = total_offset / 4;
       *component = total_offset % 4;
       return nir_imm_int(b, type_size(glsl_vec4_type()) * slot_offset);
@@ -280,6 +278,10 @@ lower_atomic(nir_intrinsic_instr *intrin, struct lower_io_state *state,
    OP(atomic_and)
    OP(atomic_or)
    OP(atomic_xor)
+   OP(atomic_fadd)
+   OP(atomic_fmin)
+   OP(atomic_fmax)
+   OP(atomic_fcomp_swap)
 #undef OP
    default:
       unreachable("Invalid atomic");
@@ -380,6 +382,10 @@ nir_lower_io_block(nir_block *block,
       case nir_intrinsic_deref_atomic_xor:
       case nir_intrinsic_deref_atomic_exchange:
       case nir_intrinsic_deref_atomic_comp_swap:
+      case nir_intrinsic_deref_atomic_fadd:
+      case nir_intrinsic_deref_atomic_fmin:
+      case nir_intrinsic_deref_atomic_fmax:
+      case nir_intrinsic_deref_atomic_fcomp_swap:
          /* We can lower the io for this nir instrinsic */
          break;
       case nir_intrinsic_interp_deref_at_centroid:
@@ -441,6 +447,10 @@ nir_lower_io_block(nir_block *block,
       case nir_intrinsic_deref_atomic_xor:
       case nir_intrinsic_deref_atomic_exchange:
       case nir_intrinsic_deref_atomic_comp_swap:
+      case nir_intrinsic_deref_atomic_fadd:
+      case nir_intrinsic_deref_atomic_fmin:
+      case nir_intrinsic_deref_atomic_fmax:
+      case nir_intrinsic_deref_atomic_fcomp_swap:
          assert(vertex_index == NULL);
          replacement = lower_atomic(intrin, state, var, offset);
          break;

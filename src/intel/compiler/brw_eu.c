@@ -364,24 +364,37 @@ brw_disassemble(const struct gen_device_info *devinfo,
 
       if (compacted) {
          brw_compact_inst *compacted = (void *)insn;
-	 if (dump_hex) {
-	    fprintf(out, "0x%08x 0x%08x                       ",
-		    ((uint32_t *)insn)[1],
-		    ((uint32_t *)insn)[0]);
-	 }
+         if (dump_hex) {
+            unsigned char * insn_ptr = ((unsigned char *)&insn[0]);
+            const unsigned int blank_spaces = 24;
+            for (int i = 0 ; i < 8; i = i + 4) {
+               fprintf(out, "%02x %02x %02x %02x ",
+                       insn_ptr[i],
+                       insn_ptr[i + 1],
+                       insn_ptr[i + 2],
+                       insn_ptr[i + 3]);
+            }
+            /* Make compacted instructions hex value output vertically aligned
+             * with uncompacted instructions hex value
+             */
+            fprintf(out, "%*c", blank_spaces, ' ');
+         }
 
-	 brw_uncompact_instruction(devinfo, &uncompacted, compacted);
-	 insn = &uncompacted;
-	 offset += 8;
+         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
+         insn = &uncompacted;
+         offset += 8;
       } else {
-	 if (dump_hex) {
-	    fprintf(out, "0x%08x 0x%08x 0x%08x 0x%08x ",
-		    ((uint32_t *)insn)[3],
-		    ((uint32_t *)insn)[2],
-		    ((uint32_t *)insn)[1],
-		    ((uint32_t *)insn)[0]);
-	 }
-	 offset += 16;
+         if (dump_hex) {
+            unsigned char * insn_ptr = ((unsigned char *)&insn[0]);
+            for (int i = 0 ; i < 16; i = i + 4) {
+               fprintf(out, "%02x %02x %02x %02x ",
+                       insn_ptr[i],
+                       insn_ptr[i + 1],
+                       insn_ptr[i + 2],
+                       insn_ptr[i + 3]);
+            }
+         }
+         offset += 16;
       }
 
       brw_disassemble_inst(out, devinfo, insn, compacted);

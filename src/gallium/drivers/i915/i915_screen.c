@@ -27,11 +27,12 @@
 
 
 #include "draw/draw_context.h"
-#include "os/os_misc.h"
+#include "util/os_misc.h"
 #include "util/u_format.h"
 #include "util/u_format_s3tc.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_screen.h"
 #include "util/u_string.h"
 
 #include "i915_reg.h"
@@ -210,10 +211,12 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    /* Unsupported features (boolean caps). */
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
+   case PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE:
    case PIPE_CAP_INDEP_BLEND_ENABLE:
    case PIPE_CAP_INDEP_BLEND_FUNC:
    case PIPE_CAP_SHADER_STENCIL_EXPORT:
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
+   case PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE:
    case PIPE_CAP_TEXTURE_SWIZZLE:
    case PIPE_CAP_QUERY_TIME_ELAPSED:
    case PIPE_CAP_SM3:
@@ -289,6 +292,7 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
    case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
    case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
+   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
       return 0;
 
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
@@ -336,6 +340,12 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_PACKED_UNIFORMS:
    case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
       return 0;
+
+   case PIPE_CAP_MAX_GS_INVOCATIONS:
+      return 32;
+
+   case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
+      return 1 << 27;
 
    case PIPE_CAP_MAX_VIEWPORTS:
       return 1;
@@ -418,9 +428,9 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
    case PIPE_CAP_COMPUTE:
    case PIPE_CAP_QUERY_BUFFER_OBJECT:
       return 0;
+
    default:
-      debug_printf("%s: Unknown cap %u.\n", __FUNCTION__, cap);
-      return 0;
+      return u_pipe_screen_get_param_defaults(screen, cap);
    }
 }
 

@@ -21,14 +21,6 @@ msgstr ""
 msgid "Debugging"
 msgstr "Debogage"
 
-#: t_options.h:60
-msgid "Disable 3D acceleration"
-msgstr "Désactiver l'accélération 3D"
-
-#: t_options.h:65
-msgid "Show performance boxes"
-msgstr "Afficher les boîtes de performance"
-
 #: t_options.h:70
 msgid "Enable flushing batchbuffer after each draw call"
 msgstr ""
@@ -53,10 +45,6 @@ msgstr ""
 msgid "Disable backslash-based line continuations in GLSL source"
 msgstr ""
 
-#: t_options.h:100
-msgid "Disable GL_ARB_shader_bit_encoding"
-msgstr ""
-
 #: t_options.h:105
 msgid ""
 "Force a default GLSL version for shaders that lack an explicit #version line"
@@ -69,84 +57,6 @@ msgstr ""
 #: t_options.h:120
 msgid "Image Quality"
 msgstr "Qualité d'image"
-
-#: t_options.h:133
-msgid "Texture color depth"
-msgstr "Profondeur de texture"
-
-#: t_options.h:134
-msgid "Prefer frame buffer color depth"
-msgstr "Profondeur de couleur"
-
-#: t_options.h:135
-msgid "Prefer 32 bits per texel"
-msgstr "Préférer 32 bits par texel"
-
-#: t_options.h:136
-msgid "Prefer 16 bits per texel"
-msgstr "Prérérer 16 bits par texel"
-
-#: t_options.h:137
-msgid "Force 16 bits per texel"
-msgstr "Forcer 16 bits par texel"
-
-#: t_options.h:143
-msgid "Initial maximum value for anisotropic texture filtering"
-msgstr "Valeur maximale initiale pour le filtrage anisotropique de texture"
-
-#: t_options.h:148
-msgid "Forbid negative texture LOD bias"
-msgstr "Interdire le LOD bias negatif"
-
-#: t_options.h:153
-msgid ""
-"Enable S3TC texture compression even if software support is not available"
-msgstr ""
-"Activer la compression de texture S3TC même si le support logiciel est absent"
-
-#: t_options.h:160
-msgid "Initial color reduction method"
-msgstr "Technique de réduction de couleurs"
-
-#: t_options.h:161
-msgid "Round colors"
-msgstr "Arrondir les valeurs de couleur"
-
-#: t_options.h:162
-msgid "Dither colors"
-msgstr "Tramer les couleurs"
-
-#: t_options.h:170
-msgid "Color rounding method"
-msgstr "Méthode d'arrondi des couleurs"
-
-#: t_options.h:171
-msgid "Round color components downward"
-msgstr "Arrondi à l'inférieur"
-
-#: t_options.h:172
-msgid "Round to nearest color"
-msgstr "Arrondi au plus proche"
-
-#: t_options.h:181
-msgid "Color dithering method"
-msgstr "Méthode de tramage"
-
-#: t_options.h:182
-msgid "Horizontal error diffusion"
-msgstr "Diffusion d'erreur horizontale"
-
-#: t_options.h:183
-msgid "Horizontal error diffusion, reset error at line start"
-msgstr "Diffusion d'erreur horizontale, réinitialisé pour chaque ligne"
-
-#: t_options.h:184
-msgid "Ordered 2D color dithering"
-msgstr "Tramage ordonné des couleurs"
-
-#: t_options.h:190
-msgid "Floating point depth buffer"
-msgstr "Z-buffer en virgule flottante"
 
 #: t_options.h:195
 msgid "A post-processing filter to cel-shade the output"
@@ -180,45 +90,6 @@ msgstr ""
 msgid "Performance"
 msgstr "Performance"
 
-#: t_options.h:238
-msgid "TCL mode (Transformation, Clipping, Lighting)"
-msgstr "Mode de TCL (Transformation, Clipping, Eclairage)"
-
-#: t_options.h:239
-msgid "Use software TCL pipeline"
-msgstr "Utiliser un pipeline TCL logiciel"
-
-#: t_options.h:240
-msgid "Use hardware TCL as first TCL pipeline stage"
-msgstr "Utiliser le TCL matériel pour le premier niveau de pipeline"
-
-#: t_options.h:241
-msgid "Bypass the TCL pipeline"
-msgstr "Court-circuiter le pipeline TCL"
-
-#: t_options.h:242
-msgid ""
-"Bypass the TCL pipeline with state-based machine code generated on-the-fly"
-msgstr ""
-"Court-circuiter le pipeline TCL par une machine à états qui génère le codede "
-"TCL à la volée"
-
-#: t_options.h:251
-msgid "Method to limit rendering latency"
-msgstr "Méthode d'attente de la carte graphique"
-
-#: t_options.h:252
-msgid "Busy waiting for the graphics hardware"
-msgstr "Attente active de la carte graphique"
-
-#: t_options.h:253
-msgid "Sleep for brief intervals while waiting for the graphics hardware"
-msgstr "Attente utilisant usleep()"
-
-#: t_options.h:254
-msgid "Let the graphics hardware emit a software interrupt and sleep"
-msgstr "Utiliser les interruptions"
-
 #: t_options.h:264
 msgid "Synchronization with vertical refresh (swap intervals)"
 msgstr "Synchronisation de l'affichage avec le balayage vertical"
@@ -248,43 +119,6 @@ msgid ""
 msgstr ""
 "Toujours synchroniser avec le balayage vertical, l'application choisit "
 "l'intervalle minimal"
-
-#: t_options.h:276
-msgid "Use HyperZ to boost performance"
-msgstr "Utiliser le HyperZ pour améliorer les performances"
-
-#: t_options.h:281
-msgid "Number of texture units used"
-msgstr "Nombre d'unités de texture"
-
-#: t_options.h:286
-msgid "Texture filtering quality vs. speed, AKA “brilinear” texture filtering"
-msgstr ""
-"Qualité/performance du filtrage trilinéaire de texture (filtrage brilinéaire)"
-
-#: t_options.h:294
-msgid "Used types of texture memory"
-msgstr "Types de mémoire de texture"
-
-#: t_options.h:295
-msgid "All available memory"
-msgstr "Utiliser toute la mémoire disponible"
-
-#: t_options.h:296
-msgid "Only card memory (if available)"
-msgstr "Utiliser uniquement la mémoire graphique (si disponible)"
-
-#: t_options.h:297
-msgid "Only GART (AGP/PCIE) memory (if available)"
-msgstr "Utiliser uniquement la mémoire GART (AGP/PCIE) (si disponible)"
-
-#: t_options.h:309
-msgid "Features that are not hardware-accelerated"
-msgstr "Fonctionnalités ne bénéficiant pas d'une accélération matérielle"
-
-#: t_options.h:313
-msgid "Enable extension GL_ARB_vertex_program"
-msgstr "Activer l'extension GL_ARB_vertex_program"
 
 #: t_options.h:323
 msgid "Miscellaneous"

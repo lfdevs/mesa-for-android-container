@@ -42,6 +42,7 @@
 #include "main/buffers.h"
 #include "main/clear.h"
 #include "main/condrender.h"
+#include "main/draw.h"
 #include "main/depth.h"
 #include "main/enable.h"
 #include "main/fbobject.h"
@@ -88,6 +89,7 @@
 #include "util/bitscan.h"
 #include "util/ralloc.h"
 #include "compiler/nir/nir.h"
+#include "util/u_math.h"
 
 /** Return offset in bytes of the field within a vertex struct */
 #define OFFSET(FIELD) ((void *) offsetof(struct vertex, FIELD))
@@ -1611,7 +1613,7 @@ _mesa_meta_drawbuffers_from_bitfield(GLbitfield bits)
    assert((bits & ~BUFFER_BITS_COLOR) == 0);
 
    /* Make sure we don't overflow any arrays. */
-   assert(_mesa_bitcount(bits) <= MAX_DRAW_BUFFERS);
+   assert(util_bitcount(bits) <= MAX_DRAW_BUFFERS);
 
    enums[0] = GL_NONE;
 
@@ -1651,7 +1653,7 @@ _mesa_meta_drawbuffers_and_colormask(struct gl_context *ctx, GLbitfield mask)
    assert((mask & ~BUFFER_BITS_COLOR) == 0);
 
    /* Make sure we don't overflow any arrays. */
-   assert(_mesa_bitcount(mask) <= MAX_DRAW_BUFFERS);
+   assert(util_bitcount(mask) <= MAX_DRAW_BUFFERS);
 
    enums[0] = GL_NONE;
 
@@ -3079,7 +3081,7 @@ decompress_texture_image(struct gl_context *ctx,
    /* alloc dest surface */
    if (width > decompress_fbo->Width || height > decompress_fbo->Height) {
       _mesa_renderbuffer_storage(ctx, decompress_fbo->rb, rbFormat,
-                                 width, height, 0);
+                                 width, height, 0, 0);
 
       /* Do the full completeness check to recompute
        * ctx->DrawBuffer->Width/Height.

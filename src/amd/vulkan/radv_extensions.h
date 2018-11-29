@@ -27,7 +27,7 @@
 
 enum {
    RADV_INSTANCE_EXTENSION_COUNT = 16,
-   RADV_DEVICE_EXTENSION_COUNT = 46,
+   RADV_DEVICE_EXTENSION_COUNT = 53,
 };
 
 struct radv_instance_extension_table {
@@ -66,6 +66,7 @@ struct radv_device_extension_table {
         bool KHR_descriptor_update_template;
         bool KHR_device_group;
         bool KHR_draw_indirect_count;
+        bool KHR_driver_properties;
         bool KHR_external_fence;
         bool KHR_external_fence_fd;
         bool KHR_external_memory;
@@ -86,7 +87,9 @@ struct radv_device_extension_table {
         bool KHR_swapchain;
         bool KHR_variable_pointers;
         bool KHR_multiview;
+        bool EXT_calibrated_timestamps;
         bool EXT_conditional_rendering;
+        bool EXT_conservative_rasterization;
         bool EXT_display_control;
         bool EXT_depth_range_unrestricted;
         bool EXT_descriptor_indexing;
@@ -94,9 +97,11 @@ struct radv_device_extension_table {
         bool EXT_external_memory_dma_buf;
         bool EXT_external_memory_host;
         bool EXT_global_priority;
+        bool EXT_pci_bus_info;
         bool EXT_sampler_filter_minmax;
         bool EXT_shader_viewport_index_layer;
         bool EXT_shader_stencil_export;
+        bool EXT_transform_feedback;
         bool EXT_vertex_attribute_divisor;
         bool AMD_draw_indirect_count;
         bool AMD_gcn_shader;
@@ -104,6 +109,8 @@ struct radv_device_extension_table {
         bool AMD_shader_core_properties;
         bool AMD_shader_info;
         bool AMD_shader_trinary_minmax;
+        bool GOOGLE_decorate_string;
+        bool GOOGLE_hlsl_functionality1;
       };
    };
 };

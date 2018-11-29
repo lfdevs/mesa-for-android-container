@@ -415,7 +415,7 @@ st_create_color_map_texture(struct gl_context *ctx)
 
    /* find an RGBA texture format */
    format = st_choose_format(st, GL_RGBA, GL_NONE, GL_NONE,
-                             PIPE_TEXTURE_2D, 0, PIPE_BIND_SAMPLER_VIEW,
+                             PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW,
                              FALSE);
 
    /* create texture for color map/table */
@@ -540,7 +540,7 @@ st_create_image_handle_from_unit(struct st_context *st,
    struct pipe_context *pipe = st->pipe;
    struct pipe_image_view img;
 
-   st_convert_image_from_unit(st, &img, imgUnit);
+   st_convert_image_from_unit(st, &img, imgUnit, GL_READ_WRITE);
 
    return pipe->create_image_handle(pipe, &img);
 }

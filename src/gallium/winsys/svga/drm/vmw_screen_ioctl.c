@@ -54,6 +54,11 @@
 #define VMW_MAX_DEFAULT_TEXTURE_SIZE   (128 * 1024 * 1024)
 #define VMW_FENCE_TIMEOUT_SECONDS 60
 
+#define SVGA3D_FLAGS_64(upper32, lower32) (((uint64_t)upper32 << 32) | lower32)
+#define SVGA3D_FLAGS_UPPER_32(svga3d_flags) (svga3d_flags >> 32)
+#define SVGA3D_FLAGS_LOWER_32(svga3d_flags) \
+   (svga3d_flags & ((uint64_t)UINT32_MAX))
+
 struct vmw_region
 {
    uint32_t handle;
@@ -131,7 +136,7 @@ vmw_ioctl_context_destroy(struct vmw_winsys_screen *vws, uint32 cid)
 
 uint32
 vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
-                         SVGA3dSurfaceFlags flags,
+                         SVGA3dSurface1Flags flags,
                          SVGA3dSurfaceFormat format,
                          unsigned usage,
                          SVGA3dSize size,
@@ -193,19 +198,19 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
 
 uint32
 vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
-			    SVGA3dSurfaceFlags flags,
-			    SVGA3dSurfaceFormat format,
+                            SVGA3dSurfaceAllFlags flags,
+                            SVGA3dSurfaceFormat format,
                             unsigned usage,
-			    SVGA3dSize size,
-			    uint32_t numFaces,
-			    uint32_t numMipLevels,
+                            SVGA3dSize size,
+                            uint32_t numFaces,
+                            uint32_t numMipLevels,
                             unsigned sampleCount,
                             uint32_t buffer_handle,
-			    struct vmw_region **p_region)
+                            SVGA3dMSPattern multisamplePattern,
+                            SVGA3dMSQualityLevel qualityLevel,
+                            struct vmw_region **p_region)
 {
-   union drm_vmw_gb_surface_create_arg s_arg;
-   struct drm_vmw_gb_surface_create_req *req = &s_arg.req;
-   struct drm_vmw_gb_surface_create_rep *rep = &s_arg.rep;
+   struct drm_vmw_gb_surface_create_rep *rep;
    struct vmw_region *region = NULL;
    int ret;
 
@@ -217,40 +222,94 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
          return SVGA3D_INVALID_ID;
    }
 
-   memset(&s_arg, 0, sizeof(s_arg));
-   req->svga3d_flags = (uint32_t) flags;
-   if (usage & SVGA_SURFACE_USAGE_SCANOUT)
-      req->drm_surface_flags |= drm_vmw_surface_flag_scanout;
-   req->format = (uint32_t) format;
-   if (usage & SVGA_SURFACE_USAGE_SHARED)
-      req->drm_surface_flags |= drm_vmw_surface_flag_shareable;
-   req->drm_surface_flags |= drm_vmw_surface_flag_create_buffer; 
-   req->base_size.width = size.width;
-   req->base_size.height = size.height;
-   req->base_size.depth = size.depth;
-   req->mip_levels = numMipLevels;
-   req->multisample_count = 0;
-   req->autogen_filter = SVGA3D_TEX_FILTER_NONE;
+   if (vws->ioctl.have_drm_2_15) {
+      union drm_vmw_gb_surface_create_ext_arg s_arg;
+      struct drm_vmw_gb_surface_create_ext_req *req = &s_arg.req;
+      rep = &s_arg.rep;
 
-   if (vws->base.have_vgpu10) {
-      req->array_size = numFaces;
-      req->multisample_count = sampleCount;
+      memset(&s_arg, 0, sizeof(s_arg));
+
+      req->version = drm_vmw_gb_surface_v1;
+      req->multisample_pattern = multisamplePattern;
+      req->quality_level = qualityLevel;
+      req->must_be_zero = 0;
+      req->base.svga3d_flags = SVGA3D_FLAGS_LOWER_32(flags);
+      req->svga3d_flags_upper_32_bits = SVGA3D_FLAGS_UPPER_32(flags);
+      req->base.format = (uint32_t) format;
+
+      if (usage & SVGA_SURFACE_USAGE_SCANOUT)
+         req->base.drm_surface_flags |= drm_vmw_surface_flag_scanout;
+
+      if (usage & SVGA_SURFACE_USAGE_SHARED)
+         req->base.drm_surface_flags |= drm_vmw_surface_flag_shareable;
+
+      req->base.drm_surface_flags |= drm_vmw_surface_flag_create_buffer;
+      req->base.base_size.width = size.width;
+      req->base.base_size.height = size.height;
+      req->base.base_size.depth = size.depth;
+      req->base.mip_levels = numMipLevels;
+      req->base.multisample_count = 0;
+      req->base.autogen_filter = SVGA3D_TEX_FILTER_NONE;
+
+      if (vws->base.have_vgpu10) {
+         req->base.array_size = numFaces;
+         req->base.multisample_count = sampleCount;
+      } else {
+         assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
+	        DRM_VMW_MAX_MIP_LEVELS);
+         req->base.array_size = 0;
+      }
+
+      req->base.buffer_handle = buffer_handle ?
+         buffer_handle : SVGA3D_INVALID_ID;
+
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd,
+                                DRM_VMW_GB_SURFACE_CREATE_EXT, &s_arg,
+                                sizeof(s_arg));
+
+      if (ret)
+         goto out_fail_create;
    } else {
-      assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
-	     DRM_VMW_MAX_MIP_LEVELS);
-      req->array_size = 0;
+      union drm_vmw_gb_surface_create_arg s_arg;
+      struct drm_vmw_gb_surface_create_req *req = &s_arg.req;
+      rep = &s_arg.rep;
+
+      memset(&s_arg, 0, sizeof(s_arg));
+      req->svga3d_flags = (uint32_t) flags;
+      req->format = (uint32_t) format;
+
+      if (usage & SVGA_SURFACE_USAGE_SCANOUT)
+         req->drm_surface_flags |= drm_vmw_surface_flag_scanout;
+
+      if (usage & SVGA_SURFACE_USAGE_SHARED)
+         req->drm_surface_flags |= drm_vmw_surface_flag_shareable;
+
+      req->drm_surface_flags |= drm_vmw_surface_flag_create_buffer;
+      req->base_size.width = size.width;
+      req->base_size.height = size.height;
+      req->base_size.depth = size.depth;
+      req->mip_levels = numMipLevels;
+      req->multisample_count = 0;
+      req->autogen_filter = SVGA3D_TEX_FILTER_NONE;
+
+      if (vws->base.have_vgpu10) {
+         req->array_size = numFaces;
+         req->multisample_count = sampleCount;
+      } else {
+         assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
+	        DRM_VMW_MAX_MIP_LEVELS);
+         req->array_size = 0;
+      }
+
+      req->buffer_handle = buffer_handle ?
+         buffer_handle : SVGA3D_INVALID_ID;
+
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GB_SURFACE_CREATE,
+			        &s_arg, sizeof(s_arg));
+
+      if (ret)
+         goto out_fail_create;
    }
-
-   if (buffer_handle)
-      req->buffer_handle = buffer_handle;
-   else
-      req->buffer_handle = SVGA3D_INVALID_ID;
-
-   ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GB_SURFACE_CREATE,
-			     &s_arg, sizeof(s_arg));
-
-   if (ret)
-      goto out_fail_create;
 
    if (p_region) {
       region->handle = rep->buffer_handle;
@@ -342,48 +401,79 @@ vmw_ioctl_surface_req(const struct vmw_winsys_screen *vws,
 int
 vmw_ioctl_gb_surface_ref(struct vmw_winsys_screen *vws,
                          const struct winsys_handle *whandle,
-                         SVGA3dSurfaceFlags *flags,
+                         SVGA3dSurfaceAllFlags *flags,
                          SVGA3dSurfaceFormat *format,
                          uint32_t *numMipLevels,
                          uint32_t *handle,
                          struct vmw_region **p_region)
 {
-   union drm_vmw_gb_surface_reference_arg s_arg;
-   struct drm_vmw_surface_arg *req = &s_arg.req;
-   struct drm_vmw_gb_surface_ref_rep *rep = &s_arg.rep;
    struct vmw_region *region = NULL;
    boolean needs_unref = FALSE;
    int ret;
-
-   vmw_printf("%s flags %d format %d\n", __FUNCTION__, flags, format);
 
    assert(p_region != NULL);
    region = CALLOC_STRUCT(vmw_region);
    if (!region)
       return -ENOMEM;
 
-   memset(&s_arg, 0, sizeof(s_arg));
-   ret = vmw_ioctl_surface_req(vws, whandle, req, &needs_unref);
-   if (ret)
-      goto out_fail_req;
+   if (vws->ioctl.have_drm_2_15) {
+      union drm_vmw_gb_surface_reference_ext_arg s_arg;
+      struct drm_vmw_surface_arg *req = &s_arg.req;
+      struct drm_vmw_gb_surface_ref_ext_rep *rep = &s_arg.rep;
 
-   *handle = req->sid;
-   ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GB_SURFACE_REF,
-			     &s_arg, sizeof(s_arg));
+      memset(&s_arg, 0, sizeof(s_arg));
+      ret = vmw_ioctl_surface_req(vws, whandle, req, &needs_unref);
+      if (ret)
+         goto out_fail_req;
 
-   if (ret)
-      goto out_fail_ref;
+      *handle = req->sid;
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GB_SURFACE_REF_EXT,
+			        &s_arg, sizeof(s_arg));
 
-   region->handle = rep->crep.buffer_handle;
-   region->map_handle = rep->crep.buffer_map_handle;
-   region->drm_fd = vws->ioctl.drm_fd;
-   region->size = rep->crep.backup_size;
-   *p_region = region;
+      if (ret)
+         goto out_fail_ref;
 
-   *handle = rep->crep.handle;
-   *flags = rep->creq.svga3d_flags;
-   *format = rep->creq.format;
-   *numMipLevels = rep->creq.mip_levels;
+      region->handle = rep->crep.buffer_handle;
+      region->map_handle = rep->crep.buffer_map_handle;
+      region->drm_fd = vws->ioctl.drm_fd;
+      region->size = rep->crep.backup_size;
+      *p_region = region;
+
+      *handle = rep->crep.handle;
+      *flags = SVGA3D_FLAGS_64(rep->creq.svga3d_flags_upper_32_bits,
+                               rep->creq.base.svga3d_flags);
+      *format = rep->creq.base.format;
+      *numMipLevels = rep->creq.base.mip_levels;
+   } else {
+      union drm_vmw_gb_surface_reference_arg s_arg;
+      struct drm_vmw_surface_arg *req = &s_arg.req;
+      struct drm_vmw_gb_surface_ref_rep *rep = &s_arg.rep;
+
+      memset(&s_arg, 0, sizeof(s_arg));
+      ret = vmw_ioctl_surface_req(vws, whandle, req, &needs_unref);
+      if (ret)
+         goto out_fail_req;
+
+      *handle = req->sid;
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GB_SURFACE_REF,
+			        &s_arg, sizeof(s_arg));
+
+      if (ret)
+         goto out_fail_ref;
+
+      region->handle = rep->crep.buffer_handle;
+      region->map_handle = rep->crep.buffer_map_handle;
+      region->drm_fd = vws->ioctl.drm_fd;
+      region->size = rep->crep.backup_size;
+      *p_region = region;
+
+      *handle = rep->crep.handle;
+      *flags = rep->creq.svga3d_flags;
+      *format = rep->creq.format;
+      *numMipLevels = rep->creq.mip_levels;
+   }
+
+   vmw_printf("%s flags %d format %d\n", __FUNCTION__, *flags, *format);
 
    if (needs_unref)
       vmw_ioctl_surface_destroy(vws, *handle);
@@ -890,6 +980,8 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       (version->version_major == 2 && version->version_minor > 5);
    vws->ioctl.have_drm_2_9 = version->version_major > 2 ||
       (version->version_major == 2 && version->version_minor > 8);
+   vws->ioctl.have_drm_2_15 = version->version_major > 2 ||
+      (version->version_major == 2 && version->version_minor > 14);
 
    vws->ioctl.drm_execbuf_version = vws->ioctl.have_drm_2_9 ? 2 : 1;
 
@@ -929,22 +1021,10 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       goto out_no_3d;
 
    vws->base.have_vgpu10 = FALSE;
+   vws->base.have_sm4_1 = FALSE;
+   vws->base.have_intra_surface_copy = FALSE;
+
    if (vws->base.have_gb_objects) {
-      memset(&gp_arg, 0, sizeof(gp_arg));
-      gp_arg.param = DRM_VMW_PARAM_3D_CAPS_SIZE;
-      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
-                                &gp_arg, sizeof(gp_arg));
-      if (ret)
-         size = SVGA_FIFO_3D_CAPS_SIZE * sizeof(uint32_t);
-      else
-         size = gp_arg.value;
-   
-      if (vws->base.have_gb_objects)
-         vws->ioctl.num_cap_3d = size / sizeof(uint32_t);
-      else
-         vws->ioctl.num_cap_3d = SVGA3D_DEVCAP_MAX;
-
-
       memset(&gp_arg, 0, sizeof(gp_arg));
       gp_arg.param = DRM_VMW_PARAM_MAX_MOB_MEMORY;
       ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
@@ -971,7 +1051,6 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       vws->ioctl.max_surface_memory = -1;
 
       if (vws->ioctl.have_drm_2_9) {
-
          memset(&gp_arg, 0, sizeof(gp_arg));
          gp_arg.param = DRM_VMW_PARAM_VGPU10;
          ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
@@ -990,6 +1069,38 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
             }
          }
       }
+
+      if (vws->ioctl.have_drm_2_15 && vws->base.have_vgpu10) {
+         memset(&gp_arg, 0, sizeof(gp_arg));
+         gp_arg.param = DRM_VMW_PARAM_HW_CAPS2;
+         ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
+                                   &gp_arg, sizeof(gp_arg));
+         if (ret == 0 && gp_arg.value != 0) {
+            vws->base.have_intra_surface_copy = TRUE;
+         }
+
+         memset(&gp_arg, 0, sizeof(gp_arg));
+         gp_arg.param = DRM_VMW_PARAM_SM4_1;
+         ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
+                                   &gp_arg, sizeof(gp_arg));
+         if (ret == 0 && gp_arg.value != 0) {
+            vws->base.have_sm4_1 = TRUE;
+         }
+      }
+
+      memset(&gp_arg, 0, sizeof(gp_arg));
+      gp_arg.param = DRM_VMW_PARAM_3D_CAPS_SIZE;
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_GET_PARAM,
+                                &gp_arg, sizeof(gp_arg));
+      if (ret)
+         size = SVGA_FIFO_3D_CAPS_SIZE * sizeof(uint32_t);
+      else
+         size = gp_arg.value;
+
+      if (vws->base.have_gb_objects)
+         vws->ioctl.num_cap_3d = size / sizeof(uint32_t);
+      else
+         vws->ioctl.num_cap_3d = SVGA3D_DEVCAP_MAX;
    } else {
       vws->ioctl.num_cap_3d = SVGA3D_DEVCAP_MAX;
 
@@ -1025,11 +1136,16 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       debug_printf("Failed alloc fifo 3D caps buffer.\n");
       goto out_no_caparray;
    }
-      
+
    memset(&cap_arg, 0, sizeof(cap_arg));
    cap_arg.buffer = (uint64_t) (unsigned long) (cap_buffer);
    cap_arg.max_size = size;
 
+   /*
+    * This call must always be after DRM_VMW_PARAM_MAX_MOB_MEMORY and
+    * DRM_VMW_PARAM_SM4_1. This is because, based on these calls, kernel
+    * driver sends the supported cap.
+    */
    ret = drmCommandWrite(vws->ioctl.drm_fd, DRM_VMW_GET_3D_CAP,
 			 &cap_arg, sizeof(cap_arg));
 

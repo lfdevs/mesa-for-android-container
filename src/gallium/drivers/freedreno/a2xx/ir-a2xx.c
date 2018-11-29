@@ -35,19 +35,13 @@
 #define WARN_MSG(f, ...)   DBG("WARN:  "f, ##__VA_ARGS__)
 #define ERROR_MSG(f, ...)  DBG("ERROR: "f, ##__VA_ARGS__)
 
-#define REG_MASK 0x3f
-
-static int cf_emit(struct ir2_cf *cf, instr_cf_t *instr);
-
 static int instr_emit(struct ir2_instruction *instr, uint32_t *dwords,
 		uint32_t idx, struct ir2_shader_info *info);
 
-static void reg_update_stats(struct ir2_register *reg,
-		struct ir2_shader_info *info, bool dest);
-static uint32_t reg_fetch_src_swiz(struct ir2_register *reg, uint32_t n);
-static uint32_t reg_fetch_dst_swiz(struct ir2_register *reg);
-static uint32_t reg_alu_dst_swiz(struct ir2_register *reg);
-static uint32_t reg_alu_src_swiz(struct ir2_register *reg);
+static uint32_t reg_fetch_src_swiz(struct ir2_src_register *reg, uint32_t n);
+static uint32_t reg_fetch_dst_swiz(struct ir2_dst_register *reg);
+static uint32_t reg_alu_dst_swiz(struct ir2_dst_register *reg);
+static uint32_t reg_alu_src_swiz(struct ir2_src_register *reg);
 
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.
@@ -55,7 +49,7 @@ static uint32_t reg_alu_src_swiz(struct ir2_register *reg);
 static void * ir2_alloc(struct ir2_shader *shader, int sz)
 {
 	void *ptr = &shader->heap[shader->heap_idx];
-	shader->heap_idx += align(sz, 4);
+	shader->heap_idx += align(sz, 4) / 4;
 	return ptr;
 }
 
@@ -74,7 +68,9 @@ static char * ir2_strdup(struct ir2_shader *shader, const char *str)
 struct ir2_shader * ir2_shader_create(void)
 {
 	DEBUG_MSG("");
-	return calloc(1, sizeof(struct ir2_shader));
+	struct ir2_shader *shader = calloc(1, sizeof(struct ir2_shader));
+	shader->max_reg = -1;
+	return shader;
 }
 
 void ir2_shader_destroy(struct ir2_shader *shader)
@@ -83,189 +79,344 @@ void ir2_shader_destroy(struct ir2_shader *shader)
 	free(shader);
 }
 
-/* resolve addr/cnt/sequence fields in the individual CF's */
-static int shader_resolve(struct ir2_shader *shader, struct ir2_shader_info *info)
-{
-	uint32_t addr;
-	unsigned i;
-	int j;
-
-	addr = shader->cfs_count / 2;
-	for (i = 0; i < shader->cfs_count; i++) {
-		struct ir2_cf *cf = shader->cfs[i];
-		if ((cf->cf_type == EXEC) || (cf->cf_type == EXEC_END)) {
-			uint32_t sequence = 0;
-
-			if (cf->exec.addr && (cf->exec.addr != addr))
-				WARN_MSG("invalid addr '%d' at CF %d", cf->exec.addr, i);
-			if (cf->exec.cnt && (cf->exec.cnt != cf->exec.instrs_count))
-				WARN_MSG("invalid cnt '%d' at CF %d", cf->exec.cnt, i);
-
-			for (j = cf->exec.instrs_count - 1; j >= 0; j--) {
-				struct ir2_instruction *instr = cf->exec.instrs[j];
-				sequence <<= 2;
-				if (instr->instr_type == IR2_FETCH)
-					sequence |= 0x1;
-				if (instr->sync)
-					sequence |= 0x2;
-			}
-
-			cf->exec.addr = addr;
-			cf->exec.cnt  = cf->exec.instrs_count;
-			cf->exec.sequence = sequence;
-
-			addr += cf->exec.instrs_count;
-		}
-	}
-
-	info->sizedwords = 3 * addr;
-
-	return 0;
-}
-
-void * ir2_shader_assemble(struct ir2_shader *shader, struct ir2_shader_info *info)
-{
-	uint32_t i, j;
-	uint32_t *ptr, *dwords = NULL;
-	uint32_t idx = 0;
-	int ret;
-
-	info->sizedwords    = 0;
-	info->max_reg       = -1;
-	info->max_input_reg = 0;
-	info->regs_written  = 0;
-
-	/* we need an even # of CF's.. insert a NOP if needed */
-	if (shader->cfs_count != align(shader->cfs_count, 2))
-		ir2_cf_create(shader, NOP);
-
-	/* first pass, resolve sizes and addresses: */
-	ret = shader_resolve(shader, info);
-	if (ret) {
-		ERROR_MSG("resolve failed: %d", ret);
-		goto fail;
-	}
-
-	ptr = dwords = calloc(4, info->sizedwords);
-
-	/* second pass, emit CF program in pairs: */
-	for (i = 0; i < shader->cfs_count; i += 2) {
-		instr_cf_t *cfs = (instr_cf_t *)ptr;
-		ret = cf_emit(shader->cfs[i], &cfs[0]);
-		if (ret) {
-			ERROR_MSG("CF emit failed: %d\n", ret);
-			goto fail;
-		}
-		ret = cf_emit(shader->cfs[i+1], &cfs[1]);
-		if (ret) {
-			ERROR_MSG("CF emit failed: %d\n", ret);
-			goto fail;
-		}
-		ptr += 3;
-		assert((ptr - dwords) <= info->sizedwords);
-	}
-
-	/* third pass, emit ALU/FETCH: */
-	for (i = 0; i < shader->cfs_count; i++) {
-		struct ir2_cf *cf = shader->cfs[i];
-		if ((cf->cf_type == EXEC) || (cf->cf_type == EXEC_END)) {
-			for (j = 0; j < cf->exec.instrs_count; j++) {
-				ret = instr_emit(cf->exec.instrs[j], ptr, idx++, info);
-				if (ret) {
-					ERROR_MSG("instruction emit failed: %d", ret);
-					goto fail;
-				}
-				ptr += 3;
-				assert((ptr - dwords) <= info->sizedwords);
-			}
-		}
-	}
-
-	return dwords;
-
-fail:
-	free(dwords);
-	return NULL;
-}
-
-
-struct ir2_cf * ir2_cf_create(struct ir2_shader *shader, instr_cf_opc_t cf_type)
-{
-	struct ir2_cf *cf = ir2_alloc(shader, sizeof(struct ir2_cf));
-	DEBUG_MSG("%d", cf_type);
-	cf->shader = shader;
-	cf->cf_type = cf_type;
-	assert(shader->cfs_count < ARRAY_SIZE(shader->cfs));
-	shader->cfs[shader->cfs_count++] = cf;
-	return cf;
-}
-
-
-/*
- * CF instructions:
+/* check if an instruction is a simple MOV
  */
-
-static int cf_emit(struct ir2_cf *cf, instr_cf_t *instr)
+static struct ir2_instruction * simple_mov(struct ir2_instruction *instr,
+		bool output)
 {
-	memset(instr, 0, sizeof(*instr));
+    struct ir2_src_register *src_reg = instr->src_reg;
+    struct ir2_dst_register *dst_reg = &instr->dst_reg;
+    struct ir2_register *reg;
+    unsigned i;
 
-	instr->opc = cf->cf_type;
+    /* MAXv used for MOV */
+    if (instr->instr_type != IR2_ALU_VECTOR ||
+		instr->alu_vector.opc != MAXv)
+		return NULL;
 
-	switch (cf->cf_type) {
-	case NOP:
-		break;
-	case EXEC:
-	case EXEC_END:
-		assert(cf->exec.addr <= 0x1ff);
-		assert(cf->exec.cnt <= 0x6);
-		assert(cf->exec.sequence <= 0xfff);
-		instr->exec.address = cf->exec.addr;
-		instr->exec.count = cf->exec.cnt;
-		instr->exec.serialize = cf->exec.sequence;
-		break;
-	case ALLOC:
-		assert(cf->alloc.size <= 0xf);
-		instr->alloc.size = cf->alloc.size;
-		switch (cf->alloc.type) {
-		case SQ_POSITION:
-		case SQ_PARAMETER_PIXEL:
-			instr->alloc.buffer_select = cf->alloc.type;
+	/* non identical srcs */
+	if (src_reg[0].num != src_reg[1].num)
+		return NULL;
+
+	/* flags */
+	int flags = IR2_REG_NEGATE | IR2_REG_ABS;
+	if (output)
+		flags |= IR2_REG_INPUT | IR2_REG_CONST;
+	if ((src_reg[0].flags & flags) || (src_reg[1].flags & flags))
+		return NULL;
+
+	/* clamping */
+	if (instr->alu_vector.clamp)
+		return NULL;
+
+	/* swizzling */
+    for (i = 0; i < 4; i++) {
+		char swiz = (dst_reg->swizzle ? dst_reg->swizzle : "xyzw")[i];
+		if (swiz == '_')
+			continue;
+
+		if (swiz != (src_reg[0].swizzle ? src_reg[0].swizzle : "xyzw")[i] ||
+			swiz != (src_reg[1].swizzle ? src_reg[1].swizzle : "xyzw")[i])
+			return NULL;
+    }
+
+    if (output)
+		reg = &instr->shader->reg[src_reg[0].num];
+	else
+		reg = &instr->shader->reg[dst_reg->num];
+
+	assert(reg->write_idx >= 0);
+    if (reg->write_idx != reg->write_idx2)
+		return NULL;
+
+	if (!output)
+		return instr;
+
+	instr = instr->shader->instr[reg->write_idx];
+	return instr->instr_type != IR2_ALU_VECTOR ? NULL : instr;
+}
+
+static int src_to_reg(struct ir2_instruction *instr,
+		struct ir2_src_register *reg)
+{
+	if (reg->flags & IR2_REG_CONST)
+		return reg->num;
+
+	return instr->shader->reg[reg->num].reg;
+}
+
+static int dst_to_reg(struct ir2_instruction *instr,
+		struct ir2_dst_register *reg)
+{
+	if (reg->flags & IR2_REG_EXPORT)
+		return reg->num;
+
+	return instr->shader->reg[reg->num].reg;
+}
+
+static bool mask_get(uint32_t *mask, unsigned index)
+{
+    return !!(mask[index / 32] & 1 << index % 32);
+}
+
+static void mask_set(uint32_t *mask, struct ir2_register *reg, int index)
+{
+	if (reg) {
+		unsigned i;
+		for (i = 0; i < ARRAY_SIZE(reg->regmask); i++)
+			mask[i] |= reg->regmask[i];
+	}
+	if (index >= 0)
+		mask[index / 32] |= 1 << index % 32;
+}
+
+static bool sets_pred(struct ir2_instruction *instr)
+{
+    return instr->instr_type == IR2_ALU_SCALAR &&
+		instr->alu_scalar.opc >= PRED_SETEs &&
+		instr->alu_scalar.opc <= PRED_SET_RESTOREs;
+}
+
+
+
+void* ir2_shader_assemble(struct ir2_shader *shader,
+		struct ir2_shader_info *info)
+{
+	/* NOTES
+	 * blob compiler seems to always puts PRED_* instrs in a CF by
+	 * themselves, and wont combine EQ/NE in the same CF
+	 * (not doing this - doesn't seem to make a difference)
+	 *
+	 * TODO: implement scheduling for combining vector+scalar instructions
+	 * -some vector instructions can be replaced by scalar
+	 */
+
+	/* first step:
+	 * 1. remove "NOP" MOV instructions generated by TGSI for input/output:
+	 * 2. track information for register allocation, and to remove
+	 * the dead code when some exports are not needed
+	 * 3. add additional instructions for a20x hw binning if needed
+	 * NOTE: modifies the shader instrs
+	 * this step could be done as instructions are added by compiler instead
+	 */
+
+	/* mask of exports that must be generated
+	 * used to avoid calculating ps exports with hw binning
+	*/
+	uint64_t export = ~0ull;
+	/* bitmask of variables required for exports defined by "export" */
+	uint32_t export_mask[REG_MASK/32+1] = {};
+
+	unsigned idx, reg_idx;
+	unsigned max_input = 0;
+	int export_size = -1;
+
+	for (idx = 0; idx < shader->instr_count; idx++) {
+		struct ir2_instruction *instr = shader->instr[idx], *prev;
+		struct ir2_dst_register dst_reg = instr->dst_reg;
+
+		if (dst_reg.flags & IR2_REG_EXPORT) {
+			if (dst_reg.num < 32)
+				export_size++;
+
+			if ((prev = simple_mov(instr, true))) {
+				/* copy instruction but keep dst */
+				*instr = *prev;
+				instr->dst_reg = dst_reg;
+			}
+		}
+
+		for (reg_idx = 0; reg_idx < instr->src_reg_count; reg_idx++) {
+			struct ir2_src_register *src_reg = &instr->src_reg[reg_idx];
+			struct ir2_register *reg;
+			int num;
+
+			if (src_reg->flags & IR2_REG_CONST)
+				continue;
+
+			num = src_reg->num;
+			reg = &shader->reg[num];
+			reg->read_idx = idx;
+
+			if (src_reg->flags & IR2_REG_INPUT) {
+				max_input = MAX2(max_input, num);
+			} else {
+				/* bypass simple mov used to set src_reg */
+				assert(reg->write_idx >= 0);
+				prev = shader->instr[reg->write_idx];
+				if (simple_mov(prev, false)) {
+					*src_reg = prev->src_reg[0];
+					/* process same src_reg again */
+					reg_idx -= 1;
+					continue;
+				}
+			}
+
+			/* update dependencies */
+			uint32_t *mask = (dst_reg.flags & IR2_REG_EXPORT) ?
+					export_mask : shader->reg[dst_reg.num].regmask;
+			mask_set(mask, reg, num);
+			if (sets_pred(instr))
+				mask_set(export_mask, reg, num);
+		}
+	}
+
+	/* second step:
+	 * emit instructions (with CFs) + RA
+	 */
+	instr_cf_t cfs[128], *cf = cfs;
+	uint32_t alufetch[3*256], *af = alufetch;
+
+	/* RA is done on write, so inputs must be allocated here */
+	for (reg_idx = 0; reg_idx <= max_input; reg_idx++)
+		shader->reg[reg_idx].reg = reg_idx;
+	info->max_reg = max_input;
+
+	/* CF instr state */
+	instr_cf_exec_t exec = { .opc = EXEC };
+	instr_cf_alloc_t alloc = { .opc = ALLOC };
+	bool need_alloc = 0;
+	bool pos_export = 0;
+
+	export_size = MAX2(export_size, 0);
+
+	for (idx = 0; idx < shader->instr_count; idx++) {
+		struct ir2_instruction *instr = shader->instr[idx];
+		struct ir2_dst_register *dst_reg = &instr->dst_reg;
+		unsigned num = dst_reg->num;
+		struct ir2_register *reg;
+
+		/* a2xx only has 64 registers, so we can use a single 64-bit mask */
+		uint64_t regmask = 0ull;
+
+		/* compute the current regmask */
+		for (reg_idx = 0; (int) reg_idx <= shader->max_reg; reg_idx++) {
+			reg = &shader->reg[reg_idx];
+			if ((int) idx > reg->write_idx && idx < reg->read_idx)
+				regmask |= (1ull << reg->reg);
+		}
+
+		if (dst_reg->flags & IR2_REG_EXPORT) {
+			/* skip if export is not needed */
+			if (!(export & (1ull << num)))
+				continue;
+
+            /* ALLOC CF:
+             * want to alloc all < 32 at once
+			 * 32/33 and 62/63 come in pairs
+			 * XXX assuming all 3 types are never interleaved
+			 */
+            if (num < 32) {
+				alloc.size = export_size;
+				alloc.buffer_select = SQ_PARAMETER_PIXEL;
+				need_alloc = export_size >= 0;
+				export_size = -1;
+			} else if (num == 32 || num == 33) {
+				alloc.size = 0;
+				alloc.buffer_select = SQ_MEMORY;
+				need_alloc = num != 33;
+			} else {
+				alloc.size = 0;
+				alloc.buffer_select = SQ_POSITION;
+				need_alloc = !pos_export;
+				pos_export = true;
+			}
+
+		} else {
+			/* skip if dst register not needed to compute exports */
+			if (!mask_get(export_mask, num))
+				continue;
+
+			/* RA on first write */
+			reg = &shader->reg[num];
+			if (reg->write_idx == idx) {
+				reg->reg = ffsll(~regmask) - 1;
+				info->max_reg = MAX2(info->max_reg, reg->reg);
+			}
+		}
+
+		if (exec.count == 6 || (exec.count && need_alloc)) {
+			*cf++ = *(instr_cf_t*) &exec;
+			exec.address += exec.count;
+			exec.serialize = 0;
+			exec.count = 0;
+		}
+
+		if (need_alloc) {
+			*cf++ = *(instr_cf_t*) &alloc;
+			need_alloc = false;
+		}
+
+		int ret = instr_emit(instr, af, idx, info); af += 3;
+		assert(!ret);
+
+		if (instr->instr_type == IR2_FETCH)
+			exec.serialize |= 0x1 << exec.count * 2;
+		if (instr->sync)
+			exec.serialize |= 0x2 << exec.count * 2;
+		 exec.count += 1;
+	}
+
+
+	exec.opc = !export_size ? EXEC : EXEC_END;
+	*cf++ = *(instr_cf_t*) &exec;
+	exec.address += exec.count;
+	exec.serialize = 0;
+	exec.count = 0;
+
+	/* GPU will hang without at least one pixel alloc */
+	if (!export_size) {
+		alloc.size = 0;
+		alloc.buffer_select = SQ_PARAMETER_PIXEL;
+		*cf++ = *(instr_cf_t*) &alloc;
+
+		exec.opc = EXEC_END;
+		*cf++ = *(instr_cf_t*) &exec;
+	}
+
+	unsigned num_cfs = cf - cfs;
+
+	/* insert nop to get an even # of CFs */
+	if (num_cfs % 2) {
+		*cf++ = (instr_cf_t) { .opc = NOP };
+		num_cfs++;
+	}
+
+	/* offset cf addrs */
+	for (idx = 0; idx < num_cfs; idx++) {
+        switch (cfs[idx].opc) {
+		case EXEC:
+		case EXEC_END:
+			cfs[idx].exec.address += num_cfs / 2;
 			break;
 		default:
-			ERROR_MSG("invalid alloc type: %d", cf->alloc.type);
-			return -1;
+			break;
+		/* XXX  and any other address using cf that gets implemented */
 		}
-		break;
-	case COND_EXEC:
-	case COND_EXEC_END:
-	case COND_PRED_EXEC:
-	case COND_PRED_EXEC_END:
-	case LOOP_START:
-	case LOOP_END:
-	case COND_CALL:
-	case RETURN:
-	case COND_JMP:
-	case COND_EXEC_PRED_CLEAN:
-	case COND_EXEC_PRED_CLEAN_END:
-	case MARK_VS_FETCH_DONE:
-		ERROR_MSG("TODO");
-		return -1;
 	}
 
-	return 0;
+	/* concatenate cfs+alufetchs */
+	uint32_t cfdwords = num_cfs / 2 * 3;
+	uint32_t alufetchdwords = exec.address * 3;
+	info->sizedwords = cfdwords + alufetchdwords;
+	uint32_t *dwords = malloc(info->sizedwords * 4);
+	assert(dwords);
+	memcpy(dwords, cfs, cfdwords * 4);
+	memcpy(&dwords[cfdwords], alufetch, alufetchdwords * 4);
+	return dwords;
 }
 
-
-struct ir2_instruction * ir2_instr_create(struct ir2_cf *cf, int instr_type)
+struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
+		int instr_type)
 {
 	struct ir2_instruction *instr =
-			ir2_alloc(cf->shader, sizeof(struct ir2_instruction));
+			ir2_alloc(shader, sizeof(struct ir2_instruction));
 	DEBUG_MSG("%d", instr_type);
-	instr->shader = cf->shader;
-	instr->pred = cf->shader->pred;
+	instr->shader = shader;
+	instr->idx = shader->instr_count;
+	instr->pred = shader->pred;
 	instr->instr_type = instr_type;
-	assert(cf->exec.instrs_count < ARRAY_SIZE(cf->exec.instrs));
-	cf->exec.instrs[cf->exec.instrs_count++] = instr;
+	shader->instr[shader->instr_count++] = instr;
 	return instr;
 }
 
@@ -279,14 +430,10 @@ static int instr_emit_fetch(struct ir2_instruction *instr,
 		struct ir2_shader_info *info)
 {
 	instr_fetch_t *fetch = (instr_fetch_t *)dwords;
-	int reg = 0;
-	struct ir2_register *dst_reg = instr->regs[reg++];
-	struct ir2_register *src_reg = instr->regs[reg++];
+	struct ir2_dst_register *dst_reg = &instr->dst_reg;
+	struct ir2_src_register *src_reg = &instr->src_reg[0];
 
 	memset(fetch, 0, sizeof(*fetch));
-
-	reg_update_stats(dst_reg, info, true);
-	reg_update_stats(src_reg, info, false);
 
 	fetch->opc = instr->fetch.opc;
 
@@ -298,9 +445,9 @@ static int instr_emit_fetch(struct ir2_instruction *instr,
 		assert(instr->fetch.const_idx <= 0x1f);
 		assert(instr->fetch.const_idx_sel <= 0x3);
 
-		vtx->src_reg = src_reg->num;
+		vtx->src_reg = src_to_reg(instr, src_reg);
 		vtx->src_swiz = reg_fetch_src_swiz(src_reg, 1);
-		vtx->dst_reg = dst_reg->num;
+		vtx->dst_reg = dst_to_reg(instr, dst_reg);
 		vtx->dst_swiz = reg_fetch_dst_swiz(dst_reg);
 		vtx->must_be_one = 1;
 		vtx->const_index = instr->fetch.const_idx;
@@ -326,9 +473,9 @@ static int instr_emit_fetch(struct ir2_instruction *instr,
 
 		assert(instr->fetch.const_idx <= 0x1f);
 
-		tex->src_reg = src_reg->num;
+		tex->src_reg = src_to_reg(instr, src_reg);
 		tex->src_swiz = reg_fetch_src_swiz(src_reg, 3);
-		tex->dst_reg = dst_reg->num;
+		tex->dst_reg = dst_to_reg(instr, dst_reg);
 		tex->dst_swiz = reg_fetch_dst_swiz(dst_reg);
 		tex->const_idx = instr->fetch.const_idx;
 		tex->mag_filter = TEX_FILTER_USE_FETCH_CONST;
@@ -360,95 +507,62 @@ static int instr_emit_fetch(struct ir2_instruction *instr,
  * ALU instructions:
  */
 
-static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
+static int instr_emit_alu(struct ir2_instruction *instr_v,
+		struct ir2_instruction *instr_s, uint32_t *dwords,
 		struct ir2_shader_info *info)
 {
-	int reg = 0;
 	instr_alu_t *alu = (instr_alu_t *)dwords;
-	struct ir2_register *dst_reg  = instr->regs[reg++];
-	struct ir2_register *src1_reg;
-	struct ir2_register *src2_reg;
-	struct ir2_register *src3_reg;
+	struct ir2_dst_register *vdst_reg, *sdst_reg;
+	struct ir2_src_register *src1_reg, *src2_reg, *src3_reg;
+	struct ir2_shader *shader = instr_v ? instr_v->shader : instr_s->shader;
+	enum ir2_pred pred = IR2_PRED_NONE;
 
 	memset(alu, 0, sizeof(*alu));
 
-	/* handle instructions w/ 3 src operands: */
-	switch (instr->alu.vector_opc) {
-	case MULADDv:
-	case CNDEv:
-	case CNDGTEv:
-	case CNDGTv:
-	case DOT2ADDv:
-		/* note: disassembler lists 3rd src first, ie:
-		 *   MULADDv Rdst = Rsrc3 + (Rsrc1 * Rsrc2)
-		 * which is the reason for this strange ordering.
-		 */
-		src3_reg = instr->regs[reg++];
-		break;
-	default:
-		src3_reg = NULL;
-		break;
+	vdst_reg = NULL;
+	sdst_reg = NULL;
+	src1_reg = NULL;
+	src2_reg = NULL;
+	src3_reg = NULL;
+
+	if (instr_v) {
+		vdst_reg = &instr_v->dst_reg;
+		assert(instr_v->src_reg_count >= 2);
+		src1_reg = &instr_v->src_reg[0];
+		src2_reg = &instr_v->src_reg[1];
+		if (instr_v->src_reg_count > 2)
+			src3_reg = &instr_v->src_reg[2];
+		pred = instr_v->pred;
 	}
 
-	src1_reg = instr->regs[reg++];
-	src2_reg = instr->regs[reg++];
-
-	reg_update_stats(dst_reg, info, true);
-	reg_update_stats(src1_reg, info, false);
-	reg_update_stats(src2_reg, info, false);
-
-	assert((dst_reg->flags & ~IR2_REG_EXPORT) == 0);
-	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
-	assert((src1_reg->flags & IR2_REG_EXPORT) == 0);
-	assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
-	assert((src2_reg->flags & IR2_REG_EXPORT) == 0);
-	assert(!src2_reg->swizzle || (strlen(src2_reg->swizzle) == 4));
-
-	if (instr->alu.vector_opc == (instr_vector_opc_t)~0) {
-		alu->vector_opc          = MAXv;
-		alu->vector_write_mask   = 0;
-	} else {
-		alu->vector_opc          = instr->alu.vector_opc;
-		alu->vector_write_mask   = reg_alu_dst_swiz(dst_reg);
-	}
-
-	alu->vector_dest         = dst_reg->num;
-	alu->export_data         = !!(dst_reg->flags & IR2_REG_EXPORT);
-
-	// TODO predicate case/condition.. need to add to parser
-
-	alu->src2_reg            = src2_reg->num;
-	alu->src2_swiz           = reg_alu_src_swiz(src2_reg);
-	alu->src2_reg_negate     = !!(src2_reg->flags & IR2_REG_NEGATE);
-	alu->src2_reg_abs        = !!(src2_reg->flags & IR2_REG_ABS);
-	alu->src2_sel            = !(src2_reg->flags & IR2_REG_CONST);
-
-	alu->src1_reg            = src1_reg->num;
-	alu->src1_swiz           = reg_alu_src_swiz(src1_reg);
-	alu->src1_reg_negate     = !!(src1_reg->flags & IR2_REG_NEGATE);
-	alu->src1_reg_abs        = !!(src1_reg->flags & IR2_REG_ABS);
-	alu->src1_sel            = !(src1_reg->flags & IR2_REG_CONST);
-
-	alu->vector_clamp        = instr->alu.vector_clamp;
-	alu->scalar_clamp        = instr->alu.scalar_clamp;
-
-	if (instr->alu.scalar_opc != (instr_scalar_opc_t)~0) {
-		struct ir2_register *sdst_reg = instr->regs[reg++];
-
-		reg_update_stats(sdst_reg, info, true);
-
-		assert(sdst_reg->flags == dst_reg->flags);
-
+	if (instr_s) {
+		sdst_reg = &instr_s->dst_reg;
+		assert(instr_s->src_reg_count == 1);
+		assert(!instr_v || vdst_reg->flags == sdst_reg->flags);
+		assert(!instr_v || pred == instr_s->pred);
 		if (src3_reg) {
-			assert(src3_reg == instr->regs[reg]);
-			reg++;
-		} else {
-			src3_reg = instr->regs[reg++];
+			assert(src3_reg->flags == instr_s->src_reg[0].flags);
+			assert(src3_reg->num == instr_s->src_reg[0].num);
+			assert(!strcmp(src3_reg->swizzle, instr_s->src_reg[0].swizzle));
 		}
+		src3_reg = &instr_s->src_reg[0];
+		pred = instr_s->pred;
+	}
 
-		alu->scalar_dest         = sdst_reg->num;
+	if (vdst_reg) {
+		assert((vdst_reg->flags & ~IR2_REG_EXPORT) == 0);
+		assert(!vdst_reg->swizzle || (strlen(vdst_reg->swizzle) == 4));
+		alu->vector_opc          = instr_v->alu_vector.opc;
+		alu->vector_write_mask   = reg_alu_dst_swiz(vdst_reg);
+		alu->vector_dest         = dst_to_reg(instr_v, vdst_reg);
+	} else {
+		alu->vector_opc          = MAXv;
+	}
+
+	if (sdst_reg) {
+		alu->scalar_opc          = instr_s->alu_scalar.opc;
 		alu->scalar_write_mask   = reg_alu_dst_swiz(sdst_reg);
-		alu->scalar_opc          = instr->alu.scalar_opc;
+		alu->scalar_dest         = dst_to_reg(instr_s, sdst_reg);
 	} else {
 		/* not sure if this is required, but adreno compiler seems
 		 * to always set scalar opc to MAXs if it is not used:
@@ -456,13 +570,58 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 		alu->scalar_opc = MAXs;
 	}
 
-	if (src3_reg) {
-		reg_update_stats(src3_reg, info, false);
+	alu->export_data =
+		!!((instr_v ? vdst_reg : sdst_reg)->flags & IR2_REG_EXPORT);
 
-		alu->src3_reg            = src3_reg->num;
+	/* export32 has this bit set.. it seems to do more than just set
+	 * the base address of the constants used to zero
+	 * TODO make this less of a hack
+	 */
+	if (alu->export_data && alu->vector_dest == 32) {
+		assert(!instr_s);
+		alu->relative_addr = 1;
+	}
+
+	if (src1_reg) {
+		if (src1_reg->flags & IR2_REG_CONST) {
+			assert(!(src1_reg->flags & IR2_REG_ABS));
+			alu->src1_reg_const  = src1_reg->num;
+		} else {
+			alu->src1_reg        = shader->reg[src1_reg->num].reg;
+			alu->src1_reg_abs    = !!(src1_reg->flags & IR2_REG_ABS);
+		}
+		alu->src1_swiz           = reg_alu_src_swiz(src1_reg);
+		alu->src1_reg_negate     = !!(src1_reg->flags & IR2_REG_NEGATE);
+		alu->src1_sel            = !(src1_reg->flags & IR2_REG_CONST);
+    }  else {
+		alu->src1_sel = 1;
+	}
+
+    if (src2_reg) {
+		if (src2_reg->flags & IR2_REG_CONST) {
+			assert(!(src2_reg->flags & IR2_REG_ABS));
+			alu->src2_reg_const  = src2_reg->num;
+		} else {
+			alu->src2_reg        = shader->reg[src2_reg->num].reg;
+			alu->src2_reg_abs    = !!(src2_reg->flags & IR2_REG_ABS);
+		}
+		alu->src2_swiz           = reg_alu_src_swiz(src2_reg);
+		alu->src2_reg_negate     = !!(src2_reg->flags & IR2_REG_NEGATE);
+		alu->src2_sel            = !(src2_reg->flags & IR2_REG_CONST);
+    } else {
+		alu->src2_sel = 1;
+    }
+
+    if (src3_reg) {
+		if (src3_reg->flags & IR2_REG_CONST) {
+			assert(!(src3_reg->flags & IR2_REG_ABS));
+			alu->src3_reg_const  = src3_reg->num;
+		} else {
+			alu->src3_reg        = shader->reg[src3_reg->num].reg;
+			alu->src3_reg_abs    = !!(src3_reg->flags & IR2_REG_ABS);
+		}
 		alu->src3_swiz           = reg_alu_src_swiz(src3_reg);
 		alu->src3_reg_negate     = !!(src3_reg->flags & IR2_REG_NEGATE);
-		alu->src3_reg_abs        = !!(src3_reg->flags & IR2_REG_ABS);
 		alu->src3_sel            = !(src3_reg->flags & IR2_REG_CONST);
 	} else {
 		/* not sure if this is required, but adreno compiler seems
@@ -471,9 +630,11 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 		alu->src3_sel = 1;
 	}
 
-	if (instr->pred != IR2_PRED_NONE) {
-		alu->pred_select = (instr->pred == IR2_PRED_EQ) ? 3 : 2;
-	}
+	alu->vector_clamp = instr_v ? instr_v->alu_vector.clamp : 0;
+	alu->scalar_clamp = instr_s ? instr_s->alu_scalar.clamp : 0;
+
+	if (pred != IR2_PRED_NONE)
+		alu->pred_select = (pred == IR2_PRED_EQ) ? 3 : 2;
 
 	return 0;
 }
@@ -483,51 +644,63 @@ static int instr_emit(struct ir2_instruction *instr, uint32_t *dwords,
 {
 	switch (instr->instr_type) {
 	case IR2_FETCH: return instr_emit_fetch(instr, dwords, idx, info);
-	case IR2_ALU:   return instr_emit_alu(instr, dwords, info);
+	case IR2_ALU_VECTOR: return instr_emit_alu(instr, NULL, dwords, info);
+	case IR2_ALU_SCALAR: return instr_emit_alu(NULL, instr, dwords, info);
 	}
 	return -1;
 }
 
-
-struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
+struct ir2_dst_register * ir2_dst_create(struct ir2_instruction *instr,
 		int num, const char *swizzle, int flags)
 {
-	struct ir2_register *reg =
-			ir2_alloc(instr->shader, sizeof(struct ir2_register));
-	DEBUG_MSG("%x, %d, %s", flags, num, swizzle);
-	assert(num <= REG_MASK);
+	if (!(flags & IR2_REG_EXPORT)) {
+		struct ir2_register *reg = &instr->shader->reg[num];
+
+		unsigned i;
+		for (i = instr->shader->max_reg + 1; i <= num; i++)
+			instr->shader->reg[i].write_idx = -1;
+		instr->shader->max_reg = i - 1;
+
+		if (reg->write_idx < 0)
+            reg->write_idx = instr->idx;
+		reg->write_idx2 = instr->idx;
+	}
+
+	struct ir2_dst_register *reg = &instr->dst_reg;
 	reg->flags = flags;
 	reg->num = num;
 	reg->swizzle = ir2_strdup(instr->shader, swizzle);
-	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
-	instr->regs[instr->regs_count++] = reg;
 	return reg;
 }
 
-static void reg_update_stats(struct ir2_register *reg,
-		struct ir2_shader_info *info, bool dest)
+struct ir2_src_register * ir2_reg_create(struct ir2_instruction *instr,
+		int num, const char *swizzle, int flags)
 {
-	if (!(reg->flags & (IR2_REG_CONST|IR2_REG_EXPORT))) {
-		info->max_reg = MAX2(info->max_reg, reg->num);
+	assert(instr->src_reg_count + 1 <= ARRAY_SIZE(instr->src_reg));
+	if (!(flags & IR2_REG_CONST)) {
+		struct ir2_register *reg = &instr->shader->reg[num];
 
-		if (dest) {
-			info->regs_written |= (1 << reg->num);
-		} else if (!(info->regs_written & (1 << reg->num))) {
-			/* for registers that haven't been written, they must be an
-			 * input register that the thread scheduler (presumably?)
-			 * needs to know about:
-			 */
-			info->max_input_reg = MAX2(info->max_input_reg, reg->num);
-		}
+		reg->read_idx = instr->idx;
+
+		unsigned i;
+		for (i = instr->shader->max_reg + 1; i <= num; i++)
+			instr->shader->reg[i].write_idx = -1;
+		instr->shader->max_reg = i - 1;
 	}
+
+	struct ir2_src_register *reg = &instr->src_reg[instr->src_reg_count++];
+	reg->flags = flags;
+	reg->num = num;
+	reg->swizzle = ir2_strdup(instr->shader, swizzle);
+	return reg;
 }
 
-static uint32_t reg_fetch_src_swiz(struct ir2_register *reg, uint32_t n)
+static uint32_t reg_fetch_src_swiz(struct ir2_src_register *reg, uint32_t n)
 {
 	uint32_t swiz = 0;
 	int i;
 
-	assert(reg->flags == 0);
+	assert((reg->flags & ~IR2_REG_INPUT) == 0);
 	assert(reg->swizzle);
 
 	DEBUG_MSG("fetch src R%d.%s", reg->num, reg->swizzle);
@@ -547,7 +720,7 @@ static uint32_t reg_fetch_src_swiz(struct ir2_register *reg, uint32_t n)
 	return swiz;
 }
 
-static uint32_t reg_fetch_dst_swiz(struct ir2_register *reg)
+static uint32_t reg_fetch_dst_swiz(struct ir2_dst_register *reg)
 {
 	uint32_t swiz = 0;
 	int i;
@@ -580,7 +753,7 @@ static uint32_t reg_fetch_dst_swiz(struct ir2_register *reg)
 }
 
 /* actually, a write-mask */
-static uint32_t reg_alu_dst_swiz(struct ir2_register *reg)
+static uint32_t reg_alu_dst_swiz(struct ir2_dst_register *reg)
 {
 	uint32_t swiz = 0;
 	int i;
@@ -607,12 +780,11 @@ static uint32_t reg_alu_dst_swiz(struct ir2_register *reg)
 	return swiz;
 }
 
-static uint32_t reg_alu_src_swiz(struct ir2_register *reg)
+static uint32_t reg_alu_src_swiz(struct ir2_src_register *reg)
 {
 	uint32_t swiz = 0;
 	int i;
 
-	assert((reg->flags & IR2_REG_EXPORT) == 0);
 	assert(!reg->swizzle || (strlen(reg->swizzle) == 4));
 
 	DEBUG_MSG("vector src R%d.%s", reg->num, reg->swizzle);

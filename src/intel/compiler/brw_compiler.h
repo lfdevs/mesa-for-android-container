@@ -434,18 +434,14 @@ union brw_any_prog_key {
  * entries [most of them except when we're doing untyped surface
  * access] will be removed by the uniform packing pass.
  */
-#define BRW_IMAGE_PARAM_SURFACE_IDX_OFFSET      0
-#define BRW_IMAGE_PARAM_OFFSET_OFFSET           4
-#define BRW_IMAGE_PARAM_SIZE_OFFSET             8
-#define BRW_IMAGE_PARAM_STRIDE_OFFSET           12
-#define BRW_IMAGE_PARAM_TILING_OFFSET           16
-#define BRW_IMAGE_PARAM_SWIZZLING_OFFSET        20
-#define BRW_IMAGE_PARAM_SIZE                    24
+#define BRW_IMAGE_PARAM_OFFSET_OFFSET           0
+#define BRW_IMAGE_PARAM_SIZE_OFFSET             4
+#define BRW_IMAGE_PARAM_STRIDE_OFFSET           8
+#define BRW_IMAGE_PARAM_TILING_OFFSET           12
+#define BRW_IMAGE_PARAM_SWIZZLING_OFFSET        16
+#define BRW_IMAGE_PARAM_SIZE                    20
 
 struct brw_image_param {
-   /** Surface binding table index. */
-   uint32_t surface_idx;
-
    /** Offset applied to the X and Y surface coordinates. */
    uint32_t offset[2];
 

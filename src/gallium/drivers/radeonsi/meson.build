@@ -27,6 +27,7 @@ files_libradeonsi = files(
   'si_clear.c',
   'si_compute.c',
   'si_compute.h',
+  'si_compute_blit.c',
   'si_cp_dma.c',
   'si_debug.c',
   'si_descriptors.c',
@@ -51,6 +52,7 @@ files_libradeonsi = files(
   'si_shader_tgsi_alu.c',
   'si_shader_tgsi_mem.c',
   'si_shader_tgsi_setup.c',
+  'si_shaderlib_tgsi.c',
   'si_state.c',
   'si_state.h',
   'si_state_binning.c',
@@ -60,6 +62,7 @@ files_libradeonsi = files(
   'si_state_streamout.c',
   'si_state_viewport.c',
   'si_test_dma.c',
+  'si_test_dma_perf.c',
   'si_texture.c',
   'si_uvd.c',
   '../radeon/r600_perfcounter.c',
@@ -68,6 +71,7 @@ files_libradeonsi = files(
   '../radeon/radeon_vcn_enc_1_2.c',
   '../radeon/radeon_vcn_enc.c',
   '../radeon/radeon_vcn_enc.h',
+  '../radeon/radeon_vcn_dec_jpeg.c',
   '../radeon/radeon_vcn_dec.c',
   '../radeon/radeon_vcn_dec.h',
   '../radeon/radeon_uvd_enc_1_1.c',
@@ -90,7 +94,7 @@ si_driinfo_h = custom_target(
     '../../auxiliary/pipe-loader/driinfo_gallium.h', 'driinfo_radeonsi.h'
   ),
   output : 'si_driinfo.h',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
 )
 

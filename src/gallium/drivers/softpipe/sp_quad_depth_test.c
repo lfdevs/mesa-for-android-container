@@ -803,7 +803,7 @@ depth_test_quads_fallback(struct quad_stage *qs,
       data.tile = sp_get_cached_tile(qs->softpipe->zsbuf_cache, 
                                      quads[0]->input.x0, 
                                      quads[0]->input.y0, quads[0]->input.layer);
-      data.clamp = !qs->softpipe->rasterizer->depth_clip;
+      data.clamp = !qs->softpipe->rasterizer->depth_clip_near;
 
       near_val = qs->softpipe->viewports[vp_idx].translate[2] - qs->softpipe->viewports[vp_idx].scale[2];
       far_val = near_val + (qs->softpipe->viewports[vp_idx].scale[2] * 2.0);
@@ -916,7 +916,7 @@ choose_depth_test(struct quad_stage *qs,
 
    boolean occlusion = qs->softpipe->active_query_count;
 
-   boolean clipped = !qs->softpipe->rasterizer->depth_clip;
+   boolean clipped = !qs->softpipe->rasterizer->depth_clip_near;
 
    if(!qs->softpipe->framebuffer.zsbuf)
       depth = depthwrite = stencil = FALSE;

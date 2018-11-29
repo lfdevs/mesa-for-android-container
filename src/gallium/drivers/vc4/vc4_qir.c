@@ -343,13 +343,57 @@ qir_channels_written(struct qinst *inst)
         unreachable("Bad pack field");
 }
 
+char *
+qir_describe_uniform(enum quniform_contents contents, uint32_t data,
+                     const uint32_t *uniforms)
+{
+        static const char *quniform_names[] = {
+                [QUNIFORM_VIEWPORT_X_SCALE] = "vp_x_scale",
+                [QUNIFORM_VIEWPORT_Y_SCALE] = "vp_y_scale",
+                [QUNIFORM_VIEWPORT_Z_OFFSET] = "vp_z_offset",
+                [QUNIFORM_VIEWPORT_Z_SCALE] = "vp_z_scale",
+                [QUNIFORM_TEXTURE_CONFIG_P0] = "tex_p0",
+                [QUNIFORM_TEXTURE_CONFIG_P1] = "tex_p1",
+                [QUNIFORM_TEXTURE_CONFIG_P2] = "tex_p2",
+                [QUNIFORM_TEXTURE_FIRST_LEVEL] = "tex_first_level",
+        };
+
+        switch (contents) {
+        case QUNIFORM_CONSTANT:
+                return ralloc_asprintf(NULL, "0x%08x / %f", data, uif(data));
+        case QUNIFORM_UNIFORM:
+                if (uniforms) {
+                        uint32_t unif = uniforms[data];
+                        return ralloc_asprintf(NULL, "unif[%d] = 0x%08x / %f",
+                                               data, unif, uif(unif));
+                } else {
+                        return ralloc_asprintf(NULL, "unif[%d]", data);
+                }
+
+        case QUNIFORM_TEXTURE_CONFIG_P0:
+        case QUNIFORM_TEXTURE_CONFIG_P1:
+        case QUNIFORM_TEXTURE_CONFIG_P2:
+        case QUNIFORM_TEXTURE_FIRST_LEVEL:
+                return ralloc_asprintf(NULL, "%s[%d]",
+                                       quniform_names[contents], data);
+
+        default:
+                if (contents < ARRAY_SIZE(quniform_names) &&
+                    quniform_names[contents]) {
+                        return ralloc_asprintf(NULL, "%s",
+                                               quniform_names[contents]);
+                } else {
+                        return ralloc_asprintf(NULL, "??? %d", contents);
+                }
+        }
+}
+
 static void
 qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
 {
         static const char *files[] = {
                 [QFILE_TEMP] = "t",
                 [QFILE_VARY] = "v",
-                [QFILE_UNIF] = "u",
                 [QFILE_TLB_COLOR_WRITE] = "tlb_c",
                 [QFILE_TLB_COLOR_WRITE_MS] = "tlb_c_ms",
                 [QFILE_TLB_Z_WRITE] = "tlb_z",
@@ -403,16 +447,18 @@ qir_print_reg(struct vc4_compile *c, struct qreg reg, bool write)
                 fprintf(stderr, "%s", files[reg.file]);
                 break;
 
-        default:
-                fprintf(stderr, "%s%d", files[reg.file], reg.index);
+        case QFILE_UNIF: {
+                char *desc = qir_describe_uniform(c->uniform_contents[reg.index],
+                                                  c->uniform_data[reg.index],
+                                                  NULL);
+                fprintf(stderr, "u%d (%s)", reg.index, desc);
+                ralloc_free(desc);
                 break;
         }
 
-        if (reg.file == QFILE_UNIF &&
-            c->uniform_contents[reg.index] == QUNIFORM_CONSTANT) {
-                fprintf(stderr, " (0x%08x / %f)",
-                        c->uniform_data[reg.index],
-                        uif(c->uniform_data[reg.index]));
+        default:
+                fprintf(stderr, "%s%d", files[reg.file], reg.index);
+                break;
         }
 }
 

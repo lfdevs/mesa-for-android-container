@@ -235,13 +235,10 @@ dead_cf_block(nir_block *block)
          return true;
       }
 
-      nir_const_value *const_value =
-         nir_src_as_const_value(following_if->condition);
-
-      if (!const_value)
+      if (!nir_src_is_const(following_if->condition))
          return false;
 
-      opt_constant_if(following_if, const_value->u32[0] != 0);
+      opt_constant_if(following_if, nir_src_as_bool(following_if->condition));
       return true;
    }
 
@@ -254,16 +251,6 @@ dead_cf_block(nir_block *block)
 
    nir_cf_node_remove(&following_loop->cf_node);
    return true;
-}
-
-static bool
-ends_in_jump(nir_block *block)
-{
-   if (exec_list_is_empty(&block->instr_list))
-      return false;
-
-   nir_instr *instr = nir_block_last_instr(block);
-   return instr->type == nir_instr_type_jump;
 }
 
 static bool
@@ -297,7 +284,7 @@ dead_cf_list(struct exec_list *list, bool *list_ends_in_jump)
             progress = true;
          }
 
-         if (ends_in_jump(block)) {
+         if (nir_block_ends_in_jump(block)) {
             *list_ends_in_jump = true;
 
             if (!exec_node_is_tail_sentinel(cur->node.next)) {

@@ -1198,7 +1198,7 @@ swr_update_derived(struct pipe_context *pipe,
       if (zb && swr_resource(zb->texture)->has_depth)
          rastState->depthFormat = swr_resource(zb->texture)->swr.format;
 
-      rastState->depthClipEnable = rasterizer->depth_clip;
+      rastState->depthClipEnable = rasterizer->depth_clip_near;
       rastState->clipHalfZ = rasterizer->clip_halfz;
 
       ctx->api.pfnSwrSetRastState(ctx->swrContext, rastState);

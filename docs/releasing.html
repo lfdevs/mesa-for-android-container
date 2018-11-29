@@ -21,6 +21,7 @@
 <li><a href="#overview">Overview</a>
 <li><a href="#schedule">Release schedule</a>
 <li><a href="#pickntest">Cherry-pick and test</a>
+<li><a href="#stagingbranch">Staging branch</a>
 <li><a href="#branch">Making a branchpoint</a>
 <li><a href="#prerelease">Pre-release announcement</a>
 <li><a href="#release">Making a new release</a>
@@ -208,6 +209,25 @@ Installing the built driver from the pre-announced RC branch in the
 system and making some every day's use until the release may be a good
 idea too.
 </p>
+
+<h1 id="stagingbranch">Staging branch</h1>
+
+<p>
+A live branch, which contains the currently merge/rejected patches is available
+in the main repository under <code>staging/X.Y</code>. For example:
+</p>
+<pre>
+	staging/18.1 - WIP branch for the 18.1 series
+	staging/18.2 - WIP branch for the 18.2 series
+</pre>
+
+<p>
+Notes:
+</p>
+<ul>
+<li>People are encouraged to test the branch and report regressions.</li>
+<li>The branch history is not stable and it <strong>will</strong> be rebased,</li>
+</ul>
 
 
 <h1 id="branch">Making a branchpoint</h1>
@@ -492,10 +512,10 @@ Here is one solution that I've been using.
 	# Drop LLVM_CONFIG, if applicable:
 	# unset LLVM_CONFIG
 
-	__glxinfo_cmd='glxinfo 2>&amp;1 | egrep -o "Mesa.*|Gallium.*|.*dri\.so"'
-	__glxgears_cmd='glxgears 2>&amp;1 | grep -v "configuration file"'
-	__es2info_cmd='es2_info 2>&amp;1 | egrep "GL_VERSION|GL_RENDERER|.*dri\.so"'
-	__es2gears_cmd='es2gears_x11 2>&amp;1 | grep -v "configuration file"'
+	__glxinfo_cmd='glxinfo 2&gt;&amp;1 | egrep -o "Mesa.*|Gallium.*|.*dri\.so"'
+	__glxgears_cmd='glxgears 2&gt;&amp;1 | grep -v "configuration file"'
+	__es2info_cmd='es2_info 2&gt;&amp;1 | egrep "GL_VERSION|GL_RENDERER|.*dri\.so"'
+	__es2gears_cmd='es2gears_x11 2&gt;&amp;1 | grep -v "configuration file"'
 	test "x$LD_LIBRARY_PATH" != 'x' &amp;&amp; __old_ld="$LD_LIBRARY_PATH"
 	export LD_LIBRARY_PATH=`pwd`/test/usr/local/lib/:"${__old_ld}"
 	export LIBGL_DRIVERS_PATH=`pwd`/test/usr/local/lib/dri/

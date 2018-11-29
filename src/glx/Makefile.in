@@ -470,8 +470,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -492,7 +490,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -585,11 +582,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -651,8 +653,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -711,10 +711,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -729,16 +732,15 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = $(am__append_7) $(am__append_10) . tests
 EXTRA_DIST = SConscript meson.build
-@HAVE_XF86VIDMODE_TRUE@EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
 AM_CFLAGS = -I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/GL/internal -I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/loader -I$(top_builddir)/src/mapi \
 	-I$(top_srcdir)/src/mapi -I$(top_builddir)/src/mapi/glapi \
 	-I$(top_srcdir)/src/mapi/glapi $(VISIBILITY_CFLAGS) \
-	$(EXTRA_DEFINES_XF86VIDMODE) -D_REENTRANT \
-	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" $(DEFINES) \
-	$(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) $(GLPROTO_CFLAGS) \
-	$(X11_INCLUDES) $(am__append_12) $(am__append_14)
+	-D_REENTRANT -DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
+	$(DEFINES) $(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) \
+	$(GLPROTO_CFLAGS) $(X11_INCLUDES) $(am__append_12) \
+	$(am__append_14)
 lib_LTLIBRARIES = lib@GL_LIB@.la
 noinst_LTLIBRARIES = libglx.la
 libglx_la_SOURCES = clientattrib.c clientinfo.c compsize.c \

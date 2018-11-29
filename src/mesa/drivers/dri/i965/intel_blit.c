@@ -169,7 +169,7 @@ get_blit_intratile_offset_el(const struct brw_context *brw,
                              uint32_t *y_offset_el)
 {
    isl_tiling_get_intratile_offset_el(mt->surf.tiling,
-                                      mt->cpp * 8, mt->surf.row_pitch,
+                                      mt->cpp * 8, mt->surf.row_pitch_B,
                                       total_x_offset_el, total_y_offset_el,
                                       base_address_offset,
                                       x_offset_el, y_offset_el);
@@ -425,11 +425,11 @@ emit_miptree_blit(struct brw_context *brw,
 
          if (!emit_copy_blit(brw,
                              src_mt->cpp,
-                             reverse ? -src_mt->surf.row_pitch :
-                                        src_mt->surf.row_pitch,
+                             reverse ? -src_mt->surf.row_pitch_B :
+                                        src_mt->surf.row_pitch_B,
                              src_mt->bo, src_mt->offset + src_offset,
                              src_mt->surf.tiling,
-                             dst_mt->surf.row_pitch,
+                             dst_mt->surf.row_pitch_B,
                              dst_mt->bo, dst_mt->offset + dst_offset,
                              dst_mt->surf.tiling,
                              src_tile_x, src_tile_y,
@@ -715,7 +715,7 @@ intel_miptree_set_alpha_to_one(struct brw_context *brw,
    uint32_t BR13, CMD;
    int pitch, cpp;
 
-   pitch = mt->surf.row_pitch;
+   pitch = mt->surf.row_pitch_B;
    cpp = mt->cpp;
 
    DBG("%s dst:buf(%p)/%d %d,%d sz:%dx%d\n",

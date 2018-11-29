@@ -68,7 +68,7 @@ void fd_bc_flush_deferred(struct fd_batch_cache *cache, struct fd_context *ctx);
 void fd_bc_invalidate_context(struct fd_context *ctx);
 void fd_bc_invalidate_batch(struct fd_batch *batch, bool destroy);
 void fd_bc_invalidate_resource(struct fd_resource *rsc, bool destroy);
-struct fd_batch * fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx);
+struct fd_batch * fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool nondraw);
 
 struct fd_batch * fd_batch_from_fb(struct fd_batch_cache *cache,
 		struct fd_context *ctx, const struct pipe_framebuffer_state *pfb);

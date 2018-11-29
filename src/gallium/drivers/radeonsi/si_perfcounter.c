@@ -377,7 +377,7 @@ static struct si_pc_block groups_VI[] = {
 	{ &cik_DB, 257},
 	{ &cik_GRBM, 34 },
 	{ &cik_GRBMSE, 15 },
-	{ &cik_PA_SU, 153 },
+	{ &cik_PA_SU, 154 },
 	{ &cik_PA_SC, 397 },
 	{ &cik_SPI, 197 },
 	{ &cik_SQ, 273 },
@@ -559,7 +559,7 @@ static void si_pc_emit_start(struct si_context *sctx,
 
 	radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 	radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) |
-			COPY_DATA_DST_SEL(COPY_DATA_MEM));
+			COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM));
 	radeon_emit(cs, 1); /* immediate */
 	radeon_emit(cs, 0); /* unused */
 	radeon_emit(cs, va);
@@ -580,10 +580,12 @@ static void si_pc_emit_stop(struct si_context *sctx,
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	si_gfx_write_event_eop(sctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
-			       EOP_DATA_SEL_VALUE_32BIT,
-			       buffer, va, 0, SI_NOT_QUERY);
-	si_gfx_wait_fence(sctx, va, 0, 0xffffffff);
+	si_cp_release_mem(sctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
+			  EOP_DST_SEL_MEM,
+			  EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM,
+			  EOP_DATA_SEL_VALUE_32BIT,
+			  buffer, va, 0, SI_NOT_QUERY);
+	si_cp_wait_mem(sctx, va, 0, 0xffffffff, 0);
 
 	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 	radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_SAMPLE) | EVENT_INDEX(0));
@@ -616,7 +618,7 @@ static void si_pc_emit_read(struct si_context *sctx,
 
 			radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 			radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_PERF) |
-					COPY_DATA_DST_SEL(COPY_DATA_MEM) |
+					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM) |
 					COPY_DATA_COUNT_SEL); /* 64 bits */
 			radeon_emit(cs, reg >> 2);
 			radeon_emit(cs, 0); /* unused */
@@ -629,7 +631,7 @@ static void si_pc_emit_read(struct si_context *sctx,
 		for (idx = 0; idx < count; ++idx) {
 			radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 			radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) |
-					COPY_DATA_DST_SEL(COPY_DATA_MEM) |
+					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM) |
 					COPY_DATA_COUNT_SEL);
 			radeon_emit(cs, 0); /* immediate */
 			radeon_emit(cs, 0);
@@ -682,7 +684,7 @@ void si_init_perfcounters(struct si_screen *screen)
 	if (!pc)
 		return;
 
-	pc->num_stop_cs_dwords = 14 + si_gfx_write_fence_dwords(screen);
+	pc->num_stop_cs_dwords = 14 + si_cp_write_fence_dwords(screen);
 	pc->num_instance_cs_dwords = 3;
 
 	pc->num_shader_types = ARRAY_SIZE(si_pc_shader_type_bits);

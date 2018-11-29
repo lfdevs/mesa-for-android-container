@@ -59,6 +59,10 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
 		util_blitter_save_fragment_shader(sctx->blitter, sctx->ps_shader.cso);
 		util_blitter_save_sample_mask(sctx->blitter, sctx->sample_mask);
 		util_blitter_save_scissor(sctx->blitter, &sctx->scissors.states[0]);
+		util_blitter_save_window_rectangles(sctx->blitter,
+						    sctx->window_rectangles_include,
+						    sctx->num_window_rectangles,
+						    sctx->window_rectangles);
 	}
 
 	if (op & SI_SAVE_FRAMEBUFFER)
@@ -906,7 +910,7 @@ void si_resource_copy_region(struct pipe_context *ctx,
 
 	/* Handle buffers first. */
 	if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
-		si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width, 0);
+		si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
 		return;
 	}
 

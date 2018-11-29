@@ -40,8 +40,10 @@ static const struct gen_info {
    { "skl", },
    { "bxt", },
    { "kbl", },
+   { "aml", },
    { "glk", },
    { "cfl", },
+   { "whl", },
    { "cnl", },
    { "icl", },
 };

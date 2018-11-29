@@ -30,8 +30,10 @@
 #include "amdgpu_cs.h"
 #include "amdgpu_public.h"
 
+#include "util/u_cpu_detect.h"
 #include "util/u_hash_table.h"
 #include "util/hash_table.h"
+#include "util/xmlconfig.h"
 #include <amdgpu_drm.h>
 #include <xf86drm.h>
 #include <stdio.h>
@@ -49,7 +51,9 @@ static simple_mtx_t dev_tab_mutex = _SIMPLE_MTX_INITIALIZER_NP;
 DEBUG_GET_ONCE_BOOL_OPTION(all_bos, "RADEON_ALL_BOS", false)
 
 /* Helper function to do the ioctls needed for setup and init. */
-static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
+static bool do_winsys_init(struct amdgpu_winsys *ws,
+                           const struct pipe_screen_config *config,
+                           int fd)
 {
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info, &ws->amdinfo))
       goto fail;
@@ -63,7 +67,8 @@ static bool do_winsys_init(struct amdgpu_winsys *ws, int fd)
    ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
    ws->debug_all_bos = debug_get_option_all_bos();
    ws->reserve_vmid = strstr(debug_get_option("R600_DEBUG", ""), "reserve_vmid") != NULL;
-   ws->zero_all_vram_allocs = strstr(debug_get_option("R600_DEBUG", ""), "zerovram") != NULL;
+   ws->zero_all_vram_allocs = strstr(debug_get_option("R600_DEBUG", ""), "zerovram") != NULL ||
+      driQueryOptionb(config->options, "radeonsi_zerovram");
 
    return true;
 
@@ -231,6 +236,14 @@ static const char* amdgpu_get_chip_name(struct radeon_winsys *ws)
    return amdgpu_get_marketing_name(dev);
 }
 
+static void amdgpu_pin_threads_to_L3_cache(struct radeon_winsys *rws,
+                                           unsigned cache)
+{
+   struct amdgpu_winsys *ws = (struct amdgpu_winsys*)rws;
+
+   util_pin_thread_to_L3(ws->cs_queue.threads[0], cache,
+                         util_cpu_caps.cores_per_L3);
+}
 
 PUBLIC struct radeon_winsys *
 amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
@@ -279,7 +292,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->info.drm_major = drm_major;
    ws->info.drm_minor = drm_minor;
 
-   if (!do_winsys_init(ws, fd))
+   if (!do_winsys_init(ws, config, fd))
       goto fail_alloc;
 
    /* Create managers. */
@@ -310,6 +323,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->base.query_value = amdgpu_query_value;
    ws->base.read_registers = amdgpu_read_registers;
    ws->base.get_chip_name = amdgpu_get_chip_name;
+   ws->base.pin_threads_to_L3_cache = amdgpu_pin_threads_to_L3_cache;
 
    amdgpu_bo_init_functions(ws);
    amdgpu_cs_init_functions(ws);

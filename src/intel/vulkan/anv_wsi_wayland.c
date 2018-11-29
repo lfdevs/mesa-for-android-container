@@ -21,9 +21,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "vk_format_info.h"
-#include <util/hash_table.h>
-
 #include "wsi_common_wayland.h"
 #include "anv_private.h"
 

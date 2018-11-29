@@ -144,6 +144,9 @@ void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 		radeon_emit(cs, ib->gpu_address >> 32);
 		radeon_emit(cs, (ib->b.b.width0 >> 2) & 0xfffff);
 	}
+
+	if (state->atom.emit)
+		state->atom.emit(sctx);
 }
 
 void si_pm4_reset_emitted(struct si_context *sctx)

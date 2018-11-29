@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -119,9 +117,10 @@ fd_set_sampler_views(struct pipe_context *pctx, enum pipe_shader_type shader,
 void
 fd_texture_init(struct pipe_context *pctx)
 {
-	pctx->delete_sampler_state = fd_sampler_state_delete;
-
-	pctx->sampler_view_destroy = fd_sampler_view_destroy;
+	if (!pctx->delete_sampler_state)
+		pctx->delete_sampler_state = fd_sampler_state_delete;
+	if (!pctx->sampler_view_destroy)
+		pctx->sampler_view_destroy = fd_sampler_view_destroy;
 }
 
 /* helper for setting up border-color buffer for a3xx/a4xx: */

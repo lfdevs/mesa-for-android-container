@@ -29,6 +29,7 @@
 
 #include "glapi/glapi.h"
 #include "util/u_debug.h"
+#include "util/u_debug_gallium.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "pipe/p_screen.h"

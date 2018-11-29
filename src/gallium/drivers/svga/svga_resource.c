@@ -85,6 +85,7 @@ svga_can_create_resource(struct pipe_screen *screen,
    SVGA3dSize base_level_size;
    uint32 numMipLevels;
    uint32 arraySize;
+   uint32 numSamples;
 
    if (res->target == PIPE_BUFFER) {
       format = SVGA3D_BUFFER;
@@ -93,6 +94,7 @@ svga_can_create_resource(struct pipe_screen *screen,
       base_level_size.depth = 1;
       numMipLevels = 1;
       arraySize = 1;
+      numSamples = 0;
 
    } else {
       if (res->target == PIPE_TEXTURE_CUBE)
@@ -107,10 +109,11 @@ svga_can_create_resource(struct pipe_screen *screen,
       base_level_size.depth = res->depth0;
       numMipLevels = res->last_level + 1;
       arraySize = res->array_size;
+      numSamples = res->nr_samples;
    }
 
    return sws->surface_can_create(sws, format, base_level_size, 
-                                  arraySize, numMipLevels);
+                                  arraySize, numMipLevels, numSamples);
 }
 
 

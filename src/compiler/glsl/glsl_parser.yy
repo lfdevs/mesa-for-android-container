@@ -897,6 +897,23 @@ parameter_declarator:
       $$->identifier = $2;
       state->symbols->add_variable(new(state) ir_variable(NULL, $2, ir_var_auto));
    }
+   | layout_qualifier type_specifier any_identifier
+   {
+      if (state->allow_layout_qualifier_on_function_parameter) {
+         void *ctx = state->linalloc;
+         $$ = new(ctx) ast_parameter_declarator();
+         $$->set_location_range(@2, @3);
+         $$->type = new(ctx) ast_fully_specified_type();
+         $$->type->set_location(@2);
+         $$->type->specifier = $2;
+         $$->identifier = $3;
+         state->symbols->add_variable(new(state) ir_variable(NULL, $3, ir_var_auto));
+      } else {
+         _mesa_glsl_error(&@1, state,
+                          "is is not allowed on function parameter");
+         YYERROR;
+      }
+   }
    | type_specifier any_identifier array_specifier
    {
       void *ctx = state->linalloc;
@@ -1450,10 +1467,12 @@ layout_qualifier_id:
                           "only valid in fragment shader input layout declaration.");
       } else if (pixel_interlock_ordered + pixel_interlock_unordered +
                  sample_interlock_ordered + sample_interlock_unordered > 0 &&
-                 !state->ARB_fragment_shader_interlock_enable) {
+                 !state->ARB_fragment_shader_interlock_enable &&
+                 !state->NV_fragment_shader_interlock_enable) {
          _mesa_glsl_error(& @1, state,
                           "interlock layout qualifier present, but the "
-                          "GL_ARB_fragment_shader_interlock extension is not "
+                          "GL_ARB_fragment_shader_interlock or "
+                          "GL_NV_fragment_shader_interlock extension is not "
                           "enabled.");
       } else {
          $$.flags.q.pixel_interlock_ordered = pixel_interlock_ordered;

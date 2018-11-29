@@ -38,7 +38,7 @@ if with_dri
 endif
 
 if with_dri2
-  files_libdri += files('dri2.c', 'dri2_buffer.h')
+  files_libdri += files('dri2.c')
 endif
 
 libdri_c_args = []

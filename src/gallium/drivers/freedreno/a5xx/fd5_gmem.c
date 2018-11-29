@@ -614,6 +614,9 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	bool tiled;
 	uint32_t offset;
 
+	if (!rsc->valid)
+		return;
+
 	if (buf == BLIT_S)
 		rsc = rsc->stencil;
 

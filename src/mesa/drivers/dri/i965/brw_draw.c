@@ -885,7 +885,7 @@ brw_draw_single_prim(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   bool fail_next = false;
+   bool fail_next;
 
    /* Flag BRW_NEW_DRAW_CALL on every draw.  This allows us to have
     * atoms that happen on every draw call.
@@ -898,6 +898,7 @@ brw_draw_single_prim(struct gl_context *ctx,
    intel_batchbuffer_require_space(brw, 1500);
    brw_require_statebuffer_space(brw, 2400);
    intel_batchbuffer_save_state(brw);
+   fail_next = intel_batchbuffer_saved_state_is_empty(brw);
 
    if (brw->num_instances != prim->num_instances ||
        brw->basevertex != prim->basevertex ||

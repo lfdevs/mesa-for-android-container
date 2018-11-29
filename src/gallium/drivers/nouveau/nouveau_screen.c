@@ -243,6 +243,7 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
 
    nouveau_disk_cache_create(screen);
 
+   screen->transfer_pushbuf_threshold = 192;
    screen->lowmem_bindings = PIPE_BIND_GLOBAL; /* gallium limit */
    screen->vidmem_bindings =
       PIPE_BIND_RENDER_TARGET | PIPE_BIND_DEPTH_STENCIL |

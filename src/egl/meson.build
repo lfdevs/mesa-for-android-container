@@ -38,6 +38,8 @@ files_egl = files(
   'main/eglcurrent.c',
   'main/eglcurrent.h',
   'main/egldefines.h',
+  'main/egldevice.c',
+  'main/egldevice.h',
   'main/egldisplay.c',
   'main/egldisplay.h',
   'main/egldriver.c',
@@ -65,7 +67,7 @@ g_egldispatchstubs_c = custom_target(
   ],
   output : 'g_egldispatchstubs.c',
   command : [
-    prog_python2, '@INPUT0@', 'source', '@INPUT1@', '@INPUT2@', '@INPUT3@'
+    prog_python, '@INPUT0@', 'source', '@INPUT1@', '@INPUT2@', '@INPUT3@'
   ],
   depend_files : files('generate/genCommon.py'),
   capture : true,
@@ -79,7 +81,7 @@ g_egldispatchstubs_h = custom_target(
   ],
   output : 'g_egldispatchstubs.h',
   command : [
-    prog_python2, '@INPUT0@', 'header', '@INPUT1@', '@INPUT2@', '@INPUT3@'
+    prog_python, '@INPUT0@', 'header', '@INPUT1@', '@INPUT2@', '@INPUT3@'
   ],
   depend_files : files('generate/genCommon.py'),
   capture : true,
@@ -93,46 +95,44 @@ if with_dri2
   )
   c_args_for_egl += [
     '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
-    '-D_EGL_BUILT_IN_DRIVER_DRI2',
   ]
-endif
 
-if with_platform_x11
-  files_egl += files('drivers/dri2/platform_x11.c')
-  incs_for_egl += inc_loader
-  if with_dri3
-    files_egl += files('drivers/dri2/platform_x11_dri3.c')
-    link_for_egl += libloader_dri3_helper
+  if with_platform_x11
+    files_egl += files('drivers/dri2/platform_x11.c')
+    incs_for_egl += inc_loader
+    if with_dri3
+      files_egl += files('drivers/dri2/platform_x11_dri3.c')
+      link_for_egl += libloader_dri3_helper
+    endif
+    deps_for_egl += [dep_x11_xcb, dep_xcb_dri2, dep_xcb_xfixes]
   endif
-  deps_for_egl += [dep_x11_xcb, dep_xcb_dri2, dep_xcb_xfixes]
-endif
-if with_platform_drm
-  files_egl += files('drivers/dri2/platform_drm.c')
-  link_for_egl += [libloader, libgbm, libxmlconfig]
-  incs_for_egl += [inc_loader, inc_gbm, include_directories('../gbm/main')]
-  deps_for_egl += dep_libdrm
-endif
-if with_platform_surfaceless
-  files_egl += files('drivers/dri2/platform_surfaceless.c')
-  incs_for_egl += [inc_loader]
-endif
-if with_platform_wayland
-  deps_for_egl += [dep_wayland_client, dep_wayland_server, dep_wayland_egl_headers]
-  link_for_egl += libwayland_drm
-  files_egl += files('drivers/dri2/platform_wayland.c')
-  files_egl += [
-    linux_dmabuf_unstable_v1_protocol_c,
-    linux_dmabuf_unstable_v1_client_protocol_h,
-    wayland_drm_client_protocol_h,
-  ]
-  incs_for_egl += include_directories('wayland/wayland-drm')
-endif
-if with_platform_android
-  deps_for_egl += dep_android
-  files_egl += files('drivers/dri2/platform_android.c')
-  incs_for_egl += [inc_loader]
-endif
-if with_platform_haiku
+  if with_platform_drm
+    files_egl += files('drivers/dri2/platform_drm.c')
+    link_for_egl += [libloader, libgbm, libxmlconfig]
+    incs_for_egl += [inc_loader, inc_gbm, include_directories('../gbm/main')]
+    deps_for_egl += dep_libdrm
+  endif
+  if with_platform_surfaceless
+    files_egl += files('drivers/dri2/platform_surfaceless.c')
+    incs_for_egl += [inc_loader]
+  endif
+  if with_platform_wayland
+    deps_for_egl += [dep_wayland_client, dep_wayland_server, dep_wayland_egl_headers]
+    link_for_egl += libwayland_drm
+    files_egl += files('drivers/dri2/platform_wayland.c')
+    files_egl += [
+      linux_dmabuf_unstable_v1_protocol_c,
+      linux_dmabuf_unstable_v1_client_protocol_h,
+      wayland_drm_client_protocol_h,
+    ]
+    incs_for_egl += include_directories('wayland/wayland-drm')
+  endif
+  if with_platform_android
+    deps_for_egl += dep_android
+    files_egl += files('drivers/dri2/platform_android.c')
+    incs_for_egl += [inc_loader]
+  endif
+elif with_platform_haiku
   incs_for_egl += inc_haikugl
   c_args_for_egl += [
     '-D_EGL_BUILT_IN_DRIVER_HAIKU',

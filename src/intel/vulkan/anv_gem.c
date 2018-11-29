@@ -423,6 +423,19 @@ anv_gem_fd_to_handle(struct anv_device *device, int fd)
    return args.handle;
 }
 
+int
+anv_gem_reg_read(struct anv_device *device, uint32_t offset, uint64_t *result)
+{
+   struct drm_i915_reg_read args = {
+      .offset = offset
+   };
+
+   int ret = anv_ioctl(device->fd, DRM_IOCTL_I915_REG_READ, &args);
+
+   *result = args.val;
+   return ret;
+}
+
 #ifndef SYNC_IOC_MAGIC
 /* duplicated from linux/sync_file.h to avoid build-time dependency
  * on new (v4.7) kernel headers.  Once distro's are mostly using

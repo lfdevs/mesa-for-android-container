@@ -131,7 +131,8 @@ static void init( void )
       rasterizer.half_pixel_center = 1;
       rasterizer.bottom_edge_rule = 1;
       rasterizer.flatshade = FlatShade;
-      rasterizer.depth_clip = 1;
+      rasterizer.depth_clip_near = 1;
+      rasterizer.depth_clip_far = 1;
       handle = info.ctx->create_rasterizer_state(info.ctx, &rasterizer);
       info.ctx->bind_rasterizer_state(info.ctx, handle);
    }

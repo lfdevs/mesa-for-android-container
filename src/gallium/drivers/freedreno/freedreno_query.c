@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; ttxab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *

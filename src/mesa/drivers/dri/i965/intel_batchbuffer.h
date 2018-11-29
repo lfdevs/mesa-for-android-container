@@ -24,6 +24,7 @@ struct intel_batchbuffer;
 void intel_batchbuffer_init(struct brw_context *brw);
 void intel_batchbuffer_free(struct intel_batchbuffer *batch);
 void intel_batchbuffer_save_state(struct brw_context *brw);
+bool intel_batchbuffer_saved_state_is_empty(struct brw_context *brw);
 void intel_batchbuffer_reset_to_saved(struct brw_context *brw);
 void intel_batchbuffer_require_space(struct brw_context *brw, GLuint sz);
 int _intel_batchbuffer_flush_fence(struct brw_context *brw,
@@ -44,8 +45,12 @@ int _intel_batchbuffer_flush_fence(struct brw_context *brw,
 void intel_batchbuffer_data(struct brw_context *brw,
                             const void *data, GLuint bytes);
 
-bool brw_batch_has_aperture_space(struct brw_context *brw,
-                                  unsigned extra_space_in_bytes);
+static inline bool
+brw_batch_has_aperture_space(struct brw_context *brw, uint64_t extra_space)
+{
+   return brw->batch.aperture_space + extra_space <=
+          brw->screen->aperture_threshold;
+}
 
 bool brw_batch_references(struct intel_batchbuffer *batch, struct brw_bo *bo);
 

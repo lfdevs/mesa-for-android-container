@@ -645,9 +645,12 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 			if (radv_is_filter_minmax_format_supported(format))
 				 tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
 
-			/* GFX9 doesn't support linear depth surfaces */
-			if (physical_device->rad_info.chip_class >= GFX9)
-				linear = 0;
+			/* Don't support blitting surfaces with depth/stencil. */
+			if (vk_format_is_depth(format) && vk_format_is_stencil(format))
+				tiled &= ~VK_FORMAT_FEATURE_BLIT_DST_BIT;
+
+			/* Don't support linear depth surfaces */
+			linear = 0;
 		}
 	} else {
 		bool linear_sampling;
@@ -663,6 +666,13 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 			if (linear_sampling) {
 				linear |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
 				tiled |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+			}
+
+			/* Don't support blitting for R32G32B32 formats. */
+			if (format == VK_FORMAT_R32G32B32_SFLOAT ||
+			    format == VK_FORMAT_R32G32B32_UINT ||
+			    format == VK_FORMAT_R32G32B32_SINT) {
+				linear &= ~VK_FORMAT_FEATURE_BLIT_SRC_BIT;
 			}
 		}
 		if (radv_is_colorbuffer_format_supported(format, &blendable)) {
@@ -1086,6 +1096,20 @@ static VkResult radv_get_image_format_properties(struct radv_physical_device *ph
 	    !(info->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
 	    !(info->usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
 		sampleCounts |= VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT | VK_SAMPLE_COUNT_8_BIT;
+	}
+
+	if (info->tiling == VK_IMAGE_TILING_LINEAR &&
+	    (info->format == VK_FORMAT_R32G32B32_SFLOAT ||
+	     info->format == VK_FORMAT_R32G32B32_SINT ||
+	     info->format == VK_FORMAT_R32G32B32_UINT)) {
+		/* R32G32B32 is a weird format and the driver currently only
+		 * supports the barely minimum.
+		 * TODO: Implement more if we really need to.
+		 */
+		if (info->type == VK_IMAGE_TYPE_3D)
+			goto unsupported;
+		maxArraySize = 1;
+		maxMipLevels = 1;
 	}
 
 	if (info->usage & VK_IMAGE_USAGE_SAMPLED_BIT) {

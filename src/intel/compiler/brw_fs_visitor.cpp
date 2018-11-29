@@ -791,9 +791,19 @@ fs_visitor::emit_cs_terminate()
 void
 fs_visitor::emit_barrier()
 {
-   assert(devinfo->gen >= 7);
-   const uint32_t barrier_id_mask =
-      devinfo->gen >= 9 ? 0x8f000000u : 0x0f000000u;
+   uint32_t barrier_id_mask;
+   switch (devinfo->gen) {
+   case 7:
+   case 8:
+      barrier_id_mask = 0x0f000000u; break;
+   case 9:
+   case 10:
+      barrier_id_mask = 0x8f000000u; break;
+   case 11:
+      barrier_id_mask = 0x7f000000u; break;
+   default:
+      unreachable("barrier is only available on gen >= 7");
+   }
 
    /* We are getting the barrier ID from the compute shader header */
    assert(stage == MESA_SHADER_COMPUTE);

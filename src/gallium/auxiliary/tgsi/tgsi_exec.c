@@ -1223,7 +1223,17 @@ tgsi_exec_machine_bind_shader(
          {
             uint size = parse.FullToken.FullImmediate.Immediate.NrTokens - 1;
             assert( size <= 4 );
-            assert( mach->ImmLimit + 1 <= TGSI_EXEC_NUM_IMMEDIATES );
+            if (mach->ImmLimit >= mach->ImmsReserved) {
+               unsigned newReserved = mach->ImmsReserved ? 2 * mach->ImmsReserved : 128;
+               float4 *imms = REALLOC(mach->Imms, mach->ImmsReserved, newReserved * sizeof(float4));
+               if (imms) {
+                  mach->ImmsReserved = newReserved;
+                  mach->Imms = imms;
+               } else {
+                  debug_printf("Unable to (re)allocate space for immidiate constants\n");
+                  break;
+               }
+            }
 
             for( i = 0; i < size; i++ ) {
                mach->Imms[mach->ImmLimit][i] = 
@@ -1337,6 +1347,7 @@ tgsi_exec_machine_destroy(struct tgsi_exec_machine *mach)
    if (mach) {
       FREE(mach->Instructions);
       FREE(mach->Declarations);
+      FREE(mach->Imms);
 
       align_free(mach->Inputs);
       align_free(mach->Outputs);

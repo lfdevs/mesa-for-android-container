@@ -270,6 +270,16 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       gl_nir_link_assign_xfb_resources(ctx, shProg);
    }
 
+   for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
+      struct gl_linked_shader *shader = shProg->_LinkedShaders[stage];
+      if (!shader)
+         continue;
+
+      struct gl_program *prog = shader->Program;
+
+      NIR_PASS_V(prog->nir, brw_nir_lower_gl_images, prog);
+   }
+
    /* Determine first and last stage. */
    unsigned first = MESA_SHADER_STAGES;
    unsigned last = 0;

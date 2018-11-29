@@ -87,26 +87,35 @@ static const uint32_t sample_locs_1x =
 	FILL_SREG( 0, 0,   0, 0,   0, 0,   0, 0); /* S1, S2, S3 fields are not used by 1x */
 static const uint64_t centroid_priority_1x = 0x0000000000000000ull;
 
-/* 2x MSAA */
+/* 2x MSAA (the positions are sorted for EQAA) */
 static const uint32_t sample_locs_2x =
 	FILL_SREG(-4,-4,   4, 4,   0, 0,   0, 0); /* S2 & S3 fields are not used by 2x MSAA */
 static const uint64_t centroid_priority_2x = 0x1010101010101010ull;
 
-/* 4x, 8x, and 16x MSAA
- * - The first 4 locations happen to be optimal for 4x MSAA, better than
- *   the standard DX 4x locations.
- * - The first 8 locations happen to be almost as good as 8x DX locations,
- *   but the DX locations are horrible for worst-case EQAA 8s4f and 8s2f.
- */
-static const uint32_t sample_locs_4x_8x_16x[] = {
-	FILL_SREG(-5,-2,   5, 3,  -2, 6,   3,-5),
-	FILL_SREG(-6,-7,   1, 1,  -6, 4,   7,-3),
-	FILL_SREG(-1,-3,   6, 7,  -3, 2,   0,-7),
-	FILL_SREG(-4,-6,   2, 5,  -8, 0,   4,-1),
+/* 4x MSAA (the positions are sorted for EQAA) */
+static const uint32_t sample_locs_4x =
+	FILL_SREG(-2,-6,   2, 6,   -6, 2,  6,-2);
+static const uint64_t centroid_priority_4x = 0x3210321032103210ull;
+
+/* 8x MSAA (the positions are sorted for EQAA) */
+static const uint32_t sample_locs_8x[] = {
+	FILL_SREG(-3,-5,   5, 1,  -1, 3,   7,-7),
+	FILL_SREG(-7,-1,   3, 7,  -5, 5,   1,-3),
+	/* The following are unused by hardware, but we emit them to IBs
+	 * instead of multiple SET_CONTEXT_REG packets. */
+	0,
+	0,
 };
-static const uint64_t centroid_priority_4x = 0x2310231023102310ull;
-static const uint64_t centroid_priority_8x = 0x4762310547623105ull;
-static const uint64_t centroid_priority_16x = 0x49e7c6b231d0fa85ull;
+static const uint64_t centroid_priority_8x = 0x3546012735460127ull;
+
+/* 16x MSAA (the positions are sorted for EQAA) */
+static const uint32_t sample_locs_16x[] = {
+	FILL_SREG(-5,-2,   5, 3,  -2, 6,   3,-5),
+	FILL_SREG(-4,-6,   1, 1,  -6, 4,   7,-4),
+	FILL_SREG(-1,-3,   6, 7,  -3, 2,   0,-7),
+	FILL_SREG(-7,-8,   2, 5,  -8, 0,   4,-1),
+};
+static const uint64_t centroid_priority_16x = 0xc97e64b231d0fa85ull;
 
 static void si_get_sample_position(struct pipe_context *ctx, unsigned sample_count,
 				   unsigned sample_index, float *out_value)
@@ -122,9 +131,13 @@ static void si_get_sample_position(struct pipe_context *ctx, unsigned sample_cou
 		sample_locs = &sample_locs_2x;
 		break;
 	case 4:
+		sample_locs = &sample_locs_4x;
+		break;
 	case 8:
+		sample_locs = sample_locs_8x;
+		break;
 	case 16:
-		sample_locs = sample_locs_4x_8x_16x;
+		sample_locs = sample_locs_16x;
 		break;
 	}
 
@@ -172,13 +185,13 @@ void si_emit_sample_locations(struct radeon_cmdbuf *cs, int nr_samples)
 		si_emit_max_4_sample_locs(cs, centroid_priority_2x, sample_locs_2x);
 		break;
 	case 4:
-		si_emit_max_4_sample_locs(cs, centroid_priority_4x, sample_locs_4x_8x_16x[0]);
+		si_emit_max_4_sample_locs(cs, centroid_priority_4x, sample_locs_4x);
 		break;
 	case 8:
-		si_emit_max_16_sample_locs(cs, centroid_priority_8x, sample_locs_4x_8x_16x, 8);
+		si_emit_max_16_sample_locs(cs, centroid_priority_8x, sample_locs_8x, 8);
 		break;
 	case 16:
-		si_emit_max_16_sample_locs(cs, centroid_priority_16x, sample_locs_4x_8x_16x, 16);
+		si_emit_max_16_sample_locs(cs, centroid_priority_16x, sample_locs_16x, 16);
 		break;
 	}
 }
@@ -189,14 +202,14 @@ void si_init_msaa_functions(struct si_context *sctx)
 
 	sctx->b.get_sample_position = si_get_sample_position;
 
-	si_get_sample_position(&sctx->b, 1, 0, sctx->sample_locations_1x[0]);
+	si_get_sample_position(&sctx->b, 1, 0, sctx->sample_positions.x1[0]);
 
 	for (i = 0; i < 2; i++)
-		si_get_sample_position(&sctx->b, 2, i, sctx->sample_locations_2x[i]);
+		si_get_sample_position(&sctx->b, 2, i, sctx->sample_positions.x2[i]);
 	for (i = 0; i < 4; i++)
-		si_get_sample_position(&sctx->b, 4, i, sctx->sample_locations_4x[i]);
+		si_get_sample_position(&sctx->b, 4, i, sctx->sample_positions.x4[i]);
 	for (i = 0; i < 8; i++)
-		si_get_sample_position(&sctx->b, 8, i, sctx->sample_locations_8x[i]);
+		si_get_sample_position(&sctx->b, 8, i, sctx->sample_positions.x8[i]);
 	for (i = 0; i < 16; i++)
-		si_get_sample_position(&sctx->b, 16, i, sctx->sample_locations_16x[i]);
+		si_get_sample_position(&sctx->b, 16, i, sctx->sample_positions.x16[i]);
 }

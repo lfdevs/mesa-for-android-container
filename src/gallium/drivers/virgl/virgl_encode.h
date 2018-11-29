@@ -70,7 +70,6 @@ static inline void virgl_encoder_write_block(struct virgl_cmd_buf *state,
    int x;
    memcpy(state->buf + state->cdw, ptr, len);
    x = (len % 4);
-//   fprintf(stderr, "[%d] block %d x is %d\n", state->cdw, len, x);
    if (x) {
       uint8_t *mp = (uint8_t *)(state->buf + state->cdw);
       mp += len;
@@ -268,8 +267,13 @@ int virgl_encode_set_shader_images(struct virgl_context *ctx,
                                    enum pipe_shader_type shader,
                                    unsigned start_slot, unsigned count,
                                    const struct pipe_image_view *images);
+int virgl_encode_set_hw_atomic_buffers(struct virgl_context *ctx,
+                                       unsigned start_slot, unsigned count,
+                                       const struct pipe_shader_buffer *buffers);
 int virgl_encode_memory_barrier(struct virgl_context *ctx,
                                 unsigned flags);
 int virgl_encode_launch_grid(struct virgl_context *ctx,
                              const struct pipe_grid_info *grid_info);
+int virgl_encode_texture_barrier(struct virgl_context *ctx,
+                                 unsigned flags);
 #endif

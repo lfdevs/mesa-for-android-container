@@ -32,7 +32,6 @@ args_gbm = []
 deps_gbm = []
 incs_gbm = [
   include_directories('main'), inc_include, inc_src, inc_loader,
-  inc_wayland_drm,
 ]
 
 if with_dri2

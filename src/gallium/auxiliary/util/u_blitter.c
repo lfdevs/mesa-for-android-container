@@ -276,7 +276,8 @@ struct blitter_context *util_blitter_create(struct pipe_context *pipe)
    rs_state.half_pixel_center = 1;
    rs_state.bottom_edge_rule = 1;
    rs_state.flatshade = 1;
-   rs_state.depth_clip = 1;
+   rs_state.depth_clip_near = 1;
+   rs_state.depth_clip_far = 1;
    ctx->rs_state = pipe->create_rasterizer_state(pipe, &rs_state);
 
    rs_state.scissor = 1;
@@ -657,6 +658,13 @@ void util_blitter_restore_fragment_states(struct blitter_context *blitter)
 
    if (!blitter->skip_viewport_restore)
       pipe->set_viewport_states(pipe, 0, 1, &ctx->base.saved_viewport);
+
+   if (blitter->saved_num_window_rectangles) {
+      pipe->set_window_rectangles(pipe,
+                                  blitter->saved_window_rectangles_include,
+                                  blitter->saved_num_window_rectangles,
+                                  blitter->saved_window_rectangles);
+   }
 }
 
 static void blitter_check_saved_fb_state(MAYBE_UNUSED struct blitter_context_priv *ctx)
@@ -1223,6 +1231,9 @@ static void blitter_set_common_draw_rect_state(struct blitter_context_priv *ctx,
                                                bool scissor)
 {
    struct pipe_context *pipe = ctx->base.pipe;
+
+   if (ctx->base.saved_num_window_rectangles)
+      pipe->set_window_rectangles(pipe, false, 0, NULL);
 
    pipe->bind_rasterizer_state(pipe, scissor ? ctx->rs_state_scissor
                                              : ctx->rs_state);

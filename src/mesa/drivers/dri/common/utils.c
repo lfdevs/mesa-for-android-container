@@ -41,6 +41,20 @@
 #include "utils.h"
 #include "dri_util.h"
 
+/* WARNING: HACK: Local defines to avoid pulling glx.h.
+ *
+ * Any parts of this file that use the following defines are either partial or
+ * entirely broken wrt EGL.
+ *
+ * For example any getConfigAttrib() or indexConfigAttrib() query from EGL for
+ * SLOW or NON_CONFORMANT_CONFIG will not work as expected since the EGL tokens
+ * are different from the GLX ones.
+ */
+#define GLX_NONE                                                0x8000
+#define GLX_SLOW_CONFIG                                         0x8001
+#define GLX_NON_CONFORMANT_CONFIG                               0x800D
+#define GLX_DONT_CARE                                           0xFFFFFFFF
+
 /**
  * Create the \c GL_RENDERER string for DRI drivers.
  * 
@@ -134,11 +148,12 @@ driGetRendererString( char * buffer, const char * hardware_name,
  * \param num_depth_stencil_bits  Number of entries in both \c depth_bits and
  *                      \c stencil_bits.
  * \param db_modes      Array of buffer swap modes.  If an element has a
- *                      value of \c GLX_NONE, then it represents a
- *                      single-buffered mode.  Other valid values are
- *                      \c GLX_SWAP_EXCHANGE_OML, \c GLX_SWAP_COPY_OML, and
- *                      \c GLX_SWAP_UNDEFINED_OML.  See the
- *                      GLX_OML_swap_method extension spec for more details.
+ *                      value of \c __DRI_ATTRIB_SWAP_NONE, then it
+ *                      represents a single-buffered mode.  Other valid
+ *                      values are \c __DRI_ATTRIB_SWAP_EXCHANGE,
+ *                      \c __DRI_ATTRIB_SWAP_COPY, and \c __DRI_ATTRIB_SWAP_UNDEFINED.
+ *                      They represent the respective GLX values as in
+ *                      the GLX_OML_swap_method extension spec.
  * \param num_db_modes  Number of entries in \c db_modes.
  * \param msaa_samples  Array of msaa sample count. 0 represents a visual
  *                      without a multisample buffer.
@@ -147,7 +162,10 @@ driGetRendererString( char * buffer, const char * hardware_name,
  * \param color_depth_match Whether the color depth must match the zs depth
  *                          This forces 32-bit color to have 24-bit depth, and
  *                          16-bit color to have 16-bit depth.
- * 
+ * \param mutable_render_buffer Enable __DRI_ATTRIB_MUTABLE_RENDER_BUFFER,
+ *                              which translates to
+ *                              EGL_MUTABLE_RENDER_BUFFER_BIT_KHR.
+ *
  * \returns
  * Pointer to any array of pointers to the \c __DRIconfig structures created
  * for the specified formats.  If there is an error, \c NULL is returned.
@@ -160,7 +178,8 @@ driCreateConfigs(mesa_format format,
 		 unsigned num_depth_stencil_bits,
 		 const GLenum * db_modes, unsigned num_db_modes,
 		 const uint8_t * msaa_samples, unsigned num_msaa_modes,
-		 GLboolean enable_accum, GLboolean color_depth_match)
+		 GLboolean enable_accum, GLboolean color_depth_match,
+		 GLboolean mutable_render_buffer)
 {
    static const uint32_t masks_table[][4] = {
       /* MESA_FORMAT_B5G6R5_UNORM */
@@ -325,6 +344,7 @@ driCreateConfigs(mesa_format format,
 
 		    modes->yInverted = GL_TRUE;
 		    modes->sRGBCapable = is_srgb;
+		    modes->mutableRenderBuffer = mutable_render_buffer;
 		}
 	    }
 	}
@@ -409,6 +429,7 @@ static const struct { unsigned int attrib, offset; } attribMap[] = {
     __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_TARGETS,	bindToTextureTargets),
     __ATTRIB(__DRI_ATTRIB_YINVERTED,			yInverted),
     __ATTRIB(__DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE,	sRGBCapable),
+    __ATTRIB(__DRI_ATTRIB_MUTABLE_RENDER_BUFFER,	mutableRenderBuffer),
 
     /* The struct field doesn't matter here, these are handled by the
      * switch in driGetConfigAttribIndex.  We need them in the array

@@ -446,8 +446,6 @@ svga_set_sampler_views(struct pipe_context *pipe,
    struct svga_context *svga = svga_context(pipe);
    unsigned flag_1d = 0;
    unsigned flag_srgb = 0;
-   unsigned flag_rect = 0;
-   unsigned flag_buf = 0;
    uint i;
    boolean any_change = FALSE;
 
@@ -492,13 +490,20 @@ svga_set_sampler_views(struct pipe_context *pipe,
       if (util_format_is_srgb(views[i]->format))
          flag_srgb |= 1 << (start + i);
 
-      target = views[i]->texture->target;
-      if (target == PIPE_TEXTURE_1D)
+      target = views[i]->target;
+      if (target == PIPE_TEXTURE_1D) {
          flag_1d |= 1 << (start + i);
-      else if (target == PIPE_TEXTURE_RECT)
-         flag_rect |= 1 << (start + i);
-      else if (target == PIPE_BUFFER)
-         flag_buf |= 1 << (start + i);
+      } else if (target == PIPE_TEXTURE_RECT) {
+         /* If the size of the bound texture changes, we need to emit new
+          * const buffer values.
+          */
+         svga->dirty |= SVGA_NEW_TEXTURE_CONSTS;
+      } else if (target == PIPE_BUFFER) {
+         /* If the size of the bound buffer changes, we need to emit new
+          * const buffer values.
+          */
+         svga->dirty |= SVGA_NEW_TEXTURE_CONSTS;
+      }
    }
 
    if (!any_change) {
@@ -520,15 +525,6 @@ svga_set_sampler_views(struct pipe_context *pipe,
       svga->dirty |= SVGA_NEW_TEXTURE_FLAGS;
       svga->curr.tex_flags.flag_1d = flag_1d;
       svga->curr.tex_flags.flag_srgb = flag_srgb;
-   }
-
-   if (flag_rect != svga->curr.tex_flags.flag_rect ||
-       flag_buf != svga->curr.tex_flags.flag_buf)
-   {
-      /* Need to re-emit texture constants */
-      svga->dirty |= SVGA_NEW_TEXTURE_CONSTS;
-      svga->curr.tex_flags.flag_rect = flag_rect;
-      svga->curr.tex_flags.flag_buf = flag_buf;
    }
 
    /* Check if any of the sampler view resources collide with the framebuffer

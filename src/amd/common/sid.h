@@ -119,6 +119,7 @@
 #define			STRMOUT_OFFSET_FROM_VGT_FILLED_SIZE	1
 #define			STRMOUT_OFFSET_FROM_MEM			2
 #define			STRMOUT_OFFSET_NONE			3
+#define		STRMOUT_DATA_TYPE(x)		(((unsigned)(x) & 0x1) << 7)
 #define		STRMOUT_SELECT_BUFFER(x)	(((unsigned)(x) & 0x3) << 8)
 #define PKT3_DRAW_INDEX_OFFSET_2               0x35
 #define PKT3_WRITE_DATA                        0x37
@@ -144,7 +145,10 @@
 #define PKT3_MPEG_INDEX                        0x3A /* not on CIK */
 #define PKT3_WAIT_REG_MEM                      0x3C
 #define		WAIT_REG_MEM_EQUAL		3
+#define		WAIT_REG_MEM_NOT_EQUAL		4
+#define		WAIT_REG_MEM_GREATER_OR_EQUAL   5
 #define         WAIT_REG_MEM_MEM_SPACE(x)       (((unsigned)(x) & 0x3) << 4)
+#define         WAIT_REG_MEM_PFP		(1 << 8)
 #define PKT3_MEM_WRITE                         0x3D /* not on CIK */
 #define PKT3_INDIRECT_BUFFER_CIK               0x3F /* new on CIK */
 #define   R_3F0_IB_BASE_LO                     0x3F0
@@ -159,20 +163,30 @@
 #define PKT3_COPY_DATA			       0x40
 #define		COPY_DATA_SRC_SEL(x)		((x) & 0xf)
 #define			COPY_DATA_REG		0
-#define			COPY_DATA_MEM		1
+#define			COPY_DATA_SRC_MEM	1 /* only valid as source */
+#define                 COPY_DATA_TC_L2         2
+#define                 COPY_DATA_GDS           3
 #define                 COPY_DATA_PERF          4
 #define                 COPY_DATA_IMM           5
 #define                 COPY_DATA_TIMESTAMP     9
 #define		COPY_DATA_DST_SEL(x)		(((unsigned)(x) & 0xf) << 8)
-#define                 COPY_DATA_MEM_ASYNC     5
+#define                 COPY_DATA_DST_MEM_GRBM	1 /* sync across GRBM, deprecated */
+#define                 COPY_DATA_TC_L2         2
+#define                 COPY_DATA_GDS           3
+#define                 COPY_DATA_PERF          4
+#define                 COPY_DATA_DST_MEM       5
 #define		COPY_DATA_COUNT_SEL		(1 << 16)
 #define		COPY_DATA_WR_CONFIRM		(1 << 20)
+#define		COPY_DATA_ENGINE_PFP		(1 << 30)
 #define PKT3_PFP_SYNC_ME		       0x42
 #define PKT3_SURFACE_SYNC                      0x43 /* deprecated on CIK, use ACQUIRE_MEM */
 #define PKT3_ME_INITIALIZE                     0x44 /* not on CIK */
 #define PKT3_COND_WRITE                        0x45
 #define PKT3_EVENT_WRITE                       0x46
 #define PKT3_EVENT_WRITE_EOP                   0x47 /* not on GFX9 */
+#define         EOP_DST_SEL(x)				((x) << 16)
+#define			EOP_DST_SEL_MEM			0
+#define			EOP_DST_SEL_TC_L2		1
 #define         EOP_INT_SEL(x)                          ((x) << 24)
 #define			EOP_INT_SEL_NONE			0
 #define			EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM	3
@@ -181,6 +195,8 @@
 #define			EOP_DATA_SEL_VALUE_32BIT	1
 #define			EOP_DATA_SEL_VALUE_64BIT	2
 #define			EOP_DATA_SEL_TIMESTAMP		3
+#define			EOP_DATA_SEL_GDS		5
+#define		EOP_DATA_GDS(dw_offset, num_dwords)	((dw_offset) | ((unsigned)(num_dwords) << 16))
 /* CP DMA bug: Any use of CP_DMA.DST_SEL=TC must be avoided when EOS packets
  * are used. Use DST_SEL=MC instead. For prefetch, use SRC_SEL=TC and
  * DST_SEL=MC. Only CIK chips are affected.
@@ -294,11 +310,13 @@
 #define       V_500_GDS			1 /* program SAS to 1 as well */
 #define       V_500_DATA		2
 #define       V_500_SRC_ADDR_TC_L2	3 /* new for CIK */
+#define     S_500_DST_CACHE_POLICY(x)	(((unsigned)(x) & 0x3) << 25) /* CIK+ */
 #define     S_500_DST_SEL(x)		(((unsigned)(x) & 0x3) << 20)
 #define       V_500_DST_ADDR		0
 #define       V_500_GDS			1 /* program DAS to 1 as well */
 #define       V_500_NOWHERE		2 /* new for GFX9 */
 #define       V_500_DST_ADDR_TC_L2	3 /* new for CIK */
+#define     S_500_SRC_CACHE_POLICY(x)	(((unsigned)(x) & 0x3) << 13) /* CIK+ */
 #define     S_500_ENGINE(x)		((x) & 0x1)
 #define       V_500_ME			0
 #define       V_500_PFP			1
@@ -5282,6 +5300,22 @@
 #define   S_02820C_CLIP_RULE(x)                                       (((unsigned)(x) & 0xFFFF) << 0)
 #define   G_02820C_CLIP_RULE(x)                                       (((x) >> 0) & 0xFFFF)
 #define   C_02820C_CLIP_RULE                                          0xFFFF0000
+#define     V_02820C_OUT                                            0x0001
+#define     V_02820C_IN_0                                           0x0002
+#define     V_02820C_IN_1                                           0x0004
+#define     V_02820C_IN_10                                          0x0008
+#define     V_02820C_IN_2                                           0x0010
+#define     V_02820C_IN_20                                          0x0020
+#define     V_02820C_IN_21                                          0x0040
+#define     V_02820C_IN_210                                         0x0080
+#define     V_02820C_IN_3                                           0x0100
+#define     V_02820C_IN_30                                          0x0200
+#define     V_02820C_IN_31                                          0x0400
+#define     V_02820C_IN_310                                         0x0800
+#define     V_02820C_IN_32                                          0x1000
+#define     V_02820C_IN_320                                         0x2000
+#define     V_02820C_IN_321                                         0x4000
+#define     V_02820C_IN_3210                                        0x8000
 #define R_028210_PA_SC_CLIPRECT_0_TL                                    0x028210
 #define   S_028210_TL_X(x)                                            (((unsigned)(x) & 0x7FFF) << 0)
 #define   G_028210_TL_X(x)                                            (((x) >> 0) & 0x7FFF)
@@ -9122,6 +9156,10 @@
 #define    CIK_SDMA_PACKET_TRAP                    0x6
 #define    CIK_SDMA_PACKET_SEMAPHORE               0x7
 #define    CIK_SDMA_PACKET_CONSTANT_FILL           0xb
+#define    CIK_SDMA_OPCODE_TIMESTAMP               0xd
+#define        SDMA_TS_SUB_OPCODE_SET_LOCAL_TIMESTAMP     0x0
+#define        SDMA_TS_SUB_OPCODE_GET_LOCAL_TIMESTAMP     0x1
+#define        SDMA_TS_SUB_OPCODE_GET_GLOBAL_TIMESTAMP    0x2
 #define    CIK_SDMA_PACKET_SRBM_WRITE              0xe
 /* There is apparently an undocumented HW "feature" that
    prevents the HW from copying past 256 bytes of (1 << 22) */

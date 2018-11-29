@@ -2825,13 +2825,13 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
    bld.format_desc = util_format_description(static_texture_state->format);
    bld.dims = dims;
 
-   if (gallivm_debug & GALLIVM_DEBUG_NO_QUAD_LOD || op_is_lodq) {
+   if (gallivm_perf & GALLIVM_PERF_NO_QUAD_LOD || op_is_lodq) {
       bld.no_quad_lod = TRUE;
    }
-   if (gallivm_debug & GALLIVM_DEBUG_NO_RHO_APPROX || op_is_lodq) {
+   if (gallivm_perf & GALLIVM_PERF_NO_RHO_APPROX || op_is_lodq) {
       bld.no_rho_approx = TRUE;
    }
-   if (gallivm_debug & GALLIVM_DEBUG_NO_BRILINEAR || op_is_lodq) {
+   if (gallivm_perf & GALLIVM_PERF_NO_BRILINEAR || op_is_lodq) {
       bld.no_brilinear = TRUE;
    }
 

@@ -1085,7 +1085,7 @@ struct isl_tile_info {
     * always used with ISL_FORMAT_R8) has a logical size of 64el x 64el but
     * its physical size is 128B x 32rows, the same as a Y-tile.
     *
-    * @see isl_surf::row_pitch
+    * @see isl_surf::row_pitch_B
     */
    struct isl_extent2d phys_extent_B;
 };
@@ -1135,13 +1135,13 @@ struct isl_surf_init_info {
    uint32_t samples;
 
    /** Lower bound for isl_surf::alignment, in bytes. */
-   uint32_t min_alignment;
+   uint32_t min_alignment_B;
 
    /**
     * Exact value for isl_surf::row_pitch. Ignored if zero.  isl_surf_init()
     * will fail if this is misaligned or out of bounds.
     */
-   uint32_t row_pitch;
+   uint32_t row_pitch_B;
 
    isl_surf_usage_flags_t usage;
 
@@ -1184,17 +1184,17 @@ struct isl_surf {
    uint32_t samples;
 
    /** Total size of the surface, in bytes. */
-   uint64_t size;
+   uint64_t size_B;
 
    /** Required alignment for the surface's base address. */
-   uint32_t alignment;
+   uint32_t alignment_B;
 
    /**
     * The interpretation of this field depends on the value of
     * isl_tile_info::physical_extent_B.  In particular, the width of the
-    * surface in tiles is row_pitch / isl_tile_info::physical_extent_B.width
+    * surface in tiles is row_pitch_B / isl_tile_info::physical_extent_B.width
     * and the distance in bytes between vertically adjacent tiles in the image
-    * is given by row_pitch * isl_tile_info::physical_extent_B.height.
+    * is given by row_pitch_B * isl_tile_info::physical_extent_B.height.
     *
     * For linear images where isl_tile_info::physical_extent_B.height == 1,
     * this cleanly reduces to being the distance, in bytes, between vertically
@@ -1202,7 +1202,7 @@ struct isl_surf {
     *
     * @see isl_tile_info::phys_extent_B;
     */
-   uint32_t row_pitch;
+   uint32_t row_pitch_B;
 
    /**
     * Pitch between physical array slices, in rows of surface elements.
@@ -1338,7 +1338,7 @@ struct isl_buffer_fill_state_info {
    /**
     * The size of the buffer
     */
-   uint64_t size;
+   uint64_t size_B;
 
    /**
     * The Memory Object Control state for the filled surface state.
@@ -1355,7 +1355,7 @@ struct isl_buffer_fill_state_info {
     */
    enum isl_format format;
 
-   uint32_t stride;
+   uint32_t stride_B;
 };
 
 struct isl_depth_stencil_hiz_emit_info {
@@ -1805,7 +1805,7 @@ bool
 isl_surf_get_ccs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
                       struct isl_surf *ccs_surf,
-                      uint32_t row_pitch /**< Ignored if 0 */);
+                      uint32_t row_pitch_B /**< Ignored if 0 */);
 
 #define isl_surf_fill_state(dev, state, ...) \
    isl_surf_fill_state_s((dev), (state), \
@@ -1875,9 +1875,9 @@ isl_surf_get_image_alignment_sa(const struct isl_surf *surf)
  * Pitch between vertically adjacent surface elements, in bytes.
  */
 static inline uint32_t
-isl_surf_get_row_pitch(const struct isl_surf *surf)
+isl_surf_get_row_pitch_B(const struct isl_surf *surf)
 {
-   return surf->row_pitch;
+   return surf->row_pitch_B;
 }
 
 /**
@@ -1888,8 +1888,8 @@ isl_surf_get_row_pitch_el(const struct isl_surf *surf)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(surf->format);
 
-   assert(surf->row_pitch % (fmtl->bpb / 8) == 0);
-   return surf->row_pitch / (fmtl->bpb / 8);
+   assert(surf->row_pitch_B % (fmtl->bpb / 8) == 0);
+   return surf->row_pitch_B / (fmtl->bpb / 8);
 }
 
 /**
@@ -1927,7 +1927,7 @@ isl_surf_get_array_pitch_sa_rows(const struct isl_surf *surf)
 static inline uint32_t
 isl_surf_get_array_pitch(const struct isl_surf *surf)
 {
-   return isl_surf_get_array_pitch_sa_rows(surf) * surf->row_pitch;
+   return isl_surf_get_array_pitch_sa_rows(surf) * surf->row_pitch_B;
 }
 
 /**
@@ -2019,7 +2019,7 @@ isl_surf_get_image_surf(const struct isl_device *dev,
 void
 isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
                                    uint32_t bpb,
-                                   uint32_t row_pitch,
+                                   uint32_t row_pitch_B,
                                    uint32_t total_x_offset_el,
                                    uint32_t total_y_offset_el,
                                    uint32_t *base_address_offset,
@@ -2029,7 +2029,7 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
 static inline void
 isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
                                    enum isl_format format,
-                                   uint32_t row_pitch,
+                                   uint32_t row_pitch_B,
                                    uint32_t total_x_offset_sa,
                                    uint32_t total_y_offset_sa,
                                    uint32_t *base_address_offset,
@@ -2047,7 +2047,7 @@ isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
    const uint32_t total_x_offset = total_x_offset_sa / fmtl->bw;
    const uint32_t total_y_offset = total_y_offset_sa / fmtl->bh;
 
-   isl_tiling_get_intratile_offset_el(tiling, fmtl->bpb, row_pitch,
+   isl_tiling_get_intratile_offset_el(tiling, fmtl->bpb, row_pitch_B,
                                       total_x_offset, total_y_offset,
                                       base_address_offset,
                                       x_offset_sa, y_offset_sa);

@@ -74,7 +74,7 @@
 
 #define ANV_HAS_SURFACE (VK_USE_PLATFORM_WAYLAND_KHR ||                          VK_USE_PLATFORM_XCB_KHR ||                          VK_USE_PLATFORM_XLIB_KHR ||                          VK_USE_PLATFORM_DISPLAY_KHR)
 
-static const uint32_t MAX_API_VERSION = VK_MAKE_VERSION(1, 1, 80);
+static const uint32_t MAX_API_VERSION = VK_MAKE_VERSION(1, 1, 90);
 
 VkResult anv_EnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
@@ -132,11 +132,11 @@ anv_physical_device_api_version(struct anv_physical_device *device)
 
     if (!(true))
         return version;
-    version = VK_MAKE_VERSION(1, 0, 80);
+    version = VK_MAKE_VERSION(1, 0, 90);
 
     if (!(device->has_syncobj_wait))
         return version;
-    version = VK_MAKE_VERSION(1, 1, 80);
+    version = VK_MAKE_VERSION(1, 1, 90);
 
     return version;
 }
@@ -150,6 +150,7 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_KHR_dedicated_allocation", 1},
    {"VK_KHR_descriptor_update_template", 1},
    {"VK_KHR_device_group", 1},
+   {"VK_KHR_driver_properties", 1},
    {"VK_KHR_external_fence", 1},
    {"VK_KHR_external_fence_fd", 1},
    {"VK_KHR_external_memory", 1},
@@ -174,10 +175,15 @@ const VkExtensionProperties anv_device_extensions[ANV_DEVICE_EXTENSION_COUNT] = 
    {"VK_EXT_display_control", 1},
    {"VK_EXT_external_memory_dma_buf", 1},
    {"VK_EXT_global_priority", 1},
+   {"VK_EXT_pci_bus_info", 1},
    {"VK_EXT_shader_viewport_index_layer", 1},
    {"VK_EXT_shader_stencil_export", 1},
    {"VK_EXT_vertex_attribute_divisor", 3},
    {"VK_EXT_post_depth_coverage", 1},
+   {"VK_EXT_sampler_filter_minmax", 1},
+   {"VK_EXT_calibrated_timestamps", 1},
+   {"VK_GOOGLE_decorate_string", 1},
+   {"VK_GOOGLE_hlsl_functionality1", 1},
 };
 
 void
@@ -193,6 +199,7 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .KHR_dedicated_allocation = true,
       .KHR_descriptor_update_template = true,
       .KHR_device_group = true,
+      .KHR_driver_properties = true,
       .KHR_external_fence = device->has_syncobj_wait,
       .KHR_external_fence_fd = device->has_syncobj_wait,
       .KHR_external_memory = true,
@@ -217,9 +224,14 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .EXT_display_control = VK_USE_PLATFORM_DISPLAY_KHR,
       .EXT_external_memory_dma_buf = true,
       .EXT_global_priority = device->has_context_priority,
+      .EXT_pci_bus_info = true,
       .EXT_shader_viewport_index_layer = true,
       .EXT_shader_stencil_export = device->info.gen >= 9,
       .EXT_vertex_attribute_divisor = true,
       .EXT_post_depth_coverage = device->info.gen >= 9,
+      .EXT_sampler_filter_minmax = device->info.gen >= 9,
+      .EXT_calibrated_timestamps = true,
+      .GOOGLE_decorate_string = true,
+      .GOOGLE_hlsl_functionality1 = true,
    };
 }

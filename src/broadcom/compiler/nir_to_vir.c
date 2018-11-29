@@ -845,6 +845,20 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                                             vir_uniform_ui(c, 0)));
                 break;
 
+        case nir_op_pack_half_2x16_split:
+                result = vir_VFPACK(c, src[0], src[1]);
+                break;
+
+        case nir_op_unpack_half_2x16_split_x:
+                result = vir_FMOV(c, src[0]);
+                vir_set_unpack(c->defs[result.index], 0, V3D_QPU_UNPACK_L);
+                break;
+
+        case nir_op_unpack_half_2x16_split_y:
+                result = vir_FMOV(c, src[0]);
+                vir_set_unpack(c->defs[result.index], 0, V3D_QPU_UNPACK_H);
+                break;
+
         default:
                 fprintf(stderr, "unknown NIR ALU inst: ");
                 nir_print_instr(&instr->instr, stderr);
@@ -1260,7 +1274,72 @@ ntq_emit_vpm_read(struct v3d_compile *c,
 }
 
 static void
-ntq_setup_inputs(struct v3d_compile *c)
+ntq_setup_vpm_inputs(struct v3d_compile *c)
+{
+        /* Figure out how many components of each vertex attribute the shader
+         * uses.  Each variable should have been split to individual
+         * components and unused ones DCEed.  The vertex fetcher will load
+         * from the start of the attribute to the number of components we
+         * declare we need in c->vattr_sizes[].
+         */
+        nir_foreach_variable(var, &c->s->inputs) {
+                /* No VS attribute array support. */
+                assert(MAX2(glsl_get_length(var->type), 1) == 1);
+
+                unsigned loc = var->data.driver_location;
+                int start_component = var->data.location_frac;
+                int num_components = glsl_get_components(var->type);
+
+                c->vattr_sizes[loc] = MAX2(c->vattr_sizes[loc],
+                                           start_component + num_components);
+        }
+
+        unsigned num_components = 0;
+        uint32_t vpm_components_queued = 0;
+        bool uses_iid = c->s->info.system_values_read &
+                (1ull << SYSTEM_VALUE_INSTANCE_ID);
+        bool uses_vid = c->s->info.system_values_read &
+                (1ull << SYSTEM_VALUE_VERTEX_ID);
+        num_components += uses_iid;
+        num_components += uses_vid;
+
+        for (int i = 0; i < ARRAY_SIZE(c->vattr_sizes); i++)
+                num_components += c->vattr_sizes[i];
+
+        if (uses_iid) {
+                c->iid = ntq_emit_vpm_read(c, &vpm_components_queued,
+                                           &num_components, ~0);
+        }
+
+        if (uses_vid) {
+                c->vid = ntq_emit_vpm_read(c, &vpm_components_queued,
+                                           &num_components, ~0);
+        }
+
+        for (int loc = 0; loc < ARRAY_SIZE(c->vattr_sizes); loc++) {
+                resize_qreg_array(c, &c->inputs, &c->inputs_array_size,
+                                  (loc + 1) * 4);
+
+                for (int i = 0; i < c->vattr_sizes[loc]; i++) {
+                        c->inputs[loc * 4 + i] =
+                                ntq_emit_vpm_read(c,
+                                                  &vpm_components_queued,
+                                                  &num_components,
+                                                  loc * 4 + i);
+
+                }
+        }
+
+        if (c->devinfo->ver >= 40) {
+                assert(vpm_components_queued == num_components);
+        } else {
+                assert(vpm_components_queued == 0);
+                assert(num_components == 0);
+        }
+}
+
+static void
+ntq_setup_fs_inputs(struct v3d_compile *c)
 {
         unsigned num_entries = 0;
         unsigned num_components = 0;
@@ -1282,27 +1361,6 @@ ntq_setup_inputs(struct v3d_compile *c)
          */
         qsort(&vars, num_entries, sizeof(*vars), driver_location_compare);
 
-        uint32_t vpm_components_queued = 0;
-        if (c->s->info.stage == MESA_SHADER_VERTEX) {
-                bool uses_iid = c->s->info.system_values_read &
-                        (1ull << SYSTEM_VALUE_INSTANCE_ID);
-                bool uses_vid = c->s->info.system_values_read &
-                        (1ull << SYSTEM_VALUE_VERTEX_ID);
-
-                num_components += uses_iid;
-                num_components += uses_vid;
-
-                if (uses_iid) {
-                        c->iid = ntq_emit_vpm_read(c, &vpm_components_queued,
-                                                   &num_components, ~0);
-                }
-
-                if (uses_vid) {
-                        c->vid = ntq_emit_vpm_read(c, &vpm_components_queued,
-                                                   &num_components, ~0);
-                }
-        }
-
         for (unsigned i = 0; i < num_entries; i++) {
                 nir_variable *var = vars[i];
                 unsigned array_len = MAX2(glsl_get_length(var->type), 1);
@@ -1313,40 +1371,17 @@ ntq_setup_inputs(struct v3d_compile *c)
                 resize_qreg_array(c, &c->inputs, &c->inputs_array_size,
                                   (loc + 1) * 4);
 
-                if (c->s->info.stage == MESA_SHADER_FRAGMENT) {
-                        if (var->data.location == VARYING_SLOT_POS) {
-                                emit_fragcoord_input(c, loc);
-                        } else if (var->data.location == VARYING_SLOT_PNTC ||
-                                   (var->data.location >= VARYING_SLOT_VAR0 &&
-                                    (c->fs_key->point_sprite_mask &
-                                     (1 << (var->data.location -
-                                            VARYING_SLOT_VAR0))))) {
-                                c->inputs[loc * 4 + 0] = c->point_x;
-                                c->inputs[loc * 4 + 1] = c->point_y;
-                        } else {
-                                emit_fragment_input(c, loc, var);
-                        }
+                if (var->data.location == VARYING_SLOT_POS) {
+                        emit_fragcoord_input(c, loc);
+                } else if (var->data.location == VARYING_SLOT_PNTC ||
+                           (var->data.location >= VARYING_SLOT_VAR0 &&
+                            (c->fs_key->point_sprite_mask &
+                             (1 << (var->data.location -
+                                    VARYING_SLOT_VAR0))))) {
+                        c->inputs[loc * 4 + 0] = c->point_x;
+                        c->inputs[loc * 4 + 1] = c->point_y;
                 } else {
-                        int var_components = glsl_get_components(var->type);
-
-                        for (int i = 0; i < var_components; i++) {
-                                c->inputs[loc * 4 + i] =
-                                        ntq_emit_vpm_read(c,
-                                                          &vpm_components_queued,
-                                                          &num_components,
-                                                          loc * 4 + i);
-
-                        }
-                        c->vattr_sizes[loc] = var_components;
-                }
-        }
-
-        if (c->s->info.stage == MESA_SHADER_VERTEX) {
-                if (c->devinfo->ver >= 40) {
-                        assert(vpm_components_queued == num_components);
-                } else {
-                        assert(vpm_components_queued == 0);
-                        assert(num_components == 0);
+                        emit_fragment_input(c, loc, var);
                 }
         }
 }
@@ -1361,7 +1396,7 @@ ntq_setup_outputs(struct v3d_compile *c)
                 assert(array_len == 1);
                 (void)array_len;
 
-                for (int i = 0; i < 4; i++) {
+                for (int i = 0; i < 4 - var->data.location_frac; i++) {
                         add_output(c, loc + var->data.location_frac + i,
                                    var->data.location,
                                    var->data.location_frac + i);
@@ -1889,7 +1924,11 @@ nir_to_vir(struct v3d_compile *c)
                 }
         }
 
-        ntq_setup_inputs(c);
+        if (c->s->info.stage == MESA_SHADER_FRAGMENT)
+                ntq_setup_fs_inputs(c);
+        else
+                ntq_setup_vpm_inputs(c);
+
         ntq_setup_outputs(c);
         ntq_setup_uniforms(c);
         ntq_setup_registers(c, &c->s->registers);
@@ -1917,6 +1956,8 @@ const nir_shader_compiler_options v3d_nir_options = {
         .lower_pack_snorm_4x8 = true,
         .lower_unpack_unorm_4x8 = true,
         .lower_unpack_snorm_4x8 = true,
+        .lower_pack_half_2x16 = true,
+        .lower_unpack_half_2x16 = true,
         .lower_fdiv = true,
         .lower_find_lsb = true,
         .lower_ffma = true,

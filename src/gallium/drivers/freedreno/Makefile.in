@@ -135,34 +135,46 @@ am__objects_1 = freedreno_batch.lo freedreno_batch_cache.lo \
 	freedreno_resource.lo freedreno_screen.lo freedreno_state.lo \
 	freedreno_surface.lo freedreno_texture.lo freedreno_util.lo
 am__dirstamp = $(am__leading_dot)dirstamp
-am__objects_2 = a2xx/disasm-a2xx.lo a2xx/fd2_blend.lo \
+am__objects_2 = drm/freedreno_bo.lo drm/freedreno_bo_cache.lo \
+	drm/freedreno_device.lo drm/freedreno_pipe.lo \
+	drm/freedreno_ringbuffer.lo drm/msm_bo.lo drm/msm_device.lo \
+	drm/msm_pipe.lo drm/msm_ringbuffer.lo drm/msm_ringbuffer_sp.lo
+am__objects_3 = a2xx/disasm-a2xx.lo a2xx/fd2_blend.lo \
 	a2xx/fd2_compiler.lo a2xx/fd2_context.lo a2xx/fd2_draw.lo \
 	a2xx/fd2_emit.lo a2xx/fd2_gmem.lo a2xx/fd2_program.lo \
 	a2xx/fd2_rasterizer.lo a2xx/fd2_screen.lo a2xx/fd2_texture.lo \
 	a2xx/fd2_util.lo a2xx/fd2_zsa.lo a2xx/ir-a2xx.lo
-am__objects_3 = a3xx/fd3_blend.lo a3xx/fd3_context.lo a3xx/fd3_draw.lo \
+am__objects_4 = a3xx/fd3_blend.lo a3xx/fd3_context.lo a3xx/fd3_draw.lo \
 	a3xx/fd3_emit.lo a3xx/fd3_format.lo a3xx/fd3_gmem.lo \
 	a3xx/fd3_program.lo a3xx/fd3_query.lo a3xx/fd3_rasterizer.lo \
 	a3xx/fd3_screen.lo a3xx/fd3_texture.lo a3xx/fd3_zsa.lo
-am__objects_4 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
+am__objects_5 = a4xx/fd4_blend.lo a4xx/fd4_context.lo a4xx/fd4_draw.lo \
 	a4xx/fd4_emit.lo a4xx/fd4_format.lo a4xx/fd4_gmem.lo \
 	a4xx/fd4_program.lo a4xx/fd4_query.lo a4xx/fd4_rasterizer.lo \
 	a4xx/fd4_screen.lo a4xx/fd4_texture.lo a4xx/fd4_zsa.lo
-am__objects_5 = a5xx/fd5_blend.lo a5xx/fd5_blitter.lo \
+am__objects_6 = a5xx/fd5_blend.lo a5xx/fd5_blitter.lo \
 	a5xx/fd5_compute.lo a5xx/fd5_context.lo a5xx/fd5_draw.lo \
 	a5xx/fd5_emit.lo a5xx/fd5_format.lo a5xx/fd5_gmem.lo \
 	a5xx/fd5_image.lo a5xx/fd5_perfcntr.lo a5xx/fd5_program.lo \
 	a5xx/fd5_query.lo a5xx/fd5_rasterizer.lo a5xx/fd5_resource.lo \
 	a5xx/fd5_screen.lo a5xx/fd5_texture.lo a5xx/fd5_zsa.lo
-am__objects_6 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_compiler_nir.lo \
-	ir3/ir3_compiler.lo ir3/ir3_cp.lo ir3/ir3_depth.lo \
-	ir3/ir3_group.lo ir3/ir3_legalize.lo ir3/ir3_nir.lo \
-	ir3/ir3_nir_lower_tg4_to_tex.lo ir3/ir3_print.lo ir3/ir3_ra.lo \
-	ir3/ir3_sched.lo ir3/ir3_shader.lo
-am__objects_7 = ir3/ir3_nir_trig.lo
+am__objects_7 = a6xx/fd6_blend.lo a6xx/fd6_blitter.lo \
+	a6xx/fd6_context.lo a6xx/fd6_draw.lo a6xx/fd6_emit.lo \
+	a6xx/fd6_format.lo a6xx/fd6_gmem.lo a6xx/fd6_image.lo \
+	a6xx/fd6_program.lo a6xx/fd6_query.lo a6xx/fd6_rasterizer.lo \
+	a6xx/fd6_resource.lo a6xx/fd6_screen.lo a6xx/fd6_texture.lo \
+	a6xx/fd6_zsa.lo
+am__objects_8 = ir3/disasm-a3xx.lo ir3/ir3.lo ir3/ir3_cache.lo \
+	ir3/ir3_compiler_nir.lo ir3/ir3_compiler.lo ir3/ir3_cp.lo \
+	ir3/ir3_depth.lo ir3/ir3_group.lo ir3/ir3_legalize.lo \
+	ir3/ir3_nir.lo ir3/ir3_nir_lower_tg4_to_tex.lo \
+	ir3/ir3_print.lo ir3/ir3_ra.lo ir3/ir3_sched.lo \
+	ir3/ir3_shader.lo
+am__objects_9 = ir3/ir3_nir_trig.lo
 am_libfreedreno_la_OBJECTS = $(am__objects_1) $(am__objects_2) \
 	$(am__objects_3) $(am__objects_4) $(am__objects_5) \
-	$(am__objects_6) $(am__objects_7)
+	$(am__objects_6) $(am__objects_7) $(am__objects_8) \
+	$(am__objects_9)
 libfreedreno_la_OBJECTS = $(am_libfreedreno_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -247,8 +259,25 @@ am__depfiles_remade = ./$(DEPDIR)/dummy.Po \
 	a5xx/$(DEPDIR)/fd5_query.Plo a5xx/$(DEPDIR)/fd5_rasterizer.Plo \
 	a5xx/$(DEPDIR)/fd5_resource.Plo a5xx/$(DEPDIR)/fd5_screen.Plo \
 	a5xx/$(DEPDIR)/fd5_texture.Plo a5xx/$(DEPDIR)/fd5_zsa.Plo \
+	a6xx/$(DEPDIR)/fd6_blend.Plo a6xx/$(DEPDIR)/fd6_blitter.Plo \
+	a6xx/$(DEPDIR)/fd6_context.Plo a6xx/$(DEPDIR)/fd6_draw.Plo \
+	a6xx/$(DEPDIR)/fd6_emit.Plo a6xx/$(DEPDIR)/fd6_format.Plo \
+	a6xx/$(DEPDIR)/fd6_gmem.Plo a6xx/$(DEPDIR)/fd6_image.Plo \
+	a6xx/$(DEPDIR)/fd6_program.Plo a6xx/$(DEPDIR)/fd6_query.Plo \
+	a6xx/$(DEPDIR)/fd6_rasterizer.Plo \
+	a6xx/$(DEPDIR)/fd6_resource.Plo a6xx/$(DEPDIR)/fd6_screen.Plo \
+	a6xx/$(DEPDIR)/fd6_texture.Plo a6xx/$(DEPDIR)/fd6_zsa.Plo \
+	drm/$(DEPDIR)/freedreno_bo.Plo \
+	drm/$(DEPDIR)/freedreno_bo_cache.Plo \
+	drm/$(DEPDIR)/freedreno_device.Plo \
+	drm/$(DEPDIR)/freedreno_pipe.Plo \
+	drm/$(DEPDIR)/freedreno_ringbuffer.Plo \
+	drm/$(DEPDIR)/msm_bo.Plo drm/$(DEPDIR)/msm_device.Plo \
+	drm/$(DEPDIR)/msm_pipe.Plo drm/$(DEPDIR)/msm_ringbuffer.Plo \
+	drm/$(DEPDIR)/msm_ringbuffer_sp.Plo \
 	ir3/$(DEPDIR)/disasm-a3xx.Plo ir3/$(DEPDIR)/ir3.Plo \
-	ir3/$(DEPDIR)/ir3_cmdline.Po ir3/$(DEPDIR)/ir3_compiler.Plo \
+	ir3/$(DEPDIR)/ir3_cache.Plo ir3/$(DEPDIR)/ir3_cmdline.Po \
+	ir3/$(DEPDIR)/ir3_compiler.Plo \
 	ir3/$(DEPDIR)/ir3_compiler_nir.Plo ir3/$(DEPDIR)/ir3_cp.Plo \
 	ir3/$(DEPDIR)/ir3_depth.Plo ir3/$(DEPDIR)/ir3_group.Plo \
 	ir3/$(DEPDIR)/ir3_legalize.Plo ir3/$(DEPDIR)/ir3_nir.Plo \
@@ -385,8 +414,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -407,7 +434,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -500,11 +526,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -566,8 +597,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -626,10 +655,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -683,6 +715,23 @@ C_SOURCES := \
 	freedreno_texture.h \
 	freedreno_util.c \
 	freedreno_util.h
+
+drm_SOURCES := \
+	drm/freedreno_bo.c \
+	drm/freedreno_bo_cache.c \
+	drm/freedreno_device.c \
+	drm/freedreno_drmif.h \
+	drm/freedreno_pipe.c \
+	drm/freedreno_priv.h \
+	drm/freedreno_ringbuffer.c \
+	drm/freedreno_ringbuffer.h \
+	drm/msm_bo.c \
+	drm/msm_device.c \
+	drm/msm_drm.h \
+	drm/msm_pipe.c \
+	drm/msm_priv.h \
+	drm/msm_ringbuffer.c \
+	drm/msm_ringbuffer_sp.c
 
 a2xx_SOURCES := \
 	a2xx/a2xx.xml.h \
@@ -805,10 +854,45 @@ a5xx_SOURCES := \
 	a5xx/fd5_zsa.c \
 	a5xx/fd5_zsa.h
 
+a6xx_SOURCES := \
+	a6xx/a6xx.xml.h \
+	a6xx/fd6_blend.c \
+	a6xx/fd6_blend.h \
+	a6xx/fd6_blitter.c \
+	a6xx/fd6_blitter.h \
+	a6xx/fd6_context.c \
+	a6xx/fd6_context.h \
+	a6xx/fd6_draw.c \
+	a6xx/fd6_draw.h \
+	a6xx/fd6_emit.c \
+	a6xx/fd6_emit.h \
+	a6xx/fd6_format.c \
+	a6xx/fd6_format.h \
+	a6xx/fd6_gmem.c \
+	a6xx/fd6_gmem.h \
+	a6xx/fd6_image.c \
+	a6xx/fd6_image.h \
+	a6xx/fd6_program.c \
+	a6xx/fd6_program.h \
+	a6xx/fd6_query.c \
+	a6xx/fd6_query.h \
+	a6xx/fd6_rasterizer.c \
+	a6xx/fd6_rasterizer.h \
+	a6xx/fd6_resource.c \
+	a6xx/fd6_resource.h \
+	a6xx/fd6_screen.c \
+	a6xx/fd6_screen.h \
+	a6xx/fd6_texture.c \
+	a6xx/fd6_texture.h \
+	a6xx/fd6_zsa.c \
+	a6xx/fd6_zsa.h
+
 ir3_SOURCES := \
 	ir3/disasm-a3xx.c \
 	ir3/instr-a3xx.h \
 	ir3/ir3.c \
+	ir3/ir3_cache.c \
+	ir3/ir3_cache.h \
 	ir3/ir3_compiler_nir.c \
 	ir3/ir3_compiler.c \
 	ir3/ir3_compiler.h \
@@ -899,16 +983,19 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/compiler/nir \
 	$(GALLIUM_DRIVER_CFLAGS) \
-	$(FREEDRENO_CFLAGS)
+	$(LIBDRM_CFLAGS) \
+	$(VALGRIND_CFLAGS)
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 noinst_LTLIBRARIES = libfreedreno.la
 libfreedreno_la_SOURCES = \
 	$(C_SOURCES) \
+	$(drm_SOURCES) \
 	$(a2xx_SOURCES) \
 	$(a3xx_SOURCES) \
 	$(a4xx_SOURCES) \
 	$(a5xx_SOURCES) \
+	$(a6xx_SOURCES) \
 	$(ir3_SOURCES) \
 	$(ir3_GENERATED_FILES)
 
@@ -929,7 +1016,7 @@ ir3_compiler_LDADD = \
 	$(top_builddir)/src/util/libmesautil.la \
 	$(top_builddir)/src/mesa/libmesagallium.la \
 	$(GALLIUM_COMMON_LIB_DEPS) \
-	$(FREEDRENO_LIBS)
+	$(LIBDRM_LIBS)
 
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -986,6 +1073,28 @@ clean-noinstLTLIBRARIES:
 	  echo rm -f $${locs}; \
 	  rm -f $${locs}; \
 	}
+drm/$(am__dirstamp):
+	@$(MKDIR_P) drm
+	@: > drm/$(am__dirstamp)
+drm/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) drm/$(DEPDIR)
+	@: > drm/$(DEPDIR)/$(am__dirstamp)
+drm/freedreno_bo.lo: drm/$(am__dirstamp) drm/$(DEPDIR)/$(am__dirstamp)
+drm/freedreno_bo_cache.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
+drm/freedreno_device.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
+drm/freedreno_pipe.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
+drm/freedreno_ringbuffer.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
+drm/msm_bo.lo: drm/$(am__dirstamp) drm/$(DEPDIR)/$(am__dirstamp)
+drm/msm_device.lo: drm/$(am__dirstamp) drm/$(DEPDIR)/$(am__dirstamp)
+drm/msm_pipe.lo: drm/$(am__dirstamp) drm/$(DEPDIR)/$(am__dirstamp)
+drm/msm_ringbuffer.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
+drm/msm_ringbuffer_sp.lo: drm/$(am__dirstamp) \
+	drm/$(DEPDIR)/$(am__dirstamp)
 a2xx/$(am__dirstamp):
 	@$(MKDIR_P) a2xx
 	@: > a2xx/$(am__dirstamp)
@@ -1094,6 +1203,35 @@ a5xx/fd5_screen.lo: a5xx/$(am__dirstamp) \
 a5xx/fd5_texture.lo: a5xx/$(am__dirstamp) \
 	a5xx/$(DEPDIR)/$(am__dirstamp)
 a5xx/fd5_zsa.lo: a5xx/$(am__dirstamp) a5xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/$(am__dirstamp):
+	@$(MKDIR_P) a6xx
+	@: > a6xx/$(am__dirstamp)
+a6xx/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) a6xx/$(DEPDIR)
+	@: > a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_blend.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_blitter.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_context.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_draw.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_emit.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_format.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_gmem.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_image.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_program.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_query.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_rasterizer.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_resource.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_screen.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_texture.lo: a6xx/$(am__dirstamp) \
+	a6xx/$(DEPDIR)/$(am__dirstamp)
+a6xx/fd6_zsa.lo: a6xx/$(am__dirstamp) a6xx/$(DEPDIR)/$(am__dirstamp)
 ir3/$(am__dirstamp):
 	@$(MKDIR_P) ir3
 	@: > ir3/$(am__dirstamp)
@@ -1102,6 +1240,7 @@ ir3/$(DEPDIR)/$(am__dirstamp):
 	@: > ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/disasm-a3xx.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
+ir3/ir3_cache.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_compiler_nir.lo: ir3/$(am__dirstamp) \
 	ir3/$(DEPDIR)/$(am__dirstamp)
 ir3/ir3_compiler.lo: ir3/$(am__dirstamp) ir3/$(DEPDIR)/$(am__dirstamp)
@@ -1137,6 +1276,10 @@ mostlyclean-compile:
 	-rm -f a4xx/*.lo
 	-rm -f a5xx/*.$(OBJEXT)
 	-rm -f a5xx/*.lo
+	-rm -f a6xx/*.$(OBJEXT)
+	-rm -f a6xx/*.lo
+	-rm -f drm/*.$(OBJEXT)
+	-rm -f drm/*.lo
 	-rm -f ir3/*.$(OBJEXT)
 	-rm -f ir3/*.lo
 
@@ -1217,8 +1360,34 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_screen.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_texture.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@a5xx/$(DEPDIR)/fd5_zsa.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_blend.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_blitter.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_context.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_draw.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_emit.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_format.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_gmem.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_image.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_program.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_query.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_rasterizer.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_resource.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_screen.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_texture.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@a6xx/$(DEPDIR)/fd6_zsa.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/freedreno_bo.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/freedreno_bo_cache.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/freedreno_device.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/freedreno_pipe.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/freedreno_ringbuffer.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/msm_bo.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/msm_device.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/msm_pipe.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/msm_ringbuffer.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@drm/$(DEPDIR)/msm_ringbuffer_sp.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/disasm-a3xx.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cache.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_cmdline.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@ir3/$(DEPDIR)/ir3_compiler_nir.Plo@am__quote@ # am--include-marker
@@ -1297,6 +1466,8 @@ clean-libtool:
 	-rm -rf a3xx/.libs a3xx/_libs
 	-rm -rf a4xx/.libs a4xx/_libs
 	-rm -rf a5xx/.libs a5xx/_libs
+	-rm -rf a6xx/.libs a6xx/_libs
+	-rm -rf drm/.libs drm/_libs
 	-rm -rf ir3/.libs ir3/_libs
 
 ID: $(am__tagged_files)
@@ -1425,6 +1596,10 @@ distclean-generic:
 	-rm -f a4xx/$(am__dirstamp)
 	-rm -f a5xx/$(DEPDIR)/$(am__dirstamp)
 	-rm -f a5xx/$(am__dirstamp)
+	-rm -f a6xx/$(DEPDIR)/$(am__dirstamp)
+	-rm -f a6xx/$(am__dirstamp)
+	-rm -f drm/$(DEPDIR)/$(am__dirstamp)
+	-rm -f drm/$(am__dirstamp)
 	-rm -f ir3/$(DEPDIR)/$(am__dirstamp)
 	-rm -f ir3/$(am__dirstamp)
 
@@ -1512,8 +1687,34 @@ distclean: distclean-am
 	-rm -f a5xx/$(DEPDIR)/fd5_screen.Plo
 	-rm -f a5xx/$(DEPDIR)/fd5_texture.Plo
 	-rm -f a5xx/$(DEPDIR)/fd5_zsa.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_blend.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_blitter.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_context.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_draw.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_emit.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_format.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_gmem.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_image.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_program.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_query.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_rasterizer.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_resource.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_screen.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_texture.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_zsa.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_bo.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_bo_cache.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_device.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_pipe.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_ringbuffer.Plo
+	-rm -f drm/$(DEPDIR)/msm_bo.Plo
+	-rm -f drm/$(DEPDIR)/msm_device.Plo
+	-rm -f drm/$(DEPDIR)/msm_pipe.Plo
+	-rm -f drm/$(DEPDIR)/msm_ringbuffer.Plo
+	-rm -f drm/$(DEPDIR)/msm_ringbuffer_sp.Plo
 	-rm -f ir3/$(DEPDIR)/disasm-a3xx.Plo
 	-rm -f ir3/$(DEPDIR)/ir3.Plo
+	-rm -f ir3/$(DEPDIR)/ir3_cache.Plo
 	-rm -f ir3/$(DEPDIR)/ir3_cmdline.Po
 	-rm -f ir3/$(DEPDIR)/ir3_compiler.Plo
 	-rm -f ir3/$(DEPDIR)/ir3_compiler_nir.Plo
@@ -1647,8 +1848,34 @@ maintainer-clean: maintainer-clean-am
 	-rm -f a5xx/$(DEPDIR)/fd5_screen.Plo
 	-rm -f a5xx/$(DEPDIR)/fd5_texture.Plo
 	-rm -f a5xx/$(DEPDIR)/fd5_zsa.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_blend.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_blitter.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_context.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_draw.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_emit.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_format.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_gmem.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_image.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_program.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_query.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_rasterizer.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_resource.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_screen.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_texture.Plo
+	-rm -f a6xx/$(DEPDIR)/fd6_zsa.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_bo.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_bo_cache.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_device.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_pipe.Plo
+	-rm -f drm/$(DEPDIR)/freedreno_ringbuffer.Plo
+	-rm -f drm/$(DEPDIR)/msm_bo.Plo
+	-rm -f drm/$(DEPDIR)/msm_device.Plo
+	-rm -f drm/$(DEPDIR)/msm_pipe.Plo
+	-rm -f drm/$(DEPDIR)/msm_ringbuffer.Plo
+	-rm -f drm/$(DEPDIR)/msm_ringbuffer_sp.Plo
 	-rm -f ir3/$(DEPDIR)/disasm-a3xx.Plo
 	-rm -f ir3/$(DEPDIR)/ir3.Plo
+	-rm -f ir3/$(DEPDIR)/ir3_cache.Plo
 	-rm -f ir3/$(DEPDIR)/ir3_cmdline.Po
 	-rm -f ir3/$(DEPDIR)/ir3_compiler.Plo
 	-rm -f ir3/$(DEPDIR)/ir3_compiler_nir.Plo
@@ -1701,7 +1928,7 @@ uninstall-am:
 
 ir3/ir3_nir_trig.c: ir3/ir3_nir_trig.py $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
+	$(AM_V_GEN) $(PYTHON) $(PYTHON_FLAGS) $(srcdir)/ir3/ir3_nir_trig.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

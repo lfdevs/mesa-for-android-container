@@ -25,7 +25,6 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import csv
 import re
-import textwrap
 
 from mako import template
 
@@ -150,7 +149,7 @@ class Channel(object):
             self.size = int(grouped.group('size'))
 
         # Default the start bit to -1
-        self.start = -1;
+        self.start = -1
 
 
 class Format(object):
@@ -177,7 +176,7 @@ class Format(object):
         bit = 0
         for c in self.order:
             chan = getattr(self, c)
-            chan.start = bit;
+            chan.start = bit
             bit = bit + chan.size
 
         # alpha doesn't have a colorspace of it's own.
@@ -217,13 +216,13 @@ def get_srgb_to_linear_map(formats):
             ('U8SRGB',  'FLT16'),
         ]
 
-        found = False;
+        found = False
         for rep in replacements:
             rgb_name = fmt.name.replace(rep[0], rep[1])
             if rgb_name in names:
                 found = True
                 yield fmt.name, rgb_name
-                break;
+                break
 
         # We should have found a format name
         assert found

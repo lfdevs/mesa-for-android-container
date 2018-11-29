@@ -23,6 +23,7 @@
 
 #include "compiler/brw_nir.h"
 #include "compiler/glsl/ir_uniform.h"
+#include "compiler/nir/nir_builder.h"
 #include "brw_program.h"
 
 static void
@@ -92,9 +93,6 @@ brw_setup_image_uniform_values(gl_shader_stage stage,
       /* Upload the brw_image_param structure.  The order is expected to match
        * the BRW_IMAGE_PARAM_*_OFFSET defines.
        */
-      setup_vec4_image_param(param + BRW_IMAGE_PARAM_SURFACE_IDX_OFFSET,
-                             image_idx,
-                             offsetof(brw_image_param, surface_idx), 1);
       setup_vec4_image_param(param + BRW_IMAGE_PARAM_OFFSET_OFFSET,
                              image_idx,
                              offsetof(brw_image_param, offset), 2);
@@ -248,10 +246,9 @@ brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
    stage_prog_data->param = rzalloc_array(mem_ctx, uint32_t, nr_params);
 
    /* For ARB programs, prog_to_nir generates a single "parameters" variable
-    * for all uniform data.  nir_lower_wpos_ytransform may also create an
-    * additional variable.
+    * for all uniform data.  There may be additional sampler variables, and
+    * an extra uniform from nir_lower_wpos_ytransform.
     */
-   assert(shader->uniforms.length() <= 2);
 
    for (unsigned p = 0; p < plist->NumParameters; p++) {
       /* Parameters should be either vec4 uniforms or single component
@@ -265,5 +262,132 @@ brw_nir_setup_arb_uniforms(void *mem_ctx, nir_shader *shader,
          stage_prog_data->param[4 * p + i] = BRW_PARAM_PARAMETER(p, i);
       for (; i < 4; i++)
          stage_prog_data->param[4 * p + i] = BRW_PARAM_BUILTIN_ZERO;
+   }
+}
+
+static nir_ssa_def *
+get_aoa_deref_offset(nir_builder *b,
+                     nir_deref_instr *deref,
+                     unsigned elem_size)
+{
+   unsigned array_size = elem_size;
+   nir_ssa_def *offset = nir_imm_int(b, 0);
+
+   while (deref->deref_type != nir_deref_type_var) {
+      assert(deref->deref_type == nir_deref_type_array);
+
+      /* This level's element size is the previous level's array size */
+      nir_ssa_def *index = nir_ssa_for_src(b, deref->arr.index, 1);
+      assert(deref->arr.index.ssa);
+      offset = nir_iadd(b, offset,
+                           nir_imul(b, index, nir_imm_int(b, array_size)));
+
+      deref = nir_deref_instr_parent(deref);
+      assert(glsl_type_is_array(deref->type));
+      array_size *= glsl_get_length(deref->type);
+   }
+
+   /* Accessing an invalid surface index with the dataport can result in a
+    * hang.  According to the spec "if the index used to select an individual
+    * element is negative or greater than or equal to the size of the array,
+    * the results of the operation are undefined but may not lead to
+    * termination" -- which is one of the possible outcomes of the hang.
+    * Clamp the index to prevent access outside of the array bounds.
+    */
+   return nir_umin(b, offset, nir_imm_int(b, array_size - elem_size));
+}
+
+void
+brw_nir_lower_gl_images(nir_shader *shader,
+                        const struct gl_program *prog)
+{
+   /* We put image uniforms at the end */
+   nir_foreach_variable(var, &shader->uniforms) {
+      if (!var->type->contains_image())
+         continue;
+
+      /* GL Only allows arrays of arrays of images */
+      assert(var->type->without_array()->is_image());
+      const unsigned num_images = MAX2(1, var->type->arrays_of_arrays_size());
+
+      var->data.driver_location = shader->num_uniforms;
+      shader->num_uniforms += num_images * BRW_IMAGE_PARAM_SIZE * 4;
+   }
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+
+   nir_builder b;
+   nir_builder_init(&b, impl);
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         switch (intrin->intrinsic) {
+         case nir_intrinsic_image_deref_load:
+         case nir_intrinsic_image_deref_store:
+         case nir_intrinsic_image_deref_atomic_add:
+         case nir_intrinsic_image_deref_atomic_min:
+         case nir_intrinsic_image_deref_atomic_max:
+         case nir_intrinsic_image_deref_atomic_and:
+         case nir_intrinsic_image_deref_atomic_or:
+         case nir_intrinsic_image_deref_atomic_xor:
+         case nir_intrinsic_image_deref_atomic_exchange:
+         case nir_intrinsic_image_deref_atomic_comp_swap:
+         case nir_intrinsic_image_deref_size:
+         case nir_intrinsic_image_deref_samples:
+         case nir_intrinsic_image_deref_load_raw_intel:
+         case nir_intrinsic_image_deref_store_raw_intel: {
+            nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+
+            struct gl_uniform_storage *storage =
+               &prog->sh.data->UniformStorage[var->data.location];
+            const unsigned image_var_idx =
+               storage->opaque[shader->info.stage].index;
+
+            b.cursor = nir_before_instr(&intrin->instr);
+            nir_ssa_def *index = nir_iadd(&b, nir_imm_int(&b, image_var_idx),
+                                          get_aoa_deref_offset(&b, deref, 1));
+            brw_nir_rewrite_image_intrinsic(intrin, index);
+            break;
+         }
+
+         case nir_intrinsic_image_deref_load_param_intel: {
+            nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+            nir_variable *var = nir_deref_instr_get_variable(deref);
+            const unsigned num_images =
+               MAX2(1, var->type->arrays_of_arrays_size());
+
+            b.cursor = nir_instr_remove(&intrin->instr);
+
+            const unsigned param = nir_intrinsic_base(intrin);
+            nir_ssa_def *offset =
+               get_aoa_deref_offset(&b, deref, BRW_IMAGE_PARAM_SIZE * 4);
+            offset = nir_iadd(&b, offset, nir_imm_int(&b, param * 16));
+
+            nir_intrinsic_instr *load =
+               nir_intrinsic_instr_create(b.shader,
+                                          nir_intrinsic_load_uniform);
+            nir_intrinsic_set_base(load, var->data.driver_location);
+            nir_intrinsic_set_range(load, num_images * BRW_IMAGE_PARAM_SIZE * 4);
+            load->src[0] = nir_src_for_ssa(offset);
+            load->num_components = intrin->dest.ssa.num_components;
+            nir_ssa_dest_init(&load->instr, &load->dest,
+                              intrin->dest.ssa.num_components,
+                              intrin->dest.ssa.bit_size, NULL);
+            nir_builder_instr_insert(&b, &load->instr);
+
+            nir_ssa_def_rewrite_uses(&intrin->dest.ssa,
+                                     nir_src_for_ssa(&load->dest.ssa));
+            break;
+         }
+
+         default:
+            break;
+         }
+      }
    }
 }

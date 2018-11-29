@@ -20,13 +20,13 @@
 # IN THE SOFTWARE.
 
 .PHONY: git_sha1.h
-git_sha1.h: $(top_srcdir)/src/git_sha1.h.in
+git_sha1.h:
 	@echo "updating $@"
-	@$(PYTHON2) $(top_srcdir)/bin/git_sha1_gen.py --output $@
+	@$(PYTHON) $(top_srcdir)/bin/git_sha1_gen.py --output $@
 
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
-EXTRA_DIST = git_sha1.h.in meson.build
+EXTRA_DIST = meson.build
 
 SUBDIRS = . gtest util mapi/glapi/gen mapi
 
@@ -39,6 +39,7 @@ gl_HEADERS = \
   $(top_srcdir)/include/GL/gl_mangle.h
 endif
 
+# TODO: When building with glvnd, glvnd itself should be providing gl.pc and the headers
 if HAVE_GLX
 glxdir = $(includedir)/GL
 glx_HEADERS = \

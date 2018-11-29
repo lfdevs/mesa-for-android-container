@@ -32,10 +32,9 @@ import xml.etree.cElementTree as et
 def _bool_to_c_expr(b):
     if b is True:
         return 'true'
-    elif b is False:
+    if b is False:
         return 'false'
-    else:
-        return b
+    return b
 
 class Extension:
     def __init__(self, name, ext_version, enable):
@@ -48,7 +47,7 @@ class ApiVersion:
         self.version = version
         self.enable = _bool_to_c_expr(enable)
 
-API_PATCH_VERSION = 80
+API_PATCH_VERSION = 90
 
 # Supported API versions.  Each one is the maximum patch version for the given
 # version.  Version come in increasing order and each version is available if
@@ -79,6 +78,7 @@ EXTENSIONS = [
     Extension('VK_KHR_descriptor_update_template',        1, True),
     Extension('VK_KHR_device_group',                      1, True),
     Extension('VK_KHR_device_group_creation',             1, True),
+    Extension('VK_KHR_driver_properties',                 1, True),
     Extension('VK_KHR_external_fence',                    1,
               'device->has_syncobj_wait'),
     Extension('VK_KHR_external_fence_capabilities',       1, True),
@@ -121,10 +121,15 @@ EXTENSIONS = [
     Extension('VK_EXT_external_memory_dma_buf',           1, True),
     Extension('VK_EXT_global_priority',                   1,
               'device->has_context_priority'),
+    Extension('VK_EXT_pci_bus_info',                      1, True),
     Extension('VK_EXT_shader_viewport_index_layer',       1, True),
     Extension('VK_EXT_shader_stencil_export',             1, 'device->info.gen >= 9'),
     Extension('VK_EXT_vertex_attribute_divisor',          3, True),
     Extension('VK_EXT_post_depth_coverage',               1, 'device->info.gen >= 9'),
+    Extension('VK_EXT_sampler_filter_minmax',             1, 'device->info.gen >= 9'),
+    Extension('VK_EXT_calibrated_timestamps',             1, True),
+    Extension('VK_GOOGLE_decorate_string',                1, True),
+    Extension('VK_GOOGLE_hlsl_functionality1',            1, True),
 ]
 
 class VkVersion:
@@ -142,7 +147,7 @@ class VkVersion:
         # VK_MAKE_VERSION macro
         assert self.major < 1024 and self.minor < 1024
         assert self.patch is None or self.patch < 4096
-        assert(str(self) == string)
+        assert str(self) == string
 
     def __str__(self):
         ver_list = [str(self.major), str(self.minor)]
@@ -160,14 +165,15 @@ class VkVersion:
         patch = self.patch if self.patch is not None else 0
         return (self.major << 22) | (self.minor << 12) | patch
 
-    def __cmp__(self, other):
+    def __gt__(self, other):
         # If only one of them has a patch version, "ignore" it by making
         # other's patch version match self.
         if (self.patch is None) != (other.patch is None):
             other = copy.copy(other)
             other.patch = self.patch
 
-        return self.__int_ver().__cmp__(other.__int_ver())
+        return self.__int_ver() > other.__int_ver()
+
 
 
 MAX_API_VERSION = VkVersion('0.0.0')

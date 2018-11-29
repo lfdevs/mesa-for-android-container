@@ -29,6 +29,7 @@
 #include "main/enums.h"
 #include "main/macros.h"
 #include "main/glformats.h"
+#include "nir.h"
 
 #include "brw_draw.h"
 #include "brw_defines.h"
@@ -454,10 +455,14 @@ brw_prepare_vertices(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
    struct gl_context *ctx = &brw->ctx;
+   /* BRW_NEW_VERTEX_PROGRAM */
+   const struct gl_program *vp = brw->programs[MESA_SHADER_VERTEX];
    /* BRW_NEW_VS_PROG_DATA */
    const struct brw_vs_prog_data *vs_prog_data =
       brw_vs_prog_data(brw->vs.base.prog_data);
-   GLbitfield64 vs_inputs = vs_prog_data->inputs_read;
+   GLbitfield64 vs_inputs =
+      nir_get_single_slot_attribs_mask(vs_prog_data->inputs_read,
+                                       vp->DualSlotInputs);
    const unsigned char *ptr = NULL;
    GLuint interleaved = 0;
    unsigned int min_index = brw->vb.min_index + brw->basevertex;
@@ -486,16 +491,12 @@ brw_prepare_vertices(struct brw_context *brw)
    /* Accumulate the list of enabled arrays. */
    brw->vb.nr_enabled = 0;
    while (vs_inputs) {
-      GLuint first = ffsll(vs_inputs) - 1;
-      assert (first < 64);
-      GLuint index =
-         first - DIV_ROUND_UP(_mesa_bitcount_64(vs_prog_data->double_inputs_read &
-                                                BITFIELD64_MASK(first)), 2);
+      const unsigned index = ffsll(vs_inputs) - 1;
+      assert(index < 64);
+
       struct brw_vertex_element *input = &brw->vb.inputs[index];
-      input->is_dual_slot = (vs_prog_data->double_inputs_read & BITFIELD64_BIT(first)) != 0;
-      vs_inputs &= ~BITFIELD64_BIT(first);
-      if (input->is_dual_slot)
-         vs_inputs &= ~BITFIELD64_BIT(first + 1);
+      input->is_dual_slot = (vp->DualSlotInputs & BITFIELD64_BIT(index)) != 0;
+      vs_inputs &= ~BITFIELD64_BIT(index);
       brw->vb.enabled[brw->vb.nr_enabled++] = input;
    }
 

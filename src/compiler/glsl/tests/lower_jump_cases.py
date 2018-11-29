@@ -54,7 +54,7 @@ def make_test_case(f_name, ret_type, body):
                     else:
                         make_declarations(s, already_declared)
     make_declarations(body)
-    return declarations.values() + \
+    return list(declarations.values()) + \
         [['function', f_name, ['signature', ret_type, ['parameters'], body]]]
 
 

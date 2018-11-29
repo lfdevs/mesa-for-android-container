@@ -86,6 +86,33 @@ static inline void _nine_bind(void **dst, void *obj)
         __params.dtor = (void *)Nine##nine##_dtor; \
         __params.container = NULL; \
         __params.device = dev; \
+        __params.start_with_bind_not_ref = false; \
+        { \
+            HRESULT __hr = Nine##nine##_ctor(__data, &__params, ## __VA_ARGS__); \
+            if (FAILED(__hr)) { \
+                Nine##nine##_dtor(__data); \
+                return __hr; \
+            } \
+        } \
+         \
+        *(out) = __data; \
+    } \
+    return D3D_OK
+
+#define NINE_DEVICE_CHILD_BIND_NEW(nine, out, dev, ...) \
+    { \
+        struct NineUnknownParams __params; \
+        struct Nine##nine *__data; \
+         \
+        __data = CALLOC_STRUCT(Nine##nine); \
+        if (!__data) { return E_OUTOFMEMORY; } \
+         \
+        __params.vtable = ((dev)->params.BehaviorFlags & D3DCREATE_MULTITHREADED) ? &Lock##nine##_vtable : &Nine##nine##_vtable; \
+        __params.guids = Nine##nine##_IIDs; \
+        __params.dtor = (void *)Nine##nine##_dtor; \
+        __params.container = NULL; \
+        __params.device = dev; \
+        __params.start_with_bind_not_ref = true; \
         { \
             HRESULT __hr = Nine##nine##_ctor(__data, &__params, ## __VA_ARGS__); \
             if (FAILED(__hr)) { \
@@ -111,6 +138,7 @@ static inline void _nine_bind(void **dst, void *obj)
         __params.dtor = (void *)Nine##nine##_dtor; \
         __params.container = NULL; \
         __params.device = NULL; \
+        __params.start_with_bind_not_ref = false; \
         { \
             HRESULT __hr = Nine##nine##_ctor(__data, &__params, ## __VA_ARGS__); \
             if (FAILED(__hr)) { \

@@ -46,6 +46,3 @@ libEGL_mesa.so.0 libegl-mesa0 #MINVER#
  eglWaitGL@Base 7.8.1
  eglWaitNative@Base 7.8.1
  eglWaitSync@Base 10.7.0~
- (arch=linux-any)wl_drm_interface@Base 8.0-2~
- (arch=linux-any)zwp_linux_buffer_params_v1_interface@Base 17.2.0~
- (arch=linux-any)zwp_linux_dmabuf_v1_interface@Base 17.2.0~

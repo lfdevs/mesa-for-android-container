@@ -68,9 +68,15 @@ struct vl_screen
 
    struct pipe_screen *pscreen;
    struct pipe_loader_device *dev;
+
+   void *xcb_screen;
+   uint32_t color_depth;
 };
 
 #ifdef HAVE_X11_PLATFORM
+uint32_t
+vl_dri2_format_for_depth(struct vl_screen *vscreen, int depth);
+
 struct vl_screen *
 vl_dri2_screen_create(Display *display, int screen);
 #else

@@ -40,8 +40,10 @@ The integer capabilities:
   for a 3D texture.
 * ``PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS``: The maximum number of mipmap levels available
   for a cubemap.
-* ``PIPE_CAP_TEXTURE_MIRROR_CLAMP``: Whether mirrored texture coordinates with clamp
-  are supported.
+* ``PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE``: Whether mirrored texture coordinates are
+  supported with the clamp-to-edge wrap mode.
+* ``PIPE_CAP_TEXTURE_MIRROR_CLAMP``: Whether mirrored texture coordinates are supported
+  with clamp or clamp-to-border wrap modes.
 * ``PIPE_CAP_BLEND_EQUATION_SEPARATE``: Whether alpha blend equations may be different
   from color blend equations, in :ref:`Blend` state.
 * ``PIPE_CAP_SM3``: Whether the vertex shader and fragment shader support equivalent
@@ -67,6 +69,10 @@ The integer capabilities:
   property FS_COORD_PIXEL_CENTER with value INTEGER is supported.
 * ``PIPE_CAP_DEPTH_CLIP_DISABLE``: Whether the driver is capable of disabling
   depth clipping (through pipe_rasterizer_state)
+* ``PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE``: Whether the driver is capable of
+  disabling depth clipping (through pipe_rasterizer_state) separately for
+  the near and far plane. If not, depth_clip_near and depth_clip_far will be
+  equal.
 * ``PIPE_CAP_SHADER_STENCIL_EXPORT``: Whether a stencil reference value can be
   written from a fragment shader.
 * ``PIPE_CAP_TGSI_INSTANCEID``: Whether TGSI_SEMANTIC_INSTANCEID is supported
@@ -340,6 +346,8 @@ The integer capabilities:
   for ``pipe_rasterizer_state::offset_units_unscaled``.
 * ``PIPE_CAP_VIEWPORT_SUBPIXEL_BITS``: Number of bits of subpixel precision for
   floating point viewport bounds.
+* ``PIPE_CAP_RASTERIZER_SUBPIXEL_BITS``: Number of bits of subpixel precision used
+  by the rasterizer.
 * ``PIPE_CAP_MIXED_COLOR_DEPTH_BITS``: Whether there is non-fallback
   support for color/depth format combinations that use a different
   number of bits. For the purpose of this cap, Z24 is treated as
@@ -452,7 +460,23 @@ subpixel precision bias in bits during conservative rasterization.
 * ``PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS``: True is the driver supports
   programmable sample location through ```get_sample_pixel_grid``` and
   ```set_sample_locations```.
-
+* ``PIPE_CAP_MAX_GS_INVOCATIONS``: Maximum supported value of
+  TGSI_PROPERTY_GS_INVOCATIONS.
+* ``PIPE_CAP_MAX_SHADER_BUFFER_SIZE``: Maximum supported size for binding
+  with set_shader_buffers.
+* ``PIPE_CAP_MAX_COMBINED_SHADER_BUFFERS``: Maximum total number of shader
+  buffers. A value of 0 means the sum of all per-shader stage maximums (see
+  ``PIPE_SHADER_CAP_MAX_SHADER_BUFFERS``).
+* ``PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS``: Maximum total number of atomic
+  counters. A value of 0 means the default value (MAX_ATOMIC_COUNTERS = 4096).
+* ``PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS``: Maximum total number of
+  atomic counter buffers. A value of 0 means the sum of all per-shader stage
+  maximums (see ``PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS``).
+* ``PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET: Maximum recommend memory size
+  for all active texture uploads combined. This is a performance hint.
+  0 means no limit.
+* ``PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET``: The maximum supported value for
+  of pipe_vertex_element::src_offset.
 
 .. _pipe_capf:
 

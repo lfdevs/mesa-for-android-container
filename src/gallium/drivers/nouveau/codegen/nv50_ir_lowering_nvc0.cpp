@@ -2503,18 +2503,16 @@ NVC0LoweringPass::handleLDST(Instruction *i)
          assert(prog->getType() != Program::TYPE_FRAGMENT); // INTERP
       }
    } else if (i->src(0).getFile() == FILE_MEMORY_CONST) {
+      int8_t fileIndex = i->getSrc(0)->reg.fileIndex - 1;
+      Value *ind = i->getIndirect(0, 1);
+
       if (targ->getChipset() >= NVISA_GK104_CHIPSET &&
-          prog->getType() == Program::TYPE_COMPUTE) {
+          prog->getType() == Program::TYPE_COMPUTE &&
+          (fileIndex >= 6 || ind)) {
          // The launch descriptor only allows to set up 8 CBs, but OpenGL
-         // requires at least 12 UBOs. To bypass this limitation, we store the
-         // addrs into the driver constbuf and we directly load from the global
-         // memory.
-         int8_t fileIndex = i->getSrc(0)->reg.fileIndex - 1;
-         Value *ind = i->getIndirect(0, 1);
-
-         if (!ind && fileIndex == -1)
-            return;
-
+         // requires at least 12 UBOs. To bypass this limitation, for constant
+         // buffers 7+, we store the addrs into the driver constbuf and we
+         // directly load from the global memory.
          if (ind) {
             // Clamp the UBO index when an indirect access is used to avoid
             // loading information from the wrong place in the driver cb.
@@ -2818,6 +2816,9 @@ NVC0LoweringPass::handleMOD(Instruction *i)
 bool
 NVC0LoweringPass::handleSQRT(Instruction *i)
 {
+   if (targ->isOpSupported(OP_SQRT, i->dType))
+      return true;
+
    if (i->dType == TYPE_F64) {
       Value *pred = bld.getSSA(1, FILE_PREDICATE);
       Value *zero = bld.loadImm(NULL, 0.0);

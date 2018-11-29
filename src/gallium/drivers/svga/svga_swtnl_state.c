@@ -288,6 +288,7 @@ svga_swtnl_update_vdecl(struct svga_context *svga)
          nr_decls++;
          break;
       case TGSI_SEMANTIC_POSITION:
+      case TGSI_SEMANTIC_FACE:
          /* generated internally, not a vertex shader output */
          break;
       default:

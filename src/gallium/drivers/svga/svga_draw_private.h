@@ -191,31 +191,23 @@ static inline boolean
 svga_need_unfilled_fallback(const struct svga_hwtnl *hwtnl,
                             enum pipe_prim_type prim)
 {
-   const struct svga_context *svga = hwtnl->svga;
-
    if (u_reduced_prim(prim) != PIPE_PRIM_TRIANGLES) {
       /* if we're drawing points or lines, no fallback needed */
       return FALSE;
    }
 
-   if (svga_have_vgpu10(svga)) {
-      /* vgpu10 supports polygon fill and line modes */
-      if ((prim == PIPE_PRIM_QUADS ||
-           prim == PIPE_PRIM_QUAD_STRIP ||
-           prim == PIPE_PRIM_POLYGON) &&
-          hwtnl->api_fillmode == PIPE_POLYGON_MODE_LINE) {
-         /* VGPU10 doesn't directly render quads or polygons.  They're
-          * converted to triangles.  If we let the device draw the triangle
-          * outlines we'll get an extra, stray lines in the interiors.
-          * So, to draw unfilled quads correctly, we need the fallback.
-          */
-         return true;
-      }
-      return hwtnl->api_fillmode == PIPE_POLYGON_MODE_POINT;
-   } else {
-      /* vgpu9 doesn't support line or point fill modes */
-      return hwtnl->api_fillmode != PIPE_POLYGON_MODE_FILL;
+   if ((prim == PIPE_PRIM_QUADS ||
+        prim == PIPE_PRIM_QUAD_STRIP ||
+        prim == PIPE_PRIM_POLYGON) &&
+       hwtnl->api_fillmode == PIPE_POLYGON_MODE_LINE) {
+      /* We can't directly render quads or polygons.  They're
+       * converted to triangles.  If we let the device draw the triangle
+       * outlines we'll get an extra, stray lines in the interiors.
+       * So, to draw unfilled quads correctly, we need the fallback.
+       */
+      return true;
    }
+   return false;
 }
 
 

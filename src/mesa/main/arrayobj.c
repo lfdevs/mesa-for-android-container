@@ -53,6 +53,7 @@
 #include "varray.h"
 #include "util/bitscan.h"
 #include "util/u_atomic.h"
+#include "util/u_math.h"
 
 
 const GLubyte
@@ -196,7 +197,16 @@ _mesa_vao_attribute_map[ATTRIBUTE_MAP_MODE_MAX][VERT_ATTRIB_MAX] =
 struct gl_vertex_array_object *
 _mesa_lookup_vao(struct gl_context *ctx, GLuint id)
 {
+   /* The ARB_direct_state_access specification says:
+    *
+    *    "<vaobj> is [compatibility profile:
+    *     zero, indicating the default vertex array object, or]
+    *     the name of the vertex array object."
+    */
    if (id == 0) {
+      if (ctx->API == API_OPENGL_COMPAT)
+         return ctx->Array.DefaultVAO;
+
       return NULL;
    } else {
       struct gl_vertex_array_object *vao;
@@ -746,7 +756,7 @@ _mesa_update_vao_derived_arrays(struct gl_context *ctx,
           * grouping information in a seperate array beside
           * gl_array_attributes/gl_vertex_buffer_binding.
           */
-         assert(_mesa_bitcount(binding->_BoundArrays & vao->_Enabled) == 1
+         assert(util_bitcount(binding->_BoundArrays & vao->_Enabled) == 1
                 || (vao->_Enabled & ~binding->_BoundArrays) == 0);
 
          /* Start this current effective binding with the array */
@@ -766,7 +776,7 @@ _mesa_update_vao_derived_arrays(struct gl_context *ctx,
                &vao->BufferBinding[attrib2->BufferBindingIndex];
 
             /* See the comment at the same assert above. */
-            assert(_mesa_bitcount(binding2->_BoundArrays & vao->_Enabled) == 1
+            assert(util_bitcount(binding2->_BoundArrays & vao->_Enabled) == 1
                    || (vao->_Enabled & ~binding->_BoundArrays) == 0);
 
             /* Check if we have an identical binding */
@@ -1005,6 +1015,10 @@ delete_vertex_arrays(struct gl_context *ctx, GLsizei n, const GLuint *ids)
    GLsizei i;
 
    for (i = 0; i < n; i++) {
+      /* IDs equal to 0 should be silently ignored. */
+      if (!ids[i])
+         continue;
+
       struct gl_vertex_array_object *obj = _mesa_lookup_vao(ctx, ids[i]);
 
       if (obj) {

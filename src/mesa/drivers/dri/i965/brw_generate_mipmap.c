@@ -105,6 +105,23 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
       last_layer = base_size->array_len - 1;
    }
 
+   /* The GL_EXT_texture_sRGB_decode extension's issues section says:
+    *
+    *    "10) How is mipmap generation of sRGB textures affected by the
+    *     TEXTURE_SRGB_DECODE_EXT parameter?
+    *
+    *     RESOLVED:  When the TEXTURE_SRGB_DECODE parameter is DECODE_EXT
+    *     for an sRGB texture, mipmap generation should decode sRGB texels
+    *     to a linear RGB color space, perform downsampling, then encode
+    *     back to an sRGB color space.  (Issue 24 in the EXT_texture_sRGB
+    *     specification provides a rationale for why.)  When the parameter
+    *     is SKIP_DECODE_EXT instead, mipmap generation skips the encode
+    *     and decode steps during mipmap generation.  By skipping the
+    *     encode and decode steps, sRGB mipmap generation should match
+    *     the mipmap generation for a non-sRGB texture."
+    */
+   bool do_srgb = tex_obj->Sampler.sRGBDecode == GL_DECODE_EXT;
+
    for (unsigned dst_level = base_level + 1;
         dst_level <= last_level;
         dst_level++) {
@@ -121,7 +138,7 @@ brw_generate_mipmap(struct gl_context *ctx, GLenum target,
                                  minify(base_size->width, dst_level),
                                  minify(base_size->height, dst_level),
                                  GL_LINEAR, false, false,
-                                 true, true);
+                                 do_srgb, do_srgb);
       }
    }
 }

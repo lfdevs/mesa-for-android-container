@@ -47,6 +47,7 @@ struct radeon_info {
 	uint32_t                    pci_func;
 
 	/* Device info. */
+	const char                  *name;
 	uint32_t                    pci_id;
 	enum radeon_family          family;
 	enum chip_class             chip_class;
@@ -115,6 +116,7 @@ struct radeon_info {
 	uint32_t                    r600_max_quad_pipes; /* wave size / 16 */
 	uint32_t                    max_shader_clock;
 	uint32_t                    num_good_compute_units;
+	uint32_t                    num_good_cu_per_sh;
 	uint32_t                    num_tcc_blocks;
 	uint32_t                    max_se; /* shader engines */
 	uint32_t                    max_sh_per_se; /* shader arrays per shader engine */
@@ -148,7 +150,8 @@ void ac_print_gpu_info(struct radeon_info *info);
 int ac_get_gs_table_depth(enum chip_class chip_class, enum radeon_family family);
 void ac_get_raster_config(struct radeon_info *info,
 			  uint32_t *raster_config_p,
-			  uint32_t *raster_config_1_p);
+			  uint32_t *raster_config_1_p,
+			  uint32_t *se_tile_repeat_p);
 void ac_get_harvested_configs(struct radeon_info *info,
 			      unsigned raster_config,
 			      unsigned *cik_raster_config_1_p,

@@ -137,7 +137,6 @@ static void *virgl_texture_transfer_map(struct pipe_context *ctx,
    struct virgl_hw_res *hw_res;
    const unsigned h = u_minify(vtex->base.u.b.height0, level);
    const unsigned nblocksy = util_format_get_nblocksy(format, h);
-   bool is_depth = util_format_has_depth(util_format_description(resource->format));
    uint32_t l_stride;
    bool doflushwait;
 
@@ -165,7 +164,7 @@ static void *virgl_texture_transfer_map(struct pipe_context *ctx,
    else
       l_stride = trans->base.layer_stride;
 
-   if (is_depth && resource->nr_samples > 1) {
+   if (resource->nr_samples > 1) {
       struct pipe_resource tmp_resource;
       virgl_init_temp_resource_from_box(&tmp_resource, resource, box,
                                         level, 0);
@@ -197,6 +196,7 @@ static void *virgl_texture_transfer_map(struct pipe_context *ctx,
 
    ptr = vs->vws->resource_map(vs->vws, hw_res);
    if (!ptr) {
+      slab_free(&vctx->texture_transfer_pool, trans);
       return NULL;
    }
 
@@ -241,7 +241,7 @@ static void virgl_texture_transfer_unmap(struct pipe_context *ctx,
 }
 
 
-static boolean
+static void
 vrend_resource_layout(struct virgl_texture *res,
                       uint32_t *total_size)
 {
@@ -277,7 +277,6 @@ vrend_resource_layout(struct virgl_texture *res,
       *total_size = buffer_size;
    else /* don't create guest backing store for MSAA */
       *total_size = 0;
-   return TRUE;
 }
 
 static boolean virgl_texture_get_handle(struct pipe_screen *screen,
@@ -313,15 +312,11 @@ virgl_texture_from_handle(struct virgl_screen *vs,
                           const struct pipe_resource *template,
                           struct winsys_handle *whandle)
 {
-   struct virgl_texture *tex;
-   uint32_t size;
-
-   tex = CALLOC_STRUCT(virgl_texture);
+   struct virgl_texture *tex = CALLOC_STRUCT(virgl_texture);
    tex->base.u.b = *template;
    tex->base.u.b.screen = &vs->base;
    pipe_reference_init(&tex->base.u.b.reference, 1);
    tex->base.u.vtbl = &virgl_texture_vtbl;
-   vrend_resource_layout(tex, &size);
 
    tex->base.hw_res = vs->vws->resource_create_from_handle(vs->vws, whandle);
    return &tex->base.u.b;

@@ -1261,12 +1261,12 @@ static uint32_t
 isl_calc_linear_min_row_pitch(const struct isl_device *dev,
                               const struct isl_surf_init_info *info,
                               const struct isl_extent2d *phys_total_el,
-                              uint32_t alignment)
+                              uint32_t alignment_B)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
    const uint32_t bs = fmtl->bpb / 8;
 
-   return isl_align_npot(bs * phys_total_el->w, alignment);
+   return isl_align_npot(bs * phys_total_el->w, alignment_B);
 }
 
 static uint32_t
@@ -1274,7 +1274,7 @@ isl_calc_tiled_min_row_pitch(const struct isl_device *dev,
                              const struct isl_surf_init_info *surf_info,
                              const struct isl_tile_info *tile_info,
                              const struct isl_extent2d *phys_total_el,
-                             uint32_t alignment)
+                             uint32_t alignment_B)
 {
    const struct isl_format_layout *fmtl = isl_format_get_layout(surf_info->format);
 
@@ -1285,7 +1285,7 @@ isl_calc_tiled_min_row_pitch(const struct isl_device *dev,
       isl_align_div(phys_total_el->w * tile_el_scale,
                     tile_info->logical_extent_el.width);
 
-   assert(alignment == tile_info->phys_extent_B.width);
+   assert(alignment_B == tile_info->phys_extent_B.width);
    return total_w_tl * tile_info->phys_extent_B.width;
 }
 
@@ -1294,14 +1294,14 @@ isl_calc_min_row_pitch(const struct isl_device *dev,
                        const struct isl_surf_init_info *surf_info,
                        const struct isl_tile_info *tile_info,
                        const struct isl_extent2d *phys_total_el,
-                       uint32_t alignment)
+                       uint32_t alignment_B)
 {
    if (tile_info->tiling == ISL_TILING_LINEAR) {
       return isl_calc_linear_min_row_pitch(dev, surf_info, phys_total_el,
-                                           alignment);
+                                           alignment_B);
    } else {
       return isl_calc_tiled_min_row_pitch(dev, surf_info, tile_info,
-                                          phys_total_el, alignment);
+                                          phys_total_el, alignment_B);
    }
 }
 
@@ -1327,15 +1327,15 @@ isl_calc_row_pitch(const struct isl_device *dev,
                    const struct isl_tile_info *tile_info,
                    enum isl_dim_layout dim_layout,
                    const struct isl_extent2d *phys_total_el,
-                   uint32_t *out_row_pitch)
+                   uint32_t *out_row_pitch_B)
 {
-   uint32_t alignment =
+   uint32_t alignment_B =
       isl_calc_row_pitch_alignment(surf_info, tile_info);
 
    /* If pitch isn't given and it can be chosen freely, align it by cache line
     * allowing one to use blit engine on the surface.
     */
-   if (surf_info->row_pitch == 0 && tile_info->tiling == ISL_TILING_LINEAR) {
+   if (surf_info->row_pitch_B == 0 && tile_info->tiling == ISL_TILING_LINEAR) {
       /* From the Broadwell PRM docs for XY_SRC_COPY_BLT::SourceBaseAddress:
        *
        *    "Base address of the destination surface: X=0, Y=0. Lower 32bits
@@ -1343,28 +1343,28 @@ isl_calc_row_pitch(const struct isl_device *dev,
        *    enabled), this address must be 4KB-aligned. When Tiling is not
        *    enabled, this address should be CL (64byte) aligned."
        */
-      alignment = MAX2(alignment, 64);
+      alignment_B = MAX2(alignment_B, 64);
    }
 
-   const uint32_t min_row_pitch =
+   const uint32_t min_row_pitch_B =
       isl_calc_min_row_pitch(dev, surf_info, tile_info, phys_total_el,
-                             alignment);
+                             alignment_B);
 
-   uint32_t row_pitch = min_row_pitch;
+   uint32_t row_pitch_B = min_row_pitch_B;
 
-   if (surf_info->row_pitch != 0) {
-      row_pitch = surf_info->row_pitch;
+   if (surf_info->row_pitch_B != 0) {
+      row_pitch_B = surf_info->row_pitch_B;
 
-      if (row_pitch < min_row_pitch)
+      if (row_pitch_B < min_row_pitch_B)
          return false;
 
-      if (row_pitch % alignment != 0)
+      if (row_pitch_B % alignment_B != 0)
          return false;
    }
 
-   const uint32_t row_pitch_tiles = row_pitch / tile_info->phys_extent_B.width;
+   const uint32_t row_pitch_tl = row_pitch_B / tile_info->phys_extent_B.width;
 
-   if (row_pitch == 0)
+   if (row_pitch_B == 0)
       return false;
 
    if (dim_layout == ISL_DIM_LAYOUT_GEN9_1D) {
@@ -1375,20 +1375,20 @@ isl_calc_row_pitch(const struct isl_device *dev,
    if ((surf_info->usage & (ISL_SURF_USAGE_RENDER_TARGET_BIT |
                             ISL_SURF_USAGE_TEXTURE_BIT |
                             ISL_SURF_USAGE_STORAGE_BIT)) &&
-       !pitch_in_range(row_pitch, RENDER_SURFACE_STATE_SurfacePitch_bits(dev->info)))
+       !pitch_in_range(row_pitch_B, RENDER_SURFACE_STATE_SurfacePitch_bits(dev->info)))
       return false;
 
    if ((surf_info->usage & (ISL_SURF_USAGE_CCS_BIT |
                             ISL_SURF_USAGE_MCS_BIT)) &&
-       !pitch_in_range(row_pitch_tiles, RENDER_SURFACE_STATE_AuxiliarySurfacePitch_bits(dev->info)))
+       !pitch_in_range(row_pitch_tl, RENDER_SURFACE_STATE_AuxiliarySurfacePitch_bits(dev->info)))
       return false;
 
    if ((surf_info->usage & ISL_SURF_USAGE_DEPTH_BIT) &&
-       !pitch_in_range(row_pitch, _3DSTATE_DEPTH_BUFFER_SurfacePitch_bits(dev->info)))
+       !pitch_in_range(row_pitch_B, _3DSTATE_DEPTH_BUFFER_SurfacePitch_bits(dev->info)))
       return false;
 
    if ((surf_info->usage & ISL_SURF_USAGE_HIZ_BIT) &&
-       !pitch_in_range(row_pitch, _3DSTATE_HIER_DEPTH_BUFFER_SurfacePitch_bits(dev->info)))
+       !pitch_in_range(row_pitch_B, _3DSTATE_HIER_DEPTH_BUFFER_SurfacePitch_bits(dev->info)))
       return false;
 
    const uint32_t stencil_pitch_bits = dev->use_separate_stencil ?
@@ -1396,11 +1396,11 @@ isl_calc_row_pitch(const struct isl_device *dev,
       _3DSTATE_DEPTH_BUFFER_SurfacePitch_bits(dev->info);
 
    if ((surf_info->usage & ISL_SURF_USAGE_STENCIL_BIT) &&
-       !pitch_in_range(row_pitch, stencil_pitch_bits))
+       !pitch_in_range(row_pitch_B, stencil_pitch_bits))
       return false;
 
  done:
-   *out_row_pitch = row_pitch;
+   *out_row_pitch_B = row_pitch_B;
    return true;
 }
 
@@ -1456,15 +1456,15 @@ isl_surf_init_s(const struct isl_device *dev,
                                  array_pitch_span, &array_pitch_el_rows,
                                  &phys_total_el);
 
-   uint32_t row_pitch;
+   uint32_t row_pitch_B;
    if (!isl_calc_row_pitch(dev, info, &tile_info, dim_layout,
-                           &phys_total_el, &row_pitch))
+                           &phys_total_el, &row_pitch_B))
       return false;
 
-   uint32_t base_alignment;
-   uint64_t size;
+   uint32_t base_alignment_B;
+   uint64_t size_B;
    if (tiling == ISL_TILING_LINEAR) {
-      size = (uint64_t) row_pitch * phys_total_el.h;
+      size_B = (uint64_t) row_pitch_B * phys_total_el.h;
 
       /* From the Broadwell PRM Vol 2d, RENDER_SURFACE_STATE::SurfaceBaseAddress:
        *
@@ -1475,25 +1475,25 @@ isl_surf_init_s(const struct isl_device *dev,
        *    surfaces have no alignment requirements (byte alignment is
        *    sufficient.)"
        */
-      base_alignment = MAX(1, info->min_alignment);
+      base_alignment_B = MAX(1, info->min_alignment_B);
       if (info->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) {
          if (isl_format_is_yuv(info->format)) {
-            base_alignment = MAX(base_alignment, fmtl->bpb / 4);
+            base_alignment_B = MAX(base_alignment_B, fmtl->bpb / 4);
          } else {
-            base_alignment = MAX(base_alignment, fmtl->bpb / 8);
+            base_alignment_B = MAX(base_alignment_B, fmtl->bpb / 8);
          }
       }
-      base_alignment = isl_round_up_to_power_of_two(base_alignment);
+      base_alignment_B = isl_round_up_to_power_of_two(base_alignment_B);
    } else {
       const uint32_t total_h_tl =
          isl_align_div(phys_total_el.h, tile_info.logical_extent_el.height);
 
-      size = (uint64_t) total_h_tl * tile_info.phys_extent_B.height * row_pitch;
+      size_B = (uint64_t) total_h_tl * tile_info.phys_extent_B.height * row_pitch_B;
 
-      const uint32_t tile_size = tile_info.phys_extent_B.width *
-                                 tile_info.phys_extent_B.height;
-      assert(isl_is_pow2(info->min_alignment) && isl_is_pow2(tile_size));
-      base_alignment = MAX(info->min_alignment, tile_size);
+      const uint32_t tile_size_B = tile_info.phys_extent_B.width *
+                                   tile_info.phys_extent_B.height;
+      assert(isl_is_pow2(info->min_alignment_B) && isl_is_pow2(tile_size_B));
+      base_alignment_B = MAX(info->min_alignment_B, tile_size_B);
    }
 
    if (ISL_DEV_GEN(dev) < 9) {
@@ -1505,7 +1505,7 @@ isl_surf_init_s(const struct isl_device *dev,
        *
        * This comment is applicable to all Pre-gen9 platforms.
        */
-      if (size > (uint64_t) 1 << 31)
+      if (size_B > (uint64_t) 1 << 31)
          return false;
    } else if (ISL_DEV_GEN(dev) < 11) {
       /* From the Skylake PRM Vol 5, Maximum Surface Size in Bytes:
@@ -1514,11 +1514,11 @@ isl_surf_init_s(const struct isl_device *dev,
        *     All pixels within the surface must be contained within 2^38 bytes
        *     of the base address."
        */
-      if (size > (uint64_t) 1 << 38)
+      if (size_B > (uint64_t) 1 << 38)
          return false;
    } else {
       /* gen11+ platforms raised this limit to 2^44 bytes. */
-      if (size > (uint64_t) 1 << 44)
+      if (size_B > (uint64_t) 1 << 44)
          return false;
    }
 
@@ -1536,9 +1536,9 @@ isl_surf_init_s(const struct isl_device *dev,
       .logical_level0_px = logical_level0_px,
       .phys_level0_sa = phys_level0_sa,
 
-      .size = size,
-      .alignment = base_alignment,
-      .row_pitch = row_pitch,
+      .size_B = size_B,
+      .alignment_B = base_alignment_B,
+      .row_pitch_B = row_pitch_B,
       .array_pitch_el_rows = array_pitch_el_rows,
       .array_pitch_span = array_pitch_span,
 
@@ -1689,7 +1689,7 @@ bool
 isl_surf_get_ccs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
                       struct isl_surf *ccs_surf,
-                      uint32_t row_pitch)
+                      uint32_t row_pitch_B)
 {
    assert(surf->samples == 1 && surf->msaa_layout == ISL_MSAA_LAYOUT_NONE);
    assert(ISL_DEV_GEN(dev) >= 7);
@@ -1767,7 +1767,7 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
                         .levels = surf->levels,
                         .array_len = surf->logical_level0_px.array_len,
                         .samples = 1,
-                        .row_pitch = row_pitch,
+                        .row_pitch_B = row_pitch_B,
                         .usage = ISL_SURF_USAGE_CCS_BIT,
                         .tiling_flags = ISL_TILING_CCS_BIT);
 }
@@ -2171,7 +2171,7 @@ isl_surf_get_image_offset_B_tile_sa(const struct isl_surf *surf,
 
    uint32_t x_offset_el, y_offset_el;
    isl_tiling_get_intratile_offset_el(surf->tiling, fmtl->bpb,
-                                      surf->row_pitch,
+                                      surf->row_pitch_B,
                                       total_x_offset_el,
                                       total_y_offset_el,
                                       offset_B,
@@ -2226,7 +2226,7 @@ isl_surf_get_image_surf(const struct isl_device *dev,
                       .levels = 1,
                       .array_len = 1,
                       .samples = surf->samples,
-                      .row_pitch = surf->row_pitch,
+                      .row_pitch_B = surf->row_pitch_B,
                       .usage = usage,
                       .tiling_flags = (1 << surf->tiling));
    assert(ok);
@@ -2235,7 +2235,7 @@ isl_surf_get_image_surf(const struct isl_device *dev,
 void
 isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
                                    uint32_t bpb,
-                                   uint32_t row_pitch,
+                                   uint32_t row_pitch_B,
                                    uint32_t total_x_offset_el,
                                    uint32_t total_y_offset_el,
                                    uint32_t *base_address_offset,
@@ -2244,7 +2244,7 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
 {
    if (tiling == ISL_TILING_LINEAR) {
       assert(bpb % 8 == 0);
-      *base_address_offset = total_y_offset_el * row_pitch +
+      *base_address_offset = total_y_offset_el * row_pitch_B +
                              total_x_offset_el * (bpb / 8);
       *x_offset_el = 0;
       *y_offset_el = 0;
@@ -2254,7 +2254,7 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
    struct isl_tile_info tile_info;
    isl_tiling_get_info(tiling, bpb, &tile_info);
 
-   assert(row_pitch % tile_info.phys_extent_B.width == 0);
+   assert(row_pitch_B % tile_info.phys_extent_B.width == 0);
 
    /* For non-power-of-two formats, we need the address to be both tile and
     * element-aligned.  The easiest way to achieve this is to work with a tile
@@ -2277,7 +2277,7 @@ isl_tiling_get_intratile_offset_el(enum isl_tiling tiling,
    uint32_t y_offset_tl = total_y_offset_el / tile_info.logical_extent_el.h;
 
    *base_address_offset =
-      y_offset_tl * tile_info.phys_extent_B.h * row_pitch +
+      y_offset_tl * tile_info.phys_extent_B.h * row_pitch_B +
       x_offset_tl * tile_info.phys_extent_B.h * tile_info.phys_extent_B.w;
 }
 

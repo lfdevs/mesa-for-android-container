@@ -1,5 +1,5 @@
 /**********************************************************
- * Copyright 1998-2015 VMware, Inc.  All rights reserved.
+ * Copyright 1998-2017 VMware, Inc.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -162,10 +162,15 @@ typedef enum {
    SVGA3D_DEVCAP_SURFACEFMT_A16B16G16R16           = 67,
    SVGA3D_DEVCAP_SURFACEFMT_UYVY                   = 68,
    SVGA3D_DEVCAP_SURFACEFMT_YUY2                   = 69,
-   SVGA3D_DEVCAP_MULTISAMPLE_NONMASKABLESAMPLES    = 70,
-   SVGA3D_DEVCAP_MULTISAMPLE_MASKABLESAMPLES       = 71,
-   SVGA3D_DEVCAP_ALPHATOCOVERAGE                   = 72,
-   SVGA3D_DEVCAP_SUPERSAMPLE                       = 73,
+
+   /*
+    * Deprecated.
+    */
+   SVGA3D_DEVCAP_DEAD4                             = 70,
+   SVGA3D_DEVCAP_DEAD5                             = 71,
+   SVGA3D_DEVCAP_DEAD7                             = 72,
+   SVGA3D_DEVCAP_DEAD6                             = 73,
+
    SVGA3D_DEVCAP_AUTOGENMIPMAPS                    = 74,
    SVGA3D_DEVCAP_SURFACEFMT_NV12                   = 75,
    SVGA3D_DEVCAP_SURFACEFMT_AYUV                   = 76,
@@ -193,18 +198,8 @@ typedef enum {
     * Deprecated.
     */
    SVGA3D_DEVCAP_DEAD1                             = 84,
-
-   /*
-    * This contains several SVGA_3D_CAPS_VIDEO_DECODE elements
-    * ored together, one for every type of video decoding supported.
-    */
-   SVGA3D_DEVCAP_VIDEO_DECODE                      = 85,
-
-   /*
-    * This contains several SVGA_3D_CAPS_VIDEO_PROCESS elements
-    * ored together, one for every type of video processing supported.
-    */
-   SVGA3D_DEVCAP_VIDEO_PROCESS                     = 86,
+   SVGA3D_DEVCAP_DEAD8                             = 85,
+   SVGA3D_DEVCAP_DEAD9                             = 86,
 
    SVGA3D_DEVCAP_LINE_AA                           = 87,  /* boolean */
    SVGA3D_DEVCAP_LINE_STIPPLE                      = 88,  /* boolean */
@@ -214,9 +209,9 @@ typedef enum {
    SVGA3D_DEVCAP_SURFACEFMT_YV12                   = 91,
 
    /*
-    * Does the host support the SVGA logic ops commands?
+    * Deprecated.
     */
-   SVGA3D_DEVCAP_LOGICOPS                          = 92,
+   SVGA3D_DEVCAP_DEAD3                             = 92,
 
    /*
     * Are TS_CONSTANT, TS_COLOR_KEY, and TS_COLOR_KEY_ENABLE supported?
@@ -229,9 +224,9 @@ typedef enum {
    SVGA3D_DEVCAP_DEAD2                             = 94,
 
    /*
-    * Does the device support the DX commands?
+    * Does the device support DXContexts?  (ie DX10 era rendering)
     */
-   SVGA3D_DEVCAP_DX                                = 95,
+   SVGA3D_DEVCAP_DXCONTEXT                         = 95,
 
    /*
     * What is the maximum size of a texture array?
@@ -241,21 +236,47 @@ typedef enum {
    SVGA3D_DEVCAP_MAX_TEXTURE_ARRAY_SIZE            = 96,
 
    /*
-    * What is the maximum number of vertex buffers that can
-    * be used in the DXContext inputAssembly?
+    * What is the maximum number of vertex buffers or vertex input registers
+    * that can be expected to work correctly with a DXContext?
+    *
+    * The guest is allowed to set up to SVGA3D_DX_MAX_VERTEXBUFFERS, but
+    * anything in excess of this cap is not guaranteed to render correctly.
+    *
+    * Similarly, the guest can set up to SVGA3D_DX_MAX_VERTEXINPUTREGISTERS
+    * input registers without the SVGA3D_DEVCAP_SM4_1 cap, or
+    * SVGA3D_DX_SM41_MAX_VERTEXINPUTREGISTERS with the SVGA3D_DEVCAP_SM4_1,
+    * but only the registers up to this cap value are guaranteed to render
+    * correctly.
+    *
+    * If guest-drivers are able to expose a lower-limit, it's recommended
+    * that they clamp to this value.  Otherwise, the host will make a
+    * best-effort on case-by-case basis if guests exceed this.
     */
    SVGA3D_DEVCAP_DX_MAX_VERTEXBUFFERS              = 97,
 
    /*
-    * What is the maximum number of constant buffers
-    * that can be expected to work correctly with a
-    * DX context?
+    * What is the maximum number of constant buffers that can be expected to
+    * work correctly with a DX context?
+    *
+    * The guest is allowed to set up to SVGA3D_DX_MAX_CONSTBUFFERS, but
+    * anything in excess of this cap is not guaranteed to render correctly.
+    *
+    * If guest-drivers are able to expose a lower-limit, it's recommended
+    * that they clamp to this value.  Otherwise, the host will make a
+    * best-effort on case-by-case basis if guests exceed this.
     */
    SVGA3D_DEVCAP_DX_MAX_CONSTANT_BUFFERS           = 98,
 
    /*
     * Does the device support provoking vertex control?
-    * If zero, the first vertex will always be the provoking vertex.
+    *
+    * If this cap is present, the provokingVertexLast field in the
+    * rasterizer state is enabled.  (Guests can then set it to FALSE,
+    * meaning that the first vertex is the provoking vertex, or TRUE,
+    * meaning that the last verteix is the provoking vertex.)
+    *
+    * If this cap is FALSE, then guests should set the provokingVertexLast
+    * to FALSE, otherwise rendering behavior is undefined.
     */
    SVGA3D_DEVCAP_DX_PROVOKING_VERTEX               = 99,
 
@@ -320,8 +341,8 @@ typedef enum {
    SVGA3D_DEVCAP_DXFMT_R32G32_SINT                 = 158,
    SVGA3D_DEVCAP_DXFMT_R32G8X24_TYPELESS           = 159,
    SVGA3D_DEVCAP_DXFMT_D32_FLOAT_S8X24_UINT        = 160,
-   SVGA3D_DEVCAP_DXFMT_R32_FLOAT_X8X24_TYPELESS    = 161,
-   SVGA3D_DEVCAP_DXFMT_X32_TYPELESS_G8X24_UINT     = 162,
+   SVGA3D_DEVCAP_DXFMT_R32_FLOAT_X8X24             = 161,
+   SVGA3D_DEVCAP_DXFMT_X32_G8X24_UINT              = 162,
    SVGA3D_DEVCAP_DXFMT_R10G10B10A2_TYPELESS        = 163,
    SVGA3D_DEVCAP_DXFMT_R10G10B10A2_UINT            = 164,
    SVGA3D_DEVCAP_DXFMT_R11G11B10_FLOAT             = 165,
@@ -339,8 +360,8 @@ typedef enum {
    SVGA3D_DEVCAP_DXFMT_R32_SINT                    = 177,
    SVGA3D_DEVCAP_DXFMT_R24G8_TYPELESS              = 178,
    SVGA3D_DEVCAP_DXFMT_D24_UNORM_S8_UINT           = 179,
-   SVGA3D_DEVCAP_DXFMT_R24_UNORM_X8_TYPELESS       = 180,
-   SVGA3D_DEVCAP_DXFMT_X24_TYPELESS_G8_UINT        = 181,
+   SVGA3D_DEVCAP_DXFMT_R24_UNORM_X8                = 180,
+   SVGA3D_DEVCAP_DXFMT_X24_G8_UINT                 = 181,
    SVGA3D_DEVCAP_DXFMT_R8G8_TYPELESS               = 182,
    SVGA3D_DEVCAP_DXFMT_R8G8_UNORM                  = 183,
    SVGA3D_DEVCAP_DXFMT_R8G8_UINT                   = 184,
@@ -404,12 +425,27 @@ typedef enum {
    SVGA3D_DEVCAP_DXFMT_BC4_UNORM                   = 242,
    SVGA3D_DEVCAP_DXFMT_BC5_UNORM                   = 243,
 
+   /*
+    * Advertises shaderModel 4.1 support, independent blend-states,
+    * cube-map arrays, and a higher vertex input registers limit.
+    *
+    * (ie DX10.1 era rendering)
+    *
+    * (See documentation on SVGA3D_DEVCAP_DX_MAX_VERTEXBUFFERS.)
+    */
+   SVGA3D_DEVCAP_SM41                              = 244,
+
+   SVGA3D_DEVCAP_MULTISAMPLE_2X                    = 245,
+   SVGA3D_DEVCAP_MULTISAMPLE_4X                    = 246,
+
    SVGA3D_DEVCAP_MAX                       /* This must be the last index. */
 } SVGA3dDevCapIndex;
 
 /*
  * Bit definitions for DXFMT devcaps
  *
+ * See also:
+ * http://msdn.microsoft.com/en-gb/library/windows/hardware/ff539390.aspx
  *
  * SUPPORTED: Can the format be defined?
  * SHADER_SAMPLE: Can the format be sampled from a shader?
@@ -419,9 +455,7 @@ typedef enum {
  * MIPS: Does the format support mip levels?
  * ARRAY: Does the format support texture arrays?
  * VOLUME: Does the format support having volume?
- * MULTISAMPLE_2: Does the format support 2x multisample?
- * MULTISAMPLE_4: Does the format support 4x multisample?
- * MULTISAMPLE_8: Does the format support 8x multisample?
+ * MULTISAMPLE: Does the format support multisample?
  */
 #define SVGA3D_DXFMT_SUPPORTED                (1 <<  0)
 #define SVGA3D_DXFMT_SHADER_SAMPLE            (1 <<  1)
@@ -432,20 +466,8 @@ typedef enum {
 #define SVGA3D_DXFMT_ARRAY                    (1 <<  6)
 #define SVGA3D_DXFMT_VOLUME                   (1 <<  7)
 #define SVGA3D_DXFMT_DX_VERTEX_BUFFER         (1 <<  8)
-#define SVGADX_DXFMT_MULTISAMPLE_2            (1 <<  9)
-#define SVGADX_DXFMT_MULTISAMPLE_4            (1 << 10)
-#define SVGADX_DXFMT_MULTISAMPLE_8            (1 << 11)
-#define SVGADX_DXFMT_MAX                      (1 << 12)
-
-/*
- * Convenience mask for any multisample capability.
- *
- * The multisample bits imply both load and render capability.
- */
-#define SVGA3D_DXFMT_MULTISAMPLE ( \
-           SVGADX_DXFMT_MULTISAMPLE_2 | \
-           SVGADX_DXFMT_MULTISAMPLE_4 | \
-           SVGADX_DXFMT_MULTISAMPLE_8 )
+#define SVGA3D_DXFMT_MULTISAMPLE              (1 <<  9)
+#define SVGA3D_DXFMT_MAX                      (1 << 10)
 
 typedef union {
    SVGA3dBool b;

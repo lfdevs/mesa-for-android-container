@@ -67,6 +67,9 @@ static void
 detect_conflicting_assignments(struct _mesa_glsl_parse_state *state,
                                exec_list *instructions);
 static void
+verify_subroutine_associated_funcs(struct _mesa_glsl_parse_state *state);
+
+static void
 remove_per_vertex_blocks(exec_list *instructions,
                          _mesa_glsl_parse_state *state, ir_variable_mode mode);
 
@@ -155,6 +158,7 @@ _mesa_ast_to_hir(exec_list *instructions, struct _mesa_glsl_parse_state *state)
    foreach_list_typed (ast_node, ast, link, & state->translation_unit)
       ast->hir(instructions, state);
 
+   verify_subroutine_associated_funcs(state);
    detect_recursion_unlinked(state, instructions);
    detect_conflicting_assignments(state, instructions);
 
@@ -312,10 +316,6 @@ apply_implicit_conversion(const glsl_type *to, ir_rvalue * &from,
 
    /* Prior to GLSL 1.20, there are no implicit conversions */
    if (!state->is_version(120, 0))
-      return false;
-
-   /* ESSL does not allow implicit conversions */
-   if (state->es_shader)
       return false;
 
    /* From page 27 (page 33 of the PDF) of the GLSL 1.50 spec:
@@ -892,7 +892,8 @@ validate_assignment(struct _mesa_glsl_parse_state *state,
    }
    if (unsized_array) {
       if (is_initializer) {
-         return rhs;
+         if (rhs->type->get_scalar_type() == lhs->type->get_scalar_type())
+            return rhs;
       } else {
          _mesa_glsl_error(&loc, state,
                           "implicitly sized arrays cannot be assigned");
@@ -1012,6 +1013,8 @@ do_assignment(exec_list *instructions, struct _mesa_glsl_parse_state *state,
          mark_whole_array_access(rhs);
          mark_whole_array_access(lhs);
       }
+   } else {
+     error_emitted = true;
    }
 
    /* Most callers of do_assignment (assign, add_assign, pre_inc/dec,
@@ -4568,41 +4571,43 @@ process_initializer(ir_variable *var, ast_declaration *decl,
       /* Never emit code to initialize a uniform.
        */
       const glsl_type *initializer_type;
+      bool error_emitted = false;
       if (!type->qualifier.flags.q.uniform) {
-         do_assignment(initializer_instructions, state,
-                       NULL,
-                       lhs, rhs,
-                       &result, true,
-                       true,
-                       type->get_location());
+         error_emitted =
+            do_assignment(initializer_instructions, state,
+                          NULL, lhs, rhs,
+                          &result, true, true,
+                          type->get_location());
          initializer_type = result->type;
       } else
          initializer_type = rhs->type;
 
-      var->constant_initializer = rhs->constant_expression_value(mem_ctx);
-      var->data.has_initializer = true;
+      if (!error_emitted) {
+         var->constant_initializer = rhs->constant_expression_value(mem_ctx);
+         var->data.has_initializer = true;
 
-      /* If the declared variable is an unsized array, it must inherrit
-       * its full type from the initializer.  A declaration such as
-       *
-       *     uniform float a[] = float[](1.0, 2.0, 3.0, 3.0);
-       *
-       * becomes
-       *
-       *     uniform float a[4] = float[](1.0, 2.0, 3.0, 3.0);
-       *
-       * The assignment generated in the if-statement (below) will also
-       * automatically handle this case for non-uniforms.
-       *
-       * If the declared variable is not an array, the types must
-       * already match exactly.  As a result, the type assignment
-       * here can be done unconditionally.  For non-uniforms the call
-       * to do_assignment can change the type of the initializer (via
-       * the implicit conversion rules).  For uniforms the initializer
-       * must be a constant expression, and the type of that expression
-       * was validated above.
-       */
-      var->type = initializer_type;
+         /* If the declared variable is an unsized array, it must inherrit
+         * its full type from the initializer.  A declaration such as
+         *
+         *     uniform float a[] = float[](1.0, 2.0, 3.0, 3.0);
+         *
+         * becomes
+         *
+         *     uniform float a[4] = float[](1.0, 2.0, 3.0, 3.0);
+         *
+         * The assignment generated in the if-statement (below) will also
+         * automatically handle this case for non-uniforms.
+         *
+         * If the declared variable is not an array, the types must
+         * already match exactly.  As a result, the type assignment
+         * here can be done unconditionally.  For non-uniforms the call
+         * to do_assignment can change the type of the initializer (via
+         * the implicit conversion rules).  For uniforms the initializer
+         * must be a constant expression, and the type of that expression
+         * was validated above.
+         */
+         var->type = initializer_type;
+      }
 
       var->data.read_only = temp;
    }
@@ -6641,7 +6646,6 @@ ast_case_statement_list::hir(exec_list *instructions,
     * if default should be chosen or not.
     */
    if (!default_case.is_empty()) {
-      struct hash_entry *entry;
       ir_factory body(instructions, state);
 
       ir_expression *cmp = NULL;
@@ -8680,6 +8684,38 @@ detect_conflicting_assignments(struct _mesa_glsl_parse_state *state,
    }
 }
 
+static void
+verify_subroutine_associated_funcs(struct _mesa_glsl_parse_state *state)
+{
+   YYLTYPE loc;
+   memset(&loc, 0, sizeof(loc));
+
+   /* Section 6.1.2 (Subroutines) of the GLSL 4.00 spec says:
+    *
+    *   "A program will fail to compile or link if any shader
+    *    or stage contains two or more functions with the same
+    *    name if the name is associated with a subroutine type."
+    */
+
+   for (int i = 0; i < state->num_subroutines; i++) {
+      unsigned definitions = 0;
+      ir_function *fn = state->subroutines[i];
+      /* Calculate number of function definitions with the same name */
+      foreach_in_list(ir_function_signature, sig, &fn->signatures) {
+         if (sig->is_defined) {
+            if (++definitions > 1) {
+               _mesa_glsl_error(&loc, state,
+                     "%s shader contains two or more function "
+                     "definitions with name `%s', which is "
+                     "associated with a subroutine type.\n",
+                     _mesa_shader_stage_to_string(state->stage),
+                     fn->name);
+               return;
+            }
+         }
+      }
+   }
+}
 
 static void
 remove_per_vertex_blocks(exec_list *instructions,

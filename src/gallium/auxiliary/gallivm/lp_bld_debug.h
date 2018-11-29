@@ -39,19 +39,21 @@
 #define GALLIVM_DEBUG_TGSI          (1 << 0)
 #define GALLIVM_DEBUG_IR            (1 << 1)
 #define GALLIVM_DEBUG_ASM           (1 << 2)
-#define GALLIVM_DEBUG_NO_OPT        (1 << 3)
-#define GALLIVM_DEBUG_PERF          (1 << 4)
-#define GALLIVM_DEBUG_NO_BRILINEAR  (1 << 5)
-#define GALLIVM_DEBUG_NO_RHO_APPROX (1 << 6)
-#define GALLIVM_DEBUG_NO_QUAD_LOD   (1 << 7)
-#define GALLIVM_DEBUG_GC            (1 << 8)
-#define GALLIVM_DEBUG_DUMP_BC       (1 << 9)
+#define GALLIVM_DEBUG_PERF          (1 << 3)
+#define GALLIVM_DEBUG_GC            (1 << 4)
+#define GALLIVM_DEBUG_DUMP_BC       (1 << 5)
 
+#define GALLIVM_PERF_NO_BRILINEAR  (1 << 0)
+#define GALLIVM_PERF_NO_RHO_APPROX (1 << 1)
+#define GALLIVM_PERF_NO_QUAD_LOD   (1 << 2)
+#define GALLIVM_PERF_NO_OPT        (1 << 3)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+
+extern unsigned gallivm_perf;
 
 #ifdef DEBUG
 extern unsigned gallivm_debug;

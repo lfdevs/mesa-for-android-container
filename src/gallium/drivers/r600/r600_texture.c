@@ -1942,7 +1942,7 @@ r600_texture_from_memobj(struct pipe_screen *screen,
 	pb_reference(&buf, memobj->buf);
 
 	rtex->resource.b.is_shared = true;
-	rtex->resource.external_usage = PIPE_HANDLE_USAGE_READ_WRITE;
+	rtex->resource.external_usage = PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE;
 
 	if (rscreen->apply_opaque_metadata)
 		rscreen->apply_opaque_metadata(rscreen, rtex, &metadata);

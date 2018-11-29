@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -322,10 +320,15 @@ emit_gmem2mem_surf(struct fd_batch *batch,
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	enum pipe_format format = psurf->format;
+
+	if (!rsc->valid)
+		return;
+
 	if (stencil) {
 		rsc = rsc->stencil;
 		format = rsc->base.format;
 	}
+
 	struct fd_resource_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset = fd_resource_offset(rsc, psurf->u.tex.level,
 			psurf->u.tex.first_layer);

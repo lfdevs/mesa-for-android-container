@@ -404,11 +404,7 @@ one_time_init( struct gl_context *ctx )
 
 #if defined(DEBUG)
       if (MESA_VERBOSE != 0) {
-         _mesa_debug(ctx, "Mesa " PACKAGE_VERSION " DEBUG build"
-#ifdef MESA_GIT_SHA1
-                     " (" MESA_GIT_SHA1 ")"
-#endif
-                     "\n");
+         _mesa_debug(ctx, "Mesa " PACKAGE_VERSION " DEBUG build" MESA_GIT_SHA1 "\n");
       }
 #endif
    }
@@ -637,6 +633,7 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
    consts->Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits = MAX_TEXTURE_IMAGE_UNITS;
    consts->MaxGeometryOutputVertices = MAX_GEOMETRY_OUTPUT_VERTICES;
    consts->MaxGeometryTotalOutputComponents = MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS;
+   consts->MaxGeometryShaderInvocations = MAX_GEOMETRY_SHADER_INVOCATIONS;
 
 #ifdef DEBUG
    consts->GenerateTemporaryNames = true;
@@ -1701,7 +1698,10 @@ _mesa_make_current( struct gl_context *newCtx,
       _mesa_flush(curCtx);
    }
 
-   /* We used to call _glapi_check_multithread() here.  Now do it in drivers */
+   /* Call this periodically to detect when the user has begun using
+    * GL rendering from multiple threads.
+    */
+   _glapi_check_multithread();
 
    if (!newCtx) {
       _glapi_set_dispatch(NULL);  /* none current */

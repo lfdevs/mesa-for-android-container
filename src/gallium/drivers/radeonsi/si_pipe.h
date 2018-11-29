@@ -48,9 +48,15 @@
 #define SI_BASE_VERTEX_UNKNOWN		INT_MIN
 #define SI_RESTART_INDEX_UNKNOWN	INT_MIN
 #define SI_NUM_SMOOTH_AA_SAMPLES	8
+#define SI_MAX_POINT_SIZE		2048
 #define SI_GS_PER_ES			128
 /* Alignment for optimal CP DMA performance. */
 #define SI_CPDMA_ALIGNMENT		32
+
+/* Tunables for compute-based clear_buffer and copy_buffer: */
+#define SI_COMPUTE_CLEAR_DW_PER_THREAD	4
+#define SI_COMPUTE_COPY_DW_PER_THREAD	4
+#define SI_COMPUTE_DST_CACHE_POLICY	L2_STREAM
 
 /* Pipeline & streamout query controls. */
 #define SI_CONTEXT_START_PIPELINE_STATS	(1 << 0)
@@ -102,6 +108,7 @@
 #define SI_RESOURCE_FLAG_UNMAPPABLE	(PIPE_RESOURCE_FLAG_DRV_PRIV << 4)
 #define SI_RESOURCE_FLAG_READ_ONLY	(PIPE_RESOURCE_FLAG_DRV_PRIV << 5)
 #define SI_RESOURCE_FLAG_32BIT		(PIPE_RESOURCE_FLAG_DRV_PRIV << 6)
+#define SI_RESOURCE_FLAG_SO_FILLED_SIZE	(PIPE_RESOURCE_FLAG_DRV_PRIV << 7)
 
 /* Debug flags. */
 enum {
@@ -165,10 +172,25 @@ enum {
 	DBG_TEST_VMFAULT_CP,
 	DBG_TEST_VMFAULT_SDMA,
 	DBG_TEST_VMFAULT_SHADER,
+	DBG_TEST_DMA_PERF,
+	DBG_TEST_GDS,
 };
 
 #define DBG_ALL_SHADERS		(((1 << (DBG_CS + 1)) - 1))
 #define DBG(name)		(1ull << DBG_##name)
+
+enum si_cache_policy {
+	L2_BYPASS,
+	L2_STREAM, /* same as SLC=1 */
+	L2_LRU,    /* same as SLC=0 */
+};
+
+enum si_coherency {
+	SI_COHERENCY_NONE, /* no cache flushes needed */
+	SI_COHERENCY_SHADER,
+	SI_COHERENCY_CB_META,
+	SI_COHERENCY_CP,
+};
 
 struct si_compute;
 struct hash_table;
@@ -403,6 +425,9 @@ struct si_screen {
 	uint64_t			debug_flags;
 	char				renderer_string[183];
 
+	unsigned			pa_sc_raster_config;
+	unsigned			pa_sc_raster_config_1;
+	unsigned			se_tile_repeat;
 	unsigned			gs_table_depth;
 	unsigned			tess_offchip_block_dw_size;
 	unsigned			tess_offchip_ring_size;
@@ -592,10 +617,18 @@ struct si_framebuffer {
 	ubyte				color_is_int8;
 	ubyte				color_is_int10;
 	ubyte				dirty_cbufs;
+	ubyte				dcc_overwrite_combiner_watermark;
 	bool				dirty_zsbuf;
 	bool				any_dst_linear;
 	bool				CB_has_shader_readable_metadata;
 	bool				DB_has_shader_readable_metadata;
+};
+
+enum si_quant_mode {
+	/* This is the list we want to support. */
+	SI_QUANT_MODE_16_8_FIXED_POINT_1_256TH,
+	SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH,
+	SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH,
 };
 
 struct si_signed_scissor {
@@ -603,6 +636,7 @@ struct si_signed_scissor {
 	int miny;
 	int maxx;
 	int maxy;
+	enum si_quant_mode quant_mode;
 };
 
 struct si_scissors {
@@ -760,6 +794,8 @@ struct si_context {
 	void				*vs_blit_color;
 	void				*vs_blit_color_layered;
 	void				*vs_blit_texcoord;
+	void				*cs_clear_buffer;
+	void				*cs_copy_buffer;
 	struct si_screen		*screen;
 	struct pipe_debug_callback	debug;
 	struct ac_llvm_compiler		compiler; /* only non-threaded compilation */
@@ -803,6 +839,9 @@ struct si_context {
 	struct si_scissors		scissors;
 	struct si_streamout		streamout;
 	struct si_viewports		viewports;
+	unsigned			num_window_rectangles;
+	bool				window_rectangles_include;
+	struct pipe_scissor_state	window_rectangles[4];
 
 	/* Precomputed states. */
 	struct si_pm4_state		*init_config;
@@ -821,6 +860,7 @@ struct si_context {
 	/* shader information */
 	struct si_vertex_elements	*vertex_elements;
 	unsigned			sprite_coord_enable;
+	unsigned			cs_max_waves_per_sh;
 	bool				flatshade;
 	bool				do_update_shaders;
 
@@ -850,6 +890,7 @@ struct si_context {
 	unsigned			border_color_count;
 	unsigned			num_vs_blit_sgprs;
 	uint32_t			vs_blit_sh_data[SI_VS_BLIT_SGPRS_POS_TEXCOORD];
+	uint32_t			cs_user_data[4];
 
 	/* Vertex and index buffers. */
 	bool				vertex_buffers_dirty;
@@ -955,11 +996,14 @@ struct si_context {
 	/* MSAA sample locations.
 	 * The first index is the sample index.
 	 * The second index is the coordinate: X, Y. */
-	float			sample_locations_1x[1][2];
-	float			sample_locations_2x[2][2];
-	float			sample_locations_4x[4][2];
-	float			sample_locations_8x[8][2];
-	float			sample_locations_16x[16][2];
+	struct {
+		float			x1[1][2];
+		float			x2[2][2];
+		float			x4[4][2];
+		float			x8[8][2];
+		float			x16[16][2];
+	} sample_positions;
+	struct pipe_resource *sample_pos_buffer;
 
 	/* Misc stats. */
 	unsigned			num_draw_calls;
@@ -981,6 +1025,7 @@ struct si_context {
 	unsigned			num_resident_handles;
 	uint64_t			num_alloc_tex_transfer_bytes;
 	unsigned			last_tex_ps_draw_ratio; /* for query */
+	unsigned			context_roll_counter;
 
 	/* Queries. */
 	/* Maintain the list of active queries for pausing between IBs. */
@@ -1022,9 +1067,6 @@ struct si_context {
 			 struct pipe_resource *src,
 			 unsigned src_level,
 			 const struct pipe_box *src_box);
-
-	void (*dma_clear_buffer)(struct si_context *sctx, struct pipe_resource *dst,
-				 uint64_t offset, uint64_t size, unsigned value);
 
 	struct si_tracked_regs			tracked_regs;
 };
@@ -1092,6 +1134,17 @@ void vi_dcc_clear_level(struct si_context *sctx,
 			unsigned level, unsigned clear_value);
 void si_init_clear_functions(struct si_context *sctx);
 
+/* si_compute_blit.c */
+unsigned si_get_flush_flags(struct si_context *sctx, enum si_coherency coher,
+			    enum si_cache_policy cache_policy);
+void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
+		     uint64_t offset, uint64_t size, uint32_t *clear_value,
+		     uint32_t clear_value_size, enum si_coherency coher);
+void si_copy_buffer(struct si_context *sctx,
+		    struct pipe_resource *dst, struct pipe_resource *src,
+		    uint64_t dst_offset, uint64_t src_offset, unsigned size);
+void si_init_compute_blit_functions(struct si_context *sctx);
+
 /* si_cp_dma.c */
 #define SI_CPDMA_SKIP_CHECK_CS_SPACE	(1 << 0) /* don't call need_cs_space */
 #define SI_CPDMA_SKIP_SYNC_AFTER	(1 << 1) /* don't wait for DMA after the copy */
@@ -1104,24 +1157,20 @@ void si_init_clear_functions(struct si_context *sctx);
 			   SI_CPDMA_SKIP_GFX_SYNC | \
 			   SI_CPDMA_SKIP_BO_LIST_UPDATE)
 
-enum si_coherency {
-	SI_COHERENCY_NONE, /* no cache flushes needed */
-	SI_COHERENCY_SHADER,
-	SI_COHERENCY_CB_META,
-};
-
 void si_cp_dma_wait_for_idle(struct si_context *sctx);
-void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
-		     uint64_t offset, uint64_t size, unsigned value,
-		     enum si_coherency coher);
-void si_copy_buffer(struct si_context *sctx,
-		    struct pipe_resource *dst, struct pipe_resource *src,
-		    uint64_t dst_offset, uint64_t src_offset, unsigned size,
-		    unsigned user_flags);
+void si_cp_dma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
+			    uint64_t offset, uint64_t size, unsigned value,
+			    enum si_coherency coher,
+			    enum si_cache_policy cache_policy);
+void si_cp_dma_copy_buffer(struct si_context *sctx,
+			   struct pipe_resource *dst, struct pipe_resource *src,
+			   uint64_t dst_offset, uint64_t src_offset, unsigned size,
+			   unsigned user_flags, enum si_coherency coher,
+			   enum si_cache_policy cache_policy);
 void cik_prefetch_TC_L2_async(struct si_context *sctx, struct pipe_resource *buf,
 			      uint64_t offset, unsigned size);
 void cik_emit_prefetch_L2(struct si_context *sctx, bool vertex_stage_only);
-void si_init_cp_dma_functions(struct si_context *sctx);
+void si_test_gds(struct si_context *sctx);
 
 /* si_debug.c */
 void si_save_cs(struct radeon_winsys *ws, struct radeon_cmdbuf *cs,
@@ -1141,6 +1190,10 @@ bool si_replace_shader(unsigned num, struct ac_shader_binary *binary);
 void si_init_dma_functions(struct si_context *sctx);
 
 /* si_dma_cs.c */
+void si_dma_emit_timestamp(struct si_context *sctx, struct r600_resource *dst,
+			   uint64_t offset);
+void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
+			  uint64_t offset, uint64_t size, unsigned clear_value);
 void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 		       struct r600_resource *dst, struct r600_resource *src);
 void si_flush_dma_cs(struct si_context *ctx, unsigned flags,
@@ -1149,21 +1202,20 @@ void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst
 			    uint64_t offset, uint64_t size, unsigned value);
 
 /* si_fence.c */
-void si_gfx_write_event_eop(struct si_context *ctx,
-			    unsigned event, unsigned event_flags,
-			    unsigned data_sel,
-			    struct r600_resource *buf, uint64_t va,
-			    uint32_t new_fence, unsigned query_type);
-unsigned si_gfx_write_fence_dwords(struct si_screen *screen);
-void si_gfx_wait_fence(struct si_context *ctx,
-		       uint64_t va, uint32_t ref, uint32_t mask);
+void si_cp_release_mem(struct si_context *ctx,
+		       unsigned event, unsigned event_flags,
+		       unsigned dst_sel, unsigned int_sel, unsigned data_sel,
+		       struct r600_resource *buf, uint64_t va,
+		       uint32_t new_fence, unsigned query_type);
+unsigned si_cp_write_fence_dwords(struct si_screen *screen);
+void si_cp_wait_mem(struct si_context *ctx,
+		      uint64_t va, uint32_t ref, uint32_t mask, unsigned flags);
 void si_init_fence_functions(struct si_context *ctx);
 void si_init_screen_fence_functions(struct si_screen *screen);
 struct pipe_fence_handle *si_create_fence(struct pipe_context *ctx,
 					  struct tc_unflushed_batch_token *tc_token);
 
 /* si_get.c */
-const char *si_get_family_name(const struct si_screen *sscreen);
 void si_init_screen_get_functions(struct si_screen *sscreen);
 
 /* si_gfx_cs.c */
@@ -1196,8 +1248,20 @@ void si_init_query_functions(struct si_context *sctx);
 void si_suspend_queries(struct si_context *sctx);
 void si_resume_queries(struct si_context *sctx);
 
+/* si_shaderlib_tgsi.c */
+void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
+			unsigned num_layers);
+void *si_create_fixed_func_tcs(struct si_context *sctx);
+void *si_create_dma_compute_shader(struct pipe_context *ctx,
+				   unsigned num_dwords_per_thread,
+				   bool dst_stream_cache_policy, bool is_copy);
+void *si_create_query_result_cs(struct si_context *sctx);
+
 /* si_test_dma.c */
 void si_test_dma(struct si_screen *sscreen);
+
+/* si_test_clearbuffer.c */
+void si_test_dma_perf(struct si_screen *sscreen);
 
 /* si_uvd.c */
 struct pipe_video_codec *si_uvd_create_decoder(struct pipe_context *context,

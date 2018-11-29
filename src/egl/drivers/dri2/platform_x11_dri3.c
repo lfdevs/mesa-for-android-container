@@ -423,10 +423,6 @@ dri3_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *draw)
 {
    struct dri3_egl_surface *dri3_surf = dri3_egl_surface(draw);
 
-   /* No-op for a pixmap or pbuffer surface */
-   if (draw->Type == EGL_PIXMAP_BIT || draw->Type == EGL_PBUFFER_BIT)
-      return EGL_FALSE;
-
    return loader_dri3_swap_buffers_msc(&dri3_surf->loader_drawable,
                                        0, 0, 0, 0,
                                        draw->SwapBehavior == EGL_BUFFER_PRESERVED) != -1;

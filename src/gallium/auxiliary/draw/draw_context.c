@@ -275,7 +275,7 @@ draw_update_clip_flags(struct draw_context *draw)
    draw->guard_band_xy = (!draw->driver.bypass_clip_xy &&
                           draw->driver.guard_band_xy);
    draw->clip_z = (!draw->driver.bypass_clip_z &&
-                   draw->rasterizer && draw->rasterizer->depth_clip) &&
+                   draw->rasterizer && draw->rasterizer->depth_clip_near) &&
                   !window_space;
    draw->clip_user = draw->rasterizer &&
                      draw->rasterizer->clip_plane_enable != 0 &&

@@ -56,11 +56,20 @@ struct svga_screen;
  * Texture format flags.
  */
 #define TF_GEN_MIPS         (1 << 8)  /* supports hw generate mipmap */
+#define TF_000X             (1 << 9)  /* swizzle <0, 0, 0, X> */
+#define TF_XXXX             (1 << 10) /* swizzle <X, X, X, X> */
+#define TF_XXX1             (1 << 11) /* swizzle <X, X, X, 1> */
+#define TF_XXXY             (1 << 12) /* swizzle <X, X, X, Y> */
 
 void
 svga_translate_vertex_format_vgpu10(enum pipe_format format,
                                     SVGA3dSurfaceFormat *svga_format,
                                     unsigned *vf_flags);
+
+void
+svga_translate_texture_buffer_view_format(enum pipe_format format,
+                                          SVGA3dSurfaceFormat *svga_format,
+                                          unsigned *tf_flags);
 
 enum SVGA3dSurfaceFormat
 svga_translate_format(const struct svga_screen *ss,
@@ -130,5 +139,13 @@ svga_is_format_supported(struct pipe_screen *screen,
                          unsigned storage_sample_count,
                          unsigned bindings);
 
+
+boolean
+svga_is_dx_format_supported(struct pipe_screen *screen,
+                            enum pipe_format format,
+                            enum pipe_texture_target target,
+                            unsigned sample_count,
+                            unsigned storage_sample_count,
+                            unsigned bindings);
 
 #endif /* SVGA_FORMAT_H_ */

@@ -154,7 +154,7 @@ int virgl_encode_rasterizer_state(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, handle);
 
    tmp = VIRGL_OBJ_RS_S0_FLATSHADE(state->flatshade) |
-      VIRGL_OBJ_RS_S0_DEPTH_CLIP(state->depth_clip) |
+      VIRGL_OBJ_RS_S0_DEPTH_CLIP(state->depth_clip_near) |
       VIRGL_OBJ_RS_S0_CLIP_HALFZ(state->clip_halfz) |
       VIRGL_OBJ_RS_S0_RASTERIZER_DISCARD(state->rasterizer_discard) |
       VIRGL_OBJ_RS_S0_FLATSHADE_FIRST(state->flatshade_first) |
@@ -261,7 +261,8 @@ int virgl_encode_shader_state(struct virgl_context *ctx,
 
       bret = tgsi_dump_str(tokens, TGSI_DUMP_FLOAT_AS_HEX, str, str_total_size);
       if (bret == false) {
-         fprintf(stderr, "Failed to translate shader in available space - trying again\n");
+         if (virgl_debug & VIRGL_DEBUG_VERBOSE)
+            debug_printf("Failed to translate shader in available space - trying again\n");
          old_size = str_total_size;
          str_total_size = 65536 * ++retry_size;
          str = REALLOC(str, old_size, str_total_size);
@@ -272,6 +273,9 @@ int virgl_encode_shader_state(struct virgl_context *ctx,
 
    if (bret == false)
       return -1;
+
+   if (virgl_debug & VIRGL_DEBUG_TGSI)
+      debug_printf("TGSI:\n---8<---\n%s\n---8<---\n", str);
 
    shader_len = strlen(str) + 1;
 
@@ -880,7 +884,7 @@ int virgl_encoder_set_so_targets(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, append_bitmask);
    for (i = 0; i < num_targets; i++) {
       struct virgl_so_target *tg = virgl_so_target(targets[i]);
-      virgl_encoder_write_dword(ctx->cbuf, tg->handle);
+      virgl_encoder_write_dword(ctx->cbuf, tg ? tg->handle : 0);
    }
    return 0;
 }
@@ -954,6 +958,29 @@ int virgl_encode_set_shader_buffers(struct virgl_context *ctx,
    return 0;
 }
 
+int virgl_encode_set_hw_atomic_buffers(struct virgl_context *ctx,
+                                       unsigned start_slot, unsigned count,
+                                       const struct pipe_shader_buffer *buffers)
+{
+   int i;
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_SET_ATOMIC_BUFFERS, 0, VIRGL_SET_ATOMIC_BUFFER_SIZE(count)));
+
+   virgl_encoder_write_dword(ctx->cbuf, start_slot);
+   for (i = 0; i < count; i++) {
+      if (buffers) {
+         struct virgl_resource *res = virgl_resource(buffers[i].buffer);
+         virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_offset);
+         virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_size);
+         virgl_encoder_write_res(ctx, res);
+      } else {
+         virgl_encoder_write_dword(ctx->cbuf, 0);
+         virgl_encoder_write_dword(ctx->cbuf, 0);
+         virgl_encoder_write_dword(ctx->cbuf, 0);
+      }
+   }
+   return 0;
+}
+
 int virgl_encode_set_shader_images(struct virgl_context *ctx,
                                    enum pipe_shader_type shader,
                                    unsigned start_slot, unsigned count,
@@ -1007,5 +1034,13 @@ int virgl_encode_launch_grid(struct virgl_context *ctx,
    } else
       virgl_encoder_write_dword(ctx->cbuf, 0);
    virgl_encoder_write_dword(ctx->cbuf, grid_info->indirect_offset);
+   return 0;
+}
+
+int virgl_encode_texture_barrier(struct virgl_context *ctx,
+                                 unsigned flags)
+{
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_TEXTURE_BARRIER, 0, 1));
+   virgl_encoder_write_dword(ctx->cbuf, flags);
    return 0;
 }

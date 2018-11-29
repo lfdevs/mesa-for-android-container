@@ -75,14 +75,12 @@ extern "C" {
  */
 struct _egl_driver
 {
-   const char *Name;  /**< name of this driver */
-
    _EGLAPI API;  /**< EGL API dispatch table */
 };
 
 
-extern _EGLDriver*
-_eglBuiltInDriver(void);
+extern void
+_eglInitDriver(_EGLDriver *driver);
 
 
 extern _EGLDriver *

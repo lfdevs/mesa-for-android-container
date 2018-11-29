@@ -24,10 +24,6 @@ SUBDIRS =
 
 EXTRA_DIST = SConscript meson.build
 
-if HAVE_XF86VIDMODE
-EXTRA_DEFINES_XF86VIDMODE = -DXF86VIDMODE
-endif
-
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/include/GL/internal \
@@ -38,7 +34,6 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/mapi/glapi \
 	-I$(top_srcdir)/src/mapi/glapi \
 	$(VISIBILITY_CFLAGS) \
-	$(EXTRA_DEFINES_XF86VIDMODE) \
 	-D_REENTRANT \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 	$(DEFINES) \

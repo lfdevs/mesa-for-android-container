@@ -28,7 +28,7 @@ vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py \
 			  vulkan/anv_extensions.py \
 			  $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_entrypoints_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) \
 		--outdir $(builddir)/vulkan
 vulkan/anv_entrypoints.h: vulkan/anv_entrypoints.c
@@ -37,7 +37,7 @@ vulkan/anv_extensions.c: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--out-c $@
 
@@ -45,7 +45,7 @@ vulkan/anv_extensions.h: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--out-h $@
 
@@ -65,12 +65,12 @@ EXTRA_DIST += \
 
 vulkan/dev_icd.json : vulkan/anv_extensions.py vulkan/anv_icd.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${abs_top_builddir}/${LIB_DIR}" --out $@
 
 vulkan/intel_icd.@host_cpu@.json : vulkan/anv_extensions.py vulkan/anv_icd.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${libdir}" --out $@
 
 if HAVE_INTEL_VULKAN

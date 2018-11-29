@@ -256,7 +256,8 @@ struct _mesa_glsl_parse_state {
 
    bool has_int64() const
    {
-      return ARB_gpu_shader_int64_enable;
+      return ARB_gpu_shader_int64_enable ||
+             AMD_gpu_shader_int64_enable;
    }
 
    bool has_420pack() const
@@ -493,6 +494,7 @@ struct _mesa_glsl_parse_state {
       unsigned MaxVertexOutputComponents;
       unsigned MaxGeometryInputComponents;
       unsigned MaxGeometryOutputComponents;
+      unsigned MaxGeometryShaderInvocations;
       unsigned MaxFragmentInputComponents;
       unsigned MaxGeometryTextureImageUnits;
       unsigned MaxGeometryOutputVertices;
@@ -758,6 +760,8 @@ struct _mesa_glsl_parse_state {
     */
    bool AMD_conservative_depth_enable;
    bool AMD_conservative_depth_warn;
+   bool AMD_gpu_shader_int64_enable;
+   bool AMD_gpu_shader_int64_warn;
    bool AMD_shader_stencil_export_enable;
    bool AMD_shader_stencil_export_warn;
    bool AMD_shader_trinary_minmax_enable;
@@ -808,10 +812,18 @@ struct _mesa_glsl_parse_state {
    bool EXT_texture_cube_map_array_warn;
    bool INTEL_conservative_rasterization_enable;
    bool INTEL_conservative_rasterization_warn;
+   bool INTEL_fragment_shader_ordering_enable;
+   bool INTEL_fragment_shader_ordering_warn;
+   bool INTEL_shader_atomic_float_minmax_enable;
+   bool INTEL_shader_atomic_float_minmax_warn;
    bool MESA_shader_integer_functions_enable;
    bool MESA_shader_integer_functions_warn;
+   bool NV_fragment_shader_interlock_enable;
+   bool NV_fragment_shader_interlock_warn;
    bool NV_image_formats_enable;
    bool NV_image_formats_warn;
+   bool NV_shader_atomic_float_enable;
+   bool NV_shader_atomic_float_warn;
    /*@}*/
 
    /** Extensions supported by the OpenGL implementation. */
@@ -856,6 +868,7 @@ struct _mesa_glsl_parse_state {
 
    bool allow_extension_directive_midshader;
    bool allow_builtin_variable_redeclaration;
+   bool allow_layout_qualifier_on_function_parameter;
 
    /**
     * Known subroutine type declarations.

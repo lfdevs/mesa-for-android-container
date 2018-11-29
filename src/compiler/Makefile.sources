@@ -216,6 +216,7 @@ NIR_FILES = \
 	nir/nir_format_convert.h \
 	nir/nir_from_ssa.c \
 	nir/nir_gather_info.c \
+	nir/nir_gather_xfb_info.c \
 	nir/nir_gs_count_vertices.c \
 	nir/nir_inline_functions.c \
 	nir/nir_instr_set.c \
@@ -274,6 +275,8 @@ NIR_FILES = \
 	nir/nir_opt_cse.c \
 	nir/nir_opt_dce.c \
 	nir/nir_opt_dead_cf.c \
+	nir/nir_opt_dead_write_vars.c \
+	nir/nir_opt_find_array_copies.c \
 	nir/nir_opt_gcm.c \
 	nir/nir_opt_global_to_local.c \
 	nir/nir_opt_if.c \
@@ -300,12 +303,14 @@ NIR_FILES = \
 	nir/nir_serialize.h \
 	nir/nir_split_per_member_structs.c \
 	nir/nir_split_var_copies.c \
+	nir/nir_split_vars.c \
 	nir/nir_sweep.c \
 	nir/nir_to_lcssa.c \
 	nir/nir_validate.c \
 	nir/nir_vla.h \
 	nir/nir_worklist.c \
-	nir/nir_worklist.h
+	nir/nir_worklist.h \
+	nir/nir_xfb_info.h
 
 SPIRV_GENERATED_FILES = \
 	spirv/spirv_info.c \

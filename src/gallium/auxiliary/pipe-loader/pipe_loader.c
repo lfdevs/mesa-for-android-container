@@ -108,7 +108,7 @@ pipe_loader_load_options(struct pipe_loader_device *dev)
 
    driParseOptionInfo(&dev->option_info, xml_options);
    driParseConfigFiles(&dev->option_cache, &dev->option_info, 0,
-                       dev->driver_name);
+                       dev->driver_name, NULL);
 }
 
 char *

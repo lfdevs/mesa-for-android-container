@@ -68,13 +68,16 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
                             struct nine_context *context )
 {
     uint16_t samplers_shadow;
-    uint32_t samplers_ps1_types;
+    uint16_t samplers_ps1_types;
     uint16_t projected;
     uint64_t key;
     BOOL res;
 
+    samplers_shadow = (uint16_t)((context->samplers_shadow & NINE_PS_SAMPLERS_MASK) >> NINE_SAMPLER_PS(0));
+    key = samplers_shadow & ps->sampler_mask;
+
     if (unlikely(ps->byte_code.version < 0x20)) {
-        /* no depth textures, but variable targets */
+        /* variable targets */
         uint32_t m = ps->sampler_mask;
         samplers_ps1_types = 0;
         while (m) {
@@ -82,10 +85,9 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
             m &= ~(1 << s);
             samplers_ps1_types |= (context->texture[s].enabled ? context->texture[s].pstype : 1) << (s * 2);
         }
-        key = samplers_ps1_types;
-    } else {
-        samplers_shadow = (uint16_t)((context->samplers_shadow & NINE_PS_SAMPLERS_MASK) >> NINE_SAMPLER_PS(0));
-        key = samplers_shadow & ps->sampler_mask;
+        /* Note: For ps 1.X, only samplers 0 1 2 and 3 are available (except 1.4 where 4 and 5 are available).
+         * Thus there is no overflow of samplers_ps1_types. */
+        key |= samplers_ps1_types << 16;
     }
 
     if (ps->byte_code.version < 0x30) {

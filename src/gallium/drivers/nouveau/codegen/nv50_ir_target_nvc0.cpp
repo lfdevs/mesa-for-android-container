@@ -129,6 +129,7 @@ static const struct opProperties _initProps[] =
    { OP_LG2,    0x1, 0x1, 0x0, 0x8, 0x0, 0x0 },
    { OP_RCP,    0x1, 0x1, 0x0, 0x8, 0x0, 0x0 },
    { OP_RSQ,    0x1, 0x1, 0x0, 0x8, 0x0, 0x0 },
+   { OP_SQRT,   0x1, 0x1, 0x0, 0x8, 0x0, 0x0 },
    { OP_DFDX,   0x1, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_DFDY,   0x1, 0x0, 0x0, 0x0, 0x0, 0x0 },
    { OP_CALL,   0x0, 0x0, 0x0, 0x0, 0x1, 0x0 },
@@ -161,6 +162,7 @@ static const struct opProperties _initPropsGM107[] = {
    { OP_SUSTP,   0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
    { OP_SUREDB,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
    { OP_SUREDP,  0x0, 0x0, 0x0, 0x0, 0x0, 0x4 },
+   { OP_XMAD,    0x0, 0x0, 0x0, 0x0, 0x6, 0x2 },
 };
 
 void TargetNVC0::initProps(const struct opProperties *props, int size)
@@ -356,6 +358,18 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
    if ((i->op == OP_SHL || i->op == OP_SHR) && typeSizeof(i->sType) == 8 &&
        sf == FILE_MEMORY_CONST)
       return false;
+   // constant buffer loads can't be used with cbcc xmads
+   if (i->op == OP_XMAD && sf == FILE_MEMORY_CONST &&
+       (i->subOp & NV50_IR_SUBOP_XMAD_CMODE_MASK) == NV50_IR_SUBOP_XMAD_CBCC)
+      return false;
+   // constant buffer loads for the third operand can't be used with psl/mrg xmads
+   if (i->op == OP_XMAD && sf == FILE_MEMORY_CONST && s == 2 &&
+       (i->subOp & (NV50_IR_SUBOP_XMAD_PSL | NV50_IR_SUBOP_XMAD_MRG)))
+      return false;
+   // for xmads, immediates can't have the h1 flag set
+   if (i->op == OP_XMAD && sf == FILE_IMMEDIATE && s < 2 &&
+       i->subOp & NV50_IR_SUBOP_XMAD_H1(s))
+      return false;
 
    for (int k = 0; i->srcExists(k); ++k) {
       if (i->src(k).getFile() == FILE_IMMEDIATE) {
@@ -391,6 +405,9 @@ TargetNVC0::insnCanLoad(const Instruction *i, int s,
          case TYPE_U32:
             // with u32, 0xfffff counts as 0xffffffff as well
             if (reg.data.s32 > 0x7ffff || reg.data.s32 < -0x80000)
+               return false;
+            // XMADs can only have 16-bit immediates
+            if (i->op == OP_XMAD && reg.data.u32 > 0xffff)
                return false;
             break;
          case TYPE_U8:
@@ -448,6 +465,8 @@ TargetNVC0::isOpSupported(operation op, DataType ty) const
       return false;
    if (op == OP_POW || op == OP_SQRT || op == OP_DIV || op == OP_MOD)
       return false;
+   if (op == OP_XMAD)
+      return false;
    return true;
 }
 
@@ -467,6 +486,7 @@ TargetNVC0::isModSupported(const Instruction *insn, int s, Modifier mod) const
       case OP_XOR:
       case OP_POPCNT:
       case OP_BFIND:
+      case OP_XMAD:
          break;
       case OP_SET:
          if (insn->sType != TYPE_F32)

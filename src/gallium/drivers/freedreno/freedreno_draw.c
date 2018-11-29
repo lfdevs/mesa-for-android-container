@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -36,6 +34,7 @@
 
 #include "freedreno_draw.h"
 #include "freedreno_context.h"
+#include "freedreno_fence.h"
 #include "freedreno_state.h"
 #include "freedreno_resource.h"
 #include "freedreno_query_acc.h"
@@ -62,7 +61,7 @@ static void
 fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
 	unsigned i, prims, buffers = 0, restore_buffers = 0;
@@ -100,6 +99,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		return;
 	}
 
+	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
+
 	/* Upload a user index buffer. */
 	struct pipe_resource *indexbuf = NULL;
 	unsigned index_offset = 0;
@@ -136,20 +137,37 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 	mtx_lock(&ctx->screen->lock);
 
-	if (fd_depth_enabled(ctx)) {
-		if (fd_resource(pfb->zsbuf->texture)->valid)
-			restore_buffers |= FD_BUFFER_DEPTH;
-		buffers |= FD_BUFFER_DEPTH;
-		resource_written(batch, pfb->zsbuf->texture);
-		batch->gmem_reason |= FD_GMEM_DEPTH_ENABLED;
+	if (ctx->dirty & (FD_DIRTY_FRAMEBUFFER | FD_DIRTY_ZSA)) {
+		if (fd_depth_enabled(ctx)) {
+			if (fd_resource(pfb->zsbuf->texture)->valid) {
+				restore_buffers |= FD_BUFFER_DEPTH;
+			} else {
+				batch->invalidated |= FD_BUFFER_DEPTH;
+			}
+			buffers |= FD_BUFFER_DEPTH;
+			resource_written(batch, pfb->zsbuf->texture);
+			batch->gmem_reason |= FD_GMEM_DEPTH_ENABLED;
+		}
+
+		if (fd_stencil_enabled(ctx)) {
+			if (fd_resource(pfb->zsbuf->texture)->valid) {
+				restore_buffers |= FD_BUFFER_STENCIL;
+			} else {
+				batch->invalidated |= FD_BUFFER_STENCIL;
+			}
+			buffers |= FD_BUFFER_STENCIL;
+			resource_written(batch, pfb->zsbuf->texture);
+			batch->gmem_reason |= FD_GMEM_STENCIL_ENABLED;
+		}
 	}
 
-	if (fd_stencil_enabled(ctx)) {
-		if (fd_resource(pfb->zsbuf->texture)->valid)
-			restore_buffers |= FD_BUFFER_STENCIL;
-		buffers |= FD_BUFFER_STENCIL;
-		resource_written(batch, pfb->zsbuf->texture);
-		batch->gmem_reason |= FD_GMEM_STENCIL_ENABLED;
+	if (ctx->dirty & FD_DIRTY_FRAMEBUFFER) {
+		for (i = 0; i < pfb->nr_cbufs; i++) {
+			if (!pfb->cbufs[i])
+				continue;
+
+			resource_written(batch, pfb->cbufs[i]->texture);
+		}
 	}
 
 	if (fd_logicop_enabled(ctx))
@@ -163,10 +181,11 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 		surf = pfb->cbufs[i]->texture;
 
-		resource_written(batch, surf);
-
-		if (fd_resource(surf)->valid)
+		if (fd_resource(surf)->valid) {
 			restore_buffers |= PIPE_CLEAR_COLOR0 << i;
+		} else {
+			batch->invalidated |= PIPE_CLEAR_COLOR0 << i;
+		}
 
 		buffers |= PIPE_CLEAR_COLOR0 << i;
 
@@ -177,27 +196,38 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* Mark SSBOs as being written.. we don't actually know which ones are
 	 * read vs written, so just assume the worst
 	 */
-	foreach_bit(i, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].enabled_mask)
-		resource_written(batch, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].sb[i].buffer);
-
-	foreach_bit(i, ctx->shaderimg[PIPE_SHADER_FRAGMENT].enabled_mask) {
-		struct pipe_image_view *img =
-			&ctx->shaderimg[PIPE_SHADER_FRAGMENT].si[i];
-		if (img->access & PIPE_IMAGE_ACCESS_WRITE)
-			resource_written(batch, img->resource);
-		else
-			resource_read(batch, img->resource);
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_SSBO) {
+		foreach_bit(i, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].enabled_mask)
+				resource_written(batch, ctx->shaderbuf[PIPE_SHADER_FRAGMENT].sb[i].buffer);
 	}
 
-	foreach_bit(i, ctx->constbuf[PIPE_SHADER_VERTEX].enabled_mask)
-		resource_read(batch, ctx->constbuf[PIPE_SHADER_VERTEX].cb[i].buffer);
-	foreach_bit(i, ctx->constbuf[PIPE_SHADER_FRAGMENT].enabled_mask)
-		resource_read(batch, ctx->constbuf[PIPE_SHADER_FRAGMENT].cb[i].buffer);
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_IMAGE) {
+		foreach_bit(i, ctx->shaderimg[PIPE_SHADER_FRAGMENT].enabled_mask) {
+			struct pipe_image_view *img =
+					&ctx->shaderimg[PIPE_SHADER_FRAGMENT].si[i];
+			if (img->access & PIPE_IMAGE_ACCESS_WRITE)
+				resource_written(batch, img->resource);
+			else
+				resource_read(batch, img->resource);
+		}
+	}
+
+	if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_CONST) {
+		foreach_bit(i, ctx->constbuf[PIPE_SHADER_VERTEX].enabled_mask)
+			resource_read(batch, ctx->constbuf[PIPE_SHADER_VERTEX].cb[i].buffer);
+	}
+
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_CONST) {
+		foreach_bit(i, ctx->constbuf[PIPE_SHADER_FRAGMENT].enabled_mask)
+			resource_read(batch, ctx->constbuf[PIPE_SHADER_FRAGMENT].cb[i].buffer);
+	}
 
 	/* Mark VBOs as being read */
-	foreach_bit(i, ctx->vtx.vertexbuf.enabled_mask) {
-		assert(!ctx->vtx.vertexbuf.vb[i].is_user_buffer);
-		resource_read(batch, ctx->vtx.vertexbuf.vb[i].buffer.resource);
+	if (ctx->dirty & FD_DIRTY_VTXBUF) {
+		foreach_bit(i, ctx->vtx.vertexbuf.enabled_mask) {
+			assert(!ctx->vtx.vertexbuf.vb[i].is_user_buffer);
+			resource_read(batch, ctx->vtx.vertexbuf.vb[i].buffer.resource);
+		}
 	}
 
 	/* Mark index buffer as being read */
@@ -208,15 +238,22 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		resource_read(batch, info->indirect->buffer);
 
 	/* Mark textures as being read */
-	foreach_bit(i, ctx->tex[PIPE_SHADER_VERTEX].valid_textures)
-		resource_read(batch, ctx->tex[PIPE_SHADER_VERTEX].textures[i]->texture);
-	foreach_bit(i, ctx->tex[PIPE_SHADER_FRAGMENT].valid_textures)
-		resource_read(batch, ctx->tex[PIPE_SHADER_FRAGMENT].textures[i]->texture);
+	if (ctx->dirty_shader[PIPE_SHADER_VERTEX] & FD_DIRTY_SHADER_TEX) {
+		foreach_bit(i, ctx->tex[PIPE_SHADER_VERTEX].valid_textures)
+			resource_read(batch, ctx->tex[PIPE_SHADER_VERTEX].textures[i]->texture);
+	}
+
+	if (ctx->dirty_shader[PIPE_SHADER_FRAGMENT] & FD_DIRTY_SHADER_TEX) {
+		foreach_bit(i, ctx->tex[PIPE_SHADER_FRAGMENT].valid_textures)
+			resource_read(batch, ctx->tex[PIPE_SHADER_FRAGMENT].textures[i]->texture);
+	}
 
 	/* Mark streamout buffers as being written.. */
-	for (i = 0; i < ctx->streamout.num_targets; i++)
-		if (ctx->streamout.targets[i])
-			resource_written(batch, ctx->streamout.targets[i]->buffer);
+	if (ctx->dirty & FD_DIRTY_STREAMOUT) {
+		for (i = 0; i < ctx->streamout.num_targets; i++)
+			if (ctx->streamout.targets[i])
+				resource_written(batch, ctx->streamout.targets[i]->buffer);
+	}
 
 	resource_written(batch, batch->query_buf);
 
@@ -242,7 +279,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	ctx->stats.prims_generated += prims;
 
 	/* any buffers that haven't been cleared yet, we need to restore: */
-	batch->restore |= restore_buffers & (FD_BUFFER_ALL & ~batch->cleared);
+	batch->restore |= restore_buffers & (FD_BUFFER_ALL & ~batch->invalidated);
 	/* and any buffers used, need to be resolved: */
 	batch->resolve |= buffers;
 
@@ -297,7 +334,8 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 			.half_pixel_center = 1,
 			.bottom_edge_rule = 1,
 			.flatshade = 1,
-			.depth_clip = 1,
+			.depth_clip_near = 1,
+			.depth_clip_far = 1,
 		};
 		ctx->clear_rs_state = pctx->create_rasterizer_state(pctx, &tmpl);
 	}
@@ -335,20 +373,13 @@ fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
 	fd_blitter_pipe_end(ctx);
 }
 
-/* TODO figure out how to make better use of existing state mechanism
- * for clear (and possibly gmem->mem / mem->gmem) so we can (a) keep
- * track of what state really actually changes, and (b) reduce the code
- * in the a2xx/a3xx parts.
- */
-
 static void
 fd_clear(struct pipe_context *pctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
 	unsigned cleared_buffers;
 	int i;
 
@@ -356,10 +387,20 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	if (!fd_render_condition_check(pctx))
 		return;
 
+	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
+
 	if (ctx->in_blit) {
 		fd_batch_reset(batch);
 		fd_context_all_dirty(ctx);
 	}
+
+	/* pctx->clear() is only for full-surface clears, so scissor is
+	 * equivalent to having GL_SCISSOR_TEST disabled:
+	 */
+	batch->max_scissor.minx = 0;
+	batch->max_scissor.miny = 0;
+	batch->max_scissor.maxx = pfb->width;
+	batch->max_scissor.maxy = pfb->height;
 
 	/* for bookkeeping about which buffers have been cleared (and thus
 	 * can fully or partially skip mem2gmem) we need to ignore buffers
@@ -369,19 +410,9 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	 * the depth buffer, etc)
 	 */
 	cleared_buffers = buffers & (FD_BUFFER_ALL & ~batch->restore);
+	batch->cleared |= cleared_buffers;
+	batch->invalidated |= cleared_buffers;
 
-	/* do we have full-screen scissor? */
-	if (!memcmp(scissor, &ctx->disabled_scissor, sizeof(*scissor))) {
-		batch->cleared |= cleared_buffers;
-	} else {
-		batch->partial_cleared |= cleared_buffers;
-		if (cleared_buffers & PIPE_CLEAR_COLOR)
-			batch->cleared_scissor.color = *scissor;
-		if (cleared_buffers & PIPE_CLEAR_DEPTH)
-			batch->cleared_scissor.depth = *scissor;
-		if (cleared_buffers & PIPE_CLEAR_STENCIL)
-			batch->cleared_scissor.stencil = *scissor;
-	}
 	batch->resolve |= buffers;
 	batch->needs_flush = true;
 
@@ -428,6 +459,8 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	if (fallback) {
 		fd_blitter_clear(pctx, buffers, color, depth, stencil);
 	}
+
+	fd_batch_check_size(batch);
 }
 
 static void
@@ -456,9 +489,10 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	struct fd_batch *batch, *save_batch = NULL;
 	unsigned i;
 
-	batch = fd_batch_create(ctx, true);
+	batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
 	fd_batch_reference(&save_batch, ctx->batch);
 	fd_batch_reference(&ctx->batch, batch);
+	fd_context_all_dirty(ctx);
 
 	mtx_lock(&ctx->screen->lock);
 
@@ -466,7 +500,7 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	 * read vs written, so just assume the worst
 	 */
 	foreach_bit(i, ctx->shaderbuf[PIPE_SHADER_COMPUTE].enabled_mask)
-		resource_read(batch, ctx->shaderbuf[PIPE_SHADER_COMPUTE].sb[i].buffer);
+		resource_written(batch, ctx->shaderbuf[PIPE_SHADER_COMPUTE].sb[i].buffer);
 
 	foreach_bit(i, ctx->shaderimg[PIPE_SHADER_COMPUTE].enabled_mask) {
 		struct pipe_image_view *img =
@@ -502,7 +536,9 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	fd_batch_flush(batch, false, false);
 
 	fd_batch_reference(&ctx->batch, save_batch);
+	fd_context_all_dirty(ctx);
 	fd_batch_reference(&save_batch, NULL);
+	fd_batch_reference(&batch, NULL);
 }
 
 void

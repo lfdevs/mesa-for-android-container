@@ -8,17 +8,17 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- /home/robclark/src/freedreno/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-01-31 18:26:32)
-- /home/robclark/src/freedreno/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-01-08 14:56:24)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a2xx.xml          (  36805 bytes, from 2018-05-20 19:03:35)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_common.xml (  13634 bytes, from 2018-06-10 17:35:36)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/adreno_pm4.xml    (  41584 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-01-10 16:21:40)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-01-08 14:56:24)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a5xx.xml          ( 147158 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx.xml          (  88437 bytes, from 2018-06-18 14:25:44)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-06-10 17:37:04)
-- /home/robclark/src/freedreno/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-01-08 14:56:24)
+- /home/robclark/src/envytools/rnndb/adreno.xml               (    501 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/freedreno_copyright.xml  (   1572 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a2xx.xml          (  37936 bytes, from 2018-10-08 11:43:51)
+- /home/robclark/src/envytools/rnndb/adreno/adreno_common.xml (  14201 bytes, from 2018-10-08 11:43:51)
+- /home/robclark/src/envytools/rnndb/adreno/adreno_pm4.xml    (  42864 bytes, from 2018-10-08 21:57:22)
+- /home/robclark/src/envytools/rnndb/adreno/a3xx.xml          (  83840 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a4xx.xml          ( 112086 bytes, from 2018-07-03 19:37:13)
+- /home/robclark/src/envytools/rnndb/adreno/a5xx.xml          ( 147240 bytes, from 2018-10-08 21:57:22)
+- /home/robclark/src/envytools/rnndb/adreno/a6xx.xml          ( 140514 bytes, from 2018-10-08 21:57:35)
+- /home/robclark/src/envytools/rnndb/adreno/a6xx_gmu.xml      (  10431 bytes, from 2018-09-14 13:03:07)
+- /home/robclark/src/envytools/rnndb/adreno/ocmem.xml         (   1773 bytes, from 2018-07-03 19:37:13)
 
 Copyright (C) 2013-2018 by the following authors:
 - Rob Clark <robdclark@gmail.com> (robclark)
@@ -106,6 +106,13 @@ enum pc_di_src_sel {
 	DI_SRC_SEL_IMMEDIATE = 1,
 	DI_SRC_SEL_AUTO_INDEX = 2,
 	DI_SRC_SEL_RESERVED = 3,
+};
+
+enum pc_di_face_cull_sel {
+	DI_FACE_CULL_NONE = 0,
+	DI_FACE_CULL_FETCH = 1,
+	DI_FACE_BACKFACE_CULL = 2,
+	DI_FACE_FRONTFACE_CULL = 3,
 };
 
 enum pc_di_index_size {
@@ -222,6 +229,9 @@ enum adreno_pm4_type3_packets {
 	CP_MEM_TO_MEM = 115,
 	CP_BLIT = 44,
 	CP_REG_TEST = 57,
+	CP_SET_MODE = 99,
+	CP_LOAD_STATE6_GEOM = 50,
+	CP_LOAD_STATE6_FRAG = 52,
 	IN_IB_PREFETCH_END = 23,
 	IN_SUBBLK_PREFETCH = 31,
 	IN_INSTR_PREFETCH = 32,
@@ -231,6 +241,10 @@ enum adreno_pm4_type3_packets {
 	IN_INCR_UPDT_CONST = 86,
 	IN_INCR_UPDT_INSTR = 87,
 	PKT4 = 4,
+	CP_UNK_A6XX_14 = 20,
+	CP_UNK_A6XX_36 = 54,
+	CP_UNK_A6XX_55 = 85,
+	CP_REG_WRITE = 109,
 };
 
 enum adreno_state_block {
@@ -285,6 +299,33 @@ enum a4xx_state_src {
 	SS4_INDIRECT = 2,
 };
 
+enum a6xx_state_block {
+	SB6_VS_TEX = 0,
+	SB6_HS_TEX = 1,
+	SB6_DS_TEX = 2,
+	SB6_GS_TEX = 3,
+	SB6_FS_TEX = 4,
+	SB6_CS_TEX = 5,
+	SB6_VS_SHADER = 8,
+	SB6_HS_SHADER = 9,
+	SB6_DS_SHADER = 10,
+	SB6_GS_SHADER = 11,
+	SB6_FS_SHADER = 12,
+	SB6_CS_SHADER = 13,
+	SB6_SSBO = 14,
+	SB6_CS_SSBO = 15,
+};
+
+enum a6xx_state_type {
+	ST6_SHADER = 0,
+	ST6_CONSTANTS = 1,
+};
+
+enum a6xx_state_src {
+	SS6_DIRECT = 0,
+	SS6_INDIRECT = 2,
+};
+
 enum a4xx_index_size {
 	INDEX4_SIZE_8_BIT = 0,
 	INDEX4_SIZE_16_BIT = 1,
@@ -314,6 +355,23 @@ enum cp_blit_cmd {
 	BLIT_OP_FILL = 0,
 	BLIT_OP_COPY = 1,
 	BLIT_OP_SCALE = 3,
+};
+
+enum a6xx_render_mode {
+	RM6_BYPASS = 1,
+	RM6_BINNING = 2,
+	RM6_GMEM = 4,
+	RM6_BLIT2D = 5,
+	RM6_RESOLVE = 6,
+	RM6_BLIT2DSCALE = 12,
+};
+
+enum pseudo_reg {
+	SMMU_INFO = 0,
+	NON_SECURE_SAVE_ADDR = 1,
+	SECURE_SAVE_ADDR = 2,
+	NON_PRIV_SAVE_ADDR = 3,
+	COUNTER = 4,
 };
 
 #define REG_CP_LOAD_STATE_0					0x00000000
@@ -404,6 +462,55 @@ static inline uint32_t CP_LOAD_STATE4_1_EXT_SRC_ADDR(uint32_t val)
 static inline uint32_t CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI(uint32_t val)
 {
 	return ((val) << CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI__SHIFT) & CP_LOAD_STATE4_2_EXT_SRC_ADDR_HI__MASK;
+}
+
+#define REG_CP_LOAD_STATE6_0					0x00000000
+#define CP_LOAD_STATE6_0_DST_OFF__MASK				0x00003fff
+#define CP_LOAD_STATE6_0_DST_OFF__SHIFT				0
+static inline uint32_t CP_LOAD_STATE6_0_DST_OFF(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE6_0_DST_OFF__SHIFT) & CP_LOAD_STATE6_0_DST_OFF__MASK;
+}
+#define CP_LOAD_STATE6_0_STATE_TYPE__MASK			0x00004000
+#define CP_LOAD_STATE6_0_STATE_TYPE__SHIFT			14
+static inline uint32_t CP_LOAD_STATE6_0_STATE_TYPE(enum a6xx_state_type val)
+{
+	return ((val) << CP_LOAD_STATE6_0_STATE_TYPE__SHIFT) & CP_LOAD_STATE6_0_STATE_TYPE__MASK;
+}
+#define CP_LOAD_STATE6_0_STATE_SRC__MASK			0x00030000
+#define CP_LOAD_STATE6_0_STATE_SRC__SHIFT			16
+static inline uint32_t CP_LOAD_STATE6_0_STATE_SRC(enum a6xx_state_src val)
+{
+	return ((val) << CP_LOAD_STATE6_0_STATE_SRC__SHIFT) & CP_LOAD_STATE6_0_STATE_SRC__MASK;
+}
+#define CP_LOAD_STATE6_0_STATE_BLOCK__MASK			0x003c0000
+#define CP_LOAD_STATE6_0_STATE_BLOCK__SHIFT			18
+static inline uint32_t CP_LOAD_STATE6_0_STATE_BLOCK(enum a6xx_state_block val)
+{
+	return ((val) << CP_LOAD_STATE6_0_STATE_BLOCK__SHIFT) & CP_LOAD_STATE6_0_STATE_BLOCK__MASK;
+}
+#define CP_LOAD_STATE6_0_NUM_UNIT__MASK				0xffc00000
+#define CP_LOAD_STATE6_0_NUM_UNIT__SHIFT			22
+static inline uint32_t CP_LOAD_STATE6_0_NUM_UNIT(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE6_0_NUM_UNIT__SHIFT) & CP_LOAD_STATE6_0_NUM_UNIT__MASK;
+}
+
+#define REG_CP_LOAD_STATE6_1					0x00000001
+#define CP_LOAD_STATE6_1_EXT_SRC_ADDR__MASK			0xfffffffc
+#define CP_LOAD_STATE6_1_EXT_SRC_ADDR__SHIFT			2
+static inline uint32_t CP_LOAD_STATE6_1_EXT_SRC_ADDR(uint32_t val)
+{
+	assert(!(val & 0x3));
+	return ((val >> 2) << CP_LOAD_STATE6_1_EXT_SRC_ADDR__SHIFT) & CP_LOAD_STATE6_1_EXT_SRC_ADDR__MASK;
+}
+
+#define REG_CP_LOAD_STATE6_2					0x00000002
+#define CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI__MASK			0xffffffff
+#define CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI__SHIFT			0
+static inline uint32_t CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(uint32_t val)
+{
+	return ((val) << CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI__SHIFT) & CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI__MASK;
 }
 
 #define REG_CP_DRAW_INDX_0					0x00000000
@@ -750,6 +857,12 @@ static inline uint32_t CP_SET_DRAW_STATE__0_COUNT(uint32_t val)
 #define CP_SET_DRAW_STATE__0_DISABLE				0x00020000
 #define CP_SET_DRAW_STATE__0_DISABLE_ALL_GROUPS			0x00040000
 #define CP_SET_DRAW_STATE__0_LOAD_IMMED				0x00080000
+#define CP_SET_DRAW_STATE__0_ENABLE_MASK__MASK			0x00f00000
+#define CP_SET_DRAW_STATE__0_ENABLE_MASK__SHIFT			20
+static inline uint32_t CP_SET_DRAW_STATE__0_ENABLE_MASK(uint32_t val)
+{
+	return ((val) << CP_SET_DRAW_STATE__0_ENABLE_MASK__SHIFT) & CP_SET_DRAW_STATE__0_ENABLE_MASK__MASK;
+}
 #define CP_SET_DRAW_STATE__0_GROUP_ID__MASK			0x1f000000
 #define CP_SET_DRAW_STATE__0_GROUP_ID__SHIFT			24
 static inline uint32_t CP_SET_DRAW_STATE__0_GROUP_ID(uint32_t val)
@@ -865,6 +978,22 @@ static inline uint32_t CP_SET_BIN_DATA5_4_BIN_SIZE_ADDRESS_HI(uint32_t val)
 	return ((val) << CP_SET_BIN_DATA5_4_BIN_SIZE_ADDRESS_HI__SHIFT) & CP_SET_BIN_DATA5_4_BIN_SIZE_ADDRESS_HI__MASK;
 }
 
+#define REG_CP_SET_BIN_DATA5_5					0x00000005
+#define CP_SET_BIN_DATA5_5_BIN_DATA_ADDR2_LO__MASK		0xffffffff
+#define CP_SET_BIN_DATA5_5_BIN_DATA_ADDR2_LO__SHIFT		0
+static inline uint32_t CP_SET_BIN_DATA5_5_BIN_DATA_ADDR2_LO(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_DATA5_5_BIN_DATA_ADDR2_LO__SHIFT) & CP_SET_BIN_DATA5_5_BIN_DATA_ADDR2_LO__MASK;
+}
+
+#define REG_CP_SET_BIN_DATA5_6					0x00000006
+#define CP_SET_BIN_DATA5_6_BIN_DATA_ADDR2_LO__MASK		0xffffffff
+#define CP_SET_BIN_DATA5_6_BIN_DATA_ADDR2_LO__SHIFT		0
+static inline uint32_t CP_SET_BIN_DATA5_6_BIN_DATA_ADDR2_LO(uint32_t val)
+{
+	return ((val) << CP_SET_BIN_DATA5_6_BIN_DATA_ADDR2_LO__SHIFT) & CP_SET_BIN_DATA5_6_BIN_DATA_ADDR2_LO__MASK;
+}
+
 #define REG_CP_REG_TO_MEM_0					0x00000000
 #define CP_REG_TO_MEM_0_REG__MASK				0x0000ffff
 #define CP_REG_TO_MEM_0_REG__SHIFT				0
@@ -887,6 +1016,46 @@ static inline uint32_t CP_REG_TO_MEM_0_CNT(uint32_t val)
 static inline uint32_t CP_REG_TO_MEM_1_DEST(uint32_t val)
 {
 	return ((val) << CP_REG_TO_MEM_1_DEST__SHIFT) & CP_REG_TO_MEM_1_DEST__MASK;
+}
+
+#define REG_CP_REG_TO_MEM_2					0x00000002
+#define CP_REG_TO_MEM_2_DEST_HI__MASK				0xffffffff
+#define CP_REG_TO_MEM_2_DEST_HI__SHIFT				0
+static inline uint32_t CP_REG_TO_MEM_2_DEST_HI(uint32_t val)
+{
+	return ((val) << CP_REG_TO_MEM_2_DEST_HI__SHIFT) & CP_REG_TO_MEM_2_DEST_HI__MASK;
+}
+
+#define REG_CP_MEM_TO_REG_0					0x00000000
+#define CP_MEM_TO_REG_0_REG__MASK				0x0000ffff
+#define CP_MEM_TO_REG_0_REG__SHIFT				0
+static inline uint32_t CP_MEM_TO_REG_0_REG(uint32_t val)
+{
+	return ((val) << CP_MEM_TO_REG_0_REG__SHIFT) & CP_MEM_TO_REG_0_REG__MASK;
+}
+#define CP_MEM_TO_REG_0_CNT__MASK				0x3ff80000
+#define CP_MEM_TO_REG_0_CNT__SHIFT				19
+static inline uint32_t CP_MEM_TO_REG_0_CNT(uint32_t val)
+{
+	return ((val) << CP_MEM_TO_REG_0_CNT__SHIFT) & CP_MEM_TO_REG_0_CNT__MASK;
+}
+#define CP_MEM_TO_REG_0_64B					0x40000000
+#define CP_MEM_TO_REG_0_ACCUMULATE				0x80000000
+
+#define REG_CP_MEM_TO_REG_1					0x00000001
+#define CP_MEM_TO_REG_1_SRC__MASK				0xffffffff
+#define CP_MEM_TO_REG_1_SRC__SHIFT				0
+static inline uint32_t CP_MEM_TO_REG_1_SRC(uint32_t val)
+{
+	return ((val) << CP_MEM_TO_REG_1_SRC__SHIFT) & CP_MEM_TO_REG_1_SRC__MASK;
+}
+
+#define REG_CP_MEM_TO_REG_2					0x00000002
+#define CP_MEM_TO_REG_2_SRC_HI__MASK				0xffffffff
+#define CP_MEM_TO_REG_2_SRC_HI__SHIFT				0
+static inline uint32_t CP_MEM_TO_REG_2_SRC_HI(uint32_t val)
+{
+	return ((val) << CP_MEM_TO_REG_2_SRC_HI__SHIFT) & CP_MEM_TO_REG_2_SRC_HI__MASK;
 }
 
 #define REG_CP_MEM_TO_MEM_0					0x00000000
@@ -1339,6 +1508,62 @@ static inline uint32_t A5XX_CP_EXEC_CS_INDIRECT_3_LOCALSIZEZ(uint32_t val)
 {
 	return ((val) << A5XX_CP_EXEC_CS_INDIRECT_3_LOCALSIZEZ__SHIFT) & A5XX_CP_EXEC_CS_INDIRECT_3_LOCALSIZEZ__MASK;
 }
+
+#define REG_A2XX_CP_SET_MARKER_0				0x00000000
+#define A2XX_CP_SET_MARKER_0_MARKER__MASK			0x0000000f
+#define A2XX_CP_SET_MARKER_0_MARKER__SHIFT			0
+static inline uint32_t A2XX_CP_SET_MARKER_0_MARKER(uint32_t val)
+{
+	return ((val) << A2XX_CP_SET_MARKER_0_MARKER__SHIFT) & A2XX_CP_SET_MARKER_0_MARKER__MASK;
+}
+#define A2XX_CP_SET_MARKER_0_MODE__MASK				0x0000000f
+#define A2XX_CP_SET_MARKER_0_MODE__SHIFT			0
+static inline uint32_t A2XX_CP_SET_MARKER_0_MODE(enum a6xx_render_mode val)
+{
+	return ((val) << A2XX_CP_SET_MARKER_0_MODE__SHIFT) & A2XX_CP_SET_MARKER_0_MODE__MASK;
+}
+#define A2XX_CP_SET_MARKER_0_IFPC				0x00000100
+
+static inline uint32_t REG_A2XX_CP_SET_PSEUDO_REG_(uint32_t i0) { return 0x00000000 + 0x3*i0; }
+
+static inline uint32_t REG_A2XX_CP_SET_PSEUDO_REG__0(uint32_t i0) { return 0x00000000 + 0x3*i0; }
+#define A2XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG__MASK		0x00000007
+#define A2XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG__SHIFT		0
+static inline uint32_t A2XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG(enum pseudo_reg val)
+{
+	return ((val) << A2XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG__SHIFT) & A2XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG__MASK;
+}
+
+static inline uint32_t REG_A2XX_CP_SET_PSEUDO_REG__1(uint32_t i0) { return 0x00000001 + 0x3*i0; }
+#define A2XX_CP_SET_PSEUDO_REG__1_LO__MASK			0xffffffff
+#define A2XX_CP_SET_PSEUDO_REG__1_LO__SHIFT			0
+static inline uint32_t A2XX_CP_SET_PSEUDO_REG__1_LO(uint32_t val)
+{
+	return ((val) << A2XX_CP_SET_PSEUDO_REG__1_LO__SHIFT) & A2XX_CP_SET_PSEUDO_REG__1_LO__MASK;
+}
+
+static inline uint32_t REG_A2XX_CP_SET_PSEUDO_REG__2(uint32_t i0) { return 0x00000002 + 0x3*i0; }
+#define A2XX_CP_SET_PSEUDO_REG__2_HI__MASK			0xffffffff
+#define A2XX_CP_SET_PSEUDO_REG__2_HI__SHIFT			0
+static inline uint32_t A2XX_CP_SET_PSEUDO_REG__2_HI(uint32_t val)
+{
+	return ((val) << A2XX_CP_SET_PSEUDO_REG__2_HI__SHIFT) & A2XX_CP_SET_PSEUDO_REG__2_HI__MASK;
+}
+
+#define REG_A2XX_CP_REG_TEST_0					0x00000000
+#define A2XX_CP_REG_TEST_0_REG__MASK				0x00000fff
+#define A2XX_CP_REG_TEST_0_REG__SHIFT				0
+static inline uint32_t A2XX_CP_REG_TEST_0_REG(uint32_t val)
+{
+	return ((val) << A2XX_CP_REG_TEST_0_REG__SHIFT) & A2XX_CP_REG_TEST_0_REG__MASK;
+}
+#define A2XX_CP_REG_TEST_0_BIT__MASK				0x01f00000
+#define A2XX_CP_REG_TEST_0_BIT__SHIFT				20
+static inline uint32_t A2XX_CP_REG_TEST_0_BIT(uint32_t val)
+{
+	return ((val) << A2XX_CP_REG_TEST_0_BIT__SHIFT) & A2XX_CP_REG_TEST_0_BIT__MASK;
+}
+#define A2XX_CP_REG_TEST_0_UNK25				0x02000000
 
 
 #endif /* ADRENO_PM4_XML */

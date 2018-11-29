@@ -95,12 +95,13 @@ struct ir3_register {
 		IR3_REG_ARRAY  = 0x8000,
 
 	} flags;
+
+	/* normal registers:
+	 * the component is in the low two bits of the reg #, so
+	 * rN.x becomes: (N << 2) | x
+	 */
+	int   num;
 	union {
-		/* normal registers:
-		 * the component is in the low two bits of the reg #, so
-		 * rN.x becomes: (N << 2) | x
-		 */
-		int   num;
 		/* immediate: */
 		int32_t  iim_val;
 		uint32_t uim_val;
@@ -445,14 +446,12 @@ struct ir3 {
 #endif
 };
 
-typedef struct nir_register nir_register;
-
 struct ir3_array {
 	struct list_head node;
 	unsigned length;
 	unsigned id;
 
-	nir_register *r;
+	struct nir_register *r;
 
 	/* To avoid array write's from getting DCE'd, keep track of the
 	 * most recent write.  Any array access depends on the most
@@ -470,13 +469,11 @@ struct ir3_array {
 
 struct ir3_array * ir3_lookup_array(struct ir3 *ir, unsigned id);
 
-typedef struct nir_block nir_block;
-
 struct ir3_block {
 	struct list_head node;
 	struct ir3 *shader;
 
-	const nir_block *nblock;
+	const struct nir_block *nblock;
 
 	struct list_head instr_list;  /* list of ir3_instruction */
 
@@ -1004,12 +1001,12 @@ void ir3_sched_add_deps(struct ir3 *ir);
 int ir3_sched(struct ir3 *ir);
 
 /* register assignment: */
-struct ir3_ra_reg_set * ir3_ra_alloc_reg_set(void *memctx);
+struct ir3_ra_reg_set * ir3_ra_alloc_reg_set(struct ir3_compiler *compiler);
 int ir3_ra(struct ir3 *ir3, enum shader_t type,
 		bool frag_coord, bool frag_face);
 
 /* legalize: */
-void ir3_legalize(struct ir3 *ir, bool *has_samp, bool *has_ssbo, int *max_bary);
+void ir3_legalize(struct ir3 *ir, int *num_samp, bool *has_ssbo, int *max_bary);
 
 /* ************************************************************************* */
 /* instruction helpers */

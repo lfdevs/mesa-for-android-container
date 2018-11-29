@@ -26,7 +26,6 @@
  **************************************************************************/
 
 #include <assert.h>
-#include <fcntl.h>
 
 #include "pipe/p_screen.h"
 #include "pipe-loader/pipe_loader.h"
@@ -42,16 +41,12 @@ struct vl_screen *
 vl_drm_screen_create(int fd)
 {
    struct vl_screen *vscreen;
-   int new_fd;
 
    vscreen = CALLOC_STRUCT(vl_screen);
    if (!vscreen)
       return NULL;
 
-   if (fd < 0 || (new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3)) < 0)
-      goto free_screen;
-
-   if (pipe_loader_drm_probe_fd(&vscreen->dev, new_fd))
+   if (pipe_loader_drm_probe_fd(&vscreen->dev, fd))
       vscreen->pscreen = pipe_loader_create_screen(vscreen->dev);
 
    if (!vscreen->pscreen)
@@ -68,10 +63,7 @@ vl_drm_screen_create(int fd)
 release_pipe:
    if (vscreen->dev)
       pipe_loader_release(&vscreen->dev, 1);
-   else
-      close(new_fd);
 
-free_screen:
    FREE(vscreen);
    return NULL;
 }
@@ -83,5 +75,6 @@ vl_drm_screen_destroy(struct vl_screen *vscreen)
 
    vscreen->pscreen->destroy(vscreen->pscreen);
    pipe_loader_release(&vscreen->dev, 1);
+   /* CHECK: The VAAPI loader/user preserves ownership of the original fd */
    FREE(vscreen);
 }

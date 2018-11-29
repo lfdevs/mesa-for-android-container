@@ -5,7 +5,6 @@ env = env.Clone()
 env.PkgUseModules('DRM')
 
 env.Append(CPPDEFINES = [
-    'HAVE_STDINT_H',
     '-D_FILE_OFFSET_BITS=64',
 ])
 

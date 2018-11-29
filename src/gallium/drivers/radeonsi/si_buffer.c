@@ -521,18 +521,11 @@ static void si_buffer_do_flush_region(struct pipe_context *ctx,
 	struct r600_resource *rbuffer = r600_resource(transfer->resource);
 
 	if (stransfer->staging) {
-		struct pipe_resource *dst, *src;
-		unsigned soffset;
-		struct pipe_box dma_box;
-
-		dst = transfer->resource;
-		src = &stransfer->staging->b.b;
-		soffset = stransfer->offset + box->x % SI_MAP_BUFFER_ALIGNMENT;
-
-		u_box_1d(soffset, box->width, &dma_box);
-
 		/* Copy the staging buffer into the original one. */
-		ctx->resource_copy_region(ctx, dst, 0, box->x, 0, 0, src, 0, &dma_box);
+		si_copy_buffer((struct si_context*)ctx, transfer->resource,
+			       &stransfer->staging->b.b, box->x,
+			       stransfer->offset + box->x % SI_MAP_BUFFER_ALIGNMENT,
+			       box->width);
 	}
 
 	util_range_add(&rbuffer->valid_buffer_range, box->x,

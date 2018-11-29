@@ -679,6 +679,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
          break;
 
       case SHADER_OPCODE_UNTYPED_ATOMIC:
+      case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
       case SHADER_OPCODE_UNTYPED_SURFACE_READ:
       case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
       case SHADER_OPCODE_TYPED_ATOMIC:
@@ -720,6 +721,7 @@ fs_visitor::try_constant_propagate(fs_inst *inst, acp_entry *entry)
       case SHADER_OPCODE_TG4_LOGICAL:
       case SHADER_OPCODE_TG4_OFFSET_LOGICAL:
       case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
+      case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
       case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
       case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:
       case SHADER_OPCODE_TYPED_ATOMIC_LOGICAL:

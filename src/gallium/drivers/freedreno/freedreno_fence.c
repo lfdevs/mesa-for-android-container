@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -132,9 +130,13 @@ void fd_fence_server_sync(struct pipe_context *pctx,
 		struct pipe_fence_handle *fence)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 
 	fence_flush(fence);
+
+	/* if not an external fence, then nothing more to do without preemption: */
+	if (fence->fence_fd == -1)
+		return;
 
 	if (sync_accumulate("freedreno", &batch->in_fence_fd, fence->fence_fd)) {
 		/* error */

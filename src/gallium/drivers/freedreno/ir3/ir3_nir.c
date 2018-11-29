@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2015 Rob Clark <robclark@freedesktop.org>
  *
@@ -94,6 +92,7 @@ ir3_optimize_loop(nir_shader *s)
 
 		OPT_V(s, nir_lower_vars_to_ssa);
 		progress |= OPT(s, nir_opt_copy_prop_vars);
+		progress |= OPT(s, nir_opt_dead_write_vars);
 		progress |= OPT(s, nir_lower_alu_to_scalar);
 		progress |= OPT(s, nir_lower_phis_to_scalar);
 
@@ -255,6 +254,7 @@ ir3_nir_scan_driver_consts(nir_shader *shader,
 				case nir_intrinsic_image_deref_atomic_exchange:
 				case nir_intrinsic_image_deref_atomic_comp_swap:
 				case nir_intrinsic_image_deref_store:
+				case nir_intrinsic_image_deref_size:
 					idx = nir_intrinsic_get_var(intr, 0)->data.driver_location;
 					if (layout->image_dims.mask & (1 << idx))
 						break;

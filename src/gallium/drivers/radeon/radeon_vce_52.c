@@ -38,8 +38,6 @@
 #include "radeon_video.h"
 #include "radeon_vce.h"
 
-static const unsigned profiles[7] = { 66, 77, 88, 100, 110, 122, 244 };
-
 static void get_rate_control_param(struct rvce_encoder *enc, struct pipe_h264_enc_picture_desc *pic)
 {
 	enc->enc_pic.rc.rc_method = pic->rate_ctrl.rate_ctrl_method;
@@ -172,8 +170,7 @@ static void create(struct rvce_encoder *enc)
 
 	RVCE_BEGIN(0x01000001); // create cmd
 	RVCE_CS(enc->enc_pic.ec.enc_use_circular_buffer);
-	RVCE_CS(profiles[enc->base.profile -
-		PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE]); // encProfile
+	RVCE_CS(u_get_h264_profile_idc(enc->base.profile)); // encProfile
 	RVCE_CS(enc->base.level); // encLevel
 	RVCE_CS(enc->enc_pic.ec.enc_pic_struct_restriction);
 	RVCE_CS(enc->base.width); // encImageWidth

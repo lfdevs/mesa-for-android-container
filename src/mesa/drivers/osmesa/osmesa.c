@@ -1019,12 +1019,6 @@ OSMesaMakeCurrent( OSMesaContext osmesa, void *buffer, GLenum type,
 
    osmesa_update_state( &osmesa->mesa, 0 );
 
-   /* Call this periodically to detect when the user has begun using
-    * GL rendering from multiple threads.
-    */
-   _glapi_check_multithread();
-
-
    /* Create a front/left color buffer which wraps the user-provided buffer.
     * There is no back color buffer.
     * If the user tries to use a 8, 16 or 32-bit/channel buffer that

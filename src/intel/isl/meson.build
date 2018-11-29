@@ -66,7 +66,7 @@ isl_format_layout_c = custom_target(
   'isl_format_layout.c',
   input : ['gen_format_layout.py', 'isl_format_layout.csv'],
   output : 'isl_format_layout.c',
-  command : [prog_python2, '@INPUT0@', '--csv', '@INPUT1@', '--out', '@OUTPUT@'],
+  command : [prog_python, '@INPUT0@', '--csv', '@INPUT1@', '--out', '@OUTPUT@'],
 )
 
 libisl_files = files(

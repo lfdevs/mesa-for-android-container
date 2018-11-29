@@ -87,7 +87,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    struct brw_bo *bo;
 
    uint32_t cpp;
-   mem_copy_fn mem_copy = NULL;
+   mem_copy_fn_type copy_type;
 
    /* This fastpath is restricted to specific renderbuffer types:
     * a 2D BGRA, RGBA, L8 or A8 texture. It could be generalized to support
@@ -125,7 +125,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    if (rb->_BaseFormat == GL_RGB)
       return false;
 
-   if (!intel_get_memcpy(rb->Format, format, type, &mem_copy, &cpp))
+   if (!intel_get_memcpy_type(rb->Format, format, type, &copy_type, &cpp))
       return false;
 
    if (!irb->mt ||
@@ -203,10 +203,10 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
       yoffset, yoffset + height,
       pixels,
       map + irb->mt->offset,
-      dst_pitch, irb->mt->surf.row_pitch,
+      dst_pitch, irb->mt->surf.row_pitch_B,
       brw->has_swizzling,
       irb->mt->surf.tiling,
-      mem_copy
+      copy_type
    );
 
    brw_bo_unmap(bo);

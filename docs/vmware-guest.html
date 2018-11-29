@@ -44,6 +44,23 @@ Otherwise, OpenGL 2.1 is supported.
 </p>
 
 <p>
+With the Fall 2018 Workstation 15 / Fusion 11 releases, additional
+features are supported in the driver:
+<ul>
+<li>Multisample antialiasing (2x, 4x)
+<li>GL_ARB/AMD_draw_buffers_blend
+<li>GL_ARB_sample_shading
+<li>GL_ARB_texture_cube_map_array
+<li>GL_ARB_texture_gather
+<li>GL_ARB_texture_query_lod
+<li>GL_EXT/OES_draw_buffers_indexed
+</ul>
+<p>
+This requires version 2.15.0 or later of the vmwgfx kernel module and
+the VM must be configured for hardware version 16 or later.
+</p>
+
+<p>
 OpenGL 3.3 support can be disabled by setting the environment variable
 SVGA_VGPU10=0.
 You will then have OpenGL 2.1 support.
@@ -126,7 +143,7 @@ Begin by saving your current directory location:
 <ul>
 <li>Mesa/Gallium master branch. This code is used to build libGL, and the direct rendering svga driver for libGL, vmwgfx_dri.so, and the X acceleration library libxatracker.so.x.x.x. 
   <pre>
-  git clone git://anongit.freedesktop.org/git/mesa/mesa
+  git clone https://gitlab.freedesktop.org/mesa/mesa.git
   </pre>
 <li>VMware Linux guest kernel module. Note that this repo contains the complete DRM and TTM code. The vmware-specific driver is really only the files prefixed with vmwgfx. 
   <pre>
@@ -136,7 +153,7 @@ Begin by saving your current directory location:
 Most distros ship with this but it's safest to install a newer version.
 To get the latest code from git:
   <pre>
-  git clone git://anongit.freedesktop.org/git/mesa/drm
+  git clone https://gitlab.freedesktop.org/mesa/drm.git
   </pre>
 <li>xf86-video-vmware. The chainloading driver, vmware_drv.so, the legacy driver vmwlegacy_drv.so, and the vmwgfx driver vmwgfx_drv.so. 
   <pre>

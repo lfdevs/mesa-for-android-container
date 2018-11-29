@@ -11,8 +11,6 @@
 #include "nouveau_buffer.h"
 #include "nouveau_mm.h"
 
-#define NOUVEAU_TRANSFER_PUSHBUF_THRESHOLD 192
-
 struct nouveau_transfer {
    struct pipe_transfer base;
 
@@ -147,7 +145,7 @@ nouveau_transfer_staging(struct nouveau_context *nv,
    if (!nv->push_data)
       permit_pb = false;
 
-   if ((size <= NOUVEAU_TRANSFER_PUSHBUF_THRESHOLD) && permit_pb) {
+   if ((size <= nv->screen->transfer_pushbuf_threshold) && permit_pb) {
       tx->map = align_malloc(size, NOUVEAU_MIN_BUFFER_MAP_ALIGN);
       if (tx->map)
          tx->map += adj;

@@ -527,7 +527,7 @@ static void
 vlVdpDecoderFixVC1Startcode(uint32_t *num_buffers, const void *buffers[], unsigned sizes[])
 {
    static const uint8_t vc1_startcode[] = { 0x00, 0x00, 0x01, 0x0D };
-   struct vl_vlc vlc;
+   struct vl_vlc vlc = {};
    unsigned i;
 
    /* search the first 64 bytes for a startcode */

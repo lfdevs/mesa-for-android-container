@@ -48,28 +48,35 @@ batch_init(struct fd_batch *batch)
 	 * have no option but to allocate large worst-case sizes so that
 	 * we don't need to grow the ringbuffer.  Performance is likely to
 	 * suffer, but there is no good alternative.
+	 *
+	 * XXX I think we can just require new enough kernel for this?
 	 */
 	if ((fd_device_version(ctx->screen->dev) < FD_VERSION_UNLIMITED_CMDS) ||
 			(fd_mesa_debug & FD_DBG_NOGROW)){
 		size = 0x100000;
 	}
 
-	batch->draw    = fd_ringbuffer_new(ctx->pipe, size);
-	if (!batch->nondraw) {
-		batch->binning = fd_ringbuffer_new(ctx->pipe, size);
-		batch->gmem    = fd_ringbuffer_new(ctx->pipe, size);
-
-		fd_ringbuffer_set_parent(batch->gmem, NULL);
-		fd_ringbuffer_set_parent(batch->draw, batch->gmem);
-		fd_ringbuffer_set_parent(batch->binning, batch->gmem);
+	batch->submit = fd_submit_new(ctx->pipe);
+	if (batch->nondraw) {
+		batch->draw = fd_submit_new_ringbuffer(batch->submit, size,
+				FD_RINGBUFFER_PRIMARY | FD_RINGBUFFER_GROWABLE);
 	} else {
-		fd_ringbuffer_set_parent(batch->draw, NULL);
+		batch->gmem = fd_submit_new_ringbuffer(batch->submit, size,
+				FD_RINGBUFFER_PRIMARY | FD_RINGBUFFER_GROWABLE);
+		batch->draw = fd_submit_new_ringbuffer(batch->submit, size,
+				FD_RINGBUFFER_GROWABLE);
+
+		if (ctx->screen->gpu_id < 600) {
+			batch->binning = fd_submit_new_ringbuffer(batch->submit,
+					size, FD_RINGBUFFER_GROWABLE);
+		}
 	}
 
 	batch->in_fence_fd = -1;
 	batch->fence = fd_fence_create(batch);
 
-	batch->cleared = batch->partial_cleared = 0;
+	batch->cleared = 0;
+	batch->invalidated = 0;
 	batch->restore = batch->resolve = 0;
 	batch->needs_flush = false;
 	batch->flushed = false;
@@ -79,14 +86,12 @@ batch_init(struct fd_batch *batch)
 
 	fd_reset_wfi(batch);
 
-	/* reset maximal bounds: */
-	batch->max_scissor.minx = batch->max_scissor.miny = ~0;
-	batch->max_scissor.maxx = batch->max_scissor.maxy = 0;
-
 	util_dynarray_init(&batch->draw_patches, NULL);
 
 	if (is_a3xx(ctx->screen))
 		util_dynarray_init(&batch->rbrc_patches, NULL);
+
+	util_dynarray_init(&batch->gmem_patches, NULL);
 
 	assert(batch->resources->entries == 0);
 
@@ -132,7 +137,8 @@ batch_fini(struct fd_batch *batch)
 
 	fd_ringbuffer_del(batch->draw);
 	if (!batch->nondraw) {
-		fd_ringbuffer_del(batch->binning);
+		if (batch->binning)
+			fd_ringbuffer_del(batch->binning);
 		fd_ringbuffer_del(batch->gmem);
 	} else {
 		debug_assert(!batch->binning);
@@ -143,10 +149,14 @@ batch_fini(struct fd_batch *batch)
 		batch->lrz_clear = NULL;
 	}
 
+	fd_submit_del(batch->submit);
+
 	util_dynarray_fini(&batch->draw_patches);
 
 	if (is_a3xx(batch->ctx->screen))
 		util_dynarray_fini(&batch->rbrc_patches);
+
+	util_dynarray_fini(&batch->gmem_patches);
 
 	while (batch->samples.size > 0) {
 		struct fd_hw_sample *samp =
@@ -177,8 +187,6 @@ batch_flush_reset_dependencies(struct fd_batch *batch, bool flush)
 static void
 batch_reset_resources_locked(struct fd_batch *batch)
 {
-	struct set_entry *entry;
-
 	pipe_mutex_assert_locked(batch->ctx->screen->lock);
 
 	set_foreach(batch->resources, entry) {
@@ -235,10 +243,10 @@ __fd_batch_destroy(struct fd_batch *batch)
 	debug_assert(batch->resources->entries == 0);
 	_mesa_set_destroy(batch->resources, NULL);
 
+	fd_context_unlock(ctx);
 	batch_flush_reset_dependencies(batch, false);
 	debug_assert(batch->dependents_mask == 0);
 
-	fd_context_unlock(ctx);
 	util_copy_framebuffer_state(&batch->framebuffer, NULL);
 	batch_fini(batch);
 	free(batch);
@@ -292,7 +300,6 @@ batch_flush(struct fd_batch *batch, bool force)
 	 */
 	fd_batch_set_stage(batch, FD_STAGE_NULL);
 
-	fd_context_all_dirty(batch->ctx);
 	batch_flush_reset_dependencies(batch, true);
 
 	batch->flushed = true;
@@ -348,13 +355,21 @@ fd_batch_flush(struct fd_batch *batch, bool sync, bool force)
 
 	if (newbatch) {
 		struct fd_context *ctx = batch->ctx;
-		struct fd_batch *new_batch =
-			fd_batch_from_fb(&ctx->screen->batch_cache, ctx, &batch->framebuffer);
+		struct fd_batch *new_batch;
 
-		util_copy_framebuffer_state(&new_batch->framebuffer, &batch->framebuffer);
+		if (ctx->screen->reorder) {
+			/* defer allocating new batch until one is needed for rendering
+			 * to avoid unused batches for apps that create many contexts
+			 */
+			new_batch = NULL;
+		} else {
+			new_batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, false);
+			util_copy_framebuffer_state(&new_batch->framebuffer, &batch->framebuffer);
+		}
 
 		fd_batch_reference(&batch, NULL);
 		ctx->batch = new_batch;
+		fd_context_all_dirty(ctx);
 	}
 
 	if (sync)
@@ -459,8 +474,10 @@ fd_batch_resource_used(struct fd_batch *batch, struct fd_resource *rsc, bool wri
 			flush_write_batch(rsc);
 	}
 
-	if (rsc->batch_mask & (1 << batch->idx))
+	if (rsc->batch_mask & (1 << batch->idx)) {
+		debug_assert(_mesa_set_search(batch->resources, rsc));
 		return;
+	}
 
 	debug_assert(!_mesa_set_search(batch->resources, rsc));
 
@@ -473,12 +490,16 @@ fd_batch_check_size(struct fd_batch *batch)
 {
 	debug_assert(!batch->flushed);
 
+	if (unlikely(fd_mesa_debug & FD_DBG_FLUSH)) {
+		fd_batch_flush(batch, true, false);
+		return;
+	}
+
 	if (fd_device_version(batch->ctx->screen->dev) >= FD_VERSION_UNLIMITED_CMDS)
 		return;
 
 	struct fd_ringbuffer *ring = batch->draw;
-	if (((ring->cur - ring->start) > (ring->size/4 - 0x1000)) ||
-			(fd_mesa_debug & FD_DBG_FLUSH))
+	if ((ring->cur - ring->start) > (ring->size/4 - 0x1000))
 		fd_batch_flush(batch, true, false);
 }
 

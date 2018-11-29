@@ -118,6 +118,7 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
    this->Const.MaxVertexOutputComponents = ctx->Const.Program[MESA_SHADER_VERTEX].MaxOutputComponents;
    this->Const.MaxGeometryInputComponents = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxInputComponents;
    this->Const.MaxGeometryOutputComponents = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxOutputComponents;
+   this->Const.MaxGeometryShaderInvocations = ctx->Const.MaxGeometryShaderInvocations;
    this->Const.MaxFragmentInputComponents = ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxInputComponents;
    this->Const.MaxGeometryTextureImageUnits = ctx->Const.Program[MESA_SHADER_GEOMETRY].MaxTextureImageUnits;
    this->Const.MaxGeometryOutputVertices = ctx->Const.MaxGeometryOutputVertices;
@@ -310,6 +311,8 @@ _mesa_glsl_parse_state::_mesa_glsl_parse_state(struct gl_context *_ctx,
       ctx->Const.AllowGLSLExtensionDirectiveMidShader;
    this->allow_builtin_variable_redeclaration =
       ctx->Const.AllowGLSLBuiltinVariableRedeclaration;
+   this->allow_layout_qualifier_on_function_parameter =
+      ctx->Const.AllowLayoutQualifiersOnFunctionParameters;
 
    this->cs_input_local_size_variable_specified = false;
 
@@ -698,6 +701,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    /* All other extensions go here, sorted alphabetically.
     */
    EXT(AMD_conservative_depth),
+   EXT(AMD_gpu_shader_int64),
    EXT(AMD_shader_stencil_export),
    EXT(AMD_shader_trinary_minmax),
    EXT(AMD_vertex_shader_layer),
@@ -723,8 +727,12 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT_AEP(EXT_texture_buffer),
    EXT_AEP(EXT_texture_cube_map_array),
    EXT(INTEL_conservative_rasterization),
+   EXT(INTEL_fragment_shader_ordering),
+   EXT(INTEL_shader_atomic_float_minmax),
    EXT(MESA_shader_integer_functions),
+   EXT(NV_fragment_shader_interlock),
    EXT(NV_image_formats),
+   EXT(NV_shader_atomic_float),
 };
 
 #undef EXT
@@ -1817,7 +1825,7 @@ set_shader_inout_layout(struct gl_shader *shader,
                                           &invocations, false)) {
 
             YYLTYPE loc = state->in_qualifier->invocations->get_location();
-            if (invocations > MAX_GEOMETRY_SHADER_INVOCATIONS) {
+            if (invocations > state->Const.MaxGeometryShaderInvocations) {
                _mesa_glsl_error(&loc, state,
                                 "invocations (%d) exceeds "
                                 "GL_MAX_GEOMETRY_SHADER_INVOCATIONS",

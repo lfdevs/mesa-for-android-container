@@ -134,8 +134,15 @@ nine_state_copy_common(struct NineDevice9 *device,
     unsigned i, s;
 
     DBG("apply:%d changed.group: %x\n", (int)apply, (int)mask->changed.group );
-    if (apply)
-       dst->changed.group |= mask->changed.group;
+
+    /* device changed.* are unused.
+     * Instead nine_context_apply_stateblock is used and will
+     * internally set the right context->changed fields.
+     * Uncomment these only if we want to apply a stateblock onto a stateblock.
+     *
+     * if (apply)
+     *     dst->changed.group |= mask->changed.group;
+     */
 
     if (mask->changed.group & NINE_STATE_VIEWPORT)
         dst->viewport = src->viewport;
@@ -202,10 +209,10 @@ nine_state_copy_common(struct NineDevice9 *device,
     /* Render states.
      * TODO: Maybe build a list ?
      */
-    for (i = 0; i < ARRAY_SIZE(dst->changed.rs); ++i) {
+    for (i = 0; i < ARRAY_SIZE(mask->changed.rs); ++i) {
         uint32_t m = mask->changed.rs[i];
-        if (apply)
-            dst->changed.rs[i] |= m;
+        /* if (apply)
+         *     dst->changed.rs[i] |= m; */
         while (m) {
             const int r = ffs(m) - 1;
             m &= ~(1 << r);
@@ -222,8 +229,8 @@ nine_state_copy_common(struct NineDevice9 *device,
             if (mask->changed.ucp & (1 << i))
                 memcpy(dst->clip.ucp[i],
                        src->clip.ucp[i], sizeof(src->clip.ucp[0]));
-        if (apply)
-           dst->changed.ucp |= mask->changed.ucp;
+        /* if (apply)
+         *    dst->changed.ucp |= mask->changed.ucp;*/
     }
 
     /* Sampler state. */
@@ -240,8 +247,8 @@ nine_state_copy_common(struct NineDevice9 *device,
                     dst->samp_advertised[s][i] = src->samp_advertised[s][i];
                 }
             }
-            if (apply)
-                dst->changed.sampler[s] |= mask->changed.sampler[s];
+            /* if (apply)
+             *     dst->changed.sampler[s] |= mask->changed.sampler[s];*/
         }
     }
 
@@ -270,10 +277,11 @@ nine_state_copy_common(struct NineDevice9 *device,
             if (mask->changed.stream_freq & (1 << i))
                 dst->stream_freq[i] = src->stream_freq[i];
         }
-        if (apply) {
-            dst->changed.vtxbuf |= mask->changed.vtxbuf;
-            dst->changed.stream_freq |= mask->changed.stream_freq;
-        }
+        /*
+         * if (apply) {
+         *     dst->changed.vtxbuf |= mask->changed.vtxbuf;
+         *     dst->changed.stream_freq |= mask->changed.stream_freq;
+         * }*/
     }
 
     /* Textures */
@@ -293,18 +301,19 @@ nine_state_copy_common(struct NineDevice9 *device,
     if (mask->changed.group & NINE_STATE_FF_MATERIAL)
         dst->ff.material = src->ff.material;
 
-    if (mask->changed.group & NINE_STATE_FF_PSSTAGES) {
+    if (mask->changed.group & NINE_STATE_FF_PS_CONSTS) {
         for (s = 0; s < NINE_MAX_TEXTURE_STAGES; ++s) {
             for (i = 0; i < NINED3DTSS_COUNT; ++i)
                 if (mask->ff.changed.tex_stage[s][i / 32] & (1 << (i % 32)))
                     dst->ff.tex_stage[s][i] = src->ff.tex_stage[s][i];
-            if (apply) {
-                /* TODO: it's 32 exactly, just offset by 1 as 0 is unused */
-                dst->ff.changed.tex_stage[s][0] |=
-                    mask->ff.changed.tex_stage[s][0];
-                dst->ff.changed.tex_stage[s][1] |=
-                    mask->ff.changed.tex_stage[s][1];
-            }
+            /*
+             * if (apply) {
+             *    TODO: it's 32 exactly, just offset by 1 as 0 is unused
+             *    dst->ff.changed.tex_stage[s][0] |=
+             *        mask->ff.changed.tex_stage[s][0];
+             *    dst->ff.changed.tex_stage[s][1] |=
+             *        mask->ff.changed.tex_stage[s][1];
+             * }*/
         }
     }
     if (mask->changed.group & NINE_STATE_FF_LIGHTING) {
@@ -357,11 +366,10 @@ nine_state_copy_common(struct NineDevice9 *device,
                 if (!(mask->ff.changed.transform[i] & (1 << (s % 32))))
                     continue;
                 *nine_state_access_transform(&dst->ff, s, TRUE) =
-                    *nine_state_access_transform( /* const because !alloc */
-                        (struct nine_ff_state *)&src->ff, s, FALSE);
+                    *nine_state_access_transform(&src->ff, s, FALSE);
             }
-            if (apply)
-                dst->ff.changed.transform[i] |= mask->ff.changed.transform[i];
+            /* if (apply)
+             *     dst->ff.changed.transform[i] |= mask->ff.changed.transform[i];*/
         }
     }
 }
@@ -369,7 +377,7 @@ nine_state_copy_common(struct NineDevice9 *device,
 static void
 nine_state_copy_common_all(struct NineDevice9 *device,
                            struct nine_state *dst,
-                           const struct nine_state *src,
+                           struct nine_state *src,
                            struct nine_state *help,
                            const boolean apply,
                            struct nine_range_pool *pool,
@@ -377,8 +385,9 @@ nine_state_copy_common_all(struct NineDevice9 *device,
 {
     unsigned i;
 
-    if (apply)
-       dst->changed.group |= src->changed.group;
+    /* if (apply)
+     *     dst->changed.group |= src->changed.group;
+     */
 
     dst->viewport = src->viewport;
     dst->scissor = src->scissor;
@@ -412,20 +421,20 @@ nine_state_copy_common_all(struct NineDevice9 *device,
 
     /* Render states. */
     memcpy(dst->rs_advertised, src->rs_advertised, sizeof(dst->rs_advertised));
-    if (apply)
-        memcpy(dst->changed.rs, src->changed.rs, sizeof(dst->changed.rs));
+    /* if (apply)
+     *     memcpy(dst->changed.rs, src->changed.rs, sizeof(dst->changed.rs));*/
 
 
     /* Clip planes. */
     memcpy(&dst->clip, &src->clip, sizeof(dst->clip));
-    if (apply)
-        dst->changed.ucp = src->changed.ucp;
+    /* if (apply)
+     *     dst->changed.ucp = src->changed.ucp;*/
 
     /* Sampler state. */
     memcpy(dst->samp_advertised, src->samp_advertised, sizeof(dst->samp_advertised));
-    if (apply)
-        memcpy(dst->changed.sampler,
-               src->changed.sampler, sizeof(dst->changed.sampler));
+    /* if (apply)
+     *     memcpy(dst->changed.sampler,
+     *            src->changed.sampler, sizeof(dst->changed.sampler));*/
 
     /* Index buffer. */
     NineStateBlock9_BindBuffer(device,
@@ -446,10 +455,10 @@ nine_state_copy_common_all(struct NineDevice9 *device,
             }
             dst->stream_freq[i] = src->stream_freq[i];
         }
-        if (apply) {
-            dst->changed.vtxbuf = (1ULL << MaxStreams) - 1;
-            dst->changed.stream_freq = (1ULL << MaxStreams) - 1;
-        }
+        /* if (apply) {
+         *     dst->changed.vtxbuf = (1ULL << MaxStreams) - 1;
+         *     dst->changed.stream_freq = (1ULL << MaxStreams) - 1;
+         *  }*/
     }
 
     /* Textures */
@@ -467,9 +476,9 @@ nine_state_copy_common_all(struct NineDevice9 *device,
     dst->ff.material = src->ff.material;
 
     memcpy(dst->ff.tex_stage, src->ff.tex_stage, sizeof(dst->ff.tex_stage));
-    if (apply) /* TODO: memset */
-        memcpy(dst->ff.changed.tex_stage,
-               src->ff.changed.tex_stage, sizeof(dst->ff.changed.tex_stage));
+    /* if (apply) TODO: memset
+     *     memcpy(dst->ff.changed.tex_stage,
+     *            src->ff.changed.tex_stage, sizeof(dst->ff.changed.tex_stage));*/
 
     /* Lights. */
     if (1) {
@@ -488,17 +497,23 @@ nine_state_copy_common_all(struct NineDevice9 *device,
 
     /* Transforms. */
     if (1) {
-        if (dst->ff.num_transforms < src->ff.num_transforms) {
-            dst->ff.transform = REALLOC(dst->ff.transform,
-                dst->ff.num_transforms * sizeof(dst->ff.transform[0]),
-                src->ff.num_transforms * sizeof(src->ff.transform[0]));
-            dst->ff.num_transforms = src->ff.num_transforms;
+        /* Increase dst size if required (to copy the new states).
+         * Increase src size if required (to initialize missing transforms).
+         */
+        if (dst->ff.num_transforms != src->ff.num_transforms) {
+            int num_transforms = MAX2(src->ff.num_transforms, dst->ff.num_transforms);
+            nine_state_resize_transform(&src->ff, num_transforms);
+            nine_state_resize_transform(&dst->ff, num_transforms);
         }
         memcpy(dst->ff.transform,
-               src->ff.transform, src->ff.num_transforms * sizeof(D3DMATRIX));
-        if (apply) /* TODO: memset */
-            memcpy(dst->ff.changed.transform,
-                   src->ff.changed.transform, sizeof(dst->ff.changed.transform));
+               src->ff.transform, dst->ff.num_transforms * sizeof(D3DMATRIX));
+        /* Apply is always used on device state.
+         * src is then the D3DSBT_ALL stateblock which
+         * ff.changed.transform indicates all matrices are dirty.
+         *
+         * if (apply)
+         *     memcpy(dst->ff.changed.transform,
+         *            src->ff.changed.transform, sizeof(dst->ff.changed.transform));*/
     }
 }
 

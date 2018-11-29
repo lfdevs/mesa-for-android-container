@@ -43,7 +43,6 @@ v3d_flush(struct pipe_context *pctx)
 {
         struct v3d_context *v3d = v3d_context(pctx);
 
-        struct hash_entry *entry;
         hash_table_foreach(v3d->jobs, entry) {
                 struct v3d_job *job = entry->data;
                 v3d_job_submit(v3d, job);

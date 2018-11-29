@@ -267,6 +267,9 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
    case SHADER_OPCODE_SAMPLEINFO_LOGICAL:
       return "sampleinfo_logical";
 
+   case SHADER_OPCODE_IMAGE_SIZE:
+      return "image_size";
+
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return "shader_time_add";
 
@@ -274,6 +277,10 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "untyped_atomic";
    case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
       return "untyped_atomic_logical";
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
+      return "untyped_atomic_float";
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
+      return "untyped_atomic_float_logical";
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
       return "untyped_surface_read";
    case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
@@ -996,6 +1003,8 @@ backend_instruction::has_side_effects() const
    switch (opcode) {
    case SHADER_OPCODE_UNTYPED_ATOMIC:
    case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT_LOGICAL:
    case SHADER_OPCODE_GEN4_SCRATCH_WRITE:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
    case SHADER_OPCODE_UNTYPED_SURFACE_WRITE_LOGICAL:

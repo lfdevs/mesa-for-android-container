@@ -22,6 +22,9 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+#ifndef ST_GLSL_TO_TGSI_H
+#define ST_GLSL_TO_TGSI_H
+
 #include "pipe/p_defines.h"
 #include "pipe/p_shader_tokens.h"
 #include "main/mtypes.h"
@@ -72,4 +75,6 @@ _mesa_sysval_to_semantic(unsigned sysval);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif

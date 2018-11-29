@@ -63,15 +63,6 @@ vc4_size_is_lt(uint32_t width, uint32_t height, int cpp)
                 height <= 4 * vc4_utile_height(cpp));
 }
 
-static void
-check_box_utile_alignment(const struct pipe_box *box, int cpp)
-{
-        assert(!(box->x & (vc4_utile_width(cpp) - 1)));
-        assert(!(box->y & (vc4_utile_height(cpp) - 1)));
-        assert(!(box->width & (vc4_utile_width(cpp) - 1)));
-        assert(!(box->height & (vc4_utile_height(cpp) - 1)));
-}
-
 /**
  * Takes a utile x and y (and the number of utiles of width of the image) and
  * returns the offset to the utile within a VC4_TILING_FORMAT_TF image.
@@ -216,8 +207,6 @@ vc4_load_tiled_image(void *dst, uint32_t dst_stride,
                      uint8_t tiling_format, int cpp,
                      const struct pipe_box *box)
 {
-        check_box_utile_alignment(box, cpp);
-
         if (tiling_format == VC4_TILING_FORMAT_LT) {
                 vc4_load_lt_image(dst, dst_stride,
                                   src, src_stride,
@@ -240,8 +229,6 @@ vc4_store_tiled_image(void *dst, uint32_t dst_stride,
                       uint8_t tiling_format, int cpp,
                       const struct pipe_box *box)
 {
-        check_box_utile_alignment(box, cpp);
-
         if (tiling_format == VC4_TILING_FORMAT_LT) {
                 vc4_store_lt_image(dst, dst_stride,
                                    src, src_stride,

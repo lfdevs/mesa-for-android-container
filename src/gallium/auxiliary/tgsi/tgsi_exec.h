@@ -231,7 +231,6 @@ struct tgsi_sampler
 };
 
 #define TGSI_EXEC_NUM_TEMPS       4096
-#define TGSI_EXEC_NUM_IMMEDIATES  256
 
 /*
  * Locations of various utility registers (_I = Index, _C = Channel)
@@ -341,6 +340,7 @@ enum tgsi_break_type {
 
 #define TGSI_EXEC_MAX_BREAK_STACK (TGSI_EXEC_MAX_LOOP_NESTING + TGSI_EXEC_MAX_SWITCH_NESTING)
 
+typedef float float4[4];
 
 /**
  * Run-time virtual machine state for executing TGSI shader.
@@ -352,9 +352,8 @@ struct tgsi_exec_machine
    struct tgsi_exec_vector       Temps[TGSI_EXEC_NUM_TEMPS +
                                        TGSI_EXEC_NUM_TEMP_EXTRAS];
 
-   float                         Imms[TGSI_EXEC_NUM_IMMEDIATES][4];
-
-   float                         ImmArray[TGSI_EXEC_NUM_IMMEDIATES][4];
+   unsigned                       ImmsReserved;
+   float4                         *Imms;
 
    struct tgsi_exec_vector       *Inputs;
    struct tgsi_exec_vector       *Outputs;

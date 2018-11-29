@@ -89,10 +89,8 @@ VkResult anv_GetPhysicalDeviceSurfaceSupportKHR(
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
 
    return wsi_common_get_surface_support(&device->wsi_device,
-                                         device->local_fd,
                                          queueFamilyIndex,
                                          surface,
-                                         &device->instance->alloc,
                                          pSupported);
 }
 
@@ -184,7 +182,7 @@ VkResult anv_CreateSwapchainKHR(
    else
      alloc = &device->alloc;
 
-   return wsi_common_create_swapchain(wsi_device, _device, device->fd,
+   return wsi_common_create_swapchain(wsi_device, _device,
                                       pCreateInfo, alloc, pSwapchain);
 }
 
@@ -293,4 +291,17 @@ VkResult anv_GetDeviceGroupSurfacePresentModesKHR(
    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
 
    return VK_SUCCESS;
+}
+
+VkResult anv_GetPhysicalDevicePresentRectanglesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkSurfaceKHR                                surface,
+    uint32_t*                                   pRectCount,
+    VkRect2D*                                   pRects)
+{
+   ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
+
+   return wsi_common_get_present_rectangles(&device->wsi_device,
+                                            surface,
+                                            pRectCount, pRects);
 }

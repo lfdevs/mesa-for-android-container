@@ -53,17 +53,7 @@
  */
 #define DRI_CONF_SECTION_DEBUG \
 DRI_CONF_SECTION_BEGIN \
-	DRI_CONF_DESC(en,gettext("Debugging"))
-
-#define DRI_CONF_NO_RAST(def) \
-DRI_CONF_OPT_BEGIN_B(no_rast, def) \
-        DRI_CONF_DESC(en,gettext("Disable 3D acceleration")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_PERFORMANCE_BOXES(def) \
-DRI_CONF_OPT_BEGIN_B(performance_boxes, def) \
-        DRI_CONF_DESC(en,gettext("Show performance boxes")) \
-DRI_CONF_OPT_END
+        DRI_CONF_DESC(en,gettext("Debugging"))
 
 #define DRI_CONF_ALWAYS_FLUSH_BATCH(def) \
 DRI_CONF_OPT_BEGIN_B(always_flush_batch, def) \
@@ -77,7 +67,7 @@ DRI_CONF_OPT_END
 
 #define DRI_CONF_DISABLE_THROTTLING(def) \
 DRI_CONF_OPT_BEGIN_B(disable_throttling, def) \
-	DRI_CONF_DESC(en,gettext("Disable throttling on first batch after flush")) \
+        DRI_CONF_DESC(en,gettext("Disable throttling on first batch after flush")) \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_FORCE_GLSL_EXTENSIONS_WARN(def) \
@@ -98,11 +88,6 @@ DRI_CONF_OPT_END
 #define DRI_CONF_DISABLE_GLSL_LINE_CONTINUATIONS(def) \
 DRI_CONF_OPT_BEGIN_B(disable_glsl_line_continuations, def) \
         DRI_CONF_DESC(en,gettext("Disable backslash-based line continuations in GLSL source")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DISABLE_SHADER_BIT_ENCODING(def) \
-DRI_CONF_OPT_BEGIN_B(disable_shader_bit_encoding, def) \
-        DRI_CONF_DESC(en,gettext("Disable GL_ARB_shader_bit_encoding")) \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_FORCE_GLSL_VERSION(def) \
@@ -150,6 +135,11 @@ DRI_CONF_OPT_BEGIN_B(allow_glsl_cross_stage_interpolation_mismatch, def) \
         DRI_CONF_DESC(en,gettext("Allow interpolation qualifier mismatch across shader stages")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_GLSL_LAYOUT_QUALIFIER_ON_FUNCTION_PARAMETERS(def) \
+DRI_CONF_OPT_BEGIN_B(allow_glsl_layout_qualifier_on_function_parameters, def) \
+        DRI_CONF_DESC(en,gettext("Allow layout qualifiers on function parameters.")) \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
 DRI_CONF_OPT_BEGIN_B(force_compat_profile, def) \
         DRI_CONF_DESC(en,gettext("Force an OpenGL compatibility context")) \
@@ -160,77 +150,11 @@ DRI_CONF_OPT_END
  */
 #define DRI_CONF_SECTION_QUALITY \
 DRI_CONF_SECTION_BEGIN \
-	DRI_CONF_DESC(en,gettext("Image Quality"))
-
-#define DRI_CONF_EXCESS_MIPMAP(def) \
-DRI_CONF_OPT_BEGIN_B(excess_mipmap, def) \
-	DRI_CONF_DESC(en,"Enable extra mipmap level") \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_DEPTH_FB       0
-#define DRI_CONF_TEXTURE_DEPTH_32       1
-#define DRI_CONF_TEXTURE_DEPTH_16       2
-#define DRI_CONF_TEXTURE_DEPTH_FORCE_16 3
-#define DRI_CONF_TEXTURE_DEPTH(def) \
-DRI_CONF_OPT_BEGIN_V(texture_depth,enum,def,"0:3") \
-	DRI_CONF_DESC_BEGIN(en,gettext("Texture color depth")) \
-                DRI_CONF_ENUM(0,gettext("Prefer frame buffer color depth")) \
-                DRI_CONF_ENUM(1,gettext("Prefer 32 bits per texel")) \
-                DRI_CONF_ENUM(2,gettext("Prefer 16 bits per texel")) \
-                DRI_CONF_ENUM(3,gettext("Force 16 bits per texel")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DEF_MAX_ANISOTROPY(def,range) \
-DRI_CONF_OPT_BEGIN_V(def_max_anisotropy,float,def,range) \
-        DRI_CONF_DESC(en,gettext("Initial maximum value for anisotropic texture filtering")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_NO_NEG_LOD_BIAS(def) \
-DRI_CONF_OPT_BEGIN_B(no_neg_lod_bias, def) \
-        DRI_CONF_DESC(en,gettext("Forbid negative texture LOD bias")) \
-DRI_CONF_OPT_END
+        DRI_CONF_DESC(en,gettext("Image Quality"))
 
 #define DRI_CONF_PRECISE_TRIG(def) \
 DRI_CONF_OPT_BEGIN_B(precise_trig, def) \
         DRI_CONF_DESC(en,gettext("Prefer accuracy over performance in trig functions")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_COLOR_REDUCTION_ROUND 0
-#define DRI_CONF_COLOR_REDUCTION_DITHER 1
-#define DRI_CONF_COLOR_REDUCTION(def) \
-DRI_CONF_OPT_BEGIN_V(color_reduction,enum,def,"0:1") \
-        DRI_CONF_DESC_BEGIN(en,gettext("Initial color reduction method")) \
-                DRI_CONF_ENUM(0,gettext("Round colors")) \
-                DRI_CONF_ENUM(1,gettext("Dither colors")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_ROUND_TRUNC 0
-#define DRI_CONF_ROUND_ROUND 1
-#define DRI_CONF_ROUND_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(round_mode,enum,def,"0:1") \
-	DRI_CONF_DESC_BEGIN(en,gettext("Color rounding method")) \
-                DRI_CONF_ENUM(0,gettext("Round color components downward")) \
-                DRI_CONF_ENUM(1,gettext("Round to nearest color")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_DITHER_XERRORDIFF 0
-#define DRI_CONF_DITHER_XERRORDIFFRESET 1
-#define DRI_CONF_DITHER_ORDERED 2
-#define DRI_CONF_DITHER_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(dither_mode,enum,def,"0:2") \
-	DRI_CONF_DESC_BEGIN(en,gettext("Color dithering method")) \
-                DRI_CONF_ENUM(0,gettext("Horizontal error diffusion")) \
-                DRI_CONF_ENUM(1,gettext("Horizontal error diffusion, reset error at line start")) \
-                DRI_CONF_ENUM(2,gettext("Ordered 2D color dithering")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_FLOAT_DEPTH(def) \
-DRI_CONF_OPT_BEGIN_B(float_depth, def) \
-        DRI_CONF_DESC(en,gettext("Floating point depth buffer")) \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_PP_CELSHADE(def) \
@@ -272,32 +196,6 @@ DRI_CONF_OPT_END
 DRI_CONF_SECTION_BEGIN \
         DRI_CONF_DESC(en,gettext("Performance"))
 
-#define DRI_CONF_TCL_SW 0
-#define DRI_CONF_TCL_PIPELINED 1
-#define DRI_CONF_TCL_VTXFMT 2
-#define DRI_CONF_TCL_CODEGEN 3
-#define DRI_CONF_TCL_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(tcl_mode,enum,def,"0:3") \
-        DRI_CONF_DESC_BEGIN(en,gettext("TCL mode (Transformation, Clipping, Lighting)")) \
-                DRI_CONF_ENUM(0,gettext("Use software TCL pipeline")) \
-                DRI_CONF_ENUM(1,gettext("Use hardware TCL as first TCL pipeline stage")) \
-                DRI_CONF_ENUM(2,gettext("Bypass the TCL pipeline")) \
-                DRI_CONF_ENUM(3,gettext("Bypass the TCL pipeline with state-based machine code generated on-the-fly")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_FTHROTTLE_BUSY 0
-#define DRI_CONF_FTHROTTLE_USLEEPS 1
-#define DRI_CONF_FTHROTTLE_IRQS 2
-#define DRI_CONF_FTHROTTLE_MODE(def) \
-DRI_CONF_OPT_BEGIN_V(fthrottle_mode,enum,def,"0:2") \
-        DRI_CONF_DESC_BEGIN(en,gettext("Method to limit rendering latency")) \
-                DRI_CONF_ENUM(0,gettext("Busy waiting for the graphics hardware")) \
-                DRI_CONF_ENUM(1,gettext("Sleep for brief intervals while waiting for the graphics hardware")) \
-                DRI_CONF_ENUM(2,gettext("Let the graphics hardware emit a software interrupt and sleep")) \
-        DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
 #define DRI_CONF_VBLANK_NEVER 0
 #define DRI_CONF_VBLANK_DEF_INTERVAL_0 1
 #define DRI_CONF_VBLANK_DEF_INTERVAL_1 2
@@ -310,35 +208,6 @@ DRI_CONF_OPT_BEGIN_V(vblank_mode,enum,def,"0:3") \
                 DRI_CONF_ENUM(2,gettext("Initial swap interval 1, obey application's choice")) \
                 DRI_CONF_ENUM(3,gettext("Always synchronize with vertical refresh, application chooses the minimum swap interval")) \
         DRI_CONF_DESC_END \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_HYPERZ_DISABLED 0
-#define DRI_CONF_HYPERZ_ENABLED 1
-#define DRI_CONF_HYPERZ(def) \
-DRI_CONF_OPT_BEGIN_B(hyperz, def) \
-        DRI_CONF_DESC(en,gettext("Use HyperZ to boost performance")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_MAX_TEXTURE_UNITS(def,min,max) \
-DRI_CONF_OPT_BEGIN_V(texture_units,int,def, # min ":" # max ) \
-        DRI_CONF_DESC(en,gettext("Number of texture units used")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_BLEND_QUALITY(def,range) \
-DRI_CONF_OPT_BEGIN_V(texture_blend_quality,float,def,range) \
-	DRI_CONF_DESC(en,gettext("Texture filtering quality vs. speed, AKA “brilinear” texture filtering")) \
-DRI_CONF_OPT_END
-
-#define DRI_CONF_TEXTURE_HEAPS_ALL 0
-#define DRI_CONF_TEXTURE_HEAPS_CARD 1
-#define DRI_CONF_TEXTURE_HEAPS_GART 2
-#define DRI_CONF_TEXTURE_HEAPS(def) \
-DRI_CONF_OPT_BEGIN_V(texture_heaps,enum,def,"0:2") \
-	DRI_CONF_DESC_BEGIN(en,gettext("Used types of texture memory")) \
-		DRI_CONF_ENUM(0,gettext("All available memory")) \
-		DRI_CONF_ENUM(1,gettext("Only card memory (if available)")) \
-		DRI_CONF_ENUM(2,gettext("Only GART (AGP/PCIE) memory (if available)")) \
-	DRI_CONF_DESC_END \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_MESA_GLTHREAD(def) \
@@ -364,20 +233,6 @@ DRI_CONF_OPT_END
 #define DRI_CONF_DISABLE_SGI_VIDEO_SYNC(def) \
 DRI_CONF_OPT_BEGIN_B(glx_disable_sgi_video_sync, def) \
    DRI_CONF_DESC(en, gettext("Disable the GLX_SGI_video_sync extension")) \
-DRI_CONF_OPT_END
-
-
-/**
- * \brief Software-fallback options.  To allow using features (like
- * GL_ARB_vertex_program) on GPUs that don't otherwise support the feature.
- */
-#define DRI_CONF_SECTION_SOFTWARE \
-DRI_CONF_SECTION_BEGIN \
-        DRI_CONF_DESC(en,gettext("Features that are not hardware-accelerated"))
-
-#define DRI_CONF_ARB_VERTEX_PROGRAM(def) \
-DRI_CONF_OPT_BEGIN_B(arb_vertex_program, def) \
-        DRI_CONF_DESC(en,gettext("Enable extension GL_ARB_vertex_program")) \
 DRI_CONF_OPT_END
 
 
@@ -414,6 +269,11 @@ DRI_CONF_SECTION_BEGIN \
 #define DRI_CONF_DEVICE_ID_PATH_TAG(def) \
 DRI_CONF_OPT_BEGIN(device_id, string, def) \
         DRI_CONF_DESC(en,gettext("Define the graphic device to use if possible")) \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_DRI_DRIVER(def) \
+DRI_CONF_OPT_BEGIN(dri_driver, string, def) \
+        DRI_CONF_DESC(en,gettext("Override the DRI driver to load")) \
 DRI_CONF_OPT_END
 
 /**
@@ -476,4 +336,9 @@ DRI_CONF_OPT_END
 #define DRI_CONF_RADEONSI_CLEAR_DB_CACHE_BEFORE_CLEAR(def) \
 DRI_CONF_OPT_BEGIN_B(radeonsi_clear_db_cache_before_clear, def) \
         DRI_CONF_DESC(en,"Clear DB cache before fast depth clear") \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_RADEONSI_ZERO_ALL_VRAM_ALLOCS(def) \
+DRI_CONF_OPT_BEGIN_B(radeonsi_zerovram, def) \
+        DRI_CONF_DESC(en,"Zero all vram allocations") \
 DRI_CONF_OPT_END

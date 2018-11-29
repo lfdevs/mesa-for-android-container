@@ -44,6 +44,7 @@ struct fd5_emit {
 	const struct fd_vertex_state *vtx;
 	const struct fd_program_stateobj *prog;
 	const struct pipe_draw_info *info;
+	bool binning_pass;
 	struct ir3_shader_key key;
 	enum fd_dirty_3d_state dirty;
 
@@ -77,7 +78,8 @@ fd5_emit_get_vp(struct fd5_emit *emit)
 {
 	if (!emit->vp) {
 		struct ir3_shader *shader = emit->prog->vp;
-		emit->vp = ir3_shader_variant(shader, emit->key, emit->debug);
+		emit->vp = ir3_shader_variant(shader, emit->key,
+				emit->binning_pass, emit->debug);
 	}
 	return emit->vp;
 }
@@ -86,13 +88,14 @@ static inline const struct ir3_shader_variant *
 fd5_emit_get_fp(struct fd5_emit *emit)
 {
 	if (!emit->fp) {
-		if (emit->key.binning_pass) {
+		if (emit->binning_pass) {
 			/* use dummy stateobj to simplify binning vs non-binning: */
 			static const struct ir3_shader_variant binning_fp = {};
 			emit->fp = &binning_fp;
 		} else {
 			struct ir3_shader *shader = emit->prog->fp;
-			emit->fp = ir3_shader_variant(shader, emit->key, emit->debug);
+			emit->fp = ir3_shader_variant(shader, emit->key,
+					false, emit->debug);
 		}
 	}
 	return emit->fp;

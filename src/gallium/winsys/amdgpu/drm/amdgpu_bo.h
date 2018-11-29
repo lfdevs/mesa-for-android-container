@@ -66,6 +66,8 @@ struct amdgpu_winsys_bo {
          bool use_reusable_pool;
 
          struct list_head global_list_item;
+
+         uint32_t kms_handle;
       } real;
       struct {
          struct pb_slab_entry entry;

@@ -322,11 +322,7 @@ clGetDeviceInfo(cl_device_id d_dev, cl_device_info param,
       break;
 
    case CL_DEVICE_VERSION:
-      buf.as_string() = "OpenCL " + dev.device_version() + " Mesa " PACKAGE_VERSION
-#ifdef MESA_GIT_SHA1
-                        " (" MESA_GIT_SHA1 ")"
-#endif
-			;
+      buf.as_string() = "OpenCL " + dev.device_version() + " Mesa " PACKAGE_VERSION MESA_GIT_SHA1;
       break;
 
    case CL_DEVICE_EXTENSIONS:

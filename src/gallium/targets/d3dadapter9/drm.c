@@ -107,7 +107,7 @@ drm_destroy( struct d3dadapter9_context *ctx )
     if (drm->dev)
         pipe_loader_release(&drm->dev, 1);
 
-    /* The pipe loader takes ownership of the fd */
+    close(drm->fd);
     FREE(ctx);
 }
 
@@ -252,7 +252,7 @@ drm_create_adapter( int fd,
         ctx->base.throttling = FALSE;
 
     driParseOptionInfo(&defaultInitOptions, __driConfigOptionsNine);
-    driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0, "nine");
+    driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0, "nine", NULL);
     if (driCheckOption(&userInitOptions, "throttle_value", DRI_INT)) {
         throttling_value_user = driQueryOptioni(&userInitOptions, "throttle_value");
         if (throttling_value_user == -1)

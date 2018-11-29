@@ -292,7 +292,7 @@ struct section {
    char *ring_name;
    const char *buffer_name;
    uint32_t *data;
-   int count;
+   int dword_count;
 };
 
 #define MAX_SECTIONS 256
@@ -389,11 +389,11 @@ get_gen_batch_bo(void *user_data, uint64_t address)
 {
    for (int s = 0; s < num_sections; s++) {
       if (sections[s].gtt_offset <= address &&
-          address < sections[s].gtt_offset + sections[s].count * 4) {
+          address < sections[s].gtt_offset + sections[s].dword_count * 4) {
          return (struct gen_batch_decode_bo) {
             .addr = sections[s].gtt_offset,
             .map = sections[s].data,
-            .size = sections[s].count * 4,
+            .size = sections[s].dword_count * 4,
          };
       }
    }
@@ -424,14 +424,14 @@ read_data_file(FILE *file)
 
       if (line[0] == ':' || line[0] == '~') {
          uint32_t *data = NULL;
-         int count = ascii85_decode(line+1, &data, line[0] == ':');
-         if (count == 0) {
+         int dword_count = ascii85_decode(line+1, &data, line[0] == ':');
+         if (dword_count == 0) {
             fprintf(stderr, "ASCII85 decode failed.\n");
             exit(EXIT_FAILURE);
          }
          assert(num_sections < MAX_SECTIONS);
          sections[num_sections].data = data;
-         sections[num_sections].count = count;
+         sections[num_sections].dword_count = dword_count;
          num_sections++;
          continue;
       }
@@ -610,7 +610,8 @@ read_data_file(FILE *file)
           strcmp(sections[s].buffer_name, "batch buffer") == 0 ||
           strcmp(sections[s].buffer_name, "ring buffer") == 0 ||
           strcmp(sections[s].buffer_name, "HW Context") == 0) {
-         gen_print_batch(&batch_ctx, sections[s].data, sections[s].count,
+         gen_print_batch(&batch_ctx, sections[s].data,
+                         sections[s].dword_count * 4,
                          sections[s].gtt_offset);
       }
    }
@@ -756,7 +757,7 @@ main(int argc, char *argv[])
       setup_pager();
 
    if (S_ISDIR(st.st_mode)) {
-      int ret;
+      MAYBE_UNUSED int ret;
       char *filename;
 
       ret = asprintf(&filename, "%s/i915_error_state", path);

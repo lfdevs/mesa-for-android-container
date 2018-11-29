@@ -24,7 +24,7 @@ nir_builder_opcodes_h = custom_target(
   'nir_builder_opcodes.h',
   input : 'nir_builder_opcodes_h.py',
   output : 'nir_builder_opcodes.h',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
   depend_files : nir_depends,
 )
@@ -33,7 +33,7 @@ nir_constant_expressions_c = custom_target(
   'nir_constant_expressions.c',
   input : 'nir_constant_expressions.py',
   output : 'nir_constant_expressions.c',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
   depend_files : nir_depends,
 )
@@ -42,7 +42,7 @@ nir_opcodes_h = custom_target(
   'nir_opcodes.h',
   input : 'nir_opcodes_h.py',
   output : 'nir_opcodes.h',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
   depend_files : nir_depends,
 )
@@ -51,7 +51,7 @@ nir_opcodes_c = custom_target(
   'nir_opcodes.c',
   input : 'nir_opcodes_c.py',
   output : 'nir_opcodes.c',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
   depend_files : nir_depends,
 )
@@ -60,7 +60,7 @@ nir_opt_algebraic_c = custom_target(
   'nir_opt_algebraic.c',
   input : 'nir_opt_algebraic.py',
   output : 'nir_opt_algebraic.c',
-  command : [prog_python2, '@INPUT@'],
+  command : [prog_python, '@INPUT@'],
   capture : true,
   depend_files : files('nir_algebraic.py'),
 )
@@ -69,7 +69,7 @@ nir_intrinsics_h = custom_target(
   'nir_intrinsics.h',
   input : 'nir_intrinsics_h.py',
   output : 'nir_intrinsics.h',
-  command : [prog_python2, '@INPUT@', '--outdir', meson.current_build_dir()],
+  command : [prog_python, '@INPUT@', '--outdir', meson.current_build_dir()],
   capture : false,
   depend_files : files('nir_intrinsics.py'),
 )
@@ -78,7 +78,7 @@ nir_intrinsics_c = custom_target(
   'nir_intrinsic.c',
   input : 'nir_intrinsics_c.py',
   output : 'nir_intrinsics.c',
-  command : [prog_python2, '@INPUT@', '--outdir', meson.current_build_dir()],
+  command : [prog_python, '@INPUT@', '--outdir', meson.current_build_dir()],
   capture: false,
   depend_files : files('nir_intrinsics.py'),
 )
@@ -100,6 +100,7 @@ files_libnir = files(
   'nir_format_convert.h',
   'nir_from_ssa.c',
   'nir_gather_info.c',
+  'nir_gather_xfb_info.c',
   'nir_gs_count_vertices.c',
   'nir_inline_functions.c',
   'nir_instr_set.c',
@@ -158,6 +159,8 @@ files_libnir = files(
   'nir_opt_cse.c',
   'nir_opt_dce.c',
   'nir_opt_dead_cf.c',
+  'nir_opt_dead_write_vars.c',
+  'nir_opt_find_array_copies.c',
   'nir_opt_gcm.c',
   'nir_opt_global_to_local.c',
   'nir_opt_if.c',
@@ -184,12 +187,14 @@ files_libnir = files(
   'nir_serialize.h',
   'nir_split_per_member_structs.c',
   'nir_split_var_copies.c',
+  'nir_split_vars.c',
   'nir_sweep.c',
   'nir_to_lcssa.c',
   'nir_validate.c',
   'nir_vla.h',
   'nir_worklist.c',
   'nir_worklist.h',
+  'nir_xfb_info.h',
   '../spirv/GLSL.ext.AMD.h',
   '../spirv/GLSL.std.450.h',
   '../spirv/gl_spirv.c',
@@ -237,6 +242,17 @@ if with_tests
     executable(
       'nir_control_flow_test',
       files('tests/control_flow_tests.cpp'),
+      cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
+      include_directories : [inc_common],
+      dependencies : [dep_thread, idep_gtest, idep_nir],
+      link_with : libmesa_util,
+    )
+  )
+  test(
+    'nir_vars',
+    executable(
+      'nir_vars_test',
+      files('tests/vars_tests.cpp'),
       cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
       include_directories : [inc_common],
       dependencies : [dep_thread, idep_gtest, idep_nir],

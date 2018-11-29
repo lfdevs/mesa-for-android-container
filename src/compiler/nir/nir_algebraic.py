@@ -35,6 +35,14 @@ import traceback
 
 from nir_opcodes import opcodes
 
+if sys.version_info < (3, 0):
+    integer_types = (int, long)
+    string_type = unicode
+
+else:
+    integer_types = (int, )
+    string_type = str
+
 _type_re = re.compile(r"(?P<type>int|uint|bool|float)?(?P<bits>\d+)?")
 
 def type_bits(type_str):
@@ -66,13 +74,16 @@ class VarSet(object):
 class Value(object):
    @staticmethod
    def create(val, name_base, varset):
+      if isinstance(val, bytes):
+         val = val.decode('utf-8')
+
       if isinstance(val, tuple):
          return Expression(val, name_base, varset)
       elif isinstance(val, Expression):
          return val
-      elif isinstance(val, (str, unicode)):
+      elif isinstance(val, string_type):
          return Variable(val, name_base, varset)
-      elif isinstance(val, (bool, int, long, float)):
+      elif isinstance(val, (bool, float) + integer_types):
          return Constant(val, name_base)
 
    __template = mako.template.Template("""
@@ -93,9 +104,13 @@ static const ${val.c_type} ${val.name} = {
 % endif
 };""")
 
-   def __init__(self, name, type_str):
+   def __init__(self, val, name, type_str):
+      self.in_val = str(val)
       self.name = name
       self.type_str = type_str
+
+   def __str__(self):
+      return self.in_val
 
    @property
    def type_enum(self):
@@ -119,8 +134,9 @@ _constant_re = re.compile(r"(?P<value>[^@\(]+)(?:@(?P<bits>\d+))?")
 
 class Constant(Value):
    def __init__(self, val, name):
-      Value.__init__(self, name, "constant")
+      Value.__init__(self, val, name, "constant")
 
+      self.in_val = str(val)
       if isinstance(val, (str)):
          m = _constant_re.match(val)
          self.value = ast.literal_eval(m.group('value'))
@@ -136,7 +152,7 @@ class Constant(Value):
    def hex(self):
       if isinstance(self.value, (bool)):
          return 'NIR_TRUE' if self.value else 'NIR_FALSE'
-      if isinstance(self.value, (int, long)):
+      if isinstance(self.value, integer_types):
          return hex(self.value)
       elif isinstance(self.value, float):
          i = struct.unpack('Q', struct.pack('d', self.value))[0]
@@ -154,8 +170,8 @@ class Constant(Value):
 
    def type(self):
       if isinstance(self.value, (bool)):
-         return "nir_type_bool32"
-      elif isinstance(self.value, (int, long)):
+         return "nir_type_bool"
+      elif isinstance(self.value, integer_types):
          return "nir_type_int"
       elif isinstance(self.value, float):
          return "nir_type_float"
@@ -166,7 +182,7 @@ _var_name_re = re.compile(r"(?P<const>#)?(?P<name>\w+)"
 
 class Variable(Value):
    def __init__(self, val, name, varset):
-      Value.__init__(self, name, "variable")
+      Value.__init__(self, val, name, "variable")
 
       m = _var_name_re.match(val)
       assert m and m.group('name') is not None
@@ -186,9 +202,12 @@ class Variable(Value):
 
       self.index = varset[self.var_name]
 
+   def __str__(self):
+      return self.in_val
+
    def type(self):
       if self.required_type == 'bool':
-         return "nir_type_bool32"
+         return "nir_type_bool"
       elif self.required_type in ('int', 'uint'):
          return "nir_type_int"
       elif self.required_type == 'float':
@@ -199,7 +218,7 @@ _opcode_re = re.compile(r"(?P<inexact>~)?(?P<opcode>\w+)(?:@(?P<bits>\d+))?"
 
 class Expression(Value):
    def __init__(self, expr, name_base, varset):
-      Value.__init__(self, name_base, "expression")
+      Value.__init__(self, expr, name_base, "expression")
       assert isinstance(expr, tuple)
 
       m = _opcode_re.match(expr[0])
@@ -314,32 +333,46 @@ class BitSizeValidator(object):
       self._class_relation = IntEquivalenceRelation()
 
    def validate(self, search, replace):
-      dst_class = self._propagate_bit_size_up(search)
-      if dst_class == 0:
-         dst_class = self._new_class()
-      self._propagate_bit_class_down(search, dst_class)
+      search_dst_class = self._propagate_bit_size_up(search)
+      if search_dst_class == 0:
+         search_dst_class = self._new_class()
+      self._propagate_bit_class_down(search, search_dst_class)
 
-      validate_dst_class = self._validate_bit_class_up(replace)
-      assert validate_dst_class == 0 or validate_dst_class == dst_class
-      self._validate_bit_class_down(replace, dst_class)
+      replace_dst_class = self._validate_bit_class_up(replace)
+      if replace_dst_class != 0:
+         assert search_dst_class != 0, \
+                'Search expression matches any bit size but replace ' \
+                'expression can only generate {0}-bit values' \
+                .format(replace_dst_class)
+
+         assert search_dst_class == replace_dst_class, \
+                'Search expression matches any {0}-bit values but replace ' \
+                'expression can only generates {1}-bit values' \
+                .format(search_dst_class, replace_dst_class)
+
+      self._validate_bit_class_down(replace, search_dst_class)
 
    def _new_class(self):
       self._num_classes += 1
       return -self._num_classes
 
-   def _set_var_bit_class(self, var_id, bit_class):
+   def _set_var_bit_class(self, var, bit_class):
       assert bit_class != 0
-      var_class = self._var_classes[var_id]
+      var_class = self._var_classes[var.index]
       if var_class == 0:
-         self._var_classes[var_id] = bit_class
+         self._var_classes[var.index] = bit_class
       else:
-         canon_class = self._class_relation.get_canonical(var_class)
-         assert canon_class < 0 or canon_class == bit_class
+         canon_var_class = self._class_relation.get_canonical(var_class)
+         canon_bit_class = self._class_relation.get_canonical(bit_class)
+         assert canon_var_class < 0 or canon_bit_class < 0 or \
+                canon_var_class == canon_bit_class, \
+                'Variable {0} cannot be both {1}-bit and {2}-bit' \
+                .format(str(var), bit_class, var_class)
          var_class = self._class_relation.add_equiv(var_class, bit_class)
-         self._var_classes[var_id] = var_class
+         self._var_classes[var.index] = var_class
 
-   def _get_var_bit_class(self, var_id):
-      return self._class_relation.get_canonical(self._var_classes[var_id])
+   def _get_var_bit_class(self, var):
+      return self._class_relation.get_canonical(self._var_classes[var.index])
 
    def _propagate_bit_size_up(self, val):
       if isinstance(val, (Constant, Variable)):
@@ -355,37 +388,60 @@ class BitSizeValidator(object):
 
             src_type_bits = type_bits(nir_op.input_types[i])
             if src_type_bits != 0:
-               assert src_bits == src_type_bits
+               assert src_bits == src_type_bits, \
+                      'Source {0} of nir_op_{1} must be a {2}-bit value but ' \
+                      'the only possible matched values are {3}-bit: {4}' \
+                      .format(i, val.opcode, src_type_bits, src_bits, str(val))
             else:
-               assert val.common_size == 0 or src_bits == val.common_size
+               assert val.common_size == 0 or src_bits == val.common_size, \
+                      'Expression cannot have both {0}-bit and {1}-bit ' \
+                      'variable-width sources: {2}' \
+                      .format(src_bits, val.common_size, str(val))
                val.common_size = src_bits
 
          dst_type_bits = type_bits(nir_op.output_type)
          if dst_type_bits != 0:
-            assert val.bit_size == 0 or val.bit_size == dst_type_bits
+            assert val.bit_size == 0 or val.bit_size == dst_type_bits, \
+                   'nir_op_{0} produces a {1}-bit result but a {2}-bit ' \
+                   'result was requested' \
+                   .format(val.opcode, dst_type_bits, val.bit_size)
             return dst_type_bits
          else:
             if val.common_size != 0:
-               assert val.bit_size == 0 or val.bit_size == val.common_size
+               assert val.bit_size == 0 or val.bit_size == val.common_size, \
+                      'Variable width expression musr be {0}-bit based on ' \
+                      'the sources but a {1}-bit result was requested: {2}' \
+                      .format(val.common_size, val.bit_size, str(val))
             else:
                val.common_size = val.bit_size
             return val.common_size
 
    def _propagate_bit_class_down(self, val, bit_class):
       if isinstance(val, Constant):
-         assert val.bit_size == 0 or val.bit_size == bit_class
+         assert val.bit_size == 0 or val.bit_size == bit_class, \
+                'Constant is {0}-bit but a {1}-bit value is required: {2}' \
+                .format(val.bit_size, bit_class, str(val))
 
       elif isinstance(val, Variable):
-         assert val.bit_size == 0 or val.bit_size == bit_class
-         self._set_var_bit_class(val.index, bit_class)
+         assert val.bit_size == 0 or val.bit_size == bit_class, \
+                'Variable is {0}-bit but a {1}-bit value is required: {2}' \
+                .format(val.bit_size, bit_class, str(val))
+         self._set_var_bit_class(val, bit_class)
 
       elif isinstance(val, Expression):
          nir_op = opcodes[val.opcode]
          dst_type_bits = type_bits(nir_op.output_type)
          if dst_type_bits != 0:
-            assert bit_class == 0 or bit_class == dst_type_bits
+            assert bit_class == 0 or bit_class == dst_type_bits, \
+                   'nir_op_{0} produces a {1}-bit result but the parent ' \
+                   'expression wants a {2}-bit value' \
+                   .format(val.opcode, dst_type_bits, bit_class)
          else:
-            assert val.common_size == 0 or val.common_size == bit_class
+            assert val.common_size == 0 or val.common_size == bit_class, \
+                   'Variable-width expression produces a {0}-bit result ' \
+                   'based on the source widths but the parent expression ' \
+                   'wants a {1}-bit value: {2}' \
+                   .format(val.common_size, bit_class, str(val))
             val.common_size = bit_class
 
          if val.common_size:
@@ -407,7 +463,7 @@ class BitSizeValidator(object):
          return val.bit_size
 
       elif isinstance(val, Variable):
-         var_class = self._get_var_bit_class(val.index)
+         var_class = self._get_var_bit_class(val)
          # By the time we get to validation, every variable should have a class
          assert var_class != 0
 
@@ -507,6 +563,7 @@ class SearchAndReplace(object):
 
 _algebraic_pass_template = mako.template.Template("""
 #include "nir.h"
+#include "nir_builder.h"
 #include "nir_search.h"
 #include "nir_search_helpers.h"
 
@@ -535,8 +592,8 @@ static const struct transform ${pass_name}_${opcode}_xforms[] = {
 % endfor
 
 static bool
-${pass_name}_block(nir_block *block, const bool *condition_flags,
-                   void *mem_ctx)
+${pass_name}_block(nir_builder *build, nir_block *block,
+                   const bool *condition_flags)
 {
    bool progress = false;
 
@@ -554,8 +611,7 @@ ${pass_name}_block(nir_block *block, const bool *condition_flags,
          for (unsigned i = 0; i < ARRAY_SIZE(${pass_name}_${opcode}_xforms); i++) {
             const struct transform *xform = &${pass_name}_${opcode}_xforms[i];
             if (condition_flags[xform->condition_offset] &&
-                nir_replace_instr(alu, xform->search, xform->replace,
-                                  mem_ctx)) {
+                nir_replace_instr(build, alu, xform->search, xform->replace)) {
                progress = true;
                break;
             }
@@ -573,11 +629,13 @@ ${pass_name}_block(nir_block *block, const bool *condition_flags,
 static bool
 ${pass_name}_impl(nir_function_impl *impl, const bool *condition_flags)
 {
-   void *mem_ctx = ralloc_parent(impl);
    bool progress = false;
 
+   nir_builder build;
+   nir_builder_init(&build, impl);
+
    nir_foreach_block_reverse(block, impl) {
-      progress |= ${pass_name}_block(block, condition_flags, mem_ctx);
+      progress |= ${pass_name}_block(&build, block, condition_flags);
    }
 
    if (progress)

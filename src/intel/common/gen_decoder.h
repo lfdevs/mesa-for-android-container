@@ -99,8 +99,10 @@ struct gen_group {
    char *name;
 
    struct gen_field *fields; /* linked list of fields */
+   struct gen_field *dword_length_field; /* <instruction> specific */
 
    uint32_t dw_length;
+   uint32_t bias; /* <instruction> specific */
    uint32_t group_offset, group_count;
    uint32_t group_size;
    bool variable; /* <group> specific */
@@ -201,8 +203,6 @@ struct gen_batch_decode_bo {
    uint32_t size;
    const void *map;
 };
-
-struct gen_disasm *disasm;
 
 struct gen_batch_decode_ctx {
    /**

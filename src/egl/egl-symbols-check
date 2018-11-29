@@ -1,7 +1,12 @@
 #!/bin/sh
 set -eu
 
-LIB=${1-.libs/libEGL.so}
+if [ "$(uname)" = "Darwin" ]
+then
+  LIB=${1-.libs/libEGL.dylib}
+else
+  LIB=${1-.libs/libEGL.so}
+fi
 
 if ! [ -f "$LIB" ]
 then

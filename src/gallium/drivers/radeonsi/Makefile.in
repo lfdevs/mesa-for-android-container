@@ -151,16 +151,17 @@ libradeonsi_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 am__objects_1 =
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_2 = $(am__objects_1) cik_sdma.lo si_blit.lo si_buffer.lo \
-	si_clear.lo si_compute.lo si_cp_dma.lo si_debug.lo \
-	si_descriptors.lo si_dma.lo si_dma_cs.lo si_fence.lo si_get.lo \
-	si_gfx_cs.lo si_gpu_load.lo si_pipe.lo si_pm4.lo \
-	si_perfcounter.lo si_query.lo si_shader.lo si_shader_nir.lo \
-	si_shader_tgsi_alu.lo si_shader_tgsi_mem.lo \
-	si_shader_tgsi_setup.lo si_state.lo si_state_binning.lo \
-	si_state_draw.lo si_state_msaa.lo si_state_shaders.lo \
-	si_state_streamout.lo si_state_viewport.lo si_test_dma.lo \
-	si_texture.lo si_uvd.lo ../radeon/r600_perfcounter.lo \
-	../radeon/radeon_uvd.lo ../radeon/radeon_vcn_dec.lo \
+	si_clear.lo si_compute.lo si_compute_blit.lo si_cp_dma.lo \
+	si_debug.lo si_descriptors.lo si_dma.lo si_dma_cs.lo \
+	si_fence.lo si_get.lo si_gfx_cs.lo si_gpu_load.lo si_pipe.lo \
+	si_pm4.lo si_perfcounter.lo si_query.lo si_shader.lo \
+	si_shader_nir.lo si_shader_tgsi_alu.lo si_shader_tgsi_mem.lo \
+	si_shader_tgsi_setup.lo si_shaderlib_tgsi.lo si_state.lo \
+	si_state_binning.lo si_state_draw.lo si_state_msaa.lo \
+	si_state_shaders.lo si_state_streamout.lo si_state_viewport.lo \
+	si_test_dma.lo si_test_dma_perf.lo si_texture.lo si_uvd.lo \
+	../radeon/r600_perfcounter.lo ../radeon/radeon_uvd.lo \
+	../radeon/radeon_vcn_dec_jpeg.lo ../radeon/radeon_vcn_dec.lo \
 	../radeon/radeon_vcn_enc_1_2.lo ../radeon/radeon_vcn_enc.lo \
 	../radeon/radeon_uvd_enc_1_1.lo ../radeon/radeon_uvd_enc.lo \
 	../radeon/radeon_vce_40_2_2.lo ../radeon/radeon_vce_50.lo \
@@ -200,27 +201,30 @@ am__depfiles_remade = ../radeon/$(DEPDIR)/r600_perfcounter.Plo \
 	../radeon/$(DEPDIR)/radeon_vce_50.Plo \
 	../radeon/$(DEPDIR)/radeon_vce_52.Plo \
 	../radeon/$(DEPDIR)/radeon_vcn_dec.Plo \
+	../radeon/$(DEPDIR)/radeon_vcn_dec_jpeg.Plo \
 	../radeon/$(DEPDIR)/radeon_vcn_enc.Plo \
 	../radeon/$(DEPDIR)/radeon_vcn_enc_1_2.Plo \
 	../radeon/$(DEPDIR)/radeon_video.Plo ./$(DEPDIR)/cik_sdma.Plo \
 	./$(DEPDIR)/si_blit.Plo ./$(DEPDIR)/si_buffer.Plo \
 	./$(DEPDIR)/si_clear.Plo ./$(DEPDIR)/si_compute.Plo \
-	./$(DEPDIR)/si_cp_dma.Plo ./$(DEPDIR)/si_debug.Plo \
-	./$(DEPDIR)/si_descriptors.Plo ./$(DEPDIR)/si_dma.Plo \
-	./$(DEPDIR)/si_dma_cs.Plo ./$(DEPDIR)/si_fence.Plo \
-	./$(DEPDIR)/si_get.Plo ./$(DEPDIR)/si_gfx_cs.Plo \
-	./$(DEPDIR)/si_gpu_load.Plo ./$(DEPDIR)/si_perfcounter.Plo \
-	./$(DEPDIR)/si_pipe.Plo ./$(DEPDIR)/si_pm4.Plo \
-	./$(DEPDIR)/si_query.Plo ./$(DEPDIR)/si_shader.Plo \
-	./$(DEPDIR)/si_shader_nir.Plo \
+	./$(DEPDIR)/si_compute_blit.Plo ./$(DEPDIR)/si_cp_dma.Plo \
+	./$(DEPDIR)/si_debug.Plo ./$(DEPDIR)/si_descriptors.Plo \
+	./$(DEPDIR)/si_dma.Plo ./$(DEPDIR)/si_dma_cs.Plo \
+	./$(DEPDIR)/si_fence.Plo ./$(DEPDIR)/si_get.Plo \
+	./$(DEPDIR)/si_gfx_cs.Plo ./$(DEPDIR)/si_gpu_load.Plo \
+	./$(DEPDIR)/si_perfcounter.Plo ./$(DEPDIR)/si_pipe.Plo \
+	./$(DEPDIR)/si_pm4.Plo ./$(DEPDIR)/si_query.Plo \
+	./$(DEPDIR)/si_shader.Plo ./$(DEPDIR)/si_shader_nir.Plo \
 	./$(DEPDIR)/si_shader_tgsi_alu.Plo \
 	./$(DEPDIR)/si_shader_tgsi_mem.Plo \
-	./$(DEPDIR)/si_shader_tgsi_setup.Plo ./$(DEPDIR)/si_state.Plo \
+	./$(DEPDIR)/si_shader_tgsi_setup.Plo \
+	./$(DEPDIR)/si_shaderlib_tgsi.Plo ./$(DEPDIR)/si_state.Plo \
 	./$(DEPDIR)/si_state_binning.Plo ./$(DEPDIR)/si_state_draw.Plo \
 	./$(DEPDIR)/si_state_msaa.Plo ./$(DEPDIR)/si_state_shaders.Plo \
 	./$(DEPDIR)/si_state_streamout.Plo \
 	./$(DEPDIR)/si_state_viewport.Plo ./$(DEPDIR)/si_test_dma.Plo \
-	./$(DEPDIR)/si_texture.Plo ./$(DEPDIR)/si_uvd.Plo
+	./$(DEPDIR)/si_test_dma_perf.Plo ./$(DEPDIR)/si_texture.Plo \
+	./$(DEPDIR)/si_uvd.Plo
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -331,8 +335,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -353,7 +355,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -446,11 +447,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -512,8 +518,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -572,10 +576,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -601,6 +608,7 @@ C_SOURCES := \
 	si_clear.c \
 	si_compute.c \
 	si_compute.h \
+	si_compute_blit.c \
 	si_cp_dma.c \
 	si_debug.c \
 	si_descriptors.c \
@@ -625,6 +633,7 @@ C_SOURCES := \
 	si_shader_tgsi_alu.c \
 	si_shader_tgsi_mem.c \
 	si_shader_tgsi_setup.c \
+	si_shaderlib_tgsi.c \
 	si_state.c \
 	si_state_binning.c \
 	si_state_draw.c \
@@ -634,11 +643,13 @@ C_SOURCES := \
 	si_state_viewport.c \
 	si_state.h \
 	si_test_dma.c \
+	si_test_dma_perf.c \
 	si_texture.c \
 	si_uvd.c \
 	../radeon/r600_perfcounter.c \
 	../radeon/radeon_uvd.c \
 	../radeon/radeon_uvd.h \
+	../radeon/radeon_vcn_dec_jpeg.c \
 	../radeon/radeon_vcn_dec.c \
 	../radeon/radeon_vcn_dec.h \
 	../radeon/radeon_vcn_enc_1_2.c \
@@ -743,7 +754,7 @@ GEN_DRIINFO_INPUTS = \
 	$(top_srcdir)/src/gallium/auxiliary/pipe-loader/driinfo_gallium.h \
 	$(srcdir)/driinfo_radeonsi.h
 
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 MERGE_DRIINFO = $(top_srcdir)/src/util/merge_driinfo.py
 BUILT_SOURCES = $(GENERATED_SOURCES)
 CLEANFILES = $(GENERATED_SOURCES)
@@ -804,6 +815,8 @@ clean-noinstLTLIBRARIES:
 	../radeon/$(DEPDIR)/$(am__dirstamp)
 ../radeon/radeon_uvd.lo: ../radeon/$(am__dirstamp) \
 	../radeon/$(DEPDIR)/$(am__dirstamp)
+../radeon/radeon_vcn_dec_jpeg.lo: ../radeon/$(am__dirstamp) \
+	../radeon/$(DEPDIR)/$(am__dirstamp)
 ../radeon/radeon_vcn_dec.lo: ../radeon/$(am__dirstamp) \
 	../radeon/$(DEPDIR)/$(am__dirstamp)
 ../radeon/radeon_vcn_enc_1_2.lo: ../radeon/$(am__dirstamp) \
@@ -845,6 +858,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce_50.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vce_52.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_dec.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_dec_jpeg.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_enc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_vcn_enc_1_2.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_video.Plo@am__quote@ # am--include-marker
@@ -853,6 +867,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_buffer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_clear.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_compute.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_compute_blit.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_cp_dma.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_debug.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_descriptors.Plo@am__quote@ # am--include-marker
@@ -871,6 +886,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader_tgsi_alu.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader_tgsi_mem.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shader_tgsi_setup.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_shaderlib_tgsi.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_binning.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_draw.Plo@am__quote@ # am--include-marker
@@ -879,6 +895,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_streamout.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_state_viewport.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_test_dma.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_test_dma_perf.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_texture.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/si_uvd.Plo@am__quote@ # am--include-marker
 
@@ -1059,6 +1076,7 @@ distclean: distclean-am
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce_50.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce_52.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_dec.Plo
+	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_dec_jpeg.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_enc.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_enc_1_2.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_video.Plo
@@ -1067,6 +1085,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/si_buffer.Plo
 	-rm -f ./$(DEPDIR)/si_clear.Plo
 	-rm -f ./$(DEPDIR)/si_compute.Plo
+	-rm -f ./$(DEPDIR)/si_compute_blit.Plo
 	-rm -f ./$(DEPDIR)/si_cp_dma.Plo
 	-rm -f ./$(DEPDIR)/si_debug.Plo
 	-rm -f ./$(DEPDIR)/si_descriptors.Plo
@@ -1085,6 +1104,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_alu.Plo
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_mem.Plo
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_setup.Plo
+	-rm -f ./$(DEPDIR)/si_shaderlib_tgsi.Plo
 	-rm -f ./$(DEPDIR)/si_state.Plo
 	-rm -f ./$(DEPDIR)/si_state_binning.Plo
 	-rm -f ./$(DEPDIR)/si_state_draw.Plo
@@ -1093,6 +1113,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/si_state_streamout.Plo
 	-rm -f ./$(DEPDIR)/si_state_viewport.Plo
 	-rm -f ./$(DEPDIR)/si_test_dma.Plo
+	-rm -f ./$(DEPDIR)/si_test_dma_perf.Plo
 	-rm -f ./$(DEPDIR)/si_texture.Plo
 	-rm -f ./$(DEPDIR)/si_uvd.Plo
 	-rm -f Makefile
@@ -1149,6 +1170,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce_50.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce_52.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_dec.Plo
+	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_dec_jpeg.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_enc.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vcn_enc_1_2.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_video.Plo
@@ -1157,6 +1179,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/si_buffer.Plo
 	-rm -f ./$(DEPDIR)/si_clear.Plo
 	-rm -f ./$(DEPDIR)/si_compute.Plo
+	-rm -f ./$(DEPDIR)/si_compute_blit.Plo
 	-rm -f ./$(DEPDIR)/si_cp_dma.Plo
 	-rm -f ./$(DEPDIR)/si_debug.Plo
 	-rm -f ./$(DEPDIR)/si_descriptors.Plo
@@ -1175,6 +1198,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_alu.Plo
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_mem.Plo
 	-rm -f ./$(DEPDIR)/si_shader_tgsi_setup.Plo
+	-rm -f ./$(DEPDIR)/si_shaderlib_tgsi.Plo
 	-rm -f ./$(DEPDIR)/si_state.Plo
 	-rm -f ./$(DEPDIR)/si_state_binning.Plo
 	-rm -f ./$(DEPDIR)/si_state_draw.Plo
@@ -1183,6 +1207,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/si_state_streamout.Plo
 	-rm -f ./$(DEPDIR)/si_state_viewport.Plo
 	-rm -f ./$(DEPDIR)/si_test_dma.Plo
+	-rm -f ./$(DEPDIR)/si_test_dma_perf.Plo
 	-rm -f ./$(DEPDIR)/si_texture.Plo
 	-rm -f ./$(DEPDIR)/si_uvd.Plo
 	-rm -f Makefile

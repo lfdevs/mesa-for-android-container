@@ -207,7 +207,15 @@ extern "C"
 EGLBoolean
 init_haiku(_EGLDriver *drv, _EGLDisplay *dpy)
 {
+	_EGLDevice *dev;
 	CALLED();
+
+	dev = _eglAddDevice(-1, true);
+	if (!dev) {
+		_eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
+		return EGL_FALSE;
+	}
+	disp->Device = dev;
 
 	TRACE("Add configs\n");
 	if (!haiku_add_configs_for_visuals(dpy))
@@ -305,22 +313,14 @@ haiku_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
 
 /**
  * This is the main entrypoint into the driver, called by libEGL.
- * Create a new _EGLDriver object and init its dispatch table.
+ * Gets an _EGLDriver object and init its dispatch table.
  */
 extern "C"
-_EGLDriver*
-_eglBuiltInDriver(void)
+void
+_eglInitDriver(_EGLDriver *driver)
 {
 	CALLED();
 
-	_EGLDriver* driver;
-	driver = (_EGLDriver*) calloc(1, sizeof(*driver));
-	if (!driver) {
-		_eglError(EGL_BAD_ALLOC, "_eglBuiltInDriverHaiku");
-		return NULL;
-	}
-
-	_eglInitDriverFallbacks(driver);
 	driver->API.Initialize = init_haiku;
 	driver->API.Terminate = haiku_terminate;
 	driver->API.CreateContext = haiku_create_context;
@@ -333,9 +333,5 @@ _eglBuiltInDriver(void)
 
 	driver->API.SwapBuffers = haiku_swap_buffers;
 
-	driver->Name = "Haiku";
-
 	TRACE("API Calls defined\n");
-
-	return driver;
 }

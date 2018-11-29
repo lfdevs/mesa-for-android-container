@@ -45,13 +45,6 @@ struct si_shader_selector;
 struct si_texture;
 struct si_qbo_state;
 
-/* State atoms are callbacks which write a sequence of packets into a GPU
- * command buffer (AKA indirect buffer, AKA IB, AKA command stream, AKA CS).
- */
-struct si_atom {
-	void (*emit)(struct si_context *ctx);
-};
-
 struct si_state_blend {
 	struct si_pm4_state	pm4;
 	uint32_t		cb_target_mask;
@@ -78,6 +71,7 @@ struct si_state_rasterizer {
 	float			max_point_size;
 	unsigned		sprite_coord_enable:8;
 	unsigned		clip_plane_enable:8;
+	unsigned		half_pixel_center:1;
 	unsigned		flatshade:1;
 	unsigned		two_side:1;
 	unsigned		multisample_enable:1;
@@ -138,7 +132,7 @@ struct si_stencil_ref {
 
 struct si_vertex_elements
 {
-	uint32_t			instance_divisors[SI_MAX_ATTRIBS];
+	struct r600_resource		*instance_divisor_factor_buffer;
 	uint32_t			rsrc_word3[SI_MAX_ATTRIBS];
 	uint16_t			src_offset[SI_MAX_ATTRIBS];
 	uint8_t				fix_fetch[SI_MAX_ATTRIBS];
@@ -177,17 +171,13 @@ union si_state {
 #define SI_STATE_BIT(name) (1 << SI_STATE_IDX(name))
 #define SI_NUM_STATES (sizeof(union si_state) / sizeof(struct si_pm4_state *))
 
-static inline unsigned si_states_that_roll_context(void)
+static inline unsigned si_states_that_always_roll_context(void)
 {
 	return (SI_STATE_BIT(blend) |
 		SI_STATE_BIT(rasterizer) |
 		SI_STATE_BIT(dsa) |
 		SI_STATE_BIT(poly_offset) |
-		SI_STATE_BIT(es) |
-		SI_STATE_BIT(gs) |
-		SI_STATE_BIT(vgt_shader_config) |
-		SI_STATE_BIT(vs) |
-		SI_STATE_BIT(ps));
+		SI_STATE_BIT(vgt_shader_config));
 }
 
 union si_state_atoms {
@@ -213,6 +203,7 @@ union si_state_atoms {
 		struct si_atom stencil_ref;
 		struct si_atom spi_map;
 		struct si_atom scratch_state;
+		struct si_atom window_rectangles;
 	} s;
 	struct si_atom array[0];
 };
@@ -221,25 +212,18 @@ union si_state_atoms {
 			         sizeof(struct si_atom)))
 #define SI_NUM_ATOMS (sizeof(union si_state_atoms)/sizeof(struct si_atom*))
 
-static inline unsigned si_atoms_that_roll_context(void)
+static inline unsigned si_atoms_that_always_roll_context(void)
 {
 	return (SI_ATOM_BIT(streamout_begin) |
 		SI_ATOM_BIT(streamout_enable) |
 		SI_ATOM_BIT(framebuffer) |
 		SI_ATOM_BIT(msaa_sample_locs) |
-		SI_ATOM_BIT(db_render_state) |
-		SI_ATOM_BIT(dpbb_state) |
-		SI_ATOM_BIT(msaa_config) |
 		SI_ATOM_BIT(sample_mask) |
-		SI_ATOM_BIT(cb_render_state) |
 		SI_ATOM_BIT(blend_color) |
-		SI_ATOM_BIT(clip_regs) |
 		SI_ATOM_BIT(clip_state) |
-		SI_ATOM_BIT(guardband) |
 		SI_ATOM_BIT(scissors) |
 		SI_ATOM_BIT(viewports) |
 		SI_ATOM_BIT(stencil_ref) |
-		SI_ATOM_BIT(spi_map) |
 		SI_ATOM_BIT(scratch_state));
 }
 
@@ -268,6 +252,7 @@ enum si_tracked_reg {
 	SI_TRACKED_DB_EQAA,
 	SI_TRACKED_PA_SC_MODE_CNTL_1,
 
+	SI_TRACKED_PA_SU_PRIM_FILTER_CNTL,
 	SI_TRACKED_PA_SU_SMALL_PRIM_FILTER_CNTL,
 
 	SI_TRACKED_PA_CL_VS_OUT_CNTL,
@@ -281,11 +266,54 @@ enum si_tracked_reg {
 	SI_TRACKED_PA_CL_GB_HORZ_CLIP_ADJ,
 	SI_TRACKED_PA_CL_GB_HORZ_DISC_ADJ,
 
+	SI_TRACKED_PA_SU_HARDWARE_SCREEN_OFFSET,
+	SI_TRACKED_PA_SU_VTX_CNTL,
+
+	SI_TRACKED_PA_SC_CLIPRECT_RULE,
+
+	SI_TRACKED_VGT_ESGS_RING_ITEMSIZE,
+
+	SI_TRACKED_VGT_GSVS_RING_OFFSET_1, /* 4 consecutive registers */
+	SI_TRACKED_VGT_GSVS_RING_OFFSET_2,
+	SI_TRACKED_VGT_GSVS_RING_OFFSET_3,
+	SI_TRACKED_VGT_GS_OUT_PRIM_TYPE,
+
+	SI_TRACKED_VGT_GSVS_RING_ITEMSIZE,
+	SI_TRACKED_VGT_GS_MAX_VERT_OUT,
+
+	SI_TRACKED_VGT_GS_VERT_ITEMSIZE, /* 4 consecutive registers */
+	SI_TRACKED_VGT_GS_VERT_ITEMSIZE_1,
+	SI_TRACKED_VGT_GS_VERT_ITEMSIZE_2,
+	SI_TRACKED_VGT_GS_VERT_ITEMSIZE_3,
+
+	SI_TRACKED_VGT_GS_INSTANCE_CNT,
+	SI_TRACKED_VGT_GS_ONCHIP_CNTL,
+	SI_TRACKED_VGT_GS_MAX_PRIMS_PER_SUBGROUP,
+	SI_TRACKED_VGT_GS_MODE,
+	SI_TRACKED_VGT_PRIMITIVEID_EN,
+	SI_TRACKED_VGT_REUSE_OFF,
+	SI_TRACKED_SPI_VS_OUT_CONFIG,
+	SI_TRACKED_SPI_SHADER_POS_FORMAT,
+	SI_TRACKED_PA_CL_VTE_CNTL,
+
+	SI_TRACKED_SPI_PS_INPUT_ENA, /* 2 consecutive registers */
+	SI_TRACKED_SPI_PS_INPUT_ADDR,
+
+	SI_TRACKED_SPI_BARYC_CNTL,
+	SI_TRACKED_SPI_PS_IN_CONTROL,
+
+	SI_TRACKED_SPI_SHADER_Z_FORMAT, /* 2 consecutive registers */
+	SI_TRACKED_SPI_SHADER_COL_FORMAT,
+
+	SI_TRACKED_CB_SHADER_MASK,
+	SI_TRACKED_VGT_TF_PARAM,
+	SI_TRACKED_VGT_VERTEX_REUSE_BLOCK_CNTL,
+
 	SI_NUM_TRACKED_REGS,
 };
 
 struct si_tracked_regs {
-	uint32_t		reg_saved;
+	uint64_t		reg_saved;
 	uint32_t		reg_value[SI_NUM_TRACKED_REGS];
 	uint32_t		spi_ps_input_cntl[32];
 };
@@ -511,8 +539,6 @@ void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
 void si_get_active_slot_masks(const struct tgsi_shader_info *info,
 			      uint32_t *const_and_shader_buffers,
 			      uint64_t *samplers_and_images);
-void *si_get_blit_vs(struct si_context *sctx, enum blitter_attrib_type type,
-		     unsigned num_layers);
 
 /* si_state_draw.c */
 void si_init_ia_multi_vgt_param_table(struct si_context *sctx);

@@ -285,7 +285,8 @@ build_triplet = @build@
 host_triplet = @host@
 target_triplet = @target@
 noinst_PROGRAMS = tools/aubinator$(EXEEXT) \
-	tools/aubinator_error_decode$(EXEEXT) tools/error2aub$(EXEEXT)
+	tools/aubinator_error_decode$(EXEEXT) \
+	tools/i965_disasm$(EXEEXT) tools/error2aub$(EXEEXT)
 check_PROGRAMS = $(am__EXEEXT_1) \
 	isl/tests/isl_surf_get_image_offset_test$(EXEEXT) \
 	$(am__EXEEXT_3)
@@ -476,6 +477,7 @@ am__objects_3 = compiler/libintel_compiler_la-brw_cfg.lo \
 	compiler/libintel_compiler_la-brw_nir_analyze_ubo_ranges.lo \
 	compiler/libintel_compiler_la-brw_nir_attribute_workarounds.lo \
 	compiler/libintel_compiler_la-brw_nir_lower_cs_intrinsics.lo \
+	compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo \
 	compiler/libintel_compiler_la-brw_nir_opt_peephole_ffma.lo \
 	compiler/libintel_compiler_la-brw_nir_tcs_workarounds.lo \
 	compiler/libintel_compiler_la-brw_packed_float.lo \
@@ -918,7 +920,9 @@ isl_tests_isl_surf_get_image_offset_test_OBJECTS =  \
 isl_tests_isl_surf_get_image_offset_test_DEPENDENCIES =  \
 	dev/libintel_dev.la isl/libisl.la \
 	$(top_builddir)/src/util/libmesautil.la
-am_tools_aubinator_OBJECTS = tools/aubinator-aubinator.$(OBJEXT)
+am_tools_aubinator_OBJECTS = tools/aubinator-aub_mem.$(OBJEXT) \
+	tools/aubinator-aub_read.$(OBJEXT) \
+	tools/aubinator-aubinator.$(OBJEXT)
 tools_aubinator_OBJECTS = $(am_tools_aubinator_OBJECTS)
 tools_aubinator_DEPENDENCIES = common/libintel_common.la \
 	compiler/libintel_compiler.la dev/libintel_dev.la \
@@ -950,6 +954,16 @@ tools_error2aub_DEPENDENCIES = dev/libintel_dev.la \
 tools_error2aub_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(tools_error2aub_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
+	-o $@
+am_tools_i965_disasm_OBJECTS =  \
+	tools/i965_disasm-i965_disasm.$(OBJEXT)
+tools_i965_disasm_OBJECTS = $(am_tools_i965_disasm_OBJECTS)
+tools_i965_disasm_DEPENDENCIES = common/libintel_common.la \
+	compiler/libintel_compiler.la dev/libintel_dev.la \
+	$(top_builddir)/src/util/libmesautil.la $(am__DEPENDENCIES_1)
+tools_i965_disasm_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(tools_i965_disasm_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
 vulkan_tests_block_pool_no_free_SOURCES =  \
 	vulkan/tests/block_pool_no_free.c
@@ -1043,6 +1057,7 @@ am__depfiles_remade = ./$(DEPDIR)/vulkan_libvulkan_intel_la-dummy.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_analyze_ubo_ranges.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_attribute_workarounds.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_cs_intrinsics.Plo \
+	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_opt_peephole_ffma.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_tcs_workarounds.Plo \
 	compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_trig_workarounds.Plo \
@@ -1108,10 +1123,13 @@ am__depfiles_remade = ./$(DEPDIR)/vulkan_libvulkan_intel_la-dummy.Plo \
 	isl/$(DEPDIR)/libisl_gen9_la-isl_gen9.Plo \
 	isl/$(DEPDIR)/libisl_gen9_la-isl_surface_state.Plo \
 	isl/tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po \
+	tools/$(DEPDIR)/aubinator-aub_mem.Po \
+	tools/$(DEPDIR)/aubinator-aub_read.Po \
 	tools/$(DEPDIR)/aubinator-aubinator.Po \
 	tools/$(DEPDIR)/aubinator_error_decode-aubinator_error_decode.Po \
 	tools/$(DEPDIR)/error2aub-aub_write.Po \
 	tools/$(DEPDIR)/error2aub-error2aub.Po \
+	tools/$(DEPDIR)/i965_disasm-i965_disasm.Po \
 	vulkan/$(DEPDIR)/libanv_gen10_la-gen8_cmd_buffer.Plo \
 	vulkan/$(DEPDIR)/libanv_gen10_la-genX_blorp_exec.Plo \
 	vulkan/$(DEPDIR)/libanv_gen10_la-genX_cmd_buffer.Plo \
@@ -1255,8 +1273,8 @@ SOURCES = $(blorp_libblorp_la_SOURCES) \
 	isl/tests/isl_surf_get_image_offset_test.c \
 	$(tools_aubinator_SOURCES) \
 	$(tools_aubinator_error_decode_SOURCES) \
-	$(tools_error2aub_SOURCES) vulkan/tests/block_pool_no_free.c \
-	vulkan/tests/state_pool.c \
+	$(tools_error2aub_SOURCES) $(tools_i965_disasm_SOURCES) \
+	vulkan/tests/block_pool_no_free.c vulkan/tests/state_pool.c \
 	vulkan/tests/state_pool_free_list_only.c \
 	vulkan/tests/state_pool_no_free.c
 DIST_SOURCES = $(blorp_libblorp_la_SOURCES) \
@@ -1289,8 +1307,8 @@ DIST_SOURCES = $(blorp_libblorp_la_SOURCES) \
 	isl/tests/isl_surf_get_image_offset_test.c \
 	$(tools_aubinator_SOURCES) \
 	$(tools_aubinator_error_decode_SOURCES) \
-	$(tools_error2aub_SOURCES) vulkan/tests/block_pool_no_free.c \
-	vulkan/tests/state_pool.c \
+	$(tools_error2aub_SOURCES) $(tools_i965_disasm_SOURCES) \
+	vulkan/tests/block_pool_no_free.c vulkan/tests/state_pool.c \
 	vulkan/tests/state_pool_free_list_only.c \
 	vulkan/tests/state_pool_no_free.c
 am__can_run_installinfo = \
@@ -1575,8 +1593,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -1597,7 +1613,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -1690,11 +1705,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -1756,8 +1776,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -1816,10 +1834,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -1918,6 +1939,7 @@ COMPILER_FILES = \
 	compiler/brw_nir_analyze_ubo_ranges.c \
 	compiler/brw_nir_attribute_workarounds.c \
 	compiler/brw_nir_lower_cs_intrinsics.c \
+	compiler/brw_nir_lower_image_load_store.c \
 	compiler/brw_nir_opt_peephole_ffma.c \
 	compiler/brw_nir_tcs_workarounds.c \
 	compiler/brw_packed_float.c \
@@ -2165,7 +2187,7 @@ AM_CXXFLAGS = \
 	$(VISIBILITY_CXXFLAGS)
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 lib_LTLIBRARIES = $(am__append_6)
 check_LTLIBRARIES = $(am__append_7)
 noinst_DATA = $(am__append_23)
@@ -2181,6 +2203,18 @@ CLEANFILES = $(VULKAN_GENERATED_FILES) vulkan/dev_icd.json \
 # ----------------------------------------------------------------------------
 EXTRA_DIST = blorp/meson.build common/meson.build compiler/meson.build \
 	dev/meson.build genxml/meson.build isl/meson.build \
+	tools/aubinator_viewer.cpp tools/aubinator_viewer.h \
+	tools/aubinator_viewer_decoder.cpp \
+	tools/aubinator_viewer_urb.h tools/imgui/README \
+	tools/imgui/stb_textedit.h tools/imgui/meson.build \
+	tools/imgui/imconfig.h tools/imgui/imgui.cpp \
+	tools/imgui/imgui.h tools/imgui/imgui_draw.cpp \
+	tools/imgui/imgui_demo.cpp tools/imgui/imgui_internal.h \
+	tools/imgui/imgui_impl_gtk3.cpp tools/imgui/imgui_impl_gtk3.h \
+	tools/imgui/imgui_impl_opengl3.cpp \
+	tools/imgui/imgui_impl_opengl3.h \
+	tools/imgui/imgui_memory_editor.h tools/imgui/stb_truetype.h \
+	tools/imgui/stb_rect_pack.h tools/imgui/LICENSE.txt \
 	tools/intel_sanitize_gpu.c tools/intel_sanitize_gpu.in \
 	tools/intel_dump_gpu.c tools/intel_dump_gpu.in \
 	tools/meson.build vulkan/meson.build meson.build blorp/TODO \
@@ -2316,6 +2350,10 @@ isl_tests_isl_surf_get_image_offset_test_LDADD = \
 	-lm
 
 tools_aubinator_SOURCES = \
+	tools/aub_mem.c \
+	tools/aub_mem.h \
+	tools/aub_read.c \
+	tools/aub_read.h \
 	tools/aubinator.c \
 	tools/intel_aub.h
 
@@ -2350,6 +2388,19 @@ tools_aubinator_error_decode_LDADD = \
 tools_aubinator_error_decode_CFLAGS = \
 	$(AM_CFLAGS) \
 	$(ZLIB_CFLAGS)
+
+tools_i965_disasm_SOURCES = \
+	tools/i965_disasm.c
+
+tools_i965_disasm_LDADD = \
+	common/libintel_common.la \
+	compiler/libintel_compiler.la \
+	dev/libintel_dev.la \
+	$(top_builddir)/src/util/libmesautil.la \
+	$(PTHREAD_LIBS)
+
+tools_i965_disasm_CFLAGS = \
+	$(AM_CFLAGS)
 
 tools_error2aub_SOURCES = \
 	tools/gen_context.h \
@@ -2718,6 +2769,8 @@ compiler/libintel_compiler_la-brw_nir_analyze_ubo_ranges.lo:  \
 compiler/libintel_compiler_la-brw_nir_attribute_workarounds.lo:  \
 	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
 compiler/libintel_compiler_la-brw_nir_lower_cs_intrinsics.lo:  \
+	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
+compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo:  \
 	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
 compiler/libintel_compiler_la-brw_nir_opt_peephole_ffma.lo:  \
 	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
@@ -3125,6 +3178,10 @@ tools/$(am__dirstamp):
 tools/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) tools/$(DEPDIR)
 	@: > tools/$(DEPDIR)/$(am__dirstamp)
+tools/aubinator-aub_mem.$(OBJEXT): tools/$(am__dirstamp) \
+	tools/$(DEPDIR)/$(am__dirstamp)
+tools/aubinator-aub_read.$(OBJEXT): tools/$(am__dirstamp) \
+	tools/$(DEPDIR)/$(am__dirstamp)
 tools/aubinator-aubinator.$(OBJEXT): tools/$(am__dirstamp) \
 	tools/$(DEPDIR)/$(am__dirstamp)
 
@@ -3145,6 +3202,12 @@ tools/error2aub-error2aub.$(OBJEXT): tools/$(am__dirstamp) \
 tools/error2aub$(EXEEXT): $(tools_error2aub_OBJECTS) $(tools_error2aub_DEPENDENCIES) $(EXTRA_tools_error2aub_DEPENDENCIES) tools/$(am__dirstamp)
 	@rm -f tools/error2aub$(EXEEXT)
 	$(AM_V_CCLD)$(tools_error2aub_LINK) $(tools_error2aub_OBJECTS) $(tools_error2aub_LDADD) $(LIBS)
+tools/i965_disasm-i965_disasm.$(OBJEXT): tools/$(am__dirstamp) \
+	tools/$(DEPDIR)/$(am__dirstamp)
+
+tools/i965_disasm$(EXEEXT): $(tools_i965_disasm_OBJECTS) $(tools_i965_disasm_DEPENDENCIES) $(EXTRA_tools_i965_disasm_DEPENDENCIES) tools/$(am__dirstamp)
+	@rm -f tools/i965_disasm$(EXEEXT)
+	$(AM_V_CCLD)$(tools_i965_disasm_LINK) $(tools_i965_disasm_OBJECTS) $(tools_i965_disasm_LDADD) $(LIBS)
 vulkan/tests/$(am__dirstamp):
 	@$(MKDIR_P) vulkan/tests
 	@: > vulkan/tests/$(am__dirstamp)
@@ -3254,6 +3317,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_analyze_ubo_ranges.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_attribute_workarounds.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_cs_intrinsics.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_opt_peephole_ffma.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_tcs_workarounds.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_trig_workarounds.Plo@am__quote@ # am--include-marker
@@ -3320,10 +3384,13 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/libisl_gen9_la-isl_gen9.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@isl/$(DEPDIR)/libisl_gen9_la-isl_surface_state.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@isl/tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/aubinator-aub_mem.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/aubinator-aub_read.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/aubinator-aubinator.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/aubinator_error_decode-aubinator_error_decode.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/error2aub-aub_write.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/error2aub-error2aub.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@tools/$(DEPDIR)/i965_disasm-i965_disasm.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@vulkan/$(DEPDIR)/libanv_gen10_la-gen8_cmd_buffer.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@vulkan/$(DEPDIR)/libanv_gen10_la-genX_blorp_exec.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@vulkan/$(DEPDIR)/libanv_gen10_la-genX_cmd_buffer.Plo@am__quote@ # am--include-marker
@@ -3626,6 +3693,13 @@ compiler/libintel_compiler_la-brw_nir_lower_cs_intrinsics.lo: compiler/brw_nir_l
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='compiler/brw_nir_lower_cs_intrinsics.c' object='compiler/libintel_compiler_la-brw_nir_lower_cs_intrinsics.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(compiler_libintel_compiler_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o compiler/libintel_compiler_la-brw_nir_lower_cs_intrinsics.lo `test -f 'compiler/brw_nir_lower_cs_intrinsics.c' || echo '$(srcdir)/'`compiler/brw_nir_lower_cs_intrinsics.c
+
+compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo: compiler/brw_nir_lower_image_load_store.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(compiler_libintel_compiler_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo -MD -MP -MF compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Tpo -c -o compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo `test -f 'compiler/brw_nir_lower_image_load_store.c' || echo '$(srcdir)/'`compiler/brw_nir_lower_image_load_store.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Tpo compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='compiler/brw_nir_lower_image_load_store.c' object='compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(compiler_libintel_compiler_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o compiler/libintel_compiler_la-brw_nir_lower_image_load_store.lo `test -f 'compiler/brw_nir_lower_image_load_store.c' || echo '$(srcdir)/'`compiler/brw_nir_lower_image_load_store.c
 
 compiler/libintel_compiler_la-brw_nir_opt_peephole_ffma.lo: compiler/brw_nir_opt_peephole_ffma.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(compiler_libintel_compiler_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT compiler/libintel_compiler_la-brw_nir_opt_peephole_ffma.lo -MD -MP -MF compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_opt_peephole_ffma.Tpo -c -o compiler/libintel_compiler_la-brw_nir_opt_peephole_ffma.lo `test -f 'compiler/brw_nir_opt_peephole_ffma.c' || echo '$(srcdir)/'`compiler/brw_nir_opt_peephole_ffma.c
@@ -4341,6 +4415,34 @@ vulkan/libvulkan_intel_la-anv_gem.lo: vulkan/anv_gem.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(vulkan_libvulkan_intel_la_CPPFLAGS) $(CPPFLAGS) $(vulkan_libvulkan_intel_la_CFLAGS) $(CFLAGS) -c -o vulkan/libvulkan_intel_la-anv_gem.lo `test -f 'vulkan/anv_gem.c' || echo '$(srcdir)/'`vulkan/anv_gem.c
 
+tools/aubinator-aub_mem.o: tools/aub_mem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -MT tools/aubinator-aub_mem.o -MD -MP -MF tools/$(DEPDIR)/aubinator-aub_mem.Tpo -c -o tools/aubinator-aub_mem.o `test -f 'tools/aub_mem.c' || echo '$(srcdir)/'`tools/aub_mem.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/aubinator-aub_mem.Tpo tools/$(DEPDIR)/aubinator-aub_mem.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/aub_mem.c' object='tools/aubinator-aub_mem.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -c -o tools/aubinator-aub_mem.o `test -f 'tools/aub_mem.c' || echo '$(srcdir)/'`tools/aub_mem.c
+
+tools/aubinator-aub_mem.obj: tools/aub_mem.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -MT tools/aubinator-aub_mem.obj -MD -MP -MF tools/$(DEPDIR)/aubinator-aub_mem.Tpo -c -o tools/aubinator-aub_mem.obj `if test -f 'tools/aub_mem.c'; then $(CYGPATH_W) 'tools/aub_mem.c'; else $(CYGPATH_W) '$(srcdir)/tools/aub_mem.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/aubinator-aub_mem.Tpo tools/$(DEPDIR)/aubinator-aub_mem.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/aub_mem.c' object='tools/aubinator-aub_mem.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -c -o tools/aubinator-aub_mem.obj `if test -f 'tools/aub_mem.c'; then $(CYGPATH_W) 'tools/aub_mem.c'; else $(CYGPATH_W) '$(srcdir)/tools/aub_mem.c'; fi`
+
+tools/aubinator-aub_read.o: tools/aub_read.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -MT tools/aubinator-aub_read.o -MD -MP -MF tools/$(DEPDIR)/aubinator-aub_read.Tpo -c -o tools/aubinator-aub_read.o `test -f 'tools/aub_read.c' || echo '$(srcdir)/'`tools/aub_read.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/aubinator-aub_read.Tpo tools/$(DEPDIR)/aubinator-aub_read.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/aub_read.c' object='tools/aubinator-aub_read.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -c -o tools/aubinator-aub_read.o `test -f 'tools/aub_read.c' || echo '$(srcdir)/'`tools/aub_read.c
+
+tools/aubinator-aub_read.obj: tools/aub_read.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -MT tools/aubinator-aub_read.obj -MD -MP -MF tools/$(DEPDIR)/aubinator-aub_read.Tpo -c -o tools/aubinator-aub_read.obj `if test -f 'tools/aub_read.c'; then $(CYGPATH_W) 'tools/aub_read.c'; else $(CYGPATH_W) '$(srcdir)/tools/aub_read.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/aubinator-aub_read.Tpo tools/$(DEPDIR)/aubinator-aub_read.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/aub_read.c' object='tools/aubinator-aub_read.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -c -o tools/aubinator-aub_read.obj `if test -f 'tools/aub_read.c'; then $(CYGPATH_W) 'tools/aub_read.c'; else $(CYGPATH_W) '$(srcdir)/tools/aub_read.c'; fi`
+
 tools/aubinator-aubinator.o: tools/aubinator.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_aubinator_CFLAGS) $(CFLAGS) -MT tools/aubinator-aubinator.o -MD -MP -MF tools/$(DEPDIR)/aubinator-aubinator.Tpo -c -o tools/aubinator-aubinator.o `test -f 'tools/aubinator.c' || echo '$(srcdir)/'`tools/aubinator.c
 @am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/aubinator-aubinator.Tpo tools/$(DEPDIR)/aubinator-aubinator.Po
@@ -4396,6 +4498,20 @@ tools/error2aub-error2aub.obj: tools/error2aub.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/error2aub.c' object='tools/error2aub-error2aub.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_error2aub_CFLAGS) $(CFLAGS) -c -o tools/error2aub-error2aub.obj `if test -f 'tools/error2aub.c'; then $(CYGPATH_W) 'tools/error2aub.c'; else $(CYGPATH_W) '$(srcdir)/tools/error2aub.c'; fi`
+
+tools/i965_disasm-i965_disasm.o: tools/i965_disasm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_i965_disasm_CFLAGS) $(CFLAGS) -MT tools/i965_disasm-i965_disasm.o -MD -MP -MF tools/$(DEPDIR)/i965_disasm-i965_disasm.Tpo -c -o tools/i965_disasm-i965_disasm.o `test -f 'tools/i965_disasm.c' || echo '$(srcdir)/'`tools/i965_disasm.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/i965_disasm-i965_disasm.Tpo tools/$(DEPDIR)/i965_disasm-i965_disasm.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/i965_disasm.c' object='tools/i965_disasm-i965_disasm.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_i965_disasm_CFLAGS) $(CFLAGS) -c -o tools/i965_disasm-i965_disasm.o `test -f 'tools/i965_disasm.c' || echo '$(srcdir)/'`tools/i965_disasm.c
+
+tools/i965_disasm-i965_disasm.obj: tools/i965_disasm.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_i965_disasm_CFLAGS) $(CFLAGS) -MT tools/i965_disasm-i965_disasm.obj -MD -MP -MF tools/$(DEPDIR)/i965_disasm-i965_disasm.Tpo -c -o tools/i965_disasm-i965_disasm.obj `if test -f 'tools/i965_disasm.c'; then $(CYGPATH_W) 'tools/i965_disasm.c'; else $(CYGPATH_W) '$(srcdir)/tools/i965_disasm.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) tools/$(DEPDIR)/i965_disasm-i965_disasm.Tpo tools/$(DEPDIR)/i965_disasm-i965_disasm.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tools/i965_disasm.c' object='tools/i965_disasm-i965_disasm.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(tools_i965_disasm_CFLAGS) $(CFLAGS) -c -o tools/i965_disasm-i965_disasm.obj `if test -f 'tools/i965_disasm.c'; then $(CYGPATH_W) 'tools/i965_disasm.c'; else $(CYGPATH_W) '$(srcdir)/tools/i965_disasm.c'; fi`
 
 vulkan/tests/block_pool_no_free-block_pool_no_free.o: vulkan/tests/block_pool_no_free.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(vulkan_tests_block_pool_no_free_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT vulkan/tests/block_pool_no_free-block_pool_no_free.o -MD -MP -MF vulkan/tests/$(DEPDIR)/block_pool_no_free-block_pool_no_free.Tpo -c -o vulkan/tests/block_pool_no_free-block_pool_no_free.o `test -f 'vulkan/tests/block_pool_no_free.c' || echo '$(srcdir)/'`vulkan/tests/block_pool_no_free.c
@@ -5305,6 +5421,7 @@ distclean: distclean-am
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_analyze_ubo_ranges.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_attribute_workarounds.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_cs_intrinsics.Plo
+	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_opt_peephole_ffma.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_tcs_workarounds.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_trig_workarounds.Plo
@@ -5371,10 +5488,13 @@ distclean: distclean-am
 	-rm -f isl/$(DEPDIR)/libisl_gen9_la-isl_gen9.Plo
 	-rm -f isl/$(DEPDIR)/libisl_gen9_la-isl_surface_state.Plo
 	-rm -f isl/tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po
+	-rm -f tools/$(DEPDIR)/aubinator-aub_mem.Po
+	-rm -f tools/$(DEPDIR)/aubinator-aub_read.Po
 	-rm -f tools/$(DEPDIR)/aubinator-aubinator.Po
 	-rm -f tools/$(DEPDIR)/aubinator_error_decode-aubinator_error_decode.Po
 	-rm -f tools/$(DEPDIR)/error2aub-aub_write.Po
 	-rm -f tools/$(DEPDIR)/error2aub-error2aub.Po
+	-rm -f tools/$(DEPDIR)/i965_disasm-i965_disasm.Po
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-gen8_cmd_buffer.Plo
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-genX_blorp_exec.Plo
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-genX_cmd_buffer.Plo
@@ -5549,6 +5669,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_analyze_ubo_ranges.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_attribute_workarounds.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_cs_intrinsics.Plo
+	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_lower_image_load_store.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_opt_peephole_ffma.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_tcs_workarounds.Plo
 	-rm -f compiler/$(DEPDIR)/libintel_compiler_la-brw_nir_trig_workarounds.Plo
@@ -5615,10 +5736,13 @@ maintainer-clean: maintainer-clean-am
 	-rm -f isl/$(DEPDIR)/libisl_gen9_la-isl_gen9.Plo
 	-rm -f isl/$(DEPDIR)/libisl_gen9_la-isl_surface_state.Plo
 	-rm -f isl/tests/$(DEPDIR)/isl_surf_get_image_offset_test.Po
+	-rm -f tools/$(DEPDIR)/aubinator-aub_mem.Po
+	-rm -f tools/$(DEPDIR)/aubinator-aub_read.Po
 	-rm -f tools/$(DEPDIR)/aubinator-aubinator.Po
 	-rm -f tools/$(DEPDIR)/aubinator_error_decode-aubinator_error_decode.Po
 	-rm -f tools/$(DEPDIR)/error2aub-aub_write.Po
 	-rm -f tools/$(DEPDIR)/error2aub-error2aub.Po
+	-rm -f tools/$(DEPDIR)/i965_disasm-i965_disasm.Po
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-gen8_cmd_buffer.Plo
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-genX_blorp_exec.Plo
 	-rm -f vulkan/$(DEPDIR)/libanv_gen10_la-genX_cmd_buffer.Plo
@@ -5741,7 +5865,7 @@ uninstall-am: uninstall-icdconfDATA uninstall-libLTLIBRARIES \
 compiler/brw_nir_trig_workarounds.c: compiler/brw_nir_trig_workarounds.py \
                                      $(top_srcdir)/src/compiler/nir/nir_algebraic.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN) $(PYTHON2) $(PYTHON_FLAGS) $(srcdir)/compiler/brw_nir_trig_workarounds.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
+	$(AM_V_GEN) $(PYTHON) $(PYTHON_FLAGS) $(srcdir)/compiler/brw_nir_trig_workarounds.py -p $(top_srcdir)/src/compiler/nir > $@ || ($(RM) $@; false)
 
 $(GENXML_GENERATED_PACK_FILES): genxml/gen_pack_header.py
 
@@ -5767,7 +5891,7 @@ vulkan/anv_entrypoints.c: vulkan/anv_entrypoints_gen.py \
 			  vulkan/anv_extensions.py \
 			  $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_entrypoints_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_entrypoints_gen.py \
 		--xml $(vulkan_api_xml) \
 		--outdir $(builddir)/vulkan
 vulkan/anv_entrypoints.h: vulkan/anv_entrypoints.c
@@ -5776,7 +5900,7 @@ vulkan/anv_extensions.c: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--out-c $@
 
@@ -5784,18 +5908,18 @@ vulkan/anv_extensions.h: vulkan/anv_extensions_gen.py \
 			 vulkan/anv_extensions.py \
 			 $(vulkan_api_xml)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_extensions_gen.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_extensions_gen.py \
 		--xml $(vulkan_api_xml) \
 		--out-h $@
 
 vulkan/dev_icd.json : vulkan/anv_extensions.py vulkan/anv_icd.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${abs_top_builddir}/${LIB_DIR}" --out $@
 
 vulkan/intel_icd.@host_cpu@.json : vulkan/anv_extensions.py vulkan/anv_icd.py
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(PYTHON2) $(srcdir)/vulkan/anv_icd.py \
+	$(AM_V_GEN)$(PYTHON) $(srcdir)/vulkan/anv_icd.py \
 		--lib-path="${libdir}" --out $@
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@@HAVE_INTEL_VULKAN_TRUE@all-local : .install-mesa-links

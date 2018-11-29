@@ -882,13 +882,22 @@ emit_ds_state(struct anv_pipeline *pipeline,
 #endif
 }
 
+MAYBE_UNUSED static bool
+is_dual_src_blend_factor(VkBlendFactor factor)
+{
+   return factor == VK_BLEND_FACTOR_SRC1_COLOR ||
+          factor == VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
+          factor == VK_BLEND_FACTOR_SRC1_ALPHA ||
+          factor == VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+}
+
 static void
 emit_cb_state(struct anv_pipeline *pipeline,
               const VkPipelineColorBlendStateCreateInfo *info,
               const VkPipelineMultisampleStateCreateInfo *ms_info)
 {
    struct anv_device *device = pipeline->device;
-
+   const struct brw_wm_prog_data *wm_prog_data = get_wm_prog_data(pipeline);
 
    struct GENX(BLEND_STATE) blend_state = {
 #if GEN_GEN >= 8
@@ -973,6 +982,32 @@ emit_cb_state(struct anv_pipeline *pipeline,
 #else
          entry.IndependentAlphaBlendEnable = true;
 #endif
+      }
+
+      /* The Dual Source Blending documentation says:
+       *
+       * "If SRC1 is included in a src/dst blend factor and
+       * a DualSource RT Write message is not used, results
+       * are UNDEFINED. (This reflects the same restriction in DX APIs,
+       * where undefined results are produced if “o1” is not written
+       * by a PS – there are no default values defined)."
+       *
+       * There is no way to gracefully fix this undefined situation
+       * so we just disable the blending to prevent possible issues.
+       */
+      if (!wm_prog_data->dual_src_blend &&
+          (is_dual_src_blend_factor(a->srcColorBlendFactor) ||
+           is_dual_src_blend_factor(a->dstColorBlendFactor) ||
+           is_dual_src_blend_factor(a->srcAlphaBlendFactor) ||
+           is_dual_src_blend_factor(a->dstAlphaBlendFactor))) {
+         vk_debug_report(&device->instance->debug_report_callbacks,
+                         VK_DEBUG_REPORT_WARNING_BIT_EXT,
+                         VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT,
+                         (uint64_t)(uintptr_t)device,
+                         0, 0, "anv",
+                         "Enabled dual-src blend factors without writing both targets "
+                         "in the shader.  Disabling blending to avoid GPU hangs.");
+         entry.ColorBufferBlendEnable = false;
       }
 
       if (a->colorWriteMask != 0)
@@ -1164,7 +1199,11 @@ emit_3dstate_vs(struct anv_pipeline *pipeline)
 #endif
       vs.VectorMaskEnable           = false;
       vs.SamplerCount               = get_sampler_count(vs_bin);
-      vs.BindingTableEntryCount     = get_binding_table_entry_count(vs_bin);
+     /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to
+      * disable prefetching of binding tables on A0 and B0 steppings.
+      * TODO: Revisit this WA on newer steppings.
+      */
+      vs.BindingTableEntryCount     = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(vs_bin);
       vs.FloatingPointMode          = IEEE754;
       vs.IllegalOpcodeExceptionEnable = false;
       vs.SoftwareExceptionEnable    = false;
@@ -1236,7 +1275,8 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
       hs.KernelStartPointer = tcs_bin->kernel.offset;
 
       hs.SamplerCount = get_sampler_count(tcs_bin);
-      hs.BindingTableEntryCount = get_binding_table_entry_count(tcs_bin);
+      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
+      hs.BindingTableEntryCount = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(tcs_bin);
       hs.MaximumNumberofThreads = devinfo->max_tcs_threads - 1;
       hs.IncludeVertexHandles = true;
       hs.InstanceCount = tcs_prog_data->instances - 1;
@@ -1286,7 +1326,8 @@ emit_3dstate_hs_te_ds(struct anv_pipeline *pipeline,
       ds.KernelStartPointer = tes_bin->kernel.offset;
 
       ds.SamplerCount = get_sampler_count(tes_bin);
-      ds.BindingTableEntryCount = get_binding_table_entry_count(tes_bin);
+      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
+      ds.BindingTableEntryCount = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(tes_bin);
       ds.MaximumNumberofThreads = devinfo->max_tes_threads - 1;
 
       ds.ComputeWCoordinateEnable =
@@ -1343,7 +1384,8 @@ emit_3dstate_gs(struct anv_pipeline *pipeline)
       gs.SingleProgramFlow       = false;
       gs.VectorMaskEnable        = false;
       gs.SamplerCount            = get_sampler_count(gs_bin);
-      gs.BindingTableEntryCount  = get_binding_table_entry_count(gs_bin);
+      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
+      gs.BindingTableEntryCount  = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(gs_bin);
       gs.IncludeVertexHandles    = gs_prog_data->base.include_vue_handles;
       gs.IncludePrimitiveID      = gs_prog_data->include_primitive_id;
 
@@ -1501,15 +1543,6 @@ emit_3dstate_wm(struct anv_pipeline *pipeline, struct anv_subpass *subpass,
    }
 }
 
-UNUSED static bool
-is_dual_src_blend_factor(VkBlendFactor factor)
-{
-   return factor == VK_BLEND_FACTOR_SRC1_COLOR ||
-          factor == VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR ||
-          factor == VK_BLEND_FACTOR_SRC1_ALPHA ||
-          factor == VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
-}
-
 static void
 emit_3dstate_ps(struct anv_pipeline *pipeline,
                 const VkPipelineColorBlendStateCreateInfo *blend,
@@ -1584,7 +1617,8 @@ emit_3dstate_ps(struct anv_pipeline *pipeline,
       ps.SingleProgramFlow          = false;
       ps.VectorMaskEnable           = true;
       ps.SamplerCount               = get_sampler_count(fs_bin);
-      ps.BindingTableEntryCount     = get_binding_table_entry_count(fs_bin);
+      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
+      ps.BindingTableEntryCount     = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(fs_bin);
       ps.PushConstantEnable         = wm_prog_data->base.nr_params > 0 ||
                                       wm_prog_data->base.ubo_ranges[0].length;
       ps.PositionXYOffsetSelect     = wm_prog_data->uses_pos_offset ?
@@ -1853,8 +1887,6 @@ compute_pipeline_create(
     */
    memset(pipeline->shaders, 0, sizeof(pipeline->shaders));
 
-   pipeline->active_stages = 0;
-
    pipeline->needs_data_cache = false;
 
    assert(pCreateInfo->stage.stage == VK_SHADER_STAGE_COMPUTE_BIT);
@@ -1917,7 +1949,8 @@ compute_pipeline_create(
       .KernelStartPointer     = cs_bin->kernel.offset,
 
       .SamplerCount           = get_sampler_count(cs_bin),
-      .BindingTableEntryCount = get_binding_table_entry_count(cs_bin),
+      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable */
+      .BindingTableEntryCount = GEN_GEN == 11 ? 0 : get_binding_table_entry_count(cs_bin),
       .BarrierEnable          = cs_prog_data->uses_barrier,
       .SharedLocalMemorySize  =
          encode_slm_size(GEN_GEN, cs_prog_data->base.total_shared),

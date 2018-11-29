@@ -23,6 +23,7 @@
 
 #include "common/gen_decoder.h"
 #include "gen_disasm.h"
+#include "util/macros.h"
 
 #include <string.h>
 
@@ -64,8 +65,6 @@ gen_batch_decode_ctx_finish(struct gen_batch_decode_ctx *ctx)
 #define BLUE_HEADER  CSI "0;44m"
 #define GREEN_HEADER CSI "1;42m"
 #define NORMAL       CSI "0m"
-
-#define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 
 static void
 ctx_print_group(struct gen_batch_decode_ctx *ctx,
@@ -201,15 +200,33 @@ handle_state_base_address(struct gen_batch_decode_ctx *ctx, const uint32_t *p)
    struct gen_field_iterator iter;
    gen_field_iterator_init(&iter, inst, p, 0, false);
 
+   uint64_t surface_base = 0, dynamic_base = 0, instruction_base = 0;
+   bool surface_modify = 0, dynamic_modify = 0, instruction_modify = 0;
+
    while (gen_field_iterator_next(&iter)) {
       if (strcmp(iter.name, "Surface State Base Address") == 0) {
-         ctx->surface_base = iter.raw_value;
+         surface_base = iter.raw_value;
       } else if (strcmp(iter.name, "Dynamic State Base Address") == 0) {
-         ctx->dynamic_base = iter.raw_value;
+         dynamic_base = iter.raw_value;
       } else if (strcmp(iter.name, "Instruction Base Address") == 0) {
-         ctx->instruction_base = iter.raw_value;
+         instruction_base = iter.raw_value;
+      } else if (strcmp(iter.name, "Surface State Base Address Modify Enable") == 0) {
+         surface_modify = iter.raw_value;
+      } else if (strcmp(iter.name, "Dynamic State Base Address Modify Enable") == 0) {
+         dynamic_modify = iter.raw_value;
+      } else if (strcmp(iter.name, "Instruction Base Address Modify Enable") == 0) {
+         instruction_modify = iter.raw_value;
       }
    }
+
+   if (dynamic_modify)
+      ctx->dynamic_base = dynamic_base;
+
+   if (surface_modify)
+      ctx->surface_base = surface_base;
+
+   if (instruction_modify)
+      ctx->instruction_base = instruction_base;
 }
 
 static void
@@ -249,11 +266,11 @@ dump_binding_table(struct gen_batch_decode_ctx *ctx, uint32_t offset, int count)
 
       if (pointers[i] % 32 != 0 ||
           addr < bo.addr || addr + size >= bo.addr + bo.size) {
-         fprintf(ctx->fp, "pointer %u: %08x <not valid>\n", i, pointers[i]);
+         fprintf(ctx->fp, "pointer %u: 0x%08x <not valid>\n", i, pointers[i]);
          continue;
       }
 
-      fprintf(ctx->fp, "pointer %u: %08x\n", i, pointers[i]);
+      fprintf(ctx->fp, "pointer %u: 0x%08x\n", i, pointers[i]);
       ctx_print_group(ctx, strct, addr, bo.map + (addr - bo.addr));
    }
 }
@@ -775,33 +792,12 @@ struct custom_decoder {
    { "MI_LOAD_REGISTER_IMM", decode_load_register_imm }
 };
 
-static inline uint64_t
-get_address(struct gen_spec *spec, const uint32_t *p)
-{
-   /* Addresses are always guaranteed to be page-aligned and sometimes
-    * hardware packets have extra stuff stuffed in the bottom 12 bits.
-    */
-   uint64_t addr = p[0] & ~0xfffu;
-
-   if (gen_spec_get_gen(spec) >= gen_make_gen(8,0)) {
-      /* On Broadwell and above, we have 48-bit addresses which consume two
-       * dwords.  Some packets require that these get stored in a "canonical
-       * form" which means that bit 47 is sign-extended through the upper
-       * bits. In order to correctly handle those aub dumps, we need to mask
-       * off the top 16 bits.
-       */
-      addr |= ((uint64_t)p[1] & 0xffff) << 32;
-   }
-
-   return addr;
-}
-
 void
 gen_print_batch(struct gen_batch_decode_ctx *ctx,
                 const uint32_t *batch, uint32_t batch_size,
                 uint64_t batch_addr)
 {
-   const uint32_t *p, *end = batch + batch_size;
+   const uint32_t *p, *end = batch + batch_size / sizeof(uint32_t);
    int length;
    struct gen_group *inst;
 
@@ -850,7 +846,7 @@ gen_print_batch(struct gen_batch_decode_ctx *ctx,
       if (ctx->flags & GEN_BATCH_DECODE_FULL) {
          ctx_print_group(ctx, inst, offset, p);
 
-         for (int i = 0; i < ARRAY_LENGTH(custom_decoders); i++) {
+         for (int i = 0; i < ARRAY_SIZE(custom_decoders); i++) {
             if (strcmp(inst_name, custom_decoders[i].cmd_name) == 0) {
                custom_decoders[i].decode(ctx, p);
                break;

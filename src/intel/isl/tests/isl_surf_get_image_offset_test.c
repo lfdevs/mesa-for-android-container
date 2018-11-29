@@ -153,7 +153,7 @@ test_bdw_2d_r8g8b8a8_unorm_512x512_array01_samples01_noaux_tiley0(void)
             isl_surf_get_array_pitch_sa_rows(&surf));
 
    /* Row pitch should be minimal possible */
-   t_assert(surf.row_pitch == 2048);
+   t_assert(surf.row_pitch_B == 2048);
 
    t_assert_offset_el(&surf, 0, 0, 0, 0, 0); // +0, +0
    t_assert_offset_el(&surf, 1, 0, 0, 0, 512); // +0, +512
@@ -201,7 +201,7 @@ test_bdw_2d_r8g8b8a8_unorm_1024x1024_array06_samples01_noaux_tiley0(void)
             isl_surf_get_array_pitch_sa_rows(&surf));
 
    /* Row pitch should be minimal possible */
-   t_assert(surf.row_pitch == 4096);
+   t_assert(surf.row_pitch_B == 4096);
 
    for (uint32_t a = 0; a < 6; ++a) {
       uint32_t b = a * isl_surf_get_array_pitch_sa_rows(&surf);

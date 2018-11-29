@@ -188,7 +188,9 @@ API_XML = \
 	ARB_vertex_attrib_64bit.xml \
 	ARB_vertex_attrib_binding.xml \
 	ARB_viewport_array.xml \
+	AMD_depth_clamp_separate.xml \
 	AMD_draw_buffers_blend.xml \
+	AMD_gpu_shader_int64.xml \
 	AMD_performance_monitor.xml \
 	ARB_vertex_type_2_10_10_10_rev.xml \
 	APPLE_object_purgeable.xml \
@@ -204,6 +206,7 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	EXT_vertex_attrib_64bit.xml \
 	EXT_window_rectangles.xml \
 	GREMEDY_string_marker.xml \
 	INTEL_performance_query.xml \
@@ -233,7 +236,7 @@ COMMON = $(API_XML) \
 
 COMMON_GLX = $(COMMON) glX_API.xml glX_XML.py glX_proto_common.py
 
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 
 ######################################################################
 

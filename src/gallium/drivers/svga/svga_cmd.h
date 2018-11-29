@@ -99,7 +99,7 @@ SVGA3D_DestroyContext(struct svga_winsys_context *swc);
 enum pipe_error
 SVGA3D_BeginDefineSurface(struct svga_winsys_context *swc,
                           struct svga_winsys_surface *sid,
-                          SVGA3dSurfaceFlags flags,
+                          SVGA3dSurface1Flags flags,
                           SVGA3dSurfaceFormat format,
                           SVGA3dSurfaceFace **faces,
                           SVGA3dSize **mipSizes,
@@ -681,5 +681,20 @@ SVGA3D_vgpu10_TransferFromBuffer(struct svga_winsys_context *swc,
                                  struct svga_winsys_surface *dst,
                                  unsigned dstSubResource,
                                  SVGA3dBox *dstBox);
+
+/*Cap2 commands*/
+enum pipe_error
+SVGA3D_vgpu10_IntraSurfaceCopy(struct svga_winsys_context *swc,
+                               struct svga_winsys_surface *src,
+                               unsigned level, unsigned face,
+                               const SVGA3dCopyBox *box);
+
+enum pipe_error
+SVGA3D_vgpu10_ResolveCopy(struct svga_winsys_context *swc,
+                          unsigned dstSubResource,
+                          struct svga_winsys_surface *dst,
+                          unsigned srcSubResource,
+                          struct svga_winsys_surface *src,
+                          const SVGA3dSurfaceFormat copyFormat);
 
 #endif /* __SVGA3D_H__ */

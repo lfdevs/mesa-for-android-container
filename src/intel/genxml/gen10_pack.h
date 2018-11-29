@@ -9683,7 +9683,7 @@ GEN10_SAMPLER_INSTDONE_pack(__attribute__((unused)) __gen_user_data *data,
 #define GEN10_L3CNTLREG_num               0x7034
 #define GEN10_L3CNTLREG_length                 1
 struct GEN10_L3CNTLREG {
-   uint32_t                             SLMEnable;
+   bool                                 SLMEnable;
    uint32_t                             URBAllocation;
    uint32_t                             ROAllocation;
    uint32_t                             DCAllocation;

@@ -68,6 +68,7 @@ GL_PATCH = 0
 lib@GL_LIB@_la_LIBADD = \
 	$(top_builddir)/src/mesa/libmesa.la \
 	$(top_builddir)/src/mapi/glapi/libglapi.la \
+	$(top_builddir)/src/util/libmesautil.la \
 	$(SHARED_GLAPI_LIB) \
 	$(GL_LIB_DEPS)
 

@@ -29,6 +29,7 @@
 #include "radeon_drm_cs.h"
 #include "radeon_drm_public.h"
 
+#include "util/u_cpu_detect.h"
 #include "util/u_memory.h"
 #include "util/u_hash_table.h"
 
@@ -182,7 +183,12 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 #include "pci_ids/r600_pci_ids.h"
 #undef CHIPSET
 
-#define CHIPSET(pci_id, cfamily) case pci_id: ws->info.family = CHIP_##cfamily; ws->gen = DRV_SI; break;
+#define CHIPSET(pci_id, cfamily) \
+    case pci_id: \
+        ws->info.family = CHIP_##cfamily; \
+        ws->info.name = #cfamily; \
+        ws->gen = DRV_SI; \
+        break;
 #include "pci_ids/radeonsi_pci_ids.h"
 #undef CHIPSET
 
@@ -356,11 +362,13 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     if (ws->info.drm_minor < 49)
         ws->info.vram_vis_size = MIN2(ws->info.vram_vis_size, 256*1024*1024);
 
-    /* Radeon allocates all buffers as contigous, which makes large allocations
+    /* Radeon allocates all buffers contiguously, which makes large allocations
      * unlikely to succeed. */
-    ws->info.max_alloc_size = MAX2(ws->info.vram_size, ws->info.gart_size) * 0.7;
     if (ws->info.has_dedicated_vram)
-        ws->info.max_alloc_size = MIN2(ws->info.vram_size * 0.7, ws->info.max_alloc_size);
+	    ws->info.max_alloc_size = ws->info.vram_size * 0.7;
+    else
+	    ws->info.max_alloc_size = ws->info.gart_size * 0.7;
+
     if (ws->info.drm_minor < 40)
         ws->info.max_alloc_size = MIN2(ws->info.max_alloc_size, 256*1024*1024);
     /* Both 32-bit and 64-bit address spaces only have 4GB. */
@@ -519,6 +527,10 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
 
     radeon_get_drm_value(ws->fd, RADEON_INFO_MAX_SH_PER_SE, NULL,
                          &ws->info.max_sh_per_se);
+    if (ws->gen == DRV_SI) {
+        ws->info.num_good_cu_per_sh = ws->info.num_good_compute_units /
+                                      (ws->info.max_se * ws->info.max_sh_per_se);
+    }
 
     radeon_get_drm_value(ws->fd, RADEON_INFO_ACCEL_WORKING2, NULL,
                          &ws->accel_working2);
@@ -792,6 +804,17 @@ static int handle_compare(void *key1, void *key2)
     return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
 }
 
+static void radeon_pin_threads_to_L3_cache(struct radeon_winsys *ws,
+                                           unsigned cache)
+{
+    struct radeon_drm_winsys *rws = (struct radeon_drm_winsys*)ws;
+
+    if (util_queue_is_initialized(&rws->cs_queue)) {
+        util_pin_thread_to_L3(rws->cs_queue.threads[0], cache,
+                              util_cpu_caps.cores_per_L3);
+    }
+}
+
 PUBLIC struct radeon_winsys *
 radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
 			 radeon_screen_create_t screen_create)
@@ -859,6 +882,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
     ws->base.unref = radeon_winsys_unref;
     ws->base.destroy = radeon_winsys_destroy;
     ws->base.query_info = radeon_query_info;
+    ws->base.pin_threads_to_L3_cache = radeon_pin_threads_to_L3_cache;
     ws->base.cs_request_feature = radeon_cs_request_feature;
     ws->base.query_value = radeon_query_value;
     ws->base.read_registers = radeon_read_registers;

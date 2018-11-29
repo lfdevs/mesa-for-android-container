@@ -368,8 +368,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -390,7 +388,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -483,11 +480,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -549,8 +551,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -609,10 +609,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -627,8 +630,8 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 BUILT_SOURCES = git_sha1.h
 CLEANFILES = $(BUILT_SOURCES)
-EXTRA_DIST = git_sha1.h.in meson.build vulkan/registry/vk.xml getopt \
-	hgl SConscript $(top_srcdir)/include/GL/mesa_glinterop.h
+EXTRA_DIST = meson.build vulkan/registry/vk.xml getopt hgl SConscript \
+	$(top_srcdir)/include/GL/mesa_glinterop.h
 
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
@@ -643,6 +646,8 @@ SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
 @HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/glcorearb.h \
 @HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/gl_mangle.h
 
+
+# TODO: When building with glvnd, glvnd itself should be providing gl.pc and the headers
 @HAVE_GLX_TRUE@glxdir = $(includedir)/GL
 @HAVE_GLX_TRUE@glx_HEADERS = \
 @HAVE_GLX_TRUE@  $(top_srcdir)/include/GL/glx.h \
@@ -1188,9 +1193,9 @@ uninstall-am: uninstall-glHEADERS uninstall-glxHEADERS \
 
 
 .PHONY: git_sha1.h
-git_sha1.h: $(top_srcdir)/src/git_sha1.h.in
+git_sha1.h:
 	@echo "updating $@"
-	@$(PYTHON2) $(top_srcdir)/bin/git_sha1_gen.py --output $@
+	@$(PYTHON) $(top_srcdir)/bin/git_sha1_gen.py --output $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

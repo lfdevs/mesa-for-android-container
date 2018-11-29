@@ -300,11 +300,17 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
     *
     * FINISHME: Advertise all display-supported formats.
     */
-   if (format == VK_FORMAT_B8G8R8A8_UNORM ||
-       format == VK_FORMAT_B5G6R5_UNORM_PACK16) {
-      *grallocUsage |= GRALLOC_USAGE_HW_FB |
-                       GRALLOC_USAGE_HW_COMPOSER |
-                       GRALLOC_USAGE_EXTERNAL_DISP;
+   switch (format) {
+      case VK_FORMAT_B8G8R8A8_UNORM:
+      case VK_FORMAT_B5G6R5_UNORM_PACK16:
+      case VK_FORMAT_R8G8B8A8_UNORM:
+      case VK_FORMAT_R8G8B8A8_SRGB:
+         *grallocUsage |= GRALLOC_USAGE_HW_FB |
+                          GRALLOC_USAGE_HW_COMPOSER |
+                          GRALLOC_USAGE_EXTERNAL_DISP;
+         break;
+      default:
+         intel_logw("%s: unsupported format=%d", __func__, format);
    }
 
    if (*grallocUsage == 0)

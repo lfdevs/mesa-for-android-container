@@ -24,7 +24,7 @@ wayland_drm_protocol_c = custom_target(
   'wayland-drm-protocol.c',
   input : 'wayland-drm.xml',
   output : 'wayland-drm-protocol.c',
-  command : [prog_wl_scanner, 'code', '@INPUT@', '@OUTPUT@'],
+  command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
 )
 
 wayland_drm_client_protocol_h = custom_target(
@@ -61,7 +61,7 @@ linux_dmabuf_unstable_v1_protocol_c = custom_target(
   'linux-dmabuf-unstable-v1-protocol.c',
   input : wayland_dmabuf_xml,
   output : 'linux-dmabuf-unstable-v1-protocol.c',
-  command : [prog_wl_scanner, 'code', '@INPUT@', '@OUTPUT@'],
+  command : [prog_wl_scanner, wl_scanner_arg, '@INPUT@', '@OUTPUT@'],
 )
 
 linux_dmabuf_unstable_v1_client_protocol_h = custom_target(

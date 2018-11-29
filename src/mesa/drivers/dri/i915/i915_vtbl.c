@@ -609,14 +609,6 @@ i915_set_draw_region(struct intel_context *intel,
       value |= DV_PF_8888;
    }
 
-   /* This isn't quite safe, thus being hidden behind an option.  When changing
-    * the value of this bit, the pipeline needs to be MI_FLUSHed.  And it
-    * can only be set when a depth buffer is already defined.
-    */
-   if (intel->is_945 && intel->use_early_z &&
-       depth_region->tiling != I915_TILING_NONE)
-      value |= CLASSIC_EARLY_DEPTH;
-
    if (depth_region && depth_region->cpp == 4) {
       value |= DEPTH_FRMT_24_FIXED_8_OTHER;
    }

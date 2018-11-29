@@ -28,6 +28,11 @@
 # as ['constant', 'float', ['1.000000']].
 
 import re
+import sys
+if sys.version_info >= (3, 0, 0):
+    STRING_TYPE = str
+else:
+    STRING_TYPE = unicode
 
 def check_sexp(sexp):
     """Verify that the argument is a proper sexp.
@@ -39,7 +44,7 @@ def check_sexp(sexp):
     if isinstance(sexp, list):
         for s in sexp:
             check_sexp(s)
-    elif not isinstance(sexp, basestring):
+    elif not isinstance(sexp, (STRING_TYPE, bytes)):
         raise Exception('Not a sexp: {0!r}'.format(sexp))
 
 def parse_sexp(sexp):
@@ -70,8 +75,10 @@ def sexp_to_string(sexp):
     """Convert a sexp, represented as nested lists containing strings,
     into a single string of the form parseable by mesa.
     """
-    if isinstance(sexp, basestring):
+    if isinstance(sexp, STRING_TYPE):
         return sexp
+    if isinstance(sexp, bytes):
+        return sexp.encode('utf-8')
     assert isinstance(sexp, list)
     result = ''
     for s in sexp:

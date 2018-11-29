@@ -29,6 +29,7 @@
 #include "util/format_rgb9e5.h"
 /* header-only include needed for _mesa_unorm_to_float and friends. */
 #include "mesa/main/format_utils.h"
+#include "util/u_math.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLORP
 
@@ -582,7 +583,7 @@ static inline int count_trailing_one_bits(unsigned value)
 #ifdef HAVE___BUILTIN_CTZ
    return __builtin_ctz(~value);
 #else
-   return _mesa_bitcount(value & ~(value + 1));
+   return util_bitcount(value & ~(value + 1));
 #endif
 }
 
@@ -634,7 +635,7 @@ blorp_nir_manual_blend_average(nir_builder *b, struct brw_blorp_blit_vars *v,
    nir_ssa_def *texture_data[5];
    unsigned stack_depth = 0;
    for (unsigned i = 0; i < tex_samples; ++i) {
-      assert(stack_depth == _mesa_bitcount(i)); /* Loop invariant */
+      assert(stack_depth == util_bitcount(i)); /* Loop invariant */
 
       /* Push sample i onto the stack */
       assert(stack_depth < ARRAY_SIZE(texture_data));
@@ -939,7 +940,7 @@ bit_cast_color(struct nir_builder *b, nir_ssa_def *color,
          isl_format_get_num_channels(key->src_format);
       color = nir_channels(b, color, (1 << src_channels) - 1);
 
-      color = nir_format_bitcast_uint_vec_unmasked(b, color, src_bpc, dst_bpc);
+      color = nir_format_bitcast_uvec_unmasked(b, color, src_bpc, dst_bpc);
    }
 
    /* Blorp likes to assume that colors are vec4s */
@@ -2108,7 +2109,7 @@ shrink_surface_params(const struct isl_device *dev,
    x_offset_sa = (uint32_t)*x0 * px_size_sa.w + info->tile_x_sa;
    y_offset_sa = (uint32_t)*y0 * px_size_sa.h + info->tile_y_sa;
    isl_tiling_get_intratile_offset_sa(info->surf.tiling,
-                                      info->surf.format, info->surf.row_pitch,
+                                      info->surf.format, info->surf.row_pitch_B,
                                       x_offset_sa, y_offset_sa,
                                       &byte_offset,
                                       &info->tile_x_sa, &info->tile_y_sa);
@@ -2708,7 +2709,7 @@ do_buffer_copy(struct blorp_batch *batch,
                       .levels = 1,
                       .array_len = 1,
                       .samples = 1,
-                      .row_pitch = width * block_size,
+                      .row_pitch_B = width * block_size,
                       .usage = ISL_SURF_USAGE_TEXTURE_BIT |
                                ISL_SURF_USAGE_RENDER_TARGET_BIT,
                       .tiling_flags = ISL_TILING_LINEAR_BIT);

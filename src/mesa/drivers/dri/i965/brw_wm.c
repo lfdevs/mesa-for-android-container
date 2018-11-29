@@ -35,10 +35,12 @@
 #include "program/program.h"
 #include "intel_mipmap_tree.h"
 #include "intel_image.h"
+#include "intel_fbo.h"
 #include "compiler/brw_nir.h"
 #include "brw_program.h"
 
 #include "util/ralloc.h"
+#include "util/u_math.h"
 
 static void
 assign_fs_binding_table_offsets(const struct gen_device_info *devinfo,
@@ -456,6 +458,9 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
    /* Build the index for table lookup
     */
    if (devinfo->gen < 6) {
+      struct intel_renderbuffer *depth_irb =
+         intel_get_renderbuffer(ctx->DrawBuffer, BUFFER_DEPTH);
+
       /* _NEW_COLOR */
       if (prog->info.fs.uses_discard || ctx->Color.AlphaEnabled) {
          lookup |= BRW_WM_IZ_PS_KILL_ALPHATEST_BIT;
@@ -466,11 +471,12 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
       }
 
       /* _NEW_DEPTH */
-      if (ctx->Depth.Test)
+      if (depth_irb && ctx->Depth.Test) {
          lookup |= BRW_WM_IZ_DEPTH_TEST_ENABLE_BIT;
 
-      if (brw_depth_writes_enabled(brw))
-         lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
+         if (brw_depth_writes_enabled(brw))
+            lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
+      }
 
       /* _NEW_STENCIL | _NEW_BUFFERS */
       if (brw->stencil_enabled) {
@@ -554,7 +560,7 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
    }
 
    /* BRW_NEW_VUE_MAP_GEOM_OUT */
-   if (devinfo->gen < 6 || _mesa_bitcount_64(prog->info.inputs_read &
+   if (devinfo->gen < 6 || util_bitcount64(prog->info.inputs_read &
                                              BRW_FS_VARYING_INPUT_MASK) > 16) {
       key->input_slots_valid = brw->vue_map_geom_out.slots_valid;
    }
@@ -627,14 +633,14 @@ brw_wm_populate_default_key(const struct gen_device_info *devinfo,
       key->iz_lookup |= BRW_WM_IZ_DEPTH_WRITE_ENABLE_BIT;
    }
 
-   if (devinfo->gen < 6 || _mesa_bitcount_64(prog->info.inputs_read &
+   if (devinfo->gen < 6 || util_bitcount64(prog->info.inputs_read &
                                              BRW_FS_VARYING_INPUT_MASK) > 16) {
       key->input_slots_valid = prog->info.inputs_read | VARYING_BIT_POS;
    }
 
    brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
 
-   key->nr_color_regions = _mesa_bitcount_64(outputs_written &
+   key->nr_color_regions = util_bitcount64(outputs_written &
          ~(BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
            BITFIELD64_BIT(FRAG_RESULT_STENCIL) |
            BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)));

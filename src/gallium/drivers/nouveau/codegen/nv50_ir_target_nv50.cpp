@@ -443,6 +443,7 @@ TargetNV50::isOpSupported(operation op, DataType ty) const
    case OP_EXIT: // want exit modifier instead (on NOP if required)
    case OP_MEMBAR:
    case OP_SHLADD:
+   case OP_XMAD:
       return false;
    case OP_SAD:
       return ty == TYPE_S32;

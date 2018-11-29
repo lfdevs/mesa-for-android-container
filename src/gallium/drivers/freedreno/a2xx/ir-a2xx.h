@@ -33,19 +33,35 @@
 
 struct ir2_shader;
 
+#define REG_MASK 0xff
+
 struct ir2_shader_info {
 	uint16_t sizedwords;
 	int8_t   max_reg;   /* highest GPR # used by shader */
-	uint8_t  max_input_reg;
-	uint64_t regs_written;
 };
 
 struct ir2_register {
+	int16_t write_idx, write_idx2, read_idx, reg;
+	/* bitmask of variables on which this one depends
+	 * XXX: use bitmask util?
+	 */
+	uint32_t regmask[REG_MASK/32+1];
+};
+
+struct ir2_src_register {
 	enum {
-		IR2_REG_CONST  = 0x1,
-		IR2_REG_EXPORT = 0x2,
+		IR2_REG_INPUT  = 0x1,
+		IR2_REG_CONST  = 0x2,
 		IR2_REG_NEGATE = 0x4,
 		IR2_REG_ABS    = 0x8,
+	} flags;
+	int num;
+	char *swizzle;
+};
+
+struct ir2_dst_register {
+	enum {
+		IR2_REG_EXPORT = 0x1,
 	} flags;
 	int num;
 	char *swizzle;
@@ -59,14 +75,17 @@ enum ir2_pred {
 
 struct ir2_instruction {
 	struct ir2_shader *shader;
+	unsigned idx;
 	enum {
 		IR2_FETCH,
-		IR2_ALU,
+		IR2_ALU_VECTOR,
+		IR2_ALU_SCALAR,
 	} instr_type;
 	enum ir2_pred pred;
 	int sync;
-	unsigned regs_count;
-	struct ir2_register *regs[5];
+	unsigned src_reg_count;
+	struct ir2_dst_register dst_reg;
+	struct ir2_src_register src_reg[3];
 	union {
 		/* FETCH specific: */
 		struct {
@@ -83,38 +102,25 @@ struct ir2_instruction {
 			uint32_t stride;
 			uint32_t offset;
 		} fetch;
-		/* ALU specific: */
+		/* ALU-Vector specific: */
 		struct {
-			instr_vector_opc_t vector_opc;
-			instr_scalar_opc_t scalar_opc;
-			bool vector_clamp : 1;
-			bool scalar_clamp : 1;
-		} alu;
-	};
-};
-
-struct ir2_cf {
-	struct ir2_shader *shader;
-	instr_cf_opc_t cf_type;
-
-	union {
-		/* EXEC/EXEC_END specific: */
+			instr_vector_opc_t opc;
+			bool clamp;
+		} alu_vector;
+		/* ALU-Scalar specific: */
 		struct {
-			unsigned instrs_count;
-			struct ir2_instruction *instrs[6];
-			uint32_t addr, cnt, sequence;
-		} exec;
-		/* ALLOC specific: */
-		struct {
-			instr_alloc_type_t type;   /* SQ_POSITION or SQ_PARAMETER_PIXEL */
-			int size;
-		} alloc;
+			instr_scalar_opc_t opc;
+			bool clamp;
+		} alu_scalar;
 	};
 };
 
 struct ir2_shader {
-	unsigned cfs_count;
-	struct ir2_cf *cfs[0x56];
+	unsigned instr_count;
+	int max_reg;
+	struct ir2_register reg[REG_MASK+1];
+
+	struct ir2_instruction *instr[0x200];
 	uint32_t heap[100 * 4096];
 	unsigned heap_idx;
 
@@ -126,40 +132,41 @@ void ir2_shader_destroy(struct ir2_shader *shader);
 void * ir2_shader_assemble(struct ir2_shader *shader,
 		struct ir2_shader_info *info);
 
-struct ir2_cf * ir2_cf_create(struct ir2_shader *shader, instr_cf_opc_t cf_type);
+struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
+		int instr_type);
 
-struct ir2_instruction * ir2_instr_create(struct ir2_cf *cf, int instr_type);
-
-struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
+struct ir2_dst_register * ir2_dst_create(struct ir2_instruction *instr,
+		int num, const char *swizzle, int flags);
+struct ir2_src_register * ir2_reg_create(struct ir2_instruction *instr,
 		int num, const char *swizzle, int flags);
 
 /* some helper fxns: */
 
-static inline struct ir2_cf *
-ir2_cf_create_alloc(struct ir2_shader *shader, instr_alloc_type_t type, int size)
-{
-	struct ir2_cf *cf = ir2_cf_create(shader, ALLOC);
-	if (!cf)
-		return cf;
-	cf->alloc.type = type;
-	cf->alloc.size = size;
-	return cf;
-}
 static inline struct ir2_instruction *
-ir2_instr_create_alu(struct ir2_cf *cf, instr_vector_opc_t vop, instr_scalar_opc_t sop)
+ir2_instr_create_alu_v(struct ir2_shader *shader, instr_vector_opc_t vop)
 {
-	struct ir2_instruction *instr = ir2_instr_create(cf, IR2_ALU);
+	struct ir2_instruction *instr = ir2_instr_create(shader, IR2_ALU_VECTOR);
 	if (!instr)
 		return instr;
-	instr->alu.vector_opc = vop;
-	instr->alu.scalar_opc = sop;
+	instr->alu_vector.opc = vop;
 	return instr;
 }
+
 static inline struct ir2_instruction *
-ir2_instr_create_vtx_fetch(struct ir2_cf *cf, int ci, int cis,
+ir2_instr_create_alu_s(struct ir2_shader *shader, instr_scalar_opc_t sop)
+{
+	struct ir2_instruction *instr = ir2_instr_create(shader, IR2_ALU_SCALAR);
+	if (!instr)
+		return instr;
+	instr->alu_scalar.opc = sop;
+	return instr;
+}
+
+static inline struct ir2_instruction *
+ir2_instr_create_vtx_fetch(struct ir2_shader *shader, int ci, int cis,
 		enum a2xx_sq_surfaceformat fmt, bool is_signed, int stride)
 {
-	struct ir2_instruction *instr = ir2_instr_create(cf, IR2_FETCH);
+	struct ir2_instruction *instr = ir2_instr_create(shader, IR2_FETCH);
 	instr->fetch.opc = VTX_FETCH;
 	instr->fetch.const_idx = ci;
 	instr->fetch.const_idx_sel = cis;
@@ -169,9 +176,9 @@ ir2_instr_create_vtx_fetch(struct ir2_cf *cf, int ci, int cis,
 	return instr;
 }
 static inline struct ir2_instruction *
-ir2_instr_create_tex_fetch(struct ir2_cf *cf, int ci)
+ir2_instr_create_tex_fetch(struct ir2_shader *shader, int ci)
 {
-	struct ir2_instruction *instr = ir2_instr_create(cf, IR2_FETCH);
+	struct ir2_instruction *instr = ir2_instr_create(shader, IR2_FETCH);
 	instr->fetch.opc = TEX_FETCH;
 	instr->fetch.const_idx = ci;
 	return instr;

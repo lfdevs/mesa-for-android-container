@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -30,8 +28,6 @@
 #define FD3_CONTEXT_H_
 
 #include "util/u_upload_mgr.h"
-
-#include "freedreno_drmif.h"
 
 #include "freedreno_context.h"
 

@@ -28,10 +28,8 @@ if env['platform'] == 'windows':
     env.AppendUnique(CPPDEFINES = [
         '_GDI32_', # prevent wgl* being declared __declspec(dllimport)
         'BUILD_GL32', # declare gl* as __declspec(dllexport) in Mesa headers
+        '_GLAPI_NO_EXPORTS', # prevent _glapi_* from being declared __declspec(dllimport)
     ])
-    if not env['gles']:
-        # prevent _glapi_* from being declared __declspec(dllimport)
-        env.Append(CPPDEFINES = ['_GLAPI_NO_EXPORTS'])
 
     sources += ['osmesa.def']
 

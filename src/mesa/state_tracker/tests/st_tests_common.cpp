@@ -46,7 +46,8 @@ void *FakeCodeline::mem_ctx = nullptr;
 FakeCodeline::FakeCodeline(tgsi_opcode _op, const vector<int>& _dst,
                            const vector<int>& _src, const vector<int>&_to):
    op(_op),
-   max_temp_id(0)
+   max_temp_id(0),
+   max_array_id(0)
 {
    transform(_dst.begin(), _dst.end(), std::back_inserter(dst),
              [this](int i) { return create_dst_register(i);});
@@ -64,7 +65,8 @@ FakeCodeline::FakeCodeline(tgsi_opcode _op, const vector<pair<int,int>>& _dst,
                            const vector<pair<int, const char *>>&_to,
                            SWZ with_swizzle):
    op(_op),
-   max_temp_id(0)
+   max_temp_id(0),
+   max_array_id(0)
 {
    (void)with_swizzle;
 
@@ -88,7 +90,8 @@ FakeCodeline::FakeCodeline(tgsi_opcode _op, const vector<tuple<int,int,int>>& _d
                            const vector<tuple<int,int,int>>& _src,
                            const vector<tuple<int,int,int>>&_to, RA with_reladdr):
    op(_op),
-   max_temp_id(0)
+   max_temp_id(0),
+   max_array_id(0)
 {
    (void)with_reladdr;
 
@@ -108,9 +111,35 @@ FakeCodeline::FakeCodeline(tgsi_opcode _op, const vector<tuple<int,int,int>>& _d
    });
 }
 
+FakeCodeline::FakeCodeline(tgsi_opcode _op, const vector<tuple<int,int,int>>& _dst,
+			   const vector<tuple<int,int, const char*>>& _src,
+			   const vector<tuple<int,int, const char*>>&_to,
+			   ARR with_array):
+   FakeCodeline(_op)
+{
+   (void)with_array;
+
+   transform(_dst.begin(), _dst.end(), std::back_inserter(dst),
+	     [this](const tuple<int,int,int>& r) {
+      return create_array_dst_register(r);
+   });
+
+   transform(_src.begin(), _src.end(), std::back_inserter(src),
+	     [this](const tuple<int,int,const char*>& r) {
+      return create_array_src_register(r);
+   });
+
+   transform(_to.begin(), _to.end(), std::back_inserter(tex_offsets),
+	     [this](const tuple<int,int,const char*>& r) {
+      return create_array_src_register(r);
+   });
+
+}
+
 FakeCodeline::FakeCodeline(const glsl_to_tgsi_instruction& instr):
    op(instr.op),
-   max_temp_id(0)
+   max_temp_id(0),
+   max_array_id(0)
 {
    int nsrc = num_inst_src_regs(&instr);
    int ndst = num_inst_dst_regs(&instr);
@@ -129,7 +158,14 @@ FakeCodeline::FakeCodeline(const glsl_to_tgsi_instruction& instr):
 template <typename st_reg>
 void FakeCodeline::read_reg(const st_reg& s)
 {
-   if (s.file == PROGRAM_TEMPORARY) {
+   if (s.file == PROGRAM_ARRAY) {
+      if (s.array_id > max_array_id)
+	 max_array_id = s.array_id;
+      if (s.reladdr)
+	 read_reg(*s.reladdr);
+      if (s.reladdr2)
+	 read_reg(*s.reladdr2);
+   } else  if (s.file == PROGRAM_TEMPORARY) {
       if (s.index > max_temp_id)
          max_temp_id = s.index;
    }
@@ -207,6 +243,8 @@ st_src_reg FakeCodeline::create_src_register(int src_idx, gl_register_file file)
          max_temp_id = src_idx;
    } else if (file == PROGRAM_ARRAY) {
       retval.array_id = 1;
+      if (max_array_id < 1)
+	  max_array_id = 1;
    }
    retval.swizzle = SWIZZLE_XYZW;
    retval.type = GLSL_TYPE_INT;
@@ -220,6 +258,48 @@ st_src_reg *FakeCodeline::create_rel_src_register(int idx)
    *retval = st_src_reg(PROGRAM_TEMPORARY, idx, GLSL_TYPE_INT);
    if (max_temp_id < idx)
       max_temp_id = idx;
+   return retval;
+}
+
+st_src_reg FakeCodeline::create_array_src_register(const tuple<int,int, const char*>& r)
+{
+
+   int array_id = std::get<0>(r);
+   int idx = std::get<1>(r);
+
+   st_src_reg retval = create_src_register(idx, std::get<2>(r));
+
+   if (array_id > 0) {
+      retval.file = PROGRAM_ARRAY;
+
+      retval.array_id = array_id;
+      if (max_array_id < array_id)
+	 max_array_id = array_id;
+   } else {
+      if (max_temp_id < idx)
+	 max_temp_id = idx;
+   }
+
+   return retval;
+}
+
+st_dst_reg FakeCodeline::create_array_dst_register(const tuple<int,int,int>& r)
+{
+
+   int array_id = std::get<0>(r);
+   int idx = std::get<1>(r);
+
+   st_dst_reg retval = create_dst_register(idx, std::get<2>(r));
+
+   if (array_id > 0) {
+      retval.file = PROGRAM_ARRAY;
+      retval.array_id = array_id;
+      if (max_array_id < array_id)
+	 max_array_id = array_id;
+   } else {
+      if (max_temp_id < idx)
+	 max_temp_id = idx;
+   }
    return retval;
 }
 
@@ -286,6 +366,8 @@ st_dst_reg FakeCodeline::create_dst_register(int dst_idx, gl_register_file file)
          max_temp_id = dst_idx;
    } else if (file == PROGRAM_ARRAY) {
       retval.array_id = 1;
+      if (max_array_id < 1)
+	  max_array_id = 1;
    }
    retval.writemask = 0xF;
    retval.type = GLSL_TYPE_INT;
@@ -350,28 +432,41 @@ void FakeCodeline::set_mem_ctx(void *ctx)
 
 FakeShader::FakeShader(const vector<FakeCodeline>& source):
    program(source),
-   num_temps(0)
+   num_temps(0),
+   num_arrays(0)
 {
    for (const FakeCodeline& i: source) {
       int t = i.get_max_reg_id();
       if (t > num_temps)
          num_temps = t;
+
+      int a = i.get_max_array_id();
+      if (a > num_arrays)
+	 num_arrays = a;
    }
    ++num_temps;
 }
 
 FakeShader::FakeShader(exec_list *tgsi_prog):
-   num_temps(0)
+   num_temps(0),
+   num_arrays(0)
 {
    FakeCodeline nop(TGSI_OPCODE_NOP);
    FakeCodeline& last = nop;
 
    foreach_in_list(glsl_to_tgsi_instruction, inst, tgsi_prog) {
       program.push_back(last = FakeCodeline(*inst));
+      if (last.get_max_array_id() > num_arrays)
+	 num_arrays = last.get_max_array_id();
       if (num_temps < last.get_max_reg_id())
          num_temps = last.get_max_reg_id();
    }
    ++num_temps;
+}
+
+int FakeShader::get_num_arrays() const
+{
+   return num_arrays;
 }
 
 int FakeShader::get_num_temps() const
@@ -390,6 +485,16 @@ exec_list* FakeShader::get_program(void *ctx) const
    return prog;
 }
 
+size_t FakeShader::length() const
+{
+   return program.size();
+}
+
+const FakeCodeline& FakeShader::line(unsigned i) const
+{
+   return program[i];
+}
+
 void MesaTestWithMemCtx::SetUp()
 {
    mem_ctx = ralloc_context(nullptr);
@@ -404,34 +509,39 @@ void MesaTestWithMemCtx::TearDown()
 }
 
 
-LifetimeEvaluatorTest::lifetime_result
+LifetimeEvaluatorTest::life_range_result
 LifetimeEvaluatorTest::run(const vector<FakeCodeline>& code, bool& success)
 {
    FakeShader shader(code);
-   lifetime_result result(shader.get_num_temps());
+   life_range_result result = make_pair(life_range_result::first_type(shader.get_num_temps()),
+					life_range_result::second_type(shader.get_num_arrays()));
 
    success =
-         get_temp_registers_required_lifetimes(mem_ctx, shader.get_program(mem_ctx),
-                                               shader.get_num_temps(),
-                                               &result[0]);
-
+	 get_temp_registers_required_live_ranges(mem_ctx, shader.get_program(mem_ctx),
+						 shader.get_num_temps(),&result.first[0],
+						 shader.get_num_arrays(), &result.second[0]);
    return result;
 }
 
 void LifetimeEvaluatorTest::run(const vector<FakeCodeline>& code, const temp_lt_expect& e)
 {
-   FakeShader shader(code);
-   lifetime_result result(shader.get_num_temps());
-   bool success =
-      get_temp_registers_required_lifetimes(mem_ctx, shader.get_program(mem_ctx),
-                                            shader.get_num_temps(),
-                                            &result[0]);
+   bool success = false;
+   auto result = run(code, success);
    ASSERT_TRUE(success);
-   ASSERT_EQ(result.size(), e.size());
-   check(result, e);
+   ASSERT_EQ(result.first.size(), e.size());
+   check(result.first, e);
 }
 
-void LifetimeEvaluatorExactTest::check( const vector<lifetime>& lifetimes,
+void LifetimeEvaluatorTest::run(const vector<FakeCodeline>& code, const array_lt_expect& e)
+{
+   bool success = false;
+   auto result = run(code, success);
+   ASSERT_TRUE(success);
+   ASSERT_EQ(result.second.size(), e.size());
+   check(result.second, e);
+}
+
+void LifetimeEvaluatorExactTest::check( const vector<register_live_range>& lifetimes,
                                         const temp_lt_expect& e)
 {
    for (unsigned i = 1; i < lifetimes.size(); ++i) {
@@ -440,7 +550,17 @@ void LifetimeEvaluatorExactTest::check( const vector<lifetime>& lifetimes,
    }
 }
 
-void LifetimeEvaluatorAtLeastTest::check( const vector<lifetime>& lifetimes,
+void LifetimeEvaluatorExactTest::check(const vector<array_live_range>& lifetimes,
+				       const array_lt_expect& e)
+{
+   for (unsigned i = 0; i < lifetimes.size(); ++i) {
+      EXPECT_EQ(lifetimes[i].begin(), e[i].begin());
+      EXPECT_EQ(lifetimes[i].end(), e[i].end());
+      EXPECT_EQ(lifetimes[i].access_mask(), e[i].access_mask());
+   }
+}
+
+void LifetimeEvaluatorAtLeastTest::check( const vector<register_live_range>& lifetimes,
                                           const temp_lt_expect& e)
 {
    for (unsigned i = 1; i < lifetimes.size(); ++i) {
@@ -449,7 +569,21 @@ void LifetimeEvaluatorAtLeastTest::check( const vector<lifetime>& lifetimes,
    }
 }
 
-void RegisterRemappingTest::run(const vector<lifetime>& lt,
+void LifetimeEvaluatorAtLeastTest::check(const vector<array_live_range>& lifetimes,
+					 const array_lt_expect& e)
+{
+   for (unsigned i = 0; i < lifetimes.size(); ++i) {
+      EXPECT_LE(lifetimes[i].begin(), e[i].begin());
+      EXPECT_GE(lifetimes[i].end(), e[i].end());
+
+      /* Tests that lifetimes doesn't add unexpected swizzles */
+      EXPECT_EQ(lifetimes[i].access_mask()| e[i].access_mask(),
+		e[i].access_mask());
+   }
+}
+
+
+void RegisterRemappingTest::run(const vector<register_live_range>& lt,
                                 const vector<int>& expect)
 {
    rename_reg_pair proto{false,0};
@@ -476,8 +610,10 @@ void RegisterLifetimeAndRemappingTest::run(const vector<FakeCodeline>& code,
                                            const vector<int>& expect)
 {
      FakeShader shader(code);
-     std::vector<lifetime> lt(shader.get_num_temps());
-     get_temp_registers_required_lifetimes(mem_ctx, shader.get_program(mem_ctx),
-                                           shader.get_num_temps(), &lt[0]);
+     std::vector<register_live_range> lt(shader.get_num_temps());
+     std::vector<array_live_range> alt(shader.get_num_arrays());
+     get_temp_registers_required_live_ranges(mem_ctx, shader.get_program(mem_ctx),
+					     shader.get_num_temps(), &lt[0],
+					     shader.get_num_arrays(), &alt[0]);
      this->run(lt, expect);
 }

@@ -309,7 +309,7 @@ vlVaAcquireBufferHandle(VADriverContextP ctx, VABufferID buf_id,
 
          if (!screen->resource_get_handle(screen, drv->pipe,
                                           buf->derived_surface.resource,
-                                          &whandle, PIPE_HANDLE_USAGE_READ_WRITE)) {
+                                          &whandle, PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE)) {
             mtx_unlock(&drv->mutex);
             return VA_STATUS_ERROR_INVALID_BUFFER;
          }

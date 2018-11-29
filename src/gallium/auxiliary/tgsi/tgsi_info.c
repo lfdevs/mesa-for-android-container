@@ -150,9 +150,6 @@ tgsi_opcode_infer_type(enum tgsi_opcode opcode)
    case TGSI_OPCODE_UBFE:
    case TGSI_OPCODE_BFI:
    case TGSI_OPCODE_BREV:
-   case TGSI_OPCODE_POPC:
-   case TGSI_OPCODE_LSB:
-   case TGSI_OPCODE_UMSB:
    case TGSI_OPCODE_IMG2HND:
    case TGSI_OPCODE_SAMP2HND:
       return TGSI_TYPE_UNSIGNED;
@@ -188,6 +185,9 @@ tgsi_opcode_infer_type(enum tgsi_opcode opcode)
    case TGSI_OPCODE_U64SGE:
    case TGSI_OPCODE_I64SLT:
    case TGSI_OPCODE_I64SGE:
+   case TGSI_OPCODE_LSB:
+   case TGSI_OPCODE_POPC:
+   case TGSI_OPCODE_UMSB:
       return TGSI_TYPE_SIGNED;
    case TGSI_OPCODE_DADD:
    case TGSI_OPCODE_DABS:
@@ -269,6 +269,7 @@ tgsi_opcode_infer_src_type(enum tgsi_opcode opcode, uint src_idx)
    case TGSI_OPCODE_UP2H:
    case TGSI_OPCODE_U2I64:
    case TGSI_OPCODE_MEMBAR:
+   case TGSI_OPCODE_UMSB:
       return TGSI_TYPE_UNSIGNED;
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_I2F:

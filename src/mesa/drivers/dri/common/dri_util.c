@@ -81,6 +81,8 @@ setupLoaderExtensions(__DRIscreen *psp,
 	    psp->swrast_loader = (__DRIswrastLoaderExtension *) extensions[i];
         if (strcmp(extensions[i]->name, __DRI_IMAGE_LOADER) == 0)
            psp->image.loader = (__DRIimageLoaderExtension *) extensions[i];
+        if (strcmp(extensions[i]->name, __DRI_MUTABLE_RENDER_BUFFER_LOADER) == 0)
+           psp->mutableRenderBuffer.loader = (__DRImutableRenderBufferLoaderExtension *) extensions[i];
     }
 }
 
@@ -146,7 +148,7 @@ driCreateNewScreen2(int scrn, int fd,
 
     /* Option parsing before ->InitScreen(), as some options apply there. */
     driParseOptionInfo(&psp->optionInfo, __dri2ConfigOptions);
-    driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum, "dri2");
+    driParseConfigFiles(&psp->optionCache, &psp->optionInfo, psp->myNum, "dri2", NULL);
 
     *driver_configs = psp->driver->InitScreen(psp);
     if (*driver_configs == NULL) {

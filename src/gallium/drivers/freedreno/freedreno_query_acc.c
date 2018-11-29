@@ -77,7 +77,7 @@ realloc_query_bo(struct fd_context *ctx, struct fd_acc_query *aq)
 static boolean
 fd_acc_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct fd_acc_query *aq = fd_acc_query(q);
 	const struct fd_acc_sample_provider *p = aq->provider;
 
@@ -100,7 +100,7 @@ fd_acc_begin_query(struct fd_context *ctx, struct fd_query *q)
 static void
 fd_acc_end_query(struct fd_context *ctx, struct fd_query *q)
 {
-	struct fd_batch *batch = ctx->batch;
+	struct fd_batch *batch = fd_context_batch(ctx);
 	struct fd_acc_query *aq = fd_acc_query(q);
 	const struct fd_acc_sample_provider *p = aq->provider;
 

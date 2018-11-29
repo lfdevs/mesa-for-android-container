@@ -1392,6 +1392,7 @@ try_pbo_upload(struct gl_context *ctx, GLuint dims,
    return success;
 }
 
+
 static void
 st_TexSubImage(struct gl_context *ctx, GLuint dims,
                struct gl_texture_image *texImage,
@@ -1417,6 +1418,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    GLubyte *map;
    unsigned dstz = texImage->Face + texImage->TexObject->MinLayer;
    unsigned dst_level = 0;
+   bool throttled = false;
 
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
@@ -1455,6 +1457,10 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
          height = 1;
          layer_stride = stride;
       }
+
+      util_throttle_memory_usage(pipe, &st->throttle,
+                                 width * height * depth *
+                                 util_format_get_blocksize(dst->format));
 
       u_box_3d(xoffset, yoffset, zoffset + dstz, width, height, depth, &box);
       pipe->texture_subdata(pipe, dst, dst_level, 0,
@@ -1561,6 +1567,11 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
       goto fallback;
    }
 
+   util_throttle_memory_usage(pipe, &st->throttle,
+                              width * height * depth *
+                              util_format_get_blocksize(src_templ.format));
+   throttled = true;
+
    /* Create the source texture. */
    src = screen->resource_create(screen, &src_templ);
    if (!src) {
@@ -1651,6 +1662,11 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    return;
 
 fallback:
+   if (!throttled) {
+      util_throttle_memory_usage(pipe, &st->throttle,
+                                 width * height * depth *
+                                 _mesa_get_format_bytes(texImage->TexFormat));
+   }
    _mesa_store_texsubimage(ctx, dims, texImage, xoffset, yoffset, zoffset,
                            width, height, depth, format, type, pixels,
                            unpack);
@@ -2043,7 +2059,7 @@ st_GetTexSubImage(struct gl_context * ctx,
       }
 
       dst_format = st_choose_format(st, dst_glformat, format, type,
-                                    pipe_target, 0, bind, FALSE);
+                                    pipe_target, 0, 0, bind, FALSE);
 
       if (dst_format == PIPE_FORMAT_NONE) {
          /* unable to get an rgba format!?! */
@@ -3221,7 +3237,7 @@ st_NewImageHandle(struct gl_context *ctx, struct gl_image_unit *imgObj)
    struct pipe_context *pipe = st->pipe;
    struct pipe_image_view image;
 
-   st_convert_image(st, imgObj, &image);
+   st_convert_image(st, imgObj, &image, GL_READ_WRITE);
 
    return pipe->create_image_handle(pipe, &image);
 }

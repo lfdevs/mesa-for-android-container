@@ -78,7 +78,7 @@ nouveau_get_configs(uint32_t chipset)
 					  ARRAY_SIZE(back_buffer_modes),
 					  msaa_samples,
 					  ARRAY_SIZE(msaa_samples),
-					  GL_TRUE, chipset < 0x10);
+					  GL_TRUE, chipset < 0x10, GL_FALSE);
 		assert(config);
 
 		configs = driConcatConfigs(configs, config);

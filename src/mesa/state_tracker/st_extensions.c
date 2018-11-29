@@ -81,9 +81,8 @@ void st_init_limits(struct pipe_screen *screen,
 {
    int supported_irs;
    unsigned sh;
-   boolean can_ubo = TRUE;
+   bool can_ubo = true;
    int temp;
-   bool ssbo_atomic = true;
 
    c->MaxTextureLevels
       = _min(screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS),
@@ -111,6 +110,8 @@ void st_init_limits(struct pipe_screen *screen,
    c->MaxViewportHeight =
    c->MaxRenderbufferSize = c->MaxTextureRectSize;
 
+   c->SubPixelBits =
+      screen->get_param(screen, PIPE_CAP_RASTERIZER_SUBPIXEL_BITS);
    c->ViewportSubpixelBits =
       screen->get_param(screen, PIPE_CAP_VIEWPORT_SUBPIXEL_BITS);
 
@@ -153,8 +154,13 @@ void st_init_limits(struct pipe_screen *screen,
    c->MaxUniformBlockSize =
       screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
                                PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE);
+   /* GL45-CTS.enhanced_layouts.ssb_member_invalid_offset_alignment fails if
+    * this is larger than INT_MAX - 100. Use a nicely aligned limit.
+    */
+   c->MaxUniformBlockSize = MIN2(c->MaxUniformBlockSize, INT_MAX - 127);
+
    if (c->MaxUniformBlockSize < 16384) {
-      can_ubo = FALSE;
+      can_ubo = false;
    }
 
    for (sh = 0; sh < PIPE_SHADER_TYPES; ++sh) {
@@ -209,17 +215,20 @@ void st_init_limits(struct pipe_screen *screen,
          screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_TEMPS);
       pc->MaxAddressRegs =
       pc->MaxNativeAddressRegs = sh == PIPE_SHADER_VERTEX ? 1 : 0;
-      pc->MaxParameters =
-      pc->MaxNativeParameters =
+
+      pc->MaxUniformComponents =
          screen->get_shader_param(screen, sh,
-                   PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) / sizeof(float[4]);
+                                  PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) / 4;
+      pc->MaxUniformComponents = MIN2(pc->MaxUniformComponents,
+                                      MAX_UNIFORMS * 4);
+
+      pc->MaxParameters =
+      pc->MaxNativeParameters = pc->MaxUniformComponents / 4;
       pc->MaxInputComponents =
          screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_INPUTS) * 4;
       pc->MaxOutputComponents =
          screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_OUTPUTS) * 4;
 
-      pc->MaxUniformComponents =
-         4 * MIN2(pc->MaxNativeParameters, MAX_UNIFORMS);
 
       pc->MaxUniformBlocks =
          screen->get_shader_param(screen, sh,
@@ -228,9 +237,13 @@ void st_init_limits(struct pipe_screen *screen,
          pc->MaxUniformBlocks -= 1; /* The first one is for ordinary uniforms. */
       pc->MaxUniformBlocks = _min(pc->MaxUniformBlocks, MAX_UNIFORM_BUFFERS);
 
-      pc->MaxCombinedUniformComponents = (pc->MaxUniformComponents +
-                                          c->MaxUniformBlockSize / 4 *
-                                          pc->MaxUniformBlocks);
+      pc->MaxCombinedUniformComponents =
+         pc->MaxUniformComponents +
+         (uint64_t)c->MaxUniformBlockSize / 4 * pc->MaxUniformBlocks;
+
+      pc->MaxShaderStorageBlocks =
+         screen->get_shader_param(screen, sh,
+                                  PIPE_SHADER_CAP_MAX_SHADER_BUFFERS);
 
       temp = screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS);
       if (temp) {
@@ -238,14 +251,16 @@ void st_init_limits(struct pipe_screen *screen,
           * for separate atomic counters get the actual hw limits
           * per stage on atomic counters and buffers
           */
-         ssbo_atomic = false;
          pc->MaxAtomicCounters = temp;
          pc->MaxAtomicBuffers = screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS);
-         pc->MaxShaderStorageBlocks = screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_SHADER_BUFFERS);
       } else {
          pc->MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
-         pc->MaxAtomicBuffers = screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_SHADER_BUFFERS) / 2;
-         pc->MaxShaderStorageBlocks = pc->MaxAtomicBuffers;
+         /*
+          * without separate atomic counters, reserve half of the available
+          * SSBOs for atomic buffers, and the other half for normal SSBOs.
+          */
+         pc->MaxAtomicBuffers = pc->MaxShaderStorageBlocks / 2;
+         pc->MaxShaderStorageBlocks -= pc->MaxAtomicBuffers;
       }
       pc->MaxImageUniforms = screen->get_shader_param(
             screen, sh, PIPE_SHADER_CAP_MAX_SHADER_IMAGES);
@@ -292,7 +307,7 @@ void st_init_limits(struct pipe_screen *screen,
 
       if (pc->MaxNativeInstructions &&
           (options->EmitNoIndirectUniform || pc->MaxUniformBlocks < 12)) {
-         can_ubo = FALSE;
+         can_ubo = false;
       }
 
       if (options->EmitNoLoops)
@@ -308,6 +323,13 @@ void st_init_limits(struct pipe_screen *screen,
       options->LowerCombinedClipCullDistance = true;
       options->LowerBufferInterfaceBlocks = true;
    }
+
+   c->MaxUserAssignableUniformLocations =
+      c->Program[MESA_SHADER_VERTEX].MaxUniformComponents +
+      c->Program[MESA_SHADER_TESS_CTRL].MaxUniformComponents +
+      c->Program[MESA_SHADER_TESS_EVAL].MaxUniformComponents +
+      c->Program[MESA_SHADER_GEOMETRY].MaxUniformComponents +
+      c->Program[MESA_SHADER_FRAGMENT].MaxUniformComponents;
 
    c->GLSLOptimizeConservatively =
       screen->get_param(screen, PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY);
@@ -346,6 +368,8 @@ void st_init_limits(struct pipe_screen *screen,
       screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES);
    c->MaxGeometryTotalOutputComponents =
       screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS);
+   c->MaxGeometryShaderInvocations =
+      screen->get_param(screen, PIPE_CAP_MAX_GS_INVOCATIONS);
    c->MaxTessPatchComponents =
       MIN2(screen->get_param(screen, PIPE_CAP_MAX_SHADER_PATCH_VARYINGS),
            MAX_VARYING) * 4;
@@ -379,6 +403,12 @@ void st_init_limits(struct pipe_screen *screen,
 
    c->MaxVertexAttribStride
       = screen->get_param(screen, PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE);
+
+   /* The value cannot be larger than that since pipe_vertex_buffer::src_offset
+    * is only 16 bits.
+    */
+   temp = screen->get_param(screen, PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET);
+   c->MaxVertexAttribRelativeOffset = MIN2(0xffff, temp);
 
    c->StripTextureBorder = GL_TRUE;
 
@@ -416,18 +446,15 @@ void st_init_limits(struct pipe_screen *screen,
       c->NumProgramBinaryFormats = 1;
 
    c->MaxAtomicBufferBindings =
-          c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers;
+      c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers;
+   c->MaxAtomicBufferSize =
+      c->Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters * ATOMIC_COUNTER_SIZE;
 
-   if (!ssbo_atomic) {
-      /* for separate atomic buffers - there atomic buffer size will be
-         limited */
-      c->MaxAtomicBufferSize = c->Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters * ATOMIC_COUNTER_SIZE;
-      /* on all HW with separate atomic (evergreen) the following
-         lines are true. not sure it's worth adding CAPs for this at this
-         stage. */
-      c->MaxCombinedAtomicCounters = c->Program[MESA_SHADER_FRAGMENT].MaxAtomicCounters;
-      c->MaxCombinedAtomicBuffers = c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers;
-   } else {
+   c->MaxCombinedAtomicBuffers =
+      MIN2(screen->get_param(screen,
+                             PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS),
+           MAX_COMBINED_ATOMIC_BUFFERS);
+   if (!c->MaxCombinedAtomicBuffers) {
       c->MaxCombinedAtomicBuffers =
          c->Program[MESA_SHADER_VERTEX].MaxAtomicBuffers +
          c->Program[MESA_SHADER_TESS_CTRL].MaxAtomicBuffers +
@@ -436,6 +463,11 @@ void st_init_limits(struct pipe_screen *screen,
          c->Program[MESA_SHADER_FRAGMENT].MaxAtomicBuffers;
       assert(c->MaxCombinedAtomicBuffers <= MAX_COMBINED_ATOMIC_BUFFERS);
    }
+
+   c->MaxCombinedAtomicCounters =
+      screen->get_param(screen, PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS);
+   if (!c->MaxCombinedAtomicCounters)
+      c->MaxCombinedAtomicCounters = MAX_ATOMIC_COUNTERS;
 
    if (c->MaxCombinedAtomicBuffers > 0) {
       extensions->ARB_shader_atomic_counters = GL_TRUE;
@@ -446,13 +478,24 @@ void st_init_limits(struct pipe_screen *screen,
    c->ShaderStorageBufferOffsetAlignment =
       screen->get_param(screen, PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT);
    if (c->ShaderStorageBufferOffsetAlignment) {
-      /* for hw atomic counters leaves these at default for now */
-      if (ssbo_atomic)
-         c->MaxCombinedShaderStorageBlocks = c->MaxShaderStorageBufferBindings =
-            c->MaxCombinedAtomicBuffers;
+      c->MaxCombinedShaderStorageBlocks =
+         MIN2(screen->get_param(screen, PIPE_CAP_MAX_COMBINED_SHADER_BUFFERS),
+              MAX_COMBINED_SHADER_STORAGE_BUFFERS);
+      if (!c->MaxCombinedShaderStorageBlocks) {
+         c->MaxCombinedShaderStorageBlocks =
+            c->Program[MESA_SHADER_VERTEX].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_TESS_CTRL].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_TESS_EVAL].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_GEOMETRY].MaxShaderStorageBlocks +
+            c->Program[MESA_SHADER_FRAGMENT].MaxShaderStorageBlocks;
+         assert(c->MaxCombinedShaderStorageBlocks < MAX_COMBINED_SHADER_STORAGE_BUFFERS);
+      }
+      c->MaxShaderStorageBufferBindings = c->MaxCombinedShaderStorageBlocks;
+
       c->MaxCombinedShaderOutputResources +=
          c->MaxCombinedShaderStorageBlocks;
-      c->MaxShaderStorageBlockSize = 1 << 27;
+      c->MaxShaderStorageBlockSize =
+         screen->get_param(screen, PIPE_CAP_MAX_SHADER_BUFFER_SIZE);
       extensions->ARB_shader_storage_buffer_object = GL_TRUE;
    }
 
@@ -600,6 +643,26 @@ get_max_samples_for_formats(struct pipe_screen *screen,
    return 0;
 }
 
+static unsigned
+get_max_samples_for_formats_advanced(struct pipe_screen *screen,
+                                     unsigned num_formats,
+                                     const enum pipe_format *formats,
+                                     unsigned max_samples,
+                                     unsigned num_storage_samples,
+                                     unsigned bind)
+{
+   unsigned i, f;
+
+   for (i = max_samples; i > 0; --i) {
+      for (f = 0; f < num_formats; f++) {
+         if (screen->is_format_supported(screen, formats[f], PIPE_TEXTURE_2D,
+                                         i, num_storage_samples, bind)) {
+            return i;
+         }
+      }
+   }
+   return 0;
+}
 
 /**
  * Use pipe_screen::get_param() to query PIPE_CAP_ values to determine
@@ -659,7 +722,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_texture_buffer_object),        PIPE_CAP_TEXTURE_BUFFER_OBJECTS           },
       { o(ARB_texture_cube_map_array),       PIPE_CAP_CUBE_MAP_ARRAY                   },
       { o(ARB_texture_gather),               PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS    },
-      { o(ARB_texture_mirror_clamp_to_edge), PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
+      { o(ARB_texture_mirror_clamp_to_edge), PIPE_CAP_TEXTURE_MIRROR_CLAMP_TO_EDGE     },
       { o(ARB_texture_multisample),          PIPE_CAP_TEXTURE_MULTISAMPLE              },
       { o(ARB_texture_non_power_of_two),     PIPE_CAP_NPOT_TEXTURES                    },
       { o(ARB_texture_query_lod),            PIPE_CAP_TEXTURE_QUERY_LOD                },
@@ -673,6 +736,7 @@ void st_init_extensions(struct pipe_screen *screen,
 
       { o(EXT_blend_equation_separate),      PIPE_CAP_BLEND_EQUATION_SEPARATE          },
       { o(EXT_depth_bounds_test),            PIPE_CAP_DEPTH_BOUNDS_TEST                },
+      { o(EXT_disjoint_timer_query),         PIPE_CAP_QUERY_TIMESTAMP                  },
       { o(EXT_draw_buffers2),                PIPE_CAP_INDEP_BLEND_ENABLE               },
       { o(EXT_memory_object),                PIPE_CAP_MEMOBJ                           },
       { o(EXT_memory_object_fd),             PIPE_CAP_MEMOBJ                           },
@@ -685,6 +749,8 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(EXT_transform_feedback),           PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS        },
       { o(EXT_window_rectangles),            PIPE_CAP_MAX_WINDOW_RECTANGLES            },
 
+      { o(AMD_depth_clamp_separate),         PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE      },
+      { o(AMD_framebuffer_multisample_advanced), PIPE_CAP_FRAMEBUFFER_MSAA_CONSTRAINTS },
       { o(AMD_pinned_memory),                PIPE_CAP_RESOURCE_FROM_USER_MEMORY        },
       { o(ATI_meminfo),                      PIPE_CAP_QUERY_MEMORY_INFO                },
       { o(AMD_seamless_cubemap_per_texture), PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE    },
@@ -772,7 +838,8 @@ void st_init_extensions(struct pipe_screen *screen,
           PIPE_FORMAT_BPTC_RGB_FLOAT,
           PIPE_FORMAT_BPTC_RGB_UFLOAT } },
 
-      { { o(KHR_texture_compression_astc_ldr) },
+      { { o(KHR_texture_compression_astc_ldr),
+          o(KHR_texture_compression_astc_sliced_3d) },
         { PIPE_FORMAT_ASTC_4x4,
           PIPE_FORMAT_ASTC_5x4,
           PIPE_FORMAT_ASTC_5x5,
@@ -803,7 +870,8 @@ void st_init_extensions(struct pipe_screen *screen,
           PIPE_FORMAT_ASTC_12x12_SRGB } },
 
       /* ASTC software fallback support. */
-      { { o(KHR_texture_compression_astc_ldr) },
+      { { o(KHR_texture_compression_astc_ldr),
+          o(KHR_texture_compression_astc_sliced_3d) },
         { PIPE_FORMAT_R8G8B8A8_UNORM,
           PIPE_FORMAT_R8G8B8A8_SRGB } },
 
@@ -999,9 +1067,7 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->ARB_shading_language_420pack = GL_TRUE;
       extensions->ARB_texture_query_levels = GL_TRUE;
 
-      if (!options->disable_shader_bit_encoding) {
-         extensions->ARB_shader_bit_encoding = GL_TRUE;
-      }
+      extensions->ARB_shader_bit_encoding = GL_TRUE;
 
       extensions->EXT_shader_integer_mix = GL_TRUE;
       extensions->ARB_arrays_of_arrays = GL_TRUE;
@@ -1102,6 +1168,74 @@ void st_init_extensions(struct pipe_screen *screen,
          get_max_samples_for_formats(screen, ARRAY_SIZE(void_formats),
                                      void_formats, 32,
                                      PIPE_BIND_RENDER_TARGET);
+
+      if (extensions->AMD_framebuffer_multisample_advanced) {
+         /* AMD_framebuffer_multisample_advanced */
+         /* This can be greater than storage samples. */
+         consts->MaxColorFramebufferSamples =
+            get_max_samples_for_formats_advanced(screen,
+                                                ARRAY_SIZE(color_formats),
+                                                color_formats, 16,
+                                                consts->MaxSamples,
+                                                PIPE_BIND_RENDER_TARGET);
+
+         /* If the driver supports N color samples, it means it supports
+          * N samples and N storage samples. N samples >= N storage
+          * samples.
+          */
+         consts->MaxColorFramebufferStorageSamples = consts->MaxSamples;
+         consts->MaxDepthStencilFramebufferSamples =
+            consts->MaxDepthTextureSamples;
+
+         assert(consts->MaxColorFramebufferSamples >=
+                consts->MaxDepthStencilFramebufferSamples);
+         assert(consts->MaxDepthStencilFramebufferSamples >=
+                consts->MaxColorFramebufferStorageSamples);
+
+         consts->NumSupportedMultisampleModes = 0;
+
+         unsigned depth_samples_supported = 0;
+
+         for (unsigned samples = 2;
+              samples <= consts->MaxDepthStencilFramebufferSamples;
+              samples++) {
+            if (screen->is_format_supported(screen, PIPE_FORMAT_Z32_FLOAT,
+                                            PIPE_TEXTURE_2D, samples, samples,
+                                            PIPE_BIND_DEPTH_STENCIL))
+               depth_samples_supported |= 1 << samples;
+         }
+
+         for (unsigned samples = 2;
+              samples <= consts->MaxColorFramebufferSamples;
+              samples++) {
+            for (unsigned depth_samples = 2;
+                 depth_samples <= samples; depth_samples++) {
+               if (!(depth_samples_supported & (1 << depth_samples)))
+                  continue;
+
+               for (unsigned storage_samples = 2;
+                    storage_samples <= depth_samples; storage_samples++) {
+                  if (screen->is_format_supported(screen,
+                                                  PIPE_FORMAT_R8G8B8A8_UNORM,
+                                                  PIPE_TEXTURE_2D,
+                                                  samples,
+                                                  storage_samples,
+                                                  PIPE_BIND_RENDER_TARGET)) {
+                     unsigned i = consts->NumSupportedMultisampleModes;
+
+                     assert(i < ARRAY_SIZE(consts->SupportedMultisampleModes));
+                     consts->SupportedMultisampleModes[i].NumColorSamples =
+                        samples;
+                     consts->SupportedMultisampleModes[i].NumColorStorageSamples =
+                        storage_samples;
+                     consts->SupportedMultisampleModes[i].NumDepthStencilSamples =
+                        depth_samples;
+                     consts->NumSupportedMultisampleModes++;
+                  }
+               }
+            }
+         }
+      }
    }
 
    if (consts->MaxSamples >= 2) {
@@ -1145,6 +1279,9 @@ void st_init_extensions(struct pipe_screen *screen,
 
    if (options->allow_glsl_relaxed_es)
       consts->AllowGLSLRelaxedES = GL_TRUE;
+
+   if (options->allow_glsl_layout_qualifier_on_function_parameters)
+      consts->AllowLayoutQualifiersOnFunctionParameters = GL_TRUE;
 
    consts->MinMapBufferAlignment =
       screen->get_param(screen, PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT);

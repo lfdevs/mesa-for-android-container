@@ -3212,7 +3212,7 @@ make_variant_key(struct llvmpipe_context *lp,
    if (lp->rasterizer->clip_halfz) {
       key->depth_clamp = 1;
    } else {
-      key->depth_clamp = (lp->rasterizer->depth_clip == 0) ? 1 : 0;
+      key->depth_clamp = (lp->rasterizer->depth_clip_near == 0) ? 1 : 0;
    }
 
    /* alpha test only applies if render buffer 0 is non-integer (or does not exist) */

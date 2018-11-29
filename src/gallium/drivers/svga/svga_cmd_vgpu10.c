@@ -222,6 +222,7 @@ SVGA3D_vgpu10_SetViewports(struct svga_winsys_context *swc,
 {
    SVGA3D_CREATE_CMD_COUNT(SetViewports, SET_VIEWPORTS, SVGA3dViewport);
 
+   cmd->pad0 = 0;
    memcpy(cmd + 1, viewports, count * sizeof(SVGA3dViewport));
 
    swc->commit(swc);
@@ -508,6 +509,7 @@ SVGA3D_vgpu10_SetScissorRects(struct svga_winsys_context *swc,
    if (!cmd)
       return PIPE_ERROR_OUT_OF_MEMORY;
 
+   cmd->pad0 = 0;
    memcpy(cmd + 1, rects, count * sizeof(SVGASignedRect));
 
    swc->commit(swc);
@@ -602,6 +604,7 @@ SVGA3D_vgpu10_DrawAuto(struct svga_winsys_context *swc)
 {
    SVGA3D_CREATE_COMMAND(DrawAuto, DRAW_AUTO);
 
+   cmd->pad0 = 0;
    swc->hints |= SVGA_HINT_FLAG_CAN_PRE_FLUSH;
    swc->commit(swc);
    swc->num_draw_commands++;
@@ -819,6 +822,9 @@ SVGA3D_vgpu10_DefineDepthStencilView(struct svga_winsys_context *swc,
    cmd->mipSlice = desc->tex.mipSlice;
    cmd->firstArraySlice = desc->tex.firstArraySlice;
    cmd->arraySize = desc->tex.arraySize;
+   cmd->flags = 0;
+   cmd->pad0 = 0;
+   cmd->pad1 = 0;
 
    surface_to_resourceid(swc, surface,
                          &cmd->sid,
@@ -1031,6 +1037,8 @@ SVGA3D_vgpu10_DefineSamplerState(struct svga_winsys_context *swc,
    SVGA3D_COPY_BASIC_5(maxAnisotropy, comparisonFunc,
                        borderColor, minLOD,
                        maxLOD);
+   cmd->pad0 = 0;
+   cmd->pad1 = 0;
 
    swc->commit(swc);
    return PIPE_OK;
@@ -1124,6 +1132,7 @@ SVGA3D_vgpu10_DefineStreamOutput(struct svga_winsys_context *swc,
           sizeof(SVGA3dStreamOutputDeclarationEntry)
           * SVGA3D_MAX_STREAMOUT_DECLS);
 
+   cmd->rasterizedStream = 0;
    swc->commit(swc);
    return PIPE_OK;
 }
@@ -1370,5 +1379,56 @@ SVGA3D_vgpu10_TransferFromBuffer(struct svga_winsys_context *swc,
    cmd->destBox = *dstBox;
  
    swc->commit(swc);
+   return PIPE_OK;
+}
+
+enum pipe_error
+SVGA3D_vgpu10_IntraSurfaceCopy(struct svga_winsys_context *swc,
+                               struct svga_winsys_surface *surface,
+                               unsigned level, unsigned face,
+                               const SVGA3dCopyBox *box)
+{
+   SVGA3dCmdIntraSurfaceCopy *cmd =
+      SVGA3D_FIFOReserve(swc,
+                         SVGA_3D_CMD_INTRA_SURFACE_COPY,
+                         sizeof(SVGA3dCmdIntraSurfaceCopy),
+                         1);  /* one relocation */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   swc->surface_relocation(swc, &cmd->surface.sid, NULL, surface, SVGA_RELOC_READ | SVGA_RELOC_WRITE);
+   cmd->surface.face = face;
+   cmd->surface.mipmap = level;
+   cmd->box = *box;
+
+   swc->commit(swc);
+
+   return PIPE_OK;
+}
+
+enum pipe_error
+SVGA3D_vgpu10_ResolveCopy(struct svga_winsys_context *swc,
+                          unsigned dstSubResource,
+                          struct svga_winsys_surface *dst,
+                          unsigned srcSubResource,
+                          struct svga_winsys_surface *src,
+                          const SVGA3dSurfaceFormat copyFormat)
+{
+   SVGA3dCmdDXResolveCopy *cmd =
+      SVGA3D_FIFOReserve(swc,
+                         SVGA_3D_CMD_DX_RESOLVE_COPY,
+                         sizeof(SVGA3dCmdDXResolveCopy),
+                         2); /* two relocations */
+   if (!cmd)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   cmd->dstSubResource = dstSubResource;
+   swc->surface_relocation(swc, &cmd->dstSid, NULL, dst, SVGA_RELOC_WRITE);
+   cmd->srcSubResource = srcSubResource;
+   swc->surface_relocation(swc, &cmd->srcSid, NULL, src, SVGA_RELOC_READ);
+   cmd->copyFormat = copyFormat;
+
+   swc->commit(swc);
+
    return PIPE_OK;
 }

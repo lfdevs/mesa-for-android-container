@@ -63,7 +63,7 @@
  * \return number of float[4] constants put into the 'dest' buffer
  */
 static unsigned
-svga_get_extra_constants_common(struct svga_context *svga,
+svga_get_extra_constants_common(const struct svga_context *svga,
                                 const struct svga_shader_variant *variant,
                                 enum pipe_shader_type shader, float *dest)
 {
@@ -82,10 +82,10 @@ svga_get_extra_constants_common(struct svga_context *svga,
             /* debug/sanity check */
             assert(variant->key.tex[i].width_height_idx == count);
 
-            *dest++ = 1.0 / (float)tex->width0;
-            *dest++ = 1.0 / (float)tex->height0;
-            *dest++ = 1.0;
-            *dest++ = 1.0;
+            *dest++ = 1.0f / (float) tex->width0;
+            *dest++ = 1.0f / (float) tex->height0;
+            *dest++ = 1.0f;
+            *dest++ = 1.0f;
 
             count++;
          }
@@ -114,7 +114,7 @@ svga_get_extra_constants_common(struct svga_context *svga,
  * \return number of float[4] constants put into the dest buffer
  */
 static unsigned
-svga_get_extra_fs_constants(struct svga_context *svga, float *dest)
+svga_get_extra_fs_constants(const struct svga_context *svga, float *dest)
 {
    const struct svga_shader_variant *variant = svga->state.hw_draw.fs;
    unsigned count = 0;
@@ -133,7 +133,7 @@ svga_get_extra_fs_constants(struct svga_context *svga, float *dest)
  * will be returned in 'dest'.
  */
 static unsigned
-svga_get_prescale_constants(struct svga_context *svga, float **dest)
+svga_get_prescale_constants(const struct svga_context *svga, float **dest)
 {
    memcpy(*dest, svga->state.hw_clear.prescale.scale, 4 * sizeof(float));
    *dest += 4;
@@ -148,7 +148,7 @@ svga_get_prescale_constants(struct svga_context *svga, float **dest)
  * Emit extra constants needed for point sprite emulation.
  */
 static unsigned
-svga_get_pt_sprite_constants(struct svga_context *svga, float **dest)
+svga_get_pt_sprite_constants(const struct svga_context *svga, float **dest)
 {
    const struct svga_screen *screen = svga_screen(svga->pipe.screen);
    float *dst = *dest;
@@ -166,7 +166,7 @@ svga_get_pt_sprite_constants(struct svga_context *svga, float **dest)
  * by '*dest'. The updated buffer pointer will be returned in 'dest'.
  */
 static unsigned
-svga_get_clip_plane_constants(struct svga_context *svga,
+svga_get_clip_plane_constants(const struct svga_context *svga,
                               const struct svga_shader_variant *variant,
                               float **dest)
 {
@@ -195,7 +195,7 @@ svga_get_clip_plane_constants(struct svga_context *svga,
  * \return number of float[4] constants put into the dest buffer
  */
 static unsigned
-svga_get_extra_vs_constants(struct svga_context *svga, float *dest)
+svga_get_extra_vs_constants(const struct svga_context *svga, float *dest)
 {
    const struct svga_shader_variant *variant = svga->state.hw_draw.vs;
    unsigned count = 0;
@@ -233,7 +233,7 @@ svga_get_extra_vs_constants(struct svga_context *svga, float *dest)
  * to by 'dest'.
  */
 static unsigned
-svga_get_extra_gs_constants(struct svga_context *svga, float *dest)
+svga_get_extra_gs_constants(const struct svga_context *svga, float *dest)
 {
    const struct svga_shader_variant *variant = svga->state.hw_draw.gs;
    unsigned count = 0;
@@ -490,12 +490,6 @@ emit_constbuf_vgpu10(struct svga_context *svga, enum pipe_shader_type shader)
    const struct svga_shader_variant *variant;
    unsigned alloc_buf_size;
 
-   assert(shader == PIPE_SHADER_VERTEX ||
-          shader == PIPE_SHADER_GEOMETRY ||
-          shader == PIPE_SHADER_FRAGMENT);
-
-   cbuf = &svga->curr.constbufs[shader][0];
-
    switch (shader) {
    case PIPE_SHADER_VERTEX:
       variant = svga->state.hw_draw.vs;
@@ -518,6 +512,8 @@ emit_constbuf_vgpu10(struct svga_context *svga, enum pipe_shader_type shader)
    }
 
    assert(variant);
+
+   cbuf = &svga->curr.constbufs[shader][0];
 
    /* Compute extra constants size and offset in bytes */
    extra_size = extra_count * 4 * sizeof(float);
@@ -773,7 +769,8 @@ struct svga_tracked_state svga_hw_vs_constants =
    "hw vs params",
    (SVGA_NEW_PRESCALE |
     SVGA_NEW_VS_CONST_BUFFER |
-    SVGA_NEW_VS_VARIANT),
+    SVGA_NEW_VS_VARIANT |
+    SVGA_NEW_TEXTURE_CONSTS),
    emit_vs_consts
 };
 
@@ -813,6 +810,7 @@ struct svga_tracked_state svga_hw_gs_constants =
    (SVGA_NEW_PRESCALE |
     SVGA_NEW_GS_CONST_BUFFER |
     SVGA_NEW_RAST |
-    SVGA_NEW_GS_VARIANT),
+    SVGA_NEW_GS_VARIANT |
+    SVGA_NEW_TEXTURE_CONSTS),
    emit_gs_consts
 };

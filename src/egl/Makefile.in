@@ -231,12 +231,12 @@ am__libEGL_common_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	main/eglarray.c main/eglarray.h main/eglconfig.c \
 	main/eglconfig.h main/eglcontext.c main/eglcontext.h \
 	main/eglcurrent.c main/eglcurrent.h main/egldefines.h \
-	main/egldisplay.c main/egldisplay.h main/egldriver.c \
-	main/egldriver.h main/eglfallbacks.c main/eglglobals.c \
-	main/eglglobals.h main/eglimage.c main/eglimage.h \
-	main/egllog.c main/egllog.h main/eglsurface.c \
-	main/eglsurface.h main/eglsync.c main/eglsync.h \
-	main/eglentrypoint.h main/egltypedefs.h \
+	main/egldevice.c main/egldevice.h main/egldisplay.c \
+	main/egldisplay.h main/egldriver.c main/egldriver.h \
+	main/eglfallbacks.c main/eglglobals.c main/eglglobals.h \
+	main/eglimage.c main/eglimage.h main/egllog.c main/egllog.h \
+	main/eglsurface.c main/eglsurface.h main/eglsync.c \
+	main/eglsync.h main/eglentrypoint.h main/egltypedefs.h \
 	drivers/dri2/egl_dri2.c drivers/dri2/egl_dri2.h \
 	drivers/dri2/egl_dri2_fallbacks.h drivers/dri2/platform_x11.c \
 	drivers/dri2/platform_wayland.c drivers/dri2/platform_drm.c \
@@ -246,10 +246,10 @@ am__libEGL_common_la_SOURCES_DIST = main/eglapi.c main/eglapi.h \
 	drivers/dri2/platform_x11_dri3.h
 am__dirstamp = $(am__leading_dot)dirstamp
 am__objects_1 = main/eglapi.lo main/eglarray.lo main/eglconfig.lo \
-	main/eglcontext.lo main/eglcurrent.lo main/egldisplay.lo \
-	main/egldriver.lo main/eglfallbacks.lo main/eglglobals.lo \
-	main/eglimage.lo main/egllog.lo main/eglsurface.lo \
-	main/eglsync.lo
+	main/eglcontext.lo main/eglcurrent.lo main/egldevice.lo \
+	main/egldisplay.lo main/egldriver.lo main/eglfallbacks.lo \
+	main/eglglobals.lo main/eglimage.lo main/egllog.lo \
+	main/eglsurface.lo main/eglsync.lo
 am__objects_2 = drivers/dri2/egl_dri2.lo
 @HAVE_PLATFORM_X11_TRUE@am__objects_3 = drivers/dri2/platform_x11.lo
 @HAVE_PLATFORM_WAYLAND_TRUE@am__objects_4 =  \
@@ -309,7 +309,7 @@ am__depfiles_remade = ./$(DEPDIR)/g_egldispatchstubs.Plo \
 	drivers/dri2/$(DEPDIR)/platform_x11_dri3.Plo \
 	main/$(DEPDIR)/eglapi.Plo main/$(DEPDIR)/eglarray.Plo \
 	main/$(DEPDIR)/eglconfig.Plo main/$(DEPDIR)/eglcontext.Plo \
-	main/$(DEPDIR)/eglcurrent.Plo \
+	main/$(DEPDIR)/eglcurrent.Plo main/$(DEPDIR)/egldevice.Plo \
 	main/$(DEPDIR)/egldispatchstubs.Plo \
 	main/$(DEPDIR)/egldisplay.Plo main/$(DEPDIR)/egldriver.Plo \
 	main/$(DEPDIR)/eglfallbacks.Plo main/$(DEPDIR)/eglglobals.Plo \
@@ -608,8 +608,6 @@ EXEEXT = @EXEEXT@
 EXPAT_CFLAGS = @EXPAT_CFLAGS@
 EXPAT_LIBS = @EXPAT_LIBS@
 FGREP = @FGREP@
-FREEDRENO_CFLAGS = @FREEDRENO_CFLAGS@
-FREEDRENO_LIBS = @FREEDRENO_LIBS@
 GALLIUM_PIPE_LOADER_DEFINES = @GALLIUM_PIPE_LOADER_DEFINES@
 GBM_PC_LIB_PRIV = @GBM_PC_LIB_PRIV@
 GBM_PC_REQ_PRIV = @GBM_PC_REQ_PRIV@
@@ -630,7 +628,6 @@ GL_PC_LIB_PRIV = @GL_PC_LIB_PRIV@
 GL_PC_REQ_PRIV = @GL_PC_REQ_PRIV@
 GL_PKGCONF_LIB = @GL_PKGCONF_LIB@
 GREP = @GREP@
-HAVE_XF86VIDMODE = @HAVE_XF86VIDMODE@
 I915_CFLAGS = @I915_CFLAGS@
 I915_LIBS = @I915_LIBS@
 INDENT = @INDENT@
@@ -723,11 +720,16 @@ PTHREAD_CC = @PTHREAD_CC@
 PTHREAD_CFLAGS = @PTHREAD_CFLAGS@
 PTHREAD_LIBS = @PTHREAD_LIBS@
 PWR8_CFLAGS = @PWR8_CFLAGS@
-PYTHON2 = @PYTHON2@
+PYTHON = @PYTHON@
+PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
+PYTHON_PLATFORM = @PYTHON_PLATFORM@
+PYTHON_PREFIX = @PYTHON_PREFIX@
+PYTHON_VERSION = @PYTHON_VERSION@
 RADEON_CFLAGS = @RADEON_CFLAGS@
 RADEON_LIBS = @RADEON_LIBS@
 RANLIB = @RANLIB@
 RM = @RM@
+SCANNER_ARG = @SCANNER_ARG@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -789,8 +791,6 @@ XCB_DRI3_MODIFIERS_CFLAGS = @XCB_DRI3_MODIFIERS_CFLAGS@
 XCB_DRI3_MODIFIERS_LIBS = @XCB_DRI3_MODIFIERS_LIBS@
 XCB_RANDR_CFLAGS = @XCB_RANDR_CFLAGS@
 XCB_RANDR_LIBS = @XCB_RANDR_LIBS@
-XF86VIDMODE_CFLAGS = @XF86VIDMODE_CFLAGS@
-XF86VIDMODE_LIBS = @XF86VIDMODE_LIBS@
 XLIBGL_CFLAGS = @XLIBGL_CFLAGS@
 XLIBGL_LIBS = @XLIBGL_LIBS@
 XLIB_RANDR_CFLAGS = @XLIB_RANDR_CFLAGS@
@@ -849,10 +849,13 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgpyexecdir = @pkgpyexecdir@
+pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-runstatedir = @runstatedir@
+pyexecdir = @pyexecdir@
+pythondir = @pythondir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 srcdir = @srcdir@
@@ -877,6 +880,8 @@ LIBEGL_C_FILES := \
 	main/eglcurrent.c \
 	main/eglcurrent.h \
 	main/egldefines.h \
+	main/egldevice.c \
+	main/egldevice.h \
 	main/egldisplay.c \
 	main/egldisplay.h \
 	main/egldriver.c \
@@ -914,7 +919,7 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/drm-uapi \
 	-I$(top_builddir)/src/egl/wayland/wayland-drm \
 	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
 	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
-	-D_EGL_BUILT_IN_DRIVER_DRI2 $(am__append_16)
+	$(am__append_16)
 
 # Depending on whether libglvnd is enabled, we'll build the EGL library as
 # either libEGL.so.1 or libEGL_mesa.so.0. Using an automake substitution
@@ -942,7 +947,7 @@ GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
 	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
 	generate/egl_other.xml
 
-PYTHON_GEN = $(AM_V_GEN)$(PYTHON2) $(PYTHON_FLAGS)
+PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 CLEANFILES = \
 	$(BUILT_SOURCES) \
 	$(dri2_backend_GENERATED_FILES)
@@ -981,6 +986,8 @@ CLEANFILES = \
 @USE_LIBGLVND_FALSE@	$(GC_SECTIONS) \
 @USE_LIBGLVND_FALSE@	$(LD_NO_UNDEFINED)
 
+
+# TODO: When building with glvnd, glvnd itself should be providing egl.pc and the headers
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = main/egl.pc
 egldir = $(includedir)/EGL
@@ -1099,6 +1106,7 @@ main/eglcontext.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/eglcurrent.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
+main/egldevice.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
 main/egldisplay.lo: main/$(am__dirstamp) \
 	main/$(DEPDIR)/$(am__dirstamp)
 main/egldriver.lo: main/$(am__dirstamp) main/$(DEPDIR)/$(am__dirstamp)
@@ -1168,6 +1176,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglconfig.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglcontext.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/eglcurrent.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/egldevice.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/egldispatchstubs.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/egldisplay.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@main/$(DEPDIR)/egldriver.Plo@am__quote@ # am--include-marker
@@ -1608,6 +1617,7 @@ distclean: distclean-am
 	-rm -f main/$(DEPDIR)/eglconfig.Plo
 	-rm -f main/$(DEPDIR)/eglcontext.Plo
 	-rm -f main/$(DEPDIR)/eglcurrent.Plo
+	-rm -f main/$(DEPDIR)/egldevice.Plo
 	-rm -f main/$(DEPDIR)/egldispatchstubs.Plo
 	-rm -f main/$(DEPDIR)/egldisplay.Plo
 	-rm -f main/$(DEPDIR)/egldriver.Plo
@@ -1678,6 +1688,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f main/$(DEPDIR)/eglconfig.Plo
 	-rm -f main/$(DEPDIR)/eglcontext.Plo
 	-rm -f main/$(DEPDIR)/eglcurrent.Plo
+	-rm -f main/$(DEPDIR)/egldevice.Plo
 	-rm -f main/$(DEPDIR)/egldispatchstubs.Plo
 	-rm -f main/$(DEPDIR)/egldisplay.Plo
 	-rm -f main/$(DEPDIR)/egldriver.Plo
@@ -1733,7 +1744,7 @@ uninstall-am: uninstall-eglHEADERS uninstall-libLTLIBRARIES \
 
 drivers/dri2/linux-dmabuf-unstable-v1-protocol.c: $(WL_DMABUF_XML)
 	$(MKDIR_GEN)
-	$(AM_V_GEN)$(WAYLAND_SCANNER) code $< $@
+	$(AM_V_GEN)$(WAYLAND_SCANNER) $(SCANNER_ARG) $< $@
 
 drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
 	$(MKDIR_GEN)

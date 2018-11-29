@@ -2042,6 +2042,15 @@ SVGA3D_DUMP_HEADER(TransferFromBuffer)
 }
 
 static void
+dump_SVGA3dCmdIntraSurfaceCopy(const SVGA3dCmdIntraSurfaceCopy *cmd)
+{
+   SVGA3D_DUMP_PARAMETER(surface.sid, u);
+   SVGA3D_DUMP_PARAMETER(surface.face, u);
+   SVGA3D_DUMP_PARAMETER(surface.mipmap, u);
+   dump_SVGA3dCopyBox(&cmd->box);
+}
+
+static void
 dump_SVGA3dCmdInvalidateGBSurface(const SVGA3dCmdInvalidateGBSurface *cmd)
 {
    SVGA3D_DUMP_PARAMETER(sid, u);
@@ -2556,6 +2565,14 @@ svga_dump_command(uint32_t cmd_id, const void *data, uint32_t size)
       {
          const SVGA3dCmdInvalidateGBSurface *cmd = (const SVGA3dCmdInvalidateGBSurface *)body;
          dump_SVGA3dCmdInvalidateGBSurface(cmd);
+         body = (const uint8_t *)&cmd[1];
+      }
+      break;
+   case SVGA_3D_CMD_INTRA_SURFACE_COPY:
+      _debug_printf("\tSVGA_3D_CMD_INTRA_SURFACE_COPY\n");
+      {
+         const SVGA3dCmdIntraSurfaceCopy *cmd = (const SVGA3dCmdIntraSurfaceCopy *)body;
+         dump_SVGA3dCmdIntraSurfaceCopy(cmd);
          body = (const uint8_t *)&cmd[1];
       }
       break;

@@ -51,41 +51,10 @@
 #define RDECODE_GPCOM_VCPU_DATA1	0x20714
 #define RDECODE_ENGINE_CNTL		0x20718
 
-#define NUM_BUFFERS			4
 #define NUM_MPEG2_REFS			6
 #define NUM_H264_REFS			17
 #define NUM_VC1_REFS			5
 #define NUM_VP9_REFS			8
-
-struct radeon_decoder {
-	struct pipe_video_codec		base;
-
-	unsigned			stream_handle;
-	unsigned			stream_type;
-	unsigned			frame_number;
-
-	struct pipe_screen		*screen;
-	struct radeon_winsys		*ws;
-	struct radeon_cmdbuf		*cs;
-
-	void				*msg;
-	uint32_t			*fb;
-	uint8_t				*it;
-	uint8_t				*probs;
-	void				*bs_ptr;
-
-	struct rvid_buffer		msg_fb_it_probs_buffers[NUM_BUFFERS];
-	struct rvid_buffer		bs_buffers[NUM_BUFFERS];
-	struct rvid_buffer		dpb;
-	struct rvid_buffer		ctx;
-	struct rvid_buffer		sessionctx;
-
-	unsigned			bs_size;
-	unsigned			cur_buffer;
-	void				*render_pic_list[16];
-	bool				show_frame;
-	unsigned			ref_idx;
-};
 
 static rvcn_dec_message_avc_t get_h264_msg(struct radeon_decoder *dec,
 		struct pipe_h264_picture_desc *pic)
@@ -1278,6 +1247,10 @@ static unsigned calc_dpb_size(struct radeon_decoder *dec)
 			dpb_size *= (3 / 2);
 		break;
 
+	case PIPE_VIDEO_FORMAT_JPEG:
+		dpb_size = 0;
+		break;
+
 	default:
 		// something is missing here
 		assert(0);
@@ -1399,20 +1372,14 @@ static void radeon_dec_decode_bitstream(struct pipe_video_codec *decoder,
 }
 
 /**
- * end decoding of the current frame
+ * send cmd for vcn dec
  */
-static void radeon_dec_end_frame(struct pipe_video_codec *decoder,
+void send_cmd_dec(struct radeon_decoder *dec,
 			   struct pipe_video_buffer *target,
 			   struct pipe_picture_desc *picture)
 {
-	struct radeon_decoder *dec = (struct radeon_decoder*)decoder;
 	struct pb_buffer *dt;
 	struct rvid_buffer *msg_fb_it_probs_buf, *bs_buf;
-
-	assert(decoder);
-
-	if (!dec->bs_ptr)
-		return;
 
 	msg_fb_it_probs_buf = &dec->msg_fb_it_probs_buffers[dec->cur_buffer];
 	bs_buf = &dec->bs_buffers[dec->cur_buffer];
@@ -1443,6 +1410,23 @@ static void radeon_dec_end_frame(struct pipe_video_codec *decoder,
 		send_cmd(dec, RDECODE_CMD_PROB_TBL_BUFFER, msg_fb_it_probs_buf->res->buf,
 			 FB_BUFFER_OFFSET + FB_BUFFER_SIZE, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
 	set_reg(dec, RDECODE_ENGINE_CNTL, 1);
+}
+
+/**
+ * end decoding of the current frame
+ */
+static void radeon_dec_end_frame(struct pipe_video_codec *decoder,
+			   struct pipe_video_buffer *target,
+			   struct pipe_picture_desc *picture)
+{
+	struct radeon_decoder *dec = (struct radeon_decoder*)decoder;
+
+	assert(decoder);
+
+	if (!dec->bs_ptr)
+		return;
+
+	dec->send_cmd(dec, target, picture);
 
 	flush(dec, PIPE_FLUSH_ASYNC);
 	next_buffer(dec);
@@ -1464,7 +1448,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 	struct si_context *sctx = (struct si_context*)context;
 	struct radeon_winsys *ws = sctx->ws;
 	unsigned width = templ->width, height = templ->height;
-	unsigned dpb_size, bs_buf_size, stream_type = 0;
+	unsigned dpb_size, bs_buf_size, stream_type = 0, ring = RING_VCN_DEC;
 	struct radeon_decoder *dec;
 	int r, i;
 
@@ -1493,6 +1477,10 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 	case PIPE_VIDEO_FORMAT_VP9:
 		stream_type = RDECODE_CODEC_VP9;
 		break;
+	case PIPE_VIDEO_FORMAT_JPEG:
+		stream_type = RDECODE_CODEC_JPEG;
+		ring = RING_VCN_JPEG;
+		break;
 	default:
 		assert(0);
 		break;
@@ -1519,7 +1507,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 	dec->stream_handle = si_vid_alloc_stream_handle();
 	dec->screen = context->screen;
 	dec->ws = ws;
-	dec->cs = ws->cs_create(sctx->ctx, RING_VCN_DEC, NULL, NULL);
+	dec->cs = ws->cs_create(sctx->ctx, ring, NULL, NULL);
 	if (!dec->cs) {
 		RVID_ERR("Can't get command submission context.\n");
 		goto error;
@@ -1563,13 +1551,13 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 	}
 
 	dpb_size = calc_dpb_size(dec);
-
-	if (!si_vid_create_buffer(dec->screen, &dec->dpb, dpb_size, PIPE_USAGE_DEFAULT)) {
-		RVID_ERR("Can't allocated dpb.\n");
-		goto error;
+	if (dpb_size) {
+		if (!si_vid_create_buffer(dec->screen, &dec->dpb, dpb_size, PIPE_USAGE_DEFAULT)) {
+			RVID_ERR("Can't allocated dpb.\n");
+			goto error;
+		}
+		si_vid_clear_buffer(context, &dec->dpb);
 	}
-
-	si_vid_clear_buffer(context, &dec->dpb);
 
 	if (dec->stream_type == RDECODE_CODEC_H264_PERF) {
 		unsigned ctx_size = calc_ctx_size_h264_perf(dec);
@@ -1596,6 +1584,11 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 		goto error;
 
 	next_buffer(dec);
+
+	if (stream_type == RDECODE_CODEC_JPEG)
+		dec->send_cmd = send_cmd_jpeg;
+	else
+		dec->send_cmd = send_cmd_dec;
 
 	return &dec->base;
 

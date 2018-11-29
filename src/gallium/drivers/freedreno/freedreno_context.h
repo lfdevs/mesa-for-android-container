@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
  *
@@ -232,6 +230,12 @@ struct fd_context {
 	 */
 	struct fd_batch *batch;
 
+	/* NULL if there has been rendering since last flush.  Otherwise
+	 * keeps a reference to the last fence so we can re-use it rather
+	 * than having to flush no-op batch.
+	 */
+	struct pipe_fence_handle *last_fence;
+
 	/* Are we in process of shadowing a resource? Used to detect recursion
 	 * in transfer_map, and skip unneeded synchronization.
 	 */
@@ -258,7 +262,7 @@ struct fd_context {
 	 * means we'd always have to recalc tiles ever batch)
 	 */
 	struct fd_gmem_stateobj gmem;
-	struct fd_vsc_pipe      vsc_pipe[16];
+	struct fd_vsc_pipe      vsc_pipe[32];
 	struct fd_tile          tile[512];
 
 	/* which state objects need to be re-emit'd: */
@@ -281,6 +285,8 @@ struct fd_context {
 	struct pipe_blend_color blend_color;
 	struct pipe_stencil_ref stencil_ref;
 	unsigned sample_mask;
+	/* local context fb state, for when ctx->batch is null: */
+	struct pipe_framebuffer_state framebuffer;
 	struct pipe_poly_stipple stipple;
 	struct pipe_viewport_state viewport;
 	struct fd_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
@@ -426,6 +432,19 @@ static inline bool
 fd_supported_prim(struct fd_context *ctx, unsigned prim)
 {
 	return (1 << prim) & ctx->primtype_mask;
+}
+
+static inline struct fd_batch *
+fd_context_batch(struct fd_context *ctx)
+{
+	if (unlikely(!ctx->batch)) {
+		struct fd_batch *batch =
+			fd_batch_from_fb(&ctx->screen->batch_cache, ctx, &ctx->framebuffer);
+		util_copy_framebuffer_state(&batch->framebuffer, &ctx->framebuffer);
+		ctx->batch = batch;
+		fd_context_all_dirty(ctx);
+	}
+	return ctx->batch;
 }
 
 static inline void

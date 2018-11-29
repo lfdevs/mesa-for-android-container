@@ -33,24 +33,14 @@
 void v3dX(bcl_epilogue)(struct v3d_context *v3d, struct v3d_job *job)
 {
                 v3d_cl_ensure_space_with_branch(&job->bcl,
-                                                cl_packet_length(OCCLUSION_QUERY_COUNTER) +
 #if V3D_VERSION >= 41
                                                 cl_packet_length(TRANSFORM_FEEDBACK_SPECS) +
 #endif
-                                                cl_packet_length(FLUSH_ALL_STATE));
+                                                cl_packet_length(FLUSH));
 
-                if (job->oq_enabled) {
-                        /* Disable the OQ at the end of the CL, so that the
-                         * draw calls at the start of the CL don't inherit the
-                         * OQ counter.
-                         */
-                        cl_emit(&job->bcl, OCCLUSION_QUERY_COUNTER, counter);
-                }
-
-                /* Disable TF at the end of the CL, so that the next job to be
-                 * run doesn't start out trying to write TF primitives.  On
-                 * V3D 3.x, it's only the TF primitive mode that triggers TF
-                 * writes.
+                /* Disable TF at the end of the CL, so that the TF block
+                 * cleans up and finishes before it gets reset by the next
+                 * frame's tile binning mode cfg packet. (SWVC5-718).
                  */
 #if V3D_VERSION >= 41
                 if (job->tf_enabled) {
@@ -60,10 +50,10 @@ void v3dX(bcl_epilogue)(struct v3d_context *v3d, struct v3d_job *job)
                 }
 #endif /* V3D_VERSION >= 41 */
 
-                /* The FLUSH_ALL emits any unwritten state changes in each
-                 * tile.  We can use this to reset any state that needs to be
-                 * present at the start of the next tile, as we do with
-                 * OCCLUSION_QUERY_COUNTER above.
+                /* We just FLUSH here to tell the HW to cap the bin CLs with a
+                 * return.  Any remaining state changes won't be flushed to
+                 * the bins first -- you would need FLUSH_ALL for that, but
+                 * the HW for hasn't been validated
                  */
-                cl_emit(&job->bcl, FLUSH_ALL_STATE, flush);
+                cl_emit(&job->bcl, FLUSH, flush);
 }

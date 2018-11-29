@@ -35939,6 +35939,100 @@ _mesa_marshal_FramebufferFetchBarrierEXT(void)
 }
 
 
+/* RenderbufferStorageMultisampleAdvancedAMD: marshalled asynchronously */
+struct marshal_cmd_RenderbufferStorageMultisampleAdvancedAMD
+{
+   struct marshal_cmd_base cmd_base;
+   GLenum target;
+   GLsizei samples;
+   GLsizei storageSamples;
+   GLenum internalformat;
+   GLsizei width;
+   GLsizei height;
+};
+static inline void
+_mesa_unmarshal_RenderbufferStorageMultisampleAdvancedAMD(struct gl_context *ctx, const struct marshal_cmd_RenderbufferStorageMultisampleAdvancedAMD *cmd)
+{
+   const GLenum target = cmd->target;
+   const GLsizei samples = cmd->samples;
+   const GLsizei storageSamples = cmd->storageSamples;
+   const GLenum internalformat = cmd->internalformat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   CALL_RenderbufferStorageMultisampleAdvancedAMD(ctx->CurrentServerDispatch, (target, samples, storageSamples, internalformat, width, height));
+}
+static void GLAPIENTRY
+_mesa_marshal_RenderbufferStorageMultisampleAdvancedAMD(GLenum target, GLsizei samples, GLsizei storageSamples, GLenum internalformat, GLsizei width, GLsizei height)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_RenderbufferStorageMultisampleAdvancedAMD);
+   struct marshal_cmd_RenderbufferStorageMultisampleAdvancedAMD *cmd;
+   debug_print_marshal("RenderbufferStorageMultisampleAdvancedAMD");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_RenderbufferStorageMultisampleAdvancedAMD, cmd_size);
+      cmd->target = target;
+      cmd->samples = samples;
+      cmd->storageSamples = storageSamples;
+      cmd->internalformat = internalformat;
+      cmd->width = width;
+      cmd->height = height;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("RenderbufferStorageMultisampleAdvancedAMD");
+   CALL_RenderbufferStorageMultisampleAdvancedAMD(ctx->CurrentServerDispatch, (target, samples, storageSamples, internalformat, width, height));
+}
+
+
+/* NamedRenderbufferStorageMultisampleAdvancedAMD: marshalled asynchronously */
+struct marshal_cmd_NamedRenderbufferStorageMultisampleAdvancedAMD
+{
+   struct marshal_cmd_base cmd_base;
+   GLuint renderbuffer;
+   GLsizei samples;
+   GLsizei storageSamples;
+   GLenum internalformat;
+   GLsizei width;
+   GLsizei height;
+};
+static inline void
+_mesa_unmarshal_NamedRenderbufferStorageMultisampleAdvancedAMD(struct gl_context *ctx, const struct marshal_cmd_NamedRenderbufferStorageMultisampleAdvancedAMD *cmd)
+{
+   const GLuint renderbuffer = cmd->renderbuffer;
+   const GLsizei samples = cmd->samples;
+   const GLsizei storageSamples = cmd->storageSamples;
+   const GLenum internalformat = cmd->internalformat;
+   const GLsizei width = cmd->width;
+   const GLsizei height = cmd->height;
+   CALL_NamedRenderbufferStorageMultisampleAdvancedAMD(ctx->CurrentServerDispatch, (renderbuffer, samples, storageSamples, internalformat, width, height));
+}
+static void GLAPIENTRY
+_mesa_marshal_NamedRenderbufferStorageMultisampleAdvancedAMD(GLuint renderbuffer, GLsizei samples, GLsizei storageSamples, GLenum internalformat, GLsizei width, GLsizei height)
+{
+   GET_CURRENT_CONTEXT(ctx);
+   size_t cmd_size = sizeof(struct marshal_cmd_NamedRenderbufferStorageMultisampleAdvancedAMD);
+   struct marshal_cmd_NamedRenderbufferStorageMultisampleAdvancedAMD *cmd;
+   debug_print_marshal("NamedRenderbufferStorageMultisampleAdvancedAMD");
+   if (cmd_size <= MARSHAL_MAX_CMD_SIZE) {
+      cmd = _mesa_glthread_allocate_command(ctx, DISPATCH_CMD_NamedRenderbufferStorageMultisampleAdvancedAMD, cmd_size);
+      cmd->renderbuffer = renderbuffer;
+      cmd->samples = samples;
+      cmd->storageSamples = storageSamples;
+      cmd->internalformat = internalformat;
+      cmd->width = width;
+      cmd->height = height;
+      _mesa_post_marshal_hook(ctx);
+      return;
+   }
+
+   _mesa_glthread_finish(ctx);
+   debug_print_sync_fallback("NamedRenderbufferStorageMultisampleAdvancedAMD");
+   CALL_NamedRenderbufferStorageMultisampleAdvancedAMD(ctx->CurrentServerDispatch, (renderbuffer, samples, storageSamples, internalformat, width, height));
+}
+
+
 /* StencilFuncSeparateATI: marshalled asynchronously */
 struct marshal_cmd_StencilFuncSeparateATI
 {
@@ -43627,6 +43721,14 @@ _mesa_unmarshal_dispatch_cmd(struct gl_context *ctx, const void *cmd)
       debug_print_unmarshal("FramebufferFetchBarrierEXT");
       _mesa_unmarshal_FramebufferFetchBarrierEXT(ctx, (const struct marshal_cmd_FramebufferFetchBarrierEXT *) cmd);
       break;
+   case DISPATCH_CMD_RenderbufferStorageMultisampleAdvancedAMD:
+      debug_print_unmarshal("RenderbufferStorageMultisampleAdvancedAMD");
+      _mesa_unmarshal_RenderbufferStorageMultisampleAdvancedAMD(ctx, (const struct marshal_cmd_RenderbufferStorageMultisampleAdvancedAMD *) cmd);
+      break;
+   case DISPATCH_CMD_NamedRenderbufferStorageMultisampleAdvancedAMD:
+      debug_print_unmarshal("NamedRenderbufferStorageMultisampleAdvancedAMD");
+      _mesa_unmarshal_NamedRenderbufferStorageMultisampleAdvancedAMD(ctx, (const struct marshal_cmd_NamedRenderbufferStorageMultisampleAdvancedAMD *) cmd);
+      break;
    case DISPATCH_CMD_StencilFuncSeparateATI:
       debug_print_unmarshal("StencilFuncSeparateATI");
       _mesa_unmarshal_StencilFuncSeparateATI(ctx, (const struct marshal_cmd_StencilFuncSeparateATI *) cmd);
@@ -45243,6 +45345,8 @@ _mesa_create_marshal_table(const struct gl_context *ctx)
    SET_PolygonOffsetClampEXT(table, _mesa_marshal_PolygonOffsetClampEXT);
    SET_WindowRectanglesEXT(table, _mesa_marshal_WindowRectanglesEXT);
    SET_FramebufferFetchBarrierEXT(table, _mesa_marshal_FramebufferFetchBarrierEXT);
+   SET_RenderbufferStorageMultisampleAdvancedAMD(table, _mesa_marshal_RenderbufferStorageMultisampleAdvancedAMD);
+   SET_NamedRenderbufferStorageMultisampleAdvancedAMD(table, _mesa_marshal_NamedRenderbufferStorageMultisampleAdvancedAMD);
    SET_StencilFuncSeparateATI(table, _mesa_marshal_StencilFuncSeparateATI);
    SET_ProgramEnvParameters4fvEXT(table, _mesa_marshal_ProgramEnvParameters4fvEXT);
    SET_ProgramLocalParameters4fvEXT(table, _mesa_marshal_ProgramLocalParameters4fvEXT);

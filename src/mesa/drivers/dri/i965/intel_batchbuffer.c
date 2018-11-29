@@ -301,6 +301,13 @@ intel_batchbuffer_save_state(struct brw_context *brw)
    brw->batch.saved.exec_count = brw->batch.exec_count;
 }
 
+bool
+intel_batchbuffer_saved_state_is_empty(struct brw_context *brw)
+{
+   struct intel_batchbuffer *batch = &brw->batch;
+   return (batch->saved.map_next == batch->batch.map);
+}
+
 void
 intel_batchbuffer_reset_to_saved(struct brw_context *brw)
 {
@@ -874,7 +881,7 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
               bytes_for_commands, 100.0f * bytes_for_commands / BATCH_SZ,
               bytes_for_state, 100.0f * bytes_for_state / STATE_SZ,
               brw->batch.exec_count,
-              (float) brw->batch.aperture_space / (1024 * 1024),
+              (float) (brw->batch.aperture_space / (1024 * 1024)),
               brw->batch.batch_relocs.reloc_count,
               brw->batch.state_relocs.reloc_count);
 
@@ -892,13 +899,6 @@ _intel_batchbuffer_flush_fence(struct brw_context *brw,
    brw_new_batch(brw);
 
    return ret;
-}
-
-bool
-brw_batch_has_aperture_space(struct brw_context *brw, unsigned extra_space)
-{
-   return brw->batch.aperture_space + extra_space <=
-          brw->screen->aperture_threshold;
 }
 
 bool

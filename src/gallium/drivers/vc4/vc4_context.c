@@ -42,7 +42,6 @@ vc4_flush(struct pipe_context *pctx)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
-        struct hash_entry *entry;
         hash_table_foreach(vc4->jobs, entry) {
                 struct vc4_job *job = entry->data;
                 vc4_job_submit(vc4, job);

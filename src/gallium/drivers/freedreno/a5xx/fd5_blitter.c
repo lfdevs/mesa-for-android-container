@@ -459,7 +459,7 @@ fd5_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 		return;
 	}
 
-	batch = fd_batch_create(ctx, true);
+	batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
 
 	fd5_emit_restore(batch, batch->draw);
 	fd5_emit_lrz_flush(batch->draw);

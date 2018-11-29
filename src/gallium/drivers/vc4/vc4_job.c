@@ -118,7 +118,6 @@ vc4_flush_jobs_reading_resource(struct vc4_context *vc4,
 
         vc4_flush_jobs_writing_resource(vc4, prsc);
 
-        struct hash_entry *entry;
         hash_table_foreach(vc4->jobs, entry) {
                 struct vc4_job *job = entry->data;
 

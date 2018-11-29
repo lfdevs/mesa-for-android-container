@@ -75,6 +75,23 @@ svga_queue_rs(struct rs_queue *q, unsigned rss, unsigned value)
 }
 
 
+static unsigned
+translate_fill_mode(unsigned fill)
+{
+   switch (fill) {
+   case PIPE_POLYGON_MODE_POINT:
+      return SVGA3D_FILLMODE_POINT;
+   case PIPE_POLYGON_MODE_LINE:
+      return SVGA3D_FILLMODE_LINE;
+   case PIPE_POLYGON_MODE_FILL:
+      return SVGA3D_FILLMODE_FILL;
+   default:
+      assert(!"Bad fill mode");
+      return SVGA3D_FILLMODE_FILL;
+   }
+}
+
+
 /* Compare old and new render states and emit differences between them
  * to hardware.  Simplest implementation would be to emit the whole of
  * the "to" state.
@@ -206,6 +223,8 @@ emit_rss_vgpu9(struct svga_context *svga, unsigned dirty)
        * flat-shading PV first vertex.
        */
       EMIT_RS(svga, curr->shademode, SHADEMODE);
+
+      EMIT_RS(svga, translate_fill_mode(curr->hw_fillmode), FILLMODE);
 
       /* Don't do culling while the software pipeline is active.  It
        * does it for us, and additionally introduces potentially

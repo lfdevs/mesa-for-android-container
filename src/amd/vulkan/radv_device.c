@@ -43,6 +43,7 @@
 #include "ac_llvm_util.h"
 #include "vk_format.h"
 #include "sid.h"
+#include "git_sha1.h"
 #include "gfx9d.h"
 #include "addrlib/gfx9/chip/gfx9_enum.h"
 #include "util/build_id.h"
@@ -112,6 +113,7 @@ radv_get_device_name(enum radeon_family family, char *name, size_t name_len)
 	case CHIP_VEGA10: chip_string = "AMD RADV VEGA10"; break;
 	case CHIP_VEGA12: chip_string = "AMD RADV VEGA12"; break;
 	case CHIP_RAVEN: chip_string = "AMD RADV RAVEN"; break;
+	case CHIP_RAVEN2: chip_string = "AMD RADV RAVEN2"; break;
 	default: chip_string = "AMD RADV unknown"; break;
 	}
 
@@ -255,8 +257,6 @@ radv_physical_device_init(struct radv_physical_device *device,
 
 	if (strcmp(version->name, "amdgpu")) {
 		drmFreeVersion(version);
-		if (master_fd != -1)
-			close(master_fd);
 		close(fd);
 
 		if (instance->debug_flags & RADV_DEBUG_STARTUP)
@@ -337,7 +337,8 @@ radv_physical_device_init(struct radv_physical_device *device,
 		device->has_rbplus = true;
 		device->rbplus_allowed = device->rad_info.family == CHIP_STONEY ||
 					 device->rad_info.family == CHIP_VEGA12 ||
-		                         device->rad_info.family == CHIP_RAVEN;
+		                         device->rad_info.family == CHIP_RAVEN ||
+		                         device->rad_info.family == CHIP_RAVEN2;
 	}
 
 	/* The mere presence of CLEAR_STATE in the IB causes random GPU hangs
@@ -363,15 +364,21 @@ radv_physical_device_init(struct radv_physical_device *device,
 	radv_physical_device_init_mem_types(device);
 	radv_fill_device_extension_table(device, &device->supported_extensions);
 
+	device->bus_info = *drm_device->businfo.pci;
+
+	if ((device->instance->debug_flags & RADV_DEBUG_INFO))
+		ac_print_gpu_info(&device->rad_info);
+
+	/* The WSI is structured as a layer on top of the driver, so this has
+	 * to be the last part of initialization (at least until we get other
+	 * semi-layers).
+	 */
 	result = radv_init_wsi(device);
 	if (result != VK_SUCCESS) {
 		device->ws->destroy(device->ws);
 		vk_error(instance, result);
 		goto fail;
 	}
-
-	if ((device->instance->debug_flags & RADV_DEBUG_INFO))
-		ac_print_gpu_info(&device->rad_info);
 
 	return VK_SUCCESS;
 
@@ -741,7 +748,7 @@ void radv_GetPhysicalDeviceFeatures(
 		.shaderCullDistance                       = true,
 		.shaderFloat64                            = true,
 		.shaderInt64                              = true,
-		.shaderInt16                              = false,
+		.shaderInt16                              = pdevice->rad_info.chip_class >= GFX9 && HAVE_LLVM >= 0x700,
 		.sparseBinding                            = true,
 		.variableMultisampleRate                  = true,
 		.inheritedQueries                         = true,
@@ -833,6 +840,13 @@ void radv_GetPhysicalDeviceFeatures2(
 				(VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT *)ext;
 			features->vertexAttributeInstanceRateDivisor = VK_TRUE;
 			features->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT: {
+			VkPhysicalDeviceTransformFeedbackFeaturesEXT *features =
+				(VkPhysicalDeviceTransformFeedbackFeaturesEXT*)ext;
+			features->transformFeedback = true;
+			features->geometryStreams = true;
 			break;
 		}
 		default:
@@ -963,7 +977,7 @@ void radv_GetPhysicalDeviceProperties(
 		.maxClipDistances                         = 8,
 		.maxCullDistances                         = 8,
 		.maxCombinedClipAndCullDistances          = 8,
-		.discreteQueuePriorities                  = 1,
+		.discreteQueuePriorities                  = 2,
 		.pointSizeRange                           = { 0.125, 255.875 },
 		.lineWidthRange                           = { 0.0, 7.9921875 },
 		.pointSizeGranularity                     = (1.0 / 8.0),
@@ -1082,9 +1096,7 @@ void radv_GetPhysicalDeviceProperties2(
 			properties->shaderArraysPerEngineCount =
 				pdevice->rad_info.max_sh_per_se;
 			properties->computeUnitsPerShaderArray =
-				pdevice->rad_info.num_good_compute_units /
-					(pdevice->rad_info.max_se *
-					 pdevice->rad_info.max_sh_per_se);
+				pdevice->rad_info.num_good_cu_per_sh;
 			properties->simdPerComputeUnit = 4;
 			properties->wavefrontsPerSimd =
 				pdevice->rad_info.family == CHIP_TONGA ||
@@ -1152,6 +1164,73 @@ void radv_GetPhysicalDeviceProperties2(
 			properties->maxDescriptorSetUpdateAfterBindSampledImages = max_descriptor_set_size;
 			properties->maxDescriptorSetUpdateAfterBindStorageImages = max_descriptor_set_size;
 			properties->maxDescriptorSetUpdateAfterBindInputAttachments = max_descriptor_set_size;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES: {
+			VkPhysicalDeviceProtectedMemoryProperties *properties =
+				(VkPhysicalDeviceProtectedMemoryProperties *)ext;
+			properties->protectedNoFault = false;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT: {
+			VkPhysicalDeviceConservativeRasterizationPropertiesEXT *properties =
+				(VkPhysicalDeviceConservativeRasterizationPropertiesEXT *)ext;
+			properties->primitiveOverestimationSize = 0;
+			properties->maxExtraPrimitiveOverestimationSize = 0;
+			properties->extraPrimitiveOverestimationSizeGranularity = 0;
+			properties->primitiveUnderestimation = VK_FALSE;
+			properties->conservativePointAndLineRasterization = VK_FALSE;
+			properties->degenerateTrianglesRasterized = VK_FALSE;
+			properties->degenerateLinesRasterized = VK_FALSE;
+			properties->fullyCoveredFragmentShaderInputVariable = VK_FALSE;
+			properties->conservativeRasterizationPostDepthCoverage = VK_FALSE;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT: {
+			VkPhysicalDevicePCIBusInfoPropertiesEXT *properties =
+				(VkPhysicalDevicePCIBusInfoPropertiesEXT *)ext;
+			properties->pciDomain = pdevice->bus_info.domain;
+			properties->pciBus = pdevice->bus_info.bus;
+			properties->pciDevice = pdevice->bus_info.dev;
+			properties->pciFunction = pdevice->bus_info.func;
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR: {
+			VkPhysicalDeviceDriverPropertiesKHR *driver_props =
+				(VkPhysicalDeviceDriverPropertiesKHR *) ext;
+
+			driver_props->driverID = VK_DRIVER_ID_MESA_RADV_KHR;
+			memset(driver_props->driverName, 0, VK_MAX_DRIVER_NAME_SIZE_KHR);
+			strcpy(driver_props->driverName, "radv");
+
+			memset(driver_props->driverInfo, 0, VK_MAX_DRIVER_INFO_SIZE_KHR);
+			snprintf(driver_props->driverInfo, VK_MAX_DRIVER_INFO_SIZE_KHR,
+				"Mesa " PACKAGE_VERSION MESA_GIT_SHA1
+				" (LLVM %d.%d.%d)",
+				 (HAVE_LLVM >> 8) & 0xff, HAVE_LLVM & 0xff,
+				 MESA_LLVM_VERSION_PATCH);
+
+			driver_props->conformanceVersion = (VkConformanceVersionKHR) {
+				.major = 1,
+				.minor = 1,
+				.subminor = 2,
+				.patch = 0,
+			};
+			break;
+		}
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT: {
+			VkPhysicalDeviceTransformFeedbackPropertiesEXT *properties =
+				(VkPhysicalDeviceTransformFeedbackPropertiesEXT *)ext;
+			properties->maxTransformFeedbackStreams = MAX_SO_STREAMS;
+			properties->maxTransformFeedbackBuffers = MAX_SO_BUFFERS;
+			properties->maxTransformFeedbackBufferSize = UINT32_MAX;
+			properties->maxTransformFeedbackStreamDataSize = 512;
+			properties->maxTransformFeedbackBufferDataSize = UINT32_MAX;
+			properties->maxTransformFeedbackBufferDataStride = 512;
+			properties->transformFeedbackQueries = true;
+			properties->transformFeedbackStreamsLinesTriangles = false;
+			properties->transformFeedbackRasterizationStreamSelect = false;
+			properties->transformFeedbackDraw = true;
 			break;
 		}
 		default:
@@ -1437,6 +1516,28 @@ static int radv_get_device_extension_index(const char *name)
 	return -1;
 }
 
+static int
+radv_get_int_debug_option(const char *name, int default_value)
+{
+	const char *str;
+	int result;
+
+	str = getenv(name);
+	if (!str) {
+		result = default_value;
+	} else {
+		char *endptr;
+
+		result = strtol(str, &endptr, 0);
+		if (str == endptr) {
+			/* No digits founs. */
+			result = default_value;
+		}
+	}
+
+	return result;
+}
+
 VkResult radv_CreateDevice(
 	VkPhysicalDevice                            physicalDevice,
 	const VkDeviceCreateInfo*                   pCreateInfo,
@@ -1532,11 +1633,13 @@ VkResult radv_CreateDevice(
 
 	device->pbb_allowed = device->physical_device->rad_info.chip_class >= GFX9 &&
 			((device->instance->perftest_flags & RADV_PERFTEST_BINNING) ||
-			 device->physical_device->rad_info.family == CHIP_RAVEN);
+			 device->physical_device->rad_info.family == CHIP_RAVEN ||
+			 device->physical_device->rad_info.family == CHIP_RAVEN2);
 
 	/* Disabled and not implemented for now. */
 	device->dfsm_allowed = device->pbb_allowed &&
-	                       device->physical_device->rad_info.family == CHIP_RAVEN;
+	                       (device->physical_device->rad_info.family == CHIP_RAVEN ||
+	                        device->physical_device->rad_info.family == CHIP_RAVEN2);
 
 #ifdef ANDROID
 	device->always_use_syncobj = device->physical_device->rad_info.has_syncobj_wait_for_submit;
@@ -1631,6 +1734,13 @@ VkResult radv_CreateDevice(
 		goto fail_meta;
 
 	device->mem_cache = radv_pipeline_cache_from_handle(pc);
+
+	device->force_aniso =
+		MIN2(16, radv_get_int_debug_option("RADV_TEX_ANISO", -1));
+	if (device->force_aniso >= 0) {
+		fprintf(stderr, "radv: Forcing anisotropy filter to %ix\n",
+			1 << util_logbase2(device->force_aniso));
+	}
 
 	*pDevice = radv_device_to_handle(device);
 	return VK_SUCCESS;
@@ -2092,6 +2202,33 @@ radv_emit_global_shader_pointers(struct radv_queue *queue,
 	}
 }
 
+static void
+radv_init_graphics_state(struct radeon_cmdbuf *cs, struct radv_queue *queue)
+{
+	struct radv_device *device = queue->device;
+
+	if (device->gfx_init) {
+		uint64_t va = radv_buffer_get_va(device->gfx_init);
+
+		radeon_emit(cs, PKT3(PKT3_INDIRECT_BUFFER_CIK, 2, 0));
+		radeon_emit(cs, va);
+		radeon_emit(cs, va >> 32);
+		radeon_emit(cs, device->gfx_init_size_dw & 0xffff);
+
+		radv_cs_add_buffer(device->ws, cs, device->gfx_init);
+	} else {
+		struct radv_physical_device *physical_device = device->physical_device;
+		si_emit_graphics(physical_device, cs);
+	}
+}
+
+static void
+radv_init_compute_state(struct radeon_cmdbuf *cs, struct radv_queue *queue)
+{
+	struct radv_physical_device *physical_device = queue->device->physical_device;
+	si_emit_compute(physical_device, cs);
+}
+
 static VkResult
 radv_get_preamble_cs(struct radv_queue *queue,
                      uint32_t scratch_size,
@@ -2245,6 +2382,18 @@ radv_get_preamble_cs(struct radv_queue *queue,
 
 		if (scratch_bo)
 			radv_cs_add_buffer(queue->device->ws, cs, scratch_bo);
+
+		/* Emit initial configuration. */
+		switch (queue->queue_family_index) {
+		case RADV_QUEUE_GENERAL:
+			radv_init_graphics_state(cs, queue);
+			break;
+		case RADV_QUEUE_COMPUTE:
+			radv_init_compute_state(cs, queue);
+			break;
+		case RADV_QUEUE_TRANSFER:
+			break;
+		}
 
 		if (descriptor_bo != queue->descriptor_bo) {
 			uint32_t *map = (uint32_t*)queue->device->ws->buffer_map(descriptor_bo);
@@ -3791,7 +3940,7 @@ radv_init_dcc_control_reg(struct radv_device *device,
 	unsigned max_compressed_block_size;
 	unsigned independent_64b_blocks;
 
-	if (device->physical_device->rad_info.chip_class < VI)
+	if (!radv_image_has_dcc(iview->image))
 		return 0;
 
 	if (iview->image->info.samples > 1) {
@@ -4391,13 +4540,26 @@ radv_tex_filter_mode(VkSamplerReductionModeEXT mode)
 	return 0;
 }
 
+static uint32_t
+radv_get_max_anisotropy(struct radv_device *device,
+			const VkSamplerCreateInfo *pCreateInfo)
+{
+	if (device->force_aniso >= 0)
+		return device->force_aniso;
+
+	if (pCreateInfo->anisotropyEnable &&
+	    pCreateInfo->maxAnisotropy > 1.0f)
+		return (uint32_t)pCreateInfo->maxAnisotropy;
+
+	return 0;
+}
+
 static void
 radv_init_sampler(struct radv_device *device,
 		  struct radv_sampler *sampler,
 		  const VkSamplerCreateInfo *pCreateInfo)
 {
-	uint32_t max_aniso = pCreateInfo->anisotropyEnable && pCreateInfo->maxAnisotropy > 1.0 ?
-					(uint32_t) pCreateInfo->maxAnisotropy : 0;
+	uint32_t max_aniso = radv_get_max_anisotropy(device, pCreateInfo);
 	uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
 	bool is_vi = (device->physical_device->rad_info.chip_class >= VI);
 	unsigned filter_mode = SQ_IMG_FILTER_MODE_BLEND;
@@ -4827,4 +4989,123 @@ radv_GetDeviceGroupPeerMemoryFeatures(
 	                       VK_PEER_MEMORY_FEATURE_COPY_DST_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT |
 	                       VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
+}
+
+static const VkTimeDomainEXT radv_time_domains[] = {
+	VK_TIME_DOMAIN_DEVICE_EXT,
+	VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT,
+	VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT,
+};
+
+VkResult radv_GetPhysicalDeviceCalibrateableTimeDomainsEXT(
+	VkPhysicalDevice                             physicalDevice,
+	uint32_t                                     *pTimeDomainCount,
+	VkTimeDomainEXT                              *pTimeDomains)
+{
+	int d;
+	VK_OUTARRAY_MAKE(out, pTimeDomains, pTimeDomainCount);
+
+	for (d = 0; d < ARRAY_SIZE(radv_time_domains); d++) {
+		vk_outarray_append(&out, i) {
+			*i = radv_time_domains[d];
+		}
+	}
+
+	return vk_outarray_status(&out);
+}
+
+static uint64_t
+radv_clock_gettime(clockid_t clock_id)
+{
+	struct timespec current;
+	int ret;
+
+	ret = clock_gettime(clock_id, &current);
+	if (ret < 0 && clock_id == CLOCK_MONOTONIC_RAW)
+		ret = clock_gettime(CLOCK_MONOTONIC, &current);
+	if (ret < 0)
+		return 0;
+
+	return (uint64_t) current.tv_sec * 1000000000ULL + current.tv_nsec;
+}
+
+VkResult radv_GetCalibratedTimestampsEXT(
+	VkDevice                                     _device,
+	uint32_t                                     timestampCount,
+	const VkCalibratedTimestampInfoEXT           *pTimestampInfos,
+	uint64_t                                     *pTimestamps,
+	uint64_t                                     *pMaxDeviation)
+{
+	RADV_FROM_HANDLE(radv_device, device, _device);
+	uint32_t clock_crystal_freq = device->physical_device->rad_info.clock_crystal_freq;
+	int d;
+	uint64_t begin, end;
+        uint64_t max_clock_period = 0;
+
+	begin = radv_clock_gettime(CLOCK_MONOTONIC_RAW);
+
+	for (d = 0; d < timestampCount; d++) {
+		switch (pTimestampInfos[d].timeDomain) {
+		case VK_TIME_DOMAIN_DEVICE_EXT:
+			pTimestamps[d] = device->ws->query_value(device->ws,
+								 RADEON_TIMESTAMP);
+                        uint64_t device_period = DIV_ROUND_UP(1000000, clock_crystal_freq);
+                        max_clock_period = MAX2(max_clock_period, device_period);
+			break;
+		case VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT:
+			pTimestamps[d] = radv_clock_gettime(CLOCK_MONOTONIC);
+                        max_clock_period = MAX2(max_clock_period, 1);
+			break;
+
+		case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
+			pTimestamps[d] = begin;
+			break;
+		default:
+			pTimestamps[d] = 0;
+			break;
+		}
+	}
+
+	end = radv_clock_gettime(CLOCK_MONOTONIC_RAW);
+
+        /*
+         * The maximum deviation is the sum of the interval over which we
+         * perform the sampling and the maximum period of any sampled
+         * clock. That's because the maximum skew between any two sampled
+         * clock edges is when the sampled clock with the largest period is
+         * sampled at the end of that period but right at the beginning of the
+         * sampling interval and some other clock is sampled right at the
+         * begining of its sampling period and right at the end of the
+         * sampling interval. Let's assume the GPU has the longest clock
+         * period and that the application is sampling GPU and monotonic:
+         *
+         *                               s                 e
+         *			 w x y z 0 1 2 3 4 5 6 7 8 9 a b c d e f
+         *	Raw              -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+         *
+         *                               g
+         *		  0         1         2         3
+         *	GPU       -----_____-----_____-----_____-----_____
+         *
+         *                                                m
+         *					    x y z 0 1 2 3 4 5 6 7 8 9 a b c
+         *	Monotonic                           -_-_-_-_-_-_-_-_-_-_-_-_-_-_-_-
+         *
+         *	Interval                     <----------------->
+         *	Deviation           <-------------------------->
+         *
+         *		s  = read(raw)       2
+         *		g  = read(GPU)       1
+         *		m  = read(monotonic) 2
+         *		e  = read(raw)       b
+         *
+         * We round the sample interval up by one tick to cover sampling error
+         * in the interval clock
+         */
+
+        uint64_t sample_interval = end - begin + 1;
+
+        *pMaxDeviation = sample_interval + max_clock_period;
+
+	return VK_SUCCESS;
 }

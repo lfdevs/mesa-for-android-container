@@ -534,6 +534,20 @@ v3d_register_allocate(struct v3d_compile *c, bool *spilled)
                 }
         }
 
+        /* Debug code to force a bit of register spilling, for running across
+         * conformance tests to make sure that spilling works.
+         */
+        int force_register_spills = 0;
+        if (c->spill_size < 16 * sizeof(uint32_t) * force_register_spills) {
+                int node = v3d_choose_spill_node(c, g, temp_to_node);
+                if (node != -1) {
+                        v3d_spill_reg(c, map[node].temp);
+                        ralloc_free(g);
+                        *spilled = true;
+                        return NULL;
+                }
+        }
+
         bool ok = ra_allocate(g);
         if (!ok) {
                 /* Try to spill, if we can't reduce threading first. */

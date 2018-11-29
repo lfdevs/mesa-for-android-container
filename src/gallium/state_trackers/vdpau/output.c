@@ -80,7 +80,8 @@ vlVdpOutputSurfaceCreate(VdpDevice device,
     * if the VDPAU RGB component order doesn't match the X11 one so
     * we only allow the X11 format
     */
-   vlsurface->send_to_X = rgba_format == VDP_RGBA_FORMAT_B8G8R8A8;
+   vlsurface->send_to_X = dev->vscreen->color_depth == 24 &&
+      rgba_format == VDP_RGBA_FORMAT_B8G8R8A8;
 
    res_tmpl.target = PIPE_TEXTURE_2D;
    res_tmpl.format = VdpFormatRGBAToPipe(rgba_format);
@@ -810,7 +811,7 @@ VdpStatus vlVdpOutputSurfaceDMABuf(VdpOutputSurface surface,
    pscreen = vlsurface->surface->texture->screen;
    if (!pscreen->resource_get_handle(pscreen, vlsurface->device->context,
                                      vlsurface->surface->texture, &whandle,
-                                     PIPE_HANDLE_USAGE_READ_WRITE)) {
+                                     PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE)) {
       mtx_unlock(&vlsurface->device->mutex);
       return VDP_STATUS_NO_IMPLEMENTATION;
    }

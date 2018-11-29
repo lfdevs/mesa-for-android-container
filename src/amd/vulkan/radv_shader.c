@@ -71,7 +71,6 @@ static const struct nir_shader_compiler_options nir_options = {
 	.lower_extract_word = true,
 	.lower_ffma = true,
 	.lower_fpow = true,
-	.vs_inputs_dual_locations = true,
 	.max_unroll_iterations = 32
 };
 
@@ -119,15 +118,32 @@ void radv_DestroyShaderModule(
 }
 
 void
-radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively)
+radv_optimize_nir(struct nir_shader *shader, bool optimize_conservatively,
+                  bool allow_copies)
 {
         bool progress;
 
         do {
                 progress = false;
 
+		NIR_PASS(progress, shader, nir_split_array_vars, nir_var_local);
+		NIR_PASS(progress, shader, nir_shrink_vec_array_vars, nir_var_local);
+
                 NIR_PASS_V(shader, nir_lower_vars_to_ssa);
 		NIR_PASS_V(shader, nir_lower_pack);
+
+		if (allow_copies) {
+			/* Only run this pass in the first call to
+			 * radv_optimize_nir.  Later calls assume that we've
+			 * lowered away any copy_deref instructions and we
+			 *  don't want to introduce any more.
+			*/
+			NIR_PASS(progress, shader, nir_opt_find_array_copies);
+		}
+
+		NIR_PASS(progress, shader, nir_opt_copy_prop_vars);
+		NIR_PASS(progress, shader, nir_opt_dead_write_vars);
+
                 NIR_PASS_V(shader, nir_lower_alu_to_scalar);
                 NIR_PASS_V(shader, nir_lower_phis_to_scalar);
 
@@ -173,7 +189,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 		 * and just use the NIR shader */
 		nir = module->nir;
 		nir->options = &nir_options;
-		nir_validate_shader(nir);
+		nir_validate_shader(nir, "in internal shader");
 
 		assert(exec_list_length(&nir->functions) == 1);
 		struct exec_node *node = exec_list_get_head(&nir->functions);
@@ -211,7 +227,9 @@ radv_shader_compile_to_nir(struct radv_device *device,
 				.image_write_without_format = true,
 				.tessellation = true,
 				.int64 = true,
+				.int16 = true,
 				.multiview = true,
+				.subgroup_arithmetic = true,
 				.subgroup_ballot = true,
 				.subgroup_basic = true,
 				.subgroup_quad = true,
@@ -225,6 +243,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 				.runtime_descriptor_array = true,
 				.stencil_export = true,
 				.storage_16bit = true,
+				.geometry_streams = true,
+				.transform_feedback = true,
 			},
 		};
 		entry_point = spirv_to_nir(spirv, module->size / 4,
@@ -233,7 +253,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 					   &spirv_options, &nir_options);
 		nir = entry_point->shader;
 		assert(nir->info.stage == stage);
-		nir_validate_shader(nir);
+		nir_validate_shader(nir, "after spirv_to_nir");
 
 		free(spec_entries);
 
@@ -301,7 +321,6 @@ radv_shader_compile_to_nir(struct radv_device *device,
 	}
 
 	nir_split_var_copies(nir);
-	nir_lower_var_copies(nir);
 
 	nir_lower_global_vars_to_local(nir);
 	nir_remove_dead_variables(nir, nir_var_local);
@@ -315,8 +334,15 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			.lower_vote_eq_to_ballot = 1,
 		});
 
+	nir_lower_load_const_to_scalar(nir);
+
 	if (!(flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT))
-		radv_optimize_nir(nir, false);
+		radv_optimize_nir(nir, false, true);
+
+	/* We call nir_lower_var_copies() after the first radv_optimize_nir()
+	 * to remove any copies introduced by nir_opt_find_array_copies().
+	 */
+	nir_lower_var_copies(nir);
 
 	/* Indirect lowering must be called after the radv_optimize_nir() loop
 	 * has been called at least once. Otherwise indirect lowering can
@@ -324,7 +350,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 	 * considered too large for unrolling.
 	 */
 	ac_lower_indirect_derefs(nir, device->physical_device->rad_info.chip_class);
-	radv_optimize_nir(nir, flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT);
+	radv_optimize_nir(nir, flags & VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT, false);
 
 	return nir;
 }
@@ -410,7 +436,12 @@ radv_fill_shader_variant(struct radv_device *device,
 	variant->code_size = radv_get_shader_binary_size(binary);
 	variant->rsrc2 = S_00B12C_USER_SGPR(variant->info.num_user_sgprs) |
 			 S_00B12C_USER_SGPR_MSB(variant->info.num_user_sgprs >> 5) |
-			 S_00B12C_SCRATCH_EN(scratch_enabled);
+			 S_00B12C_SCRATCH_EN(scratch_enabled) |
+			 S_00B12C_SO_BASE0_EN(!!info->so.strides[0]) |
+			 S_00B12C_SO_BASE1_EN(!!info->so.strides[1]) |
+			 S_00B12C_SO_BASE2_EN(!!info->so.strides[2]) |
+			 S_00B12C_SO_BASE3_EN(!!info->so.strides[3]) |
+			 S_00B12C_SO_EN(!!info->so.num_outputs);
 
 	variant->rsrc1 = S_00B848_VGPRS((variant->config.num_vgprs - 1) / 4) |
 		S_00B848_SGPRS((variant->config.num_sgprs - 1) / 8) |

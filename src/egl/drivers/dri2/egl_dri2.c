@@ -272,7 +272,10 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
          _eglSetConfigKey(&base, EGL_MAX_PBUFFER_HEIGHT,
                           _EGL_MAX_PBUFFER_HEIGHT);
          break;
-
+      case __DRI_ATTRIB_MUTABLE_RENDER_BUFFER:
+         if (disp->Extensions.KHR_mutable_render_buffer)
+            surface_type |= EGL_MUTABLE_RENDER_BUFFER_BIT_KHR;
+         break;
       default:
          key = dri2_to_egl_attribute_map[attrib];
          if (key != 0)
@@ -338,7 +341,7 @@ dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
       _eglLinkConfig(&conf->base);
    }
    else {
-      assert(0);
+      unreachable("duplicates should not be possible");
       return NULL;
    }
 
@@ -432,6 +435,7 @@ static const struct dri2_extension_match optional_core_extensions[] = {
    { __DRI_IMAGE, 1, offsetof(struct dri2_egl_display, image) },
    { __DRI2_FLUSH_CONTROL, 1, offsetof(struct dri2_egl_display, flush_control) },
    { __DRI2_BLOB, 1, offsetof(struct dri2_egl_display, blob) },
+   { __DRI_MUTABLE_RENDER_BUFFER_DRIVER, 1, offsetof(struct dri2_egl_display, mutable_render_buffer) },
    { NULL, 0, 0 }
 };
 
@@ -1104,7 +1108,7 @@ dri2_create_context_attribs_error(int dri_error)
       break;
 
    default:
-      assert(0);
+      assert(!"unknown dri_error code");
       egl_error = EGL_BAD_MATCH;
       break;
    }
@@ -1289,12 +1293,6 @@ dri2_create_context(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
          dri_config = dri2_config->dri_config[1][0];
       else
          dri_config = dri2_config->dri_config[0][0];
-
-      /* EGL_WINDOW_BIT is set only when there is a double-buffered dri_config.
-       * This makes sure the back buffer will always be used.
-       */
-      if (conf->SurfaceType & EGL_WINDOW_BIT)
-         dri2_ctx->base.WindowRenderBuffer = EGL_BACK_BUFFER;
    }
    else
       dri_config = NULL;
@@ -1465,6 +1463,8 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_context *dri2_ctx = dri2_egl_context(ctx);
+   _EGLDisplay *old_disp = NULL;
+   struct dri2_egl_display *old_dri2_dpy = NULL;
    _EGLContext *old_ctx;
    _EGLSurface *old_dsurf, *old_rsurf;
    _EGLSurface *tmp_dsurf, *tmp_rsurf;
@@ -1481,6 +1481,11 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
       return EGL_FALSE;
    }
 
+   if (old_ctx) {
+      old_disp = old_ctx->Resource.Display;
+      old_dri2_dpy = dri2_egl_display(old_disp);
+   }
+
    /* flush before context switch */
    if (old_ctx)
       dri2_gl_flush();
@@ -1494,30 +1499,29 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 
       if (old_dsurf)
          dri2_surf_update_fence_fd(old_ctx, disp, old_dsurf);
+
+      /* Disable shared buffer mode */
+      if (old_dsurf && _eglSurfaceInSharedBufferMode(old_dsurf) &&
+          old_dri2_dpy->vtbl->set_shared_buffer_mode) {
+         old_dri2_dpy->vtbl->set_shared_buffer_mode(old_disp, old_dsurf, false);
+      }
+
       dri2_dpy->core->unbindContext(old_cctx);
    }
 
    unbind = (cctx == NULL && ddraw == NULL && rdraw == NULL);
 
-   if (unbind || dri2_dpy->core->bindContext(cctx, ddraw, rdraw)) {
-      dri2_destroy_surface(drv, disp, old_dsurf);
-      dri2_destroy_surface(drv, disp, old_rsurf);
-
-      if (!unbind)
-         dri2_dpy->ref_count++;
-      if (old_ctx) {
-         EGLDisplay old_disp = _eglGetDisplayHandle(old_ctx->Resource.Display);
-         dri2_destroy_context(drv, disp, old_ctx);
-         dri2_display_release(old_disp);
-      }
-
-      return EGL_TRUE;
-   } else {
+   if (!unbind && !dri2_dpy->core->bindContext(cctx, ddraw, rdraw)) {
       /* undo the previous _eglBindContext */
       _eglBindContext(old_ctx, old_dsurf, old_rsurf, &ctx, &tmp_dsurf, &tmp_rsurf);
       assert(&dri2_ctx->base == ctx &&
              tmp_dsurf == dsurf &&
              tmp_rsurf == rsurf);
+
+      if (old_dsurf && _eglSurfaceInSharedBufferMode(old_dsurf) &&
+          old_dri2_dpy->vtbl->set_shared_buffer_mode) {
+         old_dri2_dpy->vtbl->set_shared_buffer_mode(old_disp, old_dsurf, true);
+      }
 
       _eglPutSurface(dsurf);
       _eglPutSurface(rsurf);
@@ -1533,6 +1537,31 @@ dri2_make_current(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *dsurf,
        */
       return _eglError(EGL_BAD_MATCH, "eglMakeCurrent");
    }
+
+   dri2_destroy_surface(drv, disp, old_dsurf);
+   dri2_destroy_surface(drv, disp, old_rsurf);
+
+   if (!unbind)
+      dri2_dpy->ref_count++;
+
+   if (old_ctx) {
+      dri2_destroy_context(drv, disp, old_ctx);
+      dri2_display_release(old_disp);
+   }
+
+   if (dsurf && _eglSurfaceHasMutableRenderBuffer(dsurf) &&
+       dri2_dpy->vtbl->set_shared_buffer_mode) {
+      /* Always update the shared buffer mode. This is obviously needed when
+       * the active EGL_RENDER_BUFFER is EGL_SINGLE_BUFFER. When
+       * EGL_RENDER_BUFFER is EGL_BACK_BUFFER, the update protects us in the
+       * case where external non-EGL API may have changed window's shared
+       * buffer mode since we last saw it.
+       */
+      bool mode = (dsurf->ActiveRenderBuffer == EGL_SINGLE_BUFFER);
+      dri2_dpy->vtbl->set_shared_buffer_mode(disp, dsurf, mode);
+   }
+
+   return EGL_TRUE;
 }
 
 __DRIdrawable *
@@ -1786,7 +1815,7 @@ dri2_release_tex_image(_EGLDriver *drv,
       target = GL_TEXTURE_2D;
       break;
    default:
-      assert(0);
+      assert(!"missing texture target");
    }
 
    if (dri2_dpy->tex_buffer->base.version >= 3 &&
@@ -1849,7 +1878,7 @@ egl_error_from_dri_image_error(int dri_error)
    case __DRI_IMAGE_ERROR_BAD_ACCESS:
       return EGL_BAD_ACCESS;
    default:
-      assert(0);
+      assert(!"unknown dri_error code");
       return EGL_BAD_ALLOC;
    }
 }
@@ -2280,7 +2309,7 @@ dri2_check_dma_buf_format(const _EGLImageAttribs *attrs)
 {
    unsigned plane_n = dri2_num_fourcc_format_planes(attrs->DMABufFourCC.Value);
    if (plane_n == 0) {
-      _eglError(EGL_BAD_ATTRIBUTE, "invalid format");
+      _eglError(EGL_BAD_MATCH, "unknown drm fourcc format");
       return 0;
    }
 
@@ -2454,8 +2483,8 @@ dri2_create_image_dma_buf(_EGLDisplay *disp, _EGLContext *ctx,
     * will be present in attrs.DMABufPlaneModifiersLo[0] and
     * attrs.DMABufPlaneModifiersHi[0] */
    if (attrs.DMABufPlaneModifiersLo[0].IsPresent) {
-      modifier = (uint64_t) attrs.DMABufPlaneModifiersHi[0].Value << 32;
-      modifier |= (uint64_t) (attrs.DMABufPlaneModifiersLo[0].Value & 0xffffffff);
+      modifier = combine_u32_into_u64(attrs.DMABufPlaneModifiersHi[0].Value,
+                                      attrs.DMABufPlaneModifiersLo[0].Value);
       has_modifier = true;
    }
 
@@ -3226,16 +3255,11 @@ dri2_interop_export_object(_EGLDisplay *dpy, _EGLContext *ctx,
 
 /**
  * This is the main entrypoint into the driver, called by libEGL.
- * Create a new _EGLDriver object and init its dispatch table.
+ * Gets an _EGLDriver object and init its dispatch table.
  */
-_EGLDriver *
-_eglBuiltInDriver(void)
+void
+_eglInitDriver(_EGLDriver *dri2_drv)
 {
-   _EGLDriver *dri2_drv = calloc(1, sizeof *dri2_drv);
-   if (!dri2_drv)
-      return NULL;
-
-   _eglInitDriverFallbacks(dri2_drv);
    dri2_drv->API.Initialize = dri2_initialize;
    dri2_drv->API.Terminate = dri2_terminate;
    dri2_drv->API.CreateContext = dri2_create_context;
@@ -3285,8 +3309,4 @@ _eglBuiltInDriver(void)
    dri2_drv->API.GLInteropExportObject = dri2_interop_export_object;
    dri2_drv->API.DupNativeFenceFDANDROID = dri2_dup_native_fence_fd;
    dri2_drv->API.SetBlobCacheFuncsANDROID = dri2_set_blob_cache_funcs;
-
-   dri2_drv->Name = "DRI2";
-
-   return dri2_drv;
 }

@@ -1,5 +1,3 @@
-/* -*- mode: C; c-file-style: "k&r"; tab-width 4; indent-tabs-mode: t; -*- */
-
 /*
  * Copyright (C) 2013 Rob Clark <robclark@freedesktop.org>
  *
@@ -41,6 +39,7 @@ static void
 fd2_context_destroy(struct pipe_context *pctx)
 {
 	fd_context_destroy(pctx);
+	free(pctx);
 }
 
 static struct pipe_resource *

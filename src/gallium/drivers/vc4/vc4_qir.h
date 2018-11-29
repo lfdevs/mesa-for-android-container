@@ -592,6 +592,8 @@ uint8_t qir_channels_written(struct qinst *inst);
 
 void qir_dump(struct vc4_compile *c);
 void qir_dump_inst(struct vc4_compile *c, struct qinst *inst);
+char *qir_describe_uniform(enum quniform_contents contents, uint32_t data,
+                           const uint32_t *uniforms);
 const char *qir_get_stage_name(enum qstage stage);
 
 void qir_validate(struct vc4_compile *c);
