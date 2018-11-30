@@ -1127,13 +1127,22 @@ drm_handle_device(void *data, struct wl_drm *drm, const char *device)
    if (dri2_dpy->fd == -1) {
       _eglLog(_EGL_WARNING, "wayland-egl: could not open %s (%s)",
               dri2_dpy->device_name, strerror(errno));
+      free(dri2_dpy->device_name);
+      dri2_dpy->device_name = NULL;
       return;
    }
 
    if (drmGetNodeTypeFromFd(dri2_dpy->fd) == DRM_NODE_RENDER) {
       dri2_dpy->authenticated = true;
    } else {
-      drmGetMagic(dri2_dpy->fd, &magic);
+      if (drmGetMagic(dri2_dpy->fd, &magic)) {
+         close(dri2_dpy->fd);
+         dri2_dpy->fd = -1;
+         free(dri2_dpy->device_name);
+         dri2_dpy->device_name = NULL;
+         _eglLog(_EGL_WARNING, "wayland-egl: drmGetMagic failed");
+         return;
+      }
       wl_drm_authenticate(dri2_dpy->wl_drm, magic);
    }
 }

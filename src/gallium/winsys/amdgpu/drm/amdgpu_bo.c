@@ -1310,6 +1310,12 @@ static struct pb_buffer *amdgpu_bo_from_handle(struct radeon_winsys *rws,
    if (bo) {
       p_atomic_inc(&bo->base.reference.count);
       simple_mtx_unlock(&ws->bo_export_table_lock);
+
+      /* Release the buffer handle, because we don't need it anymore.
+       * This function is returning an existing buffer, which has its own
+       * handle.
+       */
+      amdgpu_bo_free(result.buf_handle);
       return &bo->base;
    }
 

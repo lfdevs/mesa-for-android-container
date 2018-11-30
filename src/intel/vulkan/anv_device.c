@@ -636,7 +636,7 @@ VkResult anv_CreateInstance(
    }
 
    if (instance->app_info.api_version == 0)
-      anv_EnumerateInstanceVersion(&instance->app_info.api_version);
+      instance->app_info.api_version = VK_API_VERSION_1_0;
 
    instance->enabled_extensions = enabled_extensions;
 

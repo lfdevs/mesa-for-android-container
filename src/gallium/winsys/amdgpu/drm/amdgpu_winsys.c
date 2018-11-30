@@ -280,6 +280,12 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    if (ws) {
       pipe_reference(NULL, &ws->reference);
       simple_mtx_unlock(&dev_tab_mutex);
+
+      /* Release the device handle, because we don't need it anymore.
+       * This function is returning an existing winsys instance, which
+       * has its own device handle.
+       */
+      amdgpu_device_deinitialize(dev);
       return &ws->base;
    }
 

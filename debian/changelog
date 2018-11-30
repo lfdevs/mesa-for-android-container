@@ -1,3 +1,15 @@
+mesa (18.3.0~rc5-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Fix a typo in list of dri drivers.
+  * rules, meson-add-glx-direct-toggle.diff: Fix build on hurd.
+  * rules: Drop extra -Dosmesa from confflags.
+  * rules: Don't build gallium nouveau on s390x.
+  * rules: Classic osmesa needs classic swrast, and since it's not enabled
+    where llvmpipe is enabled, enable gallium osmesa there.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 30 Nov 2018 11:45:45 +0200
+
 mesa (18.3.0~rc4-1) experimental; urgency=medium
 
   * New upstream release candidate.

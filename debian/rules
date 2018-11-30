@@ -39,7 +39,7 @@ confflags_DRI3 = -Ddri3=false
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	EGL_PLATFORMS = x11,
 
-	confflags_DIRECT_RENDERING = -Dglx=xlib
+	confflags_DIRECT_RENDERING = -Dglx-direct=false
 	confflags_GBM = -Dgbm=false
 	confflags_OSMESA = -Dosmesa=classic
 	DRI_DRIVERS = swrast,
@@ -50,7 +50,7 @@ else
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=true
 	# Gallium drivers which require kernel support, not yet ported to non-Linux
-	GALLIUM_DRIVERS += nouveau, virgl,
+	GALLIUM_DRIVERS += virgl,
 
 	# Freedreno requires arm in addition
 	ifneq (,$(filter arm arm64,$(DEB_HOST_ARCH_CPU)))
@@ -74,6 +74,7 @@ else
 
 	ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 		DRI_DRIVERS += nouveau,
+		GALLIUM_DRIVERS += nouveau,
 	endif
   endif
 
@@ -85,17 +86,17 @@ else
   endif
 
   ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-	DRI_DRIVERS += r200, r100
+	DRI_DRIVERS += r200, r100,
 	GALLIUM_DRIVERS += r600, r300,
   endif
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el))
-	GALLIUM_DRIVERS += radeonsi,
+	GALLIUM_DRIVERS += radeonsi, swrast
 	confflags_GALLIUM += -Dllvm=true
 	confflags_GALLIUM += -Dgallium-opencl=icd
-	GALLIUM_DRIVERS += swrast,
+	confflags_OSMESA = -Dosmesa=gallium
 
 	# nine makes sense only on archs that build wine
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-i386 powerpc))
@@ -104,6 +105,7 @@ else
   else
 	DRI_DRIVERS += swrast,
 	confflags_GALLIUM += -Dllvm=false
+	confflags_OSMESA = -Dosmesa=classic
   endif
 
   # radv needs LLVM and the Vulkan loader, so only build on the subset of
@@ -112,13 +114,12 @@ else
 	VULKAN_DRIVERS += amd,
   endif
 
-	confflags_DIRECT_RENDERING = -Dglx=dri
+	confflags_DIRECT_RENDERING = -Dglx-direct=true
 	confflags_GBM = -Dgbm=true
 	confflags_GALLIUM += -Dgallium-vdpau=true
 	confflags_GALLIUM += -Dgallium-va=true
 	confflags_GALLIUM += -Dgallium-extra-hud=true
 	confflags_GALLIUM += -Dlmsensors=true
-	confflags_OSMESA = -Dosmesa=gallium
 	with_libva = ,libva
 endif
 
@@ -138,7 +139,6 @@ confflags += \
 	-Ddri-search-path='/usr/lib/$(DEB_HOST_MULTIARCH)/dri:\$$$${ORIGIN}/dri:/usr/lib/dri' \
 	-Dvulkan-drivers="$(VULKAN_DRIVERS)" \
 	-Dglvnd=true \
-	-Dosmesa=classic \
 	-Dshared-glapi=true \
 	-Dgallium-xvmc=false \
 	-Dgallium-omx=disabled \

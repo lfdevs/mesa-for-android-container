@@ -446,6 +446,9 @@ anv_pipeline_hash_graphics(struct anv_pipeline *pipeline,
    if (layout)
       _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
 
+   const bool rba = pipeline->device->robust_buffer_access;
+   _mesa_sha1_update(&ctx, &rba, sizeof(rba));
+
    for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
       if (stages[s].entrypoint)
          anv_pipeline_hash_shader(&ctx, &stages[s]);
@@ -465,6 +468,9 @@ anv_pipeline_hash_compute(struct anv_pipeline *pipeline,
 
    if (layout)
       _mesa_sha1_update(&ctx, layout->sha1, sizeof(layout->sha1));
+
+   const bool rba = pipeline->device->robust_buffer_access;
+   _mesa_sha1_update(&ctx, &rba, sizeof(rba));
 
    anv_pipeline_hash_shader(&ctx, stage);
 
