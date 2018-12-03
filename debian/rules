@@ -49,8 +49,11 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=true
-	# Gallium drivers which require kernel support, not yet ported to non-Linux
-	GALLIUM_DRIVERS += virgl,
+	ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
+		DRI_DRIVERS += nouveau,
+		# Gallium drivers which require kernel support, not yet ported to non-Linux
+		GALLIUM_DRIVERS += nouveau, virgl,
+	endif
 
 	# Freedreno requires arm in addition
 	ifneq (,$(filter arm arm64,$(DEB_HOST_ARCH_CPU)))
@@ -72,10 +75,6 @@ else
 	# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
 	EGL_PLATFORMS += wayland,
 
-	ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-		DRI_DRIVERS += nouveau,
-		GALLIUM_DRIVERS += nouveau,
-	endif
   endif
 
 	EGL_PLATFORMS += drm,
@@ -88,6 +87,8 @@ else
   ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += r200, r100,
 	GALLIUM_DRIVERS += r600, r300,
+	confflags_GALLIUM += -Dgallium-va=true
+	confflags_GALLIUM += -Dgallium-vdpau=true
   endif
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
@@ -116,8 +117,6 @@ else
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
 	confflags_GBM = -Dgbm=true
-	confflags_GALLIUM += -Dgallium-vdpau=true
-	confflags_GALLIUM += -Dgallium-va=true
 	confflags_GALLIUM += -Dgallium-extra-hud=true
 	confflags_GALLIUM += -Dlmsensors=true
 	with_libva = ,libva

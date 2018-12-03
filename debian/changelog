@@ -1,3 +1,10 @@
+mesa (18.3.0~rc5-2) experimental; urgency=medium
+
+  * rules: Drop virgl, va/vdpau from s390x.
+  * meson-fix-hurd-build.diff: Hurd needs -D_GNU_SOURCE.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 03 Dec 2018 20:43:45 +0200
+
 mesa (18.3.0~rc5-1) experimental; urgency=medium
 
   * New upstream release candidate.
