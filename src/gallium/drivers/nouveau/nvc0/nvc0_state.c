@@ -464,10 +464,14 @@ nvc0_stage_sampler_states_bind(struct nvc0_context *nvc0,
                                unsigned s,
                                unsigned nr, void **hwcso)
 {
+   unsigned highest_found = 0;
    unsigned i;
 
    for (i = 0; i < nr; ++i) {
       struct nv50_tsc_entry *old = nvc0->samplers[s][i];
+
+      if (hwcso[i])
+         highest_found = i;
 
       if (hwcso[i] == old)
          continue;
@@ -477,14 +481,8 @@ nvc0_stage_sampler_states_bind(struct nvc0_context *nvc0,
       if (old)
          nvc0_screen_tsc_unlock(nvc0->screen, old);
    }
-   for (; i < nvc0->num_samplers[s]; ++i) {
-      if (nvc0->samplers[s][i]) {
-         nvc0_screen_tsc_unlock(nvc0->screen, nvc0->samplers[s][i]);
-         nvc0->samplers[s][i] = NULL;
-      }
-   }
-
-   nvc0->num_samplers[s] = nr;
+   if (nr >= nvc0->num_samplers[s])
+      nvc0->num_samplers[s] = highest_found + 1;
 }
 
 static void

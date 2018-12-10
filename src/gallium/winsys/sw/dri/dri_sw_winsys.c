@@ -62,7 +62,7 @@ struct dri_sw_winsys
 {
    struct sw_winsys base;
 
-   struct drisw_loader_funcs *lf;
+   const struct drisw_loader_funcs *lf;
 };
 
 static inline struct dri_sw_displaytarget *
@@ -282,7 +282,7 @@ dri_destroy_sw_winsys(struct sw_winsys *winsys)
 }
 
 struct sw_winsys *
-dri_create_sw_winsys(struct drisw_loader_funcs *lf)
+dri_create_sw_winsys(const struct drisw_loader_funcs *lf)
 {
    struct dri_sw_winsys *ws;
 

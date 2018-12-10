@@ -106,7 +106,6 @@ static void virgl_buffer_transfer_unmap(struct pipe_context *ctx,
    if (trans->base.usage & PIPE_TRANSFER_WRITE) {
       if (!(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT)) {
          struct virgl_screen *vs = virgl_screen(ctx->screen);
-         vbuf->base.clean = FALSE;
          vctx->num_transfers++;
          vs->vws->transfer_put(vs->vws, vbuf->base.hw_res,
                                &transfer->box, trans->base.stride, trans->base.layer_stride, trans->offset, transfer->level);

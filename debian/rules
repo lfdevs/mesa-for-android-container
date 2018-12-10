@@ -25,10 +25,6 @@ else
   endif
 endif
 
-# keep a list of files we don't install (yet), but since it's a bit
-# large, use an external file:
-include debian/not-installed
-
 DRI_DRIVERS =
 GALLIUM_DRIVERS =
 VULKAN_DRIVERS =
@@ -49,11 +45,9 @@ else
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=true
-	ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
-		DRI_DRIVERS += nouveau,
-		# Gallium drivers which require kernel support, not yet ported to non-Linux
-		GALLIUM_DRIVERS += nouveau, virgl,
-	endif
+	DRI_DRIVERS += nouveau,
+	# Gallium drivers which require kernel support, not yet ported to non-Linux
+	GALLIUM_DRIVERS += nouveau, virgl,
 
 	# Freedreno requires arm in addition
 	ifneq (,$(filter arm arm64,$(DEB_HOST_ARCH_CPU)))
@@ -84,17 +78,13 @@ else
 	DRI_DRIVERS += i915, i965,
   endif
 
-  ifeq (,$(filter $(DEB_HOST_ARCH), s390 s390x))
 	DRI_DRIVERS += r200, r100,
 	GALLIUM_DRIVERS += r600, r300,
-	confflags_GALLIUM += -Dgallium-va=true
-	confflags_GALLIUM += -Dgallium-vdpau=true
-  endif
 
   # LLVM is required for building r300g, radeonsi and llvmpipe drivers.
   # It's also required for building OpenCL support.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el))
-	GALLIUM_DRIVERS += radeonsi, swrast
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
+	GALLIUM_DRIVERS += radeonsi, swrast,
 	confflags_GALLIUM += -Dllvm=true
 	confflags_GALLIUM += -Dgallium-opencl=icd
 	confflags_OSMESA = -Dosmesa=gallium
@@ -111,13 +101,15 @@ else
 
   # radv needs LLVM and the Vulkan loader, so only build on the subset of
   # arches where we have LLVM enabled and where the Vulkan loader is built.
-  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el))
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	VULKAN_DRIVERS += amd,
   endif
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
 	confflags_GBM = -Dgbm=true
 	confflags_GALLIUM += -Dgallium-extra-hud=true
+	confflags_GALLIUM += -Dgallium-va=true
+	confflags_GALLIUM += -Dgallium-vdpau=true
 	confflags_GALLIUM += -Dlmsensors=true
 	with_libva = ,libva
 endif
@@ -187,23 +179,17 @@ override_dh_installchangelogs:
 	dh_installchangelogs -pmesa-common-dev
 
 override_dh_install:
-	# Also get rid of other files which aren't installed. Do not
-	# use -f to ensure we notice disappearing files:
-	set -e; for file in $(NOT_INSTALLED); do rm debian/tmp/$$file; done
-	# Files only in git, not in tarballs, OK to use rm -f here:
-	set -e; for file in $(NOT_INSTALLED_EITHER); do rm -f debian/tmp/$$file; done
 	# purge .la files
 	find debian/tmp/ -name '*.la' -exec rm '{}' ';'
 
-	# GLESv2 libs still get built for some reason
-	rm -f debian/tmp/usr/lib/*/libGLESv2*
-	# these are not needed
-	rm -f debian/tmp/usr/lib/*/libEGL_mesa.so
-	rm -f debian/tmp/usr/lib/*/libGLX_mesa.so
+	# Get rid of some files which aren't installed. Do not
+	# use -f to ensure we notice disappearing files:
+	rm debian/tmp/usr/lib/*/libglapi.so
+	rm debian/tmp/usr/lib/*/libEGL_mesa.so
+	rm debian/tmp/usr/lib/*/libGLX_mesa.so
 
-	# Drop libwayland-egl which is provided by src:wayland now
-	rm -f debian/tmp/usr/lib/*/libwayland-egl.so*
-	rm -f debian/tmp/usr/lib/*/pkgconfig/wayland-egl.pc
+	# GLESv2 libs still get built for some reason
+	rm debian/tmp/usr/lib/*/libGLESv2*
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/

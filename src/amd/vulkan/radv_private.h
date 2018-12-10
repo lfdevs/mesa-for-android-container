@@ -1498,6 +1498,14 @@ struct radv_image {
 	uint64_t clear_value_offset;
 	uint64_t dcc_pred_offset;
 
+	/*
+	 * Metadata for the TC-compat zrange workaround. If the 32-bit value
+	 * stored at this offset is UINT_MAX, the driver will emit
+	 * DB_Z_INFO.ZRANGE_PRECISION=0, otherwise it will skip the
+	 * SET_CONTEXT_REG packet.
+	 */
+	uint64_t tc_compat_zrange_offset;
+
 	/* For VK_ANDROID_native_buffer, the WSI image owns the memory, */
 	VkDeviceMemory owned_memory;
 };

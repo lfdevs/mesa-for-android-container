@@ -1,3 +1,21 @@
+mesa (18.3.0-1) experimental; urgency=medium
+
+  [ Timo Aaltonen ]
+  * control, rules. LLVM is available on s390x these days, so simplify
+    the packaging and let s390x build the same package set as other release
+    archs.
+
+  [ Andreas Boll ]
+  * New upstream release.
+  * Use proposed meson patches from upstream to fix hurd and ppc64el.
+  * control: Bump meson build-dep to 0.45 per meson.build.
+  * control: Drop unused build-dep libtool.
+  * control: Switch to python3 build-deps.
+  * Inline debian/not-installed into debian/rules.
+  * rules: Tidy up override_dh_install.
+
+ -- Andreas Boll <aboll@debian.org>  Mon, 10 Dec 2018 22:52:55 +0100
+
 mesa (18.3.0~rc5-2) experimental; urgency=medium
 
   * rules: Drop virgl, va/vdpau from s390x.

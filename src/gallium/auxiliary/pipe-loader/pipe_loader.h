@@ -142,7 +142,7 @@ pipe_loader_release(struct pipe_loader_device **devs, int ndev);
  */
 bool
 pipe_loader_sw_probe_dri(struct pipe_loader_device **devs,
-                         struct drisw_loader_funcs *drisw_lf);
+                         const struct drisw_loader_funcs *drisw_lf);
 
 /**
  * Initialize a kms backed sw device given an fd.

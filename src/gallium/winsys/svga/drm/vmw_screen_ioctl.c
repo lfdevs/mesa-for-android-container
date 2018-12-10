@@ -1198,4 +1198,6 @@ void
 vmw_ioctl_cleanup(struct vmw_winsys_screen *vws)
 {
    VMW_FUNC;
+
+   free(vws->ioctl.cap_3d);
 }

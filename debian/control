@@ -6,7 +6,7 @@ Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
  debhelper (>= 11),
- meson,
+ meson (>= 0.45),
  quilt (>= 0.63-8.2~),
  pkg-config,
  libdrm-dev (>= 2.4.95) [!hurd-any],
@@ -19,8 +19,7 @@ Build-Depends:
  libxext-dev,
  libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
- libvulkan-dev [amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el sparc64 x32],
- libtool,
+ libvulkan-dev [amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32],
  x11proto-dev,
  linux-libc-dev (>= 2.6.31) [linux-any],
  libx11-xcb-dev,
@@ -33,17 +32,16 @@ Build-Depends:
  libxcb-sync-dev,
  libxrandr-dev,
  libxshmfence-dev (>= 1.1),
- python,
- python-mako,
+ python3,
  python3-mako,
  flex,
  bison,
- llvm-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ llvm-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
+ libelf-dev [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
  libwayland-dev (>= 1.15.0) [linux-any],
  libwayland-egl-backend-dev (>= 1.15.0) [linux-any],
- libclang-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
- libclc-dev (>= 0.2.0+git20180917-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el],
+ libclang-7-dev (>= 1:7~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
+ libclc-dev (>= 0.2.0+git20180917-1~) [amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64],
  wayland-protocols (>= 1.9),
  zlib1g-dev,
  libglvnd-core-dev,
@@ -442,7 +440,7 @@ Description: Mesa VDPAU video acceleration drivers
 
 Package: mesa-vulkan-drivers
 Section: libs
-Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el sparc64 x32
+Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libvulkan1,
@@ -455,7 +453,7 @@ Description: Mesa Vulkan graphics drivers
 
 Package: mesa-opencl-icd
 Section: libs
-Architecture: amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 sparc64 ppc64el
+Architecture: amd64 arm64 armel armhf i386 kfreebsd-amd64 kfreebsd-i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64
 Pre-Depends: ${misc:Pre-Depends}
 Depends:
  libclc-r600 (>= 0.2.0+git20180312-1~),

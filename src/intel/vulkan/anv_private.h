@@ -1747,6 +1747,13 @@ enum anv_pipe_bits {
     * we would have to CS stall on every flush which could be bad.
     */
    ANV_PIPE_NEEDS_CS_STALL_BIT               = (1 << 21),
+
+   /* This bit does not exist directly in PIPE_CONTROL. It means that render
+    * target operations are ongoing. Some operations like copies on the
+    * command streamer might need to be aware of this to trigger the
+    * appropriate stall before they can proceed with the copy.
+    */
+   ANV_PIPE_RENDER_TARGET_WRITES              = (1 << 22),
 };
 
 #define ANV_PIPE_FLUSH_BITS ( \

@@ -600,25 +600,23 @@ static inline void
 nv50_stage_sampler_states_bind(struct nv50_context *nv50, int s,
                                unsigned nr, void **hwcso)
 {
+   unsigned highest_found = 0;
    unsigned i;
 
    assert(nr <= PIPE_MAX_SAMPLERS);
    for (i = 0; i < nr; ++i) {
       struct nv50_tsc_entry *old = nv50->samplers[s][i];
 
+      if (hwcso[i])
+         highest_found = i;
+
       nv50->samplers[s][i] = nv50_tsc_entry(hwcso[i]);
       if (old)
          nv50_screen_tsc_unlock(nv50->screen, old);
    }
    assert(nv50->num_samplers[s] <= PIPE_MAX_SAMPLERS);
-   for (; i < nv50->num_samplers[s]; ++i) {
-      if (nv50->samplers[s][i]) {
-         nv50_screen_tsc_unlock(nv50->screen, nv50->samplers[s][i]);
-         nv50->samplers[s][i] = NULL;
-      }
-   }
-
-   nv50->num_samplers[s] = nr;
+   if (nr >= nv50->num_samplers[s])
+      nv50->num_samplers[s] = highest_found + 1;
 
    nv50->dirty_3d |= NV50_NEW_3D_SAMPLERS;
 }

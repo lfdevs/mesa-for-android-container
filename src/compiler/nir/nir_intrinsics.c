@@ -409,14 +409,6 @@ const nir_intrinsic_info nir_intrinsic_infos[nir_num_intrinsics] = {
    .flags = 0,
 },
 {
-   .name = "begin_fragment_shader_ordering",
-   .num_srcs = 0,
-   .has_dest = false,
-   .dest_components = 0,
-   .num_indices = 0,
-   .flags = 0,
-},
-{
    .name = "begin_invocation_interlock",
    .num_srcs = 0,
    .has_dest = false,

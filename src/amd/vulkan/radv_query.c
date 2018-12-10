@@ -1341,10 +1341,13 @@ void radv_CmdCopyQueryPoolResults(
 
 
 			if (flags & VK_QUERY_RESULT_WAIT_BIT) {
+				/* Wait on the high 32 bits of the timestamp in
+				 * case the low part is 0xffffffff.
+				 */
 				radeon_emit(cs, PKT3(PKT3_WAIT_REG_MEM, 5, false));
 				radeon_emit(cs, WAIT_REG_MEM_NOT_EQUAL | WAIT_REG_MEM_MEM_SPACE(1));
-				radeon_emit(cs, local_src_va);
-				radeon_emit(cs, local_src_va >> 32);
+				radeon_emit(cs, local_src_va + 4);
+				radeon_emit(cs, (local_src_va + 4) >> 32);
 				radeon_emit(cs, TIMESTAMP_NOT_READY >> 32);
 				radeon_emit(cs, 0xffffffff);
 				radeon_emit(cs, 4);
@@ -1444,6 +1447,22 @@ static unsigned event_type_for_stream(unsigned stream)
 	case 1: return V_028A90_SAMPLE_STREAMOUTSTATS1;
 	case 2: return V_028A90_SAMPLE_STREAMOUTSTATS2;
 	case 3: return V_028A90_SAMPLE_STREAMOUTSTATS3;
+	}
+}
+
+static void emit_query_flush(struct radv_cmd_buffer *cmd_buffer,
+			     struct radv_query_pool *pool)
+{
+	if (cmd_buffer->pending_reset_query) {
+		if (pool->size >= RADV_BUFFER_OPS_CS_THRESHOLD) {
+			/* Only need to flush caches if the query pool size is
+			 * large enough to be resetted using the compute shader
+			 * path. Small pools don't need any cache flushes
+			 * because we use a CP dma clear.
+			 */
+			si_emit_cache_flush(cmd_buffer);
+			cmd_buffer->pending_reset_query = false;
+		}
 	}
 }
 
@@ -1593,17 +1612,7 @@ void radv_CmdBeginQueryIndexedEXT(
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo);
 
-	if (cmd_buffer->pending_reset_query) {
-		if (pool->size >= RADV_BUFFER_OPS_CS_THRESHOLD) {
-			/* Only need to flush caches if the query pool size is
-			 * large enough to be resetted using the compute shader
-			 * path. Small pools don't need any cache flushes
-			 * because we use a CP dma clear.
-			 */
-			si_emit_cache_flush(cmd_buffer);
-			cmd_buffer->pending_reset_query = false;
-		}
-	}
+	emit_query_flush(cmd_buffer, pool);
 
 	va += pool->stride * query;
 
@@ -1679,6 +1688,8 @@ void radv_CmdWriteTimestamp(
 	uint64_t query_va = va + pool->stride * query;
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cs, pool->bo);
+
+	emit_query_flush(cmd_buffer, pool);
 
 	int num_queries = 1;
 	if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask)

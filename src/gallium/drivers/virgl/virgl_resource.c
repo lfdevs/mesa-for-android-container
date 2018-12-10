@@ -95,7 +95,11 @@ static void virgl_buffer_subdata(struct pipe_context *pipe,
       usage |= PIPE_TRANSFER_DISCARD_RANGE;
 
    u_box_1d(offset, size, &box);
-   virgl_transfer_inline_write(pipe, resource, 0, usage, &box, data, 0, 0);
+
+   if (size >= (VIRGL_MAX_CMDBUF_DWORDS * 4))
+      u_default_buffer_subdata(pipe, resource, usage, offset, size, data);
+   else
+      virgl_transfer_inline_write(pipe, resource, 0, usage, &box, data, 0, 0);
 }
 
 void virgl_init_context_resource_functions(struct pipe_context *ctx)

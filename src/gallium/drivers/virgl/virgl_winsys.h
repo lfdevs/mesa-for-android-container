@@ -31,7 +31,7 @@ struct pipe_fence_handle;
 struct winsys_handle;
 struct virgl_hw_res;
 
-#define VIRGL_MAX_CMDBUF_DWORDS (16*1024)
+#define VIRGL_MAX_CMDBUF_DWORDS (64 * 1024)
 
 struct virgl_drm_caps {
    union virgl_caps caps;

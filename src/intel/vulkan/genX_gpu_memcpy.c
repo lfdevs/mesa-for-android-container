@@ -302,4 +302,5 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_RENDER_TARGET_WRITES;
 }

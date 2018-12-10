@@ -421,10 +421,17 @@ static const __DRIextension *drisw_screen_extensions[] = {
    NULL
 };
 
-static struct drisw_loader_funcs drisw_lf = {
+static const struct drisw_loader_funcs drisw_lf = {
    .get_image = drisw_get_image,
    .put_image = drisw_put_image,
    .put_image2 = drisw_put_image2
+};
+
+static const struct drisw_loader_funcs drisw_shm_lf = {
+   .get_image = drisw_get_image,
+   .put_image = drisw_put_image,
+   .put_image2 = drisw_put_image2,
+   .put_image_shm = drisw_put_image_shm
 };
 
 static const __DRIconfig **
@@ -434,6 +441,7 @@ drisw_init_screen(__DRIscreen * sPriv)
    const __DRIconfig **configs;
    struct dri_screen *screen;
    struct pipe_screen *pscreen = NULL;
+   const struct drisw_loader_funcs *lf = &drisw_lf;
 
    screen = CALLOC_STRUCT(dri_screen);
    if (!screen)
@@ -448,10 +456,10 @@ drisw_init_screen(__DRIscreen * sPriv)
    sPriv->extensions = drisw_screen_extensions;
    if (loader->base.version >= 4) {
       if (loader->putImageShm)
-         drisw_lf.put_image_shm = drisw_put_image_shm;
+         lf = &drisw_shm_lf;
    }
 
-   if (pipe_loader_sw_probe_dri(&screen->dev, &drisw_lf)) {
+   if (pipe_loader_sw_probe_dri(&screen->dev, lf)) {
       dri_init_options(screen);
 
       pscreen = pipe_loader_create_screen(screen->dev);

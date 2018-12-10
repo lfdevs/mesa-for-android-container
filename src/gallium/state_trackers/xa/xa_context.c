@@ -91,6 +91,7 @@ xa_context_destroy(struct xa_context *r)
     }
 
     r->pipe->destroy(r->pipe);
+    free(r);
 }
 
 XA_EXPORT int

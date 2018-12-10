@@ -263,4 +263,5 @@ genX(blorp_exec)(struct blorp_batch *batch,
    cmd_buffer->state.gfx.vb_dirty = ~0;
    cmd_buffer->state.gfx.dirty = ~0;
    cmd_buffer->state.push_constants_dirty = ~0;
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_RENDER_TARGET_WRITES;
 }

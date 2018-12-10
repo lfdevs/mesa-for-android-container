@@ -58,7 +58,6 @@ typedef enum {
    nir_intrinsic_ballot_find_lsb,
    nir_intrinsic_ballot_find_msb,
    nir_intrinsic_barrier,
-   nir_intrinsic_begin_fragment_shader_ordering,
    nir_intrinsic_begin_invocation_interlock,
    nir_intrinsic_copy_deref,
    nir_intrinsic_deref_atomic_add,

@@ -1636,7 +1636,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 	}
 
 	if (query->buffer.previous) {
-		u_suballocator_alloc(rctx->allocator_zeroed_memory, 16, 16,
+		u_suballocator_alloc(rctx->allocator_zeroed_memory, 16, 256,
 				     &tmp_buffer_offset, &tmp_buffer);
 		if (!tmp_buffer)
 			return;
