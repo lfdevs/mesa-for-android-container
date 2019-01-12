@@ -6,3 +6,4 @@
 3-5-meson-Override-C-standard-to-gnu-11-when-building-with-altivec-on-ppc64le.patch
 4-5-meson-Add-support-for-gnu-hurd.patch
 5-5-meson-Add-toggle-for-glx-direct.patch
+fix-hurd-ftbfs.diff

@@ -211,7 +211,7 @@ void radv_fill_device_extension_table(const struct radv_physical_device *device,
    table->EXT_external_memory_dma_buf = true;
    table->EXT_external_memory_host = device->rad_info.has_userptr;
    table->EXT_global_priority = device->rad_info.has_ctx_priority;
-   table->EXT_pci_bus_info = true;
+   table->EXT_pci_bus_info = false;
    table->EXT_sampler_filter_minmax = device->rad_info.chip_class >= CIK;
    table->EXT_shader_viewport_index_layer = true;
    table->EXT_shader_stencil_export = true;

@@ -224,7 +224,7 @@ anv_physical_device_get_supported_extensions(const struct anv_physical_device *d
       .EXT_display_control = VK_USE_PLATFORM_DISPLAY_KHR,
       .EXT_external_memory_dma_buf = true,
       .EXT_global_priority = device->has_context_priority,
-      .EXT_pci_bus_info = true,
+      .EXT_pci_bus_info = false,
       .EXT_shader_viewport_index_layer = true,
       .EXT_shader_stencil_export = device->info.gen >= 9,
       .EXT_vertex_attribute_divisor = true,
