@@ -478,6 +478,10 @@ private:
                          struct brw_reg src,
                          struct brw_reg idx);
 
+   void generate_quad_swizzle(const fs_inst *inst,
+                              struct brw_reg dst, struct brw_reg src,
+                              unsigned swiz);
+
    bool patch_discard_jumps_to_fb_writes();
 
    const struct brw_compiler *compiler;
@@ -528,6 +532,25 @@ namespace brw {
       } else {
          return fs_reg(retype(brw_vec8_grf(regs[0], 0), type));
       }
+   }
+
+   /**
+    * Remove any modifiers from the \p i-th source region of the instruction,
+    * including negate, abs and any implicit type conversion to the execution
+    * type.  Instead any source modifiers will be implemented as a separate
+    * MOV instruction prior to the original instruction.
+    */
+   inline bool
+   lower_src_modifiers(fs_visitor *v, bblock_t *block, fs_inst *inst, unsigned i)
+   {
+      assert(inst->components_read(i) == 1);
+      const fs_builder ibld(v, block, inst);
+      const fs_reg tmp = ibld.vgrf(get_exec_type(inst));
+
+      ibld.MOV(tmp, inst->src[i]);
+      inst->src[i] = tmp;
+
+      return true;
    }
 }
 

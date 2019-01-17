@@ -31,7 +31,7 @@ if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
     with_gallium_xvmc or with_dri)
   pipe_loader_link_with += libgalliumvl
 else
-  pipe_loader_link_with += libgalliumvl_stubs
+  pipe_loader_link_with += libgalliumvl_stub
 endif
 if (with_gallium_va or with_gallium_vdpau or with_gallium_omx != 'disabled' or
     with_gallium_xvmc)

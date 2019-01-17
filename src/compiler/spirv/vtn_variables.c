@@ -132,12 +132,12 @@ vtn_access_link_as_ssa(struct vtn_builder *b, struct vtn_access_link link,
    } else if (stride == 1) {
        nir_ssa_def *ssa = vtn_ssa_value(b, link.id)->def;
        if (ssa->bit_size != 32)
-          ssa = nir_u2u32(&b->nb, ssa);
+          ssa = nir_i2i32(&b->nb, ssa);
       return ssa;
    } else {
       nir_ssa_def *src0 = vtn_ssa_value(b, link.id)->def;
       if (src0->bit_size != 32)
-         src0 = nir_u2u32(&b->nb, src0);
+         src0 = nir_i2i32(&b->nb, src0);
       return nir_imul(&b->nb, src0, nir_imm_int(&b->nb, stride));
    }
 }
@@ -512,9 +512,9 @@ vtn_local_load(struct vtn_builder *b, nir_deref_instr *src)
 
    if (src_tail != src) {
       val->type = src->type;
-      nir_const_value *const_index = nir_src_as_const_value(src->arr.index);
-      if (const_index)
-         val->def = vtn_vector_extract(b, val->def, const_index->u32[0]);
+      if (nir_src_is_const(src->arr.index))
+         val->def = vtn_vector_extract(b, val->def,
+                                       nir_src_as_uint(src->arr.index));
       else
          val->def = vtn_vector_extract_dynamic(b, val->def, src->arr.index.ssa);
    }
@@ -532,10 +532,9 @@ vtn_local_store(struct vtn_builder *b, struct vtn_ssa_value *src,
       struct vtn_ssa_value *val = vtn_create_ssa_value(b, dest_tail->type);
       _vtn_local_load_store(b, true, dest_tail, val);
 
-      nir_const_value *const_index = nir_src_as_const_value(dest->arr.index);
-      if (const_index)
+      if (nir_src_is_const(dest->arr.index))
          val->def = vtn_vector_insert(b, val->def, src->def,
-                                      const_index->u32[0]);
+                                      nir_src_as_uint(dest->arr.index));
       else
          val->def = vtn_vector_insert_dynamic(b, val->def, src->def,
                                               dest->arr.index.ssa);

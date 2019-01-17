@@ -1,3 +1,14 @@
+mesa (18.3.2-1) unstable; urgency=medium
+
+  * New upstream release.
+    - 2-5..5-5*.patch: Dropped, upstream.
+  * fix-hurd-ftbfs.diff: Add one more check for PIPE_OS_HURD, and fixes
+    from James Clarke to address other issues with the build.
+  * nv30: Cherry-pick patches to fix a plasmashell crash. (Closes:
+    #918835)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 17 Jan 2019 20:36:15 +0200
+
 mesa (18.3.1-1) experimental; urgency=medium
 
   * New upstream release.
@@ -53,6 +64,37 @@ mesa (18.3.0~rc4-1) experimental; urgency=medium
   * control, rules: Build with meson.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Thu, 29 Nov 2018 15:35:41 +0200
+
+mesa (18.2.8-2) unstable; urgency=medium
+
+  * Actually merge the upstream version. (Closes: #917556)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 28 Dec 2018 20:11:40 +0200
+
+mesa (18.2.8-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Build-depend on libsensors-dev. (Closes: #917442)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 28 Dec 2018 10:50:13 +0200
+
+mesa (18.2.7-2) unstable; urgency=medium
+
+  * Temporarily disable libsensors support to bootstrap with libsensors5.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Fri, 21 Dec 2018 09:22:16 +0100
+
+mesa (18.2.7-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 19 Dec 2018 11:47:32 +0200
+
+mesa (18.2.6-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 28 Nov 2018 22:58:22 +0200
 
 mesa (18.2.5-3) unstable; urgency=medium
 

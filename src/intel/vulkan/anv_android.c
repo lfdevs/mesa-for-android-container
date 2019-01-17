@@ -234,7 +234,7 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
    *grallocUsage = 0;
    intel_logd("%s: format=%d, usage=0x%x", __func__, format, imageUsage);
 
-   /* WARNING: Android Nougat's libvulkan.so hardcodes the VkImageUsageFlags
+   /* WARNING: Android's libvulkan.so hardcodes the VkImageUsageFlags
     * returned to applications via VkSurfaceCapabilitiesKHR::supportedUsageFlags.
     * The relevant code in libvulkan/swapchain.cpp contains this fun comment:
     *
@@ -268,19 +268,13 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
                        "inside %s", __func__);
    }
 
-   /* Reject STORAGE here to avoid complexity elsewhere. */
-   if (imageUsage & VK_IMAGE_USAGE_STORAGE_BIT) {
-      return vk_errorf(device->instance, device, VK_ERROR_FORMAT_NOT_SUPPORTED,
-                       "VK_IMAGE_USAGE_STORAGE_BIT unsupported for gralloc "
-                       "swapchain");
-   }
-
    if (unmask32(&imageUsage, VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
       *grallocUsage |= GRALLOC_USAGE_HW_RENDER;
 
    if (unmask32(&imageUsage, VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                              VK_IMAGE_USAGE_SAMPLED_BIT |
+                             VK_IMAGE_USAGE_STORAGE_BIT |
                              VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))
       *grallocUsage |= GRALLOC_USAGE_HW_TEXTURE;
 

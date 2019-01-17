@@ -486,4 +486,32 @@ get_exec_type_size(const fs_inst *inst)
    return type_sz(get_exec_type(inst));
 }
 
+/**
+ * Return whether the following regioning restriction applies to the specified
+ * instruction.  From the Cherryview PRM Vol 7. "Register Region
+ * Restrictions":
+ *
+ * "When source or destination datatype is 64b or operation is integer DWord
+ *  multiply, regioning in Align1 must follow these rules:
+ *
+ *  1. Source and Destination horizontal stride must be aligned to the same qword.
+ *  2. Regioning must ensure Src.Vstride = Src.Width * Src.Hstride.
+ *  3. Source and Destination offset must be the same, except the case of
+ *     scalar source."
+ */
+static inline bool
+has_dst_aligned_region_restriction(const gen_device_info *devinfo,
+                                   const fs_inst *inst)
+{
+   const brw_reg_type exec_type = get_exec_type(inst);
+   const bool is_int_multiply = !brw_reg_type_is_floating_point(exec_type) &&
+         (inst->opcode == BRW_OPCODE_MUL || inst->opcode == BRW_OPCODE_MAD);
+
+   if (type_sz(inst->dst.type) > 4 || type_sz(exec_type) > 4 ||
+       (type_sz(exec_type) == 4 && is_int_multiply))
+      return devinfo->is_cherryview || gen_device_info_is_9lp(devinfo);
+   else
+      return false;
+}
+
 #endif

@@ -4657,6 +4657,8 @@ void radv_CmdBeginConditionalRenderingEXT(
 		draw_visible = false;
 	}
 
+	si_emit_cache_flush(cmd_buffer);
+
 	/* Enable predication for this command buffer. */
 	si_emit_set_predication_state(cmd_buffer, draw_visible, va);
 	cmd_buffer->state.predicating = true;
@@ -4792,7 +4794,7 @@ void radv_CmdBeginTransformFeedbackEXT(
 	assert(firstCounterBuffer + counterBufferCount <= MAX_SO_BUFFERS);
 	for_each_bit(i, so->enabled_mask) {
 		int32_t counter_buffer_idx = i - firstCounterBuffer;
-		if (counter_buffer_idx >= 0 && counter_buffer_idx > counterBufferCount)
+		if (counter_buffer_idx >= 0 && counter_buffer_idx >= counterBufferCount)
 			counter_buffer_idx = -1;
 
 		/* SI binds streamout buffers as shader resources.
@@ -4854,7 +4856,7 @@ void radv_CmdEndTransformFeedbackEXT(
 	assert(firstCounterBuffer + counterBufferCount <= MAX_SO_BUFFERS);
 	for_each_bit(i, so->enabled_mask) {
 		int32_t counter_buffer_idx = i - firstCounterBuffer;
-		if (counter_buffer_idx >= 0 && counter_buffer_idx > counterBufferCount)
+		if (counter_buffer_idx >= 0 && counter_buffer_idx >= counterBufferCount)
 			counter_buffer_idx = -1;
 
 		if (counter_buffer_idx >= 0 && pCounterBuffers && pCounterBuffers[counter_buffer_idx]) {

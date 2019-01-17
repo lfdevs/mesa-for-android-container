@@ -32,6 +32,7 @@ struct pipe_screen;
 struct tgsi_token;
 struct u_upload_mgr;
 struct virgl_cmd_buf;
+struct virgl_vertex_elements_state;
 
 struct virgl_sampler_view {
    struct pipe_sampler_view base;
@@ -53,6 +54,7 @@ struct virgl_context {
    struct virgl_cmd_buf *cbuf;
 
    struct virgl_textures_info samplers[PIPE_SHADER_TYPES];
+   struct virgl_vertex_elements_state *vertex_elements;
 
    struct pipe_framebuffer_state framebuffer;
 

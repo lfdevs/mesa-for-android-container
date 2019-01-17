@@ -315,6 +315,16 @@ can_take_stride(fs_inst *inst, unsigned arg, unsigned stride,
    if (stride > 4)
       return false;
 
+   /* Bail if the channels of the source need to be aligned to the byte offset
+    * of the corresponding channel of the destination, and the provided stride
+    * would break this restriction.
+    */
+   if (has_dst_aligned_region_restriction(devinfo, inst) &&
+       !(type_sz(inst->src[arg].type) * stride ==
+           type_sz(inst->dst.type) * inst->dst.stride ||
+         stride == 0))
+      return false;
+
    /* 3-source instructions can only be Align16, which restricts what strides
     * they can take. They can only take a stride of 1 (the usual case), or 0
     * with a special "repctrl" bit. But the repctrl bit doesn't work for

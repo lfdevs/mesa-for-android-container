@@ -1326,7 +1326,7 @@ blorp_emit_memcpy(struct blorp_batch *batch,
 static void
 blorp_emit_surface_state(struct blorp_batch *batch,
                          const struct brw_blorp_surface_info *surface,
-                         enum isl_aux_op op,
+                         enum isl_aux_op aux_op,
                          void *state, uint32_t state_offset,
                          const bool color_write_disables[4],
                          bool is_render_target)
@@ -1382,7 +1382,7 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                           surface->aux_addr, *aux_addr);
    }
 
-   if (surface->clear_color_addr.buffer) {
+   if (aux_usage != ISL_AUX_USAGE_NONE && surface->clear_color_addr.buffer) {
 #if GEN_GEN >= 10
       assert((surface->clear_color_addr.offset & 0x3f) == 0);
       uint32_t *clear_addr = state + isl_dev->ss.clear_color_state_offset;
@@ -1390,7 +1390,10 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                           isl_dev->ss.clear_color_state_offset,
                           surface->clear_color_addr, *clear_addr);
 #elif GEN_GEN >= 7
-      if (op == ISL_AUX_OP_FULL_RESOLVE || op == ISL_AUX_OP_PARTIAL_RESOLVE) {
+      /* Fast clears just whack the AUX surface and don't actually use the
+       * clear color for anything.  We can avoid the MI memcpy on that case.
+       */
+      if (aux_op != ISL_AUX_OP_FAST_CLEAR) {
          struct blorp_address dst_addr = blorp_get_surface_base_address(batch);
          dst_addr.offset += state_offset + isl_dev->ss.clear_value_offset;
          blorp_emit_memcpy(batch, dst_addr, surface->clear_color_addr,

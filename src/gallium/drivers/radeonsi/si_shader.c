@@ -561,6 +561,14 @@ void si_llvm_load_input_vs(
 
 	/* Do multiple loads for special formats. */
 	switch (fix_fetch) {
+	case SI_FIX_FETCH_RG_64_FLOAT:
+		num_fetches = 1; /* 1 2-dword or 4-dword load */
+		fetch_stride = 0;
+		if (util_last_bit(info->input_usage_mask[input_index]) >= 2)
+			num_channels = 4; /* 2 doubles in 4 dwords */
+		else
+			num_channels = 2; /* 1 double in 2 dwords */
+		break;
 	case SI_FIX_FETCH_RGB_64_FLOAT:
 		num_fetches = 3; /* 3 2-dword loads */
 		fetch_stride = 8;

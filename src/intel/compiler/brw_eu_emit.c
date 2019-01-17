@@ -925,8 +925,8 @@ brw_MOV(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0)
    const struct gen_device_info *devinfo = p->devinfo;
 
    /* When converting F->DF on IVB/BYT, every odd source channel is ignored.
-    * To avoid the problems that causes, we use a <1,2,0> source region to read
-    * each element twice.
+    * To avoid the problems that causes, we use an <X,2,0> source region to
+    * read each element twice.
     */
    if (devinfo->gen == 7 && !devinfo->is_haswell &&
        brw_get_default_access_mode(p) == BRW_ALIGN_1 &&
@@ -935,11 +935,8 @@ brw_MOV(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0)
         src0.type == BRW_REGISTER_TYPE_D ||
         src0.type == BRW_REGISTER_TYPE_UD) &&
        !has_scalar_region(src0)) {
-      assert(src0.vstride == BRW_VERTICAL_STRIDE_4 &&
-             src0.width == BRW_WIDTH_4 &&
-             src0.hstride == BRW_HORIZONTAL_STRIDE_1);
-
-      src0.vstride = BRW_VERTICAL_STRIDE_1;
+      assert(src0.vstride == src0.width + src0.hstride);
+      src0.vstride = src0.hstride;
       src0.width = BRW_WIDTH_2;
       src0.hstride = BRW_HORIZONTAL_STRIDE_0;
    }

@@ -64,9 +64,8 @@ constant_fold_alu_instr(nir_alu_instr *instr, void *mem_ctx)
          return false;
 
       if (bit_size == 0 &&
-          !nir_alu_type_get_type_size(nir_op_infos[instr->op].input_sizes[i])) {
+          !nir_alu_type_get_type_size(nir_op_infos[instr->op].input_types[i]))
          bit_size = instr->src[i].src.ssa->bit_size;
-      }
 
       nir_instr *src_instr = instr->src[i].src.ssa->parent_instr;
 

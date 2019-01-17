@@ -989,6 +989,9 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
 			LLVMValueRef data[4];
 			unsigned loc = variable->data.location;
 
+			if (loc >= VARYING_SLOT_VAR0 && nir->info.stage == MESA_SHADER_FRAGMENT)
+				ctx->abi.fs_input_attr_indices[loc - VARYING_SLOT_VAR0] = input_idx / 4;
+
 			for (unsigned i = 0; i < attrib_count; i++) {
 				/* Packed components share the same location so skip
 				 * them if we have already processed the location.

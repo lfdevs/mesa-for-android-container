@@ -47,6 +47,7 @@ vtn_type_count_function_params(struct vtn_type *type)
 {
    switch (type->base_type) {
    case vtn_base_type_array:
+   case vtn_base_type_matrix:
       return type->length * vtn_type_count_function_params(type->array_element);
 
    case vtn_base_type_struct: {
@@ -76,6 +77,7 @@ vtn_type_add_to_function_params(struct vtn_type *type,
 
    switch (type->base_type) {
    case vtn_base_type_array:
+   case vtn_base_type_matrix:
       for (unsigned i = 0; i < type->length; i++)
          vtn_type_add_to_function_params(type->array_element, func, param_idx);
       break;
@@ -123,6 +125,7 @@ vtn_ssa_value_add_to_call_params(struct vtn_builder *b,
 {
    switch (type->base_type) {
    case vtn_base_type_array:
+   case vtn_base_type_matrix:
       for (unsigned i = 0; i < type->length; i++) {
          vtn_ssa_value_add_to_call_params(b, value->elems[i],
                                           type->array_element,
@@ -152,6 +155,7 @@ vtn_ssa_value_load_function_param(struct vtn_builder *b,
 {
    switch (type->base_type) {
    case vtn_base_type_array:
+   case vtn_base_type_matrix:
       for (unsigned i = 0; i < type->length; i++) {
          vtn_ssa_value_load_function_param(b, value->elems[i],
                                            type->array_element, param_idx);

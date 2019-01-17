@@ -221,9 +221,7 @@ nv30_context_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    /*XXX: *cough* per-context pushbufs */
    push = screen->base.pushbuf;
    nv30->base.pushbuf = push;
-   nv30->base.pushbuf->user_priv = &nv30->bufctx; /* hack at validate time */
-   nv30->base.pushbuf->rsvd_kick = 16; /* hack in screen before first space */
-   nv30->base.pushbuf->kick_notify = nv30_context_kick_notify;
+   push->kick_notify = nv30_context_kick_notify;
 
    nv30->base.invalidate_resource_storage = nv30_invalidate_resource_storage;
 

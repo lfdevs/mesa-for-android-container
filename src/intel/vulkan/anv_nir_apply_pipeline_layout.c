@@ -171,6 +171,8 @@ lower_res_reindex_intrinsic(nir_intrinsic_instr *intrin,
 {
    nir_builder *b = &state->builder;
 
+   b->cursor = nir_before_instr(&intrin->instr);
+
    /* For us, the resource indices are just indices into the binding table and
     * array elements are sequential.  A resource_reindex just turns into an
     * add of the two indices.

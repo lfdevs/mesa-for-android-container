@@ -141,7 +141,8 @@ NineVolumeTexture9_dtor( struct NineVolumeTexture9 *This )
 
     if (This->volumes) {
         for (l = 0; l <= This->base.base.info.last_level; ++l)
-            NineUnknown_Destroy(&This->volumes[l]->base);
+            if (This->volumes[l])
+                NineUnknown_Destroy(&This->volumes[l]->base);
         FREE(This->volumes);
     }
 

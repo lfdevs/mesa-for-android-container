@@ -375,7 +375,7 @@ ttn_emit_declaration(struct ttn_compile *c)
             c->outputs[idx] = var;
 
             for (int i = 0; i < array_size; i++)
-               b->shader->info.outputs_written |= 1 << (var->data.location + i);
+               b->shader->info.outputs_written |= 1ull << (var->data.location + i);
          }
             break;
          case TGSI_FILE_CONSTANT:

@@ -2894,13 +2894,19 @@ vtn_vector_insert(struct vtn_builder *b, nir_ssa_def *src, nir_ssa_def *insert,
    return &vec->dest.dest.ssa;
 }
 
+static nir_ssa_def *
+nir_ieq_imm(nir_builder *b, nir_ssa_def *x, uint64_t i)
+{
+   return nir_ieq(b, x, nir_imm_intN_t(b, i, x->bit_size));
+}
+
 nir_ssa_def *
 vtn_vector_extract_dynamic(struct vtn_builder *b, nir_ssa_def *src,
                            nir_ssa_def *index)
 {
    nir_ssa_def *dest = vtn_vector_extract(b, src, 0);
    for (unsigned i = 1; i < src->num_components; i++)
-      dest = nir_bcsel(&b->nb, nir_ieq(&b->nb, index, nir_imm_int(&b->nb, i)),
+      dest = nir_bcsel(&b->nb, nir_ieq_imm(&b->nb, index, i),
                        vtn_vector_extract(b, src, i), dest);
 
    return dest;
@@ -2912,7 +2918,7 @@ vtn_vector_insert_dynamic(struct vtn_builder *b, nir_ssa_def *src,
 {
    nir_ssa_def *dest = vtn_vector_insert(b, src, insert, 0);
    for (unsigned i = 1; i < src->num_components; i++)
-      dest = nir_bcsel(&b->nb, nir_ieq(&b->nb, index, nir_imm_int(&b->nb, i)),
+      dest = nir_bcsel(&b->nb, nir_ieq_imm(&b->nb, index, i),
                        vtn_vector_insert(b, src, insert, i), dest);
 
    return dest;

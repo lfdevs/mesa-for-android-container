@@ -551,6 +551,7 @@ bool
 v3d_qpu_magic_waddr_is_tsy(enum v3d_qpu_waddr waddr)
 {
         return (waddr == V3D_QPU_WADDR_SYNC ||
+                waddr == V3D_QPU_WADDR_SYNCB ||
                 waddr == V3D_QPU_WADDR_SYNCU);
 }
 

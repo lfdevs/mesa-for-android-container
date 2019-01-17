@@ -29,6 +29,7 @@
 
 #include "eglconfig.h"
 #include "eglcontext.h"
+#include "egldevice.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglcurrent.h"
@@ -215,7 +216,7 @@ init_haiku(_EGLDriver *drv, _EGLDisplay *dpy)
 		_eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
 		return EGL_FALSE;
 	}
-	disp->Device = dev;
+	dpy->Device = dev;
 
 	TRACE("Add configs\n");
 	if (!haiku_add_configs_for_visuals(dpy))

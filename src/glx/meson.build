@@ -150,26 +150,22 @@ libglx = static_library(
     extra_libs_libglx,
   ],
   dependencies : [dep_libdrm, dep_dri2proto, dep_glproto, dep_x11, dep_glvnd],
-  build_by_default : false,
 )
 
-if with_glx == 'dri'
-  libgl = shared_library(
-    gl_lib_name,
-    [],
-    include_directories : [inc_common, inc_glapi, inc_loader, inc_gl_internal],
-    link_with : [libglapi_static, libglapi],
-    link_whole : libglx,
-    link_args : [ld_args_bsymbolic, ld_args_gc_sections, extra_ld_args_libgl],
-    dependencies : [
-      dep_libdrm, dep_dl, dep_m, dep_thread, dep_x11, dep_xcb_glx, dep_xcb,
-      dep_x11_xcb, dep_xcb_dri2, dep_xext, dep_xfixes, dep_xdamage, dep_xxf86vm,
-      extra_deps_libgl,
-    ],
-    version : gl_lib_version,
-    install : true,
-  )
-endif
+libgl = shared_library(
+  gl_lib_name,
+  [],
+  link_with : [libglapi_static, libglapi],
+  link_whole : libglx,
+  link_args : [ld_args_bsymbolic, ld_args_gc_sections, extra_ld_args_libgl],
+  dependencies : [
+    dep_libdrm, dep_dl, dep_m, dep_thread, dep_x11, dep_xcb_glx, dep_xcb,
+    dep_x11_xcb, dep_xcb_dri2, dep_xext, dep_xfixes, dep_xdamage, dep_xxf86vm,
+    extra_deps_libgl,
+  ],
+  version : gl_lib_version,
+  install : true,
+)
 
 if with_tests
   subdir('tests')

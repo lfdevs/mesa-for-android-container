@@ -583,6 +583,72 @@ fs_generator::generate_shuffle(fs_inst *inst,
 }
 
 void
+fs_generator::generate_quad_swizzle(const fs_inst *inst,
+                                    struct brw_reg dst, struct brw_reg src,
+                                    unsigned swiz)
+{
+   /* Requires a quad. */
+   assert(inst->exec_size >= 4);
+
+   if (src.file == BRW_IMMEDIATE_VALUE ||
+       has_scalar_region(src)) {
+      /* The value is uniform across all channels */
+      brw_MOV(p, dst, src);
+
+   } else if (devinfo->gen < 11 && type_sz(src.type) == 4) {
+      /* This only works on 8-wide 32-bit values */
+      assert(inst->exec_size == 8);
+      assert(src.hstride == BRW_HORIZONTAL_STRIDE_1);
+      assert(src.vstride == src.width + 1);
+      brw_set_default_access_mode(p, BRW_ALIGN_16);
+      struct brw_reg swiz_src = stride(src, 4, 4, 1);
+      swiz_src.swizzle = swiz;
+      brw_MOV(p, dst, swiz_src);
+
+   } else {
+      assert(src.hstride == BRW_HORIZONTAL_STRIDE_1);
+      assert(src.vstride == src.width + 1);
+      const struct brw_reg src_0 = suboffset(src, BRW_GET_SWZ(swiz, 0));
+
+      switch (swiz) {
+      case BRW_SWIZZLE_XXXX:
+      case BRW_SWIZZLE_YYYY:
+      case BRW_SWIZZLE_ZZZZ:
+      case BRW_SWIZZLE_WWWW:
+         brw_MOV(p, dst, stride(src_0, 4, 4, 0));
+         break;
+
+      case BRW_SWIZZLE_XXZZ:
+      case BRW_SWIZZLE_YYWW:
+         brw_MOV(p, dst, stride(src_0, 2, 2, 0));
+         break;
+
+      case BRW_SWIZZLE_XYXY:
+      case BRW_SWIZZLE_ZWZW:
+         assert(inst->exec_size == 4);
+         brw_MOV(p, dst, stride(src_0, 0, 2, 1));
+         break;
+
+      default:
+         assert(inst->force_writemask_all);
+         brw_set_default_exec_size(p, cvt(inst->exec_size / 4) - 1);
+
+         for (unsigned c = 0; c < 4; c++) {
+            brw_inst *insn = brw_MOV(
+               p, stride(suboffset(dst, c),
+                         4 * inst->dst.stride, 1, 4 * inst->dst.stride),
+               stride(suboffset(src, BRW_GET_SWZ(swiz, c)), 4, 1, 0));
+
+            brw_inst_set_no_dd_clear(devinfo, insn, c < 3);
+            brw_inst_set_no_dd_check(devinfo, insn, c > 0);
+         }
+
+         break;
+      }
+   }
+}
+
+void
 fs_generator::generate_urb_read(fs_inst *inst,
                                 struct brw_reg dst,
                                 struct brw_reg header)
@@ -2303,23 +2369,9 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          break;
 
       case SHADER_OPCODE_QUAD_SWIZZLE:
-         /* This only works on 8-wide 32-bit values */
-         assert(inst->exec_size == 8);
-         assert(type_sz(src[0].type) == 4);
-         assert(inst->force_writemask_all);
          assert(src[1].file == BRW_IMMEDIATE_VALUE);
          assert(src[1].type == BRW_REGISTER_TYPE_UD);
-
-         if (src[0].file == BRW_IMMEDIATE_VALUE ||
-             (src[0].vstride == 0 && src[0].hstride == 0)) {
-            /* The value is uniform across all channels */
-            brw_MOV(p, dst, src[0]);
-         } else {
-            brw_set_default_access_mode(p, BRW_ALIGN_16);
-            struct brw_reg swiz_src = stride(src[0], 4, 4, 1);
-            swiz_src.swizzle = inst->src[1].ud;
-            brw_MOV(p, dst, swiz_src);
-         }
+         generate_quad_swizzle(inst, dst, src[0], src[1].ud);
          break;
 
       case SHADER_OPCODE_CLUSTER_BROADCAST: {

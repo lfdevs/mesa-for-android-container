@@ -368,6 +368,7 @@ am__EXEEXT_1 = compiler/test_fs_cmod_propagation$(EXEEXT) \
 	compiler/test_vf_float_conversions$(EXEEXT) \
 	compiler/test_vec4_cmod_propagation$(EXEEXT) \
 	compiler/test_vec4_copy_propagation$(EXEEXT) \
+	compiler/test_vec4_dead_code_eliminate$(EXEEXT) \
 	compiler/test_vec4_register_coalesce$(EXEEXT)
 @HAVE_INTEL_VULKAN_TRUE@am__EXEEXT_2 = vulkan/tests/block_pool_no_free$(EXEEXT) \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/tests/state_pool_no_free$(EXEEXT) \
@@ -901,6 +902,12 @@ compiler_test_vec4_copy_propagation_OBJECTS =  \
 	$(am_compiler_test_vec4_copy_propagation_OBJECTS)
 compiler_test_vec4_copy_propagation_DEPENDENCIES =  \
 	$(am__DEPENDENCIES_9)
+am_compiler_test_vec4_dead_code_eliminate_OBJECTS =  \
+	compiler/test_vec4_dead_code_eliminate.$(OBJEXT)
+compiler_test_vec4_dead_code_eliminate_OBJECTS =  \
+	$(am_compiler_test_vec4_dead_code_eliminate_OBJECTS)
+compiler_test_vec4_dead_code_eliminate_DEPENDENCIES =  \
+	$(am__DEPENDENCIES_9)
 am_compiler_test_vec4_register_coalesce_OBJECTS =  \
 	compiler/test_vec4_register_coalesce.$(OBJEXT)
 compiler_test_vec4_register_coalesce_OBJECTS =  \
@@ -1092,6 +1099,7 @@ am__depfiles_remade = ./$(DEPDIR)/vulkan_libvulkan_intel_la-dummy.Plo \
 	compiler/$(DEPDIR)/test_fs_saturate_propagation.Po \
 	compiler/$(DEPDIR)/test_vec4_cmod_propagation.Po \
 	compiler/$(DEPDIR)/test_vec4_copy_propagation.Po \
+	compiler/$(DEPDIR)/test_vec4_dead_code_eliminate.Po \
 	compiler/$(DEPDIR)/test_vec4_register_coalesce.Po \
 	compiler/$(DEPDIR)/test_vf_float_conversions.Po \
 	dev/$(DEPDIR)/libintel_dev_la-gen_device_info.Plo \
@@ -1268,6 +1276,7 @@ SOURCES = $(blorp_libblorp_la_SOURCES) \
 	$(compiler_test_fs_saturate_propagation_SOURCES) \
 	$(compiler_test_vec4_cmod_propagation_SOURCES) \
 	$(compiler_test_vec4_copy_propagation_SOURCES) \
+	$(compiler_test_vec4_dead_code_eliminate_SOURCES) \
 	$(compiler_test_vec4_register_coalesce_SOURCES) \
 	$(compiler_test_vf_float_conversions_SOURCES) \
 	isl/tests/isl_surf_get_image_offset_test.c \
@@ -1302,6 +1311,7 @@ DIST_SOURCES = $(blorp_libblorp_la_SOURCES) \
 	$(compiler_test_fs_saturate_propagation_SOURCES) \
 	$(compiler_test_vec4_cmod_propagation_SOURCES) \
 	$(compiler_test_vec4_copy_propagation_SOURCES) \
+	$(compiler_test_vec4_dead_code_eliminate_SOURCES) \
 	$(compiler_test_vec4_register_coalesce_SOURCES) \
 	$(compiler_test_vf_float_conversions_SOURCES) \
 	isl/tests/isl_surf_get_image_offset_test.c \
@@ -2265,6 +2275,7 @@ COMPILER_TESTS = \
 	compiler/test_vf_float_conversions \
 	compiler/test_vec4_cmod_propagation \
 	compiler/test_vec4_copy_propagation \
+	compiler/test_vec4_dead_code_eliminate \
 	compiler/test_vec4_register_coalesce
 
 compiler_test_fs_cmod_propagation_SOURCES = \
@@ -2295,6 +2306,10 @@ compiler_test_vec4_cmod_propagation_SOURCES = \
 	compiler/test_vec4_cmod_propagation.cpp
 
 compiler_test_vec4_cmod_propagation_LDADD = $(TEST_LIBS)
+compiler_test_vec4_dead_code_eliminate_SOURCES = \
+	compiler/test_vec4_dead_code_eliminate.cpp
+
+compiler_test_vec4_dead_code_eliminate_LDADD = $(TEST_LIBS)
 
 # Strictly speaking this is neither a C++ test nor using gtest - we can address
 # address that at a later point. Until then, this allows us a to simplify things.
@@ -3148,6 +3163,12 @@ compiler/test_vec4_copy_propagation.$(OBJEXT):  \
 compiler/test_vec4_copy_propagation$(EXEEXT): $(compiler_test_vec4_copy_propagation_OBJECTS) $(compiler_test_vec4_copy_propagation_DEPENDENCIES) $(EXTRA_compiler_test_vec4_copy_propagation_DEPENDENCIES) compiler/$(am__dirstamp)
 	@rm -f compiler/test_vec4_copy_propagation$(EXEEXT)
 	$(AM_V_CXXLD)$(CXXLINK) $(compiler_test_vec4_copy_propagation_OBJECTS) $(compiler_test_vec4_copy_propagation_LDADD) $(LIBS)
+compiler/test_vec4_dead_code_eliminate.$(OBJEXT):  \
+	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
+
+compiler/test_vec4_dead_code_eliminate$(EXEEXT): $(compiler_test_vec4_dead_code_eliminate_OBJECTS) $(compiler_test_vec4_dead_code_eliminate_DEPENDENCIES) $(EXTRA_compiler_test_vec4_dead_code_eliminate_DEPENDENCIES) compiler/$(am__dirstamp)
+	@rm -f compiler/test_vec4_dead_code_eliminate$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(compiler_test_vec4_dead_code_eliminate_OBJECTS) $(compiler_test_vec4_dead_code_eliminate_LDADD) $(LIBS)
 compiler/test_vec4_register_coalesce.$(OBJEXT):  \
 	compiler/$(am__dirstamp) compiler/$(DEPDIR)/$(am__dirstamp)
 
@@ -3352,6 +3373,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_fs_saturate_propagation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_vec4_cmod_propagation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_vec4_copy_propagation.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_vec4_dead_code_eliminate.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_vec4_register_coalesce.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@compiler/$(DEPDIR)/test_vf_float_conversions.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@dev/$(DEPDIR)/libintel_dev_la-gen_device_info.Plo@am__quote@ # am--include-marker
@@ -5200,6 +5222,13 @@ compiler/test_vec4_copy_propagation.log: compiler/test_vec4_copy_propagation$(EX
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+compiler/test_vec4_dead_code_eliminate.log: compiler/test_vec4_dead_code_eliminate$(EXEEXT)
+	@p='compiler/test_vec4_dead_code_eliminate$(EXEEXT)'; \
+	b='compiler/test_vec4_dead_code_eliminate'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 compiler/test_vec4_register_coalesce.log: compiler/test_vec4_register_coalesce$(EXEEXT)
 	@p='compiler/test_vec4_register_coalesce$(EXEEXT)'; \
 	b='compiler/test_vec4_register_coalesce'; \
@@ -5456,6 +5485,7 @@ distclean: distclean-am
 	-rm -f compiler/$(DEPDIR)/test_fs_saturate_propagation.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_cmod_propagation.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_copy_propagation.Po
+	-rm -f compiler/$(DEPDIR)/test_vec4_dead_code_eliminate.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_register_coalesce.Po
 	-rm -f compiler/$(DEPDIR)/test_vf_float_conversions.Po
 	-rm -f dev/$(DEPDIR)/libintel_dev_la-gen_device_info.Plo
@@ -5704,6 +5734,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f compiler/$(DEPDIR)/test_fs_saturate_propagation.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_cmod_propagation.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_copy_propagation.Po
+	-rm -f compiler/$(DEPDIR)/test_vec4_dead_code_eliminate.Po
 	-rm -f compiler/$(DEPDIR)/test_vec4_register_coalesce.Po
 	-rm -f compiler/$(DEPDIR)/test_vf_float_conversions.Po
 	-rm -f dev/$(DEPDIR)/libintel_dev_la-gen_device_info.Plo

@@ -749,7 +749,8 @@ st_link_nir(struct gl_context *ctx,
           * the pipe_stream_output->output_register field is based on the
           * pre-compacted driver_locations.
           */
-         if (!prev_shader->sh.LinkedTransformFeedback)
+         if (!(prev_shader->sh.LinkedTransformFeedback &&
+               prev_shader->sh.LinkedTransformFeedback->NumVarying > 0))
             nir_compact_varyings(shader_program->_LinkedShaders[prev]->Program->nir,
                               nir, ctx->API != API_OPENGL_COMPAT);
       }

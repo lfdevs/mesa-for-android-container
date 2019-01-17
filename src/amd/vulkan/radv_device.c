@@ -936,9 +936,9 @@ void radv_GetPhysicalDeviceProperties(
 			2048,
 			2048
 		},
-		.subPixelPrecisionBits                    = 4 /* FIXME */,
-		.subTexelPrecisionBits                    = 4 /* FIXME */,
-		.mipmapPrecisionBits                      = 4 /* FIXME */,
+		.subPixelPrecisionBits                    = 8,
+		.subTexelPrecisionBits                    = 8,
+		.mipmapPrecisionBits                      = 8,
 		.maxDrawIndexedIndexValue                 = UINT32_MAX,
 		.maxDrawIndirectCount                     = UINT32_MAX,
 		.maxSamplerLodBias                        = 16,

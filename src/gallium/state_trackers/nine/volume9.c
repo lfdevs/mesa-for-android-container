@@ -449,7 +449,7 @@ NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
 
     nine_context_box_upload(This->base.device,
                             &From->pending_uploads_counter,
-                            (struct NineUnknown *)This,
+                            (struct NineUnknown *)From,
                             r_dst,
                             This->level,
                             &dst_box,

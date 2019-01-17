@@ -639,7 +639,7 @@ static void virgl_vtest_flush_frontbuffer(struct virgl_winsys *vws,
     * get the data. */
    virgl_vtest_recv_transfer_get_data(vtws, map + offset, size, valid_stride,
                                       &box, res->format,
-                                      util_format_get_stride(res->format, res->width));
+                                      vtws->protocol_version == 0 ? valid_stride : util_format_get_stride(res->format, res->width));
 
    vtws->sws->displaytarget_unmap(vtws->sws, res->dt);
 

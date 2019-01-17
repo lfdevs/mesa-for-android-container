@@ -171,7 +171,7 @@ nv30_fp_state_bind(struct pipe_context *pipe, void *hwcso)
     * code
     */
    if (fp != nv30->state.fragprog)
-      PUSH_RESET(nv30->base.pushbuf, BUFCTX_FRAGPROG);
+      nouveau_bufctx_reset(nv30->bufctx, BUFCTX_FRAGPROG);
 
    nv30->fragprog.program = fp;
    nv30->dirty |= NV30_NEW_FRAGPROG;

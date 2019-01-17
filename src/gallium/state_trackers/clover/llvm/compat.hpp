@@ -58,8 +58,13 @@
 #include <llvm/Analysis/TargetLibraryInfo.h>
 
 #include <clang/Basic/TargetInfo.h>
-#include <clang/Frontend/CodeGenOptions.h>
 #include <clang/Frontend/CompilerInstance.h>
+
+#if HAVE_LLVM >= 0x0800
+#include <clang/Basic/CodeGenOptions.h>
+#else
+#include <clang/Frontend/CodeGenOptions.h>
+#endif
 
 namespace clover {
    namespace llvm {

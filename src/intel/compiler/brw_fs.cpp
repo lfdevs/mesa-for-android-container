@@ -315,6 +315,24 @@ fs_inst::has_source_and_destination_hazard() const
        * may stomp all over it.
        */
       return true;
+   case SHADER_OPCODE_QUAD_SWIZZLE:
+      switch (src[1].ud) {
+      case BRW_SWIZZLE_XXXX:
+      case BRW_SWIZZLE_YYYY:
+      case BRW_SWIZZLE_ZZZZ:
+      case BRW_SWIZZLE_WWWW:
+      case BRW_SWIZZLE_XXZZ:
+      case BRW_SWIZZLE_YYWW:
+      case BRW_SWIZZLE_XYXY:
+      case BRW_SWIZZLE_ZWZW:
+         /* These can be implemented as a single Align1 region on all
+          * platforms, so there's never a hazard between source and
+          * destination.  C.f. fs_generator::generate_quad_swizzle().
+          */
+         return false;
+      default:
+         return !is_uniform(src[0]);
+      }
    default:
       /* The SIMD16 compressed instruction
        *
@@ -3853,6 +3871,9 @@ fs_visitor::lower_integer_multiplication()
             high.offset = inst->dst.offset % REG_SIZE;
 
             if (devinfo->gen >= 7) {
+               if (inst->src[1].abs)
+                  lower_src_modifiers(this, block, inst, 1);
+
                if (inst->src[1].file == IMM) {
                   ibld.MUL(low, inst->src[0],
                            brw_imm_uw(inst->src[1].ud & 0xffff));
@@ -3865,6 +3886,9 @@ fs_visitor::lower_integer_multiplication()
                            subscript(inst->src[1], BRW_REGISTER_TYPE_UW, 1));
                }
             } else {
+               if (inst->src[0].abs)
+                  lower_src_modifiers(this, block, inst, 0);
+
                ibld.MUL(low, subscript(inst->src[0], BRW_REGISTER_TYPE_UW, 0),
                         inst->src[1]);
                ibld.MUL(high, subscript(inst->src[0], BRW_REGISTER_TYPE_UW, 1),
@@ -3882,6 +3906,18 @@ fs_visitor::lower_integer_multiplication()
          }
 
       } else if (inst->opcode == SHADER_OPCODE_MULH) {
+         /* According to the BDW+ BSpec page for the "Multiply Accumulate
+          * High" instruction:
+          *
+          *  "An added preliminary mov is required for source modification on
+          *   src1:
+          *      mov (8) r3.0<1>:d -r3<8;8,1>:d
+          *      mul (8) acc0:d r2.0<8;8,1>:d r3.0<16;8,2>:uw
+          *      mach (8) r5.0<1>:d r2.0<8;8,1>:d r3.0<8;8,1>:d"
+          */
+         if (devinfo->gen >= 8 && (inst->src[1].negate || inst->src[1].abs))
+            lower_src_modifiers(this, block, inst, 1);
+
          /* Should have been lowered to 8-wide. */
          assert(inst->exec_size <= get_lowered_simd_width(devinfo, inst));
          const fs_reg acc = retype(brw_acc_reg(inst->exec_size),
@@ -3897,8 +3933,6 @@ fs_visitor::lower_integer_multiplication()
              * On Gen8, the multiply instruction does a full 32x32-bit
              * multiply, but in order to do a 64-bit multiply we can simulate
              * the previous behavior and then use a MACH instruction.
-             *
-             * FINISHME: Don't use source modifiers on src1.
              */
             assert(mul->src[1].type == BRW_REGISTER_TYPE_D ||
                    mul->src[1].type == BRW_REGISTER_TYPE_UD);
@@ -5534,9 +5568,14 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    case SHADER_OPCODE_URB_WRITE_SIMD8_MASKED_PER_SLOT:
       return MIN2(8, inst->exec_size);
 
-   case SHADER_OPCODE_QUAD_SWIZZLE:
-      return 8;
-
+   case SHADER_OPCODE_QUAD_SWIZZLE: {
+      const unsigned swiz = inst->src[1].ud;
+      return (is_uniform(inst->src[0]) ?
+                 get_fpu_lowered_simd_width(devinfo, inst) :
+              devinfo->gen < 11 && type_sz(inst->src[0].type) == 4 ? 8 :
+              swiz == BRW_SWIZZLE_XYXY || swiz == BRW_SWIZZLE_ZWZW ? 4 :
+              get_fpu_lowered_simd_width(devinfo, inst));
+   }
    case SHADER_OPCODE_MOV_INDIRECT: {
       /* From IVB and HSW PRMs:
        *
@@ -5601,8 +5640,10 @@ needs_src_copy(const fs_builder &lbld, const fs_inst *inst, unsigned i)
 static fs_reg
 emit_unzip(const fs_builder &lbld, fs_inst *inst, unsigned i)
 {
+   assert(lbld.group() >= inst->group);
+
    /* Specified channel group from the source region. */
-   const fs_reg src = horiz_offset(inst->src[i], lbld.group());
+   const fs_reg src = horiz_offset(inst->src[i], lbld.group() - inst->group);
 
    if (needs_src_copy(lbld, inst, i)) {
       /* Builder of the right width to perform the copy avoiding uninitialized
@@ -5691,9 +5732,10 @@ emit_zip(const fs_builder &lbld_before, const fs_builder &lbld_after,
 {
    assert(lbld_before.dispatch_width() == lbld_after.dispatch_width());
    assert(lbld_before.group() == lbld_after.group());
+   assert(lbld_after.group() >= inst->group);
 
    /* Specified channel group from the destination region. */
-   const fs_reg dst = horiz_offset(inst->dst, lbld_after.group());
+   const fs_reg dst = horiz_offset(inst->dst, lbld_after.group() - inst->group);
    const unsigned dst_size = inst->size_written /
       inst->dst.component_size(inst->exec_size);
 

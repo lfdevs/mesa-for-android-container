@@ -660,7 +660,7 @@ NineSurface9_CopyMemToDefault( struct NineSurface9 *This,
 
     nine_context_box_upload(This->base.base.device,
                             &From->pending_uploads_counter,
-                            (struct NineUnknown *)This,
+                            (struct NineUnknown *)From,
                             r_dst,
                             This->level,
                             &dst_box,

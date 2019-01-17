@@ -392,6 +392,7 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
                 for (int i = 0; i < ARRAY_SIZE(state->last_r); i++)
                         add_write_dep(state, &state->last_r[i], n);
                 add_write_dep(state, &state->last_sf, n);
+                add_write_dep(state, &state->last_rtop, n);
 
                 /* Scoreboard-locking operations have to stay after the last
                  * thread switch.

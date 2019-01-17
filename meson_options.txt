@@ -318,3 +318,9 @@ option(
   choices : ['auto', 'true', 'false'],
   description : 'Enable VK_EXT_acquire_xlib_display.'
 )
+option(
+  'glx-direct',
+  type : 'boolean',
+  value : true,
+  description : 'Enable direct rendering in GLX and EGL for DRI',
+)

@@ -9,3 +9,80 @@
  #  include <unistd.h>
  #elif defined(PIPE_OS_APPLE) || defined(PIPE_OS_BSD)
  #  include <sys/sysctl.h>
+@@ -124,7 +124,7 @@ os_get_option(const char *name)
+ bool
+ os_get_total_physical_memory(uint64_t *size)
+ {
+-#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_CYGWIN) || defined(PIPE_OS_SOLARIS)
++#if defined(PIPE_OS_LINUX) || defined(PIPE_OS_CYGWIN) || defined(PIPE_OS_SOLARIS) || defined(PIPE_OS_HURD)
+    const long phys_pages = sysconf(_SC_PHYS_PAGES);
+    const long page_size = sysconf(_SC_PAGE_SIZE);
+ 
+--- a/src/util/xmlconfig.c
++++ b/src/util/xmlconfig.c
+@@ -967,12 +967,18 @@ parseConfigDir(struct OptConfData *data,
+         return;
+ 
+     for (i = 0; i < count; i++) {
+-        char filename[PATH_MAX];
++        char *filename;
+ 
+-        snprintf(filename, PATH_MAX, "%s/%s", dirname, entries[i]->d_name);
++        if (asprintf(&filename, "%s/%s", dirname, entries[i]->d_name) == -1) {
++            __driUtilMessage ("Error constructing config file name: %s.",
++                              strerror (errno));
++            free(entries[i]);
++            continue;
++        }
+         free(entries[i]);
+ 
+         parseOneConfigFile(data, filename);
++        free(filename);
+     }
+ 
+     free(entries);
+@@ -1006,10 +1012,15 @@ driParseConfigFiles(driOptionCache *cach
+     parseOneConfigFile(&userData, SYSCONFDIR "/drirc");
+ 
+     if ((home = getenv ("HOME"))) {
+-        char filename[PATH_MAX];
++        char *filename;
+ 
+-        snprintf(filename, PATH_MAX, "%s/.drirc", home);
+-        parseOneConfigFile(&userData, filename);
++        if (asprintf(&filename, "%s/.drirc", home) == -1) {
++            __driUtilMessage ("Error constructing config file name: %s.",
++                              strerror (errno));
++        } else {
++            parseOneConfigFile(&userData, filename);
++            free(filename);
++        }
+     }
+ }
+ 
+--- a/src/egl/main/egldevice.c
++++ b/src/egl/main/egldevice.c
+@@ -211,7 +211,12 @@ _eglDeviceSupports(_EGLDevice *dev, _EGL
+ const char *
+ _eglGetDRMDeviceRenderNode(_EGLDevice *dev)
+ {
++#ifdef HAVE_LIBDRM
+    return dev->device->nodes[DRM_NODE_RENDER];
++#else
++   _eglLog(_EGL_FATAL, "Driver bug: Built without libdrm, yet requesting DRM render node");
++   return NULL;
++#endif
+ }
+ 
+ EGLBoolean
+--- a/src/egl/meson.build
++++ b/src/egl/meson.build
+@@ -87,7 +87,7 @@ g_egldispatchstubs_h = custom_target(
+   capture : true,
+ )
+ 
+-if with_dri2
++if with_dri
+   files_egl += files(
+     'drivers/dri2/egl_dri2.c',
+     'drivers/dri2/egl_dri2.h',

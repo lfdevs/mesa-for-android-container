@@ -2882,9 +2882,11 @@ LLVMValueRef ac_trim_vector(struct ac_llvm_context *ctx, LLVMValueRef value,
 	if (count == num_components)
 		return value;
 
-	LLVMValueRef masks[] = {
-	    ctx->i32_0, ctx->i32_1,
-	    LLVMConstInt(ctx->i32, 2, false), LLVMConstInt(ctx->i32, 3, false)};
+	LLVMValueRef masks[MAX2(count, 2)];
+	masks[0] = ctx->i32_0;
+	masks[1] = ctx->i32_1;
+	for (unsigned i = 2; i < count; i++)
+		masks[i] = LLVMConstInt(ctx->i32, i, false);
 
 	if (count == 1)
 		return LLVMBuildExtractElement(ctx->builder, value, masks[0],

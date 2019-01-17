@@ -30,6 +30,7 @@ libcltgsi = static_library(
   files('tgsi/compiler.cpp', 'tgsi/invocation.hpp'),
   include_directories : clover_incs,
   cpp_args : [cpp_vis_args],
+  override_options : clover_cpp_std,
 )
 
 libclllvm = static_library(
@@ -56,6 +57,7 @@ libclllvm = static_library(
     )),
   ],
   dependencies : [dep_llvm, dep_elf],
+  override_options : clover_cpp_std,
 )
 
 clover_files = files(
@@ -119,4 +121,5 @@ libclover = static_library(
   include_directories : clover_incs,
   cpp_args : [clover_cpp_args, cpp_vis_args],
   link_with : [libcltgsi, libclllvm],
+  override_options : clover_cpp_std,
 )
