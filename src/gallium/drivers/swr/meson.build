@@ -190,11 +190,7 @@ swr_arch_libs = []
 swr_arch_defines = []
 
 swr_avx_args = cpp.first_supported_argument(
-  '-target-cpu=sandybridge', '-mavx', '-march=core-avx', '-tp=sandybridge',
-  prefix : '''
-    #if !defined(__AVX__)
-    # error
-    #endif ''',
+  '-mavx', '-target-cpu=sandybridge', '-march=core-avx', '-tp=sandybridge',
 )
 if swr_avx_args == []
   error('Cannot find AVX support for swr. (these are required for SWR an all architectures.)')
@@ -215,18 +211,10 @@ endif
 
 if with_swr_arches.contains('avx2')
   swr_avx2_args = cpp.first_supported_argument(
-    '-target-cpu=haswell', '-march=core-avx2', '-tp=haswell',
-    prefix : '''
-      #if !defined(__AVX2__)
-      # error
-      #endif ''',
+    '-march=core-avx2', '-target-cpu=haswell', '-tp=haswell',
   )
   if swr_avx2_args == []
-    if cpp.has_argument(['-mavx2', '-mfma', '-mbmi2', '-mf16c'],
-                        prefix : '''
-                          #if !defined(__AVX2__)
-                          # error
-                          #endif ''')
+    if cpp.has_argument(['-mavx2', '-mfma', '-mbmi2', '-mf16c'])
       swr_avx2_args = ['-mavx2', '-mfma', '-mbmi2', '-mf16c']
     else
       error('Cannot find AVX2 support for swr.')
@@ -248,11 +236,7 @@ endif
 
 if with_swr_arches.contains('knl')
   swr_knl_args = cpp.first_supported_argument(
-    '-target-cpu=mic-knl', '-march=knl', '-xMIC-AVX512',
-    prefix : '''
-      #if !defined(__AVX512F__) || !defined(__AVX512ER__)
-      # error
-      #endif ''',
+    '-march=knl', '-target-cpu=mic-knl', '-xMIC-AVX512',
   )
   if swr_knl_args == []
     error('Cannot find KNL support for swr.')
@@ -264,7 +248,7 @@ if with_swr_arches.contains('knl')
     [files_swr_common, files_swr_arch],
     cpp_args : [
       swr_cpp_args, swr_knl_args, '-DKNOB_ARCH=KNOB_ARCH_AVX512',
-      '-DKNOB_ARCH_KNIGHTS',
+      '-DSIMD_ARCH_KNIGHTS',
     ],
     link_args : [ld_args_gc_sections],
     include_directories : [swr_incs],
@@ -276,11 +260,7 @@ endif
 
 if with_swr_arches.contains('skx')
   swr_skx_args = cpp.first_supported_argument(
-    '-target-cpu=x86-skylake', '-march=skylake-avx512', '-xCORE-AVX512',
-    prefix : '''
-      #if !defined(__AVX512F__) || !defined(__AVX512BW__)
-      # error
-      #endif ''',
+    '-march=skylake-avx512', '-target-cpu=x86-skylake', '-xCORE-AVX512',
   )
   if swr_skx_args == []
     error('Cannot find SKX support for swr.')

@@ -157,7 +157,8 @@ struct gen_l3_config;
 #define MAX_SCISSORS    16
 #define MAX_PUSH_CONSTANTS_SIZE 128
 #define MAX_DYNAMIC_BUFFERS 16
-#define MAX_IMAGES 8
+#define MAX_IMAGES 64
+#define MAX_GEN8_IMAGES 8
 #define MAX_PUSH_DESCRIPTORS 32 /* Minimum requirement */
 
 /* The kernel relocation API has a limitation of a 32-bit delta value
@@ -1874,7 +1875,7 @@ struct anv_push_constants {
    uint32_t base_work_group_id[3];
 
    /* Image data for image_load_store on pre-SKL */
-   struct brw_image_param images[MAX_IMAGES];
+   struct brw_image_param images[MAX_GEN8_IMAGES];
 };
 
 struct anv_dynamic_state {

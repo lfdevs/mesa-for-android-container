@@ -256,7 +256,16 @@ get_tcs_num_patches(struct radv_shader_context *ctx)
 	/* Make sure that the data fits in LDS. This assumes the shaders only
 	 * use LDS for the inputs and outputs.
 	 */
-	hardware_lds_size = ctx->options->chip_class >= CIK ? 65536 : 32768;
+	hardware_lds_size = 32768;
+
+	/* Looks like STONEY hangs if we use more than 32 KiB LDS in a single
+	 * threadgroup, even though there is more than 32 KiB LDS.
+	 *
+	 * Test: dEQP-VK.tessellation.shader_input_output.barrier
+	 */
+	if (ctx->options->chip_class >= CIK && ctx->options->family != CHIP_STONEY)
+		hardware_lds_size = 65536;
+
 	num_patches = MIN2(num_patches, hardware_lds_size / (input_patch_size + output_patch_size));
 	/* Make sure the output data fits in the offchip buffer */
 	num_patches = MIN2(num_patches, (ctx->options->tess_offchip_block_dw_size * 4) / output_patch_size);
@@ -2160,7 +2169,7 @@ handle_fs_input_decl(struct radv_shader_context *ctx,
 
 		interp = lookup_interp_param(&ctx->abi, variable->data.interpolation, interp_type);
 	}
-	bool is_16bit = glsl_type_is_16bit(variable->type);
+	bool is_16bit = glsl_type_is_16bit(glsl_without_array(variable->type));
 	LLVMTypeRef type = is_16bit ? ctx->ac.i16 : ctx->ac.i32;
 	if (interp == NULL)
 		interp = LLVMGetUndef(type);

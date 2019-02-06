@@ -1998,6 +1998,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
                    gl_shader_stage stage,
                    struct anv_state *bt_state)
 {
+   const struct gen_device_info *devinfo = &cmd_buffer->device->info;
    struct anv_subpass *subpass = cmd_buffer->state.subpass;
    struct anv_cmd_pipeline_state *pipe_state;
    struct anv_pipeline *pipeline;
@@ -2055,7 +2056,8 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
    if (map->surface_count == 0)
       goto out;
 
-   if (map->image_count > 0) {
+   /* We only use push constant space for images before gen9 */
+   if (map->image_count > 0 && devinfo->gen < 9) {
       VkResult result =
          anv_cmd_buffer_ensure_push_constant_field(cmd_buffer, stage, images);
       if (result != VK_SUCCESS)
@@ -2168,11 +2170,15 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          surface_state = sstate.state;
          assert(surface_state.alloc_size);
          add_surface_state_relocs(cmd_buffer, sstate);
+         if (devinfo->gen < 9) {
+            assert(image < MAX_GEN8_IMAGES);
+            struct brw_image_param *image_param =
+               &cmd_buffer->state.push_constants[stage]->images[image];
 
-         struct brw_image_param *image_param =
-            &cmd_buffer->state.push_constants[stage]->images[image++];
-
-         *image_param = desc->image_view->planes[binding->plane].storage_image_param;
+            *image_param =
+               desc->image_view->planes[binding->plane].storage_image_param;
+         }
+         image++;
          break;
       }
 
@@ -2217,11 +2223,14 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          assert(surface_state.alloc_size);
          add_surface_reloc(cmd_buffer, surface_state,
                            desc->buffer_view->address);
+         if (devinfo->gen < 9) {
+            assert(image < MAX_GEN8_IMAGES);
+            struct brw_image_param *image_param =
+               &cmd_buffer->state.push_constants[stage]->images[image];
 
-         struct brw_image_param *image_param =
-            &cmd_buffer->state.push_constants[stage]->images[image++];
-
-         *image_param = desc->buffer_view->storage_image_param;
+            *image_param = desc->buffer_view->storage_image_param;
+         }
+         image++;
          break;
 
       default:

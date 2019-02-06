@@ -1662,7 +1662,7 @@ static inline void si_shader_selector_key(struct pipe_context *ctx,
 		key->part.ps.epilog.alpha_func = si_get_alpha_test_func(sctx);
 
 		/* ps_uses_fbfetch is true only if the color buffer is bound. */
-		if (sctx->ps_uses_fbfetch) {
+		if (sctx->ps_uses_fbfetch && !sctx->blitter->running) {
 			struct pipe_surface *cb0 = sctx->framebuffer.state.cbufs[0];
 			struct pipe_resource *tex = cb0->texture;
 

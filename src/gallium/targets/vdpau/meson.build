@@ -54,13 +54,14 @@ libvdpau_gallium = shared_library(
     dep_thread, driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
   ],
   link_depends : vdpau_link_depends,
+  soversion : '@0@.@1@.0'.format(VDPAU_MAJOR, VDPAU_MINOR),
 )
 foreach d : [[with_gallium_r300, 'r300'],
              [with_gallium_r600, 'r600'],
              [with_gallium_radeonsi, 'radeonsi'],
              [with_gallium_nouveau, 'nouveau']]
   if d[0]
-    vdpau_drivers += 'libvdpau_@0@.so.1.0.0'.format(d[1])
+    vdpau_drivers += 'libvdpau_@0@.so.@1@.@2@.0'.format(d[1], VDPAU_MAJOR, VDPAU_MINOR)
   endif
 endforeach
 

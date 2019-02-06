@@ -76,13 +76,13 @@ add_var_xfb_outputs(nir_xfb_info *xfb,
          nir_xfb_output_info *output = &xfb->outputs[xfb->output_count++];
 
          output->buffer = var->data.xfb_buffer;
-         output->offset = *offset;
+         output->offset = *offset + s * 16;
          output->location = *location;
          output->component_mask = (comp_mask >> (s * 4)) & 0xf;
 
          (*location)++;
-         *offset += comp_slots * 4;
       }
+      *offset += comp_slots * 4;
    }
 }
 

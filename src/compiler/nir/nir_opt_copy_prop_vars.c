@@ -143,9 +143,19 @@ gather_vars_written(struct copy_prop_var_state *state,
             written->modes = nir_var_shader_out;
             break;
 
+         case nir_intrinsic_deref_atomic_add:
+         case nir_intrinsic_deref_atomic_imin:
+         case nir_intrinsic_deref_atomic_umin:
+         case nir_intrinsic_deref_atomic_imax:
+         case nir_intrinsic_deref_atomic_umax:
+         case nir_intrinsic_deref_atomic_and:
+         case nir_intrinsic_deref_atomic_or:
+         case nir_intrinsic_deref_atomic_xor:
+         case nir_intrinsic_deref_atomic_exchange:
+         case nir_intrinsic_deref_atomic_comp_swap:
          case nir_intrinsic_store_deref:
          case nir_intrinsic_copy_deref: {
-            /* Destination in _both_ store_deref and copy_deref is src[0]. */
+            /* Destination in all of store_deref, copy_deref and the atomics is src[0]. */
             nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
 
             uintptr_t mask = intrin->intrinsic == nir_intrinsic_store_deref ?
@@ -749,6 +759,19 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
          store_to_entry(state, dst_entry, &value, 0xf);
          break;
       }
+
+      case nir_intrinsic_deref_atomic_add:
+      case nir_intrinsic_deref_atomic_imin:
+      case nir_intrinsic_deref_atomic_umin:
+      case nir_intrinsic_deref_atomic_imax:
+      case nir_intrinsic_deref_atomic_umax:
+      case nir_intrinsic_deref_atomic_and:
+      case nir_intrinsic_deref_atomic_or:
+      case nir_intrinsic_deref_atomic_xor:
+      case nir_intrinsic_deref_atomic_exchange:
+      case nir_intrinsic_deref_atomic_comp_swap:
+         kill_aliases(copies, nir_src_as_deref(intrin->src[0]), 0xf);
+         break;
 
       default:
          break;

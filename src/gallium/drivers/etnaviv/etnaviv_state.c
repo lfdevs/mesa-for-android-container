@@ -37,6 +37,7 @@
 #include "etnaviv_surface.h"
 #include "etnaviv_translate.h"
 #include "etnaviv_util.h"
+#include "util/u_framebuffer.h"
 #include "util/u_helpers.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
@@ -130,7 +131,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       assert(res->layout & ETNA_LAYOUT_BIT_TILE); /* Cannot render to linear surfaces */
       etna_update_render_resource(pctx, cbuf->base.texture);
 
-      pipe_surface_reference(&cs->cbuf, &cbuf->base);
       cs->PE_COLOR_FORMAT =
          VIVS_PE_COLOR_FORMAT_FORMAT(translate_rs_format(cbuf->base.format)) |
          VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK |
@@ -182,7 +182,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       nr_samples_color = cbuf->base.texture->nr_samples;
    } else {
-      pipe_surface_reference(&cs->cbuf, NULL);
       /* Clearing VIVS_PE_COLOR_FORMAT_COMPONENTS__MASK and
        * VIVS_PE_COLOR_FORMAT_OVERWRITE prevents us from overwriting the
        * color target */
@@ -201,7 +200,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       etna_update_render_resource(pctx, zsbuf->base.texture);
 
-      pipe_surface_reference(&cs->zsbuf, &zsbuf->base);
       assert(res->layout &ETNA_LAYOUT_BIT_TILE); /* Cannot render to linear surfaces */
 
       uint32_t depth_format = translate_depth_format(zsbuf->base.format);
@@ -252,7 +250,6 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       nr_samples_depth = zsbuf->base.texture->nr_samples;
    } else {
-      pipe_surface_reference(&cs->zsbuf, NULL);
       cs->PE_DEPTH_CONFIG = VIVS_PE_DEPTH_CONFIG_DEPTH_MODE_NONE;
       cs->PE_DEPTH_ADDR.bo = NULL;
       cs->PE_DEPTH_STRIDE = 0;
@@ -325,7 +322,8 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
     */
    cs->PE_LOGIC_OP = VIVS_PE_LOGIC_OP_SINGLE_BUFFER(ctx->specs.single_buffer ? 3 : 0);
 
-   ctx->framebuffer_s = *sv; /* keep copy of original structure */
+   /* keep copy of original structure */
+   util_copy_framebuffer_state(&ctx->framebuffer_s, sv);
    ctx->dirty |= ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_DERIVE_TS;
 }
 

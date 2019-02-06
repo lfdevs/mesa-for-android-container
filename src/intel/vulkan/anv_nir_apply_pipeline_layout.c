@@ -428,7 +428,8 @@ setup_vec4_uniform_value(uint32_t *params, uint32_t offset, unsigned n)
 }
 
 void
-anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
+anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
+                              bool robust_buffer_access,
                               struct anv_pipeline_layout *layout,
                               nir_shader *shader,
                               struct brw_stage_prog_data *prog_data,
@@ -439,7 +440,7 @@ anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
    struct apply_pipeline_layout_state state = {
       .shader = shader,
       .layout = layout,
-      .add_bounds_checks = pipeline->device->robust_buffer_access,
+      .add_bounds_checks = robust_buffer_access,
    };
 
    void *mem_ctx = ralloc_context(NULL);
@@ -518,8 +519,8 @@ anv_nir_apply_pipeline_layout(struct anv_pipeline *pipeline,
       }
    }
 
-   if (map->image_count > 0) {
-      assert(map->image_count <= MAX_IMAGES);
+   if (map->image_count > 0 && pdevice->compiler->devinfo->gen < 9) {
+      assert(map->image_count <= MAX_GEN8_IMAGES);
       assert(shader->num_uniforms == prog_data->nr_params * 4);
       state.first_image_uniform = shader->num_uniforms;
       uint32_t *param = brw_stage_prog_data_add_params(prog_data,

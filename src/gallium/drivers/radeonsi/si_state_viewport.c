@@ -146,6 +146,8 @@ static void si_emit_one_scissor(struct si_context *ctx,
 			S_028254_BR_Y(final.maxy));
 }
 
+#define MAX_PA_SU_HARDWARE_SCREEN_OFFSET 8176
+
 static void si_emit_guardband(struct si_context *ctx)
 {
 	const struct si_state_rasterizer *rs = ctx->queued.named.rasterizer;
@@ -179,13 +181,12 @@ static void si_emit_guardband(struct si_context *ctx)
 	int hw_screen_offset_x = (vp_as_scissor.maxx + vp_as_scissor.minx) / 2;
 	int hw_screen_offset_y = (vp_as_scissor.maxy + vp_as_scissor.miny) / 2;
 
-	const unsigned hw_screen_offset_max = 8176;
 	/* SI-CI need to align the offset to an ubertile consisting of all SEs. */
 	const unsigned hw_screen_offset_alignment =
 		ctx->chip_class >= VI ? 16 : MAX2(ctx->screen->se_tile_repeat, 16);
 
-	hw_screen_offset_x = CLAMP(hw_screen_offset_x, 0, hw_screen_offset_max);
-	hw_screen_offset_y = CLAMP(hw_screen_offset_y, 0, hw_screen_offset_max);
+	hw_screen_offset_x = CLAMP(hw_screen_offset_x, 0, MAX_PA_SU_HARDWARE_SCREEN_OFFSET);
+	hw_screen_offset_y = CLAMP(hw_screen_offset_y, 0, MAX_PA_SU_HARDWARE_SCREEN_OFFSET);
 
 	/* Align the screen offset by dropping the low bits. */
 	hw_screen_offset_x &= ~(hw_screen_offset_alignment - 1);
@@ -331,6 +332,20 @@ static void si_set_viewport_states(struct pipe_context *pctx,
 		unsigned w = scissor->maxx - scissor->minx;
 		unsigned h = scissor->maxy - scissor->miny;
 		unsigned max_extent = MAX2(w, h);
+
+		unsigned center_x = (scissor->maxx + scissor->minx) / 2;
+		unsigned center_y = (scissor->maxy + scissor->miny) / 2;
+		unsigned max_center = MAX2(center_x, center_y);
+
+		/* PA_SU_HARDWARE_SCREEN_OFFSET can't center viewports whose
+		 * center start farther than MAX_PA_SU_HARDWARE_SCREEN_OFFSET.
+		 * (for example, a 1x1 viewport in the lower right corner of
+		 * 16Kx16K) Such viewports need a greater guardband, so they
+		 * have to use a worse quantization mode.
+		 */
+		unsigned distance_off_center =
+			MAX2(0, (int)max_center - MAX_PA_SU_HARDWARE_SCREEN_OFFSET);
+		max_extent += distance_off_center;
 
 		/* Determine the best quantization mode (subpixel precision),
 		 * but also leave enough space for the guardband.

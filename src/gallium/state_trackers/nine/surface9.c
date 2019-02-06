@@ -668,6 +668,19 @@ NineSurface9_CopyMemToDefault( struct NineSurface9 *This,
                             From->data, From->stride,
                             0, /* depth = 1 */
                             &src_box);
+    if (From->texture == D3DRTYPE_TEXTURE) {
+        struct NineTexture9 *tex =
+            NineTexture9(From->base.base.container);
+        /* D3DPOOL_SYSTEMMEM with buffer content passed
+         * from the user: execute the upload right now.
+         * It is possible it is enough to delay upload
+         * until the surface refcount is 0, but the
+         * bind refcount may not be 0, and thus the dtor
+         * is not executed (and doesn't trigger the
+         * pending_uploads_counter check). */
+        if (!tex->managed_buffer)
+            nine_csmt_process(This->base.base.device);
+    }
 
     if (This->data_conversion)
         (void) util_format_translate(This->format_conversion,

@@ -50,7 +50,9 @@ swr_fence_cb(uint64_t userData, uint64_t userData2, uint64_t userData3)
    swr_fence_do_work(fence);
 
    /* Correct value is in SwrSync data, and not the fence write field. */
-   fence->read = userData2;
+   /* Contexts may not finish in order, but fence value always increases */
+   if (fence->read < userData2)
+      fence->read = userData2;
 }
 
 /*

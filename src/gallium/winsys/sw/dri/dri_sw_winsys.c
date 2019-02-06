@@ -244,15 +244,20 @@ dri_sw_displaytarget_display(struct sw_winsys *ws,
    unsigned width, height, x = 0, y = 0;
    unsigned blsize = util_format_get_blocksize(dri_sw_dt->format);
    unsigned offset = 0;
+   unsigned offset_x = 0;
    char *data = dri_sw_dt->data;
-
+   bool is_shm = dri_sw_dt->shmid != -1;
    /* Set the width to 'stride / cpp'.
     *
     * PutImage correctly clips to the width of the dst drawable.
     */
    if (box) {
-      offset = (dri_sw_dt->stride * box->y) + box->x * blsize;
+      offset = dri_sw_dt->stride * box->y;
+      offset_x = box->x * blsize;
       data += offset;
+      /* don't add x offset for shm, the put_image_shm will deal with it */
+      if (!is_shm)
+         data += offset_x;
       x = box->x;
       y = box->y;
       width = box->width;
@@ -262,8 +267,8 @@ dri_sw_displaytarget_display(struct sw_winsys *ws,
       height = dri_sw_dt->height;
    }
 
-   if (dri_sw_dt->shmid != -1) {
-      dri_sw_ws->lf->put_image_shm(dri_drawable, dri_sw_dt->shmid, dri_sw_dt->data, offset,
+   if (is_shm) {
+      dri_sw_ws->lf->put_image_shm(dri_drawable, dri_sw_dt->shmid, dri_sw_dt->data, offset, offset_x,
                                    x, y, width, height, dri_sw_dt->stride);
       return;
    }

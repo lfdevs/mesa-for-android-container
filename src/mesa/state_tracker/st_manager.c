@@ -1071,7 +1071,12 @@ st_api_make_current(struct st_api *stapi, struct st_context_iface *stctxi,
       st_framebuffers_purge(st);
    }
    else {
+      GET_CURRENT_CONTEXT(ctx);
+
       ret = _mesa_make_current(NULL, NULL, NULL);
+
+      if (ctx)
+         st_framebuffers_purge(ctx->st);
    }
 
    return ret;

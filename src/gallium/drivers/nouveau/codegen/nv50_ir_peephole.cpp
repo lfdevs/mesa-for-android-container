@@ -1044,7 +1044,7 @@ ConstantFolding::opnd(Instruction *i, ImmediateValue &imm0, int s)
       break;
    }
    case OP_MUL:
-      if (i->dType == TYPE_F32)
+      if (i->dType == TYPE_F32 && !i->precise)
          tryCollapseChainedMULs(i, s, imm0);
 
       if (i->subOp == NV50_IR_SUBOP_MUL_HIGH) {

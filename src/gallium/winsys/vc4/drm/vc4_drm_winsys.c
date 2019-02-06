@@ -37,5 +37,5 @@ vc4_drm_screen_create(int fd)
 struct pipe_screen *
 vc4_drm_screen_create_renderonly(struct renderonly *ro)
 {
-   return vc4_screen_create(fcntl(ro->gpu_fd, F_DUPFD_CLOEXEC, 3), ro);
+   return vc4_screen_create(ro->gpu_fd, ro);
 }

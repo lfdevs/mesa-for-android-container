@@ -94,7 +94,22 @@ VkResult anv_CreateDescriptorSetLayout(
    uint32_t immutable_sampler_count = 0;
    for (uint32_t j = 0; j < pCreateInfo->bindingCount; j++) {
       max_binding = MAX2(max_binding, pCreateInfo->pBindings[j].binding);
-      if (pCreateInfo->pBindings[j].pImmutableSamplers)
+
+      /* From the Vulkan 1.1.97 spec for VkDescriptorSetLayoutBinding:
+       *
+       *    "If descriptorType specifies a VK_DESCRIPTOR_TYPE_SAMPLER or
+       *    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER type descriptor, then
+       *    pImmutableSamplers can be used to initialize a set of immutable
+       *    samplers. [...]  If descriptorType is not one of these descriptor
+       *    types, then pImmutableSamplers is ignored.
+       *
+       * We need to be careful here and only parse pImmutableSamplers if we
+       * have one of the right descriptor types.
+       */
+      VkDescriptorType desc_type = pCreateInfo->pBindings[j].descriptorType;
+      if ((desc_type == VK_DESCRIPTOR_TYPE_SAMPLER ||
+           desc_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+          pCreateInfo->pBindings[j].pImmutableSamplers)
          immutable_sampler_count += pCreateInfo->pBindings[j].descriptorCount;
    }
 
@@ -153,6 +168,12 @@ VkResult anv_CreateDescriptorSetLayout(
       if (binding == NULL)
          continue;
 
+      /* We temporarily stashed the pointer to the binding in the
+       * immutable_samplers pointer.  Now that we've pulled it back out
+       * again, we reset immutable_samplers to NULL.
+       */
+      set_layout->binding[b].immutable_samplers = NULL;
+
       if (binding->descriptorCount == 0)
          continue;
 
@@ -169,6 +190,15 @@ VkResult anv_CreateDescriptorSetLayout(
          anv_foreach_stage(s, binding->stageFlags) {
             set_layout->binding[b].stage[s].sampler_index = sampler_count[s];
             sampler_count[s] += binding->descriptorCount;
+         }
+
+         if (binding->pImmutableSamplers) {
+            set_layout->binding[b].immutable_samplers = samplers;
+            samplers += binding->descriptorCount;
+
+            for (uint32_t i = 0; i < binding->descriptorCount; i++)
+               set_layout->binding[b].immutable_samplers[i] =
+                  anv_sampler_from_handle(binding->pImmutableSamplers[i]);
          }
          break;
       default:
@@ -219,17 +249,6 @@ VkResult anv_CreateDescriptorSetLayout(
          break;
       default:
          break;
-      }
-
-      if (binding->pImmutableSamplers) {
-         set_layout->binding[b].immutable_samplers = samplers;
-         samplers += binding->descriptorCount;
-
-         for (uint32_t i = 0; i < binding->descriptorCount; i++)
-            set_layout->binding[b].immutable_samplers[i] =
-               anv_sampler_from_handle(binding->pImmutableSamplers[i]);
-      } else {
-         set_layout->binding[b].immutable_samplers = NULL;
       }
 
       set_layout->shader_stages |= binding->stageFlags;

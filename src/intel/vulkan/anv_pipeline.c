@@ -532,7 +532,9 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
 
    /* Apply the actual pipeline layout to UBOs, SSBOs, and textures */
    if (layout) {
-      anv_nir_apply_pipeline_layout(pipeline, layout, nir, prog_data,
+      anv_nir_apply_pipeline_layout(&pipeline->device->instance->physicalDevice,
+                                    pipeline->device->robust_buffer_access,
+                                    layout, nir, prog_data,
                                     &stage->bind_map);
    }
 

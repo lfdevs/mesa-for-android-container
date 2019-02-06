@@ -18,13 +18,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+VDPAU_MAJOR = 1
+VDPAU_MINOR = 0
+
 libvdpau_st = static_library(
   'vdpau_st',
   files(
     'bitmap.c', 'decode.c', 'device.c', 'ftab.c', 'htab.c', 'mixer.c',
     'output.c', 'preemption.c', 'presentation.c', 'query.c', 'surface.c',
   ),
-  c_args : [c_vis_args, '-DVER_MAJOR=1', '-DVER_MINOR=0'],
+  c_args : [
+    c_vis_args,
+    '-DVER_MAJOR=@0@'.format(VDPAU_MAJOR),
+    '-DVER_MINOR=@0@'.format(VDPAU_MINOR),
+  ],
   include_directories : [
     inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux,
   ],

@@ -1,4 +1,4 @@
-# Copyright © 2017-2018 Intel Corporation
+# Copyright © 2017-2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -164,6 +164,14 @@ with_gallium_i915 = _drivers.contains('i915')
 with_gallium_svga = _drivers.contains('svga')
 with_gallium_virgl = _drivers.contains('virgl')
 with_gallium_swr = _drivers.contains('swr')
+
+if cc.get_id() == 'intel'
+  if meson.version().version_compare('< 0.49.0')
+    error('Meson does not have sufficient support of ICC before 0.49.0 to compile mesa')
+  elif with_gallium_swr and meson.version().version_compare('== 0.49.0')
+    warning('Meson as of 0.49.0 is sufficient for compiling mesa with ICC, but there are some caveats with SWR. 0.49.1 should resolve all of these')
+  endif
+endif
 
 with_gallium = _drivers.length() != 0 and _drivers != ['']
 
@@ -385,8 +393,8 @@ if with_any_vk and (with_platform_x11 and not with_dri3)
   error('Vulkan drivers require dri3 for X11 support')
 endif
 if with_dri
-  if with_glx == 'disabled' and not with_egl and not with_gbm
-    error('building dri drivers require at least one windowing system')
+  if with_glx == 'disabled' and not with_egl and not with_gbm and with_osmesa != 'classic'
+    error('building dri drivers require at least one windowing system or classic osmesa')
   endif
 endif
 
@@ -671,7 +679,7 @@ if _opencl != 'disabled'
 else
   dep_clc = null_dep
   with_gallium_opencl = false
-  with_gallium_icd = false
+  with_opencl_icd = false
 endif
 
 gl_pkgconfig_c_flags = []

@@ -60,6 +60,8 @@ etna_context_destroy(struct pipe_context *pctx)
 {
    struct etna_context *ctx = etna_context(pctx);
 
+   util_copy_framebuffer_state(&ctx->framebuffer_s, NULL);
+
    if (ctx->primconvert)
       util_primconvert_destroy(ctx->primconvert);
 
@@ -296,10 +298,10 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
    if (DBG_ENABLED(ETNA_DBG_FLUSH_ALL))
       pctx->flush(pctx, NULL, 0);
 
-   if (ctx->framebuffer.cbuf)
-      etna_resource(ctx->framebuffer.cbuf->texture)->seqno++;
-   if (ctx->framebuffer.zsbuf)
-      etna_resource(ctx->framebuffer.zsbuf->texture)->seqno++;
+   if (ctx->framebuffer_s.cbufs[0])
+      etna_resource(ctx->framebuffer_s.cbufs[0]->texture)->seqno++;
+   if (ctx->framebuffer_s.zsbuf)
+      etna_resource(ctx->framebuffer_s.zsbuf->texture)->seqno++;
    if (info->index_size && indexbuf != info->index.resource)
       pipe_resource_reference(&indexbuf, NULL);
 }

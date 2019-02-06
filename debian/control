@@ -17,7 +17,7 @@ Build-Depends:
  libxfixes-dev,
  libxdamage-dev,
  libxext-dev,
- libva-dev (>= 1.6.0) [linux-any kfreebsd-any],
+ libva-dev (>= 1.6.0) [linux-any kfreebsd-any] <!pkg.mesa.nolibva>,
  libvdpau-dev (>= 1.1.1) [linux-any kfreebsd-any],
  libvulkan-dev [amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32],
  x11proto-dev,
@@ -400,6 +400,7 @@ Description: Mesa Off-screen rendering extension -- development files
 Package: mesa-va-drivers
 Section: libs
 Architecture: linux-any kfreebsd-any
+Build-Profiles: <!pkg.mesa.nolibva>
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},

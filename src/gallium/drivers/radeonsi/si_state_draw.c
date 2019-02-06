@@ -348,20 +348,11 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		    key->u.uses_gs)
 			partial_vs_wave = true;
 
-		/* Needed for 028B6C_DISTRIBUTION_MODE != 0 */
+		/* Needed for 028B6C_DISTRIBUTION_MODE != 0. (implies >= VI) */
 		if (sscreen->has_distributed_tess) {
 			if (key->u.uses_gs) {
-				if (sscreen->info.chip_class <= VI)
+				if (sscreen->info.chip_class == VI)
 					partial_es_wave = true;
-
-				/* GPU hang workaround. */
-				if (sscreen->info.family == CHIP_TONGA ||
-				    sscreen->info.family == CHIP_FIJI ||
-				    sscreen->info.family == CHIP_POLARIS10 ||
-				    sscreen->info.family == CHIP_POLARIS11 ||
-				    sscreen->info.family == CHIP_POLARIS12 ||
-				    sscreen->info.family == CHIP_VEGAM)
-					partial_vs_wave = true;
 			} else {
 				partial_vs_wave = true;
 			}
@@ -416,6 +407,18 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 		/* Required on CIK and later. */
 		if (sscreen->info.max_se == 4 && !wd_switch_on_eop)
 			ia_switch_on_eoi = true;
+
+		/* HW engineers suggested that PARTIAL_VS_WAVE_ON should be set
+		 * to work around a GS hang.
+		 */
+		if (key->u.uses_gs &&
+		    (sscreen->info.family == CHIP_TONGA ||
+		     sscreen->info.family == CHIP_FIJI ||
+		     sscreen->info.family == CHIP_POLARIS10 ||
+		     sscreen->info.family == CHIP_POLARIS11 ||
+		     sscreen->info.family == CHIP_POLARIS12 ||
+		     sscreen->info.family == CHIP_VEGAM))
+			partial_vs_wave = true;
 
 		/* Required by Hawaii and, for some special cases, by VI. */
 		if (ia_switch_on_eoi &&

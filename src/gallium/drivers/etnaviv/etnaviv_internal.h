@@ -182,7 +182,6 @@ struct compiled_viewport_state {
 
 /* Compiled pipe_framebuffer_state */
 struct compiled_framebuffer_state {
-   struct pipe_surface *cbuf, *zsbuf; /* keep reference to surfaces */
    uint32_t GL_MULTI_SAMPLE_CONFIG;
    uint32_t PE_COLOR_FORMAT;
    uint32_t PE_DEPTH_CONFIG;

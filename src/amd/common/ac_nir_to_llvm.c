@@ -2802,15 +2802,16 @@ static LLVMValueRef visit_interp(struct ac_nir_context *ctx,
 				 const nir_intrinsic_instr *instr)
 {
 	LLVMValueRef result[4];
-	LLVMValueRef interp_param, attr_number;
+	LLVMValueRef interp_param;
 	unsigned location;
 	unsigned chan;
 	LLVMValueRef src_c0 = NULL;
 	LLVMValueRef src_c1 = NULL;
 	LLVMValueRef src0 = NULL;
 
-	nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
-	int input_index = ctx->abi->fs_input_attr_indices[var->data.location - VARYING_SLOT_VAR0];
+	nir_deref_instr *deref_instr = nir_instr_as_deref(instr->src[0].ssa->parent_instr);
+	nir_variable *var = nir_deref_instr_get_variable(deref_instr);
+	int input_base = ctx->abi->fs_input_attr_indices[var->data.location - VARYING_SLOT_VAR0];
 	switch (instr->intrinsic) {
 	case nir_intrinsic_interp_deref_at_centroid:
 		location = INTERP_CENTROID;
@@ -2840,7 +2841,6 @@ static LLVMValueRef visit_interp(struct ac_nir_context *ctx,
 		src_c1 = LLVMBuildFSub(ctx->ac.builder, src_c1, halfval, "");
 	}
 	interp_param = ctx->abi->lookup_interp_param(ctx->abi, var->data.interpolation, location);
-	attr_number = LLVMConstInt(ctx->ac.i32, input_index, false);
 
 	if (location == INTERP_CENTER) {
 		LLVMValueRef ij_out[2];
@@ -2878,26 +2878,65 @@ static LLVMValueRef visit_interp(struct ac_nir_context *ctx,
 
 	}
 
+	LLVMValueRef array_idx = ctx->ac.i32_0;
+	while(deref_instr->deref_type != nir_deref_type_var) {
+		if (deref_instr->deref_type == nir_deref_type_array) {
+			unsigned array_size = glsl_get_aoa_size(deref_instr->type);
+			if (!array_size)
+				array_size = 1;
+
+			LLVMValueRef offset;
+			nir_const_value *const_value = nir_src_as_const_value(deref_instr->arr.index);
+			if (const_value) {
+				offset = LLVMConstInt(ctx->ac.i32, array_size * const_value->u32[0], false);
+			} else {
+				LLVMValueRef indirect = get_src(ctx, deref_instr->arr.index);
+
+				offset = LLVMBuildMul(ctx->ac.builder, indirect,
+						      LLVMConstInt(ctx->ac.i32, array_size, false), "");
+			}
+
+			array_idx = LLVMBuildAdd(ctx->ac.builder, array_idx, offset, "");
+			deref_instr = nir_src_as_deref(deref_instr->parent);
+		} else {
+			unreachable("Unsupported deref type");
+		}
+
+	}
+
+	unsigned input_array_size = glsl_get_aoa_size(var->type);
+	if (!input_array_size)
+		input_array_size = 1;
+
 	for (chan = 0; chan < 4; chan++) {
+		LLVMValueRef gather = LLVMGetUndef(LLVMVectorType(ctx->ac.f32, input_array_size));
 		LLVMValueRef llvm_chan = LLVMConstInt(ctx->ac.i32, chan, false);
 
-		if (interp_param) {
-			interp_param = LLVMBuildBitCast(ctx->ac.builder,
-							interp_param, ctx->ac.v2f32, "");
-			LLVMValueRef i = LLVMBuildExtractElement(
-				ctx->ac.builder, interp_param, ctx->ac.i32_0, "");
-			LLVMValueRef j = LLVMBuildExtractElement(
-				ctx->ac.builder, interp_param, ctx->ac.i32_1, "");
+		for (unsigned idx = 0; idx < input_array_size; ++idx) {
+			LLVMValueRef v, attr_number;
 
-			result[chan] = ac_build_fs_interp(&ctx->ac,
-							  llvm_chan, attr_number,
-							  ctx->abi->prim_mask, i, j);
-		} else {
-			result[chan] = ac_build_fs_interp_mov(&ctx->ac,
-							      LLVMConstInt(ctx->ac.i32, 2, false),
-							      llvm_chan, attr_number,
-							      ctx->abi->prim_mask);
+			attr_number = LLVMConstInt(ctx->ac.i32, input_base + idx, false);
+			if (interp_param) {
+				interp_param = LLVMBuildBitCast(ctx->ac.builder,
+							interp_param, ctx->ac.v2f32, "");
+				LLVMValueRef i = LLVMBuildExtractElement(
+					ctx->ac.builder, interp_param, ctx->ac.i32_0, "");
+				LLVMValueRef j = LLVMBuildExtractElement(
+					ctx->ac.builder, interp_param, ctx->ac.i32_1, "");
+
+				v = ac_build_fs_interp(&ctx->ac, llvm_chan, attr_number,
+						       ctx->abi->prim_mask, i, j);
+			} else {
+				v = ac_build_fs_interp_mov(&ctx->ac, LLVMConstInt(ctx->ac.i32, 2, false),
+							   llvm_chan, attr_number, ctx->abi->prim_mask);
+			}
+
+			gather = LLVMBuildInsertElement(ctx->ac.builder, gather, v,
+							LLVMConstInt(ctx->ac.i32, idx, false), "");
 		}
+
+		result[chan] = LLVMBuildExtractElement(ctx->ac.builder, gather, array_idx, "");
+
 	}
 	return ac_build_varying_gather_values(&ctx->ac, result, instr->num_components,
 					      var->data.location_frac);
@@ -3460,7 +3499,7 @@ static void visit_tex(struct ac_nir_context *ctx, nir_tex_instr *instr)
 	 * It's unnecessary if the original texture format was
 	 * Z32_FLOAT, but we don't know that here.
 	 */
-	if (args.compare && ctx->ac.chip_class == VI && ctx->abi->clamp_shadow_reference)
+	if (args.compare && ctx->ac.chip_class >= VI && ctx->abi->clamp_shadow_reference)
 		args.compare = ac_build_clamp(&ctx->ac, ac_to_float(&ctx->ac, args.compare));
 
 	/* pack derivatives */
@@ -3851,7 +3890,7 @@ ac_handle_shader_output_decl(struct ac_llvm_context *ctx,
 		}
 	}
 
-	bool is_16bit = glsl_type_is_16bit(variable->type);
+	bool is_16bit = glsl_type_is_16bit(glsl_without_array(variable->type));
 	LLVMTypeRef type = is_16bit ? ctx->f16 : ctx->f32;
 	for (unsigned i = 0; i < attrib_count; ++i) {
 		for (unsigned chan = 0; chan < 4; chan++) {
