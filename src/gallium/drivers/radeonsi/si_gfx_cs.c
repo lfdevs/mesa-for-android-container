@@ -33,7 +33,7 @@ void si_need_gfx_cs_space(struct si_context *ctx)
 	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 
 	/* There is no need to flush the DMA IB here, because
-	 * r600_need_dma_space always flushes the GFX IB if there is
+	 * si_need_dma_space always flushes the GFX IB if there is
 	 * a conflict, which means any unflushed DMA commands automatically
 	 * precede the GFX IB (= they had no dependency on the GFX IB when
 	 * they were submitted).
@@ -177,7 +177,7 @@ static void si_begin_gfx_cs_debug(struct si_context *ctx)
 
 	pipe_reference_init(&ctx->current_saved_cs->reference, 1);
 
-	ctx->current_saved_cs->trace_buf = r600_resource(
+	ctx->current_saved_cs->trace_buf = si_resource(
 		pipe_buffer_create(ctx->b.screen, 0, PIPE_USAGE_STAGING, 8));
 	if (!ctx->current_saved_cs->trace_buf) {
 		free(ctx->current_saved_cs);

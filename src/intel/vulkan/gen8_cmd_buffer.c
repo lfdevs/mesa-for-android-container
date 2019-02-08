@@ -68,8 +68,6 @@ gen8_cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
                                  &sf_clip_viewport);
    }
 
-   anv_state_flush(cmd_buffer->device, sf_clip_state);
-
    anv_batch_emit(&cmd_buffer->batch,
                   GENX(3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP), clip) {
       clip.SFClipViewportPointer = sf_clip_state.offset;
@@ -96,8 +94,6 @@ gen8_cmd_buffer_emit_depth_viewport(struct anv_cmd_buffer *cmd_buffer,
 
       GENX(CC_VIEWPORT_pack)(NULL, cc_state.map + i * 8, &cc_viewport);
    }
-
-   anv_state_flush(cmd_buffer->device, cc_state);
 
    anv_batch_emit(&cmd_buffer->batch,
                   GENX(3DSTATE_VIEWPORT_STATE_POINTERS_CC), cc) {
@@ -441,8 +437,6 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
 
-      anv_state_flush(cmd_buffer->device, cc_state);
-
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CC_STATE_POINTERS), ccp) {
          ccp.ColorCalcStatePointer        = cc_state.offset;
          ccp.ColorCalcStatePointerValid   = true;
@@ -490,8 +484,6 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .BlendConstantColorAlpha = d->blend_constants[3],
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
-
-      anv_state_flush(cmd_buffer->device, cc_state);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CC_STATE_POINTERS), ccp) {
          ccp.ColorCalcStatePointer = cc_state.offset;
@@ -565,7 +557,7 @@ void genX(CmdBindIndexBuffer)(
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
       ib.IndexFormat                = vk_to_gen_index_type[indexType];
-      ib.IndexBufferMOCS            = anv_mocs_for_bo(cmd_buffer->device,
+      ib.MOCS                       = anv_mocs_for_bo(cmd_buffer->device,
                                                       buffer->address.bo);
       ib.BufferStartingAddress      = anv_address_add(buffer->address, offset);
       ib.BufferSize                 = buffer->size - offset;
@@ -610,7 +602,7 @@ void genX(CmdSetEvent)(
       pc.DestinationAddressType  = DAT_PPGTT,
       pc.PostSyncOperation       = WriteImmediateData,
       pc.Address = (struct anv_address) {
-         &cmd_buffer->device->dynamic_state_pool.block_pool.bo,
+         cmd_buffer->device->dynamic_state_pool.block_pool.bo,
          event->state.offset
       };
       pc.ImmediateData           = VK_EVENT_SET;
@@ -634,7 +626,7 @@ void genX(CmdResetEvent)(
       pc.DestinationAddressType  = DAT_PPGTT;
       pc.PostSyncOperation       = WriteImmediateData;
       pc.Address = (struct anv_address) {
-         &cmd_buffer->device->dynamic_state_pool.block_pool.bo,
+         cmd_buffer->device->dynamic_state_pool.block_pool.bo,
          event->state.offset
       };
       pc.ImmediateData           = VK_EVENT_RESET;
@@ -663,7 +655,7 @@ void genX(CmdWaitEvents)(
          sem.CompareOperation    = COMPARE_SAD_EQUAL_SDD,
          sem.SemaphoreDataDword  = VK_EVENT_SET,
          sem.SemaphoreAddress = (struct anv_address) {
-            &cmd_buffer->device->dynamic_state_pool.block_pool.bo,
+            cmd_buffer->device->dynamic_state_pool.block_pool.bo,
             event->state.offset
          };
       }

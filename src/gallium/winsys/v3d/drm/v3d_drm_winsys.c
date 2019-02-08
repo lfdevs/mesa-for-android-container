@@ -31,5 +31,11 @@
 struct pipe_screen *
 v3d_drm_screen_create(int fd)
 {
-	return v3d_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3));
+	return v3d_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3), NULL);
+}
+
+struct pipe_screen *
+v3d_drm_screen_create_renderonly(struct renderonly *ro)
+{
+	return v3d_screen_create(ro->gpu_fd, ro);
 }

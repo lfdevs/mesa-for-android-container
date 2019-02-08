@@ -159,7 +159,6 @@ struct intel_context
     */
    int gen;
    bool is_945;
-   bool has_swizzling;
 
    struct intel_batchbuffer batch;
 

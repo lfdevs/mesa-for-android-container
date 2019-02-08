@@ -63,23 +63,13 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
     mContext(), mBuilder(mContext), mIsModuleFinalized(true), mJitNumber(0), mVWidth(simdWidth),
     mArch(arch)
 {
+    mpCurrentModule = nullptr;
+    mpExec = nullptr;
+
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetDisassembler();
 
-
-    TargetOptions tOpts;
-    tOpts.AllowFPOpFusion = FPOpFusion::Fast;
-    tOpts.NoInfsFPMath    = false;
-    tOpts.NoNaNsFPMath    = false;
-    tOpts.UnsafeFPMath = false;
-
-    // tOpts.PrintMachineCode    = true;
-
-    std::unique_ptr<Module> newModule(new Module("", mContext));
-    mpCurrentModule = newModule.get();
-
-    StringRef hostCPUName;
 
     // force JIT to use the same CPU arch as the rest of swr
     if (mArch.AVX512F())
@@ -87,15 +77,15 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
 #if USE_SIMD16_SHADERS
         if (mArch.AVX512ER())
         {
-            hostCPUName = StringRef("knl");
+            mHostCpuName = StringRef("knl");
         }
         else
         {
-            hostCPUName = StringRef("skylake-avx512");
+            mHostCpuName = StringRef("skylake-avx512");
         }
         mUsingAVX512 = true;
 #else
-        hostCPUName = StringRef("core-avx2");
+        mHostCpuName = StringRef("core-avx2");
 #endif
         if (mVWidth == 0)
         {
@@ -104,7 +94,7 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
     }
     else if (mArch.AVX2())
     {
-        hostCPUName = StringRef("core-avx2");
+        mHostCpuName = StringRef("core-avx2");
         if (mVWidth == 0)
         {
             mVWidth = 8;
@@ -114,11 +104,11 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
     {
         if (mArch.F16C())
         {
-            hostCPUName = StringRef("core-avx-i");
+            mHostCpuName = StringRef("core-avx-i");
         }
         else
         {
-            hostCPUName = StringRef("corei7-avx");
+            mHostCpuName = StringRef("corei7-avx");
         }
         if (mVWidth == 0)
         {
@@ -131,31 +121,21 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
     }
 
 
-    auto optLevel = CodeGenOpt::Aggressive;
+    mOptLevel = CodeGenOpt::Aggressive;
 
     if (KNOB_JIT_OPTIMIZATION_LEVEL >= CodeGenOpt::None &&
         KNOB_JIT_OPTIMIZATION_LEVEL <= CodeGenOpt::Aggressive)
     {
-        optLevel = CodeGenOpt::Level(KNOB_JIT_OPTIMIZATION_LEVEL);
+        mOptLevel = CodeGenOpt::Level(KNOB_JIT_OPTIMIZATION_LEVEL);
     }
-
-    mpCurrentModule->setTargetTriple(sys::getProcessTriple());
-    mpExec = EngineBuilder(std::move(newModule))
-                 .setTargetOptions(tOpts)
-                 .setOptLevel(optLevel)
-                 .setMCPU(hostCPUName)
-                 .create();
 
     if (KNOB_JIT_ENABLE_CACHE)
     {
-        mCache.Init(this, hostCPUName, optLevel);
-        mpExec->setObjectCache(&mCache);
+        mCache.Init(this, mHostCpuName, mOptLevel);
     }
 
-#if LLVM_USE_INTEL_JITEVENTS
-    JITEventListener* vTune = JITEventListener::createIntelJITEventListener();
-    mpExec->RegisterJITEventListener(vTune);
-#endif
+    SetupNewModule();
+    mIsModuleFinalized = true;
 
     // fetch function signature
 #if USE_SIMD16_SHADERS
@@ -198,6 +178,35 @@ JitManager::JitManager(uint32_t simdWidth, const char* arch, const char* core) :
 #endif
 }
 
+void JitManager::CreateExecEngine(std::unique_ptr<Module> pModule)
+{
+    TargetOptions tOpts;
+    tOpts.AllowFPOpFusion = FPOpFusion::Fast;
+    tOpts.NoInfsFPMath    = false;
+    tOpts.NoNaNsFPMath    = false;
+    tOpts.UnsafeFPMath = false;
+
+    // tOpts.PrintMachineCode    = true;
+
+    mpExec = EngineBuilder(std::move(pModule))
+                 .setTargetOptions(tOpts)
+                 .setOptLevel(mOptLevel)
+                 .setMCPU(mHostCpuName)
+                 .create();
+
+    if (KNOB_JIT_ENABLE_CACHE)
+    {
+        mpExec->setObjectCache(&mCache);
+    }
+
+#if LLVM_USE_INTEL_JITEVENTS
+    JITEventListener* vTune = JITEventListener::createIntelJITEventListener();
+    mpExec->RegisterJITEventListener(vTune);
+#endif
+
+    mvExecEngines.push_back(mpExec);
+}
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Create new LLVM module.
 void JitManager::SetupNewModule()
@@ -207,7 +216,7 @@ void JitManager::SetupNewModule()
     std::unique_ptr<Module> newModule(new Module("", mContext));
     mpCurrentModule = newModule.get();
     mpCurrentModule->setTargetTriple(sys::getProcessTriple());
-    mpExec->addModule(std::move(newModule));
+    CreateExecEngine(std::move(newModule));
     mIsModuleFinalized = false;
 }
 
@@ -443,7 +452,7 @@ std::string JitManager::GetOutputDir()
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Dump function to file.
-void JitManager::DumpToFile(Module* M, const char* fileName)
+void JitManager::DumpToFile(Module* M, const char* fileName, llvm::AssemblyAnnotationWriter* annotater)
 {
     if (KNOB_DUMP_SHADER_IR)
     {
@@ -458,7 +467,7 @@ void JitManager::DumpToFile(Module* M, const char* fileName)
         sprintf(fName, "%s.%s.ll", funcName, fileName);
 #endif
         raw_fd_ostream fd(fName, EC, llvm::sys::fs::F_None);
-        M->print(fd, nullptr);
+        M->print(fd, annotater);
         fd.flush();
     }
 }
@@ -573,7 +582,7 @@ struct JitCacheFileHeader
     uint64_t GetObjectCRC() const { return m_objCRC; }
 
 private:
-    static const uint64_t JC_MAGIC_NUMBER = 0xfedcba9876543211ULL + 4;
+    static const uint64_t JC_MAGIC_NUMBER = 0xfedcba9876543210ULL + 6;
     static const size_t   JC_STR_MAX_LEN  = 32;
     static const uint32_t JC_PLATFORM_KEY = (LLVM_VERSION_MAJOR << 24) |
                                             (LLVM_VERSION_MINOR << 16) | (LLVM_VERSION_PATCH << 8) |
@@ -625,12 +634,41 @@ JitCache::JitCache()
     {
         mCacheDir = KNOB_JIT_CACHE_DIR;
     }
+
+    // Create cache dir at startup to allow jitter to write debug.ll files
+    // to that directory.
+    if (!llvm::sys::fs::exists(mCacheDir.str()) &&
+        llvm::sys::fs::create_directories(mCacheDir.str()))
+    {
+        SWR_INVALID("Unable to create directory: %s", mCacheDir.c_str());
+    }
+
 }
 
 int ExecUnhookedProcess(const std::string& CmdLine, std::string* pStdOut, std::string* pStdErr)
 {
     return ExecCmd(CmdLine, "", pStdOut, pStdErr);
 }
+
+/// Calculate actual directory where module will be cached.
+/// This is always a subdirectory of mCacheDir.  Full absolute
+/// path name will be stored in mCurrentModuleCacheDir
+void JitCache::CalcModuleCacheDir()
+{
+    mModuleCacheDir.clear();
+
+    llvm::SmallString<MAX_PATH> moduleDir = mCacheDir;
+
+    // Create 4 levels of directory hierarchy based on CRC, 256 entries each
+    uint8_t* pCRC = (uint8_t*)&mCurrentModuleCRC;
+    for (uint32_t i = 0; i < 4; ++i)
+    {
+        llvm::sys::path::append(moduleDir, std::to_string((int)pCRC[i]));
+    }
+
+    mModuleCacheDir = moduleDir;
+}
+
 
 /// notifyObjectCompiled - Provides a pointer to compiled code for Module M.
 void JitCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj)
@@ -641,16 +679,22 @@ void JitCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef
         return;
     }
 
-    if (!llvm::sys::fs::exists(mCacheDir.str()) &&
-        llvm::sys::fs::create_directories(mCacheDir.str()))
+    if (!mModuleCacheDir.size())
     {
-        SWR_INVALID("Unable to create directory: %s", mCacheDir.c_str());
+        SWR_INVALID("Unset module cache directory");
+        return;
+    }
+
+    if (!llvm::sys::fs::exists(mModuleCacheDir.str()) &&
+        llvm::sys::fs::create_directories(mModuleCacheDir.str()))
+    {
+        SWR_INVALID("Unable to create directory: %s", mModuleCacheDir.c_str());
         return;
     }
 
     JitCacheFileHeader header;
 
-    llvm::SmallString<MAX_PATH> filePath = mCacheDir;
+    llvm::SmallString<MAX_PATH> filePath = mModuleCacheDir;
     llvm::sys::path::append(filePath, moduleID);
 
     llvm::SmallString<MAX_PATH> objPath = filePath;
@@ -690,12 +734,14 @@ std::unique_ptr<llvm::MemoryBuffer> JitCache::getObject(const llvm::Module* M)
         return nullptr;
     }
 
-    if (!llvm::sys::fs::exists(mCacheDir))
+    CalcModuleCacheDir();
+
+    if (!llvm::sys::fs::exists(mModuleCacheDir))
     {
         return nullptr;
     }
 
-    llvm::SmallString<MAX_PATH> filePath = mCacheDir;
+    llvm::SmallString<MAX_PATH> filePath = mModuleCacheDir;
     llvm::sys::path::append(filePath, moduleID);
 
     llvm::SmallString<MAX_PATH> objFilePath = filePath;
@@ -758,3 +804,26 @@ std::unique_ptr<llvm::MemoryBuffer> JitCache::getObject(const llvm::Module* M)
 
     return pBuf;
 }
+
+void InterleaveAssemblyAnnotater::emitInstructionAnnot(const llvm::Instruction *pInst, llvm::formatted_raw_ostream &OS)
+{
+    auto dbgLoc = pInst->getDebugLoc();
+    if(dbgLoc)
+    {
+        unsigned int line = dbgLoc.getLine();
+        if(line != mCurrentLineNo)
+        {
+            if(line > 0 && line <= mAssembly.size())
+            {
+                // HACK: here we assume that OS is a formatted_raw_ostream(ods())
+                // and modify the color accordingly. We can't do the color
+                // modification on OS because formatted_raw_ostream strips
+                // the color information. The only way to fix this behavior
+                // is to patch LLVM.
+                OS << "\n; " << line << ": " << mAssembly[line-1] << "\n";
+            }
+            mCurrentLineNo = line;
+        }
+    }
+}
+

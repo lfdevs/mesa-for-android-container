@@ -37,6 +37,7 @@
 #include "eglcurrent.h"
 #include "eglsurface.h"
 #include "egllog.h"
+#include "util/macros.h"
 
 
 /**

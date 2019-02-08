@@ -77,6 +77,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
+   case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
       return 0;
 
    case PIPE_CAP_MIN_TEXEL_OFFSET:
@@ -145,6 +146,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
       return 1;
 
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS:
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE:
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
       return 0;
 
@@ -261,6 +263,9 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
       return 1;
 
+   case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
+      return 0;
+
    case PIPE_CAP_TGSI_FS_FBFETCH:
    case PIPE_CAP_TGSI_MUL_ZERO_WINS:
    case PIPE_CAP_DOUBLES:
@@ -311,6 +316,7 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
    case PIPE_CAP_MAX_COMBINED_SHADER_BUFFERS:
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS:
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS:
+   case PIPE_CAP_TGSI_ATOMFADD:
       return 0;
 
    case PIPE_CAP_MAX_GS_INVOCATIONS:
@@ -325,6 +331,11 @@ u_pipe_screen_get_param_defaults(struct pipe_screen *pscreen,
 
    case PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET:
       return 2047;
+
+   case PIPE_CAP_SURFACE_SAMPLE_COUNT:
+      return 0;
+   case PIPE_CAP_DEST_SURFACE_SRGB_CONTROL:
+      return 1;
 
    default:
       unreachable("bad PIPE_CAP_*");

@@ -158,21 +158,9 @@ struct si_context;
 /* SGPR user data indices */
 enum {
 	SI_SGPR_RW_BUFFERS,  /* rings (& stream-out, VS only) */
-#if !HAVE_32BIT_POINTERS
-	SI_SGPR_RW_BUFFERS_HI,
-#endif
 	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES,
-#if !HAVE_32BIT_POINTERS
-	SI_SGPR_BINDLESS_SAMPLERS_AND_IMAGES_HI,
-#endif
 	SI_SGPR_CONST_AND_SHADER_BUFFERS, /* or just a constant buffer 0 pointer */
-#if !HAVE_32BIT_POINTERS
-	SI_SGPR_CONST_AND_SHADER_BUFFERS_HI,
-#endif
 	SI_SGPR_SAMPLERS_AND_IMAGES,
-#if !HAVE_32BIT_POINTERS
-	SI_SGPR_SAMPLERS_AND_IMAGES_HI,
-#endif
 	SI_NUM_RESOURCE_SGPRS,
 
 	/* API VS, TES without GS, GS copy shader */
@@ -200,35 +188,20 @@ enum {
 	GFX6_TCS_NUM_USER_SGPR,
 
 	/* GFX9: Merged shaders. */
-#if HAVE_32BIT_POINTERS
 	/* 2ND_CONST_AND_SHADER_BUFFERS is set in USER_DATA_ADDR_LO (SGPR0). */
 	/* 2ND_SAMPLERS_AND_IMAGES is set in USER_DATA_ADDR_HI (SGPR1). */
 	GFX9_MERGED_NUM_USER_SGPR = SI_VS_NUM_USER_SGPR,
-#else
-	/* 2ND_CONST_AND_SHADER_BUFFERS is set in USER_DATA_ADDR_LO/HI (SGPR[0:1]). */
-	GFX9_SGPR_2ND_SAMPLERS_AND_IMAGES = SI_VS_NUM_USER_SGPR,
-	GFX9_SGPR_2ND_SAMPLERS_AND_IMAGES_HI,
-	GFX9_MERGED_NUM_USER_SGPR,
-#endif
 
 	/* GFX9: Merged LS-HS (VS-TCS) only. */
 	GFX9_SGPR_TCS_OFFCHIP_LAYOUT = GFX9_MERGED_NUM_USER_SGPR,
 	GFX9_SGPR_TCS_OUT_OFFSETS,
 	GFX9_SGPR_TCS_OUT_LAYOUT,
-#if !HAVE_32BIT_POINTERS
-	GFX9_SGPR_align_for_vb_pointer,
-#endif
 	GFX9_TCS_NUM_USER_SGPR,
 
 	/* GS limits */
 	GFX6_GS_NUM_USER_SGPR = SI_NUM_RESOURCE_SGPRS,
-#if HAVE_32BIT_POINTERS
 	GFX9_VSGS_NUM_USER_SGPR = SI_VS_NUM_USER_SGPR,
 	GFX9_TESGS_NUM_USER_SGPR = SI_TES_NUM_USER_SGPR,
-#else
-	GFX9_VSGS_NUM_USER_SGPR = GFX9_MERGED_NUM_USER_SGPR,
-	GFX9_TESGS_NUM_USER_SGPR = GFX9_MERGED_NUM_USER_SGPR,
-#endif
 	SI_GSCOPY_NUM_USER_SGPR = SI_NUM_VS_STATE_RESOURCE_SGPRS,
 
 	/* PS only */
@@ -627,8 +600,8 @@ struct si_shader {
 	struct si_shader_part		*epilog;
 
 	struct si_pm4_state		*pm4;
-	struct r600_resource		*bo;
-	struct r600_resource		*scratch_bo;
+	struct si_resource		*bo;
+	struct si_resource		*scratch_bo;
 	struct si_shader_key		key;
 	struct util_queue_fence		ready;
 	bool				compilation_failed;
@@ -735,7 +708,6 @@ const char *si_get_shader_name(const struct si_shader *shader, unsigned processo
 void si_nir_scan_shader(const struct nir_shader *nir,
 			struct tgsi_shader_info *info);
 void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
-			   const struct tgsi_shader_info *info,
 			   struct tgsi_tessctrl_info *out);
 void si_lower_nir(struct si_shader_selector *sel);
 

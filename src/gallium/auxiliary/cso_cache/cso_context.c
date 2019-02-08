@@ -329,7 +329,8 @@ cso_create_context(struct pipe_context *pipe, unsigned u_vbuf_flags)
       int supported_irs =
          pipe->screen->get_shader_param(pipe->screen, PIPE_SHADER_COMPUTE,
                                         PIPE_SHADER_CAP_SUPPORTED_IRS);
-      if (supported_irs & (1 << PIPE_SHADER_IR_TGSI)) {
+      if (supported_irs & ((1 << PIPE_SHADER_IR_TGSI) |
+                           (1 << PIPE_SHADER_IR_NIR))) {
          ctx->has_compute_shader = TRUE;
       }
    }

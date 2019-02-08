@@ -31,10 +31,25 @@ ISL_GEN_LIBS =                                           \
 	isl/libisl-gen11.la                              \
 	$(NULL)
 
-noinst_LTLIBRARIES += $(ISL_GEN_LIBS) isl/libisl.la
+noinst_LTLIBRARIES += $(ISL_GEN_LIBS) \
+                      isl/libisl.la \
+                      libisl_tiled_memcpy.la \
+                      libisl_tiled_memcpy_sse41.la
 
-isl_libisl_la_LIBADD = $(ISL_GEN_LIBS)
+isl_libisl_la_LIBADD = $(ISL_GEN_LIBS) \
+                       libisl_tiled_memcpy.la \
+                       libisl_tiled_memcpy_sse41.la
+
 isl_libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
+
+libisl_tiled_memcpy_la_SOURCES = $(ISL_TILED_MEMCPY_FILES)
+libisl_tiled_memcpy_la_CFLAGS = $(AM_CFLAGS)
+
+libisl_tiled_memcpy_sse41_la_SOURCES = $(ISL_TILED_MEMCPY_SSE41_FILES)
+libisl_tiled_memcpy_sse41_la_CFLAGS = $(AM_CFLAGS) $(SSE41_CFLAGS)
+
+isl_tiled_memcpy_normal.c: $(ISL_TILED_MEMCPY_DEP_FILES)
+isl_tiled_memcpy_sse41.c: $(ISL_TILED_MEMCPY_DEP_FILES)
 
 isl_libisl_gen4_la_SOURCES = $(ISL_GEN4_FILES)
 isl_libisl_gen4_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=40
@@ -90,4 +105,5 @@ isl_tests_isl_surf_get_image_offset_test_LDADD = \
 EXTRA_DIST += \
 	isl/gen_format_layout.py \
 	isl/isl_format_layout.csv \
-	isl/README
+	isl/README \
+	$(ISL_TILED_MEMCPY_DEP_FILES)

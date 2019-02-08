@@ -379,6 +379,15 @@ nv50_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    util_dynarray_init(&nv50->global_residents, NULL);
 
+   // Make sure that the first TSC entry has SRGB conversion bit set, since we
+   // use it as a fallback.
+   if (!screen->tsc.entries[0])
+      nv50_upload_tsc0(nv50);
+
+   // And mark samplers as dirty so that the first slot would get bound to the
+   // zero entry if it's not otherwise set.
+   nv50->dirty_3d |= NV50_NEW_3D_SAMPLERS;
+
    return pipe;
 
 out_err:

@@ -609,6 +609,8 @@ GALLIUM_PIPE_LOADER_WINSYS_LIBS =  \
 	$(am__append_3) $(am__append_4)
 AM_CFLAGS = \
 	-I$(top_srcdir)/src/gallium/drivers \
+	-I$(top_srcdir)/src/freedreno \
+	-I$(top_srcdir)/src/freedreno/registers \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(FREEDRENO_CFLAGS)
 

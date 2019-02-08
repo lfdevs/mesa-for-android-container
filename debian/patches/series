@@ -1,5 +1,4 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 
 # meson fixes
-1-5-meson-remove-duplicate-definition.patch
 fix-hurd-ftbfs.diff

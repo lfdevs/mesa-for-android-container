@@ -405,6 +405,7 @@ struct vc4_context {
         struct pipe_viewport_state viewport;
         struct vc4_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
         struct vc4_vertexbuf_stateobj vertexbuf;
+        struct pipe_debug_callback debug;
 
         struct vc4_hwperfmon *perfmon;
         /** @} */
@@ -451,6 +452,8 @@ struct vc4_depth_stencil_alpha_state {
 #define perf_debug(...) do {                            \
         if (unlikely(vc4_debug & VC4_DEBUG_PERF))       \
                 fprintf(stderr, __VA_ARGS__);           \
+        if (unlikely(vc4->debug.debug_message))         \
+                pipe_debug_message(&vc4->debug, PERF_INFO, __VA_ARGS__);    \
 } while (0)
 
 static inline struct vc4_context *
@@ -486,12 +489,8 @@ void vc4_program_fini(struct pipe_context *pctx);
 void vc4_query_init(struct pipe_context *pctx);
 void vc4_simulator_init(struct vc4_screen *screen);
 void vc4_simulator_destroy(struct vc4_screen *screen);
-int vc4_simulator_flush(struct vc4_context *vc4,
-                        struct drm_vc4_submit_cl *args,
-                        struct vc4_job *job);
 int vc4_simulator_ioctl(int fd, unsigned long request, void *arg);
-void vc4_simulator_open_from_handle(int fd, uint32_t winsys_stride,
-                                    int handle, uint32_t size);
+void vc4_simulator_open_from_handle(int fd, int handle, uint32_t size);
 
 static inline int
 vc4_ioctl(int fd, unsigned long request, void *arg)

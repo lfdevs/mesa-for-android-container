@@ -737,8 +737,7 @@ AM_CFLAGS = -I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/loader -I$(top_builddir)/src/mapi \
 	-I$(top_srcdir)/src/mapi -I$(top_builddir)/src/mapi/glapi \
 	-I$(top_srcdir)/src/mapi/glapi $(VISIBILITY_CFLAGS) \
-	-D_REENTRANT -DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
-	$(DEFINES) $(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) \
+	-D_REENTRANT $(DEFINES) $(LIBDRM_CFLAGS) $(DRI2PROTO_CFLAGS) \
 	$(GLPROTO_CFLAGS) $(X11_INCLUDES) $(am__append_12) \
 	$(am__append_14)
 lib_LTLIBRARIES = lib@GL_LIB@.la

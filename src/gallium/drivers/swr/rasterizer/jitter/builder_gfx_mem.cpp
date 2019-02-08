@@ -52,7 +52,7 @@ namespace SwrJit
 
     void BuilderGfxMem::AssertGFXMemoryParams(Value* ptr, Builder::JIT_MEM_CLIENT usage)
     {
-        SWR_ASSERT(!(ptr->getType() == mInt64Ty && usage == MEM_CLIENT_INTERNAL),
+        SWR_ASSERT(!(ptr->getType() == mInt64Ty && usage == JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL),
                    "Internal memory should not be gfxptr_t.");
     }
 

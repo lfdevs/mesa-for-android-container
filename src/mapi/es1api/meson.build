@@ -20,10 +20,10 @@
 
 es1_glapi_mapi_tmp_h = custom_target(
   'es1_glapi_mapi_tmp.h',
-  input : [mapi_abi_py, gl_and_es_api_files],
+  input : [glapi_gen_mapi_py, glapi_gen_gl_xml],
   output : 'glapi_mapi_tmp.h',
-  command : [prog_python, '@INPUT0@', '--printer', 'es1api', '@INPUT1@'],
-  depend_files : api_xml_files,
+  command : [prog_python, '@INPUT0@', 'glesv1', '@INPUT1@'],
+  depend_files : glapi_gen_mapi_deps,
   capture : true,
 )
 
@@ -56,6 +56,7 @@ if with_tests
     'es1-ABI-check',
     find_program('ABI-check'),
     env : env_test,
-    args : libglesv1_cm
+    args : libglesv1_cm,
+    suite : ['mapi'],
   )
 endif

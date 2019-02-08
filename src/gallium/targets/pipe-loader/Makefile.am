@@ -157,6 +157,8 @@ pipe_msm_la_LIBADD = \
 	$(PIPE_LIBS) \
 	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
 	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+	$(top_builddir)/src/freedreno/libfreedreno_drm.la \
+	$(top_builddir)/src/freedreno/libfreedreno_ir3.la \
 	$(LIBDRM_LIBS) \
 	$(FREEDRENO_LIBS)
 

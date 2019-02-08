@@ -41,14 +41,14 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       /* The EmitNoIndirectInput flag guarantees our vertex index will
        * be constant.  We should handle indirects someday.
        */
-      nir_const_value *vertex = nir_src_as_const_value(instr->src[0]);
-      nir_const_value *offset_reg = nir_src_as_const_value(instr->src[1]);
+      const unsigned vertex = nir_src_as_uint(instr->src[0]);
+      const unsigned offset_reg = nir_src_as_uint(instr->src[1]);
 
       const unsigned input_array_stride = prog_data->urb_read_length * 2;
 
       if (nir_dest_bit_size(instr->dest) == 64) {
-         src = src_reg(ATTR, input_array_stride * vertex->u32[0] +
-                       instr->const_index[0] + offset_reg->u32[0],
+         src = src_reg(ATTR, input_array_stride * vertex +
+                       instr->const_index[0] + offset_reg,
                        glsl_type::dvec4_type);
 
          dst_reg tmp = dst_reg(this, glsl_type::dvec4_type);
@@ -65,8 +65,8 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
          /* Make up a type...we have no way of knowing... */
          const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
-         src = src_reg(ATTR, input_array_stride * vertex->u32[0] +
-                       instr->const_index[0] + offset_reg->u32[0],
+         src = src_reg(ATTR, input_array_stride * vertex +
+                       instr->const_index[0] + offset_reg,
                        type);
          src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
 

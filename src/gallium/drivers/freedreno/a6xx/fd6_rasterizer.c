@@ -69,7 +69,9 @@ fd6_rasterizer_state_create(struct pipe_context *pctx,
 			A6XX_GRAS_SU_POLY_OFFSET_OFFSET_CLAMP(cso->offset_clamp);
 
 	so->gras_su_cntl =
-			A6XX_GRAS_SU_CNTL_LINEHALFWIDTH(cso->line_width/2.0);
+			A6XX_GRAS_SU_CNTL_LINEHALFWIDTH(cso->line_width/2.0) |
+			COND(cso->multisample, A6XX_GRAS_SU_CNTL_MSAA_ENABLE);
+
 #if 0
 	so->pc_raster_cntl =
 		A6XX_PC_RASTER_CNTL_POLYMODE_FRONT_PTYPE(fd_polygon_mode(cso->fill_front)) |

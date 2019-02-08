@@ -8,17 +8,17 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  26087 bytes, from 2017-10-30 13:44:54)
-- common.xml    (  26187 bytes, from 2017-10-31 19:05:01)
-- common_3d.xml (  14615 bytes, from 2017-11-04 14:03:35)
-- state_hi.xml  (  27733 bytes, from 2017-10-02 19:00:30)
-- copyright.xml (   1597 bytes, from 2016-10-29 07:29:22)
-- state_2d.xml  (  51552 bytes, from 2016-10-29 07:29:22)
-- state_3d.xml  (  79992 bytes, from 2017-11-07 10:44:35)
-- state_blt.xml (  13405 bytes, from 2017-10-16 17:42:46)
-- state_vg.xml  (   5975 bytes, from 2016-10-29 07:29:22)
+- state.xml     (  26087 bytes, from 2018-02-10 13:09:26)
+- common.xml    (  35468 bytes, from 2018-02-10 13:09:26)
+- common_3d.xml (  14843 bytes, from 2019-01-18 10:13:41)
+- state_hi.xml  (  30232 bytes, from 2018-03-30 07:48:22)
+- copyright.xml (   1597 bytes, from 2018-02-10 13:09:26)
+- state_2d.xml  (  51552 bytes, from 2018-02-10 13:09:26)
+- state_3d.xml  (  79992 bytes, from 2019-01-18 10:10:57)
+- state_blt.xml (  13405 bytes, from 2018-02-10 13:09:26)
+- state_vg.xml  (   5975 bytes, from 2018-02-10 13:09:26)
 
-Copyright (C) 2012-2017 by the following authors:
+Copyright (C) 2012-2019 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -1400,6 +1400,9 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_TE_SAMPLER_CONFIG0_FORMAT__SHIFT			13
 #define VIVS_TE_SAMPLER_CONFIG0_FORMAT(x)			(((x) << VIVS_TE_SAMPLER_CONFIG0_FORMAT__SHIFT) & VIVS_TE_SAMPLER_CONFIG0_FORMAT__MASK)
 #define VIVS_TE_SAMPLER_CONFIG0_ROUND_UV			0x00080000
+#define VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE__MASK		0x00300000
+#define VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE__SHIFT		20
+#define VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(x)		(((x) << VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE__SHIFT) & VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE__MASK)
 #define VIVS_TE_SAMPLER_CONFIG0_ENDIAN__MASK			0x00c00000
 #define VIVS_TE_SAMPLER_CONFIG0_ENDIAN__SHIFT			22
 #define VIVS_TE_SAMPLER_CONFIG0_ENDIAN(x)			(((x) << VIVS_TE_SAMPLER_CONFIG0_ENDIAN__SHIFT) & VIVS_TE_SAMPLER_CONFIG0_ENDIAN__MASK)
@@ -1520,6 +1523,9 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_NTE_SAMPLER_CONFIG0_FORMAT__SHIFT			13
 #define VIVS_NTE_SAMPLER_CONFIG0_FORMAT(x)			(((x) << VIVS_NTE_SAMPLER_CONFIG0_FORMAT__SHIFT) & VIVS_NTE_SAMPLER_CONFIG0_FORMAT__MASK)
 #define VIVS_NTE_SAMPLER_CONFIG0_ROUND_UV			0x00080000
+#define VIVS_NTE_SAMPLER_CONFIG0_ADDRESSING_MODE__MASK		0x00300000
+#define VIVS_NTE_SAMPLER_CONFIG0_ADDRESSING_MODE__SHIFT		20
+#define VIVS_NTE_SAMPLER_CONFIG0_ADDRESSING_MODE(x)		(((x) << VIVS_NTE_SAMPLER_CONFIG0_ADDRESSING_MODE__SHIFT) & VIVS_NTE_SAMPLER_CONFIG0_ADDRESSING_MODE__MASK)
 #define VIVS_NTE_SAMPLER_CONFIG0_ENDIAN__MASK			0x00c00000
 #define VIVS_NTE_SAMPLER_CONFIG0_ENDIAN__SHIFT			22
 #define VIVS_NTE_SAMPLER_CONFIG0_ENDIAN(x)			(((x) << VIVS_NTE_SAMPLER_CONFIG0_ENDIAN__SHIFT) & VIVS_NTE_SAMPLER_CONFIG0_ENDIAN__MASK)

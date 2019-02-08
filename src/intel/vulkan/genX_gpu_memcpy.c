@@ -133,9 +133,6 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    if (size == 0)
       return;
 
-   assert(dst.offset + size <= dst.bo->size);
-   assert(src.offset + size <= src.bo->size);
-
    /* The maximum copy block size is 4 32-bit components at a time. */
    assert(size % 4 == 0);
    unsigned bs = gcd_pow2_u64(16, size);
@@ -167,7 +164,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
          .AddressModifyEnable = true,
          .BufferStartingAddress = src,
          .BufferPitch = bs,
-         .VertexBufferMOCS = anv_mocs_for_bo(cmd_buffer->device, src.bo),
+         .MOCS = anv_mocs_for_bo(cmd_buffer->device, src.bo),
 #if (GEN_GEN >= 8)
          .BufferSize = size,
 #else
@@ -227,7 +224,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
       sob.SOBufferIndex = 0;
-      sob.SOBufferMOCS = anv_mocs_for_bo(cmd_buffer->device, dst.bo),
+      sob.MOCS = anv_mocs_for_bo(cmd_buffer->device, dst.bo),
       sob.SurfaceBaseAddress = dst;
 
 #if GEN_GEN >= 8
@@ -302,5 +299,4 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
-   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_RENDER_TARGET_WRITES;
 }

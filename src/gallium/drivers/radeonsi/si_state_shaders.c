@@ -337,10 +337,10 @@ void si_destroy_shader_cache(struct si_screen *sscreen)
 /* SHADER STATES */
 
 static void si_set_tesseval_regs(struct si_screen *sscreen,
-				 struct si_shader_selector *tes,
+				 const struct si_shader_selector *tes,
 				 struct si_pm4_state *pm4)
 {
-	struct tgsi_shader_info *info = &tes->info;
+	const struct tgsi_shader_info *info = &tes->info;
 	unsigned tes_prim_mode = info->properties[TGSI_PROPERTY_TES_PRIM_MODE];
 	unsigned tes_spacing = info->properties[TGSI_PROPERTY_TES_SPACING];
 	bool tes_vertex_order_cw = info->properties[TGSI_PROPERTY_TES_VERTEX_ORDER_CW];
@@ -464,12 +464,7 @@ static struct si_pm4_state *si_get_shader_pm4_state(struct si_shader *shader)
 static unsigned si_get_num_vs_user_sgprs(unsigned num_always_on_user_sgprs)
 {
 	/* Add the pointer to VBO descriptors. */
-	if (HAVE_32BIT_POINTERS) {
-		return num_always_on_user_sgprs + 1;
-	} else {
-		assert(num_always_on_user_sgprs % 2 == 0);
-		return num_always_on_user_sgprs + 2;
-	}
+	return num_always_on_user_sgprs + 1;
 }
 
 static void si_shader_ls(struct si_screen *sscreen, struct si_shader *shader)
@@ -2243,7 +2238,7 @@ static void *si_create_shader_selector(struct pipe_context *ctx,
 		sel->nir = state->ir.nir;
 
 		si_nir_scan_shader(sel->nir, &sel->info);
-		si_nir_scan_tess_ctrl(sel->nir, &sel->info, &sel->tcs_info);
+		si_nir_scan_tess_ctrl(sel->nir, &sel->tcs_info);
 
 		si_lower_nir(sel);
 	}
@@ -3094,7 +3089,7 @@ static int si_update_scratch_buffer(struct si_context *sctx,
 	/* Update the shader state to use the new shader bo. */
 	si_shader_init_pm4_state(sctx->screen, shader);
 
-	r600_resource_reference(&shader->scratch_bo, sctx->scratch_buffer);
+	si_resource_reference(&shader->scratch_bo, sctx->scratch_buffer);
 
 	si_shader_unlock(shader);
 	return 1;
@@ -3204,7 +3199,7 @@ static bool si_update_spi_tmpring_size(struct si_context *sctx)
 	if (scratch_needed_size > 0) {
 		if (scratch_needed_size > current_scratch_buffer_size) {
 			/* Create a bigger scratch buffer */
-			r600_resource_reference(&sctx->scratch_buffer, NULL);
+			si_resource_reference(&sctx->scratch_buffer, NULL);
 
 			sctx->scratch_buffer =
 				si_aligned_buffer_create(&sctx->screen->b,
@@ -3254,10 +3249,10 @@ static void si_init_tess_factor_ring(struct si_context *sctx)
 
 	si_init_config_add_vgt_flush(sctx);
 
-	si_pm4_add_bo(sctx->init_config, r600_resource(sctx->tess_rings),
+	si_pm4_add_bo(sctx->init_config, si_resource(sctx->tess_rings),
 		      RADEON_USAGE_READWRITE, RADEON_PRIO_SHADER_RINGS);
 
-	uint64_t factor_va = r600_resource(sctx->tess_rings)->gpu_address +
+	uint64_t factor_va = si_resource(sctx->tess_rings)->gpu_address +
 			     sctx->screen->tess_offchip_ring_size;
 
 	/* Append these registers to the init config state. */

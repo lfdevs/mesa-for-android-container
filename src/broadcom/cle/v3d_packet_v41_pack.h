@@ -89,11 +89,11 @@ enum V3D41_Border_Color_Mode {
 };
 
 enum V3D41_Wrap_Mode {
-        V3D_WRAP_MODE_WRAP_MODE_REPEAT       =      0,
-        V3D_WRAP_MODE_WRAP_MODE_CLAMP        =      1,
-        V3D_WRAP_MODE_WRAP_MODE_MIRROR       =      2,
-        V3D_WRAP_MODE_WRAP_MODE_BORDER       =      3,
-        V3D_WRAP_MODE_WRAP_MODE_MIRROR_ONCE  =      4,
+        V3D_WRAP_MODE_REPEAT                 =      0,
+        V3D_WRAP_MODE_CLAMP                  =      1,
+        V3D_WRAP_MODE_MIRROR                 =      2,
+        V3D_WRAP_MODE_BORDER                 =      3,
+        V3D_WRAP_MODE_MIRROR_ONCE            =      4,
 };
 
 enum V3D41_TMU_Op {
@@ -160,6 +160,12 @@ enum V3D41_Render_Target_Clamp {
         V3D_RENDER_TARGET_CLAMP_NONE         =      0,
         V3D_RENDER_TARGET_CLAMP_NORM         =      1,
         V3D_RENDER_TARGET_CLAMP_POS          =      2,
+};
+
+enum V3D41_L2T_Flush_Mode {
+        L2T_FLUSH_MODE_FLUSH                 =      0,
+        L2T_FLUSH_MODE_CLEAR                 =      1,
+        L2T_FLUSH_MODE_CLEAN                 =      2,
 };
 
 enum V3D41_Output_Image_Format {
@@ -1248,6 +1254,71 @@ V3D41_INDEXED_PRIM_LIST_unpack(const uint8_t * restrict cl,
 #endif
 
 
+#define V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_opcode     33
+#define V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_header\
+   .opcode                              =     33
+
+struct V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST {
+   uint32_t                             opcode;
+   uint32_t                             stride_in_multiples_of_4_bytes;
+   __gen_address_type                   address;
+   bool                                 enable_primitive_restarts;
+   uint32_t                             number_of_draw_indirect_indexed_records;
+   uint32_t                             index_type;
+#define INDEX_TYPE_8_BIT                         0
+#define INDEX_TYPE_16_BIT                        1
+#define INDEX_TYPE_32_BIT                        2
+   enum V3D41_Primitive                 mode;
+};
+
+static inline void
+V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                const struct V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->index_type, 6, 7) |
+            __gen_uint(values->mode, 0, 5);
+
+   cl[ 2] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30);
+
+   cl[ 3] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 8;
+
+   cl[ 4] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 16;
+
+   cl[ 5] = __gen_uint(values->enable_primitive_restarts, 7, 7) |
+            __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 24;
+
+   __gen_emit_reloc(data, &values->address);
+   cl[ 6] = __gen_address_offset(&values->address);
+
+   cl[ 7] = __gen_address_offset(&values->address) >> 8;
+
+   cl[ 8] = __gen_address_offset(&values->address) >> 16;
+
+   cl[ 9] = __gen_address_offset(&values->address) >> 24;
+
+   cl[10] = __gen_uint(values->stride_in_multiples_of_4_bytes, 0, 7);
+
+}
+
+#define V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_length     11
+#ifdef __gen_unpack_address
+static inline void
+V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_unpack(const uint8_t * restrict cl,
+                                                  struct V3D41_INDIRECT_INDEXED_INSTANCED_PRIM_LIST * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->stride_in_multiples_of_4_bytes = __gen_unpack_uint(cl, 80, 87);
+   values->address = __gen_unpack_address(cl, 48, 79);
+   values->enable_primitive_restarts = __gen_unpack_uint(cl, 47, 47);
+   values->number_of_draw_indirect_indexed_records = __gen_unpack_uint(cl, 16, 46);
+   values->index_type = __gen_unpack_uint(cl, 14, 15);
+   values->mode = __gen_unpack_uint(cl, 8, 13);
+}
+#endif
+
+
 #define V3D41_INDEXED_INSTANCED_PRIM_LIST_opcode     34
 #define V3D41_INDEXED_INSTANCED_PRIM_LIST_header\
    .opcode                              =     34
@@ -1340,6 +1411,56 @@ V3D41_VERTEX_ARRAY_PRIMS_unpack(const uint8_t * restrict cl,
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_of_first_vertex = __gen_unpack_uint(cl, 48, 79);
    values->length = __gen_unpack_uint(cl, 16, 47);
+   values->mode = __gen_unpack_uint(cl, 8, 15);
+}
+#endif
+
+
+#define V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_opcode     37
+#define V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_header\
+   .opcode                              =     37
+
+struct V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS {
+   uint32_t                             opcode;
+   uint32_t                             stride_in_multiples_of_4_bytes;
+   __gen_address_type                   address;
+   uint32_t                             number_of_draw_indirect_array_records;
+   enum V3D41_Primitive                 mode;
+};
+
+static inline void
+V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                 const struct V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->mode, 0, 7);
+
+
+   memcpy(&cl[2], &values->number_of_draw_indirect_array_records, sizeof(values->number_of_draw_indirect_array_records));
+   __gen_emit_reloc(data, &values->address);
+   cl[ 6] = __gen_address_offset(&values->address);
+
+   cl[ 7] = __gen_address_offset(&values->address) >> 8;
+
+   cl[ 8] = __gen_address_offset(&values->address) >> 16;
+
+   cl[ 9] = __gen_address_offset(&values->address) >> 24;
+
+   cl[10] = __gen_uint(values->stride_in_multiples_of_4_bytes, 0, 7);
+
+}
+
+#define V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_length     11
+#ifdef __gen_unpack_address
+static inline void
+V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_unpack(const uint8_t * restrict cl,
+                                                   struct V3D41_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->stride_in_multiples_of_4_bytes = __gen_unpack_uint(cl, 80, 87);
+   values->address = __gen_unpack_address(cl, 48, 79);
+   values->number_of_draw_indirect_array_records = __gen_unpack_uint(cl, 16, 47);
    values->mode = __gen_unpack_uint(cl, 8, 15);
 }
 #endif
@@ -1685,6 +1806,100 @@ V3D41_FLUSH_TRANSFORM_FEEDBACK_DATA_unpack(const uint8_t * restrict cl,
                                            struct V3D41_FLUSH_TRANSFORM_FEEDBACK_DATA * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
+}
+#endif
+
+
+#define V3D41_L1_CACHE_FLUSH_CONTROL_opcode     76
+#define V3D41_L1_CACHE_FLUSH_CONTROL_header     \
+   .opcode                              =     76
+
+struct V3D41_L1_CACHE_FLUSH_CONTROL {
+   uint32_t                             opcode;
+   uint32_t                             tmu_config_cache_clear;
+   uint32_t                             tmu_data_cache_clear;
+   uint32_t                             uniforms_cache_clear;
+   uint32_t                             instruction_cache_clear;
+};
+
+static inline void
+V3D41_L1_CACHE_FLUSH_CONTROL_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                  const struct V3D41_L1_CACHE_FLUSH_CONTROL * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->uniforms_cache_clear, 4, 7) |
+            __gen_uint(values->instruction_cache_clear, 0, 3);
+
+   cl[ 2] = __gen_uint(values->tmu_config_cache_clear, 4, 7) |
+            __gen_uint(values->tmu_data_cache_clear, 0, 3);
+
+}
+
+#define V3D41_L1_CACHE_FLUSH_CONTROL_length      3
+#ifdef __gen_unpack_address
+static inline void
+V3D41_L1_CACHE_FLUSH_CONTROL_unpack(const uint8_t * restrict cl,
+                                    struct V3D41_L1_CACHE_FLUSH_CONTROL * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->tmu_config_cache_clear = __gen_unpack_uint(cl, 20, 23);
+   values->tmu_data_cache_clear = __gen_unpack_uint(cl, 16, 19);
+   values->uniforms_cache_clear = __gen_unpack_uint(cl, 12, 15);
+   values->instruction_cache_clear = __gen_unpack_uint(cl, 8, 11);
+}
+#endif
+
+
+#define V3D41_L2T_CACHE_FLUSH_CONTROL_opcode     77
+#define V3D41_L2T_CACHE_FLUSH_CONTROL_header    \
+   .opcode                              =     77
+
+struct V3D41_L2T_CACHE_FLUSH_CONTROL {
+   uint32_t                             opcode;
+   enum V3D41_L2T_Flush_Mode            l2t_flush_mode;
+   __gen_address_type                   l2t_flush_end;
+   __gen_address_type                   l2t_flush_start;
+};
+
+static inline void
+V3D41_L2T_CACHE_FLUSH_CONTROL_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                   const struct V3D41_L2T_CACHE_FLUSH_CONTROL * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   __gen_emit_reloc(data, &values->l2t_flush_start);
+   cl[ 1] = __gen_address_offset(&values->l2t_flush_start);
+
+   cl[ 2] = __gen_address_offset(&values->l2t_flush_start) >> 8;
+
+   cl[ 3] = __gen_address_offset(&values->l2t_flush_start) >> 16;
+
+   cl[ 4] = __gen_address_offset(&values->l2t_flush_start) >> 24;
+
+   __gen_emit_reloc(data, &values->l2t_flush_end);
+   cl[ 5] = __gen_address_offset(&values->l2t_flush_end);
+
+   cl[ 6] = __gen_address_offset(&values->l2t_flush_end) >> 8;
+
+   cl[ 7] = __gen_address_offset(&values->l2t_flush_end) >> 16;
+
+   cl[ 8] = __gen_address_offset(&values->l2t_flush_end) >> 24;
+
+   cl[ 9] = __gen_uint(values->l2t_flush_mode, 0, 3);
+
+}
+
+#define V3D41_L2T_CACHE_FLUSH_CONTROL_length     10
+#ifdef __gen_unpack_address
+static inline void
+V3D41_L2T_CACHE_FLUSH_CONTROL_unpack(const uint8_t * restrict cl,
+                                     struct V3D41_L2T_CACHE_FLUSH_CONTROL * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->l2t_flush_mode = __gen_unpack_uint(cl, 72, 75);
+   values->l2t_flush_end = __gen_unpack_address(cl, 40, 71);
+   values->l2t_flush_start = __gen_unpack_address(cl, 8, 39);
 }
 #endif
 
@@ -4225,10 +4440,10 @@ V3D41_TEXTURE_SHADER_STATE_unpack(const uint8_t * restrict cl,
 
 
 struct V3D41_SAMPLER_STATE {
-   uint32_t                             border_color_alpha;
-   uint32_t                             border_color_blue;
-   uint32_t                             border_color_green;
-   uint32_t                             border_color_red;
+   uint32_t                             border_color_word_3;
+   uint32_t                             border_color_word_2;
+   uint32_t                             border_color_word_1;
+   uint32_t                             border_color_word_0;
    uint32_t                             maximum_anisotropy;
    enum V3D41_Border_Color_Mode         border_color_mode;
    bool                                 wrap_i_border;
@@ -4278,13 +4493,13 @@ V3D41_SAMPLER_STATE_pack(__gen_user_data *data, uint8_t * restrict cl,
             __gen_uint(values->wrap_r, 6, 8) >> 8;
 
 
-   memcpy(&cl[8], &values->border_color_red, sizeof(values->border_color_red));
+   memcpy(&cl[8], &values->border_color_word_0, sizeof(values->border_color_word_0));
 
-   memcpy(&cl[12], &values->border_color_green, sizeof(values->border_color_green));
+   memcpy(&cl[12], &values->border_color_word_1, sizeof(values->border_color_word_1));
 
-   memcpy(&cl[16], &values->border_color_blue, sizeof(values->border_color_blue));
+   memcpy(&cl[16], &values->border_color_word_2, sizeof(values->border_color_word_2));
 
-   memcpy(&cl[20], &values->border_color_alpha, sizeof(values->border_color_alpha));
+   memcpy(&cl[20], &values->border_color_word_3, sizeof(values->border_color_word_3));
 }
 
 #define V3D41_SAMPLER_STATE_length            24
@@ -4293,10 +4508,10 @@ static inline void
 V3D41_SAMPLER_STATE_unpack(const uint8_t * restrict cl,
                            struct V3D41_SAMPLER_STATE * restrict values)
 {
-   values->border_color_alpha = __gen_unpack_uint(cl, 160, 191);
-   values->border_color_blue = __gen_unpack_uint(cl, 128, 159);
-   values->border_color_green = __gen_unpack_uint(cl, 96, 127);
-   values->border_color_red = __gen_unpack_uint(cl, 64, 95);
+   values->border_color_word_3 = __gen_unpack_uint(cl, 160, 191);
+   values->border_color_word_2 = __gen_unpack_uint(cl, 128, 159);
+   values->border_color_word_1 = __gen_unpack_uint(cl, 96, 127);
+   values->border_color_word_0 = __gen_unpack_uint(cl, 64, 95);
    values->maximum_anisotropy = __gen_unpack_uint(cl, 61, 62);
    values->border_color_mode = __gen_unpack_uint(cl, 58, 60);
    values->wrap_i_border = __gen_unpack_uint(cl, 57, 57);

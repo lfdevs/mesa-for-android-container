@@ -714,7 +714,7 @@ intel_miptree_get_clear_color(const struct gen_device_info *devinfo,
                               const struct intel_mipmap_tree *mt,
                               enum isl_format view_format, bool sampling,
                               struct brw_bo **clear_color_bo,
-                              uint32_t *clear_color_offset);
+                              uint64_t *clear_color_offset);
 
 
 static inline int
@@ -725,6 +725,10 @@ intel_miptree_blt_pitch(struct intel_mipmap_tree *mt)
       pitch /= 4;
    return pitch;
 }
+
+isl_memcpy_type
+intel_miptree_get_memcpy_type(mesa_format tiledFormat, GLenum format, GLenum type,
+                              uint32_t *cpp);
 
 #ifdef __cplusplus
 }

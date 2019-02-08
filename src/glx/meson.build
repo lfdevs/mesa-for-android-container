@@ -134,7 +134,6 @@ endif
 
 gl_lib_cargs = [
   '-D_REENTRANT',
-  '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
 ]
 
 libglx = static_library(

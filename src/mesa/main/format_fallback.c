@@ -53,6 +53,8 @@ _mesa_get_srgb_format_linear(mesa_format format)
       return MESA_FORMAT_L8A8_UNORM;
    case MESA_FORMAT_A8L8_SRGB:
       return MESA_FORMAT_A8L8_UNORM;
+   case MESA_FORMAT_R_SRGB8:
+      return MESA_FORMAT_R_UNORM8;
    case MESA_FORMAT_L_SRGB8:
       return MESA_FORMAT_L_UNORM8;
    case MESA_FORMAT_BGR_SRGB8:
@@ -155,6 +157,8 @@ _mesa_get_linear_format_srgb(mesa_format format)
       return MESA_FORMAT_L8A8_SRGB;
    case MESA_FORMAT_A8L8_UNORM:
       return MESA_FORMAT_A8L8_SRGB;
+   case MESA_FORMAT_R_UNORM8:
+      return MESA_FORMAT_R_SRGB8;
    case MESA_FORMAT_L_UNORM8:
       return MESA_FORMAT_L_SRGB8;
    case MESA_FORMAT_BGR_UNORM8:
@@ -233,6 +237,7 @@ _mesa_get_linear_format_srgb(mesa_format format)
    case MESA_FORMAT_X8B8G8R8_SRGB:
    case MESA_FORMAT_L8A8_SRGB:
    case MESA_FORMAT_A8L8_SRGB:
+   case MESA_FORMAT_R_SRGB8:
    case MESA_FORMAT_L_SRGB8:
    case MESA_FORMAT_BGR_SRGB8:
    case MESA_FORMAT_SRGB_DXT1:

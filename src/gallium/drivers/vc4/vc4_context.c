@@ -85,6 +85,18 @@ vc4_texture_barrier(struct pipe_context *pctx, unsigned flags)
 }
 
 static void
+vc4_set_debug_callback(struct pipe_context *pctx,
+                       const struct pipe_debug_callback *cb)
+{
+        struct vc4_context *vc4 = vc4_context(pctx);
+
+        if (cb)
+                vc4->debug = *cb;
+        else
+                memset(&vc4->debug, 0, sizeof(vc4->debug));
+}
+
+static void
 vc4_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
         struct vc4_context *vc4 = vc4_context(pctx);
@@ -164,6 +176,7 @@ vc4_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
         pctx->priv = priv;
         pctx->destroy = vc4_context_destroy;
         pctx->flush = vc4_pipe_flush;
+        pctx->set_debug_callback = vc4_set_debug_callback;
         pctx->invalidate_resource = vc4_invalidate_resource;
         pctx->texture_barrier = vc4_texture_barrier;
 

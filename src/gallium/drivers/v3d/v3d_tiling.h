@@ -27,8 +27,6 @@
 uint32_t v3d_utile_width(int cpp) ATTRIBUTE_CONST;
 uint32_t v3d_utile_height(int cpp) ATTRIBUTE_CONST;
 bool v3d_size_is_lt(uint32_t width, uint32_t height, int cpp) ATTRIBUTE_CONST;
-void v3d_load_utile(void *dst, void *src, uint32_t dst_stride, uint32_t cpp);
-void v3d_store_utile(void *dst, void *src, uint32_t src_stride, uint32_t cpp);
 void v3d_load_tiled_image(void *dst, uint32_t dst_stride,
                           void *src, uint32_t src_stride,
                           enum v3d_tiling_mode tiling_format, int cpp,

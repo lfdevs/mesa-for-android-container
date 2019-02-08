@@ -223,15 +223,15 @@ am__libvulkan_common_la_SOURCES_DIST = radv_entrypoints.c \
 	radv_meta.h radv_meta_blit.c radv_meta_blit2d.c \
 	radv_meta_buffer.c radv_meta_bufimage.c radv_meta_clear.c \
 	radv_meta_copy.c radv_meta_decompress.c radv_meta_fast_clear.c \
-	radv_meta_resolve.c radv_meta_resolve_cs.c \
-	radv_meta_resolve_fs.c radv_nir_to_llvm.c radv_llvm_helper.cpp \
-	radv_pass.c radv_pipeline.c radv_pipeline_cache.c \
-	radv_private.h radv_radeon_winsys.h radv_shader.c \
-	radv_shader_info.c radv_shader.h radv_shader_helper.h \
-	radv_query.c radv_util.c radv_util.h radv_wsi.c \
-	si_cmd_buffer.c vk_format.h winsys/amdgpu/radv_amdgpu_bo.c \
-	winsys/amdgpu/radv_amdgpu_bo.h winsys/amdgpu/radv_amdgpu_cs.c \
-	winsys/amdgpu/radv_amdgpu_cs.h \
+	radv_meta_fmask_expand.c radv_meta_resolve.c \
+	radv_meta_resolve_cs.c radv_meta_resolve_fs.c \
+	radv_nir_to_llvm.c radv_llvm_helper.cpp radv_pass.c \
+	radv_pipeline.c radv_pipeline_cache.c radv_private.h \
+	radv_radeon_winsys.h radv_shader.c radv_shader_info.c \
+	radv_shader.h radv_shader_helper.h radv_query.c radv_util.c \
+	radv_util.h radv_wsi.c si_cmd_buffer.c vk_format.h \
+	winsys/amdgpu/radv_amdgpu_bo.c winsys/amdgpu/radv_amdgpu_bo.h \
+	winsys/amdgpu/radv_amdgpu_cs.c winsys/amdgpu/radv_amdgpu_cs.h \
 	winsys/amdgpu/radv_amdgpu_surface.c \
 	winsys/amdgpu/radv_amdgpu_surface.h \
 	winsys/amdgpu/radv_amdgpu_winsys.c \
@@ -250,12 +250,13 @@ am__objects_3 = radv_cmd_buffer.lo radv_debug.lo radv_device.lo \
 	radv_meta.lo radv_meta_blit.lo radv_meta_blit2d.lo \
 	radv_meta_buffer.lo radv_meta_bufimage.lo radv_meta_clear.lo \
 	radv_meta_copy.lo radv_meta_decompress.lo \
-	radv_meta_fast_clear.lo radv_meta_resolve.lo \
-	radv_meta_resolve_cs.lo radv_meta_resolve_fs.lo \
-	radv_nir_to_llvm.lo radv_llvm_helper.lo radv_pass.lo \
-	radv_pipeline.lo radv_pipeline_cache.lo radv_shader.lo \
-	radv_shader_info.lo radv_query.lo radv_util.lo radv_wsi.lo \
-	si_cmd_buffer.lo $(am__objects_2)
+	radv_meta_fast_clear.lo radv_meta_fmask_expand.lo \
+	radv_meta_resolve.lo radv_meta_resolve_cs.lo \
+	radv_meta_resolve_fs.lo radv_nir_to_llvm.lo \
+	radv_llvm_helper.lo radv_pass.lo radv_pipeline.lo \
+	radv_pipeline_cache.lo radv_shader.lo radv_shader_info.lo \
+	radv_query.lo radv_util.lo radv_wsi.lo si_cmd_buffer.lo \
+	$(am__objects_2)
 am__objects_4 = radv_wsi_display.lo
 @HAVE_PLATFORM_DRM_TRUE@am__objects_5 = $(am__objects_4)
 am__objects_6 = radv_wsi_x11.lo
@@ -326,6 +327,7 @@ am__depfiles_remade = ./$(DEPDIR)/dummy.Plo \
 	./$(DEPDIR)/radv_meta_clear.Plo ./$(DEPDIR)/radv_meta_copy.Plo \
 	./$(DEPDIR)/radv_meta_decompress.Plo \
 	./$(DEPDIR)/radv_meta_fast_clear.Plo \
+	./$(DEPDIR)/radv_meta_fmask_expand.Plo \
 	./$(DEPDIR)/radv_meta_resolve.Plo \
 	./$(DEPDIR)/radv_meta_resolve_cs.Plo \
 	./$(DEPDIR)/radv_meta_resolve_fs.Plo \
@@ -764,6 +766,7 @@ VULKAN_FILES := \
 	radv_meta_copy.c \
 	radv_meta_decompress.c \
 	radv_meta_fast_clear.c \
+	radv_meta_fmask_expand.c \
 	radv_meta_resolve.c \
 	radv_meta_resolve_cs.c \
 	radv_meta_resolve_fs.c \
@@ -1010,6 +1013,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_copy.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_decompress.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_fast_clear.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_fmask_expand.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_resolve.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_resolve_cs.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/radv_meta_resolve_fs.Plo@am__quote@ # am--include-marker
@@ -1272,6 +1276,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/radv_meta_copy.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_decompress.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_fast_clear.Plo
+	-rm -f ./$(DEPDIR)/radv_meta_fmask_expand.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve_cs.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve_fs.Plo
@@ -1358,6 +1363,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/radv_meta_copy.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_decompress.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_fast_clear.Plo
+	-rm -f ./$(DEPDIR)/radv_meta_fmask_expand.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve_cs.Plo
 	-rm -f ./$(DEPDIR)/radv_meta_resolve_fs.Plo

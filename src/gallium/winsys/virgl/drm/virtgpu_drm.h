@@ -44,6 +44,16 @@
 #define DRM_VIRTGPU_WAIT     0x08
 #define DRM_VIRTGPU_GET_CAPS  0x09
 
+/*
+ * virtgpu execbuffer flags
+ */
+#define VIRTGPU_EXECBUF_FENCE_FD_IN	0x01
+#define VIRTGPU_EXECBUF_FENCE_FD_OUT	0x02
+#define VIRTGPU_EXECBUF_FLAGS	(\
+		VIRTGPU_EXECBUF_FENCE_FD_IN |\
+		VIRTGPU_EXECBUF_FENCE_FD_OUT |\
+		0)
+
 struct drm_virtgpu_map {
 	uint64_t offset; /* use for mmap system call */
 	uint32_t handle;
@@ -56,7 +66,7 @@ struct drm_virtgpu_execbuffer {
 	uint64_t command; /* void* */
 	uint64_t bo_handles;
 	uint32_t num_bo_handles;
-	uint32_t pad;
+	int32_t fence_fd;
 };
 
 #define VIRTGPU_PARAM_3D_FEATURES 1 /* do we have 3D features in the hw */
@@ -130,7 +140,7 @@ struct drm_virtgpu_get_caps {
 	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_MAP, struct drm_virtgpu_map)
 
 #define DRM_IOCTL_VIRTGPU_EXECBUFFER \
-	DRM_IOW(DRM_COMMAND_BASE + DRM_VIRTGPU_EXECBUFFER,\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VIRTGPU_EXECBUFFER,\
 		struct drm_virtgpu_execbuffer)
 
 #define DRM_IOCTL_VIRTGPU_GETPARAM \

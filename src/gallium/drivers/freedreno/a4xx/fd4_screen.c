@@ -30,7 +30,8 @@
 #include "fd4_screen.h"
 #include "fd4_context.h"
 #include "fd4_format.h"
-#include "ir3_compiler.h"
+
+#include "ir3/ir3_compiler.h"
 
 static boolean
 fd4_screen_is_format_supported(struct pipe_screen *pscreen,

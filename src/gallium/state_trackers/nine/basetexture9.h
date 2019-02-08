@@ -150,7 +150,7 @@ NineBindTextureToDevice( struct NineDevice9 *device,
     nine_bind(slot, tex);
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
 void
 NineBaseTexture9_Dump( struct NineBaseTexture9 *This );
 #else

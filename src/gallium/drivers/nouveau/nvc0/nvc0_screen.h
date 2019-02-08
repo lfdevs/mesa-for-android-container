@@ -89,8 +89,6 @@ struct nvc0_screen {
 
    struct nvc0_blitter *blitter;
 
-   struct nv50_tsc_entry *default_tsc;
-
    struct {
       void **entries;
       int next;

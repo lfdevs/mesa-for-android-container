@@ -119,8 +119,7 @@ AM_CFLAGS += \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_builddir)/src/egl/wayland/wayland-drm \
-	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
-	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\"
+	-I$(top_srcdir)/src/egl/wayland/wayland-drm
 
 nodist_libEGL_common_la_SOURCES = \
 	$(dri2_backend_GENERATED_FILES)
@@ -137,20 +136,26 @@ libEGL_common_la_LIBADD += \
 	$(LIBDRM_LIBS) \
 	$(CLOCK_LIB)
 
-GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
-	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
+# dummy rule to keep dist happy
+$(top_scrdir)/src/mapi/new/genCommon.py:
+
+GLVND_GEN_EGL_DEPS = \
+	generate/gen_egl_dispatch.py \
+	generate/eglFunctionList.py \
+	generate/egl.xml \
 	generate/egl_other.xml
+
+GLVND_GEN_DEPS = $(top_scrdir)/src/mapi/new/genCommon.py \
+	$(GLVND_GEN_EGL_DEPS)
 
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 g_egldispatchstubs.c: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py source \
-		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
 		$(top_srcdir)/src/egl/generate/egl.xml \
 		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
 
 g_egldispatchstubs.h: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py header \
-		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
 		$(top_srcdir)/src/egl/generate/egl.xml \
 		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
 
@@ -229,6 +234,6 @@ EXTRA_DIST = \
 	drivers/haiku \
 	main/egl.def \
 	main/README.txt \
-	$(GLVND_GEN_DEPS) \
+	$(GLVND_GEN_EGL_DEPS) \
 	main/50_mesa.json \
 	meson.build

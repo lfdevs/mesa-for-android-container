@@ -44,8 +44,6 @@
 
 #include "lp_test.h"
 
-#define USE_TEXTURE_CACHE 1
-
 static struct lp_build_format_cache *cache_ptr;
 
 void
@@ -80,7 +78,8 @@ typedef void
 static LLVMValueRef
 add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
                     const struct util_format_description *desc,
-                    struct lp_type type)
+                    struct lp_type type,
+                    unsigned use_cache)
 {
    char name[256];
    LLVMContextRef context = gallivm->context;
@@ -114,7 +113,7 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
    i = LLVMGetParam(func, 2);
    j = LLVMGetParam(func, 3);
 
-   if (cache_ptr) {
+   if (use_cache) {
       cache = LLVMGetParam(func, 4);
    }
 
@@ -137,7 +136,8 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
 PIPE_ALIGN_STACK
 static boolean
 test_format_float(unsigned verbose, FILE *fp,
-                  const struct util_format_description *desc)
+                  const struct util_format_description *desc,
+                  unsigned use_cache)
 {
    LLVMContextRef context;
    struct gallivm_state *gallivm;
@@ -152,7 +152,8 @@ test_format_float(unsigned verbose, FILE *fp,
    context = LLVMContextCreate();
    gallivm = gallivm_create("test_module_float", context);
 
-   fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_float32_vec4_type());
+   fetch = add_fetch_rgba_test(gallivm, verbose, desc,
+                               lp_float32_vec4_type(), use_cache);
 
    gallivm_compile_module(gallivm);
 
@@ -181,7 +182,7 @@ test_format_float(unsigned verbose, FILE *fp,
 
                memset(unpacked, 0, sizeof unpacked);
 
-               fetch_ptr(unpacked, packed, j, i, cache_ptr);
+               fetch_ptr(unpacked, packed, j, i, use_cache ? cache_ptr : NULL);
 
                for(k = 0; k < 4; ++k) {
                   if (util_double_inf_sign(test->unpacked[i][j][k]) != util_inf_sign(unpacked[k])) {
@@ -236,7 +237,8 @@ test_format_float(unsigned verbose, FILE *fp,
 PIPE_ALIGN_STACK
 static boolean
 test_format_unorm8(unsigned verbose, FILE *fp,
-                   const struct util_format_description *desc)
+                   const struct util_format_description *desc,
+                   unsigned use_cache)
 {
    LLVMContextRef context;
    struct gallivm_state *gallivm;
@@ -251,7 +253,8 @@ test_format_unorm8(unsigned verbose, FILE *fp,
    context = LLVMContextCreate();
    gallivm = gallivm_create("test_module_unorm8", context);
 
-   fetch = add_fetch_rgba_test(gallivm, verbose, desc, lp_unorm8_vec4_type());
+   fetch = add_fetch_rgba_test(gallivm, verbose, desc,
+                               lp_unorm8_vec4_type(), use_cache);
 
    gallivm_compile_module(gallivm);
 
@@ -280,7 +283,7 @@ test_format_unorm8(unsigned verbose, FILE *fp,
 
                memset(unpacked, 0, sizeof unpacked);
 
-               fetch_ptr(unpacked, packed, j, i, cache_ptr);
+               fetch_ptr(unpacked, packed, j, i, use_cache ? cache_ptr : NULL);
 
                match = TRUE;
                for(k = 0; k < 4; ++k) {
@@ -335,15 +338,16 @@ test_format_unorm8(unsigned verbose, FILE *fp,
 
 static boolean
 test_one(unsigned verbose, FILE *fp,
-         const struct util_format_description *format_desc)
+         const struct util_format_description *format_desc,
+         unsigned use_cache)
 {
    boolean success = TRUE;
 
-   if (!test_format_float(verbose, fp, format_desc)) {
+   if (!test_format_float(verbose, fp, format_desc, use_cache)) {
      success = FALSE;
    }
 
-   if (!test_format_unorm8(verbose, fp, format_desc)) {
+   if (!test_format_unorm8(verbose, fp, format_desc, use_cache)) {
      success = FALSE;
    }
 
@@ -356,49 +360,52 @@ test_all(unsigned verbose, FILE *fp)
 {
    enum pipe_format format;
    boolean success = TRUE;
+   unsigned use_cache;
 
-#if USE_TEXTURE_CACHE
    cache_ptr = align_malloc(sizeof(struct lp_build_format_cache), 16);
-#endif
 
-   for (format = 1; format < PIPE_FORMAT_COUNT; ++format) {
-      const struct util_format_description *format_desc;
+   for (use_cache = 0; use_cache < 2; use_cache++) {
+      for (format = 1; format < PIPE_FORMAT_COUNT; ++format) {
+         const struct util_format_description *format_desc;
 
-      format_desc = util_format_description(format);
-      if (!format_desc) {
-         continue;
-      }
+         format_desc = util_format_description(format);
+         if (!format_desc) {
+            continue;
+         }
 
+         /*
+          * TODO: test more
+          */
 
-      /*
-       * TODO: test more
-       */
+         if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
+            continue;
+         }
 
-      if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_ZS) {
-         continue;
-      }
+         if (util_format_is_pure_integer(format))
+	    continue;
 
-      if (util_format_is_pure_integer(format))
-	 continue;
+         /* only have util fetch func for etc1 */
+         if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&
+             format != PIPE_FORMAT_ETC1_RGB8) {
+            continue;
+         }
 
-      /* only have util fetch func for etc1 */
-      if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&
-          format != PIPE_FORMAT_ETC1_RGB8) {
-         continue;
-      }
+         /* missing fetch funcs */
+         if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+            continue;
+         }
 
-      /* missing fetch funcs */
-      if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
-         continue;
-      }
+         /* only test twice with formats which can use cache */
+         if (format_desc->layout != UTIL_FORMAT_LAYOUT_S3TC && use_cache) {
+            continue;
+         }
 
-      if (!test_one(verbose, fp, format_desc)) {
-           success = FALSE;
+         if (!test_one(verbose, fp, format_desc, use_cache)) {
+              success = FALSE;
+         }
       }
    }
-#if USE_TEXTURE_CACHE
    align_free(cache_ptr);
-#endif
 
    return success;
 }

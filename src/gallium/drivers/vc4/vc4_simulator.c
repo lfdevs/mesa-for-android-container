@@ -99,10 +99,13 @@ struct vc4_simulator_bo {
 
         /** Area for this BO within sim_state->mem */
         struct mem_block *block;
-        void *winsys_map;
-        uint32_t winsys_stride;
 
         int handle;
+
+        /* Mapping of the underlying GEM object that we copy in/out of
+         * simulator memory.
+         */
+        void *gem_vaddr;
 };
 
 static void *
@@ -143,6 +146,7 @@ vc4_create_simulator_bo(int fd, int handle, unsigned size)
         sim_bo->file = file;
         sim_bo->handle = handle;
 
+        /* Allocate space for the buffer in simulator memory. */
         mtx_lock(&sim_state.mutex);
         sim_bo->block = u_mmAllocMem(sim_state.heap, size + 4, PAGE_ALIGN2, 0);
         mtx_unlock(&sim_state.mutex);
@@ -162,6 +166,25 @@ vc4_create_simulator_bo(int fd, int handle, unsigned size)
                 mtx_lock(&sim_state.mutex);
                 _mesa_hash_table_insert(file->bo_map, int_to_key(handle), bo);
                 mtx_unlock(&sim_state.mutex);
+
+                /* Map the GEM buffer for copy in/out to the simulator. */
+                struct drm_mode_map_dumb map = {
+                        .handle = handle,
+                };
+                int ret = drmIoctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &map);
+                if (ret) {
+                        fprintf(stderr, "Failed to get MMAP offset: %d\n",
+                                errno);
+                        abort();
+                }
+                sim_bo->gem_vaddr = mmap(NULL, obj->base.size,
+                                         PROT_READ | PROT_WRITE, MAP_SHARED,
+                                         fd, map.offset);
+                if (sim_bo->gem_vaddr == MAP_FAILED) {
+                        fprintf(stderr, "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
+                                handle, (long long)map.offset, (int)obj->base.size);
+                        abort();
+                }
         }
 
         return sim_bo;
@@ -174,16 +197,19 @@ vc4_free_simulator_bo(struct vc4_simulator_bo *sim_bo)
         struct drm_vc4_bo *bo = &sim_bo->base;
         struct drm_gem_cma_object *obj = &bo->base;
 
-        if (sim_bo->winsys_map)
-                munmap(sim_bo->winsys_map, obj->base.size);
+        if (bo->validated_shader) {
+                free(bo->validated_shader->texture_samples);
+                free(bo->validated_shader);
+        }
+
+        if (sim_bo->gem_vaddr)
+                munmap(sim_bo->gem_vaddr, obj->base.size);
 
         mtx_lock(&sim_state.mutex);
         u_mmFreeMem(sim_bo->block);
         if (sim_bo->handle) {
-                struct hash_entry *entry =
-                        _mesa_hash_table_search(sim_file->bo_map,
-                                                int_to_key(sim_bo->handle));
-                _mesa_hash_table_remove(sim_file->bo_map, entry);
+                _mesa_hash_table_remove_key(sim_file->bo_map,
+                                            int_to_key(sim_bo->handle));
         }
         mtx_unlock(&sim_state.mutex);
         ralloc_free(sim_bo);
@@ -210,41 +236,23 @@ drm_gem_cma_create(struct drm_device *dev, size_t size)
 }
 
 static int
-vc4_simulator_pin_bos(struct drm_device *dev, struct vc4_job *job,
+vc4_simulator_pin_bos(struct vc4_simulator_file *file,
                       struct vc4_exec_info *exec)
 {
-        int fd = dev->screen->fd;
-        struct vc4_simulator_file *file = vc4_get_simulator_file_for_fd(fd);
         struct drm_vc4_submit_cl *args = exec->args;
-        struct vc4_bo **bos = job->bo_pointers.base;
+        uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
 
         exec->bo_count = args->bo_handle_count;
         exec->bo = calloc(exec->bo_count, sizeof(void *));
         for (int i = 0; i < exec->bo_count; i++) {
-                struct vc4_bo *bo = bos[i];
                 struct vc4_simulator_bo *sim_bo =
-                        vc4_get_simulator_bo(file, bo->handle);
+                        vc4_get_simulator_bo(file, bo_handles[i]);
                 struct drm_vc4_bo *drm_bo = &sim_bo->base;
                 struct drm_gem_cma_object *obj = &drm_bo->base;
 
-                drm_bo->bo = bo;
-#if 0
-                fprintf(stderr, "bo hindex %d: %s\n", i, bo->name);
-#endif
-
-                vc4_bo_map(bo);
-                memcpy(obj->vaddr, bo->map, bo->size);
+                memcpy(obj->vaddr, sim_bo->gem_vaddr, obj->base.size);
 
                 exec->bo[i] = obj;
-
-                /* The kernel does this validation at shader create ioctl
-                 * time.
-                 */
-                if (strcmp(bo->name, "code") == 0) {
-                        drm_bo->validated_shader = vc4_validate_shader(obj);
-                        if (!drm_bo->validated_shader)
-                                abort();
-                }
         }
         return 0;
 }
@@ -255,16 +263,13 @@ vc4_simulator_unpin_bos(struct vc4_exec_info *exec)
         for (int i = 0; i < exec->bo_count; i++) {
                 struct drm_gem_cma_object *obj = exec->bo[i];
                 struct drm_vc4_bo *drm_bo = to_vc4_bo(&obj->base);
-                struct vc4_bo *bo = drm_bo->bo;
+                struct vc4_simulator_bo *sim_bo =
+                        (struct vc4_simulator_bo *)drm_bo;
 
                 assert(*(uint32_t *)(obj->vaddr +
                                      obj->base.size) == BO_SENTINEL);
-                memcpy(bo->map, obj->vaddr, bo->size);
-
-                if (drm_bo->validated_shader) {
-                        free(drm_bo->validated_shader->texture_samples);
-                        free(drm_bo->validated_shader);
-                }
+                if (sim_bo->gem_vaddr)
+                        memcpy(sim_bo->gem_vaddr, obj->vaddr, obj->base.size);
         }
 
         free(exec->bo);
@@ -359,19 +364,10 @@ vc4_dump_to_file(struct vc4_exec_info *exec)
         fclose(f);
 }
 
-int
-vc4_simulator_flush(struct vc4_context *vc4,
-                    struct drm_vc4_submit_cl *args, struct vc4_job *job)
+static int
+vc4_simulator_submit_cl_ioctl(int fd, struct drm_vc4_submit_cl *args)
 {
-        struct vc4_screen *screen = vc4->screen;
-        int fd = screen->fd;
         struct vc4_simulator_file *file = vc4_get_simulator_file_for_fd(fd);
-        struct vc4_surface *csurf = vc4_surface(vc4->framebuffer.cbufs[0]);
-        struct vc4_resource *ctex = csurf ? vc4_resource(csurf->base.texture) : NULL;
-        struct vc4_simulator_bo *csim_bo = ctex ? vc4_get_simulator_bo(file, ctex->bo->handle) : NULL;
-        uint32_t winsys_stride = ctex ? csim_bo->winsys_stride : 0;
-        uint32_t sim_stride = ctex ? ctex->slices[0].stride : 0;
-        uint32_t row_len = MIN2(sim_stride, winsys_stride);
         struct vc4_exec_info exec;
         struct drm_device *dev = &file->dev;
         int ret;
@@ -379,25 +375,9 @@ vc4_simulator_flush(struct vc4_context *vc4,
         memset(&exec, 0, sizeof(exec));
         list_inithead(&exec.unref_list);
 
-        if (ctex && csim_bo->winsys_map) {
-#if 0
-                fprintf(stderr, "%dx%d %d %d %d\n",
-                        ctex->base.b.width0, ctex->base.b.height0,
-                        winsys_stride,
-                        sim_stride,
-                        ctex->bo->size);
-#endif
-
-                for (int y = 0; y < ctex->base.height0; y++) {
-                        memcpy(ctex->bo->map + y * sim_stride,
-                               csim_bo->winsys_map + y * winsys_stride,
-                               row_len);
-                }
-        }
-
         exec.args = args;
 
-        ret = vc4_simulator_pin_bos(dev, job, &exec);
+        ret = vc4_simulator_pin_bos(file, &exec);
         if (ret)
                 return ret;
 
@@ -448,48 +428,7 @@ vc4_simulator_flush(struct vc4_context *vc4,
                 vc4_free_simulator_bo(sim_bo);
         }
 
-        if (ctex && csim_bo->winsys_map) {
-                for (int y = 0; y < ctex->base.height0; y++) {
-                        memcpy(csim_bo->winsys_map + y * winsys_stride,
-                               ctex->bo->map + y * sim_stride,
-                               row_len);
-                }
-        }
-
         return 0;
-}
-
-/**
- * Map the underlying GEM object from the real hardware GEM handle.
- */
-static void *
-vc4_simulator_map_winsys_bo(int fd, struct vc4_simulator_bo *sim_bo)
-{
-        struct drm_vc4_bo *bo = &sim_bo->base;
-        struct drm_gem_cma_object *obj = &bo->base;
-        int ret;
-        void *map;
-
-        struct drm_mode_map_dumb map_dumb = {
-                .handle = sim_bo->handle,
-        };
-        ret = drmIoctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
-        if (ret != 0) {
-                fprintf(stderr, "map ioctl failure\n");
-                abort();
-        }
-
-        map = mmap(NULL, obj->base.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                   fd, map_dumb.offset);
-        if (map == MAP_FAILED) {
-                fprintf(stderr,
-                        "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
-                        sim_bo->handle, (long long)map_dumb.offset,
-                        (int)obj->base.size);
-                abort();
-        }
-
-        return map;
 }
 
 /**
@@ -499,14 +438,9 @@ vc4_simulator_map_winsys_bo(int fd, struct vc4_simulator_bo *sim_bo)
  * time, but we're still using drmPrimeFDToHandle() so we have this helper to
  * be called afterward instead.
  */
-void vc4_simulator_open_from_handle(int fd, uint32_t winsys_stride,
-                                    int handle, uint32_t size)
+void vc4_simulator_open_from_handle(int fd, int handle, uint32_t size)
 {
-        struct vc4_simulator_bo *sim_bo =
-                vc4_create_simulator_bo(fd, handle, size);
-
-        sim_bo->winsys_stride = winsys_stride;
-        sim_bo->winsys_map = vc4_simulator_map_winsys_bo(fd, sim_bo);
+        vc4_create_simulator_bo(fd, handle, size);
 }
 
 /**
@@ -558,19 +492,22 @@ vc4_simulator_create_shader_bo_ioctl(int fd,
 
         args->handle = create.handle;
 
-        vc4_create_simulator_bo(fd, create.handle, args->size);
+        struct vc4_simulator_bo *sim_bo =
+                vc4_create_simulator_bo(fd, create.handle, args->size);
+        struct drm_vc4_bo *drm_bo = &sim_bo->base;
+        struct drm_gem_cma_object *obj = &drm_bo->base;
 
-        struct drm_mode_map_dumb map = {
-                .handle = create.handle
-        };
-        ret = drmIoctl(fd, DRM_IOCTL_MODE_MAP_DUMB, &map);
-        if (ret)
-                return ret;
+        /* Copy into the simulator's BO for validation. */
+        memcpy(obj->vaddr, (void *)(uintptr_t)args->data, args->size);
 
-        void *shader = mmap(NULL, args->size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                            fd, map.offset);
-        memcpy(shader, (void *)(uintptr_t)args->data, args->size);
-        munmap(shader, args->size);
+        /* Copy into the GEM BO to prevent the simulator_pin_bos() from
+         * smashing it.
+         */
+        memcpy(sim_bo->gem_vaddr, (void *)(uintptr_t)args->data, args->size);
+
+        drm_bo->validated_shader = vc4_validate_shader(obj);
+        if (!drm_bo->validated_shader)
+                return -EINVAL;
 
         return 0;
 }
@@ -643,6 +580,8 @@ int
 vc4_simulator_ioctl(int fd, unsigned long request, void *args)
 {
         switch (request) {
+        case DRM_IOCTL_VC4_SUBMIT_CL:
+                return vc4_simulator_submit_cl_ioctl(fd, args);
         case DRM_IOCTL_VC4_CREATE_BO:
                 return vc4_simulator_create_bo_ioctl(fd, args);
         case DRM_IOCTL_VC4_CREATE_SHADER_BO:

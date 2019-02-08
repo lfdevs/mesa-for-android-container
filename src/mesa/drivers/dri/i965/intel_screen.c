@@ -286,6 +286,9 @@ static const struct intel_image_format intel_image_formats[] = {
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
+   { __DRI_IMAGE_FOURCC_AYUV, __DRI_IMAGE_COMPONENTS_AYUV, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } },
+
    /* For YUYV and UYVY buffers, we set up two overlapping DRI images
     * and treat them as planar buffers in the compositors.
     * Plane 0 is GR88 and samples YU or YV pairs and places Y into
@@ -957,7 +960,6 @@ intel_dup_image(__DRIimage *orig_image, void *loaderPrivate)
    image->tile_y          = orig_image->tile_y;
    image->has_depthstencil = orig_image->has_depthstencil;
    image->data            = loaderPrivate;
-   image->dma_buf_imported = orig_image->dma_buf_imported;
    image->aux_offset      = orig_image->aux_offset;
    image->aux_pitch       = orig_image->aux_pitch;
 
@@ -1237,7 +1239,6 @@ intel_create_image_from_dma_bufs2(__DRIscreen *dri_screen,
       return NULL;
    }
 
-   image->dma_buf_imported = true;
    image->yuv_color_space = yuv_color_space;
    image->sample_range = sample_range;
    image->horizontal_siting = horizontal_siting;

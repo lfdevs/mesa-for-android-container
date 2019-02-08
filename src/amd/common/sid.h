@@ -133,11 +133,11 @@
 #define     S_370_WR_ONE_ADDR(x)		(((unsigned)(x) & 0x1) << 16)
 #define     S_370_DST_SEL(x)			(((unsigned)(x) & 0xf) << 8)
 #define       V_370_MEM_MAPPED_REGISTER		0
-#define       V_370_MEMORY_SYNC			1
+#define       V_370_MEM_GRBM			1 /* sync across GRBM */
 #define       V_370_TC_L2			2
 #define       V_370_GDS				3
 #define       V_370_RESERVED			4
-#define       V_370_MEM_ASYNC			5
+#define       V_370_MEM				5 /* not on SI */
 #define   R_371_DST_ADDR_LO			0x371
 #define   R_372_DST_ADDR_HI			0x372
 #define PKT3_DRAW_INDEX_INDIRECT_MULTI         0x38
@@ -211,12 +211,14 @@
 #define PKT3_SET_SH_REG                        0x76
 #define PKT3_SET_SH_REG_OFFSET                 0x77
 #define PKT3_SET_UCONFIG_REG                   0x79 /* new for CIK */
+#define PKT3_SET_UCONFIG_REG_INDEX             0x7A /* new for GFX9, CP ucode version >= 26 */
 #define PKT3_LOAD_CONST_RAM                    0x80
 #define PKT3_WRITE_CONST_RAM                   0x81
 #define PKT3_DUMP_CONST_RAM                    0x83
 #define PKT3_INCREMENT_CE_COUNTER              0x84
 #define PKT3_INCREMENT_DE_COUNTER              0x85
 #define PKT3_WAIT_ON_CE_COUNTER                0x86
+#define PKT3_LOAD_CONTEXT_REG                  0x9F /* new for VI */
 
 #define PKT_TYPE_S(x)                   (((unsigned)(x) & 0x3) << 30)
 #define PKT_TYPE_G(x)                   (((x) >> 30) & 0x3)
@@ -2435,6 +2437,9 @@
 #define   S_008F30_FILTER_MODE(x)                                     (((unsigned)(x) & 0x03) << 29)
 #define   G_008F30_FILTER_MODE(x)                                     (((x) >> 29) & 0x03)
 #define   C_008F30_FILTER_MODE                                        0x9FFFFFFF
+#define     V_008F30_SQ_IMG_FILTER_MODE_BLEND                       0x00
+#define     V_008F30_SQ_IMG_FILTER_MODE_MIN                         0x01
+#define     V_008F30_SQ_IMG_FILTER_MODE_MAX                         0x02
 /* VI */
 #define   S_008F30_COMPAT_MODE(x)                                     (((unsigned)(x) & 0x1) << 31)
 #define   G_008F30_COMPAT_MODE(x)                                     (((x) >> 31) & 0x1)

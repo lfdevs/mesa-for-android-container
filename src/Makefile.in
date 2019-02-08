@@ -117,14 +117,15 @@ target_triplet = @target@
 @HAVE_AMD_DRIVERS_TRUE@am__append_3 = amd
 @HAVE_INTEL_DRIVERS_TRUE@am__append_4 = intel
 @HAVE_BROADCOM_DRIVERS_TRUE@am__append_5 = broadcom
-@NEED_OPENGL_COMMON_TRUE@am__append_6 = mesa
-@HAVE_DRI_GLX_TRUE@am__append_7 = glx
-@HAVE_GBM_TRUE@am__append_8 = gbm
-@HAVE_EGL_TRUE@am__append_9 = egl
+@HAVE_FREEDRENO_DRIVERS_TRUE@am__append_6 = freedreno
+@NEED_OPENGL_COMMON_TRUE@am__append_7 = mesa
+@HAVE_DRI_GLX_TRUE@am__append_8 = glx
+@HAVE_GBM_TRUE@am__append_9 = gbm
+@HAVE_EGL_TRUE@am__append_10 = egl
 
 # Requires wayland-drm
-@HAVE_RADEON_VULKAN_TRUE@am__append_10 = amd/vulkan
-@HAVE_GALLIUM_TRUE@am__append_11 = gallium
+@HAVE_RADEON_VULKAN_TRUE@am__append_11 = amd/vulkan
+@HAVE_GALLIUM_TRUE@am__append_12 = gallium
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -278,8 +279,8 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = . gtest util mapi/glapi/gen mapi compiler \
-	egl/wayland/wayland-drm vulkan amd intel broadcom mesa loader \
-	glx gbm egl amd/vulkan gallium
+	egl/wayland/wayland-drm vulkan amd intel broadcom freedreno \
+	mesa loader glx gbm egl amd/vulkan gallium
 am__DIST_COMMON = $(srcdir)/Makefile.in $(top_srcdir)/bin/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -636,9 +637,9 @@ EXTRA_DIST = meson.build vulkan/registry/vk.xml getopt hgl SConscript \
 # include only conditionally ?
 SUBDIRS = . gtest util mapi/glapi/gen mapi compiler $(am__append_1) \
 	$(am__append_2) $(am__append_3) $(am__append_4) \
-	$(am__append_5) $(am__append_6) loader $(am__append_7) \
+	$(am__append_5) $(am__append_6) $(am__append_7) loader \
 	$(am__append_8) $(am__append_9) $(am__append_10) \
-	$(am__append_11)
+	$(am__append_11) $(am__append_12)
 @HAVE_OPENGL_TRUE@gldir = $(includedir)/GL
 @HAVE_OPENGL_TRUE@gl_HEADERS = \
 @HAVE_OPENGL_TRUE@  $(top_srcdir)/include/GL/gl.h \

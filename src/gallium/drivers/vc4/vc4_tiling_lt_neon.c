@@ -26,5 +26,5 @@
  * single file.
  */
 
-#define VC4_BUILD_NEON
+#define V3D_BUILD_NEON
 #include "vc4_tiling_lt.c"

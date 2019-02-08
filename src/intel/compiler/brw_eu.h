@@ -266,6 +266,46 @@ brw_message_desc(const struct gen_device_info *devinfo,
    }
 }
 
+static inline unsigned
+brw_message_desc_mlen(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   if (devinfo->gen >= 5)
+      return GET_BITS(desc, 28, 25);
+   else
+      return GET_BITS(desc, 23, 20);
+}
+
+static inline unsigned
+brw_message_desc_rlen(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   if (devinfo->gen >= 5)
+      return GET_BITS(desc, 24, 20);
+   else
+      return GET_BITS(desc, 19, 16);
+}
+
+static inline bool
+brw_message_desc_header_present(const struct gen_device_info *devinfo,
+                                uint32_t desc)
+{
+   assert(devinfo->gen >= 5);
+   return GET_BITS(desc, 19, 19);
+}
+
+static inline unsigned
+brw_message_ex_desc(const struct gen_device_info *devinfo,
+                    unsigned ex_msg_length)
+{
+   return SET_BITS(ex_msg_length, 9, 6);
+}
+
+static inline unsigned
+brw_message_ex_desc_ex_mlen(const struct gen_device_info *devinfo,
+                            uint32_t ex_desc)
+{
+   return GET_BITS(ex_desc, 9, 6);
+}
+
 /**
  * Construct a message descriptor immediate with the specified sampler
  * function controls.
@@ -293,6 +333,103 @@ brw_sampler_desc(const struct gen_device_info *devinfo,
               SET_BITS(msg_type, 15, 14));
 }
 
+static inline unsigned
+brw_sampler_desc_binding_table_index(const struct gen_device_info *devinfo,
+                                     uint32_t desc)
+{
+   return GET_BITS(desc, 7, 0);
+}
+
+static inline unsigned
+brw_sampler_desc_sampler(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   return GET_BITS(desc, 11, 8);
+}
+
+static inline unsigned
+brw_sampler_desc_msg_type(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   if (devinfo->gen >= 7)
+      return GET_BITS(desc, 16, 12);
+   else if (devinfo->gen >= 5 || devinfo->is_g4x)
+      return GET_BITS(desc, 15, 12);
+   else
+      return GET_BITS(desc, 15, 14);
+}
+
+static inline unsigned
+brw_sampler_desc_simd_mode(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   assert(devinfo->gen >= 5);
+   if (devinfo->gen >= 7)
+      return GET_BITS(desc, 18, 17);
+   else
+      return GET_BITS(desc, 17, 16);
+}
+
+static  inline unsigned
+brw_sampler_desc_return_format(const struct gen_device_info *devinfo,
+                               uint32_t desc)
+{
+   assert(devinfo->gen == 4 && !devinfo->is_g4x);
+   return GET_BITS(desc, 13, 12);
+}
+
+/**
+ * Construct a message descriptor for the dataport
+ */
+static inline uint32_t
+brw_dp_desc(const struct gen_device_info *devinfo,
+            unsigned binding_table_index,
+            unsigned msg_type,
+            unsigned msg_control)
+{
+   /* Prior to gen6, things are too inconsistent; use the dp_read/write_desc
+    * helpers instead.
+    */
+   assert(devinfo->gen >= 6);
+   const unsigned desc = SET_BITS(binding_table_index, 7, 0);
+   if (devinfo->gen >= 8) {
+      return (desc | SET_BITS(msg_control, 13, 8) |
+              SET_BITS(msg_type, 18, 14));
+   } else if (devinfo->gen >= 7) {
+      return (desc | SET_BITS(msg_control, 13, 8) |
+              SET_BITS(msg_type, 17, 14));
+   } else {
+      return (desc | SET_BITS(msg_control, 12, 8) |
+              SET_BITS(msg_type, 16, 13));
+   }
+}
+
+static inline unsigned
+brw_dp_desc_binding_table_index(const struct gen_device_info *devinfo,
+                                uint32_t desc)
+{
+   return GET_BITS(desc, 7, 0);
+}
+
+static inline unsigned
+brw_dp_desc_msg_type(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   assert(devinfo->gen >= 6);
+   if (devinfo->gen >= 8)
+      return GET_BITS(desc, 18, 14);
+   else if (devinfo->gen >= 7)
+      return GET_BITS(desc, 17, 14);
+   else
+      return GET_BITS(desc, 16, 13);
+}
+
+static inline unsigned
+brw_dp_desc_msg_control(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   assert(devinfo->gen >= 6);
+   if (devinfo->gen >= 7)
+      return GET_BITS(desc, 13, 8);
+   else
+      return GET_BITS(desc, 12, 8);
+}
+
 /**
  * Construct a message descriptor immediate with the specified dataport read
  * function controls.
@@ -304,21 +441,41 @@ brw_dp_read_desc(const struct gen_device_info *devinfo,
                  unsigned msg_type,
                  unsigned target_cache)
 {
-   const unsigned desc = SET_BITS(binding_table_index, 7, 0);
-   if (devinfo->gen >= 7)
-      return (desc | SET_BITS(msg_control, 13, 8) |
-              SET_BITS(msg_type, 17, 14));
-   else if (devinfo->gen >= 6)
-      return (desc | SET_BITS(msg_control, 12, 8) |
-              SET_BITS(msg_type, 16, 13));
+   if (devinfo->gen >= 6)
+      return brw_dp_desc(devinfo, binding_table_index, msg_type, msg_control);
    else if (devinfo->gen >= 5 || devinfo->is_g4x)
-      return (desc | SET_BITS(msg_control, 10, 8) |
+      return (SET_BITS(binding_table_index, 7, 0) |
+              SET_BITS(msg_control, 10, 8) |
               SET_BITS(msg_type, 13, 11) |
               SET_BITS(target_cache, 15, 14));
    else
-      return (desc | SET_BITS(msg_control, 11, 8) |
+      return (SET_BITS(binding_table_index, 7, 0) |
+              SET_BITS(msg_control, 11, 8) |
               SET_BITS(msg_type, 13, 12) |
               SET_BITS(target_cache, 15, 14));
+}
+
+static inline unsigned
+brw_dp_read_desc_msg_type(const struct gen_device_info *devinfo, uint32_t desc)
+{
+   if (devinfo->gen >= 6)
+      return brw_dp_desc_msg_type(devinfo, desc);
+   else if (devinfo->gen >= 5 || devinfo->is_g4x)
+      return GET_BITS(desc, 13, 11);
+   else
+      return GET_BITS(desc, 13, 12);
+}
+
+static inline unsigned
+brw_dp_read_desc_msg_control(const struct gen_device_info *devinfo,
+                             uint32_t desc)
+{
+   if (devinfo->gen >= 6)
+      return brw_dp_desc_msg_control(devinfo, desc);
+   else if (devinfo->gen >= 5 || devinfo->is_g4x)
+      return GET_BITS(desc, 10, 8);
+   else
+      return GET_BITS(desc, 11, 8);
 }
 
 /**
@@ -333,21 +490,58 @@ brw_dp_write_desc(const struct gen_device_info *devinfo,
                   unsigned last_render_target,
                   unsigned send_commit_msg)
 {
-   const unsigned desc = SET_BITS(binding_table_index, 7, 0);
-   if (devinfo->gen >= 7)
-      return (desc | SET_BITS(msg_control, 13, 8) |
-              SET_BITS(last_render_target, 12, 12) |
-              SET_BITS(msg_type, 17, 14));
-   else if (devinfo->gen >= 6)
-      return (desc | SET_BITS(msg_control, 12, 8) |
-              SET_BITS(last_render_target, 12, 12) |
-              SET_BITS(msg_type, 16, 13) |
-              SET_BITS(send_commit_msg, 17, 17));
+   assert(devinfo->gen <= 6 || !send_commit_msg);
+   if (devinfo->gen >= 6)
+      return brw_dp_desc(devinfo, binding_table_index, msg_type, msg_control) |
+             SET_BITS(last_render_target, 12, 12) |
+             SET_BITS(send_commit_msg, 17, 17);
    else
-      return (desc | SET_BITS(msg_control, 11, 8) |
+      return (SET_BITS(binding_table_index, 7, 0) |
+              SET_BITS(msg_control, 11, 8) |
               SET_BITS(last_render_target, 11, 11) |
               SET_BITS(msg_type, 14, 12) |
               SET_BITS(send_commit_msg, 15, 15));
+}
+
+static inline unsigned
+brw_dp_write_desc_msg_type(const struct gen_device_info *devinfo,
+                           uint32_t desc)
+{
+   if (devinfo->gen >= 6)
+      return brw_dp_desc_msg_type(devinfo, desc);
+   else
+      return GET_BITS(desc, 14, 12);
+}
+
+static inline unsigned
+brw_dp_write_desc_msg_control(const struct gen_device_info *devinfo,
+                              uint32_t desc)
+{
+   if (devinfo->gen >= 6)
+      return brw_dp_desc_msg_control(devinfo, desc);
+   else
+      return GET_BITS(desc, 11, 8);
+}
+
+static inline bool
+brw_dp_write_desc_last_render_target(const struct gen_device_info *devinfo,
+                                     uint32_t desc)
+{
+   if (devinfo->gen >= 6)
+      return GET_BITS(desc, 12, 12);
+   else
+      return GET_BITS(desc, 11, 11);
+}
+
+static inline bool
+brw_dp_write_desc_write_commit(const struct gen_device_info *devinfo,
+                               uint32_t desc)
+{
+   assert(devinfo->gen <= 6);
+   if (devinfo->gen >= 6)
+      return GET_BITS(desc, 17, 17);
+   else
+      return GET_BITS(desc, 15, 15);
 }
 
 /**
@@ -360,13 +554,221 @@ brw_dp_surface_desc(const struct gen_device_info *devinfo,
                     unsigned msg_control)
 {
    assert(devinfo->gen >= 7);
-   if (devinfo->gen >= 8) {
-      return (SET_BITS(msg_control, 13, 8) |
-              SET_BITS(msg_type, 18, 14));
+   /* We'll OR in the binding table index later */
+   return brw_dp_desc(devinfo, 0, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_untyped_atomic_desc(const struct gen_device_info *devinfo,
+                           unsigned exec_size, /**< 0 for SIMD4x2 */
+                           unsigned atomic_op,
+                           bool response_expected)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+
+   unsigned msg_type;
+   if (devinfo->gen >= 8 || devinfo->is_haswell) {
+      if (exec_size > 0) {
+         msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP;
+      } else {
+         msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2;
+      }
    } else {
-      return (SET_BITS(msg_control, 13, 8) |
-              SET_BITS(msg_type, 17, 14));
+      msg_type = GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP;
    }
+
+   const unsigned msg_control =
+      SET_BITS(atomic_op, 3, 0) |
+      SET_BITS(0 < exec_size && exec_size <= 8, 4, 4) |
+      SET_BITS(response_expected, 5, 5);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_untyped_atomic_float_desc(const struct gen_device_info *devinfo,
+                                 unsigned exec_size,
+                                 unsigned atomic_op,
+                                 bool response_expected)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+   assert(devinfo->gen >= 9);
+
+   assert(exec_size > 0);
+   const unsigned msg_type = GEN9_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP;
+
+   const unsigned msg_control =
+      SET_BITS(atomic_op, 1, 0) |
+      SET_BITS(exec_size <= 8, 4, 4) |
+      SET_BITS(response_expected, 5, 5);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline unsigned
+brw_mdc_cmask(unsigned num_channels)
+{
+   /* See also MDC_CMASK in the SKL PRM Vol 2d. */
+   return 0xf & (0xf << num_channels);
+}
+
+static inline uint32_t
+brw_dp_untyped_surface_rw_desc(const struct gen_device_info *devinfo,
+                               unsigned exec_size, /**< 0 for SIMD4x2 */
+                               unsigned num_channels,
+                               bool write)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+
+   unsigned msg_type;
+   if (write) {
+      if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE;
+      } else {
+         msg_type = GEN7_DATAPORT_DC_UNTYPED_SURFACE_WRITE;
+      }
+   } else {
+      /* Read */
+      if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ;
+      } else {
+         msg_type = GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ;
+      }
+   }
+
+   /* SIMD4x2 is only valid for read messages on IVB; use SIMD8 instead */
+   if (write && devinfo->gen == 7 && !devinfo->is_haswell && exec_size == 0)
+      exec_size = 8;
+
+   /* See also MDC_SM3 in the SKL PRM Vol 2d. */
+   const unsigned simd_mode = exec_size == 0 ? 0 : /* SIMD4x2 */
+                              exec_size <= 8 ? 2 : 1;
+
+   const unsigned msg_control =
+      SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
+      SET_BITS(simd_mode, 5, 4);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline unsigned
+brw_mdc_ds(unsigned bit_size)
+{
+   switch (bit_size) {
+   case 8:
+      return GEN7_BYTE_SCATTERED_DATA_ELEMENT_BYTE;
+   case 16:
+      return GEN7_BYTE_SCATTERED_DATA_ELEMENT_WORD;
+   case 32:
+      return GEN7_BYTE_SCATTERED_DATA_ELEMENT_DWORD;
+   default:
+      unreachable("Unsupported bit_size for byte scattered messages");
+   }
+}
+
+static inline uint32_t
+brw_dp_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
+                              unsigned exec_size,
+                              unsigned bit_size,
+                              bool write)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+
+   assert(devinfo->gen > 7 || devinfo->is_haswell);
+   const unsigned msg_type =
+      write ? HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_WRITE :
+              HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_READ;
+
+   assert(exec_size > 0);
+   const unsigned msg_control =
+      SET_BITS(exec_size == 16, 0, 0) |
+      SET_BITS(brw_mdc_ds(bit_size), 3, 2);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_typed_atomic_desc(const struct gen_device_info *devinfo,
+                         unsigned exec_size,
+                         unsigned exec_group,
+                         unsigned atomic_op,
+                         bool response_expected)
+{
+   assert(exec_size > 0 || exec_group == 0);
+   assert(exec_group % 8 == 0);
+
+   unsigned msg_type;
+   if (devinfo->gen >= 8 || devinfo->is_haswell) {
+      if (exec_size == 0) {
+         msg_type = HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2;
+      } else {
+         msg_type = HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP;
+      }
+   } else {
+      /* SIMD4x2 typed surface R/W messages only exist on HSW+ */
+      assert(exec_size > 0);
+      msg_type = GEN7_DATAPORT_RC_TYPED_ATOMIC_OP;
+   }
+
+   const bool high_sample_mask = (exec_group / 8) % 2 == 1;
+
+   const unsigned msg_control =
+      SET_BITS(atomic_op, 3, 0) |
+      SET_BITS(high_sample_mask, 4, 4) |
+      SET_BITS(response_expected, 5, 5);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_typed_surface_rw_desc(const struct gen_device_info *devinfo,
+                             unsigned exec_size,
+                             unsigned exec_group,
+                             unsigned num_channels,
+                             bool write)
+{
+   assert(exec_size > 0 || exec_group == 0);
+   assert(exec_group % 8 == 0);
+
+   /* Typed surface reads and writes don't support SIMD16 */
+   assert(exec_size <= 8);
+
+   unsigned msg_type;
+   if (write) {
+      if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         msg_type = HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE;
+      } else {
+         msg_type = GEN7_DATAPORT_RC_TYPED_SURFACE_WRITE;
+      }
+   } else {
+      if (devinfo->gen >= 8 || devinfo->is_haswell) {
+         msg_type = HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ;
+      } else {
+         msg_type = GEN7_DATAPORT_RC_TYPED_SURFACE_READ;
+      }
+   }
+
+   /* See also MDC_SG3 in the SKL PRM Vol 2d. */
+   unsigned msg_control;
+   if (devinfo->gen >= 8 || devinfo->is_haswell) {
+      /* See also MDC_SG3 in the SKL PRM Vol 2d. */
+      const unsigned slot_group = exec_size == 0 ? 0 : /* SIMD4x2 */
+                                  1 + ((exec_group / 8) % 2);
+
+      msg_control =
+         SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
+         SET_BITS(slot_group, 5, 4);
+   } else {
+      /* SIMD4x2 typed surface R/W messages only exist on HSW+ */
+      assert(exec_size > 0);
+      const unsigned slot_group = ((exec_group / 8) % 2);
+
+      msg_control =
+         SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
+         SET_BITS(slot_group, 5, 5);
+   }
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
 }
 
 /**
@@ -408,6 +810,17 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg payload,
                           struct brw_reg desc,
                           unsigned desc_imm);
+
+void
+brw_send_indirect_split_message(struct brw_codegen *p,
+                                unsigned sfid,
+                                struct brw_reg dst,
+                                struct brw_reg payload0,
+                                struct brw_reg payload1,
+                                struct brw_reg desc,
+                                unsigned desc_imm,
+                                struct brw_reg ex_desc,
+                                unsigned ex_desc_imm);
 
 void brw_ff_sync(struct brw_codegen *p,
 		   struct brw_reg dest,
@@ -578,17 +991,6 @@ brw_untyped_atomic(struct brw_codegen *p,
                    bool header_present);
 
 void
-brw_untyped_atomic_float(struct brw_codegen *p,
-                         struct brw_reg dst,
-                         struct brw_reg payload,
-                         struct brw_reg surface,
-                         unsigned atomic_op,
-                         unsigned msg_length,
-                         bool response_expected,
-                         bool header_present);
-
-
-void
 brw_untyped_surface_read(struct brw_codegen *p,
                          struct brw_reg dst,
                          struct brw_reg payload,
@@ -630,22 +1032,6 @@ brw_typed_surface_write(struct brw_codegen *p,
                         unsigned msg_length,
                         unsigned num_channels,
                         bool header_present);
-
-void
-brw_byte_scattered_read(struct brw_codegen *p,
-                        struct brw_reg dst,
-                        struct brw_reg payload,
-                        struct brw_reg surface,
-                        unsigned msg_length,
-                        unsigned bit_size);
-
-void
-brw_byte_scattered_write(struct brw_codegen *p,
-                         struct brw_reg payload,
-                         struct brw_reg surface,
-                         unsigned msg_length,
-                         unsigned bit_size,
-                         bool header_present);
 
 void
 brw_memory_fence(struct brw_codegen *p,

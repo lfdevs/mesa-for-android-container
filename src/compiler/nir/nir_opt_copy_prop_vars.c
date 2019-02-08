@@ -86,13 +86,27 @@ struct copy_prop_var_state {
    bool progress;
 };
 
+static bool
+value_equals_store_src(struct value *value, nir_intrinsic_instr *intrin)
+{
+   assert(intrin->intrinsic == nir_intrinsic_store_deref);
+   uintptr_t write_mask = nir_intrinsic_write_mask(intrin);
+
+   for (unsigned i = 0; i < intrin->num_components; i++) {
+      if ((write_mask & (1 << i)) &&
+          value->ssa[i] != intrin->src[1].ssa)
+         return false;
+   }
+
+   return true;
+}
+
 static struct vars_written *
 create_vars_written(struct copy_prop_var_state *state)
 {
    struct vars_written *written =
       linear_zalloc_child(state->lin_ctx, sizeof(struct vars_written));
-   written->derefs = _mesa_hash_table_create(state->mem_ctx, _mesa_hash_pointer,
-                                             _mesa_key_pointer_equal);
+   written->derefs = _mesa_pointer_hash_table_create(state->mem_ctx);
    return written;
 }
 
@@ -119,10 +133,10 @@ gather_vars_written(struct copy_prop_var_state *state,
       nir_foreach_instr(instr, block) {
          if (instr->type == nir_instr_type_call) {
             written->modes |= nir_var_shader_out |
-                              nir_var_global |
-                              nir_var_local |
-                              nir_var_shader_storage |
-                              nir_var_shared;
+                              nir_var_shader_temp |
+                              nir_var_function_temp |
+                              nir_var_mem_ssbo |
+                              nir_var_mem_shared;
             continue;
          }
 
@@ -134,8 +148,8 @@ gather_vars_written(struct copy_prop_var_state *state,
          case nir_intrinsic_barrier:
          case nir_intrinsic_memory_barrier:
             written->modes |= nir_var_shader_out |
-                              nir_var_shader_storage |
-                              nir_var_shared;
+                              nir_var_mem_ssbo |
+                              nir_var_mem_shared;
             break;
 
          case nir_intrinsic_emit_vertex:
@@ -345,12 +359,8 @@ apply_barrier_for_modes(struct util_dynarray *copies,
                         nir_variable_mode modes)
 {
    util_dynarray_foreach_reverse(copies, struct copy_entry, iter) {
-      nir_variable *dst_var = nir_deref_instr_get_variable(iter->dst);
-      nir_variable *src_var = iter->src.is_ssa ? NULL :
-         nir_deref_instr_get_variable(iter->src.deref);
-
-      if ((dst_var->data.mode & modes) ||
-          (src_var && (src_var->data.mode & modes)))
+      if ((iter->dst->mode & modes) ||
+          (!iter->src.is_ssa && (iter->src.deref->mode & modes)))
          copy_entry_remove(copies, iter);
    }
 }
@@ -614,10 +624,10 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
    nir_foreach_instr_safe(instr, block) {
       if (instr->type == nir_instr_type_call) {
          apply_barrier_for_modes(copies, nir_var_shader_out |
-                                         nir_var_global |
-                                         nir_var_local |
-                                         nir_var_shader_storage |
-                                         nir_var_shared);
+                                         nir_var_shader_temp |
+                                         nir_var_function_temp |
+                                         nir_var_mem_ssbo |
+                                         nir_var_mem_shared);
          continue;
       }
 
@@ -629,8 +639,8 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
       case nir_intrinsic_barrier:
       case nir_intrinsic_memory_barrier:
          apply_barrier_for_modes(copies, nir_var_shader_out |
-                                         nir_var_shader_storage |
-                                         nir_var_shared);
+                                         nir_var_mem_ssbo |
+                                         nir_var_mem_shared);
          break;
 
       case nir_intrinsic_emit_vertex:
@@ -702,18 +712,28 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
       }
 
       case nir_intrinsic_store_deref: {
-         struct value value = {
-            .is_ssa = true
-         };
-
-         for (unsigned i = 0; i < intrin->num_components; i++)
-            value.ssa[i] = intrin->src[1].ssa;
-
          nir_deref_instr *dst = nir_src_as_deref(intrin->src[0]);
-         unsigned wrmask = nir_intrinsic_write_mask(intrin);
          struct copy_entry *entry =
-            get_entry_and_kill_aliases(copies, dst, wrmask);
-         store_to_entry(state, entry, &value, wrmask);
+            lookup_entry_for_deref(copies, dst, nir_derefs_equal_bit);
+         if (entry && value_equals_store_src(&entry->src, intrin)) {
+            /* If we are storing the value from a load of the same var the
+             * store is redundant so remove it.
+             */
+            nir_instr_remove(instr);
+         } else {
+            struct value value = {
+               .is_ssa = true
+            };
+
+            for (unsigned i = 0; i < intrin->num_components; i++)
+               value.ssa[i] = intrin->src[1].ssa;
+
+            unsigned wrmask = nir_intrinsic_write_mask(intrin);
+            struct copy_entry *entry =
+               get_entry_and_kill_aliases(copies, dst, wrmask);
+            store_to_entry(state, entry, &value, wrmask);
+         }
+
          break;
       }
 
@@ -867,8 +887,7 @@ nir_copy_prop_vars_impl(nir_function_impl *impl)
       .mem_ctx = mem_ctx,
       .lin_ctx = linear_zalloc_parent(mem_ctx, 0),
 
-      .vars_written_map = _mesa_hash_table_create(mem_ctx, _mesa_hash_pointer,
-                                                  _mesa_key_pointer_equal),
+      .vars_written_map = _mesa_pointer_hash_table_create(mem_ctx),
    };
 
    gather_vars_written(&state, NULL, &impl->cf_node);
@@ -878,6 +897,10 @@ nir_copy_prop_vars_impl(nir_function_impl *impl)
    if (state.progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
+   } else {
+#ifndef NDEBUG
+      impl->valid_metadata &= ~nir_metadata_not_properly_reset;
+#endif
    }
 
    ralloc_free(mem_ctx);

@@ -31,7 +31,7 @@
 
 #include "freedreno_context.h"
 
-#include "ir3_shader.h"
+#include "ir3/ir3_shader.h"
 
 
 struct fd3_context {

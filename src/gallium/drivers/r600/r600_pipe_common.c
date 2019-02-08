@@ -715,7 +715,7 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 	if (rscreen->info.num_sdma_rings && !(rscreen->debug_flags & DBG_NO_ASYNC_DMA)) {
 		rctx->dma.cs = rctx->ws->cs_create(rctx->ctx, RING_DMA,
 						   r600_flush_dma_ring,
-						   rctx);
+						   rctx, false);
 		rctx->dma.flush = r600_flush_dma_ring;
 	}
 

@@ -48,8 +48,8 @@
 struct stipple_stage {
    struct draw_stage stage;
    float counter;
-   uint pattern;
-   uint factor;
+   ushort pattern;
+   ushort factor;
    bool smooth;
 };
 
@@ -110,7 +110,7 @@ emit_segment(struct draw_stage *stage, struct prim_header *header,
 
 
 static inline bool
-stipple_test(int counter, ushort pattern, int factor)
+stipple_test(int counter, ushort pattern, ushort factor)
 {
    int b = (counter / factor) & 0xf;
    return !!((1 << b) & pattern);
@@ -136,6 +136,10 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
 
    float length;
    int i;
+   int intlength;
+
+   if (header->flags & DRAW_PIPE_RESET_STIPPLE)
+      stipple->counter = 0;
 
    if (stipple->smooth) {
       float dx = x1 - x0;
@@ -147,21 +151,21 @@ stipple_line(struct draw_stage *stage, struct prim_header *header)
       length = MAX2(dx, dy);
    }
 
-   if (header->flags & DRAW_PIPE_RESET_STIPPLE)
-      stipple->counter = 0;
+   if (util_is_inf_or_nan(length))
+      intlength = 0;
+   else
+      intlength = ceilf(length);
 
    /* XXX ToDo: instead of iterating pixel-by-pixel, use a look-up table.
     */
-   for (i = 0; i < length; i++) {
+   for (i = 0; i < intlength; i++) {
       bool result = stipple_test((int)stipple->counter + i,
-                                 (ushort)stipple->pattern, stipple->factor);
+                                 stipple->pattern, stipple->factor);
       if (result != state) {
          /* changing from "off" to "on" or vice versa */
          if (state) {
-            if (start != i) {
-               /* finishing an "on" segment */
-               emit_segment(stage, header, start / length, i / length);
-            }
+            /* finishing an "on" segment */
+            emit_segment(stage, header, start / length, i / length);
          }
          else {
             /* starting an "on" segment */

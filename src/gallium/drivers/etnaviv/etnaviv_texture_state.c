@@ -131,6 +131,17 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
       return NULL;
    }
 
+   if (res->addressing_mode == ETNA_ADDRESSING_MODE_LINEAR) {
+      sv->TE_SAMPLER_CONFIG0 |= VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_LINEAR);
+
+      for (int lod = 0; lod <= res->base.last_level; ++lod)
+         sv->TE_SAMPLER_LINEAR_STRIDE[lod] = res->levels[lod].stride;
+
+   } else {
+      sv->TE_SAMPLER_CONFIG0 |= VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_TILED);
+      memset(&sv->TE_SAMPLER_LINEAR_STRIDE, 0, sizeof(sv->TE_SAMPLER_LINEAR_STRIDE));
+   }
+
    sv->TE_SAMPLER_CONFIG1 = COND(ext, VIVS_TE_SAMPLER_CONFIG1_FORMAT_EXT(format)) |
                             COND(astc, VIVS_TE_SAMPLER_CONFIG1_FORMAT_EXT(TEXTURE_FORMAT_EXT_ASTC)) |
                             VIVS_TE_SAMPLER_CONFIG1_HALIGN(res->halign) | swiz;
@@ -290,6 +301,16 @@ etna_emit_texture_state(struct etna_context *ctx)
             if ((1 << x) & active_samplers) {
                struct etna_sampler_view *sv = etna_sampler_view(ctx->sampler_view[x]);
                /*02400*/ EMIT_STATE_RELOC(TE_SAMPLER_LOD_ADDR(x, y),&sv->TE_SAMPLER_LOD_ADDR[y]);
+            }
+         }
+      }
+   }
+   if (unlikely(dirty & (ETNA_DIRTY_SAMPLER_VIEWS))) {
+      for (int y = 0; y < VIVS_TE_SAMPLER_LINEAR_STRIDE__LEN; ++y) {
+         for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
+            if ((1 << x) & active_samplers) {
+               struct etna_sampler_view *sv = etna_sampler_view(ctx->sampler_view[x]);
+               /*02C00*/ EMIT_STATE(TE_SAMPLER_LINEAR_STRIDE(x, y), sv->TE_SAMPLER_LINEAR_STRIDE[y]);
             }
          }
       }

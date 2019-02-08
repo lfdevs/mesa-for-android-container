@@ -934,6 +934,7 @@ enum marshal_dispatch_cmd_id
    DISPATCH_CMD_DrawTexxOES,
    DISPATCH_CMD_DrawTexxvOES,
    DISPATCH_CMD_DiscardFramebufferEXT,
+   DISPATCH_CMD_FramebufferTexture2DMultisampleEXT,
    DISPATCH_CMD_DepthRangeIndexedfOES,
 };
 

@@ -114,11 +114,25 @@ namespace brw {
       fs_builder
       group(unsigned n, unsigned i) const
       {
-         assert(force_writemask_all ||
-                (n <= dispatch_width() && i < dispatch_width() / n));
          fs_builder bld = *this;
+
+         if (n <= dispatch_width() && i < dispatch_width() / n) {
+            bld._group += i * n;
+         } else {
+            /* The requested channel group isn't a subset of the channel group
+             * of this builder, which means that the resulting instructions
+             * would use (potentially undefined) channel enable signals not
+             * specified by the parent builder.  That's only valid if the
+             * instruction doesn't have per-channel semantics, in which case
+             * we should clear off the default group index in order to prevent
+             * emitting instructions with channel group not aligned to their
+             * own execution size.
+             */
+            assert(force_writemask_all);
+            bld._group = 0;
+         }
+
          bld._dispatch_width = n;
-         bld._group += i * n;
          return bld;
       }
 
@@ -412,6 +426,21 @@ namespace brw {
          return src_reg(component(dst, 0));
       }
 
+      src_reg
+      move_to_vgrf(const src_reg &src, unsigned num_components) const
+      {
+         src_reg *const src_comps = new src_reg[num_components];
+         for (unsigned i = 0; i < num_components; i++)
+            src_comps[i] = offset(src, dispatch_width(), i);
+
+         const dst_reg dst = vgrf(src.type, num_components);
+         LOAD_PAYLOAD(dst, src_comps, num_components, 0);
+
+         delete[] src_comps;
+
+         return src_reg(dst);
+      }
+
       void
       emit_scan(enum opcode opcode, const dst_reg &tmp,
                 unsigned cluster_size, brw_conditional_mod mod) const
@@ -437,43 +466,13 @@ namespace brw {
 
          if (cluster_size > 1) {
             const fs_builder ubld = exec_all().group(dispatch_width() / 2, 0);
-            dst_reg left = horiz_stride(tmp, 2);
-            dst_reg right = horiz_stride(horiz_offset(tmp, 1), 2);
-
-            /* From the Cherryview PRM Vol. 7, "Register Region Restrictiosn":
-             *
-             *    "When source or destination datatype is 64b or operation is
-             *    integer DWord multiply, regioning in Align1 must follow
-             *    these rules:
-             *
-             *    [...]
-             *
-             *    3. Source and Destination offset must be the same, except
-             *       the case of scalar source."
-             *
-             * In order to work around this, we create a temporary register
-             * and shift left over to match right.  If we have a 64-bit type,
-             * we have to use two integer MOVs instead of a 64-bit MOV.
-             */
-            if (need_matching_subreg_offset(opcode, tmp.type)) {
-               dst_reg tmp2 = vgrf(tmp.type);
-               dst_reg new_left = horiz_stride(horiz_offset(tmp2, 1), 2);
-               if (type_sz(tmp.type) > 4) {
-                  ubld.MOV(subscript(new_left, BRW_REGISTER_TYPE_D, 0),
-                           subscript(left, BRW_REGISTER_TYPE_D, 0));
-                  ubld.MOV(subscript(new_left, BRW_REGISTER_TYPE_D, 1),
-                           subscript(left, BRW_REGISTER_TYPE_D, 1));
-               } else {
-                  ubld.MOV(new_left, left);
-               }
-               left = new_left;
-            }
+            const dst_reg left = horiz_stride(tmp, 2);
+            const dst_reg right = horiz_stride(horiz_offset(tmp, 1), 2);
             set_condmod(mod, ubld.emit(opcode, right, left, right));
          }
 
          if (cluster_size > 2) {
-            if (type_sz(tmp.type) <= 4 &&
-                !need_matching_subreg_offset(opcode, tmp.type)) {
+            if (type_sz(tmp.type) <= 4) {
                const fs_builder ubld =
                   exec_all().group(dispatch_width() / 4, 0);
                src_reg left = horiz_stride(horiz_offset(tmp, 1), 4);
@@ -771,38 +770,6 @@ namespace brw {
          } else {
             return src;
          }
-      }
-
-
-      /* From the Cherryview PRM Vol. 7, "Register Region Restrictiosn":
-       *
-       *    "When source or destination datatype is 64b or operation is
-       *    integer DWord multiply, regioning in Align1 must follow
-       *    these rules:
-       *
-       *    [...]
-       *
-       *    3. Source and Destination offset must be the same, except
-       *       the case of scalar source."
-       *
-       * This helper just detects when we're in this case.
-       */
-      bool
-      need_matching_subreg_offset(enum opcode opcode,
-                                  enum brw_reg_type type) const
-      {
-         if (!shader->devinfo->is_cherryview &&
-             !gen_device_info_is_9lp(shader->devinfo))
-            return false;
-
-         if (type_sz(type) > 4)
-            return true;
-
-         if (opcode == BRW_OPCODE_MUL &&
-             !brw_reg_type_is_floating_point(type))
-            return true;
-
-         return false;
       }
 
       bblock_t *block;

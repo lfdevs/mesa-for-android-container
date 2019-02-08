@@ -385,6 +385,7 @@ tgsi_util_get_inst_usage_mask(const struct tgsi_full_instruction *inst,
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMIMAX:
+   case TGSI_OPCODE_ATOMFADD:
       if (src_idx == 0) {
          read_mask = TGSI_WRITEMASK_XY; /* bindless handle possible */
       } else if (src_idx == 1) {

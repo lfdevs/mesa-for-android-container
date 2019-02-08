@@ -165,6 +165,9 @@ create_group(struct parser_context *ctx,
    group->fixed_length = fixed_length;
    group->dword_length_field = NULL;
    group->dw_length = 0;
+   group->engine_mask = I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_RENDER) |
+                        I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_VIDEO) |
+                        I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_COPY);
    group->bias = 1;
 
    for (int i = 0; atts[i]; i += 2) {
@@ -173,6 +176,28 @@ create_group(struct parser_context *ctx,
          group->dw_length = strtoul(atts[i + 1], &p, 0);
       } else if (strcmp(atts[i], "bias") == 0) {
          group->bias = strtoul(atts[i + 1], &p, 0);
+      } else if (strcmp(atts[i], "engine") == 0) {
+         void *mem_ctx = ralloc_context(NULL);
+         char *tmp = ralloc_strdup(mem_ctx, atts[i + 1]);
+         char *save_ptr;
+         char *tok = strtok_r(tmp, "|", &save_ptr);
+
+         group->engine_mask = 0;
+         while (tok != NULL) {
+            if (strcmp(tok, "render") == 0) {
+               group->engine_mask |= I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_RENDER);
+            } else if (strcmp(tok, "video") == 0) {
+               group->engine_mask |= I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_VIDEO);
+            } else if (strcmp(tok, "blitter") == 0) {
+               group->engine_mask |= I915_ENGINE_CLASS_TO_MASK(I915_ENGINE_CLASS_COPY);
+            } else {
+               fprintf(stderr, "unknown engine class defined for instruction \"%s\": %s\n", name, atts[i + 1]);
+            }
+
+            tok = strtok_r(NULL, "|", &save_ptr);
+         }
+
+         ralloc_free(mem_ctx);
       }
    }
 
@@ -708,12 +733,15 @@ void gen_spec_destroy(struct gen_spec *spec)
 }
 
 struct gen_group *
-gen_spec_find_instruction(struct gen_spec *spec, const uint32_t *p)
+gen_spec_find_instruction(struct gen_spec *spec,
+                          enum drm_i915_gem_engine_class engine,
+                          const uint32_t *p)
 {
    hash_table_foreach(spec->commands, entry) {
       struct gen_group *command = entry->data;
       uint32_t opcode = *p & command->opcode_mask;
-      if (opcode == command->opcode)
+      if ((command->engine_mask & I915_ENGINE_CLASS_TO_MASK(engine)) &&
+           opcode == command->opcode)
          return command;
    }
 

@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright Â© 2017 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -62,28 +62,28 @@ files_egl = files(
 g_egldispatchstubs_c = custom_target(
   'g_egldispatchstubs.c',
   input : [
-    'generate/gen_egl_dispatch.py', 'generate/eglFunctionList.py',
+    'generate/gen_egl_dispatch.py',
     'generate/egl.xml', 'generate/egl_other.xml'
   ],
   output : 'g_egldispatchstubs.c',
   command : [
-    prog_python, '@INPUT0@', 'source', '@INPUT1@', '@INPUT2@', '@INPUT3@'
+    prog_python, '@INPUT0@', 'source', '@INPUT1@', '@INPUT2@',
   ],
-  depend_files : files('generate/genCommon.py'),
+  depend_files : [ files('generate/eglFunctionList.py'), genCommon_py, ],
   capture : true,
 )
 
 g_egldispatchstubs_h = custom_target(
   'g_egldispatchstubs.h',
   input : [
-    'generate/gen_egl_dispatch.py', 'generate/eglFunctionList.py',
+    'generate/gen_egl_dispatch.py',
     'generate/egl.xml', 'generate/egl_other.xml'
   ],
   output : 'g_egldispatchstubs.h',
   command : [
-    prog_python, '@INPUT0@', 'header', '@INPUT1@', '@INPUT2@', '@INPUT3@'
+    prog_python, '@INPUT0@', 'header', '@INPUT1@', '@INPUT2@',
   ],
-  depend_files : files('generate/genCommon.py'),
+  depend_files : [ files('generate/eglFunctionList.py'), genCommon_py, ],
   capture : true,
 )
 
@@ -93,9 +93,6 @@ if with_dri2
     'drivers/dri2/egl_dri2.h',
     'drivers/dri2/egl_dri2_fallbacks.h',
   )
-  c_args_for_egl += [
-    '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
-  ]
 
   if with_platform_x11
     files_egl += files('drivers/dri2/platform_x11.c')
@@ -203,11 +200,13 @@ if with_tests
     test('egl-symbols-check',
       find_program('egl-symbols-check'),
       env : env_test,
-      args : libegl
+      args : libegl,
+      suite : ['egl'],
     )
   endif
   test('egl-entrypoint-check',
     find_program('egl-entrypoint-check'),
-    env : [ 'srcdir=' + meson.current_source_dir() ]
+    env : ['srcdir=' + meson.current_source_dir()],
+    suite : ['egl'],
   )
 endif

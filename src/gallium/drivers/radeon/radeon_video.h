@@ -40,7 +40,7 @@
 struct rvid_buffer
 {
 	unsigned		usage;
-	struct r600_resource	*res;
+	struct si_resource	*res;
 };
 
 /* generate an stream handle */

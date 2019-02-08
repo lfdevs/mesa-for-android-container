@@ -37,6 +37,7 @@ struct anv_instance_extension_table {
       bool extensions[ANV_INSTANCE_EXTENSION_COUNT];
       struct {
          bool KHR_device_group_creation;
+         bool KHR_display;
          bool KHR_external_fence_capabilities;
          bool KHR_external_memory_capabilities;
          bool KHR_external_semaphore_capabilities;
@@ -47,7 +48,6 @@ struct anv_instance_extension_table {
          bool KHR_wayland_surface;
          bool KHR_xcb_surface;
          bool KHR_xlib_surface;
-         bool KHR_display;
          bool EXT_acquire_xlib_display;
          bool EXT_debug_report;
          bool EXT_direct_mode_display;
@@ -59,7 +59,7 @@ struct anv_instance_extension_table {
 extern const struct anv_instance_extension_table anv_instance_extensions_supported;
 
 
-#define ANV_DEVICE_EXTENSION_COUNT 42
+#define ANV_DEVICE_EXTENSION_COUNT 48
 
 extern const VkExtensionProperties anv_device_extensions[];
 
@@ -67,14 +67,17 @@ struct anv_device_extension_table {
    union {
       bool extensions[ANV_DEVICE_EXTENSION_COUNT];
       struct {
+        bool ANDROID_external_memory_android_hardware_buffer;
         bool ANDROID_native_buffer;
-        bool KHR_16bit_storage;
         bool KHR_8bit_storage;
+        bool KHR_16bit_storage;
         bool KHR_bind_memory2;
         bool KHR_create_renderpass2;
         bool KHR_dedicated_allocation;
+        bool KHR_depth_stencil_resolve;
         bool KHR_descriptor_update_template;
         bool KHR_device_group;
+        bool KHR_draw_indirect_count;
         bool KHR_driver_properties;
         bool KHR_external_fence;
         bool KHR_external_fence_fd;
@@ -88,6 +91,7 @@ struct anv_device_extension_table {
         bool KHR_maintenance1;
         bool KHR_maintenance2;
         bool KHR_maintenance3;
+        bool KHR_multiview;
         bool KHR_push_descriptor;
         bool KHR_relaxed_block_layout;
         bool KHR_sampler_mirror_clamp_to_edge;
@@ -96,17 +100,19 @@ struct anv_device_extension_table {
         bool KHR_storage_buffer_storage_class;
         bool KHR_swapchain;
         bool KHR_variable_pointers;
-        bool KHR_multiview;
+        bool EXT_calibrated_timestamps;
+        bool EXT_conditional_rendering;
         bool EXT_display_control;
         bool EXT_external_memory_dma_buf;
         bool EXT_global_priority;
         bool EXT_pci_bus_info;
-        bool EXT_shader_viewport_index_layer;
-        bool EXT_shader_stencil_export;
-        bool EXT_vertex_attribute_divisor;
         bool EXT_post_depth_coverage;
         bool EXT_sampler_filter_minmax;
-        bool EXT_calibrated_timestamps;
+        bool EXT_scalar_block_layout;
+        bool EXT_shader_viewport_index_layer;
+        bool EXT_shader_stencil_export;
+        bool EXT_transform_feedback;
+        bool EXT_vertex_attribute_divisor;
         bool GOOGLE_decorate_string;
         bool GOOGLE_hlsl_functionality1;
       };

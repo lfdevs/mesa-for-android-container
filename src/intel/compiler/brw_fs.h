@@ -103,6 +103,7 @@ public:
    void setup_vs_payload();
    void setup_gs_payload();
    void setup_cs_payload();
+   bool fixup_sends_duplicate_payload();
    void fixup_3src_null_dest();
    void assign_curb_setup();
    void calculate_urb_setup();
@@ -119,7 +120,7 @@ public:
    void setup_payload_interference(struct ra_graph *g, int payload_reg_count,
                                    int first_payload_node);
    int choose_spill_reg(struct ra_graph *g);
-   void spill_reg(int spill_reg);
+   void spill_reg(unsigned spill_reg);
    void split_virtual_grfs();
    bool compact_virtual_grfs();
    void assign_constant_locations();
@@ -164,7 +165,7 @@ public:
    void lower_uniform_pull_constant_loads();
    bool lower_load_payload();
    bool lower_pack();
-   bool lower_conversions();
+   bool lower_regioning();
    bool lower_logical_sends();
    bool lower_integer_multiplication();
    bool lower_minmax();
@@ -218,6 +219,8 @@ public:
                               nir_intrinsic_instr *instr);
    fs_reg get_nir_image_intrinsic_image(const brw::fs_builder &bld,
                                         nir_intrinsic_instr *instr);
+   fs_reg get_nir_ssbo_intrinsic_index(const brw::fs_builder &bld,
+                                       nir_intrinsic_instr *instr);
    void nir_emit_intrinsic(const brw::fs_builder &bld,
                            nir_intrinsic_instr *instr);
    void nir_emit_tes_intrinsic(const brw::fs_builder &bld,
@@ -404,6 +407,12 @@ private:
                       struct brw_reg payload,
                       struct brw_reg implied_header,
                       GLuint nr);
+   void generate_send(fs_inst *inst,
+                      struct brw_reg dst,
+                      struct brw_reg desc,
+                      struct brw_reg ex_desc,
+                      struct brw_reg payload,
+                      struct brw_reg payload2);
    void generate_fb_write(fs_inst *inst, struct brw_reg payload);
    void generate_fb_read(fs_inst *inst, struct brw_reg dst,
                          struct brw_reg payload);
@@ -413,7 +422,7 @@ private:
    void generate_barrier(fs_inst *inst, struct brw_reg src);
    bool generate_linterp(fs_inst *inst, struct brw_reg dst,
 			 struct brw_reg *src);
-   void generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
+   void generate_tex(fs_inst *inst, struct brw_reg dst,
                      struct brw_reg surface_index,
                      struct brw_reg sampler_index);
    void generate_get_buffer_size(fs_inst *inst, struct brw_reg dst,
@@ -436,10 +445,6 @@ private:
    void generate_varying_pull_constant_load_gen4(fs_inst *inst,
                                                  struct brw_reg dst,
                                                  struct brw_reg index);
-   void generate_varying_pull_constant_load_gen7(fs_inst *inst,
-                                                 struct brw_reg dst,
-                                                 struct brw_reg index,
-                                                 struct brw_reg offset);
    void generate_mov_dispatch_to_flags(fs_inst *inst);
 
    void generate_pixel_interpolator_query(fs_inst *inst,
@@ -459,9 +464,6 @@ private:
                                       struct brw_reg dst,
                                       struct brw_reg x,
                                       struct brw_reg y);
-   void generate_unpack_half_2x16_split(fs_inst *inst,
-                                        struct brw_reg dst,
-                                        struct brw_reg src);
 
    void generate_shader_time_add(fs_inst *inst,
                                  struct brw_reg payload,
@@ -534,24 +536,8 @@ namespace brw {
       }
    }
 
-   /**
-    * Remove any modifiers from the \p i-th source region of the instruction,
-    * including negate, abs and any implicit type conversion to the execution
-    * type.  Instead any source modifiers will be implemented as a separate
-    * MOV instruction prior to the original instruction.
-    */
-   inline bool
-   lower_src_modifiers(fs_visitor *v, bblock_t *block, fs_inst *inst, unsigned i)
-   {
-      assert(inst->components_read(i) == 1);
-      const fs_builder ibld(v, block, inst);
-      const fs_reg tmp = ibld.vgrf(get_exec_type(inst));
-
-      ibld.MOV(tmp, inst->src[i]);
-      inst->src[i] = tmp;
-
-      return true;
-   }
+   bool
+   lower_src_modifiers(fs_visitor *v, bblock_t *block, fs_inst *inst, unsigned i);
 }
 
 void shuffle_from_32bit_read(const brw::fs_builder &bld,

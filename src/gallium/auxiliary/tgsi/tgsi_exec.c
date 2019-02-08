@@ -4253,6 +4253,9 @@ exec_atomop_mem(struct tgsi_exec_machine *mach,
       if (val == value[0].u[0])
          val = value2[0].u[0];
       break;
+   case TGSI_OPCODE_ATOMFADD:
+      val = fui(r[0].f[0] + value[0].f[0]);
+      break;
    default:
       break;
    }
@@ -5933,6 +5936,7 @@ exec_instruction(
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMIMAX:
+   case TGSI_OPCODE_ATOMFADD:
       exec_atomop(mach, inst);
       break;
 

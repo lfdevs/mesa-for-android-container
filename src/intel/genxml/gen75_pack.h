@@ -343,7 +343,7 @@ GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(__attribute__((unused)) __gen_user_data *
 #define GEN75_3DSTATE_CONSTANT_BODY_length      6
 struct GEN75_3DSTATE_CONSTANT_BODY {
    uint32_t                             ReadLength[4];
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE ConstantBufferObjectControlState;
+   uint32_t                             MOCS;
    __gen_address_type                   Buffer[4];
 };
 
@@ -362,11 +362,8 @@ GEN75_3DSTATE_CONSTANT_BODY_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->ReadLength[2], 0, 15) |
       __gen_uint(values->ReadLength[3], 16, 31);
 
-   uint32_t v2_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v2_0, &values->ConstantBufferObjectControlState);
-
    const uint32_t v2 =
-      __gen_uint(v2_0, 0, 4);
+      __gen_uint(values->MOCS, 0, 4);
    dw[2] = __gen_combine_address(data, &dw[2], values->Buffer[0], v2);
 
    dw[3] = __gen_combine_address(data, &dw[3], values->Buffer[1], 0);
@@ -420,8 +417,7 @@ struct GEN75_VERTEX_BUFFER_STATE {
    uint32_t                             BufferAccessType;
 #define VERTEXDATA                               0
 #define INSTANCEDATA                             1
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE VertexBufferMemoryObjectControlState;
-   uint32_t                             VertexBufferMOCS;
+   uint32_t                             MOCS;
    bool                                 AddressModifyEnable;
    bool                                 NullVertexBuffer;
    bool                                 VertexFetchInvalidate;
@@ -438,14 +434,10 @@ GEN75_VERTEX_BUFFER_STATE_pack(__attribute__((unused)) __gen_user_data *data,
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
-   uint32_t v0_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v0_0, &values->VertexBufferMemoryObjectControlState);
-
    dw[0] =
       __gen_uint(values->VertexBufferIndex, 26, 31) |
       __gen_uint(values->BufferAccessType, 20, 20) |
-      __gen_uint(v0_0, 16, 19) |
-      __gen_uint(values->VertexBufferMOCS, 16, 19) |
+      __gen_uint(values->MOCS, 16, 19) |
       __gen_uint(values->AddressModifyEnable, 14, 14) |
       __gen_uint(values->NullVertexBuffer, 13, 13) |
       __gen_uint(values->VertexFetchInvalidate, 12, 12) |
@@ -1052,7 +1044,6 @@ struct GEN75_RENDER_SURFACE_STATE {
    uint32_t                             StrbufMinimumArrayElement;
    uint32_t                             XOffset;
    uint32_t                             YOffset;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE SurfaceObjectControlState;
    uint32_t                             MOCS;
    uint32_t                             SurfaceMinLOD;
    uint32_t                             MIPCountLOD;
@@ -1122,13 +1113,9 @@ GEN75_RENDER_SURFACE_STATE_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->MultisamplePositionPaletteIndex, 0, 2) |
       __gen_uint(values->StrbufMinimumArrayElement, 0, 26);
 
-   uint32_t v5_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v5_0, &values->SurfaceObjectControlState);
-
    dw[5] =
       __gen_uint(values->XOffset, 25, 31) |
       __gen_uint(values->YOffset, 20, 23) |
-      __gen_uint(v5_0, 16, 19) |
       __gen_uint(values->MOCS, 16, 19) |
       __gen_uint(values->SurfaceMinLOD, 4, 7) |
       __gen_uint(values->MIPCountLOD, 0, 3);
@@ -1944,7 +1931,7 @@ struct GEN75_3DSTATE_BINDING_TABLE_POOL_ALLOC {
    uint32_t                             DWordLength;
    __gen_address_type                   BindingTablePoolBaseAddress;
    uint32_t                             BindingTablePoolEnable;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE SurfaceObjectControlState;
+   uint32_t                             MOCS;
    __gen_address_type                   BindingTablePoolUpperBound;
 };
 
@@ -1962,12 +1949,9 @@ GEN75_3DSTATE_BINDING_TABLE_POOL_ALLOC_pack(__attribute__((unused)) __gen_user_d
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->SurfaceObjectControlState);
-
    const uint32_t v1 =
       __gen_uint(values->BindingTablePoolEnable, 11, 11) |
-      __gen_uint(v1_0, 7, 10);
+      __gen_uint(values->MOCS, 7, 10);
    dw[1] = __gen_combine_address(data, &dw[1], values->BindingTablePoolBaseAddress, v1);
 
    dw[2] = __gen_combine_address(data, &dw[2], values->BindingTablePoolUpperBound, 0);
@@ -2441,8 +2425,7 @@ struct GEN75_3DSTATE_DEPTH_BUFFER {
    uint32_t                             Depth;
 #define SURFTYPE_CUBEmustbezero                  0
    uint32_t                             MinimumArrayElement;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE DepthBufferObjectControlState;
-   uint32_t                             DepthBufferMOCS;
+   uint32_t                             MOCS;
    int32_t                              DepthCoordinateOffsetY;
    int32_t                              DepthCoordinateOffsetX;
    uint32_t                             RenderTargetViewExtent;
@@ -2477,14 +2460,10 @@ GEN75_3DSTATE_DEPTH_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->Width, 4, 17) |
       __gen_uint(values->LOD, 0, 3);
 
-   uint32_t v4_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v4_0, &values->DepthBufferObjectControlState);
-
    dw[4] =
       __gen_uint(values->Depth, 21, 31) |
       __gen_uint(values->MinimumArrayElement, 10, 20) |
-      __gen_uint(v4_0, 0, 3) |
-      __gen_uint(values->DepthBufferMOCS, 0, 3);
+      __gen_uint(values->MOCS, 0, 3);
 
    dw[5] =
       __gen_sint(values->DepthCoordinateOffsetY, 16, 31) |
@@ -2907,7 +2886,7 @@ struct GEN75_3DSTATE_GATHER_POOL_ALLOC {
    uint32_t                             DWordLength;
    __gen_address_type                   GatherPoolBaseAddress;
    bool                                 GatherPoolEnable;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE MemoryObjectControlState;
+   uint32_t                             MOCS;
    __gen_address_type                   GatherPoolUpperBound;
 };
 
@@ -2925,13 +2904,10 @@ GEN75_3DSTATE_GATHER_POOL_ALLOC_pack(__attribute__((unused)) __gen_user_data *da
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->MemoryObjectControlState);
-
    const uint32_t v1 =
       __gen_uint(values->GatherPoolEnable, 11, 11) |
       __gen_mbo(4, 5) |
-      __gen_uint(v1_0, 0, 3);
+      __gen_uint(values->MOCS, 0, 3);
    dw[1] = __gen_combine_address(data, &dw[1], values->GatherPoolBaseAddress, v1);
 
    dw[2] = __gen_combine_address(data, &dw[2], values->GatherPoolUpperBound, 0);
@@ -3078,8 +3054,7 @@ struct GEN75_3DSTATE_HIER_DEPTH_BUFFER {
    uint32_t                             _3DCommandOpcode;
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE HierarchicalDepthBufferObjectControlState;
-   uint32_t                             HierarchicalDepthBufferMOCS;
+   uint32_t                             MOCS;
    uint32_t                             SurfacePitch;
    __gen_address_type                   SurfaceBaseAddress;
 };
@@ -3098,12 +3073,8 @@ GEN75_3DSTATE_HIER_DEPTH_BUFFER_pack(__attribute__((unused)) __gen_user_data *da
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->HierarchicalDepthBufferObjectControlState);
-
    dw[1] =
-      __gen_uint(v1_0, 25, 28) |
-      __gen_uint(values->HierarchicalDepthBufferMOCS, 25, 28) |
+      __gen_uint(values->MOCS, 25, 28) |
       __gen_uint(values->SurfacePitch, 0, 16);
 
    dw[2] = __gen_combine_address(data, &dw[2], values->SurfaceBaseAddress, 0);
@@ -3217,8 +3188,7 @@ struct GEN75_3DSTATE_INDEX_BUFFER {
    uint32_t                             CommandSubType;
    uint32_t                             _3DCommandOpcode;
    uint32_t                             _3DCommandSubOpcode;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE MemoryObjectControlState;
-   uint32_t                             IndexBufferMOCS;
+   uint32_t                             MOCS;
    uint32_t                             IndexFormat;
 #define INDEX_BYTE                               0
 #define INDEX_WORD                               1
@@ -3235,16 +3205,12 @@ GEN75_3DSTATE_INDEX_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
 {
    uint32_t * restrict dw = (uint32_t * restrict) dst;
 
-   uint32_t v0_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v0_0, &values->MemoryObjectControlState);
-
    dw[0] =
       __gen_uint(values->CommandType, 29, 31) |
       __gen_uint(values->CommandSubType, 27, 28) |
       __gen_uint(values->_3DCommandOpcode, 24, 26) |
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
-      __gen_uint(v0_0, 12, 15) |
-      __gen_uint(values->IndexBufferMOCS, 12, 15) |
+      __gen_uint(values->MOCS, 12, 15) |
       __gen_uint(values->IndexFormat, 8, 9) |
       __gen_uint(values->DWordLength, 0, 7);
 
@@ -4646,8 +4612,7 @@ struct GEN75_3DSTATE_SO_BUFFER {
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
    uint32_t                             SOBufferIndex;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE SOBufferObjectControlState;
-   uint32_t                             SOBufferMOCS;
+   uint32_t                             MOCS;
    uint32_t                             SurfacePitch;
    __gen_address_type                   SurfaceBaseAddress;
    __gen_address_type                   SurfaceEndAddress;
@@ -4667,13 +4632,9 @@ GEN75_3DSTATE_SO_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->SOBufferObjectControlState);
-
    dw[1] =
       __gen_uint(values->SOBufferIndex, 29, 30) |
-      __gen_uint(v1_0, 25, 28) |
-      __gen_uint(values->SOBufferMOCS, 25, 28) |
+      __gen_uint(values->MOCS, 25, 28) |
       __gen_uint(values->SurfacePitch, 0, 11);
 
    dw[2] = __gen_combine_address(data, &dw[2], values->SurfaceBaseAddress, 0);
@@ -4748,8 +4709,7 @@ struct GEN75_3DSTATE_STENCIL_BUFFER {
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
    bool                                 StencilBufferEnable;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE StencilBufferObjectControlState;
-   uint32_t                             StencilBufferMOCS;
+   uint32_t                             MOCS;
    uint32_t                             SurfacePitch;
    __gen_address_type                   SurfaceBaseAddress;
 };
@@ -4768,13 +4728,9 @@ GEN75_3DSTATE_STENCIL_BUFFER_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->StencilBufferObjectControlState);
-
    dw[1] =
       __gen_uint(values->StencilBufferEnable, 31, 31) |
-      __gen_uint(v1_0, 25, 28) |
-      __gen_uint(values->StencilBufferMOCS, 25, 28) |
+      __gen_uint(values->MOCS, 25, 28) |
       __gen_uint(values->SurfacePitch, 0, 16);
 
    dw[2] = __gen_combine_address(data, &dw[2], values->SurfaceBaseAddress, 0);
@@ -6728,6 +6684,8 @@ struct GEN75_MI_PREDICATE {
 #define COMBINE_OR                               2
 #define COMBINE_XOR                              3
    uint32_t                             CompareOperation;
+#define COMPARE_TRUE                             0
+#define COMPARE_FALSE                            1
 #define COMPARE_SRCS_EQUAL                       2
 #define COMPARE_DELTAS_EQUAL                     3
 };
@@ -7485,20 +7443,20 @@ struct GEN75_STATE_BASE_ADDRESS {
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
    __gen_address_type                   GeneralStateBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE GeneralStateMemoryObjectControlState;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE StatelessDataPortAccessMemoryObjectControlState;
+   uint32_t                             GeneralStateMOCS;
+   uint32_t                             StatelessDataPortAccessMOCS;
    bool                                 GeneralStateBaseAddressModifyEnable;
    __gen_address_type                   SurfaceStateBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE SurfaceStateMemoryObjectControlState;
+   uint32_t                             SurfaceStateMOCS;
    bool                                 SurfaceStateBaseAddressModifyEnable;
    __gen_address_type                   DynamicStateBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE DynamicStateMemoryObjectControlState;
+   uint32_t                             DynamicStateMOCS;
    bool                                 DynamicStateBaseAddressModifyEnable;
    __gen_address_type                   IndirectObjectBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE IndirectObjectMemoryObjectControlState;
+   uint32_t                             IndirectObjectMOCS;
    bool                                 IndirectObjectBaseAddressModifyEnable;
    __gen_address_type                   InstructionBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE InstructionMemoryObjectControlState;
+   uint32_t                             InstructionMOCS;
    bool                                 InstructionBaseAddressModifyEnable;
    __gen_address_type                   GeneralStateAccessUpperBound;
    bool                                 GeneralStateAccessUpperBoundModifyEnable;
@@ -7524,47 +7482,29 @@ GEN75_STATE_BASE_ADDRESS_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->GeneralStateMemoryObjectControlState);
-
-   uint32_t v1_1;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_1, &values->StatelessDataPortAccessMemoryObjectControlState);
-
    const uint32_t v1 =
-      __gen_uint(v1_0, 8, 11) |
-      __gen_uint(v1_1, 4, 7) |
+      __gen_uint(values->GeneralStateMOCS, 8, 11) |
+      __gen_uint(values->StatelessDataPortAccessMOCS, 4, 7) |
       __gen_uint(values->GeneralStateBaseAddressModifyEnable, 0, 0);
    dw[1] = __gen_combine_address(data, &dw[1], values->GeneralStateBaseAddress, v1);
 
-   uint32_t v2_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v2_0, &values->SurfaceStateMemoryObjectControlState);
-
    const uint32_t v2 =
-      __gen_uint(v2_0, 8, 11) |
+      __gen_uint(values->SurfaceStateMOCS, 8, 11) |
       __gen_uint(values->SurfaceStateBaseAddressModifyEnable, 0, 0);
    dw[2] = __gen_combine_address(data, &dw[2], values->SurfaceStateBaseAddress, v2);
 
-   uint32_t v3_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v3_0, &values->DynamicStateMemoryObjectControlState);
-
    const uint32_t v3 =
-      __gen_uint(v3_0, 8, 11) |
+      __gen_uint(values->DynamicStateMOCS, 8, 11) |
       __gen_uint(values->DynamicStateBaseAddressModifyEnable, 0, 0);
    dw[3] = __gen_combine_address(data, &dw[3], values->DynamicStateBaseAddress, v3);
 
-   uint32_t v4_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v4_0, &values->IndirectObjectMemoryObjectControlState);
-
    const uint32_t v4 =
-      __gen_uint(v4_0, 8, 11) |
+      __gen_uint(values->IndirectObjectMOCS, 8, 11) |
       __gen_uint(values->IndirectObjectBaseAddressModifyEnable, 0, 0);
    dw[4] = __gen_combine_address(data, &dw[4], values->IndirectObjectBaseAddress, v4);
 
-   uint32_t v5_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v5_0, &values->InstructionMemoryObjectControlState);
-
    const uint32_t v5 =
-      __gen_uint(v5_0, 8, 11) |
+      __gen_uint(values->InstructionMOCS, 8, 11) |
       __gen_uint(values->InstructionBaseAddressModifyEnable, 0, 0);
    dw[5] = __gen_combine_address(data, &dw[5], values->InstructionBaseAddress, v5);
 
@@ -7675,7 +7615,7 @@ struct GEN75_SWTESS_BASE_ADDRESS {
    uint32_t                             _3DCommandSubOpcode;
    uint32_t                             DWordLength;
    __gen_address_type                   SWTessellationBaseAddress;
-   struct GEN75_MEMORY_OBJECT_CONTROL_STATE SWTessellationMemoryObjectControlState;
+   uint32_t                             SWTessellationMOCS;
 };
 
 static inline void
@@ -7692,11 +7632,8 @@ GEN75_SWTESS_BASE_ADDRESS_pack(__attribute__((unused)) __gen_user_data *data,
       __gen_uint(values->_3DCommandSubOpcode, 16, 23) |
       __gen_uint(values->DWordLength, 0, 7);
 
-   uint32_t v1_0;
-   GEN75_MEMORY_OBJECT_CONTROL_STATE_pack(data, &v1_0, &values->SWTessellationMemoryObjectControlState);
-
    const uint32_t v1 =
-      __gen_uint(v1_0, 8, 11);
+      __gen_uint(values->SWTessellationMOCS, 8, 11);
    dw[1] = __gen_combine_address(data, &dw[1], values->SWTessellationBaseAddress, v1);
 }
 
@@ -8359,6 +8296,158 @@ GEN75_CHICKEN3_pack(__attribute__((unused)) __gen_user_data *data,
    dw[0] =
       __gen_uint(values->L3AtomicDisable, 6, 6) |
       __gen_uint(values->L3AtomicDisableMask, 22, 22);
+}
+
+#define GEN75_SO_NUM_PRIMS_WRITTEN0_num   0x5200
+#define GEN75_SO_NUM_PRIMS_WRITTEN0_length      2
+struct GEN75_SO_NUM_PRIMS_WRITTEN0 {
+   uint64_t                             NumPrimsWrittenCount;
+};
+
+static inline void
+GEN75_SO_NUM_PRIMS_WRITTEN0_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN75_SO_NUM_PRIMS_WRITTEN0 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->NumPrimsWrittenCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_NUM_PRIMS_WRITTEN1_num   0x5208
+#define GEN75_SO_NUM_PRIMS_WRITTEN1_length      2
+struct GEN75_SO_NUM_PRIMS_WRITTEN1 {
+   uint64_t                             NumPrimsWrittenCount;
+};
+
+static inline void
+GEN75_SO_NUM_PRIMS_WRITTEN1_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN75_SO_NUM_PRIMS_WRITTEN1 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->NumPrimsWrittenCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_NUM_PRIMS_WRITTEN2_num   0x5210
+#define GEN75_SO_NUM_PRIMS_WRITTEN2_length      2
+struct GEN75_SO_NUM_PRIMS_WRITTEN2 {
+   uint64_t                             NumPrimsWrittenCount;
+};
+
+static inline void
+GEN75_SO_NUM_PRIMS_WRITTEN2_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN75_SO_NUM_PRIMS_WRITTEN2 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->NumPrimsWrittenCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_NUM_PRIMS_WRITTEN3_num   0x5218
+#define GEN75_SO_NUM_PRIMS_WRITTEN3_length      2
+struct GEN75_SO_NUM_PRIMS_WRITTEN3 {
+   uint64_t                             NumPrimsWrittenCount;
+};
+
+static inline void
+GEN75_SO_NUM_PRIMS_WRITTEN3_pack(__attribute__((unused)) __gen_user_data *data,
+                                 __attribute__((unused)) void * restrict dst,
+                                 __attribute__((unused)) const struct GEN75_SO_NUM_PRIMS_WRITTEN3 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->NumPrimsWrittenCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_PRIM_STORAGE_NEEDED0_num 0x5240
+#define GEN75_SO_PRIM_STORAGE_NEEDED0_length      2
+struct GEN75_SO_PRIM_STORAGE_NEEDED0 {
+   uint64_t                             PrimStorageNeededCount;
+};
+
+static inline void
+GEN75_SO_PRIM_STORAGE_NEEDED0_pack(__attribute__((unused)) __gen_user_data *data,
+                                   __attribute__((unused)) void * restrict dst,
+                                   __attribute__((unused)) const struct GEN75_SO_PRIM_STORAGE_NEEDED0 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->PrimStorageNeededCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_PRIM_STORAGE_NEEDED1_num 0x5248
+#define GEN75_SO_PRIM_STORAGE_NEEDED1_length      2
+struct GEN75_SO_PRIM_STORAGE_NEEDED1 {
+   uint64_t                             PrimStorageNeededCount;
+};
+
+static inline void
+GEN75_SO_PRIM_STORAGE_NEEDED1_pack(__attribute__((unused)) __gen_user_data *data,
+                                   __attribute__((unused)) void * restrict dst,
+                                   __attribute__((unused)) const struct GEN75_SO_PRIM_STORAGE_NEEDED1 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->PrimStorageNeededCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_PRIM_STORAGE_NEEDED2_num 0x5250
+#define GEN75_SO_PRIM_STORAGE_NEEDED2_length      2
+struct GEN75_SO_PRIM_STORAGE_NEEDED2 {
+   uint64_t                             PrimStorageNeededCount;
+};
+
+static inline void
+GEN75_SO_PRIM_STORAGE_NEEDED2_pack(__attribute__((unused)) __gen_user_data *data,
+                                   __attribute__((unused)) void * restrict dst,
+                                   __attribute__((unused)) const struct GEN75_SO_PRIM_STORAGE_NEEDED2 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->PrimStorageNeededCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
+}
+
+#define GEN75_SO_PRIM_STORAGE_NEEDED3_num 0x5258
+#define GEN75_SO_PRIM_STORAGE_NEEDED3_length      2
+struct GEN75_SO_PRIM_STORAGE_NEEDED3 {
+   uint64_t                             PrimStorageNeededCount;
+};
+
+static inline void
+GEN75_SO_PRIM_STORAGE_NEEDED3_pack(__attribute__((unused)) __gen_user_data *data,
+                                   __attribute__((unused)) void * restrict dst,
+                                   __attribute__((unused)) const struct GEN75_SO_PRIM_STORAGE_NEEDED3 * restrict values)
+{
+   uint32_t * restrict dw = (uint32_t * restrict) dst;
+
+   const uint64_t v0 =
+      __gen_uint(values->PrimStorageNeededCount, 0, 63);
+   dw[0] = v0;
+   dw[1] = v0 >> 32;
 }
 
 #define GEN75_SO_WRITE_OFFSET0_num        0x5280

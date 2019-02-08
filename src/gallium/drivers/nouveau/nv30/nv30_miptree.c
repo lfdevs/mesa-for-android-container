@@ -116,8 +116,22 @@ define_rect(struct pipe_resource *pt, unsigned level, unsigned z,
 
    rect->x0     = util_format_get_nblocksx(pt->format, x) << mt->ms_x;
    rect->y0     = util_format_get_nblocksy(pt->format, y) << mt->ms_y;
-   rect->x1     = rect->x0 + (w << mt->ms_x);
-   rect->y1     = rect->y0 + (h << mt->ms_y);
+   rect->x1     = rect->x0 + (util_format_get_nblocksx(pt->format, w) << mt->ms_x);
+   rect->y1     = rect->y0 + (util_format_get_nblocksy(pt->format, h) << mt->ms_y);
+
+   /* XXX There's some indication that swizzled formats > 4 bytes are treated
+    * differently. However that only applies to RGBA16_FLOAT, RGBA32_FLOAT,
+    * and the DXT* formats. The former aren't properly supported yet, and the
+    * latter avoid swizzled layouts.
+
+   if (mt->swizzled && rect->cpp > 4) {
+      unsigned scale = rect->cpp / 4;
+      rect->w *= scale;
+      rect->x0 *= scale;
+      rect->x1 *= scale;
+      rect->cpp = 4;
+   }
+   */
 }
 
 void
@@ -265,6 +279,7 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
 {
    struct nv30_context *nv30 = nv30_context(pipe);
    struct nouveau_device *dev = nv30->screen->base.device;
+   struct nv30_miptree *mt = nv30_miptree(pt);
    struct nv30_transfer *tx;
    unsigned access = 0;
    int ret;
@@ -285,10 +300,11 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
    tx->nblocksy = util_format_get_nblocksy(pt->format, box->height);
 
    define_rect(pt, level, box->z, box->x, box->y,
-                   tx->nblocksx, tx->nblocksy, &tx->img);
+               box->width, box->height, &tx->img);
 
    ret = nouveau_bo_new(dev, NOUVEAU_BO_GART | NOUVEAU_BO_MAP, 0,
-                        tx->base.layer_stride, NULL, &tx->tmp.bo);
+                        tx->base.layer_stride * tx->base.box.depth, NULL,
+                        &tx->tmp.bo);
    if (ret) {
       pipe_resource_reference(&tx->base.resource, NULL);
       FREE(tx);
@@ -308,8 +324,25 @@ nv30_miptree_transfer_map(struct pipe_context *pipe, struct pipe_resource *pt,
    tx->tmp.y1     = tx->tmp.h;
    tx->tmp.z      = 0;
 
-   if (usage & PIPE_TRANSFER_READ)
-      nv30_transfer_rect(nv30, NEAREST, &tx->img, &tx->tmp);
+   if (usage & PIPE_TRANSFER_READ) {
+      bool is_3d = mt->base.base.target == PIPE_TEXTURE_3D;
+      unsigned offset = tx->img.offset;
+      unsigned z = tx->img.z;
+      unsigned i;
+      for (i = 0; i < box->depth; ++i) {
+         nv30_transfer_rect(nv30, NEAREST, &tx->img, &tx->tmp);
+         if (is_3d && mt->swizzled)
+            tx->img.z++;
+         else if (is_3d)
+            tx->img.offset += mt->level[level].zslice_size;
+         else
+            tx->img.offset += mt->layer_size;
+         tx->tmp.offset += tx->base.layer_stride;
+      }
+      tx->img.z = z;
+      tx->img.offset = offset;
+      tx->tmp.offset = 0;
+   }
 
    if (tx->tmp.bo->map) {
       *ptransfer = &tx->base;
@@ -338,9 +371,21 @@ nv30_miptree_transfer_unmap(struct pipe_context *pipe,
 {
    struct nv30_context *nv30 = nv30_context(pipe);
    struct nv30_transfer *tx = nv30_transfer(ptx);
+   struct nv30_miptree *mt = nv30_miptree(tx->base.resource);
+   unsigned i;
 
    if (ptx->usage & PIPE_TRANSFER_WRITE) {
-      nv30_transfer_rect(nv30, NEAREST, &tx->tmp, &tx->img);
+      bool is_3d = mt->base.base.target == PIPE_TEXTURE_3D;
+      for (i = 0; i < tx->base.box.depth; ++i) {
+         nv30_transfer_rect(nv30, NEAREST, &tx->tmp, &tx->img);
+         if (is_3d && mt->swizzled)
+            tx->img.z++;
+         else if (is_3d)
+            tx->img.offset += mt->level[tx->base.level].zslice_size;
+         else
+            tx->img.offset += mt->layer_size;
+         tx->tmp.offset += tx->base.layer_stride;
+      }
 
       /* Allow the copies above to finish executing before freeing the source */
       nouveau_fence_work(nv30->screen->base.fence.current,
@@ -404,8 +449,7 @@ nv30_miptree_create(struct pipe_screen *pscreen,
        !util_is_power_of_two_or_zero(pt->width0) ||
        !util_is_power_of_two_or_zero(pt->height0) ||
        !util_is_power_of_two_or_zero(pt->depth0) ||
-       util_format_is_compressed(pt->format) ||
-       util_format_is_float(pt->format) || mt->ms_mode) {
+       mt->ms_mode) {
       mt->uniform_pitch = util_format_get_nblocksx(pt->format, w) * blocksz;
       mt->uniform_pitch = align(mt->uniform_pitch, 64);
       if (pt->bind & PIPE_BIND_SCANOUT) {
@@ -418,14 +462,20 @@ nv30_miptree_create(struct pipe_screen *pscreen,
       }
    }
 
-   if (!mt->uniform_pitch)
+   if (util_format_is_compressed(pt->format)) {
+      // Compressed (DXT) formats are packed tightly. We don't mark them as
+      // swizzled, since their layout is largely linear. However we do end up
+      // omitting the LINEAR flag when texturing them, as the levels are not
+      // uniformly sized (for POT sizes).
+   } else if (!mt->uniform_pitch) {
       mt->swizzled = true;
+   }
 
    size = 0;
    for (l = 0; l <= pt->last_level; l++) {
       struct nv30_miptree_level *lvl = &mt->level[l];
       unsigned nbx = util_format_get_nblocksx(pt->format, w);
-      unsigned nby = util_format_get_nblocksx(pt->format, h);
+      unsigned nby = util_format_get_nblocksy(pt->format, h);
 
       lvl->offset = size;
       lvl->pitch  = mt->uniform_pitch;

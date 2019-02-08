@@ -393,7 +393,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
     if (!r300->ctx)
         goto fail;
 
-    r300->cs = rws->cs_create(r300->ctx, RING_GFX, r300_flush_callback, r300);
+    r300->cs = rws->cs_create(r300->ctx, RING_GFX, r300_flush_callback, r300, false);
     if (r300->cs == NULL)
         goto fail;
 

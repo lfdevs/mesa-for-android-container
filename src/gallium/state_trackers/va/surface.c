@@ -146,8 +146,39 @@ vlVaSyncSurface(VADriverContextP ctx, VASurfaceID render_target)
 VAStatus
 vlVaQuerySurfaceStatus(VADriverContextP ctx, VASurfaceID render_target, VASurfaceStatus *status)
 {
+   vlVaDriver *drv;
+   vlVaSurface *surf;
+   vlVaContext *context;
+
    if (!ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   drv = VL_VA_DRIVER(ctx);
+   if (!drv)
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+
+   mtx_lock(&drv->mutex);
+
+   surf = handle_table_get(drv->htab, render_target);
+   if (!surf || !surf->buffer) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_SURFACE;
+   }
+
+   context = handle_table_get(drv->htab, surf->ctx);
+   if (!context) {
+      mtx_unlock(&drv->mutex);
+      return VA_STATUS_ERROR_INVALID_CONTEXT;
+   }
+
+   if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_ENCODE) {
+      if(surf->feedback == NULL)
+         *status=VASurfaceReady;
+      else
+         *status=VASurfaceRendering;
+   }
+
+   mtx_unlock(&drv->mutex);
 
    return VA_STATUS_SUCCESS;
 }

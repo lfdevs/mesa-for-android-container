@@ -764,17 +764,6 @@ driswDestroyScreen(struct glx_screen *base)
 
 #define SWRAST_DRIVER_NAME "swrast"
 
-static void *
-driOpenSwrast(void)
-{
-   void *driver = NULL;
-
-   if (driver == NULL)
-      driver = driOpenDriver(SWRAST_DRIVER_NAME);
-
-   return driver;
-}
-
 static const struct glx_screen_vtable drisw_screen_vtable = {
    .create_context         = drisw_create_context,
    .create_context_attribs = drisw_create_context_attribs,
@@ -853,11 +842,7 @@ driswCreateScreen(int screen, struct glx_display *priv)
       return NULL;
    }
 
-   psc->driver = driOpenSwrast();
-   if (psc->driver == NULL)
-      goto handle_error;
-
-   extensions = driGetDriverExtensions(psc->driver, SWRAST_DRIVER_NAME);
+   extensions = driOpenDriver(SWRAST_DRIVER_NAME, &psc->driver);
    if (extensions == NULL)
       goto handle_error;
 

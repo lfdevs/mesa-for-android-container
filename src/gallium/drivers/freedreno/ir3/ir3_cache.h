@@ -27,7 +27,7 @@
 #ifndef IR3_CACHE_H_
 #define IR3_CACHE_H_
 
-#include "ir3_shader.h"
+#include "ir3/ir3_shader.h"
 
 /*
  * An in-memory cache for mapping shader state objects plus shader key to

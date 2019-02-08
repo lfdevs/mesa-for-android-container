@@ -66,10 +66,8 @@ struct vc4_bo *vc4_bo_alloc_shader(struct vc4_screen *screen, const void *data,
                                    uint32_t size);
 void vc4_bo_last_unreference(struct vc4_bo *bo);
 void vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time);
-struct vc4_bo *vc4_bo_open_name(struct vc4_screen *screen, uint32_t name,
-                                uint32_t winsys_stride);
-struct vc4_bo *vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd,
-                                  uint32_t winsys_stride);
+struct vc4_bo *vc4_bo_open_name(struct vc4_screen *screen, uint32_t name);
+struct vc4_bo *vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd);
 bool vc4_bo_flink(struct vc4_bo *bo, uint32_t *name);
 int vc4_bo_get_dmabuf(struct vc4_bo *bo);
 

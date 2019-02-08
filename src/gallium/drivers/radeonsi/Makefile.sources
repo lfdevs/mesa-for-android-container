@@ -49,7 +49,6 @@ C_SOURCES := \
 	si_test_dma_perf.c \
 	si_texture.c \
 	si_uvd.c \
-	../radeon/r600_perfcounter.c \
 	../radeon/radeon_uvd.c \
 	../radeon/radeon_uvd.h \
 	../radeon/radeon_vcn_dec_jpeg.c \

@@ -95,13 +95,13 @@ convert_instr(nir_builder *bld, nir_alu_instr *alu)
    r = nir_isub(bld, a, r);
 
    r = nir_uge(bld, r, b);
-   r = nir_b2i(bld, r);
+   r = nir_b2i32(bld, r);
 
    q = nir_iadd(bld, q, r);
    if (is_signed)  {
       /* fix the sign: */
       r = nir_ixor(bld, numer, denom);
-      r = nir_ishr(bld, r, nir_imm_int(bld, 31));
+      r = nir_ilt(bld, r, nir_imm_int(bld, 0));
       b = nir_ineg(bld, q);
       q = nir_bcsel(bld, r, b, q);
    }

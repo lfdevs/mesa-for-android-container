@@ -464,6 +464,7 @@ lp_build_pack_rgba_aos(struct gallivm_state *gallivm,
  * \param ptr  address of the pixel block (or the texel if uncompressed)
  * \param i, j  the sub-block pixel coordinates.  For non-compressed formats
  *              these will always be (0, 0).
+ * \param cache  optional value pointing to a lp_build_format_cache structure
  * \return  a 4 element vector with the pixel's RGBA values.
  */
 LLVMValueRef
@@ -728,7 +729,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
     * s3tc rgb formats
     */
 
-   if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC && cache) {
+   if (format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
       struct lp_type tmp_type;
       LLVMValueRef tmp;
 
@@ -737,7 +738,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
       tmp_type.length = num_pixels * 4;
       tmp_type.norm = TRUE;
 
-      tmp = lp_build_fetch_cached_texels(gallivm,
+      tmp = lp_build_fetch_s3tc_rgba_aos(gallivm,
                                          format_desc,
                                          num_pixels,
                                          base_ptr,

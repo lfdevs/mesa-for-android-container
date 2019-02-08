@@ -30,6 +30,7 @@ foreach t : ['clear', 'collision', 'delete_and_lookup', 'delete_management',
       dependencies : [dep_thread, dep_dl],
       include_directories : [inc_include, inc_util],
       link_with : libmesa_util,
-    )
+    ),
+    suite : ['util'],
   )
 endforeach

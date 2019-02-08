@@ -62,8 +62,8 @@ COMPILER_FILES = \
 	compiler/brw_fs.h \
 	compiler/brw_fs_live_variables.cpp \
 	compiler/brw_fs_live_variables.h \
-	compiler/brw_fs_lower_conversions.cpp \
 	compiler/brw_fs_lower_pack.cpp \
+	compiler/brw_fs_lower_regioning.cpp \
 	compiler/brw_fs_nir.cpp \
 	compiler/brw_fs_reg_allocate.cpp \
 	compiler/brw_fs_register_coalesce.cpp \
@@ -85,6 +85,7 @@ COMPILER_FILES = \
 	compiler/brw_nir_attribute_workarounds.c \
 	compiler/brw_nir_lower_cs_intrinsics.c \
 	compiler/brw_nir_lower_image_load_store.c \
+	compiler/brw_nir_lower_mem_access_bit_sizes.c \
 	compiler/brw_nir_opt_peephole_ffma.c \
 	compiler/brw_nir_tcs_workarounds.c \
 	compiler/brw_packed_float.c \
@@ -218,8 +219,18 @@ ISL_GEN11_FILES = \
 ISL_GENERATED_FILES = \
 	isl/isl_format_layout.c
 
+ISL_TILED_MEMCPY_FILES = \
+        isl/isl_tiled_memcpy_normal.c
+
+ISL_TILED_MEMCPY_SSE41_FILES = \
+        isl/isl_tiled_memcpy_sse41.c
+
+ISL_TILED_MEMCPY_DEP_FILES = \
+        isl/isl_tiled_memcpy.c
+
 VULKAN_FILES := \
 	vulkan/anv_allocator.c \
+	vulkan/anv_android.h \
 	vulkan/anv_batch_chain.c \
 	vulkan/anv_blorp.c \
 	vulkan/anv_cmd_buffer.c \
@@ -245,6 +256,9 @@ VULKAN_FILES := \
 	vulkan/anv_util.c \
 	vulkan/anv_wsi.c \
 	vulkan/vk_format_info.h
+
+VULKAN_NON_ANDROID_FILES := \
+	vulkan/anv_android_stubs.c
 
 VULKAN_ANDROID_FILES := \
 	vulkan/anv_android.c

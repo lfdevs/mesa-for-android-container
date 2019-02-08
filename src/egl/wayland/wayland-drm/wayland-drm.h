@@ -14,6 +14,8 @@ struct wayland_drm_callbacks {
                                  struct wl_drm_buffer *buffer);
 
 	void (*release_buffer)(void *user_data, struct wl_drm_buffer *buffer);
+
+	bool (*is_format_supported)(void *user_data, uint32_t format);
 };
 
 

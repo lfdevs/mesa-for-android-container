@@ -35,7 +35,6 @@ AM_CFLAGS = \
 	-I$(top_srcdir)/src/mapi/glapi \
 	$(VISIBILITY_CFLAGS) \
 	-D_REENTRANT \
-	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
 	$(DEFINES) \
 	$(LIBDRM_CFLAGS) \
 	$(DRI2PROTO_CFLAGS) \

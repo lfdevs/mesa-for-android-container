@@ -2236,6 +2236,10 @@ const struct function gles2_functions_possible[] = {
    /* GL_NV_conservative_raster_pre_snap_triangles */
    { "glConservativeRasterParameteriNV", 20, -1 },
 
+   /* GL_EXT_multisampled_render_to_texture */
+   { "glRenderbufferStorageMultisampleEXT", 20, -1 },
+   { "glFramebufferTexture2DMultisampleEXT", 20, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2330,7 +2334,7 @@ const struct function gles3_functions_possible[] = {
    // glProgramParameteri aliases glProgramParameteriEXT in GLES 2
    // We check for the aliased -NV version in GLES 2
    // { "glReadBuffer", 30, -1 },
-   { "glRenderbufferStorageMultisample", 30, -1 },
+   // glRenderbufferStorageMultisample aliases glRenderbufferStorageMultisampleEXT in GLES 2
    { "glResumeTransformFeedback", 30, -1 },
    { "glSamplerParameterf", 30, -1 },
    { "glSamplerParameterfv", 30, -1 },

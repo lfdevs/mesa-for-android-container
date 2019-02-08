@@ -100,6 +100,14 @@ enum V3D33_TMU_Filter {
         V3D_TMU_FILTER_ANISOTROPIC_16_1      =     15,
 };
 
+enum V3D33_Wrap_Mode {
+        V3D_WRAP_MODE_REPEAT                 =      0,
+        V3D_WRAP_MODE_CLAMP                  =      1,
+        V3D_WRAP_MODE_MIRROR                 =      2,
+        V3D_WRAP_MODE_BORDER                 =      3,
+        V3D_WRAP_MODE_MIRROR_ONCE            =      4,
+};
+
 enum V3D33_Varying_Flags_Action {
         V3D_VARYING_FLAGS_ACTION_UNCHANGED   =      0,
         V3D_VARYING_FLAGS_ACTION_ZEROED      =      1,
@@ -143,6 +151,12 @@ enum V3D33_Internal_Depth_Type {
         V3D_INTERNAL_TYPE_DEPTH_32F          =      0,
         V3D_INTERNAL_TYPE_DEPTH_24           =      1,
         V3D_INTERNAL_TYPE_DEPTH_16           =      2,
+};
+
+enum V3D33_L2T_Flush_Mode {
+        L2T_FLUSH_MODE_FLUSH                 =      0,
+        L2T_FLUSH_MODE_CLEAR                 =      1,
+        L2T_FLUSH_MODE_CLEAN                 =      2,
 };
 
 enum V3D33_Output_Image_Format {
@@ -1262,6 +1276,82 @@ V3D33_INDEXED_PRIM_LIST_unpack(const uint8_t * restrict cl,
 #endif
 
 
+#define V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_opcode     33
+#define V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_header\
+   .opcode                              =     33
+
+struct V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST {
+   uint32_t                             opcode;
+   uint32_t                             stride_in_multiples_of_4_bytes;
+   __gen_address_type                   address_of_indices_list;
+   __gen_address_type                   address;
+   bool                                 enable_primitive_restarts;
+   uint32_t                             number_of_draw_indirect_indexed_records;
+   uint32_t                             index_type;
+#define INDEX_TYPE_8_BIT                         0
+#define INDEX_TYPE_16_BIT                        1
+#define INDEX_TYPE_32_BIT                        2
+   enum V3D33_Primitive                 mode;
+};
+
+static inline void
+V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                const struct V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->index_type, 6, 7) |
+            __gen_uint(values->mode, 0, 5);
+
+   cl[ 2] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30);
+
+   cl[ 3] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 8;
+
+   cl[ 4] = __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 16;
+
+   cl[ 5] = __gen_uint(values->enable_primitive_restarts, 7, 7) |
+            __gen_uint(values->number_of_draw_indirect_indexed_records, 0, 30) >> 24;
+
+   __gen_emit_reloc(data, &values->address);
+   cl[ 6] = __gen_address_offset(&values->address);
+
+   cl[ 7] = __gen_address_offset(&values->address) >> 8;
+
+   cl[ 8] = __gen_address_offset(&values->address) >> 16;
+
+   cl[ 9] = __gen_address_offset(&values->address) >> 24;
+
+   __gen_emit_reloc(data, &values->address_of_indices_list);
+   cl[10] = __gen_address_offset(&values->address_of_indices_list);
+
+   cl[11] = __gen_address_offset(&values->address_of_indices_list) >> 8;
+
+   cl[12] = __gen_address_offset(&values->address_of_indices_list) >> 16;
+
+   cl[13] = __gen_address_offset(&values->address_of_indices_list) >> 24;
+
+   cl[14] = __gen_uint(values->stride_in_multiples_of_4_bytes, 0, 7);
+
+}
+
+#define V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_length     15
+#ifdef __gen_unpack_address
+static inline void
+V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST_unpack(const uint8_t * restrict cl,
+                                                  struct V3D33_INDIRECT_INDEXED_INSTANCED_PRIM_LIST * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->stride_in_multiples_of_4_bytes = __gen_unpack_uint(cl, 112, 119);
+   values->address_of_indices_list = __gen_unpack_address(cl, 80, 111);
+   values->address = __gen_unpack_address(cl, 48, 79);
+   values->enable_primitive_restarts = __gen_unpack_uint(cl, 47, 47);
+   values->number_of_draw_indirect_indexed_records = __gen_unpack_uint(cl, 16, 46);
+   values->index_type = __gen_unpack_uint(cl, 14, 15);
+   values->mode = __gen_unpack_uint(cl, 8, 13);
+}
+#endif
+
+
 #define V3D33_INDEXED_INSTANCED_PRIM_LIST_opcode     34
 #define V3D33_INDEXED_INSTANCED_PRIM_LIST_header\
    .opcode                              =     34
@@ -1365,6 +1455,56 @@ V3D33_VERTEX_ARRAY_PRIMS_unpack(const uint8_t * restrict cl,
    values->opcode = __gen_unpack_uint(cl, 0, 7);
    values->index_of_first_vertex = __gen_unpack_uint(cl, 48, 79);
    values->length = __gen_unpack_uint(cl, 16, 47);
+   values->mode = __gen_unpack_uint(cl, 8, 15);
+}
+#endif
+
+
+#define V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_opcode     37
+#define V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_header\
+   .opcode                              =     37
+
+struct V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS {
+   uint32_t                             opcode;
+   uint32_t                             stride_in_multiples_of_4_bytes;
+   __gen_address_type                   address;
+   uint32_t                             number_of_draw_indirect_array_records;
+   enum V3D33_Primitive                 mode;
+};
+
+static inline void
+V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                                 const struct V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->mode, 0, 7);
+
+
+   memcpy(&cl[2], &values->number_of_draw_indirect_array_records, sizeof(values->number_of_draw_indirect_array_records));
+   __gen_emit_reloc(data, &values->address);
+   cl[ 6] = __gen_address_offset(&values->address);
+
+   cl[ 7] = __gen_address_offset(&values->address) >> 8;
+
+   cl[ 8] = __gen_address_offset(&values->address) >> 16;
+
+   cl[ 9] = __gen_address_offset(&values->address) >> 24;
+
+   cl[10] = __gen_uint(values->stride_in_multiples_of_4_bytes, 0, 7);
+
+}
+
+#define V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_length     11
+#ifdef __gen_unpack_address
+static inline void
+V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS_unpack(const uint8_t * restrict cl,
+                                                   struct V3D33_INDIRECT_VERTEX_ARRAY_INSTANCED_PRIMS * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->stride_in_multiples_of_4_bytes = __gen_unpack_uint(cl, 80, 87);
+   values->address = __gen_unpack_address(cl, 48, 79);
+   values->number_of_draw_indirect_array_records = __gen_unpack_uint(cl, 16, 47);
    values->mode = __gen_unpack_uint(cl, 8, 15);
 }
 #endif
@@ -1618,6 +1758,100 @@ V3D33_FLUSH_TRANSFORM_FEEDBACK_DATA_unpack(const uint8_t * restrict cl,
                                            struct V3D33_FLUSH_TRANSFORM_FEEDBACK_DATA * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
+}
+#endif
+
+
+#define V3D33_L1_CACHE_FLUSH_CONTROL_opcode     76
+#define V3D33_L1_CACHE_FLUSH_CONTROL_header     \
+   .opcode                              =     76
+
+struct V3D33_L1_CACHE_FLUSH_CONTROL {
+   uint32_t                             opcode;
+   uint32_t                             tmu_config_cache_clear;
+   uint32_t                             tmu_data_cache_clear;
+   uint32_t                             uniforms_cache_clear;
+   uint32_t                             instruction_cache_clear;
+};
+
+static inline void
+V3D33_L1_CACHE_FLUSH_CONTROL_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                  const struct V3D33_L1_CACHE_FLUSH_CONTROL * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   cl[ 1] = __gen_uint(values->uniforms_cache_clear, 4, 7) |
+            __gen_uint(values->instruction_cache_clear, 0, 3);
+
+   cl[ 2] = __gen_uint(values->tmu_config_cache_clear, 4, 7) |
+            __gen_uint(values->tmu_data_cache_clear, 0, 3);
+
+}
+
+#define V3D33_L1_CACHE_FLUSH_CONTROL_length      3
+#ifdef __gen_unpack_address
+static inline void
+V3D33_L1_CACHE_FLUSH_CONTROL_unpack(const uint8_t * restrict cl,
+                                    struct V3D33_L1_CACHE_FLUSH_CONTROL * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->tmu_config_cache_clear = __gen_unpack_uint(cl, 20, 23);
+   values->tmu_data_cache_clear = __gen_unpack_uint(cl, 16, 19);
+   values->uniforms_cache_clear = __gen_unpack_uint(cl, 12, 15);
+   values->instruction_cache_clear = __gen_unpack_uint(cl, 8, 11);
+}
+#endif
+
+
+#define V3D33_L2T_CACHE_FLUSH_CONTROL_opcode     77
+#define V3D33_L2T_CACHE_FLUSH_CONTROL_header    \
+   .opcode                              =     77
+
+struct V3D33_L2T_CACHE_FLUSH_CONTROL {
+   uint32_t                             opcode;
+   enum V3D33_L2T_Flush_Mode            l2t_flush_mode;
+   __gen_address_type                   l2t_flush_end;
+   __gen_address_type                   l2t_flush_start;
+};
+
+static inline void
+V3D33_L2T_CACHE_FLUSH_CONTROL_pack(__gen_user_data *data, uint8_t * restrict cl,
+                                   const struct V3D33_L2T_CACHE_FLUSH_CONTROL * restrict values)
+{
+   cl[ 0] = __gen_uint(values->opcode, 0, 7);
+
+   __gen_emit_reloc(data, &values->l2t_flush_start);
+   cl[ 1] = __gen_address_offset(&values->l2t_flush_start);
+
+   cl[ 2] = __gen_address_offset(&values->l2t_flush_start) >> 8;
+
+   cl[ 3] = __gen_address_offset(&values->l2t_flush_start) >> 16;
+
+   cl[ 4] = __gen_address_offset(&values->l2t_flush_start) >> 24;
+
+   __gen_emit_reloc(data, &values->l2t_flush_end);
+   cl[ 5] = __gen_address_offset(&values->l2t_flush_end);
+
+   cl[ 6] = __gen_address_offset(&values->l2t_flush_end) >> 8;
+
+   cl[ 7] = __gen_address_offset(&values->l2t_flush_end) >> 16;
+
+   cl[ 8] = __gen_address_offset(&values->l2t_flush_end) >> 24;
+
+   cl[ 9] = __gen_uint(values->l2t_flush_mode, 0, 3);
+
+}
+
+#define V3D33_L2T_CACHE_FLUSH_CONTROL_length     10
+#ifdef __gen_unpack_address
+static inline void
+V3D33_L2T_CACHE_FLUSH_CONTROL_unpack(const uint8_t * restrict cl,
+                                     struct V3D33_L2T_CACHE_FLUSH_CONTROL * restrict values)
+{
+   values->opcode = __gen_unpack_uint(cl, 0, 7);
+   values->l2t_flush_mode = __gen_unpack_uint(cl, 72, 75);
+   values->l2t_flush_end = __gen_unpack_address(cl, 40, 71);
+   values->l2t_flush_start = __gen_unpack_address(cl, 8, 39);
 }
 #endif
 
@@ -3508,24 +3742,9 @@ struct V3D33_TEXTURE_UNIFORM_PARAMETER_0_CFG_MODE1 {
    int32_t                              texel_offset_for_r_coordinate;
    int32_t                              texel_offset_for_t_coordinate;
    int32_t                              texel_offset_for_s_coordinate;
-   uint32_t                             r_wrap_mode;
-#define WRAP_MODE_REPEAT                         0
-#define WRAP_MODE_CLAMP                          1
-#define WRAP_MODE_MIRROR                         2
-#define WRAP_MODE_BORDER                         3
-#define WRAP_MODE_MIRROR_ONCE                    4
-   uint32_t                             t_wrap_mode;
-#define WRAP_MODE_REPEAT                         0
-#define WRAP_MODE_CLAMP                          1
-#define WRAP_MODE_MIRROR                         2
-#define WRAP_MODE_BORDER                         3
-#define WRAP_MODE_MIRROR_ONCE                    4
-   uint32_t                             s_wrap_mode;
-#define WRAP_MODE_REPEAT                         0
-#define WRAP_MODE_CLAMP                          1
-#define WRAP_MODE_MIRROR                         2
-#define WRAP_MODE_BORDER                         3
-#define WRAP_MODE_MIRROR_ONCE                    4
+   enum V3D33_Wrap_Mode                 r_wrap_mode;
+   enum V3D33_Wrap_Mode                 t_wrap_mode;
+   enum V3D33_Wrap_Mode                 s_wrap_mode;
    bool                                 new_configuration_mode;
    bool                                 shadow;
    bool                                 coefficient_lookup_mode;

@@ -96,17 +96,17 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
 	}
 }
 
-static void print_export_comment(uint32_t num, enum shader_t type)
+static void print_export_comment(uint32_t num, gl_shader_stage type)
 {
 	const char *name = NULL;
 	switch (type) {
-	case SHADER_VERTEX:
+	case MESA_SHADER_VERTEX:
 		switch (num) {
 		case 62: name = "gl_Position";  break;
 		case 63: name = "gl_PointSize"; break;
 		}
 		break;
-	case SHADER_FRAGMENT:
+	case MESA_SHADER_FRAGMENT:
 		switch (num) {
 		case 0:  name = "gl_FragColor"; break;
 		}
@@ -212,7 +212,7 @@ struct {
 };
 
 static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
-		int level, int sync, enum shader_t type)
+		int level, int sync, gl_shader_stage type)
 {
 	instr_alu_t *alu = (instr_alu_t *)dwords;
 
@@ -592,7 +592,7 @@ static void print_cf(instr_cf_t *cf, int level)
  *   2) ALU and FETCH instructions
  */
 
-int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, enum shader_t type)
+int disasm_a2xx(uint32_t *dwords, int sizedwords, int level, gl_shader_stage type)
 {
 	instr_cf_t *cfs = (instr_cf_t *)dwords;
 	int idx, max_idx;

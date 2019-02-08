@@ -40,7 +40,6 @@
 #include "brw_blorp.h"
 #include "intel_buffer_objects.h"
 #include "intel_batchbuffer.h"
-#include "intel_tiled_memcpy.h"
 
 static void
 mark_buffer_gpu_usage(struct intel_buffer_object *intel_obj,
@@ -320,6 +319,8 @@ brw_buffer_subdata(struct gl_context *ctx,
    mark_buffer_valid_data(intel_obj, offset, size);
 }
 
+/* Typedef for memcpy function (used in brw_get_buffer_subdata below). */
+typedef void *(*mem_copy_fn)(void *dest, const void *src, size_t n);
 
 /**
  * The GetBufferSubData() driver hook.

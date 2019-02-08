@@ -377,6 +377,14 @@ anv_cmd_buffer_mark_image_written(struct anv_cmd_buffer *cmd_buffer,
                  level, base_layer, layer_count);
 }
 
+void
+anv_cmd_emit_conditional_render_predicate(struct anv_cmd_buffer *cmd_buffer)
+{
+   anv_genX_call(&cmd_buffer->device->info,
+                 cmd_emit_conditional_render_predicate,
+                 cmd_buffer);
+}
+
 void anv_CmdBindPipeline(
     VkCommandBuffer                             commandBuffer,
     VkPipelineBindPoint                         pipelineBindPoint,
@@ -645,6 +653,35 @@ void anv_CmdBindVertexBuffers(
    }
 }
 
+void anv_CmdBindTransformFeedbackBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct anv_xfb_binding *xfb = cmd_buffer->state.xfb_bindings;
+
+   /* We have to defer setting up vertex buffer since we need the buffer
+    * stride from the pipeline. */
+
+   assert(firstBinding + bindingCount <= MAX_XFB_BUFFERS);
+   for (uint32_t i = 0; i < bindingCount; i++) {
+      if (pBuffers[i] == VK_NULL_HANDLE) {
+         xfb[firstBinding + i].buffer = NULL;
+      } else {
+         ANV_FROM_HANDLE(anv_buffer, buffer, pBuffers[i]);
+         xfb[firstBinding + i].buffer = buffer;
+         xfb[firstBinding + i].offset = pOffsets[i];
+         xfb[firstBinding + i].size =
+            anv_buffer_get_range(buffer, pOffsets[i],
+                                 pSizes ? pSizes[i] : VK_WHOLE_SIZE);
+      }
+   }
+}
+
 enum isl_format
 anv_isl_format_for_descriptor_type(VkDescriptorType type)
 {
@@ -671,8 +708,6 @@ anv_cmd_buffer_emit_dynamic(struct anv_cmd_buffer *cmd_buffer,
    state = anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, size, alignment);
    memcpy(state.map, data, size);
 
-   anv_state_flush(cmd_buffer->device, state);
-
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(state.map, size));
 
    return state;
@@ -691,8 +726,6 @@ anv_cmd_buffer_merge_dynamic(struct anv_cmd_buffer *cmd_buffer,
    p = state.map;
    for (uint32_t i = 0; i < dwords; i++)
       p[i] = a[i] | b[i];
-
-   anv_state_flush(cmd_buffer->device, state);
 
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(p, dwords * 4));
 
@@ -754,8 +787,6 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
    for (unsigned i = 0; i < prog_data->nr_params; i++)
       u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
 
-   anv_state_flush(cmd_buffer->device, state);
-
    return state;
 }
 
@@ -809,8 +840,6 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
          }
       }
    }
-
-   anv_state_flush(cmd_buffer->device, state);
 
    return state;
 }

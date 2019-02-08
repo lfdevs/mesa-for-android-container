@@ -67,7 +67,7 @@ static const char *blit_vp =
 	"VERT                                        \n"
 	"DCL IN[0]                                   \n"
 	"DCL IN[1]                                   \n"
-	"DCL OUT[0], TEXCOORD[0]                     \n"
+	"DCL OUT[0], GENERIC[0]                      \n"
 	"DCL OUT[1], POSITION                        \n"
 	"  0: MOV OUT[0], IN[0]                      \n"
 	"  0: MOV OUT[1], IN[1]                      \n"
@@ -129,15 +129,14 @@ void fd_prog_init(struct pipe_context *pctx)
 	pctx->bind_fs_state = fd_fp_state_bind;
 	pctx->bind_vs_state = fd_vp_state_bind;
 
-	// XXX for now, let a2xx keep it's own hand-rolled shaders
-	// for solid and blit progs:
-	if (ctx->screen->gpu_id < 300)
-		return;
-
 	ctx->solid_prog.fp = assemble_tgsi(pctx, solid_fp, true);
 	ctx->solid_prog.vp = assemble_tgsi(pctx, solid_vp, false);
 	ctx->blit_prog[0].vp = assemble_tgsi(pctx, blit_vp, false);
 	ctx->blit_prog[0].fp = fd_prog_blit(pctx, 1, false);
+
+	if (ctx->screen->gpu_id < 300)
+		return;
+
 	for (i = 1; i < ctx->screen->max_rts; i++) {
 		ctx->blit_prog[i].vp = ctx->blit_prog[0].vp;
 		ctx->blit_prog[i].fp = fd_prog_blit(pctx, i + 1, false);

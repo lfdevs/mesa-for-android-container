@@ -38,6 +38,7 @@ gbm_bo_write
 gbm_bo_set_user_data
 gbm_bo_get_user_data
 gbm_bo_destroy
+gbm_format_get_name
 gbm_surface_create
 gbm_surface_create_with_modifiers
 gbm_surface_lock_front_buffer

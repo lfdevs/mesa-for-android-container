@@ -147,12 +147,11 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          continue; /* Not a uniform or UBO intrinsic */
       }
 
-      nir_const_value *block_const = nir_src_as_const_value(intrin->src[0]);
-      nir_const_value *offset_const = nir_src_as_const_value(intrin->src[1]);
-
-      if (block_const && offset_const) {
-         const int block = block_const->u32[0];
-         const int offset = offset_const->u32[0] / 32;
+      if (nir_src_is_const(intrin->src[0]) &&
+          nir_src_is_const(intrin->src[1])) {
+         const int block = nir_src_as_uint(intrin->src[0]);
+         const unsigned byte_offset = nir_src_as_uint(intrin->src[1]);
+         const int offset = byte_offset / 32;
 
          /* Avoid shifting by larger than the width of our bitfield, as this
           * is undefined in C.  Even if we require multiple bits to represent
@@ -166,8 +165,8 @@ analyze_ubos_block(struct ubo_analysis_state *state, nir_block *block)
          /* The value might span multiple 32-byte chunks. */
          const int bytes = nir_intrinsic_dest_components(intrin) *
                            (nir_dest_bit_size(intrin->dest) / 8);
-         const int start = ROUND_DOWN_TO(offset_const->u32[0], 32);
-         const int end = ALIGN(offset_const->u32[0] + bytes, 32);
+         const int start = ROUND_DOWN_TO(byte_offset, 32);
+         const int end = ALIGN(byte_offset + bytes, 32);
          const int chunks = (end - start) / 32;
 
          /* TODO: should we count uses in loops as higher benefit? */

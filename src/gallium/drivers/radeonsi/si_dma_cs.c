@@ -36,7 +36,7 @@ static void si_dma_emit_wait_idle(struct si_context *sctx)
 		radeon_emit(cs, 0xf0000000); /* NOP */
 }
 
-void si_dma_emit_timestamp(struct si_context *sctx, struct r600_resource *dst,
+void si_dma_emit_timestamp(struct si_context *sctx, struct si_resource *dst,
 			   uint64_t offset)
 {
 	struct radeon_cmdbuf *cs = sctx->dma_cs;
@@ -69,7 +69,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 {
 	struct radeon_cmdbuf *cs = sctx->dma_cs;
 	unsigned i, ncopy, csize;
-	struct r600_resource *rdst = r600_resource(dst);
+	struct si_resource *sdst = si_resource(dst);
 
 	assert(offset % 4 == 0);
 	assert(size);
@@ -83,14 +83,14 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&rdst->valid_buffer_range, offset, offset + size);
+	util_range_add(&sdst->valid_buffer_range, offset, offset + size);
 
-	offset += rdst->gpu_address;
+	offset += sdst->gpu_address;
 
 	if (sctx->chip_class == SI) {
 		/* the same maximum size as for copying */
 		ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
-		si_need_dma_space(sctx, ncopy * 4, rdst, NULL);
+		si_need_dma_space(sctx, ncopy * 4, sdst, NULL);
 
 		for (i = 0; i < ncopy; i++) {
 			csize = MIN2(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
@@ -108,7 +108,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 	/* The following code is for CI, VI, Vega/Raven, etc. */
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
-	si_need_dma_space(sctx, ncopy * 5, rdst, NULL);
+	si_need_dma_space(sctx, ncopy * 5, sdst, NULL);
 
 	for (i = 0; i < ncopy; i++) {
 		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
@@ -124,7 +124,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 }
 
 void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
-		       struct r600_resource *dst, struct r600_resource *src)
+		       struct si_resource *dst, struct si_resource *src)
 {
 	uint64_t vram = ctx->dma_cs->used_vram;
 	uint64_t gtt = ctx->dma_cs->used_gart;

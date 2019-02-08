@@ -32,14 +32,12 @@
 
 #include "freedreno_context.h"
 
-#include "ir3_shader.h"
+#include "ir3/ir3_shader.h"
 
 #include "a6xx.xml.h"
 
 struct fd6_context {
 	struct fd_context base;
-
-	struct fd_bo *vs_pvt_mem, *fs_pvt_mem;
 
 	/* Two buffers related to hw binning / visibility stream (VSC).
 	 * Compared to previous generations

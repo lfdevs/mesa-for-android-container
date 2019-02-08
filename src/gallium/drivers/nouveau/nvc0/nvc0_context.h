@@ -365,6 +365,7 @@ bool nve4_validate_tsc(struct nvc0_context *nvc0, int s);
 void nvc0_validate_suf(struct nvc0_context *nvc0, int s);
 void nvc0_validate_textures(struct nvc0_context *);
 void nvc0_validate_samplers(struct nvc0_context *);
+void nvc0_upload_tsc0(struct nvc0_context *);
 void nve4_set_tex_handles(struct nvc0_context *);
 void nvc0_validate_surfaces(struct nvc0_context *);
 void nve4_set_surface_info(struct nouveau_pushbuf *,

@@ -114,6 +114,8 @@ files_libnir = files(
   'nir_lower_alpha_test.c',
   'nir_lower_atomics_to_ssbo.c',
   'nir_lower_bitmap.c',
+  'nir_lower_bool_to_float.c',
+  'nir_lower_bool_to_int32.c',
   'nir_lower_clamp_color_outputs.c',
   'nir_lower_clip.c',
   'nir_lower_clip_cull_distance_arrays.c',
@@ -163,6 +165,7 @@ files_libnir = files(
   'nir_opt_find_array_copies.c',
   'nir_opt_gcm.c',
   'nir_opt_global_to_local.c',
+  'nir_opt_idiv_const.c',
   'nir_opt_if.c',
   'nir_opt_intrinsics.c',
   'nir_opt_large_constants.c',
@@ -246,8 +249,10 @@ if with_tests
       include_directories : [inc_common],
       dependencies : [dep_thread, idep_gtest, idep_nir],
       link_with : libmesa_util,
-    )
+    ), 
+    suite : ['compiler', 'nir'],
   )
+
   test(
     'nir_vars',
     executable(
@@ -257,6 +262,15 @@ if with_tests
       include_directories : [inc_common],
       dependencies : [dep_thread, idep_gtest, idep_nir],
       link_with : libmesa_util,
-    )
+    ),
+    suite : ['compiler', 'nir'],
+  )
+  test(
+    'nir_algebraic_parser',
+    prog_python,
+    args : [
+      join_paths(meson.current_source_dir(), 'tests/algebraic_parser_test.py')
+    ],
+    suite : ['compiler', 'nir'],
   )
 endif

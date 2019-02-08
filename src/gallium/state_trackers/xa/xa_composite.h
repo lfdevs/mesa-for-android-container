@@ -74,18 +74,34 @@ enum xa_composite_wrap {
  * Src picture types.
  */
 enum xa_composite_src_pict_type {
-    xa_src_pict_solid_fill
+    xa_src_pict_solid_fill,
+    xa_src_pict_float_solid_fill
 };
 
+
+/*
+ * struct xa_pict_solid_fill - Description of a solid_fill picture
+ * Deprecated. Use struct xa_pict_float_solid_fill instead.
+ */
 struct xa_pict_solid_fill {
     enum xa_composite_src_pict_type type;
     unsigned int class;
     uint32_t color;
 };
 
+/*
+ * struct xa_pict_solid_fill - Description of a solid_fill picture
+ * with color channels represented by floats.
+ */
+struct xa_pict_float_solid_fill {
+    enum xa_composite_src_pict_type type;
+    float color[4]; /* R, G, B, A */
+};
+
 union xa_source_pict {
-    unsigned int type;
+    enum xa_composite_src_pict_type type;
     struct xa_pict_solid_fill solid_fill;
+    struct xa_pict_float_solid_fill float_solid_fill;
 };
 
 struct xa_picture {

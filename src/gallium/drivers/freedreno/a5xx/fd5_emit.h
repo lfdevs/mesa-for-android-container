@@ -34,7 +34,7 @@
 #include "fd5_format.h"
 #include "fd5_program.h"
 #include "fd5_screen.h"
-#include "ir3_shader.h"
+#include "ir3_gallium.h"
 
 struct fd_ringbuffer;
 

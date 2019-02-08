@@ -260,10 +260,8 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       src_reg indirect_offset = get_indirect_offset(instr);
       unsigned imm_offset = instr->const_index[0];
 
-      nir_const_value *vertex_const = nir_src_as_const_value(instr->src[0]);
-      src_reg vertex_index =
-         vertex_const ? src_reg(brw_imm_ud(vertex_const->u32[0]))
-                      : get_nir_src(instr->src[0], BRW_REGISTER_TYPE_UD, 1);
+      src_reg vertex_index = retype(get_nir_src_imm(instr->src[0]),
+                                    BRW_REGISTER_TYPE_UD);
 
       unsigned first_component = nir_intrinsic_component(instr);
       if (nir_dest_bit_size(instr->dest) == 64) {
@@ -380,7 +378,7 @@ brw_compile_tcs(const struct brw_compiler *compiler,
                 void *mem_ctx,
                 const struct brw_tcs_prog_key *key,
                 struct brw_tcs_prog_data *prog_data,
-                const nir_shader *src_shader,
+                nir_shader *nir,
                 int shader_time_index,
                 char **error_str)
 {
@@ -389,7 +387,6 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_CTRL];
    const unsigned *assembly;
 
-   nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
    nir->info.outputs_written = key->outputs_written;
    nir->info.patch_outputs_written = key->patch_outputs_written;
 

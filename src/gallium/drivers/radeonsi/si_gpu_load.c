@@ -213,8 +213,8 @@ static unsigned si_end_mmio_counter(struct si_screen *sscreen,
 	}
 }
 
-#define BUSY_INDEX(rscreen, field) (&rscreen->mmio_counters.named.field.busy - \
-				    rscreen->mmio_counters.array)
+#define BUSY_INDEX(sscreen, field) (&sscreen->mmio_counters.named.field.busy - \
+				    sscreen->mmio_counters.array)
 
 static unsigned busy_index_from_type(struct si_screen *sscreen,
 				     unsigned type)

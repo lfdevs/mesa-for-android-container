@@ -28,16 +28,11 @@
 #include <stdint.h>
 
 #include "dev/gen_device_info.h"
+#include "drm-uapi/i915_drm.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-enum gen_engine {
-   GEN_ENGINE_RENDER = 1,
-   GEN_ENGINE_VIDEO = 2,
-   GEN_ENGINE_BLITTER = 3,
-};
 
 struct aub_read {
    /* Caller's data */
@@ -55,9 +50,9 @@ struct aub_read {
 
    void (*reg_write)(void *user_data, uint32_t reg_offset, uint32_t reg_value);
 
-   void (*ring_write)(void *user_data, enum gen_engine engine,
+   void (*ring_write)(void *user_data, enum drm_i915_gem_engine_class engine,
                       const void *data, uint32_t data_len);
-   void (*execlist_write)(void *user_data, enum gen_engine engine,
+   void (*execlist_write)(void *user_data, enum drm_i915_gem_engine_class engine,
                           uint64_t context_descriptor);
 
    /* Reader's data */

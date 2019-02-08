@@ -80,6 +80,22 @@ is_logic_instruction(unsigned opcode)
           opcode == BRW_OPCODE_XOR;
 }
 
+static bool
+is_send(unsigned opcode)
+{
+   return opcode == BRW_OPCODE_SEND ||
+          opcode == BRW_OPCODE_SENDC ||
+          opcode == BRW_OPCODE_SENDS ||
+          opcode == BRW_OPCODE_SENDSC;
+}
+
+static bool
+is_split_send(UNUSED const struct gen_device_info *devinfo, unsigned opcode)
+{
+   return opcode == BRW_OPCODE_SENDS ||
+          opcode == BRW_OPCODE_SENDSC;
+}
+
 const char *const conditional_modifier[16] = {
    [BRW_CONDITIONAL_NONE] = "",
    [BRW_CONDITIONAL_Z]    = ".z",
@@ -289,7 +305,7 @@ static const char *const gen6_sfid[16] = {
    [BRW_SFID_MESSAGE_GATEWAY]          = "gateway",
    [BRW_SFID_URB]                      = "urb",
    [BRW_SFID_THREAD_SPAWNER]           = "thread_spawner",
-   [GEN6_SFID_DATAPORT_SAMPLER_CACHE]  = "sampler",
+   [GEN6_SFID_DATAPORT_SAMPLER_CACHE]  = "dp_sampler",
    [GEN6_SFID_DATAPORT_RENDER_CACHE]   = "render",
    [GEN6_SFID_DATAPORT_CONSTANT_CACHE] = "const",
    [GEN7_SFID_DATAPORT_DATA_CACHE]     = "data",
@@ -713,7 +729,28 @@ dest(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
    unsigned elem_size = brw_reg_type_to_size(type);
    int err = 0;
 
-   if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+   if (is_split_send(devinfo, brw_inst_opcode(devinfo, inst))) {
+      /* These are fixed for split sends */
+      type = BRW_REGISTER_TYPE_UD;
+      elem_size = 4;
+      if (brw_inst_dst_address_mode(devinfo, inst) == BRW_ADDRESS_DIRECT) {
+         err |= reg(file, brw_inst_send_dst_reg_file(devinfo, inst),
+                    brw_inst_dst_da_reg_nr(devinfo, inst));
+         unsigned subreg_nr = brw_inst_dst_da16_subreg_nr(devinfo, inst);
+         if (subreg_nr)
+            format(file, ".%u", subreg_nr);
+         string(file, brw_reg_type_to_letters(type));
+      } else {
+         string(file, "g[a0");
+         if (brw_inst_dst_ia_subreg_nr(devinfo, inst))
+            format(file, ".%"PRIu64, brw_inst_dst_ia_subreg_nr(devinfo, inst) /
+                   elem_size);
+         if (brw_inst_send_dst_ia16_addr_imm(devinfo, inst))
+            format(file, " %d", brw_inst_send_dst_ia16_addr_imm(devinfo, inst));
+         string(file, "]<");
+         string(file, brw_reg_type_to_letters(type));
+      }
+   } else if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       if (brw_inst_dst_address_mode(devinfo, inst) == BRW_ADDRESS_DIRECT) {
          err |= reg(file, brw_inst_dst_reg_file(devinfo, inst),
                     brw_inst_dst_da_reg_nr(devinfo, inst));
@@ -1316,9 +1353,60 @@ imm(FILE *file, const struct gen_device_info *devinfo, enum brw_reg_type type,
 }
 
 static int
+src_sends_da(FILE *file,
+             const struct gen_device_info *devinfo,
+             enum brw_reg_type type,
+             unsigned _reg_nr,
+             unsigned _reg_subnr)
+{
+   int err = 0;
+
+   err |= reg(file, BRW_GENERAL_REGISTER_FILE, _reg_nr);
+   if (err == -1)
+      return 0;
+   if (_reg_subnr)
+      format(file, ".1");
+   string(file, brw_reg_type_to_letters(type));
+
+   return err;
+}
+
+static int
+src_sends_ia(FILE *file,
+             const struct gen_device_info *devinfo,
+             enum brw_reg_type type,
+             int _addr_imm,
+             unsigned _addr_subreg_nr)
+{
+   string(file, "g[a0");
+   if (_addr_subreg_nr)
+      format(file, ".1");
+   if (_addr_imm)
+      format(file, " %d", _addr_imm);
+   string(file, "]");
+   string(file, brw_reg_type_to_letters(type));
+
+   return 0;
+}
+
+static int
 src0(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
+   if (is_split_send(devinfo, brw_inst_opcode(devinfo, inst))) {
+      if (brw_inst_send_src0_address_mode(devinfo, inst) == BRW_ADDRESS_DIRECT) {
+         return src_sends_da(file,
+                             devinfo,
+                             BRW_REGISTER_TYPE_UD,
+                             brw_inst_src0_da_reg_nr(devinfo, inst),
+                             brw_inst_src0_da16_subreg_nr(devinfo, inst));
+      } else {
+         return src_sends_ia(file,
+                             devinfo,
+                             BRW_REGISTER_TYPE_UD,
+                             brw_inst_send_src0_ia16_addr_imm(devinfo, inst),
+                             brw_inst_src0_ia_subreg_nr(devinfo, inst));
+      }
+   } else if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       return imm(file, devinfo, brw_inst_src0_type(devinfo, inst), inst);
    } else if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       if (brw_inst_src0_address_mode(devinfo, inst) == BRW_ADDRESS_DIRECT) {
@@ -1373,7 +1461,13 @@ src0(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 static int
 src1(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
+   if (is_split_send(devinfo, brw_inst_opcode(devinfo, inst))) {
+      return src_sends_da(file,
+                          devinfo,
+                          BRW_REGISTER_TYPE_UD,
+                          brw_inst_send_src1_reg_nr(devinfo, inst),
+                          0 /* subreg_nr */);
+   } else if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       return imm(file, devinfo, brw_inst_src1_type(devinfo, inst), inst);
    } else if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       if (brw_inst_src1_address_mode(devinfo, inst) == BRW_ADDRESS_DIRECT) {
@@ -1485,9 +1579,9 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
       string(file, "(");
       err |= control(file, "predicate inverse", pred_inv,
                      brw_inst_pred_inv(devinfo, inst), NULL);
-      format(file, "f%"PRIu64, devinfo->gen >= 7 ? brw_inst_flag_reg_nr(devinfo, inst) : 0);
-      if (brw_inst_flag_subreg_nr(devinfo, inst))
-         format(file, ".%"PRIu64, brw_inst_flag_subreg_nr(devinfo, inst));
+      format(file, "f%"PRIu64".%"PRIu64,
+             devinfo->gen >= 7 ? brw_inst_flag_reg_nr(devinfo, inst) : 0,
+             brw_inst_flag_subreg_nr(devinfo, inst));
       if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
          err |= control(file, "predicate control align1", pred_ctrl_align1,
                         brw_inst_pred_control(devinfo, inst), NULL);
@@ -1509,7 +1603,7 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
       string(file, " ");
       err |= control(file, "function", math_function,
                      brw_inst_math_function(devinfo, inst), NULL);
-   } else if (opcode != BRW_OPCODE_SEND && opcode != BRW_OPCODE_SENDC) {
+   } else if (!is_send(opcode)) {
       err |= control(file, "conditional modifier", conditional_modifier,
                      brw_inst_cond_modifier(devinfo, inst), NULL);
 
@@ -1522,10 +1616,9 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
                                 opcode != BRW_OPCODE_CSEL &&
                                 opcode != BRW_OPCODE_IF &&
                                 opcode != BRW_OPCODE_WHILE))) {
-         format(file, ".f%"PRIu64,
-                devinfo->gen >= 7 ? brw_inst_flag_reg_nr(devinfo, inst) : 0);
-         if (brw_inst_flag_subreg_nr(devinfo, inst))
-            format(file, ".%"PRIu64, brw_inst_flag_subreg_nr(devinfo, inst));
+         format(file, ".f%"PRIu64".%"PRIu64,
+                devinfo->gen >= 7 ? brw_inst_flag_reg_nr(devinfo, inst) : 0,
+                brw_inst_flag_subreg_nr(devinfo, inst));
       }
    }
 
@@ -1599,20 +1692,47 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
       }
    }
 
-   if (opcode == BRW_OPCODE_SEND || opcode == BRW_OPCODE_SENDC) {
+   if (is_send(opcode)) {
       enum brw_message_target sfid = brw_inst_sfid(devinfo, inst);
 
-      if (brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
-         /* show the indirect descriptor source */
-         pad(file, 48);
-         err |= src1(file, devinfo, inst);
+      bool has_imm_desc = false, has_imm_ex_desc = false;
+      uint32_t imm_desc = 0, imm_ex_desc = 0;
+      if (is_split_send(devinfo, opcode)) {
          pad(file, 64);
-      } else {
-         pad(file, 48);
-      }
+         if (brw_inst_send_sel_reg32_desc(devinfo, inst)) {
+            /* show the indirect descriptor source */
+            err |= src_sends_ia(file, devinfo, BRW_REGISTER_TYPE_UD, 0, 0);
+         } else {
+            has_imm_desc = true;
+            imm_desc = brw_inst_send_desc(devinfo, inst);
+            fprintf(file, "0x%08"PRIx32, imm_desc);
+         }
 
-      /* Print message descriptor as immediate source */
-      fprintf(file, "0x%08"PRIx64, inst->data[1] >> 32);
+         pad(file, 80);
+         if (brw_inst_send_sel_reg32_ex_desc(devinfo, inst)) {
+            /* show the indirect descriptor source */
+            err |= src_sends_ia(file, devinfo, BRW_REGISTER_TYPE_UD, 0,
+                                brw_inst_send_ex_desc_ia_subreg_nr(devinfo, inst));
+         } else {
+            has_imm_ex_desc = true;
+            imm_ex_desc = brw_inst_send_ex_desc(devinfo, inst);
+            fprintf(file, "0x%08"PRIx32, imm_ex_desc);
+         }
+      } else {
+         if (brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
+            /* show the indirect descriptor source */
+            pad(file, 48);
+            err |= src1(file, devinfo, inst);
+            pad(file, 64);
+         } else {
+            has_imm_desc = true;
+            imm_desc = brw_inst_send_desc(devinfo, inst);
+            pad(file, 48);
+         }
+
+         /* Print message descriptor as immediate source */
+         fprintf(file, "0x%08"PRIx64, inst->data[1] >> 32);
+      }
 
       newline(file);
       pad(file, 16);
@@ -1623,7 +1743,7 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
                      sfid, &space);
       string(file, " MsgDesc:");
 
-      if (brw_inst_src1_reg_file(devinfo, inst) != BRW_IMMEDIATE_VALUE) {
+      if (!has_imm_desc) {
          format(file, " indirect");
       } else {
          switch (sfid) {
@@ -1642,21 +1762,24 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
          case BRW_SFID_SAMPLER:
             if (devinfo->gen >= 5) {
                err |= control(file, "sampler message", gen5_sampler_msg_type,
-                              brw_inst_sampler_msg_type(devinfo, inst), &space);
+                              brw_sampler_desc_msg_type(devinfo, imm_desc),
+                              &space);
                err |= control(file, "sampler simd mode", gen5_sampler_simd_mode,
-                              brw_inst_sampler_simd_mode(devinfo, inst), &space);
-               format(file, " Surface = %"PRIu64" Sampler = %"PRIu64,
-                      brw_inst_binding_table_index(devinfo, inst),
-                      brw_inst_sampler(devinfo, inst));
+                              brw_sampler_desc_simd_mode(devinfo, imm_desc),
+                              &space);
+               format(file, " Surface = %u Sampler = %u",
+                      brw_sampler_desc_binding_table_index(devinfo, imm_desc),
+                      brw_sampler_desc_sampler(devinfo, imm_desc));
             } else {
-               format(file, " (%"PRIu64", %"PRIu64", %"PRIu64", ",
-                      brw_inst_binding_table_index(devinfo, inst),
-                      brw_inst_sampler(devinfo, inst),
-                      brw_inst_sampler_msg_type(devinfo, inst));
+               format(file, " (%u, %u, %u, ",
+                      brw_sampler_desc_binding_table_index(devinfo, imm_desc),
+                      brw_sampler_desc_sampler(devinfo, imm_desc),
+                      brw_sampler_desc_msg_type(devinfo, imm_desc));
                if (!devinfo->is_g4x) {
                   err |= control(file, "sampler target format",
                                  sampler_target_format,
-                                 brw_inst_sampler_return_format(devinfo, inst), NULL);
+                                 brw_sampler_desc_return_format(devinfo, imm_desc),
+                                 NULL);
                }
                string(file, ")");
             }
@@ -1665,29 +1788,31 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
          case GEN6_SFID_DATAPORT_CONSTANT_CACHE:
             /* aka BRW_SFID_DATAPORT_READ on Gen4-5 */
             if (devinfo->gen >= 6) {
-               format(file, " (%"PRIu64", %"PRIu64", %"PRIu64", %"PRIu64")",
-                      brw_inst_binding_table_index(devinfo, inst),
-                      brw_inst_dp_msg_control(devinfo, inst),
-                      brw_inst_dp_msg_type(devinfo, inst),
-                      devinfo->gen >= 7 ? 0 : brw_inst_dp_write_commit(devinfo, inst));
+               format(file, " (%u, %u, %u, %u)",
+                      brw_dp_desc_binding_table_index(devinfo, imm_desc),
+                      brw_dp_desc_msg_control(devinfo, imm_desc),
+                      brw_dp_desc_msg_type(devinfo, imm_desc),
+                      devinfo->gen >= 7 ? 0u :
+                      brw_dp_write_desc_write_commit(devinfo, imm_desc));
             } else {
                bool is_965 = devinfo->gen == 4 && !devinfo->is_g4x;
                err |= control(file, "DP read message type",
                               is_965 ? gen4_dp_read_port_msg_type :
                                        g45_dp_read_port_msg_type,
-                              brw_inst_dp_read_msg_type(devinfo, inst),
+                              brw_dp_read_desc_msg_type(devinfo, imm_desc),
                               &space);
 
-               format(file, " MsgCtrl = 0x%"PRIx64,
-                      brw_inst_dp_read_msg_control(devinfo, inst));
+               format(file, " MsgCtrl = 0x%u",
+                      brw_dp_read_desc_msg_control(devinfo, imm_desc));
 
-               format(file, " Surface = %"PRIu64, brw_inst_binding_table_index(devinfo, inst));
+               format(file, " Surface = %u",
+                      brw_dp_desc_binding_table_index(devinfo, imm_desc));
             }
             break;
 
          case GEN6_SFID_DATAPORT_RENDER_CACHE: {
             /* aka BRW_SFID_DATAPORT_WRITE on Gen4-5 */
-            unsigned msg_type = brw_inst_dp_write_msg_type(devinfo, inst);
+            unsigned msg_type = brw_dp_write_desc_msg_type(devinfo, imm_desc);
 
             err |= control(file, "DP rc message type",
                            dp_rc_msg_type(devinfo), msg_type, &space);
@@ -1701,16 +1826,18 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
                               brw_inst_rt_message_type(devinfo, inst), &space);
                if (devinfo->gen >= 6 && brw_inst_rt_slot_group(devinfo, inst))
                   string(file, " Hi");
-               if (brw_inst_rt_last(devinfo, inst))
+               if (brw_dp_write_desc_last_render_target(devinfo, imm_desc))
                   string(file, " LastRT");
-               if (devinfo->gen < 7 && brw_inst_dp_write_commit(devinfo, inst))
+               if (devinfo->gen < 7 &&
+                   brw_dp_write_desc_write_commit(devinfo, imm_desc))
                   string(file, " WriteCommit");
             } else {
-               format(file, " MsgCtrl = 0x%"PRIx64,
-                      brw_inst_dp_write_msg_control(devinfo, inst));
+               format(file, " MsgCtrl = 0x%u",
+                      brw_dp_write_desc_msg_control(devinfo, imm_desc));
             }
 
-            format(file, " Surface = %"PRIu64, brw_inst_binding_table_index(devinfo, inst));
+            format(file, " Surface = %u",
+                   brw_dp_desc_binding_table_index(devinfo, imm_desc));
             break;
          }
 
@@ -1767,17 +1894,20 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
 
                err |= control(file, "DP DC0 message type",
                               dp_dc0_msg_type_gen7,
-                              brw_inst_dp_msg_type(devinfo, inst), &space);
+                              brw_dp_desc_msg_type(devinfo, imm_desc), &space);
 
-               format(file, ", %"PRIu64", ", brw_inst_binding_table_index(devinfo, inst));
+               format(file, ", %u, ",
+                      brw_dp_desc_binding_table_index(devinfo, imm_desc));
 
                switch (brw_inst_dp_msg_type(devinfo, inst)) {
                case GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP:
                   control(file, "atomic op", aop,
-                          brw_inst_imm_ud(devinfo, inst) >> 8 & 0xf, &space);
+                          brw_dp_desc_msg_control(devinfo, imm_desc) & 0xf,
+                          &space);
                   break;
                default:
-                  format(file, "%"PRIu64, brw_inst_dp_msg_control(devinfo, inst));
+                  format(file, "%u",
+                         brw_dp_desc_msg_control(devinfo, imm_desc));
                }
                format(file, ")");
                break;
@@ -1788,14 +1918,14 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
             if (devinfo->gen >= 7) {
                format(file, " (");
 
-               unsigned msg_ctrl = brw_inst_dp_msg_control(devinfo, inst);
+               unsigned msg_ctrl = brw_dp_desc_msg_control(devinfo, imm_desc);
 
                err |= control(file, "DP DC1 message type",
                               dp_dc1_msg_type_hsw,
-                              brw_inst_dp_msg_type(devinfo, inst), &space);
+                              brw_dp_desc_msg_type(devinfo, imm_desc), &space);
 
-               format(file, ", Surface = %"PRIu64", ",
-                      brw_inst_binding_table_index(devinfo, inst));
+               format(file, ", Surface = %u, ",
+                      brw_dp_desc_binding_table_index(devinfo, imm_desc));
 
                switch (brw_inst_dp_msg_type(devinfo, inst)) {
                case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
@@ -1848,9 +1978,15 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
 
          if (space)
             string(file, " ");
-         format(file, "mlen %"PRIu64, brw_inst_mlen(devinfo, inst));
-         format(file, " rlen %"PRIu64, brw_inst_rlen(devinfo, inst));
       }
+      if (has_imm_desc)
+         format(file, "mlen %u", brw_message_desc_mlen(devinfo, imm_desc));
+      if (has_imm_ex_desc) {
+         format(file, " ex_mlen %u",
+                brw_message_ex_desc_ex_mlen(devinfo, imm_ex_desc));
+      }
+      if (has_imm_desc)
+         format(file, " rlen %u", brw_message_desc_rlen(devinfo, imm_desc));
    }
    pad(file, 64);
    if (opcode != BRW_OPCODE_NOP && opcode != BRW_OPCODE_NENOP) {
@@ -1893,7 +2029,7 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
          err |= control(file, "acc write control", accwr,
                         brw_inst_acc_wr_control(devinfo, inst), &space);
       }
-      if (opcode == BRW_OPCODE_SEND || opcode == BRW_OPCODE_SENDC)
+      if (is_send(opcode))
          err |= control(file, "end of thread", end_of_thread,
                         brw_inst_eot(devinfo, inst), &space);
       if (space)

@@ -70,39 +70,6 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          break;
       }
 
-      case nir_intrinsic_load_local_invocation_id: {
-         /* We lower gl_LocalInvocationID from gl_LocalInvocationIndex based
-          * on this formula:
-          *
-          *    gl_LocalInvocationID.x =
-          *       gl_LocalInvocationIndex % gl_WorkGroupSize.x;
-          *    gl_LocalInvocationID.y =
-          *       (gl_LocalInvocationIndex / gl_WorkGroupSize.x) %
-          *       gl_WorkGroupSize.y;
-          *    gl_LocalInvocationID.z =
-          *       (gl_LocalInvocationIndex /
-          *        (gl_WorkGroupSize.x * gl_WorkGroupSize.y)) %
-          *       gl_WorkGroupSize.z;
-          */
-         unsigned *size = nir->info.cs.local_size;
-
-         nir_ssa_def *local_index = nir_load_local_invocation_index(b);
-
-         nir_const_value uvec3;
-         memset(&uvec3, 0, sizeof(uvec3));
-         uvec3.u32[0] = 1;
-         uvec3.u32[1] = size[0];
-         uvec3.u32[2] = size[0] * size[1];
-         nir_ssa_def *div_val = nir_build_imm(b, 3, 32, uvec3);
-         uvec3.u32[0] = size[0];
-         uvec3.u32[1] = size[1];
-         uvec3.u32[2] = size[2];
-         nir_ssa_def *mod_val = nir_build_imm(b, 3, 32, uvec3);
-
-         sysval = nir_umod(b, nir_udiv(b, local_index, div_val), mod_val);
-         break;
-      }
-
       case nir_intrinsic_load_subgroup_id:
          if (state->local_workgroup_size > 8)
             continue;

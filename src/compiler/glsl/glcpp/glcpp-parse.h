@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.1.  */
+/* A Bison parser, made by GNU Bison 3.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -29,6 +29,9 @@
 
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
+
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
 
 #ifndef YY_GLCPP_PARSER_GLSL_GLCPP_GLCPP_PARSE_H_INCLUDED
 # define YY_GLCPP_PARSER_GLSL_GLCPP_GLCPP_PARSE_H_INCLUDED

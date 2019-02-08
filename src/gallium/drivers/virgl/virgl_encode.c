@@ -1054,3 +1054,27 @@ int virgl_encode_texture_barrier(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, flags);
    return 0;
 }
+
+int virgl_encode_host_debug_flagstring(struct virgl_context *ctx,
+                                       const char *flagstring)
+{
+   unsigned long slen = strlen(flagstring) + 1;
+   uint32_t sslen;
+   uint32_t string_length;
+
+   if (!slen)
+      return 0;
+
+   if (slen > 4 * 0xffff) {
+      debug_printf("VIRGL: host debug flag string too long, will be truncated\n");
+      slen = 4 * 0xffff;
+   }
+
+   sslen = (uint32_t )(slen + 3) / 4;
+   string_length = (uint32_t)MIN2(sslen * 4, slen);
+
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_SET_DEBUG_FLAGS, 0, sslen));
+   virgl_encoder_write_block(ctx->cbuf, (const uint8_t *)flagstring, string_length);
+
+   return 0;
+}

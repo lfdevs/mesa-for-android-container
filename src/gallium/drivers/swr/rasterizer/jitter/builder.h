@@ -161,7 +161,6 @@ namespace SwrJit
 #include "builder_math.h"
 #include "builder_mem.h"
 
-    protected:
         void SetPrivateContext(Value* pPrivateContext)
         {
             mpPrivateContext = pPrivateContext;

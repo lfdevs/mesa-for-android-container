@@ -138,6 +138,7 @@ struct _egl_extensions
 
    EGLBoolean MESA_drm_image;
    EGLBoolean MESA_image_dma_buf_export;
+   EGLBoolean MESA_query_driver;
 
    EGLBoolean NOK_swap_region;
    EGLBoolean NOK_texture_from_pixmap;

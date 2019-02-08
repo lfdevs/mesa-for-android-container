@@ -29,11 +29,30 @@
 #include "util/u_format.h"
 
 #include "fd6_screen.h"
+#include "fd6_blitter.h"
 #include "fd6_context.h"
 #include "fd6_format.h"
 #include "fd6_resource.h"
 
-#include "ir3_compiler.h"
+#include "ir3/ir3_compiler.h"
+
+static bool
+valid_sample_count(unsigned sample_count)
+{
+	switch (sample_count) {
+	case 0:
+	case 1:
+	case 2:
+	case 4:
+// TODO seems 8x works, but increases lrz width or height.. but the
+// blob I have doesn't seem to expose any egl configs w/ 8x, so
+// just hide it for now and revisit later.
+//	case 8:
+		return true;
+	default:
+		return false;
+	}
+}
 
 static boolean
 fd6_screen_is_format_supported(struct pipe_screen *pscreen,
@@ -46,7 +65,7 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
 	unsigned retval = 0;
 
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
-			(sample_count > 1)) { /* TODO add MSAA */
+			!valid_sample_count(sample_count)) {
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
 		return FALSE;
@@ -60,11 +79,11 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
 		retval |= PIPE_BIND_VERTEX_BUFFER;
 	}
 
-	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
+	if ((usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE)) &&
 			(target == PIPE_BUFFER ||
 			 util_format_get_blocksize(format) != 12) &&
 			(fd6_pipe2tex(format) != (enum a6xx_tex_fmt)~0)) {
-		retval |= PIPE_BIND_SAMPLER_VIEW;
+		retval |= usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_SHADER_IMAGE);
 	}
 
 	if ((usage & (PIPE_BIND_RENDER_TARGET |
@@ -116,4 +135,5 @@ fd6_screen_init(struct pipe_screen *pscreen)
 	pscreen->is_format_supported = fd6_screen_is_format_supported;
 
 	screen->setup_slices = fd6_setup_slices;
+	screen->tile_mode = fd6_tile_mode;
 }

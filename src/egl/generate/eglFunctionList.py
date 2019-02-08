@@ -209,5 +209,9 @@ EGL_FUNCTIONS = (
     _eglFunc("eglQueryDevicesEXT",                   "none"),
     _eglFunc("eglQueryDisplayAttribEXT",             "display"),
 
+    # EGL_MESA_query_driver
+    _eglFunc("eglGetDisplayDriverName",              "display"),
+    _eglFunc("eglGetDisplayDriverConfig",            "display"),
+
 )
 

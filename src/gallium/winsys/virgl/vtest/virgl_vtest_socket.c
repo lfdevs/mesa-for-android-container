@@ -30,8 +30,6 @@
 
 #include <os/os_process.h>
 #include <util/u_format.h>
-/* connect to remote socket */
-#define VTEST_SOCKET_NAME "/tmp/.virgl_test"
 
 #include "virgl_vtest_winsys.h"
 #include "virgl_vtest_public.h"
@@ -163,7 +161,7 @@ int virgl_vtest_connect(struct virgl_vtest_winsys *vws)
 
    memset(&un, 0, sizeof(un));
    un.sun_family = AF_UNIX;
-   snprintf(un.sun_path, sizeof(un.sun_path), "%s", VTEST_SOCKET_NAME);
+   snprintf(un.sun_path, sizeof(un.sun_path), "%s", VTEST_DEFAULT_SOCKET_NAME);
 
    do {
       ret = 0;

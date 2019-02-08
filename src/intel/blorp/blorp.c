@@ -247,9 +247,10 @@ struct blorp_sf_key {
 };
 
 bool
-blorp_ensure_sf_program(struct blorp_context *blorp,
+blorp_ensure_sf_program(struct blorp_batch *batch,
                         struct blorp_params *params)
 {
+   struct blorp_context *blorp = batch->blorp;
    const struct brw_wm_prog_data *wm_prog_data = params->wm_prog_data;
    assert(params->wm_prog_data);
 
@@ -276,7 +277,7 @@ blorp_ensure_sf_program(struct blorp_context *blorp,
    memcpy(key.key.interp_mode, wm_prog_data->interp_mode,
           sizeof(key.key.interp_mode));
 
-   if (blorp->lookup_shader(blorp, &key, sizeof(key),
+   if (blorp->lookup_shader(batch, &key, sizeof(key),
                             &params->sf_prog_kernel, &params->sf_prog_data))
       return true;
 
@@ -293,7 +294,7 @@ blorp_ensure_sf_program(struct blorp_context *blorp,
                             &prog_data_tmp, &vue_map, &program_size);
 
    bool result =
-      blorp->upload_shader(blorp, &key, sizeof(key), program, program_size,
+      blorp->upload_shader(batch, &key, sizeof(key), program, program_size,
                            (void *)&prog_data_tmp, sizeof(prog_data_tmp),
                            &params->sf_prog_kernel, &params->sf_prog_data);
 

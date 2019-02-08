@@ -31,6 +31,7 @@
 
 #include "jit_pch.hpp"
 #include "common/isa.hpp"
+#include <llvm/IR/AssemblyAnnotationWriter.h>
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -112,9 +113,15 @@ public:
 private:
     std::string                 mCpu;
     llvm::SmallString<MAX_PATH> mCacheDir;
+    llvm::SmallString<MAX_PATH> mModuleCacheDir;
     uint32_t                    mCurrentModuleCRC = 0;
     JitManager*                 mpJitMgr          = nullptr;
     llvm::CodeGenOpt::Level     mOptLevel         = llvm::CodeGenOpt::None;
+
+    /// Calculate actual directory where module will be cached.
+    /// This is always a subdirectory of mCacheDir.  Full absolute
+    /// path name will be stored in mCurrentModuleCacheDir
+    void CalcModuleCacheDir();
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -123,12 +130,21 @@ private:
 struct JitManager
 {
     JitManager(uint32_t w, const char* arch, const char* core);
-    ~JitManager(){};
+    ~JitManager()
+    {
+        for (auto* pExec : mvExecEngines)
+        {
+            delete pExec;
+        }
+    }
 
-    JitLLVMContext         mContext; ///< LLVM compiler
-    llvm::IRBuilder<>      mBuilder; ///< LLVM IR Builder
-    llvm::ExecutionEngine* mpExec;
-    JitCache               mCache;
+    JitLLVMContext                      mContext; ///< LLVM compiler
+    llvm::IRBuilder<>                   mBuilder; ///< LLVM IR Builder
+    llvm::ExecutionEngine*              mpExec;
+    std::vector<llvm::ExecutionEngine*> mvExecEngines;
+    JitCache                            mCache;
+    llvm::StringRef                     mHostCpuName;
+    llvm::CodeGenOpt::Level             mOptLevel;
 
     // Need to be rebuilt after a JIT and before building new IR
     llvm::Module* mpCurrentModule;
@@ -147,11 +163,14 @@ struct JitManager
     // Debugging support
     std::unordered_map<llvm::StructType*, llvm::DIType*> mDebugStructMap;
 
+    void CreateExecEngine(std::unique_ptr<llvm::Module> M);
     void SetupNewModule();
 
     void               DumpAsm(llvm::Function* pFunction, const char* fileName);
     static void        DumpToFile(llvm::Function* f, const char* fileName);
-    static void        DumpToFile(llvm::Module* M, const char* fileName);
+    static void        DumpToFile(llvm::Module*                   M,
+                                  const char*                     fileName,
+                                  llvm::AssemblyAnnotationWriter* annotater = nullptr);
     static std::string GetOutputDir();
 
     // Debugging support methods
@@ -177,4 +196,15 @@ struct JitManager
                           llvm::DIFile*                                        pFile,
                           uint32_t                                             lineNum,
                           const std::vector<std::pair<std::string, uint32_t>>& members);
+};
+
+class InterleaveAssemblyAnnotater : public llvm::AssemblyAnnotationWriter
+{
+public:
+    void                     emitInstructionAnnot(const llvm::Instruction*     pInst,
+                                                  llvm::formatted_raw_ostream& OS) override;
+    std::vector<std::string> mAssembly;
+
+private:
+    uint32_t mCurrentLineNo = 0;
 };

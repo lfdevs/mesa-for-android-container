@@ -60,6 +60,9 @@ etna_context_destroy(struct pipe_context *pctx)
 {
    struct etna_context *ctx = etna_context(pctx);
 
+   if (ctx->dummy_rt)
+      etna_bo_del(ctx->dummy_rt);
+
    util_copy_framebuffer_state(&ctx->framebuffer_s, NULL);
 
    if (ctx->primconvert)
@@ -211,13 +214,8 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
    ctx->dirty |= ETNA_DIRTY_INDEX_BUFFER;
 
    struct etna_shader_key key = {};
-   struct etna_surface *cbuf = etna_surface(pfb->cbufs[0]);
-
-   if (cbuf) {
-      struct etna_resource *res = etna_resource(cbuf->base.texture);
-
-      key.frag_rb_swap = !!translate_rs_format_rb_swap(res->base.format);
-   }
+   if (pfb->cbufs[0])
+      key.frag_rb_swap = !!translate_rs_format_rb_swap(pfb->cbufs[0]->format);
 
    if (!etna_get_vs(ctx, key) || !etna_get_fs(ctx, key)) {
       BUG("compiled shaders are not okay");
@@ -487,6 +485,16 @@ etna_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
    slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
    list_inithead(&ctx->active_hw_queries);
+
+   /* create dummy RT buffer, used when rendering with no color buffer */
+   ctx->dummy_rt = etna_bo_new(ctx->screen->dev, 64 * 64 * 4,
+                               DRM_ETNA_GEM_CACHE_WC);
+   if (!ctx->dummy_rt)
+      goto fail;
+
+   ctx->dummy_rt_reloc.bo = ctx->dummy_rt;
+   ctx->dummy_rt_reloc.offset = 0;
+   ctx->dummy_rt_reloc.flags = ETNA_RELOC_READ | ETNA_RELOC_WRITE;
 
    return pctx;
 

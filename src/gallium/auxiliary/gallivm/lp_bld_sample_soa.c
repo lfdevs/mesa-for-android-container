@@ -3549,10 +3549,6 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
       const struct util_format_description *format_desc;
       format_desc = util_format_description(static_texture_state->format);
       if (format_desc && format_desc->layout == UTIL_FORMAT_LAYOUT_S3TC) {
-         /*
-          * This is not 100% correct, if we have cache but the
-          * util_format_s3tc_prefer is true the cache won't get used
-          * regardless (could hook up the block decode there...) */
          need_cache = TRUE;
       }
    }

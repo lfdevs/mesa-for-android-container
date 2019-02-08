@@ -294,13 +294,14 @@ fs_visitor::opt_combine_constants()
    for (int i = 0; i < table.len; i++) {
       foreach_list_typed(reg_link, link, link, table.imm[i].uses) {
          fs_reg *reg = link->reg;
+         assert((isnan(reg->f) && isnan(table.imm[i].val)) ||
+                fabsf(reg->f) == fabs(table.imm[i].val));
+
          reg->file = VGRF;
-         reg->nr = table.imm[i].nr;
          reg->offset = table.imm[i].subreg_offset;
          reg->stride = 0;
          reg->negate = signbit(reg->f) != signbit(table.imm[i].val);
-         assert((isnan(reg->f) && isnan(table.imm[i].val)) ||
-                fabsf(reg->f) == fabs(table.imm[i].val));
+         reg->nr = table.imm[i].nr;
       }
    }
 

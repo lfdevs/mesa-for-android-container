@@ -32,7 +32,7 @@
 #include "freedreno_context.h"
 #include "fd3_format.h"
 #include "fd3_program.h"
-#include "ir3_shader.h"
+#include "ir3_gallium.h"
 
 struct fd_ringbuffer;
 

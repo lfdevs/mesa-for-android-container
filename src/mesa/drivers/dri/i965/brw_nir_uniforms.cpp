@@ -109,10 +109,6 @@ brw_setup_image_uniform_values(gl_shader_stage stage,
                              image_idx,
                              offsetof(brw_image_param, swizzling), 2);
       param += BRW_IMAGE_PARAM_SIZE;
-
-      brw_mark_surface_used(
-         stage_prog_data,
-         stage_prog_data->binding_table.image_start + image_idx);
    }
 }
 

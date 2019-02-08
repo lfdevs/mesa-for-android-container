@@ -36,7 +36,7 @@ typedef struct {
    uint8_t component_mask;
 } nir_xfb_output_info;
 
-typedef struct {
+typedef struct nir_xfb_info {
    uint8_t buffers_written;
    uint8_t streams_written;
 

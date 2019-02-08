@@ -66,7 +66,7 @@ set_predicate_for_overflow_query(struct brw_context *brw,
    brw_emit_pipe_control_flush(brw, PIPE_CONTROL_FLUSH_ENABLE);
 
    hsw_overflow_result_to_gpr0(brw, query, count);
-   brw_load_register_reg64(brw, HSW_CS_GPR(0), MI_PREDICATE_SRC0);
+   brw_load_register_reg64(brw, MI_PREDICATE_SRC0, HSW_CS_GPR(0));
    brw_load_register_imm64(brw, MI_PREDICATE_SRC1, 0ull);
 }
 

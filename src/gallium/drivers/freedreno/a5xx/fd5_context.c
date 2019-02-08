@@ -48,8 +48,6 @@ fd5_context_destroy(struct pipe_context *pctx)
 
 	fd_context_destroy(pctx);
 
-	fd_bo_del(fd5_ctx->vs_pvt_mem);
-	fd_bo_del(fd5_ctx->fs_pvt_mem);
 	fd_bo_del(fd5_ctx->vsc_size_mem);
 	fd_bo_del(fd5_ctx->blit_mem);
 
@@ -105,17 +103,11 @@ fd5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
 	util_blitter_set_texture_multisample(fd5_ctx->base.blitter, true);
 
-	fd5_ctx->vs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
-			DRM_FREEDRENO_GEM_TYPE_KMEM);
-
-	fd5_ctx->fs_pvt_mem = fd_bo_new(screen->dev, 0x2000,
-			DRM_FREEDRENO_GEM_TYPE_KMEM);
-
 	fd5_ctx->vsc_size_mem = fd_bo_new(screen->dev, 0x1000,
-			DRM_FREEDRENO_GEM_TYPE_KMEM);
+			DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_size");
 
 	fd5_ctx->blit_mem = fd_bo_new(screen->dev, 0x1000,
-			DRM_FREEDRENO_GEM_TYPE_KMEM);
+			DRM_FREEDRENO_GEM_TYPE_KMEM, "blit");
 
 	fd_context_setup_common_vbos(&fd5_ctx->base);
 

@@ -274,8 +274,8 @@ gen6_gs_visitor::emit_urb_write_header(int mrf)
    emit(GS_OPCODE_SET_DWORD_2, dst_reg(MRF, mrf), flags_data);
 }
 
-static int
-align_interleaved_urb_mlen(int mlen)
+static unsigned
+align_interleaved_urb_mlen(unsigned mlen)
 {
    /* URB data written (does not include the message header reg) must
     * be a multiple of 256 bits, or 2 VS registers.  See vol5c.5,

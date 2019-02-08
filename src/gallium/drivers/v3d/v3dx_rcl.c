@@ -74,6 +74,7 @@ load_general(struct v3d_cl *cl, struct pipe_surface *psurf, int buffer,
                         load.input_image_format = V3D_OUTPUT_IMAGE_FORMAT_S8;
                 else
                         load.input_image_format = surf->format;
+                load.r_b_swap = surf->swap_rb;
 
                 if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
                     surf->tiling == VC5_TILING_UIF_XOR) {
@@ -137,6 +138,7 @@ store_general(struct v3d_job *job,
                 else
                         store.output_image_format = surf->format;
 
+                store.r_b_swap = surf->swap_rb;
                 store.memory_format = surf->tiling;
 
                 if (surf->tiling == VC5_TILING_UIF_NO_XOR ||
@@ -205,7 +207,7 @@ v3d_rcl_emit_loads(struct v3d_job *job, struct v3d_cl *cl)
 {
         uint32_t loads_pending = job->load;
 
-        for (int i = 0; i < VC5_MAX_DRAW_BUFFERS; i++) {
+        for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 uint32_t bit = PIPE_CLEAR_COLOR0 << i;
                 if (!(loads_pending & bit))
                         continue;
@@ -303,7 +305,7 @@ v3d_rcl_emit_stores(struct v3d_job *job, struct v3d_cl *cl)
          * perspective.  Non-MSAA surfaces will use
          * STORE_MULTI_SAMPLE_RESOLVED_TILE_COLOR_BUFFER_EXTENDED.
          */
-        for (int i = 0; i < VC5_MAX_DRAW_BUFFERS; i++) {
+        for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 uint32_t bit = PIPE_CLEAR_COLOR0 << i;
                 if (!(job->store & bit))
                         continue;
@@ -372,6 +374,15 @@ v3d_rcl_emit_stores(struct v3d_job *job, struct v3d_cl *cl)
                 }
         }
 #else /* V3D_VERSION >= 40 */
+        /* If we're emitting an RCL with GL_ARB_framebuffer_no_attachments,
+         * we still need to emit some sort of store.
+         */
+        if (!job->store) {
+                cl_emit(cl, STORE_TILE_BUFFER_GENERAL, store) {
+                        store.buffer_to_store = NONE;
+                }
+        }
+
         assert(!stores_pending);
 
         /* GFXH-1461/GFXH-1689: The per-buffer store command's clear
@@ -496,7 +507,7 @@ v3dX(emit_rcl)(struct v3d_job *job)
         v3d_job_add_bo(job, job->rcl.bo);
 
         int nr_cbufs = 0;
-        for (int i = 0; i < VC5_MAX_DRAW_BUFFERS; i++) {
+        for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 if (job->cbufs[i])
                         nr_cbufs = i + 1;
         }
@@ -759,7 +770,10 @@ v3dX(emit_rcl)(struct v3d_job *job)
 
         v3d_rcl_emit_generic_per_tile_list(job, nr_cbufs - 1);
 
-        /* XXX: Use Morton order */
+        /* XXX perf: We should expose GL_MESA_tile_raster_order to improve X11
+         * performance, but we should use Morton order otherwise to improve
+         * cache locality.
+         */
         uint32_t supertile_w_in_pixels = job->tile_width * supertile_w;
         uint32_t supertile_h_in_pixels = job->tile_height * supertile_h;
         uint32_t min_x_supertile = job->draw_min_x / supertile_w_in_pixels;
@@ -779,6 +793,21 @@ v3dX(emit_rcl)(struct v3d_job *job)
                                 coords.row_number_in_supertiles = y;
                         }
                 }
+        }
+
+        if (job->tmu_dirty_rcl) {
+           cl_emit(&job->rcl, L1_CACHE_FLUSH_CONTROL, flush) {
+              flush.tmu_config_cache_clear = 0xf;
+              flush.tmu_data_cache_clear = 0xf;
+              flush.uniforms_cache_clear = 0xf;
+              flush.instruction_cache_clear = 0xf;
+           }
+
+           cl_emit(&job->rcl, L2T_CACHE_FLUSH_CONTROL, flush) {
+              flush.l2t_flush_mode = L2T_FLUSH_MODE_CLEAN;
+              flush.l2t_flush_start = cl_address(NULL, 0);
+              flush.l2t_flush_end = cl_address(NULL, ~0);
+           }
         }
 
         cl_emit(&job->rcl, END_OF_RENDERING, end);

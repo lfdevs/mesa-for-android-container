@@ -492,11 +492,7 @@ vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
         if (!(vc4_debug & VC4_DEBUG_NORAST)) {
                 int ret;
 
-#ifndef USE_VC4_SIMULATOR
-                ret = drmIoctl(vc4->fd, DRM_IOCTL_VC4_SUBMIT_CL, &submit);
-#else
-                ret = vc4_simulator_flush(vc4, &submit, job);
-#endif
+                ret = vc4_ioctl(vc4->fd, DRM_IOCTL_VC4_SUBMIT_CL, &submit);
                 static bool warned = false;
                 if (ret && !warned) {
                         fprintf(stderr, "Draw call returned %s.  "

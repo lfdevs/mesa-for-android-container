@@ -6912,6 +6912,109 @@ util_format_l8_srgb_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, cons
    }
 }
 
+union util_format_r8_srgb {
+   uint8_t value;
+   struct {
+      uint8_t r;
+   } chan;
+};
+
+static inline void
+util_format_r8_srgb_unpack_rgba_float(float *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      float *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+         uint8_t value = *(const uint8_t *)src;
+         uint8_t r;
+         r = value;
+         dst[0] = util_format_srgb_8unorm_to_linear_float(r); /* r */
+         dst[1] = 0; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+         src += 1;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_r8_srgb_pack_rgba_float(uint8_t *dst_row, unsigned dst_stride, const float *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const float *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+         uint8_t value = 0;
+         value |= util_format_linear_float_to_srgb_8unorm(src[0]);
+         *(uint8_t *)dst = value;
+         src += 4;
+         dst += 1;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+static inline void
+util_format_r8_srgb_fetch_rgba_float(float *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)
+{
+         uint8_t value = *(const uint8_t *)src;
+         uint8_t r;
+         r = value;
+         dst[0] = util_format_srgb_8unorm_to_linear_float(r); /* r */
+         dst[1] = 0; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+}
+
+static inline void
+util_format_r8_srgb_unpack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      uint8_t *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+         uint8_t value = *(const uint8_t *)src;
+         uint8_t r;
+         r = value;
+         dst[0] = util_format_srgb_to_linear_8unorm(r); /* r */
+         dst[1] = 0; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 255; /* a */
+         src += 1;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_r8_srgb_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const uint8_t *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+         uint8_t value = 0;
+         value |= util_format_linear_to_srgb_8unorm(src[0]);
+         *(uint8_t *)dst = value;
+         src += 4;
+         dst += 1;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
 union util_format_l8a8_srgb {
    uint16_t value;
    struct {
@@ -32059,6 +32162,173 @@ util_format_a8l8_snorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, c
    }
 }
 
+union util_format_a8l8_sint {
+   uint16_t value;
+   struct {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+      int8_t a;
+      int8_t rgb;
+#else
+      int8_t a;
+      int8_t rgb;
+#endif
+   } chan;
+};
+
+static inline void
+util_format_a8l8_sint_unpack_signed(int *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      int *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value) ) >> 8;
+         rgb = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (int)rgb; /* r */
+         dst[1] = (int)rgb; /* g */
+         dst[2] = (int)rgb; /* b */
+         dst[3] = (int)a; /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value << 8) ) >> 8;
+         rgb = ((int16_t)(value) ) >> 8;
+         dst[0] = (int)rgb; /* r */
+         dst[1] = (int)rgb; /* g */
+         dst[2] = (int)rgb; /* b */
+         dst[3] = (int)a; /* a */
+#endif
+         src += 2;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_a8l8_sint_pack_signed(uint8_t *dst_row, unsigned dst_stride, const int *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const int *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)CLAMP(src[3], -128, 127)) << 8) ;
+         value |= (uint16_t)(((int8_t)CLAMP(src[0], -128, 127)) & 0xff) ;
+         *(uint16_t *)dst = value;
+#else
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)CLAMP(src[3], -128, 127)) & 0xff) ;
+         value |= (uint16_t)(((int8_t)CLAMP(src[0], -128, 127)) << 8) ;
+         *(uint16_t *)dst = value;
+#endif
+         src += 4;
+         dst += 2;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+static inline void
+util_format_a8l8_sint_fetch_signed(int *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)
+{
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value) ) >> 8;
+         rgb = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (int)rgb; /* r */
+         dst[1] = (int)rgb; /* g */
+         dst[2] = (int)rgb; /* b */
+         dst[3] = (int)a; /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value << 8) ) >> 8;
+         rgb = ((int16_t)(value) ) >> 8;
+         dst[0] = (int)rgb; /* r */
+         dst[1] = (int)rgb; /* g */
+         dst[2] = (int)rgb; /* b */
+         dst[3] = (int)a; /* a */
+#endif
+}
+
+static inline void
+util_format_a8l8_sint_unpack_unsigned(unsigned *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      unsigned *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value) ) >> 8;
+         rgb = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (unsigned)MAX2(rgb, 0); /* r */
+         dst[1] = (unsigned)MAX2(rgb, 0); /* g */
+         dst[2] = (unsigned)MAX2(rgb, 0); /* b */
+         dst[3] = (unsigned)MAX2(a, 0); /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t a;
+         int16_t rgb;
+         a = ((int16_t)(value << 8) ) >> 8;
+         rgb = ((int16_t)(value) ) >> 8;
+         dst[0] = (unsigned)MAX2(rgb, 0); /* r */
+         dst[1] = (unsigned)MAX2(rgb, 0); /* g */
+         dst[2] = (unsigned)MAX2(rgb, 0); /* b */
+         dst[3] = (unsigned)MAX2(a, 0); /* a */
+#endif
+         src += 2;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_a8l8_sint_pack_unsigned(uint8_t *dst_row, unsigned dst_stride, const unsigned *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const unsigned *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)MIN2(src[3], 127)) << 8) ;
+         value |= (uint16_t)(((int8_t)MIN2(src[0], 127)) & 0xff) ;
+         *(uint16_t *)dst = value;
+#else
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)MIN2(src[3], 127)) & 0xff) ;
+         value |= (uint16_t)(((int8_t)MIN2(src[0], 127)) << 8) ;
+         *(uint16_t *)dst = value;
+#endif
+         src += 4;
+         dst += 2;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
 union util_format_a8l8_srgb {
    uint16_t value;
    struct {
@@ -32727,6 +32997,173 @@ util_format_g8r8_snorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_stride, c
    }
 }
 
+union util_format_g8r8_sint {
+   uint16_t value;
+   struct {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+      int8_t g;
+      int8_t r;
+#else
+      int8_t g;
+      int8_t r;
+#endif
+   } chan;
+};
+
+static inline void
+util_format_g8r8_sint_unpack_signed(int *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      int *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value) ) >> 8;
+         r = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value << 8) ) >> 8;
+         r = ((int16_t)(value) ) >> 8;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#endif
+         src += 2;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_g8r8_sint_pack_signed(uint8_t *dst_row, unsigned dst_stride, const int *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const int *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)CLAMP(src[1], -128, 127)) << 8) ;
+         value |= (uint16_t)(((int8_t)CLAMP(src[0], -128, 127)) & 0xff) ;
+         *(uint16_t *)dst = value;
+#else
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)CLAMP(src[1], -128, 127)) & 0xff) ;
+         value |= (uint16_t)(((int8_t)CLAMP(src[0], -128, 127)) << 8) ;
+         *(uint16_t *)dst = value;
+#endif
+         src += 4;
+         dst += 2;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+static inline void
+util_format_g8r8_sint_fetch_signed(int *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)
+{
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value) ) >> 8;
+         r = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value << 8) ) >> 8;
+         r = ((int16_t)(value) ) >> 8;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#endif
+}
+
+static inline void
+util_format_g8r8_sint_unpack_unsigned(unsigned *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      unsigned *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value) ) >> 8;
+         r = ((int16_t)(value << 8) ) >> 8;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#else
+         uint16_t value = *(const uint16_t *)src;
+         int16_t g;
+         int16_t r;
+         g = ((int16_t)(value << 8) ) >> 8;
+         r = ((int16_t)(value) ) >> 8;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = 0; /* b */
+         dst[3] = 1; /* a */
+#endif
+         src += 2;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_g8r8_sint_pack_unsigned(uint8_t *dst_row, unsigned dst_stride, const unsigned *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const unsigned *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)MIN2(src[1], 127)) << 8) ;
+         value |= (uint16_t)(((int8_t)MIN2(src[0], 127)) & 0xff) ;
+         *(uint16_t *)dst = value;
+#else
+         uint16_t value = 0;
+         value |= (uint16_t)(((int8_t)MIN2(src[1], 127)) & 0xff) ;
+         value |= (uint16_t)(((int8_t)MIN2(src[0], 127)) << 8) ;
+         *(uint16_t *)dst = value;
+#endif
+         src += 4;
+         dst += 2;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
 union util_format_g16r16_unorm {
    uint32_t value;
    struct {
@@ -33264,6 +33701,209 @@ util_format_a8b8g8r8_snorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_strid
    }
 }
 
+union util_format_a8b8g8r8_sint {
+   uint32_t value;
+   struct {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+      int8_t a;
+      int8_t b;
+      int8_t g;
+      int8_t r;
+#else
+      int8_t a;
+      int8_t b;
+      int8_t g;
+      int8_t r;
+#endif
+   } chan;
+};
+
+static inline void
+util_format_a8b8g8r8_sint_unpack_signed(int *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      int *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value) ) >> 24;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = (int)a; /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value << 24) ) >> 24;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = (int)a; /* a */
+#endif
+         src += 4;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_a8b8g8r8_sint_pack_signed(uint8_t *dst_row, unsigned dst_stride, const int *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const int *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = 0;
+         value |= (uint32_t)(((int8_t)CLAMP(src[3], -128, 127)) << 24) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[2], -128, 127)) & 0xff) << 16) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[1], -128, 127)) & 0xff) << 8) ;
+         value |= (uint32_t)(((int8_t)CLAMP(src[0], -128, 127)) & 0xff) ;
+         *(uint32_t *)dst = value;
+#else
+         uint32_t value = 0;
+         value |= (uint32_t)(((int8_t)CLAMP(src[3], -128, 127)) & 0xff) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[2], -128, 127)) & 0xff) << 8) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[1], -128, 127)) & 0xff) << 16) ;
+         value |= (uint32_t)(((int8_t)CLAMP(src[0], -128, 127)) << 24) ;
+         *(uint32_t *)dst = value;
+#endif
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+static inline void
+util_format_a8b8g8r8_sint_fetch_signed(int *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)
+{
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value) ) >> 24;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = (int)a; /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value << 24) ) >> 24;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = (int)a; /* a */
+#endif
+}
+
+static inline void
+util_format_a8b8g8r8_sint_unpack_unsigned(unsigned *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      unsigned *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value) ) >> 24;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = (unsigned)MAX2(b, 0); /* b */
+         dst[3] = (unsigned)MAX2(a, 0); /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t a;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         a = ((int32_t)(value << 24) ) >> 24;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = (unsigned)MAX2(b, 0); /* b */
+         dst[3] = (unsigned)MAX2(a, 0); /* a */
+#endif
+         src += 4;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_a8b8g8r8_sint_pack_unsigned(uint8_t *dst_row, unsigned dst_stride, const unsigned *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const unsigned *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = 0;
+         value |= (uint32_t)(((int8_t)MIN2(src[3], 127)) << 24) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[2], 127)) & 0xff) << 16) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[1], 127)) & 0xff) << 8) ;
+         value |= (uint32_t)(((int8_t)MIN2(src[0], 127)) & 0xff) ;
+         *(uint32_t *)dst = value;
+#else
+         uint32_t value = 0;
+         value |= (uint32_t)(((int8_t)MIN2(src[3], 127)) & 0xff) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[2], 127)) & 0xff) << 8) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[1], 127)) & 0xff) << 16) ;
+         value |= (uint32_t)(((int8_t)MIN2(src[0], 127)) << 24) ;
+         *(uint32_t *)dst = value;
+#endif
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
 union util_format_x8b8g8r8_snorm {
    uint32_t value;
    struct {
@@ -33451,6 +34091,193 @@ util_format_x8b8g8r8_snorm_pack_rgba_8unorm(uint8_t *dst_row, unsigned dst_strid
    }
 }
 
+union util_format_x8b8g8r8_sint {
+   uint32_t value;
+   struct {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+      uint8_t x;
+      int8_t b;
+      int8_t g;
+      int8_t r;
+#else
+      uint8_t x;
+      int8_t b;
+      int8_t g;
+      int8_t r;
+#endif
+   } chan;
+};
+
+static inline void
+util_format_x8b8g8r8_sint_unpack_signed(int *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      int *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = 1; /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = 1; /* a */
+#endif
+         src += 4;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_x8b8g8r8_sint_pack_signed(uint8_t *dst_row, unsigned dst_stride, const int *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const int *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = 0;
+         value |= (uint32_t)((((int8_t)CLAMP(src[2], -128, 127)) & 0xff) << 16) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[1], -128, 127)) & 0xff) << 8) ;
+         value |= (uint32_t)(((int8_t)CLAMP(src[0], -128, 127)) & 0xff) ;
+         *(uint32_t *)dst = value;
+#else
+         uint32_t value = 0;
+         value |= (uint32_t)((((int8_t)CLAMP(src[2], -128, 127)) & 0xff) << 8) ;
+         value |= (uint32_t)((((int8_t)CLAMP(src[1], -128, 127)) & 0xff) << 16) ;
+         value |= (uint32_t)(((int8_t)CLAMP(src[0], -128, 127)) << 24) ;
+         *(uint32_t *)dst = value;
+#endif
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+static inline void
+util_format_x8b8g8r8_sint_fetch_signed(int *dst, const uint8_t *src, UNUSED unsigned i, UNUSED unsigned j)
+{
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = 1; /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (int)r; /* r */
+         dst[1] = (int)g; /* g */
+         dst[2] = (int)b; /* b */
+         dst[3] = 1; /* a */
+#endif
+}
+
+static inline void
+util_format_x8b8g8r8_sint_unpack_unsigned(unsigned *dst_row, unsigned dst_stride, const uint8_t *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      unsigned *dst = dst_row;
+      const uint8_t *src = src_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 8) ) >> 24;
+         g = ((int32_t)(value << 16) ) >> 24;
+         r = ((int32_t)(value << 24) ) >> 24;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = (unsigned)MAX2(b, 0); /* b */
+         dst[3] = 1; /* a */
+#else
+         uint32_t value = *(const uint32_t *)src;
+         int32_t b;
+         int32_t g;
+         int32_t r;
+         b = ((int32_t)(value << 16) ) >> 24;
+         g = ((int32_t)(value << 8) ) >> 24;
+         r = ((int32_t)(value) ) >> 24;
+         dst[0] = (unsigned)MAX2(r, 0); /* r */
+         dst[1] = (unsigned)MAX2(g, 0); /* g */
+         dst[2] = (unsigned)MAX2(b, 0); /* b */
+         dst[3] = 1; /* a */
+#endif
+         src += 4;
+         dst += 4;
+      }
+      src_row += src_stride;
+      dst_row += dst_stride/sizeof(*dst_row);
+   }
+}
+
+static inline void
+util_format_x8b8g8r8_sint_pack_unsigned(uint8_t *dst_row, unsigned dst_stride, const unsigned *src_row, unsigned src_stride, unsigned width, unsigned height)
+{
+   unsigned x, y;
+   for(y = 0; y < height; y += 1) {
+      const unsigned *src = src_row;
+      uint8_t *dst = dst_row;
+      for(x = 0; x < width; x += 1) {
+#ifdef PIPE_ARCH_BIG_ENDIAN
+         uint32_t value = 0;
+         value |= (uint32_t)((((int8_t)MIN2(src[2], 127)) & 0xff) << 16) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[1], 127)) & 0xff) << 8) ;
+         value |= (uint32_t)(((int8_t)MIN2(src[0], 127)) & 0xff) ;
+         *(uint32_t *)dst = value;
+#else
+         uint32_t value = 0;
+         value |= (uint32_t)((((int8_t)MIN2(src[2], 127)) & 0xff) << 8) ;
+         value |= (uint32_t)((((int8_t)MIN2(src[1], 127)) & 0xff) << 16) ;
+         value |= (uint32_t)(((int8_t)MIN2(src[0], 127)) << 24) ;
+         *(uint32_t *)dst = value;
+#endif
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
 const struct util_format_description
 util_format_none_description = {
    PIPE_FORMAT_NONE,
@@ -33462,6 +34289,8 @@ util_format_none_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -33506,6 +34335,8 @@ util_format_b8g8r8a8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = b */
@@ -33568,6 +34399,8 @@ util_format_b8g8r8x8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = b */
@@ -33630,6 +34463,8 @@ util_format_a8r8g8b8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = a */
@@ -33692,6 +34527,8 @@ util_format_x8r8g8b8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -33754,6 +34591,8 @@ util_format_a8b8g8r8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = a */
@@ -33816,6 +34655,8 @@ util_format_x8b8g8r8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -33878,6 +34719,8 @@ util_format_r8g8b8x8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -33940,6 +34783,8 @@ util_format_b5g5r5x1_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 1, 15},	/* x = x */
@@ -34002,6 +34847,8 @@ util_format_b5g5r5a1_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 1, 15},	/* x = a */
@@ -34064,6 +34911,8 @@ util_format_x1b5g5r5_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 5, 11},	/* x = r */
@@ -34126,6 +34975,8 @@ util_format_a1b5g5r5_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 5, 11},	/* x = r */
@@ -34188,6 +35039,8 @@ util_format_b4g4r4a4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 4, 12},	/* x = a */
@@ -34250,6 +35103,8 @@ util_format_b4g4r4x4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 4, 12},	/* x = x */
@@ -34312,6 +35167,8 @@ util_format_a4b4g4r4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 4, 12},	/* x = r */
@@ -34374,6 +35231,8 @@ util_format_b5g6r5_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 5, 11},	/* x = r */
@@ -34436,6 +35295,8 @@ util_format_r10g10b10a2_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 2, 30},	/* x = a */
@@ -34498,6 +35359,8 @@ util_format_r10g10b10x2_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 2, 30},	/* x = x */
@@ -34560,6 +35423,8 @@ util_format_b10g10r10a2_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 2, 30},	/* x = a */
@@ -34622,6 +35487,8 @@ util_format_b2g3r3_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 3, 5},	/* x = r */
@@ -34684,6 +35551,8 @@ util_format_l8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -34728,6 +35597,8 @@ util_format_a8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -34772,6 +35643,8 @@ util_format_i8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -34816,6 +35689,8 @@ util_format_l4a4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 4, 4},	/* x = a */
@@ -34878,6 +35753,8 @@ util_format_l8a8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = rgb */
@@ -34940,6 +35817,8 @@ util_format_l16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -34984,6 +35863,8 @@ util_format_a16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -35028,6 +35909,8 @@ util_format_i16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -35072,6 +35955,8 @@ util_format_l16a16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 16},	/* x = rgb */
@@ -35134,6 +36019,8 @@ util_format_a8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -35178,6 +36065,8 @@ util_format_l8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -35222,6 +36111,8 @@ util_format_l8a8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = rgb */
@@ -35284,6 +36175,8 @@ util_format_i8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -35328,6 +36221,8 @@ util_format_a16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -35372,6 +36267,8 @@ util_format_l16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -35416,6 +36313,8 @@ util_format_l16a16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 16},	/* x = rgb */
@@ -35478,6 +36377,8 @@ util_format_i16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -35522,6 +36423,8 @@ util_format_a16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -35566,6 +36469,8 @@ util_format_l16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -35610,6 +36515,8 @@ util_format_l16a16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 16},	/* x = rgb */
@@ -35672,6 +36579,8 @@ util_format_i16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -35716,6 +36625,8 @@ util_format_a32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -35760,6 +36671,8 @@ util_format_l32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -35804,6 +36717,8 @@ util_format_l32a32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 32},	/* x = rgb */
@@ -35866,6 +36781,8 @@ util_format_i32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -35910,6 +36827,8 @@ util_format_l8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -35944,6 +36863,52 @@ util_format_l8_srgb_description = {
 };
 
 const struct util_format_description
+util_format_r8_srgb_description = {
+   PIPE_FORMAT_R8_SRGB,
+   "PIPE_FORMAT_R8_SRGB",
+   "r8_srgb",
+   {1, 1, 8},	/* block */
+   UTIL_FORMAT_LAYOUT_PLAIN,
+   1,	/* nr_channels */
+   TRUE,	/* is_array */
+   TRUE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
+   {
+      {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = r */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+   {
+      PIPE_SWIZZLE_X,	/* sr */
+      PIPE_SWIZZLE_0,	/* sg */
+      PIPE_SWIZZLE_0,	/* sb */
+      PIPE_SWIZZLE_1	/* a */
+   },
+   UTIL_FORMAT_COLORSPACE_SRGB,
+   &util_format_r8_srgb_unpack_rgba_8unorm,
+   &util_format_r8_srgb_pack_rgba_8unorm,
+   NULL, /* fetch_rgba_8unorm */
+   &util_format_r8_srgb_unpack_rgba_float,
+   &util_format_r8_srgb_pack_rgba_float,
+   &util_format_r8_srgb_fetch_rgba_float,
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   NULL, /* unpack_rgba_uint */
+   NULL, /* pack_rgba_uint */
+   NULL, /* unpack_rgba_sint */
+   NULL, /* pack_rgba_sint */
+   NULL, /* fetch_rgba_uint */
+   NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_l8a8_srgb_description = {
    PIPE_FORMAT_L8A8_SRGB,
    "PIPE_FORMAT_L8A8_SRGB",
@@ -35954,6 +36919,8 @@ util_format_l8a8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = rgb */
@@ -36016,6 +36983,8 @@ util_format_r8g8b8_srgb_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 16},	/* x = r */
@@ -36078,6 +37047,8 @@ util_format_r8g8b8a8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -36140,6 +37111,8 @@ util_format_a8b8g8r8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = a */
@@ -36202,6 +37175,8 @@ util_format_x8b8g8r8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -36264,6 +37239,8 @@ util_format_b8g8r8a8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = b */
@@ -36326,6 +37303,8 @@ util_format_b8g8r8x8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = b */
@@ -36388,6 +37367,8 @@ util_format_a8r8g8b8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = a */
@@ -36450,6 +37431,8 @@ util_format_x8r8g8b8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -36512,6 +37495,8 @@ util_format_r8sg8sb8ux8u_norm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -36574,6 +37559,8 @@ util_format_r10sg10sb10sa2u_norm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 2, 30},	/* x = a */
@@ -36636,6 +37623,8 @@ util_format_r5sg5sb6u_norm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 6, 10},	/* x = b */
@@ -36698,6 +37687,8 @@ util_format_s8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 0},	/* x = s */
       {0, 0, 0, 0, 0},
@@ -36742,6 +37733,8 @@ util_format_z16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 0},	/* x = z */
       {0, 0, 0, 0, 0},
@@ -36786,6 +37779,8 @@ util_format_z32_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 32, 0},	/* x = z */
       {0, 0, 0, 0, 0},
@@ -36830,6 +37825,8 @@ util_format_z32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 0},	/* x = z */
       {0, 0, 0, 0, 0},
@@ -36874,6 +37871,8 @@ util_format_z24_unorm_s8_uint_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 24},	/* x = s */
@@ -36936,6 +37935,8 @@ util_format_s8_uint_z24_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 24, 8},	/* x = z */
@@ -36998,6 +37999,8 @@ util_format_x24s8_uint_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 24},	/* x = s */
@@ -37060,6 +38063,8 @@ util_format_s8x24_uint_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 24, 8},	/* x = x */
@@ -37122,6 +38127,8 @@ util_format_z24x8_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -37184,6 +38191,8 @@ util_format_x8z24_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 24, 8},	/* x = z */
@@ -37246,6 +38255,8 @@ util_format_z32_float_s8x24_uint_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    TRUE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 32},	/* x = z */
@@ -37308,6 +38319,8 @@ util_format_x32_s8x24_uint_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 32},	/* x = x */
@@ -37370,6 +38383,8 @@ util_format_uyvy_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37414,6 +38429,8 @@ util_format_yuyv_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37458,6 +38475,8 @@ util_format_r8g8_b8g8_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37502,6 +38521,8 @@ util_format_g8r8_g8b8_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37546,6 +38567,8 @@ util_format_g8r8_b8r8_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37590,6 +38613,8 @@ util_format_r8g8_r8b8_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37634,6 +38659,8 @@ util_format_r11g11b10_float_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37678,6 +38705,8 @@ util_format_r9g9b9e5_float_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 32, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37722,6 +38751,8 @@ util_format_r1_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37766,6 +38797,8 @@ util_format_r8g8bx_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = x */
@@ -37828,6 +38861,8 @@ util_format_dxt1_rgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37872,6 +38907,8 @@ util_format_dxt1_rgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37916,6 +38953,8 @@ util_format_dxt3_rgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -37960,6 +38999,8 @@ util_format_dxt5_rgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38004,6 +39045,8 @@ util_format_dxt1_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38048,6 +39091,8 @@ util_format_dxt1_srgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38092,6 +39137,8 @@ util_format_dxt3_srgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38136,6 +39183,8 @@ util_format_dxt5_srgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38180,6 +39229,8 @@ util_format_rgtc1_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38224,6 +39275,8 @@ util_format_rgtc1_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38268,6 +39321,8 @@ util_format_rgtc2_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38312,6 +39367,8 @@ util_format_rgtc2_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38356,6 +39413,8 @@ util_format_latc1_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38400,6 +39459,8 @@ util_format_latc1_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38444,6 +39505,8 @@ util_format_latc2_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38488,6 +39551,8 @@ util_format_latc2_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38532,6 +39597,8 @@ util_format_etc1_rgb8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38576,6 +39643,8 @@ util_format_etc2_rgb8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38620,6 +39689,8 @@ util_format_etc2_srgb8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38664,6 +39735,8 @@ util_format_etc2_rgb8a1_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38708,6 +39781,8 @@ util_format_etc2_srgb8a1_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38752,6 +39827,8 @@ util_format_etc2_rgba8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38796,6 +39873,8 @@ util_format_etc2_srgba8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38840,6 +39919,8 @@ util_format_etc2_r11_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38884,6 +39965,8 @@ util_format_etc2_r11_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 64, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38928,6 +40011,8 @@ util_format_etc2_rg11_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -38972,6 +40057,8 @@ util_format_etc2_rg11_snorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39016,6 +40103,8 @@ util_format_bptc_rgba_unorm_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39060,6 +40149,8 @@ util_format_bptc_srgba_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39104,6 +40195,8 @@ util_format_bptc_rgb_float_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39148,6 +40241,8 @@ util_format_bptc_rgb_ufloat_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39192,6 +40287,8 @@ util_format_astc_4x4_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39236,6 +40333,8 @@ util_format_astc_5x4_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39280,6 +40379,8 @@ util_format_astc_5x5_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39324,6 +40425,8 @@ util_format_astc_6x5_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39368,6 +40471,8 @@ util_format_astc_6x6_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39412,6 +40517,8 @@ util_format_astc_8x5_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39456,6 +40563,8 @@ util_format_astc_8x6_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39500,6 +40609,8 @@ util_format_astc_8x8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39544,6 +40655,8 @@ util_format_astc_10x5_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39588,6 +40701,8 @@ util_format_astc_10x6_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39632,6 +40747,8 @@ util_format_astc_10x8_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39676,6 +40793,8 @@ util_format_astc_10x10_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39720,6 +40839,8 @@ util_format_astc_12x10_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39764,6 +40885,8 @@ util_format_astc_12x12_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39808,6 +40931,8 @@ util_format_astc_4x4_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39852,6 +40977,8 @@ util_format_astc_5x4_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39896,6 +41023,8 @@ util_format_astc_5x5_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39940,6 +41069,8 @@ util_format_astc_6x5_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -39984,6 +41115,8 @@ util_format_astc_6x6_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40028,6 +41161,8 @@ util_format_astc_8x5_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40072,6 +41207,8 @@ util_format_astc_8x6_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40116,6 +41253,8 @@ util_format_astc_8x8_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40160,6 +41299,8 @@ util_format_astc_10x5_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40204,6 +41345,8 @@ util_format_astc_10x6_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40248,6 +41391,8 @@ util_format_astc_10x8_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40292,6 +41437,8 @@ util_format_astc_10x10_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40336,6 +41483,8 @@ util_format_astc_12x10_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40380,6 +41529,8 @@ util_format_astc_12x12_srgb_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 128, 0},	/* x = x */
       {0, 0, 0, 0, 0},
@@ -40424,6 +41575,8 @@ util_format_r64_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 64, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -40468,6 +41621,8 @@ util_format_r64g64_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 64, 64},	/* x = r */
@@ -40530,6 +41685,8 @@ util_format_r64g64b64_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 64, 128},	/* x = r */
@@ -40592,6 +41749,8 @@ util_format_r64g64b64a64_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 64, 192},	/* x = r */
@@ -40654,6 +41813,8 @@ util_format_r32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -40698,6 +41859,8 @@ util_format_r32g32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 32},	/* x = r */
@@ -40760,6 +41923,8 @@ util_format_r32g32b32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 64},	/* x = r */
@@ -40822,6 +41987,8 @@ util_format_r32g32b32a32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 96},	/* x = r */
@@ -40884,6 +42051,8 @@ util_format_r32_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -40928,6 +42097,8 @@ util_format_r32g32_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 32, 32},	/* x = r */
@@ -40990,6 +42161,8 @@ util_format_r32g32b32_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 32, 64},	/* x = r */
@@ -41052,6 +42225,8 @@ util_format_r32g32b32a32_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 32, 96},	/* x = r */
@@ -41114,6 +42289,8 @@ util_format_r32_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -41158,6 +42335,8 @@ util_format_r32g32_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 32, 32},	/* x = r */
@@ -41220,6 +42399,8 @@ util_format_r32g32b32_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 32, 64},	/* x = r */
@@ -41282,6 +42463,8 @@ util_format_r32g32b32a32_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 32, 96},	/* x = r */
@@ -41344,6 +42527,8 @@ util_format_r32_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -41388,6 +42573,8 @@ util_format_r32g32_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 32, 32},	/* x = r */
@@ -41450,6 +42637,8 @@ util_format_r32g32b32_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 32, 64},	/* x = r */
@@ -41512,6 +42701,8 @@ util_format_r32g32b32a32_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 32, 96},	/* x = r */
@@ -41574,6 +42765,8 @@ util_format_r32_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -41618,6 +42811,8 @@ util_format_r32g32_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 32, 32},	/* x = r */
@@ -41680,6 +42875,8 @@ util_format_r32g32b32_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 32, 64},	/* x = r */
@@ -41742,6 +42939,8 @@ util_format_r32g32b32a32_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 32, 96},	/* x = r */
@@ -41804,6 +43003,8 @@ util_format_r16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -41848,6 +43049,8 @@ util_format_r16g16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 16},	/* x = r */
@@ -41910,6 +43113,8 @@ util_format_r16g16b16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 32},	/* x = r */
@@ -41972,6 +43177,8 @@ util_format_r16g16b16a16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 48},	/* x = r */
@@ -42034,6 +43241,8 @@ util_format_r16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -42078,6 +43287,8 @@ util_format_r16g16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 16},	/* x = r */
@@ -42140,6 +43351,8 @@ util_format_r16g16b16_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 32},	/* x = r */
@@ -42202,6 +43415,8 @@ util_format_r16g16b16a16_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 48},	/* x = r */
@@ -42264,6 +43479,8 @@ util_format_r16_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -42308,6 +43525,8 @@ util_format_r16g16_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 16, 16},	/* x = r */
@@ -42370,6 +43589,8 @@ util_format_r16g16b16_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 16, 32},	/* x = r */
@@ -42432,6 +43653,8 @@ util_format_r16g16b16a16_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 16, 48},	/* x = r */
@@ -42494,6 +43717,8 @@ util_format_r16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -42538,6 +43763,8 @@ util_format_r16g16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 16},	/* x = r */
@@ -42600,6 +43827,8 @@ util_format_r16g16b16_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 32},	/* x = r */
@@ -42662,6 +43891,8 @@ util_format_r16g16b16a16_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 48},	/* x = r */
@@ -42724,6 +43955,8 @@ util_format_r16_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -42768,6 +44001,8 @@ util_format_r16g16_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 16, 16},	/* x = r */
@@ -42830,6 +44065,8 @@ util_format_r16g16b16_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 16, 32},	/* x = r */
@@ -42892,6 +44129,8 @@ util_format_r16g16b16a16_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 16, 48},	/* x = r */
@@ -42954,6 +44193,8 @@ util_format_r8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -42998,6 +44239,8 @@ util_format_r8g8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = r */
@@ -43060,6 +44303,8 @@ util_format_r8g8b8_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 16},	/* x = r */
@@ -43122,6 +44367,8 @@ util_format_r8g8b8a8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -43184,6 +44431,8 @@ util_format_r8_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -43228,6 +44477,8 @@ util_format_r8g8_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 8, 8},	/* x = r */
@@ -43290,6 +44541,8 @@ util_format_r8g8b8_uscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 8, 16},	/* x = r */
@@ -43352,6 +44605,8 @@ util_format_r8g8b8a8_uscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 8, 24},	/* x = r */
@@ -43414,6 +44669,8 @@ util_format_r8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -43458,6 +44715,8 @@ util_format_r8g8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = r */
@@ -43520,6 +44779,8 @@ util_format_r8g8b8_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 16},	/* x = r */
@@ -43582,6 +44843,8 @@ util_format_r8g8b8a8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -43644,6 +44907,8 @@ util_format_r8_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -43688,6 +44953,8 @@ util_format_r8g8_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 8, 8},	/* x = r */
@@ -43750,6 +45017,8 @@ util_format_r8g8b8_sscaled_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 8, 16},	/* x = r */
@@ -43812,6 +45081,8 @@ util_format_r8g8b8a8_sscaled_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 8, 24},	/* x = r */
@@ -43874,6 +45145,8 @@ util_format_r32_fixed_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_FIXED, FALSE, FALSE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -43918,6 +45191,8 @@ util_format_r32g32_fixed_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FIXED, FALSE, FALSE, 32, 32},	/* x = r */
@@ -43980,6 +45255,8 @@ util_format_r32g32b32_fixed_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FIXED, FALSE, FALSE, 32, 64},	/* x = r */
@@ -44042,6 +45319,8 @@ util_format_r32g32b32a32_fixed_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FIXED, FALSE, FALSE, 32, 96},	/* x = r */
@@ -44104,6 +45383,8 @@ util_format_r10g10b10x2_uscaled_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 2, 30},	/* x = x */
@@ -44166,6 +45447,8 @@ util_format_r10g10b10x2_snorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 2, 30},	/* x = x */
@@ -44228,6 +45511,8 @@ util_format_yv12_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -44290,6 +45575,8 @@ util_format_yv16_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -44352,6 +45639,8 @@ util_format_iyuv_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -44414,6 +45703,8 @@ util_format_nv12_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -44476,6 +45767,8 @@ util_format_nv21_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -44538,6 +45831,8 @@ util_format_p016_description = {
    FALSE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 16, 16},	/* x = x */
@@ -44600,6 +45895,8 @@ util_format_a4r4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 4, 4},	/* x = r */
@@ -44662,6 +45959,8 @@ util_format_r4a4_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 4, 4},	/* x = a */
@@ -44724,6 +46023,8 @@ util_format_r8a8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = r */
@@ -44786,6 +46087,8 @@ util_format_a8r8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = a */
@@ -44848,6 +46151,8 @@ util_format_r10g10b10a2_uscaled_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 2, 30},	/* x = a */
@@ -44910,6 +46215,8 @@ util_format_r10g10b10a2_sscaled_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 2, 30},	/* x = a */
@@ -44972,6 +46279,8 @@ util_format_r10g10b10a2_snorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 2, 30},	/* x = a */
@@ -45034,6 +46343,8 @@ util_format_b10g10r10a2_uscaled_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, FALSE, 2, 30},	/* x = a */
@@ -45096,6 +46407,8 @@ util_format_b10g10r10a2_sscaled_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, FALSE, 2, 30},	/* x = a */
@@ -45158,6 +46471,8 @@ util_format_b10g10r10a2_snorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 2, 30},	/* x = a */
@@ -45220,6 +46535,8 @@ util_format_r8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -45264,6 +46581,8 @@ util_format_r8g8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 8},	/* x = r */
@@ -45326,6 +46645,8 @@ util_format_r8g8b8_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 16},	/* x = r */
@@ -45388,6 +46709,8 @@ util_format_r8g8b8a8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 24},	/* x = r */
@@ -45450,6 +46773,8 @@ util_format_r8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -45494,6 +46819,8 @@ util_format_r8g8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* x = r */
@@ -45556,6 +46883,8 @@ util_format_r8g8b8_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 16},	/* x = r */
@@ -45618,6 +46947,8 @@ util_format_r8g8b8a8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 24},	/* x = r */
@@ -45680,6 +47011,8 @@ util_format_r16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -45724,6 +47057,8 @@ util_format_r16g16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 16},	/* x = r */
@@ -45786,6 +47121,8 @@ util_format_r16g16b16_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 32},	/* x = r */
@@ -45848,6 +47185,8 @@ util_format_r16g16b16a16_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 48},	/* x = r */
@@ -45910,6 +47249,8 @@ util_format_r16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -45954,6 +47295,8 @@ util_format_r16g16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 16},	/* x = r */
@@ -46016,6 +47359,8 @@ util_format_r16g16b16_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 32},	/* x = r */
@@ -46078,6 +47423,8 @@ util_format_r16g16b16a16_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 48},	/* x = r */
@@ -46140,6 +47487,8 @@ util_format_r32_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -46184,6 +47533,8 @@ util_format_r32g32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 32},	/* x = r */
@@ -46246,6 +47597,8 @@ util_format_r32g32b32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 64},	/* x = r */
@@ -46308,6 +47661,8 @@ util_format_r32g32b32a32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 96},	/* x = r */
@@ -46370,6 +47725,8 @@ util_format_r32_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 0},	/* x = r */
       {0, 0, 0, 0, 0},
@@ -46414,6 +47771,8 @@ util_format_r32g32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 32},	/* x = r */
@@ -46476,6 +47835,8 @@ util_format_r32g32b32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 64},	/* x = r */
@@ -46538,6 +47899,8 @@ util_format_r32g32b32a32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 96},	/* x = r */
@@ -46600,6 +47963,8 @@ util_format_a8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -46644,6 +48009,8 @@ util_format_i8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -46688,6 +48055,8 @@ util_format_l8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -46732,6 +48101,8 @@ util_format_l8a8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 8},	/* x = rgb */
@@ -46794,6 +48165,8 @@ util_format_a8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -46838,6 +48211,8 @@ util_format_i8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -46882,6 +48257,8 @@ util_format_l8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -46926,6 +48303,8 @@ util_format_l8a8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* x = rgb */
@@ -46988,6 +48367,8 @@ util_format_a16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -47032,6 +48413,8 @@ util_format_i16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -47076,6 +48459,8 @@ util_format_l16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -47120,6 +48505,8 @@ util_format_l16a16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 16},	/* x = rgb */
@@ -47182,6 +48569,8 @@ util_format_a16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -47226,6 +48615,8 @@ util_format_i16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -47270,6 +48661,8 @@ util_format_l16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -47314,6 +48707,8 @@ util_format_l16a16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 16},	/* x = rgb */
@@ -47376,6 +48771,8 @@ util_format_a32_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -47420,6 +48817,8 @@ util_format_i32_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -47464,6 +48863,8 @@ util_format_l32_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -47508,6 +48909,8 @@ util_format_l32a32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 32},	/* x = rgb */
@@ -47570,6 +48973,8 @@ util_format_a32_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 0},	/* x = a */
       {0, 0, 0, 0, 0},
@@ -47614,6 +49019,8 @@ util_format_i32_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 0},	/* x = rgba */
       {0, 0, 0, 0, 0},
@@ -47658,6 +49065,8 @@ util_format_l32_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 0},	/* x = rgb */
       {0, 0, 0, 0, 0},
@@ -47702,6 +49111,8 @@ util_format_l32a32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 32},	/* x = rgb */
@@ -47764,6 +49175,8 @@ util_format_b10g10r10a2_uint_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 2, 30},	/* x = a */
@@ -47826,6 +49239,8 @@ util_format_r8g8b8x8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -47888,6 +49303,8 @@ util_format_r8g8b8x8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 24},	/* x = r */
@@ -47950,6 +49367,8 @@ util_format_r8g8b8x8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 24},	/* x = r */
@@ -48012,6 +49431,8 @@ util_format_r8g8b8x8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 24},	/* x = r */
@@ -48074,6 +49495,8 @@ util_format_b10g10r10x2_unorm_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 2, 30},	/* x = x */
@@ -48136,6 +49559,8 @@ util_format_r16g16b16x16_unorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 48},	/* x = r */
@@ -48198,6 +49623,8 @@ util_format_r16g16b16x16_snorm_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 48},	/* x = r */
@@ -48260,6 +49687,8 @@ util_format_r16g16b16x16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 48},	/* x = r */
@@ -48322,6 +49751,8 @@ util_format_r16g16b16x16_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 48},	/* x = r */
@@ -48384,6 +49815,8 @@ util_format_r16g16b16x16_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 48},	/* x = r */
@@ -48446,6 +49879,8 @@ util_format_r32g32b32x32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 96},	/* x = r */
@@ -48508,6 +49943,8 @@ util_format_r32g32b32x32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 96},	/* x = r */
@@ -48570,6 +50007,8 @@ util_format_r32g32b32x32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 96},	/* x = r */
@@ -48632,6 +50071,8 @@ util_format_r8a8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = r */
@@ -48694,6 +50135,8 @@ util_format_r16a16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 16},	/* x = r */
@@ -48756,6 +50199,8 @@ util_format_r16a16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 16},	/* x = r */
@@ -48818,6 +50263,8 @@ util_format_r16a16_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 16, 16},	/* x = r */
@@ -48880,6 +50327,8 @@ util_format_r32a32_float_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_FLOAT, FALSE, FALSE, 32, 32},	/* x = r */
@@ -48942,6 +50391,8 @@ util_format_r8a8_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 8, 8},	/* x = r */
@@ -49004,6 +50455,8 @@ util_format_r8a8_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* x = r */
@@ -49066,6 +50519,8 @@ util_format_r16a16_uint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 16, 16},	/* x = r */
@@ -49128,6 +50583,8 @@ util_format_r16a16_sint_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 16, 16},	/* x = r */
@@ -49190,6 +50647,8 @@ util_format_r32a32_uint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 32, 32},	/* x = r */
@@ -49252,6 +50711,8 @@ util_format_r32a32_sint_description = {
    TRUE,	/* is_array */
    FALSE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 32, 32},	/* x = r */
@@ -49314,6 +50775,8 @@ util_format_r10g10b10a2_uint_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, FALSE, TRUE, 2, 30},	/* x = a */
@@ -49376,6 +50839,8 @@ util_format_b5g6r5_srgb_description = {
    FALSE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 5, 11},	/* x = r */
@@ -49438,6 +50903,8 @@ util_format_a8l8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = a */
@@ -49500,6 +50967,8 @@ util_format_a8l8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = a */
@@ -49552,6 +51021,70 @@ util_format_a8l8_snorm_description = {
 };
 
 const struct util_format_description
+util_format_a8l8_sint_description = {
+   PIPE_FORMAT_A8L8_SINT,
+   "PIPE_FORMAT_A8L8_SINT",
+   "a8l8_sint",
+   {1, 1, 16},	/* block */
+   UTIL_FORMAT_LAYOUT_PLAIN,
+   2,	/* nr_channels */
+   TRUE,	/* is_array */
+   TRUE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* x = a */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* y = rgb */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#else
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = a */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* y = rgb */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#endif
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
+   },
+#else
+   {
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_Y,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
+   },
+#endif
+   UTIL_FORMAT_COLORSPACE_RGB,
+   NULL, /* unpack_rgba_8unorm */
+   NULL, /* pack_rgba_8unorm */
+   NULL, /* fetch_rgba_8unorm */
+   NULL, /* unpack_rgba_float */
+   NULL, /* pack_rgba_float */
+   NULL, /* fetch_rgba_float */
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   &util_format_a8l8_sint_unpack_unsigned, /* unpack_rgba_uint */
+   &util_format_a8l8_sint_pack_unsigned, /* pack_rgba_uint */
+   &util_format_a8l8_sint_unpack_signed, /* unpack_rgba_sint */
+   &util_format_a8l8_sint_pack_signed,  /* pack_rgba_sint */
+   NULL,  /* fetch_rgba_uint */
+   &util_format_a8l8_sint_fetch_signed  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_a8l8_srgb_description = {
    PIPE_FORMAT_A8L8_SRGB,
    "PIPE_FORMAT_A8L8_SRGB",
@@ -49562,6 +51095,8 @@ util_format_a8l8_srgb_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = a */
@@ -49624,6 +51159,8 @@ util_format_a16l16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 16},	/* x = a */
@@ -49686,6 +51223,8 @@ util_format_g8r8_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 8, 8},	/* x = g */
@@ -49748,6 +51287,8 @@ util_format_g8r8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 8},	/* x = g */
@@ -49800,6 +51341,70 @@ util_format_g8r8_snorm_description = {
 };
 
 const struct util_format_description
+util_format_g8r8_sint_description = {
+   PIPE_FORMAT_G8R8_SINT,
+   "PIPE_FORMAT_G8R8_SINT",
+   "g8r8_sint",
+   {1, 1, 16},	/* block */
+   UTIL_FORMAT_LAYOUT_PLAIN,
+   2,	/* nr_channels */
+   TRUE,	/* is_array */
+   TRUE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* x = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* y = r */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#else
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* y = r */
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0}
+   },
+#endif
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
+   },
+#else
+   {
+      PIPE_SWIZZLE_Y,	/* r */
+      PIPE_SWIZZLE_X,	/* g */
+      PIPE_SWIZZLE_0,	/* b */
+      PIPE_SWIZZLE_1	/* a */
+   },
+#endif
+   UTIL_FORMAT_COLORSPACE_RGB,
+   NULL, /* unpack_rgba_8unorm */
+   NULL, /* pack_rgba_8unorm */
+   NULL, /* fetch_rgba_8unorm */
+   NULL, /* unpack_rgba_float */
+   NULL, /* pack_rgba_float */
+   NULL, /* fetch_rgba_float */
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   &util_format_g8r8_sint_unpack_unsigned, /* unpack_rgba_uint */
+   &util_format_g8r8_sint_pack_unsigned, /* pack_rgba_uint */
+   &util_format_g8r8_sint_unpack_signed, /* unpack_rgba_sint */
+   &util_format_g8r8_sint_pack_signed,  /* pack_rgba_sint */
+   NULL,  /* fetch_rgba_uint */
+   &util_format_g8r8_sint_fetch_signed  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_g16r16_unorm_description = {
    PIPE_FORMAT_G16R16_UNORM,
    "PIPE_FORMAT_G16R16_UNORM",
@@ -49810,6 +51415,8 @@ util_format_g16r16_unorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   TRUE,	/* is_unorm */
+   FALSE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_UNSIGNED, TRUE, FALSE, 16, 16},	/* x = g */
@@ -49872,6 +51479,8 @@ util_format_g16r16_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 16, 16},	/* x = g */
@@ -49934,6 +51543,8 @@ util_format_a8b8g8r8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_SIGNED, TRUE, FALSE, 8, 24},	/* x = a */
@@ -49986,6 +51597,70 @@ util_format_a8b8g8r8_snorm_description = {
 };
 
 const struct util_format_description
+util_format_a8b8g8r8_sint_description = {
+   PIPE_FORMAT_A8B8G8R8_SINT,
+   "PIPE_FORMAT_A8B8G8R8_SINT",
+   "a8b8g8r8_sint",
+   {1, 1, 32},	/* block */
+   UTIL_FORMAT_LAYOUT_PLAIN,
+   4,	/* nr_channels */
+   TRUE,	/* is_array */
+   TRUE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 24},	/* x = a */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 16},	/* y = b */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* z = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0}	/* w = r */
+   },
+#else
+   {
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0},	/* x = a */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* y = b */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 16},	/* z = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 24}	/* w = r */
+   },
+#endif
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
+   },
+#else
+   {
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_X	/* a */
+   },
+#endif
+   UTIL_FORMAT_COLORSPACE_RGB,
+   NULL, /* unpack_rgba_8unorm */
+   NULL, /* pack_rgba_8unorm */
+   NULL, /* fetch_rgba_8unorm */
+   NULL, /* unpack_rgba_float */
+   NULL, /* pack_rgba_float */
+   NULL, /* fetch_rgba_float */
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   &util_format_a8b8g8r8_sint_unpack_unsigned, /* unpack_rgba_uint */
+   &util_format_a8b8g8r8_sint_pack_unsigned, /* pack_rgba_uint */
+   &util_format_a8b8g8r8_sint_unpack_signed, /* unpack_rgba_sint */
+   &util_format_a8b8g8r8_sint_pack_signed,  /* pack_rgba_sint */
+   NULL,  /* fetch_rgba_uint */
+   &util_format_a8b8g8r8_sint_fetch_signed  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
 util_format_x8b8g8r8_snorm_description = {
    PIPE_FORMAT_X8B8G8R8_SNORM,
    "PIPE_FORMAT_X8B8G8R8_SNORM",
@@ -49996,6 +51671,8 @@ util_format_x8b8g8r8_snorm_description = {
    TRUE,	/* is_array */
    TRUE,	/* is_bitmask */
    FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   TRUE,	/* is_snorm */
 #ifdef PIPE_ARCH_BIG_ENDIAN
    {
       {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
@@ -50045,6 +51722,70 @@ util_format_x8b8g8r8_snorm_description = {
    NULL, /* pack_rgba_sint */
    NULL, /* fetch_rgba_uint */
    NULL  /* fetch_rgba_sint */
+};
+
+const struct util_format_description
+util_format_x8b8g8r8_sint_description = {
+   PIPE_FORMAT_X8B8G8R8_SINT,
+   "PIPE_FORMAT_X8B8G8R8_SINT",
+   "x8b8g8r8_sint",
+   {1, 1, 32},	/* block */
+   UTIL_FORMAT_LAYOUT_PLAIN,
+   4,	/* nr_channels */
+   TRUE,	/* is_array */
+   TRUE,	/* is_bitmask */
+   FALSE,	/* is_mixed */
+   FALSE,	/* is_unorm */
+   FALSE,	/* is_snorm */
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 24},	/* x = x */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 16},	/* y = b */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* z = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 0}	/* w = r */
+   },
+#else
+   {
+      {UTIL_FORMAT_TYPE_VOID, FALSE, FALSE, 8, 0},	/* x = x */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 8},	/* y = b */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 16},	/* z = g */
+      {UTIL_FORMAT_TYPE_SIGNED, FALSE, TRUE, 8, 24}	/* w = r */
+   },
+#endif
+#ifdef PIPE_ARCH_BIG_ENDIAN
+   {
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
+   },
+#else
+   {
+      PIPE_SWIZZLE_W,	/* r */
+      PIPE_SWIZZLE_Z,	/* g */
+      PIPE_SWIZZLE_Y,	/* b */
+      PIPE_SWIZZLE_1	/* a */
+   },
+#endif
+   UTIL_FORMAT_COLORSPACE_RGB,
+   NULL, /* unpack_rgba_8unorm */
+   NULL, /* pack_rgba_8unorm */
+   NULL, /* fetch_rgba_8unorm */
+   NULL, /* unpack_rgba_float */
+   NULL, /* pack_rgba_float */
+   NULL, /* fetch_rgba_float */
+   NULL, /* unpack_z_32unorm */
+   NULL, /* pack_z_32unorm */
+   NULL, /* unpack_z_float */
+   NULL, /* pack_z_float */
+   NULL, /* unpack_s_8uint */
+   NULL, /* pack_s_8uint */
+   &util_format_x8b8g8r8_sint_unpack_unsigned, /* unpack_rgba_uint */
+   &util_format_x8b8g8r8_sint_pack_unsigned, /* pack_rgba_uint */
+   &util_format_x8b8g8r8_sint_unpack_signed, /* unpack_rgba_sint */
+   &util_format_x8b8g8r8_sint_pack_signed,  /* pack_rgba_sint */
+   NULL,  /* fetch_rgba_uint */
+   &util_format_x8b8g8r8_sint_fetch_signed  /* fetch_rgba_sint */
 };
 
 const struct util_format_description *
@@ -50147,6 +51888,8 @@ util_format_description(enum pipe_format format)
       return &util_format_i32_float_description;
    case PIPE_FORMAT_L8_SRGB:
       return &util_format_l8_srgb_description;
+   case PIPE_FORMAT_R8_SRGB:
+      return &util_format_r8_srgb_description;
    case PIPE_FORMAT_L8A8_SRGB:
       return &util_format_l8a8_srgb_description;
    case PIPE_FORMAT_R8G8B8_SRGB:
@@ -50651,6 +52394,8 @@ util_format_description(enum pipe_format format)
       return &util_format_a8l8_unorm_description;
    case PIPE_FORMAT_A8L8_SNORM:
       return &util_format_a8l8_snorm_description;
+   case PIPE_FORMAT_A8L8_SINT:
+      return &util_format_a8l8_sint_description;
    case PIPE_FORMAT_A8L8_SRGB:
       return &util_format_a8l8_srgb_description;
    case PIPE_FORMAT_A16L16_UNORM:
@@ -50659,14 +52404,20 @@ util_format_description(enum pipe_format format)
       return &util_format_g8r8_unorm_description;
    case PIPE_FORMAT_G8R8_SNORM:
       return &util_format_g8r8_snorm_description;
+   case PIPE_FORMAT_G8R8_SINT:
+      return &util_format_g8r8_sint_description;
    case PIPE_FORMAT_G16R16_UNORM:
       return &util_format_g16r16_unorm_description;
    case PIPE_FORMAT_G16R16_SNORM:
       return &util_format_g16r16_snorm_description;
    case PIPE_FORMAT_A8B8G8R8_SNORM:
       return &util_format_a8b8g8r8_snorm_description;
+   case PIPE_FORMAT_A8B8G8R8_SINT:
+      return &util_format_a8b8g8r8_sint_description;
    case PIPE_FORMAT_X8B8G8R8_SNORM:
       return &util_format_x8b8g8r8_snorm_description;
+   case PIPE_FORMAT_X8B8G8R8_SINT:
+      return &util_format_x8b8g8r8_sint_description;
    default:
       return NULL;
    }

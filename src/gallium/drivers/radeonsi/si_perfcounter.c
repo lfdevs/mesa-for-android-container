@@ -27,6 +27,24 @@
 #include "util/u_memory.h"
 
 
+enum si_pc_block_flags {
+	/* This block is part of the shader engine */
+	SI_PC_BLOCK_SE = (1 << 0),
+
+	/* Expose per-instance groups instead of summing all instances (within
+	 * an SE). */
+	SI_PC_BLOCK_INSTANCE_GROUPS = (1 << 1),
+
+	/* Expose per-SE groups instead of summing instances across SEs. */
+	SI_PC_BLOCK_SE_GROUPS = (1 << 2),
+
+	/* Shader block */
+	SI_PC_BLOCK_SHADER = (1 << 3),
+
+	/* Non-shader block with perfcounters windowed by shaders. */
+	SI_PC_BLOCK_SHADER_WINDOWED = (1 << 4),
+};
+
 enum si_pc_reg_layout {
 	/* All secondary selector dwords follow as one block after the primary
 	 * selector dwords for the counters that have secondary selectors.
@@ -69,10 +87,22 @@ struct si_pc_block_base {
 	unsigned layout;
 };
 
-struct si_pc_block {
+struct si_pc_block_gfxdescr {
 	struct si_pc_block_base *b;
 	unsigned selectors;
 	unsigned instances;
+};
+
+struct si_pc_block {
+	const struct si_pc_block_gfxdescr *b;
+	unsigned num_instances;
+
+	unsigned num_groups;
+	char *group_names;
+	unsigned group_name_stride;
+
+	char *selector_names;
+	unsigned selector_name_stride;
 };
 
 /* The order is chosen to be compatible with GPUPerfStudio's hardcoding of
@@ -92,6 +122,42 @@ static const unsigned si_pc_shader_type_bits[] = {
 	S_036780_HS_EN(1),
 	S_036780_CS_EN(1),
 };
+
+/* Max counters per HW block */
+#define SI_QUERY_MAX_COUNTERS 16
+
+#define SI_PC_SHADERS_WINDOWING (1 << 31)
+
+struct si_query_group {
+	struct si_query_group *next;
+	struct si_pc_block *block;
+	unsigned sub_gid; /* only used during init */
+	unsigned result_base; /* only used during init */
+	int se;
+	int instance;
+	unsigned num_counters;
+	unsigned selectors[SI_QUERY_MAX_COUNTERS];
+};
+
+struct si_query_counter {
+	unsigned base;
+	unsigned qwords;
+	unsigned stride; /* in uint64s */
+};
+
+struct si_query_pc {
+	struct si_query b;
+	struct si_query_buffer buffer;
+
+	/* Size of the results in memory, in bytes. */
+	unsigned result_size;
+
+	unsigned shaders;
+	unsigned num_counters;
+	struct si_query_counter *counters;
+	struct si_query_group *groups;
+};
+
 
 static struct si_pc_block_base cik_CB = {
 	.name = "CB",
@@ -344,7 +410,7 @@ static struct si_pc_block_base cik_SRBM = {
  * blindly once it believes it has identified the hardware, so the order of
  * blocks here matters.
  */
-static struct si_pc_block groups_CIK[] = {
+static struct si_pc_block_gfxdescr groups_CIK[] = {
 	{ &cik_CB, 226},
 	{ &cik_CPF, 17 },
 	{ &cik_DB, 257},
@@ -371,7 +437,7 @@ static struct si_pc_block groups_CIK[] = {
 
 };
 
-static struct si_pc_block groups_VI[] = {
+static struct si_pc_block_gfxdescr groups_VI[] = {
 	{ &cik_CB, 405},
 	{ &cik_CPF, 19 },
 	{ &cik_DB, 257},
@@ -398,7 +464,7 @@ static struct si_pc_block groups_VI[] = {
 
 };
 
-static struct si_pc_block groups_gfx9[] = {
+static struct si_pc_block_gfxdescr groups_gfx9[] = {
 	{ &cik_CB, 438},
 	{ &cik_CPF, 32 },
 	{ &cik_DB, 328},
@@ -421,6 +487,58 @@ static struct si_pc_block groups_gfx9[] = {
 	{ &cik_CPG, 59 },
 	{ &cik_CPC, 35 },
 };
+
+static bool si_pc_block_has_per_se_groups(const struct si_perfcounters *pc,
+					  const struct si_pc_block *block)
+{
+	return block->b->b->flags & SI_PC_BLOCK_SE_GROUPS ||
+	       (block->b->b->flags & SI_PC_BLOCK_SE && pc->separate_se);
+}
+
+static bool si_pc_block_has_per_instance_groups(const struct si_perfcounters *pc,
+						const struct si_pc_block *block)
+{
+	return block->b->b->flags & SI_PC_BLOCK_INSTANCE_GROUPS ||
+	       (block->num_instances > 1 && pc->separate_instance);
+}
+
+static struct si_pc_block *
+lookup_counter(struct si_perfcounters *pc, unsigned index,
+	       unsigned *base_gid, unsigned *sub_index)
+{
+	struct si_pc_block *block = pc->blocks;
+	unsigned bid;
+
+	*base_gid = 0;
+	for (bid = 0; bid < pc->num_blocks; ++bid, ++block) {
+		unsigned total = block->num_groups * block->b->selectors;
+
+		if (index < total) {
+			*sub_index = index;
+			return block;
+		}
+
+		index -= total;
+		*base_gid += block->num_groups;
+	}
+
+	return NULL;
+}
+
+static struct si_pc_block *
+lookup_group(struct si_perfcounters *pc, unsigned *index)
+{
+	unsigned bid;
+	struct si_pc_block *block = pc->blocks;
+
+	for (bid = 0; bid < pc->num_blocks; ++bid, ++block) {
+		if (*index < block->num_groups)
+			return block;
+		*index -= block->num_groups;
+	}
+
+	return NULL;
+}
 
 static void si_pc_emit_instance(struct si_context *sctx,
 				int se, int instance)
@@ -454,11 +572,10 @@ static void si_pc_emit_shaders(struct si_context *sctx,
 }
 
 static void si_pc_emit_select(struct si_context *sctx,
-		        struct si_perfcounter_block *group,
+		        struct si_pc_block *block,
 		        unsigned count, unsigned *selectors)
 {
-	struct si_pc_block *sigroup = (struct si_pc_block *)group->data;
-	struct si_pc_block_base *regs = sigroup->b;
+	struct si_pc_block_base *regs = block->b->b;
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	unsigned idx;
 	unsigned layout_multi = regs->layout & SI_PC_MULTI_MASK;
@@ -550,7 +667,7 @@ static void si_pc_emit_select(struct si_context *sctx,
 }
 
 static void si_pc_emit_start(struct si_context *sctx,
-			     struct r600_resource *buffer, uint64_t va)
+			     struct si_resource *buffer, uint64_t va)
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
@@ -576,16 +693,15 @@ static void si_pc_emit_start(struct si_context *sctx,
 /* Note: The buffer was already added in si_pc_emit_start, so we don't have to
  * do it again in here. */
 static void si_pc_emit_stop(struct si_context *sctx,
-			    struct r600_resource *buffer, uint64_t va)
+			    struct si_resource *buffer, uint64_t va)
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
 	si_cp_release_mem(sctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
-			  EOP_DST_SEL_MEM,
-			  EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM,
+			  EOP_DST_SEL_MEM, EOP_INT_SEL_NONE,
 			  EOP_DATA_SEL_VALUE_32BIT,
 			  buffer, va, 0, SI_NOT_QUERY);
-	si_cp_wait_mem(sctx, va, 0, 0xffffffff, 0);
+	si_cp_wait_mem(sctx, cs, va, 0, 0xffffffff, WAIT_REG_MEM_EQUAL);
 
 	radeon_emit(cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
 	radeon_emit(cs, EVENT_TYPE(V_028A90_PERFCOUNTER_SAMPLE) | EVENT_INDEX(0));
@@ -597,12 +713,10 @@ static void si_pc_emit_stop(struct si_context *sctx,
 }
 
 static void si_pc_emit_read(struct si_context *sctx,
-			    struct si_perfcounter_block *group,
-			    unsigned count, unsigned *selectors,
-			    struct r600_resource *buffer, uint64_t va)
+			    struct si_pc_block *block,
+			    unsigned count, uint64_t va)
 {
-	struct si_pc_block *sigroup = (struct si_pc_block *)group->data;
-	struct si_pc_block_base *regs = sigroup->b;
+	struct si_pc_block_base *regs = block->b->b;
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	unsigned idx;
 	unsigned reg = regs->counter0_lo;
@@ -642,16 +756,537 @@ static void si_pc_emit_read(struct si_context *sctx,
 	}
 }
 
-static void si_pc_cleanup(struct si_screen *sscreen)
+static void si_pc_query_destroy(struct si_screen *sscreen,
+				struct si_query *squery)
 {
-	si_perfcounters_do_destroy(sscreen->perfcounters);
-	sscreen->perfcounters = NULL;
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+
+	while (query->groups) {
+		struct si_query_group *group = query->groups;
+		query->groups = group->next;
+		FREE(group);
+	}
+
+	FREE(query->counters);
+
+	si_query_buffer_destroy(sscreen, &query->buffer);
+	FREE(query);
+}
+
+static void si_pc_query_resume(struct si_context *sctx, struct si_query *squery)
+/*
+				   struct si_query_hw *hwquery,
+				   struct si_resource *buffer, uint64_t va)*/
+{
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+	int current_se = -1;
+	int current_instance = -1;
+
+	if (!si_query_buffer_alloc(sctx, &query->buffer, NULL, query->result_size))
+		return;
+	si_need_gfx_cs_space(sctx);
+
+	if (query->shaders)
+		si_pc_emit_shaders(sctx, query->shaders);
+
+	for (struct si_query_group *group = query->groups; group; group = group->next) {
+		struct si_pc_block *block = group->block;
+
+		if (group->se != current_se || group->instance != current_instance) {
+			current_se = group->se;
+			current_instance = group->instance;
+			si_pc_emit_instance(sctx, group->se, group->instance);
+		}
+
+		si_pc_emit_select(sctx, block, group->num_counters, group->selectors);
+	}
+
+	if (current_se != -1 || current_instance != -1)
+		si_pc_emit_instance(sctx, -1, -1);
+
+	uint64_t va = query->buffer.buf->gpu_address + query->buffer.results_end;
+	si_pc_emit_start(sctx, query->buffer.buf, va);
+}
+
+static void si_pc_query_suspend(struct si_context *sctx, struct si_query *squery)
+{
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+
+	if (!query->buffer.buf)
+		return;
+
+	uint64_t va = query->buffer.buf->gpu_address + query->buffer.results_end;
+	query->buffer.results_end += query->result_size;
+
+	si_pc_emit_stop(sctx, query->buffer.buf, va);
+
+	for (struct si_query_group *group = query->groups; group; group = group->next) {
+		struct si_pc_block *block = group->block;
+		unsigned se = group->se >= 0 ? group->se : 0;
+		unsigned se_end = se + 1;
+
+		if ((block->b->b->flags & SI_PC_BLOCK_SE) && (group->se < 0))
+			se_end = sctx->screen->info.max_se;
+
+		do {
+			unsigned instance = group->instance >= 0 ? group->instance : 0;
+
+			do {
+				si_pc_emit_instance(sctx, se, instance);
+				si_pc_emit_read(sctx, block, group->num_counters, va);
+				va += sizeof(uint64_t) * group->num_counters;
+			} while (group->instance < 0 && ++instance < block->num_instances);
+		} while (++se < se_end);
+	}
+
+	si_pc_emit_instance(sctx, -1, -1);
+}
+
+static bool si_pc_query_begin(struct si_context *ctx, struct si_query *squery)
+{
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+
+	si_query_buffer_reset(ctx, &query->buffer);
+
+	LIST_ADDTAIL(&query->b.active_list, &ctx->active_queries);
+	ctx->num_cs_dw_queries_suspend += query->b.num_cs_dw_suspend;
+
+	si_pc_query_resume(ctx, squery);
+
+	return true;
+}
+
+static bool si_pc_query_end(struct si_context *ctx, struct si_query *squery)
+{
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+
+	si_pc_query_suspend(ctx, squery);
+
+	LIST_DEL(&squery->active_list);
+	ctx->num_cs_dw_queries_suspend -= squery->num_cs_dw_suspend;
+
+	return query->buffer.buf != NULL;
+}
+
+static void si_pc_query_add_result(struct si_query_pc *query,
+				   void *buffer,
+				   union pipe_query_result *result)
+{
+	uint64_t *results = buffer;
+	unsigned i, j;
+
+	for (i = 0; i < query->num_counters; ++i) {
+		struct si_query_counter *counter = &query->counters[i];
+
+		for (j = 0; j < counter->qwords; ++j) {
+			uint32_t value = results[counter->base + j * counter->stride];
+			result->batch[i].u64 += value;
+		}
+	}
+}
+
+static bool si_pc_query_get_result(struct si_context *sctx, struct si_query *squery,
+				   bool wait, union pipe_query_result *result)
+{
+	struct si_query_pc *query = (struct si_query_pc *)squery;
+
+	memset(result, 0, sizeof(result->batch[0]) * query->num_counters);
+
+	for (struct si_query_buffer *qbuf = &query->buffer; qbuf; qbuf = qbuf->previous) {
+		unsigned usage = PIPE_TRANSFER_READ |
+				 (wait ? 0 : PIPE_TRANSFER_DONTBLOCK);
+		unsigned results_base = 0;
+		void *map;
+
+		if (squery->b.flushed)
+			map = sctx->ws->buffer_map(qbuf->buf->buf, NULL, usage);
+		else
+			map = si_buffer_map_sync_with_rings(sctx, qbuf->buf, usage);
+
+		if (!map)
+			return false;
+
+		while (results_base != qbuf->results_end) {
+			si_pc_query_add_result(query, map + results_base, result);
+			results_base += query->result_size;
+		}
+	}
+
+	return true;
+}
+
+static const struct si_query_ops batch_query_ops = {
+	.destroy = si_pc_query_destroy,
+	.begin = si_pc_query_begin,
+	.end = si_pc_query_end,
+	.get_result = si_pc_query_get_result,
+
+	.suspend = si_pc_query_suspend,
+	.resume = si_pc_query_resume,
+};
+
+static struct si_query_group *get_group_state(struct si_screen *screen,
+					      struct si_query_pc *query,
+					      struct si_pc_block *block,
+					      unsigned sub_gid)
+{
+	struct si_query_group *group = query->groups;
+
+	while (group) {
+		if (group->block == block && group->sub_gid == sub_gid)
+			return group;
+		group = group->next;
+	}
+
+	group = CALLOC_STRUCT(si_query_group);
+	if (!group)
+		return NULL;
+
+	group->block = block;
+	group->sub_gid = sub_gid;
+
+	if (block->b->b->flags & SI_PC_BLOCK_SHADER) {
+		unsigned sub_gids = block->num_instances;
+		unsigned shader_id;
+		unsigned shaders;
+		unsigned query_shaders;
+
+		if (si_pc_block_has_per_se_groups(screen->perfcounters, block))
+			sub_gids = sub_gids * screen->info.max_se;
+		shader_id = sub_gid / sub_gids;
+		sub_gid = sub_gid % sub_gids;
+
+		shaders = si_pc_shader_type_bits[shader_id];
+
+		query_shaders = query->shaders & ~SI_PC_SHADERS_WINDOWING;
+		if (query_shaders && query_shaders != shaders) {
+			fprintf(stderr, "si_perfcounter: incompatible shader groups\n");
+			FREE(group);
+			return NULL;
+		}
+		query->shaders = shaders;
+	}
+
+	if (block->b->b->flags & SI_PC_BLOCK_SHADER_WINDOWED && !query->shaders) {
+		// A non-zero value in query->shaders ensures that the shader
+		// masking is reset unless the user explicitly requests one.
+		query->shaders = SI_PC_SHADERS_WINDOWING;
+	}
+
+	if (si_pc_block_has_per_se_groups(screen->perfcounters, block)) {
+		group->se = sub_gid / block->num_instances;
+		sub_gid = sub_gid % block->num_instances;
+	} else {
+		group->se = -1;
+	}
+
+	if (si_pc_block_has_per_instance_groups(screen->perfcounters, block)) {
+		group->instance = sub_gid;
+	} else {
+		group->instance = -1;
+	}
+
+	group->next = query->groups;
+	query->groups = group;
+
+	return group;
+}
+
+struct pipe_query *si_create_batch_query(struct pipe_context *ctx,
+					 unsigned num_queries,
+					 unsigned *query_types)
+{
+	struct si_screen *screen =
+		(struct si_screen *)ctx->screen;
+	struct si_perfcounters *pc = screen->perfcounters;
+	struct si_pc_block *block;
+	struct si_query_group *group;
+	struct si_query_pc *query;
+	unsigned base_gid, sub_gid, sub_index;
+	unsigned i, j;
+
+	if (!pc)
+		return NULL;
+
+	query = CALLOC_STRUCT(si_query_pc);
+	if (!query)
+		return NULL;
+
+	query->b.ops = &batch_query_ops;
+
+	query->num_counters = num_queries;
+
+	/* Collect selectors per group */
+	for (i = 0; i < num_queries; ++i) {
+		unsigned sub_gid;
+
+		if (query_types[i] < SI_QUERY_FIRST_PERFCOUNTER)
+			goto error;
+
+		block = lookup_counter(pc, query_types[i] - SI_QUERY_FIRST_PERFCOUNTER,
+				       &base_gid, &sub_index);
+		if (!block)
+			goto error;
+
+		sub_gid = sub_index / block->b->selectors;
+		sub_index = sub_index % block->b->selectors;
+
+		group = get_group_state(screen, query, block, sub_gid);
+		if (!group)
+			goto error;
+
+		if (group->num_counters >= block->b->b->num_counters) {
+			fprintf(stderr,
+				"perfcounter group %s: too many selected\n",
+				block->b->b->name);
+			goto error;
+		}
+		group->selectors[group->num_counters] = sub_index;
+		++group->num_counters;
+	}
+
+	/* Compute result bases and CS size per group */
+	query->b.num_cs_dw_suspend = pc->num_stop_cs_dwords;
+	query->b.num_cs_dw_suspend += pc->num_instance_cs_dwords;
+
+	i = 0;
+	for (group = query->groups; group; group = group->next) {
+		struct si_pc_block *block = group->block;
+		unsigned read_dw;
+		unsigned instances = 1;
+
+		if ((block->b->b->flags & SI_PC_BLOCK_SE) && group->se < 0)
+			instances = screen->info.max_se;
+		if (group->instance < 0)
+			instances *= block->num_instances;
+
+		group->result_base = i;
+		query->result_size += sizeof(uint64_t) * instances * group->num_counters;
+		i += instances * group->num_counters;
+
+		read_dw = 6 * group->num_counters;
+		query->b.num_cs_dw_suspend += instances * read_dw;
+		query->b.num_cs_dw_suspend += instances * pc->num_instance_cs_dwords;
+	}
+
+	if (query->shaders) {
+		if (query->shaders == SI_PC_SHADERS_WINDOWING)
+			query->shaders = 0xffffffff;
+	}
+
+	/* Map user-supplied query array to result indices */
+	query->counters = CALLOC(num_queries, sizeof(*query->counters));
+	for (i = 0; i < num_queries; ++i) {
+		struct si_query_counter *counter = &query->counters[i];
+		struct si_pc_block *block;
+
+		block = lookup_counter(pc, query_types[i] - SI_QUERY_FIRST_PERFCOUNTER,
+				       &base_gid, &sub_index);
+
+		sub_gid = sub_index / block->b->selectors;
+		sub_index = sub_index % block->b->selectors;
+
+		group = get_group_state(screen, query, block, sub_gid);
+		assert(group != NULL);
+
+		for (j = 0; j < group->num_counters; ++j) {
+			if (group->selectors[j] == sub_index)
+				break;
+		}
+
+		counter->base = group->result_base + j;
+		counter->stride = group->num_counters;
+
+		counter->qwords = 1;
+		if ((block->b->b->flags & SI_PC_BLOCK_SE) && group->se < 0)
+			counter->qwords = screen->info.max_se;
+		if (group->instance < 0)
+			counter->qwords *= block->num_instances;
+	}
+
+	return (struct pipe_query *)query;
+
+error:
+	si_pc_query_destroy(screen, &query->b);
+	return NULL;
+}
+
+static bool si_init_block_names(struct si_screen *screen,
+				struct si_pc_block *block)
+{
+	bool per_instance_groups = si_pc_block_has_per_instance_groups(screen->perfcounters, block);
+	bool per_se_groups = si_pc_block_has_per_se_groups(screen->perfcounters, block);
+	unsigned i, j, k;
+	unsigned groups_shader = 1, groups_se = 1, groups_instance = 1;
+	unsigned namelen;
+	char *groupname;
+	char *p;
+
+	if (per_instance_groups)
+		groups_instance = block->num_instances;
+	if (per_se_groups)
+		groups_se = screen->info.max_se;
+	if (block->b->b->flags & SI_PC_BLOCK_SHADER)
+		groups_shader = ARRAY_SIZE(si_pc_shader_type_bits);
+
+	namelen = strlen(block->b->b->name);
+	block->group_name_stride = namelen + 1;
+	if (block->b->b->flags & SI_PC_BLOCK_SHADER)
+		block->group_name_stride += 3;
+	if (per_se_groups) {
+		assert(groups_se <= 10);
+		block->group_name_stride += 1;
+
+		if (per_instance_groups)
+			block->group_name_stride += 1;
+	}
+	if (per_instance_groups) {
+		assert(groups_instance <= 100);
+		block->group_name_stride += 2;
+	}
+
+	block->group_names = MALLOC(block->num_groups * block->group_name_stride);
+	if (!block->group_names)
+		return false;
+
+	groupname = block->group_names;
+	for (i = 0; i < groups_shader; ++i) {
+		const char *shader_suffix = si_pc_shader_type_suffixes[i];
+		unsigned shaderlen = strlen(shader_suffix);
+		for (j = 0; j < groups_se; ++j) {
+			for (k = 0; k < groups_instance; ++k) {
+				strcpy(groupname, block->b->b->name);
+				p = groupname + namelen;
+
+				if (block->b->b->flags & SI_PC_BLOCK_SHADER) {
+					strcpy(p, shader_suffix);
+					p += shaderlen;
+				}
+
+				if (per_se_groups) {
+					p += sprintf(p, "%d", j);
+					if (per_instance_groups)
+						*p++ = '_';
+				}
+
+				if (per_instance_groups)
+					p += sprintf(p, "%d", k);
+
+				groupname += block->group_name_stride;
+			}
+		}
+	}
+
+	assert(block->b->selectors <= 1000);
+	block->selector_name_stride = block->group_name_stride + 4;
+	block->selector_names = MALLOC(block->num_groups * block->b->selectors *
+				       block->selector_name_stride);
+	if (!block->selector_names)
+		return false;
+
+	groupname = block->group_names;
+	p = block->selector_names;
+	for (i = 0; i < block->num_groups; ++i) {
+		for (j = 0; j < block->b->selectors; ++j) {
+			sprintf(p, "%s_%03d", groupname, j);
+			p += block->selector_name_stride;
+		}
+		groupname += block->group_name_stride;
+	}
+
+	return true;
+}
+
+int si_get_perfcounter_info(struct si_screen *screen,
+			    unsigned index,
+			    struct pipe_driver_query_info *info)
+{
+	struct si_perfcounters *pc = screen->perfcounters;
+	struct si_pc_block *block;
+	unsigned base_gid, sub;
+
+	if (!pc)
+		return 0;
+
+	if (!info) {
+		unsigned bid, num_queries = 0;
+
+		for (bid = 0; bid < pc->num_blocks; ++bid) {
+			num_queries += pc->blocks[bid].b->selectors *
+				       pc->blocks[bid].num_groups;
+		}
+
+		return num_queries;
+	}
+
+	block = lookup_counter(pc, index, &base_gid, &sub);
+	if (!block)
+		return 0;
+
+	if (!block->selector_names) {
+		if (!si_init_block_names(screen, block))
+			return 0;
+	}
+	info->name = block->selector_names + sub * block->selector_name_stride;
+	info->query_type = SI_QUERY_FIRST_PERFCOUNTER + index;
+	info->max_value.u64 = 0;
+	info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
+	info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_AVERAGE;
+	info->group_id = base_gid + sub / block->b->selectors;
+	info->flags = PIPE_DRIVER_QUERY_FLAG_BATCH;
+	if (sub > 0 && sub + 1 < block->b->selectors * block->num_groups)
+		info->flags |= PIPE_DRIVER_QUERY_FLAG_DONT_LIST;
+	return 1;
+}
+
+int si_get_perfcounter_group_info(struct si_screen *screen,
+				  unsigned index,
+				  struct pipe_driver_query_group_info *info)
+{
+	struct si_perfcounters *pc = screen->perfcounters;
+	struct si_pc_block *block;
+
+	if (!pc)
+		return 0;
+
+	if (!info)
+		return pc->num_groups;
+
+	block = lookup_group(pc, &index);
+	if (!block)
+		return 0;
+
+	if (!block->group_names) {
+		if (!si_init_block_names(screen, block))
+			return 0;
+	}
+	info->name = block->group_names + index * block->group_name_stride;
+	info->num_queries = block->b->selectors;
+	info->max_active_queries = block->b->b->num_counters;
+	return 1;
+}
+
+void si_destroy_perfcounters(struct si_screen *screen)
+{
+	struct si_perfcounters *pc = screen->perfcounters;
+	unsigned i;
+
+	if (!pc)
+		return;
+
+	for (i = 0; i < pc->num_blocks; ++i) {
+		FREE(pc->blocks[i].group_names);
+		FREE(pc->blocks[i].selector_names);
+	}
+	FREE(pc->blocks);
+	FREE(pc);
+	screen->perfcounters = NULL;
 }
 
 void si_init_perfcounters(struct si_screen *screen)
 {
 	struct si_perfcounters *pc;
-	struct si_pc_block *blocks;
+	const struct si_pc_block_gfxdescr *blocks;
 	unsigned num_blocks;
 	unsigned i;
 
@@ -680,52 +1315,50 @@ void si_init_perfcounters(struct si_screen *screen)
 			screen->info.max_sh_per_se);
 	}
 
-	pc = CALLOC_STRUCT(si_perfcounters);
+	screen->perfcounters = pc = CALLOC_STRUCT(si_perfcounters);
 	if (!pc)
 		return;
 
 	pc->num_stop_cs_dwords = 14 + si_cp_write_fence_dwords(screen);
 	pc->num_instance_cs_dwords = 3;
 
-	pc->num_shader_types = ARRAY_SIZE(si_pc_shader_type_bits);
-	pc->shader_type_suffixes = si_pc_shader_type_suffixes;
-	pc->shader_type_bits = si_pc_shader_type_bits;
+	pc->separate_se = debug_get_bool_option("RADEON_PC_SEPARATE_SE", false);
+	pc->separate_instance = debug_get_bool_option("RADEON_PC_SEPARATE_INSTANCE", false);
 
-	pc->emit_instance = si_pc_emit_instance;
-	pc->emit_shaders = si_pc_emit_shaders;
-	pc->emit_select = si_pc_emit_select;
-	pc->emit_start = si_pc_emit_start;
-	pc->emit_stop = si_pc_emit_stop;
-	pc->emit_read = si_pc_emit_read;
-	pc->cleanup = si_pc_cleanup;
-
-	if (!si_perfcounters_init(pc, num_blocks))
+	pc->blocks = CALLOC(num_blocks, sizeof(struct si_pc_block));
+	if (!pc->blocks)
 		goto error;
+	pc->num_blocks = num_blocks;
 
 	for (i = 0; i < num_blocks; ++i) {
-		struct si_pc_block *block = &blocks[i];
-		unsigned instances = block->instances;
+		struct si_pc_block *block = &pc->blocks[i];
+		block->b = &blocks[i];
+		block->num_instances = MAX2(1, block->b->instances);
 
-		if (!strcmp(block->b->name, "CB") ||
-		    !strcmp(block->b->name, "DB"))
-			instances = screen->info.max_se;
-		else if (!strcmp(block->b->name, "TCC"))
-			instances = screen->info.num_tcc_blocks;
-		else if (!strcmp(block->b->name, "IA"))
-			instances = MAX2(1, screen->info.max_se / 2);
+		if (!strcmp(block->b->b->name, "CB") ||
+		    !strcmp(block->b->b->name, "DB"))
+			block->num_instances = screen->info.max_se;
+		else if (!strcmp(block->b->b->name, "TCC"))
+			block->num_instances = screen->info.num_tcc_blocks;
+		else if (!strcmp(block->b->b->name, "IA"))
+			block->num_instances = MAX2(1, screen->info.max_se / 2);
 
-		si_perfcounters_add_block(screen, pc,
-					    block->b->name,
-					    block->b->flags,
-					    block->b->num_counters,
-					    block->selectors,
-					    instances,
-					    block);
+		if (si_pc_block_has_per_instance_groups(pc, block)) {
+			block->num_groups = block->num_instances;
+		} else {
+			block->num_groups = 1;
+		}
+
+		if (si_pc_block_has_per_se_groups(pc, block))
+			block->num_groups *= screen->info.max_se;
+		if (block->b->b->flags & SI_PC_BLOCK_SHADER)
+			block->num_groups *= ARRAY_SIZE(si_pc_shader_type_bits);
+
+		pc->num_groups += block->num_groups;
 	}
 
-	screen->perfcounters = pc;
 	return;
 
 error:
-	si_perfcounters_do_destroy(pc);
+	si_destroy_perfcounters(screen);
 }

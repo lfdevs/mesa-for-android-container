@@ -919,6 +919,7 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_screen *screen = nvc0->screen;
+   unsigned vram_domain = NV_VRAM_DOMAIN(&screen->base);
    int s;
 
    /* NOTE: caller must ensure that (min_index + index_bias) is >= 0 */
@@ -981,6 +982,9 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
       nvc0_add_resident(nvc0->bufctx_3d, NVC0_BIND_3D_BINDLESS, resident->buf,
                         resident->flags);
    }
+
+   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TEXT, vram_domain | NOUVEAU_BO_RD,
+                screen->text);
 
    nvc0_state_validate_3d(nvc0, ~0);
 
@@ -1092,6 +1096,7 @@ cleanup:
 
    nouveau_pushbuf_bufctx(push, NULL);
 
+   nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_TEXT);
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_IDX);
    nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_BINDLESS);
 }

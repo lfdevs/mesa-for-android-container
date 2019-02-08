@@ -76,22 +76,27 @@ batch_init(struct fd_batch *batch)
 	batch->fence = fd_fence_create(batch);
 
 	batch->cleared = 0;
+	batch->fast_cleared = 0;
 	batch->invalidated = 0;
 	batch->restore = batch->resolve = 0;
 	batch->needs_flush = false;
 	batch->flushed = false;
 	batch->gmem_reason = 0;
 	batch->num_draws = 0;
+	batch->num_vertices = 0;
 	batch->stage = FD_STAGE_NULL;
 
 	fd_reset_wfi(batch);
 
 	util_dynarray_init(&batch->draw_patches, NULL);
 
+	if (is_a2xx(ctx->screen)) {
+		util_dynarray_init(&batch->shader_patches, NULL);
+		util_dynarray_init(&batch->gmem_patches, NULL);
+	}
+
 	if (is_a3xx(ctx->screen))
 		util_dynarray_init(&batch->rbrc_patches, NULL);
-
-	util_dynarray_init(&batch->gmem_patches, NULL);
 
 	assert(batch->resources->entries == 0);
 
@@ -144,19 +149,33 @@ batch_fini(struct fd_batch *batch)
 		debug_assert(!batch->binning);
 		debug_assert(!batch->gmem);
 	}
+
 	if (batch->lrz_clear) {
 		fd_ringbuffer_del(batch->lrz_clear);
 		batch->lrz_clear = NULL;
+	}
+
+	if (batch->tile_setup) {
+		fd_ringbuffer_del(batch->tile_setup);
+		batch->tile_setup = NULL;
+	}
+
+	if (batch->tile_fini) {
+		fd_ringbuffer_del(batch->tile_fini);
+		batch->tile_fini = NULL;
 	}
 
 	fd_submit_del(batch->submit);
 
 	util_dynarray_fini(&batch->draw_patches);
 
+	if (is_a2xx(batch->ctx->screen)) {
+		util_dynarray_fini(&batch->shader_patches);
+		util_dynarray_fini(&batch->gmem_patches);
+	}
+
 	if (is_a3xx(batch->ctx->screen))
 		util_dynarray_fini(&batch->rbrc_patches);
-
-	util_dynarray_fini(&batch->gmem_patches);
 
 	while (batch->samples.size > 0) {
 		struct fd_hw_sample *samp =

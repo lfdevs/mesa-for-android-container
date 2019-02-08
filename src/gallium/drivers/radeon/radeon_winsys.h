@@ -52,7 +52,9 @@ enum radeon_bo_layout {
 enum radeon_bo_domain { /* bitfield */
     RADEON_DOMAIN_GTT  = 2,
     RADEON_DOMAIN_VRAM = 4,
-    RADEON_DOMAIN_VRAM_GTT = RADEON_DOMAIN_VRAM | RADEON_DOMAIN_GTT
+    RADEON_DOMAIN_VRAM_GTT = RADEON_DOMAIN_VRAM | RADEON_DOMAIN_GTT,
+    RADEON_DOMAIN_GDS = 8,
+    RADEON_DOMAIN_OA = 16,
 };
 
 enum radeon_bo_flag { /* bitfield */
@@ -74,6 +76,15 @@ enum radeon_bo_usage { /* bitfield */
      * previously flushed CSs referencing this BO in a conflicting way.
      */
     RADEON_USAGE_SYNCHRONIZED = 8
+};
+
+enum radeon_transfer_flags {
+   /* Indicates that the caller will unmap the buffer.
+    *
+    * Not unmapping buffers is an important performance optimization for
+    * OpenGL (avoids kernel overhead for frequently mapped buffers).
+    */
+   RADEON_TRANSFER_TEMPORARY = (PIPE_TRANSFER_DRV_PRV << 0),
 };
 
 #define RADEON_SPARSE_PAGE_SIZE (64 * 1024)
@@ -294,9 +305,12 @@ struct radeon_winsys {
      * Map the entire data store of a buffer object into the client's address
      * space.
      *
+     * Callers are expected to unmap buffers again if and only if the
+     * RADEON_TRANSFER_TEMPORARY flag is set in \p usage.
+     *
      * \param buf       A winsys buffer object to map.
      * \param cs        A command stream to flush if the buffer is referenced by it.
-     * \param usage     A bitmask of the PIPE_TRANSFER_* flags.
+     * \param usage     A bitmask of the PIPE_TRANSFER_* and RADEON_TRANSFER_* flags.
      * \return          The pointer at the beginning of the buffer.
      */
     void *(*buffer_map)(struct pb_buffer *buf,
@@ -352,6 +366,7 @@ struct radeon_winsys {
      */
     struct pb_buffer *(*buffer_from_handle)(struct radeon_winsys *ws,
                                             struct winsys_handle *whandle,
+                                            unsigned vm_alignment,
                                             unsigned *stride, unsigned *offset);
 
     /**
@@ -464,10 +479,11 @@ struct radeon_winsys {
      * \param user      User pointer that will be passed to the flush callback.
      */
     struct radeon_cmdbuf *(*cs_create)(struct radeon_winsys_ctx *ctx,
-                                          enum ring_type ring_type,
-                                          void (*flush)(void *ctx, unsigned flags,
-							struct pipe_fence_handle **fence),
-                                          void *flush_ctx);
+                                       enum ring_type ring_type,
+                                       void (*flush)(void *ctx, unsigned flags,
+                                                     struct pipe_fence_handle **fence),
+                                       void *flush_ctx,
+                                       bool stop_exec_on_failure);
 
     /**
      * Destroy a command stream.

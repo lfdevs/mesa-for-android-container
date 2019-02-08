@@ -157,7 +157,7 @@
     <group count="4" start="0" size="16">
       <field name="Read Length" start="0" end="15" type="uint"/>
     </group>
-    <field name="Constant Buffer Object Control State" start="64" end="68" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="MOCS" start="64" end="68" type="uint"/>
     <group count="4" start="64" size="32">
       <field name="Buffer" start="5" end="31" type="address"/>
     </group>
@@ -169,8 +169,7 @@
       <value name="VERTEXDATA" value="0"/>
       <value name="INSTANCEDATA" value="1"/>
     </field>
-    <field name="Vertex Buffer Memory Object Control State" start="16" end="19" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Vertex Buffer MOCS" start="16" end="19" type="uint"/>
+    <field name="MOCS" start="16" end="19" type="uint"/>
     <field name="Address Modify Enable" start="14" end="14" type="bool"/>
     <field name="Null Vertex Buffer" start="13" end="13" type="bool"/>
     <field name="Vertex Fetch Invalidate" start="12" end="12" type="bool" default="0"/>
@@ -443,7 +442,6 @@
     <field name="Strbuf Minimum Array Element" start="128" end="154" type="uint"/>
     <field name="X Offset" start="185" end="191" type="uint"/>
     <field name="Y Offset" start="180" end="183" type="uint"/>
-    <field name="Surface Object Control State" start="176" end="179" type="MEMORY_OBJECT_CONTROL_STATE"/>
     <field name="MOCS" start="176" end="179" type="uint"/>
     <field name="Surface Min LOD" start="164" end="167" type="uint"/>
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
@@ -568,7 +566,7 @@
     <field name="TCZ Address Control Mode" start="96" end="98" type="Texture Coordinate Mode"/>
   </struct>
 
-  <instruction name="3DPRIMITIVE" bias="2" length="7">
+  <instruction name="3DPRIMITIVE" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="3"/>
@@ -589,7 +587,7 @@
     <field name="Base Vertex Location" start="192" end="223" type="int"/>
   </instruction>
 
-  <instruction name="3DSTATE_AA_LINE_PARAMETERS" bias="2" length="3">
+  <instruction name="3DSTATE_AA_LINE_PARAMETERS" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -601,7 +599,7 @@
     <field name="AA Coverage EndCap Slope" start="64" end="71" type="u0.8"/>
   </instruction>
 
-  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_DS" bias="2" length="2">
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_DS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -610,7 +608,7 @@
     <field name="Pointer to DS Binding Table" start="37" end="47" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_GS" bias="2" length="2">
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_GS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -619,7 +617,7 @@
     <field name="Pointer to GS Binding Table" start="37" end="47" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_HS" bias="2" length="2">
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_HS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -628,7 +626,7 @@
     <field name="Pointer to HS Binding Table" start="37" end="47" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_PS" bias="2" length="2">
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_PS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -637,7 +635,7 @@
     <field name="Pointer to PS Binding Table" start="37" end="47" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_VS" bias="2" length="2">
+  <instruction name="3DSTATE_BINDING_TABLE_POINTERS_VS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -646,7 +644,7 @@
     <field name="Pointer to VS Binding Table" start="37" end="47" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_BLEND_STATE_POINTERS" bias="2" length="2">
+  <instruction name="3DSTATE_BLEND_STATE_POINTERS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -656,7 +654,7 @@
     <field start="32" end="32" type="mbo"/>
   </instruction>
 
-  <instruction name="3DSTATE_CC_STATE_POINTERS" bias="2" length="2">
+  <instruction name="3DSTATE_CC_STATE_POINTERS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -666,7 +664,7 @@
     <field start="32" end="32" type="mbo"/>
   </instruction>
 
-  <instruction name="3DSTATE_CHROMA_KEY" bias="2" length="4">
+  <instruction name="3DSTATE_CHROMA_KEY" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -677,7 +675,7 @@
     <field name="ChromaKey High Value" start="96" end="127" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_CLEAR_PARAMS" bias="2" length="3">
+  <instruction name="3DSTATE_CLEAR_PARAMS" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -687,7 +685,7 @@
     <field name="Depth Clear Value Valid" start="64" end="64" type="bool"/>
   </instruction>
 
-  <instruction name="3DSTATE_CLIP" bias="2" length="4">
+  <instruction name="3DSTATE_CLIP" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -740,7 +738,7 @@
     <field name="Maximum VP Index" start="96" end="99" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_CONSTANT_DS" bias="2" length="7">
+  <instruction name="3DSTATE_CONSTANT_DS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -749,7 +747,7 @@
     <field name="Constant Body" start="32" end="223" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
-  <instruction name="3DSTATE_CONSTANT_GS" bias="2" length="7">
+  <instruction name="3DSTATE_CONSTANT_GS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -758,7 +756,7 @@
     <field name="Constant Body" start="32" end="223" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
-  <instruction name="3DSTATE_CONSTANT_HS" bias="2" length="7">
+  <instruction name="3DSTATE_CONSTANT_HS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -767,7 +765,7 @@
     <field name="Constant Body" start="32" end="223" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
-  <instruction name="3DSTATE_CONSTANT_PS" bias="2" length="7">
+  <instruction name="3DSTATE_CONSTANT_PS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -776,7 +774,7 @@
     <field name="Constant Body" start="32" end="223" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
-  <instruction name="3DSTATE_CONSTANT_VS" bias="2" length="7">
+  <instruction name="3DSTATE_CONSTANT_VS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -785,7 +783,7 @@
     <field name="Constant Body" start="32" end="223" type="3DSTATE_CONSTANT_BODY"/>
   </instruction>
 
-  <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="7">
+  <instruction name="3DSTATE_DEPTH_BUFFER" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -815,14 +813,13 @@
       <value name="SURFTYPE_CUBE (must be zero)" value="0"/>
     </field>
     <field name="Minimum Array Element" start="138" end="148" type="uint"/>
-    <field name="Depth Buffer Object Control State" start="128" end="131" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Depth Buffer MOCS" start="128" end="131" type="uint"/>
+    <field name="MOCS" start="128" end="131" type="uint"/>
     <field name="Depth Coordinate Offset Y" start="176" end="191" type="int"/>
     <field name="Depth Coordinate Offset X" start="160" end="175" type="int"/>
     <field name="Render Target View Extent" start="213" end="223" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_DEPTH_STENCIL_STATE_POINTERS" bias="2" length="2">
+  <instruction name="3DSTATE_DEPTH_STENCIL_STATE_POINTERS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -832,7 +829,7 @@
     <field start="32" end="32" type="mbo"/>
   </instruction>
 
-  <instruction name="3DSTATE_DRAWING_RECTANGLE" bias="2" length="4">
+  <instruction name="3DSTATE_DRAWING_RECTANGLE" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -846,7 +843,7 @@
     <field name="Drawing Rectangle Origin X" start="96" end="111" type="int"/>
   </instruction>
 
-  <instruction name="3DSTATE_DS" bias="2" length="6">
+  <instruction name="3DSTATE_DS" bias="2" length="6" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -881,7 +878,7 @@
     <field name="Enable" start="160" end="160" type="bool"/>
   </instruction>
 
-  <instruction name="3DSTATE_GS" bias="2" length="7">
+  <instruction name="3DSTATE_GS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -943,19 +940,18 @@
     <field name="Semaphore Handle" start="192" end="203" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_HIER_DEPTH_BUFFER" bias="2" length="3">
+  <instruction name="3DSTATE_HIER_DEPTH_BUFFER" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="7"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
-    <field name="Hierarchical Depth Buffer Object Control State" start="57" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Hierarchical Depth Buffer MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
     <field name="Surface Base Address" start="64" end="95" type="address"/>
   </instruction>
 
-  <instruction name="3DSTATE_HS" bias="2" length="7">
+  <instruction name="3DSTATE_HS" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -991,13 +987,12 @@
     <field name="Semaphore Handle" start="192" end="203" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_INDEX_BUFFER" bias="2" length="3">
+  <instruction name="3DSTATE_INDEX_BUFFER" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="10"/>
-    <field name="Memory Object Control State" start="12" end="15" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="IndexBufferMOCS" start="12" end="15" type="uint"/>
+    <field name="MOCS" start="12" end="15" type="uint"/>
     <field name="Cut Index Enable" start="10" end="10" type="bool"/>
     <field name="Index Format" start="8" end="9" type="uint" prefix="INDEX">
       <value name="BYTE" value="0"/>
@@ -1009,7 +1004,7 @@
     <field name="Buffer Ending Address" start="64" end="95" type="address"/>
   </instruction>
 
-  <instruction name="3DSTATE_LINE_STIPPLE" bias="2" length="3">
+  <instruction name="3DSTATE_LINE_STIPPLE" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1023,7 +1018,7 @@
     <field name="Line Stipple Repeat Count" start="64" end="72" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_MONOFILTER_SIZE" bias="2" length="2">
+  <instruction name="3DSTATE_MONOFILTER_SIZE" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1033,7 +1028,7 @@
     <field name="Monochrome Filter Height" start="32" end="34" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_MULTISAMPLE" bias="2" length="4">
+  <instruction name="3DSTATE_MULTISAMPLE" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1066,7 +1061,7 @@
     <field name="Sample4 Y Offset" start="96" end="99" type="u0.4"/>
   </instruction>
 
-  <instruction name="3DSTATE_POLY_STIPPLE_OFFSET" bias="2" length="2">
+  <instruction name="3DSTATE_POLY_STIPPLE_OFFSET" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1076,7 +1071,7 @@
     <field name="Polygon Stipple Y Offset" start="32" end="36" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_POLY_STIPPLE_PATTERN" bias="2" length="33">
+  <instruction name="3DSTATE_POLY_STIPPLE_PATTERN" bias="2" length="33" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1087,7 +1082,7 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_PS" bias="2" length="8">
+  <instruction name="3DSTATE_PS" bias="2" length="8" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1139,7 +1134,7 @@
     <field name="Kernel Start Pointer 2" start="230" end="255" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_DS" bias="2" length="2">
+  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_DS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1153,7 +1148,7 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_GS" bias="2" length="2">
+  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_GS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1167,7 +1162,7 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_HS" bias="2" length="2">
+  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_HS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1181,7 +1176,7 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_PS" bias="2" length="2">
+  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_PS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1195,7 +1190,7 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_VS" bias="2" length="2">
+  <instruction name="3DSTATE_PUSH_CONSTANT_ALLOC_VS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1209,7 +1204,7 @@
     </field>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_PALETTE_LOAD0" bias="2">
+  <instruction name="3DSTATE_SAMPLER_PALETTE_LOAD0" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1220,7 +1215,7 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_PALETTE_LOAD1" bias="2">
+  <instruction name="3DSTATE_SAMPLER_PALETTE_LOAD1" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1234,7 +1229,7 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_DS" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_DS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1243,7 +1238,7 @@
     <field name="Pointer to DS Sampler State" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_GS" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_GS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1252,7 +1247,7 @@
     <field name="Pointer to GS Sampler State" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_HS" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_HS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1261,7 +1256,7 @@
     <field name="Pointer to HS Sampler State" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_PS" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_PS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1270,7 +1265,7 @@
     <field name="Pointer to PS Sampler State" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_VS" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLER_STATE_POINTERS_VS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1279,7 +1274,7 @@
     <field name="Pointer to VS Sampler State" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SAMPLE_MASK" bias="2" length="2">
+  <instruction name="3DSTATE_SAMPLE_MASK" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1288,7 +1283,7 @@
     <field name="Sample Mask" start="32" end="39" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_SBE" bias="2" length="14">
+  <instruction name="3DSTATE_SBE" bias="2" length="14" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1329,7 +1324,7 @@
     <field name="Attribute 8 WrapShortest Enables" start="416" end="419" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_SCISSOR_STATE_POINTERS" bias="2" length="2">
+  <instruction name="3DSTATE_SCISSOR_STATE_POINTERS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1338,7 +1333,7 @@
     <field name="Scissor Rect Pointer" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_SF" bias="2" length="7">
+  <instruction name="3DSTATE_SF" bias="2" length="7" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1415,21 +1410,20 @@
     <field name="Global Depth Offset Clamp" start="192" end="223" type="float"/>
   </instruction>
 
-  <instruction name="3DSTATE_SO_BUFFER" bias="2" length="4">
+  <instruction name="3DSTATE_SO_BUFFER" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="24"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="2"/>
     <field name="SO Buffer Index" start="61" end="62" type="uint"/>
-    <field name="SO Buffer Object Control State" start="57" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="SO Buffer MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint"/>
     <field name="Surface Pitch" start="32" end="43" type="uint"/>
     <field name="Surface Base Address" start="66" end="95" type="address"/>
     <field name="Surface End Address" start="98" end="127" type="address"/>
   </instruction>
 
-  <instruction name="3DSTATE_SO_DECL_LIST" bias="2">
+  <instruction name="3DSTATE_SO_DECL_LIST" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1448,19 +1442,18 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_STENCIL_BUFFER" bias="2" length="3">
+  <instruction name="3DSTATE_STENCIL_BUFFER" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="6"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="1"/>
-    <field name="Stencil Buffer Object Control State" start="57" end="60" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Stencil Buffer MOCS" start="57" end="60" type="uint"/>
+    <field name="MOCS" start="57" end="60" type="uint"/>
     <field name="Surface Pitch" start="32" end="48" type="uint"/>
     <field name="Surface Base Address" start="64" end="95" type="address"/>
   </instruction>
 
-  <instruction name="3DSTATE_STREAMOUT" bias="2" length="3">
+  <instruction name="3DSTATE_STREAMOUT" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1488,7 +1481,7 @@
     <field name="Stream 0 Vertex Read Length" start="64" end="68" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_TE" bias="2" length="4">
+  <instruction name="3DSTATE_TE" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1519,7 +1512,7 @@
     <field name="Maximum Tessellation Factor Not Odd" start="96" end="127" type="float"/>
   </instruction>
 
-  <instruction name="3DSTATE_URB_DS" bias="2" length="2">
+  <instruction name="3DSTATE_URB_DS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1530,7 +1523,7 @@
     <field name="DS Number of URB Entries" start="32" end="47" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_URB_GS" bias="2" length="2">
+  <instruction name="3DSTATE_URB_GS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1541,7 +1534,7 @@
     <field name="GS Number of URB Entries" start="32" end="47" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_URB_HS" bias="2" length="2">
+  <instruction name="3DSTATE_URB_HS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1552,7 +1545,7 @@
     <field name="HS Number of URB Entries" start="32" end="47" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_URB_VS" bias="2" length="2">
+  <instruction name="3DSTATE_URB_VS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1563,7 +1556,7 @@
     <field name="VS Number of URB Entries" start="32" end="47" type="uint"/>
   </instruction>
 
-  <instruction name="3DSTATE_VERTEX_BUFFERS" bias="2">
+  <instruction name="3DSTATE_VERTEX_BUFFERS" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1574,7 +1567,7 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_VERTEX_ELEMENTS" bias="2">
+  <instruction name="3DSTATE_VERTEX_ELEMENTS" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1585,7 +1578,7 @@
     </group>
   </instruction>
 
-  <instruction name="3DSTATE_VF_STATISTICS" bias="1" length="1">
+  <instruction name="3DSTATE_VF_STATISTICS" bias="1" length="1" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="1"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1593,7 +1586,7 @@
     <field name="Statistics Enable" start="0" end="0" type="bool"/>
   </instruction>
 
-  <instruction name="3DSTATE_VIEWPORT_STATE_POINTERS_CC" bias="2" length="2">
+  <instruction name="3DSTATE_VIEWPORT_STATE_POINTERS_CC" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1602,7 +1595,7 @@
     <field name="CC Viewport Pointer" start="37" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP" bias="2" length="2">
+  <instruction name="3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1611,7 +1604,7 @@
     <field name="SF Clip Viewport Pointer" start="38" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="3DSTATE_VS" bias="2" length="6">
+  <instruction name="3DSTATE_VS" bias="2" length="6" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1645,7 +1638,7 @@
     <field name="Enable" start="160" end="160" type="bool"/>
   </instruction>
 
-  <instruction name="3DSTATE_WM" bias="2" length="3">
+  <instruction name="3DSTATE_WM" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1710,7 +1703,7 @@
     </field>
   </instruction>
 
-  <instruction name="GPGPU_OBJECT" bias="2" length="8">
+  <instruction name="GPGPU_OBJECT" bias="2" length="8" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1734,7 +1727,7 @@
     <field name="Execution Mask" start="224" end="255" type="uint"/>
   </instruction>
 
-  <instruction name="GPGPU_WALKER" bias="2" length="11">
+  <instruction name="GPGPU_WALKER" bias="2" length="11" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1761,7 +1754,7 @@
     <field name="Bottom Execution Mask" start="320" end="351" type="uint"/>
   </instruction>
 
-  <instruction name="MEDIA_CURBE_LOAD" bias="2" length="4">
+  <instruction name="MEDIA_CURBE_LOAD" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1771,7 +1764,7 @@
     <field name="CURBE Data Start Address" start="96" end="127" type="uint"/>
   </instruction>
 
-  <instruction name="MEDIA_INTERFACE_DESCRIPTOR_LOAD" bias="2" length="4">
+  <instruction name="MEDIA_INTERFACE_DESCRIPTOR_LOAD" bias="2" length="4" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1781,7 +1774,7 @@
     <field name="Interface Descriptor Data Start Address" start="96" end="127" type="offset"/>
   </instruction>
 
-  <instruction name="MEDIA_OBJECT" bias="2">
+  <instruction name="MEDIA_OBJECT" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Media Command Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1813,7 +1806,7 @@
     </group>
   </instruction>
 
-  <instruction name="MEDIA_OBJECT_PRT" bias="2" length="16">
+  <instruction name="MEDIA_OBJECT_PRT" bias="2" length="16" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1831,7 +1824,7 @@
     </group>
   </instruction>
 
-  <instruction name="MEDIA_OBJECT_WALKER" bias="2">
+  <instruction name="MEDIA_OBJECT_WALKER" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -1881,7 +1874,7 @@
     </group>
   </instruction>
 
-  <instruction name="MEDIA_STATE_FLUSH" bias="2" length="2">
+  <instruction name="MEDIA_STATE_FLUSH" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1891,7 +1884,7 @@
     <field name="Interface Descriptor Offset" start="32" end="37" type="uint"/>
   </instruction>
 
-  <instruction name="MEDIA_VFE_STATE" bias="2" length="8">
+  <instruction name="MEDIA_VFE_STATE" bias="2" length="8" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Pipeline" start="27" end="28" type="uint" default="2"/>
     <field name="Media Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -1971,7 +1964,7 @@
     <field name="Batch Buffer Start Address" start="34" end="63" type="address"/>
   </instruction>
 
-  <instruction name="MI_CLFLUSH" bias="2">
+  <instruction name="MI_CLFLUSH" bias="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="39"/>
     <field name="Use Global GTT" start="22" end="22" type="bool"/>
@@ -1994,7 +1987,7 @@
     <field name="Compare Address" start="67" end="95" type="address"/>
   </instruction>
 
-  <instruction name="MI_FLUSH" bias="1" length="1">
+  <instruction name="MI_FLUSH" bias="1" length="1" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="4"/>
     <field name="Indirect State Pointers Disable" start="5" end="5" type="bool"/>
@@ -2058,6 +2051,8 @@
       <value name="XOR" value="3"/>
     </field>
     <field name="Compare Operation" start="0" end="1" type="uint" prefix="COMPARE">
+      <value name="TRUE" value="0"/>
+      <value name="FALSE" value="1"/>
       <value name="SRCS_EQUAL" value="2"/>
       <value name="DELTAS_EQUAL" value="3"/>
     </field>
@@ -2068,7 +2063,7 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="7"/>
   </instruction>
 
-  <instruction name="MI_REPORT_PERF_COUNT" bias="2" length="3">
+  <instruction name="MI_REPORT_PERF_COUNT" bias="2" length="3" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="40"/>
     <field name="DWord Length" start="0" end="5" type="uint" default="1"/>
@@ -2141,7 +2136,7 @@
     <field name="Topology Filter Value" start="0" end="5" type="3D_Prim_Topo_Type"/>
   </instruction>
 
-  <instruction name="MI_URB_CLEAR" bias="2" length="2">
+  <instruction name="MI_URB_CLEAR" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="25"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
@@ -2154,7 +2149,7 @@
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="2"/>
   </instruction>
 
-  <instruction name="MI_WAIT_FOR_EVENT" bias="1" length="1">
+  <instruction name="MI_WAIT_FOR_EVENT" bias="1" length="1" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="0"/>
     <field name="MI Command Opcode" start="23" end="28" type="uint" default="3"/>
     <field name="Display Pipe C Horizontal Blank Wait Enable" start="22" end="22" type="bool"/>
@@ -2177,7 +2172,7 @@
     <field name="Display Pipe A Scan Line Wait Enable" start="0" end="0" type="bool"/>
   </instruction>
 
-  <instruction name="PIPELINE_SELECT" bias="1" length="1">
+  <instruction name="PIPELINE_SELECT" bias="1" length="1" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="1"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -2189,7 +2184,7 @@
     </field>
   </instruction>
 
-  <instruction name="PIPE_CONTROL" bias="2" length="5">
+  <instruction name="PIPE_CONTROL" bias="2" length="5" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
@@ -2231,28 +2226,28 @@
     <field name="Immediate Data" start="96" end="159" type="uint"/>
   </instruction>
 
-  <instruction name="STATE_BASE_ADDRESS" bias="2" length="10">
+  <instruction name="STATE_BASE_ADDRESS" bias="2" length="10" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="1"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="8"/>
     <field name="General State Base Address" start="44" end="63" type="address"/>
-    <field name="General State Memory Object Control State" start="40" end="43" type="MEMORY_OBJECT_CONTROL_STATE"/>
-    <field name="Stateless Data Port Access Memory Object Control State" start="36" end="39" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="General State MOCS" start="40" end="43" type="uint"/>
+    <field name="Stateless Data Port Access MOCS" start="36" end="39" type="uint"/>
     <field name="Stateless Data Port Access Force Write Thru" start="35" end="35" type="uint"/>
     <field name="General State Base Address Modify Enable" start="32" end="32" type="bool"/>
     <field name="Surface State Base Address" start="76" end="95" type="address"/>
-    <field name="Surface State Memory Object Control State" start="72" end="75" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Surface State MOCS" start="72" end="75" type="uint"/>
     <field name="Surface State Base Address Modify Enable" start="64" end="64" type="bool"/>
     <field name="Dynamic State Base Address" start="108" end="127" type="address"/>
-    <field name="Dynamic State Memory Object Control State" start="104" end="107" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Dynamic State MOCS" start="104" end="107" type="uint"/>
     <field name="Dynamic State Base Address Modify Enable" start="96" end="96" type="bool"/>
     <field name="Indirect Object Base Address" start="140" end="159" type="address"/>
-    <field name="Indirect Object Memory Object Control State" start="136" end="139" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Indirect Object MOCS" start="136" end="139" type="uint"/>
     <field name="Indirect Object Base Address Modify Enable" start="128" end="128" type="bool"/>
     <field name="Instruction Base Address" start="172" end="191" type="address"/>
-    <field name="Instruction Memory Object Control State" start="168" end="171" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="Instruction MOCS" start="168" end="171" type="uint"/>
     <field name="Instruction Base Address Modify Enable" start="160" end="160" type="bool"/>
     <field name="General State Access Upper Bound" start="204" end="223" type="address"/>
     <field name="General State Access Upper Bound Modify Enable" start="192" end="192" type="bool"/>
@@ -2264,7 +2259,7 @@
     <field name="Instruction Access Upper Bound Modify Enable" start="288" end="288" type="bool"/>
   </instruction>
 
-  <instruction name="STATE_PREFETCH" bias="2" length="2">
+  <instruction name="STATE_PREFETCH" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="0"/>
@@ -2274,7 +2269,7 @@
     <field name="Prefetch Count" start="32" end="34" type="uint"/>
   </instruction>
 
-  <instruction name="STATE_SIP" bias="2" length="2">
+  <instruction name="STATE_SIP" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
@@ -2283,14 +2278,14 @@
     <field name="System Instruction Pointer" start="36" end="63" type="offset"/>
   </instruction>
 
-  <instruction name="SWTESS_BASE_ADDRESS" bias="2" length="2">
+  <instruction name="SWTESS_BASE_ADDRESS" bias="2" length="2" engine="render">
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="0"/>
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="3"/>
     <field name="DWord Length" start="0" end="7" type="uint" default="0"/>
     <field name="SW Tessellation Base Address" start="44" end="63" type="address"/>
-    <field name="SW Tessellation Memory Object Control State" start="40" end="43" type="MEMORY_OBJECT_CONTROL_STATE"/>
+    <field name="SW Tessellation MOCS" start="40" end="43" type="uint"/>
   </instruction>
 
   <register name="IA_VERTICES_COUNT" length="2" num="0x2310">
@@ -2487,6 +2482,38 @@
     <field name="C Low Bandwidth" start="14" end="14" type="uint"/>
     <field name="T Allocation" start="15" end="20" type="uint"/>
     <field name="T Low Bandwidth" start="21" end="21" type="uint"/>
+  </register>
+
+  <register name="SO_NUM_PRIMS_WRITTEN0" length="2" num="0x5200">
+    <field name="Num Prims Written Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_NUM_PRIMS_WRITTEN1" length="2" num="0x5208">
+    <field name="Num Prims Written Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_NUM_PRIMS_WRITTEN2" length="2" num="0x5210">
+    <field name="Num Prims Written Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_NUM_PRIMS_WRITTEN3" length="2" num="0x5218">
+    <field name="Num Prims Written Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_PRIM_STORAGE_NEEDED0" length="2" num="0x5240">
+    <field name="Prim Storage Needed Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_PRIM_STORAGE_NEEDED1" length="2" num="0x5248">
+    <field name="Prim Storage Needed Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_PRIM_STORAGE_NEEDED2" length="2" num="0x5250">
+    <field name="Prim Storage Needed Count" start="0" end="63" type="uint"/>
+  </register>
+
+  <register name="SO_PRIM_STORAGE_NEEDED3" length="2" num="0x5258">
+    <field name="Prim Storage Needed Count" start="0" end="63" type="uint"/>
   </register>
 
   <register name="SO_WRITE_OFFSET0" length="1" num="0x5280">

@@ -94,6 +94,14 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
 #endif
 }
 
+static uint64_t
+blorp_get_surface_address(struct blorp_batch *blorp_batch,
+                          struct blorp_address address)
+{
+   /* We'll let blorp_surface_reloc write the address. */
+   return 0ull;
+}
+
 #if GEN_GEN >= 7 && GEN_GEN < 10
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)
@@ -197,7 +205,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                            const struct blorp_address *addrs,
                                            unsigned num_vbs)
 {
-#if GEN_GEN >= 8
+#if GEN_GEN >= 8 && GEN_GEN < 11
    struct brw_context *brw = batch->driver_batch;
    bool need_invalidate = false;
 

@@ -289,8 +289,9 @@ aub_mem_get_ggtt_bo(void *_mem, uint64_t address)
          continue;
 
       uint32_t map_offset = i->virt_addr - address;
-      void *res = mmap((uint8_t *)bo.map + map_offset, 4096, PROT_READ,
-                       MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
+      MAYBE_UNUSED void *res =
+            mmap((uint8_t *)bo.map + map_offset, 4096, PROT_READ,
+                  MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
       assert(res != MAP_FAILED);
    }
 
@@ -354,8 +355,9 @@ aub_mem_get_ppgtt_bo(void *_mem, uint64_t address)
    for (uint64_t page = address; page < end; page += 4096) {
       struct phys_mem *phys_mem = ppgtt_walk(mem, mem->pml4, page);
 
-      void *res = mmap((uint8_t *)bo.map + (page - bo.addr), 4096, PROT_READ,
-                       MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
+      MAYBE_UNUSED void *res =
+            mmap((uint8_t *)bo.map + (page - bo.addr), 4096, PROT_READ,
+                  MAP_SHARED | MAP_FIXED, mem->mem_fd, phys_mem->fd_offset);
       assert(res != MAP_FAILED);
    }
 

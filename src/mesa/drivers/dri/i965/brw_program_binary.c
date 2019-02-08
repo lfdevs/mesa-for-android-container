@@ -206,14 +206,14 @@ brw_program_deserialize_driver_blob(struct gl_context *ctx,
          break;
       switch ((enum driver_cache_blob_part)part_type) {
       case GEN_PART: {
-         uint32_t gen_size = blob_read_uint32(&reader);
+         MAYBE_UNUSED uint32_t gen_size = blob_read_uint32(&reader);
          assert(!reader.overrun &&
                 (uintptr_t)(reader.end - reader.current) > gen_size);
          deserialize_gen_program(&reader, ctx, prog, stage);
          break;
       }
       case NIR_PART: {
-         uint32_t nir_size = blob_read_uint32(&reader);
+         MAYBE_UNUSED uint32_t nir_size = blob_read_uint32(&reader);
          assert(!reader.overrun &&
                 (uintptr_t)(reader.end - reader.current) > nir_size);
          const struct nir_shader_compiler_options *options =

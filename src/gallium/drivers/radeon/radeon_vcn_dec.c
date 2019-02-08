@@ -822,8 +822,8 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	decode->bsd_size = align(dec->bs_size, 128);
 	decode->dpb_size = dec->dpb.res->buf->size;
 	decode->dt_size =
-		r600_resource(((struct vl_video_buffer *)target)->resources[0])->buf->size +
-		r600_resource(((struct vl_video_buffer *)target)->resources[1])->buf->size;
+		si_resource(((struct vl_video_buffer *)target)->resources[0])->buf->size +
+		si_resource(((struct vl_video_buffer *)target)->resources[1])->buf->size;
 
 	decode->sct_size = 0;
 	decode->sc_coeff_size = 0;
@@ -941,7 +941,9 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 			si_vid_clear_buffer(dec->base.context, &dec->ctx);
 
 			/* ctx needs probs table */
-			ptr = dec->ws->buffer_map(dec->ctx.res->buf, dec->cs, PIPE_TRANSFER_WRITE);
+			ptr = dec->ws->buffer_map(
+				dec->ctx.res->buf, dec->cs,
+				PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 			fill_probs_table(ptr);
 			dec->ws->buffer_unmap(dec->ctx.res->buf);
 		}
@@ -1034,7 +1036,8 @@ static void map_msg_fb_it_probs_buf(struct radeon_decoder *dec)
 	buf = &dec->msg_fb_it_probs_buffers[dec->cur_buffer];
 
 	/* and map it for CPU access */
-	ptr = dec->ws->buffer_map(buf->res->buf, dec->cs, PIPE_TRANSFER_WRITE);
+	ptr = dec->ws->buffer_map(buf->res->buf, dec->cs,
+				  PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 
 	/* calc buffer offsets */
 	dec->msg = ptr;
@@ -1312,7 +1315,7 @@ static void radeon_dec_begin_frame(struct pipe_video_codec *decoder,
 	dec->bs_size = 0;
 	dec->bs_ptr = dec->ws->buffer_map(
 		dec->bs_buffers[dec->cur_buffer].res->buf,
-		dec->cs, PIPE_TRANSFER_WRITE);
+		dec->cs, PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 }
 
 /**
@@ -1357,8 +1360,9 @@ static void radeon_dec_decode_bitstream(struct pipe_video_codec *decoder,
 				return;
 			}
 
-			dec->bs_ptr = dec->ws->buffer_map(buf->res->buf, dec->cs,
-							  PIPE_TRANSFER_WRITE);
+			dec->bs_ptr = dec->ws->buffer_map(
+				buf->res->buf, dec->cs,
+				PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 			if (!dec->bs_ptr)
 				return;
 
@@ -1507,7 +1511,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 	dec->stream_handle = si_vid_alloc_stream_handle();
 	dec->screen = context->screen;
 	dec->ws = ws;
-	dec->cs = ws->cs_create(sctx->ctx, ring, NULL, NULL);
+	dec->cs = ws->cs_create(sctx->ctx, ring, NULL, NULL, false);
 	if (!dec->cs) {
 		RVID_ERR("Can't get command submission context.\n");
 		goto error;
@@ -1543,7 +1547,9 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 			void *ptr;
 
 			buf = &dec->msg_fb_it_probs_buffers[i];
-			ptr = dec->ws->buffer_map(buf->res->buf, dec->cs, PIPE_TRANSFER_WRITE);
+			ptr = dec->ws->buffer_map(
+				buf->res->buf, dec->cs,
+				PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 			ptr += FB_BUFFER_OFFSET + FB_BUFFER_SIZE;
 			fill_probs_table(ptr);
 			dec->ws->buffer_unmap(buf->res->buf);

@@ -132,68 +132,6 @@ lp_build_sample_wrap_nearest_int(struct lp_build_sample_context *bld,
 
 
 /**
- * Build LLVM code for texture coord wrapping, for nearest filtering,
- * for float texcoords.
- * \param coord  the incoming texcoord (s,t or r)
- * \param length  the texture size along one dimension
- * \param offset  the texel offset along the coord axis
- * \param is_pot  if TRUE, length is a power of two
- * \param wrap_mode  one of PIPE_TEX_WRAP_x
- * \param icoord  the texcoord after wrapping, as int
- */
-static void
-lp_build_sample_wrap_nearest_float(struct lp_build_sample_context *bld,
-                                   LLVMValueRef coord,
-                                   LLVMValueRef length,
-                                   LLVMValueRef offset,
-                                   boolean is_pot,
-                                   unsigned wrap_mode,
-                                   LLVMValueRef *icoord)
-{
-   struct lp_build_context *coord_bld = &bld->coord_bld;
-   LLVMValueRef length_minus_one;
-
-   switch(wrap_mode) {
-   case PIPE_TEX_WRAP_REPEAT:
-      if (offset) {
-         /* this is definitely not ideal for POT case */
-         offset = lp_build_int_to_float(coord_bld, offset);
-         offset = lp_build_div(coord_bld, offset, length);
-         coord = lp_build_add(coord_bld, coord, offset);
-      }
-      /* take fraction, unnormalize */
-      coord = lp_build_fract_safe(coord_bld, coord);
-      coord = lp_build_mul(coord_bld, coord, length);
-      *icoord = lp_build_itrunc(coord_bld, coord);
-      break;
-   case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
-      length_minus_one = lp_build_sub(coord_bld, length, coord_bld->one);
-      if (bld->static_sampler_state->normalized_coords) {
-         /* scale coord to length */
-         coord = lp_build_mul(coord_bld, coord, length);
-      }
-      if (offset) {
-         offset = lp_build_int_to_float(coord_bld, offset);
-         coord = lp_build_add(coord_bld, coord, offset);
-      }
-      coord = lp_build_clamp(coord_bld, coord, coord_bld->zero,
-                             length_minus_one);
-      *icoord = lp_build_itrunc(coord_bld, coord);
-      break;
-
-   case PIPE_TEX_WRAP_CLAMP:
-   case PIPE_TEX_WRAP_CLAMP_TO_BORDER:
-   case PIPE_TEX_WRAP_MIRROR_REPEAT:
-   case PIPE_TEX_WRAP_MIRROR_CLAMP:
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_EDGE:
-   case PIPE_TEX_WRAP_MIRROR_CLAMP_TO_BORDER:
-   default:
-      assert(0);
-   }
-}
-
-
-/**
  * Helper to compute the first coord and the weight for
  * linear wrap repeat npot textures
  */
@@ -425,129 +363,6 @@ lp_build_sample_wrap_linear_int(struct lp_build_sample_context *bld,
 
 
 /**
- * Build LLVM code for texture coord wrapping, for linear filtering,
- * for float texcoords.
- * \param block_length  is the length of the pixel block along the
- *                      coordinate axis
- * \param coord  the incoming texcoord (s,t or r)
- * \param length  the texture size along one dimension
- * \param offset  the texel offset along the coord axis
- * \param is_pot  if TRUE, length is a power of two
- * \param wrap_mode  one of PIPE_TEX_WRAP_x
- * \param coord0  the first texcoord after wrapping, as int
- * \param coord1  the second texcoord after wrapping, as int
- * \param weight  the filter weight as int (0-255)
- * \param force_nearest  if this coord actually uses nearest filtering
- */
-static void
-lp_build_sample_wrap_linear_float(struct lp_build_sample_context *bld,
-                                  unsigned block_length,
-                                  LLVMValueRef coord,
-                                  LLVMValueRef length,
-                                  LLVMValueRef offset,
-                                  boolean is_pot,
-                                  unsigned wrap_mode,
-                                  LLVMValueRef *coord0,
-                                  LLVMValueRef *coord1,
-                                  LLVMValueRef *weight,
-                                  unsigned force_nearest)
-{
-   struct lp_build_context *int_coord_bld = &bld->int_coord_bld;
-   struct lp_build_context *coord_bld = &bld->coord_bld;
-   LLVMBuilderRef builder = bld->gallivm->builder;
-   LLVMValueRef half = lp_build_const_vec(bld->gallivm, coord_bld->type, 0.5);
-   LLVMValueRef length_minus_one = lp_build_sub(coord_bld, length, coord_bld->one);
-
-   switch(wrap_mode) {
-   case PIPE_TEX_WRAP_REPEAT:
-      if (is_pot) {
-         /* mul by size and subtract 0.5 */
-         coord = lp_build_mul(coord_bld, coord, length);
-         if (offset) {
-            offset = lp_build_int_to_float(coord_bld, offset);
-            coord = lp_build_add(coord_bld, coord, offset);
-         }
-         if (!force_nearest)
-            coord = lp_build_sub(coord_bld, coord, half);
-         *coord1 = lp_build_add(coord_bld, coord, coord_bld->one);
-         /* convert to int, compute lerp weight */
-         lp_build_ifloor_fract(coord_bld, coord, coord0, weight);
-         *coord1 = lp_build_ifloor(coord_bld, *coord1);
-         /* repeat wrap */
-         length_minus_one = lp_build_itrunc(coord_bld, length_minus_one);
-         *coord0 = LLVMBuildAnd(builder, *coord0, length_minus_one, "");
-         *coord1 = LLVMBuildAnd(builder, *coord1, length_minus_one, "");
-      }
-      else {
-         LLVMValueRef mask;
-         if (offset) {
-            offset = lp_build_int_to_float(coord_bld, offset);
-            offset = lp_build_div(coord_bld, offset, length);
-            coord = lp_build_add(coord_bld, coord, offset);
-         }
-         /* wrap with normalized floats is just fract */
-         coord = lp_build_fract(coord_bld, coord);
-         /* unnormalize */
-         coord = lp_build_mul(coord_bld, coord, length);
-         /*
-          * we avoided the 0.5/length division, have to fix up wrong
-          * edge cases with selects
-          */
-         *coord1 = lp_build_add(coord_bld, coord, half);
-         coord = lp_build_sub(coord_bld, coord, half);
-         *weight = lp_build_fract(coord_bld, coord);
-         /*
-          * It is important for this comparison to be unordered
-          * (or need fract_safe above).
-          */
-         mask = lp_build_compare(coord_bld->gallivm, coord_bld->type,
-                                 PIPE_FUNC_LESS, coord, coord_bld->zero);
-         *coord0 = lp_build_select(coord_bld, mask, length_minus_one, coord);
-         *coord0 = lp_build_itrunc(coord_bld, *coord0);
-         mask = lp_build_compare(coord_bld->gallivm, coord_bld->type,
-                                 PIPE_FUNC_LESS, *coord1, length);
-         *coord1 = lp_build_select(coord_bld, mask, *coord1, coord_bld->zero);
-         *coord1 = lp_build_itrunc(coord_bld, *coord1);
-      }
-      break;
-   case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
-      if (bld->static_sampler_state->normalized_coords) {
-         /* mul by tex size */
-         coord = lp_build_mul(coord_bld, coord, length);
-      }
-      if (offset) {
-         offset = lp_build_int_to_float(coord_bld, offset);
-         coord = lp_build_add(coord_bld, coord, offset);
-      }
-      /* subtract 0.5 */
-      if (!force_nearest) {
-         coord = lp_build_sub(coord_bld, coord, half);
-      }
-      /* clamp to [0, length - 1] */
-      coord = lp_build_min_ext(coord_bld, coord, length_minus_one,
-                               GALLIVM_NAN_RETURN_OTHER_SECOND_NONNAN);
-      coord = lp_build_max(coord_bld, coord, coord_bld->zero);
-      *coord1 = lp_build_add(coord_bld, coord, coord_bld->one);
-      /* convert to int, compute lerp weight */
-      lp_build_ifloor_fract(coord_bld, coord, coord0, weight);
-      /* coord1 = min(coord1, length-1) */
-      *coord1 = lp_build_min(coord_bld, *coord1, length_minus_one);
-      *coord1 = lp_build_itrunc(coord_bld, *coord1);
-      break;
-   default:
-      assert(0);
-      *coord0 = int_coord_bld->zero;
-      *coord1 = int_coord_bld->zero;
-      *weight = coord_bld->zero;
-      break;
-   }
-   *weight = lp_build_mul_imm(coord_bld, *weight, 256);
-   *weight = lp_build_itrunc(coord_bld, *weight);
-   return;
-}
-
-
-/**
  * Fetch texels for image with nearest sampling.
  * Return filtered color as two vectors of 16-bit fixed point values.
  */
@@ -726,96 +541,6 @@ lp_build_sample_image_nearest(struct lp_build_sample_context *bld,
       z_offset = lp_build_mul(&bld->int_coord_bld, r, img_stride_vec);
       offset = lp_build_add(&bld->int_coord_bld, offset, z_offset);
    }
-   if (mipoffsets) {
-      offset = lp_build_add(&bld->int_coord_bld, offset, mipoffsets);
-   }
-
-   lp_build_sample_fetch_image_nearest(bld, data_ptr, offset,
-                                       x_subcoord, y_subcoord,
-                                       colors);
-}
-
-
-/**
- * Sample a single texture image with nearest sampling.
- * If sampling a cube texture, r = cube face in [0,5].
- * Return filtered color as two vectors of 16-bit fixed point values.
- * Does address calcs (except offsets) with floats.
- * Useful for AVX which has support for 8x32 floats but not 8x32 ints.
- */
-static void
-lp_build_sample_image_nearest_afloat(struct lp_build_sample_context *bld,
-                                     LLVMValueRef int_size,
-                                     LLVMValueRef row_stride_vec,
-                                     LLVMValueRef img_stride_vec,
-                                     LLVMValueRef data_ptr,
-                                     LLVMValueRef mipoffsets,
-                                     LLVMValueRef s,
-                                     LLVMValueRef t,
-                                     LLVMValueRef r,
-                                     const LLVMValueRef *offsets,
-                                     LLVMValueRef *colors)
-   {
-   const unsigned dims = bld->dims;
-   LLVMValueRef width_vec, height_vec, depth_vec;
-   LLVMValueRef offset;
-   LLVMValueRef x_subcoord, y_subcoord;
-   LLVMValueRef x_icoord = NULL, y_icoord = NULL, z_icoord = NULL;
-   LLVMValueRef flt_size;
-
-   flt_size = lp_build_int_to_float(&bld->float_size_bld, int_size);
-
-   lp_build_extract_image_sizes(bld,
-                                &bld->float_size_bld,
-                                bld->coord_type,
-                                flt_size,
-                                &width_vec,
-                                &height_vec,
-                                &depth_vec);
-
-   /* Do texcoord wrapping */
-   lp_build_sample_wrap_nearest_float(bld,
-                                      s, width_vec, offsets[0],
-                                      bld->static_texture_state->pot_width,
-                                      bld->static_sampler_state->wrap_s,
-                                      &x_icoord);
-
-   if (dims >= 2) {
-      lp_build_sample_wrap_nearest_float(bld,
-                                         t, height_vec, offsets[1],
-                                         bld->static_texture_state->pot_height,
-                                         bld->static_sampler_state->wrap_t,
-                                         &y_icoord);
-
-      if (dims >= 3) {
-         lp_build_sample_wrap_nearest_float(bld,
-                                            r, depth_vec, offsets[2],
-                                            bld->static_texture_state->pot_depth,
-                                            bld->static_sampler_state->wrap_r,
-                                            &z_icoord);
-      }
-   }
-   if (has_layer_coord(bld->static_texture_state->target)) {
-      z_icoord = r;
-   }
-
-   /*
-    * From here on we deal with ints, and we should split up the 256bit
-    * vectors manually for better generated code.
-    */
-
-   /*
-    * compute texel offsets -
-    * cannot do offset calc with floats, difficult for block-based formats,
-    * and not enough precision anyway.
-    */
-   lp_build_sample_offset(&bld->int_coord_bld,
-                          bld->format_desc,
-                          x_icoord, y_icoord,
-                          z_icoord,
-                          row_stride_vec, img_stride_vec,
-                          &offset,
-                          &x_subcoord, &y_subcoord);
    if (mipoffsets) {
       offset = lp_build_add(&bld->int_coord_bld, offset, mipoffsets);
    }
@@ -1213,175 +938,6 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
 
 
 /**
- * Sample a single texture image with (bi-)(tri-)linear sampling.
- * Return filtered color as two vectors of 16-bit fixed point values.
- * Does address calcs (except offsets) with floats.
- * Useful for AVX which has support for 8x32 floats but not 8x32 ints.
- */
-static void
-lp_build_sample_image_linear_afloat(struct lp_build_sample_context *bld,
-                                    LLVMValueRef int_size,
-                                    LLVMValueRef row_stride_vec,
-                                    LLVMValueRef img_stride_vec,
-                                    LLVMValueRef data_ptr,
-                                    LLVMValueRef mipoffsets,
-                                    LLVMValueRef s,
-                                    LLVMValueRef t,
-                                    LLVMValueRef r,
-                                    const LLVMValueRef *offsets,
-                                    LLVMValueRef *colors)
-{
-   const unsigned dims = bld->dims;
-   LLVMValueRef width_vec, height_vec, depth_vec;
-   LLVMValueRef s_fpart;
-   LLVMValueRef t_fpart = NULL;
-   LLVMValueRef r_fpart = NULL;
-   LLVMValueRef x_stride, y_stride, z_stride;
-   LLVMValueRef x_offset0, x_offset1;
-   LLVMValueRef y_offset0, y_offset1;
-   LLVMValueRef z_offset0, z_offset1;
-   LLVMValueRef offset[2][2][2]; /* [z][y][x] */
-   LLVMValueRef x_subcoord[2], y_subcoord[2];
-   LLVMValueRef flt_size;
-   LLVMValueRef x_icoord0, x_icoord1;
-   LLVMValueRef y_icoord0, y_icoord1;
-   LLVMValueRef z_icoord0, z_icoord1;
-   unsigned x, y, z;
-
-   flt_size = lp_build_int_to_float(&bld->float_size_bld, int_size);
-
-   lp_build_extract_image_sizes(bld,
-                                &bld->float_size_bld,
-                                bld->coord_type,
-                                flt_size,
-                                &width_vec,
-                                &height_vec,
-                                &depth_vec);
-
-   /* do texcoord wrapping and compute texel offsets */
-   lp_build_sample_wrap_linear_float(bld,
-                                     bld->format_desc->block.width,
-                                     s, width_vec, offsets[0],
-                                     bld->static_texture_state->pot_width,
-                                     bld->static_sampler_state->wrap_s,
-                                     &x_icoord0, &x_icoord1,
-                                     &s_fpart,
-                                     bld->static_sampler_state->force_nearest_s);
-
-   if (dims >= 2) {
-      lp_build_sample_wrap_linear_float(bld,
-                                        bld->format_desc->block.height,
-                                        t, height_vec, offsets[1],
-                                        bld->static_texture_state->pot_height,
-                                        bld->static_sampler_state->wrap_t,
-                                        &y_icoord0, &y_icoord1,
-                                        &t_fpart,
-                                        bld->static_sampler_state->force_nearest_t);
-
-      if (dims >= 3) {
-         lp_build_sample_wrap_linear_float(bld,
-                                           1, /* block length (depth) */
-                                           r, depth_vec, offsets[2],
-                                           bld->static_texture_state->pot_depth,
-                                           bld->static_sampler_state->wrap_r,
-                                           &z_icoord0, &z_icoord1,
-                                           &r_fpart, 0);
-      }
-   }
-
-   /*
-    * From here on we deal with ints, and we should split up the 256bit
-    * vectors manually for better generated code.
-    */
-
-   /* get pixel, row and image strides */
-   x_stride = lp_build_const_vec(bld->gallivm,
-                                 bld->int_coord_bld.type,
-                                 bld->format_desc->block.bits/8);
-   y_stride = row_stride_vec;
-   z_stride = img_stride_vec;
-
-   /*
-    * compute texel offset -
-    * cannot do offset calc with floats, difficult for block-based formats,
-    * and not enough precision anyway.
-    */
-   lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                  bld->format_desc->block.width,
-                                  x_icoord0, x_stride,
-                                  &x_offset0, &x_subcoord[0]);
-   lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                  bld->format_desc->block.width,
-                                  x_icoord1, x_stride,
-                                  &x_offset1, &x_subcoord[1]);
-
-   /* add potential cube/array/mip offsets now as they are constant per pixel */
-   if (has_layer_coord(bld->static_texture_state->target)) {
-      LLVMValueRef z_offset;
-      z_offset = lp_build_mul(&bld->int_coord_bld, r, img_stride_vec);
-      /* The r coord is the cube face in [0,5] or array layer */
-      x_offset0 = lp_build_add(&bld->int_coord_bld, x_offset0, z_offset);
-      x_offset1 = lp_build_add(&bld->int_coord_bld, x_offset1, z_offset);
-   }
-   if (mipoffsets) {
-      x_offset0 = lp_build_add(&bld->int_coord_bld, x_offset0, mipoffsets);
-      x_offset1 = lp_build_add(&bld->int_coord_bld, x_offset1, mipoffsets);
-   }
-
-   for (z = 0; z < 2; z++) {
-      for (y = 0; y < 2; y++) {
-         offset[z][y][0] = x_offset0;
-         offset[z][y][1] = x_offset1;
-      }
-   }
-
-   if (dims >= 2) {
-      lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                     bld->format_desc->block.height,
-                                     y_icoord0, y_stride,
-                                     &y_offset0, &y_subcoord[0]);
-      lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                     bld->format_desc->block.height,
-                                     y_icoord1, y_stride,
-                                     &y_offset1, &y_subcoord[1]);
-      for (z = 0; z < 2; z++) {
-         for (x = 0; x < 2; x++) {
-            offset[z][0][x] = lp_build_add(&bld->int_coord_bld,
-                                           offset[z][0][x], y_offset0);
-            offset[z][1][x] = lp_build_add(&bld->int_coord_bld,
-                                           offset[z][1][x], y_offset1);
-         }
-      }
-   }
-
-   if (dims >= 3) {
-      LLVMValueRef z_subcoord[2];
-      lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                     1,
-                                     z_icoord0, z_stride,
-                                     &z_offset0, &z_subcoord[0]);
-      lp_build_sample_partial_offset(&bld->int_coord_bld,
-                                     1,
-                                     z_icoord1, z_stride,
-                                     &z_offset1, &z_subcoord[1]);
-      for (y = 0; y < 2; y++) {
-         for (x = 0; x < 2; x++) {
-            offset[0][y][x] = lp_build_add(&bld->int_coord_bld,
-                                           offset[0][y][x], z_offset0);
-            offset[1][y][x] = lp_build_add(&bld->int_coord_bld,
-                                           offset[1][y][x], z_offset1);
-         }
-      }
-   }
-
-   lp_build_sample_fetch_image_linear(bld, data_ptr, offset,
-                                      x_subcoord, y_subcoord,
-                                      s_fpart, t_fpart, r_fpart,
-                                      colors);
-}
-
-
-/**
  * Sample the texture/mipmap using given image filter and mip filter.
  * data0_ptr and data1_ptr point to the two mipmap levels to sample
  * from.  width0/1_vec, height0/1_vec, depth0/1_vec indicate their sizes.
@@ -1413,9 +969,6 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
    LLVMValueRef mipoff1 = NULL;
    LLVMValueRef colors0;
    LLVMValueRef colors1;
-   boolean use_floats = util_cpu_caps.has_avx &&
-                        !util_cpu_caps.has_avx2 &&
-                        bld->coord_type.length > 4;
 
    /* sample the first mipmap level */
    lp_build_mipmap_level_sizes(bld, ilevel0,
@@ -1430,39 +983,20 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
       mipoff0 = lp_build_get_mip_offsets(bld, ilevel0);
    }
 
-   if (use_floats) {
-      if (img_filter == PIPE_TEX_FILTER_NEAREST) {
-         lp_build_sample_image_nearest_afloat(bld,
-                                              size0,
-                                              row_stride0_vec, img_stride0_vec,
-                                              data_ptr0, mipoff0, s, t, r, offsets,
-                                              &colors0);
-      }
-      else {
-         assert(img_filter == PIPE_TEX_FILTER_LINEAR);
-         lp_build_sample_image_linear_afloat(bld,
-                                             size0,
-                                             row_stride0_vec, img_stride0_vec,
-                                             data_ptr0, mipoff0, s, t, r, offsets,
-                                             &colors0);
-      }
+   if (img_filter == PIPE_TEX_FILTER_NEAREST) {
+      lp_build_sample_image_nearest(bld,
+                                    size0,
+                                    row_stride0_vec, img_stride0_vec,
+                                    data_ptr0, mipoff0, s, t, r, offsets,
+                                    &colors0);
    }
    else {
-      if (img_filter == PIPE_TEX_FILTER_NEAREST) {
-         lp_build_sample_image_nearest(bld,
-                                       size0,
-                                       row_stride0_vec, img_stride0_vec,
-                                       data_ptr0, mipoff0, s, t, r, offsets,
-                                       &colors0);
-      }
-      else {
-         assert(img_filter == PIPE_TEX_FILTER_LINEAR);
-         lp_build_sample_image_linear(bld,
-                                      size0,
-                                      row_stride0_vec, img_stride0_vec,
-                                      data_ptr0, mipoff0, s, t, r, offsets,
-                                      &colors0);
-      }
+      assert(img_filter == PIPE_TEX_FILTER_LINEAR);
+      lp_build_sample_image_linear(bld,
+                                   size0,
+                                   row_stride0_vec, img_stride0_vec,
+                                   data_ptr0, mipoff0, s, t, r, offsets,
+                                   &colors0);
    }
 
    /* Store the first level's colors in the output variables */
@@ -1521,37 +1055,19 @@ lp_build_sample_mipmap(struct lp_build_sample_context *bld,
             mipoff1 = lp_build_get_mip_offsets(bld, ilevel1);
          }
 
-         if (use_floats) {
-            if (img_filter == PIPE_TEX_FILTER_NEAREST) {
-               lp_build_sample_image_nearest_afloat(bld,
-                                                    size1,
-                                                    row_stride1_vec, img_stride1_vec,
-                                                    data_ptr1, mipoff1, s, t, r, offsets,
-                                                    &colors1);
-            }
-            else {
-               lp_build_sample_image_linear_afloat(bld,
-                                                   size1,
-                                                   row_stride1_vec, img_stride1_vec,
-                                                   data_ptr1, mipoff1, s, t, r, offsets,
-                                                   &colors1);
-            }
+         if (img_filter == PIPE_TEX_FILTER_NEAREST) {
+            lp_build_sample_image_nearest(bld,
+                                          size1,
+                                          row_stride1_vec, img_stride1_vec,
+                                          data_ptr1, mipoff1, s, t, r, offsets,
+                                          &colors1);
          }
          else {
-            if (img_filter == PIPE_TEX_FILTER_NEAREST) {
-               lp_build_sample_image_nearest(bld,
-                                             size1,
-                                             row_stride1_vec, img_stride1_vec,
-                                             data_ptr1, mipoff1, s, t, r, offsets,
-                                             &colors1);
-            }
-            else {
-               lp_build_sample_image_linear(bld,
-                                            size1,
-                                            row_stride1_vec, img_stride1_vec,
-                                            data_ptr1, mipoff1, s, t, r, offsets,
-                                            &colors1);
-            }
+            lp_build_sample_image_linear(bld,
+                                         size1,
+                                         row_stride1_vec, img_stride1_vec,
+                                         data_ptr1, mipoff1, s, t, r, offsets,
+                                         &colors1);
          }
 
          /* interpolate samples from the two mipmap levels */

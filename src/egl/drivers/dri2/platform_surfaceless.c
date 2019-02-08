@@ -350,8 +350,6 @@ dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
    const char* err;
    bool driver_loaded = false;
 
-   loader_set_logger(_eglLog);
-
    dri2_dpy = calloc(1, sizeof *dri2_dpy);
    if (!dri2_dpy)
       return _eglError(EGL_BAD_ALLOC, "eglInitialize");

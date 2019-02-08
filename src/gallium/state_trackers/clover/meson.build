@@ -53,7 +53,7 @@ libclllvm = static_library(
     '-DLIBCLC_LIBEXECDIR="@0@/"'.format(dep_clc.get_pkgconfig_variable('libexecdir')),
     '-DCLANG_RESOURCE_DIR="@0@"'.format(join_paths(
       dep_llvm.get_configtool_variable('libdir'), 'clang',
-      dep_llvm.get_configtool_variable('version'), 'include',
+      dep_llvm.version(), 'include',
     )),
   ],
   dependencies : [dep_llvm, dep_elf],

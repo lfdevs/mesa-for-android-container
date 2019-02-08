@@ -97,11 +97,13 @@ bool rvid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
 	if (!rvid_create_buffer(screen, new_buf, new_size, new_buf->usage))
 		goto error;
 
-	src = ws->buffer_map(old_buf.res->buf, cs, PIPE_TRANSFER_READ);
+	src = ws->buffer_map(old_buf.res->buf, cs,
+			     PIPE_TRANSFER_READ | RADEON_TRANSFER_TEMPORARY);
 	if (!src)
 		goto error;
 
-	dst = ws->buffer_map(new_buf->res->buf, cs, PIPE_TRANSFER_WRITE);
+	dst = ws->buffer_map(new_buf->res->buf, cs,
+			     PIPE_TRANSFER_WRITE | RADEON_TRANSFER_TEMPORARY);
 	if (!dst)
 		goto error;
 

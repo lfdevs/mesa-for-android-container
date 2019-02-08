@@ -31,6 +31,7 @@
 #include "v3d_screen.h"
 #include "v3d_context.h"
 #include "v3d_tiling.h"
+#include "broadcom/common/v3d_cpu_tiling.h"
 
 /** Return the width in pixels of a 64-byte microtile. */
 uint32_t
@@ -78,9 +79,8 @@ static inline uint32_t
 v3d_get_utile_pixel_offset(uint32_t cpp, uint32_t x, uint32_t y)
 {
         uint32_t utile_w = v3d_utile_width(cpp);
-        uint32_t utile_h = v3d_utile_height(cpp);
 
-        assert(x < utile_w && y < utile_h);
+        assert(x < utile_w && y < v3d_utile_height(cpp));
 
         return x * cpp + y * utile_w * cpp;
 }
@@ -211,15 +211,19 @@ v3d_get_uif_no_xor_pixel_offset(uint32_t cpp, uint32_t image_h,
         return v3d_get_uif_pixel_offset(cpp, image_h, x, y, false);
 }
 
+/* Loads/stores non-utile-aligned boxes by walking over the destination
+ * rectangle, computing the address on the GPU, and storing/loading a pixel at
+ * a time.
+ */
 static inline void
-v3d_move_pixels_general_percpp(void *gpu, uint32_t gpu_stride,
-                               void *cpu, uint32_t cpu_stride,
-                               int cpp, uint32_t image_h,
-                               const struct pipe_box *box,
-                               uint32_t (*get_pixel_offset)(uint32_t cpp,
-                                                            uint32_t image_h,
-                                                            uint32_t x, uint32_t y),
-                               bool is_load)
+v3d_move_pixels_unaligned(void *gpu, uint32_t gpu_stride,
+                          void *cpu, uint32_t cpu_stride,
+                          int cpp, uint32_t image_h,
+                          const struct pipe_box *box,
+                          uint32_t (*get_pixel_offset)(uint32_t cpp,
+                                                       uint32_t image_h,
+                                                       uint32_t x, uint32_t y),
+                          bool is_load)
 {
         for (uint32_t y = 0; y < box->height; y++) {
                 void *cpu_row = cpu + y * cpu_stride;
@@ -245,6 +249,107 @@ v3d_move_pixels_general_percpp(void *gpu, uint32_t gpu_stride,
                                        cpp);
                         }
                 }
+        }
+}
+
+/* Breaks the image down into utiles and calls either the fast whole-utile
+ * load/store functions, or the unaligned fallback case.
+ */
+static inline void
+v3d_move_pixels_general_percpp(void *gpu, uint32_t gpu_stride,
+                               void *cpu, uint32_t cpu_stride,
+                               int cpp, uint32_t image_h,
+                               const struct pipe_box *box,
+                               uint32_t (*get_pixel_offset)(uint32_t cpp,
+                                                            uint32_t image_h,
+                                                            uint32_t x, uint32_t y),
+                               bool is_load)
+{
+        uint32_t utile_w = v3d_utile_width(cpp);
+        uint32_t utile_h = v3d_utile_height(cpp);
+        uint32_t utile_gpu_stride = utile_w * cpp;
+        uint32_t x1 = box->x;
+        uint32_t y1 = box->y;
+        uint32_t x2 = box->x + box->width;
+        uint32_t y2 = box->y + box->height;
+        uint32_t align_x1 = align(x1, utile_w);
+        uint32_t align_y1 = align(y1, utile_h);
+        uint32_t align_x2 = x2 & ~(utile_w - 1);
+        uint32_t align_y2 = y2 & ~(utile_h - 1);
+
+        /* Load/store all the whole utiles first. */
+        for (uint32_t y = align_y1; y < align_y2; y += utile_h) {
+                void *cpu_row = cpu + (y - box->y) * cpu_stride;
+
+                for (uint32_t x = align_x1; x < align_x2; x += utile_w) {
+                        void *utile_gpu = (gpu +
+                                           get_pixel_offset(cpp, image_h, x, y));
+                        void *utile_cpu = cpu_row + (x - box->x) * cpp;
+
+                        if (is_load) {
+                                v3d_load_utile(utile_cpu, cpu_stride,
+                                               utile_gpu, utile_gpu_stride);
+                        } else {
+                                v3d_store_utile(utile_gpu, utile_gpu_stride,
+                                                utile_cpu, cpu_stride);
+                        }
+                }
+        }
+
+        /* If there were no aligned utiles in the middle, load/store the whole
+         * thing unaligned.
+         */
+        if (align_y2 <= align_y1 ||
+            align_x2 <= align_x1) {
+                v3d_move_pixels_unaligned(gpu, gpu_stride,
+                                          cpu, cpu_stride,
+                                          cpp, image_h,
+                                          box,
+                                          get_pixel_offset, is_load);
+                return;
+        }
+
+        /* Load/store the partial utiles. */
+        struct pipe_box partial_boxes[4] = {
+                /* Top */
+                {
+                        .x = x1,
+                        .width = x2 - x1,
+                        .y = y1,
+                        .height = align_y1 - y1,
+                },
+                /* Bottom */
+                {
+                        .x = x1,
+                        .width = x2 - x1,
+                        .y = align_y2,
+                        .height = y2 - align_y2,
+                },
+                /* Left */
+                {
+                        .x = x1,
+                        .width = align_x1 - x1,
+                        .y = align_y1,
+                        .height = align_y2 - align_y1,
+                },
+                /* Right */
+                {
+                        .x = align_x2,
+                        .width = x2 - align_x2,
+                        .y = align_y1,
+                        .height = align_y2 - align_y1,
+                },
+        };
+        for (int i = 0; i < ARRAY_SIZE(partial_boxes); i++) {
+                void *partial_cpu = (cpu +
+                                     (partial_boxes[i].y - y1) * cpu_stride +
+                                     (partial_boxes[i].x - x1) * cpp);
+
+                v3d_move_pixels_unaligned(gpu, gpu_stride,
+                                          partial_cpu, cpu_stride,
+                                          cpp, image_h,
+                                          &partial_boxes[i],
+                                          get_pixel_offset, is_load);
         }
 }
 

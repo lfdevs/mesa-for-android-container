@@ -344,7 +344,7 @@ virgl_vtest_winsys_resource_cache_create(struct virgl_winsys *vws,
    struct virgl_hw_res *res, *curr_res;
    struct list_head *curr, *next;
    int64_t now;
-   int ret;
+   int ret = -1;
 
    /* only store binds for vertex/index/const buffers */
    if (bind != VIRGL_BIND_CONSTANT_BUFFER && bind != VIRGL_BIND_INDEX_BUFFER &&
@@ -427,6 +427,7 @@ static struct virgl_cmd_buf *virgl_vtest_cmd_buf_create(struct virgl_winsys *vws
    }
    cbuf->ws = vws;
    cbuf->base.buf = cbuf->buf;
+   cbuf->base.in_fence_fd = -1;
    return &cbuf->base;
 }
 
@@ -501,7 +502,8 @@ static void virgl_vtest_add_res(struct virgl_vtest_winsys *vtws,
 }
 
 static int virgl_vtest_winsys_submit_cmd(struct virgl_winsys *vws,
-                                         struct virgl_cmd_buf *_cbuf)
+                                         struct virgl_cmd_buf *_cbuf,
+                                         int in_fence_fd, int *out_fence_fd)
 {
    struct virgl_vtest_winsys *vtws = virgl_vtest_winsys(vws);
    struct virgl_vtest_cmd_buf *cbuf = virgl_vtest_cmd_buf(_cbuf);
@@ -509,6 +511,9 @@ static int virgl_vtest_winsys_submit_cmd(struct virgl_winsys *vws,
 
    if (cbuf->base.cdw == 0)
       return 0;
+
+   assert(in_fence_fd == -1);
+   assert(out_fence_fd == NULL);
 
    ret = virgl_vtest_submit_cmd(vtws, cbuf);
 
@@ -552,7 +557,7 @@ static int virgl_vtest_get_caps(struct virgl_winsys *vws,
 }
 
 static struct pipe_fence_handle *
-virgl_cs_create_fence(struct virgl_winsys *vws)
+virgl_cs_create_fence(struct virgl_winsys *vws, int fd)
 {
    struct virgl_hw_res *res;
 
@@ -694,6 +699,7 @@ virgl_vtest_winsys_wrap(struct sw_winsys *sws)
    vtws->base.cs_create_fence = virgl_cs_create_fence;
    vtws->base.fence_wait = virgl_fence_wait;
    vtws->base.fence_reference = virgl_fence_reference;
+   vtws->base.supports_fences =  0;
 
    vtws->base.flush_frontbuffer = virgl_vtest_flush_frontbuffer;
 

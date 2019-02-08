@@ -95,7 +95,7 @@ struct fd_batch {
 		FD_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
 		FD_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
 		FD_BUFFER_ALL     = FD_BUFFER_COLOR | FD_BUFFER_DEPTH | FD_BUFFER_STENCIL,
-	} invalidated, cleared, restore, resolve;
+	} invalidated, cleared, fast_cleared, restore, resolve;
 
 	/* is this a non-draw batch (ie compute/blit which has no pfb state)? */
 	bool nondraw : 1;
@@ -124,6 +124,7 @@ struct fd_batch {
 		FD_GMEM_LOGICOP_ENABLED      = 0x20,
 	} gmem_reason;
 	unsigned num_draws;   /* number of draws in current batch */
+	unsigned num_vertices;   /* number of vertices in current batch */
 
 	/* Track the maximal bounds of the scissor of all the draws within a
 	 * batch.  Used at the tile rendering step (fd_gmem_render_tiles(),
@@ -136,11 +137,6 @@ struct fd_batch {
 	 */
 	struct util_dynarray draw_patches;
 
-	/* Keep track of blitter GMEM offsets that need to be patched up once we
-	 * know the gmem layout:
-	 */
-	struct util_dynarray gmem_patches;
-
 	/* Keep track of writes to RB_RENDER_CONTROL which need to be patched
 	 * once we know whether or not to use GMEM, and GMEM tile pitch.
 	 *
@@ -148,6 +144,18 @@ struct fd_batch {
 	 * seemed overkill for now)
 	 */
 	struct util_dynarray rbrc_patches;
+
+	/* Keep track of GMEM related values that need to be patched up once we
+	 * know the gmem layout:
+	 */
+	struct util_dynarray gmem_patches;
+
+	/* Keep track of pointer to start of MEM exports for a20x binning shaders
+	 *
+	 * this is so the end of the shader can be cut off at the right point
+	 * depending on the GMEM configuration
+	 */
+	struct util_dynarray shader_patches;
 
 	struct pipe_framebuffer_state framebuffer;
 
@@ -162,6 +170,12 @@ struct fd_batch {
 
 	// TODO maybe more generically split out clear and clear_binning rings?
 	struct fd_ringbuffer *lrz_clear;
+	struct fd_ringbuffer *tile_setup;
+	struct fd_ringbuffer *tile_fini;
+
+	union pipe_color_union clear_color[MAX_RENDER_TARGETS];
+	double clear_depth;
+	unsigned clear_stencil;
 
 	/**
 	 * hw query related state:

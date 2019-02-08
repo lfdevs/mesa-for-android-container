@@ -902,6 +902,7 @@ void si_resource_copy_region(struct pipe_context *ctx,
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_texture *ssrc = (struct si_texture*)src;
+	struct si_texture *sdst = (struct si_texture*)dst;
 	struct pipe_surface *dst_view, dst_templ;
 	struct pipe_sampler_view src_templ, *src_view;
 	unsigned dst_width, dst_height, src_width0, src_height0;
@@ -911,6 +912,17 @@ void si_resource_copy_region(struct pipe_context *ctx,
 	/* Handle buffers first. */
 	if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
 		si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
+		return;
+	}
+
+	if (!util_format_is_compressed(src->format) &&
+	    !util_format_is_compressed(dst->format) &&
+	    !util_format_is_depth_or_stencil(src->format) &&
+	    src->nr_samples <= 1 &&
+	    !sdst->dcc_offset &&
+	    !(dst->target != src->target &&
+	      (src->target == PIPE_TEXTURE_1D_ARRAY || dst->target == PIPE_TEXTURE_1D_ARRAY))) {
+		si_compute_copy_image(sctx, dst, dst_level, src, src_level, dstx, dsty, dstz, src_box);
 		return;
 	}
 
@@ -1012,36 +1024,8 @@ void si_resource_copy_region(struct pipe_context *ctx,
 	 * Note that some chips avoid this issue by using SDMA.
 	 */
 	if (util_format_is_snorm8(dst_templ.format)) {
-		switch (dst_templ.format) {
-		case PIPE_FORMAT_R8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_R8_SINT;
-			break;
-		case PIPE_FORMAT_R8G8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_R8G8_SINT;
-			break;
-		case PIPE_FORMAT_R8G8B8X8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_R8G8B8X8_SINT;
-			break;
-		case PIPE_FORMAT_R8G8B8A8_SNORM:
-		/* There are no SINT variants for ABGR and XBGR, so we have to use RGBA. */
-		case PIPE_FORMAT_A8B8G8R8_SNORM:
-		case PIPE_FORMAT_X8B8G8R8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_R8G8B8A8_SINT;
-			break;
-		case PIPE_FORMAT_A8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_A8_SINT;
-			break;
-		case PIPE_FORMAT_L8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_L8_SINT;
-			break;
-		case PIPE_FORMAT_L8A8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_L8A8_SINT;
-			break;
-		case PIPE_FORMAT_I8_SNORM:
-			dst_templ.format = src_templ.format = PIPE_FORMAT_I8_SINT;
-			break;
-		default:; /* fall through */
-		}
+		dst_templ.format = src_templ.format =
+			util_format_snorm8_to_sint8(dst_templ.format);
 	}
 
 	vi_disable_dcc_if_incompatible_format(sctx, dst, dst_level,
@@ -1193,7 +1177,7 @@ resolve_to_temp:
 	templ.depth0 = 1;
 	templ.array_size = 1;
 	templ.usage = PIPE_USAGE_DEFAULT;
-	templ.flags = SI_RESOURCE_FLAG_FORCE_TILING |
+	templ.flags = SI_RESOURCE_FLAG_FORCE_MSAA_TILING |
 		      SI_RESOURCE_FLAG_DISABLE_DCC;
 
 	/* The src and dst microtile modes must be the same. */

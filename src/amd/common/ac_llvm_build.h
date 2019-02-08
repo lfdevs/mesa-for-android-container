@@ -34,14 +34,12 @@
 extern "C" {
 #endif
 
-#define HAVE_32BIT_POINTERS (HAVE_LLVM >= 0x0700)
-
 enum {
-	AC_ADDR_SPACE_FLAT = HAVE_LLVM >= 0x0700 ? 0 : 4, /* Slower than global. */
+	AC_ADDR_SPACE_FLAT = 0, /* Slower than global. */
 	AC_ADDR_SPACE_GLOBAL = 1,
-	AC_ADDR_SPACE_GDS = HAVE_LLVM >= 0x0700 ? 2 : 5,
+	AC_ADDR_SPACE_GDS = 2,
 	AC_ADDR_SPACE_LDS = 3,
-	AC_ADDR_SPACE_CONST = HAVE_LLVM >= 0x0700 ? 4 : 2, /* Global allowing SMEM. */
+	AC_ADDR_SPACE_CONST = 4, /* Global allowing SMEM. */
 	AC_ADDR_SPACE_CONST_32BIT = 6, /* same as CONST, but the pointer type has 32 bits */
 };
 
@@ -128,6 +126,7 @@ unsigned ac_get_type_size(LLVMTypeRef type);
 
 LLVMTypeRef ac_to_integer_type(struct ac_llvm_context *ctx, LLVMTypeRef t);
 LLVMValueRef ac_to_integer(struct ac_llvm_context *ctx, LLVMValueRef v);
+LLVMValueRef ac_to_integer_or_pointer(struct ac_llvm_context *ctx, LLVMValueRef v);
 LLVMTypeRef ac_to_float_type(struct ac_llvm_context *ctx, LLVMTypeRef t);
 LLVMValueRef ac_to_float(struct ac_llvm_context *ctx, LLVMValueRef v);
 
@@ -481,6 +480,7 @@ void ac_build_continue(struct ac_llvm_context *ctx);
 void ac_build_else(struct ac_llvm_context *ctx, int lable_id);
 void ac_build_endif(struct ac_llvm_context *ctx, int lable_id);
 void ac_build_endloop(struct ac_llvm_context *ctx, int lable_id);
+void ac_build_ifcc(struct ac_llvm_context *ctx, LLVMValueRef cond, int label_id);
 void ac_build_if(struct ac_llvm_context *ctx, LLVMValueRef value,
 		 int lable_id);
 void ac_build_uif(struct ac_llvm_context *ctx, LLVMValueRef value,
@@ -523,6 +523,42 @@ ac_build_exclusive_scan(struct ac_llvm_context *ctx, LLVMValueRef src, nir_op op
 
 LLVMValueRef
 ac_build_reduce(struct ac_llvm_context *ctx, LLVMValueRef src, nir_op op, unsigned cluster_size);
+
+/**
+ * Common arguments for a scan/reduce operation that accumulates per-wave
+ * values across an entire workgroup, while respecting the order of waves.
+ */
+struct ac_wg_scan {
+	bool enable_reduce;
+	bool enable_exclusive;
+	bool enable_inclusive;
+	nir_op op;
+	LLVMValueRef src; /* clobbered! */
+	LLVMValueRef result_reduce;
+	LLVMValueRef result_exclusive;
+	LLVMValueRef result_inclusive;
+	LLVMValueRef extra;
+	LLVMValueRef waveidx;
+	LLVMValueRef numwaves; /* only needed for "reduce" operations */
+
+	/* T addrspace(LDS) pointer to the same type as value, at least maxwaves entries */
+	LLVMValueRef scratch;
+	unsigned maxwaves;
+};
+
+void
+ac_build_wg_wavescan_top(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
+void
+ac_build_wg_wavescan_bottom(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
+void
+ac_build_wg_wavescan(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
+
+void
+ac_build_wg_scan_top(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
+void
+ac_build_wg_scan_bottom(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
+void
+ac_build_wg_scan(struct ac_llvm_context *ctx, struct ac_wg_scan *ws);
 
 LLVMValueRef
 ac_build_quad_swizzle(struct ac_llvm_context *ctx, LLVMValueRef src,

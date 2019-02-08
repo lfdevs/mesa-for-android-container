@@ -26,5 +26,6 @@ test(
     dependencies : [dep_thread, dep_dl, idep_gtest],
     include_directories : inc_common,
     link_with : [libmesa_util],
-  )
+  ),
+  suite : ['util'],
 )

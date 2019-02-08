@@ -497,8 +497,8 @@ set_texture_attachment(struct gl_context *ctx,
                        struct gl_framebuffer *fb,
                        struct gl_renderbuffer_attachment *att,
                        struct gl_texture_object *texObj,
-                       GLenum texTarget, GLuint level, GLuint layer,
-                       GLboolean layered)
+                       GLenum texTarget, GLuint level, GLsizei samples,
+                       GLuint layer, GLboolean layered)
 {
    struct gl_renderbuffer *rb = att->Renderbuffer;
 
@@ -520,6 +520,7 @@ set_texture_attachment(struct gl_context *ctx,
 
    /* always update these fields */
    att->TextureLevel = level;
+   att->NumSamples = samples;
    att->CubeMapFace = _mesa_tex_target_to_face(texTarget);
    att->Zoffset = layer;
    att->Layered = layered;
@@ -750,6 +751,7 @@ is_format_color_renderable(const struct gl_context *ctx, mesa_format format,
    case GL_SRGB8:
    case GL_RGB10:
    case GL_RGB9_E5:
+   case GL_SR8_EXT:
       return GL_FALSE;
    default:
       break;
@@ -1001,6 +1003,7 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
    fb->_HasSNormOrFloatColorBuffer = GL_FALSE;
    fb->_HasAttachments = true;
    fb->_IntegerBuffers = 0;
+   fb->_RGBBuffers = 0;
 
    /* Start at -2 to more easily loop over all attachment points.
     *  -2: depth buffer
@@ -1084,8 +1087,11 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
             return;
          }
 
-         attNumSamples = texImg->NumSamples;
-         attNumStorageSamples = texImg->NumSamples;
+         if (att->NumSamples > 0)
+            attNumSamples = att->NumSamples;
+         else
+            attNumSamples = texImg->NumSamples;
+         attNumStorageSamples = attNumSamples;
       }
       else if (att->Type == GL_RENDERBUFFER_EXT) {
          minWidth = MIN2(minWidth, att->Renderbuffer->Width);
@@ -1143,6 +1149,9 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
          /* check if integer color */
          if (_mesa_is_format_integer_color(attFormat))
             fb->_IntegerBuffers |= (1 << i);
+
+         if (f == GL_RGB)
+            fb->_RGBBuffers |= (1 << i);
 
          fb->_AllColorBuffersFixedPoint =
             fb->_AllColorBuffersFixedPoint &&
@@ -3497,7 +3506,8 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
                           GLenum attachment,
                           struct gl_renderbuffer_attachment *att,
                           struct gl_texture_object *texObj, GLenum textarget,
-                          GLint level, GLuint layer, GLboolean layered)
+                          GLint level, GLsizei samples,
+                          GLuint layer, GLboolean layered)
 {
    FLUSH_VERTICES(ctx, _NEW_BUFFERS);
 
@@ -3508,6 +3518,7 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
           level == fb->Attachment[BUFFER_STENCIL].TextureLevel &&
           _mesa_tex_target_to_face(textarget) ==
           fb->Attachment[BUFFER_STENCIL].CubeMapFace &&
+          samples == fb->Attachment[BUFFER_STENCIL].NumSamples &&
           layer == fb->Attachment[BUFFER_STENCIL].Zoffset) {
          /* The texture object is already attached to the stencil attachment
           * point. Don't create a new renderbuffer; just reuse the stencil
@@ -3521,13 +3532,14 @@ _mesa_framebuffer_texture(struct gl_context *ctx, struct gl_framebuffer *fb,
                  level == fb->Attachment[BUFFER_DEPTH].TextureLevel &&
                  _mesa_tex_target_to_face(textarget) ==
                  fb->Attachment[BUFFER_DEPTH].CubeMapFace &&
+                 samples == fb->Attachment[BUFFER_DEPTH].NumSamples &&
                  layer == fb->Attachment[BUFFER_DEPTH].Zoffset) {
          /* As above, but with depth and stencil transposed. */
          reuse_framebuffer_texture_attachment(fb, BUFFER_STENCIL,
                                               BUFFER_DEPTH);
       } else {
          set_texture_attachment(ctx, fb, att, texObj, textarget,
-                                level, layer, layered);
+                                level, samples, layer, layered);
 
          if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
             /* Above we created a new renderbuffer and attached it to the
@@ -3582,15 +3594,15 @@ framebuffer_texture_with_dims_no_error(GLenum target, GLenum attachment,
       get_attachment(ctx, fb, attachment, NULL);
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, layer, GL_FALSE);
+                             level, 0, layer, GL_FALSE);
 }
 
 
 static void
 framebuffer_texture_with_dims(int dims, GLenum target,
                               GLenum attachment, GLenum textarget,
-                              GLuint texture, GLint level, GLint layer,
-                              const char *caller)
+                              GLuint texture, GLint level, GLsizei samples,
+                              GLint layer, const char *caller)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_framebuffer *fb;
@@ -3625,7 +3637,7 @@ framebuffer_texture_with_dims(int dims, GLenum target,
       return;
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, layer, GL_FALSE);
+                             level, samples, layer, GL_FALSE);
 }
 
 
@@ -3644,7 +3656,7 @@ _mesa_FramebufferTexture1D(GLenum target, GLenum attachment,
                            GLenum textarget, GLuint texture, GLint level)
 {
    framebuffer_texture_with_dims(1, target, attachment, textarget, texture,
-                                 level, 0, "glFramebufferTexture1D");
+                                 level, 0, 0, "glFramebufferTexture1D");
 }
 
 
@@ -3663,7 +3675,17 @@ _mesa_FramebufferTexture2D(GLenum target, GLenum attachment,
                            GLenum textarget, GLuint texture, GLint level)
 {
    framebuffer_texture_with_dims(2, target, attachment, textarget, texture,
-                                 level, 0, "glFramebufferTexture2D");
+                                 level, 0, 0, "glFramebufferTexture2D");
+}
+
+
+void GLAPIENTRY
+_mesa_FramebufferTexture2DMultisampleEXT(GLenum target, GLenum attachment,
+                                         GLenum textarget, GLuint texture,
+                                         GLint level, GLsizei samples)
+{
+   framebuffer_texture_with_dims(2, target, attachment, textarget, texture,
+                                 level, samples, 0, "glFramebufferTexture2DMultisampleEXT");
 }
 
 
@@ -3683,7 +3705,7 @@ _mesa_FramebufferTexture3D(GLenum target, GLenum attachment,
                            GLint level, GLint layer)
 {
    framebuffer_texture_with_dims(3, target, attachment, textarget, texture,
-                                 level, layer, "glFramebufferTexture3D");
+                                 level, 0, layer, "glFramebufferTexture3D");
 }
 
 
@@ -3773,7 +3795,7 @@ frame_buffer_texture(GLuint framebuffer, GLenum target,
    }
 
    _mesa_framebuffer_texture(ctx, fb, attachment, att, texObj, textarget,
-                             level, layer, layered);
+                             level, 0, layer, layered);
 }
 
 void GLAPIENTRY
@@ -4252,7 +4274,7 @@ get_framebuffer_attachment_parameter(struct gl_context *ctx,
          }
       }
       else {
-         if (ctx->Extensions.EXT_framebuffer_sRGB) {
+         if (ctx->Extensions.EXT_sRGB) {
             *params =
                _mesa_get_format_color_encoding(att->Renderbuffer->Format);
          }
@@ -4349,6 +4371,18 @@ get_framebuffer_attachment_parameter(struct gl_context *ctx,
          goto invalid_pname_enum;
       } else if (att->Type == GL_TEXTURE) {
          *params = att->Layered;
+      } else if (att->Type == GL_NONE) {
+         _mesa_error(ctx, err, "%s(invalid pname %s)", caller,
+                     _mesa_enum_to_string(pname));
+      } else {
+         goto invalid_pname_enum;
+      }
+      return;
+   case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT:
+      if (!ctx->Extensions.EXT_multisampled_render_to_texture) {
+         goto invalid_pname_enum;
+      } else if (att->Type == GL_TEXTURE) {
+         *params = att->NumSamples;
       } else if (att->Type == GL_NONE) {
          _mesa_error(ctx, err, "%s(invalid pname %s)", caller,
                      _mesa_enum_to_string(pname));
@@ -4607,6 +4641,82 @@ invalid_enum:
    return;
 }
 
+static struct gl_renderbuffer_attachment *
+get_fb_attachment(struct gl_context *ctx, struct gl_framebuffer *fb,
+                  const GLenum attachment)
+{
+   switch (attachment) {
+   case GL_COLOR:
+      return &fb->Attachment[BUFFER_BACK_LEFT];
+   case GL_COLOR_ATTACHMENT0:
+   case GL_COLOR_ATTACHMENT1:
+   case GL_COLOR_ATTACHMENT2:
+   case GL_COLOR_ATTACHMENT3:
+   case GL_COLOR_ATTACHMENT4:
+   case GL_COLOR_ATTACHMENT5:
+   case GL_COLOR_ATTACHMENT6:
+   case GL_COLOR_ATTACHMENT7:
+   case GL_COLOR_ATTACHMENT8:
+   case GL_COLOR_ATTACHMENT9:
+   case GL_COLOR_ATTACHMENT10:
+   case GL_COLOR_ATTACHMENT11:
+   case GL_COLOR_ATTACHMENT12:
+   case GL_COLOR_ATTACHMENT13:
+   case GL_COLOR_ATTACHMENT14:
+   case GL_COLOR_ATTACHMENT15:
+      return &fb->Attachment[BUFFER_COLOR0 + attachment - GL_COLOR_ATTACHMENT0];
+   case GL_DEPTH:
+   case GL_DEPTH_ATTACHMENT:
+   case GL_DEPTH_STENCIL_ATTACHMENT:
+      return &fb->Attachment[BUFFER_DEPTH];
+   case GL_STENCIL:
+   case GL_STENCIL_ATTACHMENT:
+      return &fb->Attachment[BUFFER_STENCIL];
+   default:
+      return NULL;
+   }
+}
+
+static void
+discard_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb,
+                    GLsizei numAttachments, const GLenum *attachments)
+{
+   if (!ctx->Driver.DiscardFramebuffer)
+      return;
+
+   for (int i = 0; i < numAttachments; i++) {
+      struct gl_renderbuffer_attachment *att =
+            get_fb_attachment(ctx, fb, attachments[i]);
+
+      if (!att)
+         continue;
+
+      /* If we're asked to invalidate just depth or just stencil, but the
+       * attachment is packed depth/stencil, then we can only use
+       * Driver.DiscardFramebuffer if the attachments list includes both depth
+       * and stencil and they both point at the same renderbuffer.
+       */
+      if ((attachments[i] == GL_DEPTH_ATTACHMENT ||
+           attachments[i] == GL_STENCIL_ATTACHMENT) &&
+          (!att->Renderbuffer ||
+           att->Renderbuffer->_BaseFormat == GL_DEPTH_STENCIL)) {
+         GLenum other_format = (attachments[i] == GL_DEPTH_ATTACHMENT ?
+                                GL_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT);
+         bool has_both = false;
+         for (int j = 0; j < numAttachments; j++) {
+            if (attachments[j] == other_format)
+               has_both = true;
+            break;
+         }
+
+         if (fb->Attachment[BUFFER_DEPTH].Renderbuffer !=
+             fb->Attachment[BUFFER_STENCIL].Renderbuffer || !has_both)
+            continue;
+      }
+
+      ctx->Driver.DiscardFramebuffer(ctx, fb, att);
+   }
+}
 
 void GLAPIENTRY
 _mesa_InvalidateSubFramebuffer_no_error(GLenum target, GLsizei numAttachments,
@@ -4667,12 +4777,18 @@ _mesa_InvalidateNamedFramebufferSubData(GLuint framebuffer,
                                   "glInvalidateNamedFramebufferSubData");
 }
 
-
 void GLAPIENTRY
 _mesa_InvalidateFramebuffer_no_error(GLenum target, GLsizei numAttachments,
                                      const GLenum *attachments)
 {
-   /* no-op */
+   struct gl_framebuffer *fb;
+   GET_CURRENT_CONTEXT(ctx);
+
+   fb = get_framebuffer_target(ctx, target);
+   if (!fb)
+      return;
+
+   discard_framebuffer(ctx, fb, numAttachments, attachments);
 }
 
 
@@ -4708,6 +4824,8 @@ _mesa_InvalidateFramebuffer(GLenum target, GLsizei numAttachments,
                                   ctx->Const.MaxViewportWidth,
                                   ctx->Const.MaxViewportHeight,
                                   "glInvalidateFramebuffer");
+
+   discard_framebuffer(ctx, fb, numAttachments, attachments);
 }
 
 
@@ -4794,8 +4912,7 @@ _mesa_DiscardFramebufferEXT(GLenum target, GLsizei numAttachments,
       }
    }
 
-   if (ctx->Driver.DiscardFramebuffer)
-      ctx->Driver.DiscardFramebuffer(ctx, target, numAttachments, attachments);
+   discard_framebuffer(ctx, fb, numAttachments, attachments);
 
    return;
 

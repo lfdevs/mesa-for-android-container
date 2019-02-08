@@ -125,7 +125,7 @@ build_view_index(struct lower_multiview_state *state)
          const struct glsl_type *type = glsl_int_type();
          if (b->shader->info.stage == MESA_SHADER_TESS_CTRL ||
              b->shader->info.stage == MESA_SHADER_GEOMETRY)
-            type = glsl_array_type(type, 1);
+            type = glsl_array_type(type, 1, 0);
 
          nir_variable *idx_var =
             nir_variable_create(b->shader, nir_var_shader_in,

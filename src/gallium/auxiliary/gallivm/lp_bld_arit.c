@@ -1992,6 +1992,8 @@ arch_rounding_available(const struct lp_type type)
    else if ((util_cpu_caps.has_altivec &&
             (type.width == 32 && type.length == 4)))
       return TRUE;
+   else if (util_cpu_caps.has_neon)
+      return TRUE;
 
    return FALSE;
 }
@@ -2099,7 +2101,7 @@ lp_build_round_arch(struct lp_build_context *bld,
                     LLVMValueRef a,
                     enum lp_build_round_mode mode)
 {
-   if (util_cpu_caps.has_sse4_1) {
+   if (util_cpu_caps.has_sse4_1 || util_cpu_caps.has_neon) {
       LLVMBuilderRef builder = bld->gallivm->builder;
       const struct lp_type type = bld->type;
       const char *intrinsic_root;
@@ -2477,7 +2479,7 @@ lp_build_iround(struct lp_build_context *bld,
    else {
       LLVMValueRef half;
 
-      half = lp_build_const_vec(bld->gallivm, type, 0.5);
+      half = lp_build_const_vec(bld->gallivm, type, nextafterf(0.5, 0.0));
 
       if (type.sign) {
          LLVMTypeRef vec_type = bld->vec_type;

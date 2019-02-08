@@ -99,12 +99,12 @@
     <value name="Follows" value="7"/>
   </enum>
 
-  <enum name="Wrap Mode" prefix="V3D_WRAP_MODE" min_ver="41">
-      <value name="Wrap mode REPEAT" value="0"/>
-      <value name="Wrap mode CLAMP" value="1"/>
-      <value name="Wrap mode MIRROR" value="2"/>
-      <value name="Wrap mode BORDER" value="3"/>
-      <value name="Wrap mode MIRROR_ONCE" value="4"/>
+  <enum name="Wrap Mode" prefix="V3D_WRAP_MODE">
+      <value name="REPEAT" value="0"/>
+      <value name="CLAMP" value="1"/>
+      <value name="MIRROR" value="2"/>
+      <value name="BORDER" value="3"/>
+      <value name="MIRROR_ONCE" value="4"/>
   </enum>
 
   <enum name="TMU Op" prefix="V3D_TMU_OP" min_ver="41">
@@ -172,6 +172,16 @@
     <value name="norm" value="1"/> <!-- [0,1] for f16 -->
     <value name="pos" value="2"/> <!-- [0, for f16 -->
     <value name="int" value="3" min_ver="42"/> <!-- clamp to integer RT's range -->
+  </enum>
+
+  <enum name="L2T Flush Mode" prefix="L2T_FLUSH_MODE">
+    <!-- invalidates all cache lines -->
+    <value name="flush" value="0"/>
+    <!-- Invalidates dirty cachelines without writeback -->
+    <value name="clear" value="1"/>
+    <!-- Writes back dirty cachelines and marks them clean, without
+         invalidating -->
+    <value name="clean" value="2"/>
   </enum>
 
   <enum name="Output Image Format" prefix="V3D_OUTPUT_IMAGE_FORMAT">
@@ -457,6 +467,37 @@
     <field name="mode" size="6" start="0" type="Primitive"/>
   </packet>
 
+  <packet code="33" name="Indirect Indexed Instanced Prim List" cl="B" max_ver="33">
+    <field name="Stride in Multiples of 4 Bytes" size="8" start="104" type="uint"/>
+    <field name="Address of Indices List" size="32" start="72" type="address"/>
+    <field name="Address" size="32" start="40" type="address"/>
+    <field name="Enable Primitive Restarts" size="1" start="39" type="bool"/>
+    <field name="Number of Draw Indirect Indexed Records" size="31" start="8" type="uint"/>
+
+    <field name="Index type" size="2" start="6" type="uint">
+      <value name="Index type 8-bit" value="0"/>
+      <value name="Index type 16-bit" value="1"/>
+      <value name="Index type 32-bit" value="2"/>
+    </field>
+
+    <field name="mode" size="6" start="0" type="Primitive"/>
+  </packet>
+
+  <packet code="33" name="Indirect Indexed Instanced Prim List" cl="B" min_ver="41">
+    <field name="Stride in Multiples of 4 Bytes" size="8" start="72" type="uint"/>
+    <field name="Address" size="32" start="40" type="address"/>
+    <field name="Enable Primitive Restarts" size="1" start="39" type="bool"/>
+    <field name="Number of Draw Indirect Indexed Records" size="31" start="8" type="uint"/>
+
+    <field name="Index type" size="2" start="6" type="uint">
+      <value name="Index type 8-bit" value="0"/>
+      <value name="Index type 16-bit" value="1"/>
+      <value name="Index type 32-bit" value="2"/>
+    </field>
+
+    <field name="mode" size="6" start="0" type="Primitive"/>
+  </packet>
+
   <packet code="34" name="Indexed Instanced Prim List" cl="B" max_ver="33">
     <field name="Enable Primitive Restarts" size="1" start="135" type="bool"/>
     <field name="Maximum index" size="31" start="104" type="uint"/>
@@ -491,6 +532,14 @@
   <packet code="36" name="Vertex Array Prims" cl="B">
     <field name="Index of First Vertex" size="32" start="40" type="uint"/>
     <field name="Length" size="32" start="8" type="uint"/>
+
+    <field name="mode" size="8" start="0" type="Primitive"/>
+  </packet>
+
+  <packet code="37" name="Indirect Vertex Array Instanced Prims" cl="B">
+    <field name="Stride in Multiples of 4 Bytes" size="8" start="72" type="uint"/>
+    <field name="Address" size="32" start="40" type="address"/>
+    <field name="Number of Draw Indirect Array Records" size="32" start="8" type="uint"/>
 
     <field name="mode" size="8" start="0" type="Primitive"/>
   </packet>
@@ -555,6 +604,19 @@
   </packet>
 
   <packet code="75" name="Flush Transform Feedback Data"/>
+
+  <packet code="76" name="L1 Cache Flush Control">
+    <field name="TMU Config Cache Clear" size="4" start="12" type="uint"/>
+    <field name="TMU Data Cache Clear" size="4" start="8" type="uint"/>
+    <field name="Uniforms Cache Clear" size="4" start="4" type="uint"/>
+    <field name="Instruction Cache Clear" size="4" start="0" type="uint"/>
+  </packet>
+
+  <packet code="77" name="L2T Cache Flush Control">
+    <field name="L2T Flush Mode" size="4" start="64" type="L2T Flush Mode"/>
+    <field name="L2T Flush End" size="32" start="32" type="address"/>
+    <field name="L2T Flush Start" size="32" start="0" type="address"/>
+  </packet>
 
   <struct name="Transform Feedback Output Data Spec" max_ver="33">
     <field name="First Shaded Vertex Value to output" size="8" start="0" type="uint"/>
@@ -1230,29 +1292,9 @@
     <field name="Texel offset for t coordinate" size="4" start="23" type="int"/>
     <field name="Texel offset for s coordinate" size="4" start="19" type="int"/>
 
-    <field name="R Wrap Mode" size="3" start="16" type="uint">
-      <value name="Wrap mode REPEAT" value="0"/>
-      <value name="Wrap mode CLAMP" value="1"/>
-      <value name="Wrap mode MIRROR" value="2"/>
-      <value name="Wrap mode BORDER" value="3"/>
-      <value name="Wrap mode MIRROR_ONCE" value="4"/>
-    </field>
-
-    <field name="T Wrap Mode" size="3" start="13" type="uint">
-      <value name="Wrap mode REPEAT" value="0"/>
-      <value name="Wrap mode CLAMP" value="1"/>
-      <value name="Wrap mode MIRROR" value="2"/>
-      <value name="Wrap mode BORDER" value="3"/>
-      <value name="Wrap mode MIRROR_ONCE" value="4"/>
-    </field>
-
-    <field name="S Wrap Mode" size="3" start="10" type="uint">
-      <value name="Wrap mode REPEAT" value="0"/>
-      <value name="Wrap mode CLAMP" value="1"/>
-      <value name="Wrap mode MIRROR" value="2"/>
-      <value name="Wrap mode BORDER" value="3"/>
-      <value name="Wrap mode MIRROR_ONCE" value="4"/>
-    </field>
+    <field name="R Wrap Mode" size="3" start="16" type="Wrap Mode"/>
+    <field name="T Wrap Mode" size="3" start="13" type="Wrap Mode"/>
+    <field name="S Wrap Mode" size="3" start="10" type="Wrap Mode"/>
 
     <field name="New configuration mode" size="1" start="9" type="bool" default="1"/>
 
@@ -1415,10 +1457,10 @@
   </struct>
 
   <struct name="Sampler State" min_ver="41">
-    <field name="Border color Alpha" size="32" start="160" type="uint"/>
-    <field name="Border color Blue" size="32" start="128" type="uint"/>
-    <field name="Border color Green" size="32" start="96" type="uint"/>
-    <field name="Border color Red" size="32" start="64" type="uint"/>
+    <field name="Border color word 3" size="32" start="160" type="uint"/>
+    <field name="Border color word 2" size="32" start="128" type="uint"/>
+    <field name="Border color word 1" size="32" start="96" type="uint"/>
+    <field name="Border color word 0" size="32" start="64" type="uint"/>
 
     <field name="Maximum Anisotropy" size="2" start="61" type="uint"/>
     <field name="Border Color Mode" size="3" start="58" type="Border Color Mode"/>

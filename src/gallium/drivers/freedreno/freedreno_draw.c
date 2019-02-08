@@ -144,9 +144,13 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 			} else {
 				batch->invalidated |= FD_BUFFER_DEPTH;
 			}
-			buffers |= FD_BUFFER_DEPTH;
-			resource_written(batch, pfb->zsbuf->texture);
 			batch->gmem_reason |= FD_GMEM_DEPTH_ENABLED;
+			if (fd_depth_write_enabled(ctx)) {
+				buffers |= FD_BUFFER_DEPTH;
+				resource_written(batch, pfb->zsbuf->texture);
+			} else {
+				resource_read(batch, pfb->zsbuf->texture);
+			}
 		}
 
 		if (fd_stencil_enabled(ctx)) {
@@ -155,18 +159,9 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 			} else {
 				batch->invalidated |= FD_BUFFER_STENCIL;
 			}
+			batch->gmem_reason |= FD_GMEM_STENCIL_ENABLED;
 			buffers |= FD_BUFFER_STENCIL;
 			resource_written(batch, pfb->zsbuf->texture);
-			batch->gmem_reason |= FD_GMEM_STENCIL_ENABLED;
-		}
-	}
-
-	if (ctx->dirty & FD_DIRTY_FRAMEBUFFER) {
-		for (i = 0; i < pfb->nr_cbufs; i++) {
-			if (!pfb->cbufs[i])
-				continue;
-
-			resource_written(batch, pfb->cbufs[i]->texture);
 		}
 	}
 
@@ -191,6 +186,9 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 		if (fd_blend_enabled(ctx, i))
 			batch->gmem_reason |= FD_GMEM_BLEND_ENABLED;
+
+		if (ctx->dirty & FD_DIRTY_FRAMEBUFFER)
+			resource_written(batch, pfb->cbufs[i]->texture);
 	}
 
 	/* Mark SSBOs as being written.. we don't actually know which ones are
@@ -290,6 +288,8 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 	if (ctx->draw_vbo(ctx, info, index_offset))
 		batch->needs_flush = true;
+
+	batch->num_vertices += info->count * info->instance_count;
 
 	for (i = 0; i < ctx->streamout.num_targets; i++)
 		ctx->streamout.offsets[i] += info->count;
@@ -410,7 +410,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	 * the depth buffer, etc)
 	 */
 	cleared_buffers = buffers & (FD_BUFFER_ALL & ~batch->restore);
-	batch->cleared |= cleared_buffers;
+	batch->cleared |= buffers;
 	batch->invalidated |= cleared_buffers;
 
 	batch->resolve |= buffers;

@@ -245,7 +245,8 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 
 	so->texconst0 =
 		A6XX_TEX_CONST_0_FMT(fd6_pipe2tex(format)) |
-		fd6_tex_swiz(format, cso->swizzle_r, cso->swizzle_g,
+		A6XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
+		fd6_tex_swiz(prsc, cso->swizzle_r, cso->swizzle_g,
 				cso->swizzle_b, cso->swizzle_a);
 
 	/* NOTE: since we sample z24s8 using 8888_UINT format, the swizzle
@@ -256,8 +257,12 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	 * Note that gallium expects stencil sampler to return (s,s,s,s)
 	 * which isn't quite true.  To make that happen we'd have to massage
 	 * the swizzle.  But in practice only the .x component is used.
+	 *
+	 * Skip this in the tile case because tiled formats are not swapped
+	 * and we have already applied the inverse swap in fd6_tex_swiz()
+	 * to componsate for that.
 	 */
-	if (format == PIPE_FORMAT_X24S8_UINT) {
+	if ((format == PIPE_FORMAT_X24S8_UINT) && !rsc->tile_mode) {
 		so->texconst0 |= A6XX_TEX_CONST_0_SWAP(XYZW);
 	}
 
@@ -280,12 +285,17 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		so->offset = cso->u.buf.offset;
 	} else {
 		unsigned miplevels;
+		enum a6xx_tile_mode tile_mode = TILE6_LINEAR;
 
 		lvl = fd_sampler_first_level(cso);
 		miplevels = fd_sampler_last_level(cso) - lvl;
 		layers = cso->u.tex.last_layer - cso->u.tex.first_layer + 1;
 
-		so->texconst0 |= A6XX_TEX_CONST_0_MIPLVLS(miplevels);
+		if (!fd_resource_level_linear(prsc, lvl))
+			tile_mode = fd_resource(prsc)->tile_mode;
+
+		so->texconst0 |= A6XX_TEX_CONST_0_MIPLVLS(miplevels) |
+			A6XX_TEX_CONST_0_TILE_MODE(tile_mode);
 		so->texconst1 =
 			A6XX_TEX_CONST_1_WIDTH(u_minify(prsc->width0, lvl)) |
 			A6XX_TEX_CONST_1_HEIGHT(u_minify(prsc->height0, lvl));
@@ -324,12 +334,12 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		break;
 	case PIPE_TEXTURE_3D:
 		so->texconst3 =
+			A6XX_TEX_CONST_3_MIN_LAYERSZ(rsc->slices[prsc->last_level].size0) |
 			A6XX_TEX_CONST_3_ARRAY_PITCH(rsc->slices[lvl].size0);
 		so->texconst5 =
 			A6XX_TEX_CONST_5_DEPTH(u_minify(prsc->depth0, lvl));
 		break;
 	default:
-		so->texconst3 = 0x00000000;
 		break;
 	}
 

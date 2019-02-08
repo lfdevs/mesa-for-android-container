@@ -371,6 +371,20 @@ can_take_stride(fs_inst *inst, unsigned arg, unsigned stride,
    return true;
 }
 
+static bool
+instruction_requires_packed_data(fs_inst *inst)
+{
+   switch (inst->opcode) {
+   case FS_OPCODE_DDX_FINE:
+   case FS_OPCODE_DDX_COARSE:
+   case FS_OPCODE_DDY_FINE:
+   case FS_OPCODE_DDY_COARSE:
+      return true;
+   default:
+      return false;
+   }
+}
+
 bool
 fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 {
@@ -415,6 +429,13 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
 
    if (has_source_modifiers &&
        inst->opcode == SHADER_OPCODE_GEN4_SCRATCH_WRITE)
+      return false;
+
+   /* Some instructions implemented in the generator backend, such as
+    * derivatives, assume that their operands are packed so we can't
+    * generally propagate strided regions to them.
+    */
+   if (instruction_requires_packed_data(inst) && entry->src.stride > 1)
       return false;
 
    /* Bail if the result of composing both strides would exceed the

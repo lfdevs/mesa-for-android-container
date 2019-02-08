@@ -341,7 +341,13 @@ enum pipe_transfer_usage
     * PIPE_RESOURCE_FLAG_MAP_COHERENT must be set when creating
     * the resource.
     */
-   PIPE_TRANSFER_COHERENT = (1 << 14)
+   PIPE_TRANSFER_COHERENT = (1 << 14),
+
+   /**
+    * This and higher bits are reserved for private use by drivers. Drivers
+    * should use this as (PIPE_TRANSFER_DRV_PRV << i).
+    */
+   PIPE_TRANSFER_DRV_PRV = (1 << 24)
 };
 
 /**
@@ -400,6 +406,9 @@ enum pipe_flush_flags
  * Create a low priority context.
  */
 #define PIPE_CONTEXT_LOW_PRIORITY      (1 << 5)
+
+/** Stop execution if the device is reset. */
+#define PIPE_CONTEXT_LOSE_CONTEXT_ON_RESET (1 << 6)
 
 /**
  * Flags for pipe_context::memory_barrier.
@@ -554,9 +563,27 @@ enum pipe_query_type {
    PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE,
    PIPE_QUERY_GPU_FINISHED,
    PIPE_QUERY_PIPELINE_STATISTICS,
+   PIPE_QUERY_PIPELINE_STATISTICS_SINGLE,
    PIPE_QUERY_TYPES,
    /* start of driver queries, see pipe_screen::get_driver_query_info */
    PIPE_QUERY_DRIVER_SPECIFIC = 256,
+};
+
+/**
+ * Index for PIPE_QUERY_PIPELINE_STATISTICS subqueries.
+ */
+enum pipe_statistics_query_index {
+   PIPE_STAT_QUERY_IA_VERTICES,
+   PIPE_STAT_QUERY_IA_PRIMITIVES,
+   PIPE_STAT_QUERY_VS_INVOCATIONS,
+   PIPE_STAT_QUERY_GS_INVOCATIONS,
+   PIPE_STAT_QUERY_GS_PRIMITIVES,
+   PIPE_STAT_QUERY_C_INVOCATIONS,
+   PIPE_STAT_QUERY_C_PRIMITIVES,
+   PIPE_STAT_QUERY_PS_INVOCATIONS,
+   PIPE_STAT_QUERY_HS_INVOCATIONS,
+   PIPE_STAT_QUERY_DS_INVOCATIONS,
+   PIPE_STAT_QUERY_CS_INVOCATIONS,
 };
 
 /**
@@ -780,6 +807,7 @@ enum pipe_cap
    PIPE_CAP_TGSI_CAN_READ_OUTPUTS,
    PIPE_CAP_NATIVE_FENCE_FD,
    PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY,
+   PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS,
    PIPE_CAP_TGSI_FS_FBFETCH,
    PIPE_CAP_TGSI_MUL_ZERO_WINS,
    PIPE_CAP_DOUBLES,
@@ -823,6 +851,11 @@ enum pipe_cap
    PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS,
    PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET,
    PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET,
+   PIPE_CAP_SURFACE_SAMPLE_COUNT,
+   PIPE_CAP_TGSI_ATOMFADD,
+   PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE,
+   PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND,
+   PIPE_CAP_DEST_SURFACE_SRGB_CONTROL,
 };
 
 /**

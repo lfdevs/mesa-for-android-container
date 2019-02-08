@@ -84,7 +84,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
 
    void *mem_ctx = ralloc_context(NULL);
    if (tcp) {
-      nir = tcp->program.nir;
+      nir = nir_shader_clone(mem_ctx, tcp->program.nir);
    } else {
       const nir_shader_compiler_options *options =
          ctx->Const.ShaderCompilerOptions[MESA_SHADER_TESS_CTRL].NirOptions;
@@ -100,7 +100,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
       brw_nir_setup_glsl_uniforms(mem_ctx, nir, &tcp->program,
                                   &prog_data.base.base,
                                   compiler->scalar_stage[MESA_SHADER_TESS_CTRL]);
-      brw_nir_analyze_ubo_ranges(compiler, tcp->program.nir, NULL,
+      brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
                                  prog_data.base.base.ubo_ranges);
    } else {
       /* Upload the Patch URB Header as the first two uniforms.

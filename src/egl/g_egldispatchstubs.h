@@ -49,6 +49,8 @@ enum {
     __EGL_DISPATCH_eglGetCurrentDisplay,
     __EGL_DISPATCH_eglGetCurrentSurface,
     __EGL_DISPATCH_eglGetDisplay,
+    __EGL_DISPATCH_eglGetDisplayDriverConfig,
+    __EGL_DISPATCH_eglGetDisplayDriverName,
     __EGL_DISPATCH_eglGetError,
     __EGL_DISPATCH_eglGetPlatformDisplay,
     __EGL_DISPATCH_eglGetPlatformDisplayEXT,

@@ -89,6 +89,15 @@ xa_get_pipe_format(struct xa_tracker *xa, enum xa_formats xa_format)
     fdesc.xa_format = xa_format;
 
     switch (xa_format) {
+    case xa_format_a8:
+        if (xa->screen->is_format_supported(xa->screen, PIPE_FORMAT_R8_UNORM,
+                                            PIPE_TEXTURE_2D, 0, 0,
+                                            stype_bind[xa_type_a] |
+                                            PIPE_BIND_RENDER_TARGET))
+            fdesc.format = PIPE_FORMAT_R8_UNORM;
+        else
+            fdesc.format = PIPE_FORMAT_L8_UNORM;
+	break;
     case xa_format_a8r8g8b8:
 	fdesc.format = PIPE_FORMAT_B8G8R8A8_UNORM;
 	break;
@@ -101,15 +110,21 @@ xa_get_pipe_format(struct xa_tracker *xa, enum xa_formats xa_format)
     case xa_format_x1r5g5b5:
 	fdesc.format = PIPE_FORMAT_B5G5R5A1_UNORM;
 	break;
-    case xa_format_a8:
-        if (xa->screen->is_format_supported(xa->screen, PIPE_FORMAT_R8_UNORM,
-                                            PIPE_TEXTURE_2D, 0, 0,
-                                            stype_bind[xa_type_a] |
-                                            PIPE_BIND_RENDER_TARGET))
-            fdesc.format = PIPE_FORMAT_R8_UNORM;
-        else
-            fdesc.format = PIPE_FORMAT_L8_UNORM;
-	break;
+    case xa_format_a4r4g4b4:
+        fdesc.format = PIPE_FORMAT_B4G4R4A4_UNORM;
+        break;
+    case xa_format_a2b10g10r10:
+        fdesc.format = PIPE_FORMAT_R10G10B10A2_UNORM;
+        break;
+    case xa_format_x2b10g10r10:
+        fdesc.format = PIPE_FORMAT_R10G10B10X2_UNORM;
+        break;
+    case xa_format_b8g8r8a8:
+        fdesc.format = PIPE_FORMAT_A8R8G8B8_UNORM;
+        break;
+    case xa_format_b8g8r8x8:
+        fdesc.format = PIPE_FORMAT_X8R8G8B8_UNORM;
+        break;
     case xa_format_z24:
 	fdesc.format = PIPE_FORMAT_Z24X8_UNORM;
 	break;

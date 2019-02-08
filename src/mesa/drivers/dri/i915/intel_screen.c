@@ -1020,30 +1020,6 @@ intel_init_bufmgr(struct intel_screen *intelScreen)
    return true;
 }
 
-static bool
-intel_detect_swizzling(struct intel_screen *screen)
-{
-   drm_intel_bo *buffer;
-   unsigned long flags = 0;
-   unsigned long aligned_pitch;
-   uint32_t tiling = I915_TILING_X;
-   uint32_t swizzle_mode = 0;
-
-   buffer = drm_intel_bo_alloc_tiled(screen->bufmgr, "swizzle test",
-				     64, 64, 4,
-				     &tiling, &aligned_pitch, flags);
-   if (buffer == NULL)
-      return false;
-
-   drm_intel_bo_get_tiling(buffer, &tiling, &swizzle_mode);
-   drm_intel_bo_unreference(buffer);
-
-   if (swizzle_mode == I915_BIT_6_SWIZZLE_NONE)
-      return false;
-   else
-      return true;
-}
-
 static __DRIconfig**
 intel_screen_make_configs(__DRIscreen *dri_screen)
 {
@@ -1199,8 +1175,6 @@ __DRIconfig **intelInitScreen2(__DRIscreen *psp)
    } else {
       intelScreen->gen = 2;
    }
-
-   intelScreen->hw_has_swizzling = intel_detect_swizzling(intelScreen);
 
    set_max_gl_versions(intelScreen);
 

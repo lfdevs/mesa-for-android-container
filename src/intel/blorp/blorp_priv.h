@@ -360,7 +360,7 @@ blorp_compile_vs(struct blorp_context *blorp, void *mem_ctx,
                  struct brw_vs_prog_data *vs_prog_data);
 
 bool
-blorp_ensure_sf_program(struct blorp_context *blorp,
+blorp_ensure_sf_program(struct blorp_batch *batch,
                         struct blorp_params *params);
 
 /** \} */

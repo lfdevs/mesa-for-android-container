@@ -344,6 +344,19 @@ struct _mesa_glsl_parse_state {
       return ARB_bindless_texture_enable;
    }
 
+   bool has_implicit_conversions() const
+   {
+      return EXT_shader_implicit_conversions_enable || is_version(120, 0);
+   }
+
+   bool has_implicit_uint_to_int_conversion() const
+   {
+      return ARB_gpu_shader5_enable ||
+             MESA_shader_integer_functions_enable ||
+             EXT_shader_implicit_conversions_enable ||
+             is_version(400, 0);
+   }
+
    void process_version_directive(YYLTYPE *locp, int version,
                                   const char *ident);
 
@@ -602,6 +615,13 @@ struct _mesa_glsl_parse_state {
    char *info_log;
 
    /**
+    * Are warnings enabled?
+    *
+    * Emission of warngins is controlled by '#pragma warning(...)'.
+    */
+   bool warnings_enabled;
+
+   /**
     * \name Enable bits for GLSL extensions
     */
    /*@{*/
@@ -766,6 +786,8 @@ struct _mesa_glsl_parse_state {
    bool AMD_shader_stencil_export_warn;
    bool AMD_shader_trinary_minmax_enable;
    bool AMD_shader_trinary_minmax_warn;
+   bool AMD_texture_texture4_enable;
+   bool AMD_texture_texture4_warn;
    bool AMD_vertex_shader_layer_enable;
    bool AMD_vertex_shader_layer_warn;
    bool AMD_vertex_shader_viewport_index_enable;
@@ -794,6 +816,8 @@ struct _mesa_glsl_parse_state {
    bool EXT_shader_framebuffer_fetch_warn;
    bool EXT_shader_framebuffer_fetch_non_coherent_enable;
    bool EXT_shader_framebuffer_fetch_non_coherent_warn;
+   bool EXT_shader_implicit_conversions_enable;
+   bool EXT_shader_implicit_conversions_warn;
    bool EXT_shader_integer_mix_enable;
    bool EXT_shader_integer_mix_warn;
    bool EXT_shader_io_blocks_enable;

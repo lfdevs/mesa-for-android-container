@@ -386,7 +386,6 @@ vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time)
 
 static struct vc4_bo *
 vc4_bo_open_handle(struct vc4_screen *screen,
-                   uint32_t winsys_stride,
                    uint32_t handle, uint32_t size)
 {
         struct vc4_bo *bo;
@@ -410,8 +409,7 @@ vc4_bo_open_handle(struct vc4_screen *screen,
         bo->private = false;
 
 #ifdef USE_VC4_SIMULATOR
-        vc4_simulator_open_from_handle(screen->fd, winsys_stride,
-                                       bo->handle, bo->size);
+        vc4_simulator_open_from_handle(screen->fd, bo->handle, bo->size);
         bo->map = malloc(bo->size);
 #endif
 
@@ -423,8 +421,7 @@ done:
 }
 
 struct vc4_bo *
-vc4_bo_open_name(struct vc4_screen *screen, uint32_t name,
-                 uint32_t winsys_stride)
+vc4_bo_open_name(struct vc4_screen *screen, uint32_t name)
 {
         struct drm_gem_open o = {
                 .name = name
@@ -436,11 +433,11 @@ vc4_bo_open_name(struct vc4_screen *screen, uint32_t name,
                 return NULL;
         }
 
-        return vc4_bo_open_handle(screen, winsys_stride, o.handle, o.size);
+        return vc4_bo_open_handle(screen, o.handle, o.size);
 }
 
 struct vc4_bo *
-vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd, uint32_t winsys_stride)
+vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd)
 {
         uint32_t handle;
         int ret = drmPrimeFDToHandle(screen->fd, fd, &handle);
@@ -457,7 +454,7 @@ vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd, uint32_t winsys_stride)
                 return NULL;
         }
 
-        return vc4_bo_open_handle(screen, winsys_stride, handle, size);
+        return vc4_bo_open_handle(screen, handle, size);
 }
 
 int

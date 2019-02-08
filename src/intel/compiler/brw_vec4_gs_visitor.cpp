@@ -615,7 +615,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
                void *mem_ctx,
                const struct brw_gs_prog_key *key,
                struct brw_gs_prog_data *prog_data,
-               const nir_shader *src_shader,
+               nir_shader *shader,
                struct gl_program *prog,
                int shader_time_index,
                char **error_str)
@@ -625,7 +625,6 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
    c.key = *key;
 
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_GEOMETRY];
-   nir_shader *shader = nir_shader_clone(mem_ctx, src_shader);
 
    /* The GLSL linker will have already matched up GS inputs and the outputs
     * of prior stages.  The driver does extend VS outputs in some cases, but
@@ -668,7 +667,7 @@ brw_compile_gs(const struct brw_compiler *compiler, void *log_data,
          prog_data->control_data_format = GEN7_GS_CONTROL_DATA_FORMAT_GSCTL_SID;
 
          /* We only have to emit control bits if we are using streams */
-         if (prog && prog->info.gs.uses_streams)
+         if (shader->info.gs.uses_streams)
             c.control_data_bits_per_vertex = 2;
          else
             c.control_data_bits_per_vertex = 0;

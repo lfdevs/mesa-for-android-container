@@ -42,6 +42,7 @@
 #include "util/u_format.h"
 #include "vc4_qir.h"
 #include "compiler/nir/nir_builder.h"
+#include "compiler/nir/nir_format_convert.h"
 #include "vc4_context.h"
 
 static bool
@@ -65,37 +66,6 @@ vc4_nir_get_dst_color(nir_builder *b, int sample)
         nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, NULL);
         nir_builder_instr_insert(b, &load->instr);
         return &load->dest.ssa;
-}
-
-static  nir_ssa_def *
-vc4_nir_srgb_decode(nir_builder *b, nir_ssa_def *srgb)
-{
-        nir_ssa_def *is_low = nir_flt(b, srgb, nir_imm_float(b, 0.04045));
-        nir_ssa_def *low = nir_fmul(b, srgb, nir_imm_float(b, 1.0 / 12.92));
-        nir_ssa_def *high = nir_fpow(b,
-                                     nir_fmul(b,
-                                              nir_fadd(b, srgb,
-                                                       nir_imm_float(b, 0.055)),
-                                              nir_imm_float(b, 1.0 / 1.055)),
-                                     nir_imm_float(b, 2.4));
-
-        return nir_bcsel(b, is_low, low, high);
-}
-
-static  nir_ssa_def *
-vc4_nir_srgb_encode(nir_builder *b, nir_ssa_def *linear)
-{
-        nir_ssa_def *is_low = nir_flt(b, linear, nir_imm_float(b, 0.0031308));
-        nir_ssa_def *low = nir_fmul(b, linear, nir_imm_float(b, 12.92));
-        nir_ssa_def *high = nir_fsub(b,
-                                     nir_fmul(b,
-                                              nir_imm_float(b, 1.055),
-                                              nir_fpow(b,
-                                                       linear,
-                                                       nir_imm_float(b, 0.41666))),
-                                     nir_imm_float(b, 0.055));
-
-        return nir_bcsel(b, is_low, low, high);
 }
 
 static nir_ssa_def *
@@ -130,7 +100,7 @@ vc4_blend_channel_f(nir_builder *b,
                 return nir_load_system_value(b,
                                              nir_intrinsic_load_blend_const_color_r_float +
                                              channel,
-                                             0);
+                                             0, 32);
         case PIPE_BLENDFACTOR_CONST_ALPHA:
                 return nir_load_blend_const_color_a_float(b);
         case PIPE_BLENDFACTOR_ZERO:
@@ -148,7 +118,7 @@ vc4_blend_channel_f(nir_builder *b,
                                 nir_load_system_value(b,
                                                       nir_intrinsic_load_blend_const_color_r_float +
                                                       channel,
-                                                      0));
+                                                      0, 32));
         case PIPE_BLENDFACTOR_INV_CONST_ALPHA:
                 return nir_fsub(b, nir_imm_float(b, 1.0),
                                 nir_load_blend_const_color_a_float(b));
@@ -501,14 +471,14 @@ vc4_nir_blend_pipeline(struct vc4_compile *c, nir_builder *b, nir_ssa_def *src,
 
                 /* Turn dst color to linear. */
                 for (int i = 0; i < 3; i++)
-                        dst_color[i] = vc4_nir_srgb_decode(b, dst_color[i]);
+                        dst_color[i] = nir_format_srgb_to_linear(b, dst_color[i]);
 
                 nir_ssa_def *blend_color[4];
                 vc4_do_blending_f(c, b, blend_color, src_color, dst_color);
 
                 /* sRGB encode the output color */
                 for (int i = 0; i < 3; i++)
-                        blend_color[i] = vc4_nir_srgb_encode(b, blend_color[i]);
+                        blend_color[i] = nir_format_linear_to_srgb(b, blend_color[i]);
 
                 packed_color = vc4_nir_swizzle_and_pack(c, b, blend_color);
         } else {

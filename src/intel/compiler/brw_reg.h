@@ -221,15 +221,15 @@ struct brw_reg {
          unsigned negate:1;             /* source only */
          unsigned abs:1;                /* source only */
          unsigned address_mode:1;       /* relative addressing, hopefully! */
-         unsigned pad0:1;
+         unsigned pad0:17;
          unsigned subnr:5;              /* :1 in align16 */
-         unsigned nr:16;
       };
       uint32_t bits;
    };
 
    union {
       struct {
+         unsigned nr;
          unsigned swizzle:8;      /* src only, align16 only */
          unsigned writemask:4;    /* dest only, align16 only */
          int  indirect_offset:10; /* relative addressing offset */
@@ -251,8 +251,7 @@ struct brw_reg {
 static inline bool
 brw_regs_equal(const struct brw_reg *a, const struct brw_reg *b)
 {
-   const bool df = a->type == BRW_REGISTER_TYPE_DF && a->file == IMM;
-   return a->bits == b->bits && (df ? a->u64 == b->u64 : a->ud == b->ud);
+   return a->bits == b->bits && a->u64 == b->u64;
 }
 
 static inline bool

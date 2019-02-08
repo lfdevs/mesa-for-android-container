@@ -72,6 +72,22 @@ tex_filter(unsigned filter)
 	}
 }
 
+static enum sq_tex_filter
+mip_filter(unsigned filter)
+{
+	switch (filter) {
+	case PIPE_TEX_MIPFILTER_NONE:
+		return SQ_TEX_FILTER_BASEMAP;
+	case PIPE_TEX_MIPFILTER_NEAREST:
+		return SQ_TEX_FILTER_POINT;
+	case PIPE_TEX_MIPFILTER_LINEAR:
+		return SQ_TEX_FILTER_BILINEAR;
+	default:
+		DBG("invalid filter: %u", filter);
+		return 0;
+	}
+}
+
 static void *
 fd2_sampler_state_create(struct pipe_context *pctx,
 		const struct pipe_sampler_state *cso)
@@ -83,6 +99,11 @@ fd2_sampler_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
+	/* TODO
+	 * cso->max_anisotropy
+	 * cso->normalized_coords (dealt with by shader for rect textures?)
+	 */
+
 	/* SQ_TEX0_PITCH() must be OR'd in later when we know the bound texture: */
 	so->tex0 =
 		A2XX_SQ_TEX_0_CLAMP_X(tex_clamp(cso->wrap_s)) |
@@ -91,10 +112,12 @@ fd2_sampler_state_create(struct pipe_context *pctx,
 
 	so->tex3 =
 		A2XX_SQ_TEX_3_XY_MAG_FILTER(tex_filter(cso->mag_img_filter)) |
-		A2XX_SQ_TEX_3_XY_MIN_FILTER(tex_filter(cso->min_img_filter));
+		A2XX_SQ_TEX_3_XY_MIN_FILTER(tex_filter(cso->min_img_filter)) |
+		A2XX_SQ_TEX_3_MIP_FILTER(mip_filter(cso->min_mip_filter));
 
-	so->tex4 = 0x00000000; /* ??? */
-	so->tex5 = 0x00000200; /* ??? */
+	so->tex4 = 0;
+	if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE)
+		so->tex4 = A2XX_SQ_TEX_4_LOD_BIAS(cso->lod_bias);
 
 	return so;
 }
@@ -121,6 +144,26 @@ fd2_sampler_states_bind(struct pipe_context *pctx,
 	fd_sampler_states_bind(pctx, shader, start, nr, hwcso);
 }
 
+static enum sq_tex_dimension
+tex_dimension(unsigned target)
+{
+	switch (target) {
+	default:
+		assert(0);
+	case PIPE_TEXTURE_1D:
+		assert(0); /* TODO */
+		return SQ_TEX_DIMENSION_1D;
+	case PIPE_TEXTURE_RECT:
+	case PIPE_TEXTURE_2D:
+		return SQ_TEX_DIMENSION_2D;
+	case PIPE_TEXTURE_3D:
+		assert(0); /* TODO */
+		return SQ_TEX_DIMENSION_3D;
+	case PIPE_TEXTURE_CUBE:
+		return SQ_TEX_DIMENSION_CUBE;
+	}
+}
+
 static struct pipe_sampler_view *
 fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		const struct pipe_sampler_view *cso)
@@ -137,14 +180,21 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.reference.count = 1;
 	so->base.context = pctx;
 
-	so->fmt = fd2_pipe2surface(cso->format);
-
 	so->tex0 = A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch);
+	so->tex1 =
+		A2XX_SQ_TEX_1_FORMAT(fd2_pipe2surface(cso->format)) |
+		A2XX_SQ_TEX_1_CLAMP_POLICY(SQ_TEX_CLAMP_POLICY_OGL);
 	so->tex2 =
 		A2XX_SQ_TEX_2_HEIGHT(prsc->height0 - 1) |
 		A2XX_SQ_TEX_2_WIDTH(prsc->width0 - 1);
 	so->tex3 = fd2_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
 			cso->swizzle_b, cso->swizzle_a);
+
+	so->tex4 =
+		A2XX_SQ_TEX_4_MIP_MIN_LEVEL(fd_sampler_first_level(cso)) |
+		A2XX_SQ_TEX_4_MIP_MAX_LEVEL(fd_sampler_last_level(cso));
+
+	so->tex5 = A2XX_SQ_TEX_5_DIMENSION(tex_dimension(prsc->target));
 
 	return &so->base;
 }
@@ -186,6 +236,13 @@ fd2_get_const_idx(struct fd_context *ctx, struct fd_texture_stateobj *tex,
 	if (tex == &ctx->tex[PIPE_SHADER_FRAGMENT])
 		return samp_id;
 	return samp_id + ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers;
+}
+
+/* for reasons unknown, it appears ETC1 cubemap needs swapped xy coordinates */
+bool fd2_texture_swap_xy(struct fd_texture_stateobj *tex, unsigned samp_id)
+{
+	return tex->textures[samp_id]->format == PIPE_FORMAT_ETC1_RGB8 &&
+		tex->textures[samp_id]->texture->target == PIPE_TEXTURE_CUBE;
 }
 
 void

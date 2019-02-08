@@ -85,30 +85,9 @@ set_feedback_vertex_format(struct gl_context *ctx)
 
 
 /**
- * Helper for drawing current vertex arrays.
- */
-static void
-draw_arrays(struct draw_context *draw, unsigned mode,
-            unsigned start, unsigned count)
-{
-   struct pipe_draw_info info;
-
-   util_draw_init_info(&info);
-
-   info.mode = mode;
-   info.start = start;
-   info.count = count;
-   info.min_index = start;
-   info.max_index = start + count - 1;
-
-   draw_vbo(draw, &info);
-}
-
-
-/**
  * Called by VBO to draw arrays when in selection or feedback mode and
  * to implement glRasterPos.
- * This is very much like the normal draw_vbo() function above.
+ * This function mirrors the normal st_draw_vbo().
  * Look at code refactoring some day.
  */
 void
@@ -127,16 +106,26 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    struct pipe_context *pipe = st->pipe;
    struct draw_context *draw = st_get_draw_context(st);
    const struct st_vertex_program *vp;
+   struct st_vp_variant *vp_variant;
    const struct pipe_shader_state *vs;
    struct pipe_vertex_buffer vbuffers[PIPE_MAX_SHADER_INPUTS];
+   unsigned num_vbuffers = 0;
    struct pipe_vertex_element velements[PIPE_MAX_ATTRIBS];
    struct pipe_transfer *vb_transfer[PIPE_MAX_ATTRIBS] = {NULL};
    struct pipe_transfer *ib_transfer = NULL;
-   GLuint attr, i;
+   GLuint i;
    const void *mapped_indices = NULL;
+   struct pipe_draw_info info;
 
    if (!draw)
       return;
+
+   /* Initialize pipe_draw_info. */
+   info.primitive_restart = false;
+   info.vertices_per_patch = ctx->TessCtrlProgram.patch_vertices;
+   info.indirect = NULL;
+   info.count_from_stream_output = NULL;
+   info.restart_index = 0;
 
    st_flush_bitmap_cache(st);
    st_invalidate_readpix_cache(st);
@@ -148,10 +137,11 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    /* must get these after state validation! */
    vp = st->vp;
-   vs = &st->vp_variant->tgsi;
+   vp_variant = st->vp_variant;
+   vs = &vp_variant->tgsi;
 
-   if (!st->vp_variant->draw_shader) {
-      st->vp_variant->draw_shader = draw_create_vertex_shader(draw, vs);
+   if (!vp_variant->draw_shader) {
+      vp_variant->draw_shader = draw_create_vertex_shader(draw, vs);
    }
 
    /*
@@ -164,64 +154,30 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    draw_set_viewport_states(draw, 0, 1, &st->state.viewport[0]);
    draw_set_clip_state(draw, &st->state.clip);
    draw_set_rasterizer_state(draw, &st->state.rasterizer, NULL);
-   draw_bind_vertex_shader(draw, st->vp_variant->draw_shader);
+   draw_bind_vertex_shader(draw, vp_variant->draw_shader);
    set_feedback_vertex_format(ctx);
 
-   /* loop over TGSI shader inputs to determine vertex buffer
-    * and attribute info
-    */
-   for (attr = 0; attr < vp->num_inputs; attr++) {
-      const GLuint mesaAttr = vp->index_to_input[attr];
-      const struct gl_vertex_buffer_binding *binding;
-      const struct gl_array_attributes *attrib;
-      void *map;
+   /* Must setup these after state validation! */
+   /* Setup arrays */
+   st_setup_arrays(st, vp, vp_variant, velements, vbuffers, &num_vbuffers);
+   /* Setup current values as userspace arrays */
+   st_setup_current_user(st, vp, vp_variant, velements, vbuffers, &num_vbuffers);
 
-      _mesa_draw_attrib_and_binding(ctx, mesaAttr, &attrib, &binding);
+   /* Map all buffers and tell draw about their mapping */
+   for (unsigned buf = 0; buf < num_vbuffers; ++buf) {
+      struct pipe_vertex_buffer *vbuffer = &vbuffers[buf];
 
-      if (_mesa_is_bufferobj(binding->BufferObj)) {
-         /* Attribute data is in a VBO. */
-         struct st_buffer_object *stobj = st_buffer_object(binding->BufferObj);
-         assert(stobj->buffer);
-
-         vbuffers[attr].buffer.resource = NULL;
-         vbuffers[attr].is_user_buffer = false;
-         pipe_resource_reference(&vbuffers[attr].buffer.resource, stobj->buffer);
-         vbuffers[attr].buffer_offset = _mesa_draw_binding_offset(binding);
-         velements[attr].src_offset =
-            _mesa_draw_attributes_relative_offset(attrib);
-
-         /* map the attrib buffer */
-         map = pipe_buffer_map(pipe, vbuffers[attr].buffer.resource,
-                               PIPE_TRANSFER_READ,
-                               &vb_transfer[attr]);
-         draw_set_mapped_vertex_buffer(draw, attr, map,
-                                       vbuffers[attr].buffer.resource->width0);
+      if (vbuffer->is_user_buffer) {
+         draw_set_mapped_vertex_buffer(draw, buf, vbuffer->buffer.user, ~0);
+      } else {
+         void *map = pipe_buffer_map(pipe, vbuffer->buffer.resource,
+                                     PIPE_TRANSFER_READ, &vb_transfer[buf]);
+         draw_set_mapped_vertex_buffer(draw, buf, map,
+                                       vbuffer->buffer.resource->width0);
       }
-      else {
-         /* Attribute data is in a user space array. */
-         vbuffers[attr].buffer.user = attrib->Ptr;
-         vbuffers[attr].is_user_buffer = true;
-         vbuffers[attr].buffer_offset = 0;
-         velements[attr].src_offset = 0;
-
-         draw_set_mapped_vertex_buffer(draw, attr,
-                                       vbuffers[attr].buffer.user, ~0);
-      }
-
-      /* common-case setup */
-      vbuffers[attr].stride = binding->Stride; /* in bytes */
-      velements[attr].instance_divisor = 0;
-      velements[attr].vertex_buffer_index = attr;
-      velements[attr].src_format = st_pipe_vertex_format(attrib);
-      assert(velements[attr].src_format);
-
-      /* tell draw about this attribute */
-#if 0
-      draw_set_vertex_buffer(draw, attr, &vbuffer[attr]);
-#endif
    }
 
-   draw_set_vertex_buffers(draw, 0, vp->num_inputs, vbuffers);
+   draw_set_vertex_buffers(draw, 0, num_vbuffers, vbuffers);
    draw_set_vertex_elements(draw, vp->num_inputs, velements);
 
    unsigned start = 0;
@@ -244,9 +200,23 @@ st_feedback_draw_vbo(struct gl_context *ctx,
          mapped_indices = ib->ptr;
       }
 
+      info.index_size = ib->index_size;
+      info.min_index = min_index;
+      info.max_index = max_index;
+      info.has_user_indices = true;
+      info.index.user = mapped_indices;
+
       draw_set_indexes(draw,
                        (ubyte *) mapped_indices,
                        index_size, ~0);
+
+      if (ctx->Array._PrimitiveRestart) {
+         info.primitive_restart = true;
+         info.restart_index = _mesa_primitive_restart_index(ctx, info.index_size);
+      }
+   } else {
+      info.index_size = 0;
+      info.has_user_indices = false;
    }
 
    /* set the constant buffer */
@@ -257,7 +227,23 @@ st_feedback_draw_vbo(struct gl_context *ctx,
 
    /* draw here */
    for (i = 0; i < nr_prims; i++) {
-      draw_arrays(draw, prims[i].mode, start + prims[i].start, prims[i].count);
+      info.count = prims[i].count;
+
+      if (!info.count)
+         continue;
+
+      info.mode = prims[i].mode;
+      info.start = start + prims[i].start;
+      info.start_instance = prims[i].base_instance;
+      info.instance_count = prims[i].num_instances;
+      info.index_bias = prims[i].basevertex;
+      info.drawid = prims[i].draw_id;
+      if (!ib) {
+         info.min_index = info.start;
+         info.max_index = info.start + info.count - 1;
+      }
+
+      draw_vbo(draw, &info);
    }
 
 
@@ -271,11 +257,10 @@ st_feedback_draw_vbo(struct gl_context *ctx,
    }
 
  out_unref_vertex:
-   for (attr = 0; attr < vp->num_inputs; attr++) {
-      if (vb_transfer[attr])
-         pipe_buffer_unmap(pipe, vb_transfer[attr]);
-      draw_set_mapped_vertex_buffer(draw, attr, NULL, 0);
-      pipe_vertex_buffer_unreference(&vbuffers[attr]);
+   for (unsigned buf = 0; buf < num_vbuffers; ++buf) {
+      if (vb_transfer[buf])
+         pipe_buffer_unmap(pipe, vb_transfer[buf]);
+      draw_set_mapped_vertex_buffer(draw, buf, NULL, 0);
    }
-   draw_set_vertex_buffers(draw, 0, vp->num_inputs, NULL);
+   draw_set_vertex_buffers(draw, 0, num_vbuffers, NULL);
 }

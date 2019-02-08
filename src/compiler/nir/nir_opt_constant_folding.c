@@ -88,6 +88,9 @@ constant_fold_alu_instr(nir_alu_instr *instr, void *mem_ctx)
          case 8:
             src[i].u8[j] = load_const->value.u8[instr->src[i].swizzle[j]];
             break;
+         case 1:
+            src[i].b[j] = load_const->value.b[instr->src[i].swizzle[j]];
+            break;
          default:
             unreachable("Invalid bit size");
          }
@@ -190,9 +193,14 @@ nir_opt_constant_folding_impl(nir_function_impl *impl)
       progress |= constant_fold_block(block, mem_ctx);
    }
 
-   if (progress)
+   if (progress) {
       nir_metadata_preserve(impl, nir_metadata_block_index |
                                   nir_metadata_dominance);
+   } else {
+#ifndef NDEBUG
+      impl->valid_metadata &= ~nir_metadata_not_properly_reset;
+#endif
+   }
 
    return progress;
 }

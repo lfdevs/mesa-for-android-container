@@ -47,6 +47,7 @@ namespace brw {
       unsigned
       allocate(unsigned size)
       {
+         assert(size > 0);
          if (capacity <= count) {
             capacity = MAX2(16, capacity * 2);
             sizes = (unsigned *)realloc(sizes, capacity * sizeof(unsigned));

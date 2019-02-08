@@ -47,17 +47,23 @@ i965_disasm_get_file_size(FILE *fp)
 static void *
 i965_disasm_read_binary(FILE *fp, size_t *end)
 {
+   size_t size;
    void *assembly;
 
    *end = i965_disasm_get_file_size(fp);
+   if (!*end)
+      return NULL;
 
    assembly = malloc(*end + 1);
    if (assembly == NULL)
       return NULL;
 
-   fread(assembly, *end, 1, fp);
+   size = fread(assembly, *end, 1, fp);
    fclose(fp);
-
+   if (!size) {
+      free(assembly);
+      return NULL;
+   }
    return assembly;
 }
 
@@ -167,7 +173,11 @@ int main(int argc, char *argv[])
 
    assembly = i965_disasm_read_binary(fp, &end);
    if (!assembly) {
-      fprintf(stderr, "Unable to allocate buffer to read binary file\n");
+      if (end)
+        fprintf(stderr, "Unable to allocate buffer to read binary file\n");
+      else
+        fprintf(stderr, "Input file is empty\n");
+
       exit(EXIT_FAILURE);
    }
 

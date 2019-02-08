@@ -36,39 +36,25 @@ struct winsys_handle;
 struct virgl_screen;
 struct virgl_context;
 
-struct virgl_resource {
-   struct u_resource u;
-   struct virgl_hw_res *hw_res;
-   boolean clean;
-};
-
-struct virgl_buffer {
-   struct virgl_resource base;
-
-   struct list_head flush_list;
-   boolean on_list;
-
-   /* The buffer range which is initialized (with a write transfer,
-    * streamout, DMA, or as a random access target). The rest of
-    * the buffer is considered invalid and can be mapped unsynchronized.
-    *
-    * This allows unsychronized mapping of a buffer range which hasn't
-    * been used yet. It's for applications which forget to use
-    * the unsynchronized map flag and expect the driver to figure it out.
-    */
-   struct util_range valid_buffer_range;
-};
-
-struct virgl_texture {
-   struct virgl_resource base;
-
+struct virgl_resource_metadata
+{
    unsigned long level_offset[VR_MAX_TEXTURE_2D_LEVELS];
    unsigned stride[VR_MAX_TEXTURE_2D_LEVELS];
+   unsigned layer_stride[VR_MAX_TEXTURE_2D_LEVELS];
+   uint32_t total_size;
+};
+
+struct virgl_resource {
+   struct u_resource u;
+   boolean clean;
+   struct virgl_hw_res *hw_res;
+   struct virgl_resource_metadata metadata;
 };
 
 struct virgl_transfer {
    struct pipe_transfer base;
-   uint32_t offset;
+   uint32_t offset, l_stride;
+   struct util_range range;
    struct virgl_resource *resolve_tmp;
 };
 
@@ -79,26 +65,11 @@ void virgl_init_screen_resource_functions(struct pipe_screen *screen);
 
 void virgl_init_context_resource_functions(struct pipe_context *ctx);
 
-struct pipe_resource *virgl_texture_create(struct virgl_screen *vs,
-                                           const struct pipe_resource *templ);
-
-struct pipe_resource *virgl_texture_from_handle(struct virgl_screen *vs,
-                                                const struct pipe_resource *templ,
-                                                struct winsys_handle *whandle);
+void virgl_texture_init(struct virgl_resource *res);
 
 static inline struct virgl_resource *virgl_resource(struct pipe_resource *r)
 {
    return (struct virgl_resource *)r;
-}
-
-static inline struct virgl_buffer *virgl_buffer(struct pipe_resource *r)
-{
-   return (struct virgl_buffer *)r;
-}
-
-static inline struct virgl_texture *virgl_texture(struct pipe_resource *r)
-{
-   return (struct virgl_texture *)r;
 }
 
 static inline struct virgl_transfer *virgl_transfer(struct pipe_transfer *trans)
@@ -106,8 +77,7 @@ static inline struct virgl_transfer *virgl_transfer(struct pipe_transfer *trans)
    return (struct virgl_transfer *)trans;
 }
 
-struct pipe_resource *virgl_buffer_create(struct virgl_screen *vs,
-                                          const struct pipe_resource *templ);
+void virgl_buffer_init(struct virgl_resource *res);
 
 static inline unsigned pipe_to_virgl_bind(unsigned pbind)
 {
@@ -145,4 +115,24 @@ bool virgl_res_needs_flush_wait(struct virgl_context *vctx,
 bool virgl_res_needs_readback(struct virgl_context *vctx,
                               struct virgl_resource *res,
                               unsigned usage);
+
+void virgl_resource_layout(struct pipe_resource *pt,
+                           struct virgl_resource_metadata *metadata);
+
+struct virgl_transfer *
+virgl_resource_create_transfer(struct pipe_context *ctx,
+                               struct pipe_resource *pres,
+                               const struct virgl_resource_metadata *metadata,
+                               unsigned level, unsigned usage,
+                               const struct pipe_box *box);
+
+void virgl_resource_destroy_transfer(struct virgl_context *vctx,
+                                     struct virgl_transfer *trans);
+
+void virgl_resource_destroy(struct pipe_screen *screen,
+                            struct pipe_resource *resource);
+
+boolean virgl_resource_get_handle(struct pipe_screen *screen,
+                                  struct pipe_resource *resource,
+                                  struct winsys_handle *whandle);
 #endif

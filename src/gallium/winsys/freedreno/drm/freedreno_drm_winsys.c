@@ -85,7 +85,7 @@ static int compare_fd(void *key1, void *key2)
 }
 
 struct pipe_screen *
-fd_drm_screen_create(int fd)
+fd_drm_screen_create(int fd, struct renderonly *ro)
 {
 	struct pipe_screen *pscreen = NULL;
 
@@ -104,7 +104,7 @@ fd_drm_screen_create(int fd)
 		if (!dev)
 			goto unlock;
 
-		pscreen = fd_screen_create(dev);
+		pscreen = fd_screen_create(dev, ro);
 		if (pscreen) {
 			int fd = fd_device_fd(dev);
 

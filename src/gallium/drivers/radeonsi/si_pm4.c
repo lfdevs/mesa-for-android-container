@@ -85,14 +85,14 @@ void si_pm4_set_reg(struct si_pm4_state *state, unsigned reg, uint32_t val)
 }
 
 void si_pm4_add_bo(struct si_pm4_state *state,
-                   struct r600_resource *bo,
+                   struct si_resource *bo,
                    enum radeon_bo_usage usage,
 		   enum radeon_bo_priority priority)
 {
 	unsigned idx = state->nbo++;
 	assert(idx < SI_PM4_MAX_BO);
 
-	r600_resource_reference(&state->bo[idx], bo);
+	si_resource_reference(&state->bo[idx], bo);
 	state->bo_usage[idx] = usage;
 	state->bo_priority[idx] = priority;
 }
@@ -100,8 +100,8 @@ void si_pm4_add_bo(struct si_pm4_state *state,
 void si_pm4_clear_state(struct si_pm4_state *state)
 {
 	for (int i = 0; i < state->nbo; ++i)
-		r600_resource_reference(&state->bo[i], NULL);
-	r600_resource_reference(&state->indirect_buffer, NULL);
+		si_resource_reference(&state->bo[i], NULL);
+	si_resource_reference(&state->indirect_buffer, NULL);
 	state->nbo = 0;
 	state->ndw = 0;
 }
@@ -133,7 +133,7 @@ void si_pm4_emit(struct si_context *sctx, struct si_pm4_state *state)
 	if (!state->indirect_buffer) {
 		radeon_emit_array(cs, state->pm4, state->ndw);
 	} else {
-		struct r600_resource *ib = state->indirect_buffer;
+		struct si_resource *ib = state->indirect_buffer;
 
 		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, ib,
 					  RADEON_USAGE_READ,
@@ -168,7 +168,7 @@ void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 	assert(state->ndw);
 	assert(aligned_ndw <= SI_PM4_MAX_DW);
 
-	r600_resource_reference(&state->indirect_buffer, NULL);
+	si_resource_reference(&state->indirect_buffer, NULL);
 	/* TODO: this hangs with 1024 or higher alignment on GFX9. */
 	state->indirect_buffer =
 		si_aligned_buffer_create(screen, 0,

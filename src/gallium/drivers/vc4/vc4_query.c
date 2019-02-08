@@ -132,7 +132,7 @@ vc4_create_batch_query(struct pipe_context *pctx, unsigned num_queries,
 
         /* We can't mix HW and non-HW queries. */
         if (nhwqueries && nhwqueries != num_queries)
-                return NULL;
+                goto err_free_query;
 
         if (!nhwqueries)
                 return (struct pipe_query *)query;

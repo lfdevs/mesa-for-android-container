@@ -51,21 +51,21 @@ namespace SwrJit
         virtual LoadInst* LOAD(Value*         Ptr,
                                const char*    Name,
                                Type*          Ty    = nullptr,
-                               JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                               JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
         virtual LoadInst* LOAD(Value*         Ptr,
                                const Twine&   Name  = "",
                                Type*          Ty    = nullptr,
-                               JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                               JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
         virtual LoadInst* LOAD(Value*         Ptr,
                                bool           isVolatile,
                                const Twine&   Name  = "",
                                Type*          Ty    = nullptr,
-                               JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                               JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
         virtual LoadInst* LOAD(Value*                                 BasePtr,
                                const std::initializer_list<uint32_t>& offset,
                                const llvm::Twine&                     Name  = "",
                                Type*                                  Ty    = nullptr,
-                               JIT_MEM_CLIENT                         usage = MEM_CLIENT_INTERNAL);
+                               JIT_MEM_CLIENT                         usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
 
         virtual CallInst* MASKED_LOAD(Value*         Ptr,
@@ -74,36 +74,36 @@ namespace SwrJit
                                       Value*         PassThru = nullptr,
                                       const Twine&   Name     = "",
                                       Type*          Ty       = nullptr,
-                                      JIT_MEM_CLIENT usage    = MEM_CLIENT_INTERNAL);
+                                      JIT_MEM_CLIENT usage    = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
         virtual Value* GATHERPS(Value*         src,
                                 Value*         pBase,
                                 Value*         indices,
                                 Value*         mask,
                                 uint8_t        scale = 1,
-                                JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                                JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
         virtual Value* GATHERDD(Value*         src,
                                 Value*         pBase,
                                 Value*         indices,
                                 Value*         mask,
                                 uint8_t        scale = 1,
-                                JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                                JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
         virtual void SCATTERPS(Value*         pDst,
                                Value*         vSrc,
                                Value*         vOffsets,
                                Value*         vMask,
-                               JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                               JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
 
         Value* TranslateGfxAddressForRead(Value*         xpGfxAddress,
                                           Type*          PtrTy = nullptr,
                                           const Twine&   Name  = "",
-                                          JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                                          JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
         Value* TranslateGfxAddressForWrite(Value*         xpGfxAddress,
                                            Type*          PtrTy = nullptr,
                                            const Twine&   Name  = "",
-                                           JIT_MEM_CLIENT usage = MEM_CLIENT_INTERNAL);
+                                           JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
 
     protected:

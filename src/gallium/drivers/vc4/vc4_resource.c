@@ -319,8 +319,10 @@ vc4_resource_get_handle(struct pipe_screen *pscreen,
 
                 return vc4_bo_flink(rsc->bo, &whandle->handle);
         case WINSYS_HANDLE_TYPE_KMS:
-                if (screen->ro && renderonly_get_handle(rsc->scanout, whandle))
-                        return TRUE;
+                if (screen->ro) {
+                        assert(rsc->scanout);
+                        return renderonly_get_handle(rsc->scanout, whandle);
+                }
                 whandle->handle = rsc->bo->handle;
                 return TRUE;
         case WINSYS_HANDLE_TYPE_FD:
@@ -622,12 +624,10 @@ vc4_resource_from_handle(struct pipe_screen *pscreen,
 
         switch (whandle->type) {
         case WINSYS_HANDLE_TYPE_SHARED:
-                rsc->bo = vc4_bo_open_name(screen,
-                                           whandle->handle, whandle->stride);
+                rsc->bo = vc4_bo_open_name(screen, whandle->handle);
                 break;
         case WINSYS_HANDLE_TYPE_FD:
-                rsc->bo = vc4_bo_open_dmabuf(screen,
-                                             whandle->handle, whandle->stride);
+                rsc->bo = vc4_bo_open_dmabuf(screen, whandle->handle);
                 break;
         default:
                 fprintf(stderr,
@@ -1013,6 +1013,7 @@ void
 vc4_update_shadow_baselevel_texture(struct pipe_context *pctx,
                                     struct pipe_sampler_view *pview)
 {
+        struct vc4_context *vc4 = vc4_context(pctx);
         struct vc4_sampler_view *view = vc4_sampler_view(pview);
         struct vc4_resource *shadow = vc4_resource(view->texture);
         struct vc4_resource *orig = vc4_resource(pview->texture);

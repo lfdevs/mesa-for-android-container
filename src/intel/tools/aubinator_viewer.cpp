@@ -97,7 +97,7 @@ handle_mem_write(void *user_data, uint64_t phys_addr,
 }
 
 static void
-handle_ring_write(void *user_data, enum gen_engine engine,
+handle_ring_write(void *user_data, enum drm_i915_gem_engine_class engine,
                   const void *ring_data, uint32_t ring_data_len)
 {
    struct aub_file *file = (struct aub_file *) user_data;
@@ -387,16 +387,14 @@ new_shader_window(struct aub_mem *mem, uint64_t address, const char *desc)
    window->base.display = display_shader_window;
    window->base.destroy = destroy_shader_window;
 
-   struct gen_batch_decode_bo shader_bo;
-   if (mem->pml4)
-      shader_bo = aub_mem_get_ppgtt_bo(mem, address);
-   else
-      shader_bo = aub_mem_get_ggtt_bo(mem, address);
-
+   struct gen_batch_decode_bo shader_bo =
+      aub_mem_get_ppgtt_bo(mem, address);
    if (shader_bo.map) {
       FILE *f = open_memstream(&window->shader, &window->shader_size);
       if (f) {
-         gen_disasm_disassemble(context.file->disasm, shader_bo.map, 0, f);
+         gen_disasm_disassemble(context.file->disasm,
+                                (const uint8_t *) shader_bo.map +
+                                (address - shader_bo.addr), 0, f);
          fclose(f);
       }
    }
@@ -695,7 +693,7 @@ update_batch_window(struct batch_window *window, bool reset, int exec_idx)
 }
 
 static void
-display_batch_ring_write(void *user_data, enum gen_engine engine,
+display_batch_ring_write(void *user_data, enum drm_i915_gem_engine_class engine,
                          const void *data, uint32_t data_len)
 {
    struct batch_window *window = (struct batch_window *) user_data;
@@ -706,7 +704,8 @@ display_batch_ring_write(void *user_data, enum gen_engine engine,
 }
 
 static void
-display_batch_execlist_write(void *user_data, enum gen_engine engine,
+display_batch_execlist_write(void *user_data,
+                             enum drm_i915_gem_engine_class engine,
                              uint64_t context_descriptor)
 {
    struct batch_window *window = (struct batch_window *) user_data;
@@ -722,19 +721,21 @@ display_batch_execlist_write(void *user_data, enum gen_engine engine,
    uint32_t ring_buffer_head = context_img[5];
    uint32_t ring_buffer_tail = context_img[7];
    uint32_t ring_buffer_start = context_img[9];
+   uint32_t ring_buffer_length = (context_img[11] & 0x1ff000) + 4096;
 
    window->mem.pml4 = (uint64_t)context_img[49] << 32 | context_img[51];
 
    struct gen_batch_decode_bo ring_bo =
       aub_mem_get_ggtt_bo(&window->mem, ring_buffer_start);
    assert(ring_bo.size > 0);
-   void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr);
+   void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
 
    window->uses_ppgtt = true;
 
+   window->decode_ctx.engine = engine;
    aub_viewer_render_batch(&window->decode_ctx, commands,
-                           ring_buffer_tail - ring_buffer_head,
-                           ring_buffer_start);
+                           MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
+                           ring_buffer_start + ring_buffer_head);
 }
 
 static void
@@ -992,6 +993,7 @@ display_aubfile_window(struct window *win)
    ImGui::ColorEdit3("error", (float *)&cfg->error_color, cflags); ImGui::SameLine();
    ImGui::ColorEdit3("highlight", (float *)&cfg->highlight_color, cflags); ImGui::SameLine();
    ImGui::ColorEdit3("dwords", (float *)&cfg->dwords_color, cflags); ImGui::SameLine();
+   ImGui::ColorEdit3("booleans", (float *)&cfg->boolean_color, cflags); ImGui::SameLine();
 
    if (ImGui::Button("Commands list") || has_ctrl_key('c')) { show_commands_window(); } ImGui::SameLine();
    if (ImGui::Button("Registers list") || has_ctrl_key('r')) { show_register_window(); } ImGui::SameLine();

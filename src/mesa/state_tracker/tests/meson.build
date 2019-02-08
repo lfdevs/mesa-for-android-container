@@ -35,8 +35,9 @@ test(
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
       libmesa_util,
     ],
-    dependencies : [idep_gtest, dep_thread]
-  )
+    dependencies : [idep_gtest, dep_thread],
+  ),
+  suite : ['st_mesa'],
 )
 
 test(
@@ -50,5 +51,6 @@ test(
       libmesa_util,
     ],
     dependencies : [idep_gtest, dep_thread]
-  )
+  ),
+  suite : ['st_mesa'],
 )

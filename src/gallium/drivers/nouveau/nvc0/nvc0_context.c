@@ -449,11 +449,9 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
 
    flags = NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD;
 
-   BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TEXT, flags, screen->text);
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_SCREEN, flags, screen->uniform_bo);
    BCTX_REFN_bo(nvc0->bufctx_3d, 3D_SCREEN, flags, screen->txc);
    if (screen->compute) {
-      BCTX_REFN_bo(nvc0->bufctx_cp, CP_TEXT, flags, screen->text);
       BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->uniform_bo);
       BCTX_REFN_bo(nvc0->bufctx_cp, CP_SCREEN, flags, screen->txc);
    }
@@ -477,6 +475,24 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    memset(nvc0->tex_handles, ~0, sizeof(nvc0->tex_handles));
 
    util_dynarray_init(&nvc0->global_residents, NULL);
+
+   // Make sure that the first TSC entry has SRGB conversion bit set, since we
+   // use it as a fallback on Fermi for TXF, and on Kepler+ generations for
+   // FBFETCH handling (which also uses TXF).
+   //
+   // NOTE: Preliminary testing suggests that this isn't necessary at all at
+   // least on GM20x (untested on Kepler). However this is ~free, so no reason
+   // not to do it.
+   if (!screen->tsc.entries[0])
+      nvc0_upload_tsc0(nvc0);
+
+   // On Fermi, mark samplers dirty so that the proper binding can happen
+   if (screen->base.class_3d < NVE4_3D_CLASS) {
+      for (int s = 0; s < 6; s++)
+         nvc0->samplers_dirty[s] = 1;
+      nvc0->dirty_3d |= NVC0_NEW_3D_SAMPLERS;
+      nvc0->dirty_cp |= NVC0_NEW_CP_SAMPLERS;
+   }
 
    return pipe;
 

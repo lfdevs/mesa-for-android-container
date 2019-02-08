@@ -37,17 +37,17 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 {
 	struct radeon_cmdbuf *cs = ctx->dma_cs;
 	unsigned i, ncopy, count, max_size, sub_cmd, shift;
-	struct r600_resource *rdst = r600_resource(dst);
-	struct r600_resource *rsrc = r600_resource(src);
+	struct si_resource *sdst = si_resource(dst);
+	struct si_resource *ssrc = si_resource(src);
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&rdst->valid_buffer_range, dst_offset,
+	util_range_add(&sdst->valid_buffer_range, dst_offset,
 		       dst_offset + size);
 
-	dst_offset += rdst->gpu_address;
-	src_offset += rsrc->gpu_address;
+	dst_offset += sdst->gpu_address;
+	src_offset += ssrc->gpu_address;
 
 	/* see whether we should use the dword-aligned or byte-aligned copy */
 	if (!(dst_offset % 4) && !(src_offset % 4) && !(size % 4)) {
@@ -61,7 +61,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 	}
 
 	ncopy = DIV_ROUND_UP(size, max_size);
-	si_need_dma_space(ctx, ncopy * 5, rdst, rsrc);
+	si_need_dma_space(ctx, ncopy * 5, sdst, ssrc);
 
 	for (i = 0; i < ncopy; i++) {
 		count = MIN2(size, max_size);

@@ -409,7 +409,7 @@ The integer capabilities:
   for a driver that does not support multiple output streams (i.e.,
   ``PIPE_CAP_MAX_VERTEX_STREAMS`` is 1), both query types are identical.
 * ``PIPE_CAP_MEMOBJ``: Whether operations on memory objects are supported.
-* ``PIPE_CAP_LOAD_CONSTBUF``: True if the driver supports TGSI_OPCODE_LOAD use
+* ``PIPE_CAP_LOAD_CONSTBUF``: True if the driver supports ``TGSI_OPCODE_LOAD`` use
   with constant buffers.
 * ``PIPE_CAP_TGSI_ANY_REG_AS_ADDRESS``: Any TGSI register can be used as
   an address for indirect register indexing.
@@ -434,7 +434,7 @@ The integer capabilities:
   Whether pipe_vertex_buffer::buffer_offset is treated as signed. The u_vbuf
   module needs this for optimal performance in workstation applications.
 * ``PIPE_CAP_CONTEXT_PRIORITY_MASK``: For drivers that support per-context
-  priorities, this returns a bitmask of PIPE_CONTEXT_PRIORITY_x for the
+  priorities, this returns a bitmask of ``PIPE_CONTEXT_PRIORITY_x`` for the
   supported priority levels.  A driver that does not support prioritized
   contexts can return 0.
 * ``PIPE_CAP_FENCE_SIGNAL``: True if the driver supports signaling semaphores
@@ -446,17 +446,17 @@ The integer capabilities:
 * ``PIPE_CAP_PACKED_UNIFORMS``: True if the driver supports packed uniforms
   as opposed to padding to vec4s.
 * ``PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_TRIANGLES``: Whether the
-  PIPE_CONSERVATIVE_RASTER_POST_SNAP mode is supported for triangles.
+  ``PIPE_CONSERVATIVE_RASTER_POST_SNAP`` mode is supported for triangles.
 * ``PIPE_CAP_CONSERVATIVE_RASTER_POST_SNAP_POINTS_LINES``: Whether the
-PIPE_CONSERVATIVE_RASTER_POST_SNAP mode is supported for points and lines.
+  ``PIPE_CONSERVATIVE_RASTER_POST_SNAP`` mode is supported for points and lines.
 * ``PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_TRIANGLES``: Whether the
-PIPE_CONSERVATIVE_RASTER_PRE_SNAP mode is supported for triangles.
+  ``PIPE_CONSERVATIVE_RASTER_PRE_SNAP`` mode is supported for triangles.
 * ``PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES``: Whether the
-PIPE_CONSERVATIVE_RASTER_PRE_SNAP mode is supported for points and lines.
-* ``PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE``: Whether PIPE_CAP_POST_DEPTH_COVERAGE
-works with conservative rasterization.
+  ``PIPE_CONSERVATIVE_RASTER_PRE_SNAP`` mode is supported for points and lines.
+* ``PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE``: Whether
+  ``PIPE_CAP_POST_DEPTH_COVERAGE`` works with conservative rasterization.
 * ``PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS``: The maximum
-subpixel precision bias in bits during conservative rasterization.
+  subpixel precision bias in bits during conservative rasterization.
 * ``PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS``: True is the driver supports
   programmable sample location through ```get_sample_pixel_grid``` and
   ```set_sample_locations```.
@@ -472,11 +472,21 @@ subpixel precision bias in bits during conservative rasterization.
 * ``PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS``: Maximum total number of
   atomic counter buffers. A value of 0 means the sum of all per-shader stage
   maximums (see ``PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS``).
-* ``PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET: Maximum recommend memory size
+* ``PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET``: Maximum recommend memory size
   for all active texture uploads combined. This is a performance hint.
   0 means no limit.
 * ``PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET``: The maximum supported value for
   of pipe_vertex_element::src_offset.
+* ``PIPE_CAP_SURFACE_SAMPLE_COUNT``: Whether the driver
+  supports pipe_surface overrides of resource nr_samples. If set, will
+  enable EXT_multisampled_render_to_texture.
+* ``PIPE_CAP_TGSI_ATOMFADD``: Atomic floating point adds are supported on
+  images, buffers, and shared memory.
+* ``PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND``: True if the driver needs blend state to use zero/one instead of destination alpha for RGB/XRGB formats.
+* ``PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS``: True if the driver wants TESSINNER and TESSOUTER to be inputs (rather than system values) for tessellation evaluation shaders.
+* ``PIPE_CAP_DEST_SURFACE_SRGB_CONTROL``: Indicates whether the drivers
+  supports switching the format between sRGB and linear for a surface that is
+  used as destination in draw and blit calls.
 
 .. _pipe_capf:
 

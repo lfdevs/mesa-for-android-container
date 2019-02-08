@@ -429,9 +429,9 @@ anv_dump_add_framebuffer(struct anv_cmd_buffer *cmd_buffer,
          case VK_IMAGE_ASPECT_COLOR_BIT:       suffix = "c"; break;
          case VK_IMAGE_ASPECT_DEPTH_BIT:       suffix = "d"; break;
          case VK_IMAGE_ASPECT_STENCIL_BIT:     suffix = "s"; break;
-         case VK_IMAGE_ASPECT_PLANE_0_BIT_KHR: suffix = "c0"; break;
-         case VK_IMAGE_ASPECT_PLANE_1_BIT_KHR: suffix = "c1"; break;
-         case VK_IMAGE_ASPECT_PLANE_2_BIT_KHR: suffix = "c2"; break;
+         case VK_IMAGE_ASPECT_PLANE_0_BIT:     suffix = "c0"; break;
+         case VK_IMAGE_ASPECT_PLANE_1_BIT:     suffix = "c1"; break;
+         case VK_IMAGE_ASPECT_PLANE_2_BIT:     suffix = "c2"; break;
          default:
             unreachable("Invalid aspect");
          }

@@ -57,6 +57,7 @@ struct fd_gmem_stateobj {
 	uint16_t minx, miny;
 	uint16_t width, height;
 	uint16_t maxpw, maxph;   /* maximum pipe width/height */
+	uint8_t num_vsc_pipes;   /* number of pipes for a20x */
 };
 
 struct fd_batch;

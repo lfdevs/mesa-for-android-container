@@ -37,7 +37,7 @@
 
 struct fd2_sampler_stateobj {
 	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
+	uint32_t tex0, tex3, tex4;
 };
 
 static inline struct fd2_sampler_stateobj *
@@ -48,8 +48,7 @@ fd2_sampler_stateobj(struct pipe_sampler_state *samp)
 
 struct fd2_pipe_sampler_view {
 	struct pipe_sampler_view base;
-	enum a2xx_sq_surfaceformat fmt;
-	uint32_t tex0, tex2, tex3;
+	uint32_t tex0, tex1, tex2, tex3, tex4, tex5;
 };
 
 static inline struct fd2_pipe_sampler_view *
@@ -60,6 +59,8 @@ fd2_pipe_sampler_view(struct pipe_sampler_view *pview)
 
 unsigned fd2_get_const_idx(struct fd_context *ctx,
 		struct fd_texture_stateobj *tex, unsigned samp_id);
+
+bool fd2_texture_swap_xy(struct fd_texture_stateobj *tex, unsigned samp_id);
 
 void fd2_texture_init(struct pipe_context *pctx);
 

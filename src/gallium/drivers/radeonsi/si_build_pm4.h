@@ -100,12 +100,18 @@ static inline void radeon_set_uconfig_reg(struct radeon_cmdbuf *cs, unsigned reg
 }
 
 static inline void radeon_set_uconfig_reg_idx(struct radeon_cmdbuf *cs,
+					      struct si_screen *screen,
 					      unsigned reg, unsigned idx,
 					      unsigned value)
 {
 	assert(reg >= CIK_UCONFIG_REG_OFFSET && reg < CIK_UCONFIG_REG_END);
 	assert(cs->current.cdw + 3 <= cs->current.max_dw);
-	radeon_emit(cs, PKT3(PKT3_SET_UCONFIG_REG, 1, 0));
+	assert(idx != 0);
+	unsigned opcode = PKT3_SET_UCONFIG_REG_INDEX;
+	if (screen->info.chip_class < GFX9 ||
+	    (screen->info.chip_class == GFX9 && screen->info.me_fw_version < 26))
+		opcode = PKT3_SET_UCONFIG_REG;
+	radeon_emit(cs, PKT3(opcode, 1, 0));
 	radeon_emit(cs, (reg - CIK_UCONFIG_REG_OFFSET) >> 2 | (idx << 28));
 	radeon_emit(cs, value);
 }

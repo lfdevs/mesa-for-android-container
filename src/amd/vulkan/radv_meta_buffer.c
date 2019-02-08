@@ -15,8 +15,8 @@ build_buffer_fill_shader(struct radv_device *dev)
 	b.shader->info.cs.local_size[1] = 1;
 	b.shader->info.cs.local_size[2] = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -67,8 +67,8 @@ build_buffer_copy_shader(struct radv_device *dev)
 	b.shader->info.cs.local_size[1] = 1;
 	b.shader->info.cs.local_size[2] = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -522,7 +522,7 @@ void radv_CmdUpdateBuffer(
 
 		radeon_emit(cmd_buffer->cs, PKT3(PKT3_WRITE_DATA, 2 + words, 0));
 		radeon_emit(cmd_buffer->cs, S_370_DST_SEL(mec ?
-		                                V_370_MEM_ASYNC : V_370_MEMORY_SYNC) |
+		                                V_370_MEM : V_370_MEM_GRBM) |
 		                            S_370_WR_CONFIRM(1) |
 		                            S_370_ENGINE_SEL(V_370_ME));
 		radeon_emit(cmd_buffer->cs, va);

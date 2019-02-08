@@ -153,6 +153,13 @@ struct tgsi_shader_info
    unsigned shader_buffers_load; /**< bitmask of shader buffers using loads */
    unsigned shader_buffers_store; /**< bitmask of shader buffers using stores */
    unsigned shader_buffers_atomic; /**< bitmask of shader buffers using atomics */
+   bool uses_bindless_buffer_load;
+   bool uses_bindless_buffer_store;
+   bool uses_bindless_buffer_atomic;
+   bool uses_bindless_image_load;
+   bool uses_bindless_image_store;
+   bool uses_bindless_image_atomic;
+
    /**
     * Bitmask indicating which register files are accessed with
     * indirect addressing.  The bits are (1 << TGSI_FILE_x), etc.

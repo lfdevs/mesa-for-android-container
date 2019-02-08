@@ -49,7 +49,7 @@ get_array_stride(struct gl_context *ctx, const struct tnl_vertex_array *a)
 	if (render->mode == VBO && !_mesa_is_bufferobj(binding->BufferObj)) {
 		const struct gl_array_attributes *attrib = a->VertexAttrib;
 		/* Pack client buffers. */
-		return align(_mesa_sizeof_type(attrib->Type) * attrib->Size, 4);
+		return align(attrib->Format._ElementSize, 4);
 	} else {
 		return binding->Stride;
 	}
@@ -86,7 +86,7 @@ vbo_init_arrays(struct gl_context *ctx, const struct _mesa_index_buffer *ib,
 
 		nouveau_init_array(&render->attrs[attr], attr,
 				   get_array_stride(ctx, array),
-				   attrib->Size, attrib->Type,
+				   attrib->Format.Size, attrib->Format.Type,
 				   imm ? binding->BufferObj : NULL,
 				   p, imm, ctx);
 	}
@@ -154,8 +154,8 @@ vbo_emit_attr(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 			return;
 
 		/* Constant attribute. */
-		nouveau_init_array(a, attr, binding->Stride, attrib->Size,
-				   attrib->Type, binding->BufferObj, p,
+		nouveau_init_array(a, attr, binding->Stride, attrib->Format.Size,
+				   attrib->Format.Type, binding->BufferObj, p,
 				   GL_TRUE, ctx);
 		EMIT_IMM(ctx, a, 0);
 		nouveau_deinit_array(a);
@@ -166,7 +166,7 @@ vbo_emit_attr(struct gl_context *ctx, const struct tnl_vertex_array *arrays,
 
 		if (render->mode == VBO) {
 			render->map[info->vbo_index] = attr;
-			render->vertex_size += attrib->_ElementSize;
+			render->vertex_size += attrib->Format._ElementSize;
 			render->attr_count = MAX2(render->attr_count,
 						  info->vbo_index + 1);
 		} else {

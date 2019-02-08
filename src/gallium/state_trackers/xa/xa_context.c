@@ -309,7 +309,7 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
 	xa_pixel_to_float4_a8(fg, ctx->solid_color);
     else
 	xa_pixel_to_float4(fg, ctx->solid_color);
-    ctx->has_solid_color = 1;
+    ctx->has_solid_src = 1;
 
     ctx->dst = dst;
 
@@ -321,8 +321,8 @@ xa_solid_prepare(struct xa_context *ctx, struct xa_surface *dst,
 		 exa->solid_color[2], exa->solid_color[3]);
 #endif
 
-    vs_traits = VS_SOLID_FILL;
-    fs_traits = FS_SOLID_FILL;
+    vs_traits = VS_SRC_SRC | VS_COMPOSITE;
+    fs_traits = FS_SRC_SRC | VS_COMPOSITE;
 
     renderer_bind_destination(ctx, ctx->srf);
     bind_solid_blend_state(ctx);
@@ -343,7 +343,7 @@ XA_EXPORT void
 xa_solid(struct xa_context *ctx, int x, int y, int width, int height)
 {
     xa_scissor_update(ctx, x, y, x + width, y + height);
-    renderer_solid(ctx, x, y, x + width, y + height, ctx->solid_color);
+    renderer_solid(ctx, x, y, x + width, y + height);
 }
 
 XA_EXPORT void
@@ -351,7 +351,7 @@ xa_solid_done(struct xa_context *ctx)
 {
     renderer_draw_flush(ctx);
     ctx->comp = NULL;
-    ctx->has_solid_color = FALSE;
+    ctx->has_solid_src = FALSE;
     ctx->num_bound_samplers = 0;
 }
 

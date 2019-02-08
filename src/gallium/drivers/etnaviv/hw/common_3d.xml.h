@@ -8,12 +8,12 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2017-10-31 19:05:01)
-- copyright.xml  (   1597 bytes, from 2016-10-29 07:29:22)
-- common.xml     (  26187 bytes, from 2017-10-31 19:05:01)
-- common_3d.xml  (  14615 bytes, from 2017-11-04 14:03:35)
+- texdesc_3d.xml (   3183 bytes, from 2018-02-10 13:09:26)
+- copyright.xml  (   1597 bytes, from 2018-02-10 13:09:26)
+- common.xml     (  35468 bytes, from 2018-02-10 13:09:26)
+- common_3d.xml  (  14843 bytes, from 2019-01-18 10:13:41)
 
-Copyright (C) 2012-2017 by the following authors:
+Copyright (C) 2012-2019 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -127,6 +127,8 @@ DEALINGS IN THE SOFTWARE.
 #define TEXTURE_HALIGN_SPLIT_SUPER_TILED			0x00000004
 #define TS_CACHE_MODE_128					0x00000000
 #define TS_CACHE_MODE_256					0x00000001
+#define TEXTURE_ADDRESSING_MODE_TILED				0x00000000
+#define TEXTURE_ADDRESSING_MODE_LINEAR				0x00000003
 #define COLOR_COMPRESSION_FORMAT_A4R4G4B4			0x00000000
 #define COLOR_COMPRESSION_FORMAT_A1R5G5B5			0x00000001
 #define COLOR_COMPRESSION_FORMAT_R5G6B5				0x00000002

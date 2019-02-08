@@ -88,7 +88,7 @@ VkResult anv_CreateDmaBufImageINTEL(
 
    if (mem->bo->size < aligned_image_size) {
       result = vk_errorf(device->instance, device,
-                         VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR,
+                         VK_ERROR_INVALID_EXTERNAL_HANDLE,
                          "dma-buf too small for image in "
                          "vkCreateDmaBufImageINTEL: %"PRIu64"B < "PRIu64"B",
                          mem->bo->size, aligned_image_size);

@@ -1252,13 +1252,7 @@ dri2CreateScreen(int screen, struct glx_display * priv)
       driverName = loader_driverName;
    }
 
-   psc->driver = driOpenDriver(driverName);
-   if (psc->driver == NULL) {
-      ErrorMessageF("driver pointer missing\n");
-      goto handle_error;
-   }
-
-   extensions = driGetDriverExtensions(psc->driver, driverName);
+   extensions = driOpenDriver(driverName, &psc->driver);
    if (extensions == NULL)
       goto handle_error;
 

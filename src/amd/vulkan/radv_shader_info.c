@@ -270,15 +270,15 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
 		}
 		mark_sampler_desc(var, info);
 
-		if (nir_intrinsic_image_deref_store ||
-		    nir_intrinsic_image_deref_atomic_add ||
-		    nir_intrinsic_image_deref_atomic_min ||
-		    nir_intrinsic_image_deref_atomic_max ||
-		    nir_intrinsic_image_deref_atomic_and ||
-		    nir_intrinsic_image_deref_atomic_or ||
-		    nir_intrinsic_image_deref_atomic_xor ||
-		    nir_intrinsic_image_deref_atomic_exchange ||
-		    nir_intrinsic_image_deref_atomic_comp_swap) {
+		if (instr->intrinsic == nir_intrinsic_image_deref_store ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_add ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_min ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_max ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_and ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_or ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_xor ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_exchange ||
+		    instr->intrinsic == nir_intrinsic_image_deref_atomic_comp_swap) {
 			if (nir->info.stage == MESA_SHADER_FRAGMENT)
 				info->ps.writes_memory = true;
 		}
@@ -512,8 +512,10 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 	struct nir_function *func =
 		(struct nir_function *)exec_list_get_head_const(&nir->functions);
 
-	if (options->layout && options->layout->dynamic_offset_count)
+	if (options->layout && options->layout->dynamic_offset_count &&
+	    (options->layout->dynamic_shader_stages & mesa_to_vk_shader_stage(nir->info.stage))) {
 		info->loads_push_constants = true;
+	}
 
 	nir_foreach_variable(variable, &nir->inputs)
 		gather_info_input_decl(nir, variable, info);

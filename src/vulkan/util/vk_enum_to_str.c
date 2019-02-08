@@ -29,13 +29,28 @@
 
 
 const char *
-vk_AccelerationStructureTypeNVX_to_str(VkAccelerationStructureTypeNVX input)
+vk_AccelerationStructureMemoryRequirementsTypeNV_to_str(VkAccelerationStructureMemoryRequirementsTypeNV input)
 {
     switch(input) {
         case 0:
-            return "VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NVX";
+            return "VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV";
         case 1:
-            return "VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NVX";
+            return "VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_NV";
+        case 2:
+            return "VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_UPDATE_SCRATCH_NV";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_AccelerationStructureTypeNV_to_str(VkAccelerationStructureTypeNV input)
+{
+    switch(input) {
+        case 0:
+            return "VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_NV";
+        case 1:
+            return "VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -409,13 +424,13 @@ vk_ConservativeRasterizationModeEXT_to_str(VkConservativeRasterizationModeEXT in
 }
 
 const char *
-vk_CopyAccelerationStructureModeNVX_to_str(VkCopyAccelerationStructureModeNVX input)
+vk_CopyAccelerationStructureModeNV_to_str(VkCopyAccelerationStructureModeNV input)
 {
     switch(input) {
         case 0:
-            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_NVX";
+            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_NV";
         case 1:
-            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_NVX";
+            return "VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -515,7 +530,7 @@ vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input)
         case 1000156000:
             return "VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT";
         case 1000165000:
-            return "VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NVX_EXT";
+            return "VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -550,7 +565,7 @@ vk_DescriptorType_to_str(VkDescriptorType input)
         case 1000138000:
             return "VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT";
         case 1000165000:
-            return "VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NVX";
+            return "VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -641,6 +656,8 @@ vk_DriverIdKHR_to_str(VkDriverIdKHR input)
             return "VK_DRIVER_ID_QUALCOMM_PROPRIETARY_KHR";
         case 9:
             return "VK_DRIVER_ID_ARM_PROPRIETARY_KHR";
+        case 10:
+            return "VK_DRIVER_ID_GOOGLE_PASTEL_KHR";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1177,13 +1194,13 @@ vk_FrontFace_to_str(VkFrontFace input)
 }
 
 const char *
-vk_GeometryTypeNVX_to_str(VkGeometryTypeNVX input)
+vk_GeometryTypeNV_to_str(VkGeometryTypeNV input)
 {
     switch(input) {
         case 0:
-            return "VK_GEOMETRY_TYPE_TRIANGLES_NVX";
+            return "VK_GEOMETRY_TYPE_TRIANGLES_NV";
         case 1:
-            return "VK_GEOMETRY_TYPE_AABBS_NVX";
+            return "VK_GEOMETRY_TYPE_AABBS_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1221,6 +1238,8 @@ vk_ImageLayout_to_str(VkImageLayout input)
             return "VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL";
         case 1000164003:
             return "VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV";
+        case 1000218000:
+            return "VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1287,6 +1306,8 @@ vk_IndexType_to_str(VkIndexType input)
             return "VK_INDEX_TYPE_UINT16";
         case 1:
             return "VK_INDEX_TYPE_UINT32";
+        case 1000165000:
+            return "VK_INDEX_TYPE_NONE_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1364,6 +1385,21 @@ vk_LogicOp_to_str(VkLogicOp input)
             return "VK_LOGIC_OP_NAND";
         case 15:
             return "VK_LOGIC_OP_SET";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_MemoryOverallocationBehaviorAMD_to_str(VkMemoryOverallocationBehaviorAMD input)
+{
+    switch(input) {
+        case 0:
+            return "VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD";
+        case 1:
+            return "VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD";
+        case 2:
+            return "VK_MEMORY_OVERALLOCATION_BEHAVIOR_DISALLOWED_AMD";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1467,7 +1503,7 @@ vk_ObjectType_to_str(VkObjectType input)
         case 1000160000:
             return "VK_OBJECT_TYPE_VALIDATION_CACHE_EXT";
         case 1000165000:
-            return "VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NVX";
+            return "VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1501,7 +1537,7 @@ vk_PipelineBindPoint_to_str(VkPipelineBindPoint input)
         case 1:
             return "VK_PIPELINE_BIND_POINT_COMPUTE";
         case 1000165000:
-            return "VK_PIPELINE_BIND_POINT_RAYTRACING_NVX";
+            return "VK_PIPELINE_BIND_POINT_RAY_TRACING_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1613,7 +1649,7 @@ vk_QueryType_to_str(VkQueryType input)
         case 1000028004:
             return "VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT";
         case 1000165000:
-            return "VK_QUERY_TYPE_COMPACTED_SIZE_NVX";
+            return "VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_NV";
     default:
         unreachable("Undefined enum value.");
     }
@@ -1650,9 +1686,26 @@ vk_RasterizationOrderAMD_to_str(VkRasterizationOrderAMD input)
 }
 
 const char *
+vk_RayTracingShaderGroupTypeNV_to_str(VkRayTracingShaderGroupTypeNV input)
+{
+    switch(input) {
+        case 0:
+            return "VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV";
+        case 1:
+            return "VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV";
+        case 2:
+            return "VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
 vk_Result_to_str(VkResult input)
 {
     switch(input) {
+        case -1000244000:
+            return "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT";
         case -1000174001:
             return "VK_ERROR_NOT_PERMITTED_EXT";
         case -1000161000:
@@ -2001,8 +2054,6 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR";
         case 1000006000:
             return "VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR";
-        case 1000007000:
-            return "VK_STRUCTURE_TYPE_MIR_SURFACE_CREATE_INFO_KHR";
         case 1000008000:
             return "VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR";
         case 1000009000:
@@ -2165,6 +2216,8 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT";
         case 1000081002:
             return "VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT";
+        case 1000082000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR";
         case 1000083000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES";
         case 1000084000:
@@ -2404,27 +2457,27 @@ vk_StructureType_to_str(VkStructureType input)
         case 1000164005:
             return "VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_COARSE_SAMPLE_ORDER_STATE_CREATE_INFO_NV";
         case 1000165000:
-            return "VK_STRUCTURE_TYPE_RAYTRACING_PIPELINE_CREATE_INFO_NVX";
+            return "VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV";
         case 1000165001:
-            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NVX";
-        case 1000165002:
-            return "VK_STRUCTURE_TYPE_GEOMETRY_INSTANCE_NVX";
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_NV";
         case 1000165003:
-            return "VK_STRUCTURE_TYPE_GEOMETRY_NVX";
+            return "VK_STRUCTURE_TYPE_GEOMETRY_NV";
         case 1000165004:
-            return "VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NVX";
+            return "VK_STRUCTURE_TYPE_GEOMETRY_TRIANGLES_NV";
         case 1000165005:
-            return "VK_STRUCTURE_TYPE_GEOMETRY_AABB_NVX";
+            return "VK_STRUCTURE_TYPE_GEOMETRY_AABB_NV";
         case 1000165006:
-            return "VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NVX";
+            return "VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_NV";
         case 1000165007:
-            return "VK_STRUCTURE_TYPE_DESCRIPTOR_ACCELERATION_STRUCTURE_INFO_NVX";
+            return "VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_NV";
         case 1000165008:
-            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NVX";
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV";
         case 1000165009:
-            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAYTRACING_PROPERTIES_NVX";
-        case 1000165010:
-            return "VK_STRUCTURE_TYPE_HIT_SHADER_MODULE_CREATE_INFO_NVX";
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_NV";
+        case 1000165011:
+            return "VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_NV";
+        case 1000165012:
+            return "VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_NV";
         case 1000166000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_REPRESENTATIVE_FRAGMENT_TEST_FEATURES_NV";
         case 1000166001:
@@ -2449,6 +2502,8 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_EXT";
         case 1000185000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD";
+        case 1000189000:
+            return "VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD";
         case 1000190000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT";
         case 1000190001:
@@ -2457,6 +2512,12 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT";
         case 1000196000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR";
+        case 1000197000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR";
+        case 1000199000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR";
+        case 1000199001:
+            return "VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE_KHR";
         case 1000201000:
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COMPUTE_SHADER_DERIVATIVES_FEATURES_NV";
         case 1000202000:
@@ -2481,6 +2542,30 @@ vk_StructureType_to_str(VkStructureType input)
             return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT";
         case 1000214000:
             return "VK_STRUCTURE_TYPE_IMAGEPIPE_SURFACE_CREATE_INFO_FUCHSIA";
+        case 1000218000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_FEATURES_EXT";
+        case 1000218001:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_DENSITY_MAP_PROPERTIES_EXT";
+        case 1000218002:
+            return "VK_STRUCTURE_TYPE_RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT";
+        case 1000221000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT";
+        case 1000237000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT";
+        case 1000238000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT";
+        case 1000238001:
+            return "VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT";
+        case 1000244000:
+            return "VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_ADDRESS_FEATURES_EXT";
+        case 1000244001:
+            return "VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO_EXT";
+        case 1000244002:
+            return "VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_CREATE_INFO_EXT";
+        case 1000246000:
+            return "VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT";
+        case 1000247000:
+            return "VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT";
     default:
         unreachable("Undefined enum value.");
     }
@@ -2567,6 +2652,42 @@ vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input)
             return "VK_VALIDATION_CHECK_ALL_EXT";
         case 1:
             return "VK_VALIDATION_CHECK_SHADERS_EXT";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_ValidationFeatureDisableEXT_to_str(VkValidationFeatureDisableEXT input)
+{
+    switch(input) {
+        case 0:
+            return "VK_VALIDATION_FEATURE_DISABLE_ALL_EXT";
+        case 1:
+            return "VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT";
+        case 2:
+            return "VK_VALIDATION_FEATURE_DISABLE_THREAD_SAFETY_EXT";
+        case 3:
+            return "VK_VALIDATION_FEATURE_DISABLE_API_PARAMETERS_EXT";
+        case 4:
+            return "VK_VALIDATION_FEATURE_DISABLE_OBJECT_LIFETIMES_EXT";
+        case 5:
+            return "VK_VALIDATION_FEATURE_DISABLE_CORE_CHECKS_EXT";
+        case 6:
+            return "VK_VALIDATION_FEATURE_DISABLE_UNIQUE_HANDLES_EXT";
+    default:
+        unreachable("Undefined enum value.");
+    }
+}
+
+const char *
+vk_ValidationFeatureEnableEXT_to_str(VkValidationFeatureEnableEXT input)
+{
+    switch(input) {
+        case 0:
+            return "VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT";
+        case 1:
+            return "VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT";
     default:
         unreachable("Undefined enum value.");
     }

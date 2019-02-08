@@ -34,7 +34,7 @@
 #include "fd6_context.h"
 #include "fd6_format.h"
 #include "fd6_program.h"
-#include "ir3_shader.h"
+#include "ir3_gallium.h"
 
 struct fd_ringbuffer;
 
@@ -155,14 +155,15 @@ fd6_emit_lrz_flush(struct fd_ringbuffer *ring)
 }
 
 static inline enum a6xx_state_block
-fd6_stage2shadersb(enum shader_t type)
+fd6_stage2shadersb(gl_shader_stage type)
 {
 	switch (type) {
-	case SHADER_VERTEX:
+	case MESA_SHADER_VERTEX:
 		return SB6_VS_SHADER;
-	case SHADER_FRAGMENT:
+	case MESA_SHADER_FRAGMENT:
 		return SB6_FS_SHADER;
-	case SHADER_COMPUTE:
+	case MESA_SHADER_COMPUTE:
+	case MESA_SHADER_KERNEL:
 		return SB6_CS_SHADER;
 	default:
 		unreachable("bad shader type");

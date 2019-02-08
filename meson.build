@@ -34,8 +34,6 @@ cpp = meson.get_compiler('cpp')
 
 null_dep = dependency('', required : false)
 
-system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
-
 # Arguments for the preprocessor, put these in a separate array from the C and
 # C++ (cpp in meson terminology) arguments since they need to be added to the
 # default arguments for both C and C++.
@@ -43,8 +41,7 @@ pre_args = [
   '-D__STDC_CONSTANT_MACROS',
   '-D__STDC_FORMAT_MACROS',
   '-D__STDC_LIMIT_MACROS',
-  '-DVERSION="@0@"'.format(meson.project_version()),
-  '-DPACKAGE_VERSION=VERSION',
+  '-DPACKAGE_VERSION="@0@"'.format(meson.project_version()),
   '-DPACKAGE_BUGREPORT="https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa"',
 ]
 
@@ -59,7 +56,7 @@ with_osmesa = get_option('osmesa')
 with_swr_arches = get_option('swr-arches')
 with_tools = get_option('tools')
 if with_tools.contains('all')
-  with_tools = ['freedreno', 'glsl', 'intel', 'nir', 'nouveau', 'xvmc']
+  with_tools = ['etnaviv', 'freedreno', 'glsl', 'intel', 'nir', 'nouveau', 'xvmc']
 endif
 
 dri_drivers_path = get_option('dri-drivers-path')
@@ -134,7 +131,7 @@ if _drivers.contains('auto')
       ]
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
       _drivers = [
-        'pl111', 'v3d', 'vc4', 'freedreno', 'etnaviv', 'imx', 'nouveau',
+        'kmsro', 'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau',
         'tegra', 'virgl', 'swrast',
       ]
     else
@@ -148,7 +145,7 @@ if _drivers.contains('auto')
           host_machine.system()))
   endif
 endif
-with_gallium_pl111 = _drivers.contains('pl111')
+with_gallium_kmsro = _drivers.contains('kmsro')
 with_gallium_radeonsi = _drivers.contains('radeonsi')
 with_gallium_r300 = _drivers.contains('r300')
 with_gallium_r600 = _drivers.contains('r600')
@@ -158,7 +155,6 @@ with_gallium_softpipe = _drivers.contains('swrast')
 with_gallium_vc4 = _drivers.contains('vc4')
 with_gallium_v3d = _drivers.contains('v3d')
 with_gallium_etnaviv = _drivers.contains('etnaviv')
-with_gallium_imx = _drivers.contains('imx')
 with_gallium_tegra = _drivers.contains('tegra')
 with_gallium_i915 = _drivers.contains('i915')
 with_gallium_svga = _drivers.contains('svga')
@@ -213,11 +209,8 @@ endif
 if with_dri_i915 and with_gallium_i915
   error('Only one i915 provider can be built')
 endif
-if with_gallium_imx and not with_gallium_etnaviv
-  error('IMX driver requires etnaviv driver')
-endif
-if with_gallium_pl111 and not with_gallium_vc4
-  error('pl111 driver requires vc4 driver')
+if with_gallium_kmsro and not (with_gallium_vc4 or with_gallium_etnaviv or with_gallium_freedreno)
+  error('kmsro driver requires one or more renderonly drivers (vc4, etnaviv, freedreno)')
 endif
 if with_gallium_tegra and not with_gallium_nouveau
   error('tegra driver requires nouveau driver')
@@ -936,7 +929,7 @@ endif
 # case of cross compiling where we can use asm, and that's x86_64 -> x86 when
 # host OS == build OS, since in that case the build machine can run the host's
 # binaries.
-if meson.is_cross_build() 
+if with_asm and meson.is_cross_build()
   if build_machine.system() != host_machine.system()
     # TODO: It may be possible to do this with an exe_wrapper (like wine).
     message('Cross compiling from one OS to another, disabling assembly.')
@@ -1120,7 +1113,7 @@ dep_libdrm_nouveau = null_dep
 dep_libdrm_etnaviv = null_dep
 dep_libdrm_intel = null_dep
 
-_drm_amdgpu_ver = '2.4.95'
+_drm_amdgpu_ver = '2.4.97'
 _drm_radeon_ver = '2.4.71'
 _drm_nouveau_ver = '2.4.66'
 _drm_etnaviv_ver = '2.4.89'
@@ -1195,7 +1188,7 @@ if with_gallium_opencl
 endif
 
 if with_amd_vk or with_gallium_radeonsi
-  _llvm_version = '>= 6.0.0'
+  _llvm_version = '>= 7.0.0'
 elif with_gallium_swr
   _llvm_version = '>= 6.0.0'
 elif with_gallium_opencl or with_gallium_r600
@@ -1372,7 +1365,7 @@ if with_platform_x11
     dep_xfixes = dependency('xfixes')
     dep_xcb_glx = dependency('xcb-glx', version : '>= 1.8.1')
   endif
-  if (with_any_vk or with_glx == 'dri' or
+  if (with_any_vk or with_glx == 'dri' or with_egl or
        (with_gallium_vdpau or with_gallium_xvmc or with_gallium_va or
         with_gallium_omx != 'disabled'))
     dep_xcb = dependency('xcb')

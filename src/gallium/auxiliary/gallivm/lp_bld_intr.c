@@ -241,6 +241,16 @@ lp_build_intrinsic(LLVMBuilderRef builder,
 
       function = lp_declare_intrinsic(module, name, ret_type, arg_types, num_args);
 
+      /*
+       * If llvm removes an intrinsic we use, we'll hit this abort (rather
+       * than a call to address zero in the jited code).
+       */
+      if (LLVMGetIntrinsicID(function) == 0) {
+         _debug_printf("llvm (version 0x%x) found no intrinsic for %s, going to crash...\n",
+                HAVE_LLVM, name);
+         abort();
+      }
+
       if (!set_callsite_attrs)
          lp_add_func_attributes(function, attr_mask);
 

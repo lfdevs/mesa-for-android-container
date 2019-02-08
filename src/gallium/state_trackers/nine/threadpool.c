@@ -52,10 +52,8 @@ threadpool_worker(void *data)
         while (!pool->workqueue && !pool->shutdown)
             pthread_cond_wait(&pool->new_work, &pool->m);
 
-        if (pool->shutdown) {
-            pthread_mutex_unlock(&pool->m);
-            return NULL;
-        }
+        if (pool->shutdown)
+            break;
 
         /* Pull the first task from the list.  We don't free it -- it now lacks
          * a reference other than the worker creator's, whose responsibility it

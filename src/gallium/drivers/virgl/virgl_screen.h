@@ -43,7 +43,7 @@ struct virgl_screen {
 
    struct virgl_drm_caps caps;
 
-   struct slab_parent_pool texture_transfer_pool;
+   struct slab_parent_pool transfer_pool;
 
    uint32_t sub_ctx_id;
 };

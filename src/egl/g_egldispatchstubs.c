@@ -151,6 +151,26 @@ static EGLBoolean EGLAPIENTRY dispatch_eglExportDRMImageMESA(EGLDisplay dpy, EGL
     }
     return _ret;
 }
+static char * EGLAPIENTRY dispatch_eglGetDisplayDriverConfig(EGLDisplay dpy)
+{
+    typedef char * EGLAPIENTRY (* _pfn_eglGetDisplayDriverConfig)(EGLDisplay dpy);
+    char * _ret = NULL;
+    _pfn_eglGetDisplayDriverConfig _ptr_eglGetDisplayDriverConfig = (_pfn_eglGetDisplayDriverConfig) __eglDispatchFetchByDisplay(dpy, __EGL_DISPATCH_eglGetDisplayDriverConfig);
+    if(_ptr_eglGetDisplayDriverConfig != NULL) {
+        _ret = _ptr_eglGetDisplayDriverConfig(dpy);
+    }
+    return _ret;
+}
+static const char * EGLAPIENTRY dispatch_eglGetDisplayDriverName(EGLDisplay dpy)
+{
+    typedef const char * EGLAPIENTRY (* _pfn_eglGetDisplayDriverName)(EGLDisplay dpy);
+    const char * _ret = NULL;
+    _pfn_eglGetDisplayDriverName _ptr_eglGetDisplayDriverName = (_pfn_eglGetDisplayDriverName) __eglDispatchFetchByDisplay(dpy, __EGL_DISPATCH_eglGetDisplayDriverName);
+    if(_ptr_eglGetDisplayDriverName != NULL) {
+        _ret = _ptr_eglGetDisplayDriverName(dpy);
+    }
+    return _ret;
+}
 static EGLBoolean EGLAPIENTRY dispatch_eglGetSyncAttribKHR(EGLDisplay dpy, EGLSyncKHR sync, EGLint attribute, EGLint *value)
 {
     typedef EGLBoolean EGLAPIENTRY (* _pfn_eglGetSyncAttribKHR)(EGLDisplay dpy, EGLSyncKHR sync, EGLint attribute, EGLint *value);
@@ -350,6 +370,8 @@ const char * const __EGL_DISPATCH_FUNC_NAMES[__EGL_DISPATCH_COUNT + 1] = {
     "eglGetCurrentDisplay",
     "eglGetCurrentSurface",
     "eglGetDisplay",
+    "eglGetDisplayDriverConfig",
+    "eglGetDisplayDriverName",
     "eglGetError",
     "eglGetPlatformDisplay",
     "eglGetPlatformDisplayEXT",
@@ -430,6 +452,8 @@ const __eglMustCastToProperFunctionPointerType __EGL_DISPATCH_FUNCS[__EGL_DISPAT
     NULL, // eglGetCurrentDisplay
     NULL, // eglGetCurrentSurface
     NULL, // eglGetDisplay
+    (__eglMustCastToProperFunctionPointerType) dispatch_eglGetDisplayDriverConfig,
+    (__eglMustCastToProperFunctionPointerType) dispatch_eglGetDisplayDriverName,
     NULL, // eglGetError
     NULL, // eglGetPlatformDisplay
     NULL, // eglGetPlatformDisplayEXT

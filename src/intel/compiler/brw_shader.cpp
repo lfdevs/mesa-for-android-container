@@ -206,6 +206,9 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
    case SHADER_OPCODE_COS:
       return "cos";
 
+   case SHADER_OPCODE_SEND:
+      return "send";
+
    case SHADER_OPCODE_TEX:
       return "tex";
    case SHADER_OPCODE_TEX_LOGICAL:
@@ -269,6 +272,8 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
 
    case SHADER_OPCODE_IMAGE_SIZE:
       return "image_size";
+   case SHADER_OPCODE_IMAGE_SIZE_LOGICAL:
+      return "image_size_logical";
 
    case SHADER_OPCODE_SHADER_TIME_ADD:
       return "shader_time_add";
@@ -402,8 +407,6 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
       return "uniform_pull_const_gen7";
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4:
       return "varying_pull_const_gen4";
-   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
-      return "varying_pull_const_gen7";
    case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL:
       return "varying_pull_const_logical";
 
@@ -415,10 +418,6 @@ brw_instruction_name(const struct gen_device_info *devinfo, enum opcode op)
 
    case FS_OPCODE_PACK_HALF_2x16_SPLIT:
       return "pack_half_2x16_split";
-   case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:
-      return "unpack_half_2x16_split_x";
-   case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y:
-      return "unpack_half_2x16_split_y";
 
    case FS_OPCODE_PLACEHOLDER_HALT:
       return "placeholder_halt";
@@ -1001,6 +1000,9 @@ bool
 backend_instruction::has_side_effects() const
 {
    switch (opcode) {
+   case SHADER_OPCODE_SEND:
+      return send_has_side_effects;
+
    case SHADER_OPCODE_UNTYPED_ATOMIC:
    case SHADER_OPCODE_UNTYPED_ATOMIC_LOGICAL:
    case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
@@ -1037,6 +1039,9 @@ bool
 backend_instruction::is_volatile() const
 {
    switch (opcode) {
+   case SHADER_OPCODE_SEND:
+      return send_is_volatile;
+
    case SHADER_OPCODE_UNTYPED_SURFACE_READ:
    case SHADER_OPCODE_UNTYPED_SURFACE_READ_LOGICAL:
    case SHADER_OPCODE_TYPED_SURFACE_READ:
@@ -1189,7 +1194,7 @@ brw_compile_tes(const struct brw_compiler *compiler,
                 const struct brw_tes_prog_key *key,
                 const struct brw_vue_map *input_vue_map,
                 struct brw_tes_prog_data *prog_data,
-                const nir_shader *src_shader,
+                nir_shader *nir,
                 struct gl_program *prog,
                 int shader_time_index,
                 char **error_str)
@@ -1198,7 +1203,6 @@ brw_compile_tes(const struct brw_compiler *compiler,
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_TESS_EVAL];
    const unsigned *assembly;
 
-   nir_shader *nir = nir_shader_clone(mem_ctx, src_shader);
    nir->info.inputs_read = key->inputs_read;
    nir->info.patch_inputs_read = key->patch_inputs_read;
 

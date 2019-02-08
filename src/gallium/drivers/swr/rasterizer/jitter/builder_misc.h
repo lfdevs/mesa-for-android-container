@@ -123,6 +123,28 @@ Value* VMASK_16(Value* mask);
 Value* VMOVMSK(Value* mask);
 
 //////////////////////////////////////////////////////////////////////////
+/// @brief Float / Fixed-point conversions
+//////////////////////////////////////////////////////////////////////////
+// Signed
+Value* VCVT_F32_FIXED_SI(Value*             vFloat,
+                         uint32_t           numIntBits,
+                         uint32_t           numFracBits,
+                         const llvm::Twine& name = "");
+Value* VCVT_FIXED_SI_F32(Value*             vFixed,
+                         uint32_t           numIntBits,
+                         uint32_t           numFracBits,
+                         const llvm::Twine& name = "");
+// Unsigned
+Value* VCVT_F32_FIXED_UI(Value*             vFloat,
+                         uint32_t           numIntBits,
+                         uint32_t           numFracBits,
+                         const llvm::Twine& name = "");
+Value* VCVT_FIXED_UI_F32(Value*             vFixed,
+                         uint32_t           numIntBits,
+                         uint32_t           numFracBits,
+                         const llvm::Twine& name = "");
+
+//////////////////////////////////////////////////////////////////////////
 /// @brief functions that build IR to call x86 intrinsics directly, or
 /// emulate them with other instructions if not available on the host
 //////////////////////////////////////////////////////////////////////////

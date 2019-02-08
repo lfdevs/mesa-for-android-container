@@ -1,10 +1,7 @@
 #!/bin/sh
 set -eu
 
-# Print defined gl.* functions not in GL ES 3.0 or in
-# (FIXME, none of these should be part of the ABI)
-# GL_EXT_multi_draw_arrays
-# GL_OES_EGL_image
+# Print defined gl.* functions not in GL ES 3.{0..2}
 
 case "$(uname)" in
 Darwin)
@@ -34,7 +31,6 @@ glBindAttribLocation
 glBindBuffer
 glBindBufferBase
 glBindBufferRange
-glBindFragDataLocationEXT
 glBindFramebuffer
 glBindImageTexture
 glBindProgramPipeline
@@ -118,8 +114,6 @@ glDrawElementsInstanced
 glDrawElementsInstancedBaseVertex
 glDrawRangeElements
 glDrawRangeElementsBaseVertex
-glEGLImageTargetRenderbufferStorageOES
-glEGLImageTargetTexture2DOES
 glEnable
 glEnableVertexAttribArray
 glEnablei
@@ -200,9 +194,7 @@ glGetSynciv
 glGetTexLevelParameterfv
 glGetTexLevelParameteriv
 glGetTexParameterIiv
-glGetTexParameterIivEXT
 glGetTexParameterIuiv
-glGetTexParameterIuivEXT
 glGetTexParameterfv
 glGetTexParameteriv
 glGetTransformFeedbackVarying
@@ -243,8 +235,6 @@ glMapBufferRange
 glMemoryBarrier
 glMemoryBarrierByRegion
 glMinSampleShading
-glMultiDrawArraysEXT
-glMultiDrawElementsEXT
 glObjectLabel
 glObjectPtrLabel
 glPatchParameteri
@@ -318,9 +308,7 @@ glTexBufferRange
 glTexImage2D
 glTexImage3D
 glTexParameterIiv
-glTexParameterIivEXT
 glTexParameterIuiv
-glTexParameterIuivEXT
 glTexParameterf
 glTexParameterfv
 glTexParameteri

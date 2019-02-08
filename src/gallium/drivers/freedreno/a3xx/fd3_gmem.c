@@ -785,7 +785,7 @@ update_vsc_pipe(struct fd_batch *batch)
 
 		if (!pipe->bo) {
 			pipe->bo = fd_bo_new(ctx->dev, 0x40000,
-					DRM_FREEDRENO_GEM_TYPE_KMEM);
+					DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_pipe[%u]", i);
 		}
 
 		OUT_PKT0(ring, REG_A3XX_VSC_PIPE(i), 3);

@@ -119,7 +119,8 @@ if with_tests and with_gallium_softpipe and with_llvm
         dependencies : [dep_llvm, dep_dl, dep_thread, dep_clock],
         include_directories : [inc_gallium, inc_gallium_aux, inc_include, inc_src],
         link_with : [libllvmpipe, libgallium, libmesa_util],
-      )
+      ),
+      suite : ['llvmpipe'],
     )
   endforeach
 endif

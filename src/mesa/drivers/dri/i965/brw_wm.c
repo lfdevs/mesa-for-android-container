@@ -63,6 +63,9 @@ assign_fs_binding_table_offsets(const struct gen_device_info *devinfo,
          next_binding_table_offset;
       next_binding_table_offset += key->nr_color_regions;
    }
+
+   /* Update the binding table size */
+   prog_data->base.binding_table.size_bytes = next_binding_table_offset * 4;
 }
 
 static void
@@ -139,6 +142,8 @@ brw_codegen_wm_prog(struct brw_context *brw,
    bool start_busy = false;
    double start_time = 0;
 
+   nir_shader *nir = nir_shader_clone(mem_ctx, fp->program.nir);
+
    memset(&prog_data, 0, sizeof(prog_data));
 
    /* Use ALT floating point mode for ARB programs so that 0^0 == 1. */
@@ -148,13 +153,12 @@ brw_codegen_wm_prog(struct brw_context *brw,
    assign_fs_binding_table_offsets(devinfo, &fp->program, key, &prog_data);
 
    if (!fp->program.is_arb_asm) {
-      brw_nir_setup_glsl_uniforms(mem_ctx, fp->program.nir, &fp->program,
+      brw_nir_setup_glsl_uniforms(mem_ctx, nir, &fp->program,
                                   &prog_data.base, true);
-      brw_nir_analyze_ubo_ranges(brw->screen->compiler, fp->program.nir,
+      brw_nir_analyze_ubo_ranges(brw->screen->compiler, nir,
                                  NULL, prog_data.base.ubo_ranges);
    } else {
-      brw_nir_setup_arb_uniforms(mem_ctx, fp->program.nir, &fp->program,
-                                 &prog_data.base);
+      brw_nir_setup_arb_uniforms(mem_ctx, nir, &fp->program, &prog_data.base);
 
       if (unlikely(INTEL_DEBUG & DEBUG_WM))
          brw_dump_arb_asm("fragment", &fp->program);
@@ -178,7 +182,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
 
    char *error_str = NULL;
    program = brw_compile_fs(brw->screen->compiler, brw, mem_ctx,
-                            key, &prog_data, fp->program.nir,
+                            key, &prog_data, nir,
                             &fp->program, st_index8, st_index16, st_index32,
                             true, false, vue_map,
                             &error_str);
@@ -263,6 +267,9 @@ brw_debug_recompile_sampler_key(struct brw_context *brw,
    found |= key_debug(brw, "xy_uxvx image bound",
                       old_key->xy_uxvx_image_mask,
                       key->xy_uxvx_image_mask);
+   found |= key_debug(brw, "ayuv image bound",
+                      old_key->ayuv_image_mask,
+                      key->ayuv_image_mask);
 
 
    for (unsigned int i = 0; i < MAX_SAMPLERS; i++) {
@@ -411,6 +418,9 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
                break;
             case __DRI_IMAGE_COMPONENTS_Y_UXVX:
                key->xy_uxvx_image_mask |= 1 << s;
+               break;
+            case __DRI_IMAGE_COMPONENTS_AYUV:
+               key->ayuv_image_mask |= 1 << s;
                break;
             default:
                break;

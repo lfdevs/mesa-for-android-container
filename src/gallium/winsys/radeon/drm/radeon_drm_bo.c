@@ -1134,6 +1134,7 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
 
 static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
                                                       struct winsys_handle *whandle,
+                                                      unsigned vm_alignment,
                                                       unsigned *stride,
                                                       unsigned *offset)
 {
@@ -1239,7 +1240,7 @@ done:
     if (ws->info.r600_has_virtual_memory && !bo->va) {
         struct drm_radeon_gem_va va;
 
-        bo->va = radeon_bomgr_find_va64(ws, bo->base.size, 1 << 20);
+        bo->va = radeon_bomgr_find_va64(ws, bo->base.size, vm_alignment);
 
         va.handle = bo->handle;
         va.operation = RADEON_VA_MAP;

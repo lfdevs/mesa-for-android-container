@@ -539,8 +539,11 @@ public:
       return data[i / 32] & (((1 << n) - 1) << (i % 32));
    }
 
-   // Find a range of size (<= 32) clear bits aligned to roundup_pow2(size).
-   int findFreeRange(unsigned int size) const;
+   // Find a range of count (<= 32) clear bits aligned to roundup_pow2(count).
+   int findFreeRange(unsigned int count, unsigned int max) const;
+   inline int findFreeRange(unsigned int count) const {
+      return findFreeRange(count, size);
+   }
 
    BitSet& operator|=(const BitSet&);
 

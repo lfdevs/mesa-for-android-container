@@ -121,7 +121,7 @@ static void si_emit_cb_render_state(struct si_context *sctx)
 				S_028424_OVERWRITE_COMBINER_MRT_SHARING_DISABLE(1) |
 				S_028424_OVERWRITE_COMBINER_WATERMARK(watermark) |
 				S_028424_OVERWRITE_COMBINER_DISABLE(oc_disable) |
-				S_028424_DISABLE_CONSTANT_ENCODE_REG(sctx->family == CHIP_RAVEN2));
+				S_028424_DISABLE_CONSTANT_ENCODE_REG(sctx->screen->has_dcc_constant_encode));
 	}
 
 	/* RB+ register settings. */
@@ -2151,7 +2151,7 @@ static boolean si_is_format_supported(struct pipe_screen *screen,
 	unsigned retval = 0;
 
 	if (target >= PIPE_MAX_TEXTURE_TYPES) {
-		PRINT_ERR("r600: unsupported texture type %d\n", target);
+		PRINT_ERR("radeonsi: unsupported texture type %d\n", target);
 		return false;
 	}
 
@@ -3570,7 +3570,7 @@ static void si_set_min_samples(struct pipe_context *ctx, unsigned min_samples)
  * @param state 256-bit descriptor; only the high 128 bits are filled in
  */
 void
-si_make_buffer_descriptor(struct si_screen *screen, struct r600_resource *buf,
+si_make_buffer_descriptor(struct si_screen *screen, struct si_resource *buf,
 			  enum pipe_format format,
 			  unsigned offset, unsigned size,
 			  uint32_t *state)
@@ -3613,14 +3613,11 @@ si_make_buffer_descriptor(struct si_screen *screen, struct r600_resource *buf,
 	 * - For VMEM and inst.IDXEN == 0 or STRIDE == 0, it's in byte units.
 	 * - For VMEM and inst.IDXEN == 1 and STRIDE != 0, it's in units of STRIDE.
 	 */
-	if (screen->info.chip_class >= GFX9)
-		/* When vindex == 0, LLVM sets IDXEN = 0, thus changing units
+	if (screen->info.chip_class >= GFX9 && HAVE_LLVM < 0x0800)
+		/* When vindex == 0, LLVM < 8.0 sets IDXEN = 0, thus changing units
 		 * from STRIDE to bytes. This works around it by setting
 		 * NUM_RECORDS to at least the size of one element, so that
 		 * the first element is readable when IDXEN == 0.
-		 *
-		 * TODO: Fix this in LLVM, but do we need a new intrinsic where
-		 *       IDXEN is enforced?
 		 */
 		num_records = num_records ? MAX2(num_records, stride) : 0;
 	else if (screen->info.chip_class == VI)
@@ -4064,7 +4061,7 @@ si_create_sampler_view_custom(struct pipe_context *ctx,
 	/* Buffer resource. */
 	if (texture->target == PIPE_BUFFER) {
 		si_make_buffer_descriptor(sctx->screen,
-					  r600_resource(texture),
+					  si_resource(texture),
 					  state->format,
 					  state->u.buf.offset,
 					  state->u.buf.size,
@@ -4584,7 +4581,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx,
 		unsigned num_divisors = util_last_bit(v->instance_divisor_is_fetched);
 
 		v->instance_divisor_factor_buffer =
-			(struct r600_resource*)
+			(struct si_resource*)
 			pipe_buffer_create(&sscreen->b, 0, PIPE_USAGE_DEFAULT,
 					   num_divisors * sizeof(divisor_factors[0]));
 		if (!v->instance_divisor_factor_buffer) {
@@ -4633,7 +4630,7 @@ static void si_delete_vertex_element(struct pipe_context *ctx, void *state)
 
 	if (sctx->vertex_elements == state)
 		sctx->vertex_elements = NULL;
-	r600_resource_reference(&v->instance_divisor_factor_buffer, NULL);
+	si_resource_reference(&v->instance_divisor_factor_buffer, NULL);
 	FREE(state);
 }
 
@@ -4658,7 +4655,7 @@ static void si_set_vertex_buffers(struct pipe_context *ctx,
 			dsti->stride = src->stride;
 			si_context_add_resource_size(sctx, buf);
 			if (buf)
-				r600_resource(buf)->bind_history |= PIPE_BIND_VERTEX_BUFFER;
+				si_resource(buf)->bind_history |= PIPE_BIND_VERTEX_BUFFER;
 		}
 	} else {
 		for (i = 0; i < count; i++) {
@@ -4687,7 +4684,7 @@ static void si_set_tess_state(struct pipe_context *ctx,
 	cb.user_buffer = NULL;
 	cb.buffer_size = sizeof(array);
 
-	si_upload_const_buffer(sctx, (struct r600_resource**)&cb.buffer,
+	si_upload_const_buffer(sctx, (struct si_resource**)&cb.buffer,
 			       (void*)array, sizeof(array),
 			       &cb.buffer_offset);
 
@@ -4827,8 +4824,6 @@ void si_init_state_functions(struct si_context *sctx)
 	sctx->b.set_tess_state = si_set_tess_state;
 
 	sctx->b.set_active_query_state = si_set_active_query_state;
-
-	sctx->b.draw_vbo = si_draw_vbo;
 
 	si_init_config(sctx);
 }

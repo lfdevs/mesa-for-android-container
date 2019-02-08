@@ -27,6 +27,7 @@
 #include "util/u_memory.h"
 #include "util/ralloc.h"
 #include "util/hash_table.h"
+#include "util/u_upload_mgr.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
@@ -36,6 +37,12 @@
 #include "v3d_context.h"
 #include "broadcom/cle/v3d_packet_v33_pack.h"
 #include "mesa/state_tracker/st_glsl_types.h"
+
+static struct v3d_compiled_shader *
+v3d_get_compiled_shader(struct v3d_context *v3d, struct v3d_key *key);
+static void
+v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
+                                struct v3d_key *key);
 
 static gl_varying_slot
 v3d_get_slot_for_driver_location(nir_shader *s, uint32_t driver_location)
@@ -174,6 +181,70 @@ uniforms_type_size(const struct glsl_type *type)
         return st_glsl_storage_type_size(type, false);
 }
 
+/**
+ * Precompiles a shader variant at shader state creation time if
+ * V3D_DEBUG=precompile is set.  Used for shader-db
+ * (https://gitlab.freedesktop.org/mesa/shader-db)
+ */
+static void
+v3d_shader_precompile(struct v3d_context *v3d,
+                      struct v3d_uncompiled_shader *so)
+{
+        nir_shader *s = so->base.ir.nir;
+
+        if (s->info.stage == MESA_SHADER_FRAGMENT) {
+                struct v3d_fs_key key = {
+                        .base.shader_state = so,
+                };
+
+                nir_foreach_variable(var, &s->outputs) {
+                        if (var->data.location == FRAG_RESULT_COLOR) {
+                                key.nr_cbufs = 1;
+                        } else if (var->data.location == FRAG_RESULT_DATA0) {
+                                key.nr_cbufs = MAX2(key.nr_cbufs,
+                                                    var->data.location -
+                                                    FRAG_RESULT_DATA0 + 1);
+                        }
+                }
+
+                v3d_setup_shared_precompile_key(so, &key.base);
+                v3d_get_compiled_shader(v3d, &key.base);
+        } else {
+                struct v3d_vs_key key = {
+                        .base.shader_state = so,
+                };
+
+                v3d_setup_shared_precompile_key(so, &key.base);
+
+                /* Compile VS: All outputs */
+                nir_foreach_variable(var, &s->outputs) {
+                        unsigned array_len = MAX2(glsl_get_length(var->type), 1);
+                        assert(array_len == 1);
+                        (void)array_len;
+
+                        int slot = var->data.location;
+                        for (int i = 0; i < glsl_get_components(var->type); i++) {
+                                int swiz = var->data.location_frac + i;
+                                key.fs_inputs[key.num_fs_inputs++] =
+                                        v3d_slot_from_slot_and_component(slot,
+                                                                         swiz);
+                        }
+                }
+
+                v3d_get_compiled_shader(v3d, &key.base);
+
+                /* Compile VS bin shader: only position (XXX: include TF) */
+                key.is_coord = true;
+                key.num_fs_inputs = 0;
+                for (int i = 0; i < 4; i++) {
+                        key.fs_inputs[key.num_fs_inputs++] =
+                                v3d_slot_from_slot_and_component(VARYING_SLOT_POS,
+                                                                 i);
+                }
+                v3d_get_compiled_shader(v3d, &key.base);
+        }
+}
+
 static void *
 v3d_shader_state_create(struct pipe_context *pctx,
                         const struct pipe_shader_state *cso)
@@ -225,7 +296,7 @@ v3d_shader_state_create(struct pipe_context *pctx,
 
         v3d_optimize_nir(s);
 
-        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_local);
+        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp);
 
         /* Garbage collect dead instructions */
         nir_sweep(s);
@@ -244,7 +315,18 @@ v3d_shader_state_create(struct pipe_context *pctx,
                 fprintf(stderr, "\n");
         }
 
+        if (V3D_DEBUG & V3D_DEBUG_PRECOMPILE)
+                v3d_shader_precompile(v3d, so);
+
         return so;
+}
+
+static void
+v3d_shader_debug_output(const char *message, void *data)
+{
+        struct v3d_context *v3d = data;
+
+        pipe_debug_message(&v3d->debug, SHADER_INFO, "%s", message);
 }
 
 static struct v3d_compiled_shader *
@@ -276,34 +358,19 @@ v3d_get_compiled_shader(struct v3d_context *v3d, struct v3d_key *key)
         uint64_t *qpu_insts;
         uint32_t shader_size;
 
-        switch (s->info.stage) {
-        case MESA_SHADER_VERTEX:
-                shader->prog_data.vs = rzalloc(shader, struct v3d_vs_prog_data);
-
-                qpu_insts = v3d_compile_vs(v3d->screen->compiler,
-                                           (struct v3d_vs_key *)key,
-                                           shader->prog_data.vs, s,
-                                           program_id, variant_id,
-                                           &shader_size);
-                break;
-        case MESA_SHADER_FRAGMENT:
-                shader->prog_data.fs = rzalloc(shader, struct v3d_fs_prog_data);
-
-                qpu_insts = v3d_compile_fs(v3d->screen->compiler,
-                                           (struct v3d_fs_key *)key,
-                                           shader->prog_data.fs, s,
-                                           program_id, variant_id,
-                                           &shader_size);
-                break;
-        default:
-                unreachable("bad stage");
-        }
+        qpu_insts = v3d_compile(v3d->screen->compiler, key,
+                                &shader->prog_data.base, s,
+                                v3d_shader_debug_output,
+                                v3d,
+                                program_id, variant_id, &shader_size);
+        ralloc_steal(shader, shader->prog_data.base);
 
         v3d_set_shader_uniform_dirty_flags(shader);
 
-        shader->bo = v3d_bo_alloc(v3d->screen, shader_size, "shader");
-        v3d_bo_map(shader->bo);
-        memcpy(shader->bo->map, qpu_insts, shader_size);
+        if (shader_size) {
+                u_upload_data(v3d->state_uploader, 0, shader_size, 8,
+                              qpu_insts, &shader->offset, &shader->resource);
+        }
 
         free(qpu_insts);
 
@@ -328,6 +395,13 @@ v3d_get_compiled_shader(struct v3d_context *v3d, struct v3d_key *key)
         }
 
         return shader;
+}
+
+static void
+v3d_free_compiled_shader(struct v3d_compiled_shader *shader)
+{
+        pipe_resource_reference(&shader->resource, NULL);
+        ralloc_free(shader);
 }
 
 static void
@@ -379,8 +453,6 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
                 }
 
                 if (sampler) {
-                        key->tex[i].compare_mode = sampler_state->compare_mode;
-                        key->tex[i].compare_func = sampler_state->compare_func;
                         key->tex[i].clamp_s =
                                 sampler_state->wrap_s == PIPE_TEX_WRAP_CLAMP;
                         key->tex[i].clamp_t =
@@ -391,6 +463,23 @@ v3d_setup_shared_key(struct v3d_context *v3d, struct v3d_key *key,
         }
 
         key->ucp_enables = v3d->rasterizer->base.clip_plane_enable;
+}
+
+static void
+v3d_setup_shared_precompile_key(struct v3d_uncompiled_shader *uncompiled,
+                                struct v3d_key *key)
+{
+        nir_shader *s = uncompiled->base.ir.nir;
+
+        for (int i = 0; i < s->info.num_textures; i++) {
+                key->tex[i].return_size = 16;
+                key->tex[i].return_channels = 2;
+
+                key->tex[i].swizzle[0] = PIPE_SWIZZLE_X;
+                key->tex[i].swizzle[1] = PIPE_SWIZZLE_Y;
+                key->tex[i].swizzle[2] = PIPE_SWIZZLE_Z;
+                key->tex[i].swizzle[3] = PIPE_SWIZZLE_W;
+        }
 }
 
 static void
@@ -412,7 +501,7 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, &key->base, &v3d->fragtex);
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_FRAGMENT]);
         key->base.shader_state = v3d->prog.bind_fs;
         key->is_points = (prim_mode == PIPE_PRIM_POINTS);
         key->is_lines = (prim_mode >= PIPE_PRIM_LINES &&
@@ -426,7 +515,7 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
         if (job->msaa) {
                 key->msaa = v3d->rasterizer->base.multisample;
                 key->sample_coverage = (v3d->rasterizer->base.multisample &&
-                                        v3d->sample_mask != (1 << VC5_MAX_SAMPLES) - 1);
+                                        v3d->sample_mask != (1 << V3D_MAX_SAMPLES) - 1);
                 key->sample_alpha_to_coverage = v3d->blend->base.alpha_to_coverage;
                 key->sample_alpha_to_one = v3d->blend->base.alpha_to_one;
         }
@@ -523,7 +612,7 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         memset(key, 0, sizeof(*key));
-        v3d_setup_shared_key(v3d, &key->base, &v3d->verttex);
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_VERTEX]);
         key->base.shader_state = v3d->prog.bind_vs;
         key->num_fs_inputs = v3d->prog.fs->prog_data.fs->base.num_inputs;
         STATIC_ASSERT(sizeof(key->fs_inputs) ==
@@ -606,12 +695,11 @@ delete_from_cache_if_matches(struct hash_table *ht,
         if (key->shader_state == so) {
                 struct v3d_compiled_shader *shader = entry->data;
                 _mesa_hash_table_remove(ht, entry);
-                v3d_bo_unreference(&shader->bo);
 
                 if (shader == *last_compile)
                         *last_compile = NULL;
 
-                ralloc_free(shader);
+                v3d_free_compiled_shader(shader);
         }
 }
 
@@ -677,15 +765,13 @@ v3d_program_fini(struct pipe_context *pctx)
 
         hash_table_foreach(v3d->fs_cache, entry) {
                 struct v3d_compiled_shader *shader = entry->data;
-                v3d_bo_unreference(&shader->bo);
-                ralloc_free(shader);
+                v3d_free_compiled_shader(shader);
                 _mesa_hash_table_remove(v3d->fs_cache, entry);
         }
 
         hash_table_foreach(v3d->vs_cache, entry) {
                 struct v3d_compiled_shader *shader = entry->data;
-                v3d_bo_unreference(&shader->bo);
-                ralloc_free(shader);
+                v3d_free_compiled_shader(shader);
                 _mesa_hash_table_remove(v3d->vs_cache, entry);
         }
 

@@ -393,7 +393,7 @@ static void
 ptn_slt(nir_builder *b, nir_alu_dest dest, nir_ssa_def **src)
 {
    if (b->shader->options->native_integers) {
-      ptn_move_dest(b, dest, nir_b2f(b, nir_flt(b, src[0], src[1])));
+      ptn_move_dest(b, dest, nir_b2f32(b, nir_flt(b, src[0], src[1])));
    } else {
       ptn_move_dest(b, dest, nir_slt(b, src[0], src[1]));
    }
@@ -406,7 +406,7 @@ static void
 ptn_sge(nir_builder *b, nir_alu_dest dest, nir_ssa_def **src)
 {
    if (b->shader->options->native_integers) {
-      ptn_move_dest(b, dest, nir_b2f(b, nir_fge(b, src[0], src[1])));
+      ptn_move_dest(b, dest, nir_b2f32(b, nir_fge(b, src[0], src[1])));
    } else {
       ptn_move_dest(b, dest, nir_sge(b, src[0], src[1]));
    }
@@ -983,7 +983,7 @@ prog_to_nir(const struct gl_program *prog,
    if (prog->Parameters->NumParameters > 0) {
       c->parameters = rzalloc(s, nir_variable);
       c->parameters->type =
-         glsl_array_type(glsl_vec4_type(), prog->Parameters->NumParameters);
+         glsl_array_type(glsl_vec4_type(), prog->Parameters->NumParameters, 0);
       c->parameters->name = "parameters";
       c->parameters->data.read_only = true;
       c->parameters->data.mode = nir_var_uniform;

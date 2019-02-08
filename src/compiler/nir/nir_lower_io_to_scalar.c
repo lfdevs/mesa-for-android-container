@@ -192,6 +192,10 @@ lower_load_to_scalar_early(nir_builder *b, nir_intrinsic_instr *intr,
          chan_var = nir_variable_clone(var, b->shader);
          chan_var->data.location_frac =  var->data.location_frac + i;
          chan_var->type = glsl_channel_type(chan_var->type);
+         if (var->data.explicit_offset) {
+            unsigned comp_size = glsl_get_bit_size(chan_var->type) / 8;
+            chan_var->data.offset = var->data.offset + i * comp_size;
+         }
 
          chan_vars[var->data.location_frac + i] = chan_var;
 
@@ -246,6 +250,10 @@ lower_store_output_to_scalar_early(nir_builder *b, nir_intrinsic_instr *intr,
          chan_var = nir_variable_clone(var, b->shader);
          chan_var->data.location_frac =  var->data.location_frac + i;
          chan_var->type = glsl_channel_type(chan_var->type);
+         if (var->data.explicit_offset) {
+            unsigned comp_size = glsl_get_bit_size(chan_var->type) / 8;
+            chan_var->data.offset = var->data.offset + i * comp_size;
+         }
 
          chan_vars[var->data.location_frac + i] = chan_var;
 
@@ -279,12 +287,8 @@ lower_store_output_to_scalar_early(nir_builder *b, nir_intrinsic_instr *intr,
 void
 nir_lower_io_to_scalar_early(nir_shader *shader, nir_variable_mode mask)
 {
-   struct hash_table *split_inputs =
-      _mesa_hash_table_create(NULL, _mesa_hash_pointer,
-                              _mesa_key_pointer_equal);
-   struct hash_table *split_outputs =
-      _mesa_hash_table_create(NULL, _mesa_hash_pointer,
-                              _mesa_key_pointer_equal);
+   struct hash_table *split_inputs = _mesa_pointer_hash_table_create(NULL);
+   struct hash_table *split_outputs = _mesa_pointer_hash_table_create(NULL);
 
    nir_foreach_function(function, shader) {
       if (function->impl) {
@@ -308,9 +312,12 @@ nir_lower_io_to_scalar_early(nir_shader *shader, nir_variable_mode mask)
                    intr->intrinsic != nir_intrinsic_interp_deref_at_offset)
                   continue;
 
-               nir_variable *var =
-                  nir_deref_instr_get_variable(nir_src_as_deref(intr->src[0]));
-               nir_variable_mode mode = var->data.mode;
+               nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+               nir_variable_mode mode = deref->mode;
+               if (!(mode & mask))
+                  continue;
+
+               nir_variable *var = nir_deref_instr_get_variable(deref);
 
                /* TODO: add patch support */
                if (var->data.patch)

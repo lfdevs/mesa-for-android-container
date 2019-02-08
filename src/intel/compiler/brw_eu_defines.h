@@ -41,14 +41,14 @@
 /* Using the GNU statement expression extension */
 #define SET_FIELD(value, field)                                         \
    ({                                                                   \
-      uint32_t fieldval = (value) << field ## _SHIFT;                   \
+      uint32_t fieldval = (uint32_t)(value) << field ## _SHIFT;         \
       assert((fieldval & ~ field ## _MASK) == 0);                       \
       fieldval & field ## _MASK;                                        \
    })
 
 #define SET_BITS(value, high, low)                                      \
    ({                                                                   \
-      const uint32_t fieldval = (value) << (low);                       \
+      const uint32_t fieldval = (uint32_t)(value) << (low);             \
       assert((fieldval & ~INTEL_MASK(high, low)) == 0);                 \
       fieldval & INTEL_MASK(high, low);                                 \
    })
@@ -316,6 +316,13 @@ enum opcode {
    SHADER_OPCODE_COS,
 
    /**
+    * A generic "send" opcode.  The first two sources are the message
+    * descriptor and extended message descriptor respectively.  The third
+    * and optional fourth sources are the message payload
+    */
+   SHADER_OPCODE_SEND,
+
+   /**
     * Texture sampling opcodes.
     *
     * LOGICAL opcodes are eventually translated to the matching non-LOGICAL
@@ -355,6 +362,7 @@ enum opcode {
    SHADER_OPCODE_SAMPLEINFO_LOGICAL,
 
    SHADER_OPCODE_IMAGE_SIZE,
+   SHADER_OPCODE_IMAGE_SIZE_LOGICAL,
 
    /**
     * Combines multiple sources of size 1 into a larger virtual GRF.
@@ -518,13 +526,10 @@ enum opcode {
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD,
    FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4,
-   FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7,
    FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_LOGICAL,
    FS_OPCODE_DISCARD_JUMP,
    FS_OPCODE_SET_SAMPLE_ID,
    FS_OPCODE_PACK_HALF_2x16_SPLIT,
-   FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X,
-   FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y,
    FS_OPCODE_PLACEHOLDER_HALT,
    FS_OPCODE_INTERPOLATE_AT_SAMPLE,
    FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET,
@@ -811,6 +816,8 @@ enum tex_logical_srcs {
    TEX_LOGICAL_SRC_LOD,
    /** dPdy if the operation takes explicit derivatives */
    TEX_LOGICAL_SRC_LOD2,
+   /** Min LOD */
+   TEX_LOGICAL_SRC_MIN_LOD,
    /** Sample index */
    TEX_LOGICAL_SRC_SAMPLE_INDEX,
    /** MCS data */

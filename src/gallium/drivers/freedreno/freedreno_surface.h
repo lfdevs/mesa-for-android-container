@@ -31,11 +31,6 @@
 
 struct fd_surface {
 	struct pipe_surface base;
-	uint32_t offset;
-	uint32_t pitch;
-	uint32_t width;
-	uint16_t height;
-	uint16_t depth;
 };
 
 static inline struct fd_surface *

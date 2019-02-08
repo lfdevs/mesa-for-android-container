@@ -35,135 +35,6 @@
 
 
 static void
-prepare_indirect_gpgpu_walker(struct brw_context *brw)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   GLintptr indirect_offset = brw->compute.num_work_groups_offset;
-   struct brw_bo *bo = brw->compute.num_work_groups_bo;
-
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMX, bo, indirect_offset + 0);
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMY, bo, indirect_offset + 4);
-   brw_load_register_mem(brw, GEN7_GPGPU_DISPATCHDIMZ, bo, indirect_offset + 8);
-
-   if (devinfo->gen > 7)
-      return;
-
-   /* Clear upper 32-bits of SRC0 and all 64-bits of SRC1 */
-   BEGIN_BATCH(7);
-   OUT_BATCH(MI_LOAD_REGISTER_IMM | (7 - 2));
-   OUT_BATCH(MI_PREDICATE_SRC0 + 4);
-   OUT_BATCH(0u);
-   OUT_BATCH(MI_PREDICATE_SRC1 + 0);
-   OUT_BATCH(0u);
-   OUT_BATCH(MI_PREDICATE_SRC1 + 4);
-   OUT_BATCH(0u);
-   ADVANCE_BATCH();
-
-   /* Load compute_dispatch_indirect_x_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 0);
-
-   /* predicate = (compute_dispatch_indirect_x_size == 0); */
-   BEGIN_BATCH(1);
-   OUT_BATCH(GEN7_MI_PREDICATE |
-             MI_PREDICATE_LOADOP_LOAD |
-             MI_PREDICATE_COMBINEOP_SET |
-             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
-   ADVANCE_BATCH();
-
-   /* Load compute_dispatch_indirect_y_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 4);
-
-   /* predicate |= (compute_dispatch_indirect_y_size == 0); */
-   BEGIN_BATCH(1);
-   OUT_BATCH(GEN7_MI_PREDICATE |
-             MI_PREDICATE_LOADOP_LOAD |
-             MI_PREDICATE_COMBINEOP_OR |
-             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
-   ADVANCE_BATCH();
-
-   /* Load compute_dispatch_indirect_z_size into SRC0 */
-   brw_load_register_mem(brw, MI_PREDICATE_SRC0, bo, indirect_offset + 8);
-
-   /* predicate |= (compute_dispatch_indirect_z_size == 0); */
-   BEGIN_BATCH(1);
-   OUT_BATCH(GEN7_MI_PREDICATE |
-             MI_PREDICATE_LOADOP_LOAD |
-             MI_PREDICATE_COMBINEOP_OR |
-             MI_PREDICATE_COMPAREOP_SRCS_EQUAL);
-   ADVANCE_BATCH();
-
-   /* predicate = !predicate; */
-   BEGIN_BATCH(1);
-   OUT_BATCH(GEN7_MI_PREDICATE |
-             MI_PREDICATE_LOADOP_LOADINV |
-             MI_PREDICATE_COMBINEOP_OR |
-             MI_PREDICATE_COMPAREOP_FALSE);
-   ADVANCE_BATCH();
-}
-
-static void
-brw_emit_gpgpu_walker(struct brw_context *brw)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const struct brw_cs_prog_data *prog_data =
-      brw_cs_prog_data(brw->cs.base.prog_data);
-
-   const GLuint *num_groups = brw->compute.num_work_groups;
-   uint32_t indirect_flag;
-
-   if (brw->compute.num_work_groups_bo == NULL) {
-      indirect_flag = 0;
-   } else {
-      indirect_flag =
-         GEN7_GPGPU_INDIRECT_PARAMETER_ENABLE |
-         (devinfo->gen == 7 ? GEN7_GPGPU_PREDICATE_ENABLE : 0);
-      prepare_indirect_gpgpu_walker(brw);
-   }
-
-   const unsigned simd_size = prog_data->simd_size;
-   unsigned group_size = prog_data->local_size[0] *
-      prog_data->local_size[1] * prog_data->local_size[2];
-   unsigned thread_width_max =
-      (group_size + simd_size - 1) / simd_size;
-
-   uint32_t right_mask = 0xffffffffu >> (32 - simd_size);
-   const unsigned right_non_aligned = group_size & (simd_size - 1);
-   if (right_non_aligned != 0)
-      right_mask >>= (simd_size - right_non_aligned);
-
-   uint32_t dwords = devinfo->gen < 8 ? 11 : 15;
-   BEGIN_BATCH(dwords);
-   OUT_BATCH(GPGPU_WALKER << 16 | (dwords - 2) | indirect_flag);
-   OUT_BATCH(0);
-   if (devinfo->gen >= 8) {
-      OUT_BATCH(0);                     /* Indirect Data Length */
-      OUT_BATCH(0);                     /* Indirect Data Start Address */
-   }
-   assert(thread_width_max <= brw->screen->devinfo.max_cs_threads);
-   OUT_BATCH(SET_FIELD(simd_size / 16, GPGPU_WALKER_SIMD_SIZE) |
-             SET_FIELD(thread_width_max - 1, GPGPU_WALKER_THREAD_WIDTH_MAX));
-   OUT_BATCH(0);                        /* Thread Group ID Starting X */
-   if (devinfo->gen >= 8)
-      OUT_BATCH(0);                     /* MBZ */
-   OUT_BATCH(num_groups[0]);            /* Thread Group ID X Dimension */
-   OUT_BATCH(0);                        /* Thread Group ID Starting Y */
-   if (devinfo->gen >= 8)
-      OUT_BATCH(0);                     /* MBZ */
-   OUT_BATCH(num_groups[1]);            /* Thread Group ID Y Dimension */
-   OUT_BATCH(0);                        /* Thread Group ID Starting/Resume Z */
-   OUT_BATCH(num_groups[2]);            /* Thread Group ID Z Dimension */
-   OUT_BATCH(right_mask);               /* Right Execution Mask */
-   OUT_BATCH(0xffffffff);               /* Bottom Execution Mask */
-   ADVANCE_BATCH();
-
-   BEGIN_BATCH(2);
-   OUT_BATCH(MEDIA_STATE_FLUSH << 16 | (2 - 2));
-   OUT_BATCH(0);
-   ADVANCE_BATCH();
-}
-
-
-static void
 brw_dispatch_compute_common(struct gl_context *ctx)
 {
    struct brw_context *brw = brw_context(ctx);
@@ -191,7 +62,7 @@ brw_dispatch_compute_common(struct gl_context *ctx)
    brw->batch.no_wrap = true;
    brw_upload_compute_state(brw);
 
-   brw_emit_gpgpu_walker(brw);
+   brw->vtbl.emit_compute_walker(brw);
 
    brw->batch.no_wrap = false;
 

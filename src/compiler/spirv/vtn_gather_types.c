@@ -337,8 +337,8 @@ result_type_args_for_opcode(SpvOp opcode)
    case SpvOpGroupSMaxNonUniformAMD: return (struct type_args){ 1, 0 };
    case SpvOpFragmentMaskFetchAMD: return (struct type_args){ 1, 0 };
    case SpvOpFragmentFetchAMD: return (struct type_args){ 1, 0 };
-   case SpvOpReportIntersectionNVX: return (struct type_args){ 1, 0 };
-   case SpvOpTypeAccelerationStructureNVX: return (struct type_args){ 0, -1 };
+   case SpvOpReportIntersectionNV: return (struct type_args){ 1, 0 };
+   case SpvOpTypeAccelerationStructureNV: return (struct type_args){ 0, -1 };
    case SpvOpSubgroupShuffleINTEL: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupShuffleDownINTEL: return (struct type_args){ 1, 0 };
    case SpvOpSubgroupShuffleUpINTEL: return (struct type_args){ 1, 0 };

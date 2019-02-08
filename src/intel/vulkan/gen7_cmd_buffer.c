@@ -90,8 +90,6 @@ gen7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
                   GEN7_3DSTATE_SCISSOR_STATE_POINTERS, ssp) {
       ssp.ScissorRectPointer = scissor_state.offset;
    }
-
-   anv_state_flush(cmd_buffer->device, scissor_state);
 }
 #endif
 
@@ -191,7 +189,6 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          .BackfaceStencilReferenceValue = d->stencil_reference.back & 0xff,
       };
       GENX(COLOR_CALC_STATE_pack)(NULL, cc_state.map, &cc);
-      anv_state_flush(cmd_buffer->device, cc_state);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CC_STATE_POINTERS), ccp) {
          ccp.ColorCalcStatePointer = cc_state.offset;
@@ -246,7 +243,7 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
          ib.CutIndexEnable             = pipeline->primitive_restart;
 #endif
          ib.IndexFormat                = cmd_buffer->state.gfx.gen7.index_type;
-         ib.IndexBufferMOCS            = anv_mocs_for_bo(cmd_buffer->device,
+         ib.MOCS                       = anv_mocs_for_bo(cmd_buffer->device,
                                                          buffer->address.bo);
 
          ib.BufferStartingAddress      = anv_address_add(buffer->address,

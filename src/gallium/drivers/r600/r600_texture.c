@@ -1108,7 +1108,9 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 	      templ->depth0 != 1 || templ->last_level != 0)
 		return NULL;
 
-	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle, &stride, &offset);
+	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle,
+					      rscreen->info.max_alignment,
+					      &stride, &offset);
 	if (!buf)
 		return NULL;
 
@@ -1852,6 +1854,7 @@ r600_memobj_from_handle(struct pipe_screen *screen,
 		return NULL;
 
 	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle,
+					      rscreen->info.max_alignment,
 					      &stride, &offset);
 	if (!buf) {
 		free(memobj);

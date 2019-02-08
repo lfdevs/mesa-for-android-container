@@ -63,7 +63,7 @@ static const struct debug_named_value debug_options[] = {
    {"no_autodisable", ETNA_DBG_NO_AUTODISABLE, "Disable autodisable"},
    {"no_supertile",   ETNA_DBG_NO_SUPERTILE, "Disable supertiles"},
    {"no_early_z",     ETNA_DBG_NO_EARLY_Z, "Disable early z"},
-   {"cflush_all",     ETNA_DBG_CFLUSH_ALL, "Flush every cash before state update"},
+   {"cflush_all",     ETNA_DBG_CFLUSH_ALL, "Flush every cache before state update"},
    {"msaa2x",         ETNA_DBG_MSAA_2X, "Force 2x msaa"},
    {"msaa4x",         ETNA_DBG_MSAA_4X, "Force 4x msaa"},
    {"flush_all",      ETNA_DBG_FLUSH_ALL, "Flush after every rendered primitive"},

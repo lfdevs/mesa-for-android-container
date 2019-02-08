@@ -629,7 +629,7 @@ intel_render_texture(struct gl_context * ctx,
 }
 
 
-#define fbo_incomplete(fb, ...) do {                                          \
+#define fbo_incomplete(fb, error_id, ...) do {                                          \
       static GLuint msg_id = 0;                                               \
       if (unlikely(ctx->Const.ContextFlags & GL_CONTEXT_FLAG_DEBUG_BIT)) {    \
          _mesa_gl_debug(ctx, &msg_id,                                         \
@@ -639,7 +639,7 @@ intel_render_texture(struct gl_context * ctx,
                         __VA_ARGS__);                                         \
       }                                                                       \
       DBG(__VA_ARGS__);                                                       \
-      fb->_Status = GL_FRAMEBUFFER_UNSUPPORTED;                               \
+      fb->_Status = error_id;                                                 \
    } while (0)
 
 /**
@@ -693,7 +693,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
              d_depth != s_depth ||
              depthRb->mt_level != stencilRb->mt_level ||
 	     depthRb->mt_layer != stencilRb->mt_layer) {
-	    fbo_incomplete(fb,
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
                            "FBO incomplete: depth and stencil must match in"
                            "width, height, depth, LOD and layer\n");
 	 }
@@ -705,7 +705,7 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	  */
 	 if (depthRb->mt_level != stencilRb->mt_level ||
 	     depthRb->mt_layer != stencilRb->mt_layer) {
-	    fbo_incomplete(fb,
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
                            "FBO incomplete: depth image level/layer %d/%d != "
                            "stencil image %d/%d\n",
                            depthRb->mt_level,
@@ -715,13 +715,14 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	 }
       } else {
 	 if (!brw->has_separate_stencil) {
-	    fbo_incomplete(fb, "FBO incomplete: separate stencil "
-                           "unsupported\n");
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                      "FBO incomplete: separate stencil unsupported\n");
 	 }
 	 if (stencil_mt->format != MESA_FORMAT_S_UINT8) {
-	    fbo_incomplete(fb, "FBO incomplete: separate stencil is %s "
-                           "instead of S8\n",
-                           _mesa_get_format_name(stencil_mt->format));
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                      "FBO incomplete: separate stencil is %s "
+                      "instead of S8\n",
+                      _mesa_get_format_name(stencil_mt->format));
 	 }
 	 if (devinfo->gen < 7 && !intel_renderbuffer_has_hiz(depthRb)) {
 	    /* Before Gen7, separate depth and stencil buffers can be used
@@ -730,8 +731,8 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
 	     *     [DevSNB]: This field must be set to the same value (enabled
 	     *     or disabled) as Hierarchical Depth Buffer Enable.
 	     */
-	    fbo_incomplete(fb, "FBO incomplete: separate stencil "
-                           "without HiZ\n");
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                          "FBO incomplete: separate stencil without HiZ\n");
 	 }
       }
    }
@@ -749,29 +750,39 @@ intel_validate_framebuffer(struct gl_context *ctx, struct gl_framebuffer *fb)
        */
       rb = fb->Attachment[i].Renderbuffer;
       if (rb == NULL) {
-	 fbo_incomplete(fb, "FBO incomplete: attachment without "
-                        "renderbuffer\n");
+	 fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                       "FBO incomplete: attachment without "
+                       "renderbuffer\n");
 	 continue;
       }
 
       if (fb->Attachment[i].Type == GL_TEXTURE) {
 	 if (rb->TexImage->Border) {
-	    fbo_incomplete(fb, "FBO incomplete: texture with border\n");
+	    fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                      "FBO incomplete: texture with border\n");
 	    continue;
 	 }
       }
 
       irb = intel_renderbuffer(rb);
       if (irb == NULL) {
-	 fbo_incomplete(fb, "FBO incomplete: software rendering "
-                        "renderbuffer\n");
+	 fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                   "FBO incomplete: software rendering renderbuffer\n");
 	 continue;
       }
 
+     if (rb->Format == MESA_FORMAT_R_SRGB8) {
+        fbo_incomplete(fb, GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
+                       "FBO incomplete: Format not color renderable: %s\n",
+                       _mesa_get_format_name(rb->Format));
+        continue;
+     }
+
       if (!brw_render_target_supported(brw, rb)) {
-	 fbo_incomplete(fb, "FBO incomplete: Unsupported HW "
-                        "texture/renderbuffer format attached: %s\n",
-                        _mesa_get_format_name(intel_rb_format(irb)));
+	 fbo_incomplete(fb, GL_FRAMEBUFFER_UNSUPPORTED,
+                   "FBO incomplete: Unsupported HW "
+                   "texture/renderbuffer format attached: %s\n",
+                   _mesa_get_format_name(intel_rb_format(irb)));
       }
    }
 }

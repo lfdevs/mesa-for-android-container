@@ -87,6 +87,7 @@ typedef enum {
 	SIN = 48,
 	COS = 49,
 	RETAIN_PREV = 50,
+	SCALAR_NONE = 63,
 } instr_scalar_opc_t;
 
 typedef enum {
@@ -120,6 +121,7 @@ typedef enum {
 	KILLNEv = 27,
 	DSTv = 28,
 	MOVAv = 29,
+	VECTOR_NONE = 31,
 } instr_vector_opc_t;
 
 typedef struct PACKED {
@@ -161,9 +163,9 @@ typedef struct PACKED {
 		};
 		/* constants have full 8-bit index */
 		struct {
-			uint8_t             src3_reg_const   : 8;
-			uint8_t             src2_reg_const   : 8;
-			uint8_t             src1_reg_const   : 8;
+			uint8_t             src3_reg_byte    : 8;
+			uint8_t             src2_reg_byte    : 8;
+			uint8_t             src1_reg_byte    : 8;
 		};
 	};
 	instr_vector_opc_t  vector_opc               : 5;
@@ -389,10 +391,17 @@ typedef union PACKED {
 		instr_fetch_opc_t opc                    : 5;
 		uint32_t        dummy0                   : 27;
 		/* dword1: */
-		uint32_t        dummy1                   : 32;
+		uint32_t        dummy1                   : 31;
+		uint8_t         pred_select              : 1;
 		/* dword2: */
-		uint32_t        dummy2                   : 32;
+		uint32_t        dummy2                   : 31;
+		uint8_t         pred_condition           : 1;
 	};
 } instr_fetch_t;
+
+typedef union PACKED {
+	instr_alu_t alu;
+	instr_fetch_t fetch;
+} instr_t;
 
 #endif /* INSTR_H_ */

@@ -126,6 +126,11 @@ enum xa_formats {
     xa_format_x8r8g8b8 = xa_format(32, xa_type_argb, 0, 8, 8, 8),
     xa_format_r5g6b5 = xa_format(16, xa_type_argb, 0, 5, 6, 5),
     xa_format_x1r5g5b5 = xa_format(16, xa_type_argb, 0, 5, 5, 5),
+    xa_format_a4r4g4b4 = xa_format(16, xa_type_argb, 4, 4, 4, 4),
+    xa_format_a2b10g10r10 = xa_format(32, xa_type_abgr, 2, 10, 10, 10),
+    xa_format_x2b10g10r10 = xa_format(32, xa_type_abgr, 0, 10, 10, 10),
+    xa_format_b8g8r8a8 = xa_format(32, xa_type_bgra, 8, 8, 8, 8),
+    xa_format_b8g8r8x8 = xa_format(32, xa_type_bgra, 0, 8, 8, 8),
 
     xa_format_z16 = xa_format_c(16, xa_type_z, 16, 0),
     xa_format_z32 = xa_format_c(32, xa_type_z, 32, 0),

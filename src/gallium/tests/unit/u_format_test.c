@@ -668,6 +668,47 @@ test_format_pack_s_8uint(const struct util_format_description *format_desc,
 }
 
 
+/* Touch-test that the unorm/snorm flags are set up right by codegen. */
+static boolean
+test_format_norm_flags(const struct util_format_description *format_desc)
+{
+   boolean success = TRUE;
+
+#define FORMAT_CASE(format, unorm, snorm) \
+   case format: \
+      success = (format_desc->is_unorm == unorm && \
+                 format_desc->is_snorm == snorm); \
+      break
+
+   switch (format_desc->format) {
+      FORMAT_CASE(PIPE_FORMAT_R8G8B8A8_UNORM, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_R8G8B8A8_SRGB, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_R8G8B8A8_SNORM, FALSE, TRUE);
+      FORMAT_CASE(PIPE_FORMAT_R32_FLOAT, FALSE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_X8Z24_UNORM, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_S8X24_UINT, FALSE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_DXT1_RGB, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_ETC2_RGB8, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_ETC2_R11_SNORM, FALSE, TRUE);
+      FORMAT_CASE(PIPE_FORMAT_ASTC_4x4, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_BPTC_RGBA_UNORM, TRUE, FALSE);
+      FORMAT_CASE(PIPE_FORMAT_BPTC_RGB_FLOAT, FALSE, FALSE);
+   default:
+      success = !(format_desc->is_unorm && format_desc->is_snorm);
+      break;
+   }
+#undef FORMAT_CASE
+
+   if (!success) {
+      printf("FAILED: %s (unorm %s, snorm %s)\n",
+             format_desc->short_name,
+             format_desc->is_unorm ? "yes" : "no",
+             format_desc->is_snorm ? "yes" : "no");
+   }
+
+   return success;
+}
+
 typedef boolean
 (*test_func_t)(const struct util_format_description *format_desc,
                const struct util_format_test_case *test);
@@ -698,6 +739,22 @@ test_one_func(const struct util_format_description *format_desc,
    return success;
 }
 
+static boolean
+test_format_metadata(const struct util_format_description *format_desc,
+                     boolean (*func)(const struct util_format_description *format_desc),
+                     const char *suffix)
+{
+   boolean success = TRUE;
+
+   printf("Testing util_format_%s_%s ...\n", format_desc->short_name, suffix);
+   fflush(stdout);
+
+   if (!func(format_desc)) {
+      success = FALSE;
+   }
+
+   return success;
+}
 
 static boolean
 test_all(void)
@@ -724,6 +781,11 @@ test_all(void)
          } \
       }
 
+#     define TEST_FORMAT_METADATA(name) \
+      if (!test_format_metadata(format_desc, &test_format_##name, #name)) { \
+         success = FALSE; \
+      } \
+
       TEST_ONE_FUNC(fetch_rgba_float);
       TEST_ONE_FUNC(pack_rgba_float);
       TEST_ONE_FUNC(unpack_rgba_float);
@@ -737,7 +799,10 @@ test_all(void)
       TEST_ONE_FUNC(unpack_s_8uint);
       TEST_ONE_FUNC(pack_s_8uint);
 
+      TEST_FORMAT_METADATA(norm_flags);
+
 #     undef TEST_ONE_FUNC
+#     undef TEST_ONE_FORMAT
    }
 
    return success;

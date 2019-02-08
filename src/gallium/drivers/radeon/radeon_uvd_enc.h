@@ -464,6 +464,6 @@ struct radeon_uvd_encoder
 };
 
 void radeon_uvd_enc_1_1_init(struct radeon_uvd_encoder *enc);
-bool si_radeon_uvd_enc_supported(struct si_screen *rscreen);
+bool si_radeon_uvd_enc_supported(struct si_screen *sscreen);
 
 #endif // _RADEON_UVD_ENC_H

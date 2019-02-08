@@ -968,6 +968,7 @@ static nv50_ir::operation translateOpcode(uint opcode)
    NV50_IR_OPCODE_CASE(ATOMUMAX, ATOM);
    NV50_IR_OPCODE_CASE(ATOMIMIN, ATOM);
    NV50_IR_OPCODE_CASE(ATOMIMAX, ATOM);
+   NV50_IR_OPCODE_CASE(ATOMFADD, ATOM);
 
    NV50_IR_OPCODE_CASE(TEX2, TEX);
    NV50_IR_OPCODE_CASE(TXB2, TXB);
@@ -1010,6 +1011,7 @@ static uint16_t opcodeToSubOp(uint opcode)
    case TGSI_OPCODE_ATOMIMIN: return NV50_IR_SUBOP_ATOM_MIN;
    case TGSI_OPCODE_ATOMUMAX: return NV50_IR_SUBOP_ATOM_MAX;
    case TGSI_OPCODE_ATOMIMAX: return NV50_IR_SUBOP_ATOM_MAX;
+   case TGSI_OPCODE_ATOMFADD: return NV50_IR_SUBOP_ATOM_ADD;
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_UMUL_HI:
       return NV50_IR_SUBOP_MUL_HIGH;
@@ -1619,6 +1621,7 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       case TGSI_OPCODE_ATOMIMIN:
       case TGSI_OPCODE_ATOMUMAX:
       case TGSI_OPCODE_ATOMIMAX:
+      case TGSI_OPCODE_ATOMFADD:
       case TGSI_OPCODE_LOAD:
          info->io.globalAccess |= (insn.getOpcode() == TGSI_OPCODE_LOAD) ?
             0x1 : 0x2;
@@ -3834,6 +3837,7 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMAX:
+   case TGSI_OPCODE_ATOMFADD:
       handleATOM(dst0, dstTy, tgsi::opcodeToSubOp(tgsi.getOpcode()));
       break;
    case TGSI_OPCODE_RESQ:

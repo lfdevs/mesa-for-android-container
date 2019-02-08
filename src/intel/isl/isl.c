@@ -35,6 +35,52 @@
 #include "isl_gen9.h"
 #include "isl_priv.h"
 
+void
+isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
+                           uint32_t yt1, uint32_t yt2,
+                           char *dst, const char *src,
+                           uint32_t dst_pitch, int32_t src_pitch,
+                           bool has_swizzling,
+                           enum isl_tiling tiling,
+                           isl_memcpy_type copy_type)
+{
+#ifdef USE_SSE41
+   if (copy_type == ISL_MEMCPY_STREAMING_LOAD) {
+      _isl_memcpy_linear_to_tiled_sse41(
+         xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch, has_swizzling,
+         tiling, copy_type);
+      return;
+   }
+#endif
+
+   _isl_memcpy_linear_to_tiled(
+      xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch, has_swizzling,
+      tiling, copy_type);
+}
+
+void
+isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
+                           uint32_t yt1, uint32_t yt2,
+                           char *dst, const char *src,
+                           int32_t dst_pitch, uint32_t src_pitch,
+                           bool has_swizzling,
+                           enum isl_tiling tiling,
+                           isl_memcpy_type copy_type)
+{
+#ifdef USE_SSE41
+   if (copy_type == ISL_MEMCPY_STREAMING_LOAD) {
+      _isl_memcpy_tiled_to_linear_sse41(
+         xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch, has_swizzling,
+         tiling, copy_type);
+      return;
+   }
+#endif
+
+   _isl_memcpy_tiled_to_linear(
+      xt1, xt2, yt1, yt2, dst, src, dst_pitch, src_pitch, has_swizzling,
+      tiling, copy_type);
+}
+
 void PRINTFLIKE(3, 4) UNUSED
 __isl_finishme(const char *file, int line, const char *fmt, ...)
 {

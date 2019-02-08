@@ -132,7 +132,7 @@ struct si_stencil_ref {
 
 struct si_vertex_elements
 {
-	struct r600_resource		*instance_divisor_factor_buffer;
+	struct si_resource		*instance_divisor_factor_buffer;
 	uint32_t			rsrc_word3[SI_MAX_ATTRIBS];
 	uint16_t			src_offset[SI_MAX_ATTRIBS];
 	uint8_t				fix_fetch[SI_MAX_ATTRIBS];
@@ -384,7 +384,7 @@ struct si_descriptors {
 	uint32_t *gpu_list;
 
 	/* The buffer where the descriptors have been uploaded. */
-	struct r600_resource *buffer;
+	struct si_resource *buffer;
 	uint64_t gpu_address;
 
 	/* The maximum number of descriptors. */
@@ -465,7 +465,7 @@ bool si_upload_compute_shader_descriptors(struct si_context *sctx);
 void si_release_all_descriptors(struct si_context *sctx);
 void si_all_descriptors_begin_new_cs(struct si_context *sctx);
 void si_all_resident_buffers_begin_new_cs(struct si_context *sctx);
-void si_upload_const_buffer(struct si_context *sctx, struct r600_resource **rbuffer,
+void si_upload_const_buffer(struct si_context *sctx, struct si_resource **buf,
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 void si_update_all_texture_descriptors(struct si_context *sctx);
 void si_shader_change_notify(struct si_context *sctx);
@@ -474,6 +474,8 @@ void si_emit_graphics_shader_pointers(struct si_context *sctx);
 void si_emit_compute_shader_pointers(struct si_context *sctx);
 void si_set_rw_buffer(struct si_context *sctx,
 		      uint slot, const struct pipe_constant_buffer *input);
+void si_set_rw_shader_buffer(struct si_context *sctx, uint slot,
+			     const struct pipe_shader_buffer *sbuffer);
 void si_set_active_descriptors(struct si_context *sctx, unsigned desc_idx,
 			       uint64_t new_active_mask);
 void si_set_active_descriptors_for_shader(struct si_context *sctx,
@@ -490,7 +492,7 @@ void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf,
 void si_init_state_functions(struct si_context *sctx);
 void si_init_screen_state_functions(struct si_screen *sscreen);
 void
-si_make_buffer_descriptor(struct si_screen *screen, struct r600_resource *buf,
+si_make_buffer_descriptor(struct si_screen *screen, struct si_resource *buf,
 			  enum pipe_format format,
 			  unsigned offset, unsigned size,
 			  uint32_t *state);
@@ -541,17 +543,9 @@ void si_get_active_slot_masks(const struct tgsi_shader_info *info,
 			      uint64_t *samplers_and_images);
 
 /* si_state_draw.c */
-void si_init_ia_multi_vgt_param_table(struct si_context *sctx);
 void si_emit_cache_flush(struct si_context *sctx);
-void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *dinfo);
-void si_draw_rectangle(struct blitter_context *blitter,
-		       void *vertex_elements_cso,
-		       blitter_get_vs_func get_vs,
-		       int x1, int y1, int x2, int y2,
-		       float depth, unsigned num_instances,
-		       enum blitter_attrib_type type,
-		       const union blitter_attrib *attrib);
 void si_trace_emit(struct si_context *sctx);
+void si_init_draw_functions(struct si_context *sctx);
 
 /* si_state_msaa.c */
 void si_init_msaa_functions(struct si_context *sctx);

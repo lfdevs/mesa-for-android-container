@@ -172,45 +172,45 @@ static void amdgpu_fence_submitted(struct pipe_fence_handle *fence,
                                    uint64_t seq_no,
                                    uint64_t *user_fence_cpu_address)
 {
-   struct amdgpu_fence *rfence = (struct amdgpu_fence*)fence;
+   struct amdgpu_fence *afence = (struct amdgpu_fence*)fence;
 
-   rfence->fence.fence = seq_no;
-   rfence->user_fence_cpu_address = user_fence_cpu_address;
-   util_queue_fence_signal(&rfence->submitted);
+   afence->fence.fence = seq_no;
+   afence->user_fence_cpu_address = user_fence_cpu_address;
+   util_queue_fence_signal(&afence->submitted);
 }
 
 static void amdgpu_fence_signalled(struct pipe_fence_handle *fence)
 {
-   struct amdgpu_fence *rfence = (struct amdgpu_fence*)fence;
+   struct amdgpu_fence *afence = (struct amdgpu_fence*)fence;
 
-   rfence->signalled = true;
-   util_queue_fence_signal(&rfence->submitted);
+   afence->signalled = true;
+   util_queue_fence_signal(&afence->submitted);
 }
 
 bool amdgpu_fence_wait(struct pipe_fence_handle *fence, uint64_t timeout,
                        bool absolute)
 {
-   struct amdgpu_fence *rfence = (struct amdgpu_fence*)fence;
+   struct amdgpu_fence *afence = (struct amdgpu_fence*)fence;
    uint32_t expired;
    int64_t abs_timeout;
    uint64_t *user_fence_cpu;
    int r;
 
-   if (rfence->signalled)
+   if (afence->signalled)
       return true;
 
    /* Handle syncobjs. */
-   if (amdgpu_fence_is_syncobj(rfence)) {
+   if (amdgpu_fence_is_syncobj(afence)) {
       /* Absolute timeouts are only be used by BO fences, which aren't
        * backed by syncobjs.
        */
       assert(!absolute);
 
-      if (amdgpu_cs_syncobj_wait(rfence->ws->dev, &rfence->syncobj, 1,
+      if (amdgpu_cs_syncobj_wait(afence->ws->dev, &afence->syncobj, 1,
                                  timeout, 0, NULL))
          return false;
 
-      rfence->signalled = true;
+      afence->signalled = true;
       return true;
    }
 
@@ -222,13 +222,13 @@ bool amdgpu_fence_wait(struct pipe_fence_handle *fence, uint64_t timeout,
    /* The fence might not have a number assigned if its IB is being
     * submitted in the other thread right now. Wait until the submission
     * is done. */
-   if (!util_queue_fence_wait_timeout(&rfence->submitted, abs_timeout))
+   if (!util_queue_fence_wait_timeout(&afence->submitted, abs_timeout))
       return false;
 
-   user_fence_cpu = rfence->user_fence_cpu_address;
+   user_fence_cpu = afence->user_fence_cpu_address;
    if (user_fence_cpu) {
-      if (*user_fence_cpu >= rfence->fence.fence) {
-         rfence->signalled = true;
+      if (*user_fence_cpu >= afence->fence.fence) {
+         afence->signalled = true;
          return true;
       }
 
@@ -238,7 +238,7 @@ bool amdgpu_fence_wait(struct pipe_fence_handle *fence, uint64_t timeout,
    }
 
    /* Now use the libdrm query. */
-   r = amdgpu_cs_query_fence_status(&rfence->fence,
+   r = amdgpu_cs_query_fence_status(&afence->fence,
 				    abs_timeout,
 				    AMDGPU_QUERY_FENCE_TIMEOUT_IS_ABSOLUTE,
 				    &expired);
@@ -250,7 +250,7 @@ bool amdgpu_fence_wait(struct pipe_fence_handle *fence, uint64_t timeout,
    if (expired) {
       /* This variable can only transition from false to true, so it doesn't
        * matter if threads race for it. */
-      rfence->signalled = true;
+      afence->signalled = true;
       return true;
    }
    return false;
@@ -598,7 +598,7 @@ static int amdgpu_lookup_or_add_sparse_buffer(struct amdgpu_cs *acs,
    /* We delay adding the backing buffers until we really have to. However,
     * we cannot delay accounting for memory use.
     */
-   simple_mtx_lock(&bo->u.sparse.commit_lock);
+   simple_mtx_lock(&bo->lock);
 
    list_for_each_entry(struct amdgpu_sparse_backing, backing, &bo->u.sparse.backing, list) {
       if (bo->initial_domain & RADEON_DOMAIN_VRAM)
@@ -607,7 +607,7 @@ static int amdgpu_lookup_or_add_sparse_buffer(struct amdgpu_cs *acs,
          acs->main.base.used_gart += backing->bo->base.size;
    }
 
-   simple_mtx_unlock(&bo->u.sparse.commit_lock);
+   simple_mtx_unlock(&bo->lock);
 
    return idx;
 }
@@ -923,7 +923,8 @@ amdgpu_cs_create(struct radeon_winsys_ctx *rwctx,
                  enum ring_type ring_type,
                  void (*flush)(void *ctx, unsigned flags,
                                struct pipe_fence_handle **fence),
-                 void *flush_ctx)
+                 void *flush_ctx,
+                 bool stop_exec_on_failure)
 {
    struct amdgpu_ctx *ctx = (struct amdgpu_ctx*)rwctx;
    struct amdgpu_cs *cs;
@@ -939,6 +940,7 @@ amdgpu_cs_create(struct radeon_winsys_ctx *rwctx,
    cs->flush_cs = flush;
    cs->flush_data = flush_ctx;
    cs->ring_type = ring_type;
+   cs->stop_exec_on_failure = stop_exec_on_failure;
 
    struct amdgpu_cs_fence_info fence_info;
    fence_info.handle = cs->ctx->user_fence_bo;
@@ -1265,7 +1267,7 @@ static bool amdgpu_add_sparse_backing_buffers(struct amdgpu_cs_context *cs)
       struct amdgpu_cs_buffer *buffer = &cs->sparse_buffers[i];
       struct amdgpu_winsys_bo *bo = buffer->bo;
 
-      simple_mtx_lock(&bo->u.sparse.commit_lock);
+      simple_mtx_lock(&bo->lock);
 
       list_for_each_entry(struct amdgpu_sparse_backing, backing, &bo->u.sparse.backing, list) {
          /* We can directly add the buffer here, because we know that each
@@ -1274,7 +1276,7 @@ static bool amdgpu_add_sparse_backing_buffers(struct amdgpu_cs_context *cs)
          int idx = amdgpu_do_add_real_buffer(cs, backing->bo);
          if (idx < 0) {
             fprintf(stderr, "%s: failed to add buffer\n", __FUNCTION__);
-            simple_mtx_unlock(&bo->u.sparse.commit_lock);
+            simple_mtx_unlock(&bo->lock);
             return false;
          }
 
@@ -1283,7 +1285,7 @@ static bool amdgpu_add_sparse_backing_buffers(struct amdgpu_cs_context *cs)
          p_atomic_inc(&backing->bo->num_active_ioctls);
       }
 
-      simple_mtx_unlock(&bo->u.sparse.commit_lock);
+      simple_mtx_unlock(&bo->lock);
    }
 
    return true;
@@ -1295,7 +1297,7 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
    struct amdgpu_winsys *ws = acs->ctx->ws;
    struct amdgpu_cs_context *cs = acs->cst;
    int i, r;
-   amdgpu_bo_list_handle bo_list = NULL;
+   uint32_t bo_list = 0;
    uint64_t seq_no = 0;
    bool has_user_fence = amdgpu_cs_has_user_fence(cs);
    bool use_bo_list_create = ws->info.drm_minor < 27;
@@ -1306,27 +1308,28 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
       /* The buffer list contains all buffers. This is a slow path that
        * ensures that no buffer is missing in the BO list.
        */
+      unsigned num_handles = 0;
+      struct drm_amdgpu_bo_list_entry *list =
+         alloca(ws->num_buffers * sizeof(struct drm_amdgpu_bo_list_entry));
       struct amdgpu_winsys_bo *bo;
-      amdgpu_bo_handle *handles;
-      unsigned num = 0;
 
       simple_mtx_lock(&ws->global_bo_list_lock);
-      handles = alloca(sizeof(handles[0]) * ws->num_buffers);
-
       LIST_FOR_EACH_ENTRY(bo, &ws->global_bo_list, u.real.global_list_item) {
-         assert(num < ws->num_buffers);
-         handles[num++] = bo->bo;
+         if (bo->is_local)
+            continue;
+
+         list[num_handles].bo_handle = bo->u.real.kms_handle;
+         list[num_handles].bo_priority = 0;
+         ++num_handles;
       }
 
-      r = amdgpu_bo_list_create(ws->dev, ws->num_buffers,
-                                handles, NULL, &bo_list);
+      r = amdgpu_bo_list_create_raw(ws->dev, ws->num_buffers, list, &bo_list);
       simple_mtx_unlock(&ws->global_bo_list_lock);
       if (r) {
          fprintf(stderr, "amdgpu: buffer list creation failed (%d)\n", r);
          goto cleanup;
       }
-   } else if (!use_bo_list_create) {
-      /* Standard path passing the buffer list via the CS ioctl. */
+   } else {
       if (!amdgpu_add_sparse_backing_buffers(cs)) {
          fprintf(stderr, "amdgpu: amdgpu_add_sparse_backing_buffers failed\n");
          r = -ENOMEM;
@@ -1350,52 +1353,27 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
          ++num_handles;
       }
 
-      bo_list_in.operation = ~0;
-      bo_list_in.list_handle = ~0;
-      bo_list_in.bo_number = num_handles;
-      bo_list_in.bo_info_size = sizeof(struct drm_amdgpu_bo_list_entry);
-      bo_list_in.bo_info_ptr = (uint64_t)(uintptr_t)list;
-   } else {
-      /* Legacy path creating the buffer list handle and passing it to the CS ioctl. */
-      unsigned num_handles;
-
-      if (!amdgpu_add_sparse_backing_buffers(cs)) {
-         fprintf(stderr, "amdgpu: amdgpu_add_sparse_backing_buffers failed\n");
-         r = -ENOMEM;
-         goto cleanup;
-      }
-
-      amdgpu_bo_handle *handles = alloca(sizeof(*handles) * cs->num_real_buffers);
-      uint8_t *flags = alloca(sizeof(*flags) * cs->num_real_buffers);
-
-      num_handles = 0;
-      for (i = 0; i < cs->num_real_buffers; ++i) {
-         struct amdgpu_cs_buffer *buffer = &cs->real_buffers[i];
-
-	 if (buffer->bo->is_local)
-            continue;
-
-         assert(buffer->u.real.priority_usage != 0);
-
-         handles[num_handles] = buffer->bo->bo;
-         flags[num_handles] = (util_last_bit(buffer->u.real.priority_usage) - 1) / 2;
-	 ++num_handles;
-      }
-
-      if (num_handles) {
-         r = amdgpu_bo_list_create(ws->dev, num_handles,
-                                   handles, flags, &bo_list);
+      if (use_bo_list_create) {
+         /* Legacy path creating the buffer list handle and passing it to the CS ioctl. */
+         r = amdgpu_bo_list_create_raw(ws->dev, num_handles, list, &bo_list);
          if (r) {
             fprintf(stderr, "amdgpu: buffer list creation failed (%d)\n", r);
             goto cleanup;
          }
+      } else {
+         /* Standard path passing the buffer list via the CS ioctl. */
+         bo_list_in.operation = ~0;
+         bo_list_in.list_handle = ~0;
+         bo_list_in.bo_number = num_handles;
+         bo_list_in.bo_info_size = sizeof(struct drm_amdgpu_bo_list_entry);
+         bo_list_in.bo_info_ptr = (uint64_t)(uintptr_t)list;
       }
    }
 
    if (acs->ring_type == RING_GFX)
       ws->gfx_bo_list_counter += cs->num_real_buffers;
 
-   if (acs->ctx->num_rejected_cs) {
+   if (acs->stop_exec_on_failure && acs->ctx->num_rejected_cs) {
       r = -ECANCELED;
    } else {
       struct drm_amdgpu_cs_chunk chunks[6];
@@ -1499,8 +1477,8 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
 
       assert(num_chunks <= ARRAY_SIZE(chunks));
 
-      r = amdgpu_cs_submit_raw(ws->dev, acs->ctx->ctx, bo_list,
-                               num_chunks, chunks, &seq_no);
+      r = amdgpu_cs_submit_raw2(ws->dev, acs->ctx->ctx, bo_list,
+                                num_chunks, chunks, &seq_no);
    }
 
    if (r) {
@@ -1525,7 +1503,7 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
 
    /* Cleanup. */
    if (bo_list)
-      amdgpu_bo_list_destroy(bo_list);
+      amdgpu_bo_list_destroy_raw(ws->dev, bo_list);
 
 cleanup:
    /* If there was an error, signal the fence, because it won't be signalled

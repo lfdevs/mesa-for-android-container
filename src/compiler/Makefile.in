@@ -197,7 +197,8 @@ TESTS = glsl/glcpp/tests/glcpp-test.sh glsl/tests/blob-test$(EXEEXT) \
 	glsl/tests/uniform-initializer-test$(EXEEXT) \
 	glsl/tests/warnings-test.sh \
 	nir/tests/control_flow_tests$(EXEEXT) \
-	nir/tests/vars_tests$(EXEEXT)
+	nir/tests/vars_tests$(EXEEXT) \
+	nir/tests/algebraic_parser_test.sh
 subdir = src/compiler
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -318,8 +319,9 @@ am__objects_7 = nir/nir.lo nir/nir_builtin_builder.lo nir/nir_clone.lo \
 	nir/nir_loop_analyze.lo nir/nir_lower_alpha_test.lo \
 	nir/nir_lower_alu.lo nir/nir_lower_alu_to_scalar.lo \
 	nir/nir_lower_atomics_to_ssbo.lo nir/nir_lower_bitmap.lo \
-	nir/nir_lower_bit_size.lo nir/nir_lower_clamp_color_outputs.lo \
-	nir/nir_lower_clip.lo \
+	nir/nir_lower_bit_size.lo nir/nir_lower_bool_to_float.lo \
+	nir/nir_lower_bool_to_int32.lo \
+	nir/nir_lower_clamp_color_outputs.lo nir/nir_lower_clip.lo \
 	nir/nir_lower_clip_cull_distance_arrays.lo \
 	nir/nir_lower_constant_initializers.lo \
 	nir/nir_lower_double_ops.lo nir/nir_lower_drawpixels.lo \
@@ -349,13 +351,13 @@ am__objects_7 = nir/nir.lo nir/nir_builtin_builder.lo nir/nir_clone.lo \
 	nir/nir_opt_dce.lo nir/nir_opt_dead_cf.lo \
 	nir/nir_opt_dead_write_vars.lo \
 	nir/nir_opt_find_array_copies.lo nir/nir_opt_gcm.lo \
-	nir/nir_opt_global_to_local.lo nir/nir_opt_if.lo \
-	nir/nir_opt_intrinsics.lo nir/nir_opt_loop_unroll.lo \
-	nir/nir_opt_large_constants.lo nir/nir_opt_move_comparisons.lo \
-	nir/nir_opt_move_load_ubo.lo nir/nir_opt_peephole_select.lo \
-	nir/nir_opt_remove_phis.lo nir/nir_opt_shrink_load.lo \
-	nir/nir_opt_trivial_continues.lo nir/nir_opt_undef.lo \
-	nir/nir_phi_builder.lo nir/nir_print.lo \
+	nir/nir_opt_global_to_local.lo nir/nir_opt_idiv_const.lo \
+	nir/nir_opt_if.lo nir/nir_opt_intrinsics.lo \
+	nir/nir_opt_loop_unroll.lo nir/nir_opt_large_constants.lo \
+	nir/nir_opt_move_comparisons.lo nir/nir_opt_move_load_ubo.lo \
+	nir/nir_opt_peephole_select.lo nir/nir_opt_remove_phis.lo \
+	nir/nir_opt_shrink_load.lo nir/nir_opt_trivial_continues.lo \
+	nir/nir_opt_undef.lo nir/nir_phi_builder.lo nir/nir_print.lo \
 	nir/nir_propagate_invariant.lo \
 	nir/nir_remove_dead_variables.lo nir/nir_repair_ssa.lo \
 	nir/nir_search.lo nir/nir_serialize.lo \
@@ -607,6 +609,8 @@ am__depfiles_remade = ./$(DEPDIR)/blob.Plo ./$(DEPDIR)/glsl_types.Plo \
 	nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo \
 	nir/$(DEPDIR)/nir_lower_bit_size.Plo \
 	nir/$(DEPDIR)/nir_lower_bitmap.Plo \
+	nir/$(DEPDIR)/nir_lower_bool_to_float.Plo \
+	nir/$(DEPDIR)/nir_lower_bool_to_int32.Plo \
 	nir/$(DEPDIR)/nir_lower_clamp_color_outputs.Plo \
 	nir/$(DEPDIR)/nir_lower_clip.Plo \
 	nir/$(DEPDIR)/nir_lower_clip_cull_distance_arrays.Plo \
@@ -656,6 +660,7 @@ am__depfiles_remade = ./$(DEPDIR)/blob.Plo ./$(DEPDIR)/glsl_types.Plo \
 	nir/$(DEPDIR)/nir_opt_find_array_copies.Plo \
 	nir/$(DEPDIR)/nir_opt_gcm.Plo \
 	nir/$(DEPDIR)/nir_opt_global_to_local.Plo \
+	nir/$(DEPDIR)/nir_opt_idiv_const.Plo \
 	nir/$(DEPDIR)/nir_opt_if.Plo \
 	nir/$(DEPDIR)/nir_opt_intrinsics.Plo \
 	nir/$(DEPDIR)/nir_opt_large_constants.Plo \
@@ -1483,7 +1488,8 @@ LIBGLSL_GENERATED_FILES = \
 	glsl/ir_expression_operation_strings.h \
 	glsl/glsl_lexer.cpp \
 	glsl/glsl_parser.cpp \
-	glsl/glsl_parser.h
+	glsl/glsl_parser.h \
+	glsl/float64_glsl.h
 
 
 # libglcpp
@@ -1536,6 +1542,8 @@ NIR_FILES = \
 	nir/nir_lower_atomics_to_ssbo.c \
 	nir/nir_lower_bitmap.c \
 	nir/nir_lower_bit_size.c \
+	nir/nir_lower_bool_to_float.c \
+	nir/nir_lower_bool_to_int32.c \
 	nir/nir_lower_clamp_color_outputs.c \
 	nir/nir_lower_clip.c \
 	nir/nir_lower_clip_cull_distance_arrays.c \
@@ -1584,6 +1592,7 @@ NIR_FILES = \
 	nir/nir_opt_find_array_copies.c \
 	nir/nir_opt_gcm.c \
 	nir/nir_opt_global_to_local.c \
+	nir/nir_opt_idiv_const.c \
 	nir/nir_opt_if.c \
 	nir/nir_opt_intrinsics.c \
 	nir/nir_opt_loop_unroll.c \
@@ -1673,14 +1682,16 @@ libcompiler_la_SOURCES = $(LIBCOMPILER_FILES)
 # YACC is only executed once for each parser. The rest of the generated code
 # will be created at the appropriate times according to standard automake
 # dependency rules.
-BUILT_SOURCES = $(SPIRV_GENERATED_FILES) glsl/glsl_parser.cpp \
-	glsl/glsl_lexer.cpp glsl/ir_expression_operation.h \
+BUILT_SOURCES = $(SPIRV_GENERATED_FILES) glsl/float64_glsl.h \
+	glsl/glsl_parser.cpp glsl/glsl_lexer.cpp \
+	glsl/ir_expression_operation.h \
 	glsl/ir_expression_operation_constant.h \
 	glsl/ir_expression_operation_strings.h \
 	glsl/glcpp/glcpp-parse.c glsl/glcpp/glcpp-lex.c \
 	$(NIR_GENERATED_FILES)
-CLEANFILES = $(SPIRV_GENERATED_FILES) glsl/glcpp/glcpp-parse.h \
-	glsl/glsl_parser.h glsl/glsl_parser.cpp glsl/glsl_lexer.cpp \
+CLEANFILES = $(SPIRV_GENERATED_FILES) glsl/float64_glsl.h \
+	glsl/glcpp/glcpp-parse.h glsl/glsl_parser.h \
+	glsl/glsl_parser.cpp glsl/glsl_lexer.cpp \
 	glsl/ir_expression_operation.h \
 	glsl/ir_expression_operation_constant.h \
 	glsl/ir_expression_operation_strings.h \
@@ -1692,8 +1703,8 @@ EXTRA_DIST = SConscript glsl/glcpp/meson.build glsl/tests/meson.build \
 	spirv/vtn_gather_types_c.py glsl/tests glsl/glcpp/tests \
 	glsl/README glsl/TODO glsl/glcpp/README glsl/glsl_lexer.ll \
 	glsl/glsl_parser.yy glsl/ir_expression_operation.py \
-	glsl/glcpp/glcpp-lex.l glsl/glcpp/glcpp-parse.y \
-	SConscript.glsl nir/nir_algebraic.py \
+	glsl/glcpp/glcpp-lex.l glsl/glcpp/glcpp-parse.y glsl/xxd.py \
+	glsl/float64.glsl SConscript.glsl nir/nir_algebraic.py \
 	nir/nir_builder_opcodes_h.py nir/nir_constant_expressions.py \
 	nir/nir_intrinsics.py nir/nir_intrinsics_c.py \
 	nir/nir_intrinsics_h.py nir/nir_opcodes.py \
@@ -1902,6 +1913,7 @@ nir_tests_vars_tests_CPPFLAGS = $(NIR_TESTS_CPPFLAGS)
 nir_tests_vars_tests_SOURCES = nir/tests/vars_tests.cpp
 nir_tests_vars_tests_CFLAGS = $(NIR_TESTS_CFLAGS)
 nir_tests_vars_tests_LDADD = $(NIR_TESTS_LDADD)
+check_SCRIPTS = nir/tests/algebraic_parser_test.sh
 all: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -2261,6 +2273,10 @@ nir/nir_lower_bitmap.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_bit_size.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_bool_to_float.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_bool_to_int32.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_clamp_color_outputs.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_clip.lo: nir/$(am__dirstamp) \
@@ -2351,6 +2367,8 @@ nir/nir_opt_find_array_copies.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_gcm.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_global_to_local.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_opt_idiv_const.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_if.lo: nir/$(am__dirstamp) nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_opt_intrinsics.lo: nir/$(am__dirstamp) \
@@ -2714,6 +2732,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bit_size.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bitmap.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bool_to_float.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bool_to_int32.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_clamp_color_outputs.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_clip.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_clip_cull_distance_arrays.Plo@am__quote@ # am--include-marker
@@ -2764,6 +2784,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_find_array_copies.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_gcm.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_global_to_local.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_idiv_const.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_if.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_intrinsics.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_opt_large_constants.Plo@am__quote@ # am--include-marker
@@ -3111,7 +3132,7 @@ $(TEST_SUITE_LOG): $(TEST_LOGS)
 	fi;								\
 	$$success || exit 1
 
-check-TESTS: $(check_PROGRAMS)
+check-TESTS: $(check_PROGRAMS) $(check_SCRIPTS)
 	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
 	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
 	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
@@ -3121,7 +3142,7 @@ check-TESTS: $(check_PROGRAMS)
 	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
 	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
 	exit $$?;
-recheck: all $(check_PROGRAMS)
+recheck: all $(check_PROGRAMS) $(check_SCRIPTS)
 	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 	@set +e; $(am__set_TESTS_bases); \
 	bases=`for i in $$bases; do echo $$i; done \
@@ -3202,6 +3223,13 @@ nir/tests/vars_tests.log: nir/tests/vars_tests$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+nir/tests/algebraic_parser_test.sh.log: nir/tests/algebraic_parser_test.sh
+	@p='nir/tests/algebraic_parser_test.sh'; \
+	b='nir/tests/algebraic_parser_test.sh'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 .test.log:
 	@p='$<'; \
 	$(am__set_b); \
@@ -3254,7 +3282,7 @@ distdir-am: $(DISTFILES)
 	  top_distdir="$(top_distdir)" distdir="$(distdir)" \
 	  dist-hook
 check-am: all-am
-	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS)
+	$(MAKE) $(AM_MAKEFLAGS) $(check_PROGRAMS) $(check_SCRIPTS)
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: $(BUILT_SOURCES)
 	$(MAKE) $(AM_MAKEFLAGS) check-am
@@ -3477,6 +3505,8 @@ distclean: distclean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bit_size.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bitmap.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_bool_to_float.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_bool_to_int32.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clamp_color_outputs.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clip.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clip_cull_distance_arrays.Plo
@@ -3527,6 +3557,7 @@ distclean: distclean-am
 	-rm -f nir/$(DEPDIR)/nir_opt_find_array_copies.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_gcm.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_global_to_local.Plo
+	-rm -f nir/$(DEPDIR)/nir_opt_idiv_const.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_if.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_intrinsics.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_large_constants.Plo
@@ -3773,6 +3804,8 @@ maintainer-clean: maintainer-clean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bit_size.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bitmap.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_bool_to_float.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_bool_to_int32.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clamp_color_outputs.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clip.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_clip_cull_distance_arrays.Plo
@@ -3823,6 +3856,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f nir/$(DEPDIR)/nir_opt_find_array_copies.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_gcm.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_global_to_local.Plo
+	-rm -f nir/$(DEPDIR)/nir_opt_idiv_const.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_if.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_intrinsics.Plo
 	-rm -f nir/$(DEPDIR)/nir_opt_large_constants.Plo
@@ -3935,6 +3969,10 @@ glsl/ir_expression_operation_constant.h: glsl/ir_expression_operation.py
 glsl/ir_expression_operation_strings.h: glsl/ir_expression_operation.py
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/glsl/ir_expression_operation.py strings > $@ || ($(RM) $@; false)
+
+glsl/float64_glsl.h: glsl/xxd.py glsl/float64.glsl
+	$(MKDIR_GEN)
+	$(PYTHON_GEN) $(srcdir)/glsl/xxd.py $(srcdir)/glsl/float64.glsl $@ -n float64_source || ($(RM) $@; false)
 
 clean-local:
 	$(RM) glsl/tests/lower_jumps/*.opt_test

@@ -70,7 +70,7 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_NOBYPASS 0x0040
 #define FD_DBG_FRAGHALF 0x0080
 #define FD_DBG_NOBIN    0x0100
-#define FD_DBG_OPTMSGS  0x0200
+/* unused 0x0200 */
 #define FD_DBG_GLSL120  0x0400
 #define FD_DBG_SHADERDB 0x0800
 #define FD_DBG_FLUSH    0x1000
@@ -114,15 +114,19 @@ static inline uint32_t DRAW(enum pc_di_primtype prim_type,
 }
 
 static inline uint32_t DRAW_A20X(enum pc_di_primtype prim_type,
+		enum pc_di_face_cull_sel faceness_cull_select,
 		enum pc_di_src_sel source_select, enum pc_di_index_size index_size,
-		enum pc_di_vis_cull_mode vis_cull_mode,
+		bool pre_fetch_cull_enable,
+		bool grp_cull_enable,
 		uint16_t count)
 {
 	return (prim_type         << 0) |
 			(source_select     << 6) |
+			(faceness_cull_select << 8) |
 			((index_size & 1)  << 11) |
 			((index_size >> 1) << 13) |
-			(vis_cull_mode     << 9) |
+			(pre_fetch_cull_enable << 14) |
+			(grp_cull_enable << 15) |
 			(count         << 16);
 }
 
@@ -194,6 +198,18 @@ fd_half_precision(struct pipe_framebuffer_state *pfb)
 	return true;
 }
 
+/* Note sure if this is same on all gens, but seems to be same on the later
+ * gen's
+ */
+static inline unsigned
+fd_calc_guardband(unsigned x)
+{
+	float l = log2(x);
+	if (l <= 8)
+		return 511;
+	return 511 - ((l - 8) * 65);
+}
+
 #define LOG_DWORDS 0
 
 static inline void emit_marker(struct fd_ringbuffer *ring, int scratch_idx);
@@ -228,8 +244,8 @@ OUT_RINGP(struct fd_ringbuffer *ring, uint32_t data,
  */
 
 static inline void
-OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
-		uint32_t offset, uint64_t or, int32_t shift)
+__out_reloc(struct fd_ringbuffer *ring, struct fd_bo *bo,
+		uint32_t offset, uint64_t or, int32_t shift, uint32_t flags)
 {
 	if (LOG_DWORDS) {
 		DBG("ring[%p]: OUT_RELOC   %04x:  %p+%u << %d", ring,
@@ -238,7 +254,7 @@ OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
 	debug_assert(offset < fd_bo_size(bo));
 	fd_ringbuffer_reloc(ring, &(struct fd_reloc){
 		.bo = bo,
-		.flags = FD_RELOC_READ,
+		.flags = flags,
 		.offset = offset,
 		.or = or,
 		.shift = shift,
@@ -247,22 +263,24 @@ OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
 }
 
 static inline void
+OUT_RELOC(struct fd_ringbuffer *ring, struct fd_bo *bo,
+		uint32_t offset, uint64_t or, int32_t shift)
+{
+	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ);
+}
+
+static inline void
 OUT_RELOCW(struct fd_ringbuffer *ring, struct fd_bo *bo,
 		uint32_t offset, uint64_t or, int32_t shift)
 {
-	if (LOG_DWORDS) {
-		DBG("ring[%p]: OUT_RELOCW  %04x:  %p+%u << %d", ring,
-				(uint32_t)(ring->cur - ring->start), bo, offset, shift);
-	}
-	debug_assert(offset < fd_bo_size(bo));
-	fd_ringbuffer_reloc(ring, &(struct fd_reloc){
-		.bo = bo,
-		.flags = FD_RELOC_READ | FD_RELOC_WRITE,
-		.offset = offset,
-		.or = or,
-		.shift = shift,
-		.orhi = or >> 32,
-	});
+	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ | FD_RELOC_WRITE);
+}
+
+static inline void
+OUT_RELOCD(struct fd_ringbuffer *ring, struct fd_bo *bo,
+		uint32_t offset, uint64_t or, int32_t shift)
+{
+	__out_reloc(ring, bo, offset, or, shift, FD_RELOC_READ | FD_RELOC_DUMP);
 }
 
 static inline void
@@ -411,18 +429,6 @@ emit_marker(struct fd_ringbuffer *ring, int scratch_idx)
 	OUT_RING(ring, ++marker_cnt);
 }
 
-/* helper to get numeric value from environment variable..  mostly
- * just leaving this here because it is helpful to brute-force figure
- * out unknown formats, etc, which blob driver does not support:
- */
-static inline uint32_t env2u(const char *envvar)
-{
-	char *str = getenv(envvar);
-	if (str)
-		return strtoul(str, NULL, 0);
-	return 0;
-}
-
 static inline uint32_t
 pack_rgba(enum pipe_format format, const float *rgba)
 {
@@ -453,9 +459,11 @@ fd_msaa_samples(unsigned samples)
 	switch (samples) {
 	default:
 		debug_assert(0);
+	case 0:
 	case 1: return MSAA_ONE;
 	case 2: return MSAA_TWO;
 	case 4: return MSAA_FOUR;
+	case 8: return MSAA_EIGHT;
 	}
 }
 
@@ -464,14 +472,15 @@ fd_msaa_samples(unsigned samples)
  */
 
 static inline enum a4xx_state_block
-fd4_stage2shadersb(enum shader_t type)
+fd4_stage2shadersb(gl_shader_stage type)
 {
 	switch (type) {
-	case SHADER_VERTEX:
+	case MESA_SHADER_VERTEX:
 		return SB4_VS_SHADER;
-	case SHADER_FRAGMENT:
+	case MESA_SHADER_FRAGMENT:
 		return SB4_FS_SHADER;
-	case SHADER_COMPUTE:
+	case MESA_SHADER_COMPUTE:
+	case MESA_SHADER_KERNEL:
 		return SB4_CS_SHADER;
 	default:
 		unreachable("bad shader type");

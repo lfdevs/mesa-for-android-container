@@ -75,8 +75,7 @@ anv_reloc_list_init_clone(struct anv_reloc_list *list,
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
-   list->deps = _mesa_set_create(NULL, _mesa_hash_pointer,
-                                 _mesa_key_pointer_equal);
+   list->deps = _mesa_pointer_set_create(NULL);
 
    if (!list->deps) {
       vk_free(alloc, list->relocs);
@@ -501,7 +500,7 @@ anv_cmd_buffer_surface_base_address(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_state *bt_block = u_vector_head(&cmd_buffer->bt_block_states);
    return (struct anv_address) {
-      .bo = &anv_binding_table_pool(cmd_buffer->device)->block_pool.bo,
+      .bo = anv_binding_table_pool(cmd_buffer->device)->block_pool.bo,
       .offset = bt_block->offset,
    };
 }
@@ -679,8 +678,8 @@ anv_cmd_buffer_alloc_binding_table(struct anv_cmd_buffer *cmd_buffer,
       return (struct anv_state) { 0 };
 
    state.offset = cmd_buffer->bt_next;
-   state.map = anv_binding_table_pool(device)->block_pool.map +
-      bt_block->offset + state.offset;
+   state.map = anv_block_pool_map(&anv_binding_table_pool(device)->block_pool,
+                                  bt_block->offset + state.offset);
 
    cmd_buffer->bt_next += state.alloc_size;
 
@@ -1037,6 +1036,12 @@ _compare_bo_handles(const void *_bo1, const void *_bo2)
 }
 
 static VkResult
+anv_execbuf_add_bo_set(struct anv_execbuf *exec,
+                       struct set *deps,
+                       uint32_t extra_flags,
+                       const VkAllocationCallbacks *alloc);
+
+static VkResult
 anv_execbuf_add_bo(struct anv_execbuf *exec,
                    struct anv_bo *bo,
                    struct anv_reloc_list *relocs,
@@ -1125,36 +1130,46 @@ anv_execbuf_add_bo(struct anv_execbuf *exec,
          }
       }
 
-      if (relocs->deps && relocs->deps->entries > 0) {
-         const uint32_t entries = relocs->deps->entries;
-         struct anv_bo **bos =
-            vk_alloc(alloc, entries * sizeof(*bos),
-                     8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-         if (bos == NULL)
-            return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-
-         struct anv_bo **bo = bos;
-         set_foreach(relocs->deps, entry) {
-            *bo++ = (void *)entry->key;
-         }
-
-         qsort(bos, entries, sizeof(struct anv_bo*), _compare_bo_handles);
-
-         VkResult result = VK_SUCCESS;
-         for (bo = bos; bo < bos + entries; bo++) {
-            result = anv_execbuf_add_bo(exec, *bo, NULL, extra_flags, alloc);
-            if (result != VK_SUCCESS)
-               break;
-         }
-
-         vk_free(alloc, bos);
-
-         if (result != VK_SUCCESS)
-            return result;
-      }
+      return anv_execbuf_add_bo_set(exec, relocs->deps, extra_flags, alloc);
    }
 
    return VK_SUCCESS;
+}
+
+/* Add BO dependencies to execbuf */
+static VkResult
+anv_execbuf_add_bo_set(struct anv_execbuf *exec,
+                       struct set *deps,
+                       uint32_t extra_flags,
+                       const VkAllocationCallbacks *alloc)
+{
+   if (!deps || deps->entries <= 0)
+      return VK_SUCCESS;
+
+   const uint32_t entries = deps->entries;
+   struct anv_bo **bos =
+      vk_alloc(alloc, entries * sizeof(*bos),
+               8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   if (bos == NULL)
+      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   struct anv_bo **bo = bos;
+   set_foreach(deps, entry) {
+      *bo++ = (void *)entry->key;
+   }
+
+   qsort(bos, entries, sizeof(struct anv_bo*), _compare_bo_handles);
+
+   VkResult result = VK_SUCCESS;
+   for (bo = bos; bo < bos + entries; bo++) {
+      result = anv_execbuf_add_bo(exec, *bo, NULL, extra_flags, alloc);
+      if (result != VK_SUCCESS)
+         break;
+   }
+
+   vk_free(alloc, bos);
+
+   return result;
 }
 
 static VkResult
@@ -1228,7 +1243,7 @@ adjust_relocations_to_state_pool(struct anv_state_pool *pool,
     * relocations that point to the pool bo with the correct offset.
     */
    for (size_t i = 0; i < relocs->num_relocs; i++) {
-      if (relocs->reloc_bos[i] == &pool->block_pool.bo) {
+      if (relocs->reloc_bos[i] == pool->block_pool.bo) {
          /* Adjust the delta value in the relocation to correctly
           * correspond to the new delta.  Initially, this value may have
           * been negative (if treated as unsigned), but we trust in
@@ -1336,7 +1351,7 @@ relocate_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
     * given time.  The only option is to always relocate them.
     */
    anv_reloc_list_apply(cmd_buffer->device, &cmd_buffer->surface_relocs,
-                        &cmd_buffer->device->surface_state_pool.block_pool.bo,
+                        cmd_buffer->device->surface_state_pool.block_pool.bo,
                         true /* always relocate surface states */);
 
    /* Since we own all of the batch buffers, we know what values are stored
@@ -1365,11 +1380,55 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
 
    adjust_relocations_from_state_pool(ss_pool, &cmd_buffer->surface_relocs,
                                       cmd_buffer->last_ss_pool_center);
-   VkResult result = anv_execbuf_add_bo(execbuf, &ss_pool->block_pool.bo,
-                                        &cmd_buffer->surface_relocs, 0,
-                                        &cmd_buffer->device->alloc);
-   if (result != VK_SUCCESS)
-      return result;
+   VkResult result;
+   struct anv_bo *bo;
+   if (cmd_buffer->device->instance->physicalDevice.use_softpin) {
+      anv_block_pool_foreach_bo(bo, &ss_pool->block_pool) {
+         result = anv_execbuf_add_bo(execbuf, bo, NULL, 0,
+                                     &cmd_buffer->device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+      /* Add surface dependencies (BOs) to the execbuf */
+      anv_execbuf_add_bo_set(execbuf, cmd_buffer->surface_relocs.deps, 0,
+                             &cmd_buffer->device->alloc);
+
+      struct anv_block_pool *pool;
+      pool = &cmd_buffer->device->dynamic_state_pool.block_pool;
+      anv_block_pool_foreach_bo(bo, pool) {
+         result = anv_execbuf_add_bo(execbuf, bo, NULL, 0,
+                                     &cmd_buffer->device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+
+      pool = &cmd_buffer->device->instruction_state_pool.block_pool;
+      anv_block_pool_foreach_bo(bo, pool) {
+         result = anv_execbuf_add_bo(execbuf, bo, NULL, 0,
+                                     &cmd_buffer->device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+
+      pool = &cmd_buffer->device->binding_table_pool.block_pool;
+      anv_block_pool_foreach_bo(bo, pool) {
+         result = anv_execbuf_add_bo(execbuf, bo, NULL, 0,
+                                     &cmd_buffer->device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+   } else {
+      /* Since we aren't in the softpin case, all of our STATE_BASE_ADDRESS BOs
+       * will get added automatically by processing relocations on the batch
+       * buffer.  We have to add the surface state BO manually because it has
+       * relocations of its own that we need to be sure are processsed.
+       */
+      result = anv_execbuf_add_bo(execbuf, ss_pool->block_pool.bo,
+                                  &cmd_buffer->surface_relocs, 0,
+                                  &cmd_buffer->device->alloc);
+      if (result != VK_SUCCESS)
+         return result;
+   }
 
    /* First, we walk over all of the bos we've seen and add them and their
     * relocations to the validate list.

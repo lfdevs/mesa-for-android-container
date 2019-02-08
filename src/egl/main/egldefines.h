@@ -34,8 +34,6 @@
 #ifndef EGLDEFINES_INCLUDED
 #define EGLDEFINES_INCLUDED
 
-#include "util/macros.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

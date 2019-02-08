@@ -442,8 +442,6 @@ intelInitContext(struct intel_context *intel,
 
    intel->is_945 = IS_945(devID);
 
-   intel->has_swizzling = intel->intelScreen->hw_has_swizzling;
-
    memset(&ctx->TextureFormatSupported,
 	  0, sizeof(ctx->TextureFormatSupported));
 

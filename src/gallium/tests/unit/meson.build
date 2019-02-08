@@ -20,12 +20,16 @@
 
 foreach t : ['pipe_barrier_test', 'u_cache_test', 'u_half_test',
              'u_format_test', 'u_format_compatible_test', 'translate_test']
-  executable(
+  exe = executable(
     t,
     '@0@.c'.format(t),
-    include_directories : [inc_common, inc_gallium_drivers, inc_gallium_winsys],
-    link_with : [libgallium, libmesa_util, libws_null],
-    dependencies : [driver_swrast, dep_thread],
+    include_directories : inc_common,
+    link_with : [libgallium, libmesa_util],
+    dependencies : [dep_thread],
     install : false,
   )
+  # u_cache_test is slow, and translate_test fails.
+  if not ['u_cache_test', 'translate_test'].contains(t)
+    test(t, exe, suite: 'gallium')
+  endif
 endforeach

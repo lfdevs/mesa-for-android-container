@@ -92,6 +92,7 @@ enum virgl_context_cmd {
    VIRGL_CCMD_SET_FRAMEBUFFER_STATE_NO_ATTACH,
    VIRGL_CCMD_TEXTURE_BARRIER,
    VIRGL_CCMD_SET_ATOMIC_BUFFERS,
+   VIRGL_CCMD_SET_DEBUG_FLAGS,
 };
 
 /*
@@ -222,7 +223,7 @@ enum virgl_context_cmd {
 #define VIRGL_OBJ_SHADER_OFFSET_VAL(x) (((x) & 0x7fffffff) << 0)
 /* start contains full length in VAL - also implies continuations */
 /* continuation contains offset in VAL */
-#define VIRGL_OBJ_SHADER_OFFSET_CONT (0x1 << 31)
+#define VIRGL_OBJ_SHADER_OFFSET_CONT (0x1u << 31)
 #define VIRGL_OBJ_SHADER_NUM_TOKENS 4
 #define VIRGL_OBJ_SHADER_SO_NUM_OUTPUTS 5
 #define VIRGL_OBJ_SHADER_SO_STRIDE(x) (6 + (x))

@@ -368,7 +368,19 @@ scan_instruction(struct tgsi_shader_info *info,
          info->uses_bindless_samplers = true;
       break;
    case TGSI_OPCODE_RESQ:
+      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File))
+         info->uses_bindless_images = true;
+      break;
    case TGSI_OPCODE_LOAD:
+      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File)) {
+         info->uses_bindless_images = true;
+
+         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
+            info->uses_bindless_buffer_load = true;
+         else
+            info->uses_bindless_image_load = true;
+      }
+      break;
    case TGSI_OPCODE_ATOMUADD:
    case TGSI_OPCODE_ATOMXCHG:
    case TGSI_OPCODE_ATOMCAS:
@@ -379,12 +391,25 @@ scan_instruction(struct tgsi_shader_info *info,
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMIMAX:
-      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File))
+   case TGSI_OPCODE_ATOMFADD:
+      if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File)) {
          info->uses_bindless_images = true;
+
+         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
+            info->uses_bindless_buffer_atomic = true;
+         else
+            info->uses_bindless_image_atomic = true;
+      }
       break;
    case TGSI_OPCODE_STORE:
-      if (tgsi_is_bindless_image_file(fullinst->Dst[0].Register.File))
+      if (tgsi_is_bindless_image_file(fullinst->Dst[0].Register.File)) {
          info->uses_bindless_images = true;
+
+         if (fullinst->Memory.Texture == TGSI_TEXTURE_BUFFER)
+            info->uses_bindless_buffer_store = true;
+         else
+            info->uses_bindless_image_store = true;
+      }
       break;
    default:
       break;

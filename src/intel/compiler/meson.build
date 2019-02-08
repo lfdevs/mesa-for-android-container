@@ -55,8 +55,8 @@ libintel_compiler_files = files(
   'brw_fs.h',
   'brw_fs_live_variables.cpp',
   'brw_fs_live_variables.h',
-  'brw_fs_lower_conversions.cpp',
   'brw_fs_lower_pack.cpp',
+  'brw_fs_lower_regioning.cpp',
   'brw_fs_nir.cpp',
   'brw_fs_reg_allocate.cpp',
   'brw_fs_register_coalesce.cpp',
@@ -78,6 +78,7 @@ libintel_compiler_files = files(
   'brw_nir_attribute_workarounds.c',
   'brw_nir_lower_cs_intrinsics.c',
   'brw_nir_lower_image_load_store.c',
+  'brw_nir_lower_mem_access_bit_sizes.c',
   'brw_nir_opt_peephole_ffma.c',
   'brw_nir_tcs_workarounds.c',
   'brw_packed_float.c',
@@ -157,7 +158,8 @@ if with_tests
           libintel_compiler, libintel_common, libintel_dev, libmesa_util, libisl,
         ],
         dependencies : [dep_thread, dep_dl, idep_gtest, idep_nir],
-      )
+      ),
+      suite : ['intel'],
     )
   endforeach
 endif

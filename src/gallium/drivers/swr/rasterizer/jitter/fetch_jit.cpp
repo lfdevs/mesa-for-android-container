@@ -202,7 +202,7 @@ Function* FetchJit::Create(const FETCH_COMPILE_STATE& fetchState)
         break;
     case R32_UINT:
         (fetchState.bDisableIndexOOBCheck)
-            ? vIndices = LOAD(indices, "", PointerType::get(mSimdInt32Ty, 0), GFX_MEM_CLIENT_FETCH)
+            ? vIndices = LOAD(indices, "", PointerType::get(mSimdInt32Ty, 0), JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH)
             : vIndices = GetSimdValid32bitIndices(indices, pLastIndex);
         break; // incoming type is already 32bit int
     default:
@@ -368,7 +368,7 @@ void FetchJit::UnpackComponents(SWR_FORMAT format, Value* vInput, Value* result[
 // gather SIMD full pixels per lane then shift/mask to move each component to their
 // own vector
 void FetchJit::CreateGatherOddFormats(
-    SWR_FORMAT format, Value* pMask, Value* pBase, Value* pOffsets, Value* pResult[4])
+    SWR_FORMAT format, Value* pMask, Value* xpBase, Value* pOffsets, Value* pResult[4])
 {
     const SWR_FORMAT_INFO& info = GetFormatInfo(format);
 
@@ -378,7 +378,7 @@ void FetchJit::CreateGatherOddFormats(
     Value* pGather;
     if (info.bpp == 32)
     {
-        pGather = GATHERDD(VIMMED1(0), pBase, pOffsets, pMask);
+        pGather = GATHERDD(VIMMED1(0), xpBase, pOffsets, pMask, 1, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
     }
     else
     {
@@ -386,29 +386,40 @@ void FetchJit::CreateGatherOddFormats(
         Value* pMem = ALLOCA(mSimdInt32Ty);
         STORE(VIMMED1(0u), pMem);
 
-        pBase          = BITCAST(pBase, PointerType::get(mInt8Ty, 0));
-        Value* pDstMem = BITCAST(pMem, mInt32PtrTy);
+        Value* pDstMem = POINTER_CAST(pMem, mInt32PtrTy);
 
         for (uint32_t lane = 0; lane < mVWidth; ++lane)
         {
             // Get index
             Value* index = VEXTRACT(pOffsets, C(lane));
             Value* mask  = VEXTRACT(pMask, C(lane));
+
+            // use branch around load based on mask
+            // Needed to avoid page-faults on unmasked lanes
+            BasicBlock* pCurrentBB = IRB()->GetInsertBlock();
+            BasicBlock* pMaskedLoadBlock =
+                BasicBlock::Create(JM()->mContext, "MaskedLaneLoad", pCurrentBB->getParent());
+            BasicBlock* pEndLoadBB = BasicBlock::Create(JM()->mContext, "AfterMaskedLoad", pCurrentBB->getParent());
+
+            COND_BR(mask, pMaskedLoadBlock, pEndLoadBB);
+
+            JM()->mBuilder.SetInsertPoint(pMaskedLoadBlock);
+
             switch (info.bpp)
             {
             case 8:
             {
                 Value* pDst = BITCAST(GEP(pDstMem, C(lane)), PointerType::get(mInt8Ty, 0));
-                Value* pSrc = BITCAST(GEP(pBase, index), PointerType::get(mInt8Ty, 0));
-                STORE(LOAD(SELECT(mask, pSrc, pDst)), pDst);
+                Value* xpSrc = ADD(xpBase, Z_EXT(index, xpBase->getType()));
+                STORE(LOAD(xpSrc, "", mInt8PtrTy, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH), pDst);
                 break;
             }
 
             case 16:
             {
                 Value* pDst = BITCAST(GEP(pDstMem, C(lane)), PointerType::get(mInt16Ty, 0));
-                Value* pSrc = BITCAST(GEP(pBase, index), PointerType::get(mInt16Ty, 0));
-                STORE(LOAD(SELECT(mask, pSrc, pDst)), pDst);
+                Value* xpSrc = ADD(xpBase, Z_EXT(index, xpBase->getType()));
+                STORE(LOAD(xpSrc, "", mInt16PtrTy, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH), pDst);
                 break;
             }
             break;
@@ -417,13 +428,13 @@ void FetchJit::CreateGatherOddFormats(
             {
                 // First 16-bits of data
                 Value* pDst = BITCAST(GEP(pDstMem, C(lane)), PointerType::get(mInt16Ty, 0));
-                Value* pSrc = BITCAST(GEP(pBase, index), PointerType::get(mInt16Ty, 0));
-                STORE(LOAD(SELECT(mask, pSrc, pDst)), pDst);
+                Value* xpSrc = ADD(xpBase, Z_EXT(index, xpBase->getType()));
+                STORE(LOAD(xpSrc, "", mInt16PtrTy, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH), pDst);
 
                 // Last 8-bits of data
                 pDst = BITCAST(GEP(pDst, C(1)), PointerType::get(mInt8Ty, 0));
-                pSrc = BITCAST(GEP(pSrc, C(1)), PointerType::get(mInt8Ty, 0));
-                STORE(LOAD(SELECT(mask, pSrc, pDst)), pDst);
+                xpSrc = ADD(xpSrc, C(2));
+                STORE(LOAD(xpSrc, "", mInt8PtrTy, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH), pDst);
                 break;
             }
 
@@ -431,6 +442,9 @@ void FetchJit::CreateGatherOddFormats(
                 SWR_INVALID("Shouldn't have BPP = %d now", info.bpp);
                 break;
             }
+
+            BR(pEndLoadBB);
+            JM()->mBuilder.SetInsertPoint(pEndLoadBB);
         }
 
         pGather = LOAD(pMem);
@@ -550,9 +564,6 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
 
         Value* stream = LOAD(streams, {ied.StreamIndex, SWR_VERTEX_BUFFER_STATE_xpData});
 
-        // VGATHER* takes an *i8 src pointer
-        Value* pStreamBase = INT_TO_PTR(stream, PointerType::get(mInt8Ty, 0));
-
         Value* stride  = LOAD(streams, {ied.StreamIndex, SWR_VERTEX_BUFFER_STATE_pitch});
         Value* vStride = VBROADCAST(stride);
 
@@ -619,8 +630,9 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
         // do 64bit address offset calculations.
 
         // calculate byte offset to the start of the VB
-        Value* baseOffset     = MUL(Z_EXT(startOffset, mInt64Ty), Z_EXT(stride, mInt64Ty));
-        pStreamBase           = GEP(pStreamBase, baseOffset);
+        Value* baseOffset = MUL(Z_EXT(startOffset, mInt64Ty), Z_EXT(stride, mInt64Ty));
+
+        // VGATHER* takes an *i8 src pointer so that's what stream is
         Value* pStreamBaseGFX = ADD(stream, baseOffset);
 
         // if we have a start offset, subtract from max vertex. Used for OOB check
@@ -698,7 +710,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
         {
             Value* pResults[4];
             CreateGatherOddFormats(
-                (SWR_FORMAT)ied.Format, vGatherMask, pStreamBase, vOffsets, pResults);
+                (SWR_FORMAT)ied.Format, vGatherMask, pStreamBaseGFX, vOffsets, pResults);
             ConvertFormat((SWR_FORMAT)ied.Format, pResults);
 
             for (uint32_t c = 0; c < 4; c += 1)
@@ -733,7 +745,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                 // if we have at least one component out of x or y to fetch
                 if (isComponentEnabled(compMask, 0) || isComponentEnabled(compMask, 1))
                 {
-                    vGatherResult[0] = GATHERPS(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                    vGatherResult[0] = GATHERPS(gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask);
                     // e.g. result of first 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        xyxy xyxy xyxy xyxy xyxy xyxy xyxy xyxy
@@ -744,9 +756,9 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                 if (isComponentEnabled(compMask, 2) || isComponentEnabled(compMask, 3))
                 {
                     // offset base to the next components(zw) in the vertex to gather
-                    pStreamBase = GEP(pStreamBase, C((char)4));
+                    pStreamBaseGFX = ADD(pStreamBaseGFX, C((int64_t)4));
 
-                    vGatherResult[1] = GATHERPS(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                    vGatherResult[1] = GATHERPS(gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask);
                     // e.g. result of second 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        zwzw zwzw zwzw zwzw zwzw zwzw zwzw zwzw
@@ -783,18 +795,18 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                         {
                             // Gather a SIMD of vertices
                             // APIs allow a 4GB range for offsets
-                            // However, GATHERPS uses signed 32-bit offsets, so only a 2GB range :(
-                            // But, we know that elements must be aligned for FETCH. :)
-                            // Right shift the offset by a bit and then scale by 2 to remove the
-                            // sign extension.
-                            Value* vShiftedOffsets = LSHR(vOffsets, 1);
+                            // However, GATHERPS uses signed 32-bit offsets, so +/- 2GB range :(
+                            // Add 2GB to the base pointer and 2GB to the offsets.  This makes
+                            // "negative" (large) offsets into positive offsets and small offsets
+                            // into negative offsets.
+                            Value* vNewOffsets = ADD(vOffsets, VIMMED1(0x80000000));
                             vVertexElements[currentVertexElement++] =
                                 GATHERPS(gatherSrc,
-                                         pStreamBaseGFX,
-                                         vShiftedOffsets,
+                                         ADD(pStreamBaseGFX, C((uintptr_t)0x80000000U)),
+                                         vNewOffsets,
                                          vGatherMask,
-                                         2,
-                                         GFX_MEM_CLIENT_FETCH);
+                                         1,
+                                         JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
                         }
                         else
                         {
@@ -811,7 +823,6 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                     }
 
                     // offset base to the next component in the vertex to gather
-                    pStreamBase    = GEP(pStreamBase, C((char)4));
                     pStreamBaseGFX = ADD(pStreamBaseGFX, C((int64_t)4));
                 }
             }
@@ -854,9 +865,9 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                                 mVWidth / 2, ConstantFP::get(IRB()->getDoubleTy(), 0.0f));
 
                             Value* pGatherLo =
-                                GATHERPD(vZeroDouble, pStreamBase, vOffsetsLo, vMaskLo);
+                                GATHERPD(vZeroDouble, pStreamBaseGFX, vOffsetsLo, vMaskLo);
                             Value* pGatherHi =
-                                GATHERPD(vZeroDouble, pStreamBase, vOffsetsHi, vMaskHi);
+                                GATHERPD(vZeroDouble, pStreamBaseGFX, vOffsetsHi, vMaskHi);
 
                             pGatherLo = VCVTPD2PS(pGatherLo);
                             pGatherHi = VCVTPD2PS(pGatherHi);
@@ -880,7 +891,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                     }
 
                     // offset base to the next component  in the vertex to gather
-                    pStreamBase = GEP(pStreamBase, C((char)8));
+                    pStreamBaseGFX = ADD(pStreamBaseGFX, C((int64_t)8));
                 }
             }
             break;
@@ -936,7 +947,8 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                 // if we have at least one component to fetch
                 if (compMask)
                 {
-                    Value* vGatherResult = GATHERDD(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                    Value* vGatherResult = GATHERDD(
+                        gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask, 1, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
                     // e.g. result of an 8x32bit integer gather for 8bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        xyzw xyzw xyzw xyzw xyzw xyzw xyzw xyzw
@@ -965,7 +977,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                 // if we have at least one component out of x or y to fetch
                 if (isComponentEnabled(compMask, 0) || isComponentEnabled(compMask, 1))
                 {
-                    vGatherResult[0] = GATHERDD(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                    vGatherResult[0] = GATHERDD(gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask, 1, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
                     // e.g. result of first 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        xyxy xyxy xyxy xyxy xyxy xyxy xyxy xyxy
@@ -976,9 +988,9 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                 if (isComponentEnabled(compMask, 2) || isComponentEnabled(compMask, 3))
                 {
                     // offset base to the next components(zw) in the vertex to gather
-                    pStreamBase = GEP(pStreamBase, C((char)4));
+                    pStreamBaseGFX = ADD(pStreamBaseGFX, C((int64_t)4));
 
-                    vGatherResult[1] = GATHERDD(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                    vGatherResult[1] = GATHERDD(gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask, 1, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
                     // e.g. result of second 8x32bit integer gather for 16bit components
                     // 256i - 0    1    2    3    4    5    6    7
                     //        zwzw zwzw zwzw zwzw zwzw zwzw zwzw zwzw
@@ -1015,7 +1027,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                         if (compCtrl[i] == StoreSrc)
                         {
                             Value* pGather =
-                                GATHERDD(gatherSrc, pStreamBase, vOffsets, vGatherMask);
+                                GATHERDD(gatherSrc, pStreamBaseGFX, vOffsets, vGatherMask, 1, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
 
                             if (conversionType == CONVERT_USCALED)
                             {
@@ -1053,7 +1065,7 @@ void FetchJit::JitGatherVertices(const FETCH_COMPILE_STATE& fetchState,
                     }
 
                     // offset base to the next component  in the vertex to gather
-                    pStreamBase = GEP(pStreamBase, C((char)4));
+                    pStreamBaseGFX = ADD(pStreamBaseGFX, C((int64_t)4));
                 }
             }
             break;
@@ -1112,7 +1124,7 @@ Value* FetchJit::GetSimdValidIndicesHelper(Value* pIndices, Value* pLastIndex)
 
             // if valid, load the index. if not, load 0 from the stack
             Value* pValid = SELECT(mask, pIndex, pZeroIndex);
-            Value* index  = LOAD(pValid, "valid index", Ty, GFX_MEM_CLIENT_FETCH);
+            Value* index  = LOAD(pValid, "valid index", Ty, JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
 
             // zero extended index to 32 bits and insert into the correct simd lane
             index    = Z_EXT(index, mInt32Ty);
@@ -1187,7 +1199,7 @@ Value* FetchJit::GetSimdValid32bitIndices(Value* pIndices, Value* pLastIndex)
                        VIMMED1(0),
                        "vIndices",
                        PointerType::get(mSimdInt32Ty, 0),
-                       GFX_MEM_CLIENT_FETCH);
+                       JIT_MEM_CLIENT::GFX_MEM_CLIENT_FETCH);
 }
 
 //////////////////////////////////////////////////////////////////////////

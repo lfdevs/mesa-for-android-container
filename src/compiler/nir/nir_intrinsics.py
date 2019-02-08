@@ -32,7 +32,7 @@ class Intrinsic(object):
    NOTE: this must be kept in sync with nir_intrinsic_info.
    """
    def __init__(self, name, src_components, dest_components,
-                indices, flags, sysval):
+                indices, flags, sysval, bit_sizes):
        """Parameters:
 
        - name: the intrinsic name
@@ -45,6 +45,7 @@ class Intrinsic(object):
        - indices: list of constant indicies
        - flags: list of semantic flags
        - sysval: is this a system-value intrinsic
+       - bit_sizes: allowed dest bit_sizes
        """
        assert isinstance(name, str)
        assert isinstance(src_components, list)
@@ -58,6 +59,8 @@ class Intrinsic(object):
        if flags:
            assert isinstance(flags[0], str)
        assert isinstance(sysval, bool)
+       if bit_sizes:
+           assert isinstance(bit_sizes[0], int)
 
        self.name = name
        self.num_srcs = len(src_components)
@@ -68,6 +71,7 @@ class Intrinsic(object):
        self.indices = indices
        self.flags = flags
        self.sysval = sysval
+       self.bit_sizes = bit_sizes
 
 #
 # Possible indices:
@@ -105,10 +109,15 @@ PARAM_IDX = "NIR_INTRINSIC_PARAM_IDX"
 IMAGE_DIM = "NIR_INTRINSIC_IMAGE_DIM"
 # Non-zero if we are accessing an array image
 IMAGE_ARRAY = "NIR_INTRINSIC_IMAGE_ARRAY"
-# Access qualifiers for image intrinsics
+# Access qualifiers for image and memory access intrinsics
 ACCESS = "NIR_INTRINSIC_ACCESS"
 # Image format for image intrinsics
 FORMAT = "NIR_INTRINSIC_FORMAT"
+# Offset or address alignment
+ALIGN_MUL = "NIR_INTRINSIC_ALIGN_MUL"
+ALIGN_OFFSET = "NIR_INTRINSIC_ALIGN_OFFSET"
+# The vulkan descriptor type for vulkan_resource_index
+DESC_TYPE = "NIR_INTRINSIC_DESC_TYPE"
 
 #
 # Possible flags:
@@ -120,18 +129,19 @@ CAN_REORDER   = "NIR_INTRINSIC_CAN_REORDER"
 INTR_OPCODES = {}
 
 def intrinsic(name, src_comp=[], dest_comp=-1, indices=[],
-              flags=[], sysval=False):
+              flags=[], sysval=False, bit_sizes=[]):
     assert name not in INTR_OPCODES
     INTR_OPCODES[name] = Intrinsic(name, src_comp, dest_comp,
-                                   indices, flags, sysval)
+                                   indices, flags, sysval, bit_sizes)
 
 intrinsic("nop", flags=[CAN_ELIMINATE])
 
 intrinsic("load_param", dest_comp=0, indices=[PARAM_IDX], flags=[CAN_ELIMINATE])
 
-intrinsic("load_deref", dest_comp=0, src_comp=[1], flags=[CAN_ELIMINATE])
-intrinsic("store_deref", src_comp=[1, 0], indices=[WRMASK])
-intrinsic("copy_deref", src_comp=[1, 1])
+intrinsic("load_deref", dest_comp=0, src_comp=[-1],
+          indices=[ACCESS], flags=[CAN_ELIMINATE])
+intrinsic("store_deref", src_comp=[-1, 0], indices=[WRMASK, ACCESS])
+intrinsic("copy_deref", src_comp=[-1, -1])
 
 # Interpolation of input.  The interp_deref_at* intrinsics are similar to the
 # load_var intrinsic acting on a shader input except that they interpolate the
@@ -266,15 +276,15 @@ intrinsic("set_vertex_count", src_comp=[1])
 # lowered, variants take a constant buffer index and register offset.
 
 def atomic(name, flags=[]):
-    intrinsic(name + "_deref", src_comp=[1], dest_comp=1, flags=flags)
+    intrinsic(name + "_deref", src_comp=[-1], dest_comp=1, flags=flags)
     intrinsic(name, src_comp=[1], dest_comp=1, indices=[BASE], flags=flags)
 
 def atomic2(name):
-    intrinsic(name + "_deref", src_comp=[1, 1], dest_comp=1)
+    intrinsic(name + "_deref", src_comp=[-1, 1], dest_comp=1)
     intrinsic(name, src_comp=[1, 1], dest_comp=1, indices=[BASE])
 
 def atomic3(name):
-    intrinsic(name + "_deref", src_comp=[1, 1, 1], dest_comp=1)
+    intrinsic(name + "_deref", src_comp=[-1, 1, 1], dest_comp=1)
     intrinsic(name, src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
 
 atomic("atomic_counter_inc")
@@ -354,9 +364,12 @@ image("store_raw_intel", src_comp=[1, 0])
 # corresponds to the tuple (set, binding, index) and computes an index
 # corresponding to tuple (set, binding, idx + src1).
 intrinsic("vulkan_resource_index", src_comp=[1], dest_comp=1,
-          indices=[DESC_SET, BINDING], flags=[CAN_ELIMINATE, CAN_REORDER])
-intrinsic("vulkan_resource_reindex", src_comp=[1, 1], dest_comp=1,
+          indices=[DESC_SET, BINDING, DESC_TYPE],
           flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("vulkan_resource_reindex", src_comp=[1, 1], dest_comp=1,
+          indices=[DESC_TYPE], flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("load_vulkan_descriptor", src_comp=[1], dest_comp=0,
+          indices=[DESC_TYPE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # variable atomic intrinsics
 #
@@ -371,20 +384,20 @@ intrinsic("vulkan_resource_reindex", src_comp=[1, 1], dest_comp=1,
 # 1: The data parameter to the atomic function (i.e. the value to add
 #    in shared_atomic_add, etc).
 # 2: For CompSwap only: the second data parameter.
-intrinsic("deref_atomic_add",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_imin", src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_umin", src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_imax", src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_umax", src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_and",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_or",   src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_xor",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_exchange", src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1)
-intrinsic("deref_atomic_fadd",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_fmin",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_fmax",  src_comp=[1, 1], dest_comp=1)
-intrinsic("deref_atomic_fcomp_swap", src_comp=[1, 1, 1], dest_comp=1)
+intrinsic("deref_atomic_add",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_imin", src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_umin", src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_imax", src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_umax", src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_and",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_or",   src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_xor",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_exchange", src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_comp_swap", src_comp=[-1, 1, 1], dest_comp=1)
+intrinsic("deref_atomic_fadd",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_fmin",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_fmax",  src_comp=[-1, 1], dest_comp=1)
+intrinsic("deref_atomic_fcomp_swap", src_comp=[-1, 1, 1], dest_comp=1)
 
 # SSBO atomic intrinsics
 #
@@ -445,12 +458,41 @@ intrinsic("shared_atomic_fmin",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
 intrinsic("shared_atomic_fmax",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
 intrinsic("shared_atomic_fcomp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
 
-def system_value(name, dest_comp, indices=[]):
+# Global atomic intrinsics
+#
+# All of the shared variable atomic memory operations read a value from
+# memory, compute a new value using one of the operations below, write the
+# new value to memory, and return the original value read.
+#
+# All operations take 2 sources except CompSwap that takes 3. These
+# sources represent:
+#
+# 0: The memory address that the atomic operation will operate on.
+# 1: The data parameter to the atomic function (i.e. the value to add
+#    in shared_atomic_add, etc).
+# 2: For CompSwap only: the second data parameter.
+intrinsic("global_atomic_add",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_imin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_umin", src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_imax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_umax", src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_and",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_or",   src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_xor",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_exchange", src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_comp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_fadd",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_fmin",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_fmax",  src_comp=[1, 1], dest_comp=1, indices=[BASE])
+intrinsic("global_atomic_fcomp_swap", src_comp=[1, 1, 1], dest_comp=1, indices=[BASE])
+
+def system_value(name, dest_comp, indices=[], bit_sizes=[32]):
     intrinsic("load_" + name, [], dest_comp, indices,
-              flags=[CAN_ELIMINATE, CAN_REORDER], sysval=True)
+              flags=[CAN_ELIMINATE, CAN_REORDER], sysval=True,
+              bit_sizes=bit_sizes)
 
 system_value("frag_coord", 4)
-system_value("front_face", 1)
+system_value("front_face", 1, bit_sizes=[1, 32])
 system_value("vertex_id", 1)
 system_value("vertex_id_zero_base", 1)
 system_value("first_vertex", 1)
@@ -476,17 +518,17 @@ system_value("local_invocation_index", 1)
 system_value("work_group_id", 3)
 system_value("user_clip_plane", 4, indices=[UCP_ID])
 system_value("num_work_groups", 3)
-system_value("helper_invocation", 1)
+system_value("helper_invocation", 1, bit_sizes=[1, 32])
 system_value("alpha_ref_float", 1)
 system_value("layer_id", 1)
 system_value("view_index", 1)
 system_value("subgroup_size", 1)
 system_value("subgroup_invocation", 1)
-system_value("subgroup_eq_mask", 0)
-system_value("subgroup_ge_mask", 0)
-system_value("subgroup_gt_mask", 0)
-system_value("subgroup_le_mask", 0)
-system_value("subgroup_lt_mask", 0)
+system_value("subgroup_eq_mask", 0, bit_sizes=[32, 64])
+system_value("subgroup_ge_mask", 0, bit_sizes=[32, 64])
+system_value("subgroup_gt_mask", 0, bit_sizes=[32, 64])
+system_value("subgroup_le_mask", 0, bit_sizes=[32, 64])
+system_value("subgroup_lt_mask", 0, bit_sizes=[32, 64])
 system_value("num_subgroups", 1)
 system_value("subgroup_id", 1)
 system_value("local_group_size", 3)
@@ -553,8 +595,8 @@ def load(name, num_srcs, indices=[], flags=[]):
 
 # src[] = { offset }. const_index[] = { base, range }
 load("uniform", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
-# src[] = { buffer_index, offset }. No const_index
-load("ubo", 2, flags=[CAN_ELIMINATE, CAN_REORDER])
+# src[] = { buffer_index, offset }. const_index[] = { align_mul, align_offset }
+load("ubo", 2, [ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }. const_index[] = { base, component }
 load("input", 1, [BASE, COMPONENT], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { vertex, offset }. const_index[] = { base, component }
@@ -563,18 +605,22 @@ load("per_vertex_input", 2, [BASE, COMPONENT], [CAN_ELIMINATE, CAN_REORDER])
 intrinsic("load_interpolated_input", src_comp=[2, 1], dest_comp=0,
           indices=[BASE, COMPONENT], flags=[CAN_ELIMINATE, CAN_REORDER])
 
-# src[] = { buffer_index, offset }. No const_index
-load("ssbo", 2, flags=[CAN_ELIMINATE], indices=[ACCESS])
+# src[] = { buffer_index, offset }.
+# const_index[] = { access, align_mul, align_offset }
+load("ssbo", 2, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { offset }. const_index[] = { base, component }
 load("output", 1, [BASE, COMPONENT], flags=[CAN_ELIMINATE])
 # src[] = { vertex, offset }. const_index[] = { base }
 load("per_vertex_output", 2, [BASE, COMPONENT], [CAN_ELIMINATE])
-# src[] = { offset }. const_index[] = { base }
-load("shared", 1, [BASE], [CAN_ELIMINATE])
+# src[] = { offset }. const_index[] = { base, align_mul, align_offset }
+load("shared", 1, [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # src[] = { offset }. const_index[] = { base, range }
 load("push_constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }. const_index[] = { base, range }
 load("constant", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
+# src[] = { address }.
+# const_index[] = { access, align_mul, align_offset }
+load("global", 1, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 
 # Stores work the same way as loads, except now the first source is the value
 # to store and the second (and possibly third) source specify where to store
@@ -589,7 +635,12 @@ store("output", 2, [BASE, WRMASK, COMPONENT])
 # src[] = { value, vertex, offset }.
 # const_index[] = { base, write_mask, component }
 store("per_vertex_output", 3, [BASE, WRMASK, COMPONENT])
-# src[] = { value, block_index, offset }. const_index[] = { write_mask }
-store("ssbo", 3, [WRMASK, ACCESS])
-# src[] = { value, offset }. const_index[] = { base, write_mask }
-store("shared", 2, [BASE, WRMASK])
+# src[] = { value, block_index, offset }
+# const_index[] = { write_mask, access, align_mul, align_offset }
+store("ssbo", 3, [WRMASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+# src[] = { value, offset }.
+# const_index[] = { base, write_mask, align_mul, align_offset }
+store("shared", 2, [BASE, WRMASK, ALIGN_MUL, ALIGN_OFFSET])
+# src[] = { value, address }.
+# const_index[] = { write_mask, align_mul, align_offset }
+store("global", 2, [WRMASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])

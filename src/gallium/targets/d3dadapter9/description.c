@@ -20,6 +20,7 @@
  * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
  * USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#include <stdio.h>
 #include <string.h>
 #include "adapter9.h"
 
@@ -239,7 +240,7 @@ d3d_match_vendor_id( D3DADAPTER_IDENTIFIER9* drvid,
     DBG("unknown vendor 0x4%x, emulating 0x4%x\n", drvid->VendorId, fallback_ven);
     drvid->VendorId = fallback_ven;
     drvid->DeviceId = fallback_dev;
-    strncpy(drvid->Description, fallback_name, sizeof(drvid->Description));
+    snprintf(drvid->Description, sizeof(drvid->Description), "%s", fallback_name);
 }
 
 /* fill in driver name and version */
@@ -277,46 +278,54 @@ void d3d_fill_cardname(D3DADAPTER_IDENTIFIER9* drvid) {
     case HW_VENDOR_INTEL:
         for (i = 0; i < sizeof(cards_intel) / sizeof(cards_intel[0]); i++) {
             if (strstr(drvid->Description, cards_intel[i].mesaname)) {
-                strncpy(drvid->Description, cards_intel[i].d3d9name, sizeof(drvid->Description));
+                snprintf(drvid->Description, sizeof(drvid->Description),
+                         "%s", cards_intel[i].d3d9name);
                 return;
             }
         }
         /* use a fall-back if nothing matches */
         DBG("Unknown card name %s!\n", drvid->DeviceName);
-        strncpy(drvid->Description, cards_intel[0].d3d9name, sizeof(drvid->Description));
+        snprintf(drvid->Description, sizeof(drvid->Description),
+                 "%s", cards_intel[0].d3d9name);
         break;
     case HW_VENDOR_VMWARE:
         for (i = 0; i < sizeof(cards_vmware) / sizeof(cards_vmware[0]); i++) {
             if (strstr(drvid->Description, cards_vmware[i].mesaname)) {
-                strncpy(drvid->Description, cards_vmware[i].d3d9name, sizeof(drvid->Description));
+                snprintf(drvid->Description, sizeof(drvid->Description),
+                         "%s", cards_vmware[i].d3d9name);
                 return;
             }
         }
         /* use a fall-back if nothing matches */
         DBG("Unknown card name %s!\n", drvid->DeviceName);
-        strncpy(drvid->Description, cards_vmware[0].d3d9name, sizeof(drvid->Description));
+        snprintf(drvid->Description, sizeof(drvid->Description),
+                 "%s", cards_vmware[0].d3d9name);
         break;
     case HW_VENDOR_AMD:
         for (i = 0; i < sizeof(cards_amd) / sizeof(cards_amd[0]); i++) {
             if (strstr(drvid->Description, cards_amd[i].mesaname)) {
-                strncpy(drvid->Description, cards_amd[i].d3d9name, sizeof(drvid->Description));
+                snprintf(drvid->Description, sizeof(drvid->Description),
+                         "%s", cards_amd[i].d3d9name);
                 return;
             }
         }
         /* use a fall-back if nothing matches */
         DBG("Unknown card name %s!\n", drvid->DeviceName);
-        strncpy(drvid->Description, cards_amd[0].d3d9name, sizeof(drvid->Description));
+        snprintf(drvid->Description, sizeof(drvid->Description),
+                 "%s", cards_amd[0].d3d9name);
         break;
     case HW_VENDOR_NVIDIA:
         for (i = 0; i < sizeof(cards_nvidia) / sizeof(cards_nvidia[0]); i++) {
             if (strstr(drvid->Description, cards_nvidia[i].mesaname)) {
-                strncpy(drvid->Description, cards_nvidia[i].d3d9name, sizeof(drvid->Description));
+                snprintf(drvid->Description, sizeof(drvid->Description),
+                         "%s", cards_nvidia[i].d3d9name);
                 return;
             }
         }
         /* use a fall-back if nothing matches */
         DBG("Unknown card name %s!\n", drvid->DeviceName);
-        strncpy(drvid->Description, cards_nvidia[0].d3d9name, sizeof(drvid->Description));
+        snprintf(drvid->Description, sizeof(drvid->Description),
+                 "%s", cards_nvidia[0].d3d9name);
         break;
     default:
         break;

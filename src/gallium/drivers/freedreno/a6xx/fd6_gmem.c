@@ -64,6 +64,7 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
 		struct fd_resource_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t offset = 0;
+		uint32_t tile_mode;
 
 		if (!pfb->cbufs[i])
 			continue;
@@ -79,7 +80,6 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
 		uint32_t base = gmem ? gmem->cbuf_base[i] : 0;
 		slice = fd_resource_slice(rsc, psurf->u.tex.level);
 		format = fd6_pipe2color(pformat);
-		swap = fd6_pipe2swap(pformat);
 		sint = util_format_is_pure_sint(pformat);
 		uint = util_format_is_pure_uint(pformat);
 
@@ -89,14 +89,21 @@ emit_mrt(struct fd_ringbuffer *ring, struct pipe_framebuffer_state *pfb,
 		offset = fd_resource_offset(rsc, psurf->u.tex.level,
 									psurf->u.tex.first_layer);
 
-		stride = slice->pitch * rsc->cpp;
+		stride = slice->pitch * rsc->cpp * pfb->samples;
+		swap = rsc->tile_mode ? WZYX : fd6_pipe2swap(pformat);
+
+		if (rsc->tile_mode &&
+			fd_resource_level_linear(psurf->texture, psurf->u.tex.level))
+			tile_mode = TILE6_LINEAR;
+		else
+			tile_mode = rsc->tile_mode;
 
 		debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
 		debug_assert((offset + slice->size0) <= fd_bo_size(rsc->bo));
 
 		OUT_PKT4(ring, REG_A6XX_RB_MRT_BUF_INFO(i), 6);
 		OUT_RING(ring, A6XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A6XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(rsc->tile_mode) |
+				A6XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(tile_mode) |
 				A6XX_RB_MRT_BUF_INFO_COLOR_SWAP(swap));
 		OUT_RING(ring, A6XX_RB_MRT_PITCH(stride));
 		OUT_RING(ring, A6XX_RB_MRT_ARRAY_PITCH(slice->size0));
@@ -254,22 +261,6 @@ patch_draws(struct fd_batch *batch, enum pc_di_vis_cull_mode vismode)
 }
 
 static void
-patch_gmem_bases(struct fd_batch *batch)
-{
-	struct fd_gmem_stateobj *gmem = &batch->ctx->gmem;
-	unsigned i;
-
-	for (i = 0; i < fd_patch_num_elements(&batch->gmem_patches); i++) {
-		struct fd_cs_patch *patch = fd_patch_element(&batch->gmem_patches, i);
-		if (patch->val < MAX_RENDER_TARGETS)
-			*patch->cs = gmem->cbuf_base[patch->val];
-		else
-			*patch->cs = gmem->zsbuf_base[0];
-	}
-	util_dynarray_resize(&batch->gmem_patches, 0);
-}
-
-static void
 update_render_cntl(struct fd_batch *batch, bool binning)
 {
 	struct fd_ringbuffer *ring = batch->gmem;
@@ -292,14 +283,13 @@ update_vsc_pipe(struct fd_batch *batch)
 	struct fd6_context *fd6_ctx = fd6_context(ctx);
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct fd_ringbuffer *ring = batch->gmem;
-	unsigned n = gmem->nbins_x * gmem->nbins_y;
 	int i;
 
 	OUT_PKT4(ring, REG_A6XX_VSC_BIN_SIZE, 3);
 	OUT_RING(ring, A6XX_VSC_BIN_SIZE_WIDTH(gmem->bin_w) |
 			A6XX_VSC_BIN_SIZE_HEIGHT(gmem->bin_h));
 	OUT_RELOCW(ring, fd6_ctx->vsc_data,
-			n * A6XX_VSC_DATA_PITCH, 0, 0); /* VSC_SIZE_ADDRESS_LO/HI */
+			32 * A6XX_VSC_DATA_PITCH, 0, 0); /* VSC_SIZE_ADDRESS_LO/HI */
 
 	OUT_PKT4(ring, REG_A6XX_VSC_BIN_COUNT, 1);
 	OUT_RING(ring, A6XX_VSC_BIN_COUNT_NX(gmem->nbins_x) |
@@ -431,24 +421,31 @@ emit_binning_pass(struct fd_batch *batch)
 }
 
 static void
-disable_msaa(struct fd_ringbuffer *ring)
+emit_msaa(struct fd_ringbuffer *ring, unsigned nr)
 {
-	// TODO MSAA
+	enum a3xx_msaa_samples samples = fd_msaa_samples(nr);
+
 	OUT_PKT4(ring, REG_A6XX_SP_TP_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A6XX_SP_TP_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A6XX_SP_TP_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			 A6XX_SP_TP_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A6XX_SP_TP_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A6XX_SP_TP_DEST_MSAA_CNTL_SAMPLES(samples) |
+			 COND(samples == MSAA_ONE, A6XX_SP_TP_DEST_MSAA_CNTL_MSAA_DISABLE));
 
 	OUT_PKT4(ring, REG_A6XX_GRAS_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A6XX_GRAS_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A6XX_GRAS_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			 A6XX_GRAS_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A6XX_GRAS_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A6XX_GRAS_DEST_MSAA_CNTL_SAMPLES(samples) |
+			 COND(samples == MSAA_ONE, A6XX_GRAS_DEST_MSAA_CNTL_MSAA_DISABLE));
 
 	OUT_PKT4(ring, REG_A6XX_RB_RAS_MSAA_CNTL, 2);
-	OUT_RING(ring, A6XX_RB_RAS_MSAA_CNTL_SAMPLES(MSAA_ONE));
-	OUT_RING(ring, A6XX_RB_DEST_MSAA_CNTL_SAMPLES(MSAA_ONE) |
-			 A6XX_RB_DEST_MSAA_CNTL_MSAA_DISABLE);
+	OUT_RING(ring, A6XX_RB_RAS_MSAA_CNTL_SAMPLES(samples));
+	OUT_RING(ring, A6XX_RB_DEST_MSAA_CNTL_SAMPLES(samples) |
+			 COND(samples == MSAA_ONE, A6XX_RB_DEST_MSAA_CNTL_MSAA_DISABLE));
+
+	OUT_PKT4(ring, REG_A6XX_RB_MSAA_CNTL, 1);
+	OUT_RING(ring, A6XX_RB_MSAA_CNTL_SAMPLES(samples));
 }
+
+static void prepare_tile_setup_ib(struct fd_batch *batch);
+static void prepare_tile_fini_ib(struct fd_batch *batch);
 
 /* before first tile */
 static void
@@ -468,6 +465,9 @@ fd6_emit_tile_init(struct fd_batch *batch)
 
 	fd6_cache_flush(batch, ring);
 
+	prepare_tile_setup_ib(batch);
+	prepare_tile_fini_ib(batch);
+
 	OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
 	OUT_RING(ring, 0x0);
 
@@ -478,10 +478,7 @@ fd6_emit_tile_init(struct fd_batch *batch)
 
 	emit_zs(ring, pfb->zsbuf, &ctx->gmem);
 	emit_mrt(ring, pfb, &ctx->gmem);
-
-	patch_gmem_bases(batch);
-
-	disable_msaa(ring);
+	emit_msaa(ring, pfb->samples);
 
 	if (use_hw_binning(batch)) {
 		set_bin_size(ring, gmem->bin_w, gmem->bin_h,
@@ -552,9 +549,7 @@ fd6_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, A6XX_VPC_SO_OVERRIDE_SO_DISABLE);
 
 	if (use_hw_binning(batch)) {
-		struct fd_gmem_stateobj *gmem = &ctx->gmem;
 		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
-		unsigned n = gmem->nbins_x * gmem->nbins_y;
 
 		OUT_PKT7(ring, CP_WAIT_FOR_ME, 0);
 
@@ -570,7 +565,7 @@ fd6_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 		OUT_RELOC(ring, fd6_ctx->vsc_data,       /* VSC_PIPE[p].DATA_ADDRESS */
 				(tile->p * A6XX_VSC_DATA_PITCH), 0, 0);
 		OUT_RELOC(ring, fd6_ctx->vsc_data,       /* VSC_SIZE_ADDRESS + (p * 4) */
-				(tile->p * 4) + (n * A6XX_VSC_DATA_PITCH), 0, 0);
+				(tile->p * 4) + (32 * A6XX_VSC_DATA_PITCH), 0, 0);
 		OUT_RELOC(ring, fd6_ctx->vsc_data2,
 				(tile->p * A6XX_VSC_DATA2_PITCH), 0, 0);
 	} else {
@@ -583,9 +578,8 @@ fd6_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 }
 
 static void
-set_blit_scissor(struct fd_batch *batch)
+set_blit_scissor(struct fd_batch *batch, struct fd_ringbuffer *ring)
 {
-	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_scissor_state blit_scissor;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
@@ -604,13 +598,22 @@ set_blit_scissor(struct fd_batch *batch)
 }
 
 static void
-emit_blit(struct fd_batch *batch, uint32_t base,
+emit_blit(struct fd_batch *batch,
+		  struct fd_ringbuffer *ring,
+		  uint32_t base,
 		  struct pipe_surface *psurf,
-		  struct fd_resource *rsc)
+		  bool stencil)
 {
-	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource_slice *slice;
+	struct fd_resource *rsc = fd_resource(psurf->texture);
+	enum pipe_format pfmt = psurf->format;
 	uint32_t offset;
+
+	/* separate stencil case: */
+	if (stencil) {
+		rsc = rsc->stencil;
+		pfmt = rsc->base.format;
+	}
 
 	slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	offset = fd_resource_offset(rsc, psurf->u.tex.level,
@@ -618,20 +621,24 @@ emit_blit(struct fd_batch *batch, uint32_t base,
 
 	debug_assert(psurf->u.tex.first_layer == psurf->u.tex.last_layer);
 
-	enum pipe_format pfmt = psurf->format;
 	enum a6xx_color_fmt format = fd6_pipe2color(pfmt);
 	uint32_t stride = slice->pitch * rsc->cpp;
 	uint32_t size = slice->size0;
-	enum a3xx_color_swap swap = fd6_pipe2swap(pfmt);
+	enum a3xx_color_swap swap = rsc->tile_mode ? WZYX : fd6_pipe2swap(pfmt);
+	enum a3xx_msaa_samples samples =
+			fd_msaa_samples(rsc->base.nr_samples);
+	uint32_t tile_mode;
 
-	// TODO: tile mode
-	// bool tiled;
-	// tiled = rsc->tile_mode &&
-	//   !fd_resource_level_linear(psurf->texture, psurf->u.tex.level);
+	if (rsc->tile_mode &&
+		fd_resource_level_linear(&rsc->base, psurf->u.tex.level))
+		tile_mode = TILE6_LINEAR;
+	else
+		tile_mode = rsc->tile_mode;
 
 	OUT_PKT4(ring, REG_A6XX_RB_BLIT_DST_INFO, 5);
 	OUT_RING(ring,
-			 A6XX_RB_BLIT_DST_INFO_TILE_MODE(TILE6_LINEAR) |
+			 A6XX_RB_BLIT_DST_INFO_TILE_MODE(tile_mode) |
+			 A6XX_RB_BLIT_DST_INFO_SAMPLES(samples) |
 			 A6XX_RB_BLIT_DST_INFO_COLOR_FORMAT(format) |
 			 A6XX_RB_BLIT_DST_INFO_COLOR_SWAP(swap));
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);  /* RB_BLIT_DST_LO/HI */
@@ -645,13 +652,14 @@ emit_blit(struct fd_batch *batch, uint32_t base,
 }
 
 static void
-emit_restore_blit(struct fd_batch *batch, uint32_t base,
+emit_restore_blit(struct fd_batch *batch,
+				  struct fd_ringbuffer *ring,
+				  uint32_t base,
 				  struct pipe_surface *psurf,
-				  struct fd_resource *rsc,
 				  unsigned buffer)
 {
-	struct fd_ringbuffer *ring = batch->gmem;
 	uint32_t info = 0;
+	bool stencil = false;
 
 	switch (buffer) {
 	case FD_BUFFER_COLOR:
@@ -659,6 +667,7 @@ emit_restore_blit(struct fd_batch *batch, uint32_t base,
 		break;
 	case FD_BUFFER_STENCIL:
 		info |= A6XX_RB_BLIT_INFO_UNK0;
+		stencil = true;
 		break;
 	case FD_BUFFER_DEPTH:
 		info |= A6XX_RB_BLIT_INFO_DEPTH | A6XX_RB_BLIT_INFO_UNK0;
@@ -671,7 +680,216 @@ emit_restore_blit(struct fd_batch *batch, uint32_t base,
 	OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
 	OUT_RING(ring, info | A6XX_RB_BLIT_INFO_GMEM);
 
-	emit_blit(batch, base, psurf, rsc);
+	emit_blit(batch, ring, base, psurf, stencil);
+}
+
+static void
+emit_clears(struct fd_batch *batch, struct fd_ringbuffer *ring)
+{
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+	struct fd_gmem_stateobj *gmem = &batch->ctx->gmem;
+	enum a3xx_msaa_samples samples = fd_msaa_samples(pfb->samples);
+
+	uint32_t buffers = batch->fast_cleared;
+
+	if (buffers & PIPE_CLEAR_COLOR) {
+
+		for (int i = 0; i < pfb->nr_cbufs; i++) {
+			union pipe_color_union *color = &batch->clear_color[i];
+			union util_color uc = {0};
+
+			if (!pfb->cbufs[i])
+				continue;
+
+			if (!(buffers & (PIPE_CLEAR_COLOR0 << i)))
+				continue;
+
+			enum pipe_format pfmt = pfb->cbufs[i]->format;
+
+			// XXX I think RB_CLEAR_COLOR_DWn wants to take into account SWAP??
+			union pipe_color_union swapped;
+			switch (fd6_pipe2swap(pfmt)) {
+			case WZYX:
+				swapped.ui[0] = color->ui[0];
+				swapped.ui[1] = color->ui[1];
+				swapped.ui[2] = color->ui[2];
+				swapped.ui[3] = color->ui[3];
+				break;
+			case WXYZ:
+				swapped.ui[2] = color->ui[0];
+				swapped.ui[1] = color->ui[1];
+				swapped.ui[0] = color->ui[2];
+				swapped.ui[3] = color->ui[3];
+				break;
+			case ZYXW:
+				swapped.ui[3] = color->ui[0];
+				swapped.ui[0] = color->ui[1];
+				swapped.ui[1] = color->ui[2];
+				swapped.ui[2] = color->ui[3];
+				break;
+			case XYZW:
+				swapped.ui[3] = color->ui[0];
+				swapped.ui[2] = color->ui[1];
+				swapped.ui[1] = color->ui[2];
+				swapped.ui[0] = color->ui[3];
+				break;
+			}
+
+			if (util_format_is_pure_uint(pfmt)) {
+				util_format_write_4ui(pfmt, swapped.ui, 0, &uc, 0, 0, 0, 1, 1);
+			} else if (util_format_is_pure_sint(pfmt)) {
+				util_format_write_4i(pfmt, swapped.i, 0, &uc, 0, 0, 0, 1, 1);
+			} else {
+				util_pack_color(swapped.f, pfmt, &uc);
+			}
+
+			OUT_PKT4(ring, REG_A6XX_RB_BLIT_DST_INFO, 1);
+			OUT_RING(ring, A6XX_RB_BLIT_DST_INFO_TILE_MODE(TILE6_LINEAR) |
+				A6XX_RB_BLIT_DST_INFO_SAMPLES(samples) |
+				A6XX_RB_BLIT_DST_INFO_COLOR_FORMAT(fd6_pipe2color(pfmt)));
+
+			OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
+			OUT_RING(ring, A6XX_RB_BLIT_INFO_GMEM |
+				A6XX_RB_BLIT_INFO_CLEAR_MASK(0xf));
+
+			OUT_PKT4(ring, REG_A6XX_RB_BLIT_BASE_GMEM, 1);
+			OUT_RING(ring, gmem->cbuf_base[i]);
+
+			OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_88D0, 1);
+			OUT_RING(ring, 0);
+
+			OUT_PKT4(ring, REG_A6XX_RB_BLIT_CLEAR_COLOR_DW0, 4);
+			OUT_RING(ring, uc.ui[0]);
+			OUT_RING(ring, uc.ui[1]);
+			OUT_RING(ring, uc.ui[2]);
+			OUT_RING(ring, uc.ui[3]);
+
+			fd6_emit_blit(batch, ring);
+		}
+	}
+
+	const bool has_depth = pfb->zsbuf;
+	const bool has_separate_stencil =
+		has_depth && fd_resource(pfb->zsbuf->texture)->stencil;
+
+	/* First clear depth or combined depth/stencil. */
+	if ((has_depth && (buffers & PIPE_CLEAR_DEPTH)) ||
+		(!has_separate_stencil && (buffers & PIPE_CLEAR_STENCIL))) {
+		enum pipe_format pfmt = pfb->zsbuf->format;
+		uint32_t clear_value;
+		uint32_t mask = 0;
+
+		if (has_separate_stencil) {
+			pfmt = util_format_get_depth_only(pfb->zsbuf->format);
+			clear_value = util_pack_z(pfmt, batch->clear_depth);
+		} else {
+			pfmt = pfb->zsbuf->format;
+			clear_value = util_pack_z_stencil(pfmt, batch->clear_depth,
+											  batch->clear_stencil);
+		}
+
+		if (buffers & PIPE_CLEAR_DEPTH)
+			mask |= 0x1;
+
+		if (!has_separate_stencil && (buffers & PIPE_CLEAR_STENCIL))
+			mask |= 0x2;
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_DST_INFO, 1);
+		OUT_RING(ring, A6XX_RB_BLIT_DST_INFO_TILE_MODE(TILE6_LINEAR) |
+			A6XX_RB_BLIT_DST_INFO_SAMPLES(samples) |
+			A6XX_RB_BLIT_DST_INFO_COLOR_FORMAT(fd6_pipe2color(pfmt)));
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
+		OUT_RING(ring, A6XX_RB_BLIT_INFO_GMEM |
+			// XXX UNK0 for separate stencil ??
+			A6XX_RB_BLIT_INFO_DEPTH |
+			A6XX_RB_BLIT_INFO_CLEAR_MASK(mask));
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_BASE_GMEM, 1);
+		OUT_RING(ring, gmem->zsbuf_base[0]);
+
+		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_88D0, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_CLEAR_COLOR_DW0, 1);
+		OUT_RING(ring, clear_value);
+
+		fd6_emit_blit(batch, ring);
+	}
+
+	/* Then clear the separate stencil buffer in case of 32 bit depth
+	 * formats with separate stencil. */
+	if (has_separate_stencil && (buffers & PIPE_CLEAR_STENCIL)) {
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_DST_INFO, 1);
+		OUT_RING(ring, A6XX_RB_BLIT_DST_INFO_TILE_MODE(TILE6_LINEAR) |
+				 A6XX_RB_BLIT_DST_INFO_SAMPLES(samples) |
+				 A6XX_RB_BLIT_DST_INFO_COLOR_FORMAT(RB6_R8_UINT));
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
+		OUT_RING(ring, A6XX_RB_BLIT_INFO_GMEM |
+				 //A6XX_RB_BLIT_INFO_UNK0 |
+				 A6XX_RB_BLIT_INFO_DEPTH |
+				 A6XX_RB_BLIT_INFO_CLEAR_MASK(0x1));
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_BASE_GMEM, 1);
+		OUT_RING(ring, gmem->zsbuf_base[1]);
+
+		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_88D0, 1);
+		OUT_RING(ring, 0);
+
+		OUT_PKT4(ring, REG_A6XX_RB_BLIT_CLEAR_COLOR_DW0, 1);
+		OUT_RING(ring, batch->clear_stencil & 0xff);
+
+		fd6_emit_blit(batch, ring);
+	}
+}
+
+/*
+ * transfer from system memory to gmem
+ */
+static void
+emit_restore_blits(struct fd_batch *batch, struct fd_ringbuffer *ring)
+{
+	struct fd_context *ctx = batch->ctx;
+	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+
+	if (batch->restore & FD_BUFFER_COLOR) {
+		unsigned i;
+		for (i = 0; i < pfb->nr_cbufs; i++) {
+			if (!pfb->cbufs[i])
+				continue;
+			if (!(batch->restore & (PIPE_CLEAR_COLOR0 << i)))
+				continue;
+			emit_restore_blit(batch, ring, gmem->cbuf_base[i], pfb->cbufs[i],
+							  FD_BUFFER_COLOR);
+		}
+	}
+
+	if (batch->restore & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
+		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
+
+		if (!rsc->stencil || (batch->restore & FD_BUFFER_DEPTH)) {
+			emit_restore_blit(batch, ring, gmem->zsbuf_base[0], pfb->zsbuf,
+							  FD_BUFFER_DEPTH);
+		}
+		if (rsc->stencil && (batch->restore & FD_BUFFER_STENCIL)) {
+			emit_restore_blit(batch, ring, gmem->zsbuf_base[1], pfb->zsbuf,
+							  FD_BUFFER_STENCIL);
+		}
+	}
+}
+
+static void
+prepare_tile_setup_ib(struct fd_batch *batch)
+{
+	batch->tile_setup = fd_submit_new_ringbuffer(batch->submit, 0x1000,
+			FD_RINGBUFFER_STREAMING);
+
+	set_blit_scissor(batch, batch->tile_setup);
+
+	emit_restore_blits(batch, batch->tile_setup);
+	emit_clears(batch, batch->tile_setup);
 }
 
 /*
@@ -680,55 +898,26 @@ emit_restore_blit(struct fd_batch *batch, uint32_t base,
 static void
 fd6_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 {
-	struct fd_context *ctx = batch->ctx;
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
-	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-
-	set_blit_scissor(batch);
-
-	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_COLOR)) {
-		unsigned i;
-		for (i = 0; i < pfb->nr_cbufs; i++) {
-			if (!pfb->cbufs[i])
-				continue;
-			if (!(batch->restore & (PIPE_CLEAR_COLOR0 << i)))
-				continue;
-			emit_restore_blit(batch, gmem->cbuf_base[i], pfb->cbufs[i],
-							  fd_resource(pfb->cbufs[i]->texture),
-							  FD_BUFFER_COLOR);
-		}
-	}
-
-	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
-		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-
-		if (!rsc->stencil || fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH)) {
-			emit_restore_blit(batch, gmem->zsbuf_base[0], pfb->zsbuf, rsc,
-							  FD_BUFFER_DEPTH);
-		}
-		if (rsc->stencil && fd_gmem_needs_restore(batch, tile, FD_BUFFER_STENCIL)) {
-			emit_restore_blit(batch, gmem->zsbuf_base[1], pfb->zsbuf, rsc->stencil,
-							  FD_BUFFER_STENCIL);
-		}
-	}
 }
 
 /* before IB to rendering cmds: */
 static void
 fd6_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 {
+	fd6_emit_ib(batch->gmem, batch->tile_setup);
 }
 
 static void
-emit_resolve_blit(struct fd_batch *batch, uint32_t base,
+emit_resolve_blit(struct fd_batch *batch,
+				  struct fd_ringbuffer *ring,
+				  uint32_t base,
 				  struct pipe_surface *psurf,
-				  struct fd_resource *rsc,
 				  unsigned buffer)
 {
-	struct fd_ringbuffer *ring = batch->gmem;
 	uint32_t info = 0;
+	bool stencil = false;
 
-	if (!rsc->valid)
+	if (!fd_resource(psurf->texture)->valid)
 		return;
 
 	switch (buffer) {
@@ -736,6 +925,7 @@ emit_resolve_blit(struct fd_batch *batch, uint32_t base,
 		break;
 	case FD_BUFFER_STENCIL:
 		info |= A6XX_RB_BLIT_INFO_UNK0;
+		stencil = true;
 		break;
 	case FD_BUFFER_DEPTH:
 		info |= A6XX_RB_BLIT_INFO_DEPTH;
@@ -748,7 +938,7 @@ emit_resolve_blit(struct fd_batch *batch, uint32_t base,
 	OUT_PKT4(ring, REG_A6XX_RB_BLIT_INFO, 1);
 	OUT_RING(ring, info);
 
-	emit_blit(batch, base, psurf, rsc);
+	emit_blit(batch, ring, base, psurf, stencil);
 }
 
 /*
@@ -756,12 +946,16 @@ emit_resolve_blit(struct fd_batch *batch, uint32_t base,
  */
 
 static void
-fd6_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
+prepare_tile_fini_ib(struct fd_batch *batch)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	struct fd_ringbuffer *ring = batch->gmem;
+	struct fd_ringbuffer *ring;
+
+	batch->tile_fini = fd_submit_new_ringbuffer(batch->submit, 0x1000,
+			FD_RINGBUFFER_STREAMING);
+	ring = batch->tile_fini;
 
 	if (use_hw_binning(batch)) {
 		OUT_PKT7(ring, CP_SET_MARKER, 1);
@@ -783,17 +977,19 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, A2XX_CP_SET_MARKER_0_MODE(RM6_RESOLVE) | 0x10);
 	emit_marker6(ring, 7);
 
-	set_blit_scissor(batch);
+	set_blit_scissor(batch, ring);
 
 	if (batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL)) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
 
 		if (!rsc->stencil || (batch->resolve & FD_BUFFER_DEPTH)) {
-			emit_resolve_blit(batch, gmem->zsbuf_base[0], pfb->zsbuf, rsc,
+			emit_resolve_blit(batch, ring,
+							  gmem->zsbuf_base[0], pfb->zsbuf,
 							  FD_BUFFER_DEPTH);
 		}
 		if (rsc->stencil && (batch->resolve & FD_BUFFER_STENCIL)) {
-			emit_resolve_blit(batch, gmem->zsbuf_base[1], pfb->zsbuf, rsc->stencil,
+			emit_resolve_blit(batch, ring,
+							  gmem->zsbuf_base[1], pfb->zsbuf,
 							  FD_BUFFER_STENCIL);
 		}
 	}
@@ -805,11 +1001,16 @@ fd6_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 				continue;
 			if (!(batch->resolve & (PIPE_CLEAR_COLOR0 << i)))
 				continue;
-			emit_resolve_blit(batch, gmem->cbuf_base[i], pfb->cbufs[i],
-							  fd_resource(pfb->cbufs[i]->texture),
+			emit_resolve_blit(batch, ring, gmem->cbuf_base[i], pfb->cbufs[i],
 							  FD_BUFFER_COLOR);
 		}
 	}
+}
+
+static void
+fd6_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
+{
+	fd6_emit_ib(batch->gmem, batch->tile_fini);
 }
 
 static void
@@ -874,8 +1075,7 @@ fd6_emit_sysmem_prep(struct fd_batch *batch)
 
 	emit_zs(ring, pfb->zsbuf, NULL);
 	emit_mrt(ring, pfb, NULL);
-
-	disable_msaa(ring);
+	emit_msaa(ring, pfb->samples);
 }
 
 static void

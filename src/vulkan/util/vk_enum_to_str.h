@@ -28,11 +28,16 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_android_native_buffer.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define _VK_AMD_buffer_marker_number (180)
 #define _VK_AMD_draw_indirect_count_number (34)
 #define _VK_AMD_gcn_shader_number (26)
 #define _VK_AMD_gpu_shader_half_float_number (37)
 #define _VK_AMD_gpu_shader_int16_number (133)
+#define _VK_AMD_memory_overallocation_behavior_number (190)
 #define _VK_AMD_mixed_attachment_samples_number (137)
 #define _VK_AMD_negative_viewport_height_number (36)
 #define _VK_AMD_rasterization_order_number (19)
@@ -48,6 +53,7 @@
 #define _VK_EXT_acquire_xlib_display_number (90)
 #define _VK_EXT_astc_decode_mode_number (68)
 #define _VK_EXT_blend_operation_advanced_number (149)
+#define _VK_EXT_buffer_device_address_number (245)
 #define _VK_EXT_calibrated_timestamps_number (185)
 #define _VK_EXT_conditional_rendering_number (82)
 #define _VK_EXT_conservative_rasterization_number (102)
@@ -62,15 +68,20 @@
 #define _VK_EXT_display_surface_counter_number (91)
 #define _VK_EXT_external_memory_dma_buf_number (126)
 #define _VK_EXT_external_memory_host_number (179)
+#define _VK_EXT_fragment_density_map_number (219)
 #define _VK_EXT_global_priority_number (175)
 #define _VK_EXT_hdr_metadata_number (106)
 #define _VK_EXT_image_drm_format_modifier_number (159)
 #define _VK_EXT_inline_uniform_block_number (139)
+#define _VK_EXT_memory_budget_number (238)
+#define _VK_EXT_memory_priority_number (239)
 #define _VK_EXT_pci_bus_info_number (213)
 #define _VK_EXT_post_depth_coverage_number (156)
 #define _VK_EXT_queue_family_foreign_number (127)
 #define _VK_EXT_sample_locations_number (144)
 #define _VK_EXT_sampler_filter_minmax_number (131)
+#define _VK_EXT_scalar_block_layout_number (222)
+#define _VK_EXT_separate_stencil_usage_number (247)
 #define _VK_EXT_shader_stencil_export_number (141)
 #define _VK_EXT_shader_subgroup_ballot_number (65)
 #define _VK_EXT_shader_subgroup_vote_number (66)
@@ -78,6 +89,7 @@
 #define _VK_EXT_swapchain_colorspace_number (105)
 #define _VK_EXT_transform_feedback_number (29)
 #define _VK_EXT_validation_cache_number (161)
+#define _VK_EXT_validation_features_number (248)
 #define _VK_EXT_validation_flags_number (62)
 #define _VK_EXT_vertex_attribute_divisor_number (191)
 #define _VK_FUCHSIA_imagepipe_surface_number (215)
@@ -92,6 +104,7 @@
 #define _VK_KHR_bind_memory2_number (158)
 #define _VK_KHR_create_renderpass2_number (110)
 #define _VK_KHR_dedicated_allocation_number (128)
+#define _VK_KHR_depth_stencil_resolve_number (200)
 #define _VK_KHR_descriptor_update_template_number (86)
 #define _VK_KHR_device_group_number (61)
 #define _VK_KHR_device_group_creation_number (71)
@@ -120,7 +133,6 @@
 #define _VK_KHR_maintenance1_number (70)
 #define _VK_KHR_maintenance2_number (118)
 #define _VK_KHR_maintenance3_number (169)
-#define _VK_KHR_mir_surface_number (8)
 #define _VK_KHR_multiview_number (54)
 #define _VK_KHR_push_descriptor_number (81)
 #define _VK_KHR_relaxed_block_layout_number (145)
@@ -128,10 +140,13 @@
 #define _VK_KHR_sampler_ycbcr_conversion_number (157)
 #define _VK_KHR_shader_atomic_int64_number (181)
 #define _VK_KHR_shader_draw_parameters_number (64)
+#define _VK_KHR_shader_float16_int8_number (83)
+#define _VK_KHR_shader_float_controls_number (198)
 #define _VK_KHR_shared_presentable_image_number (112)
 #define _VK_KHR_storage_buffer_storage_class_number (132)
 #define _VK_KHR_surface_number (1)
 #define _VK_KHR_swapchain_number (2)
+#define _VK_KHR_swapchain_mutable_format_number (201)
 #define _VK_KHR_variable_pointers_number (121)
 #define _VK_KHR_vulkan_memory_model_number (212)
 #define _VK_KHR_wayland_surface_number (7)
@@ -144,7 +159,6 @@
 #define _VK_NN_vi_surface_number (63)
 #define _VK_NVX_device_generated_commands_number (87)
 #define _VK_NVX_multiview_per_view_attributes_number (98)
-#define _VK_NVX_raytracing_number (166)
 #define _VK_NV_clip_space_w_scaling_number (88)
 #define _VK_NV_compute_shader_derivatives_number (202)
 #define _VK_NV_corner_sampled_image_number (51)
@@ -160,6 +174,7 @@
 #define _VK_NV_geometry_shader_passthrough_number (96)
 #define _VK_NV_glsl_shader_number (13)
 #define _VK_NV_mesh_shader_number (203)
+#define _VK_NV_ray_tracing_number (166)
 #define _VK_NV_representative_fragment_test_number (167)
 #define _VK_NV_sample_mask_override_coverage_number (95)
 #define _VK_NV_scissor_exclusive_number (206)
@@ -170,7 +185,8 @@
 #define _VK_NV_viewport_swizzle_number (99)
 #define _VK_NV_win32_keyed_mutex_number (59)
 
-const char * vk_AccelerationStructureTypeNVX_to_str(VkAccelerationStructureTypeNVX input);
+const char * vk_AccelerationStructureMemoryRequirementsTypeNV_to_str(VkAccelerationStructureMemoryRequirementsTypeNV input);
+const char * vk_AccelerationStructureTypeNV_to_str(VkAccelerationStructureTypeNV input);
 const char * vk_AttachmentLoadOp_to_str(VkAttachmentLoadOp input);
 const char * vk_AttachmentStoreOp_to_str(VkAttachmentStoreOp input);
 const char * vk_BlendFactor_to_str(VkBlendFactor input);
@@ -184,7 +200,7 @@ const char * vk_CommandBufferLevel_to_str(VkCommandBufferLevel input);
 const char * vk_CompareOp_to_str(VkCompareOp input);
 const char * vk_ComponentSwizzle_to_str(VkComponentSwizzle input);
 const char * vk_ConservativeRasterizationModeEXT_to_str(VkConservativeRasterizationModeEXT input);
-const char * vk_CopyAccelerationStructureModeNVX_to_str(VkCopyAccelerationStructureModeNVX input);
+const char * vk_CopyAccelerationStructureModeNV_to_str(VkCopyAccelerationStructureModeNV input);
 const char * vk_CoverageModulationModeNV_to_str(VkCoverageModulationModeNV input);
 const char * vk_DebugReportObjectTypeEXT_to_str(VkDebugReportObjectTypeEXT input);
 const char * vk_DescriptorType_to_str(VkDescriptorType input);
@@ -198,7 +214,7 @@ const char * vk_DynamicState_to_str(VkDynamicState input);
 const char * vk_Filter_to_str(VkFilter input);
 const char * vk_Format_to_str(VkFormat input);
 const char * vk_FrontFace_to_str(VkFrontFace input);
-const char * vk_GeometryTypeNVX_to_str(VkGeometryTypeNVX input);
+const char * vk_GeometryTypeNV_to_str(VkGeometryTypeNV input);
 const char * vk_ImageLayout_to_str(VkImageLayout input);
 const char * vk_ImageTiling_to_str(VkImageTiling input);
 const char * vk_ImageType_to_str(VkImageType input);
@@ -207,6 +223,7 @@ const char * vk_IndexType_to_str(VkIndexType input);
 const char * vk_IndirectCommandsTokenTypeNVX_to_str(VkIndirectCommandsTokenTypeNVX input);
 const char * vk_InternalAllocationType_to_str(VkInternalAllocationType input);
 const char * vk_LogicOp_to_str(VkLogicOp input);
+const char * vk_MemoryOverallocationBehaviorAMD_to_str(VkMemoryOverallocationBehaviorAMD input);
 const char * vk_ObjectEntryTypeNVX_to_str(VkObjectEntryTypeNVX input);
 const char * vk_ObjectType_to_str(VkObjectType input);
 const char * vk_PhysicalDeviceType_to_str(VkPhysicalDeviceType input);
@@ -219,6 +236,7 @@ const char * vk_PrimitiveTopology_to_str(VkPrimitiveTopology input);
 const char * vk_QueryType_to_str(VkQueryType input);
 const char * vk_QueueGlobalPriorityEXT_to_str(VkQueueGlobalPriorityEXT input);
 const char * vk_RasterizationOrderAMD_to_str(VkRasterizationOrderAMD input);
+const char * vk_RayTracingShaderGroupTypeNV_to_str(VkRayTracingShaderGroupTypeNV input);
 const char * vk_Result_to_str(VkResult input);
 const char * vk_SamplerAddressMode_to_str(VkSamplerAddressMode input);
 const char * vk_SamplerMipmapMode_to_str(VkSamplerMipmapMode input);
@@ -236,8 +254,14 @@ const char * vk_TessellationDomainOrigin_to_str(VkTessellationDomainOrigin input
 const char * vk_TimeDomainEXT_to_str(VkTimeDomainEXT input);
 const char * vk_ValidationCacheHeaderVersionEXT_to_str(VkValidationCacheHeaderVersionEXT input);
 const char * vk_ValidationCheckEXT_to_str(VkValidationCheckEXT input);
+const char * vk_ValidationFeatureDisableEXT_to_str(VkValidationFeatureDisableEXT input);
+const char * vk_ValidationFeatureEnableEXT_to_str(VkValidationFeatureEnableEXT input);
 const char * vk_VendorId_to_str(VkVendorId input);
 const char * vk_VertexInputRate_to_str(VkVertexInputRate input);
 const char * vk_ViewportCoordinateSwizzleNV_to_str(VkViewportCoordinateSwizzleNV input);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
 #endif

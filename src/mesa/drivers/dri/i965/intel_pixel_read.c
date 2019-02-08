@@ -44,7 +44,6 @@
 #include "intel_mipmap_tree.h"
 #include "intel_pixel.h"
 #include "intel_buffer_objects.h"
-#include "intel_tiled_memcpy.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PIXEL
 
@@ -87,7 +86,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    struct brw_bo *bo;
 
    uint32_t cpp;
-   mem_copy_fn_type copy_type;
+   isl_memcpy_type copy_type;
 
    /* This fastpath is restricted to specific renderbuffer types:
     * a 2D BGRA, RGBA, L8 or A8 texture. It could be generalized to support
@@ -125,7 +124,8 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
    if (rb->_BaseFormat == GL_RGB)
       return false;
 
-   if (!intel_get_memcpy_type(rb->Format, format, type, &copy_type, &cpp))
+   copy_type = intel_miptree_get_memcpy_type(rb->Format, format, type, &cpp);
+   if (copy_type == ISL_MEMCPY_INVALID)
       return false;
 
    if (!irb->mt ||
@@ -198,7 +198,7 @@ intel_readpixels_tiled_memcpy(struct gl_context * ctx,
        pack->Alignment, pack->RowLength, pack->SkipPixels,
        pack->SkipRows);
 
-   tiled_to_linear(
+   isl_memcpy_tiled_to_linear(
       xoffset * cpp, (xoffset + width) * cpp,
       yoffset, yoffset + height,
       pixels,

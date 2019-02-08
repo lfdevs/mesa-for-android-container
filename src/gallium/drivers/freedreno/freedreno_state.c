@@ -288,7 +288,36 @@ fd_set_viewport_states(struct pipe_context *pctx,
 		const struct pipe_viewport_state *viewport)
 {
 	struct fd_context *ctx = fd_context(pctx);
+	struct pipe_scissor_state *scissor = &ctx->viewport_scissor;
+	float minx, miny, maxx, maxy;
+
 	ctx->viewport = *viewport;
+
+	/* see si_get_scissor_from_viewport(): */
+
+	/* Convert (-1, -1) and (1, 1) from clip space into window space. */
+	minx = -viewport->scale[0] + viewport->translate[0];
+	miny = -viewport->scale[1] + viewport->translate[1];
+	maxx = viewport->scale[0] + viewport->translate[0];
+	maxy = viewport->scale[1] + viewport->translate[1];
+
+	/* Handle inverted viewports. */
+	if (minx > maxx) {
+		swap(minx, maxx);
+	}
+	if (miny > maxy) {
+		swap(miny, maxy);
+	}
+
+	debug_assert(miny >= 0);
+	debug_assert(maxy >= 0);
+
+	/* Convert to integer and round up the max bounds. */
+	scissor->minx = minx;
+	scissor->miny = miny;
+	scissor->maxx = ceilf(maxx);
+	scissor->maxy = ceilf(maxy);
+
 	ctx->dirty |= FD_DIRTY_VIEWPORT;
 }
 

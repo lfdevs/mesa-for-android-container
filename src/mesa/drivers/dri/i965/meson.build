@@ -133,16 +133,6 @@ files_i965 = files(
   'libdrm_macros.h',
 )
 
-files_intel_tiled_memcpy = files(
-  'intel_tiled_memcpy_normal.c',
-  'intel_tiled_memcpy.h',
-)
-
-files_intel_tiled_memcpy_sse41 = files(
-  'intel_tiled_memcpy_sse41.c',
-  'intel_tiled_memcpy_sse41.h',
-)
-
 i965_gen_libs = []
 foreach v : ['40', '45', '50', '60', '70', '75', '80', '90', '100', '110']
   i965_gen_libs += static_library(
@@ -184,36 +174,10 @@ i965_oa_sources = custom_target(
   ],
 )
 
-intel_tiled_memcpy = static_library(
-  'intel_tiled_memcpy',
-  [files_intel_tiled_memcpy],
-  include_directories : [
-    inc_common, inc_intel, inc_dri_common, inc_drm_uapi,
-  ],
-  c_args : [c_vis_args, no_override_init_args, '-msse2'],
-  extra_files : ['intel_tiled_memcpy.c']
-)
-
-if with_sse41
-  intel_tiled_memcpy_sse41 = static_library(
-    'intel_tiled_memcpy_sse41',
-    [files_intel_tiled_memcpy_sse41],
-    include_directories : [
-      inc_common, inc_intel, inc_dri_common, inc_drm_uapi,
-    ],
-    link_args : ['-Wl,--exclude-libs=ALL'],
-    c_args : [c_vis_args, no_override_init_args, '-Wl,--exclude-libs=ALL', '-msse2', sse41_args],
-    extra_files : ['intel_tiled_memcpy.c']
-  )
-else
-  intel_tiled_memcpy_sse41 = []
-endif
-
-
 libi965 = static_library(
   'i965',
   [files_i965, i965_oa_sources, ir_expression_operation_h,
-   xmlpool_options_h],
+   xmlpool_options_h, float64_glsl_h],
   include_directories : [
     inc_common, inc_intel, inc_dri_common, inc_util, inc_drm_uapi,
   ],
@@ -221,7 +185,7 @@ libi965 = static_library(
   cpp_args : [cpp_vis_args, c_sse2_args],
   link_with : [
     i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
-    libblorp, intel_tiled_memcpy, intel_tiled_memcpy_sse41
+    libblorp
   ],
   dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
 )

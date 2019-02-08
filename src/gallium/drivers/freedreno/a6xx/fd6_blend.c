@@ -138,8 +138,10 @@ fd6_blend_state_create(struct pipe_context *pctx,
 	}
 
 	so->rb_blend_cntl = A6XX_RB_BLEND_CNTL_ENABLE_BLEND(mrt_blend) |
+		COND(cso->alpha_to_coverage, A6XX_RB_BLEND_CNTL_ALPHA_TO_COVERAGE) |
 		COND(cso->independent_blend_enable, A6XX_RB_BLEND_CNTL_INDEPENDENT_BLEND);
 	so->sp_blend_cntl = A6XX_SP_BLEND_CNTL_UNK8 |
+		COND(cso->alpha_to_coverage, A6XX_SP_BLEND_CNTL_ALPHA_TO_COVERAGE) |
 		COND(mrt_blend, A6XX_SP_BLEND_CNTL_ENABLED);
 
 	return so;

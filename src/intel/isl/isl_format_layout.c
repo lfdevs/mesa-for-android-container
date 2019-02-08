@@ -2983,7 +2983,7 @@ isl_format_layouts[] = {
               .i = {},
               .p = {},
     },
-    .colorspace = ISL_COLORSPACE_LINEAR,
+    .colorspace = ISL_COLORSPACE_SRGB,
     .txc = ISL_TXC_NONE,
   },
 
@@ -5623,6 +5623,8 @@ isl_format_srgb_to_linear(enum isl_format format)
         return ISL_FORMAT_L8A8_UNORM;
     case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
         return ISL_FORMAT_B5G5R5X1_UNORM;
+    case ISL_FORMAT_L8_UNORM_SRGB:
+        return ISL_FORMAT_L8_UNORM;
     case ISL_FORMAT_DXT1_RGB_SRGB:
         return ISL_FORMAT_DXT1_RGB;
     case ISL_FORMAT_BC1_UNORM_SRGB:

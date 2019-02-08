@@ -310,20 +310,28 @@ _eglDebugReport(EGLenum error, const char *funcName,
 
    mtx_unlock(_eglGlobal.Mutex);
 
-   if (callback != NULL) {
-      char *buf = NULL;
-
-      if (message != NULL) {
-         va_start(args, message);
-         if (vasprintf(&buf, message, args) < 0)
-            buf = NULL;
-
-         va_end(args);
-      }
-      callback(error, funcName, type, thr->Label, thr->CurrentObjectLabel, buf);
-      free(buf);
+   char *message_buf = NULL;
+   if (message != NULL) {
+      va_start(args, message);
+      if (vasprintf(&message_buf, message, args) < 0)
+         message_buf = NULL;
+      va_end(args);
    }
 
-   if (type == EGL_DEBUG_MSG_CRITICAL_KHR || type == EGL_DEBUG_MSG_ERROR_KHR)
-      _eglInternalError(error, funcName);
+   if (callback != NULL) {
+      callback(error, funcName, type, thr->Label, thr->CurrentObjectLabel,
+               message_buf);
+   }
+
+   if (type == EGL_DEBUG_MSG_CRITICAL_KHR || type == EGL_DEBUG_MSG_ERROR_KHR) {
+      char *func_message_buf = NULL;
+      /* Note: _eglError() is often called with msg == thr->currentFuncName */
+      if (message_buf && funcName && strcmp(message_buf, funcName) != 0) {
+         if (asprintf(&func_message_buf, "%s: %s", funcName, message_buf) < 0)
+            func_message_buf = NULL;
+      }
+      _eglInternalError(error, func_message_buf ? func_message_buf : funcName);
+      free(func_message_buf);
+   }
+   free(message_buf);
 }

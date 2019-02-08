@@ -347,13 +347,12 @@ public:
 
    void resize_sources(uint8_t num_sources);
 
-   bool equals(fs_inst *inst) const;
    bool is_send_from_grf() const;
    bool is_partial_write() const;
    bool is_copy_payload(const brw::simple_allocator &grf_alloc) const;
    unsigned components_read(unsigned i) const;
    unsigned size_read(int arg) const;
-   bool can_do_source_mods(const struct gen_device_info *devinfo);
+   bool can_do_source_mods(const struct gen_device_info *devinfo) const;
    bool can_do_cmod();
    bool can_change_types() const;
    bool has_source_and_destination_hazard() const;
@@ -477,6 +476,27 @@ get_exec_type(const fs_inst *inst)
 
    assert(exec_type != BRW_REGISTER_TYPE_B);
 
+   /* Promotion of the execution type to 32-bit for conversions from or to
+    * half-float seems to be consistent with the following text from the
+    * Cherryview PRM Vol. 7, "Execution Data Type":
+    *
+    * "When single precision and half precision floats are mixed between
+    *  source operands or between source and destination operand [..] single
+    *  precision float is the execution datatype."
+    *
+    * and from "Register Region Restrictions":
+    *
+    * "Conversion between Integer and HF (Half Float) must be DWord aligned
+    *  and strided by a DWord on the destination."
+    */
+   if (type_sz(exec_type) == 2 &&
+       inst->dst.type != exec_type) {
+      if (exec_type == BRW_REGISTER_TYPE_HF)
+         exec_type = BRW_REGISTER_TYPE_F;
+      else if (inst->dst.type == BRW_REGISTER_TYPE_HF)
+         exec_type = BRW_REGISTER_TYPE_D;
+   }
+
    return exec_type;
 }
 
@@ -484,6 +504,16 @@ static inline unsigned
 get_exec_type_size(const fs_inst *inst)
 {
    return type_sz(get_exec_type(inst));
+}
+
+/**
+ * Return whether the instruction isn't an ALU instruction and cannot be
+ * assumed to complete in-order.
+ */
+static inline bool
+is_unordered(const fs_inst *inst)
+{
+   return inst->mlen || inst->is_send_from_grf() || inst->is_math();
 }
 
 /**

@@ -40,10 +40,13 @@ struct virgl_drm_caps {
 struct virgl_cmd_buf {
    unsigned cdw;
    uint32_t *buf;
+   int in_fence_fd;
+   bool needs_out_fence_fd;
 };
 
 struct virgl_winsys {
    unsigned pci_id;
+   int supports_fences; /* In/Out fences are supported */
 
    void (*destroy)(struct virgl_winsys *vws);
 
@@ -83,7 +86,8 @@ struct virgl_winsys {
    void (*cmd_buf_destroy)(struct virgl_cmd_buf *buf);
 
    void (*emit_res)(struct virgl_winsys *vws, struct virgl_cmd_buf *buf, struct virgl_hw_res *res, boolean write_buffer);
-   int (*submit_cmd)(struct virgl_winsys *vws, struct virgl_cmd_buf *buf);
+   int (*submit_cmd)(struct virgl_winsys *vws, struct virgl_cmd_buf *buf,
+                     int32_t in_fence_fd, int32_t *out_fence_fd);
 
    boolean (*res_is_referenced)(struct virgl_winsys *vws,
                                 struct virgl_cmd_buf *buf,
@@ -92,7 +96,7 @@ struct virgl_winsys {
    int (*get_caps)(struct virgl_winsys *vws, struct virgl_drm_caps *caps);
 
    /* fence */
-   struct pipe_fence_handle *(*cs_create_fence)(struct virgl_winsys *vws);
+   struct pipe_fence_handle *(*cs_create_fence)(struct virgl_winsys *vws, int fd);
    bool (*fence_wait)(struct virgl_winsys *vws,
                       struct pipe_fence_handle *fence,
                       uint64_t timeout);
@@ -107,6 +111,12 @@ struct virgl_winsys {
                              unsigned level, unsigned layer,
                              void *winsys_drawable_handle,
                              struct pipe_box *sub_box);
+   void (*fence_server_sync)(struct virgl_winsys *vws,
+                             struct virgl_cmd_buf *cbuf,
+                             struct pipe_fence_handle *fence);
+
+   int (*fence_get_fd)(struct virgl_winsys *vws,
+                       struct pipe_fence_handle *fence);
 };
 
 /* this defaults all newer caps,

@@ -18,21 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-ir3_nir_trig_c = custom_target(
-  'ir3_nir_trig.c',
-  input : 'ir3/ir3_nir_trig.py',
-  output : 'ir3_nir_trig.c',
-  command : [
-    prog_python, '@INPUT@',
-    '-p', join_paths(meson.source_root(), 'src/compiler/nir/'),
-  ],
-  capture : true,
-  depend_files : nir_algebraic_py,
-)
-
 files_libfreedreno = files(
-  'adreno_common.xml.h',
-  'adreno_pm4.xml.h',
   'disasm.h',
   'freedreno_batch.c',
   'freedreno_batch.h',
@@ -71,27 +57,9 @@ files_libfreedreno = files(
   'freedreno_texture.h',
   'freedreno_util.c',
   'freedreno_util.h',
-  'drm/freedreno_bo.c',
-  'drm/freedreno_bo_cache.c',
-  'drm/freedreno_device.c',
-  'drm/freedreno_drmif.h',
-  'drm/freedreno_pipe.c',
-  'drm/freedreno_priv.h',
-  'drm/freedreno_ringbuffer.c',
-  'drm/freedreno_ringbuffer.h',
-  'drm/msm_bo.c',
-  'drm/msm_device.c',
-  'drm/msm_drm.h',
-  'drm/msm_pipe.c',
-  'drm/msm_priv.h',
-  'drm/msm_ringbuffer.c',
-  'drm/msm_ringbuffer_sp.c',
-  'a2xx/a2xx.xml.h',
   'a2xx/disasm-a2xx.c',
   'a2xx/fd2_blend.c',
   'a2xx/fd2_blend.h',
-  'a2xx/fd2_compiler.c',
-  'a2xx/fd2_compiler.h',
   'a2xx/fd2_context.c',
   'a2xx/fd2_context.h',
   'a2xx/fd2_draw.c',
@@ -100,10 +68,15 @@ files_libfreedreno = files(
   'a2xx/fd2_emit.h',
   'a2xx/fd2_gmem.c',
   'a2xx/fd2_gmem.h',
+  'a2xx/fd2_perfcntr.c',
   'a2xx/fd2_program.c',
   'a2xx/fd2_program.h',
+  'a2xx/fd2_query.c',
+  'a2xx/fd2_query.h',
   'a2xx/fd2_rasterizer.c',
   'a2xx/fd2_rasterizer.h',
+  'a2xx/fd2_resource.c',
+  'a2xx/fd2_resource.h',
   'a2xx/fd2_screen.c',
   'a2xx/fd2_screen.h',
   'a2xx/fd2_texture.c',
@@ -113,9 +86,14 @@ files_libfreedreno = files(
   'a2xx/fd2_zsa.c',
   'a2xx/fd2_zsa.h',
   'a2xx/instr-a2xx.h',
-  'a2xx/ir-a2xx.c',
-  'a2xx/ir-a2xx.h',
-  'a3xx/a3xx.xml.h',
+  'a2xx/ir2.c',
+  'a2xx/ir2.h',
+  'a2xx/ir2_assemble.c',
+  'a2xx/ir2_cp.c',
+  'a2xx/ir2_nir.c',
+  'a2xx/ir2_nir_lower_scalar.c',
+  'a2xx/ir2_private.h',
+  'a2xx/ir2_ra.c',
   'a3xx/fd3_blend.c',
   'a3xx/fd3_blend.h',
   'a3xx/fd3_context.c',
@@ -140,7 +118,6 @@ files_libfreedreno = files(
   'a3xx/fd3_texture.h',
   'a3xx/fd3_zsa.c',
   'a3xx/fd3_zsa.h',
-  'a4xx/a4xx.xml.h',
   'a4xx/fd4_blend.c',
   'a4xx/fd4_blend.h',
   'a4xx/fd4_context.c',
@@ -165,7 +142,6 @@ files_libfreedreno = files(
   'a4xx/fd4_texture.h',
   'a4xx/fd4_zsa.c',
   'a4xx/fd4_zsa.h',
-  'a5xx/a5xx.xml.h',
   'a5xx/fd5_blend.c',
   'a5xx/fd5_blend.h',
   'a5xx/fd5_blitter.c',
@@ -199,7 +175,6 @@ files_libfreedreno = files(
   'a5xx/fd5_texture.h',
   'a5xx/fd5_zsa.c',
   'a5xx/fd5_zsa.h',
-  'a6xx/a6xx.xml.h',
   'a6xx/fd6_blend.c',
   'a6xx/fd6_blend.h',
   'a6xx/fd6_blitter.c',
@@ -230,32 +205,15 @@ files_libfreedreno = files(
   'a6xx/fd6_texture.h',
   'a6xx/fd6_zsa.c',
   'a6xx/fd6_zsa.h',
-  'ir3/disasm-a3xx.c',
-  'ir3/instr-a3xx.h',
-  'ir3/ir3.c',
   'ir3/ir3_cache.c',
   'ir3/ir3_cache.h',
-  'ir3/ir3_compiler_nir.c',
-  'ir3/ir3_compiler.c',
-  'ir3/ir3_compiler.h',
-  'ir3/ir3_cp.c',
-  'ir3/ir3_depth.c',
-  'ir3/ir3_group.c',
-  'ir3/ir3.h',
-  'ir3/ir3_legalize.c',
-  'ir3/ir3_nir.c',
-  'ir3/ir3_nir.h',
-  'ir3/ir3_nir_lower_tg4_to_tex.c',
-  'ir3/ir3_print.c',
-  'ir3/ir3_ra.c',
-  'ir3/ir3_sched.c',
-  'ir3/ir3_shader.c',
-  'ir3/ir3_shader.h',
+  'ir3/ir3_gallium.c',
+  'ir3/ir3_gallium.h',
 )
 
 freedreno_includes = [
   inc_src, inc_include, inc_gallium, inc_gallium_aux,
-  include_directories('ir3')
+  inc_freedreno, include_directories('ir3'),
 ]
 
 freedreno_c_args = []
@@ -270,20 +228,21 @@ endif
 
 libfreedreno = static_library(
   'freedreno',
-  [files_libfreedreno, ir3_nir_trig_c],
+  [files_libfreedreno],
   include_directories : freedreno_includes,
   c_args : [freedreno_c_args, c_vis_args],
   cpp_args : [freedreno_cpp_args, cpp_vis_args],
-  dependencies : [
-    dep_libdrm,
-    dep_valgrind,
-    idep_nir_headers
-  ],
+  dependencies : [dep_libdrm, idep_nir_headers],
 )
 
 driver_freedreno = declare_dependency(
   compile_args : '-DGALLIUM_FREEDRENO',
-  link_with : [libfreedrenowinsys, libfreedreno],
+  link_with : [
+    libfreedrenowinsys,
+    libfreedreno,
+    libfreedreno_drm,
+    libfreedreno_ir3,
+  ],
   dependencies : idep_nir,
 )
 
@@ -292,13 +251,13 @@ ir3_compiler = executable(
   'ir3/ir3_cmdline.c',
   include_directories : freedreno_includes,
   dependencies : [
-    dep_libdrm,
-    dep_valgrind,
     dep_thread,
     idep_nir,
   ],
   link_with : [
     libfreedreno,
+    libfreedreno_drm,
+    libfreedreno_ir3,
     libgallium,
     libglsl_standalone,
     libmesa_util,

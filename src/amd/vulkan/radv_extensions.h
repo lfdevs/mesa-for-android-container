@@ -27,7 +27,7 @@
 
 enum {
    RADV_INSTANCE_EXTENSION_COUNT = 16,
-   RADV_DEVICE_EXTENSION_COUNT = 53,
+   RADV_DEVICE_EXTENSION_COUNT = 56,
 };
 
 struct radv_instance_extension_table {
@@ -97,8 +97,11 @@ struct radv_device_extension_table {
         bool EXT_external_memory_dma_buf;
         bool EXT_external_memory_host;
         bool EXT_global_priority;
+        bool EXT_memory_budget;
+        bool EXT_memory_priority;
         bool EXT_pci_bus_info;
         bool EXT_sampler_filter_minmax;
+        bool EXT_scalar_block_layout;
         bool EXT_shader_viewport_index_layer;
         bool EXT_shader_stencil_export;
         bool EXT_transform_feedback;

@@ -8,12 +8,12 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2017-10-31 19:05:01)
-- copyright.xml  (   1597 bytes, from 2016-10-29 07:29:22)
-- common.xml     (  26187 bytes, from 2017-10-31 19:05:01)
-- common_3d.xml  (  14615 bytes, from 2017-11-04 14:03:35)
+- texdesc_3d.xml (   3183 bytes, from 2018-02-10 13:09:26)
+- copyright.xml  (   1597 bytes, from 2018-02-10 13:09:26)
+- common.xml     (  35468 bytes, from 2018-02-10 13:09:26)
+- common_3d.xml  (  14843 bytes, from 2019-01-18 10:13:41)
 
-Copyright (C) 2012-2017 by the following authors:
+Copyright (C) 2012-2018 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -320,5 +320,166 @@ DEALINGS IN THE SOFTWARE.
 #define chipMinorFeatures6_DEC					0x00000004
 #define chipMinorFeatures6_VS_TILE_NV12				0x00000008
 #define chipMinorFeatures6_VS_TILE_NV12_10BIT			0x00000010
+#define chipMinorFeatures6_RENDER_TARGET_8			0x00000020
+#define chipMinorFeatures6_TEX_LOD_FLOW_CORR			0x00000040
+#define chipMinorFeatures6_FACE_LOD				0x00000080
+#define chipMinorFeatures6_MULTI_CORE_SEMAPHORE_STALL_V2	0x00000100
+#define chipMinorFeatures6_VMSAA				0x00000200
+#define chipMinorFeatures6_CHIP_ENABLE_LINK			0x00000400
+#define chipMinorFeatures6_MULTI_SRC_BLT_1_5_ENHANCEMENT	0x00000800
+#define chipMinorFeatures6_MULTI_SRC_BLT_BILINEAR_FILTER	0x00001000
+#define chipMinorFeatures6_RA_HZEZ_CLOCK_CONTROL		0x00002000
+#define chipMinorFeatures6_CACHE128B256BPERLINE			0x00004000
+#define chipMinorFeatures6_V4_COMPRESSION			0x00008000
+#define chipMinorFeatures6_PE2D_MAJOR_SUPER_TILE		0x00010000
+#define chipMinorFeatures6_PE_32BPC_COLORMASK_FIX		0x00020000
+#define chipMinorFeatures6_ALPHA_BLENDING_OPT			0x00040000
+#define chipMinorFeatures6_NEW_GPIPE				0x00080000
+#define chipMinorFeatures6_PIPELINE_32_ATTRIBUTES		0x00100000
+#define chipMinorFeatures6_MSAA_SHADING				0x00200000
+#define chipMinorFeatures6_NO_ANISTRO_FILTER			0x00400000
+#define chipMinorFeatures6_NO_ASTC				0x00800000
+#define chipMinorFeatures6_NO_DXT				0x01000000
+#define chipMinorFeatures6_HWTFB				0x02000000
+#define chipMinorFeatures6_RA_DEPTH_WRITE_MSAA1X_FIX		0x04000000
+#define chipMinorFeatures6_EZHZ_CLOCKGATE_FIX			0x08000000
+#define chipMinorFeatures6_SH_SNAP2PAGE_FIX			0x10000000
+#define chipMinorFeatures6_SH_HALFDEPENDENCY_FIX		0x20000000
+#define chipMinorFeatures6_USC_MCFILL_FIX			0x40000000
+#define chipMinorFeatures6_TPG_TCPERF_FIX			0x80000000
+#define chipMinorFeatures7_USC_MDFIFO_OVERFLOW_FIX		0x00000001
+#define chipMinorFeatures7_SH_TEXLD_BARRIER_IN_CS_FIX		0x00000002
+#define chipMinorFeatures7_RS_NEW_BASEADDR			0x00000004
+#define chipMinorFeatures7_PE_8BPP_DUALPIPE_FIX			0x00000008
+#define chipMinorFeatures7_SH_ADVANCED_INSTR			0x00000010
+#define chipMinorFeatures7_SH_FLAT_INTERPOLATION_DUAL16_FIX	0x00000020
+#define chipMinorFeatures7_USC_CONTINUOUS_FLUS_FIX		0x00000040
+#define chipMinorFeatures7_SH_SUPPORT_V4			0x00000080
+#define chipMinorFeatures7_SH_SUPPORT_ALPHA_KILL		0x00000100
+#define chipMinorFeatures7_PE_NO_ALPHA_TEST			0x00000200
+#define chipMinorFeatures7_TX_LOD_NEAREST_SELECT		0x00000400
+#define chipMinorFeatures7_SH_FIX_LDEXP				0x00000800
+#define chipMinorFeatures7_SUPPORT_MOVAI			0x00001000
+#define chipMinorFeatures7_SH_SNAP2PAGE_MAXPAGES_FIX		0x00002000
+#define chipMinorFeatures7_PE_RGBA16I_FIX			0x00004000
+#define chipMinorFeatures7_BLT_8bpp_256TILE_FC_FIX		0x00008000
+#define chipMinorFeatures7_PE_64BIT_FENCE_FIX			0x00010000
+#define chipMinorFeatures7_USC_FULL_CACHE_FIX			0x00020000
+#define chipMinorFeatures7_TX_YUV_ASSEMBLER_10BIT		0x00040000
+#define chipMinorFeatures7_FE_32BIT_INDEX_FIX			0x00080000
+#define chipMinorFeatures7_BLT_64BPP_MASKED_CLEAR_FIX		0x00100000
+#define chipMinorFeatures7_BIT_SECURITY				0x00200000
+#define chipMinorFeatures7_BIT_ROBUSTNESS			0x00400000
+#define chipMinorFeatures7_USC_ATOMIC_FIX			0x00800000
+#define chipMinorFeatures7_SH_PSO_MSAA1x_FIX			0x01000000
+#define chipMinorFeatures7_BIT_USC_VX_PERF_FIX			0x02000000
+#define chipMinorFeatures7_EVIS_NO_ABSDIFF			0x04000000
+#define chipMinorFeatures7_EVIS_NO_BITREPLACE			0x08000000
+#define chipMinorFeatures7_EVIS_NO_BOXFILTER			0x10000000
+#define chipMinorFeatures7_EVIS_NO_CORDIAC			0x20000000
+#define chipMinorFeatures7_EVIS_NO_DP32				0x40000000
+#define chipMinorFeatures7_EVIS_NO_FILTER			0x80000000
+#define chipMinorFeatures8_EVIS_NO_IADD				0x00000001
+#define chipMinorFeatures8_EVIS_NO_SELECTADD			0x00000002
+#define chipMinorFeatures8_EVIS_LERP_7OUTPUT			0x00000004
+#define chipMinorFeatures8_EVIS_ACCSQ_8OUTPUT			0x00000008
+#define chipMinorFeatures8_USC_GOS_ADDR_FIX			0x00000010
+#define chipMinorFeatures8_TX_8BIT_UVFRAC			0x00000020
+#define chipMinorFeatures8_TX_DESC_CACHE_CLOCKGATE_FIX		0x00000040
+#define chipMinorFeatures8_RSBLT_MSAA_DECOMPRESSION		0x00000080
+#define chipMinorFeatures8_TX_INTEGER_COORDINATE		0x00000100
+#define chipMinorFeatures8_DRAWID				0x00000200
+#define chipMinorFeatures8_PSIO_SAMPLEMASK_IN_R0ZW_FIX		0x00000400
+#define chipMinorFeatures8_TX_INTEGER_COORDINATE_V2		0x00000800
+#define chipMinorFeatures8_MULTI_CORE_BLOCK_SET_CONFIG		0x00001000
+#define chipMinorFeatures8_VG_RESOLVE_ENGINE			0x00002000
+#define chipMinorFeatures8_VG_PE_COLOR_KEY			0x00004000
+#define chipMinorFeatures8_VG_IM_INDEX_FORMAT			0x00008000
+#define chipMinorFeatures8_SNAPPAGE_CMD				0x00010000
+#define chipMinorFeatures8_SH_NO_INDEX_CONST_ON_A0		0x00020000
+#define chipMinorFeatures8_SH_NO_ONECONST_LIMIT			0x00040000
+#define chipMinorFeatures8_SH_IMG_LDST_ON_TEMP			0x00080000
+#define chipMinorFeatures8_COMPUTE_ONLY				0x00100000
+#define chipMinorFeatures8_SH_IMG_LDST_CLAMP			0x00200000
+#define chipMinorFeatures8_SH_ICACHE_ALLOC_COUNT_FIX		0x00400000
+#define chipMinorFeatures8_SH_ICACHE_PREFETCH			0x00800000
+#define chipMinorFeatures8_PE2D_SEPARATE_CACHE			0x01000000
+#define chipMinorFeatures8_VG_AYUV_INPUT_OUTPUT			0x02000000
+#define chipMinorFeatures8_VG_DOUBLE_IMAGE			0x04000000
+#define chipMinorFeatures8_VG_RECTANGLE_STRIPE_MODE		0x08000000
+#define chipMinorFeatures8_VG_MMU				0x10000000
+#define chipMinorFeatures8_VG_IM_FILTER				0x20000000
+#define chipMinorFeatures8_VG_IM_YUV_PACKET			0x40000000
+#define chipMinorFeatures8_VG_IM_YUV_PLANAR			0x80000000
+#define chipMinorFeatures9_VG_PE_YUV_PACKET			0x00000001
+#define chipMinorFeatures9_VG_COLOR_PRECISION_8_BIT		0x00000002
+#define chipMinorFeatures9_PE_MSAA_OQ_FIX			0x00000004
+#define chipMinorFeatures9_PSIO_MSAA_CL_FIX			0x00000008
+#define chipMinorFeatures9_USC_DEFER_FILL_FIX			0x00000010
+#define chipMinorFeatures9_SH_CLOCK_GATE_FIX			0x00000020
+#define chipMinorFeatures9_FE_NEED_DUMMYDRAW			0x00000040
+#define chipMinorFeatures9_PE2D_LINEAR_YUV420_OUTPUT		0x00000080
+#define chipMinorFeatures9_PE2D_LINEAR_YUV420_10BIT		0x00000100
+#define chipMinorFeatures9_MULTI_CLUSTER			0x00000200
+#define chipMinorFeatures9_VG_TS_CULLING			0x00000400
+#define chipMinorFeatures9_VG_FP25				0x00000800
+#define chipMinorFeatures9_SH_MULTI_WG_PACK			0x00001000
+#define chipMinorFeatures9_SH_DUAL16_SAMPLEMASK_ZW		0x00002000
+#define chipMinorFeatures9_TPG_TRIVIAL_MODE_FIX			0x00004000
+#define chipMinorFeatures9_TX_ASTC_MULTISLICE_FIX		0x00008000
+#define chipMinorFeatures9_FE_ROBUST_FIX			0x00010000
+#define chipMinorFeatures9_SH_GPIPE_ACCESS_FULLTEMPS		0x00020000
+#define chipMinorFeatures9_PSIO_INTERLOCK			0x00040000
+#define chipMinorFeatures9_PA_WIDELINE_FIX			0x00080000
+#define chipMinorFeatures9_WIDELINE_HELPER_FIX			0x00100000
+#define chipMinorFeatures9_G2D_3RD_PARTY_COMPRESSION_1_1	0x00200000
+#define chipMinorFeatures9_TX_FLUSH_L1CACHE			0x00400000
+#define chipMinorFeatures9_PE_DITHER_FIX2			0x00800000
+#define chipMinorFeatures9_G2D_DEC400				0x01000000
+#define chipMinorFeatures9_SH_TEXLD_U_FIX			0x02000000
+#define chipMinorFeatures9_MC_FCCACHE_BYTEMASK			0x04000000
+#define chipMinorFeatures9_SH_MULTI_WG_PACK_FIX			0x08000000
+#define chipMinorFeatures9_DC_OVERLAY_SCALING			0x10000000
+#define chipMinorFeatures9_DC_SOURCE_ROTATION			0x20000000
+#define chipMinorFeatures9_DC_TILED				0x40000000
+#define chipMinorFeatures9_DC_YUV_L1				0x80000000
+#define chipMinorFeatures10_DC_D30_OUTPUT			0x00000001
+#define chipMinorFeatures10_DC_MMU				0x00000002
+#define chipMinorFeatures10_DC_COMPRESSION			0x00000004
+#define chipMinorFeatures10_DC_QOS				0x00000008
+#define chipMinorFeatures10_PE_ADVANCE_BLEND_PART0		0x00000010
+#define chipMinorFeatures10_FE_PATCHLIST_FETCH_FIX		0x00000020
+#define chipMinorFeatures10_RA_CG_FIX				0x00000040
+#define chipMinorFeatures10_EVIS_VX2				0x00000080
+#define chipMinorFeatures10_NN_FLOAT				0x00000100
+#define chipMinorFeatures10_DEC400				0x00000200
+#define chipMinorFeatures10_LS_SUPPORT_PERCOMP_DEPENDENCY	0x00000400
+#define chipMinorFeatures10_TP_ENGINE				0x00000800
+#define chipMinorFeatures10_MULTI_CORE_BLOCK_SET_CONFIG2	0x00001000
+#define chipMinorFeatures10_PE_VMSAA_COVERAGE_CACHE_FIX		0x00002000
+#define chipMinorFeatures10_SECURITY_AHB			0x00004000
+#define chipMinorFeatures10_MULTICORE_SEMAPHORESTALL_V3		0x00008000
+#define chipMinorFeatures10_SMALLBATCH				0x00010000
+#define chipMinorFeatures10_SH_CMPLX				0x00020000
+#define chipMinorFeatures10_SH_IDIV0_SWZL_EHS			0x00040000
+#define chipMinorFeatures10_TX_LERP_LESS_BIT			0x00080000
+#define chipMinorFeatures10_SH_GM_ENDIAN			0x00100000
+#define chipMinorFeatures10_SH_GM_USC_UNALLOC			0x00200000
+#define chipMinorFeatures10_SH_END_OF_BB			0x00400000
+#define chipMinorFeatures10_VIP_V7				0x00800000
+#define chipMinorFeatures10_TX_BORDER_CLAMP_FIX			0x01000000
+#define chipMinorFeatures10_SH_IMG_LD_LASTPIXEL_FIX		0x02000000
+#define chipMinorFeatures10_ASYNC_BLT				0x04000000
+#define chipMinorFeatures10_ASYNC_FE_FENCE_FIX			0x08000000
+#define chipMinorFeatures10_PSCS_THROTTLE			0x10000000
+#define chipMinorFeatures10_SEPARATE_LS				0x20000000
+#define chipMinorFeatures10_MCFE				0x40000000
+#define chipMinorFeatures10_WIDELINE_TRIANGLE_EMU		0x80000000
+#define chipMinorFeatures11_VG_RESOLUTION_8K			0x00000001
+#define chipMinorFeatures11_FENCE_32BIT				0x00000002
+#define chipMinorFeatures11_FENCE_64BIT				0x00000004
+#define chipMinorFeatures11_NN_INTERLEVE8			0x00000008
+#define chipMinorFeatures11_TP_REORDER				0x00000010
+#define chipMinorFeatures11_PE_DEPTH_ONLY_OQFIX			0x00000020
 
 #endif /* COMMON_XML */

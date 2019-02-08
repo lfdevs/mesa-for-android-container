@@ -1003,6 +1003,8 @@ lib_LTLIBRARIES = $(am__append_2) $(am__append_16) $(am__append_20)
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = $(am__append_15) $(am__append_19)
 EXTRA_DIST = \
+	new/genCommon.py \
+	new/gen_gldispatch_mapi.py \
 	es1api/ABI-check \
 	es2api/ABI-check \
 	mapi_abi.py \
@@ -1056,11 +1058,21 @@ MAPI_GLAPI_FILES = \
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
-glapi_gen_mapi_deps := \
+shared_glapi_gen_mapi_deps := \
 	mapi_abi.py \
 	$(wildcard $(top_srcdir)/src/mapi/glapi/gen/*.xml) \
 	$(wildcard $(top_srcdir)/src/mapi/glapi/gen/*.py)
 
+glapi_gen_gl_xml := \
+	$(srcdir)/glapi/registry/gl.xml
+
+glapi_gen_mapi_script = $(srcdir)/new/gen_gldispatch_mapi.py
+glapi_gen_mapi_deps = \
+	$(glapi_gen_mapi_script) \
+	$(srcdir)/new/genCommon.py \
+	$(glapi_gen_gl_xml)
+
+glapi_gen_mapi = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS) $(glapi_gen_mapi_script)
 @HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_SOURCES = $(MAPI_GLAPI_FILES) shared-glapi/glapi_mapi_tmp.h
 @HAVE_SHARED_GLAPI_TRUE@shared_glapi_libglapi_la_CFLAGS = \
 @HAVE_SHARED_GLAPI_TRUE@	$(AM_CFLAGS) \
@@ -2273,20 +2285,18 @@ uninstall-am: uninstall-GLES2_includeHEADERS \
 .PRECIOUS: Makefile
 
 
-shared-glapi/glapi_mapi_tmp.h : glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+shared-glapi/glapi_mapi_tmp.h : glapi/gen/gl_and_es_API.xml $(shared_glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
 	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer shared-glapi \
 		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
 
-es1api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+es1api/glapi_mapi_tmp.h: $(glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer es1api \
-		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
+	$(glapi_gen_mapi) glesv1 $(glapi_gen_gl_xml) > $@
 
-es2api/glapi_mapi_tmp.h: glapi/gen/gl_and_es_API.xml $(glapi_gen_mapi_deps)
+es2api/glapi_mapi_tmp.h: $(glapi_gen_mapi_deps)
 	$(MKDIR_GEN)
-	$(PYTHON_GEN) $(srcdir)/mapi_abi.py --printer es2api \
-		$(srcdir)/glapi/gen/gl_and_es_API.xml > $@
+	$(glapi_gen_mapi) glesv2 $(glapi_gen_gl_xml) > $@
 
 @BUILD_SHARED_TRUE@@HAVE_COMPAT_SYMLINKS_TRUE@all-local : .install-mesa-links
 

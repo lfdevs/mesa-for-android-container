@@ -423,6 +423,7 @@ void
 nvc0_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nvc0_screen *screen = nvc0->screen;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    struct nvc0_program *cp = nvc0->compprog;
    int ret;
@@ -463,12 +464,14 @@ nvc0_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    PUSH_DATA (push, (info->block[1] << 16) | info->block[0]);
    PUSH_DATA (push, info->block[2]);
 
+   nouveau_pushbuf_space(push, 32, 2, 1);
+   PUSH_REFN(push, screen->text, NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD);
+
    if (unlikely(info->indirect)) {
       struct nv04_resource *res = nv04_resource(info->indirect);
       uint32_t offset = res->offset + info->indirect_offset;
       unsigned macro = NVC0_CP_MACRO_LAUNCH_GRID_INDIRECT;
 
-      nouveau_pushbuf_space(push, 16, 0, 1);
       PUSH_REFN(push, res->bo, NOUVEAU_BO_RD | res->domain);
       PUSH_DATA(push, NVC0_FIFO_PKHDR_1I(1, macro, 3));
       nouveau_pushbuf_data(push, res->bo, offset,

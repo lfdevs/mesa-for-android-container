@@ -31,8 +31,6 @@
 #include "intel_image.h"
 #include "intel_mipmap_tree.h"
 #include "intel_tex.h"
-#include "intel_tiled_memcpy.h"
-#include "intel_tiled_memcpy_sse41.h"
 #include "intel_blit.h"
 #include "intel_fbo.h"
 
@@ -3126,14 +3124,74 @@ intel_miptree_unmap_tiled_memcpy(struct brw_context *brw,
       char *dst = intel_miptree_map_raw(brw, mt, map->mode | MAP_RAW);
       dst += mt->offset;
 
-      linear_to_tiled(x1, x2, y1, y2, dst, map->ptr, mt->surf.row_pitch_B,
-                      map->stride, brw->has_swizzling, mt->surf.tiling,
-                      INTEL_COPY_MEMCPY);
+      isl_memcpy_linear_to_tiled(
+         x1, x2, y1, y2, dst, map->ptr, mt->surf.row_pitch_B, map->stride,
+         brw->has_swizzling, mt->surf.tiling, ISL_MEMCPY);
 
       intel_miptree_unmap_raw(mt);
    }
    _mesa_align_free(map->buffer);
    map->buffer = map->ptr = NULL;
+}
+
+/**
+ * Determine which copy function to use for the given format combination
+ *
+ * The only two possible copy functions which are ever returned are a
+ * direct memcpy and a RGBA <-> BGRA copy function.  Since RGBA -> BGRA and
+ * BGRA -> RGBA are exactly the same operation (and memcpy is obviously
+ * symmetric), it doesn't matter whether the copy is from the tiled image
+ * to the untiled or vice versa.  The copy function required is the same in
+ * either case so this function can be used.
+ *
+ * \param[in]  tiledFormat The format of the tiled image
+ * \param[in]  format      The GL format of the client data
+ * \param[in]  type        The GL type of the client data
+ * \param[out] mem_copy    Will be set to one of either the standard
+ *                         library's memcpy or a different copy function
+ *                         that performs an RGBA to BGRA conversion
+ * \param[out] cpp         Number of bytes per channel
+ *
+ * \return true if the format and type combination are valid
+ */
+MAYBE_UNUSED isl_memcpy_type
+intel_miptree_get_memcpy_type(mesa_format tiledFormat, GLenum format, GLenum type,
+                              uint32_t *cpp)
+{
+   if (type == GL_UNSIGNED_INT_8_8_8_8_REV &&
+       !(format == GL_RGBA || format == GL_BGRA))
+      return ISL_MEMCPY_INVALID; /* Invalid type/format combination */
+
+   if ((tiledFormat == MESA_FORMAT_L_UNORM8 && format == GL_LUMINANCE) ||
+       (tiledFormat == MESA_FORMAT_A_UNORM8 && format == GL_ALPHA)) {
+      *cpp = 1;
+      return ISL_MEMCPY;
+   } else if ((tiledFormat == MESA_FORMAT_B8G8R8A8_UNORM) ||
+              (tiledFormat == MESA_FORMAT_B8G8R8X8_UNORM) ||
+              (tiledFormat == MESA_FORMAT_B8G8R8A8_SRGB) ||
+              (tiledFormat == MESA_FORMAT_B8G8R8X8_SRGB)) {
+      *cpp = 4;
+      if (format == GL_BGRA) {
+         return ISL_MEMCPY;
+      } else if (format == GL_RGBA) {
+         return ISL_MEMCPY_BGRA8;
+      }
+   } else if ((tiledFormat == MESA_FORMAT_R8G8B8A8_UNORM) ||
+              (tiledFormat == MESA_FORMAT_R8G8B8X8_UNORM) ||
+              (tiledFormat == MESA_FORMAT_R8G8B8A8_SRGB) ||
+              (tiledFormat == MESA_FORMAT_R8G8B8X8_SRGB)) {
+      *cpp = 4;
+      if (format == GL_BGRA) {
+         /* Copying from RGBA to BGRA is the same as BGRA to RGBA so we can
+          * use the same function.
+          */
+         return ISL_MEMCPY_BGRA8;
+      } else if (format == GL_RGBA) {
+         return ISL_MEMCPY;
+      }
+   }
+
+   return ISL_MEMCPY_INVALID;
 }
 
 static void
@@ -3162,21 +3220,16 @@ intel_miptree_map_tiled_memcpy(struct brw_context *brw,
       char *src = intel_miptree_map_raw(brw, mt, map->mode | MAP_RAW);
       src += mt->offset;
 
-      const tiled_to_linear_fn ttl_func =
+      const isl_memcpy_type copy_type =
 #if defined(USE_SSE41)
-         cpu_has_sse4_1 ? tiled_to_linear_sse41 :
+         cpu_has_sse4_1 ? ISL_MEMCPY_STREAMING_LOAD :
 #endif
-         tiled_to_linear;
+         ISL_MEMCPY;
 
-      const mem_copy_fn_type copy_type =
-#if defined(USE_SSE41)
-         cpu_has_sse4_1 ? INTEL_COPY_STREAMING_LOAD :
-#endif
-         INTEL_COPY_MEMCPY;
-
-      ttl_func(x1, x2, y1, y2, map->ptr, src, map->stride,
-               mt->surf.row_pitch_B, brw->has_swizzling, mt->surf.tiling,
-               copy_type);
+      isl_memcpy_tiled_to_linear(
+         x1, x2, y1, y2, map->ptr, src, map->stride,
+         mt->surf.row_pitch_B, brw->has_swizzling, mt->surf.tiling,
+         copy_type);
 
       intel_miptree_unmap_raw(mt);
    }
@@ -3865,7 +3918,7 @@ intel_miptree_get_clear_color(const struct gen_device_info *devinfo,
                               const struct intel_mipmap_tree *mt,
                               enum isl_format view_format, bool sampling,
                               struct brw_bo **clear_color_bo,
-                              uint32_t *clear_color_offset)
+                              uint64_t *clear_color_offset)
 {
    assert(mt->aux_buf);
 

@@ -28,7 +28,7 @@
 #include "cubetexture9.h"
 #include "volumetexture9.h"
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
 #include "nine_pipe.h"
 #include "nine_dump.h"
 #endif
@@ -605,7 +605,7 @@ NineBaseTexture9_UnLoad( struct NineBaseTexture9 *This )
     BASETEX_REGISTER_UPDATE(This);
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
 void
 NineBaseTexture9_Dump( struct NineBaseTexture9 *This )
 {
@@ -620,4 +620,4 @@ NineBaseTexture9_Dump( struct NineBaseTexture9 *This )
         This->base.info.array_size, This->base.info.last_level,
         This->managed.lod, This->managed.lod_resident);
 }
-#endif /* DEBUG */
+#endif /* DEBUG || !NDEBUG */

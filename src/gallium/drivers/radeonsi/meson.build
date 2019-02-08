@@ -65,7 +65,6 @@ files_libradeonsi = files(
   'si_test_dma_perf.c',
   'si_texture.c',
   'si_uvd.c',
-  '../radeon/r600_perfcounter.c',
   '../radeon/radeon_uvd.c',
   '../radeon/radeon_uvd.h',
   '../radeon/radeon_vcn_enc_1_2.c',

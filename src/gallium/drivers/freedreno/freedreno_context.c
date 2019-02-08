@@ -333,9 +333,6 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 
 	slab_create_child(&ctx->transfer_pool, &screen->transfer_pool);
 
-	if (!ctx->blit)
-		ctx->blit = fd_blitter_blit;
-
 	fd_draw_init(pctx);
 	fd_resource_context_init(pctx);
 	fd_query_context_init(pctx);

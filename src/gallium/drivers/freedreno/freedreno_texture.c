@@ -31,6 +31,7 @@
 
 #include "freedreno_texture.h"
 #include "freedreno_context.h"
+#include "freedreno_resource.h"
 #include "freedreno_util.h"
 
 static void
@@ -83,7 +84,7 @@ static void set_sampler_views(struct fd_texture_stateobj *tex,
 	tex->num_textures = util_last_bit(tex->valid_textures);
 
 	for (i = 0; i < tex->num_textures; i++) {
-		uint nr_samples = tex->textures[i]->texture->nr_samples;
+		uint nr_samples = fd_resource_nr_samples(tex->textures[i]->texture);
 		samplers |= (nr_samples >> 1) << (i * 2);
 	}
 

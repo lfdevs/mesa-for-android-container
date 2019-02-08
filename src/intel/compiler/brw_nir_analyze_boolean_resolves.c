@@ -109,18 +109,18 @@ analyze_boolean_resolves_block(nir_block *block)
          uint8_t resolve_status;
          nir_alu_instr *alu = nir_instr_as_alu(instr);
          switch (alu->op) {
-         case nir_op_ball_fequal2:
-         case nir_op_ball_iequal2:
-         case nir_op_ball_fequal3:
-         case nir_op_ball_iequal3:
-         case nir_op_ball_fequal4:
-         case nir_op_ball_iequal4:
-         case nir_op_bany_fnequal2:
-         case nir_op_bany_inequal2:
-         case nir_op_bany_fnequal3:
-         case nir_op_bany_inequal3:
-         case nir_op_bany_fnequal4:
-         case nir_op_bany_inequal4:
+         case nir_op_b32all_fequal2:
+         case nir_op_b32all_iequal2:
+         case nir_op_b32all_fequal3:
+         case nir_op_b32all_iequal3:
+         case nir_op_b32all_fequal4:
+         case nir_op_b32all_iequal4:
+         case nir_op_b32any_fnequal2:
+         case nir_op_b32any_inequal2:
+         case nir_op_b32any_fnequal3:
+         case nir_op_b32any_inequal3:
+         case nir_op_b32any_fnequal4:
+         case nir_op_b32any_inequal4:
             /* These are only implemented by the vec4 backend and its
              * implementation emits resolved booleans.  At some point in the
              * future, this may change and we'll have to remove some of the

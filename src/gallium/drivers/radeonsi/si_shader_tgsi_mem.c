@@ -396,20 +396,53 @@ static void load_emit_memory(
  *	For LOAD, set this to (store | atomic) slot usage in the shader.
  *	For STORE, set this to (load | atomic) slot usage in the shader.
  * \param images_reverse_access_mask  Same as above, but for images.
+ * \param bindless_buffer_reverse_access_mask  Same as above, but for bindless image buffers.
+ * \param bindless_image_reverse_access_mask   Same as above, but for bindless images.
  */
 static bool is_oneway_access_only(const struct tgsi_full_instruction *inst,
 				  const struct tgsi_shader_info *info,
 				  unsigned shader_buffers_reverse_access_mask,
-				  unsigned images_reverse_access_mask)
+				  unsigned images_reverse_access_mask,
+				  bool bindless_buffer_reverse_access_mask,
+				  bool bindless_image_reverse_access_mask)
 {
+	enum tgsi_file_type resource_file;
+	unsigned resource_index;
+	bool resource_indirect;
+
+	if (inst->Instruction.Opcode == TGSI_OPCODE_STORE) {
+		resource_file = inst->Dst[0].Register.File;
+		resource_index = inst->Dst[0].Register.Index;
+		resource_indirect = inst->Dst[0].Register.Indirect;
+	} else {
+		resource_file = inst->Src[0].Register.File;
+		resource_index = inst->Src[0].Register.Index;
+		resource_indirect = inst->Src[0].Register.Indirect;
+	}
+
+	assert(resource_file == TGSI_FILE_BUFFER ||
+	       resource_file == TGSI_FILE_IMAGE ||
+	       /* bindless image */
+	       resource_file == TGSI_FILE_INPUT ||
+	       resource_file == TGSI_FILE_OUTPUT ||
+	       resource_file == TGSI_FILE_CONSTANT ||
+	       resource_file == TGSI_FILE_TEMPORARY ||
+	       resource_file == TGSI_FILE_IMMEDIATE);
+
+	assert(resource_file != TGSI_FILE_BUFFER ||
+	       inst->Memory.Texture == TGSI_TEXTURE_BUFFER);
+
+	bool bindless = resource_file != TGSI_FILE_BUFFER &&
+			resource_file != TGSI_FILE_IMAGE;
+
 	/* RESTRICT means NOALIAS.
 	 * If there are no writes, we can assume the accessed memory is read-only.
 	 * If there are no reads, we can assume the accessed memory is write-only.
 	 */
-	if (inst->Memory.Qualifier & TGSI_MEMORY_RESTRICT) {
+	if (inst->Memory.Qualifier & TGSI_MEMORY_RESTRICT && !bindless) {
 		unsigned reverse_access_mask;
 
-		if (inst->Src[0].Register.File == TGSI_FILE_BUFFER) {
+		if (resource_file == TGSI_FILE_BUFFER) {
 			reverse_access_mask = shader_buffers_reverse_access_mask;
 		} else if (inst->Memory.Texture == TGSI_TEXTURE_BUFFER) {
 			reverse_access_mask = info->images_buffers &
@@ -419,12 +452,12 @@ static bool is_oneway_access_only(const struct tgsi_full_instruction *inst,
 					      images_reverse_access_mask;
 		}
 
-		if (inst->Src[0].Register.Indirect) {
+		if (resource_indirect) {
 			if (!reverse_access_mask)
 				return true;
 		} else {
 			if (!(reverse_access_mask &
-			      (1u << inst->Src[0].Register.Index)))
+			      (1u << resource_index)))
 				return true;
 		}
 	}
@@ -437,15 +470,15 @@ static bool is_oneway_access_only(const struct tgsi_full_instruction *inst,
 	 * Same for the case when there are no writes/reads for non-buffer
 	 * images.
 	 */
-	if (inst->Src[0].Register.File == TGSI_FILE_BUFFER ||
-	    (inst->Memory.Texture == TGSI_TEXTURE_BUFFER &&
-	     (inst->Src[0].Register.File == TGSI_FILE_IMAGE ||
-	      tgsi_is_bindless_image_file(inst->Src[0].Register.File)))) {
+	if (resource_file == TGSI_FILE_BUFFER ||
+	    inst->Memory.Texture == TGSI_TEXTURE_BUFFER) {
 		if (!shader_buffers_reverse_access_mask &&
-		    !(info->images_buffers & images_reverse_access_mask))
+		    !(info->images_buffers & images_reverse_access_mask) &&
+		    !bindless_buffer_reverse_access_mask)
 			return true;
 	} else {
-		if (!(~info->images_buffers & images_reverse_access_mask))
+		if (!(~info->images_buffers & images_reverse_access_mask) &&
+		    !bindless_image_reverse_access_mask)
 			return true;
 	}
 	return false;
@@ -474,8 +507,7 @@ static void load_emit(
 		bool ubo = inst->Src[0].Register.File == TGSI_FILE_CONSTBUF;
 		args.resource = shader_buffer_fetch_rsrc(ctx, &inst->Src[0], ubo);
 		voffset = ac_to_integer(&ctx->ac, lp_build_emit_fetch(bld_base, inst, 1, 0));
-	} else if (inst->Src[0].Register.File == TGSI_FILE_IMAGE ||
-		   tgsi_is_bindless_image_file(inst->Src[0].Register.File)) {
+	} else {
 		unsigned target = inst->Memory.Texture;
 
 		image_fetch_rsrc(bld_base, &inst->Src[0], false, target, &args.resource);
@@ -499,7 +531,11 @@ static void load_emit(
 						info->shader_buffers_store |
 						info->shader_buffers_atomic,
 						info->images_store |
-						info->images_atomic);
+						info->images_atomic,
+						info->uses_bindless_buffer_store |
+						info->uses_bindless_buffer_atomic,
+						info->uses_bindless_image_store |
+						info->uses_bindless_image_atomic);
 	args.cache_policy = get_cache_policy(ctx, inst, false, false, false);
 
 	if (inst->Src[0].Register.File == TGSI_FILE_BUFFER) {
@@ -650,42 +686,42 @@ static void store_emit(
 	struct tgsi_full_src_register resource_reg =
 		tgsi_full_src_register_from_dst(&inst->Dst[0]);
 	unsigned target = inst->Memory.Texture;
-	bool writeonly_memory = is_oneway_access_only(inst, info,
-						      info->shader_buffers_load |
-						      info->shader_buffers_atomic,
-						      info->images_load |
-						      info->images_atomic);
-	bool is_image = inst->Dst[0].Register.File == TGSI_FILE_IMAGE ||
-			tgsi_is_bindless_image_file(inst->Dst[0].Register.File);
-	LLVMValueRef chans[4], value;
-	LLVMValueRef vindex = ctx->i32_0;
-	LLVMValueRef voffset = ctx->i32_0;
-	struct ac_image_args args = {};
 
 	if (inst->Dst[0].Register.File == TGSI_FILE_MEMORY) {
 		store_emit_memory(ctx, emit_data);
 		return;
 	}
 
+	bool writeonly_memory = is_oneway_access_only(inst, info,
+						      info->shader_buffers_load |
+						      info->shader_buffers_atomic,
+						      info->images_load |
+						      info->images_atomic,
+						      info->uses_bindless_buffer_load |
+						      info->uses_bindless_buffer_atomic,
+						      info->uses_bindless_image_load |
+						      info->uses_bindless_image_atomic);
+	LLVMValueRef chans[4];
+	LLVMValueRef vindex = ctx->i32_0;
+	LLVMValueRef voffset = ctx->i32_0;
+	struct ac_image_args args = {};
+
 	for (unsigned chan = 0; chan < 4; ++chan)
 		chans[chan] = lp_build_emit_fetch(bld_base, inst, 1, chan);
-
-	value = ac_build_gather_values(&ctx->ac, chans, 4);
 
 	if (inst->Dst[0].Register.File == TGSI_FILE_BUFFER) {
 		args.resource = shader_buffer_fetch_rsrc(ctx, &resource_reg, false);
 		voffset = ac_to_integer(&ctx->ac, lp_build_emit_fetch(bld_base, inst, 0, 0));
-	} else if (is_image) {
+	} else {
 		image_fetch_rsrc(bld_base, &resource_reg, true, target, &args.resource);
 		image_fetch_coords(bld_base, inst, 0, args.resource, args.coords);
 		vindex = args.coords[0]; /* for buffers only */
-	} else {
-		unreachable("unexpected register file");
 	}
 
 	if (inst->Memory.Qualifier & TGSI_MEMORY_VOLATILE)
 		ac_build_waitcnt(&ctx->ac, VM_CNT);
 
+	bool is_image = inst->Dst[0].Register.File != TGSI_FILE_BUFFER;
 	args.cache_policy = get_cache_policy(ctx, inst,
 					     false, /* atomic */
 					     is_image, /* may_store_unaligned */
@@ -693,27 +729,46 @@ static void store_emit(
 
 	if (inst->Dst[0].Register.File == TGSI_FILE_BUFFER) {
 		store_emit_buffer(ctx, args.resource, inst->Dst[0].Register.WriteMask,
-				  value, voffset, args.cache_policy, writeonly_memory);
+				  ac_build_gather_values(&ctx->ac, chans, 4),
+				  voffset, args.cache_policy, writeonly_memory);
 		return;
 	}
 
 	if (target == TGSI_TEXTURE_BUFFER) {
-		LLVMValueRef buf_args[] = {
-			value,
+		unsigned num_channels = util_last_bit(inst->Dst[0].Register.WriteMask);
+		num_channels = util_next_power_of_two(num_channels);
+
+		LLVMValueRef buf_args[6] = {
+			ac_build_gather_values(&ctx->ac, chans, 4),
 			args.resource,
 			vindex,
 			ctx->i32_0, /* voffset */
-			LLVMConstInt(ctx->i1, !!(args.cache_policy & ac_glc), 0),
-			LLVMConstInt(ctx->i1, !!(args.cache_policy & ac_slc), 0),
 		};
 
+		if (HAVE_LLVM >= 0x0800) {
+			buf_args[4] = ctx->i32_0; /* soffset */
+			buf_args[5] = LLVMConstInt(ctx->i1, args.cache_policy, 0);
+		} else {
+			buf_args[4] = LLVMConstInt(ctx->i1, !!(args.cache_policy & ac_glc), 0);
+			buf_args[5] = LLVMConstInt(ctx->i1, !!(args.cache_policy & ac_slc), 0);
+		}
+
+		const char *types[] = { "f32", "v2f32", "v4f32" };
+		char name[128];
+
+		snprintf(name, sizeof(name), "%s.%s",
+			 HAVE_LLVM >= 0x0800 ? "llvm.amdgcn.struct.buffer.store.format" :
+					       "llvm.amdgcn.buffer.store.format",
+			 types[CLAMP(num_channels, 1, 3) - 1]);
+
 		emit_data->output[emit_data->chan] = ac_build_intrinsic(
-			&ctx->ac, "llvm.amdgcn.buffer.store.format.v4f32",
+			&ctx->ac,
+			name,
 			ctx->voidt, buf_args, 6,
 			ac_get_store_intr_attribs(writeonly_memory));
 	} else {
 		args.opcode = ac_image_store;
-		args.data[0] = value;
+		args.data[0] = ac_build_gather_values(&ctx->ac, chans, 4);
 		args.dim = ac_image_dim_from_tgsi_target(ctx->screen, inst->Memory.Texture);
 		args.attributes = ac_get_store_intr_attribs(writeonly_memory);
 		args.dmask = 0xf;
@@ -822,16 +877,42 @@ static void atomic_emit(
 	if (inst->Src[0].Register.File == TGSI_FILE_BUFFER) {
 		args.resource = shader_buffer_fetch_rsrc(ctx, &inst->Src[0], false);
 		voffset = ac_to_integer(&ctx->ac, lp_build_emit_fetch(bld_base, inst, 1, 0));
-	} else if (inst->Src[0].Register.File == TGSI_FILE_IMAGE ||
-		   tgsi_is_bindless_image_file(inst->Src[0].Register.File)) {
+	} else {
 		image_fetch_rsrc(bld_base, &inst->Src[0], true,
 				inst->Memory.Texture, &args.resource);
 		image_fetch_coords(bld_base, inst, 1, args.resource, args.coords);
 		vindex = args.coords[0]; /* for buffers only */
 	}
 
-	if (inst->Src[0].Register.File == TGSI_FILE_BUFFER ||
+	if (HAVE_LLVM >= 0x0800 &&
+	    inst->Src[0].Register.File != TGSI_FILE_BUFFER &&
 	    inst->Memory.Texture == TGSI_TEXTURE_BUFFER) {
+		LLVMValueRef buf_args[7];
+		unsigned num_args = 0;
+
+		buf_args[num_args++] = args.data[0];
+		if (inst->Instruction.Opcode == TGSI_OPCODE_ATOMCAS)
+			buf_args[num_args++] = args.data[1];
+
+		buf_args[num_args++] = args.resource;
+		buf_args[num_args++] = vindex;
+		buf_args[num_args++] = voffset;
+		buf_args[num_args++] = ctx->i32_0; /* soffset */
+		buf_args[num_args++] = LLVMConstInt(ctx->i32, args.cache_policy & ac_slc, 0);
+
+		char intrinsic_name[64];
+		snprintf(intrinsic_name, sizeof(intrinsic_name),
+			 "llvm.amdgcn.struct.buffer.atomic.%s", action->intr_name);
+		emit_data->output[emit_data->chan] =
+			ac_to_float(&ctx->ac,
+				    ac_build_intrinsic(&ctx->ac, intrinsic_name,
+						       ctx->i32, buf_args, num_args, 0));
+		return;
+	}
+
+	if (inst->Src[0].Register.File == TGSI_FILE_BUFFER ||
+	    (HAVE_LLVM < 0x0800 &&
+	     inst->Memory.Texture == TGSI_TEXTURE_BUFFER)) {
 		LLVMValueRef buf_args[7];
 		unsigned num_args = 0;
 

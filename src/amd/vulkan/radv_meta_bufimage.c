@@ -60,8 +60,8 @@ build_nir_itob_compute_shader(struct radv_device *dev, bool is_3d)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -289,8 +289,8 @@ build_nir_btoi_compute_shader(struct radv_device *dev, bool is_3d)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -511,8 +511,8 @@ build_nir_btoi_r32g32b32_compute_shader(struct radv_device *dev)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -719,8 +719,8 @@ build_nir_itoi_compute_shader(struct radv_device *dev, bool is_3d)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -932,8 +932,8 @@ build_nir_itoi_r32g32b32_compute_shader(struct radv_device *dev)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 1;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -1139,8 +1139,8 @@ build_nir_cleari_compute_shader(struct radv_device *dev, bool is_3d)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 0;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -1331,8 +1331,8 @@ build_nir_cleari_r32g32b32_compute_shader(struct radv_device *dev)
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 0;
 
-	nir_ssa_def *invoc_id = nir_load_system_value(&b, nir_intrinsic_load_local_invocation_id, 0);
-	nir_ssa_def *wg_id = nir_load_system_value(&b, nir_intrinsic_load_work_group_id, 0);
+	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
+	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
 	nir_ssa_def *block_size = nir_imm_ivec4(&b,
 						b.shader->info.cs.local_size[0],
 						b.shader->info.cs.local_size[1],
@@ -1593,7 +1593,7 @@ create_buffer_from_image(struct radv_cmd_buffer *cmd_buffer,
 			  }, NULL, buffer);
 
 	radv_BindBufferMemory2(radv_device_to_handle(device), 1,
-			       (VkBindBufferMemoryInfoKHR[]) {
+			       (VkBindBufferMemoryInfo[]) {
 				    {
 					.sType = VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO,
 					.buffer = *buffer,

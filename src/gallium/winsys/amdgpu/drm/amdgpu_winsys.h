@@ -31,22 +31,24 @@
 #include "pipebuffer/pb_cache.h"
 #include "pipebuffer/pb_slab.h"
 #include "gallium/drivers/radeon/radeon_winsys.h"
-#include "addrlib/addrinterface.h"
+#include "addrlib/inc/addrinterface.h"
 #include "util/simple_mtx.h"
 #include "util/u_queue.h"
 #include <amdgpu.h>
 
 struct amdgpu_cs;
 
-#define AMDGPU_SLAB_MIN_SIZE_LOG2   9  /* 512 bytes */
-#define AMDGPU_SLAB_MAX_SIZE_LOG2   16 /* 64 KB */
-#define AMDGPU_SLAB_BO_SIZE_LOG2    17 /* 128 KB */
+#define NUM_SLAB_ALLOCATORS 3
 
 struct amdgpu_winsys {
    struct radeon_winsys base;
    struct pipe_reference reference;
    struct pb_cache bo_cache;
-   struct pb_slabs bo_slabs;
+
+   /* Each slab buffer can only contain suballocations of equal sizes, so we
+    * need to layer the allocators, so that we don't waste too much memory.
+    */
+   struct pb_slabs bo_slabs[NUM_SLAB_ALLOCATORS];
 
    amdgpu_device_handle dev;
 

@@ -657,6 +657,19 @@ nvc0_validate_tsc(struct nvc0_context *nvc0, int s)
 
    nvc0->state.num_samplers[s] = nvc0->num_samplers[s];
 
+   // TXF, in unlinked tsc mode, will always use sampler 0. So we have to
+   // ensure that it remains bound. Its contents don't matter, all samplers we
+   // ever create have the SRGB_CONVERSION bit set, so as long as the first
+   // entry is initialized, we're good to go. This is the only bit that has
+   // any effect on what TXF does.
+   if ((nvc0->samplers_dirty[s] & 1) && !nvc0->samplers[s][0]) {
+      if (n == 0)
+         n = 1;
+      // We're guaranteed that the first command refers to the first slot, so
+      // we're not overwriting a valid entry.
+      commands[0] = (0 << 12) | (0 << 4) | 1;
+   }
+
    if (n) {
       if (unlikely(s == 5))
          BEGIN_NIC0(push, NVC0_CP(BIND_TSC), n);
@@ -726,6 +739,18 @@ void nvc0_validate_samplers(struct nvc0_context *nvc0)
    /* Invalidate all CP samplers because they are aliased. */
    nvc0->samplers_dirty[5] = ~0;
    nvc0->dirty_cp |= NVC0_NEW_CP_SAMPLERS;
+}
+
+void
+nvc0_upload_tsc0(struct nvc0_context *nvc0)
+{
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   u32 data[8] = { G80_TSC_0_SRGB_CONVERSION };
+   nvc0->base.push_data(&nvc0->base, nvc0->screen->txc,
+                        65536 /*+ tsc->id * 32*/,
+                        NV_VRAM_DOMAIN(&nvc0->screen->base), 32, data);
+   BEGIN_NVC0(push, NVC0_3D(TSC_FLUSH), 1);
+   PUSH_DATA (push, 0);
 }
 
 /* Upload the "diagonal" entries for the possible texture sources ($t == $s).

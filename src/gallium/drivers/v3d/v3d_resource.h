@@ -104,6 +104,13 @@ struct v3d_surface {
          */
         uint8_t internal_bpp;
 
+        /**
+         * If the R and B channels should be swapped.  On V3D 3.x, we do it in
+         * the shader and the blend equation.  On V3D 4.1+, we can use the new
+         * TLB load/store flags instead of recompiling.
+         */
+        bool swap_rb;
+
         uint32_t padded_height_of_output_image_in_uif_blocks;
 
         /* If the resource being referenced is separate stencil, then this is
@@ -115,7 +122,8 @@ struct v3d_surface {
 struct v3d_resource {
         struct pipe_resource base;
         struct v3d_bo *bo;
-        struct v3d_resource_slice slices[VC5_MAX_MIP_LEVELS];
+        struct renderonly_scanout *scanout;
+        struct v3d_resource_slice slices[V3D_MAX_MIP_LEVELS];
         uint32_t cube_map_stride;
         uint32_t size;
         int cpp;
@@ -168,6 +176,8 @@ void v3d_resource_screen_init(struct pipe_screen *pscreen);
 void v3d_resource_context_init(struct pipe_context *pctx);
 struct pipe_resource *v3d_resource_create(struct pipe_screen *pscreen,
                                           const struct pipe_resource *tmpl);
+void v3d_update_shadow_texture(struct pipe_context *pctx,
+                               struct pipe_sampler_view *view);
 uint32_t v3d_layer_offset(struct pipe_resource *prsc, uint32_t level,
                           uint32_t layer);
 

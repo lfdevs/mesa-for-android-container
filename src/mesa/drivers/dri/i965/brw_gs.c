@@ -89,15 +89,17 @@ brw_codegen_gs_prog(struct brw_context *brw,
 
    void *mem_ctx = ralloc_context(NULL);
 
+   nir_shader *nir = nir_shader_clone(mem_ctx, gp->program.nir);
+
    assign_gs_binding_table_offsets(devinfo, &gp->program, &prog_data);
 
-   brw_nir_setup_glsl_uniforms(mem_ctx, gp->program.nir, &gp->program,
+   brw_nir_setup_glsl_uniforms(mem_ctx, nir, &gp->program,
                                &prog_data.base.base,
                                compiler->scalar_stage[MESA_SHADER_GEOMETRY]);
-   brw_nir_analyze_ubo_ranges(compiler, gp->program.nir, NULL,
+   brw_nir_analyze_ubo_ranges(compiler, nir, NULL,
                               prog_data.base.base.ubo_ranges);
 
-   uint64_t outputs_written = gp->program.nir->info.outputs_written;
+   uint64_t outputs_written = nir->info.outputs_written;
 
    brw_compute_vue_map(devinfo,
                        &prog_data.base.vue_map, outputs_written,
@@ -115,8 +117,7 @@ brw_codegen_gs_prog(struct brw_context *brw,
    char *error_str;
    const unsigned *program =
       brw_compile_gs(brw->screen->compiler, brw, mem_ctx, key,
-                     &prog_data, gp->program.nir, &gp->program,
-                     st_index, &error_str);
+                     &prog_data, nir, &gp->program, st_index, &error_str);
    if (program == NULL) {
       ralloc_strcat(&gp->program.sh.data->InfoLog, error_str);
       _mesa_problem(NULL, "Failed to compile geometry shader: %s\n", error_str);

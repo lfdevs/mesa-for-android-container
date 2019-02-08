@@ -1798,8 +1798,8 @@ static bool
 texture_format_error_check_gles(struct gl_context *ctx, GLenum format,
                                 GLenum type, GLenum internalFormat, const char *callerName)
 {
-   GLenum err = _mesa_es3_error_check_format_and_type(ctx, format, type,
-                                                      internalFormat);
+   GLenum err = _mesa_gles_error_check_format_and_type(ctx, format, type,
+                                                       internalFormat);
    if (err != GL_NO_ERROR) {
       _mesa_error(ctx, err,
                   "%s(format = %s, type = %s, internalformat = %s)",
@@ -2438,7 +2438,7 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
       bool rb_is_srgb = false;
       bool dst_is_srgb = false;
 
-      if (ctx->Extensions.EXT_framebuffer_sRGB &&
+      if (ctx->Extensions.EXT_sRGB &&
           _mesa_get_format_color_encoding(rb->Format) == GL_SRGB) {
          rb_is_srgb = true;
       }

@@ -1201,12 +1201,14 @@ vec4_visitor::emit_psiz_and_flags(dst_reg reg)
       if (output_reg[VARYING_SLOT_CLIP_DIST0][0].file != BAD_FILE) {
          current_annotation = "Clipping flags";
          dst_reg flags0 = dst_reg(this, glsl_type::uint_type);
-         dst_reg flags1 = dst_reg(this, glsl_type::uint_type);
 
          emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST0][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags0, brw_imm_d(0));
          emit(OR(header1_w, src_reg(header1_w), src_reg(flags0)));
+      }
 
+      if (output_reg[VARYING_SLOT_CLIP_DIST1][0].file != BAD_FILE) {
+         dst_reg flags1 = dst_reg(this, glsl_type::uint_type);
          emit(CMP(dst_null_f(), src_reg(output_reg[VARYING_SLOT_CLIP_DIST1][0]), brw_imm_f(0.0f), BRW_CONDITIONAL_L));
          emit(VS_OPCODE_UNPACK_FLAGS_SIMD4X2, flags1, brw_imm_d(0));
          emit(SHL(flags1, src_reg(flags1), brw_imm_d(4)));
@@ -1335,8 +1337,8 @@ vec4_visitor::emit_urb_slot(dst_reg reg, int varying)
    }
 }
 
-static int
-align_interleaved_urb_mlen(const struct gen_device_info *devinfo, int mlen)
+static unsigned
+align_interleaved_urb_mlen(const struct gen_device_info *devinfo, unsigned mlen)
 {
    if (devinfo->gen >= 6) {
       /* URB data written (does not include the message header reg) must
@@ -1745,8 +1747,6 @@ vec4_visitor::emit_pull_constant_load(bblock_t *block, vec4_instruction *inst,
 
       src = byte_offset(src, 16);
    }
-
-   brw_mark_surface_used(&prog_data->base, index);
 
    if (is_64bit) {
       temp = retype(temp, BRW_REGISTER_TYPE_DF);

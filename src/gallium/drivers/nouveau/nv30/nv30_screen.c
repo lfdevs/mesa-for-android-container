@@ -77,6 +77,8 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
       return 2048;
+   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
+      return 8 * 1024 * 1024;
    /* supported capabilities */
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_POINT_SPRITE:
@@ -241,7 +243,6 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE:
    case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
    case PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS:
-   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
       return 0;
 
    case PIPE_CAP_MAX_GS_INVOCATIONS:
@@ -432,6 +433,12 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
       return false;
 
    if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+      return false;
+
+   /* No way to render to a swizzled 3d texture. We don't necessarily know if
+    * it's swizzled or not here, but we have to assume anyways.
+    */
+   if (target == PIPE_TEXTURE_3D && (bindings & PIPE_BIND_RENDER_TARGET))
       return false;
 
    /* shared is always supported */

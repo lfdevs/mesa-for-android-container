@@ -6005,10 +6005,6 @@ vk_format_eac_r11g11_snorm_block_description = {
 const struct vk_format_description *
 vk_format_description(VkFormat format)
 {
-   if (format > VK_FORMAT_END_RANGE) {
-      return NULL;
-   }
-
    switch (format) {
    case VK_FORMAT_UNDEFINED:
       return &vk_format_undefined_description;

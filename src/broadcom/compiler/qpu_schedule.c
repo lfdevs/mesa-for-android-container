@@ -195,6 +195,9 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
         if (!magic) {
                 add_write_dep(state, &state->last_rf[waddr], n);
         } else if (v3d_qpu_magic_waddr_is_tmu(waddr)) {
+                /* XXX perf: For V3D 4.x, we could reorder TMU writes other
+                 * than the TMUS/TMUD/TMUA to improve scheduling flexibility.
+                 */
                 add_write_dep(state, &state->last_tmu_write, n);
                 switch (waddr) {
                 case V3D_QPU_WADDR_TMUS:
@@ -233,6 +236,16 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                         add_write_dep(state, &state->last_tlb, n);
                         break;
 
+                case V3D_QPU_WADDR_SYNC:
+                case V3D_QPU_WADDR_SYNCB:
+                case V3D_QPU_WADDR_SYNCU:
+                        /* For CS barrier(): Sync against any other memory
+                         * accesses.  There doesn't appear to be any need for
+                         * barriers to affect ALU operations.
+                         */
+                        add_write_dep(state, &state->last_tmu_write, n);
+                        break;
+
                 case V3D_QPU_WADDR_NOP:
                         break;
 
@@ -241,30 +254,6 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                         abort();
                 }
         }
-}
-
-static void
-process_cond_deps(struct schedule_state *state, struct schedule_node *n,
-                  enum v3d_qpu_cond cond)
-{
-        if (cond != V3D_QPU_COND_NONE)
-                add_read_dep(state, state->last_sf, n);
-}
-
-static void
-process_pf_deps(struct schedule_state *state, struct schedule_node *n,
-                enum v3d_qpu_pf pf)
-{
-        if (pf != V3D_QPU_PF_NONE)
-                add_write_dep(state, &state->last_sf, n);
-}
-
-static void
-process_uf_deps(struct schedule_state *state, struct schedule_node *n,
-                enum v3d_qpu_uf uf)
-{
-        if (uf != V3D_QPU_UF_NONE)
-                add_write_dep(state, &state->last_sf, n);
 }
 
 /**
@@ -280,6 +269,11 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
         const struct v3d_device_info *devinfo = state->devinfo;
         struct qinst *qinst = n->inst;
         struct v3d_qpu_instr *inst = &qinst->qpu;
+        /* If the input and output segments are shared, then all VPM reads to
+         * a location need to happen before all writes.  We handle this by
+         * serializing all VPM operations for now.
+         */
+        bool separate_vpm_segment = false;
 
         if (inst->type == V3D_QPU_INSTR_TYPE_BRANCH) {
                 if (inst->branch.cond != V3D_QPU_BRANCH_COND_ALWAYS)
@@ -321,6 +315,14 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
                 add_write_dep(state, &state->last_vpm, n);
                 break;
 
+        case V3D_QPU_A_LDVPMV_IN:
+        case V3D_QPU_A_LDVPMD_IN:
+        case V3D_QPU_A_LDVPMG_IN:
+        case V3D_QPU_A_LDVPMP:
+                if (!separate_vpm_segment)
+                        add_write_dep(state, &state->last_vpm, n);
+                break;
+
         case V3D_QPU_A_VPMWT:
                 add_read_dep(state, state->last_vpm, n);
                 break;
@@ -332,19 +334,6 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
         case V3D_QPU_A_SETMSF:
         case V3D_QPU_A_SETREVF:
                 add_write_dep(state, &state->last_tlb, n);
-                break;
-
-        case V3D_QPU_A_FLAPUSH:
-        case V3D_QPU_A_FLBPUSH:
-        case V3D_QPU_A_VFLA:
-        case V3D_QPU_A_VFLNA:
-        case V3D_QPU_A_VFLB:
-        case V3D_QPU_A_VFLNB:
-                add_read_dep(state, state->last_sf, n);
-                break;
-
-        case V3D_QPU_A_FLPOP:
-                add_write_dep(state, &state->last_sf, n);
                 break;
 
         default:
@@ -415,19 +404,24 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
         if (inst->sig.ldtlb | inst->sig.ldtlbu)
                 add_read_dep(state, state->last_tlb, n);
 
-        if (inst->sig.ldvpm)
+        if (inst->sig.ldvpm) {
                 add_write_dep(state, &state->last_vpm_read, n);
+
+                /* At least for now, we're doing shared I/O segments, so queue
+                 * all writes after all reads.
+                 */
+                if (!separate_vpm_segment)
+                        add_write_dep(state, &state->last_vpm, n);
+        }
 
         /* inst->sig.ldunif or sideband uniform read */
         if (qinst->uniform != ~0)
                 add_write_dep(state, &state->last_unif, n);
 
-        process_cond_deps(state, n, inst->flags.ac);
-        process_cond_deps(state, n, inst->flags.mc);
-        process_pf_deps(state, n, inst->flags.apf);
-        process_pf_deps(state, n, inst->flags.mpf);
-        process_uf_deps(state, n, inst->flags.auf);
-        process_uf_deps(state, n, inst->flags.muf);
+        if (v3d_qpu_reads_flags(inst))
+                add_read_dep(state, state->last_sf, n);
+        if (v3d_qpu_writes_flags(inst))
+                add_write_dep(state, &state->last_sf, n);
 }
 
 static void
@@ -569,6 +563,10 @@ get_instruction_priority(const struct v3d_qpu_instr *inst)
         if (v3d_qpu_waits_on_tmu(inst))
                 return next_score;
         next_score++;
+
+        /* XXX perf: We should schedule SFU ALU ops so that the reader is 2
+         * instructions after the producer if possible, not just 1.
+         */
 
         /* Default score for things that aren't otherwise special. */
         baseline_score = next_score;
@@ -764,6 +762,12 @@ choose_instruction_to_schedule(const struct v3d_device_info *devinfo,
                  * sooner.  If the ldvary's r5 wasn't used, then ldunif might
                  * otherwise get scheduled so ldunif and ldvary try to update
                  * r5 in the same tick.
+                 *
+                 * XXX perf: To get good pipelining of a sequence of varying
+                 * loads, we need to figure out how to pair the ldvary signal
+                 * up to the instruction before the last r5 user in the
+                 * previous ldvary sequence.  Currently, it usually pairs with
+                 * the last r5 user.
                  */
                 if ((inst->sig.ldunif || inst->sig.ldunifa) &&
                     scoreboard->tick == scoreboard->last_ldvary_tick + 1) {

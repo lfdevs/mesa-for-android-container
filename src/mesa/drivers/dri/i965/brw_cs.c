@@ -58,6 +58,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
    struct brw_cs_prog_data prog_data;
    bool start_busy = false;
    double start_time = 0;
+   nir_shader *nir = nir_shader_clone(mem_ctx, cp->program.nir);
 
    memset(&prog_data, 0, sizeof(prog_data));
 
@@ -76,7 +77,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    assign_cs_binding_table_offsets(devinfo, &cp->program, &prog_data);
 
-   brw_nir_setup_glsl_uniforms(mem_ctx, cp->program.nir,
+   brw_nir_setup_glsl_uniforms(mem_ctx, nir,
                                &cp->program, &prog_data.base, true);
 
    if (unlikely(brw->perf_debug)) {
@@ -91,8 +92,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    char *error_str;
    program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx, key,
-                            &prog_data, cp->program.nir, st_index,
-                            &error_str);
+                            &prog_data, nir, st_index, &error_str);
    if (program == NULL) {
       cp->program.sh.data->LinkStatus = LINKING_FAILURE;
       ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);

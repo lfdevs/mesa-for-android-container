@@ -39,6 +39,8 @@
 #include "fd2_program.h"
 #include "fd2_util.h"
 #include "fd2_zsa.h"
+#include "fd2_draw.h"
+#include "instr-a2xx.h"
 
 static uint32_t fmt2swap(enum pipe_format format)
 {
@@ -66,6 +68,13 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swap = fmt2swap(psurf->format);
+	struct fd_resource_slice *slice =
+		fd_resource_slice(rsc, psurf->u.tex.level);
+	uint32_t offset =
+		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
+
+	assert((slice->pitch & 31) == 0);
+	assert((offset & 0xfff) == 0);
 
 	if (!rsc->valid)
 		return;
@@ -79,8 +88,8 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_CONTROL));
 	OUT_RING(ring, 0x00000000);             /* RB_COPY_CONTROL */
-	OUT_RELOCW(ring, rsc->bo, 0, 0, 0);     /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, rsc->slices[0].pitch >> 5); /* RB_COPY_DEST_PITCH */
+	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);     /* RB_COPY_DEST_BASE */
+	OUT_RING(ring, slice->pitch >> 5); /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring,                          /* RB_COPY_DEST_INFO */
 			A2XX_RB_COPY_DEST_INFO_FORMAT(fd2_pipe2color(psurf->format)) |
 			A2XX_RB_COPY_DEST_INFO_LINEAR |
@@ -108,11 +117,12 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
+	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 
 	fd2_emit_vertex_bufs(ring, 0x9c, (struct fd2_vertex_buf[]) {
-			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 48 },
+			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 36 },
 		}, 1);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -123,11 +133,13 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, CP_REG(REG_A2XX_VGT_INDX_OFFSET));
 	OUT_RING(ring, 0);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
-	OUT_RING(ring, 0x0000028f);
+	if (!is_a20x(ctx->screen)) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
+		OUT_RING(ring, 0x0000028f);
+	}
 
-	fd2_program_emit(ring, &ctx->solid_prog);
+	fd2_program_emit(ctx, ring, &ctx->solid_prog);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_AA_MASK));
@@ -149,16 +161,15 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, xy2d(pfb->width, pfb->height));    /* PA_SC_WINDOW_SCISSOR_BR */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
-	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
-			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
-			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
-			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
-			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA);
-
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_CLIP_CNTL));
 	OUT_RING(ring, 0x00000000);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
+	OUT_RING(ring, fui((float) tile->bin_w / 2.0)); /* XSCALE */
+	OUT_RING(ring, fui((float) tile->bin_w / 2.0)); /* XOFFSET */
+	OUT_RING(ring, fui((float) tile->bin_h / 2.0)); /* YSCALE */
+	OUT_RING(ring, fui((float) tile->bin_h / 2.0)); /* YOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
@@ -170,14 +181,20 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 			A2XX_RB_COPY_DEST_OFFSET_Y(tile->yoff));
 
 	if (batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_gmem2mem_surf(batch, tile->bin_w * tile->bin_h, pfb->zsbuf);
+		emit_gmem2mem_surf(batch, gmem->zsbuf_base[0], pfb->zsbuf);
 
 	if (batch->resolve & FD_BUFFER_COLOR)
-		emit_gmem2mem_surf(batch, 0, pfb->cbufs[0]);
+		emit_gmem2mem_surf(batch, gmem->cbuf_base[0], pfb->cbufs[0]);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
 	OUT_RING(ring, A2XX_RB_MODECONTROL_EDRAM_MODE(COLOR_DEPTH));
+
+	if (!is_a20x(ctx->screen)) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
+		OUT_RING(ring, 0x0000003b);
+	}
 }
 
 /* transfer from system memory to gmem */
@@ -188,6 +205,10 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 {
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
+	struct fd_resource_slice *slice =
+		fd_resource_slice(rsc, psurf->u.tex.level);
+	uint32_t offset =
+		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
 	uint32_t swiz;
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -205,17 +226,18 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, A2XX_SQ_TEX_0_CLAMP_X(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Y(SQ_TEX_WRAP) |
 			A2XX_SQ_TEX_0_CLAMP_Z(SQ_TEX_WRAP) |
-			A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch));
-	OUT_RELOC(ring, rsc->bo, 0,
-			fd2_pipe2surface(psurf->format) | 0x800, 0);
+			A2XX_SQ_TEX_0_PITCH(slice->pitch));
+	OUT_RELOC(ring, rsc->bo, offset,
+			fd2_pipe2surface(psurf->format) |
+			A2XX_SQ_TEX_1_CLAMP_POLICY(SQ_TEX_CLAMP_POLICY_OGL), 0);
 	OUT_RING(ring, A2XX_SQ_TEX_2_WIDTH(psurf->width - 1) |
 			A2XX_SQ_TEX_2_HEIGHT(psurf->height - 1));
-	OUT_RING(ring, 0x01000000 | // XXX
+	OUT_RING(ring, A2XX_SQ_TEX_3_MIP_FILTER(SQ_TEX_FILTER_BASEMAP) |
 			swiz |
 			A2XX_SQ_TEX_3_XY_MAG_FILTER(SQ_TEX_FILTER_POINT) |
 			A2XX_SQ_TEX_3_XY_MIN_FILTER(SQ_TEX_FILTER_POINT));
 	OUT_RING(ring, 0x00000000);
-	OUT_RING(ring, 0x00000200);
+	OUT_RING(ring, A2XX_SQ_TEX_5_DIMENSION(SQ_TEX_DIMENSION_2D));
 
 	if (!is_a20x(batch->ctx->screen)) {
 		OUT_PKT3(ring, CP_SET_CONSTANT, 3);
@@ -233,6 +255,7 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
+	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	unsigned bin_w = tile->bin_w;
@@ -240,8 +263,8 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 	float x0, y0, x1, y1;
 
 	fd2_emit_vertex_bufs(ring, 0x9c, (struct fd2_vertex_buf[]) {
-			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 48, .offset = 0x30 },
-			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 32, .offset = 0x60 },
+			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 36 },
+			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 24, .offset = 36 },
 		}, 2);
 
 	/* write texture coordinates to vertexbuf: */
@@ -250,7 +273,7 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 	y0 = ((float)tile->yoff) / ((float)pfb->height);
 	y1 = ((float)tile->yoff + bin_h) / ((float)pfb->height);
 	OUT_PKT3(ring, CP_MEM_WRITE, 9);
-	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 0x60, 0, 0);
+	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 36, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
@@ -264,11 +287,7 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, CP_REG(REG_A2XX_VGT_INDX_OFFSET));
 	OUT_RING(ring, 0);
 
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
-	OUT_RING(ring, 0x0000003b);
-
-	fd2_program_emit(ring, &ctx->blit_prog[0]);
+	fd2_program_emit(ctx, ring, &ctx->blit_prog[0]);
 
 	OUT_PKT0(ring, REG_A2XX_TC_CNTL_STATUS, 1);
 	OUT_RING(ring, A2XX_TC_CNTL_STATUS_L2_INVALIDATE);
@@ -331,12 +350,105 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, 0x00000000);
 
 	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
-		emit_mem2gmem_surf(batch, bin_w * bin_h, pfb->zsbuf);
+		emit_mem2gmem_surf(batch, gmem->zsbuf_base[0], pfb->zsbuf);
 
 	if (fd_gmem_needs_restore(batch, tile, FD_BUFFER_COLOR))
-		emit_mem2gmem_surf(batch, 0, pfb->cbufs[0]);
+		emit_mem2gmem_surf(batch, gmem->cbuf_base[0], pfb->cbufs[0]);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VTE_CNTL));
+	OUT_RING(ring, A2XX_PA_CL_VTE_CNTL_VTX_W0_FMT |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_X_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Y_OFFSET_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_SCALE_ENA |
+			A2XX_PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 
 	/* TODO blob driver seems to toss in a CACHE_FLUSH after each DRAW_INDX.. */
+}
+
+static void
+patch_draws(struct fd_batch *batch, enum pc_di_vis_cull_mode vismode)
+{
+	unsigned i;
+
+	if (!is_a20x(batch->ctx->screen)) {
+		/* identical to a3xx */
+		for (i = 0; i < fd_patch_num_elements(&batch->draw_patches); i++) {
+			struct fd_cs_patch *patch = fd_patch_element(&batch->draw_patches, i);
+			*patch->cs = patch->val | DRAW(0, 0, 0, vismode, 0);
+		}
+		util_dynarray_resize(&batch->draw_patches, 0);
+		return;
+	}
+
+	if (vismode == USE_VISIBILITY)
+		return;
+
+	for (i = 0; i < batch->draw_patches.size / sizeof(uint32_t*); i++) {
+		uint32_t *ptr = *util_dynarray_element(&batch->draw_patches, uint32_t*, i);
+		unsigned cnt = ptr[0] >> 16 & 0xfff; /* 5 with idx buffer, 3 without */
+
+		/* convert CP_DRAW_INDX_BIN to a CP_DRAW_INDX
+		 * replace first two DWORDS with NOP and move the rest down
+		 * (we don't want to have to move the idx buffer reloc)
+		 */
+		ptr[0] = CP_TYPE3_PKT | (CP_NOP << 8);
+		ptr[1] = 0x00000000;
+
+		ptr[4] = ptr[2] & ~(1 << 14 | 1 << 15); /* remove cull_enable bits */
+		ptr[2] = CP_TYPE3_PKT | ((cnt-2) << 16) | (CP_DRAW_INDX << 8);
+		ptr[3] = 0x00000000;
+	}
+}
+
+static void
+fd2_emit_sysmem_prep(struct fd_batch *batch)
+{
+	struct fd_context *ctx = batch->ctx;
+	struct fd_ringbuffer *ring = batch->gmem;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+	struct pipe_surface *psurf = pfb->cbufs[0];
+
+	if (!psurf)
+		return;
+
+	struct fd_resource *rsc = fd_resource(psurf->texture);
+	struct fd_resource_slice *slice =
+		fd_resource_slice(rsc, psurf->u.tex.level);
+	uint32_t offset =
+		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
+
+	assert((slice->pitch & 31) == 0);
+	assert((offset & 0xfff) == 0);
+
+	fd2_emit_restore(ctx, ring);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));
+	OUT_RING(ring, A2XX_RB_SURFACE_INFO_SURFACE_PITCH(slice->pitch));
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));
+	OUT_RELOCW(ring, rsc->bo, offset, A2XX_RB_COLOR_INFO_LINEAR |
+		A2XX_RB_COLOR_INFO_SWAP(fmt2swap(psurf->format)) |
+		A2XX_RB_COLOR_INFO_FORMAT(fd2_pipe2color(psurf->format)), 0);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 3);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_SCREEN_SCISSOR_TL));
+	OUT_RING(ring, A2XX_PA_SC_SCREEN_SCISSOR_TL_WINDOW_OFFSET_DISABLE);
+	OUT_RING(ring, A2XX_PA_SC_SCREEN_SCISSOR_BR_X(pfb->width) |
+		A2XX_PA_SC_SCREEN_SCISSOR_BR_Y(pfb->height));
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_OFFSET));
+	OUT_RING(ring, A2XX_PA_SC_WINDOW_OFFSET_X(0) |
+			A2XX_PA_SC_WINDOW_OFFSET_Y(0));
+
+	patch_draws(batch, IGNORE_VISIBILITY);
+	util_dynarray_resize(&batch->draw_patches, 0);
+	util_dynarray_resize(&batch->shader_patches, 0);
 }
 
 /* before first tile */
@@ -357,10 +469,168 @@ fd2_emit_tile_init(struct fd_batch *batch)
 	OUT_RING(ring, gmem->bin_w);                 /* RB_SURFACE_INFO */
 	OUT_RING(ring, A2XX_RB_COLOR_INFO_SWAP(fmt2swap(format)) |
 			A2XX_RB_COLOR_INFO_FORMAT(fd2_pipe2color(format)));
-	reg = A2XX_RB_DEPTH_INFO_DEPTH_BASE(align(gmem->bin_w * gmem->bin_h, 4));
+	reg = A2XX_RB_DEPTH_INFO_DEPTH_BASE(gmem->zsbuf_base[0]);
 	if (pfb->zsbuf)
 		reg |= A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(fd_pipe2depth(pfb->zsbuf->format));
 	OUT_RING(ring, reg);                         /* RB_DEPTH_INFO */
+
+	/* fast clear patches */
+	int depth_size = -1;
+	int color_size = -1;
+
+	if (pfb->cbufs[0])
+		color_size = util_format_get_blocksizebits(format) == 32 ? 4 : 2;
+
+	if (pfb->zsbuf)
+		depth_size = fd_pipe2depth(pfb->zsbuf->format) == 1 ? 4 : 2;
+
+	for (int i = 0; i < fd_patch_num_elements(&batch->gmem_patches); i++) {
+		struct fd_cs_patch *patch = fd_patch_element(&batch->gmem_patches, i);
+		uint32_t color_base = 0, depth_base = gmem->zsbuf_base[0];
+		uint32_t size, lines;
+
+		/* note: 1 "line" is 512 bytes in both color/depth areas (1K total) */
+		switch (patch->val) {
+		case GMEM_PATCH_FASTCLEAR_COLOR:
+			size = align(gmem->bin_w * gmem->bin_h * color_size, 0x4000);
+			lines = size / 1024;
+			depth_base = size / 2;
+			break;
+		case GMEM_PATCH_FASTCLEAR_DEPTH:
+			size = align(gmem->bin_w * gmem->bin_h * depth_size, 0x4000);
+			lines = size / 1024;
+			color_base = depth_base;
+			depth_base = depth_base + size / 2;
+			break;
+		case GMEM_PATCH_FASTCLEAR_COLOR_DEPTH:
+			lines = align(gmem->bin_w * gmem->bin_h * color_size * 2, 0x4000) / 1024;
+			break;
+		case GMEM_PATCH_RESTORE_INFO:
+			patch->cs[0] = gmem->bin_w;
+			patch->cs[1] = A2XX_RB_COLOR_INFO_SWAP(fmt2swap(format)) |
+					A2XX_RB_COLOR_INFO_FORMAT(fd2_pipe2color(format));
+			patch->cs[2] = A2XX_RB_DEPTH_INFO_DEPTH_BASE(gmem->zsbuf_base[0]);
+			if (pfb->zsbuf)
+				patch->cs[2] |= A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(fd_pipe2depth(pfb->zsbuf->format));
+			continue;
+		default:
+			continue;
+		}
+
+		patch->cs[0] = A2XX_PA_SC_SCREEN_SCISSOR_BR_X(32) |
+			A2XX_PA_SC_SCREEN_SCISSOR_BR_Y(lines);
+		patch->cs[4] = A2XX_RB_COLOR_INFO_BASE(color_base) |
+			A2XX_RB_COLOR_INFO_FORMAT(COLORX_8_8_8_8);
+		patch->cs[5] = A2XX_RB_DEPTH_INFO_DEPTH_BASE(depth_base) |
+			A2XX_RB_DEPTH_INFO_DEPTH_FORMAT(1);
+	}
+	util_dynarray_resize(&batch->gmem_patches, 0);
+
+	/* set to zero, for some reason hardware doesn't like certain values */
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MIN));
+	OUT_RING(ring, 0);
+
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MAX));
+	OUT_RING(ring, 0);
+
+	if (is_a20x(ctx->screen) && fd_binning_enabled && gmem->num_vsc_pipes) {
+		/* patch out unneeded memory exports by changing EXEC CF to EXEC_END
+		 *
+		 * in the shader compiler, we guarantee that the shader ends with
+		 * a specific pattern of ALLOC/EXEC CF pairs for the hw binning exports
+		 *
+		 * the since patches point only to dwords and CFs are 1.5 dwords
+		 * the patch is aligned and might point to a ALLOC CF
+		 */
+		for (int i = 0; i < batch->shader_patches.size / sizeof(void*); i++) {
+			instr_cf_t *cf =
+				*util_dynarray_element(&batch->shader_patches, instr_cf_t*, i);
+			if (cf->opc == ALLOC)
+				cf++;
+			assert(cf->opc == EXEC);
+			assert(cf[ctx->screen->num_vsc_pipes*2-2].opc == EXEC_END);
+			cf[2*(gmem->num_vsc_pipes-1)].opc = EXEC_END;
+		}
+
+		patch_draws(batch, USE_VISIBILITY);
+
+		/* initialize shader constants for the binning memexport */
+		OUT_PKT3(ring, CP_SET_CONSTANT, 1 + gmem->num_vsc_pipes * 4);
+		OUT_RING(ring, 0x0000000C);
+
+		for (int i = 0; i < gmem->num_vsc_pipes; i++) {
+			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+
+			/* XXX we know how large this needs to be..
+			 * should do some sort of realloc
+			 * it should be ctx->batch->num_vertices bytes large
+			 * with this size it will break with more than 256k vertices..
+			 */
+			if (!pipe->bo) {
+				pipe->bo = fd_bo_new(ctx->dev, 0x40000,
+						DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_pipe[%u]", i);
+			}
+
+			/* memory export address (export32):
+			 * .x: (base_address >> 2) | 0x40000000 (?)
+			 * .y: index (float) - set by shader
+			 * .z: 0x4B00D000 (?)
+			 * .w: 0x4B000000 (?) | max_index (?)
+			*/
+			OUT_RELOCW(ring, pipe->bo, 0, 0x40000000, -2);
+			OUT_RING(ring, 0x00000000);
+			OUT_RING(ring, 0x4B00D000);
+			OUT_RING(ring, 0x4B000000 | 0x40000);
+		}
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 1 + gmem->num_vsc_pipes * 8);
+		OUT_RING(ring, 0x0000018C);
+
+		for (int i = 0; i < gmem->num_vsc_pipes; i++) {
+			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+			float off_x, off_y, mul_x, mul_y;
+
+			/* const to tranform from [-1,1] to bin coordinates for this pipe
+			 * for x/y, [0,256/2040] = 0, [256/2040,512/2040] = 1, etc
+			 * 8 possible values on x/y axis,
+			 * to clip at binning stage: only use center 6x6
+			 * TODO: set the z parameters too so that hw binning
+			 * can clip primitives in Z too
+			 */
+
+			mul_x = 1.0f / (float) (gmem->bin_w * 8);
+			mul_y = 1.0f / (float) (gmem->bin_h * 8);
+			off_x = -pipe->x * (1.0/8.0f) + 0.125f - mul_x * gmem->minx;
+			off_y = -pipe->y * (1.0/8.0f) + 0.125f - mul_y * gmem->miny;
+
+			OUT_RING(ring, fui(off_x * (256.0f/255.0f)));
+			OUT_RING(ring, fui(off_y * (256.0f/255.0f)));
+			OUT_RING(ring, 0x3f000000);
+			OUT_RING(ring, fui(0.0f));
+
+			OUT_RING(ring, fui(mul_x * (256.0f/255.0f)));
+			OUT_RING(ring, fui(mul_y * (256.0f/255.0f)));
+			OUT_RING(ring, fui(0.0f));
+			OUT_RING(ring, fui(0.0f));
+		}
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
+		OUT_RING(ring, 0);
+
+		ctx->emit_ib(ring, batch->binning);
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
+		OUT_RING(ring, 0x00000002);
+	} else {
+		patch_draws(batch, IGNORE_VISIBILITY);
+	}
+
+	util_dynarray_resize(&batch->draw_patches, 0);
+	util_dynarray_resize(&batch->shader_patches, 0);
 }
 
 /* before mem2gmem */
@@ -389,6 +659,8 @@ fd2_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 static void
 fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 {
+	struct fd_context *ctx = batch->ctx;
+	struct fd2_context *fd2_ctx = fd2_context(ctx);
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
@@ -405,6 +677,38 @@ fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_WINDOW_OFFSET));
 	OUT_RING(ring, A2XX_PA_SC_WINDOW_OFFSET_X(-tile->xoff) |
 			A2XX_PA_SC_WINDOW_OFFSET_Y(-tile->yoff));
+
+	/* write SCISSOR_BR to memory so fast clear path can restore from it */
+	OUT_PKT3(ring, CP_MEM_WRITE, 2);
+	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 60, 0, 0);
+	OUT_RING(ring, A2XX_PA_SC_SCREEN_SCISSOR_BR_X(tile->bin_w) |
+			A2XX_PA_SC_SCREEN_SCISSOR_BR_Y(tile->bin_h));
+
+	/* tile offset for gl_FragCoord on a20x (C64 in fragment shader) */
+	if (is_a20x(ctx->screen)) {
+		OUT_PKT3(ring, CP_SET_CONSTANT, 5);
+		OUT_RING(ring, 0x00000580);
+		OUT_RING(ring, fui(tile->xoff));
+		OUT_RING(ring, fui(tile->yoff));
+		OUT_RING(ring, fui(0.0f));
+		OUT_RING(ring, fui(0.0f));
+	}
+
+	if (is_a20x(ctx->screen) && fd_binning_enabled) {
+		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MIN));
+		OUT_RING(ring, tile->n);
+
+		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+		OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MAX));
+		OUT_RING(ring, tile->n);
+
+		/* TODO only emit this when tile->p changes */
+		OUT_PKT3(ring, CP_SET_DRAW_INIT_FLAGS, 1);
+		OUT_RELOC(ring, pipe->bo, 0, 0, 0);
+	}
 }
 
 void
@@ -412,6 +716,7 @@ fd2_gmem_init(struct pipe_context *pctx)
 {
 	struct fd_context *ctx = fd_context(pctx);
 
+	ctx->emit_sysmem_prep = fd2_emit_sysmem_prep;
 	ctx->emit_tile_init = fd2_emit_tile_init;
 	ctx->emit_tile_prep = fd2_emit_tile_prep;
 	ctx->emit_tile_mem2gmem = fd2_emit_tile_mem2gmem;

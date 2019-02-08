@@ -138,6 +138,9 @@ typedef int GLclampx;
 #define GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI                   0x8837
 #endif
 
+#ifndef GL_EXT_texture_sRGB_R8
+#define GL_SR8_EXT                                              0x8FBD
+#endif
 
 /**
  * Internal token to represent a GLSL shader program (a collection of
@@ -148,6 +151,9 @@ typedef int GLclampx;
  */
 #define GL_SHADER_PROGRAM_MESA                                  0x9999
 
+#ifndef GL_EXT_multisampled_render_to_texture
+#define GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT 0x8D6C
+#endif
 
 #ifdef __cplusplus
 }

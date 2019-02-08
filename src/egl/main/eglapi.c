@@ -90,6 +90,8 @@
 #include "c11/threads.h"
 #include "util/macros.h"
 
+#include "eglapi.h"
+#include "egldefines.h"
 #include "eglglobals.h"
 #include "eglcontext.h"
 #include "egldisplay.h"
@@ -526,6 +528,7 @@ _eglCreateExtensionsString(_EGLDisplay *dpy)
       _eglAppendExtension(&exts, "EGL_MESA_configless_context");
    _EGL_CHECK_EXTENSION(MESA_drm_image);
    _EGL_CHECK_EXTENSION(MESA_image_dma_buf_export);
+   _EGL_CHECK_EXTENSION(MESA_query_driver);
 
    _EGL_CHECK_EXTENSION(NOK_swap_region);
    _EGL_CHECK_EXTENSION(NOK_texture_from_pixmap);
@@ -2645,6 +2648,38 @@ eglQueryDisplayAttribEXT(EGLDisplay dpy,
       RETURN_EGL_ERROR(disp, EGL_BAD_ATTRIBUTE, EGL_FALSE);
    }
    RETURN_EGL_SUCCESS(disp, EGL_TRUE);
+}
+
+static char * EGLAPIENTRY
+eglGetDisplayDriverConfig(EGLDisplay dpy)
+{
+    _EGLDisplay *disp = _eglLockDisplay(dpy);
+    _EGLDriver *drv;
+    char *ret;
+
+    _EGL_FUNC_START(disp, EGL_NONE, NULL, NULL);
+    _EGL_CHECK_DISPLAY(disp, NULL, drv);
+
+    assert(disp->Extensions.MESA_query_driver);
+
+    ret = drv->API.QueryDriverConfig(disp);
+    RETURN_EGL_EVAL(disp, ret);
+}
+
+static const char * EGLAPIENTRY
+eglGetDisplayDriverName(EGLDisplay dpy)
+{
+    _EGLDisplay *disp = _eglLockDisplay(dpy);
+    _EGLDriver *drv;
+    const char *ret;
+
+    _EGL_FUNC_START(disp, EGL_NONE, NULL, NULL);
+    _EGL_CHECK_DISPLAY(disp, NULL, drv);
+
+    assert(disp->Extensions.MESA_query_driver);
+
+    ret = drv->API.QueryDriverName(disp);
+    RETURN_EGL_EVAL(disp, ret);
 }
 
 __eglMustCastToProperFunctionPointerType EGLAPIENTRY

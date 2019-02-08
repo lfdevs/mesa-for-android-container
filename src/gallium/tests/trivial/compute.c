@@ -240,7 +240,7 @@ static void check_tex(struct context *ctx, int slot,
                   util_format_get_nblocksy(tex->format, tex->height0));
         struct pipe_transfer *xfer;
         char *map;
-        int x, y, i;
+        int x = 0, y, i;
         int err = 0;
 
         if (!check)

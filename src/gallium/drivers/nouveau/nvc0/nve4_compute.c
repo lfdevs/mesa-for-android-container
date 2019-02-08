@@ -696,6 +696,7 @@ void
 nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
+   struct nvc0_screen *screen = nvc0->screen;
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    void *desc;
    uint64_t desc_gpuaddr;
@@ -769,6 +770,8 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    }
 
    /* upload descriptor and flush */
+   nouveau_pushbuf_space(push, 32, 1, 0);
+   PUSH_REFN(push, screen->text, NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD);
    BEGIN_NVC0(push, NVE4_CP(LAUNCH_DESC_ADDRESS), 1);
    PUSH_DATA (push, desc_gpuaddr >> 8);
    BEGIN_NVC0(push, NVE4_CP(LAUNCH), 1);

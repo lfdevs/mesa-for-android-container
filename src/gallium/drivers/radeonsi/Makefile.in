@@ -160,13 +160,12 @@ am__objects_2 = $(am__objects_1) cik_sdma.lo si_blit.lo si_buffer.lo \
 	si_state_binning.lo si_state_draw.lo si_state_msaa.lo \
 	si_state_shaders.lo si_state_streamout.lo si_state_viewport.lo \
 	si_test_dma.lo si_test_dma_perf.lo si_texture.lo si_uvd.lo \
-	../radeon/r600_perfcounter.lo ../radeon/radeon_uvd.lo \
-	../radeon/radeon_vcn_dec_jpeg.lo ../radeon/radeon_vcn_dec.lo \
-	../radeon/radeon_vcn_enc_1_2.lo ../radeon/radeon_vcn_enc.lo \
-	../radeon/radeon_uvd_enc_1_1.lo ../radeon/radeon_uvd_enc.lo \
-	../radeon/radeon_vce_40_2_2.lo ../radeon/radeon_vce_50.lo \
-	../radeon/radeon_vce_52.lo ../radeon/radeon_vce.lo \
-	../radeon/radeon_video.lo
+	../radeon/radeon_uvd.lo ../radeon/radeon_vcn_dec_jpeg.lo \
+	../radeon/radeon_vcn_dec.lo ../radeon/radeon_vcn_enc_1_2.lo \
+	../radeon/radeon_vcn_enc.lo ../radeon/radeon_uvd_enc_1_1.lo \
+	../radeon/radeon_uvd_enc.lo ../radeon/radeon_vce_40_2_2.lo \
+	../radeon/radeon_vce_50.lo ../radeon/radeon_vce_52.lo \
+	../radeon/radeon_vce.lo ../radeon/radeon_video.lo
 am_libradeonsi_la_OBJECTS = $(am__objects_2)
 libradeonsi_la_OBJECTS = $(am_libradeonsi_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -192,8 +191,7 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@
 depcomp = $(SHELL) $(top_srcdir)/bin/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ../radeon/$(DEPDIR)/r600_perfcounter.Plo \
-	../radeon/$(DEPDIR)/radeon_uvd.Plo \
+am__depfiles_remade = ../radeon/$(DEPDIR)/radeon_uvd.Plo \
 	../radeon/$(DEPDIR)/radeon_uvd_enc.Plo \
 	../radeon/$(DEPDIR)/radeon_uvd_enc_1_1.Plo \
 	../radeon/$(DEPDIR)/radeon_vce.Plo \
@@ -646,7 +644,6 @@ C_SOURCES := \
 	si_test_dma_perf.c \
 	si_texture.c \
 	si_uvd.c \
-	../radeon/r600_perfcounter.c \
 	../radeon/radeon_uvd.c \
 	../radeon/radeon_uvd.h \
 	../radeon/radeon_vcn_dec_jpeg.c \
@@ -811,8 +808,6 @@ clean-noinstLTLIBRARIES:
 ../radeon/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) ../radeon/$(DEPDIR)
 	@: > ../radeon/$(DEPDIR)/$(am__dirstamp)
-../radeon/r600_perfcounter.lo: ../radeon/$(am__dirstamp) \
-	../radeon/$(DEPDIR)/$(am__dirstamp)
 ../radeon/radeon_uvd.lo: ../radeon/$(am__dirstamp) \
 	../radeon/$(DEPDIR)/$(am__dirstamp)
 ../radeon/radeon_vcn_dec_jpeg.lo: ../radeon/$(am__dirstamp) \
@@ -849,7 +844,6 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/r600_perfcounter.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd_enc.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@../radeon/$(DEPDIR)/radeon_uvd_enc_1_1.Plo@am__quote@ # am--include-marker
@@ -1067,8 +1061,7 @@ clean-am: clean-generic clean-libtool clean-noinstLTLIBRARIES \
 	mostlyclean-am
 
 distclean: distclean-am
-		-rm -f ../radeon/$(DEPDIR)/r600_perfcounter.Plo
-	-rm -f ../radeon/$(DEPDIR)/radeon_uvd.Plo
+		-rm -f ../radeon/$(DEPDIR)/radeon_uvd.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_uvd_enc.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_uvd_enc_1_1.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce.Plo
@@ -1161,8 +1154,7 @@ install-ps-am:
 installcheck-am:
 
 maintainer-clean: maintainer-clean-am
-		-rm -f ../radeon/$(DEPDIR)/r600_perfcounter.Plo
-	-rm -f ../radeon/$(DEPDIR)/radeon_uvd.Plo
+		-rm -f ../radeon/$(DEPDIR)/radeon_uvd.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_uvd_enc.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_uvd_enc_1_1.Plo
 	-rm -f ../radeon/$(DEPDIR)/radeon_vce.Plo

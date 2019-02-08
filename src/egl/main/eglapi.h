@@ -31,6 +31,7 @@
 #ifndef EGLAPI_INCLUDED
 #define EGLAPI_INCLUDED
 
+#include "egltypedefs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,6 +55,8 @@ struct _egl_api
    /* driver funcs */
    EGLBoolean (*Initialize)(_EGLDriver *, _EGLDisplay *dpy);
    EGLBoolean (*Terminate)(_EGLDriver *, _EGLDisplay *dpy);
+   const char *(*QueryDriverName)(_EGLDisplay *dpy);
+   char *(*QueryDriverConfig)(_EGLDisplay *dpy);
 
    /* config funcs */
    EGLBoolean (*GetConfigs)(_EGLDriver *drv, _EGLDisplay *dpy,

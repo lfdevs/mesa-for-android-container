@@ -93,7 +93,7 @@ void si_clear_saved_cs(struct radeon_saved_cs *saved)
 void si_destroy_saved_cs(struct si_saved_cs *scs)
 {
 	si_clear_saved_cs(&scs->gfx);
-	r600_resource_reference(&scs->trace_buf, NULL);
+	si_resource_reference(&scs->trace_buf, NULL);
 	free(scs);
 }
 
@@ -612,7 +612,7 @@ struct si_log_chunk_desc_list {
 	uint32_t *gpu_list;
 	/** Reference of buffer where the list is uploaded, so that gpu_list
 	 * is kept live. */
-	struct r600_resource *buf;
+	struct si_resource *buf;
 
 	const char *shader_name;
 	const char *elem_name;
@@ -628,7 +628,7 @@ static void
 si_log_chunk_desc_list_destroy(void *data)
 {
 	struct si_log_chunk_desc_list *chunk = data;
-	r600_resource_reference(&chunk->buf, NULL);
+	si_resource_reference(&chunk->buf, NULL);
 	FREE(chunk);
 }
 
@@ -747,7 +747,7 @@ static void si_dump_descriptor_list(struct si_screen *screen,
 	chunk->slot_remap = slot_remap;
 	chunk->chip_class = screen->info.chip_class;
 
-	r600_resource_reference(&chunk->buf, desc->buffer);
+	si_resource_reference(&chunk->buf, desc->buffer);
 	chunk->gpu_list = desc->gpu_list;
 
 	for (unsigned i = 0; i < num_elements; ++i) {
@@ -1052,23 +1052,30 @@ static void si_dump_debug_state(struct pipe_context *ctx, FILE *f,
 
 void si_log_draw_state(struct si_context *sctx, struct u_log_context *log)
 {
+	struct si_shader_ctx_state *tcs_shader;
+
 	if (!log)
 		return;
+
+	tcs_shader = &sctx->tcs_shader;
+	if (sctx->tes_shader.cso && !sctx->tcs_shader.cso)
+		tcs_shader = &sctx->fixed_func_tcs_shader;
 
 	si_dump_framebuffer(sctx, log);
 
 	si_dump_gfx_shader(sctx, &sctx->vs_shader, log);
-	si_dump_gfx_shader(sctx, &sctx->tcs_shader, log);
+	si_dump_gfx_shader(sctx, tcs_shader, log);
 	si_dump_gfx_shader(sctx, &sctx->tes_shader, log);
 	si_dump_gfx_shader(sctx, &sctx->gs_shader, log);
 	si_dump_gfx_shader(sctx, &sctx->ps_shader, log);
 
 	si_dump_descriptor_list(sctx->screen,
 				&sctx->descriptors[SI_DESCS_RW_BUFFERS],
-				"", "RW buffers", 4, SI_NUM_RW_BUFFERS,
+				"", "RW buffers", 4,
+				sctx->descriptors[SI_DESCS_RW_BUFFERS].num_active_slots,
 				si_identity, log);
 	si_dump_gfx_descriptors(sctx, &sctx->vs_shader, log);
-	si_dump_gfx_descriptors(sctx, &sctx->tcs_shader, log);
+	si_dump_gfx_descriptors(sctx, tcs_shader, log);
 	si_dump_gfx_descriptors(sctx, &sctx->tes_shader, log);
 	si_dump_gfx_descriptors(sctx, &sctx->gs_shader, log);
 	si_dump_gfx_descriptors(sctx, &sctx->ps_shader, log);

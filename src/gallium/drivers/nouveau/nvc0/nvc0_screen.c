@@ -154,6 +154,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1 << 27;
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
       return 2048;
+   case PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET:
+      return 2047;
    case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
       return 256;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
@@ -178,6 +180,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return NVC0_MAX_WINDOW_RECTANGLES;
    case PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS:
       return class_3d >= GM200_3D_CLASS ? 8 : 0;
+   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
+      return 64 * 1024 * 1024;
 
    /* supported caps */
    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -271,6 +275,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_BALLOT:
    case PIPE_CAP_BINDLESS_TEXTURE:
       return class_3d >= NVE4_3D_CLASS;
+   case PIPE_CAP_TGSI_ATOMFADD:
+      return class_3d < GM107_3D_CLASS; /* needs additional lowering */
    case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
    case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
    case PIPE_CAP_TGSI_TES_LAYER_VIEWPORT:
@@ -324,10 +330,12 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CONSTBUF0_FLAGS:
    case PIPE_CAP_PACKED_UNIFORMS:
    case PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES:
-   case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
    case PIPE_CAP_MAX_COMBINED_SHADER_BUFFERS:
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTERS:
    case PIPE_CAP_MAX_COMBINED_HW_ATOMIC_COUNTER_BUFFERS:
+   case PIPE_CAP_SURFACE_SAMPLE_COUNT:
+   case PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE:
+   case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -625,7 +633,6 @@ nvc0_screen_destroy(struct pipe_screen *pscreen)
    nouveau_heap_destroy(&screen->lib_code);
    nouveau_heap_destroy(&screen->text_heap);
 
-   FREE(screen->default_tsc);
    FREE(screen->tic.entries);
 
    nouveau_object_del(&screen->eng3d);
@@ -1383,9 +1390,6 @@ nvc0_screen_create(struct nouveau_device *dev)
 
    if (!nvc0_blitter_create(screen))
       goto fail;
-
-   screen->default_tsc = CALLOC_STRUCT(nv50_tsc_entry);
-   screen->default_tsc->tsc[0] = G80_TSC_0_SRGB_CONVERSION;
 
    nouveau_fence_new(&screen->base, &screen->base.fence.current);
 

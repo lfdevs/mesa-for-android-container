@@ -287,7 +287,7 @@ nv30_sampler_view_create(struct pipe_context *pipe, struct pipe_resource *pt,
    so->npot_size0 = (pt->width0 << 16) | pt->height0;
    if (eng3d->oclass >= NV40_3D_CLASS) {
       so->npot_size1 = (pt->depth0 << 20) | mt->uniform_pitch;
-      if (!mt->swizzled)
+      if (mt->uniform_pitch)
          so->fmt |= NV40_3D_TEX_FORMAT_LINEAR;
       so->fmt |= 0x00008000;
       so->fmt |= (pt->last_level + 1) << NV40_3D_TEX_FORMAT_MIPMAP_COUNT__SHIFT;

@@ -112,12 +112,6 @@ blend_for_op(struct xa_composite_blend *blend,
     boolean supported = FALSE;
 
     /*
-     * Temporarily disable component alpha since it appears buggy.
-     */
-    if (mask_pic && mask_pic->component_alpha)
-	return FALSE;
-
-    /*
      * our default in case something goes wrong
      */
     *blend = xa_blends[XA_BLEND_OP_OVER];
@@ -126,8 +120,15 @@ blend_for_op(struct xa_composite_blend *blend,
 	if (xa_blends[i].op == op) {
 	    *blend = xa_blends[i];
 	    supported = TRUE;
+            break;
 	}
     }
+
+    /*
+     * No component alpha yet.
+     */
+    if (mask_pic && mask_pic->component_alpha && blend->alpha_src)
+	return FALSE;
 
     if (!dst_pic->srf)
 	return supported;
@@ -148,21 +149,6 @@ blend_for_op(struct xa_composite_blend *blend,
 	    blend->rgb_src = PIPE_BLENDFACTOR_ONE;
 	else if (blend->rgb_src == PIPE_BLENDFACTOR_INV_DST_ALPHA)
 	    blend->rgb_src = PIPE_BLENDFACTOR_ZERO;
-    }
-
-    /*
-     * If the source alpha is being used, then we should only be in a case where
-     * the source blend factor is 0, and the source blend value is the mask
-     * channels multiplied by the source picture's alpha.
-     */
-    if (mask_pic && mask_pic->component_alpha &&
-	xa_format_rgb(mask_pic->pict_format) &&
-	blend->alpha_src) {
-	if (blend->rgb_dst == PIPE_BLENDFACTOR_SRC_ALPHA) {
-	    blend->rgb_dst = PIPE_BLENDFACTOR_SRC_COLOR;
-	} else if (blend->rgb_dst == PIPE_BLENDFACTOR_INV_SRC_ALPHA) {
-	    blend->rgb_dst = PIPE_BLENDFACTOR_INV_SRC_COLOR;
-	}
     }
 
     return supported;
@@ -214,43 +200,53 @@ xa_is_filter_accelerated(struct xa_picture *pic)
     return 1;
 }
 
+/**
+ * xa_src_pict_is_accelerated - Check whether we support acceleration
+ * of the given src_pict type
+ *
+ * \param src_pic[in]: Pointer to a union xa_source_pict to check.
+ *
+ * \returns TRUE if accelerated, FALSE otherwise.
+ */
+static boolean
+xa_src_pict_is_accelerated(const union xa_source_pict *src_pic)
+{
+    if (!src_pic)
+        return TRUE;
+
+    if (src_pic->type == xa_src_pict_solid_fill ||
+        src_pic->type == xa_src_pict_float_solid_fill)
+        return TRUE;
+
+    return FALSE;
+}
+
 XA_EXPORT int
 xa_composite_check_accelerated(const struct xa_composite *comp)
 {
-    struct xa_composite_blend blend;
     struct xa_picture *src_pic = comp->src;
+    struct xa_picture *mask_pic = comp->mask;
+    struct xa_composite_blend blend;
 
     if (!xa_is_filter_accelerated(src_pic) ||
 	!xa_is_filter_accelerated(comp->mask)) {
 	return -XA_ERR_INVAL;
     }
 
+    if (!xa_src_pict_is_accelerated(src_pic->src_pict) ||
+        (mask_pic && !xa_src_pict_is_accelerated(mask_pic->src_pict)))
+        return -XA_ERR_INVAL;
 
-    if (src_pic->src_pict) {
-	if (src_pic->src_pict->type != xa_src_pict_solid_fill)
-	    return -XA_ERR_INVAL;
+    if (!blend_for_op(&blend, comp->op, comp->src, comp->mask, comp->dst))
+	return -XA_ERR_INVAL;
 
-	/*
-	 * Currently we don't support solid fill with a mask.
-	 * We can easily do that, but that would require shader,
-	 * sampler view setup and vertex setup modification.
-	 */
-	if (comp->mask)
-	    return -XA_ERR_INVAL;
-    }
+    /*
+     * No component alpha yet.
+     */
+    if (mask_pic && mask_pic->component_alpha && blend.alpha_src)
+	return -XA_ERR_INVAL;
 
-    if (blend_for_op(&blend, comp->op, comp->src, comp->mask, comp->dst)) {
-	struct xa_picture *mask = comp->mask;
-	if (mask && mask->component_alpha &&
-	    xa_format_rgb(mask->pict_format)) {
-	    if (blend.alpha_src && blend.rgb_src != PIPE_BLENDFACTOR_ZERO) {
-		return -XA_ERR_INVAL;
-	    }
-	}
-
-	return XA_ERR_NONE;
-    }
-    return -XA_ERR_INVAL;
+    return XA_ERR_NONE;
 }
 
 static int
@@ -293,7 +289,7 @@ picture_format_fixups(struct xa_picture *src_pic,
     src_hw_format = xa_surface_format(src);
     src_pic_format = src_pic->pict_format;
 
-    set_alpha = (xa_format_type_is_color(src_pic_format) &&
+    set_alpha = (xa_format_type_is_color(src_hw_format) &&
 		 xa_format_a(src_pic_format) == 0);
 
     if (set_alpha)
@@ -324,6 +320,61 @@ picture_format_fixups(struct xa_picture *src_pic,
     return ret;
 }
 
+static void
+xa_src_in_mask(float src[4], const float mask[4])
+{
+	src[0] *= mask[3];
+	src[1] *= mask[3];
+	src[2] *= mask[3];
+	src[3] *= mask[3];
+}
+
+/**
+ * xa_handle_src_pict - Set up xa_context state and fragment shader
+ * input based on scr_pict type
+ *
+ * \param ctx[in, out]: Pointer to the xa context.
+ * \param src_pict[in]: Pointer to the union xa_source_pict to consider.
+ * \param is_mask[in]: Whether we're considering a mask picture.
+ *
+ * \returns TRUE if succesful, FALSE otherwise.
+ *
+ * This function computes some xa_context state used to determine whether
+ * to upload the solid color and also the solid color itself used as an input
+ * to the fragment shader.
+ */
+static boolean
+xa_handle_src_pict(struct xa_context *ctx,
+                   const union xa_source_pict *src_pict,
+                   boolean is_mask)
+{
+    float solid_color[4];
+
+    switch(src_pict->type) {
+    case xa_src_pict_solid_fill:
+        xa_pixel_to_float4(src_pict->solid_fill.color, solid_color);
+        break;
+    case xa_src_pict_float_solid_fill:
+        memcpy(solid_color, src_pict->float_solid_fill.color,
+               sizeof(solid_color));
+        break;
+    default:
+        return FALSE;
+    }
+
+    if (is_mask && ctx->has_solid_src)
+        xa_src_in_mask(ctx->solid_color, solid_color);
+    else
+        memcpy(ctx->solid_color, solid_color, sizeof(solid_color));
+
+    if (is_mask)
+        ctx->has_solid_mask = TRUE;
+    else
+        ctx->has_solid_src = TRUE;
+
+    return TRUE;
+}
+
 static int
 bind_shaders(struct xa_context *ctx, const struct xa_composite *comp)
 {
@@ -331,48 +382,54 @@ bind_shaders(struct xa_context *ctx, const struct xa_composite *comp)
     struct xa_shader shader;
     struct xa_picture *src_pic = comp->src;
     struct xa_picture *mask_pic = comp->mask;
+    struct xa_picture *dst_pic = comp->dst;
 
-    ctx->has_solid_color = FALSE;
+    ctx->has_solid_src = FALSE;
+    ctx->has_solid_mask = FALSE;
+
+    if (dst_pic && xa_format_type(dst_pic->pict_format) !=
+        xa_format_type(xa_surface_format(dst_pic->srf)))
+       return -XA_ERR_INVAL;
 
     if (src_pic) {
 	if (src_pic->wrap == xa_wrap_clamp_to_border && src_pic->has_transform)
 	    fs_traits |= FS_SRC_REPEAT_NONE;
 
-	if (src_pic->src_pict) {
-	    if (src_pic->src_pict->type == xa_src_pict_solid_fill) {
-		fs_traits |= FS_SOLID_FILL | FS_FILL;
-		vs_traits |= VS_SOLID_FILL;
-		xa_pixel_to_float4(src_pic->src_pict->solid_fill.color,
-				   ctx->solid_color);
-		ctx->has_solid_color = TRUE;
-	    }
-	} else {
-	    fs_traits |= FS_COMPOSITE;
-	    vs_traits |= VS_COMPOSITE;
-	}
+        fs_traits |= FS_COMPOSITE;
+        vs_traits |= VS_COMPOSITE;
 
-	fs_traits |= picture_format_fixups(src_pic, 0);
+	if (src_pic->src_pict) {
+            if (!xa_handle_src_pict(ctx, src_pic->src_pict, false))
+                return -XA_ERR_INVAL;
+            fs_traits |= FS_SRC_SRC;
+            vs_traits |= VS_SRC_SRC;
+	} else
+           fs_traits |= picture_format_fixups(src_pic, 0);
     }
 
     if (mask_pic) {
 	vs_traits |= VS_MASK;
 	fs_traits |= FS_MASK;
-	if (mask_pic->wrap == xa_wrap_clamp_to_border &&
-	    mask_pic->has_transform)
-	    fs_traits |= FS_MASK_REPEAT_NONE;
+        if (mask_pic->component_alpha)
+           fs_traits |= FS_CA;
+        if (mask_pic->src_pict) {
+            if (!xa_handle_src_pict(ctx, mask_pic->src_pict, true))
+                return -XA_ERR_INVAL;
 
-	if (mask_pic->component_alpha) {
-	    struct xa_composite_blend blend;
-	    if (!blend_for_op(&blend, comp->op, src_pic, mask_pic, NULL))
-		return -XA_ERR_INVAL;
+            if (ctx->has_solid_src) {
+                vs_traits &= ~VS_MASK;
+                fs_traits &= ~FS_MASK;
+            } else {
+                vs_traits |= VS_MASK_SRC;
+                fs_traits |= FS_MASK_SRC;
+            }
+        } else {
+            if (mask_pic->wrap == xa_wrap_clamp_to_border &&
+                mask_pic->has_transform)
+                fs_traits |= FS_MASK_REPEAT_NONE;
 
-	    if (blend.alpha_src) {
-		fs_traits |= FS_CA_SRCALPHA;
-	    } else
-		fs_traits |= FS_CA_FULL;
-	}
-
-	fs_traits |= picture_format_fixups(mask_pic, 1);
+            fs_traits |= picture_format_fixups(mask_pic, 1);
+        }
     }
 
     if (ctx->srf->format == PIPE_FORMAT_L8_UNORM ||
@@ -396,42 +453,35 @@ bind_samplers(struct xa_context *ctx,
     struct pipe_context *pipe = ctx->pipe;
     struct xa_picture *src_pic = comp->src;
     struct xa_picture *mask_pic = comp->mask;
+    int num_samplers = 0;
 
-    ctx->num_bound_samplers = 0;
-
+    xa_ctx_sampler_views_destroy(ctx);
     memset(&src_sampler, 0, sizeof(struct pipe_sampler_state));
     memset(&mask_sampler, 0, sizeof(struct pipe_sampler_state));
 
-    if (src_pic) {
-	if (ctx->has_solid_color) {
-	    samplers[0] = NULL;
-	    pipe_sampler_view_reference(&ctx->bound_sampler_views[0], NULL);
-	} else {
-	    unsigned src_wrap = xa_repeat_to_gallium(src_pic->wrap);
-	    int filter;
+    if (src_pic && !ctx->has_solid_src) {
+	unsigned src_wrap = xa_repeat_to_gallium(src_pic->wrap);
+	int filter;
 
-	    (void) xa_filter_to_gallium(src_pic->filter, &filter);
+	(void) xa_filter_to_gallium(src_pic->filter, &filter);
 
-	    src_sampler.wrap_s = src_wrap;
-	    src_sampler.wrap_t = src_wrap;
-	    src_sampler.min_img_filter = filter;
-	    src_sampler.mag_img_filter = filter;
-	    src_sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
-	    src_sampler.normalized_coords = 1;
-	    samplers[0] = &src_sampler;
-	    ctx->num_bound_samplers = 1;
-	    u_sampler_view_default_template(&view_templ,
-					    src_pic->srf->tex,
-					    src_pic->srf->tex->format);
-	    src_view = pipe->create_sampler_view(pipe, src_pic->srf->tex,
-						 &view_templ);
-	    pipe_sampler_view_reference(&ctx->bound_sampler_views[0], NULL);
-	    ctx->bound_sampler_views[0] = src_view;
-	}
+	src_sampler.wrap_s = src_wrap;
+	src_sampler.wrap_t = src_wrap;
+	src_sampler.min_img_filter = filter;
+	src_sampler.mag_img_filter = filter;
+	src_sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
+	src_sampler.normalized_coords = 1;
+	samplers[0] = &src_sampler;
+	u_sampler_view_default_template(&view_templ,
+					src_pic->srf->tex,+					src_pic->srf->tex->format);
+	src_view = pipe->create_sampler_view(pipe, src_pic->srf->tex,
+					     &view_templ);
+	ctx->bound_sampler_views[0] = src_view;
+	num_samplers++;
     }
 
-    if (mask_pic) {
-	unsigned mask_wrap = xa_repeat_to_gallium(mask_pic->wrap);
+    if (mask_pic && !ctx->has_solid_mask) {
+        unsigned mask_wrap = xa_repeat_to_gallium(mask_pic->wrap);
 	int filter;
 
 	(void) xa_filter_to_gallium(mask_pic->filter, &filter);
@@ -442,31 +492,21 @@ bind_samplers(struct xa_context *ctx,
 	mask_sampler.mag_img_filter = filter;
 	src_sampler.min_mip_filter = PIPE_TEX_MIPFILTER_NEAREST;
 	mask_sampler.normalized_coords = 1;
-	samplers[1] = &mask_sampler;
-	ctx->num_bound_samplers = 2;
+        samplers[num_samplers] = &mask_sampler;
 	u_sampler_view_default_template(&view_templ,
 					mask_pic->srf->tex,
 					mask_pic->srf->tex->format);
 	src_view = pipe->create_sampler_view(pipe, mask_pic->srf->tex,
 					     &view_templ);
-	pipe_sampler_view_reference(&ctx->bound_sampler_views[1], NULL);
-	ctx->bound_sampler_views[1] = src_view;
-
-
-	/*
-	 * If src is a solid color, we have no src view, so set up a
-	 * dummy one that will not be used anyway.
-	 */
-	if (ctx->bound_sampler_views[0] == NULL)
-	    pipe_sampler_view_reference(&ctx->bound_sampler_views[0],
-					src_view);
-
+        ctx->bound_sampler_views[num_samplers] = src_view;
+        num_samplers++;
     }
 
-    cso_set_samplers(ctx->cso, PIPE_SHADER_FRAGMENT, ctx->num_bound_samplers,
+    cso_set_samplers(ctx->cso, PIPE_SHADER_FRAGMENT, num_samplers,
 		     (const struct pipe_sampler_state **)samplers);
-    cso_set_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT, ctx->num_bound_samplers,
+    cso_set_sampler_views(ctx->cso, PIPE_SHADER_FRAGMENT, num_samplers,
 				   ctx->bound_sampler_views);
+    ctx->num_bound_samplers = num_samplers;
 }
 
 XA_EXPORT int
@@ -475,9 +515,6 @@ xa_composite_prepare(struct xa_context *ctx,
 {
     struct xa_surface *dst_srf = comp->dst->srf;
     int ret;
-
-    if (comp->mask && !comp->mask->srf)
-	return -XA_ERR_INVAL;
 
     ret = xa_ctx_srf_create(ctx, dst_srf);
     if (ret != XA_ERR_NONE)
@@ -511,8 +548,8 @@ xa_composite_rect(struct xa_context *ctx,
 		  int dstX, int dstY, int width, int height)
 {
     if (ctx->num_bound_samplers == 0 ) { /* solid fill */
-	renderer_solid(ctx, dstX, dstY, dstX + width, dstY + height,
-		       ctx->solid_color);
+	xa_scissor_update(ctx, dstX, dstY, dstX + width, dstY + height);
+	renderer_solid(ctx, dstX, dstY, dstX + width, dstY + height);
     } else {
 	const struct xa_composite *comp = ctx->comp;
 	int pos[6] = {srcX, srcY, maskX, maskY, dstX, dstY};
@@ -537,7 +574,8 @@ xa_composite_done(struct xa_context *ctx)
     renderer_draw_flush(ctx);
 
     ctx->comp = NULL;
-    ctx->has_solid_color = FALSE;
+    ctx->has_solid_src = FALSE;
+    ctx->has_solid_mask = FALSE;
     xa_ctx_sampler_views_destroy(ctx);
 }
 

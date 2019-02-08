@@ -831,16 +831,6 @@ nvc0_program_upload(struct nvc0_context *nvc0, struct nvc0_program *prog)
             NOUVEAU_ERR("Error allocating TEXT area: %d\n", ret);
             return false;
          }
-         nouveau_bufctx_reset(nvc0->bufctx_3d, NVC0_BIND_3D_TEXT);
-         BCTX_REFN_bo(nvc0->bufctx_3d, 3D_TEXT,
-                      NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD,
-                      screen->text);
-         if (screen->compute) {
-            nouveau_bufctx_reset(nvc0->bufctx_cp, NVC0_BIND_CP_TEXT);
-            BCTX_REFN_bo(nvc0->bufctx_cp, CP_TEXT,
-                         NV_VRAM_DOMAIN(&screen->base) | NOUVEAU_BO_RD,
-                         screen->text);
-         }
 
          /* Re-upload the builtin function into the new code segment. */
          nvc0_program_library_upload(nvc0);

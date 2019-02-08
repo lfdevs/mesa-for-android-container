@@ -544,38 +544,16 @@ convert_color_for_store(nir_builder *b, const struct gen_device_info *devinfo,
       break;
 
    case ISL_SFLOAT:
-      if (image.bits[0] == 16) {
-         nir_ssa_def *f16comps[4];
-         for (unsigned i = 0; i < image.chans; i++) {
-            f16comps[i] = nir_pack_half_2x16_split(b, nir_channel(b, color, i),
-                                                      nir_imm_float(b, 0));
-         }
-         color = nir_vec(b, f16comps, image.chans);
-      }
+      if (image.bits[0] == 16)
+         color = nir_format_float_to_half(b, color);
       break;
 
    case ISL_UINT:
-      if (image.bits[0] < 32) {
-         nir_const_value max;
-         for (unsigned i = 0; i < image.chans; i++) {
-            assert(image.bits[i] < 32);
-            max.u32[i] = (1u << image.bits[i]) - 1;
-         }
-         color = nir_umin(b, color, nir_build_imm(b, image.chans, 32, max));
-      }
+      color = nir_format_clamp_uint(b, color, image.bits);
       break;
 
    case ISL_SINT:
-      if (image.bits[0] < 32) {
-         nir_const_value min, max;
-         for (unsigned i = 0; i < image.chans; i++) {
-            assert(image.bits[i] < 32);
-            max.i32[i] = (1 << (image.bits[i] - 1)) - 1;
-            min.i32[i] = -(1 << (image.bits[i] - 1));
-         }
-         color = nir_imin(b, color, nir_build_imm(b, image.chans, 32, max));
-         color = nir_imax(b, color, nir_build_imm(b, image.chans, 32, min));
-      }
+      color = nir_format_clamp_sint(b, color, image.bits);
       break;
 
    default:

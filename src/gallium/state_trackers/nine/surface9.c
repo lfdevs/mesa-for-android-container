@@ -272,7 +272,7 @@ NineSurface9_CreatePipeSurfaces( struct NineSurface9 *This )
     assert(This->surface[1]);
 }
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
 void
 NineSurface9_Dump( struct NineSurface9 *This )
 {
@@ -300,7 +300,7 @@ NineSurface9_Dump( struct NineSurface9 *This )
         NineUnknown_Release(NineUnknown(tex));
     }
 }
-#endif /* DEBUG */
+#endif /* DEBUG || !NDEBUG */
 
 HRESULT NINE_WINAPI
 NineSurface9_GetContainer( struct NineSurface9 *This,

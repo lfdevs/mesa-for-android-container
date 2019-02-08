@@ -240,6 +240,8 @@ am__v_lt_1 =
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(am__DEPENDENCIES_6) \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/freedreno/libfreedreno_drm.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/freedreno/libfreedreno_ir3.la \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(am__DEPENDENCIES_1)
 am__pipe_msm_la_SOURCES_DIST = pipe_msm.c
 @HAVE_GALLIUM_FREEDRENO_TRUE@am_pipe_msm_la_OBJECTS = pipe_msm.lo
@@ -881,6 +883,8 @@ AM_LDFLAGS = -module -no-undefined -avoid-version $(GC_SECTIONS) \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(PIPE_LIBS) \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/gallium/winsys/freedreno/drm/libfreedrenodrm.la \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/gallium/drivers/freedreno/libfreedreno.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/freedreno/libfreedreno_drm.la \
+@HAVE_GALLIUM_FREEDRENO_TRUE@	$(top_builddir)/src/freedreno/libfreedreno_ir3.la \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(LIBDRM_LIBS) \
 @HAVE_GALLIUM_FREEDRENO_TRUE@	$(FREEDRENO_LIBS)
 

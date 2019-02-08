@@ -158,7 +158,7 @@ fs_visitor::register_coalesce()
 
    int src_size = 0;
    int channels_remaining = 0;
-   int src_reg = -1, dst_reg = -1;
+   unsigned src_reg = ~0u, dst_reg = ~0u;
    int dst_reg_offset[MAX_VGRF_SIZE];
    fs_inst *mov[MAX_VGRF_SIZE];
    int dst_var[MAX_VGRF_SIZE];
@@ -221,7 +221,7 @@ fs_visitor::register_coalesce()
          if (dst_reg_offset[i] != dst_reg_offset[0] + i) {
             /* Registers are out-of-order. */
             can_coalesce = false;
-            src_reg = -1;
+            src_reg = ~0u;
             break;
          }
 
@@ -231,7 +231,7 @@ fs_visitor::register_coalesce()
          if (!can_coalesce_vars(live_intervals, cfg, inst,
                                 dst_var[i], src_var[i])) {
             can_coalesce = false;
-            src_reg = -1;
+            src_reg = ~0u;
             break;
          }
       }
@@ -278,7 +278,7 @@ fs_visitor::register_coalesce()
             MAX2(live_intervals->end[dst_var[i]],
                  live_intervals->end[src_var[i]]);
       }
-      src_reg = -1;
+      src_reg = ~0u;
    }
 
    if (progress) {

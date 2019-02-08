@@ -39,6 +39,7 @@
 #include <i915_drm.h>
 
 #include "util/hash_table.h"
+#include "util/u_math.h"
 
 #define INTEL_LOG_TAG "INTEL-SANITIZE-GPU"
 #include "common/intel_log.h"
@@ -109,8 +110,7 @@ add_drm_fd(int fd)
 {
    struct refcnt_hash_table *r = malloc(sizeof(*r));
    r->refcnt = 1;
-   r->t = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
-                                  _mesa_key_pointer_equal);
+   r->t = _mesa_pointer_hash_table_create(NULL);
    _mesa_hash_table_insert(fds_to_bo_sizes, (void*)(uintptr_t)fd,
                            (void*)(uintptr_t)r);
 }
@@ -165,7 +165,7 @@ padding_is_good(int fd, uint32_t handle)
 {
    struct drm_i915_gem_mmap mmap_arg = {
       .handle = handle,
-      .offset = bo_size(fd, handle),
+      .offset = align64(bo_size(fd, handle), 4096),
       .size = PADDING_SIZE,
       .flags = 0,
    };
@@ -207,9 +207,11 @@ padding_is_good(int fd, uint32_t handle)
 static int
 create_with_padding(int fd, struct drm_i915_gem_create *create)
 {
-   create->size += PADDING_SIZE;
+   uint64_t original_size = create->size;
+
+   create->size = align64(original_size, 4096) + PADDING_SIZE;
    int ret = libc_ioctl(fd, DRM_IOCTL_I915_GEM_CREATE, create);
-   create->size -= PADDING_SIZE;
+   create->size = original_size;
 
    if (ret != 0)
       return ret;
@@ -217,14 +219,16 @@ create_with_padding(int fd, struct drm_i915_gem_create *create)
    uint8_t *noise_values;
    struct drm_i915_gem_mmap mmap_arg = {
       .handle = create->handle,
-      .offset = create->size,
+      .offset = align64(create->size, 4096),
       .size = PADDING_SIZE,
       .flags = 0,
    };
 
    ret = libc_ioctl(fd, DRM_IOCTL_I915_GEM_MMAP, &mmap_arg);
-   if (ret != 0)
+   if (ret != 0) {
+      intel_logd("Unable to map buffer %d for pad creation.\n", create->handle);
       return 0;
+   }
 
    noise_values = (uint8_t*) (uintptr_t) mmap_arg.addr_ptr;
    fill_noise_buffer(noise_values, create->handle & 0xFF,
@@ -421,8 +425,7 @@ ioctl(int fd, unsigned long request, ...)
 static void __attribute__ ((constructor))
 init(void)
 {
-   fds_to_bo_sizes = _mesa_hash_table_create(NULL, _mesa_hash_pointer,
-                                             _mesa_key_pointer_equal);
+   fds_to_bo_sizes = _mesa_pointer_hash_table_create(NULL);
    libc_open = dlsym(RTLD_NEXT, "open");
    libc_close = dlsym(RTLD_NEXT, "close");
    libc_fcntl = dlsym(RTLD_NEXT, "fcntl");

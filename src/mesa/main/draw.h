@@ -129,14 +129,14 @@ _mesa_MultiDrawArrays(GLenum mode, const GLint *first,
 
 
 void GLAPIENTRY
-_mesa_MultiDrawElementsEXT(GLenum mode, const GLsizei *count, GLenum type,
-                           const GLvoid **indices, GLsizei primcount);
+_mesa_MultiDrawElements(GLenum mode, const GLsizei *count, GLenum type,
+                        const GLvoid *const *indices, GLsizei primcount);
 
 
 void GLAPIENTRY
 _mesa_MultiDrawElementsBaseVertex(GLenum mode,
                                   const GLsizei *count, GLenum type,
-                                  const GLvoid **indices, GLsizei primcount,
+                                  const GLvoid * const * indices, GLsizei primcount,
                                   const GLint *basevertex);
 
 

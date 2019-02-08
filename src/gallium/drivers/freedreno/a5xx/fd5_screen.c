@@ -33,7 +33,7 @@
 #include "fd5_format.h"
 #include "fd5_resource.h"
 
-#include "ir3_compiler.h"
+#include "ir3/ir3_compiler.h"
 
 static bool
 valid_sample_count(unsigned sample_count)

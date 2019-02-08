@@ -31,5 +31,5 @@ libamdgpuwinsys = static_library(
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],
   link_with : libamdgpu_addrlib,
-  dependencies : dep_libdrm_amdgpu,
+  dependencies : [dep_llvm, dep_libdrm_amdgpu],
 )

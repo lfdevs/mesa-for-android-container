@@ -27,6 +27,56 @@
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
 
+#ifdef ANDROID
+#include <vndk/hardware_buffer.h>
+/* See i915_private_android_types.h in minigbm. */
+#define HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL 0x100
+
+static inline VkFormat
+vk_format_from_android(unsigned android_format)
+{
+   switch (android_format) {
+   case AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM:
+      return VK_FORMAT_R8G8B8A8_UNORM;
+   case AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM:
+   case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
+      return VK_FORMAT_R8G8B8_UNORM;
+   case AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM:
+      return VK_FORMAT_R5G6B5_UNORM_PACK16;
+   case AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
+   case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM:
+      return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+   case HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL:
+      return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+   case AHARDWAREBUFFER_FORMAT_BLOB:
+   default:
+      return VK_FORMAT_UNDEFINED;
+   }
+}
+
+static inline unsigned
+android_format_from_vk(unsigned vk_format)
+{
+   switch (vk_format) {
+   case VK_FORMAT_R8G8B8A8_UNORM:
+      return AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
+   case VK_FORMAT_R8G8B8_UNORM:
+      return AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM;
+   case VK_FORMAT_R5G6B5_UNORM_PACK16:
+      return AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM;
+   case VK_FORMAT_R16G16B16A16_SFLOAT:
+      return AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT;
+   case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+      return AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM;
+   case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+      return HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL;
+   default:
+      return AHARDWAREBUFFER_FORMAT_BLOB;
+   }
+}
+#endif
+
 static inline VkImageAspectFlags
 vk_format_aspects(VkFormat format)
 {

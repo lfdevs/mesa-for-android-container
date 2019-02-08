@@ -2138,7 +2138,7 @@ nine_ff_prune_vs(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
 
-    if (device->ff.num_vs > 100) {
+    if (device->ff.num_vs > 1024) {
         /* could destroy the bound one here, so unbind */
         context->pipe->bind_vs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_vs, nine_ff_ht_delete_cb, NULL);
@@ -2152,7 +2152,7 @@ nine_ff_prune_ps(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
 
-    if (device->ff.num_ps > 100) {
+    if (device->ff.num_ps > 1024) {
         /* could destroy the bound one here, so unbind */
         context->pipe->bind_fs_state(context->pipe, NULL);
         util_hash_table_foreach(device->ff.ht_ps, nine_ff_ht_delete_cb, NULL);
@@ -2491,7 +2491,7 @@ nine_d3d_matrix_inverse(D3DMATRIX *D, const D3DMATRIX *M)
     for (k = 0; k < 4; k++)
         D->m[i][k] *= det;
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
     {
         D3DMATRIX I;
 

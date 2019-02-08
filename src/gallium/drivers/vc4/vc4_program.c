@@ -1004,24 +1004,24 @@ ntq_emit_comparison(struct vc4_compile *c, struct qreg *dest,
         enum qpu_cond cond;
 
         switch (compare_instr->op) {
-        case nir_op_feq:
-        case nir_op_ieq:
+        case nir_op_feq32:
+        case nir_op_ieq32:
         case nir_op_seq:
                 cond = QPU_COND_ZS;
                 break;
-        case nir_op_fne:
-        case nir_op_ine:
+        case nir_op_fne32:
+        case nir_op_ine32:
         case nir_op_sne:
                 cond = QPU_COND_ZC;
                 break;
-        case nir_op_fge:
-        case nir_op_ige:
-        case nir_op_uge:
+        case nir_op_fge32:
+        case nir_op_ige32:
+        case nir_op_uge32:
         case nir_op_sge:
                 cond = QPU_COND_NC;
                 break;
-        case nir_op_flt:
-        case nir_op_ilt:
+        case nir_op_flt32:
+        case nir_op_ilt32:
         case nir_op_slt:
                 cond = QPU_COND_NS;
                 break;
@@ -1048,7 +1048,7 @@ ntq_emit_comparison(struct vc4_compile *c, struct qreg *dest,
                                 qir_uniform_f(c, 1.0), qir_uniform_f(c, 0.0));
                 break;
 
-        case nir_op_bcsel:
+        case nir_op_b32csel:
                 *dest = qir_SEL(c, cond,
                                 ntq_get_alu_src(c, sel_instr, 1),
                                 ntq_get_alu_src(c, sel_instr, 2));
@@ -1208,14 +1208,14 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_u2f32:
                 result = qir_ITOF(c, src[0]);
                 break;
-        case nir_op_b2f:
+        case nir_op_b2f32:
                 result = qir_AND(c, src[0], qir_uniform_f(c, 1.0));
                 break;
-        case nir_op_b2i:
+        case nir_op_b2i32:
                 result = qir_AND(c, src[0], qir_uniform_ui(c, 1));
                 break;
-        case nir_op_i2b:
-        case nir_op_f2b:
+        case nir_op_i2b32:
+        case nir_op_f2b32:
                 qir_SF(c, src[0]);
                 result = qir_MOV(c, qir_SEL(c, QPU_COND_ZC,
                                             qir_uniform_ui(c, ~0),
@@ -1264,21 +1264,21 @@ ntq_emit_alu(struct vc4_compile *c, nir_alu_instr *instr)
         case nir_op_sne:
         case nir_op_sge:
         case nir_op_slt:
-        case nir_op_feq:
-        case nir_op_fne:
-        case nir_op_fge:
-        case nir_op_flt:
-        case nir_op_ieq:
-        case nir_op_ine:
-        case nir_op_ige:
-        case nir_op_uge:
-        case nir_op_ilt:
+        case nir_op_feq32:
+        case nir_op_fne32:
+        case nir_op_fge32:
+        case nir_op_flt32:
+        case nir_op_ieq32:
+        case nir_op_ine32:
+        case nir_op_ige32:
+        case nir_op_uge32:
+        case nir_op_ilt32:
                 if (!ntq_emit_comparison(c, &result, instr, instr)) {
                         fprintf(stderr, "Bad comparison instruction\n");
                 }
                 break;
 
-        case nir_op_bcsel:
+        case nir_op_b32csel:
                 result = ntq_emit_bcsel(c, instr, src);
                 break;
         case nir_op_fcsel:
@@ -1591,14 +1591,14 @@ vc4_optimize_nir(struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_dce);
                 NIR_PASS(progress, s, nir_opt_dead_cf);
                 NIR_PASS(progress, s, nir_opt_cse);
-                NIR_PASS(progress, s, nir_opt_peephole_select, 8);
+                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
                 NIR_PASS(progress, s, nir_opt_undef);
                 NIR_PASS(progress, s, nir_opt_loop_unroll,
                          nir_var_shader_in |
                          nir_var_shader_out |
-                         nir_var_local);
+                         nir_var_function_temp);
         } while (progress);
 }
 
@@ -2363,7 +2363,8 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
                 if (stage == QSTAGE_FRAG) {
                         NIR_PASS_V(c->s, nir_lower_clip_fs, c->key->ucp_enables);
                 } else {
-                        NIR_PASS_V(c->s, nir_lower_clip_vs, c->key->ucp_enables);
+                        NIR_PASS_V(c->s, nir_lower_clip_vs,
+				   c->key->ucp_enables, false);
                         NIR_PASS_V(c->s, nir_lower_io_to_scalar,
                                    nir_var_shader_out);
                 }
@@ -2383,6 +2384,8 @@ vc4_shader_ntq(struct vc4_context *vc4, enum qstage stage,
         NIR_PASS_V(c->s, nir_lower_idiv);
 
         vc4_optimize_nir(c->s);
+
+        NIR_PASS_V(c->s, nir_lower_bool_to_int32);
 
         NIR_PASS_V(c->s, nir_convert_from_ssa, true);
 
@@ -2514,7 +2517,7 @@ vc4_shader_state_create(struct pipe_context *pctx,
 
         vc4_optimize_nir(s);
 
-        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_local);
+        NIR_PASS_V(s, nir_remove_dead_variables, nir_var_function_temp);
 
         /* Garbage collect dead instructions */
         nir_sweep(s);

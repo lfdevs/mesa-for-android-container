@@ -190,8 +190,9 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
       cs->TS_COLOR_STATUS_BASE.bo = NULL;
       cs->TS_COLOR_SURFACE_BASE.bo = NULL;
 
-      for (int i = 0; i < ETNA_MAX_PIXELPIPES; i++)
-         cs->PE_PIPE_COLOR_ADDR[i].bo = NULL;
+      cs->PE_COLOR_ADDR = ctx->dummy_rt_reloc;
+      for (int i = 0; i < ctx->specs.pixel_pipes; i++)
+         cs->PE_PIPE_COLOR_ADDR[i] = ctx->dummy_rt_reloc;
    }
 
    if (sv->zsbuf != NULL) {

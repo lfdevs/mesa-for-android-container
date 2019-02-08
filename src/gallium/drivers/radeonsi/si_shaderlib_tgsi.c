@@ -439,3 +439,80 @@ void *si_create_query_result_cs(struct si_context *sctx)
 
 	return sctx->b.create_compute_state(&sctx->b, &state);
 }
+
+/* Create a compute shader implementing copy_image.
+ * Luckily, this works with all texture targets except 1D_ARRAY.
+ */
+void *si_create_copy_image_compute_shader(struct pipe_context *ctx)
+{
+	static const char text[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL SV[0], THREAD_ID\n"
+		"DCL SV[1], BLOCK_ID\n"
+		"DCL IMAGE[0], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL IMAGE[1], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
+		"DCL TEMP[0..4], LOCAL\n"
+		"IMM[0] UINT32 {8, 1, 0, 0}\n"
+		"MOV TEMP[0].xyz, CONST[0][0].xyzw\n"
+		"UMAD TEMP[1].xyz, SV[1].xyzz, IMM[0].xxyy, SV[0].xyzz\n"
+		"UADD TEMP[2].xyz, TEMP[1].xyzx, TEMP[0].xyzx\n"
+		"LOAD TEMP[3], IMAGE[0], TEMP[2].xyzx, 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"MOV TEMP[4].xyz, CONST[0][1].xyzw\n"
+		"UADD TEMP[2].xyz, TEMP[1].xyzx, TEMP[4].xyzx\n"
+		"STORE IMAGE[1], TEMP[2].xyzz, TEMP[3], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {0};
+
+	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return ctx->create_compute_state(ctx, &state);
+}
+
+void *si_create_copy_image_compute_shader_1d_array(struct pipe_context *ctx)
+{
+	static const char text[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL SV[0], THREAD_ID\n"
+		"DCL SV[1], BLOCK_ID\n"
+		"DCL IMAGE[0], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL IMAGE[1], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
+		"DCL TEMP[0..4], LOCAL\n"
+		"IMM[0] UINT32 {64, 1, 0, 0}\n"
+		"MOV TEMP[0].xy, CONST[0][0].xzzw\n"
+		"UMAD TEMP[1].xy, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
+		"UADD TEMP[2].xy, TEMP[1].xyzx, TEMP[0].xyzx\n"
+		"LOAD TEMP[3], IMAGE[0], TEMP[2].xyzx, 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"MOV TEMP[4].xy, CONST[0][1].xzzw\n"
+		"UADD TEMP[2].xy, TEMP[1].xyzx, TEMP[4].xyzx\n"
+		"STORE IMAGE[1], TEMP[2].xyzz, TEMP[3], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {0};
+
+	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return ctx->create_compute_state(ctx, &state);
+}

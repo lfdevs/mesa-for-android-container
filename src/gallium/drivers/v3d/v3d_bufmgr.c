@@ -331,7 +331,6 @@ v3d_bo_last_unreference_locked_timed(struct v3d_bo *bo, time_t time)
 
 static struct v3d_bo *
 v3d_bo_open_handle(struct v3d_screen *screen,
-                   uint32_t winsys_stride,
                    uint32_t handle, uint32_t size)
 {
         struct v3d_bo *bo;
@@ -355,8 +354,7 @@ v3d_bo_open_handle(struct v3d_screen *screen,
         bo->private = false;
 
 #ifdef USE_V3D_SIMULATOR
-        v3d_simulator_open_from_handle(screen->fd, winsys_stride,
-                                       bo->handle, bo->size);
+        v3d_simulator_open_from_handle(screen->fd, bo->handle, bo->size);
         bo->map = malloc(bo->size);
 #endif
 
@@ -376,14 +374,16 @@ v3d_bo_open_handle(struct v3d_screen *screen,
 
         util_hash_table_set(screen->bo_handles, (void *)(uintptr_t)handle, bo);
 
+        screen->bo_count++;
+        screen->bo_size += bo->size;
+
 done:
         mtx_unlock(&screen->bo_handles_mutex);
         return bo;
 }
 
 struct v3d_bo *
-v3d_bo_open_name(struct v3d_screen *screen, uint32_t name,
-                 uint32_t winsys_stride)
+v3d_bo_open_name(struct v3d_screen *screen, uint32_t name)
 {
         struct drm_gem_open o = {
                 .name = name
@@ -395,11 +395,11 @@ v3d_bo_open_name(struct v3d_screen *screen, uint32_t name,
                 return NULL;
         }
 
-        return v3d_bo_open_handle(screen, winsys_stride, o.handle, o.size);
+        return v3d_bo_open_handle(screen, o.handle, o.size);
 }
 
 struct v3d_bo *
-v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd, uint32_t winsys_stride)
+v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd)
 {
         uint32_t handle;
         int ret = drmPrimeFDToHandle(screen->fd, fd, &handle);
@@ -416,7 +416,7 @@ v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd, uint32_t winsys_stride)
                 return NULL;
         }
 
-        return v3d_bo_open_handle(screen, winsys_stride, handle, size);
+        return v3d_bo_open_handle(screen, handle, size);
 }
 
 int

@@ -949,6 +949,12 @@ enum isl_msaa_layout {
    ISL_MSAA_LAYOUT_ARRAY,
 };
 
+typedef enum {
+  ISL_MEMCPY = 0,
+  ISL_MEMCPY_BGRA8,
+  ISL_MEMCPY_STREAMING_LOAD,
+  ISL_MEMCPY_INVALID,
+} isl_memcpy_type;
 
 struct isl_device {
    const struct gen_device_info *info;
@@ -2064,6 +2070,32 @@ isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
 uint32_t
 isl_surf_get_depth_format(const struct isl_device *dev,
                           const struct isl_surf *surf);
+
+/**
+ * @brief performs a copy from linear to tiled surface
+ *
+ */
+void
+isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
+                           uint32_t yt1, uint32_t yt2,
+                           char *dst, const char *src,
+                           uint32_t dst_pitch, int32_t src_pitch,
+                           bool has_swizzling,
+                           enum isl_tiling tiling,
+                           isl_memcpy_type copy_type);
+
+/**
+ * @brief performs a copy from tiled to linear surface
+ *
+ */
+void
+isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
+                           uint32_t yt1, uint32_t yt2,
+                           char *dst, const char *src,
+                           int32_t dst_pitch, uint32_t src_pitch,
+                           bool has_swizzling,
+                           enum isl_tiling tiling,
+                           isl_memcpy_type copy_type);
 
 #ifdef __cplusplus
 }

@@ -144,21 +144,11 @@ lower_res_index_intrinsic(nir_intrinsic_instr *intrin,
    uint32_t array_size =
       state->layout->set[set].layout->binding[binding].array_size;
 
-   nir_const_value *const_array_index = nir_src_as_const_value(intrin->src[0]);
+   nir_ssa_def *array_index = nir_ssa_for_src(b, intrin->src[0], 1);
+   if (nir_src_is_const(intrin->src[0]) || state->add_bounds_checks)
+      array_index = nir_umin(b, array_index, nir_imm_int(b, array_size - 1));
 
-   nir_ssa_def *block_index;
-   if (const_array_index) {
-      unsigned array_index = const_array_index->u32[0];
-      array_index = MIN2(array_index, array_size - 1);
-      block_index = nir_imm_int(b, surface_index + array_index);
-   } else {
-      block_index = nir_ssa_for_src(b, intrin->src[0], 1);
-
-      if (state->add_bounds_checks)
-         block_index = nir_umin(b, block_index, nir_imm_int(b, array_size - 1));
-
-      block_index = nir_iadd(b, nir_imm_int(b, surface_index), block_index);
-   }
+   nir_ssa_def *block_index = nir_iadd_imm(b, array_index, surface_index);
 
    assert(intrin->dest.is_ssa);
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(block_index));
@@ -183,6 +173,23 @@ lower_res_reindex_intrinsic(nir_intrinsic_instr *intrin,
 
    assert(intrin->dest.is_ssa);
    nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(new_index));
+   nir_instr_remove(&intrin->instr);
+}
+
+static void
+lower_load_vulkan_descriptor(nir_intrinsic_instr *intrin,
+                             struct apply_pipeline_layout_state *state)
+{
+   nir_builder *b = &state->builder;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+
+   /* We follow the nir_address_format_vk_index_offset model */
+   assert(intrin->src[0].is_ssa);
+   nir_ssa_def *vec2 = nir_vec2(b, intrin->src[0].ssa, nir_imm_int(b, 0));
+
+   assert(intrin->dest.is_ssa);
+   nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(vec2));
    nir_instr_remove(&intrin->instr);
 }
 
@@ -301,9 +308,9 @@ lower_tex_deref(nir_tex_instr *tex, nir_tex_src_type deref_src_type,
    if (deref->deref_type != nir_deref_type_var) {
       assert(deref->deref_type == nir_deref_type_array);
 
-      nir_const_value *const_index = nir_src_as_const_value(deref->arr.index);
-      if (const_index) {
-         *base_index += MIN2(const_index->u32[0], array_size - 1);
+      if (nir_src_is_const(deref->arr.index)) {
+         unsigned arr_index = nir_src_as_uint(deref->arr.index);
+         *base_index += MIN2(arr_index, array_size - 1);
       } else {
          nir_builder *b = &state->builder;
 
@@ -339,8 +346,7 @@ tex_instr_get_and_remove_plane_src(nir_tex_instr *tex)
    if (plane_src_idx < 0)
       return 0;
 
-   unsigned plane =
-      nir_src_as_const_value(tex->src[plane_src_idx].src)->u32[0];
+   unsigned plane = nir_src_as_uint(tex->src[plane_src_idx].src);
 
    nir_tex_instr_remove_src(tex, plane_src_idx);
 
@@ -382,6 +388,9 @@ apply_pipeline_layout_block(nir_block *block,
             break;
          case nir_intrinsic_vulkan_resource_reindex:
             lower_res_reindex_intrinsic(intrin, state);
+            break;
+         case nir_intrinsic_load_vulkan_descriptor:
+            lower_load_vulkan_descriptor(intrin, state);
             break;
          case nir_intrinsic_image_deref_load:
          case nir_intrinsic_image_deref_store:

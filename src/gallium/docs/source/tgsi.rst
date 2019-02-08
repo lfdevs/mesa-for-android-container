@@ -2684,6 +2684,21 @@ These atomic operations may only be used with 32-bit integer image formats.
   resource[offset] = dst_x + src_x
 
 
+.. opcode:: ATOMFADD - Atomic floating point addition
+
+  Syntax: ``ATOMFADD dst, resource, offset, src``
+
+  Example: ``ATOMFADD TEMP[0], BUFFER[0], TEMP[1], TEMP[2]``
+
+  The following operation is performed atomically:
+
+.. math::
+
+  dst_x = resource[offset]
+
+  resource[offset] = dst_x + src_x
+
+
 .. opcode:: ATOMXCHG - Atomic exchange
 
   Syntax: ``ATOMXCHG dst, resource, offset, src``
@@ -3188,24 +3203,6 @@ If PIPE_CAP_TGSI_VS_LAYER_VIEWPORT or PIPE_CAP_TGSI_TES_LAYER_VIEWPORT is
 supported, then this semantic label can also be used in vertex or
 tessellation evaluation shaders, respectively. Only the value written in the
 last vertex processing stage is used.
-
-
-TGSI_SEMANTIC_CULLDIST
-""""""""""""""""""""""
-
-Used as distance to plane for performing application-defined culling
-of individual primitives against a plane. When components of vertex
-elements are given this label, these values are assumed to be a
-float32 signed distance to a plane. Primitives will be completely
-discarded if the plane distance for all of the vertices in the
-primitive are < 0. If a vertex has a cull distance of NaN, that
-vertex counts as "out" (as if its < 0);
-The limits on both clip and cull distances are bound
-by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_COUNT define which defines
-the maximum number of components that can be used to hold the
-distances and by the PIPE_MAX_CLIP_OR_CULL_DISTANCE_ELEMENT_COUNT
-which specifies the maximum number of registers which can be
-annotated with those semantics.
 
 
 TGSI_SEMANTIC_CLIPDIST

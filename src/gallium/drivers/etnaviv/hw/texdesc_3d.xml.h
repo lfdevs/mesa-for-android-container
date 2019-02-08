@@ -8,12 +8,12 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2017-10-31 19:05:01)
-- copyright.xml  (   1597 bytes, from 2016-10-29 07:29:22)
-- common.xml     (  26187 bytes, from 2017-10-31 19:05:01)
-- common_3d.xml  (  14615 bytes, from 2017-11-04 14:03:35)
+- texdesc_3d.xml (   3183 bytes, from 2018-02-10 13:09:26)
+- copyright.xml  (   1597 bytes, from 2018-02-10 13:09:26)
+- common.xml     (  35468 bytes, from 2018-02-10 13:09:26)
+- common_3d.xml  (  14843 bytes, from 2019-01-18 10:13:41)
 
-Copyright (C) 2012-2017 by the following authors:
+Copyright (C) 2012-2018 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -67,6 +67,9 @@ DEALINGS IN THE SOFTWARE.
 #define TEXDESC_CONFIG0_FORMAT__SHIFT				13
 #define TEXDESC_CONFIG0_FORMAT(x)				(((x) << TEXDESC_CONFIG0_FORMAT__SHIFT) & TEXDESC_CONFIG0_FORMAT__MASK)
 #define TEXDESC_CONFIG0_ROUND_UV				0x00080000
+#define TEXDESC_CONFIG0_ADDRESSING_MODE__MASK			0x00300000
+#define TEXDESC_CONFIG0_ADDRESSING_MODE__SHIFT			20
+#define TEXDESC_CONFIG0_ADDRESSING_MODE(x)			(((x) << TEXDESC_CONFIG0_ADDRESSING_MODE__SHIFT) & TEXDESC_CONFIG0_ADDRESSING_MODE__MASK)
 #define TEXDESC_CONFIG0_ENDIAN__MASK				0x00c00000
 #define TEXDESC_CONFIG0_ENDIAN__SHIFT				22
 #define TEXDESC_CONFIG0_ENDIAN(x)				(((x) << TEXDESC_CONFIG0_ENDIAN__SHIFT) & TEXDESC_CONFIG0_ENDIAN__MASK)

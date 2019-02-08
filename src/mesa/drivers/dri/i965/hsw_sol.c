@@ -98,7 +98,8 @@ tally_prims_written(struct brw_context *brw,
          brw_load_register_mem64(brw, HSW_CS_GPR(1), obj->prim_count_bo,
                                  START_OFFSET + i * sizeof(uint64_t));
          /* GPR2 = Ending Snapshot */
-         brw_load_register_reg64(brw, GEN7_SO_NUM_PRIMS_WRITTEN(i), HSW_CS_GPR(2));
+         brw_load_register_reg64(brw, HSW_CS_GPR(2),
+                                 GEN7_SO_NUM_PRIMS_WRITTEN(i));
 
          BEGIN_BATCH(9);
          OUT_BATCH(HSW_MI_MATH | (9 - 2));

@@ -19,7 +19,5 @@
 # SOFTWARE.
 
 subdir('trivial')
-if with_gallium_softpipe
-  subdir('unit')
-endif
+subdir('unit')
 subdir('graw')

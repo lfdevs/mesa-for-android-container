@@ -42,6 +42,7 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
    ctx->get_bo = get_bo;
    ctx->get_state_size = get_state_size;
    ctx->user_data = user_data;
+   ctx->engine = I915_ENGINE_CLASS_RENDER;
 
    ctx->cfg = cfg;
    ctx->decode_cfg = decode_cfg;
@@ -73,7 +74,12 @@ aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
       }
       if (!gen_field_is_header(iter.field)) {
          if (ctx->decode_cfg->field_filter.PassFilter(iter.name)) {
-            ImGui::Text("%s: %s", iter.name, iter.value);
+            if (iter.field->type.kind == gen_type::GEN_TYPE_BOOL && iter.raw_value) {
+               ImGui::Text("%s: ", iter.name); ImGui::SameLine();
+               ImGui::TextColored(ctx->cfg->boolean_color, "true");
+            } else {
+               ImGui::Text("%s: %s", iter.name, iter.value);
+            }
             if (iter.struct_desc) {
                int struct_dword = iter.start_bit / 32;
                uint64_t struct_address = address + 4 * struct_dword;
@@ -140,7 +146,8 @@ ctx_disassemble_program(struct aub_viewer_decode_ctx *ctx,
    uint64_t addr = ctx->instruction_base + ksp;
    struct gen_batch_decode_bo bo = ctx_get_bo(ctx, addr);
    if (!bo.map) {
-      ImGui::TextColored(ctx->cfg->missing_color, "Shader unavailable");
+      ImGui::TextColored(ctx->cfg->missing_color,
+                         "Shader unavailable addr=0x%012" PRIx64, addr);
       return;
    }
 
@@ -231,8 +238,12 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
          continue;
       }
 
-      ImGui::Text("pointer %u: %08x", i, pointers[i]);
-      aub_viewer_print_group(ctx, strct, addr, (const uint8_t *) bo.map + (addr - bo.addr));
+      const uint8_t *state = (const uint8_t *) bo.map + (addr - bo.addr);
+      if (ImGui::TreeNodeEx(&pointers[i], ImGuiTreeNodeFlags_Framed,
+                            "pointer %u: %08x", i, pointers[i])) {
+         aub_viewer_print_group(ctx, strct, addr, state);
+         ImGui::TreePop();
+      }
    }
 }
 
@@ -260,8 +271,11 @@ dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
    }
 
    for (int i = 0; i < count; i++) {
-      ImGui::Text("sampler state %d", i);
-      aub_viewer_print_group(ctx, strct, state_addr, state_map);
+      if (ImGui::TreeNodeEx(state_map, ImGuiTreeNodeFlags_Framed,
+                            "sampler state %d", i)) {
+         aub_viewer_print_group(ctx, strct, state_addr, state_map);
+         ImGui::TreePop();
+      }
       state_addr += 16;
       state_map += 16;
    }
@@ -624,8 +638,6 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
                               struct gen_group *inst, const uint32_t *p,
                               const char *struct_type,  int count)
 {
-   struct gen_group *state = gen_spec_find_struct(ctx->spec, struct_type);
-
    uint32_t state_offset = 0;
 
    struct gen_field_iterator iter;
@@ -648,12 +660,28 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
       return;
    }
 
-   for (int i = 0; i < count; i++) {
-      ImGui::Text("%s %d", struct_type, i);
-      aub_viewer_print_group(ctx, state, state_offset, state_map);
+   struct gen_group *state = gen_spec_find_struct(ctx->spec, struct_type);
+   if (strcmp(struct_type, "BLEND_STATE") == 0) {
+      /* Blend states are different from the others because they have a header
+       * struct called BLEND_STATE which is followed by a variable number of
+       * BLEND_STATE_ENTRY structs.
+       */
+      ImGui::Text("%s", struct_type);
+      aub_viewer_print_group(ctx, state, state_addr, state_map);
 
       state_addr += state->dw_length * 4;
-      state_map += state->dw_length;
+      state_map += state->dw_length * 4;
+
+      struct_type = "BLEND_STATE_ENTRY";
+      state = gen_spec_find_struct(ctx->spec, struct_type);
+   }
+
+   for (int i = 0; i < count; i++) {
+      ImGui::Text("%s %d", struct_type, i);
+      aub_viewer_print_group(ctx, state, state_addr, state_map);
+
+      state_addr += state->dw_length * 4;
+      state_map += state->dw_length * 4;
    }
 }
 
@@ -871,7 +899,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
    int length;
 
    for (p = batch; p < end; p += length) {
-      inst = gen_spec_find_instruction(ctx->spec, p);
+      inst = gen_spec_find_instruction(ctx->spec, ctx->engine, p);
       length = gen_group_get_length(inst, p);
       assert(inst == NULL || length > 0);
       length = MAX2(1, length);
@@ -880,7 +908,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
 
       if (inst == NULL) {
          ImGui::TextColored(ctx->cfg->error_color,
-                            "x%08" PRIx64 ": unknown instruction %08x",
+                            "0x%08" PRIx64 ": unknown instruction %08x",
                             offset, p[0]);
          continue;
       }

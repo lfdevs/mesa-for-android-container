@@ -203,7 +203,7 @@ TargetNV50::getFileSize(DataFile file) const
 {
    switch (file) {
    case FILE_NULL:          return 0;
-   case FILE_GPR:           return 256; // in 16-bit units **
+   case FILE_GPR:           return 254; // in 16-bit units **
    case FILE_PREDICATE:     return 0;
    case FILE_FLAGS:         return 4;
    case FILE_ADDRESS:       return 4;

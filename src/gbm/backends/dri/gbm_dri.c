@@ -304,28 +304,6 @@ dri_bind_extensions(struct gbm_dri_device *dri,
 static const __DRIextension **
 dri_open_driver(struct gbm_dri_device *dri)
 {
-   const __DRIextension **extensions = NULL;
-   char path[PATH_MAX], *search_paths, *p, *next, *end;
-   char *get_extensions_name;
-
-   search_paths = NULL;
-   /* don't allow setuid apps to use LIBGL_DRIVERS_PATH or GBM_DRIVERS_PATH */
-   if (geteuid() == getuid()) {
-      /* Read GBM_DRIVERS_PATH first for compatibility, but LIBGL_DRIVERS_PATH
-       * is recommended over GBM_DRIVERS_PATH.
-       */
-      search_paths = getenv("GBM_DRIVERS_PATH");
-
-      /* Read LIBGL_DRIVERS_PATH if GBM_DRIVERS_PATH was not set.
-       * LIBGL_DRIVERS_PATH is recommended over GBM_DRIVERS_PATH.
-       */
-      if (search_paths == NULL) {
-         search_paths = getenv("LIBGL_DRIVERS_PATH");
-      }
-   }
-   if (search_paths == NULL)
-      search_paths = DEFAULT_DRIVER_DIR;
-
    /* Temporarily work around dri driver libs that need symbols in libglapi
     * but don't automatically link it in.
     */
@@ -334,56 +312,18 @@ dri_open_driver(struct gbm_dri_device *dri)
     */
    dlopen("libglapi.so.0", RTLD_LAZY | RTLD_GLOBAL);
 
-   dri->driver = NULL;
-   end = search_paths + strlen(search_paths);
-   for (p = search_paths; p < end && dri->driver == NULL; p = next + 1) {
-      int len;
-      next = strchr(p, ':');
-      if (next == NULL)
-         next = end;
-
-      len = next - p;
-#if GLX_USE_TLS
-      snprintf(path, sizeof path,
-               "%.*s/tls/%s_dri.so", len, p, dri->driver_name);
-      dri->driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
-#endif
-      if (dri->driver == NULL) {
-         snprintf(path, sizeof path,
-                  "%.*s/%s_dri.so", len, p, dri->driver_name);
-         dri->driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
-      }
-      /* not need continue to loop all paths once the driver is found */
-      if (dri->driver != NULL)
-         break;
-   }
-
-   if (dri->driver == NULL) {
-      fprintf(stderr, "gbm: failed to open any driver (search paths %s)\n",
-              search_paths);
-      fprintf(stderr, "gbm: Last dlopen error: %s\n", dlerror());
-      return NULL;
-   }
-
-   get_extensions_name = loader_get_extensions_name(dri->driver_name);
-   if (get_extensions_name) {
-      const __DRIextension **(*get_extensions)(void);
-
-      get_extensions = dlsym(dri->driver, get_extensions_name);
-      free(get_extensions_name);
-
-      if (get_extensions)
-         extensions = get_extensions();
-   }
-
-   if (!extensions)
-      extensions = dlsym(dri->driver, __DRI_DRIVER_EXTENSIONS);
-   if (extensions == NULL) {
-      fprintf(stderr, "gbm: driver exports no extensions (%s)", dlerror());
-      dlclose(dri->driver);
-   }
-
-   return extensions;
+   static const char *search_path_vars[] = {
+      /* Read GBM_DRIVERS_PATH first for compatibility, but LIBGL_DRIVERS_PATH
+       * is recommended over GBM_DRIVERS_PATH.
+       */
+      "GBM_DRIVERS_PATH",
+      /* Read LIBGL_DRIVERS_PATH if GBM_DRIVERS_PATH was not set.
+       * LIBGL_DRIVERS_PATH is recommended over GBM_DRIVERS_PATH.
+       */
+      "LIBGL_DRIVERS_PATH",
+      NULL
+   };
+   return loader_open_driver(dri->driver_name, &dri->driver, search_path_vars);
 }
 
 static int
@@ -593,22 +533,6 @@ static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
      { 0x000003ff, 0x000ffc00, 0x3ff00000, 0xc0000000 },
    },
 };
-
-/* The two GBM_BO_FORMAT_[XA]RGB8888 formats alias the GBM_FORMAT_*
- * formats of the same name. We want to accept them whenever someone
- * has a GBM format, but never return them to the user. */
-static int
-gbm_format_canonicalize(uint32_t gbm_format)
-{
-   switch (gbm_format) {
-   case GBM_BO_FORMAT_XRGB8888:
-      return GBM_FORMAT_XRGB8888;
-   case GBM_BO_FORMAT_ARGB8888:
-      return GBM_FORMAT_ARGB8888;
-   default:
-      return gbm_format;
-   }
-}
 
 static int
 gbm_format_to_dri_format(uint32_t gbm_format)

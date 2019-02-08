@@ -36,6 +36,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "egldefines.h"
 #include "egldisplay.h"
 #include "egldriver.h"
 #include "eglcontext.h"
@@ -44,6 +45,7 @@
 #include "egllog.h"
 #include "eglsurface.h"
 
+#include "util/macros.h"
 
 /**
  * Parse the list of surface attributes and return the proper error code.

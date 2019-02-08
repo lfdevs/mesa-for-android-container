@@ -1,4 +1,4 @@
-
+#include "util/u_format.h"
 #include "util/u_framebuffer.h"
 #include "util/u_math.h"
 #include "util/u_viewport.h"
@@ -831,20 +831,6 @@ nvc0_validate_fbread(struct nvc0_context *nvc0)
       pipe_sampler_view_reference(&nvc0->fbtexture, NULL);
    nvc0->fbtexture = new_view;
 
-   if (screen->default_tsc->id < 0) {
-      struct nv50_tsc_entry *tsc = nv50_tsc_entry(screen->default_tsc);
-      tsc->id = nvc0_screen_tsc_alloc(screen, tsc);
-      nvc0->base.push_data(&nvc0->base, screen->txc, 65536 + tsc->id * 32,
-                           NV_VRAM_DOMAIN(&screen->base), 32, tsc->tsc);
-      screen->tsc.lock[tsc->id / 32] |= 1 << (tsc->id % 32);
-
-      IMMED_NVC0(push, NVC0_3D(TSC_FLUSH), 0);
-      if (screen->base.class_3d < NVE4_3D_CLASS) {
-         BEGIN_NVC0(push, NVC0_3D(BIND_TSC2(0)), 1);
-         PUSH_DATA (push, (tsc->id << 12) | 1);
-      }
-   }
-
    if (new_view) {
       struct nv50_tic_entry *tic = nv50_tic_entry(new_view);
       assert(tic->id < 0);
@@ -860,7 +846,7 @@ nvc0_validate_fbread(struct nvc0_context *nvc0)
          PUSH_DATA (push, screen->uniform_bo->offset + NVC0_CB_AUX_INFO(4));
          BEGIN_1IC0(push, NVC0_3D(CB_POS), 1 + 1);
          PUSH_DATA (push, NVC0_CB_AUX_FB_TEX_INFO);
-         PUSH_DATA (push, (screen->default_tsc->id << 20) | tic->id);
+         PUSH_DATA (push, (0 << 20) | tic->id);
       } else {
          BEGIN_NVC0(push, NVC0_3D(BIND_TIC2(0)), 1);
          PUSH_DATA (push, (tic->id << 9) | 1);

@@ -230,8 +230,7 @@ etna_shader_link(struct etna_context *ctx)
 }
 
 static bool
-etna_shader_update_vs_inputs(struct etna_context *ctx,
-                             struct compiled_shader_state *cs,
+etna_shader_update_vs_inputs(struct compiled_shader_state *cs,
                              const struct etna_shader_variant *vs,
                              const struct compiled_vertex_elements_state *ves)
 {
@@ -246,7 +245,7 @@ etna_shader_update_vs_inputs(struct etna_context *ctx,
    num_vs_inputs = MAX2(ves->num_elements, vs->infile.num_reg);
    if (num_vs_inputs != ves->num_elements) {
       BUG("Number of elements %u does not match the number of VS inputs %zu",
-          ctx->vertex_elements->num_elements, ctx->shader.vs->infile.num_reg);
+          ves->num_elements, vs->infile.num_reg);
       return false;
    }
 
@@ -312,7 +311,7 @@ dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debu
 bool
 etna_shader_update_vertex(struct etna_context *ctx)
 {
-   return etna_shader_update_vs_inputs(ctx, &ctx->shader_state, ctx->shader.vs,
+   return etna_shader_update_vs_inputs(&ctx->shader_state, ctx->shader.vs,
                                        ctx->vertex_elements);
 }
 

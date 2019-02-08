@@ -31,12 +31,10 @@
 
 #include "freedreno_context.h"
 
-#include "ir3_shader.h"
+#include "ir3/ir3_shader.h"
 
 struct fd5_context {
 	struct fd_context base;
-
-	struct fd_bo *vs_pvt_mem, *fs_pvt_mem;
 
 	/* This only needs to be 4 * num_of_pipes bytes (ie. 32 bytes).  We
 	 * could combine it with another allocation.

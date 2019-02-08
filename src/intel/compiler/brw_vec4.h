@@ -132,7 +132,7 @@ public:
    bool reg_allocate();
    void evaluate_spill_costs(float *spill_costs, bool *no_spill);
    int choose_spill_reg(struct ra_graph *g);
-   void spill_reg(int spill_reg);
+   void spill_reg(unsigned spill_reg);
    void move_grf_array_access_to_scratch();
    void move_uniform_array_access_to_pull_constants();
    void move_push_constants_to_pull_constants();
@@ -338,6 +338,7 @@ public:
    virtual void nir_emit_block(nir_block *block);
    virtual void nir_emit_instr(nir_instr *instr);
    virtual void nir_emit_load_const(nir_load_const_instr *instr);
+   src_reg get_nir_ssbo_intrinsic_index(nir_intrinsic_instr *instr);
    virtual void nir_emit_intrinsic(nir_intrinsic_instr *instr);
    virtual void nir_emit_alu(nir_alu_instr *instr);
    virtual void nir_emit_jump(nir_jump_instr *instr);
@@ -354,6 +355,7 @@ public:
                        unsigned num_components = 4);
    src_reg get_nir_src(const nir_src &src,
                        unsigned num_components = 4);
+   src_reg get_nir_src_imm(const nir_src &src);
    src_reg get_indirect_offset(nir_intrinsic_instr *instr);
 
    dst_reg *nir_locals;

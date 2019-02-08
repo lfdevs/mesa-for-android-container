@@ -8,7 +8,7 @@
 
 #include "nine_dump.h"
 
-#ifdef DEBUG
+#if defined(DEBUG) || !defined(NDEBUG)
 
 static char __thread tls[128];
 
@@ -810,4 +810,4 @@ nine_dump_D3DCAPS9(unsigned ch, const D3DCAPS9 *caps)
     FREE(s);
 }
 
-#endif /* DEBUG */
+#endif /* DEBUG || !NDEBUG */

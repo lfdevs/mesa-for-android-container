@@ -41,7 +41,7 @@
 
 static struct ir3_shader *
 create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
-		enum shader_t type)
+		gl_shader_stage type)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct ir3_compiler *compiler = ctx->screen->compiler;
@@ -52,7 +52,7 @@ static void *
 fd6_fp_state_create(struct pipe_context *pctx,
 		const struct pipe_shader_state *cso)
 {
-	return create_shader_stateobj(pctx, cso, SHADER_FRAGMENT);
+	return create_shader_stateobj(pctx, cso, MESA_SHADER_FRAGMENT);
 }
 
 static void
@@ -68,7 +68,7 @@ static void *
 fd6_vp_state_create(struct pipe_context *pctx,
 		const struct pipe_shader_state *cso)
 {
-	return create_shader_stateobj(pctx, cso, SHADER_VERTEX);
+	return create_shader_stateobj(pctx, cso, MESA_SHADER_VERTEX);
 }
 
 static void
@@ -100,11 +100,12 @@ fd6_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 	}
 
 	switch (so->type) {
-	case SHADER_VERTEX:
+	case MESA_SHADER_VERTEX:
 		opcode = CP_LOAD_STATE6_GEOM;
 		break;
-	case SHADER_FRAGMENT:
-	case SHADER_COMPUTE:
+	case MESA_SHADER_FRAGMENT:
+	case MESA_SHADER_COMPUTE:
+	case MESA_SHADER_KERNEL:
 		opcode = CP_LOAD_STATE6_FRAG;
 		break;
 	default:
@@ -121,7 +122,7 @@ fd6_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 		OUT_RING(ring, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
 		OUT_RING(ring, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
 	} else {
-		OUT_RELOC(ring, so->bo, 0, 0, 0);
+		OUT_RELOCD(ring, so->bo, 0, 0, 0);
 	}
 
 	/* for how clever coverity is, it is sometimes rather dull, and
@@ -140,14 +141,14 @@ fd6_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 static void
 link_stream_out(struct ir3_shader_linkage *l, const struct ir3_shader_variant *v)
 {
-	const struct pipe_stream_output_info *strmout = &v->shader->stream_output;
+	const struct ir3_stream_output_info *strmout = &v->shader->stream_output;
 
 	/*
 	 * First, any stream-out varyings not already in linkage map (ie. also
 	 * consumed by frag shader) need to be added:
 	 */
 	for (unsigned i = 0; i < strmout->num_outputs; i++) {
-		const struct pipe_stream_output *out = &strmout->output[i];
+		const struct ir3_stream_output *out = &strmout->output[i];
 		unsigned k = out->register_index;
 		unsigned compmask =
 			(1 << (out->num_components + out->start_component)) - 1;
@@ -185,7 +186,7 @@ static void
 setup_stream_out(struct fd6_program_state *state, const struct ir3_shader_variant *v,
 		struct ir3_shader_linkage *l)
 {
-	const struct pipe_stream_output_info *strmout = &v->shader->stream_output;
+	const struct ir3_stream_output_info *strmout = &v->shader->stream_output;
 	struct fd6_streamout_state *tf = &state->tf;
 
 	memset(tf, 0, sizeof(*tf));
@@ -195,7 +196,7 @@ setup_stream_out(struct fd6_program_state *state, const struct ir3_shader_varian
 	debug_assert(tf->prog_count < ARRAY_SIZE(tf->prog));
 
 	for (unsigned i = 0; i < strmout->num_outputs; i++) {
-		const struct pipe_stream_output *out = &strmout->output[i];
+		const struct ir3_stream_output *out = &strmout->output[i];
 		unsigned k = out->register_index;
 		unsigned idx;
 
@@ -402,7 +403,7 @@ setup_stateobj(struct fd_ringbuffer *ring,
 	OUT_RING(ring, A6XX_SP_VS_CTRL_REG0_THREADSIZE(fssz) |
 			A6XX_SP_VS_CTRL_REG0_FULLREGFOOTPRINT(s[VS].i->max_reg + 1) |
 			A6XX_SP_VS_CTRL_REG0_MERGEDREGS |
-			A6XX_SP_VS_CTRL_REG0_BRANCHSTACK(0x3) |  // XXX need to figure this out somehow..
+			A6XX_SP_VS_CTRL_REG0_BRANCHSTACK(s[VS].v->branchstack) |
 			COND(s[VS].v->num_samp > 0, A6XX_SP_VS_CTRL_REG0_PIXLODENABLE));
 
 	struct ir3_shader_linkage l = {0};
@@ -524,7 +525,7 @@ setup_stateobj(struct fd_ringbuffer *ring,
 			0x1000000 |
 			A6XX_SP_FS_CTRL_REG0_FULLREGFOOTPRINT(s[FS].i->max_reg + 1) |
 			A6XX_SP_FS_CTRL_REG0_MERGEDREGS |
-			A6XX_SP_FS_CTRL_REG0_BRANCHSTACK(0x3) |  // XXX need to figure this out somehow..
+			A6XX_SP_FS_CTRL_REG0_BRANCHSTACK(s[FS].v->branchstack) |
 			COND(s[FS].v->num_samp > 0, A6XX_SP_FS_CTRL_REG0_PIXLODENABLE));
 
 	OUT_PKT4(ring, REG_A6XX_SP_UNKNOWN_A982, 1);

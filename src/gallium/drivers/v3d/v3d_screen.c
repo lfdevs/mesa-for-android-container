@@ -81,6 +81,20 @@ v3d_screen_destroy(struct pipe_screen *pscreen)
         ralloc_free(pscreen);
 }
 
+static bool
+v3d_has_feature(struct v3d_screen *screen, enum drm_v3d_param feature)
+{
+        struct drm_v3d_get_param p = {
+                .param = feature,
+        };
+        int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_GET_PARAM, &p);
+
+        if (ret != 0)
+                return false;
+
+        return p.value;
+}
+
 static int
 v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
@@ -108,11 +122,17 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
         case PIPE_CAP_COMPUTE:
         case PIPE_CAP_DRAW_INDIRECT:
+        case PIPE_CAP_MULTI_DRAW_INDIRECT:
         case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
         case PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET:
         case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
         case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
+        case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
+        case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
                 return 1;
+
+        case PIPE_CAP_GENERATE_MIPMAP:
+                return v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_TFU);
 
         case PIPE_CAP_INDEP_BLEND_ENABLE:
                 return screen->devinfo.ver >= 40;
@@ -120,11 +140,16 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
                 return 256;
 
+        case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+                if (screen->devinfo.ver < 40)
+                        return 0;
+                return 4;
+
         case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
                 return 4;
 
         case PIPE_CAP_GLSL_FEATURE_LEVEL:
-                return 400;
+                return 330;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
 		return 140;
@@ -156,7 +181,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
-                return VC5_MAX_MIP_LEVELS;
+                return V3D_MAX_MIP_LEVELS;
         case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
                 return 2048;
 
@@ -215,6 +240,8 @@ static int
 v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                            enum pipe_shader_cap param)
 {
+        struct v3d_screen *screen = v3d_screen(pscreen);
+
         if (shader != PIPE_SHADER_VERTEX &&
             shader != PIPE_SHADER_FRAGMENT) {
                 return 0;
@@ -233,14 +260,14 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 
         case PIPE_SHADER_CAP_MAX_INPUTS:
                 if (shader == PIPE_SHADER_FRAGMENT)
-                        return VC5_MAX_FS_INPUTS / 4;
+                        return V3D_MAX_FS_INPUTS / 4;
                 else
-                        return VC5_MAX_ATTRIBUTES;
+                        return V3D_MAX_VS_INPUTS / 4;
         case PIPE_SHADER_CAP_MAX_OUTPUTS:
                 if (shader == PIPE_SHADER_FRAGMENT)
                         return 4;
                 else
-                        return VC5_MAX_FS_INPUTS / 4;
+                        return V3D_MAX_FS_INPUTS / 4;
         case PIPE_SHADER_CAP_MAX_TEMPS:
                 return 256; /* GL_MAX_PROGRAM_TEMPORARIES_ARB */
         case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
@@ -273,9 +300,17 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return 1;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
-        case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+                return V3D_MAX_TEXTURE_SAMPLERS;
+
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
-                return VC5_MAX_TEXTURE_SAMPLERS;
+                return PIPE_MAX_SHADER_BUFFERS;
+
+        case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+                if (screen->devinfo.ver < 41)
+                        return 0;
+                else
+                        return PIPE_MAX_SHADER_IMAGES;
+
         case PIPE_SHADER_CAP_PREFERRED_IR:
                 return PIPE_SHADER_IR_NIR;
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
@@ -305,7 +340,7 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
         if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
                 return false;
 
-        if (sample_count > 1 && sample_count != VC5_MAX_SAMPLES)
+        if (sample_count > 1 && sample_count != V3D_MAX_SAMPLES)
                 return FALSE;
 
         if (target >= PIPE_MAX_TEXTURE_TYPES) {
@@ -372,7 +407,11 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 }
         }
 
+        /* FORMAT_NONE gets allowed for ARB_framebuffer_no_attachments's probe
+         * of FRAMEBUFFER_MAX_SAMPLES
+         */
         if ((usage & PIPE_BIND_RENDER_TARGET) &&
+            format != PIPE_FORMAT_NONE &&
             !v3d_rt_format_supported(&screen->devinfo, format)) {
                 return FALSE;
         }
@@ -467,7 +506,7 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
 }
 
 struct pipe_screen *
-v3d_screen_create(int fd)
+v3d_screen_create(int fd, struct renderonly *ro)
 {
         struct v3d_screen *screen = rzalloc(NULL, struct v3d_screen);
         struct pipe_screen *pscreen;
@@ -482,6 +521,14 @@ v3d_screen_create(int fd)
         pscreen->is_format_supported = v3d_screen_is_format_supported;
 
         screen->fd = fd;
+        if (ro) {
+                screen->ro = renderonly_dup(ro);
+                if (!screen->ro) {
+                        fprintf(stderr, "Failed to dup renderonly object\n");
+                        ralloc_free(screen);
+                        return NULL;
+                }
+        }
         list_inithead(&screen->bo_cache.time_list);
         (void)mtx_init(&screen->bo_handles_mutex, mtx_plain);
         screen->bo_handles = util_hash_table_create(handle_hash, handle_compare);

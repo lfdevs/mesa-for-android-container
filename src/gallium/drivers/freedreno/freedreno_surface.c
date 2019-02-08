@@ -53,6 +53,7 @@ fd_create_surface(struct pipe_context *pctx,
 	psurf->format = surf_tmpl->format;
 	psurf->width = u_minify(ptex->width0, level);
 	psurf->height = u_minify(ptex->height0, level);
+	psurf->nr_samples = surf_tmpl->nr_samples;
 
 	if (ptex->target == PIPE_BUFFER) {
 		psurf->u.buf.first_element = surf_tmpl->u.buf.first_element;

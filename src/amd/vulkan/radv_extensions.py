@@ -31,7 +31,7 @@ import xml.etree.cElementTree as et
 
 from mako.template import Template
 
-MAX_API_VERSION = '1.1.70'
+MAX_API_VERSION = '1.1.90'
 
 class Extension:
     def __init__(self, name, ext_version, enable):
@@ -51,7 +51,7 @@ class Extension:
 # and dEQP-VK.api.info.device fail due to the duplicated strings.
 EXTENSIONS = [
     Extension('VK_ANDROID_native_buffer',                 5, 'ANDROID && device->rad_info.has_syncobj_wait_for_submit'),
-    Extension('VK_KHR_16bit_storage',                     1, 'HAVE_LLVM >= 0x0700'),
+    Extension('VK_KHR_16bit_storage',                     1, True),
     Extension('VK_KHR_bind_memory2',                      1, True),
     Extension('VK_KHR_create_renderpass2',                1, True),
     Extension('VK_KHR_dedicated_allocation',              1, True),
@@ -105,8 +105,11 @@ EXTENSIONS = [
     Extension('VK_EXT_external_memory_dma_buf',           1, True),
     Extension('VK_EXT_external_memory_host',              1, 'device->rad_info.has_userptr'),
     Extension('VK_EXT_global_priority',                   1, 'device->rad_info.has_ctx_priority'),
-    Extension('VK_EXT_pci_bus_info',                      1, False),
+    Extension('VK_EXT_memory_budget',                     1, True),
+    Extension('VK_EXT_memory_priority',                   1, True),
+    Extension('VK_EXT_pci_bus_info',                      2, True),
     Extension('VK_EXT_sampler_filter_minmax',             1, 'device->rad_info.chip_class >= CIK'),
+    Extension('VK_EXT_scalar_block_layout',               1, 'device->rad_info.chip_class >= CIK'),
     Extension('VK_EXT_shader_viewport_index_layer',       1, True),
     Extension('VK_EXT_shader_stencil_export',             1, True),
     Extension('VK_EXT_transform_feedback',                1, True),
@@ -182,6 +185,32 @@ def _init_exts_from_xml(xml):
 
         ext = ext_name_map[ext_name]
         ext.type = ext_elem.attrib['type']
+        ext.promotedto = ext_elem.attrib.get('promotedto', None)
+        try:
+            ext.requires = ext_elem.attrib['requires'].split(',')
+        except KeyError:
+            ext.requires = []
+
+    def extra_deps(ext):
+        if ext.type == 'instance':
+            check = 'instance->enabled_extensions.{}'.format(ext.name[3:])
+            if ext.promotedto is not None:
+                # the xml contains values like VK_VERSION_1_1, but we need to
+                # translate them to VK_API_VERSION_1_1 for the apiVersion check
+                api_ver = ext.promotedto.replace('VK_VER', 'VK_API_VER')
+                check = '({} || instance->apiVersion >= {})'.format(check, api_ver)
+            return set([check])
+
+        deps = set()
+        for dep in ext.requires:
+            deps |= extra_deps(ext_name_map[dep])
+
+        return deps
+
+    for ext in EXTENSIONS:
+        if ext.type == 'device':
+            for dep in extra_deps(ext):
+                ext.enable += ' && ' + dep
 
 _TEMPLATE_H = Template(COPYRIGHT + """
 #ifndef RADV_EXTENSIONS_H
@@ -276,6 +305,7 @@ const struct radv_instance_extension_table radv_supported_instance_extensions = 
 void radv_fill_device_extension_table(const struct radv_physical_device *device,
                                       struct radv_device_extension_table* table)
 {
+   const struct radv_instance *instance = device->instance;
 %for ext in device_extensions:
    table->${ext.name[3:]} = ${ext.enable};
 %endfor
@@ -292,7 +322,7 @@ uint32_t
 radv_physical_device_api_version(struct radv_physical_device *dev)
 {
     if (!ANDROID && dev->rad_info.has_syncobj_wait_for_submit)
-        return VK_MAKE_VERSION(1, 1, 70);
+        return ${MAX_API_VERSION.c_vk_version()};
     return VK_MAKE_VERSION(1, 0, 68);
 }
 """)

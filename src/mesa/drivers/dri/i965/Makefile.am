@@ -26,6 +26,7 @@ include Makefile.sources
 AM_CFLAGS = \
 	-I$(top_srcdir)/include \
 	-I$(top_srcdir)/src/ \
+	-I$(top_builddir)/src/ \
 	-I$(top_srcdir)/src/mapi \
 	-I$(top_srcdir)/src/mesa/ \
 	-I$(top_srcdir)/src/gallium/include \
@@ -33,6 +34,8 @@ AM_CFLAGS = \
 	-I$(top_builddir)/src/util \
 	-I$(top_srcdir)/src/mesa/drivers/dri/common \
 	-I$(top_srcdir)/src/gtest/include \
+	-I$(top_builddir)/src/compiler \
+	-I$(top_srcdir)/src/compiler \
 	-I$(top_builddir)/src/compiler/glsl \
 	-I$(top_builddir)/src/compiler/nir \
 	-I$(top_srcdir)/src/compiler/nir \
@@ -92,19 +95,7 @@ libi965_gen11_la_CFLAGS = $(AM_CFLAGS) -DGEN_VERSIONx10=110
 
 noinst_LTLIBRARIES = \
 	libi965_dri.la \
-	libintel_tiled_memcpy.la \
-	libintel_tiled_memcpy_sse41.la \
 	$(I965_PERGEN_LIBS)
-
-libintel_tiled_memcpy_la_SOURCES = \
-	$(intel_tiled_memcpy_FILES)
-libintel_tiled_memcpy_la_CFLAGS = \
-	$(AM_CFLAGS)
-
-libintel_tiled_memcpy_sse41_la_SOURCES = \
-	$(intel_tiled_memcpy_sse41_FILES)
-libintel_tiled_memcpy_sse41_la_CFLAGS = \
-	$(AM_CFLAGS) $(SSE41_CFLAGS)
 
 libi965_dri_la_SOURCES = \
 	$(i965_FILES) \
@@ -116,8 +107,6 @@ libi965_dri_la_LIBADD = \
 	$(top_builddir)/src/intel/compiler/libintel_compiler.la \
 	$(top_builddir)/src/intel/blorp/libblorp.la \
 	$(I965_PERGEN_LIBS) \
-	libintel_tiled_memcpy.la \
-	libintel_tiled_memcpy_sse41.la \
 	$(LIBDRM_LIBS)
 
 BUILT_SOURCES = $(i965_oa_GENERATED_FILES)
@@ -126,7 +115,6 @@ CLEANFILES = $(BUILT_SOURCES)
 EXTRA_DIST = \
 	brw_oa.py \
 	$(i965_oa_xml_FILES) \
-	$(intel_tiled_memcpy_dep_FILES) \
 	meson.build
 
 brw_oa_metrics.c: brw_oa.py $(i965_oa_xml_FILES)
@@ -136,6 +124,3 @@ brw_oa_metrics.c: brw_oa.py $(i965_oa_xml_FILES)
 	$(i965_oa_xml_FILES:%=$(srcdir)/%)
 
 brw_oa_metrics.h: brw_oa_metrics.c
-
-intel_tiled_memcpy_normal.c: $(intel_tiled_memcpy_dep_FILES)
-intel_tiled_memcpy_sse41.c: $(intel_tiled_memcpy_dep_FILES)

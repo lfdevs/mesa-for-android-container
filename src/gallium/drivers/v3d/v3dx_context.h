@@ -39,9 +39,13 @@ void v3dX(bcl_epilogue)(struct v3d_context *v3d, struct v3d_job *job);
 void v3dX(simulator_init_regs)(struct v3d_hw *v3d);
 int v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                                     struct drm_v3d_get_param *args);
-void v3dX(simulator_flush)(struct v3d_hw *v3d, struct drm_v3d_submit_cl *submit,
-                           uint32_t gmp_ofs);
+void v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
+                                     struct drm_v3d_submit_cl *args,
+                                     uint32_t gmp_offset);
+int v3dX(simulator_submit_tfu_ioctl)(struct v3d_hw *v3d,
+                                     struct drm_v3d_submit_tfu *args);
 const struct v3d_format *v3dX(get_format_desc)(enum pipe_format f);
 void v3dX(get_internal_type_bpp_for_output_format)(uint32_t format,
                                                    uint32_t *type,
                                                    uint32_t *bpp);
+bool v3dX(tfu_supports_tex_format)(uint32_t tex_format);

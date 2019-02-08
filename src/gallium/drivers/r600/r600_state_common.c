@@ -1020,7 +1020,9 @@ static void r600_bind_vs_state(struct pipe_context *ctx, void *state)
 
 	rctx->vs_shader = (struct r600_pipe_shader_selector *)state;
 	r600_update_vs_writes_viewport_index(&rctx->b, r600_get_vs_info(rctx));
-	rctx->b.streamout.stride_in_dw = rctx->vs_shader->so.stride;
+
+        if (rctx->vs_shader->so.num_outputs)
+           rctx->b.streamout.stride_in_dw = rctx->vs_shader->so.stride;
 }
 
 static void r600_bind_gs_state(struct pipe_context *ctx, void *state)
@@ -1035,7 +1037,9 @@ static void r600_bind_gs_state(struct pipe_context *ctx, void *state)
 
 	if (!state)
 		return;
-	rctx->b.streamout.stride_in_dw = rctx->gs_shader->so.stride;
+
+        if (rctx->gs_shader->so.num_outputs)
+           rctx->b.streamout.stride_in_dw = rctx->gs_shader->so.stride;
 }
 
 static void r600_bind_tcs_state(struct pipe_context *ctx, void *state)
@@ -1057,7 +1061,9 @@ static void r600_bind_tes_state(struct pipe_context *ctx, void *state)
 
 	if (!state)
 		return;
-	rctx->b.streamout.stride_in_dw = rctx->tes_shader->so.stride;
+
+        if (rctx->tes_shader->so.num_outputs)
+           rctx->b.streamout.stride_in_dw = rctx->tes_shader->so.stride;
 }
 
 void r600_delete_shader_selector(struct pipe_context *ctx,
@@ -2917,6 +2923,7 @@ uint32_t r600_translate_texformat(struct pipe_screen *screen,
 			switch (desc->nr_channels) {
 			case 1:
 				result = FMT_8;
+				is_srgb_valid = TRUE;
 				goto out_word4;
 			case 2:
 				result = FMT_8_8;

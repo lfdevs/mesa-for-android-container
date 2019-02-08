@@ -165,8 +165,12 @@ lp_build_fetch_subsampled_rgba_aos(struct gallivm_state *gallivm,
                                    LLVMValueRef j);
 
 
+/*
+ * S3TC
+ */
+
 LLVMValueRef
-lp_build_fetch_cached_texels(struct gallivm_state *gallivm,
+lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
                              const struct util_format_description *format_desc,
                              unsigned n,
                              LLVMValueRef base_ptr,

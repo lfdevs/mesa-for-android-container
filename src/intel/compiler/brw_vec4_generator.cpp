@@ -291,8 +291,6 @@ generate_tex(struct brw_codegen *p,
                  inst->header_size != 0,
                  BRW_SAMPLER_SIMD_MODE_SIMD4X2,
                  return_format);
-
-      brw_mark_surface_used(&prog_data->base, sampler + base_binding_table_index);
    } else {
       /* Non-constant sampler index. */
 
@@ -1351,8 +1349,6 @@ generate_get_buffer_size(struct brw_codegen *p,
               inst->header_size > 0,
               BRW_SAMPLER_SIMD_MODE_SIMD4X2,
               BRW_SAMPLER_RETURN_FORMAT_SINT32);
-
-   brw_mark_surface_used(&prog_data->base, surf_index.ud);
 }
 
 static void
@@ -1378,9 +1374,6 @@ generate_pull_constant_load_gen7(struct brw_codegen *p,
                                     0, /* LD message ignores sampler unit */
                                     GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
                                     BRW_SAMPLER_SIMD_MODE_SIMD4X2, 0));
-
-      brw_mark_surface_used(&prog_data->base, surf_index.ud);
-
    } else {
 
       struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
@@ -1866,8 +1859,6 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_SHADER_TIME_ADD:
          brw_shader_time_add(p, src[0],
                              prog_data->base.binding_table.shader_time_start);
-         brw_mark_surface_used(&prog_data->base,
-                               prog_data->base.binding_table.shader_time_start);
          break;
 
       case SHADER_OPCODE_UNTYPED_ATOMIC:

@@ -78,12 +78,11 @@ include $(top_srcdir)/src/gallium/drivers/tegra/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/v3d/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/vc4/Automake.inc
-include $(top_srcdir)/src/gallium/drivers/pl111/Automake.inc
+include $(top_srcdir)/src/gallium/drivers/kmsro/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/virgl/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/etnaviv/Automake.inc
-include $(top_srcdir)/src/gallium/drivers/imx/Automake.inc
 
 include $(top_srcdir)/src/gallium/drivers/softpipe/Automake.inc
 include $(top_srcdir)/src/gallium/drivers/llvmpipe/Automake.inc

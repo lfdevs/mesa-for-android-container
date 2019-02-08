@@ -365,19 +365,26 @@ check_os_arm_support(void)
     }
 #endif /* PIPE_OS_LINUX */
 }
-#endif /* PIPE_ARCH_ARM */
+
+#elif defined(PIPE_ARCH_AARCH64)
+static void
+check_os_arm_support(void)
+{
+    util_cpu_caps.has_neon = true;
+}
+#endif /* PIPE_ARCH_ARM || PIPE_ARCH_AARCH64 */
 
 static void
 get_cpu_topology(void)
 {
-   uint32_t regs[4];
-
    /* Default. This is correct if L3 is not present or there is only one. */
    util_cpu_caps.cores_per_L3 = util_cpu_caps.nr_cpus;
 
 #if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    /* AMD Zen */
    if (util_cpu_caps.x86_cpu_type == 0x17) {
+      uint32_t regs[4];
+
       /* Query the L3 cache topology information. */
       cpuid_count(0x8000001D, 3, regs);
       unsigned cache_level = (regs[0] >> 5) & 0x7;
@@ -534,7 +541,7 @@ util_cpu_detect_once(void)
    }
 #endif /* PIPE_ARCH_X86 || PIPE_ARCH_X86_64 */
 
-#if defined(PIPE_ARCH_ARM)
+#if defined(PIPE_ARCH_ARM) || defined(PIPE_ARCH_AARCH64)
    check_os_arm_support();
 #endif
 

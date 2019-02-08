@@ -190,6 +190,9 @@ struct etna_context {
 
    /* list of active hardware queries */
    struct list_head active_hw_queries;
+
+   struct etna_bo *dummy_rt;
+   struct etna_reloc dummy_rt_reloc;
 };
 
 static inline struct etna_context *

@@ -765,6 +765,119 @@ namespace SwrJit
     Value* Builder::VPOPCNT(Value* a) { return POPCNT(VMOVMSK(a)); }
 
     //////////////////////////////////////////////////////////////////////////
+    /// @brief Float / Fixed-point conversions
+    //////////////////////////////////////////////////////////////////////////
+    Value* Builder::VCVT_F32_FIXED_SI(Value*             vFloat,
+                                      uint32_t           numIntBits,
+                                      uint32_t           numFracBits,
+                                      const llvm::Twine& name)
+    {
+        SWR_ASSERT((numIntBits + numFracBits) <= 32, "Can only handle 32-bit fixed-point values");
+        Value* fixed = nullptr;
+        {
+            // Do round to nearest int on fractional bits first
+            // Not entirely perfect for negative numbers, but close enough
+            vFloat = VROUND(FMUL(vFloat, VIMMED1(float(1 << numFracBits))),
+                            C(_MM_FROUND_TO_NEAREST_INT));
+            vFloat = FMUL(vFloat, VIMMED1(1.0f / float(1 << numFracBits)));
+
+            // TODO: Handle INF, NAN, overflow / underflow, etc.
+
+            Value* vSgn      = FCMP_OLT(vFloat, VIMMED1(0.0f));
+            Value* vFloatInt = BITCAST(vFloat, mSimdInt32Ty);
+            Value* vFixed    = AND(vFloatInt, VIMMED1((1 << 23) - 1));
+            vFixed           = OR(vFixed, VIMMED1(1 << 23));
+            vFixed           = SELECT(vSgn, NEG(vFixed), vFixed);
+
+            Value* vExp = LSHR(SHL(vFloatInt, VIMMED1(1)), VIMMED1(24));
+            vExp        = SUB(vExp, VIMMED1(127));
+
+            Value* vExtraBits = SUB(VIMMED1(23 - numFracBits), vExp);
+
+            fixed = ASHR(vFixed, vExtraBits, name);
+        }
+
+        return fixed;
+    }
+
+    Value* Builder::VCVT_FIXED_SI_F32(Value*             vFixed,
+                                      uint32_t           numIntBits,
+                                      uint32_t           numFracBits,
+                                      const llvm::Twine& name)
+    {
+        SWR_ASSERT((numIntBits + numFracBits) <= 32, "Can only handle 32-bit fixed-point values");
+        uint32_t extraBits = 32 - numIntBits - numFracBits;
+        if (numIntBits && extraBits)
+        {
+            // Sign extend
+            Value* shftAmt = VIMMED1(extraBits);
+            vFixed         = ASHR(SHL(vFixed, shftAmt), shftAmt);
+        }
+
+        Value* fVal  = VIMMED1(0.0f);
+        Value* fFrac = VIMMED1(0.0f);
+        if (numIntBits)
+        {
+            fVal = SI_TO_FP(ASHR(vFixed, VIMMED1(numFracBits)), mSimdFP32Ty, name);
+        }
+
+        if (numFracBits)
+        {
+            fFrac = UI_TO_FP(AND(vFixed, VIMMED1((1 << numFracBits) - 1)), mSimdFP32Ty);
+            fFrac = FDIV(fFrac, VIMMED1(float(1 << numFracBits)), name);
+        }
+
+        return FADD(fVal, fFrac, name);
+    }
+
+    Value* Builder::VCVT_F32_FIXED_UI(Value*             vFloat,
+                                      uint32_t           numIntBits,
+                                      uint32_t           numFracBits,
+                                      const llvm::Twine& name)
+    {
+        SWR_ASSERT((numIntBits + numFracBits) <= 32, "Can only handle 32-bit fixed-point values");
+        Value* fixed = nullptr;
+        // KNOB_SIM_FAST_MATH?  Below works correctly from a precision
+        // standpoint...
+        {
+            fixed = FP_TO_UI(VROUND(FMUL(vFloat, VIMMED1(float(1 << numFracBits))),
+                                    C(_MM_FROUND_TO_NEAREST_INT)),
+                             mSimdInt32Ty);
+        }
+        return fixed;
+    }
+
+    Value* Builder::VCVT_FIXED_UI_F32(Value*             vFixed,
+                                      uint32_t           numIntBits,
+                                      uint32_t           numFracBits,
+                                      const llvm::Twine& name)
+    {
+        SWR_ASSERT((numIntBits + numFracBits) <= 32, "Can only handle 32-bit fixed-point values");
+        uint32_t extraBits = 32 - numIntBits - numFracBits;
+        if (numIntBits && extraBits)
+        {
+            // Sign extend
+            Value* shftAmt = VIMMED1(extraBits);
+            vFixed         = ASHR(SHL(vFixed, shftAmt), shftAmt);
+        }
+
+        Value* fVal  = VIMMED1(0.0f);
+        Value* fFrac = VIMMED1(0.0f);
+        if (numIntBits)
+        {
+            fVal = UI_TO_FP(LSHR(vFixed, VIMMED1(numFracBits)), mSimdFP32Ty, name);
+        }
+
+        if (numFracBits)
+        {
+            fFrac = UI_TO_FP(AND(vFixed, VIMMED1((1 << numFracBits) - 1)), mSimdFP32Ty);
+            fFrac = FDIV(fFrac, VIMMED1(float(1 << numFracBits)), name);
+        }
+
+        return FADD(fVal, fFrac, name);
+    }
+
+    //////////////////////////////////////////////////////////////////////////
     /// @brief C functions called by LLVM IR
     //////////////////////////////////////////////////////////////////////////
 

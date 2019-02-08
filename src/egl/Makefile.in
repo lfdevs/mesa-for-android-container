@@ -917,9 +917,7 @@ AM_CFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/include/drm-uapi \
 	-I$(top_srcdir)/src/egl/drivers/dri2 \
 	-I$(top_srcdir)/src/gbm/backends/dri \
 	-I$(top_builddir)/src/egl/wayland/wayland-drm \
-	-I$(top_srcdir)/src/egl/wayland/wayland-drm \
-	-DDEFAULT_DRIVER_DIR=\"$(DRI_DRIVER_SEARCH_DIR)\" \
-	$(am__append_16)
+	-I$(top_srcdir)/src/egl/wayland/wayland-drm $(am__append_16)
 
 # Depending on whether libglvnd is enabled, we'll build the EGL library as
 # either libEGL.so.1 or libEGL_mesa.so.0. Using an automake substitution
@@ -943,9 +941,14 @@ WL_DMABUF_XML = $(WAYLAND_PROTOCOLS_DATADIR)/unstable/linux-dmabuf/linux-dmabuf-
 nodist_libEGL_common_la_SOURCES = \
 	$(dri2_backend_GENERATED_FILES)
 
-GLVND_GEN_DEPS = generate/gen_egl_dispatch.py \
-	generate/egl.xml generate/eglFunctionList.py generate/genCommon.py \
+GLVND_GEN_EGL_DEPS = \
+	generate/gen_egl_dispatch.py \
+	generate/eglFunctionList.py \
+	generate/egl.xml \
 	generate/egl_other.xml
+
+GLVND_GEN_DEPS = $(top_scrdir)/src/mapi/new/genCommon.py \
+	$(GLVND_GEN_EGL_DEPS)
 
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
 CLEANFILES = \
@@ -1005,7 +1008,7 @@ EXTRA_DIST = \
 	drivers/haiku \
 	main/egl.def \
 	main/README.txt \
-	$(GLVND_GEN_DEPS) \
+	$(GLVND_GEN_EGL_DEPS) \
 	main/50_mesa.json \
 	meson.build
 
@@ -1753,15 +1756,16 @@ drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h: $(WL_DMABUF_XML)
 @HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/linux-dmabuf-unstable-v1-protocol.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 @HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/egl_dri2.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
 @HAVE_PLATFORM_WAYLAND_TRUE@drivers/dri2/platform_wayland.lo: drivers/dri2/linux-dmabuf-unstable-v1-client-protocol.h
+
+# dummy rule to keep dist happy
+$(top_scrdir)/src/mapi/new/genCommon.py:
 g_egldispatchstubs.c: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py source \
-		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
 		$(top_srcdir)/src/egl/generate/egl.xml \
 		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
 
 g_egldispatchstubs.h: $(GLVND_GEN_DEPS)
 	$(PYTHON_GEN) $(top_srcdir)/src/egl/generate/gen_egl_dispatch.py header \
-		$(top_srcdir)/src/egl/generate/eglFunctionList.py \
 		$(top_srcdir)/src/egl/generate/egl.xml \
 		$(top_srcdir)/src/egl/generate/egl_other.xml > $@
 

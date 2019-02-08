@@ -3,6 +3,7 @@
 
 #include "pipe/p_screen.h"
 #include "util/disk_cache.h"
+#include "util/u_atomic.h"
 #include "util/u_memory.h"
 
 #ifdef DEBUG
@@ -106,10 +107,10 @@ struct nouveau_screen {
 
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
 # define NOUVEAU_DRV_STAT(s, n, v) do {         \
-      (s)->stats.named.n += (v);                \
+      p_atomic_add(&(s)->stats.named.n, (v));   \
    } while(0)
-# define NOUVEAU_DRV_STAT_RES(r, n, v) do {                     \
-      nouveau_screen((r)->base.screen)->stats.named.n += (v);   \
+# define NOUVEAU_DRV_STAT_RES(r, n, v) do {                                \
+      p_atomic_add(&nouveau_screen((r)->base.screen)->stats.named.n, v);   \
    } while(0)
 # define NOUVEAU_DRV_STAT_IFD(x) x
 #else

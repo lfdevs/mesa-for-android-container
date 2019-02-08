@@ -29,6 +29,7 @@
 #include "util/u_format.h"
 
 #include "fd6_format.h"
+#include "freedreno_resource.h"
 
 
 /* Specifies the table of all the formats and their features. Also supplies
@@ -419,8 +420,8 @@ fd6_pipe2depth(enum pipe_format format)
 	}
 }
 
-static inline enum a6xx_tex_swiz
-tex_swiz(unsigned swiz)
+enum a6xx_tex_swiz
+fd6_pipe2swiz(unsigned swiz)
 {
 	switch (swiz) {
 	default:
@@ -434,19 +435,37 @@ tex_swiz(unsigned swiz)
 }
 
 uint32_t
-fd6_tex_swiz(enum pipe_format format, unsigned swizzle_r, unsigned swizzle_g,
+fd6_tex_swiz(struct pipe_resource *prsc, unsigned swizzle_r, unsigned swizzle_g,
 		unsigned swizzle_b, unsigned swizzle_a)
 {
 	const struct util_format_description *desc =
-			util_format_description(format);
+			util_format_description(prsc->format);
 	unsigned char swiz[4] = {
 			swizzle_r, swizzle_g, swizzle_b, swizzle_a,
-	}, rswiz[4];
+	}, rswiz[4], *swizp;
 
 	util_format_compose_swizzles(desc->swizzle, swiz, rswiz);
 
-	return A6XX_TEX_CONST_0_SWIZ_X(tex_swiz(rswiz[0])) |
-			A6XX_TEX_CONST_0_SWIZ_Y(tex_swiz(rswiz[1])) |
-			A6XX_TEX_CONST_0_SWIZ_Z(tex_swiz(rswiz[2])) |
-			A6XX_TEX_CONST_0_SWIZ_W(tex_swiz(rswiz[3]));
+	if (fd_resource(prsc)->tile_mode) {
+		/* for tiled modes, we don't get SWAP, so manually apply that
+		 * extra step of swizzle:
+		 */
+		enum a3xx_color_swap swap = fd6_pipe2swap(prsc->format);
+		unsigned char swapswiz[][4] = {
+				[WZYX] = { 0, 1, 2, 3 },
+				[WXYZ] = { 2, 1, 0, 3 },
+				[ZYXW] = { 3, 0, 1, 2 },
+				[XYZW] = { 3, 2, 1, 0 },
+		};
+
+		util_format_compose_swizzles(swapswiz[swap], rswiz, swiz);
+		swizp = swiz;
+	} else {
+		swizp = rswiz;
+	}
+
+	return A6XX_TEX_CONST_0_SWIZ_X(fd6_pipe2swiz(swizp[0])) |
+			A6XX_TEX_CONST_0_SWIZ_Y(fd6_pipe2swiz(swizp[1])) |
+			A6XX_TEX_CONST_0_SWIZ_Z(fd6_pipe2swiz(swizp[2])) |
+			A6XX_TEX_CONST_0_SWIZ_W(fd6_pipe2swiz(swizp[3]));
 }

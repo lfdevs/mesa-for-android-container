@@ -8,15 +8,19 @@ Usage: intel_dump_gpu [OPTION]... [--] COMMAND ARGUMENTS
 Run COMMAND with ARGUMENTS and dump an AUB file that captures buffer
 contents and execution of the GEM application.
 
-  -o, --output=FILE  Name of AUB file. Defaults to COMMAND.aub
+  -g, --gdb           Launch GDB
 
-      --device=ID    Override PCI ID of the reported device
+  -o, --output=FILE   Name of AUB file. Defaults to COMMAND.aub
 
-  -v                 Enable verbose output
+      --device=ID     Override PCI ID of the reported device
 
-  -vv                Enable extra verbosity - dumps gtt mappings
+  -p, --platform=NAME Override PCI ID using a platform name
 
-      --help         Display this help message and exit
+  -v                  Enable verbose output
+
+  -vv                 Enable extra verbosity - dumps gtt mappings
+
+      --help          Display this help message and exit
 
 EOF
 
@@ -35,11 +39,6 @@ function add_arg() {
 
 while true; do
     case "$1" in
-        -o)
-            file=$2
-            add_arg "file=${file:-$(basename ${file}).aub}"
-            shift 2
-            ;;
         -v)
             add_arg "verbose=1"
             shift 1
@@ -47,6 +46,11 @@ while true; do
         -vv)
             add_arg "verbose=2"
             shift 1
+            ;;
+        -o)
+            file=$2
+            add_arg "file=${file:-$(basename ${file}).aub}"
+            shift 2
             ;;
         -o*)
             file=${1##-o}
@@ -60,6 +64,21 @@ while true; do
             ;;
         --device=*)
             add_arg "device=${1##--device=}"
+            shift
+            ;;
+        -p)
+            platform=$2
+            add_arg "platform=${platform}"
+            shift 2
+            ;;
+        -p*)
+            platform=${1##-p}
+            add_arg "platform=${platform}"
+            shift
+            ;;
+        --platform=*)
+            platform=${1##-p}
+            add_arg "platform=${platform}"
             shift
             ;;
         --gdb)

@@ -25,6 +25,7 @@
 #define ISL_PRIV_H
 
 #include <assert.h>
+#include <stddef.h>
 #include <strings.h>
 
 #include "dev/gen_device_info.h"
@@ -46,6 +47,8 @@ __isl_finishme(const char *file, int line, const char *fmt, ...);
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+typedef void *(*isl_mem_copy_fn)(void *dest, const void *src, size_t n);
 
 static inline bool
 isl_is_pow2(uintmax_t n)
@@ -157,6 +160,42 @@ isl_extent3d_el_to_sa(enum isl_format fmt, struct isl_extent3d extent_el)
       .d = extent_el.d * fmtl->bd,
    };
 }
+
+void
+_isl_memcpy_linear_to_tiled(uint32_t xt1, uint32_t xt2,
+                            uint32_t yt1, uint32_t yt2,
+                            char *dst, const char *src,
+                            uint32_t dst_pitch, int32_t src_pitch,
+                            bool has_swizzling,
+                            enum isl_tiling tiling,
+                            isl_memcpy_type copy_type);
+
+void
+_isl_memcpy_tiled_to_linear(uint32_t xt1, uint32_t xt2,
+                            uint32_t yt1, uint32_t yt2,
+                            char *dst, const char *src,
+                            int32_t dst_pitch, uint32_t src_pitch,
+                            bool has_swizzling,
+                            enum isl_tiling tiling,
+                            isl_memcpy_type copy_type);
+
+void
+_isl_memcpy_linear_to_tiled_sse41(uint32_t xt1, uint32_t xt2,
+                                  uint32_t yt1, uint32_t yt2,
+                                  char *dst, const char *src,
+                                  uint32_t dst_pitch, int32_t src_pitch,
+                                  bool has_swizzling,
+                                  enum isl_tiling tiling,
+                                  isl_memcpy_type copy_type);
+
+void
+_isl_memcpy_tiled_to_linear_sse41(uint32_t xt1, uint32_t xt2,
+                                  uint32_t yt1, uint32_t yt2,
+                                  char *dst, const char *src,
+                                  int32_t dst_pitch, uint32_t src_pitch,
+                                  bool has_swizzling,
+                                  enum isl_tiling tiling,
+                                  isl_memcpy_type copy_type);
 
 /* This is useful for adding the isl_prefix to genX functions */
 #define __PASTE2(x, y) x ## y

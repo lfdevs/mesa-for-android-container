@@ -93,18 +93,18 @@ _nine_debug_printf( unsigned long flag,
             for (func += 4; func != f; ++func) { *ptr++ = tolower(*func); }
             *ptr = '\0';
             if (tid)
-                debug_printf("nine:0x%08lx:%s:%s: ", tid, klass, ++f);
+                _debug_printf("nine:0x%08lx:%s:%s: ", tid, klass, ++f);
             else
-                debug_printf("nine:%s:%s: ", klass, ++f);
+                _debug_printf("nine:%s:%s: ", klass, ++f);
         } else if (func) {
             if (tid)
-                debug_printf("nine:0x%08lx:%s ", tid, func);
+                _debug_printf("nine:0x%08lx:%s ", tid, func);
             else
-                debug_printf("nine:%s ", func);
+                _debug_printf("nine:%s ", func);
         }
 
         va_start(ap, fmt);
-        debug_vprintf(fmt, ap);
+        _debug_vprintf(fmt, ap);
         va_end(ap);
     }
 }
@@ -116,5 +116,5 @@ _nine_stub( const char *file,
 {
     const char *r = strrchr(file, '/');
     if (r == NULL) { r = strrchr(file, '\\'); }
-    debug_printf("nine:%s:%d: %s STUB!\n", r ? ++r : file, line, func);
+    _debug_printf("nine:%s:%d: %s STUB!\n", r ? ++r : file, line, func);
 }

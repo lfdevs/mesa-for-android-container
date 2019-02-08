@@ -31,12 +31,63 @@
 static nir_ssa_def*
 build_local_group_size(nir_builder *b)
 {
-   nir_const_value local_size;
-   memset(&local_size, 0, sizeof(local_size));
-   local_size.u32[0] = b->shader->info.cs.local_size[0];
-   local_size.u32[1] = b->shader->info.cs.local_size[1];
-   local_size.u32[2] = b->shader->info.cs.local_size[2];
-   return nir_build_imm(b, 3, 32, local_size);
+   nir_ssa_def *local_size;
+
+   /*
+    * If the local work group size is variable it can't be lowered at this
+    * point, but its intrinsic can still be used.
+    */
+   if (b->shader->info.cs.local_size_variable) {
+      local_size = nir_load_local_group_size(b);
+   } else {
+      nir_const_value local_size_const;
+      memset(&local_size_const, 0, sizeof(local_size_const));
+      local_size_const.u32[0] = b->shader->info.cs.local_size[0];
+      local_size_const.u32[1] = b->shader->info.cs.local_size[1];
+      local_size_const.u32[2] = b->shader->info.cs.local_size[2];
+      local_size = nir_build_imm(b, 3, 32, local_size_const);
+   }
+
+   return local_size;
+}
+
+static nir_ssa_def *
+build_local_invocation_id(nir_builder *b)
+{
+   if (b->shader->options->lower_cs_local_id_from_index) {
+      /* We lower gl_LocalInvocationID from gl_LocalInvocationIndex based
+       * on this formula:
+       *
+       *    gl_LocalInvocationID.x =
+       *       gl_LocalInvocationIndex % gl_WorkGroupSize.x;
+       *    gl_LocalInvocationID.y =
+       *       (gl_LocalInvocationIndex / gl_WorkGroupSize.x) %
+       *       gl_WorkGroupSize.y;
+       *    gl_LocalInvocationID.z =
+       *       (gl_LocalInvocationIndex /
+       *        (gl_WorkGroupSize.x * gl_WorkGroupSize.y)) %
+       *       gl_WorkGroupSize.z;
+       *
+       * However, the final % gl_WorkGroupSize.z does nothing unless we
+       * accidentally end up with a gl_LocalInvocationIndex that is too
+       * large so it can safely be omitted.
+       */
+      nir_ssa_def *local_index = nir_load_local_invocation_index(b);
+      nir_ssa_def *local_size = build_local_group_size(b);
+
+      nir_ssa_def *id_x, *id_y, *id_z;
+      id_x = nir_umod(b, local_index,
+                         nir_channel(b, local_size, 0));
+      id_y = nir_umod(b, nir_udiv(b, local_index,
+                                     nir_channel(b, local_size, 0)),
+                         nir_channel(b, local_size, 1));
+      id_z = nir_udiv(b, local_index,
+                         nir_imul(b, nir_channel(b, local_size, 0),
+                                     nir_channel(b, local_size, 1)));
+      return nir_vec3(b, id_x, id_y, id_z);
+   } else {
+      return nir_load_local_invocation_id(b);
+   }
 }
 
 static bool
@@ -79,7 +130,7 @@ convert_block(nir_block *block, nir_builder *b)
           */
          nir_ssa_def *group_size = build_local_group_size(b);
          nir_ssa_def *group_id = nir_load_work_group_id(b);
-         nir_ssa_def *local_id = nir_load_local_invocation_id(b);
+         nir_ssa_def *local_id = build_local_invocation_id(b);
 
          sysval = nir_iadd(b, nir_imul(b, group_id, group_size), local_id);
          break;
@@ -113,6 +164,14 @@ convert_block(nir_block *block, nir_builder *b)
          sysval = nir_iadd(b, sysval, nir_channel(b, local_id, 0));
          break;
       }
+
+      case SYSTEM_VALUE_LOCAL_INVOCATION_ID:
+         /* If lower_cs_local_id_from_index is true, then we derive the local
+          * index from the local id.
+          */
+         if (b->shader->options->lower_cs_local_id_from_index)
+            sysval = build_local_invocation_id(b);
+         break;
 
       case SYSTEM_VALUE_LOCAL_GROUP_SIZE: {
          sysval = build_local_group_size(b);
@@ -202,8 +261,8 @@ convert_block(nir_block *block, nir_builder *b)
       if (sysval == NULL) {
          nir_intrinsic_op sysval_op =
             nir_intrinsic_from_system_value(var->data.location);
-         sysval = nir_load_system_value(b, sysval_op, 0);
-         sysval->bit_size = load_deref->dest.ssa.bit_size;
+         sysval = nir_load_system_value(b, sysval_op, 0,
+                                        load_deref->dest.ssa.bit_size);
       }
 
       nir_ssa_def_rewrite_uses(&load_deref->dest.ssa, nir_src_for_ssa(sysval));

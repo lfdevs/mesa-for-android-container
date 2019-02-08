@@ -4,6 +4,7 @@ include $(top_srcdir)/src/gallium/Automake.inc
 AM_CFLAGS = \
 	$(GALLIUM_WINSYS_CFLAGS) \
 	$(AMDGPU_CFLAGS) \
+	$(LLVM_CFLAGS) \
 	-I$(top_srcdir)/src/amd/
 
 AM_CXXFLAGS = $(AM_CFLAGS)

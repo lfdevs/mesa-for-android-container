@@ -31,48 +31,39 @@
 
 #include "freedreno_context.h"
 
-#include "ir-a2xx.h"
+#include "ir2.h"
 #include "disasm.h"
 
 struct fd2_shader_stateobj {
-	enum shader_t type;
+	nir_shader *nir;
+	gl_shader_stage type;
+	bool is_a20x;
 
-	uint32_t *bin;
-
-	struct tgsi_token *tokens;
-
-	/* note that we defer compiling shader until we know both vs and ps..
-	 * and if one changes, we potentially need to recompile in order to
-	 * get varying linkages correct:
+	/* note: using same set of immediates for all variants
+	 * it doesn't matter, other than the slightly larger command stream
 	 */
-	struct ir2_shader_info info;
-	struct ir2_shader *ir;
-
-	/* for vertex shaders, the fetch instructions which need to be
-	 * patched up before assembly:
-	 */
-	unsigned num_vfetch_instrs;
-	struct ir2_instruction *vfetch_instrs[64];
-
-	/* for all shaders, any tex fetch instructions which need to be
-	 * patched before assembly:
-	 */
-	unsigned num_tfetch_instrs;
-	struct {
-		unsigned samp_id;
-		struct ir2_instruction *instr;
-	} tfetch_instrs[64];
-
 	unsigned first_immediate;     /* const reg # of first immediate */
 	unsigned num_immediates;
 	struct {
 		uint32_t val[4];
+		unsigned ncomp;
 	} immediates[64];
+
+	bool writes_psize;
+	bool need_param;
+	bool has_kill;
+
+	/* note:
+	 * fragment shader only has one variant
+	 * first vertex shader variant is always binning shader
+	 * we should use a dynamic array but in normal case there is
+	 * only 2 variants (and 3 sometimes with GALLIUM_HUD)
+	 */
+	struct ir2_shader_variant variant[8];
 };
 
-void fd2_program_emit(struct fd_ringbuffer *ring,
+void fd2_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		struct fd_program_stateobj *prog);
-void fd2_program_validate(struct fd_context *ctx);
 
 void fd2_prog_init(struct pipe_context *pctx);
 

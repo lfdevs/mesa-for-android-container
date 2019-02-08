@@ -44,8 +44,6 @@ struct intel_screen
 
    bool no_hw;
 
-   bool hw_has_swizzling;
-
    bool no_vbo;
    dri_bufmgr *bufmgr;
 

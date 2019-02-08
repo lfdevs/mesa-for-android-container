@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.1.  */
+/* A Bison parser, made by GNU Bison 3.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -29,6 +29,9 @@
 
    This special exception was added by the Free Software Foundation in
    version 2.2 of Bison.  */
+
+/* Undocumented macros, especially those whose name start with YY_,
+   are private implementation details.  Do not rely on them.  */
 
 #ifndef YY__MESA_GLSL_GLSL_GLSL_PARSER_H_INCLUDED
 # define YY__MESA_GLSL_GLSL_GLSL_PARSER_H_INCLUDED
@@ -133,51 +136,53 @@ extern int _mesa_glsl_debug;
     PRAGMA_DEBUG_OFF = 343,
     PRAGMA_OPTIMIZE_ON = 344,
     PRAGMA_OPTIMIZE_OFF = 345,
-    PRAGMA_INVARIANT_ALL = 346,
-    LAYOUT_TOK = 347,
-    DOT_TOK = 348,
-    ASM = 349,
-    CLASS = 350,
-    UNION = 351,
-    ENUM = 352,
-    TYPEDEF = 353,
-    TEMPLATE = 354,
-    THIS = 355,
-    PACKED_TOK = 356,
-    GOTO = 357,
-    INLINE_TOK = 358,
-    NOINLINE = 359,
-    PUBLIC_TOK = 360,
-    STATIC = 361,
-    EXTERN = 362,
-    EXTERNAL = 363,
-    LONG_TOK = 364,
-    SHORT_TOK = 365,
-    HALF = 366,
-    FIXED_TOK = 367,
-    UNSIGNED = 368,
-    INPUT_TOK = 369,
-    HVEC2 = 370,
-    HVEC3 = 371,
-    HVEC4 = 372,
-    FVEC2 = 373,
-    FVEC3 = 374,
-    FVEC4 = 375,
-    SAMPLER3DRECT = 376,
-    SIZEOF = 377,
-    CAST = 378,
-    NAMESPACE = 379,
-    USING = 380,
-    RESOURCE = 381,
-    PATCH = 382,
-    SUBROUTINE = 383,
-    ERROR_TOK = 384,
-    COMMON = 385,
-    PARTITION = 386,
-    ACTIVE = 387,
-    FILTER = 388,
-    ROW_MAJOR = 389,
-    THEN = 390
+    PRAGMA_WARNING_ON = 346,
+    PRAGMA_WARNING_OFF = 347,
+    PRAGMA_INVARIANT_ALL = 348,
+    LAYOUT_TOK = 349,
+    DOT_TOK = 350,
+    ASM = 351,
+    CLASS = 352,
+    UNION = 353,
+    ENUM = 354,
+    TYPEDEF = 355,
+    TEMPLATE = 356,
+    THIS = 357,
+    PACKED_TOK = 358,
+    GOTO = 359,
+    INLINE_TOK = 360,
+    NOINLINE = 361,
+    PUBLIC_TOK = 362,
+    STATIC = 363,
+    EXTERN = 364,
+    EXTERNAL = 365,
+    LONG_TOK = 366,
+    SHORT_TOK = 367,
+    HALF = 368,
+    FIXED_TOK = 369,
+    UNSIGNED = 370,
+    INPUT_TOK = 371,
+    HVEC2 = 372,
+    HVEC3 = 373,
+    HVEC4 = 374,
+    FVEC2 = 375,
+    FVEC3 = 376,
+    FVEC4 = 377,
+    SAMPLER3DRECT = 378,
+    SIZEOF = 379,
+    CAST = 380,
+    NAMESPACE = 381,
+    USING = 382,
+    RESOURCE = 383,
+    PATCH = 384,
+    SUBROUTINE = 385,
+    ERROR_TOK = 386,
+    COMMON = 387,
+    PARTITION = 388,
+    ACTIVE = 389,
+    FILTER = 390,
+    ROW_MAJOR = 391,
+    THEN = 392
   };
 #endif
 
@@ -186,7 +191,7 @@ extern int _mesa_glsl_debug;
 
 union YYSTYPE
 {
-#line 98 "./glsl/glsl_parser.yy" /* yacc.c:1913  */
+#line 98 "./glsl/glsl_parser.yy" /* yacc.c:1906  */
 
    int n;
    int64_t n64;
@@ -227,7 +232,7 @@ union YYSTYPE
 
    const glsl_type *type;
 
-#line 231 "./glsl/glsl_parser.h" /* yacc.c:1913  */
+#line 236 "./glsl/glsl_parser.h" /* yacc.c:1906  */
 };
 
 typedef union YYSTYPE YYSTYPE;

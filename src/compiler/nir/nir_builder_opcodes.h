@@ -26,14 +26,109 @@
 
 
 static inline nir_ssa_def *
-nir_b2f(nir_builder *build, nir_ssa_def *src0)
+nir_b2f16(nir_builder *build, nir_ssa_def *src0)
 {
-   return nir_build_alu(build, nir_op_b2f, src0, NULL, NULL, NULL);
+   return nir_build_alu(build, nir_op_b2f16, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
-nir_b2i(nir_builder *build, nir_ssa_def *src0)
+nir_b2f32(nir_builder *build, nir_ssa_def *src0)
 {
-   return nir_build_alu(build, nir_op_b2i, src0, NULL, NULL, NULL);
+   return nir_build_alu(build, nir_op_b2f32, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2f64(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2f64, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2i1(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2i1, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2i16(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2i16, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2i32(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2i32, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2i64(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2i64, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b2i8(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_b2i8, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_fequal2(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_fequal2, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_fequal3(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_fequal3, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_fequal4(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_fequal4, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_iequal2(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_iequal2, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_iequal3(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_iequal3, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32all_iequal4(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32all_iequal4, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_fnequal2(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_fnequal2, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_fnequal3(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_fnequal3, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_fnequal4(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_fnequal4, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_inequal2(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_inequal2, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_inequal3(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_inequal3, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32any_inequal4(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_b32any_inequal4, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_b32csel(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *src2)
+{
+   return nir_build_alu(build, nir_op_b32csel, src0, src1, src2, NULL);
 }
 static inline nir_ssa_def *
 nir_ball_fequal2(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
@@ -156,9 +251,14 @@ nir_extract_u8(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_extract_u8, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
-nir_f2b(nir_builder *build, nir_ssa_def *src0)
+nir_f2b1(nir_builder *build, nir_ssa_def *src0)
 {
-   return nir_build_alu(build, nir_op_f2b, src0, NULL, NULL, NULL);
+   return nir_build_alu(build, nir_op_f2b1, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_f2b32(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_f2b32, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_f2f16(nir_builder *build, nir_ssa_def *src0)
@@ -186,6 +286,11 @@ nir_f2f64(nir_builder *build, nir_ssa_def *src0)
    return nir_build_alu(build, nir_op_f2f64, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_f2i1(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_f2i1, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_f2i16(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_f2i16, src0, NULL, NULL, NULL);
@@ -204,6 +309,11 @@ static inline nir_ssa_def *
 nir_f2i8(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_f2i8, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_f2u1(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_f2u1, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_f2u16(nir_builder *build, nir_ssa_def *src0)
@@ -366,6 +476,11 @@ nir_feq(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_feq, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_feq32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_feq32, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_fexp2(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_fexp2, src0, NULL, NULL, NULL);
@@ -391,6 +506,11 @@ nir_fge(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_fge, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_fge32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_fge32, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_find_lsb(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_find_lsb, src0, NULL, NULL, NULL);
@@ -409,6 +529,11 @@ static inline nir_ssa_def *
 nir_flt(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_flt, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_flt32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_flt32, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_fmax(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
@@ -454,6 +579,11 @@ static inline nir_ssa_def *
 nir_fne(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_fne, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_fne32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_fne32, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_fneg(nir_builder *build, nir_ssa_def *src0)
@@ -626,9 +756,14 @@ nir_fxor(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_fxor, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
-nir_i2b(nir_builder *build, nir_ssa_def *src0)
+nir_i2b1(nir_builder *build, nir_ssa_def *src0)
 {
-   return nir_build_alu(build, nir_op_i2b, src0, NULL, NULL, NULL);
+   return nir_build_alu(build, nir_op_i2b1, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_i2b32(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_i2b32, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_i2f16(nir_builder *build, nir_ssa_def *src0)
@@ -644,6 +779,11 @@ static inline nir_ssa_def *
 nir_i2f64(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_i2f64, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_i2i1(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_i2i1, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_i2i16(nir_builder *build, nir_ssa_def *src0)
@@ -701,6 +841,11 @@ nir_ieq(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_ieq, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_ieq32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_ieq32, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_ifind_msb(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_ifind_msb, src0, NULL, NULL, NULL);
@@ -711,9 +856,19 @@ nir_ige(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_ige, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_ige32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_ige32, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_ilt(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_ilt, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_ilt32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_ilt32, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_imax(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
@@ -764,6 +919,11 @@ static inline nir_ssa_def *
 nir_ine(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_ine, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_ine32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_ine32, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_ineg(nir_builder *build, nir_ssa_def *src0)
@@ -916,6 +1076,11 @@ nir_u2f64(nir_builder *build, nir_ssa_def *src0)
    return nir_build_alu(build, nir_op_u2f64, src0, NULL, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_u2u1(nir_builder *build, nir_ssa_def *src0)
+{
+   return nir_build_alu(build, nir_op_u2u1, src0, NULL, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_u2u16(nir_builder *build, nir_ssa_def *src0)
 {
    return nir_build_alu(build, nir_op_u2u16, src0, NULL, NULL, NULL);
@@ -939,6 +1104,11 @@ static inline nir_ssa_def *
 nir_uadd_carry(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_uadd_carry, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_uadd_sat(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_uadd_sat, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_ubfe(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *src2)
@@ -966,9 +1136,19 @@ nir_uge(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
    return nir_build_alu(build, nir_op_uge, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
+nir_uge32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_uge32, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
 nir_ult(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
 {
    return nir_build_alu(build, nir_op_ult, src0, src1, NULL, NULL);
+}
+static inline nir_ssa_def *
+nir_ult32(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
+{
+   return nir_build_alu(build, nir_op_ult32, src0, src1, NULL, NULL);
 }
 static inline nir_ssa_def *
 nir_umax(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1)
@@ -1128,251 +1308,348 @@ nir_vec4(nir_builder *build, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *
 
 /* Generic builder for system values. */
 static inline nir_ssa_def *
-nir_load_system_value(nir_builder *build, nir_intrinsic_op op, int index)
+nir_load_system_value(nir_builder *build, nir_intrinsic_op op, int index,
+                      unsigned bit_size)
 {
    nir_intrinsic_instr *load = nir_intrinsic_instr_create(build->shader, op);
    load->num_components = nir_intrinsic_infos[op].dest_components;
    load->const_index[0] = index;
    nir_ssa_dest_init(&load->instr, &load->dest,
-                     nir_intrinsic_infos[op].dest_components, 32, NULL);
+                     nir_intrinsic_infos[op].dest_components, bit_size, NULL);
    nir_builder_instr_insert(build, &load->instr);
    return &load->dest.ssa;
 }
 
+
+
+
 static inline nir_ssa_def *
 nir_load_alpha_ref_float(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_alpha_ref_float, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_alpha_ref_float,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_base_instance(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_base_instance, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_base_instance,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_base_vertex(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_base_vertex, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_base_vertex,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_a_float(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_a_float, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_a_float,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_aaaa8888_unorm(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_aaaa8888_unorm, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_aaaa8888_unorm,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_b_float(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_b_float, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_b_float,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_g_float(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_g_float, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_g_float,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_r_float(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_r_float, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_r_float,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_blend_const_color_rgba8888_unorm(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_rgba8888_unorm, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_blend_const_color_rgba8888_unorm,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_draw_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_draw_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_draw_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_first_vertex(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_first_vertex, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_first_vertex,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_frag_coord(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_frag_coord, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_frag_coord,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
-nir_load_front_face(nir_builder *build)
+nir_load_front_face(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_front_face, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_front_face,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
 nir_load_global_invocation_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_global_invocation_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_global_invocation_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
-nir_load_helper_invocation(nir_builder *build)
+nir_load_helper_invocation(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_helper_invocation, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_helper_invocation,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
 nir_load_instance_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_instance_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_instance_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_invocation_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_invocation_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_invocation_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_is_indexed_draw(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_is_indexed_draw, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_is_indexed_draw,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_layer_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_layer_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_layer_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_local_group_size(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_local_group_size, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_local_group_size,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_local_invocation_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_local_invocation_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_local_invocation_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_local_invocation_index(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_local_invocation_index, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_local_invocation_index,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_num_subgroups(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_num_subgroups, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_num_subgroups,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_num_work_groups(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_num_work_groups, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_num_work_groups,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_patch_vertices_in(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_patch_vertices_in, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_patch_vertices_in,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_primitive_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_primitive_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_primitive_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_sample_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_sample_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_sample_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_sample_id_no_per_sample(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_sample_id_no_per_sample, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_sample_id_no_per_sample,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_sample_mask_in(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_sample_mask_in, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_sample_mask_in,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_sample_pos(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_sample_pos, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_sample_pos,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
-nir_load_subgroup_eq_mask(nir_builder *build)
+nir_load_subgroup_eq_mask(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_eq_mask, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_eq_mask,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
-nir_load_subgroup_ge_mask(nir_builder *build)
+nir_load_subgroup_ge_mask(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_ge_mask, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_ge_mask,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
-nir_load_subgroup_gt_mask(nir_builder *build)
+nir_load_subgroup_gt_mask(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_gt_mask, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_gt_mask,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
 nir_load_subgroup_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_subgroup_invocation(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_invocation, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_invocation,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
-nir_load_subgroup_le_mask(nir_builder *build)
+nir_load_subgroup_le_mask(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_le_mask, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_le_mask,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
-nir_load_subgroup_lt_mask(nir_builder *build)
+nir_load_subgroup_lt_mask(nir_builder *build, unsigned bit_size)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_lt_mask, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_lt_mask,
+                                0, bit_size);
 }
+
 static inline nir_ssa_def *
 nir_load_subgroup_size(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_subgroup_size, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_subgroup_size,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_tess_coord(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_tess_coord, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_tess_coord,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_tess_level_inner(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_tess_level_inner, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_tess_level_inner,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_tess_level_outer(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_tess_level_outer, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_tess_level_outer,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
-nir_load_user_clip_plane(nir_builder *build)
+nir_load_user_clip_plane(nir_builder *build, unsigned nir_intrinsic_ucp_id)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_user_clip_plane, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_user_clip_plane,
+                                nir_intrinsic_ucp_id, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_vertex_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_vertex_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_vertex_id,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_vertex_id_zero_base(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_vertex_id_zero_base, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_vertex_id_zero_base,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_view_index(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_view_index, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_view_index,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_work_dim(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_work_dim, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_work_dim,
+                                0, 32);
 }
+
 static inline nir_ssa_def *
 nir_load_work_group_id(nir_builder *build)
 {
-   return nir_load_system_value(build, nir_intrinsic_load_work_group_id, 0);
+   return nir_load_system_value(build, nir_intrinsic_load_work_group_id,
+                                0, 32);
 }
 
 #endif /* _NIR_BUILDER_OPCODES_ */

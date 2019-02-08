@@ -83,6 +83,11 @@ int v3d_hw_get_version(struct v3d_hw *hw)
         return ident->tech_version * 10 + ident->revision;
 }
 
+void
+v3d_hw_set_isr(struct v3d_hw *hw, void (*isr)(uint32_t status))
+{
+        hw->set_isr(isr);
 }
 
+}
 #endif /* USE_V3D_SIMULATOR */

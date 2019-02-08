@@ -491,6 +491,11 @@ Number of tessellation evaluation shader threads launched.
 If a shader type is not supported by the device/driver,
 the corresponding values should be set to 0.
 
+``PIPE_QUERY_PIPELINE_STATISTICS_SINGLE`` returns a single counter from
+the ``PIPE_QUERY_PIPELINE_STATISTICS`` group.  The specific counter must
+be selected when calling ``create_query`` by passing one of the
+``PIPE_STAT_QUERY`` enums as the query's ``index``.
+
 Gallium does not guarantee the availability of any query types; one must
 always check the capabilities of the :ref:`Screen` first.
 

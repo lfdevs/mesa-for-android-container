@@ -128,7 +128,7 @@ void brw_disk_cache_write_compute_program(struct brw_context *brw);
 void brw_disk_cache_write_render_programs(struct brw_context *brw);
 
 /***********************************************************************
- * brw_state.c
+ * brw_state_upload.c
  */
 void brw_upload_render_state(struct brw_context *brw);
 void brw_render_state_finished(struct brw_context *brw);
@@ -138,6 +138,7 @@ void brw_init_state(struct brw_context *brw);
 void brw_destroy_state(struct brw_context *brw);
 void brw_emit_select_pipeline(struct brw_context *brw,
                               enum brw_pipeline pipeline);
+void brw_enable_obj_preemption(struct brw_context *brw, bool enable);
 
 static inline void
 brw_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)

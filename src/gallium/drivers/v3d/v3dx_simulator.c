@@ -49,7 +49,7 @@
 #define V3D_READ(reg) v3d_hw_read_reg(v3d, reg)
 
 static void
-v3d_flush_l3(struct v3d_hw *v3d)
+v3d_invalidate_l3(struct v3d_hw *v3d)
 {
         if (!v3d_hw_has_gca(v3d))
                 return;
@@ -62,10 +62,13 @@ v3d_flush_l3(struct v3d_hw *v3d)
 #endif
 }
 
-/* Invalidates the L2 cache.  This is a read-only cache. */
+/* Invalidates the L2C cache.  This is a read-only cache for uniforms and instructions. */
 static void
-v3d_flush_l2(struct v3d_hw *v3d)
+v3d_invalidate_l2c(struct v3d_hw *v3d)
 {
+        if (V3D_VERSION >= 33)
+                return;
+
         V3D_WRITE(V3D_CTL_0_L2CACTL,
                   V3D_CTL_0_L2CACTL_L2CCLR_SET |
                   V3D_CTL_0_L2CACTL_L2CENA_SET);
@@ -73,7 +76,7 @@ v3d_flush_l2(struct v3d_hw *v3d)
 
 /* Invalidates texture L2 cachelines */
 static void
-v3d_flush_l2t(struct v3d_hw *v3d)
+v3d_invalidate_l2t(struct v3d_hw *v3d)
 {
         V3D_WRITE(V3D_CTL_0_L2TFLSTA, 0);
         V3D_WRITE(V3D_CTL_0_L2TFLEND, ~0);
@@ -84,18 +87,44 @@ v3d_flush_l2t(struct v3d_hw *v3d)
 
 /* Invalidates the slice caches.  These are read-only caches. */
 static void
-v3d_flush_slices(struct v3d_hw *v3d)
+v3d_invalidate_slices(struct v3d_hw *v3d)
 {
         V3D_WRITE(V3D_CTL_0_SLCACTL, ~0);
 }
 
 static void
-v3d_flush_caches(struct v3d_hw *v3d)
+v3d_invalidate_caches(struct v3d_hw *v3d)
 {
-        v3d_flush_l3(v3d);
-        v3d_flush_l2(v3d);
-        v3d_flush_l2t(v3d);
-        v3d_flush_slices(v3d);
+        v3d_invalidate_l3(v3d);
+        v3d_invalidate_l2c(v3d);
+        v3d_invalidate_l2t(v3d);
+        v3d_invalidate_slices(v3d);
+}
+
+int
+v3dX(simulator_submit_tfu_ioctl)(struct v3d_hw *v3d,
+                                 struct drm_v3d_submit_tfu *args)
+{
+        int last_vtct = V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET;
+
+        V3D_WRITE(V3D_TFU_IIA, args->iia);
+        V3D_WRITE(V3D_TFU_IIS, args->iis);
+        V3D_WRITE(V3D_TFU_ICA, args->ica);
+        V3D_WRITE(V3D_TFU_IUA, args->iua);
+        V3D_WRITE(V3D_TFU_IOA, args->ioa);
+        V3D_WRITE(V3D_TFU_IOS, args->ios);
+        V3D_WRITE(V3D_TFU_COEF0, args->coef[0]);
+        V3D_WRITE(V3D_TFU_COEF1, args->coef[1]);
+        V3D_WRITE(V3D_TFU_COEF2, args->coef[2]);
+        V3D_WRITE(V3D_TFU_COEF3, args->coef[3]);
+
+        V3D_WRITE(V3D_TFU_ICFG, args->icfg);
+
+        while ((V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET) == last_vtct) {
+                v3d_hw_tick(v3d);
+        }
+
+        return 0;
 }
 
 int
@@ -112,6 +141,12 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                 [DRM_V3D_PARAM_V3D_CORE0_IDENT2] = V3D_CTL_0_IDENT2,
         };
 
+        switch (args->param) {
+        case DRM_V3D_PARAM_SUPPORTS_TFU:
+                args->value = 1;
+                return 0;
+        }
+
         if (args->param < ARRAY_SIZE(reg_map) && reg_map[args->param]) {
                 args->value = V3D_READ(reg_map[args->param]);
                 return 0;
@@ -120,6 +155,32 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
         fprintf(stderr, "Unknown DRM_IOCTL_VC5_GET_PARAM(%lld)\n",
                 (long long)args->value);
         abort();
+}
+
+static struct v3d_hw *v3d_isr_hw;
+
+static void
+v3d_isr(uint32_t hub_status)
+{
+        struct v3d_hw *v3d = v3d_isr_hw;
+
+        /* Check the per-core bits */
+        if (hub_status & (1 << 0)) {
+                uint32_t core_status = V3D_READ(V3D_CTL_0_INT_STS);
+
+                if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
+                        fprintf(stderr, "GMP violation at 0x%08x\n",
+                                V3D_READ(V3D_GMP_0_VIO_ADDR));
+                        abort();
+                } else {
+                        fprintf(stderr,
+                                "Unexpected ISR with core status 0x%08x\n",
+                                core_status);
+                }
+                abort();
+        }
+
+        return;
 }
 
 void
@@ -136,11 +197,19 @@ v3dX(simulator_init_regs)(struct v3d_hw *v3d)
          */
         V3D_WRITE(V3D_CTL_0_MISCCFG, V3D_CTL_1_MISCCFG_OVRTMUOUT_SET);
 #endif
+
+        uint32_t core_interrupts = V3D_CTL_0_INT_STS_INT_GMPV_SET;
+        V3D_WRITE(V3D_CTL_0_INT_MSK_SET, ~core_interrupts);
+        V3D_WRITE(V3D_CTL_0_INT_MSK_CLR, core_interrupts);
+
+        v3d_isr_hw = v3d;
+        v3d_hw_set_isr(v3d, v3d_isr);
 }
 
 void
-v3dX(simulator_flush)(struct v3d_hw *v3d, struct drm_v3d_submit_cl *submit,
-                      uint32_t gmp_ofs)
+v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
+                                struct drm_v3d_submit_cl *submit,
+                                uint32_t gmp_ofs)
 {
         /* Completely reset the GMP. */
         V3D_WRITE(V3D_GMP_0_CFG,
@@ -152,7 +221,7 @@ v3dX(simulator_flush)(struct v3d_hw *v3d, struct drm_v3d_submit_cl *submit,
                 ;
         }
 
-        v3d_flush_caches(v3d);
+        v3d_invalidate_caches(v3d);
 
         if (submit->qma) {
                 V3D_WRITE(V3D_CLE_0_CT0QMA, submit->qma);
@@ -168,13 +237,16 @@ v3dX(simulator_flush)(struct v3d_hw *v3d, struct drm_v3d_submit_cl *submit,
         V3D_WRITE(V3D_CLE_0_CT0QBA, submit->bcl_start);
         V3D_WRITE(V3D_CLE_0_CT0QEA, submit->bcl_end);
 
-        /* Wait for bin to complete before firing render, as it seems the
-         * simulator doesn't implement the semaphores.
+        /* Wait for bin to complete before firing render.  The kernel's
+         * scheduler implements this using the GPU scheduler blocking on the
+         * bin fence completing.  (We don't use HW semaphores).
          */
         while (V3D_READ(V3D_CLE_0_CT0CA) !=
                V3D_READ(V3D_CLE_0_CT0EA)) {
                 v3d_hw_tick(v3d);
         }
+
+        v3d_invalidate_caches(v3d);
 
         V3D_WRITE(V3D_CLE_0_CT1QBA, submit->rcl_start);
         V3D_WRITE(V3D_CLE_0_CT1QEA, submit->rcl_end);

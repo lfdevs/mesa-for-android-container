@@ -251,6 +251,40 @@ fs_generator::patch_discard_jumps_to_fb_writes()
 }
 
 void
+fs_generator::generate_send(fs_inst *inst,
+                            struct brw_reg dst,
+                            struct brw_reg desc,
+                            struct brw_reg ex_desc,
+                            struct brw_reg payload,
+                            struct brw_reg payload2)
+{
+   const bool dst_is_null = dst.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+                            dst.nr == BRW_ARF_NULL;
+   const unsigned rlen = dst_is_null ? 0 : inst->size_written / REG_SIZE;
+
+   uint32_t desc_imm = inst->desc |
+      brw_message_desc(devinfo, inst->mlen, rlen, inst->header_size);
+
+   uint32_t ex_desc_imm = brw_message_ex_desc(devinfo, inst->ex_mlen);
+
+   if (ex_desc.file != BRW_IMMEDIATE_VALUE || ex_desc.ud || ex_desc_imm) {
+      /* If we have any sort of extended descriptor, then we need SENDS.  This
+       * also covers the dual-payload case because ex_mlen goes in ex_desc.
+       */
+      brw_send_indirect_split_message(p, inst->sfid, dst, payload, payload2,
+                                      desc, desc_imm, ex_desc, ex_desc_imm);
+      if (inst->check_tdr)
+         brw_inst_set_opcode(p->devinfo, brw_last_inst, BRW_OPCODE_SENDSC);
+   } else {
+      brw_send_indirect_message(p, inst->sfid, dst, payload, desc, desc_imm);
+      if (inst->check_tdr)
+         brw_inst_set_opcode(p->devinfo, brw_last_inst, BRW_OPCODE_SENDC);
+   }
+
+   brw_inst_set_eot(p->devinfo, brw_last_inst, inst->eot);
+}
+
+void
 fs_generator::fire_fb_write(fs_inst *inst,
                             struct brw_reg payload,
                             struct brw_reg implied_header,
@@ -315,8 +349,6 @@ fs_generator::fire_fb_write(fs_inst *inst,
 
    if (devinfo->gen >= 6)
       brw_inst_set_rt_slot_group(devinfo, insn, inst->group / 16);
-
-   brw_mark_surface_used(&prog_data->base, surf_index);
 }
 
 void
@@ -373,8 +405,6 @@ fs_generator::generate_fb_read(fs_inst *inst, struct brw_reg dst,
    gen9_fb_READ(p, dst, payload, surf_index,
                 inst->header_size, inst->size_written / REG_SIZE,
                 prog_data->persample_dispatch);
-
-   brw_mark_surface_used(&prog_data->base, surf_index);
 }
 
 void
@@ -440,7 +470,8 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
 
       if (type_sz(reg.type) > 4 &&
           ((devinfo->gen == 7 && !devinfo->is_haswell) ||
-           devinfo->is_cherryview || gen_device_info_is_9lp(devinfo))) {
+           devinfo->is_cherryview || gen_device_info_is_9lp(devinfo) ||
+           !devinfo->has_64bit_types)) {
          /* IVB has an issue (which we found empirically) where it reads two
           * address register components per channel for indirectly addressed
           * 64-bit sources.
@@ -938,15 +969,14 @@ fs_generator::generate_get_buffer_size(fs_inst *inst,
               inst->header_size > 0,
               simd_mode,
               BRW_SAMPLER_RETURN_FORMAT_SINT32);
-
-   brw_mark_surface_used(prog_data, surf_index.ud);
 }
 
 void
-fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src,
+fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst,
                            struct brw_reg surface_index,
                            struct brw_reg sampler_index)
 {
+   assert(devinfo->gen < 7);
    assert(inst->size_written % REG_SIZE == 0);
    int msg_type = -1;
    uint32_t simd_mode;
@@ -1015,71 +1045,26 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
 	    msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LOD;
 	 }
 	 break;
-      case SHADER_OPCODE_TXL_LZ:
-         assert(devinfo->gen >= 9);
-	 if (inst->shadow_compare) {
-            msg_type = GEN9_SAMPLER_MESSAGE_SAMPLE_C_LZ;
-         } else {
-            msg_type = GEN9_SAMPLER_MESSAGE_SAMPLE_LZ;
-         }
-         break;
       case SHADER_OPCODE_TXS:
-      case SHADER_OPCODE_IMAGE_SIZE:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_RESINFO;
 	 break;
       case SHADER_OPCODE_TXD:
-         if (inst->shadow_compare) {
-            /* Gen7.5+.  Otherwise, lowered in NIR */
-            assert(devinfo->gen >= 8 || devinfo->is_haswell);
-            msg_type = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE;
-         } else {
-            msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
-         }
+         assert(!inst->shadow_compare);
+         msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_DERIVS;
 	 break;
       case SHADER_OPCODE_TXF:
 	 msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
 	 break;
-      case SHADER_OPCODE_TXF_LZ:
-         assert(devinfo->gen >= 9);
-         msg_type = GEN9_SAMPLER_MESSAGE_SAMPLE_LD_LZ;
-         break;
-      case SHADER_OPCODE_TXF_CMS_W:
-         assert(devinfo->gen >= 9);
-         msg_type = GEN9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W;
-         break;
       case SHADER_OPCODE_TXF_CMS:
-         if (devinfo->gen >= 7)
-            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DMS;
-         else
-            msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
-         break;
-      case SHADER_OPCODE_TXF_UMS:
-         assert(devinfo->gen >= 7);
-         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD2DSS;
-         break;
-      case SHADER_OPCODE_TXF_MCS:
-         assert(devinfo->gen >= 7);
-         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_LD_MCS;
+         msg_type = GEN5_SAMPLER_MESSAGE_SAMPLE_LD;
          break;
       case SHADER_OPCODE_LOD:
          msg_type = GEN5_SAMPLER_MESSAGE_LOD;
          break;
       case SHADER_OPCODE_TG4:
-         if (inst->shadow_compare) {
-            assert(devinfo->gen >= 7);
-            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C;
-         } else {
-            assert(devinfo->gen >= 6);
-            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4;
-         }
-         break;
-      case SHADER_OPCODE_TG4_OFFSET:
-         assert(devinfo->gen >= 7);
-         if (inst->shadow_compare) {
-            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C;
-         } else {
-            msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO;
-         }
+         assert(devinfo->gen == 6);
+         assert(!inst->shadow_compare);
+         msg_type = GEN7_SAMPLER_MESSAGE_SAMPLE_GATHER4;
          break;
       case SHADER_OPCODE_SAMPLEINFO:
          msg_type = GEN6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO;
@@ -1158,16 +1143,14 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
       dst = vec16(dst);
    }
 
-   assert(devinfo->gen < 7 || inst->header_size == 0 ||
-          src.file == BRW_GENERAL_REGISTER_FILE);
-
    assert(sampler_index.type == BRW_REGISTER_TYPE_UD);
 
    /* Load the message header if present.  If there's a texture offset,
     * we need to set it up explicitly and load the offset bitfield.
     * Otherwise, we can use an implied move from g0 to the first message reg.
     */
-   if (inst->header_size != 0 && devinfo->gen < 7) {
+   struct brw_reg src = brw_null_reg();
+   if (inst->header_size != 0) {
       if (devinfo->gen < 6 && !inst->offset) {
          /* Set up an implied move from g0 to the MRF. */
          src = retype(brw_vec8_grf(0, 0), BRW_REGISTER_TYPE_UW);
@@ -1196,85 +1179,28 @@ fs_generator::generate_tex(fs_inst *inst, struct brw_reg dst, struct brw_reg src
    uint32_t base_binding_table_index;
    switch (inst->opcode) {
    case SHADER_OPCODE_TG4:
-   case SHADER_OPCODE_TG4_OFFSET:
       base_binding_table_index = prog_data->binding_table.gather_texture_start;
-      break;
-   case SHADER_OPCODE_IMAGE_SIZE:
-      base_binding_table_index = prog_data->binding_table.image_start;
       break;
    default:
       base_binding_table_index = prog_data->binding_table.texture_start;
       break;
    }
 
-   if (surface_index.file == BRW_IMMEDIATE_VALUE &&
-       sampler_index.file == BRW_IMMEDIATE_VALUE) {
-      uint32_t surface = surface_index.ud;
-      uint32_t sampler = sampler_index.ud;
+   assert(surface_index.file == BRW_IMMEDIATE_VALUE);
+   assert(sampler_index.file == BRW_IMMEDIATE_VALUE);
 
-      brw_SAMPLE(p,
-                 retype(dst, BRW_REGISTER_TYPE_UW),
-                 inst->base_mrf,
-                 src,
-                 surface + base_binding_table_index,
-                 sampler % 16,
-                 msg_type,
-                 inst->size_written / REG_SIZE,
-                 inst->mlen,
-                 inst->header_size != 0,
-                 simd_mode,
-                 return_format);
-
-      brw_mark_surface_used(prog_data, surface + base_binding_table_index);
-   } else {
-      /* Non-const sampler index */
-
-      struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
-      struct brw_reg surface_reg = vec1(retype(surface_index, BRW_REGISTER_TYPE_UD));
-      struct brw_reg sampler_reg = vec1(retype(sampler_index, BRW_REGISTER_TYPE_UD));
-
-      brw_push_insn_state(p);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_set_default_access_mode(p, BRW_ALIGN_1);
-      brw_set_default_exec_size(p, BRW_EXECUTE_1);
-
-      if (brw_regs_equal(&surface_reg, &sampler_reg)) {
-         brw_MUL(p, addr, sampler_reg, brw_imm_uw(0x101));
-      } else {
-         if (sampler_reg.file == BRW_IMMEDIATE_VALUE) {
-            brw_OR(p, addr, surface_reg, brw_imm_ud(sampler_reg.ud << 8));
-         } else {
-            brw_SHL(p, addr, sampler_reg, brw_imm_ud(8));
-            brw_OR(p, addr, addr, surface_reg);
-         }
-      }
-      if (base_binding_table_index)
-         brw_ADD(p, addr, addr, brw_imm_ud(base_binding_table_index));
-      brw_AND(p, addr, addr, brw_imm_ud(0xfff));
-
-      brw_pop_insn_state(p);
-
-      /* dst = send(offset, a0.0 | <descriptor>) */
-      brw_send_indirect_message(
-         p, BRW_SFID_SAMPLER, dst, src, addr,
-         brw_message_desc(devinfo, inst->mlen, inst->size_written / REG_SIZE,
-                          inst->header_size) |
-         brw_sampler_desc(devinfo,
-                          0 /* surface */,
-                          0 /* sampler */,
-                          msg_type,
-                          simd_mode,
-                          return_format));
-
-      /* visitor knows more than we do about the surface limit required,
-       * so has already done marking.
-       */
-   }
-
-   if (is_combined_send) {
-      brw_inst_set_eot(p->devinfo, brw_last_inst, true);
-      brw_inst_set_opcode(p->devinfo, brw_last_inst, BRW_OPCODE_SENDC);
-   }
+   brw_SAMPLE(p,
+              retype(dst, BRW_REGISTER_TYPE_UW),
+              inst->base_mrf,
+              src,
+              surface_index.ud + base_binding_table_index,
+              sampler_index.ud % 16,
+              msg_type,
+              inst->size_written / REG_SIZE,
+              inst->mlen,
+              inst->header_size != 0,
+              simd_mode,
+              return_format);
 }
 
 
@@ -1596,75 +1522,6 @@ fs_generator::generate_varying_pull_constant_load_gen4(fs_inst *inst,
 }
 
 void
-fs_generator::generate_varying_pull_constant_load_gen7(fs_inst *inst,
-                                                       struct brw_reg dst,
-                                                       struct brw_reg index,
-                                                       struct brw_reg offset)
-{
-   assert(devinfo->gen >= 7);
-   /* Varying-offset pull constant loads are treated as a normal expression on
-    * gen7, so the fact that it's a send message is hidden at the IR level.
-    */
-   assert(inst->header_size == 0);
-   assert(inst->mlen);
-   assert(index.type == BRW_REGISTER_TYPE_UD);
-
-   uint32_t simd_mode, rlen;
-   if (inst->exec_size == 16) {
-      rlen = 8;
-      simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD16;
-   } else {
-      assert(inst->exec_size == 8);
-      rlen = 4;
-      simd_mode = BRW_SAMPLER_SIMD_MODE_SIMD8;
-   }
-
-   if (index.file == BRW_IMMEDIATE_VALUE) {
-
-      uint32_t surf_index = index.ud;
-
-      brw_inst *send = brw_next_insn(p, BRW_OPCODE_SEND);
-      brw_inst_set_sfid(devinfo, send, BRW_SFID_SAMPLER);
-      brw_set_dest(p, send, retype(dst, BRW_REGISTER_TYPE_UW));
-      brw_set_src0(p, send, offset);
-      brw_set_desc(p, send,
-                   brw_message_desc(devinfo, inst->mlen, rlen, false) |
-                   brw_sampler_desc(devinfo, surf_index,
-                                    0, /* LD message ignores sampler unit */
-                                    GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
-                                    simd_mode, 0));
-
-   } else {
-
-      struct brw_reg addr = vec1(retype(brw_address_reg(0), BRW_REGISTER_TYPE_UD));
-
-      brw_push_insn_state(p);
-      brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-
-      /* a0.0 = surf_index & 0xff */
-      brw_inst *insn_and = brw_next_insn(p, BRW_OPCODE_AND);
-      brw_inst_set_exec_size(p->devinfo, insn_and, BRW_EXECUTE_1);
-      brw_set_dest(p, insn_and, addr);
-      brw_set_src0(p, insn_and, vec1(retype(index, BRW_REGISTER_TYPE_UD)));
-      brw_set_src1(p, insn_and, brw_imm_ud(0x0ff));
-
-      brw_pop_insn_state(p);
-
-      /* dst = send(offset, a0.0 | <descriptor>) */
-      brw_send_indirect_message(
-         p, BRW_SFID_SAMPLER, retype(dst, BRW_REGISTER_TYPE_UW),
-         offset, addr,
-         brw_message_desc(devinfo, inst->mlen, rlen, false) |
-         brw_sampler_desc(devinfo,
-                          0 /* surface */,
-                          0 /* sampler */,
-                          GEN5_SAMPLER_MESSAGE_SAMPLE_LD,
-                          simd_mode,
-                          0));
-   }
-}
-
-void
 fs_generator::generate_pixel_interpolator_query(fs_inst *inst,
                                                 struct brw_reg dst,
                                                 struct brw_reg src,
@@ -1756,35 +1613,6 @@ fs_generator::generate_pack_half_2x16_split(fs_inst *,
 }
 
 void
-fs_generator::generate_unpack_half_2x16_split(fs_inst *inst,
-                                              struct brw_reg dst,
-                                              struct brw_reg src)
-{
-   assert(devinfo->gen >= 7);
-   assert(dst.type == BRW_REGISTER_TYPE_F);
-   assert(src.type == BRW_REGISTER_TYPE_UD);
-
-   /* From the Ivybridge PRM, Vol4, Part3, Section 6.26 f16to32:
-    *
-    *   Because this instruction does not have a 16-bit floating-point type,
-    *   the source data type must be Word (W). The destination type must be
-    *   F (Float).
-    */
-   struct brw_reg src_w = spread(retype(src, BRW_REGISTER_TYPE_W), 2);
-
-   /* Each channel of src has the form of unpackHalf2x16's input: 0xhhhhllll.
-    * For the Y case, we wish to access only the upper word; therefore
-    * a 16-bit subregister offset is needed.
-    */
-   assert(inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X ||
-          inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y);
-   if (inst->opcode == FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y)
-      src_w.subnr += 2;
-
-   brw_F16TO32(p, dst, src_w);
-}
-
-void
 fs_generator::generate_shader_time_add(fs_inst *,
                                        struct brw_reg payload,
                                        struct brw_reg offset,
@@ -1818,9 +1646,6 @@ fs_generator::generate_shader_time_add(fs_inst *,
    brw_shader_time_add(p, payload,
                        prog_data->binding_table.shader_time_start);
    brw_pop_insn_state(p);
-
-   brw_mark_surface_used(prog_data,
-                         prog_data->binding_table.shader_time_start);
 }
 
 void
@@ -1846,7 +1671,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
    struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
 
    foreach_block_and_inst (block, fs_inst, inst, cfg) {
-      struct brw_reg src[3], dst;
+      struct brw_reg src[4], dst;
       unsigned int last_insn_offset = p->next_insn_offset;
       bool multiple_instructions_emitted = false;
 
@@ -2169,6 +1994,12 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          src[0].subnr = 4 * type_sz(src[0].type);
          brw_MOV(p, dst, stride(src[0], 8, 4, 1));
          break;
+
+      case SHADER_OPCODE_SEND:
+         generate_send(inst, dst, src[0], src[1], src[2],
+                       inst->ex_mlen > 0 ? src[3] : brw_null_reg());
+         break;
+
       case SHADER_OPCODE_GET_BUFFER_SIZE:
          generate_get_buffer_size(inst, dst, src[0], src[1]);
          break;
@@ -2176,23 +2007,14 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       case FS_OPCODE_TXB:
       case SHADER_OPCODE_TXD:
       case SHADER_OPCODE_TXF:
-      case SHADER_OPCODE_TXF_LZ:
       case SHADER_OPCODE_TXF_CMS:
-      case SHADER_OPCODE_TXF_CMS_W:
-      case SHADER_OPCODE_TXF_UMS:
-      case SHADER_OPCODE_TXF_MCS:
       case SHADER_OPCODE_TXL:
-      case SHADER_OPCODE_TXL_LZ:
       case SHADER_OPCODE_TXS:
       case SHADER_OPCODE_LOD:
       case SHADER_OPCODE_TG4:
-      case SHADER_OPCODE_TG4_OFFSET:
       case SHADER_OPCODE_SAMPLEINFO:
-	 generate_tex(inst, dst, src[0], src[1], src[2]);
-	 break;
-
-      case SHADER_OPCODE_IMAGE_SIZE:
-         generate_tex(inst, dst, src[0], src[1], brw_imm_ud(0));
+         assert(inst->src[0].file == BAD_FILE);
+         generate_tex(inst, dst, src[1], src[2]);
          break;
 
       case FS_OPCODE_DDX_COARSE:
@@ -2249,10 +2071,6 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
 	 generate_varying_pull_constant_load_gen4(inst, dst, src[0]);
 	 break;
 
-      case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN7:
-	 generate_varying_pull_constant_load_gen7(inst, dst, src[0], src[1]);
-	 break;
-
       case FS_OPCODE_REP_FB_WRITE:
       case FS_OPCODE_FB_WRITE:
 	 generate_fb_write(inst, src[0]);
@@ -2268,68 +2086,6 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
 
       case SHADER_OPCODE_SHADER_TIME_ADD:
          generate_shader_time_add(inst, src[0], src[1], src[2]);
-         break;
-
-      case SHADER_OPCODE_UNTYPED_ATOMIC:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_untyped_atomic(p, dst, src[0], src[1], src[2].ud,
-                            inst->mlen, !inst->dst.is_null(),
-                            inst->header_size);
-         break;
-
-      case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_untyped_atomic_float(p, dst, src[0], src[1], src[2].ud,
-                                  inst->mlen, !inst->dst.is_null(),
-                                  inst->header_size);
-         break;
-
-      case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-         assert(!inst->header_size);
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_untyped_surface_read(p, dst, src[0], src[1],
-                                  inst->mlen, src[2].ud);
-         break;
-
-      case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_untyped_surface_write(p, src[0], src[1],
-                                   inst->mlen, src[2].ud,
-                                   inst->header_size);
-         break;
-
-      case SHADER_OPCODE_BYTE_SCATTERED_READ:
-         assert(!inst->header_size);
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_byte_scattered_read(p, dst, src[0], src[1],
-                                 inst->mlen, src[2].ud);
-         break;
-
-      case SHADER_OPCODE_BYTE_SCATTERED_WRITE:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_byte_scattered_write(p, src[0], src[1],
-                                  inst->mlen, src[2].ud,
-                                  inst->header_size);
-         break;
-
-      case SHADER_OPCODE_TYPED_ATOMIC:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_typed_atomic(p, dst, src[0], src[1],
-                          src[2].ud, inst->mlen, !inst->dst.is_null(),
-                          inst->header_size);
-         break;
-
-      case SHADER_OPCODE_TYPED_SURFACE_READ:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_typed_surface_read(p, dst, src[0], src[1],
-                                inst->mlen, src[2].ud,
-                                inst->header_size);
-         break;
-
-      case SHADER_OPCODE_TYPED_SURFACE_WRITE:
-         assert(src[2].file == BRW_IMMEDIATE_VALUE);
-         brw_typed_surface_write(p, src[0], src[1], inst->mlen, src[2].ud,
-                                 inst->header_size);
          break;
 
       case SHADER_OPCODE_MEMORY_FENCE:
@@ -2420,11 +2176,6 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
       case FS_OPCODE_PACK_HALF_2x16_SPLIT:
           generate_pack_half_2x16_split(inst, dst, src[0], src[1]);
           break;
-
-      case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_X:
-      case FS_OPCODE_UNPACK_HALF_2x16_SPLIT_Y:
-         generate_unpack_half_2x16_split(inst, dst, src[0]);
-         break;
 
       case FS_OPCODE_PLACEHOLDER_HALT:
          /* This is the place where the final HALT needs to be inserted if

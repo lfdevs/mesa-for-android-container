@@ -757,8 +757,8 @@ VkResult anv_WaitForFences(
 
 void anv_GetPhysicalDeviceExternalFenceProperties(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-    VkExternalFencePropertiesKHR*               pExternalFenceProperties)
+    const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
+    VkExternalFenceProperties*                  pExternalFenceProperties)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
 
@@ -927,9 +927,9 @@ VkResult anv_CreateSemaphore(
    if (semaphore == NULL)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   const VkExportSemaphoreCreateInfoKHR *export =
+   const VkExportSemaphoreCreateInfo *export =
       vk_find_struct_const(pCreateInfo->pNext, EXPORT_SEMAPHORE_CREATE_INFO);
-    VkExternalSemaphoreHandleTypeFlagsKHR handleTypes =
+    VkExternalSemaphoreHandleTypeFlags handleTypes =
       export ? export->handleTypes : 0;
 
    if (handleTypes == 0) {
@@ -1038,8 +1038,8 @@ void anv_DestroySemaphore(
 
 void anv_GetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
-    VkExternalSemaphorePropertiesKHR*           pExternalSemaphoreProperties)
+    const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties*               pExternalSemaphoreProperties)
 {
    ANV_FROM_HANDLE(anv_physical_device, device, physicalDevice);
 
@@ -1056,7 +1056,8 @@ void anv_GetPhysicalDeviceExternalSemaphoreProperties(
 
    case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT:
       if (device->has_exec_fence) {
-         pExternalSemaphoreProperties->exportFromImportedHandleTypes = 0;
+         pExternalSemaphoreProperties->exportFromImportedHandleTypes =
+            VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
          pExternalSemaphoreProperties->compatibleHandleTypes =
             VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT;
          pExternalSemaphoreProperties->externalSemaphoreFeatures =
@@ -1106,7 +1107,7 @@ VkResult anv_ImportSemaphoreFdKHR(
 
          if (new_impl.bo->size < 4096) {
             anv_bo_cache_release(device, &device->bo_cache, new_impl.bo);
-            return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR);
+            return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
          }
 
          /* If we're going to use this as a fence, we need to *not* have the

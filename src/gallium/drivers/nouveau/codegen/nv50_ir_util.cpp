@@ -311,12 +311,12 @@ void BitSet::setOr(BitSet *pA, BitSet *pB)
    }
 }
 
-int BitSet::findFreeRange(unsigned int count) const
+int BitSet::findFreeRange(unsigned int count, unsigned int max) const
 {
    const uint32_t m = (1 << count) - 1;
-   int pos = size;
+   int pos = max;
    unsigned int i;
-   const unsigned int end = (size + 31) / 32;
+   const unsigned int end = (max + 31) / 32;
 
    if (count == 1) {
       for (i = 0; i < end; ++i) {
@@ -373,7 +373,7 @@ int BitSet::findFreeRange(unsigned int count) const
 
    pos += i * 32;
 
-   return ((pos + count) <= size) ? pos : -1;
+   return ((pos + count) <= max) ? pos : -1;
 }
 
 void BitSet::print() const

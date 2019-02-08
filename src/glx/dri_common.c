@@ -77,11 +77,6 @@ dri_message(int level, const char *f, ...)
 #define GL_LIB_NAME "libGL.so.1"
 #endif
 
-#ifndef DEFAULT_DRIVER_DIR
-/* this is normally defined in Mesa/configs/default with DRI_DRIVER_SEARCH_PATH */
-#define DEFAULT_DRIVER_DIR "/usr/local/lib/dri"
-#endif
-
 /**
  * Try to \c dlopen the named driver.
  *
@@ -90,96 +85,31 @@ dri_message(int level, const char *f, ...)
  * order to find the driver.
  *
  * \param driverName - a name like "i965", "radeon", "nouveau", etc.
+ * \param out_driver_handle - Address to return the resulting dlopen() handle.
  *
  * \returns
- * A handle from \c dlopen, or \c NULL if driver file not found.
+ * The __DRIextension entrypoint table for the driver, or \c NULL if driver
+ * file not found.
  */
-_X_HIDDEN void *
-driOpenDriver(const char *driverName)
+_X_HIDDEN const __DRIextension **
+driOpenDriver(const char *driverName, void **out_driver_handle)
 {
-   void *glhandle, *handle;
-   const char *libPaths, *p, *next;
-   char realDriverName[200];
-   int len;
+   void *glhandle;
 
    /* Attempt to make sure libGL symbols will be visible to the driver */
    glhandle = dlopen(GL_LIB_NAME, RTLD_NOW | RTLD_GLOBAL);
 
-   libPaths = NULL;
-   if (geteuid() == getuid()) {
-      /* don't allow setuid apps to use LIBGL_DRIVERS_PATH */
-      libPaths = getenv("LIBGL_DRIVERS_PATH");
-      if (!libPaths)
-         libPaths = getenv("LIBGL_DRIVERS_DIR");        /* deprecated */
-   }
-   if (libPaths == NULL)
-      libPaths = DEFAULT_DRIVER_DIR;
+   static const char *search_path_vars[] = {
+      "LIBGL_DRIVERS_PATH",
+      "LIBGL_DRIVERS_DIR", /* deprecated */
+      NULL
+   };
 
-   handle = NULL;
-   for (p = libPaths; *p; p = next) {
-      next = strchr(p, ':');
-      if (next == NULL) {
-         len = strlen(p);
-         next = p + len;
-      }
-      else {
-         len = next - p;
-         next++;
-      }
-
-#ifdef GLX_USE_TLS
-      snprintf(realDriverName, sizeof realDriverName,
-               "%.*s/tls/%s_dri.so", len, p, driverName);
-      InfoMessageF("OpenDriver: trying %s\n", realDriverName);
-      handle = dlopen(realDriverName, RTLD_NOW | RTLD_GLOBAL);
-#endif
-
-      if (handle == NULL) {
-         snprintf(realDriverName, sizeof realDriverName,
-                  "%.*s/%s_dri.so", len, p, driverName);
-         InfoMessageF("OpenDriver: trying %s\n", realDriverName);
-         handle = dlopen(realDriverName, RTLD_NOW | RTLD_GLOBAL);
-      }
-
-      if (handle != NULL)
-         break;
-      else
-         InfoMessageF("dlopen %s failed (%s)\n", realDriverName, dlerror());
-   }
-
-   if (!handle)
-      ErrorMessageF("unable to load driver: %s_dri.so\n", driverName);
+   const __DRIextension **extensions =
+      loader_open_driver(driverName, out_driver_handle, search_path_vars);
 
    if (glhandle)
       dlclose(glhandle);
-
-   return handle;
-}
-
-_X_HIDDEN const __DRIextension **
-driGetDriverExtensions(void *handle, const char *driver_name)
-{
-   const __DRIextension **extensions = NULL;
-   const __DRIextension **(*get_extensions)(void);
-   char *get_extensions_name = loader_get_extensions_name(driver_name);
-
-   if (get_extensions_name) {
-      get_extensions = dlsym(handle, get_extensions_name);
-      if (get_extensions) {
-         free(get_extensions_name);
-         return get_extensions();
-      } else {
-         InfoMessageF("driver does not expose %s(): %s\n",
-                      get_extensions_name, dlerror());
-         free(get_extensions_name);
-      }
-   }
-
-   extensions = dlsym(handle, __DRI_DRIVER_EXTENSIONS);
-   if (extensions == NULL) {
-      ErrorMessageF("driver exports no extensions (%s)\n", dlerror());
-      return NULL;
-   }
 
    return extensions;
 }
