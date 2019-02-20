@@ -339,7 +339,6 @@ clear_fast(struct fd_batch *batch, struct fd_ringbuffer *ring,
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_SC_SCREEN_SCISSOR_BR));
 	OUT_RINGP(ring, patch_type, &batch->gmem_patches);
-	OUT_RING(ring, 0);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));

@@ -6,6 +6,11 @@
 
 #include "nvc0_query.h"
 
+#define NVC0_HW_QUERY_STATE_READY   0
+#define NVC0_HW_QUERY_STATE_ACTIVE  1
+#define NVC0_HW_QUERY_STATE_ENDED   2
+#define NVC0_HW_QUERY_STATE_FLUSHED 3
+
 #define NVC0_HW_QUERY_TFB_BUFFER_OFFSET (PIPE_QUERY_TYPES + 0)
 
 struct nvc0_hw_query;
@@ -29,7 +34,6 @@ struct nvc0_hw_query {
    uint8_t state;
    boolean is64bit;
    uint8_t rotate;
-   int nesting; /* only used for occlusion queries */
    struct nouveau_mm_allocation *mm;
    struct nouveau_fence *fence;
 };

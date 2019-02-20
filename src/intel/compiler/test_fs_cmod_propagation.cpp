@@ -889,3 +889,35 @@ TEST_F(cmod_propagation_test, subtract_delete_compare_derp)
    EXPECT_EQ(BRW_OPCODE_ADD, instruction(block0, 1)->opcode);
    EXPECT_EQ(BRW_PREDICATE_NORMAL, instruction(block0, 1)->predicate);
 }
+
+TEST_F(cmod_propagation_test, signed_unsigned_comparison_mismatch)
+{
+   const fs_builder &bld = v->bld;
+   fs_reg dest0 = v->vgrf(glsl_type::int_type);
+   fs_reg src0 = v->vgrf(glsl_type::int_type);
+   src0.type = BRW_REGISTER_TYPE_W;
+
+   bld.ASR(dest0, negate(src0), brw_imm_d(15));
+   bld.CMP(bld.null_reg_ud(), retype(dest0, BRW_REGISTER_TYPE_UD),
+           brw_imm_ud(0u), BRW_CONDITIONAL_LE);
+
+   /* = Before =
+    * 0: asr(8)          dest:D   -src0:W 15D
+    * 1: cmp.le.f0(8)    null:UD  dest:UD 0UD
+    *
+    * = After =
+    * (no changes)
+    */
+   v->calculate_cfg();
+   bblock_t *block0 = v->cfg->blocks[0];
+
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+
+   EXPECT_FALSE(cmod_propagation(v));
+   EXPECT_EQ(0, block0->start_ip);
+   EXPECT_EQ(1, block0->end_ip);
+   EXPECT_EQ(BRW_OPCODE_ASR, instruction(block0, 0)->opcode);
+   EXPECT_EQ(BRW_OPCODE_CMP, instruction(block0, 1)->opcode);
+   EXPECT_EQ(BRW_CONDITIONAL_LE, instruction(block0, 1)->conditional_mod);
+}

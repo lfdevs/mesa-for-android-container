@@ -203,8 +203,13 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
                  * shader needs to write the Z value (even just discards).
                  */
                 shader.fragment_shader_does_z_writes =
-                        (v3d->prog.fs->prog_data.fs->writes_z ||
-                         v3d->prog.fs->prog_data.fs->discard);
+                        v3d->prog.fs->prog_data.fs->writes_z;
+                /* Set if the EZ test must be disabled (due to shader side
+                 * effects and the early_z flag not being present in the
+                 * shader).
+                 */
+                shader.turn_off_early_z_test =
+                        v3d->prog.fs->prog_data.fs->disable_ez;
 
                 shader.fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 =
                         v3d->prog.fs->prog_data.fs->uses_center_w;

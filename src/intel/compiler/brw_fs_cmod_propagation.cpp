@@ -255,6 +255,13 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
             if (inst->opcode == BRW_OPCODE_AND)
                break;
 
+            /* Not safe to use inequality operators if the types are different
+             */
+            if (scan_inst->dst.type != inst->src[0].type &&
+                inst->conditional_mod != BRW_CONDITIONAL_Z &&
+                inst->conditional_mod != BRW_CONDITIONAL_NZ)
+               break;
+
             /* Comparisons operate differently for ints and floats */
             if (scan_inst->dst.type != inst->dst.type &&
                 (scan_inst->dst.type == BRW_REGISTER_TYPE_F ||

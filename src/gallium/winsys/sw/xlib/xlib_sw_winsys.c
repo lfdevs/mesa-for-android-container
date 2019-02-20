@@ -396,6 +396,7 @@ xlib_displaytarget_create(struct sw_winsys *winsys,
 {
    struct xlib_displaytarget *xlib_dt;
    unsigned nblocksy, size;
+   int ignore;
 
    xlib_dt = CALLOC_STRUCT(xlib_displaytarget);
    if (!xlib_dt)
@@ -410,7 +411,8 @@ xlib_displaytarget_create(struct sw_winsys *winsys,
    xlib_dt->stride = align(util_format_get_stride(format, width), alignment);
    size = xlib_dt->stride * nblocksy;
 
-   if (!debug_get_option_xlib_no_shm()) {
+   if (!debug_get_option_xlib_no_shm() &&
+       XQueryExtension(xlib_dt->display, "MIT-SHM", &ignore, &ignore, &ignore)) {
       xlib_dt->data = alloc_shm(xlib_dt, size);
       if (xlib_dt->data) {
          xlib_dt->shm = True;

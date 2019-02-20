@@ -399,6 +399,7 @@ Program::emitBinary(struct nv50_ir_prog_info *info)
          }
       }
    }
+   info->io.fp64 |= fp64;
    info->bin.relocData = emit->getRelocInfo();
    info->bin.fixupData = emit->getFixupInfo();
 

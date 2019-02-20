@@ -258,6 +258,10 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_FLOAT_LINEAR:
    case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
       return 1; /* TODO: need to introduce a hw-cap for this */
+   case PIPE_CAP_MAX_VARYINGS:
+      if (vscreen->caps.caps.v1.glsl_level < 150)
+         return vscreen->caps.caps.v2.max_vertex_attribs;
+      return 32;
    case PIPE_CAP_TEXTURE_GATHER_SM5:
    case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
    case PIPE_CAP_FAKE_SW_MSAA:

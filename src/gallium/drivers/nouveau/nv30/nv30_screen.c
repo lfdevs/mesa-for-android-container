@@ -79,6 +79,9 @@ nv30_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 2048;
    case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
       return 8 * 1024 * 1024;
+   case PIPE_CAP_MAX_VARYINGS:
+      return 8;
+
    /* supported capabilities */
    case PIPE_CAP_ANISOTROPIC_FILTER:
    case PIPE_CAP_POINT_SPRITE:

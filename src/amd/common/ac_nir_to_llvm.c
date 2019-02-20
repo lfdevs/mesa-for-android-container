@@ -2006,18 +2006,23 @@ static void
 visit_store_var(struct ac_nir_context *ctx,
 		nir_intrinsic_instr *instr)
 {
-        nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
+	nir_deref_instr *deref = nir_instr_as_deref(instr->src[0].ssa->parent_instr);
+	nir_variable *var = nir_deref_instr_get_variable(deref);
 
 	LLVMValueRef temp_ptr, value;
-	int idx = var->data.driver_location;
-	unsigned comp = var->data.location_frac;
+	int idx = 0;
+	unsigned comp = 0;
 	LLVMValueRef src = ac_to_float(&ctx->ac, get_src(ctx, instr->src[1]));
 	int writemask = instr->const_index[0];
 	LLVMValueRef indir_index;
 	unsigned const_index;
 
-	get_deref_offset(ctx, nir_instr_as_deref(instr->src[0].ssa->parent_instr), false,
-	                 NULL, NULL, &const_index, &indir_index);
+	if (var) {
+		get_deref_offset(ctx, deref, false,
+		                 NULL, NULL, &const_index, &indir_index);
+		idx = var->data.driver_location;
+		comp = var->data.location_frac;
+	}
 
 	if (ac_get_elem_bits(&ctx->ac, LLVMTypeOf(src)) == 64) {
 
@@ -2030,7 +2035,7 @@ visit_store_var(struct ac_nir_context *ctx,
 
 	writemask = writemask << comp;
 
-	switch (var->data.mode) {
+	switch (deref->mode) {
 	case nir_var_shader_out:
 
 		if (ctx->stage == MESA_SHADER_TESS_CTRL) {
@@ -2039,8 +2044,8 @@ visit_store_var(struct ac_nir_context *ctx,
 			unsigned const_index = 0;
 			const bool is_patch = var->data.patch;
 
-			get_deref_offset(ctx, nir_instr_as_deref(instr->src[0].ssa->parent_instr),
-			                 false, NULL, is_patch ? NULL : &vertex_index,
+			get_deref_offset(ctx, deref, false, NULL,
+			                 is_patch ? NULL : &vertex_index,
 			                 &const_index, &indir_index);
 
 			ctx->abi->store_tcs_outputs(ctx->abi, var,
@@ -2107,7 +2112,7 @@ visit_store_var(struct ac_nir_context *ctx,
 		int writemask = instr->const_index[0];
 		LLVMValueRef address = get_src(ctx, instr->src[0]);
 		LLVMValueRef val = get_src(ctx, instr->src[1]);
-		if (util_is_power_of_two_nonzero(writemask)) {
+		if (writemask == (1u << ac_get_llvm_num_components(val)) - 1) {
 			val = LLVMBuildBitCast(
 			   ctx->ac.builder, val,
 			   LLVMGetElementType(LLVMTypeOf(address)), "");
@@ -3818,6 +3823,73 @@ static void visit_jump(struct ac_llvm_context *ctx,
 	}
 }
 
+static LLVMTypeRef
+glsl_base_to_llvm_type(struct ac_llvm_context *ac,
+		       enum glsl_base_type type)
+{
+	switch (type) {
+	case GLSL_TYPE_INT:
+	case GLSL_TYPE_UINT:
+	case GLSL_TYPE_BOOL:
+	case GLSL_TYPE_SUBROUTINE:
+		return ac->i32;
+	case GLSL_TYPE_INT16:
+	case GLSL_TYPE_UINT16:
+		return ac->i16;
+	case GLSL_TYPE_FLOAT:
+		return ac->f32;
+	case GLSL_TYPE_FLOAT16:
+		return ac->f16;
+	case GLSL_TYPE_INT64:
+	case GLSL_TYPE_UINT64:
+		return ac->i64;
+	case GLSL_TYPE_DOUBLE:
+		return ac->f64;
+	default:
+		unreachable("unknown GLSL type");
+	}
+}
+
+static LLVMTypeRef
+glsl_to_llvm_type(struct ac_llvm_context *ac,
+		  const struct glsl_type *type)
+{
+	if (glsl_type_is_scalar(type)) {
+		return glsl_base_to_llvm_type(ac, glsl_get_base_type(type));
+	}
+
+	if (glsl_type_is_vector(type)) {
+		return LLVMVectorType(
+		   glsl_base_to_llvm_type(ac, glsl_get_base_type(type)),
+		   glsl_get_vector_elements(type));
+	}
+
+	if (glsl_type_is_matrix(type)) {
+		return LLVMArrayType(
+		   glsl_to_llvm_type(ac, glsl_get_column_type(type)),
+		   glsl_get_matrix_columns(type));
+	}
+
+	if (glsl_type_is_array(type)) {
+		return LLVMArrayType(
+		   glsl_to_llvm_type(ac, glsl_get_array_element(type)),
+		   glsl_get_length(type));
+	}
+
+	assert(glsl_type_is_struct(type));
+
+	LLVMTypeRef member_types[glsl_get_length(type)];
+
+	for (unsigned i = 0; i < glsl_get_length(type); i++) {
+		member_types[i] =
+			glsl_to_llvm_type(ac,
+					  glsl_get_struct_field(type, i));
+	}
+
+	return LLVMStructTypeInContext(ac->context, member_types,
+				       glsl_get_length(type), false);
+}
+
 static void visit_deref(struct ac_nir_context *ctx,
                         nir_deref_instr *instr)
 {
@@ -3839,9 +3911,27 @@ static void visit_deref(struct ac_nir_context *ctx,
 		result = ac_build_gep0(&ctx->ac, get_src(ctx, instr->parent),
 		                       get_src(ctx, instr->arr.index));
 		break;
-	case nir_deref_type_cast:
-		result = get_src(ctx, instr->parent);
+	case nir_deref_type_ptr_as_array:
+		result = ac_build_gep_ptr(&ctx->ac, get_src(ctx, instr->parent),
+		                          get_src(ctx, instr->arr.index));
 		break;
+	case nir_deref_type_cast: {
+		result = get_src(ctx, instr->parent);
+
+		LLVMTypeRef pointee_type = glsl_to_llvm_type(&ctx->ac, instr->type);
+		LLVMTypeRef type = LLVMPointerType(pointee_type, AC_ADDR_SPACE_LDS);
+
+		if (LLVMTypeOf(result) != type) {
+			if (LLVMGetTypeKind(LLVMTypeOf(result)) == LLVMVectorTypeKind) {
+				result = LLVMBuildBitCast(ctx->ac.builder, result,
+				                          type, "");
+			} else {
+				result = LLVMBuildIntToPtr(ctx->ac.builder, result,
+				                           type, "");
+			}
+		}
+		break;
+	}
 	default:
 		unreachable("Unhandled deref_instr deref type");
 	}
@@ -3988,73 +4078,6 @@ ac_handle_shader_output_decl(struct ac_llvm_context *ctx,
 		                       ac_build_alloca_undef(ctx, type, "");
 		}
 	}
-}
-
-static LLVMTypeRef
-glsl_base_to_llvm_type(struct ac_llvm_context *ac,
-		       enum glsl_base_type type)
-{
-	switch (type) {
-	case GLSL_TYPE_INT:
-	case GLSL_TYPE_UINT:
-	case GLSL_TYPE_BOOL:
-	case GLSL_TYPE_SUBROUTINE:
-		return ac->i32;
-	case GLSL_TYPE_INT16:
-	case GLSL_TYPE_UINT16:
-		return ac->i16;
-	case GLSL_TYPE_FLOAT:
-		return ac->f32;
-	case GLSL_TYPE_FLOAT16:
-		return ac->f16;
-	case GLSL_TYPE_INT64:
-	case GLSL_TYPE_UINT64:
-		return ac->i64;
-	case GLSL_TYPE_DOUBLE:
-		return ac->f64;
-	default:
-		unreachable("unknown GLSL type");
-	}
-}
-
-static LLVMTypeRef
-glsl_to_llvm_type(struct ac_llvm_context *ac,
-		  const struct glsl_type *type)
-{
-	if (glsl_type_is_scalar(type)) {
-		return glsl_base_to_llvm_type(ac, glsl_get_base_type(type));
-	}
-
-	if (glsl_type_is_vector(type)) {
-		return LLVMVectorType(
-		   glsl_base_to_llvm_type(ac, glsl_get_base_type(type)),
-		   glsl_get_vector_elements(type));
-	}
-
-	if (glsl_type_is_matrix(type)) {
-		return LLVMArrayType(
-		   glsl_to_llvm_type(ac, glsl_get_column_type(type)),
-		   glsl_get_matrix_columns(type));
-	}
-
-	if (glsl_type_is_array(type)) {
-		return LLVMArrayType(
-		   glsl_to_llvm_type(ac, glsl_get_array_element(type)),
-		   glsl_get_length(type));
-	}
-
-	assert(glsl_type_is_struct(type));
-
-	LLVMTypeRef member_types[glsl_get_length(type)];
-
-	for (unsigned i = 0; i < glsl_get_length(type); i++) {
-		member_types[i] =
-			glsl_to_llvm_type(ac,
-					  glsl_get_struct_field(type, i));
-	}
-
-	return LLVMStructTypeInContext(ac->context, member_types,
-				       glsl_get_length(type), false);
 }
 
 static void

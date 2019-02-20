@@ -1311,6 +1311,7 @@ public:
    uint32_t tlsSize; // size required for FILE_MEMORY_LOCAL
 
    int maxGPR;
+   bool fp64;
 
    MemoryPool mem_Instruction;
    MemoryPool mem_CmpInstruction;

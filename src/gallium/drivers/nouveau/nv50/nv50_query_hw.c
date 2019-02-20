@@ -29,11 +29,6 @@
 #include "nv50/nv50_query_hw_sm.h"
 #include "nv_object.xml.h"
 
-#define NV50_HW_QUERY_STATE_READY   0
-#define NV50_HW_QUERY_STATE_ACTIVE  1
-#define NV50_HW_QUERY_STATE_ENDED   2
-#define NV50_HW_QUERY_STATE_FLUSHED 3
-
 /* XXX: Nested queries, and simultaneous queries on multiple gallium contexts
  * (since we use only a single GPU channel per screen) will not work properly.
  *
@@ -158,8 +153,7 @@ nv50_hw_begin_query(struct nv50_context *nv50, struct nv50_query *q)
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-      hq->nesting = nv50->screen->num_occlusion_queries_active++;
-      if (hq->nesting) {
+      if (nv50->screen->num_occlusion_queries_active++) {
          nv50_hw_query_get(push, q, 0x10, 0x0100f002);
       } else {
          PUSH_SPACE(push, 4);

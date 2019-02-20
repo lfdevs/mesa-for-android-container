@@ -524,6 +524,14 @@ radv_pipeline_compute_spi_color_formats(struct radv_pipeline *pipeline,
 		col_format |= cf << (4 * i);
 	}
 
+	if (!col_format && blend->need_src_alpha & (1 << 0)) {
+		/* When a subpass doesn't have any color attachments, write the
+		 * alpha channel of MRT0 when alpha coverage is enabled because
+		 * the depth attachment needs it.
+		 */
+		col_format |= V_028714_SPI_SHADER_32_ABGR;
+	}
+
 	/* If the i-th target format is set, all previous target formats must
 	 * be non-zero to avoid hangs.
 	 */
@@ -689,6 +697,7 @@ radv_pipeline_init_blend_state(struct radv_pipeline *pipeline,
 
 	if (vkms && vkms->alphaToCoverageEnable) {
 		blend.db_alpha_to_mask |= S_028B70_ALPHA_TO_MASK_ENABLE(1);
+		blend.need_src_alpha |= 0x1;
 	}
 
 	blend.cb_target_mask = 0;
@@ -3192,11 +3201,11 @@ radv_compute_db_shader_control(const struct radv_device *device,
 	bool disable_rbplus = device->physical_device->has_rbplus &&
 	                      !device->physical_device->rbplus_allowed;
 
-	/* Do not enable the gl_SampleMask fragment shader output if MSAA is
-	 * disabled.
+	/* It shouldn't be needed to export gl_SampleMask when MSAA is disabled
+	 * but this appears to break Project Cars (DXVK). See
+	 * https://bugs.freedesktop.org/show_bug.cgi?id=109401
 	 */
-	bool mask_export_enable = ms->num_samples > 1 &&
-				  ps->info.info.ps.writes_sample_mask;
+	bool mask_export_enable = ps->info.info.ps.writes_sample_mask;
 
 	return  S_02880C_Z_EXPORT_ENABLE(ps->info.info.ps.writes_z) |
 		S_02880C_STENCIL_TEST_VAL_EXPORT_ENABLE(ps->info.info.ps.writes_stencil) |

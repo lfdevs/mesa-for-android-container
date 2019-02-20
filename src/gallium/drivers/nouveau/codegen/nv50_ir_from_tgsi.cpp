@@ -1087,6 +1087,8 @@ public:
    };
    std::vector<MemoryFile> memoryFiles;
 
+   std::vector<bool> bufferAtomics;
+
 private:
    int inferSysValDirection(unsigned sn) const;
    bool scanDeclaration(const struct tgsi_full_declaration *);
@@ -1137,6 +1139,7 @@ bool Source::scanSource()
    //resources.resize(scan.file_max[TGSI_FILE_RESOURCE] + 1);
    tempArrayId.resize(scan.file_max[TGSI_FILE_TEMPORARY] + 1);
    memoryFiles.resize(scan.file_max[TGSI_FILE_MEMORY] + 1);
+   bufferAtomics.resize(scan.file_max[TGSI_FILE_BUFFER] + 1);
 
    info->immd.bufSize = 0;
 
@@ -1483,11 +1486,14 @@ bool Source::scanDeclaration(const struct tgsi_full_declaration *decl)
          tempArrayInfo.insert(std::make_pair(arrayId, std::make_pair(
                                                    first, last - first + 1)));
       break;
+   case TGSI_FILE_BUFFER:
+      for (i = first; i <= last; ++i)
+         bufferAtomics[i] = decl->Declaration.Atomic;
+      break;
    case TGSI_FILE_ADDRESS:
    case TGSI_FILE_CONSTANT:
    case TGSI_FILE_IMMEDIATE:
    case TGSI_FILE_SAMPLER:
-   case TGSI_FILE_BUFFER:
    case TGSI_FILE_IMAGE:
       break;
    default:
@@ -2720,7 +2726,11 @@ Converter::handleLOAD(Value *dst0[4])
          }
 
          Instruction *ld = mkLoad(TYPE_U32, dst0[c], sym, off);
-         ld->cache = tgsi.getCacheMode();
+         if (tgsi.getSrc(0).getFile() == TGSI_FILE_BUFFER &&
+             code->bufferAtomics[r])
+            ld->cache = nv50_ir::CACHE_CG;
+         else
+            ld->cache = tgsi.getCacheMode();
          if (ind)
             ld->setIndirect(0, 1, ind);
       }

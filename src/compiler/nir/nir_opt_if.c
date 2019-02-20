@@ -313,6 +313,13 @@ opt_if_loop_last_continue(nir_loop *loop)
    if (!then_ends_in_continue && !else_ends_in_continue)
       return false;
 
+   /* if the block after the if/else is empty we bail, otherwise we might end
+    * up looping forever
+    */
+   if (&nif->cf_node == nir_cf_node_prev(&last_block->cf_node) &&
+       exec_list_is_empty(&last_block->instr_list))
+      return false;
+
    /* Move the last block of the loop inside the last if-statement */
    nir_cf_list tmp;
    nir_cf_extract(&tmp, nir_after_cf_node(if_node),

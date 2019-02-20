@@ -90,15 +90,15 @@ Status XvMCSetAttribute(Display *dpy, XvMCContext *context, Atom attribute, int 
    if (!attr)
       return XvMCBadContext;
 
-   if (strcmp(attr, XV_BRIGHTNESS))
+   if (strcmp(attr, XV_BRIGHTNESS) == 0)
       context_priv->procamp.brightness = value / 1000.0f;
-   else if (strcmp(attr, XV_CONTRAST))
+   else if (strcmp(attr, XV_CONTRAST) == 0)
       context_priv->procamp.contrast = value / 1000.0f + 1.0f;
-   else if (strcmp(attr, XV_SATURATION))
+   else if (strcmp(attr, XV_SATURATION) == 0)
       context_priv->procamp.saturation = value / 1000.0f + 1.0f;
-   else if (strcmp(attr, XV_HUE))
+   else if (strcmp(attr, XV_HUE) == 0)
       context_priv->procamp.hue = value / 1000.0f;
-   else if (strcmp(attr, XV_COLORSPACE))
+   else if (strcmp(attr, XV_COLORSPACE) == 0)
       context_priv->color_standard = value ?
          VL_CSC_COLOR_STANDARD_BT_601 :
          VL_CSC_COLOR_STANDARD_BT_709;
@@ -134,15 +134,15 @@ Status XvMCGetAttribute(Display *dpy, XvMCContext *context, Atom attribute, int 
    if (!attr)
       return XvMCBadContext;
 
-   if (strcmp(attr, XV_BRIGHTNESS))
+   if (strcmp(attr, XV_BRIGHTNESS) == 0)
       *value = context_priv->procamp.brightness * 1000;
-   else if (strcmp(attr, XV_CONTRAST))
+   else if (strcmp(attr, XV_CONTRAST) == 0)
       *value = context_priv->procamp.contrast * 1000 - 1000;
-   else if (strcmp(attr, XV_SATURATION))
+   else if (strcmp(attr, XV_SATURATION) == 0)
       *value = context_priv->procamp.saturation * 1000 + 1000;
-   else if (strcmp(attr, XV_HUE))
+   else if (strcmp(attr, XV_HUE) == 0)
       *value = context_priv->procamp.hue * 1000;
-   else if (strcmp(attr, XV_COLORSPACE))
+   else if (strcmp(attr, XV_COLORSPACE) == 0)
       *value = context_priv->color_standard == VL_CSC_COLOR_STANDARD_BT_709;
    else
       return BadName;

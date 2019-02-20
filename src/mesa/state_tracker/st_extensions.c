@@ -223,8 +223,13 @@ void st_init_limits(struct pipe_screen *screen,
       pc->MaxUniformComponents = MIN2(pc->MaxUniformComponents,
                                       MAX_UNIFORMS * 4);
 
+      /* For ARB programs, prog_src_register::Index is a signed 13-bit number.
+       * This gives us a limit of 4096 values - but we may need to generate
+       * internal values in addition to what the source program uses.  So, we
+       * drop the limit one step lower, to 2048, to be safe.
+       */
       pc->MaxParameters =
-      pc->MaxNativeParameters = pc->MaxUniformComponents / 4;
+      pc->MaxNativeParameters = MIN2(pc->MaxUniformComponents / 4, 2048);
       pc->MaxInputComponents =
          screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_INPUTS) * 4;
       pc->MaxOutputComponents =
@@ -362,10 +367,7 @@ void st_init_limits(struct pipe_screen *screen,
    c->Program[MESA_SHADER_VERTEX].MaxAttribs =
       MIN2(c->Program[MESA_SHADER_VERTEX].MaxAttribs, 16);
 
-   /* PIPE_SHADER_CAP_MAX_INPUTS for the FS specifies the maximum number
-    * of inputs. It's always 2 colors + N generic inputs. */
-   c->MaxVarying = screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
-                                            PIPE_SHADER_CAP_MAX_INPUTS);
+   c->MaxVarying = screen->get_param(screen, PIPE_CAP_MAX_VARYINGS);
    c->MaxVarying = MIN2(c->MaxVarying, MAX_VARYING);
    c->MaxGeometryOutputVertices =
       screen->get_param(screen, PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES);

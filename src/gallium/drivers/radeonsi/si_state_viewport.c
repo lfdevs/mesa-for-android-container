@@ -185,6 +185,16 @@ static void si_emit_guardband(struct si_context *ctx)
 	const unsigned hw_screen_offset_alignment =
 		ctx->chip_class >= VI ? 16 : MAX2(ctx->screen->se_tile_repeat, 16);
 
+	/* Indexed by quantization modes */
+	static unsigned max_viewport_size[] = {65535, 16383, 4095};
+
+	/* Ensure that the whole viewport stays representable in
+	 * absolute coordinates.
+	 * See comment in si_set_viewport_states.
+	 */
+	assert(vp_as_scissor.maxx <= max_viewport_size[vp_as_scissor.quant_mode] &&
+	       vp_as_scissor.maxy <= max_viewport_size[vp_as_scissor.quant_mode]);
+
 	hw_screen_offset_x = CLAMP(hw_screen_offset_x, 0, MAX_PA_SU_HARDWARE_SCREEN_OFFSET);
 	hw_screen_offset_y = CLAMP(hw_screen_offset_y, 0, MAX_PA_SU_HARDWARE_SCREEN_OFFSET);
 
@@ -219,7 +229,6 @@ static void si_emit_guardband(struct si_context *ctx)
 	 *
 	 * The viewport range is [-max_viewport_size/2, max_viewport_size/2].
 	 */
-	static unsigned max_viewport_size[] = {65535, 16383, 4095};
 	assert(vp_as_scissor.quant_mode < ARRAY_SIZE(max_viewport_size));
 	max_range = max_viewport_size[vp_as_scissor.quant_mode] / 2;
 	left   = (-max_range - vp.translate[0]) / vp.scale[0];
@@ -333,6 +342,8 @@ static void si_set_viewport_states(struct pipe_context *pctx,
 		unsigned h = scissor->maxy - scissor->miny;
 		unsigned max_extent = MAX2(w, h);
 
+		int max_corner = MAX2(scissor->maxx, scissor->maxy);
+
 		unsigned center_x = (scissor->maxx + scissor->minx) / 2;
 		unsigned center_y = (scissor->maxy + scissor->miny) / 2;
 		unsigned max_center = MAX2(center_x, center_y);
@@ -358,7 +369,22 @@ static void si_set_viewport_states(struct pipe_context *pctx,
 		if (ctx->family == CHIP_RAVEN)
 			max_extent = 16384; /* Use QUANT_MODE == 16_8. */
 
-		if (max_extent <= 1024) /* 4K scanline area for guardband */
+		/* Another constraint is that all coordinates in the viewport
+		 * are representable in fixed point with respect to the
+		 * surface origin.
+		 *
+		 * It means that PA_SU_HARDWARE_SCREEN_OFFSET can't be given
+		 * an offset that would make the upper corner of the viewport
+		 * greater than the maximum representable number post
+		 * quantization, ie 2^quant_bits.
+		 *
+		 * This does not matter for 14.10 and 16.8 formats since the
+		 * offset is already limited at 8k, but it means we can't use
+		 * 12.12 if we are drawing to some pixels outside the lower
+		 * 4k x 4k of the render target.
+		 */
+
+		if (max_extent <= 1024 && max_corner < 4096) /* 4K scanline area for guardband */
 			scissor->quant_mode = SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH;
 		else if (max_extent <= 4096) /* 16K scanline area for guardband */
 			scissor->quant_mode = SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH;

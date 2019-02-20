@@ -1219,8 +1219,6 @@ static void amdgpu_add_fence_dependencies_bo_lists(struct amdgpu_cs *acs)
 {
    struct amdgpu_cs_context *cs = acs->csc;
 
-   cs->num_fence_dependencies = 0;
-
    amdgpu_add_fence_dependencies_bo_list(acs, cs->fence, cs->num_real_buffers, cs->real_buffers);
    amdgpu_add_fence_dependencies_bo_list(acs, cs->fence, cs->num_slab_buffers, cs->slab_buffers);
    amdgpu_add_fence_dependencies_bo_list(acs, cs->fence, cs->num_sparse_buffers, cs->sparse_buffers);

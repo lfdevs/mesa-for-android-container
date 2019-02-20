@@ -123,11 +123,11 @@ void ParseArgs(int argc, char **argv, struct Config *config)
 
 			while (token && !fail)
 			{
-				if (strcmp(token, "i"))
+				if (strcmp(token, "i") == 0)
 					config->mb_types |= MB_TYPE_I;
-				else if (strcmp(token, "p"))
+				else if (strcmp(token, "p") == 0)
 					config->mb_types |= MB_TYPE_P;
-				else if (strcmp(token, "b"))
+				else if (strcmp(token, "b") == 0)
 					config->mb_types |= MB_TYPE_B;
 				else
 					fail = 1;

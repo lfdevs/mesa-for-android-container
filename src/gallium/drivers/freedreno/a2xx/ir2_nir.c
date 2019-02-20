@@ -74,7 +74,7 @@ ir2_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_opt_dce);
 		progress |= OPT(s, nir_opt_cse);
 		/* progress |= OPT(s, nir_opt_gcm, true); */
-		progress |= OPT(s, nir_opt_peephole_select, UINT_MAX, true, true);
+		progress |= OPT(s, nir_opt_peephole_select, UINT_MAX, true);
 		progress |= OPT(s, nir_opt_intrinsics);
 		progress |= OPT(s, nir_opt_algebraic);
 		progress |= OPT(s, nir_opt_constant_folding);

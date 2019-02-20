@@ -2365,7 +2365,7 @@ si_llvm_init_export_args(struct radv_shader_context *ctx,
 			if (is_16bit) {
 				for (unsigned chan = 0; chan < 4; chan++)
 					values[chan] = LLVMBuildZExt(ctx->ac.builder,
-								      values[chan],
+								      ac_to_integer(&ctx->ac, values[chan]),
 								      ctx->ac.i32, "");
 			}
 			break;
@@ -2376,7 +2376,7 @@ si_llvm_init_export_args(struct radv_shader_context *ctx,
 			if (is_16bit) {
 				for (unsigned chan = 0; chan < 4; chan++)
 					values[chan] = LLVMBuildSExt(ctx->ac.builder,
-								      values[chan],
+								      ac_to_integer(&ctx->ac, values[chan]),
 								      ctx->ac.i32, "");
 			}
 			break;
@@ -2429,12 +2429,8 @@ si_llvm_init_export_args(struct radv_shader_context *ctx,
 	} else
 		memcpy(&args->out[0], values, sizeof(values[0]) * 4);
 
-	for (unsigned i = 0; i < 4; ++i) {
-		if (!(args->enabled_channels & (1 << i)))
-			continue;
-
+	for (unsigned i = 0; i < 4; ++i)
 		args->out[i] = ac_to_float(&ctx->ac, args->out[i]);
-	}
 }
 
 static void

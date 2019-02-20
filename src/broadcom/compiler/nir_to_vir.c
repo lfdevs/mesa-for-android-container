@@ -121,7 +121,7 @@ vir_emit_thrsw(struct v3d_compile *c)
          */
         c->last_thrsw = vir_NOP(c);
         c->last_thrsw->qpu.sig.thrsw = true;
-        c->last_thrsw_at_top_level = (c->execute.file == QFILE_NULL);
+        c->last_thrsw_at_top_level = !c->in_control_flow;
 }
 
 static uint32_t
@@ -1158,7 +1158,9 @@ emit_frag_end(struct v3d_compile *c)
 
                 inst->src[vir_get_implicit_uniform_src(inst)] =
                         vir_uniform_ui(c, tlb_specifier | 0xffffff00);
+                c->writes_z = true;
         } else if (c->s->info.fs.uses_discard ||
+                   !c->s->info.fs.early_fragment_tests ||
                    c->fs_key->sample_alpha_to_coverage ||
                    !has_any_tlb_color_write) {
                 /* Emit passthrough Z if it needed to be delayed until shader
@@ -1188,6 +1190,7 @@ emit_frag_end(struct v3d_compile *c)
 
                 inst->src[vir_get_implicit_uniform_src(inst)] =
                         vir_uniform_ui(c, tlb_specifier | 0xffffff00);
+                c->writes_z = true;
         }
 
         /* XXX: Performance improvement: Merge Z write and color writes TLB
@@ -1455,7 +1458,7 @@ v3d_optimize_nir(struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_dce);
                 NIR_PASS(progress, s, nir_opt_dead_cf);
                 NIR_PASS(progress, s, nir_opt_cse);
-                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
+                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
                 NIR_PASS(progress, s, nir_opt_undef);
@@ -2103,10 +2106,10 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
         else
                 else_block = vir_new_block(c);
 
-        bool was_top_level = false;
+        bool was_uniform_control_flow = false;
         if (c->execute.file == QFILE_NULL) {
                 c->execute = vir_MOV(c, vir_uniform_ui(c, 0));
-                was_top_level = true;
+                was_uniform_control_flow = true;
         }
 
         /* Set up the flags for the IF condition (taking the THEN branch). */
@@ -2122,7 +2125,7 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
         /* Update the flags+cond to mean "Taking the ELSE branch (!cond) and
          * was previously active (execute Z) for updating the exec flags.
          */
-        if (was_top_level) {
+        if (was_uniform_control_flow) {
                 cond = v3d_qpu_cond_invert(cond);
         } else {
                 struct qinst *inst = vir_MOV_dest(c, vir_reg(QFILE_NULL, 0),
@@ -2176,7 +2179,7 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
         vir_link_blocks(c->cur_block, after_block);
 
         vir_set_emit_block(c, after_block);
-        if (was_top_level)
+        if (was_uniform_control_flow)
                 c->execute = c->undef;
         else
                 ntq_activate_execute_for_block(c);
@@ -2185,12 +2188,15 @@ ntq_emit_nonuniform_if(struct v3d_compile *c, nir_if *if_stmt)
 static void
 ntq_emit_if(struct v3d_compile *c, nir_if *nif)
 {
+        bool was_in_control_flow = c->in_control_flow;
+        c->in_control_flow = true;
         if (c->execute.file == QFILE_NULL &&
             nir_src_is_dynamically_uniform(nif->condition)) {
                 ntq_emit_uniform_if(c, nif);
         } else {
                 ntq_emit_nonuniform_if(c, nif);
         }
+        c->in_control_flow = was_in_control_flow;
 }
 
 static void
@@ -2267,10 +2273,13 @@ static void ntq_emit_cf_list(struct v3d_compile *c, struct exec_list *list);
 static void
 ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
 {
-        bool was_top_level = false;
+        bool was_in_control_flow = c->in_control_flow;
+        c->in_control_flow = true;
+
+        bool was_uniform_control_flow = false;
         if (c->execute.file == QFILE_NULL) {
                 c->execute = vir_MOV(c, vir_uniform_ui(c, 0));
-                was_top_level = true;
+                was_uniform_control_flow = true;
         }
 
         struct qblock *save_loop_cont_block = c->loop_cont_block;
@@ -2307,7 +2316,7 @@ ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
         vir_link_blocks(c->cur_block, c->loop_break_block);
 
         vir_set_emit_block(c, c->loop_break_block);
-        if (was_top_level)
+        if (was_uniform_control_flow)
                 c->execute = c->undef;
         else
                 ntq_activate_execute_for_block(c);
@@ -2316,6 +2325,8 @@ ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
         c->loop_cont_block = save_loop_cont_block;
 
         c->loops++;
+
+        c->in_control_flow = was_in_control_flow;
 }
 
 static void

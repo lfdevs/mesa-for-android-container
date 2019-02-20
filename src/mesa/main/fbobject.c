@@ -4663,8 +4663,12 @@ get_fb_attachment(struct gl_context *ctx, struct gl_framebuffer *fb,
    case GL_COLOR_ATTACHMENT12:
    case GL_COLOR_ATTACHMENT13:
    case GL_COLOR_ATTACHMENT14:
-   case GL_COLOR_ATTACHMENT15:
-      return &fb->Attachment[BUFFER_COLOR0 + attachment - GL_COLOR_ATTACHMENT0];
+   case GL_COLOR_ATTACHMENT15: {
+      const unsigned i = attachment - GL_COLOR_ATTACHMENT0;
+      if (i >= ctx->Const.MaxColorAttachments)
+         return NULL;
+      return &fb->Attachment[BUFFER_COLOR0 + i];
+   }
    case GL_DEPTH:
    case GL_DEPTH_ATTACHMENT:
    case GL_DEPTH_STENCIL_ATTACHMENT:

@@ -438,7 +438,7 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		OUT_RING(ring, A6XX_RB_2D_DST_INFO_COLOR_FORMAT(dfmt) |
 				 A6XX_RB_2D_DST_INFO_TILE_MODE(dtile) |
 				 A6XX_RB_2D_DST_INFO_COLOR_SWAP(dswap));
-		OUT_RELOC(ring, dst->bo, doff, 0, 0);    /* RB_2D_DST_LO/HI */
+		OUT_RELOCW(ring, dst->bo, doff, 0, 0);    /* RB_2D_DST_LO/HI */
 		OUT_RING(ring, A6XX_RB_2D_DST_SIZE_PITCH(dpitch));
 		OUT_RING(ring, 0x00000000);
 		OUT_RING(ring, 0x00000000);

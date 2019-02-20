@@ -369,6 +369,11 @@ radv_physical_device_init(struct radv_physical_device *device,
 	device->dcc_msaa_allowed =
 		(device->instance->perftest_flags & RADV_PERFTEST_DCC_MSAA);
 
+	/* TODO: Figure out how to use LOAD_CONTEXT_REG on SI/CIK. */
+	device->has_load_ctx_reg_pkt = device->rad_info.chip_class >= GFX9 ||
+				       (device->rad_info.chip_class >= VI &&
+				        device->rad_info.me_fw_feature >= 41);
+
 	radv_physical_device_init_mem_types(device);
 	radv_fill_device_extension_table(device, &device->supported_extensions);
 

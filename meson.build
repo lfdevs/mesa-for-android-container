@@ -1400,7 +1400,7 @@ if with_platform_x11
     dep_xcb_xfixes = dependency('xcb-xfixes')
   endif
   if with_xlib_lease
-    dep_xcb_xrandr = dependency('xcb-randr', version : '>= 1.12')
+    dep_xcb_xrandr = dependency('xcb-randr')
     dep_xlib_xrandr = dependency('xrandr', version : '>= 1.3')
   endif
 endif

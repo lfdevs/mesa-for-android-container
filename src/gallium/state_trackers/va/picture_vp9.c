@@ -28,6 +28,8 @@
 #include "vl/vl_vlc.h"
 #include "va_private.h"
 
+#define NUM_VP9_REFS 8
+
 void vlVaHandlePictureParameterBufferVP9(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VADecPictureParameterBufferVP9 *vp9 = buf->data;
@@ -79,8 +81,11 @@ void vlVaHandlePictureParameterBufferVP9(vlVaDriver *drv, vlVaContext *context, 
 
    context->desc.vp9.picture_parameter.bit_depth = vp9->bit_depth;
 
-   for (i = 0 ; i < 8 ; i++)
+   for (i = 0 ; i < NUM_VP9_REFS ; i++)
       vlVaGetReferenceFrame(drv, vp9->reference_frames[i], &context->desc.vp9.ref[i]);
+
+   if (!context->decoder && !context->templat.max_references)
+      context->templat.max_references = NUM_VP9_REFS;
 }
 
 void vlVaHandleSliceParameterBufferVP9(vlVaContext *context, vlVaBuffer *buf)

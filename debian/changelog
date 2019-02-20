@@ -1,9 +1,22 @@
+mesa (19.0.0~rc5-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * libgbm1.symbols: Updated.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 20 Feb 2019 14:02:45 +0200
+
 mesa (19.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream snapshot.
   * 1-5-meson-remove-duplicate-definition.patch: Dropped, upstream.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 Feb 2019 10:44:48 +0200
+
+mesa (18.3.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 19 Feb 2019 11:02:44 +0200
 
 mesa (18.3.3-1) unstable; urgency=medium
 

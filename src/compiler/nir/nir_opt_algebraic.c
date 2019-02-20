@@ -24149,7 +24149,7 @@ static const nir_search_variable search418_1_0 = {
    1, /* b */
    false,
    nir_type_invalid,
-   NULL,
+   (is_not_const),
 };
 
 static const nir_search_variable search418_1_1 = {
@@ -24225,7 +24225,7 @@ static const nir_search_variable search419_1_0 = {
    1, /* b */
    false,
    nir_type_invalid,
-   NULL,
+   (is_not_const),
 };
 
 static const nir_search_variable search419_1_1 = {
@@ -24301,7 +24301,7 @@ static const nir_search_variable search420_1_0 = {
    1, /* b */
    false,
    nir_type_invalid,
-   NULL,
+   (is_not_const),
 };
 
 static const nir_search_variable search420_1_1 = {
@@ -24377,7 +24377,7 @@ static const nir_search_variable search421_1_0_0 = {
    1, /* b */
    false,
    nir_type_invalid,
-   NULL,
+   (is_not_const),
 };
 
 static const nir_search_variable search421_1_0_1 = {
@@ -24474,7 +24474,7 @@ static const nir_search_variable search422_1_0 = {
    1, /* b */
    false,
    nir_type_invalid,
-   NULL,
+   (is_not_const),
 };
 
 static const nir_search_variable search422_1_1 = {

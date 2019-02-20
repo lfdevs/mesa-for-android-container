@@ -28,11 +28,6 @@
 #include "nvc0/nvc0_query_hw_metric.h"
 #include "nvc0/nvc0_query_hw_sm.h"
 
-#define NVC0_HW_QUERY_STATE_READY   0
-#define NVC0_HW_QUERY_STATE_ACTIVE  1
-#define NVC0_HW_QUERY_STATE_ENDED   2
-#define NVC0_HW_QUERY_STATE_FLUSHED 3
-
 #define NVC0_HW_QUERY_ALLOC_SPACE 256
 
 bool
@@ -158,14 +153,18 @@ nvc0_hw_begin_query(struct nvc0_context *nvc0, struct nvc0_query *q)
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-      hq->nesting = nvc0->screen->num_occlusion_queries_active++;
-      if (hq->nesting) {
+      if (nvc0->screen->num_occlusion_queries_active++) {
          nvc0_hw_query_get(push, q, 0x10, 0x0100f002);
       } else {
          PUSH_SPACE(push, 3);
          BEGIN_NVC0(push, NVC0_3D(COUNTER_RESET), 1);
          PUSH_DATA (push, NVC0_3D_COUNTER_RESET_SAMPLECNT);
          IMMED_NVC0(push, NVC0_3D(SAMPLECNT_ENABLE), 1);
+         /* Given that the counter is reset, the contents at 0x10 are
+          * equivalent to doing the query -- we would get hq->sequence as the
+          * payload and 0 as the reported value. This is already set up above
+          * as in the hq->rotate case.
+          */
       }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
@@ -199,6 +198,7 @@ nvc0_hw_begin_query(struct nvc0_context *nvc0, struct nvc0_query *q)
       nvc0_hw_query_get(push, q, 0xc0 + 0x70, 0x0980a002); /* ROP, PIXELS */
       nvc0_hw_query_get(push, q, 0xc0 + 0x80, 0x0d808002); /* TCP, LAUNCHES */
       nvc0_hw_query_get(push, q, 0xc0 + 0x90, 0x0e809002); /* TEP, LAUNCHES */
+      ((uint64_t *)hq->data)[(12 + 10) * 2] = 0;
       break;
    default:
       break;
@@ -271,6 +271,7 @@ nvc0_hw_end_query(struct nvc0_context *nvc0, struct nvc0_query *q)
       nvc0_hw_query_get(push, q, 0x70, 0x0980a002); /* ROP, PIXELS */
       nvc0_hw_query_get(push, q, 0x80, 0x0d808002); /* TCP, LAUNCHES */
       nvc0_hw_query_get(push, q, 0x90, 0x0e809002); /* TEP, LAUNCHES */
+      ((uint64_t *)hq->data)[10 * 2] = 0;
       break;
    case PIPE_QUERY_TIMESTAMP_DISJOINT:
       /* This query is not issued on GPU because disjoint is forced to false */

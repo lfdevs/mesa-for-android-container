@@ -1051,21 +1051,13 @@ nve4_set_surface_info(struct nouveau_pushbuf *push,
    } else {
       struct nv50_miptree *mt = nv50_miptree(&res->base);
       struct nv50_miptree_level *lvl = &mt->level[view->u.tex.level];
-      const unsigned z = view->u.tex.first_layer;
+      unsigned z = view->u.tex.first_layer;
 
-      if (z) {
-         if (mt->layout_3d) {
-            address += nvc0_mt_zslice_offset(mt, view->u.tex.level, z);
-            /* doesn't work if z passes z-tile boundary */
-            if (depth > 1) {
-               pipe_debug_message(&nvc0->base.debug, CONFORMANCE,
-                                  "3D images are not really supported!");
-               debug_printf("3D images are not really supported!\n");
-            }
-         } else {
-            address += mt->layer_stride * z;
-         }
+      if (!mt->layout_3d) {
+         address += mt->layer_stride * z;
+         z = 0;
       }
+
       address += lvl->offset;
 
       info[0]  = address >> 8;
@@ -1080,7 +1072,8 @@ nve4_set_surface_info(struct nouveau_pushbuf *push,
       info[6]  = depth - 1;
       info[6] |= (lvl->tile_mode & 0xf00) << 21;
       info[6] |= NVC0_TILE_SHIFT_Z(lvl->tile_mode) << 22;
-      info[7]  = 0;
+      info[7]  = mt->layout_3d ? 1 : 0;
+      info[7] |= z << 16;
       info[14] = mt->ms_x;
       info[15] = mt->ms_y;
    }

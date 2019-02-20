@@ -1449,10 +1449,10 @@ _anv_combine_address(struct anv_batch *batch, void *location,
  */
 
 /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */
-#define GEN9_MOCS 2
+#define GEN9_MOCS (2 << 1)
 
 /* TC=LLC/eLLC, LeCC=WB, LRUM=3, L3CC=WB */
-#define GEN9_EXTERNAL_MOCS 1
+#define GEN9_EXTERNAL_MOCS (1 << 1)
 
 /* Cannonlake MOCS defines are duplicates of Skylake MOCS defines. */
 #define GEN10_MOCS GEN9_MOCS

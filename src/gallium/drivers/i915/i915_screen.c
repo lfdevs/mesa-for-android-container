@@ -402,6 +402,8 @@ i915_get_param(struct pipe_screen *screen, enum pipe_cap cap)
       return 0;
    case PIPE_CAP_ENDIANNESS:
       return PIPE_ENDIAN_LITTLE;
+   case PIPE_CAP_MAX_VARYINGS:
+      return 10;
 
    case PIPE_CAP_VENDOR_ID:
       return 0x8086;

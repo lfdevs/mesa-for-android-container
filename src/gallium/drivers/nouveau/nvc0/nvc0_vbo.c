@@ -1040,7 +1040,10 @@ nvc0_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    }
 
    if (nvc0->state.vbo_mode) {
-      nvc0_push_vbo(nvc0, info);
+      if (info->indirect)
+         nvc0_push_vbo_indirect(nvc0, info);
+      else
+         nvc0_push_vbo(nvc0, info);
       goto cleanup;
    }
 

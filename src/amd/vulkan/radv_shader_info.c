@@ -101,7 +101,7 @@ gather_intrinsic_load_deref_info(const nir_shader *nir,
 	case MESA_SHADER_VERTEX: {
 		nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
 
-		if (var->data.mode == nir_var_shader_in) {
+		if (var && var->data.mode == nir_var_shader_in) {
 			unsigned idx = var->data.location;
 			uint8_t mask = nir_ssa_def_components_read(&instr->dest.ssa);
 
@@ -150,7 +150,7 @@ gather_intrinsic_store_deref_info(const nir_shader *nir,
 {
 	nir_variable *var = nir_deref_instr_get_variable(nir_instr_as_deref(instr->src[0].ssa->parent_instr));
 
-	if (var->data.mode == nir_var_shader_out) {
+	if (var && var->data.mode == nir_var_shader_out) {
 		unsigned idx = var->data.location;
 
 		switch (nir->info.stage) {

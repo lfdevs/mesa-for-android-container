@@ -3595,6 +3595,7 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
 
       case SpvCapabilityInt64Atomics:
          spv_check_supported(int64_atomics, cap);
+         break;
 
       case SpvCapabilityInt8:
          spv_check_supported(int8, cap);

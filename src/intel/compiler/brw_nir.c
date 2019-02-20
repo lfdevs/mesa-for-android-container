@@ -570,18 +570,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_dce);
       OPT(nir_opt_cse);
 
-      /* Passing 0 to the peephole select pass causes it to convert
-       * if-statements that contain only move instructions in the branches
-       * regardless of the count.
-       *
-       * Passing 1 to the peephole select pass causes it to convert
-       * if-statements that contain at most a single ALU instruction (total)
-       * in both branches.  Before Gen6, some math instructions were
-       * prohibitively expensive and the results of compare operations need an
-       * extra resolve step.  For these reasons, this pass is more harmful
-       * than good on those platforms.
-       *
-       * For indirect loads of uniforms (push constants), we assume that array
+      /* For indirect loads of uniforms (push constants), we assume that array
        * indices will nearly always be in bounds and the cost of the load is
        * low.  Therefore there shouldn't be a performance benefit to avoid it.
        * However, in vec4 tessellation shaders, these loads operate by
@@ -590,9 +579,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       const bool is_vec4_tessellation = !is_scalar &&
          (nir->info.stage == MESA_SHADER_TESS_CTRL ||
           nir->info.stage == MESA_SHADER_TESS_EVAL);
-      OPT(nir_opt_peephole_select, 0, !is_vec4_tessellation, false);
-      OPT(nir_opt_peephole_select, 1, !is_vec4_tessellation,
-          compiler->devinfo->gen >= 6);
+      OPT(nir_opt_peephole_select, 0, !is_vec4_tessellation);
 
       OPT(nir_opt_intrinsics);
       OPT(nir_opt_idiv_const, 32);

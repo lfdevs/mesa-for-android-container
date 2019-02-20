@@ -70,12 +70,36 @@ gen7_cmd_buffer_emit_scissor(struct anv_cmd_buffer *cmd_buffer)
       };
 
       const int max = 0xffff;
+
+      uint32_t y_min = s->offset.y;
+      uint32_t x_min = s->offset.x;
+      uint32_t y_max = s->offset.y + s->extent.height - 1;
+      uint32_t x_max = s->offset.x + s->extent.width - 1;
+
+      /* Do this math using int64_t so overflow gets clamped correctly. */
+      if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY) {
+         y_min = clamp_int64((uint64_t) y_min,
+                             cmd_buffer->state.render_area.offset.y, max);
+         x_min = clamp_int64((uint64_t) x_min,
+                             cmd_buffer->state.render_area.offset.x, max);
+         y_max = clamp_int64((uint64_t) y_max, 0,
+                             cmd_buffer->state.render_area.offset.y +
+                             cmd_buffer->state.render_area.extent.height - 1);
+         x_max = clamp_int64((uint64_t) x_max, 0,
+                             cmd_buffer->state.render_area.offset.x +
+                             cmd_buffer->state.render_area.extent.width - 1);
+      } else if (fb) {
+         y_min = clamp_int64((uint64_t) y_min, 0, max);
+         x_min = clamp_int64((uint64_t) x_min, 0, max);
+         y_max = clamp_int64((uint64_t) y_max, 0, fb->height - 1);
+         x_max = clamp_int64((uint64_t) x_max, 0, fb->width - 1);
+      }
+
       struct GEN7_SCISSOR_RECT scissor = {
-         /* Do this math using int64_t so overflow gets clamped correctly. */
-         .ScissorRectangleYMin = clamp_int64(s->offset.y, 0, max),
-         .ScissorRectangleXMin = clamp_int64(s->offset.x, 0, max),
-         .ScissorRectangleYMax = clamp_int64((uint64_t) s->offset.y + s->extent.height - 1, 0, fb->height - 1),
-         .ScissorRectangleXMax = clamp_int64((uint64_t) s->offset.x + s->extent.width - 1, 0, fb->width - 1)
+         .ScissorRectangleYMin = y_min,
+         .ScissorRectangleXMin = x_min,
+         .ScissorRectangleYMax = y_max,
+         .ScissorRectangleXMax = x_max
       };
 
       if (s->extent.width <= 0 || s->extent.height <= 0) {

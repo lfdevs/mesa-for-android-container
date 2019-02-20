@@ -777,21 +777,9 @@ v3d_fs_set_prog_data(struct v3d_compile *c,
                      struct v3d_fs_prog_data *prog_data)
 {
         v3d_set_fs_prog_data_inputs(c, prog_data);
-        prog_data->writes_z = (c->s->info.outputs_written &
-                               (1 << FRAG_RESULT_DEPTH));
-        prog_data->discard = (c->s->info.fs.uses_discard ||
-                              c->fs_key->sample_alpha_to_coverage);
+        prog_data->writes_z = c->writes_z;
+        prog_data->disable_ez = !c->s->info.fs.early_fragment_tests;
         prog_data->uses_center_w = c->uses_center_w;
-
-        /* If the shader has some side effects and hasn't allowed early
-         * fragment tests, disable them.
-         */
-        if (!c->s->info.fs.early_fragment_tests &&
-            (c->s->info.num_images ||
-             c->s->info.num_ssbos ||
-             c->s->info.num_abos)) {
-                prog_data->discard = true;
-        }
 }
 
 static void
@@ -888,6 +876,15 @@ v3d_nir_lower_fs_early(struct v3d_compile *c)
 {
         if (c->fs_key->int_color_rb || c->fs_key->uint_color_rb)
                 v3d_fixup_fs_output_types(c);
+
+        /* If the shader has no non-TLB side effects, we can promote it to
+         * enabling early_fragment_tests even if the user didn't.
+         */
+        if (!(c->s->info.num_images ||
+              c->s->info.num_ssbos ||
+              c->s->info.num_abos)) {
+                c->s->info.fs.early_fragment_tests = true;
+        }
 }
 
 static void
