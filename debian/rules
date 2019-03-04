@@ -54,9 +54,9 @@ else
 		GALLIUM_DRIVERS += freedreno,
 	endif
 
-	# etnaviv, imx, tegra, vc4 and v3d kernel support are only available on armhf and arm64
+	# etnaviv, kmsro, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += etnaviv, imx, tegra, vc4, v3d,
+		GALLIUM_DRIVERS += etnaviv, kmsro, tegra, vc4, v3d,
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
@@ -136,6 +136,7 @@ confflags += \
 	-Dshared-glapi=true \
 	-Dgallium-xvmc=false \
 	-Dgallium-omx=disabled \
+	-Db_ndebug=true \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_GBM) \
 	$(confflags_DRI3) \

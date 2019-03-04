@@ -90,9 +90,16 @@ brw_reg_from_fs_reg(const struct gen_device_info *devinfo, fs_inst *inst,
           *       different execution size when the number of components
           *       written to each destination GRF is not the same.
           */
-         const unsigned width = MIN2(reg_width, phys_width);
-         brw_reg = brw_vecn_reg(width, brw_file_from_reg(reg), reg->nr, 0);
-         brw_reg = stride(brw_reg, width * reg->stride, width, reg->stride);
+         if (reg->stride > 4) {
+            assert(reg != &inst->dst);
+            assert(reg->stride * type_sz(reg->type) <= REG_SIZE);
+            brw_reg = brw_vecn_reg(1, brw_file_from_reg(reg), reg->nr, 0);
+            brw_reg = stride(brw_reg, reg->stride, 1, 0);
+         } else {
+            const unsigned width = MIN2(reg_width, phys_width);
+            brw_reg = brw_vecn_reg(width, brw_file_from_reg(reg), reg->nr, 0);
+            brw_reg = stride(brw_reg, width * reg->stride, width, reg->stride);
+         }
 
          if (devinfo->gen == 7 && !devinfo->is_haswell) {
             /* From the IvyBridge PRM (EU Changes by Processor Generation, page 13):

@@ -653,7 +653,7 @@ copy_prop_vars_block(struct copy_prop_var_state *state,
 
          struct copy_entry *src_entry =
             lookup_entry_for_deref(copies, src, nir_derefs_a_contains_b_bit);
-         struct value value;
+         struct value value = {0};
          if (try_load_from_entry(state, src_entry, b, intrin, src, &value)) {
             if (value.is_ssa) {
                /* lookup_load has already ensured that we get a single SSA

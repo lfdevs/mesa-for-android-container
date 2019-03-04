@@ -776,6 +776,14 @@ brw_upload_indices(struct brw_context *brw)
       brw->ib.index_size = index_buffer->index_size;
       brw->ctx.NewDriverState |= BRW_NEW_INDEX_BUFFER;
    }
+
+   /* We need to re-emit an index buffer state each time
+    * when cut index flag is changed
+    */
+   if (brw->prim_restart.enable_cut_index != brw->ib.enable_cut_index) {
+      brw->ib.enable_cut_index = brw->prim_restart.enable_cut_index;
+      brw->ctx.NewDriverState |= BRW_NEW_INDEX_BUFFER;
+   }
 }
 
 const struct brw_tracked_state brw_indices = {

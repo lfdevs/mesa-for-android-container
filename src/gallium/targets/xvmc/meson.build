@@ -33,7 +33,7 @@ endif
 
 libxvmc_gallium = shared_library(
   'XvMCgallium',
-  'target.c',
+  ['target.c', xmlpool_options_h],
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [xvmc_link_args, ld_args_gc_sections],

@@ -1006,6 +1006,9 @@ struct brw_context
 
       /* High bits of the last seen index buffer address (for workarounds). */
       uint16_t last_bo_high_bits;
+
+      /* Used to understand is GPU state of primitive restart is up to date */
+      bool enable_cut_index;
    } ib;
 
    /* Active vertex program:

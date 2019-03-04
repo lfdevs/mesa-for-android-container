@@ -739,8 +739,7 @@ void radv_GetPhysicalDeviceFeatures(
 		.alphaToOne                               = true,
 		.multiViewport                            = true,
 		.samplerAnisotropy                        = true,
-		.textureCompressionETC2                   = pdevice->rad_info.chip_class >= GFX9 ||
-		                                            pdevice->rad_info.family == CHIP_STONEY,
+		.textureCompressionETC2                   = radv_device_supports_etc(pdevice),
 		.textureCompressionASTC_LDR               = false,
 		.textureCompressionBC                     = true,
 		.occlusionQueryPrecise                    = true,
@@ -807,7 +806,7 @@ void radv_GetPhysicalDeviceFeatures2(
 			features->storageBuffer16BitAccess = enabled;
 			features->uniformAndStorageBuffer16BitAccess = enabled;
 			features->storagePushConstant16 = enabled;
-			features->storageInputOutput16 = enabled;
+			features->storageInputOutput16 = enabled && HAVE_LLVM >= 0x900;
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES: {

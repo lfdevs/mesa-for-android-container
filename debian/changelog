@@ -1,3 +1,10 @@
+mesa (19.0.0~rc6-1) experimental; urgency=medium
+
+  * New upstream release candidate. (LP: #1815236)
+  * rules: Replace imx with kmsro, fixes arm build.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 04 Mar 2019 09:26:07 +0200
+
 mesa (19.0.0~rc5-1) experimental; urgency=medium
 
   * New upstream release candidate.
@@ -11,6 +18,18 @@ mesa (19.0.0~rc2-1) experimental; urgency=medium
   * 1-5-meson-remove-duplicate-definition.patch: Dropped, upstream.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 Feb 2019 10:44:48 +0200
+
+mesa (18.3.4-2) unstable; urgency=medium
+
+  * Cherry-pick f6556ec7d12 (dri: meson: do not prefix user provided dri-
+    drivers-path) from upstream master branch. Fixes a regression since
+    switching to meson (Closes: #922807).
+  * rules: Add meson option -Db_ndebug=true to disable assertions
+    (Related bugs: #920462, #922162, #922346).
+  * source/local-options: Remove meson build files from extend-diff-
+    ignore.
+
+ -- Andreas Boll <aboll@debian.org>  Sat, 02 Mar 2019 13:21:59 +0100
 
 mesa (18.3.4-1) unstable; urgency=medium
 

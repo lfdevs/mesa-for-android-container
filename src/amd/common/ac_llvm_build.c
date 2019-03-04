@@ -906,6 +906,37 @@ ac_build_fs_interp(struct ac_llvm_context *ctx,
 }
 
 LLVMValueRef
+ac_build_fs_interp_f16(struct ac_llvm_context *ctx,
+		       LLVMValueRef llvm_chan,
+		       LLVMValueRef attr_number,
+		       LLVMValueRef params,
+		       LLVMValueRef i,
+		       LLVMValueRef j)
+{
+	LLVMValueRef args[6];
+	LLVMValueRef p1;
+
+	args[0] = i;
+	args[1] = llvm_chan;
+	args[2] = attr_number;
+	args[3] = ctx->i1false;
+	args[4] = params;
+
+	p1 = ac_build_intrinsic(ctx, "llvm.amdgcn.interp.p1.f16",
+				ctx->f32, args, 5, AC_FUNC_ATTR_READNONE);
+
+	args[0] = p1;
+	args[1] = j;
+	args[2] = llvm_chan;
+	args[3] = attr_number;
+	args[4] = ctx->i1false;
+	args[5] = params;
+
+	return ac_build_intrinsic(ctx, "llvm.amdgcn.interp.p2.f16",
+				  ctx->f16, args, 6, AC_FUNC_ATTR_READNONE);
+}
+
+LLVMValueRef
 ac_build_fs_interp_mov(struct ac_llvm_context *ctx,
 		       LLVMValueRef parameter,
 		       LLVMValueRef llvm_chan,

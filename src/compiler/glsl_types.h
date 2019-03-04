@@ -545,6 +545,12 @@ public:
    bool contains_double() const;
 
    /**
+    * Query whether or not type is a 64-bit type, or for struct, interface and
+    * array types, contains a double type.
+    */
+   bool contains_64bit() const;
+
+   /**
     * Query whether or not a type is a float type
     */
    bool is_float() const

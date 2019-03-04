@@ -129,11 +129,9 @@ set_output_usage_mask(const nir_shader *nir, const nir_intrinsic_instr *instr,
 
 	get_deref_offset(deref_instr, &const_offset);
 
-	if (idx == VARYING_SLOT_CLIP_DIST0) {
-		/* Special case for clip/cull distances because there are
-		 * combined into a single array that contains both.
-		 */
-		output_usage_mask[idx] |= 1 << const_offset;
+	if (var->data.compact) {
+		const_offset += comp;
+		output_usage_mask[idx + const_offset / 4] |= 1 << (const_offset % 4);
 		return;
 	}
 
@@ -174,12 +172,8 @@ gather_intrinsic_store_deref_info(const nir_shader *nir,
 				type = glsl_get_array_element(var->type);
 
 			unsigned slots =
-				var->data.compact ? DIV_ROUND_UP(glsl_get_length(type), 4)
+				var->data.compact ? DIV_ROUND_UP(var->data.location_frac + glsl_get_length(type), 4)
 						  : glsl_count_attribute_slots(type, false);
-
-			if (idx == VARYING_SLOT_CLIP_DIST0)
-				slots = (nir->info.clip_distance_array_size +
-					 nir->info.cull_distance_array_size > 4) ? 2 : 1;
 
 			mark_tess_output(info, var->data.patch, param, slots);
 			break;
@@ -374,7 +368,8 @@ gather_info_input_decl_ps(const nir_shader *nir, const nir_variable *var,
 		info->ps.layer_input = true;
 		break;
 	case VARYING_SLOT_CLIP_DIST0:
-		info->ps.num_input_clips_culls = attrib_count;
+	case VARYING_SLOT_CLIP_DIST1:
+		info->ps.num_input_clips_culls += attrib_count;
 		break;
 	default:
 		break;
@@ -409,8 +404,8 @@ gather_info_output_decl_ls(const nir_shader *nir, const nir_variable *var,
 	int idx = var->data.location;
 	unsigned param = shader_io_get_unique_index(idx);
 	int num_slots = glsl_count_attribute_slots(var->type, false);
-	if (idx == VARYING_SLOT_CLIP_DIST0)
-		num_slots = (nir->info.clip_distance_array_size + nir->info.cull_distance_array_size > 4) ? 2 : 1;
+	if (var->data.compact)
+		num_slots = DIV_ROUND_UP(var->data.location_frac + glsl_get_length(var->type), 4);
 	mark_ls_output(info, param, num_slots);
 }
 

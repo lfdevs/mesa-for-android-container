@@ -464,6 +464,7 @@ emit_rs_state(struct anv_pipeline *pipeline,
    sf.TriangleStripListProvokingVertexSelect = 0;
    sf.LineStripListProvokingVertexSelect = 0;
    sf.TriangleFanProvokingVertexSelect = 1;
+   sf.VertexSubPixelPrecisionSelect = _8Bit;
 
    const struct brw_vue_prog_data *last_vue_prog_data =
       anv_pipeline_get_last_vue_prog_data(pipeline);
@@ -1076,6 +1077,10 @@ emit_3dstate_clip(struct anv_pipeline *pipeline,
       clip.EarlyCullEnable          = true;
       clip.APIMode                  = APIMODE_D3D,
       clip.ViewportXYClipTestEnable = true;
+
+#if GEN_GEN >= 8
+      clip.VertexSubPixelPrecisionSelect = _8Bit;
+#endif
 
       clip.ClipMode = CLIPMODE_NORMAL;
 

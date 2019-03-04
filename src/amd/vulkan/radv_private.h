@@ -1465,6 +1465,7 @@ bool radv_format_pack_clear_color(VkFormat format,
 bool radv_is_colorbuffer_format_supported(VkFormat format, bool *blendable);
 bool radv_dcc_formats_compatible(VkFormat format1,
                                  VkFormat format2);
+bool radv_device_supports_etc(struct radv_physical_device *physical_device);
 
 struct radv_fmask_info {
 	uint64_t offset;

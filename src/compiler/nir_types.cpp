@@ -326,6 +326,12 @@ glsl_type_is_integer(const struct glsl_type *type)
    return type->is_integer();
 }
 
+bool
+glsl_type_contains_64bit(const struct glsl_type *type)
+{
+   return type->contains_64bit();
+}
+
 const glsl_type *
 glsl_void_type(void)
 {

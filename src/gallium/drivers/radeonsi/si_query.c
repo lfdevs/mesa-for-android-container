@@ -549,11 +549,15 @@ void si_query_buffer_reset(struct si_context *sctx, struct si_query_buffer *buff
 	}
 	buffer->results_end = 0;
 
+	if (!buffer->buf)
+		return;
+
 	/* Discard even the oldest buffer if it can't be mapped without a stall. */
-	if (buffer->buf &&
-	    (si_rings_is_buffer_referenced(sctx, buffer->buf->buf, RADEON_USAGE_READWRITE) ||
-	     !sctx->ws->buffer_wait(buffer->buf->buf, 0, RADEON_USAGE_READWRITE))) {
+	if (si_rings_is_buffer_referenced(sctx, buffer->buf->buf, RADEON_USAGE_READWRITE) ||
+	    !sctx->ws->buffer_wait(buffer->buf->buf, 0, RADEON_USAGE_READWRITE)) {
 		si_resource_reference(&buffer->buf, NULL);
+	} else {
+		buffer->unprepared = true;
 	}
 }
 
@@ -561,29 +565,31 @@ bool si_query_buffer_alloc(struct si_context *sctx, struct si_query_buffer *buff
 			   bool (*prepare_buffer)(struct si_context *, struct si_query_buffer*),
 			   unsigned size)
 {
-	if (buffer->buf && buffer->results_end + size >= buffer->buf->b.b.width0)
-		return true;
+	bool unprepared = buffer->unprepared;
+	buffer->unprepared = false;
 
-	if (buffer->buf) {
-		struct si_query_buffer *qbuf = MALLOC_STRUCT(si_query_buffer);
-		memcpy(qbuf, buffer, sizeof(*qbuf));
-		buffer->previous = qbuf;
+	if (!buffer->buf || buffer->results_end + size > buffer->buf->b.b.width0) {
+		if (buffer->buf) {
+			struct si_query_buffer *qbuf = MALLOC_STRUCT(si_query_buffer);
+			memcpy(qbuf, buffer, sizeof(*qbuf));
+			buffer->previous = qbuf;
+		}
+		buffer->results_end = 0;
+
+		/* Queries are normally read by the CPU after
+		 * being written by the gpu, hence staging is probably a good
+		 * usage pattern.
+		 */
+		struct si_screen *screen = sctx->screen;
+		unsigned buf_size = MAX2(size, screen->info.min_alloc_size);
+		buffer->buf = si_resource(
+			pipe_buffer_create(&screen->b, 0, PIPE_USAGE_STAGING, buf_size));
+		if (unlikely(!buffer->buf))
+			return false;
+		unprepared = true;
 	}
 
-	buffer->results_end = 0;
-
-	/* Queries are normally read by the CPU after
-	 * being written by the gpu, hence staging is probably a good
-	 * usage pattern.
-	 */
-	struct si_screen *screen = sctx->screen;
-	unsigned buf_size = MAX2(size, screen->info.min_alloc_size);
-	buffer->buf = si_resource(
-		pipe_buffer_create(&screen->b, 0, PIPE_USAGE_STAGING, buf_size));
-	if (unlikely(!buffer->buf))
-		return false;
-
-	if (prepare_buffer) {
+	if (unprepared && prepare_buffer) {
 		if (unlikely(!prepare_buffer(sctx, buffer))) {
 			si_resource_reference(&buffer->buf, NULL);
 			return false;

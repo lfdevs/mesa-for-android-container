@@ -257,6 +257,7 @@ struct radv_shader_variant_info {
 			unsigned num_interp;
 			uint32_t input_mask;
 			uint32_t flat_shaded_mask;
+			uint32_t float16_shaded_mask;
 			bool can_discard;
 			bool early_fragment_test;
 		} fs;
@@ -401,6 +402,8 @@ static inline unsigned shader_io_get_unique_index(gl_varying_slot slot)
 		return 1;
 	if (slot == VARYING_SLOT_CLIP_DIST0)
 		return 2;
+	if (slot == VARYING_SLOT_CLIP_DIST1)
+		return 3;
 	/* 3 is reserved for clip dist as well */
 	if (slot >= VARYING_SLOT_VAR0 && slot <= VARYING_SLOT_VAR31)
 		return 4 + (slot - VARYING_SLOT_VAR0);

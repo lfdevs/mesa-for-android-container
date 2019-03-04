@@ -34,7 +34,7 @@ _xa_version = '.'.join(xa_version)
 
 libxatracker = shared_library(
   'xatracker',
-  'target.c',
+  ['target.c', xmlpool_options_h],
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [xa_link_args, ld_args_gc_sections],

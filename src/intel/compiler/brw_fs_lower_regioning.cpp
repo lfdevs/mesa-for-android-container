@@ -74,7 +74,7 @@ namespace {
          unsigned stride = inst->dst.stride * type_sz(inst->dst.type);
 
          for (unsigned i = 0; i < inst->sources; i++) {
-            if (!is_uniform(inst->src[i]))
+            if (!is_uniform(inst->src[i]) && !inst->is_control_source(i))
                stride = MAX2(stride, inst->src[i].stride *
                              type_sz(inst->src[i].type));
          }
@@ -92,7 +92,7 @@ namespace {
    required_dst_byte_offset(const fs_inst *inst)
    {
       for (unsigned i = 0; i < inst->sources; i++) {
-         if (!is_uniform(inst->src[i]))
+         if (!is_uniform(inst->src[i]) && !inst->is_control_source(i))
             if (reg_offset(inst->src[i]) % REG_SIZE !=
                 reg_offset(inst->dst) % REG_SIZE)
                return 0;
@@ -109,7 +109,7 @@ namespace {
    has_invalid_src_region(const gen_device_info *devinfo, const fs_inst *inst,
                           unsigned i)
    {
-      if (is_unordered(inst)) {
+      if (is_unordered(inst) || inst->is_control_source(i)) {
          return false;
       } else {
          const unsigned dst_byte_stride = inst->dst.stride * type_sz(inst->dst.type);

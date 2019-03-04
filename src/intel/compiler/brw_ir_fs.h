@@ -358,6 +358,13 @@ public:
    bool has_source_and_destination_hazard() const;
 
    /**
+    * Return whether \p arg is a control source of a virtual instruction which
+    * shouldn't contribute to the execution type and usual regioning
+    * restriction calculations of arithmetic instructions.
+    */
+   bool is_control_source(unsigned arg) const;
+
+   /**
     * Return the subset of flag registers read by the instruction as a bitset
     * with byte granularity.
     */
@@ -461,7 +468,8 @@ get_exec_type(const fs_inst *inst)
    brw_reg_type exec_type = BRW_REGISTER_TYPE_B;
 
    for (int i = 0; i < inst->sources; i++) {
-      if (inst->src[i].file != BAD_FILE) {
+      if (inst->src[i].file != BAD_FILE &&
+          !inst->is_control_source(i)) {
          const brw_reg_type t = get_exec_type(inst->src[i].type);
          if (type_sz(t) > type_sz(exec_type))
             exec_type = t;

@@ -33,7 +33,7 @@ endif
 
 libva_gallium = shared_library(
   'gallium_drv_video',
-  'target.c',
+  ['target.c', xmlpool_options_h],
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [va_link_args, ld_args_gc_sections],

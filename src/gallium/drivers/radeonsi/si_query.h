@@ -177,12 +177,13 @@ struct si_query_hw_ops {
 struct si_query_buffer {
 	/* The buffer where query results are stored. */
 	struct si_resource		*buf;
-	/* Offset of the next free result after current query data */
-	unsigned			results_end;
 	/* If a query buffer is full, a new buffer is created and the old one
 	 * is put in here. When we calculate the result, we sum up the samples
 	 * from all buffers. */
 	struct si_query_buffer	*previous;
+	/* Offset of the next free result after current query data */
+	unsigned			results_end;
+	bool unprepared;
 };
 
 void si_query_buffer_destroy(struct si_screen *sctx, struct si_query_buffer *buffer);

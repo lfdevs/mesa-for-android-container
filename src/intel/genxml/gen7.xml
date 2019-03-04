@@ -1399,7 +1399,10 @@
     <field name="AA Line Distance Mode" start="110" end="110" type="uint">
       <value name="AALINEDISTANCE_TRUE" value="1"/>
     </field>
-    <field name="Vertex Sub Pixel Precision Select" start="108" end="108" type="uint"/>
+    <field name="Vertex Sub Pixel Precision Select" start="108" end="108" type="uint">
+      <value name="8 Bit" value="0"/>
+      <value name="4 Bit" value="1"/>
+    </field>
     <field name="Point Width Source" start="107" end="107" type="uint">
       <value name="Vertex" value="0"/>
       <value name="State" value="1"/>

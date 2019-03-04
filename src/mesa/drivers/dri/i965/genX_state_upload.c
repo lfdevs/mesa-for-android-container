@@ -998,7 +998,8 @@ genX(emit_index_buffer)(struct brw_context *brw)
 
    brw_batch_emit(brw, GENX(3DSTATE_INDEX_BUFFER), ib) {
 #if GEN_GEN < 8 && !GEN_IS_HASWELL
-      ib.CutIndexEnable = brw->prim_restart.enable_cut_index;
+      assert(brw->ib.enable_cut_index == brw->prim_restart.enable_cut_index);
+      ib.CutIndexEnable = brw->ib.enable_cut_index;
 #endif
       ib.IndexFormat = brw_get_index_type(index_buffer->index_size);
 
@@ -2445,7 +2446,7 @@ set_scissor_bits(const struct gl_context *ctx, int i,
 
    bbox[0] = MAX2(ctx->ViewportArray[i].X, 0);
    bbox[1] = MIN2(bbox[0] + ctx->ViewportArray[i].Width, fb_width);
-   bbox[2] = MAX2(ctx->ViewportArray[i].Y, 0);
+   bbox[2] = CLAMP(ctx->ViewportArray[i].Y, 0, fb_height);
    bbox[3] = MIN2(bbox[2] + ctx->ViewportArray[i].Height, fb_height);
    _mesa_intersect_scissor_bounding_box(ctx, i, bbox);
 

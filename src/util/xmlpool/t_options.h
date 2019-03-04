@@ -347,3 +347,8 @@ DRI_CONF_OPT_END
 DRI_CONF_OPT_BEGIN_B(radeonsi_zerovram, def) \
         DRI_CONF_DESC(en,"Zero all vram allocations") \
 DRI_CONF_OPT_END
+
+#define DRI_CONF_RADEONSI_ENABLE_NIR(def) \
+DRI_CONF_OPT_BEGIN_B(radeonsi_enable_nir, def) \
+        DRI_CONF_DESC(en,gettext("Enable NIR")) \
+DRI_CONF_OPT_END

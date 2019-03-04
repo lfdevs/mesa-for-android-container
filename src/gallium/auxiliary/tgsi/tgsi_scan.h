@@ -220,7 +220,9 @@ tgsi_is_bindless_image_file(unsigned file)
 {
    return file != TGSI_FILE_IMAGE &&
           file != TGSI_FILE_MEMORY &&
-          file != TGSI_FILE_BUFFER;
+          file != TGSI_FILE_BUFFER &&
+          file != TGSI_FILE_CONSTBUF &&
+          file != TGSI_FILE_HW_ATOMIC;
 }
 
 #ifdef __cplusplus

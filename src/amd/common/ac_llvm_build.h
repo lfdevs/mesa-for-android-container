@@ -217,6 +217,14 @@ ac_build_fs_interp(struct ac_llvm_context *ctx,
 		   LLVMValueRef j);
 
 LLVMValueRef
+ac_build_fs_interp_f16(struct ac_llvm_context *ctx,
+		       LLVMValueRef llvm_chan,
+		       LLVMValueRef attr_number,
+		       LLVMValueRef params,
+		       LLVMValueRef i,
+		       LLVMValueRef j);
+
+LLVMValueRef
 ac_build_fs_interp_mov(struct ac_llvm_context *ctx,
 		       LLVMValueRef parameter,
 		       LLVMValueRef llvm_chan,

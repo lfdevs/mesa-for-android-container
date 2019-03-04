@@ -32,7 +32,7 @@ endif
 
 libomx_gallium = shared_library(
   'omx_mesa',
-  'target.c',
+  ['target.c', xmlpool_options_h],
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [omx_link_args, ld_args_gc_sections],

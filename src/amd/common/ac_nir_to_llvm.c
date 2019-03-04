@@ -1896,14 +1896,18 @@ static LLVMValueRef visit_load_var(struct ac_nir_context *ctx,
 	if (var) {
 		bool vs_in = ctx->stage == MESA_SHADER_VERTEX &&
 			var->data.mode == nir_var_shader_in;
-		if (var->data.compact)
-			stride = 1;
 		idx = var->data.driver_location;
 		comp = var->data.location_frac;
 		mode = var->data.mode;
 
 		get_deref_offset(ctx, nir_instr_as_deref(instr->src[0].ssa->parent_instr), vs_in, NULL, NULL,
 				 &const_index, &indir_index);
+
+		if (var->data.compact) {
+			stride = 1;
+			const_index += comp;
+			comp = 0;
+		}
 	}
 
 	if (instr->dest.ssa.bit_size == 64)
@@ -2022,6 +2026,11 @@ visit_store_var(struct ac_nir_context *ctx,
 		                 NULL, NULL, &const_index, &indir_index);
 		idx = var->data.driver_location;
 		comp = var->data.location_frac;
+
+		if (var->data.compact) {
+			const_index += comp;
+			comp = 0;
+		}
 	}
 
 	if (ac_get_elem_bits(&ctx->ac, LLVMTypeOf(src)) == 64) {

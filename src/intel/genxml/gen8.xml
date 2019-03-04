@@ -1816,7 +1816,10 @@
       <value name="AALINEDISTANCE_TRUE" value="1"/>
     </field>
     <field name="Smooth Point Enable" start="109" end="109" type="bool"/>
-    <field name="Vertex Sub Pixel Precision Select" start="108" end="108" type="uint"/>
+    <field name="Vertex Sub Pixel Precision Select" start="108" end="108" type="uint">
+      <value name="8 Bit" value="0"/>
+      <value name="4 Bit" value="1"/>
+    </field>
     <field name="Point Width Source" start="107" end="107" type="uint">
       <value name="Vertex" value="0"/>
       <value name="State" value="1"/>

@@ -846,7 +846,9 @@ swr_texture_layout(struct swr_screen *screen,
 
    size_t total_size = (uint64_t)res->swr.depth * res->swr.qpitch *
                                  res->swr.pitch * res->swr.numSamples;
-   if (total_size > SWR_MAX_TEXTURE_SIZE)
+
+   // Let non-sampled textures (e.g. buffer objects) bypass the size limit
+   if (swr_resource_is_texture(&res->base) && total_size > SWR_MAX_TEXTURE_SIZE)
       return false;
 
    if (allocate) {

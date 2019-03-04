@@ -38,7 +38,7 @@ endif
 
 libvdpau_gallium = shared_library(
   'vdpau_gallium',
-  'target.c',
+  ['target.c', xmlpool_options_h],
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [vdpau_link_args, ld_args_gc_sections],

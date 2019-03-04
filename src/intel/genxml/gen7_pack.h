@@ -3730,6 +3730,8 @@ struct GEN7_3DSTATE_SF {
    uint32_t                             AALineDistanceMode;
 #define AALINEDISTANCE_TRUE                      1
    uint32_t                             VertexSubPixelPrecisionSelect;
+#define _8Bit                                    0
+#define _4Bit                                    1
    uint32_t                             PointWidthSource;
 #define Vertex                                   0
 #define State                                    1

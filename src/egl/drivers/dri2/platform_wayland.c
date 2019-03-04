@@ -637,15 +637,18 @@ update_buffers(struct dri2_egl_surface *dri2_surf)
    struct dri2_egl_display *dri2_dpy =
       dri2_egl_display(dri2_surf->base.Resource.Display);
 
-   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
-       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
-
-      dri2_wl_release_buffers(dri2_surf);
+   if (dri2_surf->base.Width != dri2_surf->wl_win->width ||
+       dri2_surf->base.Height != dri2_surf->wl_win->height) {
 
       dri2_surf->base.Width  = dri2_surf->wl_win->width;
       dri2_surf->base.Height = dri2_surf->wl_win->height;
       dri2_surf->dx = dri2_surf->wl_win->dx;
       dri2_surf->dy = dri2_surf->wl_win->dy;
+   }
+
+   if (dri2_surf->base.Width != dri2_surf->wl_win->attached_width ||
+       dri2_surf->base.Height != dri2_surf->wl_win->attached_height) {
+      dri2_wl_release_buffers(dri2_surf);
    }
 
    if (get_back_bo(dri2_surf) < 0) {

@@ -251,6 +251,62 @@ fs_inst::is_send_from_grf() const
    }
 }
 
+bool
+fs_inst::is_control_source(unsigned arg) const
+{
+   switch (opcode) {
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
+   case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD_GEN7:
+   case FS_OPCODE_VARYING_PULL_CONSTANT_LOAD_GEN4:
+      return arg == 0;
+
+   case SHADER_OPCODE_BROADCAST:
+   case SHADER_OPCODE_SHUFFLE:
+   case SHADER_OPCODE_QUAD_SWIZZLE:
+   case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
+   case FS_OPCODE_INTERPOLATE_AT_SHARED_OFFSET:
+   case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
+   case SHADER_OPCODE_IMAGE_SIZE:
+   case SHADER_OPCODE_GET_BUFFER_SIZE:
+      return arg == 1;
+
+   case SHADER_OPCODE_MOV_INDIRECT:
+   case SHADER_OPCODE_CLUSTER_BROADCAST:
+   case SHADER_OPCODE_TEX:
+   case FS_OPCODE_TXB:
+   case SHADER_OPCODE_TXD:
+   case SHADER_OPCODE_TXF:
+   case SHADER_OPCODE_TXF_LZ:
+   case SHADER_OPCODE_TXF_CMS:
+   case SHADER_OPCODE_TXF_CMS_W:
+   case SHADER_OPCODE_TXF_UMS:
+   case SHADER_OPCODE_TXF_MCS:
+   case SHADER_OPCODE_TXL:
+   case SHADER_OPCODE_TXL_LZ:
+   case SHADER_OPCODE_TXS:
+   case SHADER_OPCODE_LOD:
+   case SHADER_OPCODE_TG4:
+   case SHADER_OPCODE_TG4_OFFSET:
+   case SHADER_OPCODE_SAMPLEINFO:
+   case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
+   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
+   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
+   case SHADER_OPCODE_BYTE_SCATTERED_READ:
+   case SHADER_OPCODE_BYTE_SCATTERED_WRITE:
+   case SHADER_OPCODE_TYPED_ATOMIC:
+   case SHADER_OPCODE_TYPED_SURFACE_READ:
+   case SHADER_OPCODE_TYPED_SURFACE_WRITE:
+      return arg == 1 || arg == 2;
+
+   case SHADER_OPCODE_SEND:
+      return arg == 0 || arg == 1;
+
+   default:
+      return false;
+   }
+}
+
 /**
  * Returns true if this instruction's sources and destinations cannot
  * safely be the same register.

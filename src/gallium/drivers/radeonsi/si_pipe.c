@@ -865,7 +865,8 @@ struct pipe_screen *radeonsi_screen_create(struct radeon_winsys *ws,
 		sscreen->debug_flags |= DBG(FS_CORRECT_DERIVS_AFTER_KILL);
 	if (driQueryOptionb(config->options, "radeonsi_enable_sisched"))
 		sscreen->debug_flags |= DBG(SI_SCHED);
-
+	if (driQueryOptionb(config->options, "radeonsi_enable_nir"))
+		sscreen->debug_flags |= DBG(NIR);
 
 	if (sscreen->debug_flags & DBG(INFO))
 		ac_print_gpu_info(&sscreen->info);
