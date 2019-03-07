@@ -182,14 +182,16 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_conditional_render_inverted = true;
       ctx->Extensions.ARB_cull_distance = true;
       ctx->Extensions.ARB_draw_buffers_blend = true;
-      if (ctx->API != API_OPENGL_COMPAT)
+      if (ctx->API != API_OPENGL_COMPAT ||
+          ctx->Const.AllowHigherCompatVersion)
          ctx->Extensions.ARB_enhanced_layouts = true;
       ctx->Extensions.ARB_ES3_compatibility = true;
       ctx->Extensions.ARB_fragment_layer_viewport = true;
       ctx->Extensions.ARB_pipeline_statistics_query = true;
       ctx->Extensions.ARB_sample_shading = true;
       ctx->Extensions.ARB_shading_language_420pack = true;
-      if (ctx->API != API_OPENGL_COMPAT) {
+      if (ctx->API != API_OPENGL_COMPAT ||
+          ctx->Const.AllowHigherCompatVersion) {
          ctx->Extensions.ARB_texture_buffer_object = true;
          ctx->Extensions.ARB_texture_buffer_object_rgb32 = true;
          ctx->Extensions.ARB_texture_buffer_range = true;
@@ -199,7 +201,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_multisample = true;
       ctx->Extensions.ARB_uniform_buffer_object = true;
 
-      if (ctx->API != API_OPENGL_COMPAT)
+      if (ctx->API != API_OPENGL_COMPAT ||
+          ctx->Const.AllowHigherCompatVersion)
          ctx->Extensions.AMD_vertex_shader_layer = true;
       ctx->Extensions.EXT_framebuffer_multisample = true;
       ctx->Extensions.EXT_framebuffer_multisample_blit_scaled = true;
@@ -228,7 +231,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_conservative_depth = true;
       ctx->Extensions.ARB_derivative_control = true;
       ctx->Extensions.ARB_framebuffer_no_attachments = true;
-      if (ctx->API != API_OPENGL_COMPAT) {
+      if (ctx->API != API_OPENGL_COMPAT ||
+          ctx->Const.AllowHigherCompatVersion) {
          ctx->Extensions.ARB_gpu_shader5 = true;
          ctx->Extensions.ARB_gpu_shader_fp64 = true;
       }
@@ -239,7 +243,8 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_shader_image_size = true;
       ctx->Extensions.ARB_shader_precision = true;
       ctx->Extensions.ARB_shader_texture_image_samples = true;
-      if (ctx->API != API_OPENGL_COMPAT)
+      if (ctx->API != API_OPENGL_COMPAT ||
+          ctx->Const.AllowHigherCompatVersion)
          ctx->Extensions.ARB_tessellation_shader = true;
       ctx->Extensions.ARB_texture_compression_bptc = true;
       ctx->Extensions.ARB_texture_view = true;
@@ -321,7 +326,8 @@ intelInitExtensions(struct gl_context *ctx)
    if (devinfo->gen >= 6)
       ctx->Extensions.INTEL_performance_query = true;
 
-   if (ctx->API != API_OPENGL_COMPAT)
+   if (ctx->API != API_OPENGL_COMPAT ||
+       ctx->Const.AllowHigherCompatVersion)
       ctx->Extensions.ARB_base_instance = true;
    if (ctx->API != API_OPENGL_CORE)
       ctx->Extensions.ARB_color_buffer_float = true;

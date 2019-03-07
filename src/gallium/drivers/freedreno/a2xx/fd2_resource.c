@@ -55,6 +55,12 @@ fd2_setup_slices(struct fd_resource *rsc)
 			break;
 		}
 
+		/* mipmaps have power of two sizes in memory */
+		if (level) {
+			width = util_next_power_of_two(width);
+			height = util_next_power_of_two(height);
+		}
+
 		slice->pitch = width;
 		slice->offset = size;
 

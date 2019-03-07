@@ -919,7 +919,9 @@ brw_nir_apply_sampler_key(nir_shader *nir,
                           bool is_scalar)
 {
    const struct gen_device_info *devinfo = compiler->devinfo;
-   nir_lower_tex_options tex_options = { 0 };
+   nir_lower_tex_options tex_options = {
+      .lower_txd_clamp_if_sampler_index_not_lt_16 = true,
+   };
 
    /* Iron Lake and prior require lowering of all rectangle textures */
    if (devinfo->gen < 6)

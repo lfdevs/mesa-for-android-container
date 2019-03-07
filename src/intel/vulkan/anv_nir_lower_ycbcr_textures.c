@@ -269,6 +269,7 @@ create_plane_tex_instr_implicit(struct ycbcr_state *state,
    tex->texture_index = old_tex->texture_index;
    tex->texture_array_size = old_tex->texture_array_size;
    tex->sampler_index = old_tex->sampler_index;
+   tex->is_array = old_tex->is_array;
 
    nir_ssa_dest_init(&tex->instr, &tex->dest,
                      old_tex->dest.ssa.num_components,

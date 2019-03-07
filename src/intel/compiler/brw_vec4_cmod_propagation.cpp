@@ -173,19 +173,19 @@ opt_cmod_propagation_local(bblock_t *block, vec4_visitor *v)
 
                   /* Given a sequence like:
                    *
-                   *    cmp.ge.f0(8)  g21<1>.xF      g20<4>.xF      g18<4>.xF
+                   *    cmp.ge.f0(8)  g21<1>.zF      g20<4>.xF      g18<4>.xF
                    *    ...
-                   *    cmp.nz.f0(8)  null<1>D       g21<4>.xD      0D
+                   *    cmp.nz.f0(8)  null<1>D       g21<4>.zD      0D
                    *
                    * Replace it with something like:
                    *
-                   *    cmp.ge.f0(8)  g22<1>F        g20<4>.xF      g18<4>.xF
-                   *    mov(8)        g21<1>.xF      g22<1>.xxxxF
+                   *    cmp.ge.f0(8)  g22<1>.zF      g20<4>.xF      g18<4>.xF
+                   *    mov(8)        g21<1>.xF      g22<1>.zzzzF
                    *
                    * The added MOV will most likely be removed later.  In the
                    * worst case, it should be cheaper to schedule.
                    */
-                  temp.swizzle = inst->src[0].swizzle;
+                  temp.swizzle = brw_swizzle_for_mask(inst->dst.writemask);
                   temp.type = scan_inst->src[0].type;
 
                   vec4_instruction *mov = v->MOV(scan_inst->dst, temp);

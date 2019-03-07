@@ -377,6 +377,10 @@ d3dmultisample_type_check(struct pipe_screen *screen,
     if (levels)
         *levels = 1;
 
+    /* Ignores multisamplequality */
+    if (*multisample == D3DMULTISAMPLE_NONE)
+        return D3D_OK;
+
     if (*multisample == D3DMULTISAMPLE_NONMASKABLE) {
         if (depth_stencil_format(format))
             bind = d3d9_get_pipe_depth_format_bindings(format);

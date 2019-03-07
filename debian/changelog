@@ -1,3 +1,12 @@
+mesa (19.0.0~rc7-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Migrate to llvm/clang-8.
+  * fix-hurd-ftbfs.diff: Refreshed, and partially replaced by two
+    patches from upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Mar 2019 09:58:25 +0200
+
 mesa (19.0.0~rc6-1) experimental; urgency=medium
 
   * New upstream release candidate. (LP: #1815236)

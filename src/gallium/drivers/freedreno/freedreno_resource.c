@@ -853,7 +853,13 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 	enum pipe_format format = tmpl->format;
 	uint32_t size;
 
-	if (screen->ro && (tmpl->bind & PIPE_BIND_SCANOUT)) {
+	/* when using kmsro, scanout buffers are allocated on the display device
+	 * create_with_modifiers() doesn't give us usage flags, so we have to
+	 * assume that all calls with modifiers are scanout-possible
+	 */
+	if (screen->ro &&
+		((tmpl->bind & PIPE_BIND_SCANOUT) ||
+		 !(count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID))) {
 		struct pipe_resource scanout_templat = *tmpl;
 		struct renderonly_scanout *scanout;
 		struct winsys_handle handle;

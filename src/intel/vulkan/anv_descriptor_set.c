@@ -58,6 +58,9 @@ void anv_GetDescriptorSetLayoutSupport(
                anv_foreach_stage(s, binding->stageFlags)
                   surface_count[s] += sampler->n_planes;
             }
+         } else {
+            anv_foreach_stage(s, binding->stageFlags)
+               surface_count[s] += binding->descriptorCount;
          }
          break;
 

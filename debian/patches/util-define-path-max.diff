@@ -1,0 +1,26 @@
+commit 91cc6fcbb050423823ff4262cf860a34d20f504e
+Author: Eric Engestrom <eric.engestrom@intel.com>
+Date:   Wed Feb 27 15:08:56 2019 +0000
+
+    util: #define PATH_MAX when undefined (eg. Hurd)
+    
+    Cc: Timo Aaltonen <tjaalton@debian.org>
+    Cc: James Clarke <jrtc27@debian.org>
+    Signed-off-by: Eric Engestrom <eric.engestrom@intel.com>
+    Reviewed-by: Emil Velikov <emil.velikov@collabora.com>
+
+diff --git a/src/util/xmlconfig.c b/src/util/xmlconfig.c
+index 5907c68012e..5d218eeb927 100644
+--- a/src/util/xmlconfig.c
++++ b/src/util/xmlconfig.c
+@@ -42,6 +42,10 @@
+ #include "xmlconfig.h"
+ #include "u_process.h"
+ 
++/* For systems like Hurd */
++#ifndef PATH_MAX
++#define PATH_MAX 4096
++#endif
+ 
+ /** \brief Find an option in an option cache with the name as key */
+ static uint32_t

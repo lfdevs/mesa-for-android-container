@@ -3139,6 +3139,12 @@ typedef struct nir_lower_tex_options {
    bool lower_txd_offset_clamp;
 
    /**
+    * If true, lower nir_texop_txd with min_lod to a nir_texop_txl if the
+    * sampler index is not statically determinable to be less than 16.
+    */
+   bool lower_txd_clamp_if_sampler_index_not_lt_16;
+
+   /**
     * If true, apply a .bagr swizzle on tg4 results to handle Broadcom's
     * mixed-up tg4 locations.
     */

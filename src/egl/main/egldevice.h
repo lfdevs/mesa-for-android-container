@@ -68,9 +68,6 @@ typedef enum _egl_device_extension _EGLDeviceExtension;
 EGLBoolean
 _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext);
 
-const char *
-_eglGetDRMDeviceRenderNode(_EGLDevice *dev);
-
 EGLBoolean
 _eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute,
                          EGLAttrib *value);

@@ -1,0 +1,26 @@
+commit ad862c36e5e175d9bf2d112927be7348fb3560f7
+Author: Eric Engestrom <eric.engestrom@intel.com>
+Date:   Tue Mar 5 12:32:13 2019 +0000
+
+    meson: fix with_dri2 definition for GNU Hurd
+    
+    Suggested-by: Dylan Baker <dylan@pnwbakers.com>
+    Cc: Timo Aaltonen <tjaalton@debian.org>
+    Cc: James Clarke <jrtc27@debian.org>
+    Signed-off-by: Eric Engestrom <eric.engestrom@intel.com>
+    Reviewed-by: Dylan Baker <dylan@pnwbakers.com>
+
+diff --git a/meson.build b/meson.build
+index 46f86eb0000..8a40c48e435 100644
+--- a/meson.build
++++ b/meson.build
+@@ -376,7 +376,8 @@ if with_vulkan_icd_dir == ''
+   with_vulkan_icd_dir = join_paths(get_option('datadir'), 'vulkan/icd.d')
+ endif
+ 
+-with_dri2 = (with_dri or with_any_vk) and with_dri_platform == 'drm'
++with_dri2 = (with_dri or with_any_vk) and (with_dri_platform == 'drm' or
++  host_machine.system() == 'gnu')
+ _dri3 = get_option('dri3')
+ if _dri3 == 'auto'
+   with_dri3 = system_has_kms_drm and with_dri2

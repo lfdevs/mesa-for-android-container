@@ -202,18 +202,6 @@ _eglDeviceSupports(_EGLDevice *dev, _EGLDeviceExtension ext)
    };
 }
 
-/* Ideally we'll have an extension which passes the render node,
- * instead of the card one + magic.
- *
- * Then we can move this in _eglQueryDeviceStringEXT below. Until then
- * keep it separate.
- */
-const char *
-_eglGetDRMDeviceRenderNode(_EGLDevice *dev)
-{
-   return dev->device->nodes[DRM_NODE_RENDER];
-}
-
 EGLBoolean
 _eglQueryDeviceAttribEXT(_EGLDevice *dev, EGLint attribute,
                          EGLAttrib *value)

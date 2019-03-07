@@ -147,6 +147,9 @@ XDestroyDrawable(struct drisw_drawable * pdp, Display * dpy, XID drawable)
    if (pdp->ximage)
       XDestroyImage(pdp->ximage);
 
+   if (pdp->shminfo.shmid > 0)
+      XShmDetach(dpy, &pdp->shminfo);
+
    free(pdp->visinfo);
 
    XFreeGC(dpy, pdp->gc);

@@ -59,6 +59,28 @@ static uint32_t fmt2swap(enum pipe_format format)
 	}
 }
 
+static bool
+use_hw_binning(struct fd_batch *batch)
+{
+	struct fd_gmem_stateobj *gmem = &batch->ctx->gmem;
+
+	/* we hardcoded a limit of 8 "pipes", we can increase this limit
+	 * at the cost of a slightly larger command stream
+	 * however very few cases will need more than 8
+	 * gmem->num_vsc_pipes == 0 means empty batch (TODO: does it still happen?)
+	 */
+	if (gmem->num_vsc_pipes > 8 || !gmem->num_vsc_pipes)
+		return false;
+
+	/* only a20x hw binning is implement
+	 * a22x is more like a3xx, but perhaps the a20x works? (TODO)
+	 */
+	if (!is_a20x(batch->ctx->screen))
+		return false;
+
+	return fd_binning_enabled && ((gmem->nbins_x * gmem->nbins_y) > 2);
+}
+
 /* transfer from gmem to system memory (ie. normal RAM) */
 
 static void
@@ -272,15 +294,13 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 	x1 = ((float)tile->xoff + bin_w) / ((float)pfb->width);
 	y0 = ((float)tile->yoff) / ((float)pfb->height);
 	y1 = ((float)tile->yoff + bin_h) / ((float)pfb->height);
-	OUT_PKT3(ring, CP_MEM_WRITE, 9);
+	OUT_PKT3(ring, CP_MEM_WRITE, 7);
 	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 36, 0, 0);
 	OUT_RING(ring, fui(x0));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x1));
 	OUT_RING(ring, fui(y0));
 	OUT_RING(ring, fui(x0));
-	OUT_RING(ring, fui(y1));
-	OUT_RING(ring, fui(x1));
 	OUT_RING(ring, fui(y1));
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
@@ -492,18 +512,18 @@ fd2_emit_tile_init(struct fd_batch *batch)
 		/* note: 1 "line" is 512 bytes in both color/depth areas (1K total) */
 		switch (patch->val) {
 		case GMEM_PATCH_FASTCLEAR_COLOR:
-			size = align(gmem->bin_w * gmem->bin_h * color_size, 0x4000);
+			size = align(gmem->bin_w * gmem->bin_h * color_size, 0x8000);
 			lines = size / 1024;
 			depth_base = size / 2;
 			break;
 		case GMEM_PATCH_FASTCLEAR_DEPTH:
-			size = align(gmem->bin_w * gmem->bin_h * depth_size, 0x4000);
+			size = align(gmem->bin_w * gmem->bin_h * depth_size, 0x8000);
 			lines = size / 1024;
 			color_base = depth_base;
 			depth_base = depth_base + size / 2;
 			break;
 		case GMEM_PATCH_FASTCLEAR_COLOR_DEPTH:
-			lines = align(gmem->bin_w * gmem->bin_h * color_size * 2, 0x4000) / 1024;
+			lines = align(gmem->bin_w * gmem->bin_h * color_size * 2, 0x8000) / 1024;
 			break;
 		case GMEM_PATCH_RESTORE_INFO:
 			patch->cs[0] = gmem->bin_w;
@@ -535,7 +555,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 	OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MAX));
 	OUT_RING(ring, 0);
 
-	if (is_a20x(ctx->screen) && fd_binning_enabled && gmem->num_vsc_pipes) {
+	if (use_hw_binning(batch)) {
 		/* patch out unneeded memory exports by changing EXEC CF to EXEC_END
 		 *
 		 * in the shader compiler, we guarantee that the shader ends with
@@ -694,7 +714,7 @@ fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 		OUT_RING(ring, fui(0.0f));
 	}
 
-	if (is_a20x(ctx->screen) && fd_binning_enabled) {
+	if (use_hw_binning(batch)) {
 		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);

@@ -2,3 +2,5 @@
 
 # meson fixes
 fix-hurd-ftbfs.diff
+util-define-path-max.diff
+meson-fix-with-dri2-def-for-hurd.diff

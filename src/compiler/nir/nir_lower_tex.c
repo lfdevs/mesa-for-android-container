@@ -880,6 +880,25 @@ lower_tex_packing(nir_builder *b, nir_tex_instr *tex,
 }
 
 static bool
+sampler_index_lt(nir_tex_instr *tex, unsigned max)
+{
+   assert(nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref) == -1);
+
+   unsigned sampler_index = tex->sampler_index;
+
+   int sampler_offset_idx =
+      nir_tex_instr_src_index(tex, nir_tex_src_sampler_offset);
+   if (sampler_offset_idx >= 0) {
+      if (!nir_src_is_const(tex->src[sampler_offset_idx].src))
+         return false;
+
+      sampler_index += nir_src_as_uint(tex->src[sampler_offset_idx].src);
+   }
+
+   return sampler_index < max;
+}
+
+static bool
 nir_lower_tex_block(nir_block *block, nir_builder *b,
                     const nir_lower_tex_options *options)
 {
@@ -995,6 +1014,8 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
            (options->lower_txd_shadow && tex->is_shadow) ||
            (options->lower_txd_shadow_clamp && tex->is_shadow && has_min_lod) ||
            (options->lower_txd_offset_clamp && has_offset && has_min_lod) ||
+           (options->lower_txd_clamp_if_sampler_index_not_lt_16 &&
+            has_min_lod && !sampler_index_lt(tex, 16)) ||
            (options->lower_txd_cube_map &&
             tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE) ||
            (options->lower_txd_3d &&
