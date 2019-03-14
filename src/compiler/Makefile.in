@@ -332,7 +332,8 @@ am__objects_7 = nir/nir.lo nir/nir_builtin_builder.lo nir/nir_clone.lo \
 	nir/nir_lower_indirect_derefs.lo nir/nir_lower_int64.lo \
 	nir/nir_lower_io.lo nir/nir_lower_io_arrays_to_elements.lo \
 	nir/nir_lower_io_to_temporaries.lo \
-	nir/nir_lower_io_to_scalar.lo nir/nir_lower_packing.lo \
+	nir/nir_lower_io_to_scalar.lo nir/nir_lower_io_to_vector.lo \
+	nir/nir_lower_packing.lo \
 	nir/nir_lower_passthrough_edgeflags.lo \
 	nir/nir_lower_patch_vertices.lo \
 	nir/nir_lower_phis_to_scalar.lo nir/nir_lower_regs_to_ssa.lo \
@@ -626,6 +627,7 @@ am__depfiles_remade = ./$(DEPDIR)/blob.Plo ./$(DEPDIR)/glsl_types.Plo \
 	nir/$(DEPDIR)/nir_lower_io_arrays_to_elements.Plo \
 	nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo \
 	nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo \
+	nir/$(DEPDIR)/nir_lower_io_to_vector.Plo \
 	nir/$(DEPDIR)/nir_lower_load_const_to_scalar.Plo \
 	nir/$(DEPDIR)/nir_lower_locals_to_regs.Plo \
 	nir/$(DEPDIR)/nir_lower_packing.Plo \
@@ -1561,6 +1563,7 @@ NIR_FILES = \
 	nir/nir_lower_io_arrays_to_elements.c \
 	nir/nir_lower_io_to_temporaries.c \
 	nir/nir_lower_io_to_scalar.c \
+	nir/nir_lower_io_to_vector.c \
 	nir/nir_lower_packing.c \
 	nir/nir_lower_passthrough_edgeflags.c \
 	nir/nir_lower_patch_vertices.c \
@@ -2310,6 +2313,8 @@ nir/nir_lower_io_to_temporaries.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_io_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_io_to_vector.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_packing.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_passthrough_edgeflags.lo: nir/$(am__dirstamp) \
@@ -2749,6 +2754,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_arrays_to_elements.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_io_to_vector.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_load_const_to_scalar.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_locals_to_regs.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_packing.Plo@am__quote@ # am--include-marker
@@ -3522,6 +3528,7 @@ distclean: distclean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_io_arrays_to_elements.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_io_to_vector.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_load_const_to_scalar.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_locals_to_regs.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_packing.Plo
@@ -3821,6 +3828,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_io_arrays_to_elements.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_io_to_scalar.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_io_to_temporaries.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_io_to_vector.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_load_const_to_scalar.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_locals_to_regs.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_packing.Plo

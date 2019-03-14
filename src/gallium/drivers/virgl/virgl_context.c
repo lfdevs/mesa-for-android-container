@@ -765,7 +765,6 @@ static void virgl_flush_from_st(struct pipe_context *ctx,
                                enum pipe_flush_flags flags)
 {
    struct virgl_context *vctx = virgl_context(ctx);
-   struct virgl_screen *rs = virgl_screen(ctx->screen);
 
    if (flags & PIPE_FLUSH_FENCE_FD)
        vctx->cbuf->needs_out_fence_fd = true;

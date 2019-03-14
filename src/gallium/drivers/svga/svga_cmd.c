@@ -1693,7 +1693,7 @@ SVGA3D_BindGBSurface(struct svga_winsys_context *swc,
       return PIPE_ERROR_OUT_OF_MEMORY;
 
    swc->surface_relocation(swc, &cmd->sid, &cmd->mobid, surface,
-                           SVGA_RELOC_READ | SVGA_RELOC_INTERNAL);
+                           SVGA_RELOC_READ);
 
    swc->commit(swc);
 

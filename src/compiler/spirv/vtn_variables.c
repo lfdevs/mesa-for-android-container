@@ -2444,9 +2444,17 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
    case SpvOpArrayLength: {
       struct vtn_pointer *ptr =
          vtn_value(b, w[3], vtn_value_type_pointer)->pointer;
+      const uint32_t field = w[4];
 
-      const uint32_t offset = ptr->var->type->offsets[w[4]];
-      const uint32_t stride = ptr->var->type->members[w[4]]->stride;
+      vtn_fail_if(ptr->type->base_type != vtn_base_type_struct,
+                  "OpArrayLength must take a pointer to a structure type");
+      vtn_fail_if(field != ptr->type->length - 1 ||
+                  ptr->type->members[field]->base_type != vtn_base_type_array,
+                  "OpArrayLength must reference the last memeber of the "
+                  "structure and that must be an array");
+
+      const uint32_t offset = ptr->type->offsets[field];
+      const uint32_t stride = ptr->type->members[field]->stride;
 
       if (!ptr->block_index) {
          struct vtn_access_chain chain = {

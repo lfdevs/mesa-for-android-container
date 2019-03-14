@@ -994,11 +994,6 @@ dri2_create_image_common(__DRIscreen *_screen,
    if (!map)
       return NULL;
 
-   /* createImageWithModifiers doesn't supply usage, and we should not get
-    * here with both modifiers and a usage flag.
-    */
-   assert(!(use && (modifiers != NULL)));
-
    tex_usage = PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW;
 
    if (use & __DRI_IMAGE_USE_SCANOUT)
@@ -1071,7 +1066,7 @@ dri2_create_image_with_modifiers(__DRIscreen *dri_screen,
                                  void *loaderPrivate)
 {
    return dri2_create_image_common(dri_screen, width, height, format,
-                                   0 /* use */, modifiers, count,
+                                   __DRI_IMAGE_USE_SHARE, modifiers, count,
                                    loaderPrivate);
 }
 

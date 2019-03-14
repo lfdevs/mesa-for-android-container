@@ -1581,6 +1581,10 @@ struct anv_descriptor_set {
    uint32_t size;
    uint32_t buffer_count;
    struct anv_buffer_view *buffer_views;
+
+   /* Link to descriptor pool's desc_sets list . */
+   struct list_head pool_link;
+
    struct anv_descriptor descriptors[0];
 };
 
@@ -1613,6 +1617,8 @@ struct anv_descriptor_pool {
 
    struct anv_state_stream surface_state_stream;
    void *surface_state_free_list;
+
+   struct list_head desc_sets;
 
    char data[0];
 };
