@@ -112,6 +112,7 @@ files_libnir = files(
   'nir_lower_alu.c',
   'nir_lower_alu_to_scalar.c',
   'nir_lower_alpha_test.c',
+  'nir_lower_array_deref_of_vec.c',
   'nir_lower_atomics_to_ssbo.c',
   'nir_lower_bitmap.c',
   'nir_lower_bool_to_float.c',

@@ -561,6 +561,35 @@ nir_channels(nir_builder *b, nir_ssa_def *def, nir_component_mask_t mask)
 }
 
 static inline nir_ssa_def *
+_nir_vector_extract_helper(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *c,
+                           unsigned start, unsigned end)
+{
+   if (start == end - 1) {
+      return nir_channel(b, vec, start);
+   } else {
+      unsigned mid = start + (end - start) / 2;
+      return nir_bcsel(b, nir_ilt(b, c, nir_imm_int(b, mid)),
+                       _nir_vector_extract_helper(b, vec, c, start, mid),
+                       _nir_vector_extract_helper(b, vec, c, mid, end));
+   }
+}
+
+static inline nir_ssa_def *
+nir_vector_extract(nir_builder *b, nir_ssa_def *vec, nir_ssa_def *c)
+{
+   nir_src c_src = nir_src_for_ssa(c);
+   if (nir_src_is_const(c_src)) {
+      unsigned c_const = nir_src_as_uint(c_src);
+      if (c_const < vec->num_components)
+         return nir_channel(b, vec, c_const);
+      else
+         return nir_ssa_undef(b, 1, vec->bit_size);
+   } else {
+      return _nir_vector_extract_helper(b, vec, c, 0, vec->num_components);
+   }
+}
+
+static inline nir_ssa_def *
 nir_i2i(nir_builder *build, nir_ssa_def *x, unsigned dest_bit_size)
 {
    if (x->bit_size == dest_bit_size)

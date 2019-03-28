@@ -178,12 +178,28 @@ anv_render_pass_compile(struct anv_render_pass *pass)
     * subpasses and checking to see if any of them don't have an external
     * dependency.  Or, we could just be lazy and add a couple extra flushes.
     * We choose to be lazy.
+    *
+    * From the documentation for vkCmdNextSubpass:
+    *
+    *    "Moving to the next subpass automatically performs any multisample
+    *    resolve operations in the subpass being ended. End-of-subpass
+    *    multisample resolves are treated as color attachment writes for the
+    *    purposes of synchronization. This applies to resolve operations for
+    *    both color and depth/stencil attachments. That is, they are
+    *    considered to execute in the
+    *    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT pipeline stage and
+    *    their writes are synchronized with
+    *    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT."
+    *
+    * Therefore, the above flags concerning color attachments also apply to
+    * color and depth/stencil resolve attachments.
     */
    if (all_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
       pass->subpass_flushes[0] |=
          ANV_PIPE_TEXTURE_CACHE_INVALIDATE_BIT;
    }
-   if (all_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+   if (all_usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
       pass->subpass_flushes[pass->subpass_count] |=
          ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
    }

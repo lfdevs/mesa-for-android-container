@@ -70,6 +70,7 @@ v3d_screen_destroy(struct pipe_screen *pscreen)
         util_hash_table_destroy(screen->bo_handles);
         v3d_bufmgr_destroy(pscreen);
         slab_destroy_parent(&screen->transfer_pool);
+        free(screen->ro);
 
         if (using_v3d_simulator)
                 v3d_simulator_destroy(screen);

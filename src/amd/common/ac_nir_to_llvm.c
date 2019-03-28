@@ -3093,7 +3093,8 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 			ctx->abi->frag_pos[2],
 			ac_build_fdiv(&ctx->ac, ctx->ac.f32_1, ctx->abi->frag_pos[3])
 		};
-		result = ac_build_gather_values(&ctx->ac, values, 4);
+		result = ac_to_integer(&ctx->ac,
+		                       ac_build_gather_values(&ctx->ac, values, 4));
 		break;
 	}
 	case nir_intrinsic_load_front_face:

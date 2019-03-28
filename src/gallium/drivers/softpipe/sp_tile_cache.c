@@ -373,17 +373,18 @@ sp_tile_cache_flush_clear(struct softpipe_tile_cache *tc, int layer)
                if (util_format_is_pure_uint(tc->surface->format)) {
                   pipe_put_tile_ui_format(pt, tc->transfer_map[layer],
                                           x, y, TILE_SIZE, TILE_SIZE,
-                                          pt->resource->format,
+                                          tc->surface->format,
                                           (unsigned *) tc->tile->data.colorui128);
                } else if (util_format_is_pure_sint(tc->surface->format)) {
                   pipe_put_tile_i_format(pt, tc->transfer_map[layer],
                                          x, y, TILE_SIZE, TILE_SIZE,
-                                         pt->resource->format,
+                                         tc->surface->format,
                                          (int *) tc->tile->data.colori128);
                } else {
-                  pipe_put_tile_rgba(pt, tc->transfer_map[layer],
-                                     x, y, TILE_SIZE, TILE_SIZE,
-                                     (float *) tc->tile->data.color);
+                  pipe_put_tile_rgba_format(pt, tc->transfer_map[layer],
+                                            x, y, TILE_SIZE, TILE_SIZE,
+                                            tc->surface->format,
+                                            (float *) tc->tile->data.color);
                }
             }
             numCleared++;

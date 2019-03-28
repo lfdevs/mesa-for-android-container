@@ -1734,6 +1734,7 @@ ir_variable::ir_variable(const struct glsl_type *type, const char *name,
    this->data.centroid = false;
    this->data.sample = false;
    this->data.patch = false;
+   this->data.explicit_invariant = false;
    this->data.invariant = false;
    this->data.how_declared = ir_var_declared_normally;
    this->data.mode = mode;

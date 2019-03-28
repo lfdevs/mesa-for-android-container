@@ -2653,7 +2653,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
             sob.SOBufferIndex = idx;
 
-            if (cmd_buffer->state.xfb_enabled && xfb->buffer) {
+            if (cmd_buffer->state.xfb_enabled && xfb->buffer && xfb->size != 0) {
                sob.SOBufferEnable = true;
                sob.MOCS = cmd_buffer->device->default_mocs,
                sob.StreamOffsetWriteEnable = false;

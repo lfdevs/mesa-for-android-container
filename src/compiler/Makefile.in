@@ -318,6 +318,7 @@ am__objects_7 = nir/nir.lo nir/nir_builtin_builder.lo nir/nir_clone.lo \
 	nir/nir_linking_helpers.lo nir/nir_liveness.lo \
 	nir/nir_loop_analyze.lo nir/nir_lower_alpha_test.lo \
 	nir/nir_lower_alu.lo nir/nir_lower_alu_to_scalar.lo \
+	nir/nir_lower_array_deref_of_vec.lo \
 	nir/nir_lower_atomics_to_ssbo.lo nir/nir_lower_bitmap.lo \
 	nir/nir_lower_bit_size.lo nir/nir_lower_bool_to_float.lo \
 	nir/nir_lower_bool_to_int32.lo \
@@ -607,6 +608,7 @@ am__depfiles_remade = ./$(DEPDIR)/blob.Plo ./$(DEPDIR)/glsl_types.Plo \
 	nir/$(DEPDIR)/nir_lower_alpha_test.Plo \
 	nir/$(DEPDIR)/nir_lower_alu.Plo \
 	nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo \
+	nir/$(DEPDIR)/nir_lower_array_deref_of_vec.Plo \
 	nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo \
 	nir/$(DEPDIR)/nir_lower_bit_size.Plo \
 	nir/$(DEPDIR)/nir_lower_bitmap.Plo \
@@ -1541,6 +1543,7 @@ NIR_FILES = \
 	nir/nir_lower_alpha_test.c \
 	nir/nir_lower_alu.c \
 	nir/nir_lower_alu_to_scalar.c \
+	nir/nir_lower_array_deref_of_vec.c \
 	nir/nir_lower_atomics_to_ssbo.c \
 	nir/nir_lower_bitmap.c \
 	nir/nir_lower_bit_size.c \
@@ -2270,6 +2273,8 @@ nir/nir_lower_alu.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_alu_to_scalar.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
+nir/nir_lower_array_deref_of_vec.lo: nir/$(am__dirstamp) \
+	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_atomics_to_ssbo.lo: nir/$(am__dirstamp) \
 	nir/$(DEPDIR)/$(am__dirstamp)
 nir/nir_lower_bitmap.lo: nir/$(am__dirstamp) \
@@ -2734,6 +2739,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_alpha_test.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_alu.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_array_deref_of_vec.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bit_size.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@nir/$(DEPDIR)/nir_lower_bitmap.Plo@am__quote@ # am--include-marker
@@ -3508,6 +3514,7 @@ distclean: distclean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_alpha_test.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_alu.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_array_deref_of_vec.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bit_size.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bitmap.Plo
@@ -3808,6 +3815,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f nir/$(DEPDIR)/nir_lower_alpha_test.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_alu.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_alu_to_scalar.Plo
+	-rm -f nir/$(DEPDIR)/nir_lower_array_deref_of_vec.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_atomics_to_ssbo.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bit_size.Plo
 	-rm -f nir/$(DEPDIR)/nir_lower_bitmap.Plo

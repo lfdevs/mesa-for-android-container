@@ -1,3 +1,9 @@
+mesa (19.0.1-1) experimental; urgency=medium
+
+  * New upstream release.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 28 Mar 2019 15:38:58 +0200
+
 mesa (19.0.0-1) experimental; urgency=medium
 
   * New upstream release.

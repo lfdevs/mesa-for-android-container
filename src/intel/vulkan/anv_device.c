@@ -41,6 +41,7 @@
 #include "git_sha1.h"
 #include "vk_util.h"
 #include "common/gen_defines.h"
+#include "compiler/glsl_types.h"
 
 #include "genxml/gen7_pack.h"
 
@@ -703,6 +704,7 @@ void anv_DestroyInstance(
 
    vk_debug_report_instance_destroy(&instance->debug_report_callbacks);
 
+   _mesa_glsl_release_types();
    _mesa_locale_fini();
 
    vk_free(&instance->alloc, instance);

@@ -295,52 +295,54 @@ TESTS = $(am__EXEEXT_1) $(check_PROGRAMS) $(am__EXEEXT_3)
 @HAVE_PLATFORM_ANDROID_TRUE@am__append_2 = $(ANDROID_LIBS)
 @HAVE_PLATFORM_ANDROID_TRUE@am__append_3 = $(ANDROID_CFLAGS)
 @HAVE_PLATFORM_ANDROID_TRUE@am__append_4 = $(ANDROID_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@am__append_5 = $(top_srcdir)/include/vulkan/vk_platform.h \
+@SSE41_SUPPORTED_TRUE@am__append_5 = libisl_tiled_memcpy_sse41.la
+@SSE41_SUPPORTED_TRUE@am__append_6 = libisl_tiled_memcpy_sse41.la
+@HAVE_INTEL_VULKAN_TRUE@am__append_7 = $(top_srcdir)/include/vulkan/vk_platform.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan_core.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan_wayland.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan_xcb.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan_xlib.h \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_srcdir)/include/vulkan/vulkan.h \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/tests/state_pool_test_helper.h
-@HAVE_INTEL_VULKAN_TRUE@am__append_6 = vulkan/libvulkan_intel.la
-@HAVE_INTEL_VULKAN_TRUE@am__append_7 = vulkan/libvulkan-test.la
-@HAVE_INTEL_VULKAN_TRUE@am__append_8 = $(VULKAN_PER_GEN_LIBS) \
+@HAVE_INTEL_VULKAN_TRUE@am__append_8 = vulkan/libvulkan_intel.la
+@HAVE_INTEL_VULKAN_TRUE@am__append_9 = vulkan/libvulkan-test.la
+@HAVE_INTEL_VULKAN_TRUE@am__append_10 = $(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libvulkan_common.la
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_9 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_11 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@    $(ANDROID_CPPFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@    -DVK_USE_PLATFORM_ANDROID_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_10 = $(ANDROID_CFLAGS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_11 = $(ANDROID_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_12 = $(VULKAN_ANDROID_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_FALSE@am__append_13 = $(VULKAN_NON_ANDROID_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_14 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_12 = $(ANDROID_CFLAGS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_13 = $(ANDROID_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_TRUE@am__append_14 = $(VULKAN_ANDROID_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_ANDROID_FALSE@am__append_15 = $(VULKAN_NON_ANDROID_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_16 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	$(XCB_DRI3_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XCB_KHR \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@	-DVK_USE_PLATFORM_XLIB_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_15 = $(VULKAN_WSI_X11_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_16 = $(XCB_DRI3_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_17 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_17 = $(VULKAN_WSI_X11_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_X11_TRUE@am__append_18 = $(XCB_DRI3_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_19 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	$(WAYLAND_CLIENT_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@	-DVK_USE_PLATFORM_WAYLAND_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_18 = $(VULKAN_WSI_WAYLAND_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_19 = $(WAYLAND_CLIENT_LIBS)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_DRM_TRUE@am__append_20 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_20 = $(VULKAN_WSI_WAYLAND_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_WAYLAND_TRUE@am__append_21 = $(WAYLAND_CLIENT_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_DRM_TRUE@am__append_22 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_DRM_TRUE@	-DVK_USE_PLATFORM_DISPLAY_KHR
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_DRM_TRUE@am__append_21 = $(VULKAN_WSI_DISPLAY_FILES)
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@am__append_22 = \
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_PLATFORM_DRM_TRUE@am__append_23 = $(VULKAN_WSI_DISPLAY_FILES)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@am__append_24 = \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@	-DVK_USE_PLATFORM_XLIB_XRANDR_EXT \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@	$(XCB_RANDR_CFLAGS) \
 @HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@	$(XLIB_RANDR_CFLAGS)
 
-@HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@am__append_23 = $(XCB_RANDR_LIBS)
+@HAVE_INTEL_VULKAN_TRUE@@HAVE_XLIB_LEASE_TRUE@am__append_25 = $(XCB_RANDR_LIBS)
 # The following is used for development purposes, by setting VK_ICD_FILENAMES.
-@HAVE_INTEL_VULKAN_TRUE@am__append_24 = vulkan/dev_icd.json
-@HAVE_INTEL_VULKAN_TRUE@am__append_25 = $(VULKAN_TESTS)
-@HAVE_INTEL_VULKAN_TRUE@am__append_26 = $(VULKAN_TESTS)
+@HAVE_INTEL_VULKAN_TRUE@am__append_26 = vulkan/dev_icd.json
+@HAVE_INTEL_VULKAN_TRUE@am__append_27 = $(VULKAN_TESTS)
+@HAVE_INTEL_VULKAN_TRUE@am__append_28 = $(VULKAN_TESTS)
 subdir = src/intel
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_check_compile_flag.m4 \
@@ -614,7 +616,7 @@ am__DEPENDENCIES_3 = isl/libisl-gen4.la isl/libisl-gen5.la \
 	isl/libisl-gen8.la isl/libisl-gen9.la isl/libisl-gen10.la \
 	isl/libisl-gen11.la
 isl_libisl_la_DEPENDENCIES = $(am__DEPENDENCIES_3) \
-	libisl_tiled_memcpy.la libisl_tiled_memcpy_sse41.la
+	libisl_tiled_memcpy.la $(am__append_5)
 am__objects_15 = isl/isl.lo isl/isl_drm.lo isl/isl_format.lo \
 	isl/isl_storage_image.lo
 am__objects_16 = isl/isl_format_layout.lo
@@ -639,6 +641,7 @@ libisl_tiled_memcpy_sse41_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
 	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
 	$(libisl_tiled_memcpy_sse41_la_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
+@SSE41_SUPPORTED_TRUE@am_libisl_tiled_memcpy_sse41_la_rpath =
 vulkan_libanv_gen10_la_LIBADD =
 am__vulkan_libanv_gen10_la_SOURCES_DIST = vulkan/gen8_cmd_buffer.c \
 	vulkan/genX_blorp_exec.c vulkan/genX_cmd_buffer.c \
@@ -2273,14 +2276,14 @@ AM_CXXFLAGS = \
 
 MKDIR_GEN = $(AM_V_at)$(MKDIR_P) $(@D)
 PYTHON_GEN = $(AM_V_GEN)$(PYTHON) $(PYTHON_FLAGS)
-lib_LTLIBRARIES = $(am__append_6)
-check_LTLIBRARIES = $(am__append_7)
-noinst_DATA = $(am__append_24)
-noinst_HEADERS = $(am__append_5)
+lib_LTLIBRARIES = $(am__append_8)
+check_LTLIBRARIES = $(am__append_9)
+noinst_DATA = $(am__append_26)
+noinst_HEADERS = $(am__append_7)
 noinst_LTLIBRARIES = blorp/libblorp.la common/libintel_common.la \
 	compiler/libintel_compiler.la dev/libintel_dev.la \
 	$(ISL_GEN_LIBS) isl/libisl.la libisl_tiled_memcpy.la \
-	libisl_tiled_memcpy_sse41.la $(am__append_8)
+	$(am__append_6) $(am__append_10)
 BUILT_SOURCES = $(COMPILER_GENERATED_FILES) $(GENXML_GENERATED_FILES) \
 	$(ISL_GENERATED_FILES) $(VULKAN_GENERATED_FILES)
 CLEANFILES = $(VULKAN_GENERATED_FILES) vulkan/dev_icd.json \
@@ -2415,10 +2418,8 @@ ISL_GEN_LIBS = \
 	isl/libisl-gen11.la                              \
 	$(NULL)
 
-isl_libisl_la_LIBADD = $(ISL_GEN_LIBS) \
-                       libisl_tiled_memcpy.la \
-                       libisl_tiled_memcpy_sse41.la
-
+isl_libisl_la_LIBADD = $(ISL_GEN_LIBS) libisl_tiled_memcpy.la \
+	$(am__append_5)
 isl_libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
 libisl_tiled_memcpy_la_SOURCES = $(ISL_TILED_MEMCPY_FILES)
 libisl_tiled_memcpy_la_CFLAGS = $(AM_CFLAGS)
@@ -2538,7 +2539,7 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@	vulkan/libanv-gen11.la
 
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_CFLAGS = $(AM_CFLAGS) -msse2 \
-@HAVE_INTEL_VULKAN_TRUE@	-mstackrealign $(am__append_10)
+@HAVE_INTEL_VULKAN_TRUE@	-mstackrealign $(am__append_12)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_CPPFLAGS =  \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/compiler \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/intel/compiler \
@@ -2549,9 +2550,9 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_builddir)/src/vulkan/util \
 @HAVE_INTEL_VULKAN_TRUE@	-I$(top_srcdir)/src/vulkan/util \
 @HAVE_INTEL_VULKAN_TRUE@	$(AM_CPPFLAGS) $(LIBDRM_CFLAGS) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_9) $(am__append_14) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_17) $(am__append_20) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_22)
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_11) $(am__append_16) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_19) $(am__append_22) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_24)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_CFLAGS = $(VULKAN_CFLAGS)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=70
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen7_la_SOURCES = $(VULKAN_GEN7_FILES)
@@ -2571,9 +2572,9 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen11_la_CPPFLAGS = $(VULKAN_CPPFLAGS) -DGEN_VERSIONx10=110
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libanv_gen11_la_SOURCES = $(VULKAN_GEN11_FILES)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_SOURCES = $(VULKAN_GENERATED_FILES) \
-@HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_FILES) $(am__append_12) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_13) $(am__append_15) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_18) $(am__append_21)
+@HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_FILES) $(am__append_14) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_15) $(am__append_17) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_20) $(am__append_23)
 @HAVE_INTEL_VULKAN_TRUE@VULKAN_LIB_DEPS = vulkan/libvulkan_common.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(VULKAN_PER_GEN_LIBS) \
 @HAVE_INTEL_VULKAN_TRUE@	compiler/libintel_compiler.la \
@@ -2585,9 +2586,9 @@ vulkan_api_xml = $(top_srcdir)/src/vulkan/registry/vk.xml
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/compiler/nir/libnir.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(top_builddir)/src/util/libmesautil.la \
 @HAVE_INTEL_VULKAN_TRUE@	$(LIBDRM_LIBS) $(PTHREAD_LIBS) \
-@HAVE_INTEL_VULKAN_TRUE@	$(DLOPEN_LIBS) -lm $(am__append_11) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_16) $(am__append_19) \
-@HAVE_INTEL_VULKAN_TRUE@	$(am__append_23)
+@HAVE_INTEL_VULKAN_TRUE@	$(DLOPEN_LIBS) -lm $(am__append_13) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_18) $(am__append_21) \
+@HAVE_INTEL_VULKAN_TRUE@	$(am__append_25)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_SOURCES = $(VULKAN_SOURCES)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CFLAGS = $(VULKAN_CFLAGS)
 @HAVE_INTEL_VULKAN_TRUE@vulkan_libvulkan_common_la_CPPFLAGS = $(VULKAN_CPPFLAGS)
@@ -3047,7 +3048,7 @@ isl/libisl_tiled_memcpy_sse41_la-isl_tiled_memcpy_sse41.lo:  \
 	isl/$(am__dirstamp) isl/$(DEPDIR)/$(am__dirstamp)
 
 libisl_tiled_memcpy_sse41.la: $(libisl_tiled_memcpy_sse41_la_OBJECTS) $(libisl_tiled_memcpy_sse41_la_DEPENDENCIES) $(EXTRA_libisl_tiled_memcpy_sse41_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(libisl_tiled_memcpy_sse41_la_LINK)  $(libisl_tiled_memcpy_sse41_la_OBJECTS) $(libisl_tiled_memcpy_sse41_la_LIBADD) $(LIBS)
+	$(AM_V_CCLD)$(libisl_tiled_memcpy_sse41_la_LINK) $(am_libisl_tiled_memcpy_sse41_la_rpath) $(libisl_tiled_memcpy_sse41_la_OBJECTS) $(libisl_tiled_memcpy_sse41_la_LIBADD) $(LIBS)
 vulkan/$(am__dirstamp):
 	@$(MKDIR_P) vulkan
 	@: > vulkan/$(am__dirstamp)

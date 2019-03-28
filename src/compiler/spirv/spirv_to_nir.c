@@ -3045,12 +3045,7 @@ nir_ssa_def *
 vtn_vector_extract_dynamic(struct vtn_builder *b, nir_ssa_def *src,
                            nir_ssa_def *index)
 {
-   nir_ssa_def *dest = vtn_vector_extract(b, src, 0);
-   for (unsigned i = 1; i < src->num_components; i++)
-      dest = nir_bcsel(&b->nb, nir_ieq_imm(&b->nb, index, i),
-                       vtn_vector_extract(b, src, i), dest);
-
-   return dest;
+   return nir_vector_extract(&b->nb, src, nir_i2i(&b->nb, index, 32));
 }
 
 nir_ssa_def *

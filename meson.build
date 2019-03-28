@@ -608,7 +608,7 @@ with_gallium_xa = _xa != 'false'
 
 d3d_drivers_path = get_option('d3d-drivers-path')
 if d3d_drivers_path == ''
-  d3d_drivers_path = join_paths(get_option('libdir'), 'd3d')
+  d3d_drivers_path = join_paths(get_option('prefix'), get_option('libdir'), 'd3d')
 endif
 
 with_gallium_st_nine =  get_option('gallium-nine')

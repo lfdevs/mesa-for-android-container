@@ -231,6 +231,9 @@ _mesa_gl_vdebug(struct gl_context *ctx,
    _mesa_debug_get_id(id);
 
    len = _mesa_vsnprintf(s, MAX_DEBUG_MESSAGE_LENGTH, fmtString, args);
+   if (len >= MAX_DEBUG_MESSAGE_LENGTH)
+      /* message was truncated */
+      len = MAX_DEBUG_MESSAGE_LENGTH - 1;
 
    _mesa_log_msg(ctx, source, type, *id, severity, len, s);
 }

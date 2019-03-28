@@ -229,6 +229,7 @@ NIR_FILES = \
 	nir/nir_lower_alpha_test.c \
 	nir/nir_lower_alu.c \
 	nir/nir_lower_alu_to_scalar.c \
+	nir/nir_lower_array_deref_of_vec.c \
 	nir/nir_lower_atomics_to_ssbo.c \
 	nir/nir_lower_bitmap.c \
 	nir/nir_lower_bit_size.c \

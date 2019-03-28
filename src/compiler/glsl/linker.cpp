@@ -1090,7 +1090,7 @@ cross_validate_globals(struct gl_context *ctx, struct gl_shader_program *prog,
             }
          }
 
-         if (existing->data.invariant != var->data.invariant) {
+         if (existing->data.explicit_invariant != var->data.explicit_invariant) {
             linker_error(prog, "declarations for %s `%s' have "
                          "mismatching invariant qualifiers\n",
                          mode_string(var), var->name);

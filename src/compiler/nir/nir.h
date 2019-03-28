@@ -2910,6 +2910,16 @@ void nir_fixup_deref_modes(nir_shader *shader);
 
 bool nir_lower_global_vars_to_local(nir_shader *shader);
 
+typedef enum {
+   nir_lower_direct_array_deref_of_vec_load     = (1 << 0),
+   nir_lower_indirect_array_deref_of_vec_load   = (1 << 1),
+   nir_lower_direct_array_deref_of_vec_store    = (1 << 2),
+   nir_lower_indirect_array_deref_of_vec_store  = (1 << 3),
+} nir_lower_array_deref_of_vec_options;
+
+bool nir_lower_array_deref_of_vec(nir_shader *shader, nir_variable_mode modes,
+                                  nir_lower_array_deref_of_vec_options options);
+
 bool nir_lower_indirect_derefs(nir_shader *shader, nir_variable_mode modes);
 
 bool nir_lower_locals_to_regs(nir_shader *shader);

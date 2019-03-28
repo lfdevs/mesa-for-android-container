@@ -33,12 +33,15 @@ ISL_GEN_LIBS =                                           \
 
 noinst_LTLIBRARIES += $(ISL_GEN_LIBS) \
                       isl/libisl.la \
-                      libisl_tiled_memcpy.la \
-                      libisl_tiled_memcpy_sse41.la
+                      libisl_tiled_memcpy.la
 
 isl_libisl_la_LIBADD = $(ISL_GEN_LIBS) \
-                       libisl_tiled_memcpy.la \
-                       libisl_tiled_memcpy_sse41.la
+                       libisl_tiled_memcpy.la
+
+if SSE41_SUPPORTED
+isl_libisl_la_LIBADD += libisl_tiled_memcpy_sse41.la
+noinst_LTLIBRARIES += libisl_tiled_memcpy_sse41.la
+endif
 
 isl_libisl_la_SOURCES = $(ISL_FILES) $(ISL_GENERATED_FILES)
 

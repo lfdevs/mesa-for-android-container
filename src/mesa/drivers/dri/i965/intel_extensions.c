@@ -253,7 +253,6 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.EXT_shader_samples_identical = true;
       ctx->Extensions.OES_primitive_bounding_box = true;
       ctx->Extensions.OES_texture_buffer = true;
-      ctx->Extensions.ARB_fragment_shader_interlock = true;
 
       if (can_do_pipelined_register_writes(brw->screen)) {
          ctx->Extensions.ARB_draw_indirect = true;
@@ -318,6 +317,30 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.KHR_blend_equation_advanced_coherent = true;
       ctx->Extensions.KHR_texture_compression_astc_ldr = true;
       ctx->Extensions.KHR_texture_compression_astc_sliced_3d = true;
+
+      /*
+       * From the Skylake PRM Vol. 7 (Memory Fence Message, page 221):
+       *  "A memory fence message issued by a thread causes further messages
+       *   issued by the thread to be blocked until all previous data port
+       *   messages have completed, or the results can be globally observed from
+       *   the point of view of other threads in the system."
+       *
+       * From the Haswell PRM Vol. 7 (Memory Fence, page 256):
+       *  "A memory fence message issued by a thread causes further messages
+       *   issued by the thread to be blocked until all previous messages issued
+       *   by the thread to that data port (data cache or render cache) have
+       *   been globally observed from the point of view of other threads in the
+       *   system."
+       *
+       * Summarized: For ARB_fragment_shader_interlock to work, we need to
+       * ensure memory access ordering for all messages to the dataport from
+       * all threads. Memory fence messages prior to SKL only provide memory
+       * access ordering for messages from the same thread, so we can only
+       * support the feature from Gen9 onwards.
+       *
+       */
+
+      ctx->Extensions.ARB_fragment_shader_interlock = true;
    }
 
    if (gen_device_info_is_9lp(devinfo))

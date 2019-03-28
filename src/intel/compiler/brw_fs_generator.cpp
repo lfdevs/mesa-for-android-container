@@ -2100,6 +2100,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width)
          break;
 
       case SHADER_OPCODE_INTERLOCK:
+         assert(devinfo->gen >= 9);
          /* The interlock is basically a memory fence issued via sendc */
          brw_memory_fence(p, dst, BRW_OPCODE_SENDC);
          break;
