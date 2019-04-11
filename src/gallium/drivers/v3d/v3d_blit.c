@@ -491,7 +491,8 @@ v3d_tfu_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         if ((info->mask & PIPE_MASK_RGBA) == 0)
                 return false;
 
-        if (info->dst.box.x != 0 ||
+        if (info->scissor_enable ||
+            info->dst.box.x != 0 ||
             info->dst.box.y != 0 ||
             info->dst.box.width != dst_width ||
             info->dst.box.height != dst_height ||

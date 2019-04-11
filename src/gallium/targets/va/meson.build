@@ -49,6 +49,7 @@ libva_gallium = shared_library(
     dep_libdrm, dep_thread, driver_r600, driver_radeonsi, driver_nouveau,
   ],
   link_depends : va_link_depends,
+  # Will be deleted during installation, see install_megadrivers.py
   install : true,
   install_dir : va_drivers_path,
 )

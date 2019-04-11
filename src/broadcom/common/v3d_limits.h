@@ -32,7 +32,8 @@
  */
 #define V3D_MAX_TEXTURE_SAMPLERS 16
 
-#define V3D_MAX_MIP_LEVELS 12
+/* The HW can do 16384 (15), but we run into hangs when we expose that. */
+#define V3D_MAX_MIP_LEVELS 13
 
 #define V3D_MAX_SAMPLES 4
 

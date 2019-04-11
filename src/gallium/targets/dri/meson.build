@@ -60,6 +60,9 @@ libgallium_dri = shared_library(
     driver_tegra, driver_i915, driver_svga, driver_virgl,
     driver_swr,
   ],
+  # Will be deleted during installation, see install_megadrivers.py
+  install : true,
+  install_dir : dri_drivers_path,
 )
 
 foreach d : [[with_gallium_kmsro, 'pl111_dri.so'],

@@ -846,6 +846,9 @@ v3d_setup_texture_shader_state(struct V3DX(TEXTURE_SHADER_STATE) *tex,
             prsc->target == PIPE_TEXTURE_1D_ARRAY) {
                 tex->image_height = tex->image_width >> 14;
         }
+
+        tex->image_width &= (1 << 14) - 1;
+        tex->image_height &= (1 << 14) - 1;
 #endif
 
         if (prsc->target == PIPE_TEXTURE_3D) {

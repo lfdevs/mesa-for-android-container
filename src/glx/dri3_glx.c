@@ -642,7 +642,6 @@ dri3_set_swap_interval(__GLXDRIdrawable *pdraw, int interval)
       break;
    }
 
-   priv->swap_interval = interval;
    loader_dri3_set_swap_interval(&priv->loader_drawable, interval);
 
    return 0;
@@ -659,7 +658,7 @@ dri3_get_swap_interval(__GLXDRIdrawable *pdraw)
 
    struct dri3_drawable *priv =  (struct dri3_drawable *) pdraw;
 
-  return priv->swap_interval;
+  return priv->loader_drawable.swap_interval;
 }
 
 static void

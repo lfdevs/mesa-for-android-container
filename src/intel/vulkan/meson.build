@@ -203,7 +203,7 @@ libvulkan_intel = shared_library(
     libvulkan_util, libvulkan_wsi, libmesa_util,
   ],
   dependencies : [
-    dep_thread, dep_dl, dep_m, anv_deps, idep_nir,
+    dep_thread, dep_dl, dep_m, anv_deps, idep_nir, idep_genxml,
   ],
   c_args : anv_flags,
   link_args : ['-Wl,--build-id=sha1', ld_args_bsymbolic, ld_args_gc_sections],

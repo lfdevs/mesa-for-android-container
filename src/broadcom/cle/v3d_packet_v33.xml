@@ -820,8 +820,8 @@
 
   <packet code="120" name="Tile Binning Mode Cfg" min_ver="41">
 
-    <field name="Height (in pixels)" size="12" start="48" type="uint" minus_one="true"/>
-    <field name="Width (in pixels)" size="12" start="32" type="uint" minus_one="true"/>
+    <field name="Height (in pixels)" size="16" start="48" type="uint" minus_one="true"/>
+    <field name="Width (in pixels)" size="16" start="32" type="uint" minus_one="true"/>
 
     <field name="Double-buffer in non-ms mode" size="1" start="15" type="bool"/>
     <field name="Multisample Mode (4x)" size="1" start="14" type="bool"/>

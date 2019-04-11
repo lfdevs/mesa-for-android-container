@@ -27,6 +27,19 @@
 
 #include "va_private.h"
 
+const int reverse_inverse_zscan[] =
+{
+   /* Reverse inverse z scan pattern */
+    0,  2,  3,  9, 10, 20, 21, 35,
+    1,  4,  8, 11, 19, 22, 34, 36,
+    5,  7, 12, 18, 23, 33, 37, 48,
+    6, 13, 17, 24, 32, 38, 47, 49,
+   14, 16, 25, 31, 39, 46, 50, 57,
+   15, 26, 30, 40, 45, 51, 56, 58,
+   27, 29, 41, 44, 52, 55, 59, 62,
+   28, 42, 43, 53, 54, 60, 61, 63,
+};
+
 void vlVaHandlePictureParameterBufferMPEG12(vlVaDriver *drv, vlVaContext *context, vlVaBuffer *buf)
 {
    VAPictureParameterBufferMPEG2 *mpeg2 = buf->data;
@@ -66,16 +79,29 @@ void vlVaHandlePictureParameterBufferMPEG12(vlVaDriver *drv, vlVaContext *contex
 void vlVaHandleIQMatrixBufferMPEG12(vlVaContext *context, vlVaBuffer *buf)
 {
    VAIQMatrixBufferMPEG2 *mpeg2 = buf->data;
+   static uint8_t temp_intra_matrix[64];
+   static uint8_t temp_nonintra_matrix[64];
 
    assert(buf->size >= sizeof(VAIQMatrixBufferMPEG2) && buf->num_elements == 1);
-   if (mpeg2->load_intra_quantiser_matrix)
-      context->desc.mpeg12.intra_matrix = mpeg2->intra_quantiser_matrix;
-   else
+   if (mpeg2->load_intra_quantiser_matrix) {
+      /* The quantiser matrix that VAAPI provides has been applied
+         with inverse z-scan. However, what we expect in MPEG2
+         picture description is the original order. Therefore,
+         we need to reverse it back to its original order.
+      */
+      for (int i = 0; i < 64; i++)
+         temp_intra_matrix[i] =
+            mpeg2->intra_quantiser_matrix[reverse_inverse_zscan[i]];
+      context->desc.mpeg12.intra_matrix = temp_intra_matrix;
+   } else
       context->desc.mpeg12.intra_matrix = NULL;
 
-   if (mpeg2->load_non_intra_quantiser_matrix)
-      context->desc.mpeg12.non_intra_matrix = mpeg2->non_intra_quantiser_matrix;
-   else
+   if (mpeg2->load_non_intra_quantiser_matrix) {
+      for (int i = 0; i < 64; i++)
+         temp_nonintra_matrix[i] =
+            mpeg2->non_intra_quantiser_matrix[reverse_inverse_zscan[i]];
+      context->desc.mpeg12.non_intra_matrix = temp_nonintra_matrix;
+   } else
       context->desc.mpeg12.non_intra_matrix = NULL;
 }
 

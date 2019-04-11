@@ -9,7 +9,7 @@ Build-Depends:
  meson (>= 0.45),
  quilt (>= 0.63-8.2~),
  pkg-config,
- libdrm-dev (>= 2.4.95) [!hurd-any],
+ libdrm-dev (>= 2.4.97) [!hurd-any],
  libx11-dev,
  libxxf86vm-dev,
  libexpat1-dev,

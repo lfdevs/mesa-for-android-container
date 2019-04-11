@@ -2956,13 +2956,13 @@ V3D41_TILE_BINNING_MODE_CFG_pack(__gen_user_data *data, uint8_t * restrict cl,
 
    cl[ 3] = 0;
    cl[ 4] = 0;
-   cl[ 5] = __gen_uint(values->width_in_pixels - 1, 0, 11);
+   cl[ 5] = __gen_uint(values->width_in_pixels - 1, 0, 15);
 
-   cl[ 6] = __gen_uint(values->width_in_pixels - 1, 0, 11) >> 8;
+   cl[ 6] = __gen_uint(values->width_in_pixels - 1, 0, 15) >> 8;
 
-   cl[ 7] = __gen_uint(values->height_in_pixels - 1, 0, 11);
+   cl[ 7] = __gen_uint(values->height_in_pixels - 1, 0, 15);
 
-   cl[ 8] = __gen_uint(values->height_in_pixels - 1, 0, 11) >> 8;
+   cl[ 8] = __gen_uint(values->height_in_pixels - 1, 0, 15) >> 8;
 
 }
 
@@ -2973,8 +2973,8 @@ V3D41_TILE_BINNING_MODE_CFG_unpack(const uint8_t * restrict cl,
                                    struct V3D41_TILE_BINNING_MODE_CFG * restrict values)
 {
    values->opcode = __gen_unpack_uint(cl, 0, 7);
-   values->height_in_pixels = __gen_unpack_uint(cl, 56, 67) + 1;
-   values->width_in_pixels = __gen_unpack_uint(cl, 40, 51) + 1;
+   values->height_in_pixels = __gen_unpack_uint(cl, 56, 71) + 1;
+   values->width_in_pixels = __gen_unpack_uint(cl, 40, 55) + 1;
    values->double_buffer_in_non_ms_mode = __gen_unpack_uint(cl, 23, 23);
    values->multisample_mode_4x = __gen_unpack_uint(cl, 22, 22);
    values->maximum_bpp_of_all_render_targets = __gen_unpack_uint(cl, 20, 21);

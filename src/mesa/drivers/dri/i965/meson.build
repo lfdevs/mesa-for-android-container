@@ -187,7 +187,7 @@ libi965 = static_library(
     i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
     libblorp
   ],
-  dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
+  dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml],
 )
 
 dri_drivers += libi965

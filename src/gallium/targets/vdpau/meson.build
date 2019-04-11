@@ -55,6 +55,9 @@ libvdpau_gallium = shared_library(
   ],
   link_depends : vdpau_link_depends,
   soversion : '@0@.@1@.0'.format(VDPAU_MAJOR, VDPAU_MINOR),
+  # Will be deleted during installation, see install_megadrivers.py
+  install : true,
+  install_dir : vdpau_drivers_path,
 )
 foreach d : [[with_gallium_r300, 'r300'],
              [with_gallium_r600, 'r600'],

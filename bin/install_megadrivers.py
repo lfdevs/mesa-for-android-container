@@ -49,7 +49,6 @@ def main():
         if os.path.lexists(to):
             os.unlink(to)
         os.makedirs(to)
-    shutil.copy(args.megadriver, master)
 
     for driver in args.drivers:
         abs_driver = os.path.join(to, driver)

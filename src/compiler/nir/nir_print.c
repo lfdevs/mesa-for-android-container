@@ -812,8 +812,8 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
          assert(dim < ARRAY_SIZE(dim_name) && dim_name[dim]);
          fprintf(fp, " image_dim=%s", dim_name[dim]);
       } else if (idx == NIR_INTRINSIC_IMAGE_ARRAY) {
-         bool array = nir_intrinsic_image_dim(instr);
-         fprintf(fp, " image_dim=%s", array ? "true" : "false");
+         bool array = nir_intrinsic_image_array(instr);
+         fprintf(fp, " image_array=%s", array ? "true" : "false");
       } else if (idx == NIR_INTRINSIC_DESC_TYPE) {
          VkDescriptorType desc_type = nir_intrinsic_desc_type(instr);
          fprintf(fp, " desc_type=%s", vulkan_descriptor_type_name(desc_type));

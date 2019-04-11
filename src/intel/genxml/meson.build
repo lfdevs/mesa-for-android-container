@@ -57,3 +57,5 @@ foreach f : gen_xml_files
     capture : true,
   )
 endforeach
+
+idep_genxml = declare_dependency(sources : [gen_xml_pack, genX_bits_h, genX_xml_h])

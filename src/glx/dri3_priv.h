@@ -117,7 +117,6 @@ struct dri3_context
 struct dri3_drawable {
    __GLXDRIdrawable base;
    struct loader_dri3_drawable loader_drawable;
-   int swap_interval;
 
    /* LIBGL_SHOW_FPS support */
    uint64_t previous_ust;

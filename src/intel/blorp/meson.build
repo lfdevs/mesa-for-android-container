@@ -33,5 +33,5 @@ libblorp = static_library(
   files_libblorp,
   include_directories : [inc_common, inc_intel],
   c_args : [c_vis_args, no_override_init_args],
-  dependencies : idep_nir_headers,
+  dependencies : [idep_nir_headers, idep_genxml],
 )
