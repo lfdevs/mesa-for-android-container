@@ -163,6 +163,18 @@ struct gen_l3_config;
 #define MAX_GEN8_IMAGES 8
 #define MAX_PUSH_DESCRIPTORS 32 /* Minimum requirement */
 
+/* From the Skylake PRM Vol. 7 "Binding Table Surface State Model":
+ *
+ *    "The surface state model is used when a Binding Table Index (specified
+ *    in the message descriptor) of less than 240 is specified. In this model,
+ *    the Binding Table Index is used to index into the binding table, and the
+ *    binding table entry contains a pointer to the SURFACE_STATE."
+ *
+ * Binding table values above 240 are used for various things in the hardware
+ * such as stateless, stateless with incoherent cache, SLM, and bindless.
+ */
+#define MAX_BINDING_TABLE_SIZE 240
+
 /* The kernel relocation API has a limitation of a 32-bit delta value
  * applied to the address before it is written which, in spite of it being
  * unsigned, is treated as signed .  Because of the way that this maps to

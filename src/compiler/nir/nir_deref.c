@@ -215,7 +215,7 @@ nir_build_deref_offset(nir_builder *b, nir_deref_instr *deref,
          unsigned field_offset =
             struct_type_get_field_offset(parent->type, size_align,
                                          (*p)->strct.index);
-         nir_iadd(b, offset, nir_imm_int(b, field_offset));
+         offset = nir_iadd(b, offset, nir_imm_int(b, field_offset));
       } else {
          unreachable("Unsupported deref type");
       }

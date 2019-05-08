@@ -1168,7 +1168,8 @@ unsigned si_get_flush_flags(struct si_context *sctx, enum si_coherency coher,
 			    enum si_cache_policy cache_policy);
 void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 		     uint64_t offset, uint64_t size, uint32_t *clear_value,
-		     uint32_t clear_value_size, enum si_coherency coher);
+		     uint32_t clear_value_size, enum si_coherency coher,
+		     bool force_cpdma);
 void si_copy_buffer(struct si_context *sctx,
 		    struct pipe_resource *dst, struct pipe_resource *src,
 		    uint64_t dst_offset, uint64_t src_offset, unsigned size);

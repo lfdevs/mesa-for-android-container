@@ -46,7 +46,7 @@
 
 
 #define VIRGL_DRM_VERSION(major, minor) ((major) << 16 | (minor))
-#define VIRGL_DRM_VERSION_FENCE_FD      VIRGL_DRM_VERSION(1, 0)
+#define VIRGL_DRM_VERSION_FENCE_FD      VIRGL_DRM_VERSION(0, 1)
 
 
 static inline boolean can_cache_resource(struct virgl_hw_res *res)
@@ -870,7 +870,7 @@ static int virgl_drm_get_version(int fd)
 	else if (version->version_major != 0)
 		ret = -EINVAL;
 	else
-		ret = version->version_minor;
+		ret = VIRGL_DRM_VERSION(0, version->version_minor);
 
 	drmFreeVersion(version);
 

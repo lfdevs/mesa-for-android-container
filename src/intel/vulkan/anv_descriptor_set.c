@@ -73,10 +73,10 @@ void anv_GetDescriptorSetLayoutSupport(
 
    bool supported = true;
    for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
-      /* Our maximum binding table size is 250 and we need to reserve 8 for
-       * render targets.  240 is a nice round number.
+      /* Our maximum binding table size is 240 and we need to reserve 8 for
+       * render targets.
        */
-      if (surface_count[s] >= 240)
+      if (surface_count[s] >= MAX_BINDING_TABLE_SIZE - MAX_RTS)
          supported = false;
    }
 

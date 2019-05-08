@@ -1108,7 +1108,7 @@ get_indirect_index(struct lp_build_tgsi_soa_context *bld,
     * larger than the declared size but smaller than the buffer size.
     */
    if (reg_file != TGSI_FILE_CONSTANT) {
-      assert(index_limit > 0);
+      assert(index_limit >= 0);
       max_index = lp_build_const_int_vec(bld->bld_base.base.gallivm,
                                          uint_bld->type, index_limit);
 

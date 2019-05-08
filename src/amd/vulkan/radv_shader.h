@@ -66,6 +66,9 @@ struct radv_vs_variant_key {
 	uint32_t instance_rate_inputs;
 	uint32_t instance_rate_divisors[MAX_VERTEX_ATTRIBS];
 
+	/* Mask of vertex attributes that are provided by the pipeline. */
+	uint32_t vertex_attribute_provided;
+
 	/* For 2_10_10_10 formats the alpha is handled as unsigned by pre-vega HW.
 	 * so we may need to fix it up. */
 	uint64_t alpha_adjust;

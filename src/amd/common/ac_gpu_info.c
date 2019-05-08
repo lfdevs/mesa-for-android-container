@@ -367,9 +367,7 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	info->has_syncobj_wait_for_submit = info->has_syncobj && info->drm_minor >= 20;
 	info->has_fence_to_handle = info->has_syncobj && info->drm_minor >= 21;
 	info->has_ctx_priority = info->drm_minor >= 22;
-	/* TODO: Enable this once the kernel handles it efficiently. */
-	info->has_local_buffers = info->drm_minor >= 20 &&
-				  !info->has_dedicated_vram;
+	info->has_local_buffers = info->drm_minor >= 20;
 	info->kernel_flushes_hdp_before_ib = true;
 	info->htile_cmask_support_1d_tiling = true;
 	info->si_TA_CS_BC_BASE_ADDR_allowed = true;

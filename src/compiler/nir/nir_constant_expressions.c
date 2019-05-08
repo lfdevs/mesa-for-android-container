@@ -4246,12 +4246,21 @@ dst.x = dst.y = 0.0;
 float absX = fabs(src0.x);
 float absY = fabs(src0.y);
 float absZ = fabs(src0.z);
-if (src0.x >= 0 && absX >= absY && absX >= absZ) { dst.x = -src0.y; dst.y = -src0.z; }
-if (src0.x < 0 && absX >= absY && absX >= absZ) { dst.x = -src0.y; dst.y = src0.z; }
-if (src0.y >= 0 && absY >= absX && absY >= absZ) { dst.x = src0.z; dst.y = src0.x; }
-if (src0.y < 0 && absY >= absX && absY >= absZ) { dst.x = -src0.z; dst.y = src0.x; }
-if (src0.z >= 0 && absZ >= absX && absZ >= absY) { dst.x = -src0.y; dst.y = src0.x; }
-if (src0.z < 0 && absZ >= absX && absZ >= absY) { dst.x = -src0.y; dst.y = -src0.x; }
+
+float ma = 0.0;
+if (absX >= absY && absX >= absZ) { ma = 2 * src0.x; }
+if (absY >= absX && absY >= absZ) { ma = 2 * src0.y; }
+if (absZ >= absX && absZ >= absY) { ma = 2 * src0.z; }
+
+if (src0.x >= 0 && absX >= absY && absX >= absZ) { dst.x = -src0.z; dst.y = -src0.y; }
+if (src0.x < 0 && absX >= absY && absX >= absZ) { dst.x = src0.z; dst.y = -src0.y; }
+if (src0.y >= 0 && absY >= absX && absY >= absZ) { dst.x = src0.x; dst.y = src0.z; }
+if (src0.y < 0 && absY >= absX && absY >= absZ) { dst.x = src0.x; dst.y = -src0.z; }
+if (src0.z >= 0 && absZ >= absX && absZ >= absY) { dst.x = src0.x; dst.y = -src0.y; }
+if (src0.z < 0 && absZ >= absX && absZ >= absY) { dst.x = -src0.x; dst.y = -src0.y; }
+
+dst.x = dst.x / ma + 0.5;
+dst.y = dst.y / ma + 0.5;
 
 
             _dst_val.f32[0] = dst.x;

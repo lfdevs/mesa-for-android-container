@@ -556,11 +556,11 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 
    llvm::SmallVector<std::string, 16> MAttrs;
 
-#if defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
-#if HAVE_LLVM >= 0x0400
-   /* llvm-3.7+ implements sys::getHostCPUFeatures for x86,
-    * which allows us to enable/disable code generation based
-    * on the results of cpuid.
+#if HAVE_LLVM >= 0x0400 && (defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64) || defined(PIPE_ARCH_ARM))
+   /* llvm-3.3+ implements sys::getHostCPUFeatures for Arm
+    * and llvm-3.7+ for x86, which allows us to enable/disable
+    * code generation based on the results of cpuid on these
+    * architectures.
     */
    llvm::StringMap<bool> features;
    llvm::sys::getHostCPUFeatures(features);
@@ -570,7 +570,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
         ++f) {
       MAttrs.push_back(((*f).second ? "+" : "-") + (*f).first().str());
    }
-#else
+#elif defined(PIPE_ARCH_X86) || defined(PIPE_ARCH_X86_64)
    /*
     * We need to unset attributes because sometimes LLVM mistakenly assumes
     * certain features are present given the processor name.
@@ -625,6 +625,12 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
    MAttrs.push_back("-avx512vl");
 #endif
 #endif
+#if defined(PIPE_ARCH_ARM)
+   if (!util_cpu_caps.has_neon) {
+      MAttrs.push_back("-neon");
+      MAttrs.push_back("-crypto");
+      MAttrs.push_back("-vfp2");
+   }
 #endif
 
 #if defined(PIPE_ARCH_PPC)

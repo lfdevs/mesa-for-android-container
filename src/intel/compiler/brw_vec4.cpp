@@ -1160,6 +1160,12 @@ vec4_instruction::can_reswizzle(const struct gen_device_info *devinfo,
    if (devinfo->gen == 6 && is_math() && swizzle != BRW_SWIZZLE_XYZW)
       return false;
 
+   /* If we write to the flag register changing the swizzle would change
+    * what channels are written to the flag register.
+    */
+   if (writes_flag())
+      return false;
+
    /* We can't swizzle implicit accumulator access.  We'd have to
     * reswizzle the producer of the accumulator value in addition
     * to the consumer (i.e. both MUL and MACH).  Just skip this.

@@ -31,6 +31,7 @@
 #include "shader_enums.h"
 #include "blob.h"
 #include "c11/threads.h"
+#include "util/macros.h"
 
 #ifdef __cplusplus
 #include "main/config.h"
@@ -112,6 +113,42 @@ static inline bool glsl_base_type_is_integer(enum glsl_base_type type)
           type == GLSL_TYPE_BOOL ||
           type == GLSL_TYPE_SAMPLER ||
           type == GLSL_TYPE_IMAGE;
+}
+
+static inline unsigned int
+glsl_base_type_get_bit_size(const enum glsl_base_type base_type)
+{
+   switch (base_type) {
+   case GLSL_TYPE_BOOL:
+      return 1;
+
+   case GLSL_TYPE_INT:
+   case GLSL_TYPE_UINT:
+   case GLSL_TYPE_FLOAT: /* TODO handle mediump */
+   case GLSL_TYPE_SUBROUTINE:
+      return 32;
+
+   case GLSL_TYPE_FLOAT16:
+   case GLSL_TYPE_UINT16:
+   case GLSL_TYPE_INT16:
+      return 16;
+
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8:
+      return 8;
+
+   case GLSL_TYPE_DOUBLE:
+   case GLSL_TYPE_INT64:
+   case GLSL_TYPE_UINT64:
+   case GLSL_TYPE_IMAGE:
+   case GLSL_TYPE_SAMPLER:
+      return 64;
+
+   default:
+      unreachable("unknown base type");
+   }
+
+   return 0;
 }
 
 enum glsl_sampler_dim {

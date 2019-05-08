@@ -2027,10 +2027,32 @@ handle_vs_input_decl(struct radv_shader_context *ctx,
 
 		t_list = ac_build_load_to_sgpr(&ctx->ac, t_list_ptr, t_offset);
 
-		input = ac_build_buffer_load_format(&ctx->ac, t_list,
-						    buffer_index,
-						    ctx->ac.i32_0,
-						    num_channels, false, true);
+		if (ctx->options->key.vs.vertex_attribute_provided & (1u << attrib_index)) {
+			input = ac_build_buffer_load_format(&ctx->ac, t_list,
+							    buffer_index,
+							    ctx->ac.i32_0,
+							    num_channels, false, true);
+		} else {
+			/* Per the Vulkan spec, it's invalid to consume vertex
+			 * attributes that are not provided by the pipeline but
+			 * some (invalid) apps appear to do that. Fill the
+			 * input array with (eg. (0, 0, 0, 1)) to workaround
+			 * the problem and to avoid possible GPU hangs.
+			 */
+			LLVMValueRef chan[4];
+
+			/* The input_usage mask might be 0 if input variables
+			 * are not removed by the compiler.
+			 */
+			num_channels = CLAMP(num_channels, 1, 4);
+
+			for (unsigned i = 0; i < num_channels; i++) {
+				chan[i] = i == 3 ? ctx->ac.f32_1 : ctx->ac.f32_0;
+				chan[i] = ac_to_float(&ctx->ac, chan[i]);
+			}
+
+			input = ac_build_gather_values(&ctx->ac, chan, num_channels);
+		}
 
 		input = ac_build_expand_to_vec4(&ctx->ac, input, num_channels);
 

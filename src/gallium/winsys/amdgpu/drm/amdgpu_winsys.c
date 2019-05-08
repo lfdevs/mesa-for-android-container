@@ -92,6 +92,10 @@ static bool do_winsys_init(struct amdgpu_winsys *ws,
    if (!ac_query_gpu_info(fd, ws->dev, &ws->info, &ws->amdinfo))
       goto fail;
 
+   /* TODO: Enable this once the kernel handles it efficiently. */
+   if (ws->info.has_dedicated_vram)
+      ws->info.has_local_buffers = false;
+
    handle_env_var_force_family(ws);
 
    ws->addrlib = amdgpu_addr_create(&ws->info, &ws->amdinfo, &ws->info.max_alignment);

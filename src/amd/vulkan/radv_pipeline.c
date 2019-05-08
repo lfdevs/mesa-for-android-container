@@ -1922,6 +1922,8 @@ radv_generate_graphics_pipeline_key(struct radv_pipeline *pipeline,
 			}
 			key.vertex_alpha_adjust |= adjust << (2 * location);
 		}
+
+		key.vertex_attribute_provided |= 1 << location;
 	}
 
 	if (pCreateInfo->pTessellationState)
@@ -1950,6 +1952,7 @@ radv_fill_shader_keys(struct radv_shader_variant_key *keys,
 {
 	keys[MESA_SHADER_VERTEX].vs.instance_rate_inputs = key->instance_rate_inputs;
 	keys[MESA_SHADER_VERTEX].vs.alpha_adjust = key->vertex_alpha_adjust;
+	keys[MESA_SHADER_VERTEX].vs.vertex_attribute_provided = key->vertex_attribute_provided;
 	for (unsigned i = 0; i < MAX_VERTEX_ATTRIBS; ++i)
 		keys[MESA_SHADER_VERTEX].vs.instance_rate_divisors[i] = key->instance_rate_divisors[i];
 

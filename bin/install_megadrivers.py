@@ -70,7 +70,14 @@ def main():
                 name, ext = os.path.splitext(name)
         finally:
             os.chdir(ret)
+
+    # Remove meson-created master .so and symlinks
     os.unlink(master)
+    name, ext = os.path.splitext(master)
+    while ext != '.so':
+        if os.path.lexists(name):
+            os.unlink(name)
+        name, ext = os.path.splitext(name)
 
 
 if __name__ == '__main__':

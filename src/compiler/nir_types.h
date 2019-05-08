@@ -97,37 +97,7 @@ unsigned glsl_atomic_size(const struct glsl_type *type);
 static inline unsigned
 glsl_get_bit_size(const struct glsl_type *type)
 {
-   switch (glsl_get_base_type(type)) {
-   case GLSL_TYPE_BOOL:
-      return 1;
-
-   case GLSL_TYPE_INT:
-   case GLSL_TYPE_UINT:
-   case GLSL_TYPE_FLOAT: /* TODO handle mediump */
-   case GLSL_TYPE_SUBROUTINE:
-      return 32;
-
-   case GLSL_TYPE_FLOAT16:
-   case GLSL_TYPE_UINT16:
-   case GLSL_TYPE_INT16:
-      return 16;
-
-   case GLSL_TYPE_UINT8:
-   case GLSL_TYPE_INT8:
-      return 8;
-
-   case GLSL_TYPE_DOUBLE:
-   case GLSL_TYPE_INT64:
-   case GLSL_TYPE_UINT64:
-   case GLSL_TYPE_IMAGE:
-   case GLSL_TYPE_SAMPLER:
-      return 64;
-
-   default:
-      unreachable("unknown base type");
-   }
-
-   return 0;
+   return glsl_base_type_get_bit_size(glsl_get_base_type(type));
 }
 
 bool glsl_type_is_16bit(const struct glsl_type *type);

@@ -1019,10 +1019,17 @@ static void visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 		LLVMValueRef in[3];
 		for (unsigned chan = 0; chan < 3; chan++)
 			in[chan] = ac_llvm_extract_elem(&ctx->ac, src[0], chan);
-		results[0] = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.cubetc",
+		results[0] = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.cubesc",
 						ctx->ac.f32, in, 3, AC_FUNC_ATTR_READNONE);
-		results[1] = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.cubesc",
+		results[1] = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.cubetc",
 						ctx->ac.f32, in, 3, AC_FUNC_ATTR_READNONE);
+		LLVMValueRef ma = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.cubema",
+						     ctx->ac.f32, in, 3, AC_FUNC_ATTR_READNONE);
+		results[0] = ac_build_fdiv(&ctx->ac, results[0], ma);
+		results[1] = ac_build_fdiv(&ctx->ac, results[1], ma);
+		LLVMValueRef offset = LLVMConstReal(ctx->ac.f32, 0.5);
+		results[0] = LLVMBuildFAdd(ctx->ac.builder, results[0], offset, "");
+		results[1] = LLVMBuildFAdd(ctx->ac.builder, results[1], offset, "");
 		result = ac_build_gather_values(&ctx->ac, results, 2);
 		break;
 	}
@@ -2532,7 +2539,10 @@ static LLVMValueRef visit_image_atomic(struct ac_nir_context *ctx,
 		params[param_count++] = LLVMBuildExtractElement(ctx->ac.builder, get_src(ctx, instr->src[1]),
 								ctx->ac.i32_0, ""); /* vindex */
 		params[param_count++] = ctx->ac.i32_0; /* voffset */
-		if (HAVE_LLVM >= 0x800) {
+		if (HAVE_LLVM >= 0x900) {
+			/* XXX: The new raw/struct atomic intrinsics are buggy
+			 * with LLVM 8, see r358579.
+			 */
 			params[param_count++] = ctx->ac.i32_0; /* soffset */
 			params[param_count++] = ctx->ac.i32_0;  /* slc */
 
