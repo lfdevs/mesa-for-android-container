@@ -45,7 +45,8 @@ namespace {
 device::device(clover::platform &platform, pipe_loader_device *ldev) :
    platform(platform), ldev(ldev) {
    pipe = pipe_loader_create_screen(ldev);
-   if (!pipe || !pipe->get_param(pipe, PIPE_CAP_COMPUTE)) {
+   if (!pipe || !pipe->get_param(pipe, PIPE_CAP_COMPUTE) ||
+       !supports_ir(PIPE_SHADER_IR_NATIVE)) {
       if (pipe)
          pipe->destroy(pipe);
       throw error(CL_INVALID_DEVICE);
@@ -244,15 +245,7 @@ device::vendor_name() const {
 
 enum pipe_shader_ir
 device::ir_format() const {
-   int supported_irs =
-      pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
-                             PIPE_SHADER_CAP_SUPPORTED_IRS);
-
-   if (supported_irs & (1 << PIPE_SHADER_IR_NATIVE)) {
-      return PIPE_SHADER_IR_NATIVE;
-   }
-
-   return PIPE_SHADER_IR_TGSI;
+   return PIPE_SHADER_IR_NATIVE;
 }
 
 std::string
@@ -279,4 +272,24 @@ device::device_clc_version() const {
    static const std::string device_clc_version =
          debug_get_option("CLOVER_DEVICE_CLC_VERSION_OVERRIDE", "1.1");
    return device_clc_version;
+}
+
+bool
+device::supports_ir(enum pipe_shader_ir ir) const {
+   return pipe->get_shader_param(pipe, PIPE_SHADER_COMPUTE,
+                                 PIPE_SHADER_CAP_SUPPORTED_IRS) & (1 << ir);
+}
+
+std::string
+device::supported_extensions() const {
+   return
+      "cl_khr_byte_addressable_store"
+      " cl_khr_global_int32_base_atomics"
+      " cl_khr_global_int32_extended_atomics"
+      " cl_khr_local_int32_base_atomics"
+      " cl_khr_local_int32_extended_atomics"
+      + std::string(has_int64_atomics() ? " cl_khr_int64_base_atomics" : "")
+      + std::string(has_int64_atomics() ? " cl_khr_int64_extended_atomics" : "")
+      + std::string(has_doubles() ? " cl_khr_fp64" : "")
+      + std::string(has_halves() ? " cl_khr_fp16" : "");
 }

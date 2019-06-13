@@ -689,6 +689,12 @@ get_programiv(struct gl_context *ctx, GLuint program, GLenum pname,
    case GL_DELETE_STATUS:
       *params = shProg->DeletePending;
       return;
+   case GL_COMPLETION_STATUS_ARB:
+      if (ctx->Driver.GetShaderProgramCompletionStatus)
+         *params = ctx->Driver.GetShaderProgramCompletionStatus(ctx, shProg);
+      else
+         *params = GL_TRUE;
+      return;
    case GL_LINK_STATUS:
       *params = shProg->data->LinkStatus ? GL_TRUE : GL_FALSE;
       return;
@@ -960,6 +966,10 @@ get_shaderiv(struct gl_context *ctx, GLuint name, GLenum pname, GLint *params)
    case GL_DELETE_STATUS:
       *params = shader->DeletePending;
       break;
+   case GL_COMPLETION_STATUS_ARB:
+      /* _mesa_glsl_compile_shader is not offloaded to other threads. */
+      *params = GL_TRUE;
+      return;
    case GL_COMPILE_STATUS:
       *params = shader->CompileStatus ? GL_TRUE : GL_FALSE;
       break;
@@ -1230,10 +1240,24 @@ link_program(struct gl_context *ctx, struct gl_shader_program *shProg,
    /* Capture .shader_test files. */
    const char *capture_path = _mesa_get_shader_capture_path();
    if (shProg->Name != 0 && shProg->Name != ~0 && capture_path != NULL) {
-      FILE *file;
-      char *filename = ralloc_asprintf(NULL, "%s/%u.shader_test",
+      /* Find an unused filename. */
+      char *filename = NULL;
+      for (unsigned i = 0;; i++) {
+         if (i) {
+            filename = ralloc_asprintf(NULL, "%s/%u-%u.shader_test",
+                                       capture_path, shProg->Name, i);
+         } else {
+            filename = ralloc_asprintf(NULL, "%s/%u.shader_test",
                                        capture_path, shProg->Name);
-      file = fopen(filename, "w");
+         }
+         FILE *file = fopen(filename, "r");
+         if (!file)
+            break;
+         fclose(file);
+         ralloc_free(filename);
+      }
+
+      FILE *file = fopen(filename, "w");
       if (file) {
          fprintf(file, "[require]\nGLSL%s >= %u.%02u\n",
                  shProg->IsES ? " ES" : "",

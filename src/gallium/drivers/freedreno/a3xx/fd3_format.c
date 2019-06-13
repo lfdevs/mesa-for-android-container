@@ -285,6 +285,10 @@ static struct fd3_format formats[PIPE_FORMAT_COUNT] = {
 	_T(LATC1_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
 	_T(LATC2_UNORM, 8_8_8_8_UNORM, NONE, WZYX),
 	_T(LATC2_SNORM, 8_8_8_8_SNORM, NONE, WZYX),
+
+	_T(ATC_RGB,               ATC_RGB,               NONE, WZYX),
+	_T(ATC_RGBA_EXPLICIT,     ATC_RGBA_EXPLICIT,     NONE, WZYX),
+	_T(ATC_RGBA_INTERPOLATED, ATC_RGBA_INTERPOLATED, NONE, WZYX),
 };
 
 enum a3xx_vtx_fmt

@@ -45,7 +45,7 @@
 #include "va_private.h"
 
 #include <va/va_drmcommon.h>
-#include <drm-uapi/drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 static const enum pipe_format vpp_surface_formats[] = {
    PIPE_FORMAT_B8G8R8A8_UNORM, PIPE_FORMAT_R8G8B8A8_UNORM,

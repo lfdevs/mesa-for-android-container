@@ -33,14 +33,11 @@
 #include "etnaviv_screen.h"
 #include "etnaviv_translate.h"
 
+#include "util/hash_table.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#include <drm_fourcc.h>
-
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL<<56) - 1)
-#endif
+#include "drm-uapi/drm_fourcc.h"
 
 static enum etna_surface_layout modifier_to_layout(uint64_t modifier)
 {
@@ -241,7 +238,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
    if (!screen->specs.use_blt && templat->target != PIPE_BUFFER)
       etna_adjust_rs_align(screen->specs.pixel_pipes, NULL, &paddingY);
 
-   if (templat->bind & PIPE_BIND_SCANOUT) {
+   if (templat->bind & PIPE_BIND_SCANOUT && screen->ro->kms_fd >= 0) {
       struct pipe_resource scanout_templat = *templat;
       struct renderonly_scanout *scanout;
       struct winsys_handle handle;
@@ -284,7 +281,6 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
    rsc->addressing_mode = mode;
 
    pipe_reference_init(&rsc->base.reference, 1);
-   list_inithead(&rsc->list);
 
    size = setup_miptree(rsc, paddingX, paddingY, msaa_xscale, msaa_yscale);
 
@@ -304,6 +300,11 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
       void *map = etna_bo_map(bo);
       memset(map, 0, size);
    }
+
+   rsc->pending_ctx = _mesa_set_create(NULL, _mesa_hash_pointer,
+                                       _mesa_key_pointer_equal);
+   if (!rsc->pending_ctx)
+      goto free_rsc;
 
    return &rsc->base;
 
@@ -466,7 +467,13 @@ etna_resource_changed(struct pipe_screen *pscreen, struct pipe_resource *prsc)
 static void
 etna_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
 {
+   struct etna_screen *screen = etna_screen(pscreen);
    struct etna_resource *rsc = etna_resource(prsc);
+
+   mtx_lock(&screen->lock);
+   _mesa_set_remove_key(screen->used_resources, rsc);
+   _mesa_set_destroy(rsc->pending_ctx, NULL);
+   mtx_unlock(&screen->lock);
 
    if (rsc->bo)
       etna_bo_del(rsc->bo);
@@ -477,10 +484,11 @@ etna_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
    if (rsc->scanout)
       renderonly_scanout_destroy(rsc->scanout, etna_screen(pscreen)->ro);
 
-   list_delinit(&rsc->list);
-
    pipe_resource_reference(&rsc->texture, NULL);
    pipe_resource_reference(&rsc->external, NULL);
+
+   for (unsigned i = 0; i < ETNA_NUM_LOD; i++)
+      FREE(rsc->levels[i].patch_offsets);
 
    FREE(rsc);
 }
@@ -512,7 +520,6 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    *prsc = *tmpl;
 
    pipe_reference_init(&prsc->reference, 1);
-   list_inithead(&rsc->list);
    prsc->screen = pscreen;
 
    rsc->bo = etna_screen_bo_from_handle(pscreen, handle, &level->stride);
@@ -558,6 +565,11 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
           util_format_name(tmpl->format));
       goto fail;
    }
+
+   rsc->pending_ctx = _mesa_set_create(NULL, _mesa_hash_pointer,
+                                       _mesa_key_pointer_equal);
+   if (!rsc->pending_ctx)
+      goto fail;
 
    if (rsc->layout == ETNA_LAYOUT_LINEAR) {
       /*
@@ -610,6 +622,7 @@ etna_resource_get_handle(struct pipe_screen *pscreen,
       rsc = etna_resource(rsc->external);
 
    handle->stride = rsc->levels[0].stride;
+   handle->offset = rsc->levels[0].offset;
    handle->modifier = layout_to_modifier(rsc->layout);
 
    if (handle->type == WINSYS_HANDLE_TYPE_SHARED) {
@@ -633,20 +646,47 @@ void
 etna_resource_used(struct etna_context *ctx, struct pipe_resource *prsc,
                    enum etna_resource_status status)
 {
+   struct etna_screen *screen = ctx->screen;
    struct etna_resource *rsc;
 
    if (!prsc)
       return;
 
    rsc = etna_resource(prsc);
+
+   mtx_lock(&screen->lock);
+
+   /*
+    * if we are pending read or write by any other context or
+    * if reading a resource pending a write, then
+    * flush all the contexts to maintain coherency
+    */
+   if (((status & ETNA_PENDING_WRITE) && rsc->status) ||
+       ((status & ETNA_PENDING_READ) && (rsc->status & ETNA_PENDING_WRITE))) {
+      set_foreach(rsc->pending_ctx, entry) {
+         struct etna_context *extctx = (struct etna_context *)entry->key;
+         struct pipe_context *pctx = &extctx->base;
+
+         if (extctx == ctx)
+            continue;
+
+         pctx->flush(pctx, NULL, 0);
+         /* It's safe to clear the status here. If we need to flush it means
+          * either another context had the resource in exclusive (write) use,
+          * or we transition the resource to exclusive use in our context.
+          * In both cases the new status accurately reflects the resource use
+          * after the flush.
+          */
+         rsc->status = 0;
+      }
+   }
+
    rsc->status |= status;
 
-   /* TODO resources can actually be shared across contexts,
-    * so I'm not sure a single list-head will do the trick? */
-   debug_assert((rsc->pending_ctx == ctx) || !rsc->pending_ctx);
-   list_delinit(&rsc->list);
-   list_addtail(&rsc->list, &ctx->used_resources);
-   rsc->pending_ctx = ctx;
+   _mesa_set_add(screen->used_resources, rsc);
+   _mesa_set_add(rsc->pending_ctx, ctx);
+
+   mtx_unlock(&screen->lock);
 }
 
 bool

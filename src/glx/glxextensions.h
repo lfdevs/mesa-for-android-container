@@ -39,6 +39,7 @@ enum
 {
    ARB_context_flush_control_bit = 0,
    ARB_create_context_bit,
+   ARB_create_context_no_error_bit,
    ARB_create_context_profile_bit,
    ARB_create_context_robustness_bit,
    ARB_fbconfig_float_bit,

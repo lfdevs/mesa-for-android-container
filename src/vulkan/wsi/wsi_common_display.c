@@ -32,7 +32,7 @@
 #include <math.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 #include <xcb/randr.h>
 #include <X11/Xlib-xcb.h>
@@ -96,7 +96,7 @@ struct wsi_display {
    pthread_cond_t               wait_cond;
    pthread_t                    wait_thread;
 
-   struct list_head             connectors;
+   struct list_head             connectors; /* list of all discovered connectors */
 };
 
 #define wsi_for_each_display_mode(_mode, _conn)                 \
@@ -171,17 +171,9 @@ wsi_display_mode_refresh(struct wsi_display_mode *wsi)
                                           (double) MAX2(wsi->vscan, 1));
 }
 
-static uint64_t wsi_get_current_monotonic(void)
-{
-   struct timespec tv;
-
-   clock_gettime(CLOCK_MONOTONIC, &tv);
-   return tv.tv_nsec + tv.tv_sec*1000000000ull;
-}
-
 static uint64_t wsi_rel_to_abs_time(uint64_t rel_time)
 {
-   uint64_t current_time = wsi_get_current_monotonic();
+   uint64_t current_time = wsi_common_get_current_time();
 
    /* check for overflow */
    if (rel_time > UINT64_MAX - current_time)
@@ -766,10 +758,27 @@ wsi_get_display_plane_capabilities2(
    assert(capabilities->sType ==
           VK_STRUCTURE_TYPE_DISPLAY_PLANE_CAPABILITIES_2_KHR);
 
-   return wsi_get_display_plane_capabilities(physical_device, wsi_device,
-                                             pDisplayPlaneInfo->mode,
-                                             pDisplayPlaneInfo->planeIndex,
-                                             &capabilities->capabilities);
+   VkResult result =
+      wsi_get_display_plane_capabilities(physical_device, wsi_device,
+                                         pDisplayPlaneInfo->mode,
+                                         pDisplayPlaneInfo->planeIndex,
+                                         &capabilities->capabilities);
+
+   vk_foreach_struct(ext, capabilities->pNext) {
+      switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_SURFACE_PROTECTED_CAPABILITIES_KHR: {
+         VkSurfaceProtectedCapabilitiesKHR *protected = (void *)ext;
+         protected->supportsProtected = VK_FALSE;
+         break;
+      }
+
+      default:
+         /* Ignored */
+         break;
+      }
+   }
+
+   return result;
 }
 
 VkResult
@@ -811,6 +820,7 @@ wsi_display_surface_get_support(VkIcdSurfaceBase *surface,
 
 static VkResult
 wsi_display_surface_get_capabilities(VkIcdSurfaceBase *surface_base,
+                                     struct wsi_device *wsi_device,
                                      VkSurfaceCapabilitiesKHR* caps)
 {
    VkIcdSurfaceDisplay *surface = (VkIcdSurfaceDisplay *) surface_base;
@@ -819,8 +829,11 @@ wsi_display_surface_get_capabilities(VkIcdSurfaceBase *surface_base,
    caps->currentExtent.width = mode->hdisplay;
    caps->currentExtent.height = mode->vdisplay;
 
-   /* XXX Figure out extents based on driver capabilities */
-   caps->maxImageExtent = caps->minImageExtent = caps->currentExtent;
+   caps->minImageExtent = (VkExtent2D) { 1, 1 };
+   caps->maxImageExtent = (VkExtent2D) {
+      wsi_device->maxImageDimension2D,
+      wsi_device->maxImageDimension2D,
+   };
 
    caps->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
@@ -851,13 +864,14 @@ wsi_display_surface_get_surface_counters(
 
 static VkResult
 wsi_display_surface_get_capabilities2(VkIcdSurfaceBase *icd_surface,
+                                      struct wsi_device *wsi_device,
                                       const void *info_next,
                                       VkSurfaceCapabilities2KHR *caps)
 {
    assert(caps->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR);
    VkResult result;
 
-   result = wsi_display_surface_get_capabilities(icd_surface,
+   result = wsi_display_surface_get_capabilities(icd_surface, wsi_device,
                                                  &caps->surfaceCapabilities);
    if (result != VK_SUCCESS)
       return result;
@@ -960,8 +974,8 @@ static void
 wsi_display_destroy_buffer(struct wsi_display *wsi,
                            uint32_t buffer)
 {
-   (void) drmIoctl(wsi->fd, DRM_IOCTL_MODE_DESTROY_DUMB,
-                   &((struct drm_mode_destroy_dumb) { .handle = buffer }));
+   (void) drmIoctl(wsi->fd, DRM_IOCTL_GEM_CLOSE,
+                   &((struct drm_gem_close) { .handle = buffer }));
 }
 
 static VkResult
@@ -1431,8 +1445,8 @@ wsi_display_fence_wait(struct wsi_fence *fence_wsi, uint64_t timeout)
 
    wsi_display_debug("%9lu wait fence %lu %ld\n",
                      pthread_self(), fence->sequence,
-                     (int64_t) (timeout - wsi_get_current_monotonic()));
-   wsi_display_debug_code(uint64_t start_ns = wsi_get_current_monotonic());
+                     (int64_t) (timeout - wsi_common_get_current_time()));
+   wsi_display_debug_code(uint64_t start_ns = wsi_common_get_current_time());
    pthread_mutex_lock(&wsi->wait_mutex);
 
    VkResult result;
@@ -1464,7 +1478,7 @@ wsi_display_fence_wait(struct wsi_fence *fence_wsi, uint64_t timeout)
    pthread_mutex_unlock(&wsi->wait_mutex);
    wsi_display_debug("%9lu fence wait %f ms\n",
                      pthread_self(),
-                     ((int64_t) (wsi_get_current_monotonic() - start_ns)) /
+                     ((int64_t) (wsi_common_get_current_time() - start_ns)) /
                      1.0e6);
    return result;
 }
@@ -1743,7 +1757,7 @@ wsi_display_surface_create_swapchain(
    chain->base.get_wsi_image = wsi_display_get_wsi_image;
    chain->base.acquire_next_image = wsi_display_acquire_next_image;
    chain->base.queue_present = wsi_display_queue_present;
-   chain->base.present_mode = create_info->presentMode;
+   chain->base.present_mode = wsi_swapchain_get_present_mode(wsi_device, create_info);
    chain->base.image_count = num_images;
 
    chain->wsi = wsi;
@@ -1798,6 +1812,30 @@ fail_attr_init:
    return ret;
 }
 
+
+/*
+ * Local version fo the libdrm helper. Added to avoid depending on bleeding
+ * edge version of the library.
+ */
+static int
+local_drmIsMaster(int fd)
+{
+   /* Detect master by attempting something that requires master.
+    *
+    * Authenticating magic tokens requires master and 0 is an
+    * internal kernel detail which we could use. Attempting this on
+    * a master fd would fail therefore fail with EINVAL because 0
+    * is invalid.
+    *
+    * A non-master fd will fail with EACCES, as the kernel checks
+    * for master before attempting to do anything else.
+    *
+    * Since we don't want to leak implementation details, use
+    * EACCES.
+    */
+   return drmAuthMagic(fd, 0) != -EACCES;
+}
+
 VkResult
 wsi_display_init_wsi(struct wsi_device *wsi_device,
                      const VkAllocationCallbacks *alloc,
@@ -1813,6 +1851,9 @@ wsi_display_init_wsi(struct wsi_device *wsi_device,
    }
 
    wsi->fd = display_fd;
+   if (wsi->fd != -1 && !local_drmIsMaster(wsi->fd))
+      wsi->fd = -1;
+
    wsi->alloc = alloc;
 
    list_inithead(&wsi->connectors);

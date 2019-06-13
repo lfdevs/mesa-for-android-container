@@ -2218,12 +2218,7 @@ void si_load_system_value(struct si_shader_context *ctx,
 		break;
 
 	case TGSI_SEMANTIC_HELPER_INVOCATION:
-		value = ac_build_intrinsic(&ctx->ac,
-					   "llvm.amdgcn.ps.live",
-					   ctx->i1, NULL, 0,
-					   AC_FUNC_ATTR_READNONE);
-		value = LLVMBuildNot(ctx->ac.builder, value, "");
-		value = LLVMBuildSExt(ctx->ac.builder, value, ctx->i32, "");
+		value = ac_build_load_helper_invocation(&ctx->ac);
 		break;
 
 	case TGSI_SEMANTIC_SUBGROUP_SIZE:
@@ -3924,31 +3919,6 @@ static void si_llvm_emit_ddxy(
 	emit_data->output[emit_data->chan] = val;
 }
 
-/*
- * this takes an I,J coordinate pair,
- * and works out the X and Y derivatives.
- * it returns DDX(I), DDX(J), DDY(I), DDY(J).
- */
-static LLVMValueRef si_llvm_emit_ddxy_interp(
-	struct lp_build_tgsi_context *bld_base,
-	LLVMValueRef interp_ij)
-{
-	struct si_shader_context *ctx = si_shader_context(bld_base);
-	LLVMValueRef result[4], a;
-	unsigned i;
-
-	for (i = 0; i < 2; i++) {
-		a = LLVMBuildExtractElement(ctx->ac.builder, interp_ij,
-					    LLVMConstInt(ctx->i32, i, 0), "");
-		result[i] = ac_build_ddxy(&ctx->ac, AC_TID_MASK_TOP_LEFT, 1,
-					  ac_to_integer(&ctx->ac, a)); /* DDX */
-		result[2+i] = ac_build_ddxy(&ctx->ac, AC_TID_MASK_TOP_LEFT, 2,
-					    ac_to_integer(&ctx->ac, a)); /* DDY */
-	}
-
-	return ac_build_gather_values(&ctx->ac, result, 4);
-}
-
 static void build_interp_intrinsic(const struct lp_build_tgsi_action *action,
 				struct lp_build_tgsi_context *bld_base,
 				struct lp_build_emit_data *emit_data)
@@ -4062,7 +4032,7 @@ static void build_interp_intrinsic(const struct lp_build_tgsi_action *action,
 	if (inst->Instruction.Opcode == TGSI_OPCODE_INTERP_OFFSET ||
 	    inst->Instruction.Opcode == TGSI_OPCODE_INTERP_SAMPLE) {
 		LLVMValueRef ij_out[2];
-		LLVMValueRef ddxy_out = si_llvm_emit_ddxy_interp(bld_base, interp_param);
+		LLVMValueRef ddxy_out = ac_build_ddxy_interp(&ctx->ac, interp_param);
 
 		/*
 		 * take the I then J parameters, and the DDX/Y for it, and
@@ -5380,10 +5350,9 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 
 	/* Compute the per-SIMD wave counts. */
 	if (conf->num_sgprs) {
-		if (sscreen->info.chip_class >= VI)
-			max_simd_waves = MIN2(max_simd_waves, 800 / conf->num_sgprs);
-		else
-			max_simd_waves = MIN2(max_simd_waves, 512 / conf->num_sgprs);
+		max_simd_waves =
+			MIN2(max_simd_waves,
+			     ac_get_num_physical_sgprs(sscreen->info.chip_class) / conf->num_sgprs);
 	}
 
 	if (conf->num_vgprs)

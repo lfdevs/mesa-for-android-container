@@ -55,6 +55,9 @@ virgl_screen(struct pipe_screen *pipe)
    return (struct virgl_screen *)pipe;
 }
 
+boolean
+virgl_has_readback_format(struct pipe_screen *screen, enum virgl_formats fmt);
+
 #define VIRGL_MAP_BUFFER_ALIGNMENT 64
 
 #endif

@@ -293,9 +293,8 @@ pipe_loader_sw_release(struct pipe_loader_device **dev)
    pipe_loader_base_release(dev);
 }
 
-static const struct drm_conf_ret *
-pipe_loader_sw_configuration(struct pipe_loader_device *dev,
-                             enum drm_conf conf)
+static const char *
+pipe_loader_sw_get_driconf_xml(struct pipe_loader_device *dev)
 {
    return NULL;
 }
@@ -316,6 +315,6 @@ pipe_loader_sw_create_screen(struct pipe_loader_device *dev,
 
 static const struct pipe_loader_ops pipe_loader_sw_ops = {
    .create_screen = pipe_loader_sw_create_screen,
-   .configuration = pipe_loader_sw_configuration,
+   .get_driconf_xml = pipe_loader_sw_get_driconf_xml,
    .release = pipe_loader_sw_release
 };

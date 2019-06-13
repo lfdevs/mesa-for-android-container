@@ -236,12 +236,12 @@ gen6_queryobj_get_results(struct gl_context *ctx,
        * Subtract the two and convert to nanoseconds.
        */
       query->Base.Result = brw_raw_timestamp_delta(brw, results[0], results[1]);
-      query->Base.Result = brw_timebase_scale(brw, query->Base.Result);
+      query->Base.Result = gen_device_info_timebase_scale(devinfo, query->Base.Result);
       break;
 
    case GL_TIMESTAMP:
       /* The query BO contains a single timestamp value in results[0]. */
-      query->Base.Result = brw_timebase_scale(brw, results[0]);
+      query->Base.Result = gen_device_info_timebase_scale(devinfo, results[0]);
 
       /* Ensure the scaled timestamp overflows according to
        * GL_QUERY_COUNTER_BITS

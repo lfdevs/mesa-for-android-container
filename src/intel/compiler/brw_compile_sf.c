@@ -24,7 +24,7 @@
 #include "brw_compiler.h"
 #include "brw_eu.h"
 
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 
 struct brw_sf_compile {
    struct brw_codegen func;

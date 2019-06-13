@@ -25,7 +25,7 @@
 #ifndef GEN_DEFINES_H
 #define GEN_DEFINES_H
 
-#include "i915_drm.h"
+#include "drm-uapi/i915_drm.h"
 
 #ifdef __cplusplus
 extern "C" {

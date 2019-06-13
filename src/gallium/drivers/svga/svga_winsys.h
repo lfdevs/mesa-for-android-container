@@ -753,6 +753,11 @@ struct svga_winsys_screen
    void
    (*stats_time_pop)();
 
+   /**
+    * Send a host log message
+    */
+   void
+   (*host_log)(struct svga_winsys_screen *sws, const char *message);
 
    /** Have VGPU v10 hardware? */
    boolean have_vgpu10;

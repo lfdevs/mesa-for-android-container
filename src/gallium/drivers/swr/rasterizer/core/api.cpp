@@ -193,12 +193,15 @@ HANDLE SwrCreateContext(SWR_CREATECONTEXT_INFO* pCreateInfo)
     pContext->pHotTileMgr = new HotTileMgr();
 
     // initialize callback functions
-    pContext->pfnLoadTile            = pCreateInfo->pfnLoadTile;
-    pContext->pfnStoreTile           = pCreateInfo->pfnStoreTile;
-    pContext->pfnClearTile           = pCreateInfo->pfnClearTile;
-    pContext->pfnUpdateSoWriteOffset = pCreateInfo->pfnUpdateSoWriteOffset;
-    pContext->pfnUpdateStats         = pCreateInfo->pfnUpdateStats;
-    pContext->pfnUpdateStatsFE       = pCreateInfo->pfnUpdateStatsFE;
+    pContext->pfnLoadTile                 = pCreateInfo->pfnLoadTile;
+    pContext->pfnStoreTile                = pCreateInfo->pfnStoreTile;
+    pContext->pfnClearTile                = pCreateInfo->pfnClearTile;
+    pContext->pfnTranslateGfxptrForRead   = pCreateInfo->pfnTranslateGfxptrForRead;
+    pContext->pfnTranslateGfxptrForWrite  = pCreateInfo->pfnTranslateGfxptrForWrite;
+    pContext->pfnMakeGfxPtr               = pCreateInfo->pfnMakeGfxPtr;
+    pContext->pfnUpdateSoWriteOffset      = pCreateInfo->pfnUpdateSoWriteOffset;
+    pContext->pfnUpdateStats              = pCreateInfo->pfnUpdateStats;
+    pContext->pfnUpdateStatsFE            = pCreateInfo->pfnUpdateStatsFE;
 
 
     // pass pointer to bucket manager back to caller
@@ -249,9 +252,7 @@ void QueueWork(SWR_CONTEXT* pContext)
 
     if (pContext->threadInfo.SINGLE_THREADED)
     {
-        // flush denormals to 0
-        uint32_t mxcsr = _mm_getcsr();
-        _mm_setcsr(mxcsr | _MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON);
+        uint32_t mxcsr = SetOptimalVectorCSR();
 
         if (IsDraw)
         {
@@ -273,7 +274,7 @@ void QueueWork(SWR_CONTEXT* pContext)
         }
 
         // restore csr
-        _mm_setcsr(mxcsr);
+        RestoreVectorCSR(mxcsr);
     }
     else
     {
@@ -634,15 +635,15 @@ void SwrSetCsFunc(HANDLE      hContext,
                   PFN_CS_FUNC pfnCsFunc,
                   uint32_t    totalThreadsInGroup,
                   uint32_t    totalSpillFillSize,
-                  uint32_t    scratchSpaceSizePerInstance,
-                  uint32_t    numInstances)
+                  uint32_t    scratchSpaceSizePerWarp,
+                  uint32_t    numWarps)
 {
-    API_STATE* pState                = GetDrawState(GetContext(hContext));
-    pState->pfnCsFunc                = pfnCsFunc;
-    pState->totalThreadsInGroup      = totalThreadsInGroup;
-    pState->totalSpillFillSize       = totalSpillFillSize;
-    pState->scratchSpaceSize         = scratchSpaceSizePerInstance;
-    pState->scratchSpaceNumInstances = numInstances;
+    API_STATE* pState               = GetDrawState(GetContext(hContext));
+    pState->pfnCsFunc               = pfnCsFunc;
+    pState->totalThreadsInGroup     = totalThreadsInGroup;
+    pState->totalSpillFillSize      = totalSpillFillSize;
+    pState->scratchSpaceSizePerWarp = scratchSpaceSizePerWarp;
+    pState->scratchSpaceNumWarps    = numWarps;
 }
 
 void SwrSetTsState(HANDLE hContext, SWR_TS_STATE* pState)
@@ -739,8 +740,6 @@ void SwrSetViewports(HANDLE                       hContext,
     memcpy(&pState->vp[0], pViewports, sizeof(SWR_VIEWPORT) * numViewports);
     // @todo Faster to copy portions of the SOA or just copy all of it?
     memcpy(&pState->vpMatrices, pMatrices, sizeof(SWR_VIEWPORT_MATRICES));
-
-    updateGuardbands(pState);
 }
 
 void SwrSetScissorRects(HANDLE hContext, uint32_t numScissors, const SWR_RECT* pScissors)
@@ -1049,6 +1048,9 @@ void SetupPipeline(DRAW_CONTEXT* pDC)
         // set up pass-through quantize if depth isn't enabled
         pState->state.pfnQuantizeDepth = QuantizeDepth<R32_FLOAT>;
     }
+
+    // Generate guardbands
+    updateGuardbands(&pState->state);
 }
 
 //////////////////////////////////////////////////////////////////////////

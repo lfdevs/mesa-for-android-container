@@ -33,7 +33,7 @@ aub_viewer_decode_ctx_init(struct aub_viewer_decode_ctx *ctx,
                            struct aub_viewer_decode_cfg *decode_cfg,
                            struct gen_spec *spec,
                            struct gen_disasm *disasm,
-                           struct gen_batch_decode_bo (*get_bo)(void *, uint64_t),
+                           struct gen_batch_decode_bo (*get_bo)(void *, bool, uint64_t),
                            unsigned (*get_state_size)(void *, uint32_t),
                            void *user_data)
 {
@@ -66,7 +66,7 @@ aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
          if (last_dword != iter_dword) {
             for (int i = last_dword + 1; i <= iter_dword; i++) {
                ImGui::TextColored(ctx->cfg->dwords_color,
-                                  "0x%08" PRIx64 ":  0x%08x : Dword %d",
+                                  "0x%012" PRIx64 ":  0x%012x : Dword %d",
                                   address + 4 * i, iter.p[i], i);
             }
             last_dword = iter_dword;
@@ -92,7 +92,7 @@ aub_viewer_print_group(struct aub_viewer_decode_ctx *ctx,
 }
 
 static struct gen_batch_decode_bo
-ctx_get_bo(struct aub_viewer_decode_ctx *ctx, uint64_t addr)
+ctx_get_bo(struct aub_viewer_decode_ctx *ctx, bool ppgtt, uint64_t addr)
 {
    if (gen_spec_get_gen(ctx->spec) >= gen_make_gen(8,0)) {
       /* On Broadwell and above, we have 48-bit addresses which consume two
@@ -104,7 +104,7 @@ ctx_get_bo(struct aub_viewer_decode_ctx *ctx, uint64_t addr)
       addr &= (~0ull >> 16);
    }
 
-   struct gen_batch_decode_bo bo = ctx->get_bo(ctx->user_data, addr);
+   struct gen_batch_decode_bo bo = ctx->get_bo(ctx->user_data, ppgtt, addr);
 
    if (gen_spec_get_gen(ctx->spec) >= gen_make_gen(8,0))
       bo.addr &= (~0ull >> 16);
@@ -144,7 +144,7 @@ ctx_disassemble_program(struct aub_viewer_decode_ctx *ctx,
                         uint32_t ksp, const char *type)
 {
    uint64_t addr = ctx->instruction_base + ksp;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, addr);
+   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
    if (!bo.map) {
       ImGui::TextColored(ctx->cfg->missing_color,
                          "Shader unavailable addr=0x%012" PRIx64, addr);
@@ -213,11 +213,11 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
    }
 
    struct gen_batch_decode_bo bind_bo =
-      ctx_get_bo(ctx, ctx->surface_base + offset);
+      ctx_get_bo(ctx, true, ctx->surface_base + offset);
 
    if (bind_bo.map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
-                         "binding table unavailable addr=0x%08" PRIx64,
+                         "binding table unavailable addr=0x%012" PRIx64,
                          ctx->surface_base + offset);
       return;
    }
@@ -228,19 +228,19 @@ dump_binding_table(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count
          continue;
 
       uint64_t addr = ctx->surface_base + pointers[i];
-      struct gen_batch_decode_bo bo = ctx_get_bo(ctx, addr);
+      struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, addr);
       uint32_t size = strct->dw_length * 4;
 
       if (pointers[i] % 32 != 0 ||
           addr < bo.addr || addr + size >= bo.addr + bo.size) {
          ImGui::TextColored(ctx->cfg->missing_color,
-                            "pointer %u: %08x <not valid>", i, pointers[i]);
+                            "pointer %u: %012x <not valid>", i, pointers[i]);
          continue;
       }
 
       const uint8_t *state = (const uint8_t *) bo.map + (addr - bo.addr);
       if (ImGui::TreeNodeEx(&pointers[i], ImGuiTreeNodeFlags_Framed,
-                            "pointer %u: %08x", i, pointers[i])) {
+                            "pointer %u: %012x", i, pointers[i])) {
          aub_viewer_print_group(ctx, strct, addr, state);
          ImGui::TreePop();
       }
@@ -256,12 +256,12 @@ dump_samplers(struct aub_viewer_decode_ctx *ctx, uint32_t offset, int count)
       count = update_count(ctx, offset, strct->dw_length, 4);
 
    uint64_t state_addr = ctx->dynamic_base + offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, state_addr);
+   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
    if (state_map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
-                         "samplers unavailable addr=0x%08" PRIx64, state_addr);
+                         "samplers unavailable addr=0x%012" PRIx64, state_addr);
       return;
    }
 
@@ -303,17 +303,17 @@ handle_media_interface_descriptor_load(struct aub_viewer_decode_ctx *ctx,
    }
 
    uint64_t desc_addr = ctx->dynamic_base + descriptor_offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, desc_addr);
+   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, desc_addr);
    const uint32_t *desc_map = (const uint32_t *) bo.map;
 
    if (desc_map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
-                         "interface descriptors unavailable addr=0x%08" PRIx64, desc_addr);
+                         "interface descriptors unavailable addr=0x%012" PRIx64, desc_addr);
       return;
    }
 
    for (int i = 0; i < descriptor_count; i++) {
-      ImGui::Text("descriptor %d: %08x", i, descriptor_offset);
+      ImGui::Text("descriptor %d: %012x", i, descriptor_offset);
 
       aub_viewer_print_group(ctx, desc, desc_addr, desc_map);
 
@@ -364,7 +364,7 @@ handle_3dstate_vertex_buffers(struct aub_viewer_decode_ctx *ctx,
       if (iter.struct_desc != vbs)
          continue;
 
-      uint64_t buffer_addr;
+      uint64_t buffer_addr = 0;
 
       struct gen_field_iterator vbs_iter;
       gen_field_iterator_init(&vbs_iter, vbs, &iter.p[iter.start_bit / 32], 0, false);
@@ -375,7 +375,7 @@ handle_3dstate_vertex_buffers(struct aub_viewer_decode_ctx *ctx,
             pitch = vbs_iter.raw_value;
          } else if (strcmp(vbs_iter.name, "Buffer Starting Address") == 0) {
             buffer_addr = vbs_iter.raw_value;
-            vb = ctx_get_bo(ctx, buffer_addr);
+            vb = ctx_get_bo(ctx, true, buffer_addr);
          } else if (strcmp(vbs_iter.name, "Buffer Size") == 0) {
             vb_size = vbs_iter.raw_value;
             ready = true;
@@ -394,7 +394,7 @@ handle_3dstate_vertex_buffers(struct aub_viewer_decode_ctx *ctx,
 
          if (vb.map == NULL) {
             ImGui::TextColored(ctx->cfg->missing_color,
-                               "buffer contents unavailable addr=0x%08" PRIx64, buffer_addr);
+                               "buffer contents unavailable addr=0x%012" PRIx64, buffer_addr);
             continue;
          }
 
@@ -427,7 +427,7 @@ handle_3dstate_index_buffer(struct aub_viewer_decode_ctx *ctx,
          format = iter.raw_value;
       } else if (strcmp(iter.name, "Buffer Starting Address") == 0) {
          buffer_addr = iter.raw_value;
-         ib = ctx_get_bo(ctx, buffer_addr);
+         ib = ctx_get_bo(ctx, true, buffer_addr);
       } else if (strcmp(iter.name, "Buffer Size") == 0) {
          ib_size = iter.raw_value;
       }
@@ -435,7 +435,7 @@ handle_3dstate_index_buffer(struct aub_viewer_decode_ctx *ctx,
 
    if (ib.map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
-                         "buffer contents unavailable addr=0x%08" PRIx64,
+                         "buffer contents unavailable addr=0x%012" PRIx64,
                          buffer_addr);
       return;
    }
@@ -578,10 +578,10 @@ decode_3dstate_constant(struct aub_viewer_decode_ctx *ctx,
          if (read_length[i] == 0)
             continue;
 
-         struct gen_batch_decode_bo buffer = ctx_get_bo(ctx, read_addr[i]);
+         struct gen_batch_decode_bo buffer = ctx_get_bo(ctx, true, read_addr[i]);
          if (!buffer.map) {
             ImGui::TextColored(ctx->cfg->missing_color,
-                               "constant buffer %d unavailable addr=0x%08" PRIx64,
+                               "constant buffer %d unavailable addr=0x%012" PRIx64,
                                i, read_addr[i]);
             continue;
          }
@@ -650,12 +650,12 @@ decode_dynamic_state_pointers(struct aub_viewer_decode_ctx *ctx,
    }
 
    uint64_t state_addr = ctx->dynamic_base + state_offset;
-   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, state_addr);
+   struct gen_batch_decode_bo bo = ctx_get_bo(ctx, true, state_addr);
    const uint8_t *state_map = (const uint8_t *) bo.map;
 
    if (state_map == NULL) {
       ImGui::TextColored(ctx->cfg->missing_color,
-                         "dynamic %s state unavailable addr=0x%08" PRIx64,
+                         "dynamic %s state unavailable addr=0x%012" PRIx64,
                          struct_type, state_addr);
       return;
    }
@@ -892,11 +892,19 @@ struct custom_decoder info_decoders[] = {
 void
 aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
                         const void *_batch, uint32_t batch_size,
-                        uint64_t batch_addr)
+                        uint64_t batch_addr, bool from_ring)
 {
    struct gen_group *inst;
    const uint32_t *p, *batch = (const uint32_t *) _batch, *end = batch + batch_size / sizeof(uint32_t);
    int length;
+
+   if (ctx->n_batch_buffer_start >= 100) {
+      ImGui::TextColored(ctx->cfg->error_color,
+                         "0x%08" PRIx64 ": Max batch buffer jumps exceeded", batch_addr);
+      return;
+   }
+
+   ctx->n_batch_buffer_start++;
 
    for (p = batch; p < end; p += length) {
       inst = gen_spec_find_instruction(ctx->spec, ctx->engine, p);
@@ -908,7 +916,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
 
       if (inst == NULL) {
          ImGui::TextColored(ctx->cfg->error_color,
-                            "0x%08" PRIx64 ": unknown instruction %08x",
+                            "0x%012" PRIx64 ": unknown instruction %012x",
                             offset, p[0]);
          continue;
       }
@@ -926,7 +934,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
       if (ctx->decode_cfg->command_filter.PassFilter(inst->name) &&
           ImGui::TreeNodeEx(p,
                             ImGuiTreeNodeFlags_Framed,
-                            "0x%08" PRIx64 ":  %s",
+                            "0x%012" PRIx64 ":  %s",
                             offset, inst->name)) {
          aub_viewer_print_group(ctx, inst, offset, p);
 
@@ -947,25 +955,30 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
       }
 
       if (strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0) {
-         struct gen_batch_decode_bo next_batch = {};
+         uint64_t next_batch_addr;
+         bool ppgtt = false;
          bool second_level;
          struct gen_field_iterator iter;
          gen_field_iterator_init(&iter, inst, p, 0, false);
          while (gen_field_iterator_next(&iter)) {
             if (strcmp(iter.name, "Batch Buffer Start Address") == 0) {
-               next_batch = ctx_get_bo(ctx, iter.raw_value);
+               next_batch_addr = iter.raw_value;
             } else if (strcmp(iter.name, "Second Level Batch Buffer") == 0) {
                second_level = iter.raw_value;
+            } else if (strcmp(iter.name, "Address Space Indicator") == 0) {
+               ppgtt = iter.raw_value;
             }
          }
 
+         struct gen_batch_decode_bo next_batch = ctx_get_bo(ctx, ppgtt, next_batch_addr);
+
          if (next_batch.map == NULL) {
             ImGui::TextColored(ctx->cfg->missing_color,
-                               "Secondary batch at 0x%08" PRIx64 " unavailable",
-                               next_batch.addr);
+                               "Secondary batch at 0x%012" PRIx64 " unavailable",
+                               next_batch_addr);
          } else {
             aub_viewer_render_batch(ctx, next_batch.map, next_batch.size,
-                                    next_batch.addr);
+                                    next_batch.addr, false);
          }
          if (second_level) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" set acts
@@ -974,7 +987,7 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
              * MI_BATCH_BUFFER_END.
              */
             continue;
-         } else {
+         } else if (!from_ring) {
             /* MI_BATCH_BUFFER_START with "2nd Level Batch Buffer" unset acts
              * like a goto.  Nothing after it will ever get processed.  In
              * order to prevent the recursion from growing, we just reset the
@@ -986,4 +999,6 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
          break;
       }
    }
+
+   ctx->n_batch_buffer_start--;
 }

@@ -243,8 +243,7 @@ public:
    virtual void invalidate_live_intervals() = 0;
 };
 
-bool brw_texture_offset(int *offsets,
-                        unsigned num_components,
+bool brw_texture_offset(const nir_tex_instr *tex, unsigned src,
                         uint32_t *offset_bits);
 
 #else

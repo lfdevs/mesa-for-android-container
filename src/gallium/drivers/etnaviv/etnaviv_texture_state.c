@@ -37,7 +37,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 static void *
 etna_create_sampler_state_state(struct pipe_context *pipe,

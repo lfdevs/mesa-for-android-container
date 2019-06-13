@@ -2191,7 +2191,7 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
       rgba = LLVMGetUndef(i128_vectype);
 
       for (count = 0; count < n / 4; count++) {
-         LLVMValueRef colors, codewords, alpha_lo, alpha_hi;
+         LLVMValueRef colors, codewords, alpha_lo = NULL, alpha_hi = NULL;
 
          i4 = lp_build_extract_range(gallivm, i, count * 4, 4);
          j4 = lp_build_extract_range(gallivm, j, count * 4, 4);
@@ -2230,7 +2230,7 @@ lp_build_fetch_s3tc_rgba_aos(struct gallivm_state *gallivm,
       rgba = LLVMBuildBitCast(builder, rgba, i8_vectype, "");
    }
    else {
-      LLVMValueRef colors, codewords, alpha_lo, alpha_hi;
+      LLVMValueRef colors, codewords, alpha_lo = NULL, alpha_hi = NULL;
 
       lp_build_gather_s3tc(gallivm, n, format_desc, &colors, &codewords,
                            &alpha_lo, &alpha_hi, base_ptr, offset);

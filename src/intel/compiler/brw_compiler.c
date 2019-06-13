@@ -24,7 +24,7 @@
 #include "brw_compiler.h"
 #include "brw_shader.h"
 #include "brw_eu.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 #include "compiler/nir/nir.h"
 #include "main/errors.h"
 #include "util/debug.h"
@@ -33,6 +33,8 @@
    .lower_sub = true,                                                         \
    .lower_fdiv = true,                                                        \
    .lower_scmp = true,                                                        \
+   .lower_flrp16 = true,                                                      \
+   .lower_fmod16 = true,                                                      \
    .lower_fmod32 = true,                                                      \
    .lower_fmod64 = false,                                                     \
    .lower_bitfield_extract = true,                                            \
@@ -41,8 +43,8 @@
    .lower_usub_borrow = true,                                                 \
    .lower_fdiv = true,                                                        \
    .lower_flrp64 = true,                                                      \
+   .lower_isign = true,                                                       \
    .lower_ldexp = true,                                                       \
-   .lower_cs_local_id_from_index = true,                                      \
    .lower_device_index_to_zero = true,                                        \
    .native_integers = true,                                                   \
    .use_interpolated_input_intrinsics = true,                                 \
@@ -67,34 +69,7 @@ static const struct nir_shader_compiler_options scalar_nir_options = {
    COMMON_SCALAR_OPTIONS,
 };
 
-static const struct nir_shader_compiler_options scalar_nir_options_gen11 = {
-   COMMON_OPTIONS,
-   COMMON_SCALAR_OPTIONS,
-   .lower_flrp32 = true,
-};
-
 static const struct nir_shader_compiler_options vector_nir_options = {
-   COMMON_OPTIONS,
-
-   /* In the vec4 backend, our dpN instruction replicates its result to all the
-    * components of a vec4.  We would like NIR to give us replicated fdot
-    * instructions because it can optimize better for us.
-    */
-   .fdot_replicates = true,
-
-   /* Prior to Gen6, there are no three source operations for SIMD4x2. */
-   .lower_flrp32 = true,
-
-   .lower_pack_snorm_2x16 = true,
-   .lower_pack_unorm_2x16 = true,
-   .lower_unpack_snorm_2x16 = true,
-   .lower_unpack_unorm_2x16 = true,
-   .lower_extract_byte = true,
-   .lower_extract_word = true,
-   .max_unroll_iterations = 32,
-};
-
-static const struct nir_shader_compiler_options vector_nir_options_gen6 = {
    COMMON_OPTIONS,
 
    /* In the vec4 backend, our dpN instruction replicates its result to all the
@@ -142,6 +117,41 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
       compiler->scalar_stage[MESA_SHADER_COMPUTE] = true;
    }
 
+   nir_lower_int64_options int64_options =
+      nir_lower_imul64 |
+      nir_lower_isign64 |
+      nir_lower_divmod64 |
+      nir_lower_imul_high64;
+   nir_lower_doubles_options fp64_options =
+      nir_lower_drcp |
+      nir_lower_dsqrt |
+      nir_lower_drsq |
+      nir_lower_dtrunc |
+      nir_lower_dfloor |
+      nir_lower_dceil |
+      nir_lower_dfract |
+      nir_lower_dround_even |
+      nir_lower_dmod;
+
+   if (!devinfo->has_64bit_types || (INTEL_DEBUG & DEBUG_SOFT64)) {
+      int64_options |= nir_lower_mov64 |
+                       nir_lower_icmp64 |
+                       nir_lower_iadd64 |
+                       nir_lower_iabs64 |
+                       nir_lower_ineg64 |
+                       nir_lower_logic64 |
+                       nir_lower_minmax64 |
+                       nir_lower_shift64;
+      fp64_options |= nir_lower_fp64_full_software;
+   }
+
+   /* The Bspec's section tittled "Instruction_multiply[DevBDW+]" claims that
+    * destination type can be Quadword and source type Doubleword for Gen8 and
+    * Gen9. So, lower 64 bit multiply instruction on rest of the platforms.
+    */
+   if (devinfo->gen < 8 || devinfo->gen > 9)
+      int64_options |= nir_lower_imul_2x32_64;
+
    /* We want the GLSL compiler to emit code that uses condition codes */
    for (int i = 0; i < MESA_SHADER_STAGES; i++) {
       compiler->glsl_compiler_options[i].MaxUnrollIterations = 0;
@@ -157,15 +167,30 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
       compiler->glsl_compiler_options[i].EmitNoIndirectTemp = is_scalar;
       compiler->glsl_compiler_options[i].OptimizeForAOS = !is_scalar;
 
+      struct nir_shader_compiler_options *nir_options =
+         rzalloc(compiler, struct nir_shader_compiler_options);
       if (is_scalar) {
-         compiler->glsl_compiler_options[i].NirOptions =
-            devinfo->gen < 11 ? &scalar_nir_options : &scalar_nir_options_gen11;
+         *nir_options = scalar_nir_options;
+
+         if (devinfo->gen >= 11) {
+            nir_options->lower_flrp32 = true;
+         }
       } else {
-         compiler->glsl_compiler_options[i].NirOptions =
-            devinfo->gen < 6 ? &vector_nir_options : &vector_nir_options_gen6;
+         *nir_options = vector_nir_options;
+
+         if (devinfo->gen < 6) {
+            /* Prior to Gen6, there are no three source operations. */
+            nir_options->lower_flrp32 = true;
+         }
       }
 
-      compiler->glsl_compiler_options[i].LowerBufferInterfaceBlocks = true;
+      /* Prior to Gen6, there are no three source operations. */
+      nir_options->lower_ffma = devinfo->gen < 6;
+
+      nir_options->lower_int64_options = int64_options;
+      nir_options->lower_doubles_options = fp64_options;
+      compiler->glsl_compiler_options[i].NirOptions = nir_options;
+
       compiler->glsl_compiler_options[i].ClampBlockIndicesToArrayBounds = true;
    }
 

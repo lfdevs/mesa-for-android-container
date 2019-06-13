@@ -49,6 +49,7 @@ struct pt_so_emit {
    int pos_idx;
    unsigned emitted_primitives;
    unsigned generated_primitives;
+   unsigned stream;
 };
 
 static const struct pipe_stream_output_info *
@@ -144,6 +145,9 @@ static void so_emit_prim(struct pt_so_emit *so,
          int ob = state->output[slot].output_buffer;
          unsigned dst_offset = state->output[slot].dst_offset * sizeof(float);
          unsigned write_size = num_comps * sizeof(float);
+
+         if (state->output[slot].stream != so->stream)
+            continue;
          /* If a buffer is missing then that's equivalent to
           * an overflow */
          if (!draw->so.targets[ob]) {
@@ -175,7 +179,10 @@ static void so_emit_prim(struct pt_so_emit *so,
          unsigned idx = state->output[slot].register_index;
          unsigned start_comp = state->output[slot].start_component;
          unsigned num_comps = state->output[slot].num_components;
+         unsigned stream = state->output[slot].stream;
 
+         if (stream != so->stream)
+            continue;
          ob = state->output[slot].output_buffer;
          buffer_written[ob] = TRUE;
 
@@ -184,7 +191,7 @@ static void so_emit_prim(struct pt_so_emit *so,
                             draw->so.targets[ob]->internal_offset) +
             state->output[slot].dst_offset;
          
-         if (idx == so->pos_idx && pcp_ptr)
+         if (idx == so->pos_idx && pcp_ptr && so->stream == 0)
             memcpy(buffer, &pre_clip_pos[start_comp],
                    num_comps * sizeof(float));
          else
@@ -193,8 +200,8 @@ static void so_emit_prim(struct pt_so_emit *so,
 #if 0
          {
             int j;
-            debug_printf("VERT[%d], offset = %d, slot[%d] sc = %d, num_c = %d, idx = %d = [",
-                         i,
+            debug_printf("VERT[%d], stream = %d, offset = %d, slot[%d] sc = %d, num_c = %d, idx = %d = [",
+                         i, stream,
                          draw->so.targets[ob]->internal_offset,
                          slot, start_comp, num_comps, idx);
             for (j = 0; j < num_comps; ++j) {
@@ -258,12 +265,13 @@ static void so_tri(struct pt_so_emit *so, int i0, int i1, int i2)
 
 
 void draw_pt_so_emit( struct pt_so_emit *emit,
+                      int num_vertex_streams,
                       const struct draw_vertex_info *input_verts,
                       const struct draw_prim_info *input_prims )
 {
    struct draw_context *draw = emit->draw;
    struct vbuf_render *render = draw->render;
-   unsigned start, i;
+   unsigned start, i, stream;
 
    if (!emit->has_so)
       return;
@@ -271,34 +279,36 @@ void draw_pt_so_emit( struct pt_so_emit *emit,
    if (!draw->so.num_targets)
       return;
 
-   emit->emitted_primitives = 0;
-   emit->generated_primitives = 0;
-   emit->input_vertex_stride = input_verts->stride;
-   if (emit->use_pre_clip_pos)
-      emit->pre_clip_pos = input_verts->verts->clip_pos;
-
-   emit->inputs = (const float (*)[4])input_verts->verts->data;
-
    /* XXX: need to flush to get prim_vbuf.c to release its allocation??*/
    draw_do_flush( draw, DRAW_FLUSH_BACKEND );
 
-   for (start = i = 0; i < input_prims->primitive_count;
-        start += input_prims->primitive_lengths[i], i++)
-   {
-      unsigned count = input_prims->primitive_lengths[i];
+   for (stream = 0; stream < num_vertex_streams; stream++) {
+      emit->emitted_primitives = 0;
+      emit->generated_primitives = 0;
+      if (emit->use_pre_clip_pos)
+         emit->pre_clip_pos = input_verts[stream].verts->clip_pos;
 
-      if (input_prims->linear) {
-         so_run_linear(emit, input_prims, input_verts,
-                       start, count);
-      } else {
-         so_run_elts(emit, input_prims, input_verts,
-                     start, count);
+      emit->input_vertex_stride = input_verts[stream].stride;
+      emit->inputs = (const float (*)[4])input_verts[stream].verts->data;
+      emit->stream = stream;
+      for (start = i = 0; i < input_prims[stream].primitive_count;
+           start += input_prims[stream].primitive_lengths[i], i++)
+      {
+         unsigned count = input_prims[stream].primitive_lengths[i];
+
+         if (input_prims->linear) {
+            so_run_linear(emit, &input_prims[stream], &input_verts[stream],
+                          start, count);
+         } else {
+            so_run_elts(emit, &input_prims[stream], &input_verts[stream],
+                        start, count);
+         }
       }
+      render->set_stream_output_info(render,
+                                     stream,
+                                     emit->emitted_primitives,
+                                     emit->generated_primitives);
    }
-
-   render->set_stream_output_info(render,
-                                  emit->emitted_primitives,
-                                  emit->generated_primitives);
 }
 
 

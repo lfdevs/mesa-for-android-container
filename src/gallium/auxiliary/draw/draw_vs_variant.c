@@ -179,7 +179,7 @@ static void PIPE_CDECL vsvg_run_elts( struct draw_vs_variant *variant,
                               vsvg->base.vs->draw->pt.user.vs_constants_size,
                               count,
                               temp_vertex_stride, 
-                              temp_vertex_stride);
+                              temp_vertex_stride, NULL);
 
    /* FIXME: geometry shading? */
 
@@ -247,7 +247,7 @@ static void PIPE_CDECL vsvg_run_linear( struct draw_vs_variant *variant,
                               vsvg->base.vs->draw->pt.user.vs_constants_size,
                               count,
                               temp_vertex_stride, 
-                              temp_vertex_stride);
+                              temp_vertex_stride, NULL);
 
    if (vsvg->base.key.clip) {
       /* not really handling clipping, just do the rhw so we can

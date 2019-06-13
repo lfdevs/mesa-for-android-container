@@ -75,8 +75,11 @@ i915_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    for (i = 0; i < i915->nr_vertex_buffers; i++) {
       const void *buf = i915->vertex_buffers[i].is_user_buffer ?
                            i915->vertex_buffers[i].buffer.user : NULL;
-      if (!buf)
-            buf = i915_buffer(i915->vertex_buffers[i].buffer.resource)->data;
+      if (!buf) {
+         if (!i915->vertex_buffers[i].buffer.resource)
+            continue;
+         buf = i915_buffer(i915->vertex_buffers[i].buffer.resource)->data;
+      }
       draw_set_mapped_vertex_buffer(draw, i, buf, ~0);
    }
 

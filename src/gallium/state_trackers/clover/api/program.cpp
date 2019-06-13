@@ -41,7 +41,7 @@ namespace {
          throw error(CL_INVALID_OPERATION);
 
       if (any_of([&](const device &dev) {
-               return !count(dev, prog.context().devices());
+               return !count(dev, prog.devices());
             }, objs<allow_empty_tag>(d_devs, num_devs)))
          throw error(CL_INVALID_DEVICE);
    }
@@ -176,8 +176,8 @@ clBuildProgram(cl_program d_prog, cl_uint num_devs,
                void (*pfn_notify)(cl_program, void *),
                void *user_data) try {
    auto &prog = obj(d_prog);
-   auto devs = (d_devs ? objs(d_devs, num_devs) :
-                ref_vector<device>(prog.context().devices()));
+   auto devs =
+      (d_devs ? objs(d_devs, num_devs) : ref_vector<device>(prog.devices()));
    const auto opts = std::string(p_opts ? p_opts : "") + " " +
                      debug_get_option("CLOVER_EXTRA_BUILD_OPTIONS", "");
 
@@ -186,6 +186,13 @@ clBuildProgram(cl_program d_prog, cl_uint num_devs,
    if (prog.has_source) {
       prog.compile(devs, opts);
       prog.link(devs, opts, { prog });
+   } else if (any_of([&](const device &dev){
+         return prog.build(dev).binary_type() != CL_PROGRAM_BINARY_TYPE_EXECUTABLE;
+         }, devs)) {
+      // According to the OpenCL 1.2 specification, “if program is created
+      // with clCreateProgramWithBinary, then the program binary must be an
+      // executable binary (not a compiled binary or library).”
+      throw error(CL_INVALID_BINARY);
    }
 
    return CL_SUCCESS;
@@ -202,8 +209,8 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
                  void (*pfn_notify)(cl_program, void *),
                  void *user_data) try {
    auto &prog = obj(d_prog);
-   auto devs = (d_devs ? objs(d_devs, num_devs) :
-                ref_vector<device>(prog.context().devices()));
+   auto devs =
+       (d_devs ? objs(d_devs, num_devs) : ref_vector<device>(prog.devices()));
    const auto opts = std::string(p_opts ? p_opts : "") + " " +
                      debug_get_option("CLOVER_EXTRA_COMPILE_OPTIONS", "");
    header_map headers;
@@ -243,8 +250,32 @@ clCompileProgram(cl_program d_prog, cl_uint num_devs,
 namespace {
    ref_vector<device>
    validate_link_devices(const ref_vector<program> &progs,
-                         const ref_vector<device> &all_devs) {
+                         const ref_vector<device> &all_devs,
+                         const std::string &opts) {
       std::vector<device *> devs;
+      const bool create_library =
+         opts.find("-create-library") != std::string::npos;
+      const bool enable_link_options =
+         opts.find("-enable-link-options") != std::string::npos;
+      const bool has_link_options =
+         opts.find("-cl-denorms-are-zero") != std::string::npos ||
+         opts.find("-cl-no-signed-zeroes") != std::string::npos ||
+         opts.find("-cl-unsafe-math-optimizations") != std::string::npos ||
+         opts.find("-cl-finite-math-only") != std::string::npos ||
+         opts.find("-cl-fast-relaxed-math") != std::string::npos ||
+         opts.find("-cl-no-subgroup-ifp") != std::string::npos;
+
+      // According to the OpenCL 1.2 specification, "[the
+      // -enable-link-options] option must be specified with the
+      // create-library option".
+      if (enable_link_options && !create_library)
+         throw error(CL_INVALID_LINKER_OPTIONS);
+
+      // According to the OpenCL 1.2 specification, "the
+      // [program linking options] can be specified when linking a program
+      // executable".
+      if (has_link_options && create_library)
+         throw error(CL_INVALID_LINKER_OPTIONS);
 
       for (auto &dev : all_devs) {
          const auto has_binary = [&](const program &prog) {
@@ -253,10 +284,22 @@ namespace {
                    t == CL_PROGRAM_BINARY_TYPE_LIBRARY;
          };
 
+         // According to the OpenCL 1.2 specification, a library is made of
+         // “compiled binaries specified in input_programs argument to
+         // clLinkProgram“; compiled binaries does not refer to libraries:
+         // “input_programs is an array of program objects that are compiled
+         // binaries or libraries that are to be linked to create the program
+         // executable”.
+         if (create_library && any_of([&](const program &prog) {
+                  const auto t = prog.build(dev).binary_type();
+                  return t != CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT;
+               }, progs))
+            throw error(CL_INVALID_OPERATION);
+
          // According to the CL 1.2 spec, when "all programs specified [..]
          // contain a compiled binary or library for the device [..] a link is
          // performed",
-         if (all_of(has_binary, progs))
+         else if (all_of(has_binary, progs))
             devs.push_back(&dev);
 
          // otherwise if "none of the programs contain a compiled binary or
@@ -264,6 +307,20 @@ namespace {
          // cases will return a CL_INVALID_OPERATION error."
          else if (any_of(has_binary, progs))
             throw error(CL_INVALID_OPERATION);
+
+         // According to the OpenCL 1.2 specification, "[t]he linker may apply
+         // [program linking options] to all compiled program objects
+         // specified to clLinkProgram. The linker may apply these options
+         // only to libraries which were created with the
+         // -enable-link-option."
+         else if (has_link_options && any_of([&](const program &prog) {
+                  const auto t = prog.build(dev).binary_type();
+                  return !(t == CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT ||
+                          (t == CL_PROGRAM_BINARY_TYPE_LIBRARY &&
+                           prog.build(dev).opts.find("-enable-link-options") !=
+                              std::string::npos));
+               }, progs))
+            throw error(CL_INVALID_LINKER_OPTIONS);
       }
 
       return map(derefs(), devs);
@@ -279,10 +336,10 @@ clLinkProgram(cl_context d_ctx, cl_uint num_devs, const cl_device_id *d_devs,
    const auto opts = std::string(p_opts ? p_opts : "") + " " +
                      debug_get_option("CLOVER_EXTRA_LINK_OPTIONS", "");
    auto progs = objs(d_progs, num_progs);
-   auto prog = create<program>(ctx);
-   auto devs = validate_link_devices(progs,
-                                     (d_devs ? objs(d_devs, num_devs) :
-                                      ref_vector<device>(ctx.devices())));
+   auto all_devs =
+      (d_devs ? objs(d_devs, num_devs) : ref_vector<device>(ctx.devices()));
+   auto prog = create<program>(ctx, all_devs);
+   auto devs = validate_link_devices(progs, all_devs, opts);
 
    validate_build_common(prog, num_devs, d_devs, pfn_notify, user_data);
 

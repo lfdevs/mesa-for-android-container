@@ -112,21 +112,25 @@ NineVolume9_ctor( struct NineVolume9 *This,
                                                  This->stride, pDesc->Height);
 
     /* Get true format */
-    This->format_conversion = d3d9_to_pipe_format_checked(This->info.screen,
+    This->format_internal = d3d9_to_pipe_format_checked(This->info.screen,
                                                          pDesc->Format,
                                                          This->info.target,
                                                          This->info.nr_samples,
                                                          This->info.bind, FALSE,
                                                          TRUE);
-    if (This->info.format != This->format_conversion) {
-        This->stride_conversion = nine_format_get_stride(This->format_conversion,
+    if (This->info.format != This->format_internal ||
+        /* DYNAMIC Textures requires same stride as ram buffers.
+         * Do not use workaround by default as it eats more virtual space */
+        (pParams->device->workarounds.dynamic_texture_workaround &&
+         pDesc->Pool == D3DPOOL_DEFAULT && pDesc->Usage & D3DUSAGE_DYNAMIC)) {
+        This->stride_internal = nine_format_get_stride(This->format_internal,
                                                          pDesc->Width);
-        This->layer_stride_conversion = util_format_get_2d_size(This->format_conversion,
-                                                                This->stride_conversion,
+        This->layer_stride_internal = util_format_get_2d_size(This->format_internal,
+                                                                This->stride_internal,
                                                                 pDesc->Height);
-        This->data_conversion = align_calloc(This->layer_stride_conversion *
+        This->data_internal = align_calloc(This->layer_stride_internal *
                                              This->desc.Depth, 32);
-        if (!This->data_conversion)
+        if (!This->data_internal)
             return E_OUTOFMEMORY;
     }
 
@@ -157,8 +161,8 @@ NineVolume9_dtor( struct NineVolume9 *This )
 
     if (This->data)
         align_free(This->data);
-    if (This->data_conversion)
-        align_free(This->data_conversion);
+    if (This->data_internal)
+        align_free(This->data_internal);
 
     pipe_resource_reference(&This->resource, NULL);
 
@@ -232,15 +236,16 @@ NineVolume9_AddDirtyRegion( struct NineVolume9 *This,
     }
 }
 
-static inline uint8_t *
-NineVolume9_GetSystemMemPointer(struct NineVolume9 *This, int x, int y, int z)
+static inline unsigned
+NineVolume9_GetSystemMemOffset(enum pipe_format format, unsigned stride,
+                               unsigned layer_stride,
+                               int x, int y, int z)
 {
-    unsigned x_offset = util_format_get_stride(This->info.format, x);
+    unsigned x_offset = util_format_get_stride(format, x);
 
-    y = util_format_get_nblocksy(This->info.format, y);
+    y = util_format_get_nblocksy(format, y);
 
-    assert(This->data);
-    return This->data + (z * This->layer_stride + y * This->stride + x_offset);
+    return z * layer_stride + y * stride + x_offset;
 }
 
 HRESULT NINE_WINAPI
@@ -314,18 +319,23 @@ NineVolume9_LockBox( struct NineVolume9 *This,
     if (p_atomic_read(&This->pending_uploads_counter))
         nine_csmt_process(This->base.device);
 
-    if (This->data_conversion) {
-        /* For now we only have uncompressed formats here */
-        pLockedVolume->RowPitch = This->stride_conversion;
-        pLockedVolume->SlicePitch = This->layer_stride_conversion;
-        pLockedVolume->pBits = This->data_conversion + box.z * This->layer_stride_conversion +
-                               box.y * This->stride_conversion +
-                               util_format_get_stride(This->format_conversion, box.x);
-    } else if (This->data) {
-        pLockedVolume->RowPitch = This->stride;
-        pLockedVolume->SlicePitch = This->layer_stride;
-        pLockedVolume->pBits =
-            NineVolume9_GetSystemMemPointer(This, box.x, box.y, box.z);
+    if (This->data_internal || This->data) {
+        enum pipe_format format = This->info.format;
+        unsigned stride = This->stride;
+        unsigned layer_stride = This->layer_stride;
+        uint8_t *data = This->data;
+        if (This->data_internal) {
+            format = This->format_internal;
+            stride = This->stride_internal;
+            layer_stride = This->layer_stride_internal;
+            data = This->data_internal;
+        }
+        pLockedVolume->RowPitch = stride;
+        pLockedVolume->SlicePitch = layer_stride;
+        pLockedVolume->pBits = data +
+            NineVolume9_GetSystemMemOffset(format, stride,
+                                           layer_stride,
+                                           box.x, box.y, box.z);
     } else {
         bool no_refs = !p_atomic_read(&This->base.bind) &&
             !p_atomic_read(&This->base.container->bind);
@@ -371,40 +381,38 @@ NineVolume9_UnlockBox( struct NineVolume9 *This )
     }
     --This->lock_count;
 
-    if (This->data_conversion) {
-        struct pipe_transfer *transfer;
-        uint8_t *dst = This->data;
+    if (This->data_internal) {
         struct pipe_box box;
 
         u_box_3d(0, 0, 0, This->desc.Width, This->desc.Height, This->desc.Depth,
                  &box);
 
-        pipe = NineDevice9_GetPipe(This->base.device);
-        if (!dst) {
-            dst = pipe->transfer_map(pipe,
-                                     This->resource,
-                                     This->level,
-                                     PIPE_TRANSFER_WRITE |
-                                     PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE,
-                                     &box, &transfer);
-            if (!dst)
-                return D3D_OK;
+
+        if (This->data) {
+            (void) util_format_translate_3d(This->info.format,
+                                            This->data, This->stride,
+                                            This->layer_stride,
+                                            0, 0, 0,
+                                            This->format_internal,
+                                            This->data_internal,
+                                            This->stride_internal,
+                                            This->layer_stride_internal,
+                                            0, 0, 0,
+                                            This->desc.Width, This->desc.Height,
+                                            This->desc.Depth);
+        } else {
+            nine_context_box_upload(This->base.device,
+                                    &This->pending_uploads_counter,
+                                    (struct NineUnknown *)This,
+                                    This->resource,
+                                    This->level,
+                                    &box,
+                                    This->format_internal,
+                                    This->data_internal,
+                                    This->stride_internal,
+                                    This->layer_stride_internal,
+                                    &box);
         }
-
-        (void) util_format_translate_3d(This->info.format,
-                                        dst, This->data ? This->stride : transfer->stride,
-                                        This->data ? This->layer_stride : transfer->layer_stride,
-                                        0, 0, 0,
-                                        This->format_conversion,
-                                        This->data_conversion,
-                                        This->stride_conversion,
-                                        This->layer_stride_conversion,
-                                        0, 0, 0,
-                                        This->desc.Width, This->desc.Height,
-                                        This->desc.Depth);
-
-        if (!This->data)
-            pipe_transfer_unmap(pipe, transfer);
     }
 
     return D3D_OK;
@@ -458,11 +466,11 @@ NineVolume9_CopyMemToDefault( struct NineVolume9 *This,
                             From->layer_stride,
                             &src_box);
 
-    if (This->data_conversion)
-        (void) util_format_translate_3d(This->format_conversion,
-                                        This->data_conversion,
-                                        This->stride_conversion,
-                                        This->layer_stride_conversion,
+    if (This->data_internal)
+        (void) util_format_translate_3d(This->format_internal,
+                                        This->data_internal,
+                                        This->stride_internal,
+                                        This->layer_stride_internal,
                                         dstx, dsty, dstz,
                                         From->info.format,
                                         From->data, From->stride,

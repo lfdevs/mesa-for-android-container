@@ -70,96 +70,117 @@ endif
 
 with_gles1 = get_option('gles1')
 with_gles2 = get_option('gles2')
+if host_machine.system() == 'windows'
+  if with_gles1 == 'auto'
+    with_gles1 = 'false'
+  endif
+  if with_gles2 == 'auto'
+    with_gles2 = 'false'
+  endif
+endif
 with_opengl = get_option('opengl')
+with_shared_glapi = get_option('shared-glapi')
+
+# shared-glapi is required if at least two OpenGL APIs are being built
+if not with_shared_glapi
+  if ((with_gles1 == 'true' and with_gles2 == 'true') or 
+      (with_gles1 == 'true' and with_opengl) or
+      (with_gles2 == 'true' and with_opengl))
+    error('shared-glapi required for building two or more of OpenGL, OpenGL ES 1.x, OpenGL ES 2.x')
+  endif
+  with_gles1 = 'false'
+  with_gles2 = 'false'
+endif
+
+# We require OpenGL for OpenGL ES
+if not with_opengl
+  if (with_gles1 == 'true' or with_gles2 == 'true') and not with_opengl
+    error('building OpenGL ES without OpenGL is not supported.')
+  endif
+  with_gles1 = 'false'
+  with_gles2 = 'false'
+endif
+
+with_gles1 = with_gles1 != 'false'
+with_gles2 = with_gles2 != 'false'
 with_any_opengl = with_opengl or with_gles1 or with_gles2
 # Only build shared_glapi if at least one OpenGL API is enabled
 with_shared_glapi = get_option('shared-glapi') and with_any_opengl
 
-
-# shared-glapi is required if at least two OpenGL APIs are being built
-if not with_shared_glapi
-  if ((with_gles1 and with_gles2) or (with_gles1 and with_opengl)
-      or (with_gles2 and with_opengl))
-    error('shared-glapi required for building two or more of OpenGL, OpenGL ES 1.x, OpenGL ES 2.x')
-  endif
-endif
-
-# We require OpenGL for OpenGL ES
-if (with_gles1 or with_gles2) and not with_opengl
-  error('building OpenGL ES without OpenGL is not supported.')
-endif
-
 system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'dragonfly', 'linux'].contains(host_machine.system())
 
-_drivers = get_option('dri-drivers')
-if _drivers.contains('auto')
+dri_drivers = get_option('dri-drivers')
+if dri_drivers.contains('auto')
   if system_has_kms_drm
     # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
-      _drivers = ['i915', 'i965', 'r100', 'r200', 'nouveau']
+      dri_drivers = ['i915', 'i965', 'r100', 'r200', 'nouveau']
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
-      _drivers = []
+      dri_drivers = []
     else
       error('Unknown architecture @0@. Please pass -Ddri-drivers to set driver options. Patches gladly accepted to fix this.'.format(
             host_machine.cpu_family()))
     endif
   elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
     # only swrast would make sense here, but gallium swrast is a much better default
-    _drivers = []
+    dri_drivers = []
   else
     error('Unknown OS @0@. Please pass -Ddri-drivers to set driver options. Patches gladly accepted to fix this.'.format(
           host_machine.system()))
   endif
 endif
 
-with_dri_i915 = _drivers.contains('i915')
-with_dri_i965 = _drivers.contains('i965')
-with_dri_r100 = _drivers.contains('r100')
-with_dri_r200 = _drivers.contains('r200')
-with_dri_nouveau = _drivers.contains('nouveau')
-with_dri_swrast = _drivers.contains('swrast')
+with_dri_i915 = dri_drivers.contains('i915')
+with_dri_i965 = dri_drivers.contains('i965')
+with_dri_r100 = dri_drivers.contains('r100')
+with_dri_r200 = dri_drivers.contains('r200')
+with_dri_nouveau = dri_drivers.contains('nouveau')
+with_dri_swrast = dri_drivers.contains('swrast')
 
-with_dri = _drivers.length() != 0 and _drivers != ['']
+with_dri = dri_drivers.length() != 0 and dri_drivers != ['']
 
-_drivers = get_option('gallium-drivers')
-if _drivers.contains('auto')
+gallium_drivers = get_option('gallium-drivers')
+if gallium_drivers.contains('auto')
   if system_has_kms_drm
     # TODO: PPC, Sparc
     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
-      _drivers = [
+      gallium_drivers = [
         'r300', 'r600', 'radeonsi', 'nouveau', 'virgl', 'svga', 'swrast'
       ]
     elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
-      _drivers = [
+      gallium_drivers = [
         'kmsro', 'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau',
-        'tegra', 'virgl', 'swrast',
+        'tegra', 'virgl', 'lima', 'swrast'
       ]
     else
       error('Unknown architecture @0@. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.'.format(
             host_machine.cpu_family()))
     endif
   elif ['darwin', 'windows', 'cygwin', 'haiku'].contains(host_machine.system())
-    _drivers = ['swrast']
+    gallium_drivers = ['swrast']
   else
     error('Unknown OS @0@. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.'.format(
           host_machine.system()))
   endif
 endif
-with_gallium_kmsro = _drivers.contains('kmsro')
-with_gallium_radeonsi = _drivers.contains('radeonsi')
-with_gallium_r300 = _drivers.contains('r300')
-with_gallium_r600 = _drivers.contains('r600')
-with_gallium_nouveau = _drivers.contains('nouveau')
-with_gallium_freedreno = _drivers.contains('freedreno')
-with_gallium_softpipe = _drivers.contains('swrast')
-with_gallium_vc4 = _drivers.contains('vc4')
-with_gallium_v3d = _drivers.contains('v3d')
-with_gallium_etnaviv = _drivers.contains('etnaviv')
-with_gallium_tegra = _drivers.contains('tegra')
-with_gallium_i915 = _drivers.contains('i915')
-with_gallium_svga = _drivers.contains('svga')
-with_gallium_virgl = _drivers.contains('virgl')
-with_gallium_swr = _drivers.contains('swr')
+with_gallium_kmsro = gallium_drivers.contains('kmsro')
+with_gallium_radeonsi = gallium_drivers.contains('radeonsi')
+with_gallium_r300 = gallium_drivers.contains('r300')
+with_gallium_r600 = gallium_drivers.contains('r600')
+with_gallium_nouveau = gallium_drivers.contains('nouveau')
+with_gallium_freedreno = gallium_drivers.contains('freedreno')
+with_gallium_softpipe = gallium_drivers.contains('swrast')
+with_gallium_vc4 = gallium_drivers.contains('vc4')
+with_gallium_v3d = gallium_drivers.contains('v3d')
+with_gallium_panfrost = gallium_drivers.contains('panfrost')
+with_gallium_etnaviv = gallium_drivers.contains('etnaviv')
+with_gallium_tegra = gallium_drivers.contains('tegra')
+with_gallium_iris = gallium_drivers.contains('iris')
+with_gallium_i915 = gallium_drivers.contains('i915')
+with_gallium_svga = gallium_drivers.contains('svga')
+with_gallium_virgl = gallium_drivers.contains('virgl')
+with_gallium_swr = gallium_drivers.contains('swr')
+with_gallium_lima = gallium_drivers.contains('lima')
 
 if cc.get_id() == 'intel'
   if meson.version().version_compare('< 0.49.0')
@@ -169,7 +190,7 @@ if cc.get_id() == 'intel'
   endif
 endif
 
-with_gallium = _drivers.length() != 0 and _drivers != ['']
+with_gallium = gallium_drivers.length() != 0 and gallium_drivers != ['']
 
 if with_gallium and system_has_kms_drm
   _glx = get_option('glx')
@@ -201,7 +222,12 @@ endif
 
 with_intel_vk = _vulkan_drivers.contains('intel')
 with_amd_vk = _vulkan_drivers.contains('amd')
+with_freedreno_vk = _vulkan_drivers.contains('freedreno')
 with_any_vk = _vulkan_drivers.length() != 0 and _vulkan_drivers != ['']
+
+if with_freedreno_vk and get_option('I-love-half-baked-turnips') != true
+  error('Cannot enable freedreno vulkan driver')
+endif
 
 if with_dri_swrast and (with_gallium_softpipe or with_gallium_swr)
   error('Only one swrast provider can be built')
@@ -209,8 +235,8 @@ endif
 if with_dri_i915 and with_gallium_i915
   error('Only one i915 provider can be built')
 endif
-if with_gallium_kmsro and not (with_gallium_vc4 or with_gallium_etnaviv or with_gallium_freedreno)
-  error('kmsro driver requires one or more renderonly drivers (vc4, etnaviv, freedreno)')
+if with_gallium_kmsro and not (with_gallium_v3d or with_gallium_vc4 or with_gallium_etnaviv or with_gallium_freedreno or with_gallium_panfrost or with_gallium_lima)
+  error('kmsro driver requires one or more renderonly drivers (vc4, etnaviv, freedreno, panfrost, lima)')
 endif
 if with_gallium_tegra and not with_gallium_nouveau
   error('tegra driver requires nouveau driver')
@@ -368,13 +394,17 @@ if with_glvnd
   elif with_glx == 'disabled' and not with_egl
     error('glvnd requires DRI based GLX and/or EGL')
   endif
+  if get_option('egl-lib-suffix') != ''
+    error('''EGL lib suffix can't be used with libglvnd''')
+  endif
 endif
 
 if with_vulkan_icd_dir == ''
   with_vulkan_icd_dir = join_paths(get_option('datadir'), 'vulkan/icd.d')
 endif
 
-with_dri2 = (with_dri or with_any_vk) and with_dri_platform == 'drm'
+with_dri2 = (with_dri or with_any_vk) and (with_dri_platform == 'drm' or
+  host_machine.system() == 'gnu')
 _dri3 = get_option('dri3')
 if _dri3 == 'auto'
   with_dri3 = system_has_kms_drm and with_dri2
@@ -616,7 +646,8 @@ if with_gallium_st_nine
   if not with_gallium_softpipe
     error('The nine state tracker requires gallium softpipe/llvmpipe.')
   elif not (with_gallium_radeonsi or with_gallium_nouveau or with_gallium_r600
-            or with_gallium_r300 or with_gallium_svga or with_gallium_i915)
+            or with_gallium_r300 or with_gallium_svga or with_gallium_i915
+            or with_gallium_iris)
     error('The nine state tracker requires at least one non-swrast gallium driver.')
   endif
   if not with_dri3
@@ -714,6 +745,9 @@ if with_platform_android
     dependency('hardware'),
     dependency('sync'),
   ]
+  if get_option('platform-sdk-version') >= 26
+    dep_android += dependency('nativewindow')
+  endif
   pre_args += '-DHAVE_ANDROID_PLATFORM'
 endif
 if with_platform_haiku
@@ -741,9 +775,19 @@ if get_option('buildtype') == 'debug'
   pre_args += '-DDEBUG'
 endif
 
-if get_option('shader-cache')
-  pre_args += '-DENABLE_SHADER_CACHE'
-elif with_amd_vk
+with_shader_cache = false
+_shader_cache = get_option('shader-cache')
+if _shader_cache != 'false'
+  if host_machine.system() == 'windows'
+    if _shader_cache == 'true'
+      error('Shader Cache does not currently work on Windows')
+    endif
+  else
+    pre_args += '-DENABLE_SHADER_CACHE'
+    with_shader_cache = true
+  endif
+endif
+if with_amd_vk and not with_shader_cache
   error('Radv requires shader cache support')
 endif
 
@@ -800,6 +844,7 @@ endif
 c_args = []
 foreach a : ['-Werror=implicit-function-declaration',
              '-Werror=missing-prototypes', '-Werror=return-type',
+             '-Werror=incompatible-pointer-types',
              '-fno-math-errno',
              '-fno-trapping-math', '-Qunused-arguments']
   if cc.has_argument(a)
@@ -1073,7 +1118,7 @@ if cc.has_function('dl_iterate_phdr')
   pre_args += '-DHAVE_DL_ITERATE_PHDR'
 elif with_intel_vk
   error('Intel "Anvil" Vulkan driver requires the dl_iterate_phdr function')
-elif with_dri_i965 and get_option('shader-cache')
+elif with_dri_i965 and with_shader_cache
   error('Intel i965 GL driver requires dl_iterate_phdr when built with shader caching.')
 endif
 
@@ -1213,22 +1258,15 @@ if _llvm != 'false'
       with_gallium_opencl or _llvm == 'true'
     ),
     static : not _shared_llvm,
+    method : 'config-tool',
   )
   with_llvm = dep_llvm.found()
 endif
 if with_llvm
   _llvm_version = dep_llvm.version().split('.')
-
-  # 3 digits versions in LLVM only started from 3.4.1 on
-  if dep_llvm.version().version_compare('>= 3.4.1')
-    _llvm_patch = _llvm_version[2]
-  else
-    _llvm_patch = '0'
-  endif
-
   pre_args += [
     '-DHAVE_LLVM=0x0@0@0@1@'.format(_llvm_version[0], _llvm_version[1]),
-    '-DMESA_LLVM_VERSION_PATCH=@0@'.format(_llvm_patch),
+    '-DMESA_LLVM_VERSION_STRING="@0@"'.format(dep_llvm.version()),
   ]
 
   # LLVM can be built without rtti, turning off rtti changes the ABI of C++
@@ -1237,11 +1275,15 @@ if with_llvm
   if dep_llvm.get_configtool_variable('has-rtti') == 'NO'
     if with_gallium_nouveau
       error('The Nouveau driver requires rtti. You either need to turn off nouveau or use an LLVM built with LLVM_ENABLE_RTTI.')
+    elif with_gallium_opencl
+      error('The Clover OpenCL state tracker requires rtti, you need to turn off clover or use an LLVM built with LLVM_ENABLE_RTTI.')
     endif
     cpp_args += '-fno-rtti'
   endif
 elif with_amd_vk or with_gallium_radeonsi or with_gallium_swr
   error('The following drivers require LLVM: Radv, RadeonSI, SWR. One of these is enabled, but LLVM is disabled.')
+elif with_gallium_opencl
+  error('The OpenCL "Clover" state tracker requires LLVM, but LLVM is disabled.')
 endif
 
 if (with_amd_vk or with_gallium_radeonsi or with_gallium_opencl or
@@ -1387,12 +1429,14 @@ if with_platform_x11
       dep_xshmfence = dependency('xshmfence', version : '>= 1.1')
     endif
   endif
-  if with_glx == 'dri'
+  if with_glx == 'dri' or with_glx == 'gallium-xlib'
+    dep_glproto = dependency('glproto', version : '>= 1.4.14')
+  endif
+  if with_glx == 'dri' 
     if with_dri_platform == 'drm'
       dep_dri2proto = dependency('dri2proto', version : '>= 2.8')
       dep_xxf86vm = dependency('xxf86vm')
     endif
-    dep_glproto = dependency('glproto', version : '>= 1.4.14')
   endif
   if (with_egl or (
       with_gallium_vdpau or with_gallium_xvmc or with_gallium_xa or
@@ -1429,8 +1473,6 @@ foreach a : cpp_args
   add_project_arguments(a, language : ['cpp'])
 endforeach
 
-inc_include = include_directories('include')
-
 gl_priv_reqs = []
 
 if with_glx == 'xlib' or with_glx == 'gallium-xlib'
@@ -1461,9 +1503,143 @@ endif
 
 pkg = import('pkgconfig')
 
+prog_nm = find_program('nm', required : false)
 env_test = environment()
-env_test.set('NM', find_program('nm').path())
+if prog_nm.found()
+  env_test.set('NM', prog_nm.path())
+endif
+
+# This quirk needs to be applied to sources with functions defined in assembly
+# as GCC LTO drops them. See: https://bugs.freedesktop.org/show_bug.cgi?id=109391
+gcc_lto_quirk = (cc.get_id() == 'gcc') ? ['-fno-lto'] : []
 
 subdir('include')
 subdir('bin')
 subdir('src')
+
+# Meson 0.49 and earlier seems to have a bug that fails to evaluate the string-
+# formatting below unless the first argument is passed as a variable. This has
+# been fixed in Meson 0.50 and beyond, but we need to keep it like this for now
+# for backwards compatibility.
+_with_opengl_string = with_opengl ? 'yes' : 'no'
+
+lines = ['',
+  'prefix:          ' + get_option('prefix'),
+  'libdir:          ' + get_option('libdir'),
+  'includedir:      ' + get_option('includedir'),
+  '',
+  'OpenGL:          @0@ (ES1: @1@ ES2: @2@)'.format(_with_opengl_string,
+                                                    with_gles1 ? 'yes' : 'no',
+                                                    with_gles2 ? 'yes' : 'no'),
+]
+
+lines += ''
+if with_osmesa != 'none'
+  suffix = ''
+  if with_osmesa == 'gallium'
+    suffix = '(Gallium)'
+  endif
+  lines += 'OSMesa:          lib' + osmesa_lib_name + suffix
+else
+  lines += 'OSMesa:          no'
+endif
+
+lines += ''
+if with_dri
+  lines += 'DRI platform:    ' + with_dri_platform
+  if dri_drivers.length() != 0 and dri_drivers != ['']
+    lines += 'DRI drivers:     ' + ' '.join(dri_drivers)
+  else
+    lines += 'DRI drivers:     no'
+  endif
+  lines += 'DRI driver dir:  ' + dri_drivers_path
+endif
+
+lines += ''
+if with_glx != 'disabled'
+  if with_glx == 'dri'
+    lines += 'GLX:             DRI-based'
+  elif with_glx == 'xlib'
+    lines += 'GLX:             Xlib-based'
+  elif with_glx == 'gallium-xlib'
+    lines += 'GLX:             Xlib-based (Gallium)'
+  else
+    lines += 'GLX:             ' + with_glx
+  endif
+endif
+
+lines += ''
+lines += 'EGL:             ' + (with_egl ? 'yes' : 'no')
+if with_egl
+  egl_drivers = []
+  if with_dri
+    egl_drivers += 'builtin:egl_dri2'
+  endif
+  if with_dri3
+    egl_drivers += 'builtin:egl_dri3'
+  endif
+  lines += 'EGL drivers:     ' + ' '.join(egl_drivers)
+endif
+lines += 'GBM:             ' + (with_gbm ? 'yes' : 'no')
+if with_platforms
+  lines += 'EGL/Vulkan/VL platforms:   ' + ' '.join(_platforms)
+endif
+
+lines += ''
+if with_any_vk
+  lines += 'Vulkan drivers:  ' + ' '.join(_vulkan_drivers)
+  lines += 'Vulkan ICD dir:  ' + with_vulkan_icd_dir
+else
+  lines += 'Vulkan drivers:  no'
+endif
+
+lines += ''
+if with_llvm
+  lines += 'llvm:            yes'
+  lines += 'llvm-version:    ' + dep_llvm.version()
+else
+  lines += 'llvm:            no'
+endif
+
+lines += ''
+if with_gallium
+  lines += 'Gallium drivers: ' + ' '.join(gallium_drivers)
+  gallium_st = ['mesa']
+  if with_gallium_xa
+    gallium_st += 'xa'
+  endif
+  if with_gallium_xvmc
+    gallium_st += 'xvmc'
+  endif
+  if with_gallium_xvmc
+    gallium_st += 'xvmc'
+  endif
+  if with_gallium_vdpau
+    gallium_st += 'vdpau'
+  endif
+  if with_gallium_omx != 'disabled'
+    gallium_st += 'omx' + with_gallium_omx
+  endif
+  if with_gallium_va
+    gallium_st += 'va'
+  endif
+  if with_gallium_st_nine
+    gallium_st += 'nine'
+  endif
+  if with_gallium_opencl
+    gallium_st += 'clover'
+  endif
+  lines += 'Gallium st:      ' + ' '.join(gallium_st)
+else
+  lines += 'Gallium:         no'
+endif
+
+lines += 'HUD lmsensors:   ' + (dep_lmsensors.found() ? 'yes' : 'no')
+
+lines += ''
+lines += 'Shared-glapi:    ' + (with_shared_glapi ? 'yes' : 'no')
+
+
+indent = '        '
+summary = indent + ('\n' + indent).join(lines)
+message('Configuration summary:\n@0@\n'.format(summary))

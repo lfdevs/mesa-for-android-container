@@ -44,7 +44,6 @@ struct simdBBox
     simdscalari xmax;
 };
 
-#if ENABLE_AVX512_SIMD16
 struct simd16BBox
 {
     simd16scalari ymin;
@@ -52,7 +51,6 @@ struct simd16BBox
     simd16scalari xmin;
     simd16scalari xmax;
 };
-#endif
 
 template <typename SIMD_T>
 struct SIMDBBOX_T
@@ -370,7 +368,7 @@ static INLINE std::string GetEnv(const std::string& variableName)
 {
     std::string output;
 #if defined(_WIN32)
-    DWORD valueSize = GetEnvironmentVariableA(variableName.c_str(), nullptr, 0);
+    uint32_t valueSize = GetEnvironmentVariableA(variableName.c_str(), nullptr, 0);
     if (!valueSize)
         return output;
     output.resize(valueSize - 1); // valueSize includes null, output.resize() does not

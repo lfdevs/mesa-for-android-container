@@ -165,7 +165,7 @@ anv_state_table_init(struct anv_state_table *table,
       goto fail_fd;
    }
 
-   if (!u_vector_init(&table->mmap_cleanups,
+   if (!u_vector_init(&table->cleanups,
                       round_to_power_of_two(sizeof(struct anv_state_table_cleanup)),
                       128)) {
       result = vk_error(VK_ERROR_INITIALIZATION_FAILED);
@@ -179,12 +179,12 @@ anv_state_table_init(struct anv_state_table *table,
    uint32_t initial_size = initial_entries * ANV_STATE_ENTRY_SIZE;
    result = anv_state_table_expand_range(table, initial_size);
    if (result != VK_SUCCESS)
-      goto fail_mmap_cleanups;
+      goto fail_cleanups;
 
    return VK_SUCCESS;
 
- fail_mmap_cleanups:
-   u_vector_finish(&table->mmap_cleanups);
+ fail_cleanups:
+   u_vector_finish(&table->cleanups);
  fail_fd:
    close(table->fd);
 
@@ -195,7 +195,7 @@ static VkResult
 anv_state_table_expand_range(struct anv_state_table *table, uint32_t size)
 {
    void *map;
-   struct anv_mmap_cleanup *cleanup;
+   struct anv_state_table_cleanup *cleanup;
 
    /* Assert that we only ever grow the pool */
    assert(size >= table->state.end);
@@ -204,11 +204,11 @@ anv_state_table_expand_range(struct anv_state_table *table, uint32_t size)
    if (size > BLOCK_POOL_MEMFD_SIZE)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   cleanup = u_vector_add(&table->mmap_cleanups);
+   cleanup = u_vector_add(&table->cleanups);
    if (!cleanup)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   *cleanup = ANV_MMAP_CLEANUP_INIT;
+   *cleanup = ANV_STATE_TABLE_CLEANUP_INIT;
 
    /* Just leak the old map until we destroy the pool.  We can't munmap it
     * without races or imposing locking on the block allocate fast path. On
@@ -272,12 +272,12 @@ anv_state_table_finish(struct anv_state_table *table)
 {
    struct anv_state_table_cleanup *cleanup;
 
-   u_vector_foreach(cleanup, &table->mmap_cleanups) {
+   u_vector_foreach(cleanup, &table->cleanups) {
       if (cleanup->map)
          munmap(cleanup->map, cleanup->size);
    }
 
-   u_vector_finish(&table->mmap_cleanups);
+   u_vector_finish(&table->cleanups);
 
    close(table->fd);
 }
@@ -493,10 +493,14 @@ void
 anv_block_pool_finish(struct anv_block_pool *pool)
 {
    struct anv_mmap_cleanup *cleanup;
+   const bool use_softpin = !!(pool->bo_flags & EXEC_OBJECT_PINNED);
 
    u_vector_foreach(cleanup, &pool->mmap_cleanups) {
-      if (cleanup->map)
+      if (use_softpin)
+         anv_gem_munmap(cleanup->map, cleanup->size);
+      else
          munmap(cleanup->map, cleanup->size);
+
       if (cleanup->gem_handle)
          anv_gem_close(pool->device, cleanup->gem_handle);
    }
@@ -1021,7 +1025,7 @@ anv_state_pool_return_blocks(struct anv_state_pool *pool,
    assert(chunk_offset % block_size == 0);
 
    uint32_t st_idx;
-   VkResult result = anv_state_table_add(&pool->table, &st_idx, count);
+   UNUSED VkResult result = anv_state_table_add(&pool->table, &st_idx, count);
    assert(result == VK_SUCCESS);
    for (int i = 0; i < count; i++) {
       /* update states that were added back to the state table */
@@ -1164,7 +1168,7 @@ anv_state_pool_alloc_no_vg(struct anv_state_pool *pool,
                                                 &padding);
    /* Everytime we allocate a new state, add it to the state pool */
    uint32_t idx;
-   VkResult result = anv_state_table_add(&pool->table, &idx, 1);
+   UNUSED VkResult result = anv_state_table_add(&pool->table, &idx, 1);
    assert(result == VK_SUCCESS);
 
    state = anv_state_table_get(&pool->table, idx);
@@ -1208,7 +1212,7 @@ anv_state_pool_alloc_back(struct anv_state_pool *pool)
    offset = anv_block_pool_alloc_back(&pool->block_pool,
                                       pool->block_size);
    uint32_t idx;
-   VkResult result = anv_state_table_add(&pool->table, &idx, 1);
+   UNUSED VkResult result = anv_state_table_add(&pool->table, &idx, 1);
    assert(result == VK_SUCCESS);
 
    state = anv_state_table_get(&pool->table, idx);
@@ -1706,6 +1710,66 @@ anv_bo_cache_alloc(struct anv_device *device,
 
    pthread_mutex_unlock(&cache->mutex);
 
+   *bo_out = &bo->bo;
+
+   return VK_SUCCESS;
+}
+
+VkResult
+anv_bo_cache_import_host_ptr(struct anv_device *device,
+                             struct anv_bo_cache *cache,
+                             void *host_ptr, uint32_t size,
+                             uint64_t bo_flags, struct anv_bo **bo_out)
+{
+   assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
+   assert((bo_flags & ANV_BO_EXTERNAL) == 0);
+
+   uint32_t gem_handle = anv_gem_userptr(device, host_ptr, size);
+   if (!gem_handle)
+      return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
+
+   pthread_mutex_lock(&cache->mutex);
+
+   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
+   if (bo) {
+      /* VK_EXT_external_memory_host doesn't require handling importing the
+       * same pointer twice at the same time, but we don't get in the way.  If
+       * kernel gives us the same gem_handle, only succeed if the flags match.
+       */
+      if (bo_flags != bo->bo.flags) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "same host pointer imported two different ways");
+      }
+      __sync_fetch_and_add(&bo->refcount, 1);
+   } else {
+      bo = vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+      if (!bo) {
+         anv_gem_close(device, gem_handle);
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+
+      bo->refcount = 1;
+
+      anv_bo_init(&bo->bo, gem_handle, size);
+      bo->bo.flags = bo_flags;
+
+      if (!anv_vma_alloc(device, &bo->bo)) {
+         anv_gem_close(device, bo->bo.gem_handle);
+         pthread_mutex_unlock(&cache->mutex);
+         vk_free(&device->alloc, bo);
+         return vk_errorf(device->instance, NULL,
+                          VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                          "failed to allocate virtual address for BO");
+      }
+
+      _mesa_hash_table_insert(cache->bo_map, (void *)(uintptr_t)gem_handle, bo);
+   }
+
+   pthread_mutex_unlock(&cache->mutex);
    *bo_out = &bo->bo;
 
    return VK_SUCCESS;

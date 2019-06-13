@@ -600,6 +600,7 @@ typedef enum
    SYSTEM_VALUE_LOCAL_INVOCATION_ID,
    SYSTEM_VALUE_LOCAL_INVOCATION_INDEX,
    SYSTEM_VALUE_GLOBAL_INVOCATION_ID,
+   SYSTEM_VALUE_GLOBAL_INVOCATION_INDEX,
    SYSTEM_VALUE_WORK_GROUP_ID,
    SYSTEM_VALUE_NUM_WORK_GROUPS,
    SYSTEM_VALUE_LOCAL_GROUP_SIZE,
@@ -620,10 +621,16 @@ typedef enum
    SYSTEM_VALUE_VERTEX_CNT,
 
    /**
-    * Driver internal varying-coord, used for varying-fetch instructions.
+    * Driver internal varying-coords, used for varying-fetch instructions.
     * Not externally visible.
+    *
+    * The _SIZE value is "primitive size", used to scale i/j in primitive
+    * space to pixel space.
     */
-   SYSTEM_VALUE_VARYING_COORD,
+   SYSTEM_VALUE_BARYCENTRIC_PIXEL,
+   SYSTEM_VALUE_BARYCENTRIC_SAMPLE,
+   SYSTEM_VALUE_BARYCENTRIC_CENTROID,
+   SYSTEM_VALUE_BARYCENTRIC_SIZE,
 
    SYSTEM_VALUE_MAX             /**< Number of values */
 } gl_system_value;
@@ -715,6 +722,9 @@ enum gl_access_qualifier
    ACCESS_VOLATILE      = (1 << 2),
    ACCESS_NON_READABLE  = (1 << 3),
    ACCESS_NON_WRITEABLE = (1 << 4),
+
+   /** The access may use a non-uniform buffer or image index */
+   ACCESS_NON_UNIFORM   = (1 << 5),
 };
 
 /**
@@ -766,6 +776,47 @@ enum compare_func
    COMPARE_FUNC_NOTEQUAL,
    COMPARE_FUNC_GEQUAL,
    COMPARE_FUNC_ALWAYS,
+};
+
+/**
+ * Arrangements for grouping invocations from NV_compute_shader_derivatives.
+ *
+ *   The extension provides new layout qualifiers that support two different
+ *   arrangements of compute shader invocations for the purpose of derivative
+ *   computation.  When specifying
+ *
+ *     layout(derivative_group_quadsNV) in;
+ *
+ *   compute shader invocations are grouped into 2x2x1 arrays whose four local
+ *   invocation ID values follow the pattern:
+ *
+ *       +-----------------+------------------+
+ *       | (2x+0, 2y+0, z) |  (2x+1, 2y+0, z) |
+ *       +-----------------+------------------+
+ *       | (2x+0, 2y+1, z) |  (2x+1, 2y+1, z) |
+ *       +-----------------+------------------+
+ *
+ *   where Y increases from bottom to top.  When specifying
+ *
+ *     layout(derivative_group_linearNV) in;
+ *
+ *   compute shader invocations are grouped into 2x2x1 arrays whose four local
+ *   invocation index values follow the pattern:
+ *
+ *       +------+------+
+ *       | 4n+0 | 4n+1 |
+ *       +------+------+
+ *       | 4n+2 | 4n+3 |
+ *       +------+------+
+ *
+ *   If neither layout qualifier is specified, derivatives in compute shaders
+ *   return zero, which is consistent with the handling of built-in texture
+ *   functions like texture() in GLSL 4.50 compute shaders.
+ */
+enum gl_derivative_group {
+   DERIVATIVE_GROUP_NONE = 0,
+   DERIVATIVE_GROUP_QUADS,
+   DERIVATIVE_GROUP_LINEAR,
 };
 
 #ifdef __cplusplus

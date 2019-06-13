@@ -33,35 +33,6 @@
 #include "brw_state.h"
 #include "program/prog_parameter.h"
 
-static void
-brw_tes_debug_recompile(struct brw_context *brw, struct gl_program *prog,
-                       const struct brw_tes_prog_key *key)
-{
-   perf_debug("Recompiling tessellation evaluation shader for program %d\n",
-              prog->Id);
-
-   bool found = false;
-   const struct brw_tes_prog_key *old_key =
-      brw_find_previous_compile(&brw->cache, BRW_CACHE_TES_PROG,
-                                key->program_string_id);
-
-   if (!old_key) {
-      perf_debug("  Didn't find previous compile in the shader cache for "
-                 "debug\n");
-      return;
-   }
-
-   found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
-   found |= key_debug(brw, "inputs read", old_key->inputs_read,
-                      key->inputs_read);
-   found |= key_debug(brw, "patch inputs read", old_key->patch_inputs_read,
-                      key->patch_inputs_read);
-
-   if (!found) {
-      perf_debug("  Something else\n");
-   }
-}
-
 static bool
 brw_codegen_tes_prog(struct brw_context *brw,
                      struct brw_program *tep,
@@ -119,7 +90,8 @@ brw_codegen_tes_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       if (tep->compiled_once) {
-         brw_tes_debug_recompile(brw, &tep->program, key);
+         brw_debug_recompile(brw, MESA_SHADER_TESS_EVAL, tep->program.Id,
+                             key->program_string_id, key);
       }
       if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("TES compile took %.03f ms and stalled the GPU\n",

@@ -484,6 +484,29 @@ coord_to_layer(float coord, unsigned first_layer, unsigned last_layer)
    return CLAMP(c, (int)first_layer, (int)last_layer);
 }
 
+static void
+compute_gradient_1d(const float s[TGSI_QUAD_SIZE],
+                    const float t[TGSI_QUAD_SIZE],
+                    const float p[TGSI_QUAD_SIZE],
+                    float derivs[3][2][TGSI_QUAD_SIZE])
+{
+   memset(derivs, 0, 6 * TGSI_QUAD_SIZE * sizeof(float));
+   derivs[0][0][0] = s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT];
+   derivs[0][1][0] = s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT];
+}
+
+static float
+compute_lambda_1d_explicit_gradients(const struct sp_sampler_view *sview,
+                                     const float derivs[3][2][TGSI_QUAD_SIZE],
+                                     uint quad)
+{
+   const struct pipe_resource *texture = sview->base.texture;
+   const float dsdx = fabsf(derivs[0][0][quad]);
+   const float dsdy = fabsf(derivs[0][1][quad]);
+   const float rho = MAX2(dsdx, dsdy) * u_minify(texture->width0, sview->base.u.tex.first_level);
+   return util_fast_log2(rho);
+}
+
 
 /**
  * Examine the quad's texture coordinates to compute the partial
@@ -495,11 +518,38 @@ compute_lambda_1d(const struct sp_sampler_view *sview,
                   const float t[TGSI_QUAD_SIZE],
                   const float p[TGSI_QUAD_SIZE])
 {
-   const struct pipe_resource *texture = sview->base.texture;
-   const float dsdx = fabsf(s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT]);
-   const float dsdy = fabsf(s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT]);
-   const float rho = MAX2(dsdx, dsdy) * u_minify(texture->width0, sview->base.u.tex.first_level);
+   float derivs[3][2][TGSI_QUAD_SIZE];
+   compute_gradient_1d(s, t, p, derivs);
+   return compute_lambda_1d_explicit_gradients(sview, derivs, 0);
+}
 
+
+static void
+compute_gradient_2d(const float s[TGSI_QUAD_SIZE],
+                    const float t[TGSI_QUAD_SIZE],
+                    const float p[TGSI_QUAD_SIZE],
+                    float derivs[3][2][TGSI_QUAD_SIZE])
+{
+   memset(derivs, 0, 6 * TGSI_QUAD_SIZE * sizeof(float));
+   derivs[0][0][0] = s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT];
+   derivs[0][1][0] = s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT];
+   derivs[1][0][0] = t[QUAD_BOTTOM_RIGHT] - t[QUAD_BOTTOM_LEFT];
+   derivs[1][1][0] = t[QUAD_TOP_LEFT]     - t[QUAD_BOTTOM_LEFT];
+}
+
+static float
+compute_lambda_2d_explicit_gradients(const struct sp_sampler_view *sview,
+                                     const float derivs[3][2][TGSI_QUAD_SIZE],
+                                     uint quad)
+{
+   const struct pipe_resource *texture = sview->base.texture;
+   const float dsdx = fabsf(derivs[0][0][quad]);
+   const float dsdy = fabsf(derivs[0][1][quad]);
+   const float dtdx = fabsf(derivs[1][0][quad]);
+   const float dtdy = fabsf(derivs[1][1][quad]);
+   const float maxx = MAX2(dsdx, dsdy) * u_minify(texture->width0, sview->base.u.tex.first_level);
+   const float maxy = MAX2(dtdx, dtdy) * u_minify(texture->height0, sview->base.u.tex.first_level);
+   const float rho  = MAX2(maxx, maxy);
    return util_fast_log2(rho);
 }
 
@@ -510,14 +560,43 @@ compute_lambda_2d(const struct sp_sampler_view *sview,
                   const float t[TGSI_QUAD_SIZE],
                   const float p[TGSI_QUAD_SIZE])
 {
+   float derivs[3][2][TGSI_QUAD_SIZE];
+   compute_gradient_2d(s, t, p, derivs);
+   return compute_lambda_2d_explicit_gradients(sview, derivs, 0);
+}
+
+
+static void
+compute_gradient_3d(const float s[TGSI_QUAD_SIZE],
+                    const float t[TGSI_QUAD_SIZE],
+                    const float p[TGSI_QUAD_SIZE],
+                    float derivs[3][2][TGSI_QUAD_SIZE])
+{
+   memset(derivs, 0, 6 * TGSI_QUAD_SIZE * sizeof(float));
+   derivs[0][0][0] = fabsf(s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT]);
+   derivs[0][1][0] = fabsf(s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT]);
+   derivs[1][0][0] = fabsf(t[QUAD_BOTTOM_RIGHT] - t[QUAD_BOTTOM_LEFT]);
+   derivs[1][1][0] = fabsf(t[QUAD_TOP_LEFT]     - t[QUAD_BOTTOM_LEFT]);
+   derivs[2][0][0] = fabsf(p[QUAD_BOTTOM_RIGHT] - p[QUAD_BOTTOM_LEFT]);
+   derivs[2][1][0] = fabsf(p[QUAD_TOP_LEFT]     - p[QUAD_BOTTOM_LEFT]);
+}
+
+static float
+compute_lambda_3d_explicit_gradients(const struct sp_sampler_view *sview,
+                                     const float derivs[3][2][TGSI_QUAD_SIZE],
+                                     uint quad)
+{
    const struct pipe_resource *texture = sview->base.texture;
-   const float dsdx = fabsf(s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT]);
-   const float dsdy = fabsf(s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT]);
-   const float dtdx = fabsf(t[QUAD_BOTTOM_RIGHT] - t[QUAD_BOTTOM_LEFT]);
-   const float dtdy = fabsf(t[QUAD_TOP_LEFT]     - t[QUAD_BOTTOM_LEFT]);
+   const float dsdx = fabsf(derivs[0][0][quad]);
+   const float dsdy = fabsf(derivs[0][1][quad]);
+   const float dtdx = fabsf(derivs[1][0][quad]);
+   const float dtdy = fabsf(derivs[1][1][quad]);
+   const float dpdx = fabsf(derivs[2][0][quad]);
+   const float dpdy = fabsf(derivs[2][1][quad]);
    const float maxx = MAX2(dsdx, dsdy) * u_minify(texture->width0, sview->base.u.tex.first_level);
    const float maxy = MAX2(dtdx, dtdy) * u_minify(texture->height0, sview->base.u.tex.first_level);
-   const float rho  = MAX2(maxx, maxy);
+   const float maxz = MAX2(dpdx, dpdy) * u_minify(texture->depth0, sview->base.u.tex.first_level);
+   const float rho = MAX3(maxx, maxy, maxz);
 
    return util_fast_log2(rho);
 }
@@ -529,21 +608,42 @@ compute_lambda_3d(const struct sp_sampler_view *sview,
                   const float t[TGSI_QUAD_SIZE],
                   const float p[TGSI_QUAD_SIZE])
 {
+   float derivs[3][2][TGSI_QUAD_SIZE];
+   compute_gradient_3d(s, t, p, derivs);
+   return compute_lambda_3d_explicit_gradients(sview, derivs, 0);
+}
+
+
+static float
+compute_lambda_cube_explicit_gradients(const struct sp_sampler_view *sview,
+                                       const float derivs[3][2][TGSI_QUAD_SIZE],
+                                       uint quad)
+{
    const struct pipe_resource *texture = sview->base.texture;
-   const float dsdx = fabsf(s[QUAD_BOTTOM_RIGHT] - s[QUAD_BOTTOM_LEFT]);
-   const float dsdy = fabsf(s[QUAD_TOP_LEFT]     - s[QUAD_BOTTOM_LEFT]);
-   const float dtdx = fabsf(t[QUAD_BOTTOM_RIGHT] - t[QUAD_BOTTOM_LEFT]);
-   const float dtdy = fabsf(t[QUAD_TOP_LEFT]     - t[QUAD_BOTTOM_LEFT]);
-   const float dpdx = fabsf(p[QUAD_BOTTOM_RIGHT] - p[QUAD_BOTTOM_LEFT]);
-   const float dpdy = fabsf(p[QUAD_TOP_LEFT]     - p[QUAD_BOTTOM_LEFT]);
-   const float maxx = MAX2(dsdx, dsdy) * u_minify(texture->width0, sview->base.u.tex.first_level);
-   const float maxy = MAX2(dtdx, dtdy) * u_minify(texture->height0, sview->base.u.tex.first_level);
-   const float maxz = MAX2(dpdx, dpdy) * u_minify(texture->depth0, sview->base.u.tex.first_level);
-   const float rho = MAX3(maxx, maxy, maxz);
+   const float dsdx = fabsf(derivs[0][0][quad]);
+   const float dsdy = fabsf(derivs[0][1][quad]);
+   const float dtdx = fabsf(derivs[1][0][quad]);
+   const float dtdy = fabsf(derivs[1][1][quad]);
+   const float dpdx = fabsf(derivs[2][0][quad]);
+   const float dpdy = fabsf(derivs[2][1][quad]);
+   const float maxx = MAX2(dsdx, dsdy);
+   const float maxy = MAX2(dtdx, dtdy);
+   const float maxz = MAX2(dpdx, dpdy);
+   const float rho = MAX3(maxx, maxy, maxz) * u_minify(texture->width0, sview->base.u.tex.first_level) / 2.0f;
 
    return util_fast_log2(rho);
 }
 
+static float
+compute_lambda_cube(const struct sp_sampler_view *sview,
+                    const float s[TGSI_QUAD_SIZE],
+                    const float t[TGSI_QUAD_SIZE],
+                    const float p[TGSI_QUAD_SIZE])
+{
+   float derivs[3][2][TGSI_QUAD_SIZE];
+   compute_gradient_3d(s, t, p, derivs);
+   return compute_lambda_cube_explicit_gradients(sview, derivs, 0);
+}
 
 /**
  * Compute lambda for a vertex texture sampler.
@@ -559,6 +659,39 @@ compute_lambda_vert(const struct sp_sampler_view *sview,
 }
 
 
+static float
+compute_lambda_vert_explicite_gradients(UNUSED const struct sp_sampler_view *sview,
+                                        UNUSED const float derivs[3][2][TGSI_QUAD_SIZE],
+                                        UNUSED int quad)
+{
+   return 0.0f;
+}
+
+
+compute_lambda_from_grad_func
+softpipe_get_lambda_from_grad_func(const struct pipe_sampler_view *view,
+                                   enum pipe_shader_type shader)
+{
+   switch (view->target) {
+   case PIPE_BUFFER:
+   case PIPE_TEXTURE_1D:
+   case PIPE_TEXTURE_1D_ARRAY:
+      return compute_lambda_1d_explicit_gradients;
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_2D_ARRAY:
+   case PIPE_TEXTURE_RECT:
+      return compute_lambda_2d_explicit_gradients;
+   case PIPE_TEXTURE_CUBE:
+   case PIPE_TEXTURE_CUBE_ARRAY:
+      return compute_lambda_cube_explicit_gradients;
+   case PIPE_TEXTURE_3D:
+      return compute_lambda_3d_explicit_gradients;
+   default:
+      assert(0);
+      return compute_lambda_1d_explicit_gradients;
+   }
+}
+
 
 /**
  * Get a texel from a texture, using the texture tile cache.
@@ -573,6 +706,21 @@ compute_lambda_vert(const struct sp_sampler_view *sview,
  */
 
 
+
+static inline const float *
+get_texel_buffer_no_border(const struct sp_sampler_view *sp_sview,
+                           union tex_tile_address addr, int x, unsigned elmsize)
+{
+   const struct softpipe_tex_cached_tile *tile;
+   addr.bits.x = x * elmsize / TEX_TILE_SIZE;
+   assert(x * elmsize / TEX_TILE_SIZE == addr.bits.x);
+
+   x %= TEX_TILE_SIZE / elmsize;
+
+   tile = sp_get_cached_tile_tex(sp_sview->cache, addr);
+
+   return &tile->data.color[0][x][0];
+}
 
 
 static inline const float *
@@ -1784,9 +1932,11 @@ compute_lod(const struct pipe_sampler_state *sampler,
    switch (control) {
    case TGSI_SAMPLER_LOD_NONE:
    case TGSI_SAMPLER_LOD_ZERO:
-   /* XXX FIXME */
-   case TGSI_SAMPLER_DERIVS_EXPLICIT:
       lod[0] = lod[1] = lod[2] = lod[3] = CLAMP(biased_lambda, min_lod, max_lod);
+      break;
+   case TGSI_SAMPLER_DERIVS_EXPLICIT:
+      for (i = 0; i < TGSI_QUAD_SIZE; i++)
+         lod[i] = lod_in[i];
       break;
    case TGSI_SAMPLER_LOD_BIAS:
       for (i = 0; i < TGSI_QUAD_SIZE; i++) {
@@ -1817,6 +1967,7 @@ compute_lambda_lod_unclamped(const struct sp_sampler_view *sp_sview,
                              const float s[TGSI_QUAD_SIZE],
                              const float t[TGSI_QUAD_SIZE],
                              const float p[TGSI_QUAD_SIZE],
+                             const float derivs[3][2][TGSI_QUAD_SIZE],
                              const float lod_in[TGSI_QUAD_SIZE],
                              enum tgsi_sampler_control control,
                              float lod[TGSI_QUAD_SIZE])
@@ -1828,10 +1979,12 @@ compute_lambda_lod_unclamped(const struct sp_sampler_view *sp_sview,
 
    switch (control) {
    case TGSI_SAMPLER_LOD_NONE:
-      /* XXX FIXME */
-   case TGSI_SAMPLER_DERIVS_EXPLICIT:
       lambda = sp_sview->compute_lambda(sp_sview, s, t, p) + lod_bias;
       lod[0] = lod[1] = lod[2] = lod[3] = lambda;
+      break;
+   case TGSI_SAMPLER_DERIVS_EXPLICIT:
+      for (i = 0; i < TGSI_QUAD_SIZE; i++)
+         lod[i] = sp_sview->compute_lambda_from_grad(sp_sview, derivs, i);
       break;
    case TGSI_SAMPLER_LOD_BIAS:
       lambda = sp_sview->compute_lambda(sp_sview, s, t, p) + lod_bias;
@@ -1864,6 +2017,7 @@ compute_lambda_lod(const struct sp_sampler_view *sp_sview,
                    const float s[TGSI_QUAD_SIZE],
                    const float t[TGSI_QUAD_SIZE],
                    const float p[TGSI_QUAD_SIZE],
+                   float derivs[3][2][TGSI_QUAD_SIZE],
                    const float lod_in[TGSI_QUAD_SIZE],
                    enum tgsi_sampler_control control,
                    float lod[TGSI_QUAD_SIZE])
@@ -1874,7 +2028,7 @@ compute_lambda_lod(const struct sp_sampler_view *sp_sview,
    int i;
 
    compute_lambda_lod_unclamped(sp_sview, sp_samp,
-                                s, t, p, lod_in, control, lod);
+                                s, t, p, derivs, lod_in, control, lod);
    for (i = 0; i < TGSI_QUAD_SIZE; i++) {
       lod[i] = CLAMP(lod[i], min_lod, max_lod);
    }
@@ -1932,21 +2086,18 @@ mip_filter_linear(const struct sp_sampler_view *sp_sview,
                   const float s[TGSI_QUAD_SIZE],
                   const float t[TGSI_QUAD_SIZE],
                   const float p[TGSI_QUAD_SIZE],
-                  const float c0[TGSI_QUAD_SIZE],
-                  const float lod_in[TGSI_QUAD_SIZE],
+                  int gather_comp,
+                  const float lod[TGSI_QUAD_SIZE],
                   const struct filter_args *filt_args,
                   float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
    const struct pipe_sampler_view *psview = &sp_sview->base;
    int j;
-   float lod[TGSI_QUAD_SIZE];
    struct img_filter_args args;
-
-   compute_lambda_lod(sp_sview, sp_samp, s, t, p, lod_in, filt_args->control, lod);
 
    args.offset = filt_args->offset;
    args.gather_only = filt_args->control == TGSI_SAMPLER_GATHER;
-   args.gather_comp = get_gather_component(lod_in);
+   args.gather_comp = gather_comp;
 
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       const int level0 = psview->u.tex.first_level + (int)lod[j];
@@ -1956,7 +2107,7 @@ mip_filter_linear(const struct sp_sampler_view *sp_sview,
       args.p = p[j];
       args.face_id = filt_args->faces[j];
 
-      if (lod[j] < 0.0) {
+      if (lod[j] <= 0.0 && !args.gather_only) {
          args.level = psview->u.tex.first_level;
          mag_filter(sp_sview, sp_samp, &args, &rgba[0][j]);
       }
@@ -2018,21 +2169,18 @@ mip_filter_nearest(const struct sp_sampler_view *sp_sview,
                    const float s[TGSI_QUAD_SIZE],
                    const float t[TGSI_QUAD_SIZE],
                    const float p[TGSI_QUAD_SIZE],
-                   const float c0[TGSI_QUAD_SIZE],
-                   const float lod_in[TGSI_QUAD_SIZE],
+                   int gather_component,
+                   const float lod[TGSI_QUAD_SIZE],
                    const struct filter_args *filt_args,
                    float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
    const struct pipe_sampler_view *psview = &sp_sview->base;
-   float lod[TGSI_QUAD_SIZE];
    int j;
    struct img_filter_args args;
 
    args.offset = filt_args->offset;
    args.gather_only = filt_args->control == TGSI_SAMPLER_GATHER;
-   args.gather_comp = get_gather_component(lod_in);
-
-   compute_lambda_lod(sp_sview, sp_samp, s, t, p, lod_in, filt_args->control, lod);
+   args.gather_comp = gather_component;
 
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       args.s = s[j];
@@ -2040,7 +2188,7 @@ mip_filter_nearest(const struct sp_sampler_view *sp_sview,
       args.p = p[j];
       args.face_id = filt_args->faces[j];
 
-      if (lod[j] < 0.0) {
+      if (lod[j] <= 0.0f && !args.gather_only) {
          args.level = psview->u.tex.first_level;
          mag_filter(sp_sview, sp_samp, &args, &rgba[0][j]);
       } else {
@@ -2080,27 +2228,25 @@ mip_filter_none(const struct sp_sampler_view *sp_sview,
                 const float s[TGSI_QUAD_SIZE],
                 const float t[TGSI_QUAD_SIZE],
                 const float p[TGSI_QUAD_SIZE],
-                const float c0[TGSI_QUAD_SIZE],
-                const float lod_in[TGSI_QUAD_SIZE],
+                int gather_component,
+                const float lod[TGSI_QUAD_SIZE],
                 const struct filter_args *filt_args,
                 float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
-   float lod[TGSI_QUAD_SIZE];
    int j;
    struct img_filter_args args;
 
    args.level = sp_sview->base.u.tex.first_level;
    args.offset = filt_args->offset;
    args.gather_only = filt_args->control == TGSI_SAMPLER_GATHER;
-
-   compute_lambda_lod(sp_sview, sp_samp, s, t, p, lod_in, filt_args->control, lod);
+   args.gather_comp = gather_component;
 
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       args.s = s[j];
       args.t = t[j];
       args.p = p[j];
       args.face_id = filt_args->faces[j];
-      if (lod[j] < 0.0) {
+      if (lod[j] <= 0.0f && !args.gather_only) {
          mag_filter(sp_sview, sp_samp, &args, &rgba[0][j]);
       }
       else {
@@ -2130,7 +2276,7 @@ mip_filter_none_no_filter_select(const struct sp_sampler_view *sp_sview,
                                  const float s[TGSI_QUAD_SIZE],
                                  const float t[TGSI_QUAD_SIZE],
                                  const float p[TGSI_QUAD_SIZE],
-                                 const float c0[TGSI_QUAD_SIZE],
+                                 int gather_comp,
                                  const float lod_in[TGSI_QUAD_SIZE],
                                  const struct filter_args *filt_args,
                                  float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
@@ -2140,6 +2286,7 @@ mip_filter_none_no_filter_select(const struct sp_sampler_view *sp_sview,
    args.level = sp_sview->base.u.tex.first_level;
    args.offset = filt_args->offset;
    args.gather_only = filt_args->control == TGSI_SAMPLER_GATHER;
+   args.gather_comp = gather_comp;
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       args.s = s[j];
       args.t = t[j];
@@ -2398,7 +2545,7 @@ mip_filter_linear_aniso(const struct sp_sampler_view *sp_sview,
                         const float s[TGSI_QUAD_SIZE],
                         const float t[TGSI_QUAD_SIZE],
                         const float p[TGSI_QUAD_SIZE],
-                        const float c0[TGSI_QUAD_SIZE],
+                        UNUSED int gather_comp,
                         const float lod_in[TGSI_QUAD_SIZE],
                         const struct filter_args *filt_args,
                         float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
@@ -2531,16 +2678,13 @@ mip_filter_linear_2d_linear_repeat_POT(
    const float s[TGSI_QUAD_SIZE],
    const float t[TGSI_QUAD_SIZE],
    const float p[TGSI_QUAD_SIZE],
-   const float c0[TGSI_QUAD_SIZE],
-   const float lod_in[TGSI_QUAD_SIZE],
+   int gather_comp,
+   const float lod[TGSI_QUAD_SIZE],
    const struct filter_args *filt_args,
    float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
    const struct pipe_sampler_view *psview = &sp_sview->base;
    int j;
-   float lod[TGSI_QUAD_SIZE];
-
-   compute_lambda_lod(sp_sview, sp_samp, s, t, p, lod_in, filt_args->control, lod);
 
    for (j = 0; j < TGSI_QUAD_SIZE; j++) {
       const int level0 = psview->u.tex.first_level + (int)lod[j];
@@ -2553,6 +2697,7 @@ mip_filter_linear_2d_linear_repeat_POT(
       args.face_id = filt_args->faces[j];
       args.offset = filt_args->offset;
       args.gather_only = filt_args->control == TGSI_SAMPLER_GATHER;
+      args.gather_comp = gather_comp;
       if ((unsigned)level0 >= psview->u.tex.last_level) {
          if (level0 < 0)
             args.level = psview->u.tex.first_level;
@@ -2618,11 +2763,7 @@ static const struct sp_filter_funcs funcs_linear_2d_linear_repeat_POT = {
 static void
 sample_compare(const struct sp_sampler_view *sp_sview,
                const struct sp_sampler *sp_samp,
-               const float s[TGSI_QUAD_SIZE],
-               const float t[TGSI_QUAD_SIZE],
-               const float p[TGSI_QUAD_SIZE],
                const float c0[TGSI_QUAD_SIZE],
-               const float c1[TGSI_QUAD_SIZE],
                enum tgsi_sampler_control control,
                float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
@@ -2646,23 +2787,7 @@ sample_compare(const struct sp_sampler_view *sp_sview,
     * RGBA channels.  We look at the red channel here.
     */
 
-   if (sp_sview->base.target == PIPE_TEXTURE_2D_ARRAY ||
-       sp_sview->base.target == PIPE_TEXTURE_CUBE) {
-      pc[0] = c0[0];
-      pc[1] = c0[1];
-      pc[2] = c0[2];
-      pc[3] = c0[3];
-   } else if (sp_sview->base.target == PIPE_TEXTURE_CUBE_ARRAY) {
-      pc[0] = c1[0];
-      pc[1] = c1[1];
-      pc[2] = c1[2];
-      pc[3] = c1[3];
-   } else {
-      pc[0] = p[0];
-      pc[1] = p[1];
-      pc[2] = p[2];
-      pc[3] = p[3];
-   }
+
 
    if (chan_type != UTIL_FORMAT_TYPE_FLOAT) {
       /*
@@ -2670,10 +2795,15 @@ sample_compare(const struct sp_sampler_view *sp_sview,
        * doesn't happen with floats. Technically also should do comparison
        * in texture format (quantization!).
        */
-      pc[0] = CLAMP(pc[0], 0.0F, 1.0F);
-      pc[1] = CLAMP(pc[1], 0.0F, 1.0F);
-      pc[2] = CLAMP(pc[2], 0.0F, 1.0F);
-      pc[3] = CLAMP(pc[3], 0.0F, 1.0F);
+      pc[0] = CLAMP(c0[0], 0.0F, 1.0F);
+      pc[1] = CLAMP(c0[1], 0.0F, 1.0F);
+      pc[2] = CLAMP(c0[2], 0.0F, 1.0F);
+      pc[3] = CLAMP(c0[3], 0.0F, 1.0F);
+   } else {
+      pc[0] = c0[0];
+      pc[1] = c0[1];
+      pc[2] = c0[2];
+      pc[3] = c0[3];
    }
 
    for (v = 0; v < (is_gather ? TGSI_NUM_CHANNELS : 1); v++) {
@@ -2754,6 +2884,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
    const unsigned swizzle_g = sview->swizzle_g;
    const unsigned swizzle_b = sview->swizzle_b;
    const unsigned swizzle_a = sview->swizzle_a;
+   float oneval = util_format_is_pure_integer(sview->format) ? uif(1) : 1.0f;
 
    switch (swizzle_r) {
    case PIPE_SWIZZLE_0:
@@ -2762,7 +2893,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[0][j] = 1.0f;
+         out[0][j] = oneval;
       break;
    default:
       assert(swizzle_r < 4);
@@ -2777,7 +2908,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[1][j] = 1.0f;
+         out[1][j] = oneval;
       break;
    default:
       assert(swizzle_g < 4);
@@ -2792,7 +2923,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[2][j] = 1.0f;
+         out[2][j] = oneval;
       break;
    default:
       assert(swizzle_b < 4);
@@ -2807,7 +2938,7 @@ do_swizzling(const struct pipe_sampler_view *sview,
       break;
    case PIPE_SWIZZLE_1:
       for (j = 0; j < 4; j++)
-         out[3][j] = 1.0f;
+         out[3][j] = oneval;
       break;
    default:
       assert(swizzle_a < 4);
@@ -3047,6 +3178,7 @@ sample_mip(const struct sp_sampler_view *sp_sview,
            const float t[TGSI_QUAD_SIZE],
            const float p[TGSI_QUAD_SIZE],
            const float c0[TGSI_QUAD_SIZE],
+           int gather_comp,
            const float lod[TGSI_QUAD_SIZE],
            const struct filter_args *filt_args,
            float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
@@ -3059,11 +3191,10 @@ sample_mip(const struct sp_sampler_view *sp_sview,
                &funcs, &min_img_filter, &mag_img_filter);
 
    funcs->filter(sp_sview, sp_samp, min_img_filter, mag_img_filter,
-                 s, t, p, c0, lod, filt_args, rgba);
+                 s, t, p, gather_comp, lod, filt_args, rgba);
 
    if (sp_samp->base.compare_mode != PIPE_TEX_COMPARE_NONE) {
-      sample_compare(sp_sview, sp_samp, s, t, p, c0,
-                     lod, filt_args->control, rgba);
+      sample_compare(sp_sview, sp_samp, c0, filt_args->control, rgba);
    }
 
    if (sp_sview->need_swizzle && filt_args->control != TGSI_SAMPLER_GATHER) {
@@ -3122,45 +3253,36 @@ convert_cube(const struct sp_sampler_view *sp_sview,
     * deriviates to compute the LOD.  Doing so (near cube edges
     * anyway) gives us pretty much random values.
     */
-   {
-      /* use the average of the four pixel's texcoords to choose the face */
-      const float rx = 0.25F * (s[0] + s[1] + s[2] + s[3]);
-      const float ry = 0.25F * (t[0] + t[1] + t[2] + t[3]);
-      const float rz = 0.25F * (p[0] + p[1] + p[2] + p[3]);
+   for (j = 0; j < TGSI_QUAD_SIZE; j++)  {
+      const float rx = s[j], ry = t[j], rz = p[j];
       const float arx = fabsf(rx), ary = fabsf(ry), arz = fabsf(rz);
 
       if (arx >= ary && arx >= arz) {
          const float sign = (rx >= 0.0F) ? 1.0F : -1.0F;
          const uint face = (rx >= 0.0F) ?
             PIPE_TEX_FACE_POS_X : PIPE_TEX_FACE_NEG_X;
-         for (j = 0; j < TGSI_QUAD_SIZE; j++) {
-            const float ima = -0.5F / fabsf(s[j]);
-            ssss[j] = sign *  p[j] * ima + 0.5F;
-            tttt[j] =         t[j] * ima + 0.5F;
-            faces[j] = face;
-         }
+         const float ima = -0.5F / fabsf(s[j]);
+         ssss[j] = sign *  p[j] * ima + 0.5F;
+         tttt[j] =         t[j] * ima + 0.5F;
+         faces[j] = face;
       }
       else if (ary >= arx && ary >= arz) {
          const float sign = (ry >= 0.0F) ? 1.0F : -1.0F;
          const uint face = (ry >= 0.0F) ?
             PIPE_TEX_FACE_POS_Y : PIPE_TEX_FACE_NEG_Y;
-         for (j = 0; j < TGSI_QUAD_SIZE; j++) {
-            const float ima = -0.5F / fabsf(t[j]);
-            ssss[j] =        -s[j] * ima + 0.5F;
-            tttt[j] = sign * -p[j] * ima + 0.5F;
-            faces[j] = face;
-         }
+         const float ima = -0.5F / fabsf(t[j]);
+         ssss[j] =        -s[j] * ima + 0.5F;
+         tttt[j] = sign * -p[j] * ima + 0.5F;
+         faces[j] = face;
       }
       else {
          const float sign = (rz >= 0.0F) ? 1.0F : -1.0F;
          const uint face = (rz >= 0.0F) ?
             PIPE_TEX_FACE_POS_Z : PIPE_TEX_FACE_NEG_Z;
-         for (j = 0; j < TGSI_QUAD_SIZE; j++) {
-            const float ima = -0.5F / fabsf(p[j]);
-            ssss[j] = sign * -s[j] * ima + 0.5F;
-            tttt[j] =         t[j] * ima + 0.5F;
-            faces[j] = face;
-         }
+         const float ima = -0.5F / fabsf(p[j]);
+         ssss[j] = sign * -s[j] * ima + 0.5F;
+         tttt[j] =         t[j] * ima + 0.5F;
+         faces[j] = face;
       }
    }
 }
@@ -3263,7 +3385,7 @@ sp_get_texels(const struct sp_sampler_view *sp_sview,
                              first_element,
                              first_element,
                              last_element);
-         tx = get_texel_2d_no_border(sp_sview, addr, x, 0);
+         tx = get_texel_buffer_no_border(sp_sview, addr, x, elem_size);
          for (c = 0; c < 4; c++) {
             rgba[c][j] = tx[c];
          }
@@ -3440,9 +3562,10 @@ softpipe_get_lambda_func(const struct pipe_sampler_view *view,
    case PIPE_TEXTURE_2D:
    case PIPE_TEXTURE_2D_ARRAY:
    case PIPE_TEXTURE_RECT:
+      return compute_lambda_2d;
    case PIPE_TEXTURE_CUBE:
    case PIPE_TEXTURE_CUBE_ARRAY:
-      return compute_lambda_2d;
+      return compute_lambda_cube;
    case PIPE_TEXTURE_3D:
       return compute_lambda_3d;
    default:
@@ -3541,6 +3664,31 @@ sp_tgsi_get_dims(struct tgsi_sampler *tgsi_sampler,
 }
 
 
+static void prepare_compare_values(enum pipe_texture_target target,
+                                   const float p[TGSI_QUAD_SIZE],
+                                   const float c0[TGSI_QUAD_SIZE],
+                                   const float c1[TGSI_QUAD_SIZE],
+                                   float pc[TGSI_QUAD_SIZE])
+{
+   if (target == PIPE_TEXTURE_2D_ARRAY ||
+       target == PIPE_TEXTURE_CUBE) {
+      pc[0] = c0[0];
+      pc[1] = c0[1];
+      pc[2] = c0[2];
+      pc[3] = c0[3];
+   } else if (target == PIPE_TEXTURE_CUBE_ARRAY) {
+      pc[0] = c1[0];
+      pc[1] = c1[1];
+      pc[2] = c1[2];
+      pc[3] = c1[3];
+   } else {
+      pc[0] = p[0];
+      pc[1] = p[1];
+      pc[2] = p[2];
+      pc[3] = p[3];
+   }
+}
+
 static void
 sp_tgsi_get_samples(struct tgsi_sampler *tgsi_sampler,
                     const unsigned sview_index,
@@ -3549,7 +3697,7 @@ sp_tgsi_get_samples(struct tgsi_sampler *tgsi_sampler,
                     const float t[TGSI_QUAD_SIZE],
                     const float p[TGSI_QUAD_SIZE],
                     const float c0[TGSI_QUAD_SIZE],
-                    const float lod[TGSI_QUAD_SIZE],
+                    const float lod_in[TGSI_QUAD_SIZE],
                     float derivs[3][2][TGSI_QUAD_SIZE],
                     const int8_t offset[3],
                     enum tgsi_sampler_control control,
@@ -3560,6 +3708,8 @@ sp_tgsi_get_samples(struct tgsi_sampler *tgsi_sampler,
    const struct sp_sampler_view *sp_sview;
    const struct sp_sampler *sp_samp;
    struct filter_args filt_args;
+   float compare_values[TGSI_QUAD_SIZE];
+   float lod[TGSI_QUAD_SIZE];
 
    assert(sview_index < PIPE_MAX_SHADER_SAMPLER_VIEWS);
    assert(sampler_index < PIPE_MAX_SAMPLERS);
@@ -3578,8 +3728,14 @@ sp_tgsi_get_samples(struct tgsi_sampler *tgsi_sampler,
       return;
    }
 
+   if (sp_samp->base.compare_mode != PIPE_TEX_COMPARE_NONE)
+      prepare_compare_values(sp_sview->base.target, p, c0, lod_in, compare_values);
+
    filt_args.control = control;
    filt_args.offset = offset;
+   int gather_comp = get_gather_component(lod_in);
+
+   compute_lambda_lod(sp_sview,sp_samp, s, t, p, derivs, lod_in, control, lod);
 
    if (sp_sview->need_cube_convert) {
       float cs[TGSI_QUAD_SIZE];
@@ -3590,12 +3746,12 @@ sp_tgsi_get_samples(struct tgsi_sampler *tgsi_sampler,
       convert_cube(sp_sview, sp_samp, s, t, p, c0, cs, ct, cp, faces);
 
       filt_args.faces = faces;
-      sample_mip(sp_sview, sp_samp, cs, ct, cp, c0, lod, &filt_args, rgba);
+      sample_mip(sp_sview, sp_samp, cs, ct, cp, compare_values, gather_comp, lod, &filt_args, rgba);
    } else {
       static const uint zero_faces[TGSI_QUAD_SIZE] = {0, 0, 0, 0};
 
       filt_args.faces = zero_faces;
-      sample_mip(sp_sview, sp_samp, s, t, p, c0, lod, &filt_args, rgba);
+      sample_mip(sp_sview, sp_samp, s, t, p, compare_values, gather_comp, lod, &filt_args, rgba);
    }
 }
 
@@ -3612,6 +3768,7 @@ sp_tgsi_query_lod(const struct tgsi_sampler *tgsi_sampler,
                   float lod[TGSI_QUAD_SIZE])
 {
    static const float lod_in[TGSI_QUAD_SIZE] = { 0.0, 0.0, 0.0, 0.0 };
+   static const float dummy_grad[3][2][TGSI_QUAD_SIZE];
 
    const struct sp_tgsi_sampler *sp_tgsi_samp =
       sp_tgsi_sampler_cast_c(tgsi_sampler);
@@ -3635,20 +3792,8 @@ sp_tgsi_query_lod(const struct tgsi_sampler *tgsi_sampler,
       }
       return;
    }
-
-   if (sp_sview->need_cube_convert) {
-      float cs[TGSI_QUAD_SIZE];
-      float ct[TGSI_QUAD_SIZE];
-      float cp[TGSI_QUAD_SIZE];
-      uint unused_faces[TGSI_QUAD_SIZE];
-
-      convert_cube(sp_sview, sp_samp, s, t, p, c0, cs, ct, cp, unused_faces);
-      compute_lambda_lod_unclamped(sp_sview, sp_samp,
-                                   cs, ct, cp, lod_in, control, lod);
-   } else {
-      compute_lambda_lod_unclamped(sp_sview, sp_samp,
-                                   s, t, p, lod_in, control, lod);
-   }
+   compute_lambda_lod_unclamped(sp_sview, sp_samp,
+                                s, t, p, dummy_grad, lod_in, control, lod);
 
    get_filters(sp_sview, sp_samp, control, &funcs, NULL, NULL);
    funcs->relative_level(sp_sview, sp_samp, lod, mipmap);

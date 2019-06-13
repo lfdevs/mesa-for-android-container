@@ -121,57 +121,57 @@ namespace clover {
 #endif
          }
 
-        template<typename T> void
-        set_diagnostic_handler(::llvm::LLVMContext &ctx,
-                               T *diagnostic_handler, void *data) {
+         template<typename T> void
+         set_diagnostic_handler(::llvm::LLVMContext &ctx,
+                                T *diagnostic_handler, void *data) {
 #if HAVE_LLVM >= 0x0600
-           ctx.setDiagnosticHandlerCallBack(diagnostic_handler, data);
+            ctx.setDiagnosticHandlerCallBack(diagnostic_handler, data);
 #else
-           ctx.setDiagnosticHandler(diagnostic_handler, data);
+            ctx.setDiagnosticHandler(diagnostic_handler, data);
 #endif
-        }
+         }
 
-	inline std::unique_ptr< ::llvm::Module>
-	clone_module(const ::llvm::Module &mod)
-	{
+         inline std::unique_ptr< ::llvm::Module>
+         clone_module(const ::llvm::Module &mod)
+         {
 #if HAVE_LLVM >= 0x0700
-		return ::llvm::CloneModule(mod);
+            return ::llvm::CloneModule(mod);
 #else
-		return ::llvm::CloneModule(&mod);
+            return ::llvm::CloneModule(&mod);
 #endif
-	}
+         }
 
-	template<typename T> void
-	write_bitcode_to_file(const ::llvm::Module &mod, T &os)
-	{
+         template<typename T> void
+         write_bitcode_to_file(const ::llvm::Module &mod, T &os)
+         {
 #if HAVE_LLVM >= 0x0700
-		::llvm::WriteBitcodeToFile(mod, os);
+            ::llvm::WriteBitcodeToFile(mod, os);
 #else
-		::llvm::WriteBitcodeToFile(&mod, os);
+            ::llvm::WriteBitcodeToFile(&mod, os);
 #endif
-	}
+         }
 
-	template<typename TM, typename PM, typename OS, typename FT>
-	bool add_passes_to_emit_file(TM &tm, PM &pm, OS &os, FT &ft)
-	{
+         template<typename TM, typename PM, typename OS, typename FT>
+         bool add_passes_to_emit_file(TM &tm, PM &pm, OS &os, FT &ft)
+         {
 #if HAVE_LLVM >= 0x0700
-		return tm.addPassesToEmitFile(pm, os, nullptr, ft);
+            return tm.addPassesToEmitFile(pm, os, nullptr, ft);
 #else
-		return tm.addPassesToEmitFile(pm, os, ft);
+            return tm.addPassesToEmitFile(pm, os, ft);
 #endif
-	}
+         }
 
-	template<typename T, typename M>
-	T get_abi_type(const T &arg_type, const M &mod) {
+         template<typename T, typename M>
+         T get_abi_type(const T &arg_type, const M &mod) {
 #if HAVE_LLVM >= 0x0700
-          return arg_type;
+            return arg_type;
 #else
-          ::llvm::DataLayout dl(&mod);
-          const unsigned arg_store_size = dl.getTypeStoreSize(arg_type);
-          return !arg_type->isIntegerTy() ? arg_type :
-            dl.getSmallestLegalIntType(mod.getContext(), arg_store_size * 8);
+            ::llvm::DataLayout dl(&mod);
+            const unsigned arg_store_size = dl.getTypeStoreSize(arg_type);
+            return !arg_type->isIntegerTy() ? arg_type :
+               dl.getSmallestLegalIntType(mod.getContext(), arg_store_size * 8);
 #endif
-	}
+         }
       }
    }
 }

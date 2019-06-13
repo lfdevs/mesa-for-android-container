@@ -353,18 +353,18 @@ vec4_visitor::nir_emit_load_const(nir_load_const_instr *instr)
 
       for (unsigned j = i; j < instr->def.num_components; j++) {
          if ((instr->def.bit_size == 32 &&
-              instr->value.u32[i] == instr->value.u32[j]) ||
+              instr->value[i].u32 == instr->value[j].u32) ||
              (instr->def.bit_size == 64 &&
-              instr->value.f64[i] == instr->value.f64[j])) {
+              instr->value[i].f64 == instr->value[j].f64)) {
             writemask |= 1 << j;
          }
       }
 
       reg.writemask = writemask;
       if (instr->def.bit_size == 64) {
-         emit(MOV(reg, setup_imm_df(ibld, instr->value.f64[i])));
+         emit(MOV(reg, setup_imm_df(ibld, instr->value[i].f64)));
       } else {
-         emit(MOV(reg, brw_imm_d(instr->value.i32[i])));
+         emit(MOV(reg, brw_imm_d(instr->value[i].i32)));
       }
 
       remaining &= ~writemask;
@@ -467,6 +467,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
    }
 
    case nir_intrinsic_get_buffer_size: {
+      assert(nir_src_num_components(instr->src[0]) == 1);
       unsigned ssbo_index = nir_src_is_const(instr->src[0]) ?
                             nir_src_as_uint(instr->src[0]) : 0;
 
@@ -759,7 +760,7 @@ vec4_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       const vec4_builder bld =
          vec4_builder(this).at_end().annotate(current_annotation, base_ir);
       const dst_reg tmp = bld.vgrf(BRW_REGISTER_TYPE_UD, 2);
-      bld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp)
+      bld.emit(SHADER_OPCODE_MEMORY_FENCE, tmp, brw_vec8_grf(0, 0))
          ->size_written = 2 * REG_SIZE;
       break;
    }
@@ -1008,6 +1009,66 @@ vec4_visitor::emit_conversion_to_double(dst_reg dst, src_reg src,
    inst->saturate = saturate;
 }
 
+/**
+ * Try to use an immediate value for source 1
+ *
+ * In cases of flow control, constant propagation is sometimes unable to
+ * determine that a register contains a constant value.  To work around this,
+ * try to emit a literal as the second source here.
+ */
+static void
+try_immediate_source(const nir_alu_instr *instr, src_reg *op,
+                     MAYBE_UNUSED const gen_device_info *devinfo)
+{
+   if (nir_src_num_components(instr->src[1].src) != 1 ||
+       nir_src_bit_size(instr->src[1].src) != 32 ||
+       !nir_src_is_const(instr->src[1].src))
+      return;
+
+   const enum brw_reg_type old_type = op->type;
+
+   switch (old_type) {
+   case BRW_REGISTER_TYPE_D:
+   case BRW_REGISTER_TYPE_UD: {
+      int d = nir_src_as_int(instr->src[1].src);
+
+      if (op->abs)
+         d = MAX2(-d, d);
+
+      if (op->negate) {
+         /* On Gen8+ a negation source modifier on a logical operation means
+          * something different.  Nothing should generate this, so assert that
+          * it does not occur.
+          */
+         assert(devinfo->gen < 8 || (instr->op != nir_op_iand &&
+                                     instr->op != nir_op_ior &&
+                                     instr->op != nir_op_ixor));
+         d = -d;
+      }
+
+      *op = retype(src_reg(brw_imm_d(d)), old_type);
+      break;
+   }
+
+   case BRW_REGISTER_TYPE_F: {
+      float f = nir_src_as_float(instr->src[1].src);
+
+      if (op->abs)
+         f = fabs(f);
+
+      if (op->negate)
+         f = -f;
+
+      *op = src_reg(brw_imm_f(f));
+      assert(op->type == old_type);
+      break;
+   }
+
+   default:
+      unreachable("Non-32bit type.");
+   }
+}
+
 void
 vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 {
@@ -1066,6 +1127,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
       /* fall through */
    case nir_op_fadd:
+      try_immediate_source(instr, &op[1], devinfo);
       inst = emit(ADD(dst, op[0], op[1]));
       inst->saturate = instr->dest.saturate;
       break;
@@ -1077,6 +1139,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_fmul:
+      try_immediate_source(instr, &op[1], devinfo);
       inst = emit(MUL(dst, op[0], op[1]));
       inst->saturate = instr->dest.saturate;
       break;
@@ -1304,6 +1367,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
       /* fall through */
    case nir_op_fmin:
+      try_immediate_source(instr, &op[1], devinfo);
       inst = emit_minmax(BRW_CONDITIONAL_L, dst, op[0], op[1]);
       inst->saturate = instr->dest.saturate;
       break;
@@ -1313,6 +1377,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
       /* fall through */
    case nir_op_fmax:
+      try_immediate_source(instr, &op[1], devinfo);
       inst = emit_minmax(BRW_CONDITIONAL_GE, dst, op[0], op[1]);
       inst->saturate = instr->dest.saturate;
       break;
@@ -1341,6 +1406,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          brw_conditional_for_nir_comparison(instr->op);
 
       if (nir_src_bit_size(instr->src[0].src) < 64) {
+         try_immediate_source(instr, &op[1], devinfo);
          emit(CMP(dst, op[0], op[1], conditional_mod));
       } else {
          /* Produce a 32-bit boolean result from the DF comparison by selecting
@@ -1410,6 +1476,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          op[0] = resolve_source_modifiers(op[0]);
          op[1] = resolve_source_modifiers(op[1]);
       }
+      try_immediate_source(instr, &op[1], devinfo);
       emit(XOR(dst, op[0], op[1]));
       break;
 
@@ -1419,6 +1486,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          op[0] = resolve_source_modifiers(op[0]);
          op[1] = resolve_source_modifiers(op[1]);
       }
+      try_immediate_source(instr, &op[1], devinfo);
       emit(OR(dst, op[0], op[1]));
       break;
 
@@ -1428,6 +1496,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
          op[0] = resolve_source_modifiers(op[0]);
          op[1] = resolve_source_modifiers(op[1]);
       }
+      try_immediate_source(instr, &op[1], devinfo);
       emit(AND(dst, op[0], op[1]));
       break;
 
@@ -1735,30 +1804,21 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       }
       break;
 
-   case nir_op_isign:
-      /*  ASR(val, 31) -> negative val generates 0xffffffff (signed -1).
-       *               -> non-negative val generates 0x00000000.
-       *  Predicated OR sets 1 if val is positive.
-       */
-      assert(nir_dest_bit_size(instr->dest.dest) < 64);
-      emit(CMP(dst_null_d(), op[0], brw_imm_d(0), BRW_CONDITIONAL_G));
-      emit(ASR(dst, op[0], brw_imm_d(31)));
-      inst = emit(OR(dst, src_reg(dst), brw_imm_d(1)));
-      inst->predicate = BRW_PREDICATE_NORMAL;
-      break;
-
    case nir_op_ishl:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      try_immediate_source(instr, &op[1], devinfo);
       emit(SHL(dst, op[0], op[1]));
       break;
 
    case nir_op_ishr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      try_immediate_source(instr, &op[1], devinfo);
       emit(ASR(dst, op[0], op[1]));
       break;
 
    case nir_op_ushr:
       assert(nir_dest_bit_size(instr->dest.dest) < 64);
+      try_immediate_source(instr, &op[1], devinfo);
       emit(SHR(dst, op[0], op[1]));
       break;
 
@@ -2001,19 +2061,12 @@ vec4_visitor::nir_emit_texture(nir_tex_instr *instr)
          break;
       }
 
-      case nir_tex_src_offset: {
-         nir_const_value *const_offset =
-            nir_src_as_const_value(instr->src[i].src);
-         assert(nir_src_bit_size(instr->src[i].src) == 32);
-         if (!const_offset ||
-             !brw_texture_offset(const_offset->i32,
-                                 nir_tex_instr_src_size(instr, i),
-                                 &constant_offset)) {
+      case nir_tex_src_offset:
+         if (!brw_texture_offset(instr, i, &constant_offset)) {
             offset_value =
                get_nir_src(instr->src[i].src, BRW_REGISTER_TYPE_D, 2);
          }
          break;
-      }
 
       case nir_tex_src_texture_offset: {
          /* Emit code to evaluate the actual indexing expression */

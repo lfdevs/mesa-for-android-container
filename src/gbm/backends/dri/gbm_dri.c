@@ -39,7 +39,7 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <xf86drm.h>
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 #include <GL/gl.h> /* dri_interface needs GL types */
 #include <GL/internal/dri_interface.h>
@@ -54,14 +54,6 @@
 /* For importing wl_buffer */
 #if HAVE_WAYLAND_PLATFORM
 #include "wayland-drm.h"
-#endif
-
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL<<56) - 1)
-#endif
-
-#ifndef DRM_FORMAT_MOD_LINEAR
-#define DRM_FORMAT_MOD_LINEAR 0
 #endif
 
 static __DRIimage *
@@ -182,7 +174,7 @@ swrast_put_image(__DRIdrawable *driDrawable,
                  char          *data,
                  void          *loaderPrivate)
 {
-   return swrast_put_image2(driDrawable, op, x, y, width, height,
+   swrast_put_image2(driDrawable, op, x, y, width, height,
                             width * 4, data, loaderPrivate);
 }
 

@@ -444,6 +444,11 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
    if (q.flags.q.bound_image)
       this->flags.q.bound_image = true;
 
+   if (q.flags.q.derivative_group) {
+      this->flags.q.derivative_group = true;
+      this->derivative_group = q.derivative_group;
+   }
+
    this->flags.i |= q.flags.i;
 
    if (this->flags.q.in &&
@@ -483,6 +488,13 @@ ast_type_qualifier::merge_qualifier(YYLTYPE *loc,
        q.flags.q.bound_sampler ||
        q.flags.q.bound_image)
       merge_bindless_qualifier(state);
+
+   if (state->EXT_gpu_shader4_enable &&
+       state->stage == MESA_SHADER_FRAGMENT &&
+       this->flags.q.varying && q.flags.q.out) {
+      this->flags.q.varying = 0;
+      this->flags.q.out = 1;
+   }
 
    return r;
 }
@@ -645,6 +657,7 @@ ast_type_qualifier::validate_in_qualifier(YYLTYPE *loc,
    case MESA_SHADER_COMPUTE:
       valid_in_mask.flags.q.local_size = 7;
       valid_in_mask.flags.q.local_size_variable = 1;
+      valid_in_mask.flags.q.derivative_group = 1;
       break;
    default:
       r = false;
@@ -739,6 +752,19 @@ ast_type_qualifier::merge_into_in_qualifier(YYLTYPE *loc,
       _mesa_glsl_error(loc, state,
                        "only one interlock mode can be used at any time.");
       r = false;
+   }
+
+   if (state->in_qualifier->flags.q.derivative_group) {
+      if (state->cs_derivative_group != DERIVATIVE_GROUP_NONE) {
+         if (state->in_qualifier->derivative_group != DERIVATIVE_GROUP_NONE &&
+             state->cs_derivative_group != state->in_qualifier->derivative_group) {
+            _mesa_glsl_error(loc, state,
+                             "conflicting derivative groups.");
+            r = false;
+         }
+      } else {
+         state->cs_derivative_group = state->in_qualifier->derivative_group;
+      }
    }
 
    /* We allow the creation of multiple cs_input_layout nodes. Coherence among

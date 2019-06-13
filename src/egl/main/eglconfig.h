@@ -175,7 +175,7 @@ _eglGetConfigKey(const _EGLConfig *conf, EGLint key)
 
 
 extern void
-_eglInitConfig(_EGLConfig *config, _EGLDisplay *dpy, EGLint id);
+_eglInitConfig(_EGLConfig *config, _EGLDisplay *disp, EGLint id);
 
 
 extern EGLConfig
@@ -183,7 +183,7 @@ _eglLinkConfig(_EGLConfig *conf);
 
 
 extern _EGLConfig *
-_eglLookupConfig(EGLConfig config, _EGLDisplay *dpy);
+_eglLookupConfig(EGLConfig config, _EGLDisplay *disp);
 
 
 /**
@@ -205,7 +205,7 @@ _eglMatchConfig(const _EGLConfig *conf, const _EGLConfig *criteria);
 
 
 extern EGLBoolean
-_eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *dpy,
+_eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *disp,
                           const EGLint *attrib_list);
 
 
@@ -224,15 +224,15 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
 
 
 extern EGLBoolean
-_eglChooseConfig(_EGLDriver *drv, _EGLDisplay *dpy, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config);
+_eglChooseConfig(_EGLDriver *drv, _EGLDisplay *disp, const EGLint *attrib_list, EGLConfig *configs, EGLint config_size, EGLint *num_config);
 
 
 extern EGLBoolean
-_eglGetConfigAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf, EGLint attribute, EGLint *value);
+_eglGetConfigAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf, EGLint attribute, EGLint *value);
 
 
 extern EGLBoolean
-_eglGetConfigs(_EGLDriver *drv, _EGLDisplay *dpy, EGLConfig *configs, EGLint config_size, EGLint *num_config);
+_eglGetConfigs(_EGLDriver *drv, _EGLDisplay *disp, EGLConfig *configs, EGLint config_size, EGLint *num_config);
 
 
 #ifdef __cplusplus

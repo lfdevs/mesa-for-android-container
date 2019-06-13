@@ -55,6 +55,24 @@ _mesa_warning(struct gl_context *ctx, const char *fmt, ...)
 }
 
 void
+_mesa_problem(struct gl_context *ctx, const char *fmt, ...)
+{
+    va_list vargs;
+    (void) ctx;
+
+    va_start(vargs, fmt);
+
+    /* This output is not thread-safe, but that's good enough for the
+     * standalone compiler.
+     */
+    fprintf(stderr, "Mesa problem: ");
+    vfprintf(stderr, fmt, vargs);
+    fprintf(stderr, "\n");
+
+    va_end(vargs);
+}
+
+void
 _mesa_reference_shader_program_data(struct gl_context *ctx,
                                     struct gl_shader_program_data **ptr,
                                     struct gl_shader_program_data *data)
@@ -201,6 +219,7 @@ void initialize_context_to_defaults(struct gl_context *ctx, gl_api api)
    ctx->Extensions.OES_EGL_image_external = true;
    ctx->Extensions.OES_standard_derivatives = true;
 
+   ctx->Extensions.EXT_gpu_shader4 = true;
    ctx->Extensions.EXT_shader_integer_mix = true;
    ctx->Extensions.EXT_texture_array = true;
 

@@ -233,7 +233,8 @@ void si_test_dma_perf(struct si_screen *sscreen)
 						sctx->flags |= SI_CONTEXT_INV_VMEM_L1 |
 							       SI_CONTEXT_INV_SMEM_L1;
 
-						ctx->set_shader_buffers(ctx, PIPE_SHADER_COMPUTE, 0, is_copy ? 2 : 1, sb);
+						ctx->set_shader_buffers(ctx, PIPE_SHADER_COMPUTE, 0,
+									is_copy ? 2 : 1, sb, 0x1);
 						ctx->bind_compute_state(ctx, cs);
 						sctx->cs_max_waves_per_sh = cs_waves_per_sh;
 

@@ -36,7 +36,7 @@
 #include "util/bitset.h"
 #include "util/slab.h"
 #include "xf86drm.h"
-#include "v3d_drm.h"
+#include "drm-uapi/v3d_drm.h"
 #include "v3d_screen.h"
 #include "broadcom/common/v3d_limits.h"
 
@@ -176,13 +176,6 @@ struct v3d_uncompiled_shader {
         uint16_t tf_specs[16];
         uint16_t tf_specs_psiz[16];
         uint32_t num_tf_specs;
-
-        /**
-         * Flag for if the NIR in this shader originally came from TGSI.  If
-         * so, we need to do some fixups at compile time, due to missing
-         * information in TGSI that exists in NIR.
-         */
-        bool was_tgsi;
 };
 
 struct v3d_compiled_shader {
@@ -193,6 +186,7 @@ struct v3d_compiled_shader {
                 struct v3d_prog_data *base;
                 struct v3d_vs_prog_data *vs;
                 struct v3d_fs_prog_data *fs;
+                struct v3d_compute_prog_data *compute;
         } prog_data;
 
         /**
@@ -204,8 +198,10 @@ struct v3d_compiled_shader {
 };
 
 struct v3d_program_stateobj {
-        struct v3d_uncompiled_shader *bind_vs, *bind_fs;
-        struct v3d_compiled_shader *cs, *vs, *fs;
+        struct v3d_uncompiled_shader *bind_vs, *bind_fs, *bind_compute;
+        struct v3d_compiled_shader *cs, *vs, *fs, *compute;
+
+        struct hash_table *cache[MESA_SHADER_STAGES];
 
         struct v3d_bo *spill_bo;
         int spill_size_per_thread;
@@ -421,7 +417,6 @@ struct v3d_context {
 
         struct primconvert_context *primconvert;
 
-        struct hash_table *fs_cache, *vs_cache;
         uint32_t next_uncompiled_program_id;
         uint64_t next_compiled_program_id;
 
@@ -453,6 +448,8 @@ struct v3d_context {
         struct v3d_depth_stencil_alpha_state *zsa;
 
         struct v3d_program_stateobj prog;
+        uint32_t compute_num_workgroups[3];
+        struct v3d_bo *compute_shared_memory;
 
         struct v3d_vertex_stateobj *vtx;
 
@@ -559,6 +556,7 @@ void v3d_query_init(struct pipe_context *pctx);
 
 void v3d_simulator_init(struct v3d_screen *screen);
 void v3d_simulator_destroy(struct v3d_screen *screen);
+uint32_t v3d_simulator_get_spill(uint32_t spill_size);
 int v3d_simulator_ioctl(int fd, unsigned long request, void *arg);
 void v3d_simulator_open_from_handle(int fd, int handle, uint32_t size);
 
@@ -590,6 +588,7 @@ void v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
 void v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
                                      struct pipe_resource *prsc);
 void v3d_update_compiled_shaders(struct v3d_context *v3d, uint8_t prim_mode);
+void v3d_update_compiled_cs(struct v3d_context *v3d);
 
 bool v3d_rt_format_supported(const struct v3d_device_info *devinfo,
                              enum pipe_format f);

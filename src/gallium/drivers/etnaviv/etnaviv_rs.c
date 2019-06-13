@@ -728,6 +728,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    });
 
    etna_submit_rs_state(ctx, &copy_to_screen);
+   resource_read(ctx, &src->base);
    resource_written(ctx, &dst->base);
    dst->seqno++;
    dst->levels[blit_info->dst.level].ts_valid = false;

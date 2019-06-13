@@ -66,7 +66,7 @@ static unsigned si_conv_pipe_prim(unsigned mode)
  * The information about LDS and other non-compile-time parameters is then
  * written to userdata SGPRs.
  */
-static bool si_emit_derived_tess_state(struct si_context *sctx,
+static void si_emit_derived_tess_state(struct si_context *sctx,
 				       const struct pipe_draw_info *info,
 				       unsigned *num_patches)
 {
@@ -110,7 +110,7 @@ static bool si_emit_derived_tess_state(struct si_context *sctx,
 	    (!has_primid_instancing_bug ||
 	     (sctx->last_tess_uses_primid == tess_uses_primid))) {
 		*num_patches = sctx->last_num_patches;
-		return false;
+		return;
 	}
 
 	sctx->last_ls = ls_current;
@@ -305,9 +305,8 @@ static bool si_emit_derived_tess_state(struct si_context *sctx,
 					       ls_hs_config);
 		}
 		sctx->last_ls_hs_config = ls_hs_config;
-		return true; /* true if the context rolls */
+		sctx->context_roll = true;
 	}
-	return false;
 }
 
 static unsigned si_num_prims_for_vertices(const struct pipe_draw_info *info)
@@ -541,7 +540,7 @@ static unsigned si_get_ia_multi_vgt_param(struct si_context *sctx,
 }
 
 /* rast_prim is the primitive type after GS. */
-static bool si_emit_rasterizer_prim_state(struct si_context *sctx)
+static void si_emit_rasterizer_prim_state(struct si_context *sctx)
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	enum pipe_prim_type rast_prim = sctx->current_rast_prim;
@@ -549,11 +548,11 @@ static bool si_emit_rasterizer_prim_state(struct si_context *sctx)
 
 	/* Skip this if not rendering lines. */
 	if (!util_prim_is_lines(rast_prim))
-		return false;
+		return;
 
 	if (rast_prim == sctx->last_rast_prim &&
 	    rs->pa_sc_line_stipple == sctx->last_sc_line_stipple)
-		return false;
+		return;
 
 	/* For lines, reset the stipple pattern at each primitive. Otherwise,
 	 * reset the stipple pattern at each packet (line strips, line loops).
@@ -564,7 +563,7 @@ static bool si_emit_rasterizer_prim_state(struct si_context *sctx)
 
 	sctx->last_rast_prim = rast_prim;
 	sctx->last_sc_line_stipple = rs->pa_sc_line_stipple;
-	return true; /* true if the context rolls */
+	sctx->context_roll = true;
 }
 
 static void si_emit_vs_state(struct si_context *sctx,
@@ -659,6 +658,7 @@ static void si_emit_draw_registers(struct si_context *sctx,
 		radeon_set_context_reg(cs, R_02840C_VGT_MULTI_PRIM_IB_RESET_INDX,
 				       info->restart_index);
 		sctx->last_restart_index = info->restart_index;
+		sctx->context_roll = true;
 	}
 }
 
@@ -678,24 +678,14 @@ static void si_emit_draw_packets(struct si_context *sctx,
 	if (info->count_from_stream_output) {
 		struct si_streamout_target *t =
 			(struct si_streamout_target*)info->count_from_stream_output;
-		uint64_t va = t->buf_filled_size->gpu_address +
-			      t->buf_filled_size_offset;
 
 		radeon_set_context_reg(cs, R_028B30_VGT_STRMOUT_DRAW_OPAQUE_VERTEX_STRIDE,
 				       t->stride_in_dw);
-
-		radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-		radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_SRC_MEM) |
-			    COPY_DATA_DST_SEL(COPY_DATA_REG) |
-			    COPY_DATA_WR_CONFIRM);
-		radeon_emit(cs, va);     /* src address lo */
-		radeon_emit(cs, va >> 32); /* src address hi */
-		radeon_emit(cs, R_028B2C_VGT_STRMOUT_DRAW_OPAQUE_BUFFER_FILLED_SIZE >> 2);
-		radeon_emit(cs, 0); /* unused */
-
-		radeon_add_to_buffer_list(sctx, sctx->gfx_cs,
-				      t->buf_filled_size, RADEON_USAGE_READ,
-				      RADEON_PRIO_SO_FILLED_SIZE);
+		si_cp_copy_data(sctx,
+				COPY_DATA_REG, NULL,
+				R_028B2C_VGT_STRMOUT_DRAW_OPAQUE_BUFFER_FILLED_SIZE >> 2,
+				COPY_DATA_SRC_MEM, t->buf_filled_size,
+				t->buf_filled_size_offset);
 	}
 
 	/* draw packet */
@@ -879,7 +869,7 @@ static void si_emit_surface_sync(struct si_context *sctx,
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	if (sctx->chip_class >= GFX9) {
+	if (sctx->chip_class >= GFX9 || !sctx->has_graphics) {
 		/* Flush caches and wait for the caches to assert idle. */
 		radeon_emit(cs, PKT3(PKT3_ACQUIRE_MEM, 5, 0));
 		radeon_emit(cs, cp_coher_cntl);	/* CP_COHER_CNTL */
@@ -896,12 +886,29 @@ static void si_emit_surface_sync(struct si_context *sctx,
 		radeon_emit(cs, 0);               /* CP_COHER_BASE */
 		radeon_emit(cs, 0x0000000A);      /* POLL_INTERVAL */
 	}
+
+	/* ACQUIRE_MEM has an implicit context roll if the current context
+	 * is busy. */
+	if (sctx->has_graphics)
+		sctx->context_roll = true;
 }
 
 void si_emit_cache_flush(struct si_context *sctx)
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 	uint32_t flags = sctx->flags;
+
+	if (!sctx->has_graphics) {
+		/* Only process compute flags. */
+		flags &= SI_CONTEXT_INV_ICACHE |
+			 SI_CONTEXT_INV_SMEM_L1 |
+			 SI_CONTEXT_INV_VMEM_L1 |
+			 SI_CONTEXT_INV_GLOBAL_L2 |
+			 SI_CONTEXT_WRITEBACK_GLOBAL_L2 |
+			 SI_CONTEXT_INV_L2_METADATA |
+			 SI_CONTEXT_CS_PARTIAL_FLUSH;
+	}
+
 	uint32_t cp_coher_cntl = 0;
 	uint32_t flush_cb_db = flags & (SI_CONTEXT_FLUSH_AND_INV_CB |
 					SI_CONTEXT_FLUSH_AND_INV_DB);
@@ -1068,11 +1075,12 @@ void si_emit_cache_flush(struct si_context *sctx)
 	/* Make sure ME is idle (it executes most packets) before continuing.
 	 * This prevents read-after-write hazards between PFP and ME.
 	 */
-	if (cp_coher_cntl ||
-	    (flags & (SI_CONTEXT_CS_PARTIAL_FLUSH |
-			    SI_CONTEXT_INV_VMEM_L1 |
-			    SI_CONTEXT_INV_GLOBAL_L2 |
-			    SI_CONTEXT_WRITEBACK_GLOBAL_L2))) {
+	if (sctx->has_graphics &&
+	    (cp_coher_cntl ||
+	     (flags & (SI_CONTEXT_CS_PARTIAL_FLUSH |
+		       SI_CONTEXT_INV_VMEM_L1 |
+		       SI_CONTEXT_INV_GLOBAL_L2 |
+		       SI_CONTEXT_WRITEBACK_GLOBAL_L2)))) {
 		radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
 		radeon_emit(cs, 0);
 	}
@@ -1210,26 +1218,10 @@ static void si_emit_all_states(struct si_context *sctx, const struct pipe_draw_i
 			       unsigned skip_atom_mask)
 {
 	unsigned num_patches = 0;
-	/* Vega10/Raven scissor bug workaround. When any context register is
-	 * written (i.e. the GPU rolls the context), PA_SC_VPORT_SCISSOR
-	 * registers must be written too.
-	 */
-	bool handle_scissor_bug = (sctx->family == CHIP_VEGA10 || sctx->family == CHIP_RAVEN) &&
-				  !si_is_atom_dirty(sctx, &sctx->atoms.s.scissors);
-	bool context_roll = false; /* set correctly for GFX9 only */
 
-	context_roll |= si_emit_rasterizer_prim_state(sctx);
+	si_emit_rasterizer_prim_state(sctx);
 	if (sctx->tes_shader.cso)
-		context_roll |= si_emit_derived_tess_state(sctx, info, &num_patches);
-
-	if (handle_scissor_bug &&
-	    (info->count_from_stream_output ||
-	     sctx->dirty_atoms & si_atoms_that_always_roll_context() ||
-	     sctx->dirty_states & si_states_that_always_roll_context() ||
-	     si_prim_restart_index_changed(sctx, info)))
-		context_roll = true;
-
-	sctx->context_roll_counter = 0;
+		si_emit_derived_tess_state(sctx, info, &num_patches);
 
 	/* Emit state atoms. */
 	unsigned mask = sctx->dirty_atoms & ~skip_atom_mask;
@@ -1252,12 +1244,6 @@ static void si_emit_all_states(struct si_context *sctx, const struct pipe_draw_i
 	}
 	sctx->dirty_states = 0;
 
-	if (handle_scissor_bug &&
-	    (context_roll || sctx->context_roll_counter)) {
-		sctx->scissors.dirty_mask = (1 << SI_MAX_VIEWPORTS) - 1;
-		sctx->atoms.s.scissors.emit(sctx);
-	}
-
 	/* Emit draw states. */
 	si_emit_vs_state(sctx, info);
 	si_emit_draw_registers(sctx, info, num_patches);
@@ -1268,7 +1254,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_state_rasterizer *rs = sctx->queued.named.rasterizer;
 	struct pipe_resource *indexbuf = info->index.resource;
-	unsigned dirty_tex_counter;
+	unsigned dirty_tex_counter, dirty_buf_counter;
 	enum pipe_prim_type rast_prim;
 	unsigned index_size = info->index_size;
 	unsigned index_offset = info->indirect ? info->start * index_size : 0;
@@ -1304,6 +1290,13 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		sctx->framebuffer.dirty_zsbuf = true;
 		si_mark_atom_dirty(sctx, &sctx->atoms.s.framebuffer);
 		si_update_all_texture_descriptors(sctx);
+	}
+
+	dirty_buf_counter = p_atomic_read(&sctx->screen->dirty_buf_counter);
+	if (unlikely(dirty_buf_counter != sctx->last_dirty_buf_counter)) {
+		sctx->last_dirty_buf_counter = dirty_buf_counter;
+		/* Rebind all buffers unconditionally. */
+		si_rebind_buffer(sctx, NULL);
 	}
 
 	si_decompress_textures(sctx, u_bit_consecutive(0, SI_NUM_GRAPHICS_SHADERS));
@@ -1372,7 +1365,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 	}
 
 	if (sctx->do_update_shaders && !si_update_shaders(sctx))
-		return;
+		goto return_cleanup;
 
 	if (index_size) {
 		/* Translate or upload, if needed. */
@@ -1449,12 +1442,31 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 
 	si_need_gfx_cs_space(sctx);
 
+	if (sctx->bo_list_add_all_gfx_resources)
+		si_gfx_resources_add_all_to_bo_list(sctx);
+
 	/* Since we've called si_context_add_resource_size for vertex buffers,
 	 * this must be called after si_need_cs_space, because we must let
 	 * need_cs_space flush before we add buffers to the buffer list.
 	 */
 	if (!si_upload_vertex_buffer_descriptors(sctx))
-		return;
+		goto return_cleanup;
+
+	/* Vega10/Raven scissor bug workaround. When any context register is
+	 * written (i.e. the GPU rolls the context), PA_SC_VPORT_SCISSOR
+	 * registers must be written too.
+	 */
+	bool has_gfx9_scissor_bug = sctx->screen->has_gfx9_scissor_bug;
+	unsigned masked_atoms = 0;
+
+	if (has_gfx9_scissor_bug) {
+		masked_atoms |= si_get_atom_bit(sctx, &sctx->atoms.s.scissors);
+
+		if (info->count_from_stream_output ||
+		    sctx->dirty_atoms & si_atoms_that_always_roll_context() ||
+		    sctx->dirty_states & si_states_that_always_roll_context())
+			sctx->context_roll = true;
+	}
 
 	/* Use optimal packet order based on whether we need to sync the pipeline. */
 	if (unlikely(sctx->flags & (SI_CONTEXT_FLUSH_AND_INV_CB |
@@ -1466,13 +1478,11 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		 * Then draw and prefetch at the end. This ensures that the time
 		 * the CUs are idle is very short.
 		 */
-		unsigned masked_atoms = 0;
-
 		if (unlikely(sctx->flags & SI_CONTEXT_FLUSH_FOR_RENDER_COND))
 			masked_atoms |= si_get_atom_bit(sctx, &sctx->atoms.s.render_cond);
 
 		if (!si_upload_graphics_shader_descriptors(sctx))
-			return;
+			goto return_cleanup;
 
 		/* Emit all states except possibly render condition. */
 		si_emit_all_states(sctx, info, masked_atoms);
@@ -1481,6 +1491,12 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 
 		if (si_is_atom_dirty(sctx, &sctx->atoms.s.render_cond))
 			sctx->atoms.s.render_cond.emit(sctx);
+
+		if (has_gfx9_scissor_bug &&
+		    (sctx->context_roll ||
+		     si_is_atom_dirty(sctx, &sctx->atoms.s.scissors)))
+			sctx->atoms.s.scissors.emit(sctx);
+
 		sctx->dirty_atoms = 0;
 
 		si_emit_draw_packets(sctx, info, indexbuf, index_size, index_offset);
@@ -1505,7 +1521,15 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		if (!si_upload_graphics_shader_descriptors(sctx))
 			return;
 
-		si_emit_all_states(sctx, info, 0);
+		si_emit_all_states(sctx, info, masked_atoms);
+
+		if (has_gfx9_scissor_bug &&
+		    (sctx->context_roll ||
+		     si_is_atom_dirty(sctx, &sctx->atoms.s.scissors)))
+			sctx->atoms.s.scissors.emit(sctx);
+
+		sctx->dirty_atoms = 0;
+
 		si_emit_draw_packets(sctx, info, indexbuf, index_size, index_offset);
 
 		/* Prefetch the remaining shaders after the draw has been
@@ -1513,6 +1537,9 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		if (sctx->chip_class >= CIK && sctx->prefetch_L2_mask)
 			cik_emit_prefetch_L2(sctx, false);
 	}
+
+	/* Clear the context roll flag after the draw call. */
+	sctx->context_roll = false;
 
 	if (unlikely(sctx->current_saved_cs)) {
 		si_trace_emit(sctx);
@@ -1539,6 +1566,8 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		if (G_0286E8_WAVESIZE(sctx->spi_tmpring_size))
 			sctx->num_spill_draw_calls++;
 	}
+
+return_cleanup:
 	if (index_size && indexbuf != info->index.resource)
 		pipe_resource_reference(&indexbuf, NULL);
 }

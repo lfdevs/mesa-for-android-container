@@ -37,17 +37,14 @@
  */
 
 #include "vc4_qir.h"
+#include "util/dag.h"
 
 static bool debug;
 
 struct schedule_node {
+        struct dag_node dag;
         struct list_head link;
         struct qinst *inst;
-
-        struct schedule_node **children;
-        uint32_t child_count;
-        uint32_t child_array_size;
-        uint32_t parent_count;
 
         /* Length of the longest (latency) chain from a DAG head to the this
          * instruction.
@@ -61,11 +58,7 @@ struct schedule_node {
 };
 
 struct schedule_state {
-        /* List of struct schedule_node *.  This starts out with all
-         * instructions, and after dependency updates it's trimmed to be just
-         * the DAG heads.
-         */
-        struct list_head worklist;
+        struct dag *dag;
 
         uint32_t time;
 
@@ -103,21 +96,7 @@ add_dep(enum direction dir,
                 after = t;
         }
 
-        for (int i = 0; i < after->child_count; i++) {
-                if (after->children[i] == after)
-                        return;
-        }
-
-        if (after->child_array_size <= after->child_count) {
-                after->child_array_size = MAX2(after->child_array_size * 2, 16);
-                after->children = reralloc(after, after->children,
-                                           struct schedule_node *,
-                                           after->child_array_size);
-        }
-
-        after->children[after->child_count] = before;
-        after->child_count++;
-        before->parent_count++;
+        dag_add_edge(&after->dag, &before->dag, NULL);
 }
 
 static void
@@ -474,7 +453,8 @@ choose_instruction(struct schedule_state *state)
 {
         struct schedule_node *chosen = NULL;
 
-        list_for_each_entry(struct schedule_node, n, &state->worklist, link) {
+        list_for_each_entry(struct schedule_node, n, &state->dag->heads,
+                            dag.link) {
                 /* The branches aren't being tracked as dependencies.  Make
                  * sure that they stay scheduled as the last instruction of
                  * the block, which is to say the first one we choose to
@@ -549,17 +529,20 @@ static void
 dump_state(struct vc4_compile *c, struct schedule_state *state)
 {
         uint32_t i = 0;
-        list_for_each_entry(struct schedule_node, n, &state->worklist, link) {
+        list_for_each_entry(struct schedule_node, n, &state->dag->heads,
+                            dag.link) {
                 fprintf(stderr, "%3d: ", i++);
                 qir_dump_inst(c, n->inst);
                 fprintf(stderr, " (%d cost)\n",
                         get_register_pressure_cost(state, n->inst));
 
-                for (int i = 0; i < n->child_count; i++) {
-                        struct schedule_node *child = n->children[i];
+                util_dynarray_foreach(&n->dag.edges, struct dag_edge, edge) {
+                        struct schedule_node *child =
+                                (struct schedule_node *)edge->child;
                         fprintf(stderr, "   - ");
                         qir_dump_inst(c, child->inst);
-                        fprintf(stderr, " (%d parents)\n", child->parent_count);
+                        fprintf(stderr, " (%d parents)\n",
+                                child->dag.parent_count);
                 }
         }
 }
@@ -606,27 +589,26 @@ latency_between(struct schedule_node *before, struct schedule_node *after)
 
 /** Recursive computation of the delay member of a node. */
 static void
-compute_delay(struct schedule_node *n)
+compute_delay(struct dag_node *node, void *state)
 {
-        if (!n->child_count) {
-                /* The color read needs to be scheduled late, to avoid locking
-                 * the scoreboard early.  This is our best tool for
-                 * encouraging that.  The other scoreboard locking ops will
-                 * have this happen by default, since they are generally the
-                 * DAG heads or close to them.
-                 */
-                if (n->inst->op == QOP_TLB_COLOR_READ)
-                        n->delay = 1000;
-                else
-                        n->delay = 1;
-        } else {
-                for (int i = 0; i < n->child_count; i++) {
-                        if (!n->children[i]->delay)
-                                compute_delay(n->children[i]);
-                        n->delay = MAX2(n->delay,
-                                        n->children[i]->delay +
-                                        latency_between(n->children[i], n));
-                }
+        struct schedule_node *n = (struct schedule_node *)node;
+
+        /* The color read needs to be scheduled late, to avoid locking the
+         * scoreboard early.  This is our best tool for encouraging that.  The
+         * other scoreboard locking ops will have this happen by default,
+         * since they are generally the DAG heads or close to them.
+         */
+        if (n->inst->op == QOP_TLB_COLOR_READ)
+                n->delay = 1000;
+        else
+                n->delay = 1;
+
+        util_dynarray_foreach(&n->dag.edges, struct dag_edge, edge) {
+                struct schedule_node *child =
+                        (struct schedule_node *)edge->child;
+
+                n->delay = MAX2(n->delay, (child->delay +
+                                           latency_between(child, n)));
         }
 }
 
@@ -639,15 +621,8 @@ schedule_instructions(struct vc4_compile *c,
                 dump_state(c, state);
         }
 
-        /* Remove non-DAG heads from the list. */
-        list_for_each_entry_safe(struct schedule_node, n,
-                                 &state->worklist, link) {
-                if (n->parent_count != 0)
-                        list_del(&n->link);
-        }
-
         state->time = 0;
-        while (!list_empty(&state->worklist)) {
+        while (!list_empty(&state->dag->heads)) {
                 struct schedule_node *chosen = choose_instruction(state);
                 struct qinst *inst = chosen->inst;
 
@@ -663,7 +638,6 @@ schedule_instructions(struct vc4_compile *c,
                 state->time = MAX2(state->time, chosen->unblocked_time);
 
                 /* Schedule this instruction back onto the QIR list. */
-                list_del(&chosen->link);
                 list_add(&inst->link, &block->instructions);
 
                 /* Now that we've scheduled a new instruction, some of its
@@ -671,17 +645,17 @@ schedule_instructions(struct vc4_compile *c,
                  * be scheduled.  Update the children's unblocked time for this
                  * DAG edge as we do so.
                  */
-                for (int i = chosen->child_count - 1; i >= 0; i--) {
-                        struct schedule_node *child = chosen->children[i];
+                util_dynarray_foreach(&chosen->dag.edges,
+                                      struct dag_edge, edge) {
+                        struct schedule_node *child =
+                                (struct schedule_node *)edge->child;
 
                         child->unblocked_time = MAX2(child->unblocked_time,
                                                      state->time +
                                                      latency_between(child,
                                                                      chosen));
-                        child->parent_count--;
-                        if (child->parent_count == 0)
-                                list_add(&child->link, &state->worklist);
                 }
+                dag_prune_head(state->dag, &chosen->dag);
 
                 /* Update our tracking of register pressure. */
                 for (int i = 0; i < qir_get_nsrc(inst); i++) {
@@ -702,37 +676,39 @@ static void
 qir_schedule_instructions_block(struct vc4_compile *c,
                                 struct qblock *block)
 {
-        void *mem_ctx = ralloc_context(NULL);
-        struct schedule_state state = { { 0 } };
+        struct schedule_state *state = rzalloc(NULL, struct schedule_state);
 
-        state.temp_writes = rzalloc_array(mem_ctx, uint32_t, c->num_temps);
-        state.temp_live = rzalloc_array(mem_ctx, BITSET_WORD,
-                                        BITSET_WORDS(c->num_temps));
-        list_inithead(&state.worklist);
+        state->temp_writes = rzalloc_array(state, uint32_t, c->num_temps);
+        state->temp_live = rzalloc_array(state, BITSET_WORD,
+                                         BITSET_WORDS(c->num_temps));
+        state->dag = dag_create(state);
+
+        struct list_head setup_list;
+        list_inithead(&setup_list);
 
         /* Wrap each instruction in a scheduler structure. */
         qir_for_each_inst_safe(inst, block) {
-                struct schedule_node *n = rzalloc(mem_ctx, struct schedule_node);
+                struct schedule_node *n = rzalloc(state, struct schedule_node);
 
                 n->inst = inst;
                 list_del(&inst->link);
-                list_addtail(&n->link, &state.worklist);
+                list_addtail(&n->link, &setup_list);
+                dag_init_node(state->dag, &n->dag);
 
                 if (inst->dst.file == QFILE_TEMP)
-                        state.temp_writes[inst->dst.index]++;
+                        state->temp_writes[inst->dst.index]++;
         }
 
         /* Dependencies tracked top-to-bottom. */
-        calculate_forward_deps(c, mem_ctx, &state.worklist);
+        calculate_forward_deps(c, state, &setup_list);
         /* Dependencies tracked bottom-to-top. */
-        calculate_reverse_deps(c, mem_ctx, &state.worklist);
+        calculate_reverse_deps(c, state, &setup_list);
 
-        list_for_each_entry(struct schedule_node, n, &state.worklist, link)
-                compute_delay(n);
+        dag_traverse_bottom_up(state->dag, compute_delay, NULL);
 
-        schedule_instructions(c, block, &state);
+        schedule_instructions(c, block, state);
 
-        ralloc_free(mem_ctx);
+        ralloc_free(state);
 }
 
 void

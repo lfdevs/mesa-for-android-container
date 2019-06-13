@@ -175,7 +175,7 @@ aa_transform_prolog(struct tgsi_transform_context *ctx)
 
    /* find two free temp regs */
    for (i = 0; i < 32; i++) {
-      if ((aactx->tempsUsed & (1 << i)) == 0) {
+      if ((aactx->tempsUsed & (1u << i)) == 0) {
          /* found a free temp */
          if (aactx->tmp0 < 0)
             aactx->tmp0 = i;

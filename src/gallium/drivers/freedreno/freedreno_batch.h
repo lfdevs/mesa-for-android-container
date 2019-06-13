@@ -122,6 +122,7 @@ struct fd_batch {
 
 		FD_GMEM_BLEND_ENABLED        = 0x10,
 		FD_GMEM_LOGICOP_ENABLED      = 0x20,
+		FD_GMEM_FB_READ              = 0x40,
 	} gmem_reason;
 	unsigned num_draws;   /* number of draws in current batch */
 	unsigned num_vertices;   /* number of vertices in current batch */
@@ -136,6 +137,9 @@ struct fd_batch {
 	 * on whether we using binning or not:
 	 */
 	struct util_dynarray draw_patches;
+
+	/* texture state that needs patching for fb_read: */
+	struct util_dynarray fb_read_patches;
 
 	/* Keep track of writes to RB_RENDER_CONTROL which need to be patched
 	 * once we know whether or not to use GMEM, and GMEM tile pitch.
@@ -243,6 +247,10 @@ void __fd_batch_destroy(struct fd_batch *batch);
  * WARNING the _locked() version can briefly drop the lock.  Without
  * recursive mutexes, I'm not sure there is much else we can do (since
  * __fd_batch_destroy() needs to unref resources)
+ *
+ * WARNING you must acquire the screen->lock and use the _locked()
+ * version in case that the batch being ref'd can disappear under
+ * you.
  */
 
 /* fwd-decl prototypes to untangle header dependency :-/ */

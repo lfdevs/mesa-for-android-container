@@ -87,9 +87,9 @@ compile_gs(struct svga_context *svga,
       }
    }
 
-   ret = svga_define_shader(svga, SVGA3D_SHADERTYPE_GS, variant);
+   ret = svga_define_shader(svga, variant);
    if (ret != PIPE_OK) {
-      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_GS, variant);
+      svga_destroy_shader_variant(svga, variant);
       return ret;
    }
 

@@ -39,7 +39,6 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #define ENABLE_AVX512_SIMD16 1
-#define USE_8x2_TILE_BACKEND 1
 #define USE_SIMD16_FRONTEND 1
 #define USE_SIMD16_SHADERS 1 // requires USE_SIMD16_FRONTEND
 #define USE_SIMD16_VS 1      // requires USE_SIMD16_SHADERS
@@ -54,34 +53,21 @@
 #if (KNOB_ARCH == KNOB_ARCH_AVX)
 #define KNOB_ARCH_ISA AVX
 #define KNOB_ARCH_STR "AVX"
-#define KNOB_SIMD_WIDTH 8
-#define KNOB_SIMD_BYTES 32
 #elif (KNOB_ARCH == KNOB_ARCH_AVX2)
 #define KNOB_ARCH_ISA AVX2
 #define KNOB_ARCH_STR "AVX2"
-#define KNOB_SIMD_WIDTH 8
-#define KNOB_SIMD_BYTES 32
 #elif (KNOB_ARCH == KNOB_ARCH_AVX512)
 #define KNOB_ARCH_ISA AVX512F
 #define KNOB_ARCH_STR "AVX512"
-#define KNOB_SIMD_WIDTH 8
-#define KNOB_SIMD_BYTES 32
 #else
 #error "Unknown architecture"
 #endif
 
-#if ENABLE_AVX512_SIMD16
+#define KNOB_SIMD_WIDTH 8
+#define KNOB_SIMD_BYTES 32
 
 #define KNOB_SIMD16_WIDTH 16
 #define KNOB_SIMD16_BYTES 64
-
-#if (KNOB_ARCH == KNOB_ARCH_AVX512)
-#define ENABLE_AVX512_EMULATION 0
-#else
-#define ENABLE_AVX512_EMULATION 1
-#endif
-
-#endif
 
 #define MAX_KNOB_ARCH_STR_LEN sizeof("AVX512_PLUS_PADDING")
 

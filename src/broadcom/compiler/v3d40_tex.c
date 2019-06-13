@@ -48,8 +48,7 @@ vir_WRTMUC(struct v3d_compile *c, enum quniform_contents contents, uint32_t data
 {
         struct qinst *inst = vir_NOP(c);
         inst->qpu.sig.wrtmuc = true;
-        inst->has_implicit_uniform = true;
-        inst->src[0] = vir_uniform(c, contents, data);
+        inst->uniform = vir_get_uniform_index(c, contents, data);
 }
 
 static const struct V3D41_TMU_CONFIG_PARAMETER_1 p1_unpacked_default = {
@@ -139,14 +138,13 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 
                 case nir_tex_src_offset: {
                         if (nir_src_is_const(instr->src[i].src)) {
-                                nir_const_value *offset =
-                                        nir_src_as_const_value(instr->src[i].src);
-
-                                p2_unpacked.offset_s = offset->i32[0];
+                                p2_unpacked.offset_s = nir_src_comp_as_int(instr->src[i].src, 0);
                                 if (instr->coord_components >= 2)
-                                        p2_unpacked.offset_t = offset->i32[1];
-                                if (instr->coord_components >= 3)
-                                        p2_unpacked.offset_r = offset->i32[2];
+                                        p2_unpacked.offset_t =
+                                                nir_src_comp_as_int(instr->src[i].src, 1);
+                                if (non_array_components >= 3)
+                                        p2_unpacked.offset_r =
+                                                nir_src_comp_as_int(instr->src[i].src, 2);
                         } else {
                                 struct qreg mask = vir_uniform_ui(c, 0xf);
                                 struct qreg x, y, offset;
@@ -184,6 +182,8 @@ v3d40_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                p0_unpacked.return_words_of_texture_data < (1 << 4));
         assert(p1_unpacked.output_type_32_bit ||
                p0_unpacked.return_words_of_texture_data < (1 << 2));
+
+        assert(p0_unpacked.return_words_of_texture_data != 0);
 
         uint32_t p0_packed;
         V3D41_TMU_CONFIG_PARAMETER_0_pack(NULL,

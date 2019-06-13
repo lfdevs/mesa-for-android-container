@@ -848,6 +848,807 @@ TEST_P(validation_test, byte_destination_relaxed_alignment)
    }
 }
 
+TEST_P(validation_test, byte_64bit_conversion)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src_type;
+      unsigned dst_stride;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src_type, dst_stride, expected_result)             \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src_type,                                    \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                              \
+         expected_result,                                                 \
+      }
+
+      INST(B,   Q, 1, false),
+      INST(B,  UQ, 1, false),
+      INST(B,  DF, 1, false),
+      INST(UB,  Q, 1, false),
+      INST(UB, UQ, 1, false),
+      INST(UB, DF, 1, false),
+
+      INST(B,   Q, 2, false),
+      INST(B,  UQ, 2, false),
+      INST(B , DF, 2, false),
+      INST(UB,  Q, 2, false),
+      INST(UB, UQ, 2, false),
+      INST(UB, DF, 2, false),
+
+      INST(B,   Q, 4, false),
+      INST(B,  UQ, 4, false),
+      INST(B,  DF, 4, false),
+      INST(UB,  Q, 4, false),
+      INST(UB, UQ, 4, false),
+      INST(UB, DF, 4, false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      if (!devinfo.has_64bit_types && type_sz(inst[i].src_type) == 8)
+         continue;
+
+      brw_MOV(p, retype(g0, inst[i].dst_type), retype(g0, inst[i].src_type));
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, half_float_conversion)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src_type;
+      unsigned dst_stride;
+      unsigned dst_subnr;
+      bool expected_result_bdw;
+      bool expected_result_chv_gen9;
+   } inst[] = {
+#define INST_C(dst_type, src_type, dst_stride, dst_subnr, expected_result)  \
+      {                                                                     \
+         BRW_REGISTER_TYPE_##dst_type,                                      \
+         BRW_REGISTER_TYPE_##src_type,                                      \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                                \
+         dst_subnr,                                                         \
+         expected_result,                                                   \
+         expected_result,                                                   \
+      }
+#define INST_S(dst_type, src_type, dst_stride, dst_subnr,                   \
+               expected_result_bdw, expected_result_chv_gen9)               \
+      {                                                                     \
+         BRW_REGISTER_TYPE_##dst_type,                                      \
+         BRW_REGISTER_TYPE_##src_type,                                      \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                                \
+         dst_subnr,                                                         \
+         expected_result_bdw,                                               \
+         expected_result_chv_gen9,                                          \
+      }
+
+      /* MOV to half-float destination */
+      INST_C(HF,  B, 1, 0, false),
+      INST_C(HF,  W, 1, 0, false),
+      INST_C(HF, HF, 1, 0, true),
+      INST_C(HF, HF, 1, 2, true),
+      INST_C(HF,  D, 1, 0, false),
+      INST_S(HF,  F, 1, 0, false, true),
+      INST_C(HF,  Q, 1, 0, false),
+      INST_C(HF,  B, 2, 0, true),
+      INST_C(HF,  B, 2, 2, false),
+      INST_C(HF,  W, 2, 0, true),
+      INST_C(HF,  W, 2, 2, false),
+      INST_C(HF, HF, 2, 0, true),
+      INST_C(HF, HF, 2, 2, true),
+      INST_C(HF,  D, 2, 0, true),
+      INST_C(HF,  D, 2, 2, false),
+      INST_C(HF,  F, 2, 0, true),
+      INST_S(HF,  F, 2, 2, false, true),
+      INST_C(HF,  Q, 2, 0, false),
+      INST_C(HF, DF, 2, 0, false),
+      INST_C(HF,  B, 4, 0, false),
+      INST_C(HF,  W, 4, 0, false),
+      INST_C(HF, HF, 4, 0, true),
+      INST_C(HF, HF, 4, 2, true),
+      INST_C(HF,  D, 4, 0, false),
+      INST_C(HF,  F, 4, 0, false),
+      INST_C(HF,  Q, 4, 0, false),
+      INST_C(HF, DF, 4, 0, false),
+
+      /* MOV from half-float source */
+      INST_C( B, HF, 1, 0, false),
+      INST_C( W, HF, 1, 0, false),
+      INST_C( D, HF, 1, 0, true),
+      INST_C( D, HF, 1, 4, true),
+      INST_C( F, HF, 1, 0, true),
+      INST_C( F, HF, 1, 4, true),
+      INST_C( Q, HF, 1, 0, false),
+      INST_C(DF, HF, 1, 0, false),
+      INST_C( B, HF, 2, 0, false),
+      INST_C( W, HF, 2, 0, true),
+      INST_C( W, HF, 2, 2, false),
+      INST_C( D, HF, 2, 0, false),
+      INST_C( F, HF, 2, 0, true),
+      INST_C( B, HF, 4, 0, true),
+      INST_C( B, HF, 4, 1, false),
+      INST_C( W, HF, 4, 0, false),
+
+#undef INST_C
+#undef INST_S
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      if (!devinfo.has_64bit_types &&
+          (type_sz(inst[i].src_type) == 8 || type_sz(inst[i].dst_type) == 8)) {
+         continue;
+      }
+
+      brw_MOV(p, retype(g0, inst[i].dst_type), retype(g0, inst[i].src_type));
+
+      brw_inst_set_exec_size(&devinfo, last_inst, BRW_EXECUTE_4);
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+      brw_inst_set_dst_da1_subreg_nr(&devinfo, last_inst, inst[i].dst_subnr);
+
+      if (inst[i].src_type == BRW_REGISTER_TYPE_B) {
+         brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+         brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_2);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_2);
+      } else {
+         brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+         brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_4);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+      }
+
+      if (devinfo.is_cherryview || devinfo.gen >= 9)
+         EXPECT_EQ(inst[i].expected_result_chv_gen9, validate(p));
+      else
+         EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_source_indirect_addressing)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      bool dst_indirect;
+      bool src0_indirect;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type,                              \
+             dst_stride, dst_indirect, src0_indirect, expected_result)    \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                              \
+         dst_indirect,                                                    \
+         src0_indirect,                                                   \
+         expected_result,                                                 \
+      }
+
+      /* Source and dest are mixed float: indirect src addressing not allowed */
+      INST(HF,  F,  F, 2, false, false, true),
+      INST(HF,  F,  F, 2, true,  false, true),
+      INST(HF,  F,  F, 2, false, true,  false),
+      INST(HF,  F,  F, 2, true,  true,  false),
+      INST( F, HF,  F, 1, false, false, true),
+      INST( F, HF,  F, 1, true,  false, true),
+      INST( F, HF,  F, 1, false, true,  false),
+      INST( F, HF,  F, 1, true,  true,  false),
+
+      INST(HF, HF,  F, 2, false, false, true),
+      INST(HF, HF,  F, 2, true,  false, true),
+      INST(HF, HF,  F, 2, false, true,  false),
+      INST(HF, HF,  F, 2, true,  true,  false),
+      INST( F,  F, HF, 1, false, false, true),
+      INST( F,  F, HF, 1, true,  false, true),
+      INST( F,  F, HF, 1, false, true,  false),
+      INST( F,  F, HF, 1, true,  true,  false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_dst_address_mode(&devinfo, last_inst, inst[i].dst_indirect);
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+      brw_inst_set_src0_address_mode(&devinfo, last_inst, inst[i].src0_indirect);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align1_simd16)
+{
+   static const struct {
+      unsigned exec_size;
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      bool expected_result;
+   } inst[] = {
+#define INST(exec_size, dst_type, src0_type, src1_type,                   \
+             dst_stride, expected_result)                                 \
+      {                                                                   \
+         BRW_EXECUTE_##exec_size,                                         \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                              \
+         expected_result,                                                 \
+      }
+
+      /* No SIMD16 in mixed mode when destination is packed f16 */
+      INST( 8, HF,  F, HF, 2, true),
+      INST(16, HF, HF,  F, 2, true),
+      INST(16, HF, HF,  F, 1, false),
+      INST(16, HF,  F, HF, 1, false),
+
+      /* No SIMD16 in mixed mode when destination is f32 */
+      INST( 8,  F, HF,  F, 1, true),
+      INST( 8,  F,  F, HF, 1, true),
+      INST(16,  F, HF,  F, 1, false),
+      INST(16,  F,  F, HF, 1, false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_exec_size(&devinfo, last_inst, inst[i].exec_size);
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align1_packed_fp16_dst_acc_read_offset_0)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      bool read_acc;
+      unsigned subnr;
+      bool expected_result_bdw;
+      bool expected_result_chv_skl;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type, dst_stride, read_acc, subnr,   \
+             expected_result_bdw, expected_result_chv_skl)                  \
+      {                                                                     \
+         BRW_REGISTER_TYPE_##dst_type,                                      \
+         BRW_REGISTER_TYPE_##src0_type,                                     \
+         BRW_REGISTER_TYPE_##src1_type,                                     \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                                \
+         read_acc,                                                          \
+         subnr,                                                             \
+         expected_result_bdw,                                               \
+         expected_result_chv_skl,                                           \
+      }
+
+      /* Destination is not packed */
+      INST(HF, HF,  F, 2, true,  0, true, true),
+      INST(HF, HF,  F, 2, true,  2, true, true),
+      INST(HF, HF,  F, 2, true,  4, true, true),
+      INST(HF, HF,  F, 2, true,  8, true, true),
+      INST(HF, HF,  F, 2, true, 16, true, true),
+
+      /* Destination is packed, we don't read acc */
+      INST(HF, HF,  F, 1, false,  0, false, true),
+      INST(HF, HF,  F, 1, false,  2, false, true),
+      INST(HF, HF,  F, 1, false,  4, false, true),
+      INST(HF, HF,  F, 1, false,  8, false, true),
+      INST(HF, HF,  F, 1, false, 16, false, true),
+
+      /* Destination is packed, we read acc */
+      INST(HF, HF,  F, 1, true,  0, false, false),
+      INST(HF, HF,  F, 1, true,  2, false, false),
+      INST(HF, HF,  F, 1, true,  4, false, false),
+      INST(HF, HF,  F, 1, true,  8, false, false),
+      INST(HF, HF,  F, 1, true, 16, false, false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(inst[i].read_acc ? acc0 : g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+
+      brw_inst_set_src0_da1_subreg_nr(&devinfo, last_inst, inst[i].subnr);
+
+      if (devinfo.is_cherryview || devinfo.gen >= 9)
+         EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
+      else
+         EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_fp16_dest_with_acc)
+{
+   static const struct {
+      unsigned exec_size;
+      unsigned opcode;
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      bool read_acc;
+      bool expected_result_bdw;
+      bool expected_result_chv_skl;
+   } inst[] = {
+#define INST(exec_size, opcode, dst_type, src0_type, src1_type,           \
+             dst_stride, read_acc,expected_result_bdw,                    \
+             expected_result_chv_skl)                                     \
+      {                                                                   \
+         BRW_EXECUTE_##exec_size,                                         \
+         BRW_OPCODE_##opcode,                                             \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                              \
+         read_acc,                                                        \
+         expected_result_bdw,                                             \
+         expected_result_chv_skl,                                         \
+      }
+
+      /* Packed fp16 dest with implicit acc needs hstride=2 */
+      INST(8, MAC, HF, HF,  F, 1, false, false, false),
+      INST(8, MAC, HF, HF,  F, 2, false, true,  true),
+      INST(8, MAC, HF,  F, HF, 1, false, false, false),
+      INST(8, MAC, HF,  F, HF, 2, false, true,  true),
+
+      /* Packed fp16 dest with explicit acc needs hstride=2 */
+      INST(8, ADD, HF, HF,  F, 1, true,  false, false),
+      INST(8, ADD, HF, HF,  F, 2, true,  true,  true),
+      INST(8, ADD, HF,  F, HF, 1, true,  false, false),
+      INST(8, ADD, HF,  F, HF, 2, true,  true,  true),
+
+      /* If destination is not fp16, restriction doesn't apply */
+      INST(8, MAC,  F, HF,  F, 1, false, true, true),
+      INST(8, MAC,  F, HF,  F, 2, false, true, true),
+
+      /* If there is no implicit/explicit acc, restriction doesn't apply */
+      INST(8, ADD, HF, HF,  F, 1, false, false, true),
+      INST(8, ADD, HF, HF,  F, 2, false, true,  true),
+      INST(8, ADD, HF,  F, HF, 1, false, false, true),
+      INST(8, ADD, HF,  F, HF, 2, false, true,  true),
+      INST(8, ADD,  F, HF,  F, 1, false, true,  true),
+      INST(8, ADD,  F, HF,  F, 2, false, true,  true),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      if (inst[i].opcode == BRW_OPCODE_MAC) {
+         brw_MAC(p, retype(g0, inst[i].dst_type),
+                    retype(g0, inst[i].src0_type),
+                    retype(g0, inst[i].src1_type));
+      } else {
+         assert(inst[i].opcode == BRW_OPCODE_ADD);
+         brw_ADD(p, retype(g0, inst[i].dst_type),
+                    retype(inst[i].read_acc ? acc0: g0, inst[i].src0_type),
+                    retype(g0, inst[i].src1_type));
+      }
+
+      brw_inst_set_exec_size(&devinfo, last_inst, inst[i].exec_size);
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+
+      if (devinfo.is_cherryview || devinfo.gen >= 9)
+         EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
+      else
+         EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align1_math_strided_fp16_inputs)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      unsigned src0_stride;
+      unsigned src1_stride;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type,                              \
+             dst_stride, src0_stride, src1_stride, expected_result)       \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                              \
+         BRW_HORIZONTAL_STRIDE_##src0_stride,                             \
+         BRW_HORIZONTAL_STRIDE_##src1_stride,                             \
+         expected_result,                                                 \
+      }
+
+      INST(HF, HF,  F, 2, 2, 1, true),
+      INST(HF,  F, HF, 2, 1, 2, true),
+      INST(HF,  F, HF, 1, 1, 2, true),
+      INST(HF,  F, HF, 2, 1, 1, false),
+      INST(HF, HF,  F, 2, 1, 1, false),
+      INST(HF, HF,  F, 1, 1, 1, false),
+      INST(HF, HF,  F, 2, 1, 1, false),
+      INST( F, HF,  F, 1, 1, 1, false),
+      INST( F,  F, HF, 1, 1, 2, true),
+      INST( F, HF, HF, 1, 2, 1, false),
+      INST( F, HF, HF, 1, 2, 2, true),
+
+#undef INST
+   };
+
+   /* No half-float math in gen8 */
+   if (devinfo.gen < 9)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      gen6_math(p, retype(g0, inst[i].dst_type),
+                   BRW_MATH_FUNCTION_POW,
+                   retype(g0, inst[i].src0_type),
+                   retype(g0, inst[i].src1_type));
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_4);
+      brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].src0_stride);
+
+      brw_inst_set_src1_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src1_width(&devinfo, last_inst, BRW_WIDTH_4);
+      brw_inst_set_src1_hstride(&devinfo, last_inst, inst[i].src1_stride);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align1_packed_fp16_dst)
+{
+   static const struct {
+      unsigned exec_size;
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned dst_stride;
+      unsigned dst_subnr;
+      bool expected_result_bdw;
+      bool expected_result_chv_skl;
+   } inst[] = {
+#define INST(exec_size, dst_type, src0_type, src1_type, dst_stride, dst_subnr, \
+             expected_result_bdw, expected_result_chv_skl)                     \
+      {                                                                        \
+         BRW_EXECUTE_##exec_size,                                              \
+         BRW_REGISTER_TYPE_##dst_type,                                         \
+         BRW_REGISTER_TYPE_##src0_type,                                        \
+         BRW_REGISTER_TYPE_##src1_type,                                        \
+         BRW_HORIZONTAL_STRIDE_##dst_stride,                                   \
+         dst_subnr,                                                            \
+         expected_result_bdw,                                                  \
+         expected_result_chv_skl                                               \
+      }
+
+      /* SIMD8 packed fp16 dst won't cross oword boundaries if region is
+       * oword-aligned
+       */
+      INST( 8, HF, HF,  F, 1,  0, false, true),
+      INST( 8, HF, HF,  F, 1,  2, false, false),
+      INST( 8, HF, HF,  F, 1,  4, false, false),
+      INST( 8, HF, HF,  F, 1,  8, false, false),
+      INST( 8, HF, HF,  F, 1, 16, false, true),
+
+      /* SIMD16 packed fp16 always crosses oword boundaries */
+      INST(16, HF, HF,  F, 1,  0, false, false),
+      INST(16, HF, HF,  F, 1,  2, false, false),
+      INST(16, HF, HF,  F, 1,  4, false, false),
+      INST(16, HF, HF,  F, 1,  8, false, false),
+      INST(16, HF, HF,  F, 1, 16, false, false),
+
+      /* If destination is not packed (or not fp16) we can cross oword
+       * boundaries
+       */
+      INST( 8, HF, HF,  F, 2,  0, true, true),
+      INST( 8,  F, HF,  F, 1,  0, true, true),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8)
+      return;
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, inst[i].dst_stride);
+      brw_inst_set_dst_da1_subreg_nr(&devinfo, last_inst, inst[i].dst_subnr);
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_4);
+      brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+
+      brw_inst_set_src1_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src1_width(&devinfo, last_inst, BRW_WIDTH_4);
+      brw_inst_set_src1_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+
+      brw_inst_set_exec_size(&devinfo, last_inst, inst[i].exec_size);
+
+      if (devinfo.is_cherryview || devinfo.gen >= 9)
+         EXPECT_EQ(inst[i].expected_result_chv_skl, validate(p));
+      else
+         EXPECT_EQ(inst[i].expected_result_bdw, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align16_packed_data)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned src0_vstride;
+      unsigned src1_vstride;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type,                              \
+             src0_vstride, src1_vstride, expected_result)                 \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_VERTICAL_STRIDE_##src0_vstride,                              \
+         BRW_VERTICAL_STRIDE_##src1_vstride,                              \
+         expected_result,                                                 \
+      }
+
+      /* We only test with F destination because there is a restriction
+       * by which F->HF conversions need to be DWord aligned but Align16 also
+       * requires that destination horizontal stride is 1.
+       */
+      INST(F,  F, HF, 4, 4, true),
+      INST(F,  F, HF, 2, 4, false),
+      INST(F,  F, HF, 4, 2, false),
+      INST(F,  F, HF, 0, 4, false),
+      INST(F,  F, HF, 4, 0, false),
+      INST(F, HF,  F, 4, 4, true),
+      INST(F, HF,  F, 4, 2, false),
+      INST(F, HF,  F, 2, 4, false),
+      INST(F, HF,  F, 0, 4, false),
+      INST(F, HF,  F, 4, 0, false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8 || devinfo.gen >= 11)
+      return;
+
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, inst[i].src0_vstride);
+      brw_inst_set_src1_vstride(&devinfo, last_inst, inst[i].src1_vstride);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align16_no_simd16)
+{
+   static const struct {
+      unsigned exec_size;
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      bool expected_result;
+   } inst[] = {
+#define INST(exec_size, dst_type, src0_type, src1_type, expected_result)  \
+      {                                                                   \
+         BRW_EXECUTE_##exec_size,                                         \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         expected_result,                                                 \
+      }
+
+      /* We only test with F destination because there is a restriction
+       * by which F->HF conversions need to be DWord aligned but Align16 also
+       * requires that destination horizontal stride is 1.
+       */
+      INST( 8,  F,  F, HF, true),
+      INST( 8,  F, HF,  F, true),
+      INST( 8,  F,  F, HF, true),
+      INST(16,  F,  F, HF, false),
+      INST(16,  F, HF,  F, false),
+      INST(16,  F,  F, HF, false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8 || devinfo.gen >= 11)
+      return;
+
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_exec_size(&devinfo, last_inst, inst[i].exec_size);
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src1_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align16_no_acc_read)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      bool read_acc;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type, read_acc, expected_result)   \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         read_acc,                                                        \
+         expected_result,                                                 \
+      }
+
+      /* We only test with F destination because there is a restriction
+       * by which F->HF conversions need to be DWord aligned but Align16 also
+       * requires that destination horizontal stride is 1.
+       */
+      INST( F,  F, HF, false, true),
+      INST( F,  F, HF, true,  false),
+      INST( F, HF,  F, false, true),
+      INST( F, HF,  F, true,  false),
+
+#undef INST
+   };
+
+   if (devinfo.gen < 8 || devinfo.gen >= 11)
+      return;
+
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      brw_ADD(p, retype(g0, inst[i].dst_type),
+                 retype(inst[i].read_acc ? acc0 : g0, inst[i].src0_type),
+                 retype(g0, inst[i].src1_type));
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+      brw_inst_set_src1_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, mixed_float_align16_math_packed_format)
+{
+   static const struct {
+      enum brw_reg_type dst_type;
+      enum brw_reg_type src0_type;
+      enum brw_reg_type src1_type;
+      unsigned src0_vstride;
+      unsigned src1_vstride;
+      bool expected_result;
+   } inst[] = {
+#define INST(dst_type, src0_type, src1_type,                              \
+             src0_vstride, src1_vstride, expected_result)                 \
+      {                                                                   \
+         BRW_REGISTER_TYPE_##dst_type,                                    \
+         BRW_REGISTER_TYPE_##src0_type,                                   \
+         BRW_REGISTER_TYPE_##src1_type,                                   \
+         BRW_VERTICAL_STRIDE_##src0_vstride,                              \
+         BRW_VERTICAL_STRIDE_##src1_vstride,                              \
+         expected_result,                                                 \
+      }
+
+      /* We only test with F destination because there is a restriction
+       * by which F->HF conversions need to be DWord aligned but Align16 also
+       * requires that destination horizontal stride is 1.
+       */
+      INST( F, HF,  F, 4, 0, false),
+      INST( F, HF, HF, 4, 4, true),
+      INST( F,  F, HF, 4, 0, false),
+      INST( F,  F, HF, 2, 4, false),
+      INST( F,  F, HF, 4, 2, false),
+      INST( F, HF, HF, 0, 4, false),
+
+#undef INST
+   };
+
+   /* Align16 Math for mixed float mode is not supported in gen8 */
+   if (devinfo.gen < 9 || devinfo.gen >= 11)
+      return;
+
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+
+   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+      gen6_math(p, retype(g0, inst[i].dst_type),
+                   BRW_MATH_FUNCTION_POW,
+                   retype(g0, inst[i].src0_type),
+                   retype(g0, inst[i].src1_type));
+
+      brw_inst_set_src0_vstride(&devinfo, last_inst, inst[i].src0_vstride);
+      brw_inst_set_src1_vstride(&devinfo, last_inst, inst[i].src1_vstride);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
 TEST_P(validation_test, vector_immediate_destination_alignment)
 {
    static const struct {

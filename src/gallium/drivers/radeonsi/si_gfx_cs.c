@@ -26,6 +26,7 @@
 #include "si_pipe.h"
 
 #include "util/os_time.h"
+#include "util/u_upload_mgr.h"
 
 /* initialize */
 void si_need_gfx_cs_space(struct si_context *ctx)
@@ -53,15 +54,18 @@ void si_need_gfx_cs_space(struct si_context *ctx)
 	ctx->gtt = 0;
 	ctx->vram = 0;
 
-	/* If the IB is sufficiently large, don't count the space needed
-	 * and just flush if there is not enough space left.
-	 *
-	 * Also reserve space for stopping queries at the end of IB, because
-	 * the number of active queries is mostly unlimited.
-	 */
-	unsigned need_dwords = 2048 + ctx->num_cs_dw_queries_suspend;
+	unsigned need_dwords = si_get_minimum_num_gfx_cs_dwords(ctx);
 	if (!ctx->ws->cs_check_space(cs, need_dwords))
 		si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
+}
+
+void si_unref_sdma_uploads(struct si_context *sctx)
+{
+	for (unsigned i = 0; i < sctx->num_sdma_uploads; i++) {
+		si_resource_reference(&sctx->sdma_uploads[i].dst, NULL);
+		si_resource_reference(&sctx->sdma_uploads[i].src, NULL);
+	}
+	sctx->num_sdma_uploads = 0;
 }
 
 void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
@@ -98,25 +102,47 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	if (ctx->screen->debug_flags & DBG(CHECK_VM))
 		flags &= ~PIPE_FLUSH_ASYNC;
 
-	/* If the state tracker is flushing the GFX IB, si_flush_from_st is
-	 * responsible for flushing the DMA IB and merging the fences from both.
-	 * This code is only needed when the driver flushes the GFX IB
-	 * internally, and it never asks for a fence handle.
-	 */
-	if (radeon_emitted(ctx->dma_cs, 0)) {
-		assert(fence == NULL); /* internal flushes only */
-		si_flush_dma_cs(ctx, flags, NULL);
-	}
-
 	ctx->gfx_flush_in_progress = true;
 
-	if (!LIST_IS_EMPTY(&ctx->active_queries))
-		si_suspend_queries(ctx);
+	/* If the state tracker is flushing the GFX IB, si_flush_from_st is
+	 * responsible for flushing the DMA IB and merging the fences from both.
+	 * If the driver flushes the GFX IB internally, and it should never ask
+	 * for a fence handle.
+	 */
+	assert(!radeon_emitted(ctx->dma_cs, 0) || fence == NULL);
 
-	ctx->streamout.suspended = false;
-	if (ctx->streamout.begin_emitted) {
-		si_emit_streamout_end(ctx);
-		ctx->streamout.suspended = true;
+	/* Update the sdma_uploads list by flushing the uploader. */
+	u_upload_unmap(ctx->b.const_uploader);
+
+	/* Execute SDMA uploads. */
+	ctx->sdma_uploads_in_progress = true;
+	for (unsigned i = 0; i < ctx->num_sdma_uploads; i++) {
+		struct si_sdma_upload *up = &ctx->sdma_uploads[i];
+		struct pipe_box box;
+
+		assert(up->src_offset % 4 == 0 && up->dst_offset % 4 == 0 &&
+		       up->size % 4 == 0);
+
+		u_box_1d(up->src_offset, up->size, &box);
+		ctx->dma_copy(&ctx->b, &up->dst->b.b, 0, up->dst_offset, 0, 0,
+			      &up->src->b.b, 0, &box);
+	}
+	ctx->sdma_uploads_in_progress = false;
+	si_unref_sdma_uploads(ctx);
+
+	/* Flush SDMA (preamble IB). */
+	if (radeon_emitted(ctx->dma_cs, 0))
+		si_flush_dma_cs(ctx, flags, NULL);
+
+	if (ctx->has_graphics) {
+		if (!LIST_IS_EMPTY(&ctx->active_queries))
+			si_suspend_queries(ctx);
+
+		ctx->streamout.suspended = false;
+		if (ctx->streamout.begin_emitted) {
+			si_emit_streamout_end(ctx);
+			ctx->streamout.suspended = true;
+		}
 	}
 
 	/* Make sure CP DMA is idle at the end of IBs after L2 prefetches
@@ -216,6 +242,14 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 		      SI_CONTEXT_INV_GLOBAL_L2 |
 		      SI_CONTEXT_START_PIPELINE_STATS;
 
+	ctx->cs_shader_state.initialized = false;
+	si_all_descriptors_begin_new_cs(ctx);
+
+	if (!ctx->has_graphics) {
+		ctx->initial_gfx_cs_size = ctx->gfx_cs->current.cdw;
+		return;
+	}
+
 	/* set all valid group as dirty so they get reemited on
 	 * next draw command
 	 */
@@ -280,12 +314,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 	/* CLEAR_STATE disables all window rectangles. */
 	if (!has_clear_state || ctx->num_window_rectangles > 0)
 		si_mark_atom_dirty(ctx, &ctx->atoms.s.window_rectangles);
-	si_all_descriptors_begin_new_cs(ctx);
-	si_all_resident_buffers_begin_new_cs(ctx);
 
-	ctx->scissors.dirty_mask = (1 << SI_MAX_VIEWPORTS) - 1;
-	ctx->viewports.dirty_mask = (1 << SI_MAX_VIEWPORTS) - 1;
-	ctx->viewports.depth_range_dirty_mask = (1 << SI_MAX_VIEWPORTS) - 1;
 	si_mark_atom_dirty(ctx, &ctx->atoms.s.guardband);
 	si_mark_atom_dirty(ctx, &ctx->atoms.s.scissors);
 	si_mark_atom_dirty(ctx, &ctx->atoms.s.viewports);
@@ -322,8 +351,6 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 	ctx->last_tes_sh_base = -1;
 	ctx->last_num_tcs_input_cp = -1;
 	ctx->last_ls_hs_config = -1; /* impossible value */
-
-	ctx->cs_shader_state.initialized = false;
 
 	if (has_clear_state) {
 		ctx->tracked_regs.reg_value[SI_TRACKED_DB_RENDER_CONTROL] = 0x00000000;

@@ -76,7 +76,7 @@ v3d_qpu_nop(void)
 static struct qinst *
 vir_nop(void)
 {
-        struct qreg undef = { QFILE_NULL, 0 };
+        struct qreg undef = vir_nop_reg();
         struct qinst *qinst = vir_add_inst(V3D_QPU_A_NOP, undef, undef, undef);
 
         return qinst;
@@ -90,16 +90,6 @@ new_qpu_nop_before(struct qinst *inst)
         list_addtail(&q->link, &inst->link);
 
         return q;
-}
-
-static void
-new_ldunif_instr(struct qinst *inst, int i)
-{
-        struct qinst *ldunif = new_qpu_nop_before(inst);
-
-        ldunif->qpu.sig.ldunif = true;
-        assert(inst->src[i].file == QFILE_UNIF);
-        ldunif->uniform = inst->src[i].index;
 }
 
 /**
@@ -214,16 +204,11 @@ v3d_generate_code_block(struct v3d_compile *c,
 
                 struct qinst *temp;
 
-                if (vir_has_implicit_uniform(qinst)) {
-                        int src = vir_get_implicit_uniform_src(qinst);
-                        assert(qinst->src[src].file == QFILE_UNIF);
-                        qinst->uniform = qinst->src[src].index;
+                if (vir_has_uniform(qinst))
                         c->num_uniforms++;
-                }
 
-                int nsrc = vir_get_non_sideband_nsrc(qinst);
+                int nsrc = vir_get_nsrc(qinst);
                 struct qpu_reg src[ARRAY_SIZE(qinst->src)];
-                bool emitted_ldunif = false;
                 for (int i = 0; i < nsrc; i++) {
                         int index = qinst->src[i].index;
                         switch (qinst->src[i].file) {
@@ -240,19 +225,6 @@ v3d_generate_code_block(struct v3d_compile *c,
                         case QFILE_TEMP:
                                 src[i] = temp_registers[index];
                                 break;
-                        case QFILE_UNIF:
-                                /* XXX perf: If the last ldunif we emitted was
-                                 * the same uniform value, skip it.  Common
-                                 * for multop/umul24 sequences.
-                                 */
-                                if (!emitted_ldunif) {
-                                        new_ldunif_instr(qinst, i);
-                                        c->num_uniforms++;
-                                        emitted_ldunif = true;
-                                }
-
-                                src[i] = qpu_acc(5);
-                                break;
                         case QFILE_SMALL_IMM:
                                 src[i].smimm = true;
                                 break;
@@ -268,10 +240,6 @@ v3d_generate_code_block(struct v3d_compile *c,
 
                                 src[i] = qpu_acc(3);
                                 break;
-
-                        case QFILE_TLB:
-                        case QFILE_TLBU:
-                                unreachable("bad vir src file");
                         }
                 }
 
@@ -297,15 +265,6 @@ v3d_generate_code_block(struct v3d_compile *c,
                         dst = qpu_magic(V3D_QPU_WADDR_VPM);
                         break;
 
-                case QFILE_TLB:
-                        dst = qpu_magic(V3D_QPU_WADDR_TLB);
-                        break;
-
-                case QFILE_TLBU:
-                        dst = qpu_magic(V3D_QPU_WADDR_TLBU);
-                        break;
-
-                case QFILE_UNIF:
                 case QFILE_SMALL_IMM:
                 case QFILE_LOAD_IMM:
                         assert(!"not reached");
@@ -313,7 +272,20 @@ v3d_generate_code_block(struct v3d_compile *c,
                 }
 
                 if (qinst->qpu.type == V3D_QPU_INSTR_TYPE_ALU) {
-                        if (v3d_qpu_sig_writes_address(c->devinfo,
+                        if (qinst->qpu.sig.ldunif) {
+                                assert(qinst->qpu.alu.add.op == V3D_QPU_A_NOP);
+                                assert(qinst->qpu.alu.mul.op == V3D_QPU_M_NOP);
+
+                                if (!dst.magic ||
+                                    dst.index != V3D_QPU_WADDR_R5) {
+                                        assert(c->devinfo->ver >= 40);
+
+                                        qinst->qpu.sig.ldunif = false;
+                                        qinst->qpu.sig.ldunifrf = true;
+                                        qinst->qpu.sig_addr = dst.index;
+                                        qinst->qpu.sig_magic = dst.magic;
+                                }
+                        } else if (v3d_qpu_sig_writes_address(c->devinfo,
                                                        &qinst->qpu.sig)) {
                                 assert(qinst->qpu.alu.add.op == V3D_QPU_A_NOP);
                                 assert(qinst->qpu.alu.mul.op == V3D_QPU_M_NOP);
@@ -365,7 +337,7 @@ reads_uniform(const struct v3d_device_info *devinfo, uint64_t instruction)
         assert(ok);
 
         if (qpu.sig.ldunif ||
-            qpu.sig.ldunifarf ||
+            qpu.sig.ldunifrf ||
             qpu.sig.wrtmuc) {
                 return true;
         }
@@ -433,7 +405,7 @@ v3d_vir_to_qpu(struct v3d_compile *c, struct qpu_reg *temp_registers)
         vir_for_each_block(block, c)
                 v3d_generate_code_block(c, block, temp_registers);
 
-        uint32_t cycles = v3d_qpu_schedule_instructions(c);
+        v3d_qpu_schedule_instructions(c);
 
         c->qpu_insts = rzalloc_array(c, uint64_t, c->qpu_inst_count);
         int i = 0;
@@ -449,23 +421,6 @@ v3d_vir_to_qpu(struct v3d_compile *c, struct qpu_reg *temp_registers)
                 }
         }
         assert(i == c->qpu_inst_count);
-
-        if (V3D_DEBUG & V3D_DEBUG_SHADERDB) {
-                fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d instructions\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id,
-                        c->qpu_inst_count);
-        }
-
-        /* The QPU cycle estimates are pretty broken (see waddr_latency()), so
-         * don't report them for now.
-         */
-        if (false) {
-                fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d estimated cycles\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id,
-                        cycles);
-        }
 
         if (V3D_DEBUG & (V3D_DEBUG_QPU |
                          v3d_debug_flag_for_shader_stage(c->s->info.stage))) {

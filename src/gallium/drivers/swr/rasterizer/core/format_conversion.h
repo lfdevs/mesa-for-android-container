@@ -33,15 +33,17 @@
 ///        SOA RGBA32_FLOAT format.
 /// @param pSrc - source data in SOA form
 /// @param dst - output data in SOA form
-template <SWR_FORMAT SrcFormat>
-INLINE void LoadSOA(const uint8_t* pSrc, simdvector& dst)
+template <typename SIMD_T, SWR_FORMAT SrcFormat>
+INLINE void SIMDCALL LoadSOA(const uint8_t* pSrc, Vec4<SIMD_T>& dst)
 {
     // fast path for float32
     if ((FormatTraits<SrcFormat>::GetType(0) == SWR_TYPE_FLOAT) &&
         (FormatTraits<SrcFormat>::GetBPC(0) == 32))
     {
-        auto lambda = [&](int comp) {
-            simdscalar vComp = _simd_load_ps((const float*)(pSrc + comp * sizeof(simdscalar)));
+        auto lambda = [&](int comp)
+        {
+            Float<SIMD_T> vComp =
+                SIMD_T::load_ps(reinterpret_cast<const float*>(pSrc + comp * sizeof(Float<SIMD_T>)));
 
             dst.v[FormatTraits<SrcFormat>::swizzle(comp)] = vComp;
         };
@@ -50,9 +52,11 @@ INLINE void LoadSOA(const uint8_t* pSrc, simdvector& dst)
         return;
     }
 
-    auto lambda = [&](int comp) {
+    auto lambda = [&](int comp)
+    {
         // load SIMD components
-        simdscalar vComp = FormatTraits<SrcFormat>::loadSOA(comp, pSrc);
+        Float<SIMD_T> vComp;
+        FormatTraits<SrcFormat>::loadSOA(comp, pSrc, vComp);
 
         // unpack
         vComp = FormatTraits<SrcFormat>::unpack(comp, vComp);
@@ -60,186 +64,31 @@ INLINE void LoadSOA(const uint8_t* pSrc, simdvector& dst)
         // convert
         if (FormatTraits<SrcFormat>::isNormalized(comp))
         {
-            vComp = _simd_cvtepi32_ps(_simd_castps_si(vComp));
-            vComp = _simd_mul_ps(vComp, _simd_set1_ps(FormatTraits<SrcFormat>::toFloat(comp)));
+            vComp = SIMD_T::cvtepi32_ps(SIMD_T::castps_si(vComp));
+            vComp = SIMD_T::mul_ps(vComp, SIMD_T::set1_ps(FormatTraits<SrcFormat>::toFloat(comp)));
         }
 
         dst.v[FormatTraits<SrcFormat>::swizzle(comp)] = vComp;
 
-        pSrc += (FormatTraits<SrcFormat>::GetBPC(comp) * KNOB_SIMD_WIDTH) / 8;
+        // is there a better way to get this from the SIMD traits?
+        const uint32_t SIMD_WIDTH = sizeof(typename SIMD_T::Float) / sizeof(float);
+
+        pSrc += (FormatTraits<SrcFormat>::GetBPC(comp) * SIMD_WIDTH) / 8;
     };
 
     UnrollerL<0, FormatTraits<SrcFormat>::numComps, 1>::step(lambda);
 }
 
-//////////////////////////////////////////////////////////////////////////
-/// @brief Clamps the given component based on the requirements on the
-///        Format template arg
-/// @param vComp - SIMD vector of floats
-/// @param Component - component
-template <SWR_FORMAT Format>
-INLINE simdscalar Clamp(simdscalar const& vC, uint32_t Component)
+template <SWR_FORMAT SrcFormat>
+INLINE void SIMDCALL LoadSOA(const uint8_t* pSrc, simdvector& dst)
 {
-    simdscalar vComp = vC;
-    if (FormatTraits<Format>::isNormalized(Component))
-    {
-        if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UNORM)
-        {
-            vComp = _simd_max_ps(vComp, _simd_setzero_ps());
-        }
-
-        if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_SNORM)
-        {
-            vComp = _simd_max_ps(vComp, _simd_set1_ps(-1.0f));
-        }
-        vComp = _simd_min_ps(vComp, _simd_set1_ps(1.0f));
-    }
-    else if (FormatTraits<Format>::GetBPC(Component) < 32)
-    {
-        if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UINT)
-        {
-            int         iMax   = (1 << FormatTraits<Format>::GetBPC(Component)) - 1;
-            int         iMin   = 0;
-            simdscalari vCompi = _simd_castps_si(vComp);
-            vCompi             = _simd_max_epu32(vCompi, _simd_set1_epi32(iMin));
-            vCompi             = _simd_min_epu32(vCompi, _simd_set1_epi32(iMax));
-            vComp              = _simd_castsi_ps(vCompi);
-        }
-        else if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_SINT)
-        {
-            int         iMax   = (1 << (FormatTraits<Format>::GetBPC(Component) - 1)) - 1;
-            int         iMin   = -1 - iMax;
-            simdscalari vCompi = _simd_castps_si(vComp);
-            vCompi             = _simd_max_epi32(vCompi, _simd_set1_epi32(iMin));
-            vCompi             = _simd_min_epi32(vCompi, _simd_set1_epi32(iMax));
-            vComp              = _simd_castsi_ps(vCompi);
-        }
-    }
-
-    return vComp;
+    LoadSOA<SIMD256, SrcFormat>(pSrc, dst);
 }
 
-//////////////////////////////////////////////////////////////////////////
-/// @brief Normalize the given component based on the requirements on the
-///        Format template arg
-/// @param vComp - SIMD vector of floats
-/// @param Component - component
-template <SWR_FORMAT Format>
-INLINE simdscalar Normalize(simdscalar const& vC, uint32_t Component)
-{
-    simdscalar vComp = vC;
-    if (FormatTraits<Format>::isNormalized(Component))
-    {
-        vComp = _simd_mul_ps(vComp, _simd_set1_ps(FormatTraits<Format>::fromFloat(Component)));
-        vComp = _simd_castsi_ps(_simd_cvtps_epi32(vComp));
-    }
-    return vComp;
-}
-
-//////////////////////////////////////////////////////////////////////////
-/// @brief Convert and store simdvector of pixels in SOA
-///        RGBA32_FLOAT to SOA format
-/// @param src - source data in SOA form
-/// @param dst - output data in SOA form
-template <SWR_FORMAT DstFormat>
-INLINE void StoreSOA(const simdvector& src, uint8_t* pDst)
-{
-    // fast path for float32
-    if ((FormatTraits<DstFormat>::GetType(0) == SWR_TYPE_FLOAT) &&
-        (FormatTraits<DstFormat>::GetBPC(0) == 32))
-    {
-        for (uint32_t comp = 0; comp < FormatTraits<DstFormat>::numComps; ++comp)
-        {
-            simdscalar vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
-
-            // Gamma-correct
-            if (FormatTraits<DstFormat>::isSRGB)
-            {
-                if (comp < 3) // Input format is always RGBA32_FLOAT.
-                {
-                    vComp = FormatTraits<R32G32B32A32_FLOAT>::convertSrgb(comp, vComp);
-                }
-            }
-
-            _simd_store_ps((float*)(pDst + comp * sizeof(simdscalar)), vComp);
-        }
-        return;
-    }
-
-    auto lambda = [&](int comp) {
-        simdscalar vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
-
-        // Gamma-correct
-        if (FormatTraits<DstFormat>::isSRGB)
-        {
-            if (comp < 3) // Input format is always RGBA32_FLOAT.
-            {
-                vComp = FormatTraits<R32G32B32A32_FLOAT>::convertSrgb(comp, vComp);
-            }
-        }
-
-        // clamp
-        vComp = Clamp<DstFormat>(vComp, comp);
-
-        // normalize
-        vComp = Normalize<DstFormat>(vComp, comp);
-
-        // pack
-        vComp = FormatTraits<DstFormat>::pack(comp, vComp);
-
-        // store
-        FormatTraits<DstFormat>::storeSOA(comp, pDst, vComp);
-
-        pDst += (FormatTraits<DstFormat>::GetBPC(comp) * KNOB_SIMD_WIDTH) / 8;
-    };
-
-    UnrollerL<0, FormatTraits<DstFormat>::numComps, 1>::step(lambda);
-}
-
-#if ENABLE_AVX512_SIMD16
-//////////////////////////////////////////////////////////////////////////
-/// @brief Load SIMD packed pixels in SOA format and converts to
-///        SOA RGBA32_FLOAT format.
-/// @param pSrc - source data in SOA form
-/// @param dst - output data in SOA form
 template <SWR_FORMAT SrcFormat>
 INLINE void SIMDCALL LoadSOA(const uint8_t* pSrc, simd16vector& dst)
 {
-    // fast path for float32
-    if ((FormatTraits<SrcFormat>::GetType(0) == SWR_TYPE_FLOAT) &&
-        (FormatTraits<SrcFormat>::GetBPC(0) == 32))
-    {
-        auto lambda = [&](int comp) {
-            simd16scalar vComp =
-                _simd16_load_ps(reinterpret_cast<const float*>(pSrc + comp * sizeof(simd16scalar)));
-
-            dst.v[FormatTraits<SrcFormat>::swizzle(comp)] = vComp;
-        };
-
-        UnrollerL<0, FormatTraits<SrcFormat>::numComps, 1>::step(lambda);
-        return;
-    }
-
-    auto lambda = [&](int comp) {
-        // load SIMD components
-        simd16scalar vComp = FormatTraits<SrcFormat>::loadSOA_16(comp, pSrc);
-
-        // unpack
-        vComp = FormatTraits<SrcFormat>::unpack(comp, vComp);
-
-        // convert
-        if (FormatTraits<SrcFormat>::isNormalized(comp))
-        {
-            vComp = _simd16_cvtepi32_ps(_simd16_castps_si(vComp));
-            vComp = _simd16_mul_ps(vComp, _simd16_set1_ps(FormatTraits<SrcFormat>::toFloat(comp)));
-        }
-
-        dst.v[FormatTraits<SrcFormat>::swizzle(comp)] = vComp;
-
-        pSrc += (FormatTraits<SrcFormat>::GetBPC(comp) * KNOB_SIMD16_WIDTH) / 8;
-    };
-
-    UnrollerL<0, FormatTraits<SrcFormat>::numComps, 1>::step(lambda);
+    LoadSOA<SIMD512, SrcFormat>(pSrc, dst);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -247,46 +96,58 @@ INLINE void SIMDCALL LoadSOA(const uint8_t* pSrc, simd16vector& dst)
 ///        Format template arg
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
-template <SWR_FORMAT Format>
-INLINE simd16scalar SIMDCALL Clamp(simd16scalar const& v, uint32_t Component)
+template <typename SIMD_T, SWR_FORMAT Format>
+INLINE Float<SIMD_T> SIMDCALL Clamp(Float<SIMD_T> const& v, uint32_t Component)
 {
-    simd16scalar vComp = v;
+    Float<SIMD_T> vComp = v;
     if (FormatTraits<Format>::isNormalized(Component))
     {
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UNORM)
         {
-            vComp = _simd16_max_ps(vComp, _simd16_setzero_ps());
+            vComp = SIMD_T::max_ps(vComp, SIMD_T::setzero_ps());
         }
 
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_SNORM)
         {
-            vComp = _simd16_max_ps(vComp, _simd16_set1_ps(-1.0f));
+            vComp = SIMD_T::max_ps(vComp, SIMD_T::set1_ps(-1.0f));
         }
-        vComp = _simd16_min_ps(vComp, _simd16_set1_ps(1.0f));
+        vComp = SIMD_T::min_ps(vComp, SIMD_T::set1_ps(1.0f));
     }
     else if (FormatTraits<Format>::GetBPC(Component) < 32)
     {
         if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_UINT)
         {
-            int           iMax   = (1 << FormatTraits<Format>::GetBPC(Component)) - 1;
-            int           iMin   = 0;
-            simd16scalari vCompi = _simd16_castps_si(vComp);
-            vCompi               = _simd16_max_epu32(vCompi, _simd16_set1_epi32(iMin));
-            vCompi               = _simd16_min_epu32(vCompi, _simd16_set1_epi32(iMax));
-            vComp                = _simd16_castsi_ps(vCompi);
+            int           iMax = (1 << FormatTraits<Format>::GetBPC(Component)) - 1;
+            int           iMin = 0;
+            Integer<SIMD_T> vCompi = SIMD_T::castps_si(vComp);
+            vCompi = SIMD_T::max_epu32(vCompi, SIMD_T::set1_epi32(iMin));
+            vCompi = SIMD_T::min_epu32(vCompi, SIMD_T::set1_epi32(iMax));
+            vComp = SIMD_T::castsi_ps(vCompi);
         }
         else if (FormatTraits<Format>::GetType(Component) == SWR_TYPE_SINT)
         {
-            int           iMax   = (1 << (FormatTraits<Format>::GetBPC(Component) - 1)) - 1;
-            int           iMin   = -1 - iMax;
-            simd16scalari vCompi = _simd16_castps_si(vComp);
-            vCompi               = _simd16_max_epi32(vCompi, _simd16_set1_epi32(iMin));
-            vCompi               = _simd16_min_epi32(vCompi, _simd16_set1_epi32(iMax));
-            vComp                = _simd16_castsi_ps(vCompi);
+            int           iMax = (1 << (FormatTraits<Format>::GetBPC(Component) - 1)) - 1;
+            int           iMin = -1 - iMax;
+            Integer<SIMD_T> vCompi = SIMD_T::castps_si(vComp);
+            vCompi = SIMD_T::max_epi32(vCompi, SIMD_T::set1_epi32(iMin));
+            vCompi = SIMD_T::min_epi32(vCompi, SIMD_T::set1_epi32(iMax));
+            vComp = SIMD_T::castsi_ps(vCompi);
         }
     }
 
     return vComp;
+}
+
+template <SWR_FORMAT Format>
+INLINE simdscalar SIMDCALL Clamp(simdscalar const& v, uint32_t Component)
+{
+    return Clamp<SIMD256, Format>(v, Component);
+}
+
+template <SWR_FORMAT Format>
+INLINE simd16scalar SIMDCALL Clamp(simd16scalar const& v, uint32_t Component)
+{
+    return Clamp<SIMD512, Format>(v, Component);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -294,25 +155,37 @@ INLINE simd16scalar SIMDCALL Clamp(simd16scalar const& v, uint32_t Component)
 ///        Format template arg
 /// @param vComp - SIMD vector of floats
 /// @param Component - component
-template <SWR_FORMAT Format>
-INLINE simd16scalar SIMDCALL Normalize(simd16scalar const& vComp, uint32_t Component)
+template <typename SIMD_T, SWR_FORMAT Format>
+INLINE Float<SIMD_T> SIMDCALL Normalize(Float<SIMD_T> const& vComp, uint32_t Component)
 {
-    simd16scalar r = vComp;
+    Float<SIMD_T> r = vComp;
     if (FormatTraits<Format>::isNormalized(Component))
     {
-        r = _simd16_mul_ps(r, _simd16_set1_ps(FormatTraits<Format>::fromFloat(Component)));
-        r = _simd16_castsi_ps(_simd16_cvtps_epi32(r));
+        r = SIMD_T::mul_ps(r, SIMD_T::set1_ps(FormatTraits<Format>::fromFloat(Component)));
+        r = SIMD_T::castsi_ps(SIMD_T::cvtps_epi32(r));
     }
     return r;
 }
 
+template <SWR_FORMAT Format>
+INLINE simdscalar SIMDCALL Normalize(simdscalar const& vComp, uint32_t Component)
+{
+    return Normalize<SIMD256, Format>(vComp, Component);
+}
+
+template <SWR_FORMAT Format>
+INLINE simd16scalar SIMDCALL Normalize(simd16scalar const& vComp, uint32_t Component)
+{
+    return Normalize<SIMD512, Format>(vComp, Component);
+}
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief Convert and store simdvector of pixels in SOA
 ///        RGBA32_FLOAT to SOA format
 /// @param src - source data in SOA form
 /// @param dst - output data in SOA form
-template <SWR_FORMAT DstFormat>
-INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
+template <typename SIMD_T, SWR_FORMAT DstFormat>
+INLINE void SIMDCALL StoreSOA(const Vec4<SIMD_T>& src, uint8_t* pDst)
 {
     // fast path for float32
     if ((FormatTraits<DstFormat>::GetType(0) == SWR_TYPE_FLOAT) &&
@@ -320,7 +193,7 @@ INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
     {
         for (uint32_t comp = 0; comp < FormatTraits<DstFormat>::numComps; ++comp)
         {
-            simd16scalar vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
+            Float<SIMD_T> vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
 
             // Gamma-correct
             if (FormatTraits<DstFormat>::isSRGB)
@@ -331,13 +204,13 @@ INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
                 }
             }
 
-            _simd16_store_ps(reinterpret_cast<float*>(pDst + comp * sizeof(simd16scalar)), vComp);
+            SIMD_T::store_ps(reinterpret_cast<float*>(pDst + comp * sizeof(simd16scalar)), vComp);
         }
         return;
     }
 
     auto lambda = [&](int comp) {
-        simd16scalar vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
+        Float<SIMD_T> vComp = src.v[FormatTraits<DstFormat>::swizzle(comp)];
 
         // Gamma-correct
         if (FormatTraits<DstFormat>::isSRGB)
@@ -349,10 +222,10 @@ INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
         }
 
         // clamp
-        vComp = Clamp<DstFormat>(vComp, comp);
+        vComp = Clamp<SIMD_T, DstFormat>(vComp, comp);
 
         // normalize
-        vComp = Normalize<DstFormat>(vComp, comp);
+        vComp = Normalize<SIMD_T, DstFormat>(vComp, comp);
 
         // pack
         vComp = FormatTraits<DstFormat>::pack(comp, vComp);
@@ -360,10 +233,24 @@ INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
         // store
         FormatTraits<DstFormat>::storeSOA(comp, pDst, vComp);
 
-        pDst += (FormatTraits<DstFormat>::GetBPC(comp) * KNOB_SIMD16_WIDTH) / 8;
+        // is there a better way to get this from the SIMD traits?
+        const uint32_t SIMD_WIDTH = sizeof(typename SIMD_T::Float) / sizeof(float);
+
+        pDst += (FormatTraits<DstFormat>::GetBPC(comp) * SIMD_WIDTH) / 8;
     };
 
     UnrollerL<0, FormatTraits<DstFormat>::numComps, 1>::step(lambda);
 }
 
-#endif
+template <SWR_FORMAT DstFormat>
+INLINE void SIMDCALL StoreSOA(const simdvector& src, uint8_t* pDst)
+{
+    StoreSOA<SIMD256, DstFormat>(src, pDst);
+}
+
+template <SWR_FORMAT DstFormat>
+INLINE void SIMDCALL StoreSOA(const simd16vector& src, uint8_t* pDst)
+{
+    StoreSOA<SIMD512, DstFormat>(src, pDst);
+}
+

@@ -388,8 +388,8 @@ MotionVectorToPipe(const struct pipe_mpeg12_macroblock *mb, unsigned vector,
          mv.bottom.weight = weight;
          break;
 
-      default: // TODO: Support DUALPRIME and 16x8
-         break;
+      default:
+         unreachable("TODO: Support DUALPRIME and 16x8");
       }
    } else {
       mv.top.x = mv.top.y = 0;

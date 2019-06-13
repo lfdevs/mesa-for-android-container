@@ -22,6 +22,7 @@
  */
 
 #include "util/u_pack_color.h"
+#include "util/u_upload_mgr.h"
 #include "util/format_srgb.h"
 
 #include "v3d_context.h"
@@ -95,28 +96,6 @@ get_image_size(struct v3d_shaderimg_stateobj *shaderimg,
         }
 }
 
-static struct v3d_bo *
-v3d_upload_ubo(struct v3d_context *v3d,
-               struct v3d_compiled_shader *shader,
-               const uint32_t *gallium_uniforms)
-{
-        if (!shader->prog_data.base->ubo_size)
-                return NULL;
-
-        struct v3d_bo *ubo = v3d_bo_alloc(v3d->screen,
-                                          shader->prog_data.base->ubo_size,
-                                          "ubo");
-        void *data = v3d_bo_map(ubo);
-        for (uint32_t i = 0; i < shader->prog_data.base->num_ubo_ranges; i++) {
-                memcpy(data + shader->prog_data.base->ubo_ranges[i].dst_offset,
-                       ((const void *)gallium_uniforms +
-                        shader->prog_data.base->ubo_ranges[i].src_offset),
-                       shader->prog_data.base->ubo_ranges[i].size);
-        }
-
-        return ubo;
-}
-
 /**
  *  Writes the V3D 3.x P0 (CFG_MODE=1) texture parameter.
  *
@@ -172,13 +151,13 @@ write_tmu_p0(struct v3d_job *job,
              struct v3d_texture_stateobj *texstate,
              uint32_t data)
 {
-        int unit  = v3d_tmu_config_data_get_unit(data);
+        int unit = v3d_unit_data_get_unit(data);
         struct pipe_sampler_view *psview = texstate->textures[unit];
         struct v3d_sampler_view *sview = v3d_sampler_view(psview);
         struct v3d_resource *rsc = v3d_resource(sview->texture);
 
         cl_aligned_reloc(&job->indirect, uniforms, sview->bo,
-                         v3d_tmu_config_data_get_value(data));
+                         v3d_unit_data_get_offset(data));
         v3d_job_add_bo(job, rsc->bo);
 }
 
@@ -210,7 +189,7 @@ write_tmu_p1(struct v3d_job *job,
              struct v3d_texture_stateobj *texstate,
              uint32_t data)
 {
-        uint32_t unit = v3d_tmu_config_data_get_unit(data);
+        uint32_t unit = v3d_unit_data_get_unit(data);
         struct pipe_sampler_state *psampler = texstate->samplers[unit];
         struct v3d_sampler_state *sampler = v3d_sampler_state(psampler);
         struct pipe_sampler_view *psview = texstate->textures[unit];
@@ -223,7 +202,7 @@ write_tmu_p1(struct v3d_job *job,
         cl_aligned_reloc(&job->indirect, uniforms,
                          v3d_resource(sampler->sampler_state)->bo,
                          sampler->sampler_state_offset[variant] |
-                         v3d_tmu_config_data_get_value(data));
+                         v3d_unit_data_get_offset(data));
 }
 
 struct v3d_cl_reloc
@@ -235,7 +214,6 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_compiled_shader *shader,
         struct v3d_uniform_list *uinfo = &shader->prog_data.base->uniforms;
         struct v3d_job *job = v3d->job;
         const uint32_t *gallium_uniforms = cb->cb[0].user_buffer;
-        struct v3d_bo *ubo = v3d_upload_ubo(v3d, shader, gallium_uniforms);
 
         /* We always need to return some space for uniforms, because the HW
          * will be prefetching, even if we don't read any in the program.
@@ -329,20 +307,26 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_compiled_shader *shader,
                                      v3d->zsa->base.alpha.ref_value);
                         break;
 
-                case QUNIFORM_UBO_ADDR:
-                        if (data == 0) {
-                                cl_aligned_reloc(&job->indirect, &uniforms,
-                                                 ubo, 0);
-                        } else {
-                                int ubo_index = data;
-                                struct v3d_resource *rsc =
-                                        v3d_resource(cb->cb[ubo_index].buffer);
-
-                                cl_aligned_reloc(&job->indirect, &uniforms,
-                                                 rsc->bo,
-                                                 cb->cb[ubo_index].buffer_offset);
+                case QUNIFORM_UBO_ADDR: {
+                        uint32_t unit = v3d_unit_data_get_unit(data);
+                        /* Constant buffer 0 may be a system memory pointer,
+                         * in which case we want to upload a shadow copy to
+                         * the GPU.
+                        */
+                        if (!cb->cb[unit].buffer) {
+                                u_upload_data(v3d->uploader, 0,
+                                              cb->cb[unit].buffer_size, 16,
+                                              cb->cb[unit].user_buffer,
+                                              &cb->cb[unit].buffer_offset,
+                                              &cb->cb[unit].buffer);
                         }
+
+                        cl_aligned_reloc(&job->indirect, &uniforms,
+                                         v3d_resource(cb->cb[unit].buffer)->bo,
+                                         cb->cb[unit].buffer_offset +
+                                         v3d_unit_data_get_offset(data));
                         break;
+                }
 
                 case QUNIFORM_SSBO_OFFSET: {
                         struct pipe_shader_buffer *sb =
@@ -374,6 +358,16 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_compiled_shader *shader,
                                        v3d->prog.spill_size_per_thread);
                         break;
 
+                case QUNIFORM_NUM_WORK_GROUPS:
+                        cl_aligned_u32(&uniforms,
+                                       v3d->compute_num_workgroups[data]);
+                        break;
+
+                case QUNIFORM_SHARED_OFFSET:
+                        cl_aligned_reloc(&job->indirect, &uniforms,
+                                         v3d->compute_shared_memory, 0);
+                        break;
+
                 default:
                         assert(quniform_contents_is_texture_p0(uinfo->contents[i]));
 
@@ -395,8 +389,6 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_compiled_shader *shader,
         }
 
         cl_end(&job->indirect, uniforms);
-
-        v3d_bo_unreference(&ubo);
 
         return uniform_stream;
 }
@@ -460,6 +452,11 @@ v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
 
                 case QUNIFORM_ALPHA_REF:
                         dirty |= VC5_DIRTY_ZSA;
+                        break;
+
+                case QUNIFORM_NUM_WORK_GROUPS:
+                case QUNIFORM_SHARED_OFFSET:
+                        /* Compute always recalculates uniforms. */
                         break;
 
                 default:

@@ -253,6 +253,7 @@ struct si_qbo_state {
 	void *saved_compute;
 	struct pipe_constant_buffer saved_const0;
 	struct pipe_shader_buffer saved_ssbo[3];
+	unsigned saved_ssbo_writable_mask;
 };
 
 #endif /* SI_QUERY_H */

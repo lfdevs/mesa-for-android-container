@@ -22,6 +22,8 @@
 
 #include "pipe/p_defines.h"
 
+#include "compiler/nir/nir.h"
+
 #include "nv50/nv50_program.h"
 #include "nv50/nv50_context.h"
 
@@ -333,8 +335,19 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
 
    info->type = prog->type;
    info->target = chipset;
-   info->bin.sourceRep = PIPE_SHADER_IR_TGSI;
-   info->bin.source = (void *)prog->pipe.tokens;
+
+   info->bin.sourceRep = prog->pipe.type;
+   switch (prog->pipe.type) {
+   case PIPE_SHADER_IR_TGSI:
+      info->bin.source = (void *)prog->pipe.tokens;
+      break;
+   case PIPE_SHADER_IR_NIR:
+      info->bin.source = (void *)nir_shader_clone(NULL, prog->pipe.ir.nir);
+      break;
+   default:
+      assert(!"unsupported IR!");
+      return false;
+   }
 
    info->bin.smemSize = prog->cp.smem_size;
    info->io.auxCBSlot = 15;
@@ -438,6 +451,8 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
                       info->bin.codeSize);
 
 out:
+   if (info->bin.sourceRep == PIPE_SHADER_IR_NIR)
+      ralloc_free((void *)info->bin.source);
    FREE(info);
    return !ret;
 }

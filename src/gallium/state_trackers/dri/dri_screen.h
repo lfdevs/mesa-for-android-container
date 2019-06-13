@@ -57,8 +57,7 @@ struct dri_screen
 
    /* dri */
    __DRIscreen *sPriv;
-   boolean throttling_enabled;
-   int default_throttle_frames;
+   unsigned default_throttle_frames;
 
    struct st_config_options options;
 

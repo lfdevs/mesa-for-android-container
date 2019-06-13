@@ -40,9 +40,8 @@ emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
 {
    assert(start < end);
    if (start == end - 1) {
-      nir_ssa_def *index = nir_imm_int(b, start);
       emit_load_store_deref(b, orig_instr,
-                            nir_build_deref_array(b, parent, index),
+                            nir_build_deref_array_imm(b, parent, start),
                             deref_arr + 1, dest, src);
    } else {
       int mid = start + (end - start) / 2;
@@ -52,7 +51,7 @@ emit_indirect_load_store_deref(nir_builder *b, nir_intrinsic_instr *orig_instr,
       nir_deref_instr *deref = *deref_arr;
       assert(deref->deref_type == nir_deref_type_array);
 
-      nir_push_if(b, nir_ilt(b, deref->arr.index.ssa, nir_imm_int(b, mid)));
+      nir_push_if(b, nir_ilt(b, deref->arr.index.ssa, nir_imm_intN_t(b, mid, parent->dest.ssa.bit_size)));
       emit_indirect_load_store_deref(b, orig_instr, parent, deref_arr,
                                      start, mid, &then_dest, src);
       nir_push_else(b, NULL);

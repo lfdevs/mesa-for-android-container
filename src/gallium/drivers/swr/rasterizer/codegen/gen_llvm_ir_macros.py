@@ -76,6 +76,9 @@ llvm_intrinsics = [
     ['LOG2', 'log2', ['a'], ['a']],
     ['FABS', 'fabs', ['a'], ['a']],
     ['EXP2', 'exp2', ['a'], ['a']],
+    ['COS', 'cos', ['a'], ['a']],
+    ['SIN', 'sin', ['a'], ['a']],
+    ['FLOOR', 'floor', ['a'], ['a']],
     ['POW', 'pow', ['a', 'b'], ['a']]
 ]
 
@@ -162,6 +165,8 @@ def parse_ir_builder(input_file):
                         func_name == 'CreateGEP' or
                         func_name == 'CreateLoad' or
                         func_name == 'CreateMaskedLoad' or
+                        func_name == 'CreateStore' or
+                        func_name == 'CreateMaskedStore' or
                         func_name == 'CreateElementUnorderedAtomicMemCpy'):
                         ignore = True
 

@@ -126,6 +126,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 		       struct si_resource *dst, struct si_resource *src)
 {
+	struct radeon_winsys *ws = ctx->ws;
 	uint64_t vram = ctx->dma_cs->used_vram;
 	uint64_t gtt = ctx->dma_cs->used_gart;
 
@@ -139,13 +140,14 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 	}
 
 	/* Flush the GFX IB if DMA depends on it. */
-	if (radeon_emitted(ctx->gfx_cs, ctx->initial_gfx_cs_size) &&
+	if (!ctx->sdma_uploads_in_progress &&
+	    radeon_emitted(ctx->gfx_cs, ctx->initial_gfx_cs_size) &&
 	    ((dst &&
-	      ctx->ws->cs_is_buffer_referenced(ctx->gfx_cs, dst->buf,
-						 RADEON_USAGE_READWRITE)) ||
+	      ws->cs_is_buffer_referenced(ctx->gfx_cs, dst->buf,
+					  RADEON_USAGE_READWRITE)) ||
 	     (src &&
-	      ctx->ws->cs_is_buffer_referenced(ctx->gfx_cs, src->buf,
-						 RADEON_USAGE_WRITE))))
+	      ws->cs_is_buffer_referenced(ctx->gfx_cs, src->buf,
+					  RADEON_USAGE_WRITE))))
 		si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
 
 	/* Flush if there's not enough space, or if the memory usage per IB
@@ -161,9 +163,10 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 	 * engine busy while uploads are being submitted.
 	 */
 	num_dw++; /* for emit_wait_idle below */
-	if (!ctx->ws->cs_check_space(ctx->dma_cs, num_dw) ||
-	    ctx->dma_cs->used_vram + ctx->dma_cs->used_gart > 64 * 1024 * 1024 ||
-	    !radeon_cs_memory_below_limit(ctx->screen, ctx->dma_cs, vram, gtt)) {
+	if (!ctx->sdma_uploads_in_progress &&
+	    (!ws->cs_check_space(ctx->dma_cs, num_dw) ||
+	     ctx->dma_cs->used_vram + ctx->dma_cs->used_gart > 64 * 1024 * 1024 ||
+	     !radeon_cs_memory_below_limit(ctx->screen, ctx->dma_cs, vram, gtt))) {
 		si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC, NULL);
 		assert((num_dw + ctx->dma_cs->current.cdw) <= ctx->dma_cs->current.max_dw);
 	}
@@ -172,20 +175,21 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 	 * prevent read-after-write hazards.
 	 */
 	if ((dst &&
-	     ctx->ws->cs_is_buffer_referenced(ctx->dma_cs, dst->buf,
-						RADEON_USAGE_READWRITE)) ||
+	     ws->cs_is_buffer_referenced(ctx->dma_cs, dst->buf,
+					 RADEON_USAGE_READWRITE)) ||
 	    (src &&
-	     ctx->ws->cs_is_buffer_referenced(ctx->dma_cs, src->buf,
-						RADEON_USAGE_WRITE)))
+	     ws->cs_is_buffer_referenced(ctx->dma_cs, src->buf,
+					 RADEON_USAGE_WRITE)))
 		si_dma_emit_wait_idle(ctx);
 
+	unsigned sync = ctx->sdma_uploads_in_progress ? 0 : RADEON_USAGE_SYNCHRONIZED;
 	if (dst) {
-		radeon_add_to_buffer_list(ctx, ctx->dma_cs, dst,
-					  RADEON_USAGE_WRITE, 0);
+		ws->cs_add_buffer(ctx->dma_cs, dst->buf, RADEON_USAGE_WRITE | sync,
+				  dst->domains, 0);
 	}
 	if (src) {
-		radeon_add_to_buffer_list(ctx, ctx->dma_cs, src,
-					  RADEON_USAGE_READ, 0);
+		ws->cs_add_buffer(ctx->dma_cs, src->buf, RADEON_USAGE_READ | sync,
+				  src->domains, 0);
 	}
 
 	/* this function is called before all DMA calls, so increment this. */

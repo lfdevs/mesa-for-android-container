@@ -1655,6 +1655,37 @@ layout_qualifier_id:
             $$.flags.q.non_coherent = 1;
       }
 
+      // Layout qualifiers for NV_compute_shader_derivatives.
+      if (!$$.flags.i) {
+         if (match_layout_qualifier($1, "derivative_group_quadsNV", state) == 0) {
+            $$.flags.q.derivative_group = 1;
+            $$.derivative_group = DERIVATIVE_GROUP_QUADS;
+         } else if (match_layout_qualifier($1, "derivative_group_linearNV", state) == 0) {
+            $$.flags.q.derivative_group = 1;
+            $$.derivative_group = DERIVATIVE_GROUP_LINEAR;
+         }
+
+         if ($$.flags.i) {
+            if (!state->has_compute_shader()) {
+               _mesa_glsl_error(& @1, state,
+                                "qualifier `%s' requires "
+                                "a compute shader", $1);
+            }
+
+            if (!state->NV_compute_shader_derivatives_enable) {
+               _mesa_glsl_error(& @1, state,
+                                "qualifier `%s' requires "
+                                "NV_compute_shader_derivatives", $1);
+            }
+
+            if (state->NV_compute_shader_derivatives_warn) {
+               _mesa_glsl_warning(& @1, state,
+                                  "NV_compute_shader_derivatives layout "
+                                  "qualifier `%s' used", $1);
+            }
+         }
+      }
+
       if (!$$.flags.i) {
          _mesa_glsl_error(& @1, state, "unrecognized layout identifier "
                           "`%s'", $1);
@@ -2041,7 +2072,7 @@ type_qualifier:
                           "duplicate auxiliary storage qualifier (centroid or sample)");
       }
 
-      if (!state->has_420pack_or_es31() &&
+      if ((!state->has_420pack_or_es31() && !state->EXT_gpu_shader4_enable) &&
           ($2.flags.q.precise || $2.flags.q.invariant ||
            $2.has_interpolation() || $2.has_layout())) {
          _mesa_glsl_error(&@1, state, "auxiliary storage qualifiers must come "
@@ -2055,8 +2086,13 @@ type_qualifier:
       /* Section 4.3 of the GLSL 1.20 specification states:
        * "Variable declarations may have a storage qualifier specified..."
        *  1.30 clarifies this to "may have one storage qualifier".
+       *
+       * GL_EXT_gpu_shader4 allows "varying out" in fragment shaders.
        */
-      if ($2.has_storage())
+      if ($2.has_storage() &&
+          (!state->EXT_gpu_shader4_enable ||
+           state->stage != MESA_SHADER_FRAGMENT ||
+           !$1.flags.q.varying || !$2.flags.q.out))
          _mesa_glsl_error(&@1, state, "duplicate storage qualifier");
 
       if (!state->has_420pack_or_es31() &&
@@ -2277,7 +2313,16 @@ type_specifier_nonarray:
 
 basic_type_specifier_nonarray:
    VOID_TOK                 { $$ = glsl_type::void_type; }
-   | BASIC_TYPE_TOK         { $$ = $1; };
+   | BASIC_TYPE_TOK         { $$ = $1; }
+   | UNSIGNED BASIC_TYPE_TOK
+   {
+      if ($2 == glsl_type::int_type) {
+         $$ = glsl_type::uint_type;
+      } else {
+         _mesa_glsl_error(&@1, state,
+                          "\"unsigned\" is only allowed before \"int\"");
+      }
+   }
    ;
 
 precision_qualifier:
@@ -2506,6 +2551,15 @@ statement_list:
       }
       $$ = $1;
       $$->link.insert_before(& $2->link);
+   }
+   | statement_list extension_statement
+   {
+      if (!state->allow_extension_directive_midshader) {
+         _mesa_glsl_error(& @1, state,
+                          "#extension directive is not allowed "
+                          "in the middle of a shader");
+         YYERROR;
+      }
    }
    ;
 

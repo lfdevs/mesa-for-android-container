@@ -48,6 +48,9 @@ static const struct {
         { 33, 0x1c0a0dfde2294000ull, "fcmp.ifna  rf61.h, r4.abs, r2.l; vfmul  rf55, r2.hh, r1" },
         { 33, 0x2011c89b402cc000ull, "fsub.norz  rf27, r4.abs, r1.abs; vfmul.ifa  rf34, r3.swp, r1" },
 
+        { 33, 0xe01b42ab3bb063c0ull, "vfpack.andnc  rf43, rf15.l, r0.h; fmul.ifna  rf10.h, r4.l, r5.abs" },
+        { 33, 0x600b8b87fb4d1000ull, "fdx.ifnb  rf7.h, r1.l; fmul.pushn  rf46, r3.l, r2.abs" },
+
         /* small immediates */
         { 33, 0x5de24398bbdc6218ull, "vflb.andnn  rf24     ; fmul  rf14, -8, rf8.h" },
         { 33, 0x25ef83d8b166f00full, "vfmin.pushn  rf24, 15.ff, r5; smul24.ifnb  rf15, r1, r3" },

@@ -618,6 +618,27 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          unreachable("Gen9 and earlier do not support indirect clear colors");
 #endif
       }
+
+#if GEN_GEN == 11
+      /*
+       * From BXML > GT > Shared Functions > vol5c Shared Functions >
+       * [Structure] RENDER_SURFACE_STATE [BDW+] > ClearColorConversionEnable:
+       *
+       *   Project: Gen11
+       *
+       *   "Enables Pixel backend hw to convert clear values into native format
+       *    and write back to clear address, so that display and sampler can use
+       *    the converted value for resolving fast cleared RTs."
+       *
+       * Summary:
+       *   Clear color conversion must be enabled if the clear color is stored
+       *   indirectly and fast color clears are enabled.
+       */
+      if (info->use_clear_address) {
+         s.ClearColorConversionEnable = true;
+      }
+#endif
+
 #if GEN_GEN >= 9
       if (!info->use_clear_address) {
          s.RedClearColor = info->clear_color.u32[0];
@@ -745,10 +766,10 @@ isl_genX(buffer_fill_state_s)(void *state,
 #endif
 
 #if (GEN_GEN >= 8 || GEN_IS_HASWELL)
-   s.ShaderChannelSelectRed = SCS_RED;
-   s.ShaderChannelSelectGreen = SCS_GREEN;
-   s.ShaderChannelSelectBlue = SCS_BLUE;
-   s.ShaderChannelSelectAlpha = SCS_ALPHA;
+   s.ShaderChannelSelectRed = (enum GENX(ShaderChannelSelect)) info->swizzle.r;
+   s.ShaderChannelSelectGreen = (enum GENX(ShaderChannelSelect)) info->swizzle.g;
+   s.ShaderChannelSelectBlue = (enum GENX(ShaderChannelSelect)) info->swizzle.b;
+   s.ShaderChannelSelectAlpha = (enum GENX(ShaderChannelSelect)) info->swizzle.a;
 #endif
 
    GENX(RENDER_SURFACE_STATE_pack)(NULL, state, &s);

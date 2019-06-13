@@ -576,7 +576,7 @@ static void si_emit_shader_es(struct si_context *sctx)
 					   shader->vgt_vertex_reuse_block_cntl);
 
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 static void si_shader_es(struct si_screen *sscreen, struct si_shader *shader)
@@ -825,7 +825,7 @@ static void si_emit_shader_gs(struct si_context *sctx)
 	}
 
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 static void si_shader_gs(struct si_screen *sscreen, struct si_shader *shader)
@@ -1002,7 +1002,7 @@ static void si_emit_shader_vs(struct si_context *sctx)
 					   shader->vgt_vertex_reuse_block_cntl);
 
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 /**
@@ -1194,7 +1194,7 @@ static void si_emit_shader_ps(struct si_context *sctx)
 				   shader->ctx_reg.ps.cb_shader_mask);
 
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 static void si_shader_ps(struct si_shader *shader)
@@ -1952,6 +1952,10 @@ current_not_ready:
 		/* Use the default (unoptimized) shader for now. */
 		memset(&key->opt, 0, sizeof(key->opt));
 		mtx_unlock(&sel->mutex);
+
+		if (sscreen->options.sync_compile)
+			util_queue_fence_wait(&shader->ready);
+
 		goto again;
 	}
 
@@ -2042,6 +2046,9 @@ static void si_init_shader_selector_async(void *job, int thread_index)
 	assert(thread_index >= 0);
 	assert(thread_index < ARRAY_SIZE(sscreen->compiler));
 	compiler = &sscreen->compiler[thread_index];
+
+	if (sel->nir)
+		si_lower_nir(sel);
 
 	/* Compile the main shader part for use with a prolog and/or epilog.
 	 * If this fails, the driver will try to compile a monolithic shader
@@ -2161,12 +2168,12 @@ void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
 	util_queue_fence_init(ready_fence);
 
 	struct util_async_debug_callback async_debug;
-	bool wait =
+	bool debug =
 		(sctx->debug.debug_message && !sctx->debug.async) ||
 		sctx->is_debug ||
 		si_can_dump_shader(sctx->screen, processor);
 
-	if (wait) {
+	if (debug) {
 		u_async_debug_init(&async_debug);
 		compiler_ctx_state->debug = async_debug.base;
 	}
@@ -2174,11 +2181,14 @@ void si_schedule_initial_compile(struct si_context *sctx, unsigned processor,
 	util_queue_add_job(&sctx->screen->shader_compiler_queue, job,
 			   ready_fence, execute, NULL);
 
-	if (wait) {
+	if (debug) {
 		util_queue_fence_wait(ready_fence);
 		u_async_debug_drain(&async_debug, &sctx->debug);
 		u_async_debug_cleanup(&async_debug);
 	}
+
+	if (sctx->screen->options.sync_compile)
+		util_queue_fence_wait(ready_fence);
 }
 
 /* Return descriptor slot usage masks from the given shader info. */
@@ -2237,10 +2247,9 @@ static void *si_create_shader_selector(struct pipe_context *ctx,
 
 		sel->nir = state->ir.nir;
 
+		si_nir_opts(sel->nir);
 		si_nir_scan_shader(sel->nir, &sel->info);
 		si_nir_scan_tess_ctrl(sel->nir, &sel->tcs_info);
-
-		si_lower_nir(sel);
 	}
 
 	sel->type = sel->info.processor;
@@ -2869,7 +2878,7 @@ static void si_emit_spi_map(struct si_context *sctx)
 				    sctx->tracked_regs.spi_ps_input_cntl, num_interp);
 
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 /**

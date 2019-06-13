@@ -106,18 +106,16 @@ v3d33_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                         break;
 
                 case nir_tex_src_offset: {
-                        nir_const_value *offset =
-                                nir_src_as_const_value(instr->src[i].src);
                         p0_unpacked.texel_offset_for_s_coordinate =
-                                offset->i32[0];
+                                nir_src_comp_as_int(instr->src[i].src, 0);
 
                         if (instr->coord_components >= 2)
                                 p0_unpacked.texel_offset_for_t_coordinate =
-                                        offset->i32[1];
+                                        nir_src_comp_as_int(instr->src[i].src, 1);
 
                         if (instr->coord_components >= 3)
                                 p0_unpacked.texel_offset_for_r_coordinate =
-                                        offset->i32[2];
+                                        nir_src_comp_as_int(instr->src[i].src, 2);
                         break;
                 }
 
@@ -161,11 +159,10 @@ v3d33_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
                                                  unit));
         }
 
-        struct qreg texture_u[] = {
-                vir_uniform(c, QUNIFORM_TEXTURE_CONFIG_P0_0 + unit, p0_packed),
-                vir_uniform(c, QUNIFORM_TEXTURE_CONFIG_P1, p1_packed),
+        int texture_u[] = {
+                vir_get_uniform_index(c, QUNIFORM_TEXTURE_CONFIG_P0_0 + unit, p0_packed),
+                vir_get_uniform_index(c, QUNIFORM_TEXTURE_CONFIG_P1, p1_packed),
         };
-        uint32_t next_texture_u = 0;
 
         for (int i = 0; i < next_coord; i++) {
                 struct qreg dst;
@@ -177,11 +174,8 @@ v3d33_vir_emit_tex(struct v3d_compile *c, nir_tex_instr *instr)
 
                 struct qinst *tmu = vir_MOV_dest(c, dst, coords[i]);
 
-                if (i < 2) {
-                        tmu->has_implicit_uniform = true;
-                        tmu->src[vir_get_implicit_uniform_src(tmu)] =
-                                texture_u[next_texture_u++];
-                }
+                if (i < 2)
+                        tmu->uniform = texture_u[i];
         }
 
         vir_emit_thrsw(c);

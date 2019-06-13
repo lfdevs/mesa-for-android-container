@@ -37,7 +37,6 @@
 #include "svga_public.h"
 #include "svga_context.h"
 #include "svga_format.h"
-#include "svga_msg.h"
 #include "svga_screen.h"
 #include "svga_tgsi.h"
 #include "svga_resource_texture.h"
@@ -891,17 +890,18 @@ svga_get_driver_query_info(struct pipe_screen *screen,
 static void
 init_logging(struct pipe_screen *screen)
 {
+   struct svga_screen *svgascreen = svga_screen(screen);
    static const char *log_prefix = "Mesa: ";
    char host_log[1000];
 
    /* Log Version to Host */
    util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
-                 "%s%s", log_prefix, svga_get_name(screen));
-   svga_host_log(host_log);
+                 "%s%s\n", log_prefix, svga_get_name(screen));
+   svgascreen->sws->host_log(svgascreen->sws, host_log);
 
    util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
                  "%s" PACKAGE_VERSION MESA_GIT_SHA1, log_prefix);
-   svga_host_log(host_log);
+   svgascreen->sws->host_log(svgascreen->sws, host_log);
 
    /* If the SVGA_EXTRA_LOGGING env var is set, log the process's command
     * line (program name and arguments).
@@ -910,10 +910,20 @@ init_logging(struct pipe_screen *screen)
       char cmdline[1000];
       if (os_get_command_line(cmdline, sizeof(cmdline))) {
          util_snprintf(host_log, sizeof(host_log) - strlen(log_prefix),
-                       "%s%s", log_prefix, cmdline);
-         svga_host_log(host_log);
+                       "%s%s\n", log_prefix, cmdline);
+         svgascreen->sws->host_log(svgascreen->sws, host_log);
       }
    }
+}
+
+
+/**
+ * no-op logging function to use when SVGA_NO_LOGGING is set.
+ */
+static void
+nop_host_log(struct svga_winsys_screen *sws, const char *message)
+{
+   /* nothing */
 }
 
 
@@ -1134,7 +1144,11 @@ svga_screen_create(struct svga_winsys_screen *sws)
 
    svga_screen_cache_init(svgascreen);
 
-   init_logging(screen);
+   if (debug_get_bool_option("SVGA_NO_LOGGING", FALSE) == TRUE) {
+      svgascreen->sws->host_log = nop_host_log;
+   } else {
+      init_logging(screen);
+   }
 
    return screen;
 error2:

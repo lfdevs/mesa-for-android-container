@@ -108,7 +108,7 @@ mm_buffer_destroy(struct pb_buffer *buf)
 
 static void *
 mm_buffer_map(struct pb_buffer *buf,
-              unsigned flags,
+              enum pb_usage_flags flags,
               void *flush_ctx)
 {
    struct mm_buffer *mm_buf = mm_buffer(buf);
@@ -130,7 +130,7 @@ mm_buffer_unmap(struct pb_buffer *buf)
 static enum pipe_error 
 mm_buffer_validate(struct pb_buffer *buf, 
                    struct pb_validate *vl,
-                   unsigned flags)
+                   enum pb_usage_flags flags)
 {
    struct mm_buffer *mm_buf = mm_buffer(buf);
    struct mm_pb_manager *mm = mm_buf->mgr;

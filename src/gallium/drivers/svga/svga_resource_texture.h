@@ -47,12 +47,12 @@ enum SVGA3dSurfaceFormat;
 extern struct u_resource_vtbl svga_texture_vtbl;
 
 
-struct svga_texture 
+struct svga_texture
 {
    struct u_resource b;
 
    ushort *defined;
-   
+
    struct svga_sampler_view *cached_view;
 
    unsigned view_age[SVGA_MAX_TEXTURE_LEVELS];
@@ -62,8 +62,8 @@ struct svga_texture
 
    /**
     * Creation key for the host surface handle.
-    * 
-    * This structure describes all the host surface characteristics so that it 
+    *
+    * This structure describes all the host surface characteristics so that it
     * can be looked up in cache, since creating a host surface is often a slow
     * operation.
     */
@@ -102,7 +102,7 @@ struct svga_texture
 
    /** array indexed by cube face or 3D/array slice, one bit per mipmap level.
     *  Set if the level is marked as dirty.
-    */ 
+    */
    ushort *dirty;
 
    /**
@@ -284,8 +284,8 @@ svga_texture_create(struct pipe_screen *screen,
 
 struct pipe_resource *
 svga_texture_from_handle(struct pipe_screen * screen,
-			const struct pipe_resource *template,
-			struct winsys_handle *whandle);
+                         const struct pipe_resource *template,
+                         struct winsys_handle *whandle);
 
 boolean
 svga_texture_generate_mipmap(struct pipe_context *pipe,

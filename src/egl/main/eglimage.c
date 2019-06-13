@@ -35,25 +35,25 @@
 #include "egllog.h"
 
 static EGLint
-_eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                          EGLint attr, EGLint val)
 {
    switch (attr) {
    case EGL_IMAGE_PRESERVED_KHR:
-      if (!dpy->Extensions.KHR_image_base)
+      if (!disp->Extensions.KHR_image_base)
          return EGL_BAD_PARAMETER;
 
       attrs->ImagePreserved = val;
       break;
 
    case EGL_GL_TEXTURE_LEVEL_KHR:
-      if (!dpy->Extensions.KHR_gl_texture_2D_image)
+      if (!disp->Extensions.KHR_gl_texture_2D_image)
          return EGL_BAD_PARAMETER;
 
       attrs->GLTextureLevel = val;
       break;
    case EGL_GL_TEXTURE_ZOFFSET_KHR:
-      if (!dpy->Extensions.KHR_gl_texture_3D_image)
+      if (!disp->Extensions.KHR_gl_texture_3D_image)
          return EGL_BAD_PARAMETER;
 
       attrs->GLTextureZOffset = val;
@@ -66,10 +66,10 @@ _eglParseKHRImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
 }
 
 static EGLint
-_eglParseMESADrmImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseMESADrmImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                              EGLint attr, EGLint val)
 {
-   if (!dpy->Extensions.MESA_drm_image)
+   if (!disp->Extensions.MESA_drm_image)
       return EGL_BAD_PARAMETER;
 
    switch (attr) {
@@ -96,10 +96,10 @@ _eglParseMESADrmImageAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
 }
 
 static EGLint
-_eglParseWLBindWaylandDisplayAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseWLBindWaylandDisplayAttribs(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                                      EGLint attr, EGLint val)
 {
-   if (!dpy->Extensions.WL_bind_wayland_display)
+   if (!disp->Extensions.WL_bind_wayland_display)
       return EGL_BAD_PARAMETER;
 
    switch (attr) {
@@ -114,10 +114,10 @@ _eglParseWLBindWaylandDisplayAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
 }
 
 static EGLint
-_eglParseEXTImageDmaBufImportAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseEXTImageDmaBufImportAttribs(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                                      EGLint attr, EGLint val)
 {
-   if (!dpy->Extensions.EXT_image_dma_buf_import)
+   if (!disp->Extensions.EXT_image_dma_buf_import)
       return EGL_BAD_PARAMETER;
 
    switch (attr) {
@@ -207,10 +207,10 @@ _eglParseEXTImageDmaBufImportAttribs(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
 
 static EGLint
 _eglParseEXTImageDmaBufImportModifiersAttribs(_EGLImageAttribs *attrs,
-                                              _EGLDisplay *dpy,
+                                              _EGLDisplay *disp,
                                               EGLint attr, EGLint val)
 {
-   if (!dpy->Extensions.EXT_image_dma_buf_import_modifiers)
+   if (!disp->Extensions.EXT_image_dma_buf_import_modifiers)
       return EGL_BAD_PARAMETER;
 
    switch (attr) {
@@ -272,7 +272,7 @@ _eglParseEXTImageDmaBufImportModifiersAttribs(_EGLImageAttribs *attrs,
  * Function calls _eglError to set the correct error code.
  */
 EGLBoolean
-_eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                          const EGLint *attrib_list)
 {
    EGLint i, err;
@@ -286,19 +286,19 @@ _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
       EGLint attr = attrib_list[i++];
       EGLint val = attrib_list[i];
 
-      err = _eglParseKHRImageAttribs(attrs, dpy, attr, val);
+      err = _eglParseKHRImageAttribs(attrs, disp, attr, val);
       if (err == EGL_SUCCESS)
          continue;
 
-      err = _eglParseMESADrmImageAttribs(attrs, dpy, attr, val);
+      err = _eglParseMESADrmImageAttribs(attrs, disp, attr, val);
       if (err == EGL_SUCCESS)
          continue;
 
-      err = _eglParseWLBindWaylandDisplayAttribs(attrs, dpy, attr, val);
+      err = _eglParseWLBindWaylandDisplayAttribs(attrs, disp, attr, val);
       if (err == EGL_SUCCESS)
          continue;
 
-      err = _eglParseEXTImageDmaBufImportAttribs(attrs, dpy, attr, val);
+      err = _eglParseEXTImageDmaBufImportAttribs(attrs, disp, attr, val);
       if (err == EGL_SUCCESS)
          continue;
 
@@ -309,7 +309,7 @@ _eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
       if (err == EGL_BAD_ATTRIBUTE)
          return _eglError(err, __func__);
 
-      err = _eglParseEXTImageDmaBufImportModifiersAttribs(attrs, dpy, attr, val);
+      err = _eglParseEXTImageDmaBufImportModifiersAttribs(attrs, disp, attr, val);
       if (err == EGL_SUCCESS)
          continue;
 

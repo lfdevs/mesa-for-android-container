@@ -143,6 +143,11 @@ to the array index which is used for sampling.
   to a respective sampler view and releases a reference to the previous
   sampler view.
 
+  Sampler views outside of ``[start_slot, start_slot + num_views)`` are
+  unmodified.  If ``views`` is NULL, the behavior is the same as if
+  ``views[n]`` was NULL for the entire range, ie. releasing the reference
+  for all the sampler views in the specified range.
+
 * ``create_sampler_view`` creates a new sampler view. ``texture`` is associated
   with the sampler view which results in sampler view holding a reference
   to the texture. Format specified in template must be compatible

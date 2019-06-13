@@ -225,7 +225,7 @@ analyze_boolean_resolves_block(nir_block *block)
           * have to worry about resolving them.
           */
          instr->pass_flags &= ~BRW_NIR_BOOLEAN_MASK;
-         if (load->value.u32[0] == NIR_TRUE || load->value.u32[0] == NIR_FALSE) {
+         if (load->value[0].u32 == NIR_TRUE || load->value[0].u32 == NIR_FALSE) {
             instr->pass_flags |= BRW_NIR_BOOLEAN_NO_RESOLVE;
          } else {
             instr->pass_flags |= BRW_NIR_NON_BOOLEAN;

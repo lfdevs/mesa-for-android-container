@@ -65,6 +65,9 @@ lp_fence_signalled(struct lp_fence *fence);
 void
 lp_fence_wait(struct lp_fence *fence);
 
+boolean
+lp_fence_timedwait(struct lp_fence *fence, uint64_t timeout);
+
 void
 llvmpipe_init_screen_fence_funcs(struct pipe_screen *screen);
 

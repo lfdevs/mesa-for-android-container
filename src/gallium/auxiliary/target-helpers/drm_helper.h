@@ -7,30 +7,6 @@
 #include "state_tracker/drm_driver.h"
 #include "util/xmlpool.h"
 
-static const struct drm_conf_ret throttle_ret = {
-   .type = DRM_CONF_INT,
-   .val.val_int = 2,
-};
-
-static const struct drm_conf_ret share_fd_ret = {
-   .type = DRM_CONF_BOOL,
-   .val.val_bool = true,
-};
-
-const struct drm_conf_ret *
-pipe_default_configuration_query(enum drm_conf conf)
-{
-   switch (conf) {
-   case DRM_CONF_THROTTLE:
-      return &throttle_ret;
-   case DRM_CONF_SHARE_FD:
-      return &share_fd_ret;
-   default:
-      break;
-   }
-   return NULL;
-}
-
 #ifdef GALLIUM_I915
 #include "i915/drm/i915_drm_public.h"
 #include "i915/i915_public.h"
@@ -57,6 +33,35 @@ pipe_i915_create_screen(int fd, const struct pipe_screen_config *config)
    fprintf(stderr, "i915g: driver missing\n");
    return NULL;
 }
+
+#endif
+
+#ifdef GALLIUM_IRIS
+#include "iris/drm/iris_drm_public.h"
+
+struct pipe_screen *
+pipe_iris_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = iris_drm_screen_create(fd, config);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+const char *iris_driconf_xml =
+      #include "iris/iris_driinfo.h"
+      ;
+
+#else
+
+struct pipe_screen *
+pipe_iris_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   fprintf(stderr, "iris: driver missing\n");
+   return NULL;
+}
+
+const char *iris_driconf_xml = NULL;
 
 #endif
 
@@ -100,7 +105,6 @@ pipe_kmsro_create_screen(int fd, const struct pipe_screen_config *config)
 struct pipe_screen *
 pipe_kmsro_create_screen(int fd, const struct pipe_screen_config *config)
 {
-   fprintf(stderr, "kmsro: driver missing\n");
    return NULL;
 }
 
@@ -176,23 +180,9 @@ pipe_radeonsi_create_screen(int fd, const struct pipe_screen_config *config)
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 
-const struct drm_conf_ret *
-pipe_radeonsi_configuration_query(enum drm_conf conf)
-{
-   static const struct drm_conf_ret xml_options_ret = {
-      .type = DRM_CONF_POINTER,
-      .val.val_pointer =
-#include "radeonsi/si_driinfo.h"
-   };
-
-   switch (conf) {
-   case DRM_CONF_XML_OPTIONS:
-      return &xml_options_ret;
-   default:
-      break;
-   }
-   return pipe_default_configuration_query(conf);
-}
+const char *radeonsi_driconf_xml =
+      #include "radeonsi/si_driinfo.h"
+      ;
 
 #else
 
@@ -203,11 +193,7 @@ pipe_radeonsi_create_screen(int fd, const struct pipe_screen_config *config)
    return NULL;
 }
 
-const struct drm_conf_ret *
-pipe_radeonsi_configuration_query(enum drm_conf conf)
-{
-   return NULL;
-}
+const char *radeonsi_driconf_xml = NULL;
 
 #endif
 
@@ -333,6 +319,29 @@ pipe_v3d_create_screen(int fd, const struct pipe_screen_config *config)
 
 #endif
 
+#ifdef GALLIUM_PANFROST
+#include "panfrost/drm/panfrost_drm_public.h"
+
+struct pipe_screen *
+pipe_panfrost_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = panfrost_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+#else
+
+struct pipe_screen *
+pipe_panfrost_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   fprintf(stderr, "panfrost: driver missing\n");
+   return NULL;
+}
+
+#endif
+
 #ifdef GALLIUM_ETNAVIV
 #include "etnaviv/drm/etnaviv_drm_public.h"
 
@@ -375,6 +384,29 @@ struct pipe_screen *
 pipe_tegra_create_screen(int fd, const struct pipe_screen_config *config)
 {
    fprintf(stderr, "tegra: driver missing\n");
+   return NULL;
+}
+
+#endif
+
+#ifdef GALLIUM_LIMA
+#include "lima/drm/lima_drm_public.h"
+
+struct pipe_screen *
+pipe_lima_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+
+   screen = lima_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+#else
+
+struct pipe_screen *
+pipe_lima_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   fprintf(stderr, "lima: driver missing\n");
    return NULL;
 }
 

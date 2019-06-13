@@ -1,0 +1,70 @@
+job_name: panfrost-deqp
+device_type: rk3399-gru-kevin
+timeouts:
+  job:
+    minutes: 40
+  action:
+   minutes: 10
+  actions:
+    power-off:
+      seconds: 30
+priority: medium
+visibility: public
+actions:
+- deploy:
+    timeout:
+      minutes: 2
+    to: tftp
+    kernel:
+      url: {{ base_artifacts_url }}/Image
+    ramdisk:
+      url: {{ base_artifacts_url }}/panfrost-rootfs.cpio.gz
+      compression: gz
+    dtb:
+      url: {{ base_artifacts_url }}/rk3399-gru-kevin.dtb
+    os: oe
+- boot:
+    timeout:
+      minutes: 5
+    method: depthcharge
+    commands: ramdisk
+    prompts:
+      - '#' 
+- test:
+    timeout:
+      minutes: 40
+    definitions:
+    - repository:
+        metadata:
+          format: Lava-Test Test Definition 1.0
+          name: igt
+          description: "IGT test plan"
+          os:
+          - oe
+          scope:
+          - functional
+        run:
+          steps:
+          - mount -t proc none /proc
+          - mount -t sysfs none /sys 
+          - mount -t devtmpfs none /dev
+          - mkdir -p /dev/pts
+          - mount -t devpts devpts /dev/pts
+          - echo 1 > /proc/sys/kernel/printk
+          - echo performance > /sys/devices/platform/ff9a0000.gpu/devfreq/devfreq0/governor
+          - sh /deqp/deqp-runner.sh
+        parse:
+          pattern: 'Test case ''(?P<test_case_id>\S*)''..\s+(?P<result>(Pass|NotSupported|QualityWarning|CompatibilityWarning|Fail|ResourceError|Crash|Timeout|InternalError))'
+          fixupdict:
+            Pass: pass
+            NotSupported: pass
+            QualityWarning: pass
+            CompatibilityWarning: pass
+            Fail: fail
+            ResourceError: fail
+            Crash: fail
+            Timeout: fail
+            InternalError: fail
+      from: inline
+      name: deqp
+      path: inline/lava-deqp.yaml

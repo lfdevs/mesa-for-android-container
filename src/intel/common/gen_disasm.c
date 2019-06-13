@@ -28,8 +28,6 @@
 
 #include "gen_disasm.h"
 
-uint64_t INTEL_DEBUG;
-
 struct gen_disasm {
     struct gen_device_info devinfo;
 };

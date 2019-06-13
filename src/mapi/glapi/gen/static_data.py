@@ -29,7 +29,7 @@ MAX_OFFSETS = 407
 """Table of functions that have ABI-mandated offsets in the dispatch table.
 
 The first MAX_OFFSETS entries are required by indirect GLX. The rest are
-required to preserve the glapi <> drivers ABI. This is to be addressed shortly.
+required to preserve the glapi <> GL/GLES ABI. This is to be addressed shortly.
 
 This list will never change."""
 offsets = {
@@ -1453,6 +1453,7 @@ offsets = {
     "TexParameterxv": 1417,
     "BlendBarrier": 1418,
     "PrimitiveBoundingBox": 1419,
+    "MaxShaderCompilerThreadsKHR": 1420,
 }
 
 functions = [

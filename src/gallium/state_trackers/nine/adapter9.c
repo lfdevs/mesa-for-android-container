@@ -545,9 +545,9 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
 
     pCaps->AdapterOrdinal = 0;
 
-    pCaps->Caps = 0;
+    pCaps->Caps = D3DCAPS_READ_SCANLINE;
 
-    pCaps->Caps2 = D3DCAPS2_CANMANAGERESOURCE |
+    pCaps->Caps2 = /* D3DCAPS2_CANMANAGERESOURCE | */
                 /* D3DCAPS2_CANSHARERESOURCE | */
                 /* D3DCAPS2_CANCALIBRATEGAMMA | */
                    D3DCAPS2_DYNAMICTEXTURES |
@@ -568,7 +568,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
                                    D3DPRESENT_INTERVAL_THREE |
                                    D3DPRESENT_INTERVAL_FOUR |
                                    D3DPRESENT_INTERVAL_IMMEDIATE;
-    pCaps->CursorCaps = D3DCURSORCAPS_COLOR | D3DCURSORCAPS_LOWRES;
+    pCaps->CursorCaps = D3DCURSORCAPS_COLOR /* | D3DCURSORCAPS_LOWRES*/;
 
     pCaps->DevCaps = D3DDEVCAPS_CANBLTSYSTONONLOCAL |
                      D3DDEVCAPS_CANRENDERAFTERFLIP |
@@ -678,7 +678,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
         D3DPTEXTURECAPS_ALPHAPALETTE |
         D3DPTEXTURECAPS_PERSPECTIVE |
         D3DPTEXTURECAPS_PROJECTED |
-        /*D3DPTEXTURECAPS_TEXREPEATNOTSCALEDBYSIZE |*/
+        D3DPTEXTURECAPS_TEXREPEATNOTSCALEDBYSIZE |
         D3DPTEXTURECAPS_CUBEMAP |
         D3DPTEXTURECAPS_VOLUMEMAP |
         D3DNPIPECAP(NPOT_TEXTURES, D3DPTEXTURECAPS_POW2) |

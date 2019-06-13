@@ -71,9 +71,13 @@ nvc0_vertex_configure_translate(struct nvc0_context *nvc0, int32_t index_bias)
 
       if (likely(vb->is_user_buffer))
          map = (const uint8_t *)vb->buffer.user;
-      else
+      else {
+         if (!vb->buffer.resource)
+            continue;
+
          map = nouveau_resource_map_offset(&nvc0->base,
             nv04_resource(vb->buffer.resource), vb->buffer_offset, NOUVEAU_BO_RD);
+      }
 
       if (index_bias && !unlikely(nvc0->vertex->instance_bufs & (1 << i)))
          map += (intptr_t)index_bias * vb->stride;

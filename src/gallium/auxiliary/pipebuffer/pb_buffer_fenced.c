@@ -139,7 +139,7 @@ struct fenced_buffer
     * A bitmask of PB_USAGE_CPU/GPU_READ/WRITE describing the current
     * buffer usage.
     */
-   unsigned flags;
+   enum pb_usage_flags flags;
 
    unsigned mapcount;
 
@@ -662,7 +662,7 @@ fenced_buffer_destroy(struct pb_buffer *buf)
 
 static void *
 fenced_buffer_map(struct pb_buffer *buf,
-                  unsigned flags, void *flush_ctx)
+                  enum pb_usage_flags flags, void *flush_ctx)
 {
    struct fenced_buffer *fenced_buf = fenced_buffer(buf);
    struct fenced_manager *fenced_mgr = fenced_buf->mgr;
@@ -739,7 +739,7 @@ fenced_buffer_unmap(struct pb_buffer *buf)
 static enum pipe_error
 fenced_buffer_validate(struct pb_buffer *buf,
                        struct pb_validate *vl,
-                       unsigned flags)
+                       enum pb_usage_flags flags)
 {
    struct fenced_buffer *fenced_buf = fenced_buffer(buf);
    struct fenced_manager *fenced_mgr = fenced_buf->mgr;

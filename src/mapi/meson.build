@@ -32,10 +32,14 @@ mapi_abi_py = files('mapi_abi.py')
 subdir('glapi')
 if with_shared_glapi
   subdir('shared-glapi')
+else
+  libglapi = []
 endif
-if with_gles1
-  subdir('es1api')
-endif
-if with_gles2
-  subdir('es2api')
+if not with_glvnd
+  if with_gles1
+    subdir('es1api')
+  endif
+  if with_gles2
+    subdir('es2api')
+  endif
 endif

@@ -41,8 +41,8 @@
 #include "util/ralloc.h"
 #include "compiler/glsl/ir.h"
 #include "compiler/glsl/program.h"
+#include "compiler/glsl/gl_nir.h"
 #include "compiler/glsl/glsl_to_nir.h"
-#include "glsl/float64_glsl.h"
 
 #include "brw_program.h"
 #include "brw_context.h"
@@ -54,6 +54,7 @@
 #include "brw_gs.h"
 #include "brw_vs.h"
 #include "brw_wm.h"
+#include "brw_state.h"
 
 #include "main/shaderapi.h"
 #include "main/shaderobj.h"
@@ -75,51 +76,6 @@ brw_nir_lower_uniforms(nir_shader *nir, bool is_scalar)
 static struct gl_program *brwNewProgram(struct gl_context *ctx, GLenum target,
                                         GLuint id, bool is_arb_asm);
 
-static nir_shader *
-compile_fp64_funcs(struct gl_context *ctx,
-                   const nir_shader_compiler_options *options,
-                   void *mem_ctx,
-                   gl_shader_stage stage)
-{
-   const GLuint name = ~0;
-   struct gl_shader *sh;
-
-   sh = _mesa_new_shader(name, stage);
-
-   sh->Source = float64_source;
-   sh->CompileStatus = COMPILE_FAILURE;
-   _mesa_glsl_compile_shader(ctx, sh, false, false, true);
-
-   if (!sh->CompileStatus) {
-      if (sh->InfoLog) {
-         _mesa_problem(ctx,
-                       "fp64 software impl compile failed:\n%s\nsource:\n%s\n",
-                       sh->InfoLog, float64_source);
-      }
-   }
-
-   struct gl_shader_program *sh_prog;
-   sh_prog = _mesa_new_shader_program(name);
-   sh_prog->Label = NULL;
-   sh_prog->NumShaders = 1;
-   sh_prog->Shaders = malloc(sizeof(struct gl_shader *));
-   sh_prog->Shaders[0] = sh;
-
-   struct gl_linked_shader *linked = rzalloc(NULL, struct gl_linked_shader);
-   linked->Stage = stage;
-   linked->Program =
-      brwNewProgram(ctx,
-                    _mesa_shader_stage_to_program(stage),
-                    name, false);
-
-   linked->ir = sh->ir;
-   sh_prog->_LinkedShaders[stage] = linked;
-
-   nir_shader *nir = glsl_to_nir(sh_prog, stage, options);
-
-   return nir_shader_clone(mem_ctx, nir);
-}
-
 nir_shader *
 brw_create_nir(struct brw_context *brw,
                const struct gl_shader_program *shader_prog,
@@ -138,14 +94,12 @@ brw_create_nir(struct brw_context *brw,
       if (shader_prog->data->spirv) {
          nir = _mesa_spirv_to_nir(ctx, shader_prog, stage, options);
       } else {
-         nir = glsl_to_nir(shader_prog, stage, options);
+         nir = glsl_to_nir(ctx, shader_prog, stage, options);
       }
       assert (nir);
 
       nir_remove_dead_variables(nir, nir_var_shader_in | nir_var_shader_out);
-      nir_lower_returns(nir);
-      nir_validate_shader(nir, "after glsl_to_nir or spirv_to_nir and "
-                               "return lowering");
+      nir_validate_shader(nir, "after glsl_to_nir or spirv_to_nir");
       NIR_PASS_V(nir, nir_lower_io_to_temporaries,
                  nir_shader_get_entrypoint(nir), true, false);
    } else {
@@ -156,16 +110,24 @@ brw_create_nir(struct brw_context *brw,
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   if (!devinfo->has_64bit_types && nir->info.uses_64bit) {
-      nir_shader *fp64 = compile_fp64_funcs(ctx, options, ralloc_parent(nir), stage);
-
-      nir_validate_shader(fp64, "fp64");
-      exec_list_append(&nir->functions, &fp64->functions);
+   nir_shader *softfp64 = NULL;
+   if ((options->lower_doubles_options & nir_lower_fp64_full_software) &&
+       nir->info.uses_64bit) {
+      softfp64 = glsl_float64_funcs_to_nir(ctx, options);
+      ralloc_steal(ralloc_parent(nir), softfp64);
    }
 
-   nir = brw_preprocess_nir(brw->screen->compiler, nir);
+   nir = brw_preprocess_nir(brw->screen->compiler, nir, softfp64);
+
+   NIR_PASS_V(nir, gl_nir_lower_samplers, shader_prog);
+   prog->info.textures_used = nir->info.textures_used;
+   prog->info.textures_used_by_txf = nir->info.textures_used_by_txf;
 
    NIR_PASS_V(nir, brw_nir_lower_image_load_store, devinfo);
+
+   NIR_PASS_V(nir, gl_nir_lower_buffers, shader_prog);
+   /* Do a round of constant folding to clean up address calculations */
+   NIR_PASS_V(nir, nir_opt_constant_folding);
 
    if (stage == MESA_SHADER_TESS_CTRL) {
       /* Lower gl_PatchVerticesIn from a sys. value to a uniform on Gen8+. */
@@ -950,4 +912,23 @@ brw_populate_default_key(const struct gen_device_info *devinfo,
    default:
       unreachable("Unsupported stage!");
    }
+}
+
+void
+brw_debug_recompile(struct brw_context *brw,
+                    gl_shader_stage stage,
+                    unsigned api_id,
+                    unsigned key_program_string_id,
+                    void *key)
+{
+   const struct brw_compiler *compiler = brw->screen->compiler;
+   enum brw_cache_id cache_id = brw_stage_cache_id(stage);
+
+   compiler->shader_perf_log(brw, "Recompiling %s shader for program %d\n",
+                             _mesa_shader_stage_to_string(stage), api_id);
+
+   const void *old_key =
+      brw_find_previous_compile(&brw->cache, cache_id, key_program_string_id);
+
+   brw_debug_key_recompile(compiler, brw, stage, old_key, key);
 }

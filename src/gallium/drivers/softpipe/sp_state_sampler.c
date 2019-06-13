@@ -127,6 +127,7 @@ softpipe_set_sampler_views(struct pipe_context *pipe,
       if (sp_sviewsrc) {
          memcpy(sp_sviewdst, sp_sviewsrc, sizeof(*sp_sviewsrc));
          sp_sviewdst->compute_lambda = softpipe_get_lambda_func(&sp_sviewdst->base, shader);
+         sp_sviewdst->compute_lambda_from_grad = softpipe_get_lambda_from_grad_func(&sp_sviewdst->base, shader);
          sp_sviewdst->cache = softpipe->tex_cache[shader][start + i];
       }
       else {

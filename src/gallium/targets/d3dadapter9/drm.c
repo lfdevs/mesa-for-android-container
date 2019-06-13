@@ -40,7 +40,7 @@
 #include "util/xmlconfig.h"
 #include "util/xmlpool.h"
 
-#include <drm.h>
+#include "drm-uapi/drm.h"
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -59,6 +59,8 @@ DRI_CONF_BEGIN
         DRI_CONF_NINE_ALLOWDISCARDDELAYEDRELEASE("true")
         DRI_CONF_NINE_TEARFREEDISCARD("false")
         DRI_CONF_NINE_CSMT(-1)
+        DRI_CONF_NINE_DYNAMICTEXTUREWORKAROUND("false")
+        DRI_CONF_NINE_SHADERINLINECONSTANTS("false")
     DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -205,8 +207,6 @@ drm_create_adapter( int fd,
     struct d3dadapter9drm_context *ctx = CALLOC_STRUCT(d3dadapter9drm_context);
     HRESULT hr;
     bool different_device;
-    const struct drm_conf_ret *throttle_ret = NULL;
-    const struct drm_conf_ret *dmabuf_ret = NULL;
     driOptionCache defaultInitOptions;
     driOptionCache userInitOptions;
     int throttling_value_user = -2;
@@ -236,20 +236,18 @@ drm_create_adapter( int fd,
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-    dmabuf_ret = pipe_loader_configuration(ctx->dev, DRM_CONF_SHARE_FD);
-    throttle_ret = pipe_loader_configuration(ctx->dev, DRM_CONF_THROTTLE);
-    if (!dmabuf_ret || !dmabuf_ret->val.val_bool) {
+    if (!ctx->base.hal->get_param(ctx->base.hal, PIPE_CAP_DMABUF)) {
         ERR("The driver is not capable of dma-buf sharing."
             "Abandon to load nine state tracker\n");
         drm_destroy(&ctx->base);
         return D3DERR_DRIVERINTERNALERROR;
     }
 
-    if (throttle_ret && throttle_ret->val.val_int != -1) {
-        ctx->base.throttling = TRUE;
-        ctx->base.throttling_value = throttle_ret->val.val_int;
-    } else
-        ctx->base.throttling = FALSE;
+    /* Previously was set to PIPE_CAP_MAX_FRAMES_IN_FLIGHT,
+     * but the change of value of this cap to 1 seems to cause
+     * regressions. */
+    ctx->base.throttling_value = 2;
+    ctx->base.throttling = ctx->base.throttling_value > 0;
 
     driParseOptionInfo(&defaultInitOptions, __driConfigOptionsNine);
     driParseConfigFiles(&userInitOptions, &defaultInitOptions, 0, "nine", NULL);
@@ -272,13 +270,6 @@ drm_create_adapter( int fd,
         ctx->base.thread_submit = driQueryOptionb(&userInitOptions, "thread_submit");
     else
         ctx->base.thread_submit = different_device;
-
-    if (ctx->base.thread_submit && (throttling_value_user == -2 || throttling_value_user == 0)) {
-        ctx->base.throttling_value = 0;
-    } else if (ctx->base.thread_submit) {
-        DBG("You have set a non standard throttling value in combination with thread_submit."
-            "We advise to use a throttling value of -2/0");
-    }
 
     if (driCheckOption(&userInitOptions, "override_vendorid", DRI_INT)) {
         override_vendorid = driQueryOptioni(&userInitOptions, "override_vendorid");
@@ -303,6 +294,16 @@ drm_create_adapter( int fd,
         ctx->base.csmt_force = driQueryOptioni(&userInitOptions, "csmt_force");
     else
         ctx->base.csmt_force = -1;
+
+    if (driCheckOption(&userInitOptions, "dynamic_texture_workaround", DRI_BOOL))
+        ctx->base.dynamic_texture_workaround = driQueryOptionb(&userInitOptions, "dynamic_texture_workaround");
+    else
+        ctx->base.dynamic_texture_workaround = FALSE;
+
+    if (driCheckOption(&userInitOptions, "shader_inline_constants", DRI_BOOL))
+        ctx->base.shader_inline_constants = driQueryOptionb(&userInitOptions, "shader_inline_constants");
+    else
+        ctx->base.shader_inline_constants = FALSE;
 
     driDestroyOptionCache(&userInitOptions);
     driDestroyOptionInfo(&defaultInitOptions);

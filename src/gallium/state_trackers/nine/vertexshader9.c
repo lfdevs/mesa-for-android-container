@@ -66,6 +66,9 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     info.fog_enable = 0;
     info.point_size_min = 0;
     info.point_size_max = 0;
+    info.add_constants_defs.c_combination = NULL;
+    info.add_constants_defs.int_const_added = NULL;
+    info.add_constants_defs.bool_const_added = NULL;
     info.swvp_on = !!(device->params.BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING);
     info.process_vertices = false;
 
@@ -91,14 +94,25 @@ NineVertexShader9_ctor( struct NineVertexShader9 *This,
     This->byte_code.size = info.byte_size;
 
     This->variant.cso = info.cso;
+    This->variant.const_ranges = info.const_ranges;
+    This->variant.const_used_size = info.const_used_size;
     This->last_cso = info.cso;
+    This->last_const_ranges = info.const_ranges;
+    This->last_const_used_size = info.const_used_size;
     This->last_key = (uint32_t) (info.swvp_on << 9);
 
-    This->const_used_size = info.const_used_size;
     This->lconstf = info.lconstf;
     This->sampler_mask = info.sampler_mask;
     This->position_t = info.position_t;
     This->point_size = info.point_size;
+
+    memcpy(This->int_slots_used, info.int_slots_used, sizeof(This->int_slots_used));
+    memcpy(This->bool_slots_used, info.bool_slots_used, sizeof(This->bool_slots_used));
+
+    This->const_int_slots = info.const_int_slots;
+    This->const_bool_slots = info.const_bool_slots;
+
+    This->c_combinations = NULL;
 
     for (i = 0; i < info.num_inputs && i < ARRAY_SIZE(This->input_map); ++i)
         This->input_map[i].ndecl = info.input_map[i];
@@ -122,6 +136,7 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
                 if (This->base.device->context.cso_shader.vs == var->cso)
                     pipe->bind_vs_state(pipe, NULL);
                 pipe->delete_vs_state(pipe, var->cso);
+                FREE(var->const_ranges);
             }
             var = var->next;
         } while (var);
@@ -141,6 +156,8 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
     }
     nine_shader_variants_free(&This->variant);
     nine_shader_variants_so_free(&This->variant_so);
+
+    nine_shader_constant_combination_free(This->c_combinations);
 
     FREE((void *)This->byte_code.tokens); /* const_cast */
 
@@ -169,7 +186,9 @@ NineVertexShader9_GetFunction( struct NineVertexShader9 *This,
 }
 
 void *
-NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
+NineVertexShader9_GetVariant( struct NineVertexShader9 *This,
+                              unsigned **const_ranges,
+                              unsigned *const_used_size )
 {
     /* GetVariant is called from nine_context, thus we can
      * get pipe directly */
@@ -178,10 +197,13 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
     uint64_t key;
 
     key = This->next_key;
-    if (key == This->last_key)
+    if (key == This->last_key) {
+        *const_ranges = This->last_const_ranges;
+        *const_used_size = This->last_const_used_size;
         return This->last_cso;
+    }
 
-    cso = nine_shader_variant_get(&This->variant, key);
+    cso = nine_shader_variant_get(&This->variant, const_ranges, const_used_size, key);
     if (!cso) {
         struct NineDevice9 *device = This->base.device;
         struct nine_shader_info info;
@@ -195,18 +217,27 @@ NineVertexShader9_GetVariant( struct NineVertexShader9 *This )
         info.fog_enable = device->context.rs[D3DRS_FOGENABLE];
         info.point_size_min = asfloat(device->context.rs[D3DRS_POINTSIZE_MIN]);
         info.point_size_max = asfloat(device->context.rs[D3DRS_POINTSIZE_MAX]);
+        info.add_constants_defs.c_combination =
+            nine_shader_constant_combination_get(This->c_combinations, (key >> 16) & 0xff);
+        info.add_constants_defs.int_const_added = &This->int_slots_used;
+        info.add_constants_defs.bool_const_added = &This->bool_slots_used;
         info.swvp_on = device->context.swvp;
         info.process_vertices = false;
 
         hr = nine_translate_shader(This->base.device, &info, pipe);
         if (FAILED(hr))
             return NULL;
-        nine_shader_variant_add(&This->variant, key, info.cso);
+        nine_shader_variant_add(&This->variant, key, info.cso,
+                                info.const_ranges, info.const_used_size);
         cso = info.cso;
+        *const_ranges = info.const_ranges;
+        *const_used_size = info.const_used_size;
     }
 
     This->last_key = key;
     This->last_cso = cso;
+    This->last_const_ranges = *const_ranges;
+    This->last_const_used_size = *const_used_size;
 
     return cso;
 }
@@ -232,6 +263,9 @@ NineVertexShader9_GetVariantProcessVertices( struct NineVertexShader9 *This,
     info.fog_enable = false;
     info.point_size_min = 0;
     info.point_size_max = 0;
+    info.add_constants_defs.c_combination = NULL;
+    info.add_constants_defs.int_const_added = NULL;
+    info.add_constants_defs.bool_const_added = NULL;
     info.swvp_on = true;
     info.vdecl_out = vdecl_out;
     info.process_vertices = true;

@@ -77,6 +77,8 @@ struct v3d_screen {
         uint32_t bo_size;
         uint32_t bo_count;
 
+        bool has_csd;
+
         struct v3d_simulator_file *sim_file;
 };
 

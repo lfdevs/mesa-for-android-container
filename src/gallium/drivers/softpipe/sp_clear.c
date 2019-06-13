@@ -68,7 +68,8 @@ softpipe_clear(struct pipe_context *pipe, unsigned buffers,
 
    if (buffers & PIPE_CLEAR_COLOR) {
       for (i = 0; i < softpipe->framebuffer.nr_cbufs; i++) {
-         sp_tile_cache_clear(softpipe->cbuf_cache[i], color, 0);
+         if (buffers & (PIPE_CLEAR_COLOR0 << i))
+            sp_tile_cache_clear(softpipe->cbuf_cache[i], color, 0);
       }
    }
 

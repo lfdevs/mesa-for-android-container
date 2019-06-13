@@ -28,8 +28,8 @@
 #include <set>
 
 #include "codegen/nv50_ir.h"
+#include "codegen/nv50_ir_from_common.h"
 #include "codegen/nv50_ir_util.h"
-#include "codegen/nv50_ir_build_util.h"
 
 namespace tgsi {
 
@@ -1671,7 +1671,7 @@ namespace {
 
 using namespace nv50_ir;
 
-class Converter : public BuildUtil
+class Converter : public ConverterCommon
 {
 public:
    Converter(Program *, const tgsi::Source *);
@@ -1680,13 +1680,6 @@ public:
    bool run();
 
 private:
-   struct Subroutine
-   {
-      Subroutine(Function *f) : f(f) { }
-      Function *f;
-      ValueMap values;
-   };
-
    Value *shiftAddress(Value *);
    Value *getVertexBase(int s);
    Value *getOutputBase(int s);
@@ -1711,8 +1704,6 @@ private:
 
    bool handleInstruction(const struct tgsi_full_instruction *);
    void exportOutputs();
-   inline Subroutine *getSubroutine(unsigned ip);
-   inline Subroutine *getSubroutine(Function *);
    inline bool isEndOfSubroutine(uint ip);
 
    void loadProjTexCoords(Value *dst[4], Value *src[4], unsigned int mask);
@@ -1724,7 +1715,6 @@ private:
    void handleTXQ(Value *dst0[4], enum TexQuery, int R);
    void handleFBFETCH(Value *dst0[4]);
    void handleLIT(Value *dst0[4]);
-   void handleUserClipPlanes();
 
    // Symbol *getResourceBase(int r);
    void getImageCoords(std::vector<Value *>&, int s);
@@ -1735,8 +1725,6 @@ private:
 
    void handleINTERP(Value *dst0[4]);
 
-   uint8_t translateInterpMode(const struct nv50_ir_varying *var,
-                               operation& op);
    Value *interpolate(tgsi::Instruction::SrcRegister, int c, Value *ptr);
 
    void insertConvergenceOps(BasicBlock *conv, BasicBlock *fork);
@@ -1768,12 +1756,6 @@ private:
 
 private:
    const tgsi::Source *code;
-   const struct nv50_ir_prog_info *info;
-
-   struct {
-      std::map<unsigned, Subroutine> map;
-      Subroutine *cur;
-   } sub;
 
    uint ip; // instruction pointer
 
@@ -1788,13 +1770,9 @@ private:
    DataArray oData; // TGSI_FILE_OUTPUT (if outputs in registers)
 
    Value *zero;
-   Value *fragCoord[4];
-   Value *clipVtx[4];
 
    Value *vtxBase[5]; // base address of vertex in primitive (for TP/GP)
    uint8_t vtxBaseValid;
-
-   Value *outBase; // base address of vertex out patch (for TCP)
 
    Stack condBBs;  // fork BB, then else clause BB
    Stack joinBBs;  // fork BB, for inserting join ops on ENDIF
@@ -1868,29 +1846,6 @@ Converter::makeSym(uint tgsiFile, int fileIdx, int idx, int c, uint32_t address)
       sym->setOffset(address);
    }
    return sym;
-}
-
-uint8_t
-Converter::translateInterpMode(const struct nv50_ir_varying *var, operation& op)
-{
-   uint8_t mode = NV50_IR_INTERP_PERSPECTIVE;
-
-   if (var->flat)
-      mode = NV50_IR_INTERP_FLAT;
-   else
-   if (var->linear)
-      mode = NV50_IR_INTERP_LINEAR;
-   else
-   if (var->sc)
-      mode = NV50_IR_INTERP_SC;
-
-   op = (mode == NV50_IR_INTERP_PERSPECTIVE || mode == NV50_IR_INTERP_SC)
-      ? OP_PINTERP : OP_LINTERP;
-
-   if (var->centroid)
-      mode |= NV50_IR_INTERP_CENTROID;
-
-   return mode;
 }
 
 Value *
@@ -3175,30 +3130,6 @@ Converter::handleINTERP(Value *dst[4])
    }
 }
 
-Converter::Subroutine *
-Converter::getSubroutine(unsigned ip)
-{
-   std::map<unsigned, Subroutine>::iterator it = sub.map.find(ip);
-
-   if (it == sub.map.end())
-      it = sub.map.insert(std::make_pair(
-              ip, Subroutine(new Function(prog, "SUB", ip)))).first;
-
-   return &it->second;
-}
-
-Converter::Subroutine *
-Converter::getSubroutine(Function *f)
-{
-   unsigned ip = f->getLabel();
-   std::map<unsigned, Subroutine>::iterator it = sub.map.find(ip);
-
-   if (it == sub.map.end())
-      it = sub.map.insert(std::make_pair(ip, Subroutine(f))).first;
-
-   return &it->second;
-}
-
 bool
 Converter::isEndOfSubroutine(uint ip)
 {
@@ -4248,35 +4179,6 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
 }
 
 void
-Converter::handleUserClipPlanes()
-{
-   Value *res[8];
-   int n, i, c;
-
-   for (c = 0; c < 4; ++c) {
-      for (i = 0; i < info->io.genUserClip; ++i) {
-         Symbol *sym = mkSymbol(FILE_MEMORY_CONST, info->io.auxCBSlot,
-                                TYPE_F32, info->io.ucpBase + i * 16 + c * 4);
-         Value *ucp = mkLoadv(TYPE_F32, sym, NULL);
-         if (c == 0)
-            res[i] = mkOp2v(OP_MUL, TYPE_F32, getScratch(), clipVtx[c], ucp);
-         else
-            mkOp3(OP_MAD, TYPE_F32, res[i], clipVtx[c], ucp, res[i]);
-      }
-   }
-
-   const int first = info->numOutputs - (info->io.genUserClip + 3) / 4;
-
-   for (i = 0; i < info->io.genUserClip; ++i) {
-      n = i / 4 + first;
-      c = i % 4;
-      Symbol *sym =
-         mkSymbol(FILE_SHADER_OUTPUT, 0, TYPE_F32, info->out[n].slot[c] * 4);
-      mkStore(OP_EXPORT, TYPE_F32, sym, NULL, res[i]);
-   }
-}
-
-void
 Converter::exportOutputs()
 {
    if (info->io.alphaRefBase) {
@@ -4317,13 +4219,11 @@ Converter::exportOutputs()
    }
 }
 
-Converter::Converter(Program *ir, const tgsi::Source *code) : BuildUtil(ir),
+Converter::Converter(Program *ir, const tgsi::Source *code) : ConverterCommon(ir, code->info),
      code(code),
      tgsi(NULL),
      tData(this), lData(this), aData(this), oData(this)
 {
-   info = code->info;
-
    const unsigned tSize = code->fileSize(TGSI_FILE_TEMPORARY);
    const unsigned aSize = code->fileSize(TGSI_FILE_ADDRESS);
    const unsigned oSize = code->fileSize(TGSI_FILE_OUTPUT);

@@ -34,41 +34,6 @@
 #include "program/prog_parameter.h"
 #include "nir_builder.h"
 
-static void
-brw_tcs_debug_recompile(struct brw_context *brw, struct gl_program *prog,
-                       const struct brw_tcs_prog_key *key)
-{
-   perf_debug("Recompiling tessellation control shader for program %d\n",
-              prog->Id);
-
-   bool found = false;
-   const struct brw_tcs_prog_key *old_key =
-      brw_find_previous_compile(&brw->cache, BRW_CACHE_TCS_PROG,
-                                key->program_string_id);
-
-   if (!old_key) {
-      perf_debug("  Didn't find previous compile in the shader cache for "
-                 "debug\n");
-      return;
-   }
-
-   found |= key_debug(brw, "input vertices", old_key->input_vertices,
-                      key->input_vertices);
-   found |= key_debug(brw, "outputs written", old_key->outputs_written,
-                      key->outputs_written);
-   found |= key_debug(brw, "patch outputs written", old_key->patch_outputs_written,
-                      key->patch_outputs_written);
-   found |= key_debug(brw, "TES primitive mode", old_key->tes_primitive_mode,
-                      key->tes_primitive_mode);
-   found |= key_debug(brw, "quads and equal_spacing workaround",
-                      old_key->quads_workaround, key->quads_workaround);
-   found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
-
-   if (!found) {
-      perf_debug("  Something else\n");
-   }
-}
-
 static bool
 brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
                      struct brw_program *tep, struct brw_tcs_prog_key *key)
@@ -161,7 +126,8 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
    if (unlikely(brw->perf_debug)) {
       if (tcp) {
          if (tcp->compiled_once) {
-            brw_tcs_debug_recompile(brw, &tcp->program, key);
+            brw_debug_recompile(brw, MESA_SHADER_TESS_CTRL, tcp->program.Id,
+                                key->program_string_id, key);
          }
          tcp->compiled_once = true;
       }

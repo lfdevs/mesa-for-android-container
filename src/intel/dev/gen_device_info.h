@@ -46,6 +46,7 @@ struct drm_i915_query_topology_info;
 struct gen_device_info
 {
    int gen; /**< Generation number: 4, 5, 6, 7, ... */
+   int revision;
    int gt;
 
    bool is_g4x;
@@ -273,6 +274,13 @@ void gen_device_info_update_from_masks(struct gen_device_info *devinfo,
 /* Used with DRM_IOCTL_I915_QUERY & DRM_I915_QUERY_TOPOLOGY_INFO. */
 void gen_device_info_update_from_topology(struct gen_device_info *devinfo,
                                           const struct drm_i915_query_topology_info *topology);
+
+static inline uint64_t
+gen_device_info_timebase_scale(const struct gen_device_info *devinfo,
+                               uint64_t gpu_timestamp)
+{
+   return (1000000000ull * gpu_timestamp) / devinfo->timestamp_frequency;
+}
 
 #ifdef __cplusplus
 }

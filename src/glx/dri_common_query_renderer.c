@@ -25,7 +25,7 @@
 
 #include "glxclient.h"
 #include "glx_error.h"
-#include "dri_interface.h"
+#include "GL/internal/dri_interface.h"
 #include "dri2_priv.h"
 #if defined(HAVE_DRI3)
 #include "dri3_priv.h"

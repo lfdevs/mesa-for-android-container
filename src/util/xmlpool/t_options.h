@@ -264,6 +264,11 @@ DRI_CONF_OPT_BEGIN_B(allow_rgb10_configs, def) \
 DRI_CONF_DESC(en,gettext("Allow exposure of visuals and fbconfigs with rgb10a2 formats")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_ALLOW_RGB565_CONFIGS(def) \
+DRI_CONF_OPT_BEGIN_B(allow_rgb565_configs, def) \
+DRI_CONF_DESC(en,gettext("Allow exposure of visuals and fbconfigs with rgb565 formats")) \
+DRI_CONF_OPT_END
+
 /**
  * \brief Initialization configuration options
  */
@@ -319,6 +324,16 @@ DRI_CONF_OPT_BEGIN(csmt_force, int, def) \
         DRI_CONF_DESC(en,gettext("If set to 1, force gallium nine CSMT. If set to 0, disable it. By default (-1) CSMT is enabled on known thread-safe drivers.")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_NINE_DYNAMICTEXTUREWORKAROUND(def) \
+DRI_CONF_OPT_BEGIN_B(dynamic_texture_workaround, def) \
+        DRI_CONF_DESC(en,gettext("If set to true, use a ram intermediate buffer for dynamic textures. Increases ram usage, which can cause out of memory issues, but can fix glitches for some games.")) \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_NINE_SHADERINLINECONSTANTS(def) \
+DRI_CONF_OPT_BEGIN_B(shader_inline_constants, def) \
+        DRI_CONF_DESC(en,gettext("If set to true, recompile shaders with integer or boolean constants when the values are known. Can cause stutter, but can increase slightly performance.")) \
+DRI_CONF_OPT_END
+
 /**
  * \brief radeonsi specific configuration options
  */
@@ -338,17 +353,8 @@ DRI_CONF_OPT_BEGIN_B(radeonsi_commutative_blend_add, def) \
         DRI_CONF_DESC(en,gettext("Commutative additive blending optimizations (may cause rendering errors)")) \
 DRI_CONF_OPT_END
 
-#define DRI_CONF_RADEONSI_CLEAR_DB_CACHE_BEFORE_CLEAR(def) \
-DRI_CONF_OPT_BEGIN_B(radeonsi_clear_db_cache_before_clear, def) \
-        DRI_CONF_DESC(en,"Clear DB cache before fast depth clear") \
-DRI_CONF_OPT_END
-
 #define DRI_CONF_RADEONSI_ZERO_ALL_VRAM_ALLOCS(def) \
 DRI_CONF_OPT_BEGIN_B(radeonsi_zerovram, def) \
         DRI_CONF_DESC(en,"Zero all vram allocations") \
 DRI_CONF_OPT_END
 
-#define DRI_CONF_RADEONSI_ENABLE_NIR(def) \
-DRI_CONF_OPT_BEGIN_B(radeonsi_enable_nir, def) \
-        DRI_CONF_DESC(en,gettext("Enable NIR")) \
-DRI_CONF_OPT_END

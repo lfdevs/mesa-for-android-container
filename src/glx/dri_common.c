@@ -427,6 +427,7 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
 {
    unsigned i;
    bool got_profile = false;
+   int no_error = 0;
    uint32_t profile;
 
    *major_ver = 1;
@@ -458,6 +459,9 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
 	 break;
       case GLX_CONTEXT_FLAGS_ARB:
 	 *flags = attribs[i * 2 + 1];
+	 break;
+      case GLX_CONTEXT_OPENGL_NO_ERROR_ARB:
+	 no_error = attribs[i * 2 + 1];
 	 break;
       case GLX_CONTEXT_PROFILE_MASK_ARB:
 	 profile = attribs[i * 2 + 1];
@@ -500,6 +504,10 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
       }
    }
 
+   if (no_error) {
+      *flags |= __DRI_CTX_FLAG_NO_ERROR;
+   }
+
    if (!got_profile) {
       if (*major_ver > 3 || (*major_ver == 3 && *minor_ver >= 2))
 	 *api = __DRI_API_OPENGL_CORE;
@@ -540,7 +548,8 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
    /* Unknown flag value.
     */
    if (*flags & ~(__DRI_CTX_FLAG_DEBUG | __DRI_CTX_FLAG_FORWARD_COMPATIBLE
-                  | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS)) {
+                  | __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS
+                  | __DRI_CTX_FLAG_NO_ERROR)) {
       *error = __DRI_CTX_ERROR_UNKNOWN_FLAG;
       return false;
    }
@@ -562,6 +571,47 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
    }
 
    *error = __DRI_CTX_ERROR_SUCCESS;
+   return true;
+}
+
+_X_HIDDEN bool
+dri2_check_no_error(uint32_t flags, struct glx_context *share_context,
+                    int major, unsigned *error)
+{
+   Bool noError = flags & __DRI_CTX_FLAG_NO_ERROR;
+
+   /* The KHR_no_error specs say:
+    *
+    *    Requires OpenGL ES 2.0 or OpenGL 2.0.
+    */
+   if (noError && major < 2) {
+      *error = __DRI_CTX_ERROR_UNKNOWN_ATTRIBUTE;
+      return false;
+   }
+
+   /* The GLX_ARB_create_context_no_error specs say:
+    *
+    *    BadMatch is generated if the value of GLX_CONTEXT_OPENGL_NO_ERROR_ARB
+    *    used to create <share_context> does not match the value of
+    *    GLX_CONTEXT_OPENGL_NO_ERROR_ARB for the context being created.
+    */
+   if (share_context && !!share_context->noError != !!noError) {
+      *error = __DRI_CTX_ERROR_BAD_FLAG;
+      return false;
+   }
+
+   /* The GLX_ARB_create_context_no_error specs say:
+    *
+    *    BadMatch is generated if the GLX_CONTEXT_OPENGL_NO_ERROR_ARB is TRUE at
+    *    the same time as a debug or robustness context is specified.
+    *
+    */
+   if (noError && ((flags & __DRI_CTX_FLAG_DEBUG) ||
+                   (flags & __DRI_CTX_FLAG_ROBUST_BUFFER_ACCESS))) {
+      *error = __DRI_CTX_ERROR_BAD_FLAG;
+      return false;
+   }
+
    return true;
 }
 

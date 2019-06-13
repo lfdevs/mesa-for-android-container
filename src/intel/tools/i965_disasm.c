@@ -29,8 +29,6 @@
 #include "compiler/brw_eu.h"
 #include "dev/gen_device_info.h"
 
-uint64_t INTEL_DEBUG;
-
 /* Return size of file in bytes pointed by fp */
 static size_t
 i965_disasm_get_file_size(FILE *fp)

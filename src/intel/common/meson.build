@@ -23,8 +23,6 @@
 files_libintel_common = files(
   'gen_clflush.h',
   'gen_batch_decoder.c',
-  'gen_debug.c',
-  'gen_debug.h',
   'gen_decoder.c',
   'gen_decoder.h',
   'gen_disasm.c',
@@ -45,3 +43,23 @@ libintel_common = static_library(
   link_with : [libisl],
   dependencies : [dep_expat, dep_libdrm, dep_thread, idep_genxml],
 )
+
+install_intel_gpu_tests = get_option('install-intel-gpu-tests')
+
+if install_intel_gpu_tests
+  foreach g : [['70', 'gen7'], ['75', 'hsw'], ['80', 'gen8'],
+               ['90', 'gen9'], ['110', 'gen11']]
+    executable(
+      'intel_@0@_mi_builder_test'.format(g[1]),
+      files('tests/gen_mi_builder_test.cpp'),
+      cpp_args : [
+        cpp_vis_args, cpp_msvc_compat_args,
+        '-DGEN_VERSIONx10=@0@'.format(g[0])
+      ],
+      include_directories : [inc_common, inc_intel],
+      link_with : [libintel_dev, libmesa_util],
+      dependencies : [dep_libdrm, dep_thread, idep_gtest, idep_genxml],
+      install : install_intel_gpu_tests,
+    )
+  endforeach
+endif

@@ -140,7 +140,8 @@ struct draw_vertex_shader {
                        const unsigned const_size[PIPE_MAX_CONSTANT_BUFFERS],
 		       unsigned count,
 		       unsigned input_stride,
-		       unsigned output_stride );
+		       unsigned output_stride,
+		       const unsigned *fetch_elts);
 
 
    void (*delete)( struct draw_vertex_shader * );

@@ -5,6 +5,8 @@
 # Uncomment this to turn on verbose mode.
 #export DH_VERBOSE=1
 
+include /usr/share/dpkg/pkg-info.mk
+
 DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
 DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 DEB_HOST_ARCH_OS   ?= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
@@ -56,7 +58,7 @@ else
 
 	# etnaviv, kmsro, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += etnaviv, kmsro, tegra, vc4, v3d,
+		GALLIUM_DRIVERS += etnaviv, kmsro, lima, panfrost, tegra, vc4, v3d,
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
@@ -76,6 +78,7 @@ else
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))
 	DRI_DRIVERS += i915, i965,
+	GALLIUM_DRIVERS += iris,
   endif
 
 	DRI_DRIVERS += r200, r100,
@@ -157,9 +160,8 @@ override_dh_clean:
 	rm -rf src/egl/generate/*.pyc src/egl/generate/__pycache__/
 	rm -rf src/gallium/auxiliary/util/*.pyc src/gallium/auxiliary/util/__pycache__/
 	rm -rf src/intel/vulkan/*.pyc src/intel/vulkan/__pycache__/
-	rm -rf src/mapi/glapi/gen/*.pyc src/mapi/glapi/gen/__pycache__/
+	rm -rf src/mapi/glapi/gen/*.pyc src/mapi/glapi/gen/__pycache__/ src/mapi/new/__pycache__/
 	rm -rf src/mesa/main/*.pyc src/mesa/main/__pycache__/
-
 	dh_clean
 
 override_dh_auto_configure:
@@ -191,9 +193,6 @@ override_dh_install:
 	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
-
-	# GLESv2 libs still get built for some reason
-	rm debian/tmp/usr/lib/*/libGLESv2*
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/
@@ -239,7 +238,6 @@ override_dh_makeshlibs:
 		--buildsystem=meson
 
 # For maintainer use only, generate a tarball:
-gentarball: SOURCE=mesa
-gentarball: UV=$(shell dpkg-parsechangelog|awk '/^Version:/ {print $$2}'|sed 's/-.*$$//')
 gentarball:
-	git archive --format=tar upstream-experimental --prefix=$(SOURCE)-$(UV)/ | gzip -9 > ../$(SOURCE)_$(UV).orig.tar.gz
+	git archive --format=tar upstream-experimental --prefix=$(DEB_SOURCE)-$(DEB_VERSION_UPSTREAM)/ \
+		| gzip -9 > ../$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM).orig.tar.gz

@@ -36,7 +36,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define __R200_CONTEXT_H__
 
 #include "tnl/t_vertex.h"
-#include "drm.h"
+#include "drm-uapi/drm.h"
 #include "radeon_drm.h"
 #include "dri_util.h"
 

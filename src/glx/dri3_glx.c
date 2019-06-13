@@ -259,6 +259,10 @@ dri3_create_context_attribs(struct glx_screen *base,
                                  &reset, &release, error))
       goto error_exit;
 
+   if (!dri2_check_no_error(flags, shareList, major_ver, error)) {
+      goto error_exit;
+   }
+
    /* Check the renderType value */
    if (!validate_renderType_against_config(config_base, render_type))
        goto error_exit;
@@ -303,6 +307,9 @@ dri3_create_context_attribs(struct glx_screen *base,
        * GLX_CONTEXT_*_BIT values.
        */
       ctx_attribs[num_ctx_attribs++] = flags;
+
+      if (flags & __DRI_CTX_FLAG_NO_ERROR)
+         pcp->base.noError = GL_TRUE;
    }
 
    pcp->driContext =
@@ -778,6 +785,10 @@ dri3_bind_extensions(struct dri3_screen *psc, struct glx_display * priv,
       if (strcmp(extensions[i]->name, __DRI2_ROBUSTNESS) == 0)
          __glXEnableDirectExtension(&psc->base,
                                     "GLX_ARB_create_context_robustness");
+
+      if (strcmp(extensions[i]->name, __DRI2_NO_ERROR) == 0)
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_ARB_create_context_no_error");
 
       if (strcmp(extensions[i]->name, __DRI2_RENDERER_QUERY) == 0) {
          psc->rendererQuery = (__DRI2rendererQueryExtension *) extensions[i];

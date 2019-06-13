@@ -2,7 +2,7 @@
 #include "i915_drm_winsys.h"
 #include "util/u_memory.h"
 
-#include "i915_drm.h"
+#include "drm-uapi/i915_drm.h"
 #include "i915/i915_debug.h"
 #include <xf86drm.h>
 #include <stdio.h>

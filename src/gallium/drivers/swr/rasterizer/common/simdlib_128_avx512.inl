@@ -276,7 +276,7 @@ static SIMDINLINE Integer SIMDCALL
     return __conv(_mm512_maskz_loadu_epi32(__mmask16(0xf), p));
 }
 
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         i32gather_ps(float const* p, Integer idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
@@ -285,7 +285,7 @@ static SIMDINLINE Float SIMDCALL
 }
 
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         mask_i32gather_ps(Float old, float const* p, Integer idx, Float mask)
 {

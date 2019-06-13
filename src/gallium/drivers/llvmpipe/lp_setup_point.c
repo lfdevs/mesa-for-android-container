@@ -251,7 +251,7 @@ setup_point_coefficients( struct lp_setup_context *setup,
              * PIPE_MAX_SHADER_OUTPUTS bits.
              */
             if (semantic_index < PIPE_MAX_SHADER_OUTPUTS &&
-                (setup->sprite_coord_enable & (1 << semantic_index))) {
+                (setup->sprite_coord_enable & (1u << semantic_index))) {
                for (i = 0; i < NUM_CHANNELS; i++) {
                   if (usage_mask & (1 << i)) {
                      texcoord_coef(setup, info, slot + 1, i,

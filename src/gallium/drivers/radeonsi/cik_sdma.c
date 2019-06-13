@@ -496,7 +496,8 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 	    dst->flags & PIPE_RESOURCE_FLAG_SPARSE)
 		goto fallback;
 
-	if (dst->target == PIPE_BUFFER && src->target == PIPE_BUFFER) {
+	/* If src is a buffer and dst is a texture, we are uploading metadata. */
+	if (src->target == PIPE_BUFFER) {
 		cik_sdma_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
 		return;
 	}

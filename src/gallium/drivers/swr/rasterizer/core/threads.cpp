@@ -421,9 +421,9 @@ INLINE void UpdateClientStats(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CON
     for (uint32_t i = 0; i < pContext->NumWorkerThreads; ++i)
     {
         stats.DepthPassCount += dynState.pStats[i].DepthPassCount;
-
         stats.PsInvocations += dynState.pStats[i].PsInvocations;
         stats.CsInvocations += dynState.pStats[i].CsInvocations;
+
     }
 
 
@@ -439,6 +439,10 @@ INLINE void ExecuteCallbacks(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONT
         pDC->retireCallback.pfnCallbackFunc(pDC->retireCallback.userData,
                                             pDC->retireCallback.userData2,
                                             pDC->retireCallback.userData3);
+
+        // Callbacks to external code *could* change floating point control state
+        // Reset our optimal flags
+        SetOptimalVectorCSR();
     }
 }
 
@@ -870,8 +874,7 @@ DWORD workerThreadMain(LPVOID pData)
     uint32_t numaNode = pThreadData->numaId - pContext->threadInfo.BASE_NUMA_NODE;
     uint32_t numaMask = pContext->threadPool.numaMask;
 
-    // flush denormals to 0
-    _mm_setcsr(_mm_getcsr() | _MM_FLUSH_ZERO_ON | _MM_DENORMALS_ZERO_ON);
+    SetOptimalVectorCSR();
 
     // Track tiles locked by other threads. If we try to lock a macrotile and find its already
     // locked then we'll add it to this list so that we don't try and lock it again.

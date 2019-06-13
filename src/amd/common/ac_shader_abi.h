@@ -32,11 +32,16 @@ struct nir_variable;
 
 #define AC_LLVM_MAX_OUTPUTS (VARYING_SLOT_VAR31 + 1)
 
+#define AC_MAX_INLINE_PUSH_CONSTS 8
+
 enum ac_descriptor_type {
 	AC_DESC_IMAGE,
 	AC_DESC_FMASK,
 	AC_DESC_SAMPLER,
 	AC_DESC_BUFFER,
+	AC_DESC_PLANE_0,
+	AC_DESC_PLANE_1,
+	AC_DESC_PLANE_2,
 };
 
 /* Document the shader ABI during compilation. This is what allows radeonsi and
@@ -66,6 +71,9 @@ struct ac_shader_abi {
 
 	/* Vulkan only */
 	LLVMValueRef push_constants;
+	LLVMValueRef inline_push_consts[AC_MAX_INLINE_PUSH_CONSTS];
+	unsigned num_inline_push_consts;
+	unsigned base_inline_push_consts;
 	LLVMValueRef view_index;
 
 	LLVMValueRef outputs[AC_LLVM_MAX_OUTPUTS * 4];
@@ -195,6 +203,7 @@ struct ac_shader_abi {
 	/* Whether to workaround GFX9 ignoring the stride for the buffer size if IDXEN=0
 	* and LLVM optimizes an indexed load with constant index to IDXEN=0. */
 	bool gfx9_stride_size_workaround;
+	bool gfx9_stride_size_workaround_for_atomic;
 };
 
 #endif /* AC_SHADER_ABI_H */

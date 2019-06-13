@@ -282,6 +282,8 @@ struct nvc0_context {
    uint16_t images_valid[6];
 
    struct util_dynarray global_residents;
+
+   uint64_t compute_invocations;
 };
 
 static inline struct nvc0_context *
@@ -442,5 +444,7 @@ void nve4_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 /* nvc0_compute.c */
 void nvc0_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 void nvc0_compute_validate_globals(struct nvc0_context *);
+void nvc0_update_compute_invocations_counter(struct nvc0_context *nvc0,
+                                             const struct pipe_grid_info *info);
 
 #endif

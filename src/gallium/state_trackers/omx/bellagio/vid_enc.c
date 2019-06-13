@@ -161,6 +161,8 @@ static OMX_ERRORTYPE vid_enc_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
    if (!priv->s_pipe)
       return OMX_ErrorInsufficientResources;
 
+   enc_InitCompute_common(priv);
+
    if (!vl_compositor_init(&priv->compositor, priv->s_pipe)) {
       priv->s_pipe->destroy(priv->s_pipe);
       priv->s_pipe = NULL;
@@ -267,6 +269,7 @@ static OMX_ERRORTYPE vid_enc_Destructor(OMX_COMPONENTTYPE *comp)
    if (priv->s_pipe) {
       vl_compositor_cleanup_state(&priv->cstate);
       vl_compositor_cleanup(&priv->compositor);
+      enc_ReleaseCompute_common(priv);
       priv->s_pipe->destroy(priv->s_pipe);
    }
 

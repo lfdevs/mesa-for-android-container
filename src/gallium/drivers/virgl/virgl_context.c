@@ -70,15 +70,19 @@ static void virgl_attach_res_framebuffer(struct virgl_context *vctx)
    surf = vctx->framebuffer.zsbuf;
    if (surf) {
       res = virgl_resource(surf->texture);
-      if (res)
+      if (res) {
          vws->emit_res(vws, vctx->cbuf, res->hw_res, FALSE);
+         virgl_resource_dirty(res, surf->u.tex.level);
+      }
    }
    for (i = 0; i < vctx->framebuffer.nr_cbufs; i++) {
       surf = vctx->framebuffer.cbufs[i];
       if (surf) {
          res = virgl_resource(surf->texture);
-         if (res)
+         if (res) {
             vws->emit_res(vws, vctx->cbuf, res->hw_res, FALSE);
+            virgl_resource_dirty(res, surf->u.tex.level);
+         }
       }
    }
 }
@@ -234,7 +238,7 @@ static struct pipe_surface *virgl_create_surface(struct pipe_context *ctx,
           (util_format_is_srgb(templ->format) ==
            util_format_is_srgb(resource->format)));
 
-   res->clean = FALSE;
+   virgl_resource_dirty(res, 0);
    handle = virgl_object_assign_handle();
    pipe_reference_init(&surf->base.reference, 1);
    pipe_resource_reference(&surf->base.texture, resource);
@@ -462,6 +466,8 @@ static void virgl_hw_set_vertex_buffers(struct virgl_context *vctx)
          virgl_encoder_set_vertex_buffers(vctx, vctx->num_vertex_buffers, vctx->vertex_buffer);
 
       virgl_attach_res_vertex_buffers(vctx);
+
+      vctx->vertex_array_dirty = FALSE;
    }
 }
 
@@ -520,12 +526,20 @@ void virgl_transfer_inline_write(struct pipe_context *ctx,
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_screen *vs = virgl_screen(ctx->screen);
    struct virgl_resource *grres = virgl_resource(res);
+   struct virgl_transfer trans = { 0 };
 
-   grres->clean = FALSE;
+   trans.base.resource = res;
+   trans.base.level = level;
+   trans.base.usage = usage;
+   trans.base.box = *box;
+   trans.base.stride = stride;
+   trans.base.layer_stride = layer_stride;
+   trans.offset = box->x;
 
-   if (virgl_res_needs_flush_wait(vctx, grres, usage)) {
+   virgl_resource_dirty(grres, 0);
+
+   if (virgl_res_needs_flush(vctx, &trans)) {
       ctx->flush(ctx, NULL, 0);
-
       vs->vws->resource_wait(vs->vws, grres->hw_res);
    }
 
@@ -720,13 +734,11 @@ static void virgl_draw_vbo(struct pipe_context *ctx,
            ib.offset = info.start * ib.index_size;
 
            if (ib.user_buffer) {
-                   u_upload_data(vctx->uploader, 0, info.count * ib.index_size, 256,
+                   u_upload_data(vctx->uploader, 0, info.count * ib.index_size, 4,
                                  ib.user_buffer, &ib.offset, &ib.buffer);
                    ib.user_buffer = NULL;
            }
    }
-
-   u_upload_unmap(vctx->uploader);
 
    vctx->num_draws++;
    virgl_hw_set_vertex_buffers(vctx);
@@ -743,21 +755,32 @@ static void virgl_flush_eq(struct virgl_context *ctx, void *closure,
 			   struct pipe_fence_handle **fence)
 {
    struct virgl_screen *rs = virgl_screen(ctx->base.screen);
-   int out_fence_fd = -1;
+
+   /* skip empty cbuf */
+   if (ctx->cbuf->cdw == ctx->cbuf_initial_cdw &&
+       ctx->queue.num_dwords == 0 &&
+       !fence)
+      return;
+
+   if (ctx->num_draws)
+      u_upload_unmap(ctx->uploader);
 
    /* send the buffer to the remote side for decoding */
-   ctx->num_transfers = ctx->num_draws = 0;
+   ctx->num_draws = ctx->num_compute = 0;
 
-   rs->vws->submit_cmd(rs->vws, ctx->cbuf, ctx->cbuf->in_fence_fd,
-                       ctx->cbuf->needs_out_fence_fd ? &out_fence_fd : NULL);
+   virgl_transfer_queue_clear(&ctx->queue, ctx->cbuf);
+   rs->vws->submit_cmd(rs->vws, ctx->cbuf, fence);
 
-   if (fence)
-      *fence = rs->vws->cs_create_fence(rs->vws, out_fence_fd);
+   /* Reserve some space for transfers. */
+   if (ctx->encoded_transfers)
+      ctx->cbuf->cdw = VIRGL_MAX_TBUF_DWORDS;
 
    virgl_encoder_set_sub_ctx(ctx, ctx->hw_sub_ctx_id);
 
    /* add back current framebuffer resources to reference list? */
    virgl_reemit_res(ctx);
+
+   ctx->cbuf_initial_cdw = ctx->cbuf->cdw;
 }
 
 static void virgl_flush_from_st(struct pipe_context *ctx,
@@ -766,16 +789,7 @@ static void virgl_flush_from_st(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
 
-   if (flags & PIPE_FLUSH_FENCE_FD)
-       vctx->cbuf->needs_out_fence_fd = true;
-
    virgl_flush_eq(vctx, vctx, fence);
-
-   if (vctx->cbuf->in_fence_fd != -1) {
-      close(vctx->cbuf->in_fence_fd);
-      vctx->cbuf->in_fence_fd = -1;
-   }
-   vctx->cbuf->needs_out_fence_fd = false;
 }
 
 static struct pipe_sampler_view *virgl_create_sampler_view(struct pipe_context *ctx,
@@ -974,7 +988,7 @@ static void virgl_resource_copy_region(struct pipe_context *ctx,
    struct virgl_resource *dres = virgl_resource(dst);
    struct virgl_resource *sres = virgl_resource(src);
 
-   dres->clean = FALSE;
+   virgl_resource_dirty(dres, dst_level);
    virgl_encode_resource_copy_region(vctx, dres,
                                     dst_level, dstx, dsty, dstz,
                                     sres, src_level,
@@ -999,7 +1013,7 @@ static void virgl_blit(struct pipe_context *ctx,
           (util_format_is_srgb(blit->dst.resource->format) ==
             util_format_is_srgb(blit->dst.format)));
 
-   dres->clean = FALSE;
+   virgl_resource_dirty(dres, blit->dst.level);
    virgl_encode_blit(vctx, dres, sres,
                     blit);
 }
@@ -1029,7 +1043,8 @@ static void virgl_set_hw_atomic_buffers(struct pipe_context *ctx,
 static void virgl_set_shader_buffers(struct pipe_context *ctx,
                                      enum pipe_shader_type shader,
                                      unsigned start_slot, unsigned count,
-                                     const struct pipe_shader_buffer *buffers)
+                                     const struct pipe_shader_buffer *buffers,
+                                     unsigned writable_bitmask)
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_screen *rs = virgl_screen(ctx->screen);
@@ -1157,6 +1172,7 @@ static void virgl_launch_grid(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
    virgl_encode_launch_grid(vctx, info);
+   vctx->num_compute++;
 }
 
 static void
@@ -1174,6 +1190,7 @@ virgl_context_destroy( struct pipe_context *ctx )
    if (vctx->uploader)
       u_upload_destroy(vctx->uploader);
    util_primconvert_destroy(vctx->primconvert);
+   virgl_transfer_queue_fini(&vctx->queue);
 
    slab_destroy_child(&vctx->transfer_pool);
    FREE(vctx);
@@ -1226,7 +1243,7 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
    vctx = CALLOC_STRUCT(virgl_context);
    const char *host_debug_flagstring;
 
-   vctx->cbuf = rs->vws->cmd_buf_create(rs->vws);
+   vctx->cbuf = rs->vws->cmd_buf_create(rs->vws, VIRGL_MAX_CMDBUF_DWORDS);
    if (!vctx->cbuf) {
       FREE(vctx);
       return NULL;
@@ -1317,6 +1334,13 @@ struct pipe_context *virgl_context_create(struct pipe_screen *pscreen,
    virgl_init_so_functions(vctx);
 
    slab_create_child(&vctx->transfer_pool, &rs->transfer_pool);
+   virgl_transfer_queue_init(&vctx->queue, rs, &vctx->transfer_pool);
+   vctx->encoded_transfers = (rs->vws->supports_encoded_transfers &&
+                       (rs->caps.caps.v2.capability_bits & VIRGL_CAP_TRANSFER));
+
+   /* Reserve some space for transfers. */
+   if (vctx->encoded_transfers)
+      vctx->cbuf->cdw = VIRGL_MAX_TBUF_DWORDS;
 
    vctx->primconvert = util_primconvert_create(&vctx->base, rs->caps.caps.v1.prim_mask);
    vctx->uploader = u_upload_create(&vctx->base, 1024 * 1024,

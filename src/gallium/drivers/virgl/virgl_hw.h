@@ -233,6 +233,16 @@ enum virgl_formats {
 #define VIRGL_CAP_TGSI_COMPONENTS      (1 << 13)
 #define VIRGL_CAP_GUEST_MAY_INIT_LOG   (1 << 14)
 #define VIRGL_CAP_SRGB_WRITE_CONTROL   (1 << 15)
+#define VIRGL_CAP_QBO                  (1 << 16)
+#define VIRGL_CAP_TRANSFER             (1 << 17)
+#define VIRGL_CAP_FBO_MIXED_COLOR_FORMATS (1 << 18)
+#define VIRGL_CAP_FAKE_FP64            (1 << 19)
+#define VIRGL_CAP_BIND_COMMAND_ARGS    (1 << 20)
+#define VIRGL_CAP_MULTI_DRAW_INDIRECT  (1 << 21)
+#define VIRGL_CAP_INDIRECT_PARAMS      (1 << 22)
+#define VIRGL_CAP_TRANSFORM_FEEDBACK3  (1 << 23)
+#define VIRGL_CAP_INDIRECT_INPUT_ADDR  (1 << 25)
+
 
 /* virgl bind flags - these are compatible with mesa 10.5 gallium.
  * but are fixed, no other should be passed to virgl either.
@@ -244,8 +254,10 @@ enum virgl_formats {
 #define VIRGL_BIND_INDEX_BUFFER  (1 << 5)
 #define VIRGL_BIND_CONSTANT_BUFFER (1 << 6)
 #define VIRGL_BIND_DISPLAY_TARGET (1 << 7)
+#define VIRGL_BIND_COMMAND_ARGS  (1 << 8)
 #define VIRGL_BIND_STREAM_OUTPUT (1 << 11)
 #define VIRGL_BIND_SHADER_BUFFER (1 << 14)
+#define VIRGL_BIND_QUERY_BUFFER  (1 << 15)
 #define VIRGL_BIND_CURSOR        (1 << 16)
 #define VIRGL_BIND_CUSTOM        (1 << 17)
 #define VIRGL_BIND_SCANOUT       (1 << 18)
@@ -358,6 +370,8 @@ struct virgl_caps_v2 {
         uint32_t max_atomic_counter_buffers[6];
         uint32_t max_combined_atomic_counters;
         uint32_t max_combined_atomic_counter_buffers;
+        uint32_t host_feature_check_version;
+        struct virgl_supported_format_mask supported_readback_formats;
 };
 
 union virgl_caps {

@@ -29,7 +29,7 @@
 #include "glxclient.h"
 #include "glx_error.h"
 #include "dri2.h"
-#include "dri_interface.h"
+#include "GL/internal/dri_interface.h"
 #include "dri2_priv.h"
 
 struct attribute_test_vector {

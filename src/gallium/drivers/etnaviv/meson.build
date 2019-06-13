@@ -44,6 +44,8 @@ files_etnaviv = files(
   'etnaviv_disasm.h',
   'etnaviv_emit.c',
   'etnaviv_emit.h',
+  'etnaviv_etc2.c',
+  'etnaviv_etc2.h',
   'etnaviv_fence.c',
   'etnaviv_fence.h',
   'etnaviv_format.c',

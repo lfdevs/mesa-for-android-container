@@ -87,7 +87,7 @@ static void
 emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 		struct pipe_surface *psurf)
 {
-	struct fd_ringbuffer *ring = batch->gmem;
+	struct fd_ringbuffer *ring = batch->tile_fini;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	uint32_t swap = fmt2swap(psurf->format);
 	struct fd_resource_slice *slice =
@@ -135,13 +135,17 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 }
 
 static void
-fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
+prepare_tile_fini_ib(struct fd_batch *batch)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
 	struct fd_gmem_stateobj *gmem = &ctx->gmem;
-	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+	struct fd_ringbuffer *ring;
+
+	batch->tile_fini = fd_submit_new_ringbuffer(batch->submit, 0x1000,
+			FD_RINGBUFFER_STREAMING);
+	ring = batch->tile_fini;
 
 	fd2_emit_vertex_bufs(ring, 0x9c, (struct fd2_vertex_buf[]) {
 			{ .prsc = fd2_ctx->solid_vertexbuf, .size = 36 },
@@ -188,19 +192,14 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 5);
 	OUT_RING(ring, CP_REG(REG_A2XX_PA_CL_VPORT_XSCALE));
-	OUT_RING(ring, fui((float) tile->bin_w / 2.0)); /* XSCALE */
-	OUT_RING(ring, fui((float) tile->bin_w / 2.0)); /* XOFFSET */
-	OUT_RING(ring, fui((float) tile->bin_h / 2.0)); /* YSCALE */
-	OUT_RING(ring, fui((float) tile->bin_h / 2.0)); /* YOFFSET */
+	OUT_RING(ring, fui((float) gmem->bin_w / 2.0)); /* XSCALE */
+	OUT_RING(ring, fui((float) gmem->bin_w / 2.0)); /* XOFFSET */
+	OUT_RING(ring, fui((float) gmem->bin_h / 2.0)); /* YSCALE */
+	OUT_RING(ring, fui((float) gmem->bin_h / 2.0)); /* YOFFSET */
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_MODECONTROL));
 	OUT_RING(ring, A2XX_RB_MODECONTROL_EDRAM_MODE(EDRAM_COPY));
-
-	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
-	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_DEST_OFFSET));
-	OUT_RING(ring, A2XX_RB_COPY_DEST_OFFSET_X(tile->xoff) |
-			A2XX_RB_COPY_DEST_OFFSET_Y(tile->yoff));
 
 	if (batch->resolve & (FD_BUFFER_DEPTH | FD_BUFFER_STENCIL))
 		emit_gmem2mem_surf(batch, gmem->zsbuf_base[0], pfb->zsbuf);
@@ -217,6 +216,12 @@ fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
 		OUT_RING(ring, CP_REG(REG_A2XX_VGT_VERTEX_REUSE_BLOCK_CNTL));
 		OUT_RING(ring, 0x0000003b);
 	}
+}
+
+static void
+fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
+{
+	batch->ctx->emit_ib(batch->gmem, batch->tile_fini);
 }
 
 /* transfer from system memory to gmem */
@@ -328,7 +333,7 @@ fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLORCONTROL));
-	OUT_RING(ring, A2XX_RB_COLORCONTROL_ALPHA_FUNC(PIPE_FUNC_ALWAYS) |
+	OUT_RING(ring, A2XX_RB_COLORCONTROL_ALPHA_FUNC(FUNC_ALWAYS) |
 			A2XX_RB_COLORCONTROL_BLEND_DISABLE |
 			A2XX_RB_COLORCONTROL_ROP_CODE(12) |
 			A2XX_RB_COLORCONTROL_DITHER_MODE(DITHER_DISABLE) |
@@ -483,6 +488,8 @@ fd2_emit_tile_init(struct fd_batch *batch)
 	uint32_t reg;
 
 	fd2_emit_restore(ctx, ring);
+
+	prepare_tile_fini_ib(batch);
 
 	OUT_PKT3(ring, CP_SET_CONSTANT, 4);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_SURFACE_INFO));
@@ -703,6 +710,12 @@ fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	OUT_RELOC(ring, fd_resource(fd2_ctx->solid_vertexbuf)->bo, 60, 0, 0);
 	OUT_RING(ring, A2XX_PA_SC_SCREEN_SCISSOR_BR_X(tile->bin_w) |
 			A2XX_PA_SC_SCREEN_SCISSOR_BR_Y(tile->bin_h));
+
+	/* set the copy offset for gmem2mem */
+	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
+	OUT_RING(ring, CP_REG(REG_A2XX_RB_COPY_DEST_OFFSET));
+	OUT_RING(ring, A2XX_RB_COPY_DEST_OFFSET_X(tile->xoff) |
+			A2XX_RB_COPY_DEST_OFFSET_Y(tile->yoff));
 
 	/* tile offset for gl_FragCoord on a20x (C64 in fragment shader) */
 	if (is_a20x(ctx->screen)) {

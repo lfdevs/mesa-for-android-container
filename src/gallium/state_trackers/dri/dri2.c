@@ -50,9 +50,7 @@
 #include "dri_drawable.h"
 #include "dri_query_renderer.h"
 
-#ifndef DRM_FORMAT_MOD_INVALID
-#define DRM_FORMAT_MOD_INVALID ((1ULL<<56) - 1)
-#endif
+#include "drm-uapi/drm_fourcc.h"
 
 struct dri2_buffer
 {
@@ -112,6 +110,8 @@ static const struct dri2_format_mapping dri2_format_table[] = {
         __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_NV12 },
       { __DRI_IMAGE_FOURCC_YUYV,          __DRI_IMAGE_FORMAT_YUYV,
         __DRI_IMAGE_COMPONENTS_Y_XUXV,    PIPE_FORMAT_YUYV },
+      { __DRI_IMAGE_FOURCC_UYVY,          __DRI_IMAGE_FORMAT_UYVY,
+        __DRI_IMAGE_COMPONENTS_Y_UXVX,    PIPE_FORMAT_UYVY },
 };
 
 static const struct dri2_format_mapping *
@@ -1908,8 +1908,6 @@ dri2_init_screen(__DRIscreen * sPriv)
    const __DRIconfig **configs;
    struct dri_screen *screen;
    struct pipe_screen *pscreen = NULL;
-   const struct drm_conf_ret *throttle_ret;
-   const struct drm_conf_ret *dmabuf_ret;
 
    screen = CALLOC_STRUCT(dri_screen);
    if (!screen)
@@ -1930,19 +1928,14 @@ dri2_init_screen(__DRIscreen * sPriv)
    if (!pscreen)
        goto release_pipe;
 
-   throttle_ret = pipe_loader_configuration(screen->dev, DRM_CONF_THROTTLE);
-   dmabuf_ret = pipe_loader_configuration(screen->dev, DRM_CONF_SHARE_FD);
-
-   if (throttle_ret && throttle_ret->val.val_int != -1) {
-      screen->throttling_enabled = TRUE;
-      screen->default_throttle_frames = throttle_ret->val.val_int;
-   }
+   screen->default_throttle_frames =
+      pscreen->get_param(pscreen, PIPE_CAP_MAX_FRAMES_IN_FLIGHT);
 
    if (pscreen->resource_create_with_modifiers)
       dri2ImageExtension.createImageWithModifiers =
          dri2_create_image_with_modifiers;
 
-   if (dmabuf_ret && dmabuf_ret->val.val_bool) {
+   if (pscreen->get_param(pscreen, PIPE_CAP_DMABUF)) {
       uint64_t cap;
 
       if (drmGetCap(sPriv->fd, DRM_CAP_PRIME, &cap) == 0 &&

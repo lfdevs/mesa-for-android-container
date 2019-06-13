@@ -17,6 +17,9 @@ extern int nouveau_mesa_debug;
 
 struct nouveau_bo;
 
+#define NOUVEAU_SHADER_CACHE_FLAGS_IR_TGSI 0 << 0
+#define NOUVEAU_SHADER_CACHE_FLAGS_IR_NIR  1 << 0
+
 struct nouveau_screen {
    struct pipe_screen base;
    struct nouveau_drm *drm;
@@ -64,6 +67,8 @@ struct nouveau_screen {
    } firmware_info;
 
    struct disk_cache *disk_shader_cache;
+
+   bool prefer_nir;
 
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
    union {

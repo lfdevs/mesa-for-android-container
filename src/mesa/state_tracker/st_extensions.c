@@ -76,8 +76,7 @@ static int _clamp(int a, int min, int max)
  * Note that we have to limit/clamp against Mesa's internal limits too.
  */
 void st_init_limits(struct pipe_screen *screen,
-                    struct gl_constants *c, struct gl_extensions *extensions,
-                    gl_api api)
+                    struct gl_constants *c, struct gl_extensions *extensions)
 {
    int supported_irs;
    unsigned sh;
@@ -259,7 +258,7 @@ void st_init_limits(struct pipe_screen *screen,
           */
          pc->MaxAtomicCounters = temp;
          pc->MaxAtomicBuffers = screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS);
-      } else {
+      } else if (pc->MaxShaderStorageBlocks) {
          pc->MaxAtomicCounters = MAX_ATOMIC_COUNTERS;
          /*
           * without separate atomic counters, reserve half of the available
@@ -326,8 +325,16 @@ void st_init_limits(struct pipe_screen *screen,
             screen->get_shader_param(screen, sh,
                                   PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT);
 
-      options->LowerCombinedClipCullDistance = true;
-      options->LowerBufferInterfaceBlocks = true;
+      if (!screen->get_param(screen, PIPE_CAP_NIR_COMPACT_ARRAYS))
+         options->LowerCombinedClipCullDistance = true;
+
+      bool prefer_nir = PIPE_SHADER_IR_NIR ==
+         screen->get_shader_param(screen, sh, PIPE_SHADER_CAP_PREFERRED_IR);
+
+      /* NIR can do the lowering on our behalf and we'll get better results
+       * because it can actually optimize SSBO access.
+       */
+      options->LowerBufferInterfaceBlocks = !prefer_nir;
    }
 
    c->MaxUserAssignableUniformLocations =
@@ -341,7 +348,8 @@ void st_init_limits(struct pipe_screen *screen,
       screen->get_param(screen, PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY);
    c->GLSLTessLevelsAsInputs =
       screen->get_param(screen, PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS);
-   c->LowerTessLevel = true;
+   c->LowerTessLevel =
+      !screen->get_param(screen, PIPE_CAP_NIR_COMPACT_ARRAYS);
    c->LowerCsDerivedVariables = true;
    c->PrimitiveRestartForPatches =
       screen->get_param(screen, PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES);
@@ -440,14 +448,8 @@ void st_init_limits(struct pipe_screen *screen,
    c->GLSLFrontFacingIsSysVal =
       screen->get_param(screen, PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL);
 
-   /* GL_ARB_get_program_binary
-    *
-    * The QT framework has a bug in their shader program cache, which is built
-    * on GL_ARB_get_program_binary. In an effort to allow them to fix the bug
-    * we don't enable more than 1 binary format for compatibility profiles.
-    */
-   if (api != API_OPENGL_COMPAT &&
-       screen->get_disk_shader_cache && screen->get_disk_shader_cache(screen))
+   /* GL_ARB_get_program_binary */
+   if (screen->get_disk_shader_cache && screen->get_disk_shader_cache(screen))
       c->NumProgramBinaryFormats = 1;
 
    c->MaxAtomicBufferBindings =
@@ -721,6 +723,7 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ARB_shader_clock),                 PIPE_CAP_TGSI_CLOCK                       },
       { o(ARB_shader_draw_parameters),       PIPE_CAP_DRAW_PARAMETERS                  },
       { o(ARB_shader_group_vote),            PIPE_CAP_TGSI_VOTE                        },
+      { o(EXT_shader_image_load_formatted),  PIPE_CAP_IMAGE_LOAD_FORMATTED             },
       { o(ARB_shader_stencil_export),        PIPE_CAP_SHADER_STENCIL_EXPORT            },
       { o(ARB_shader_texture_image_samples), PIPE_CAP_TGSI_TXQS                        },
       { o(ARB_shader_texture_lod),           PIPE_CAP_SM3                              },
@@ -762,7 +765,9 @@ void st_init_extensions(struct pipe_screen *screen,
       { o(ATI_meminfo),                      PIPE_CAP_QUERY_MEMORY_INFO                },
       { o(AMD_seamless_cubemap_per_texture), PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE    },
       { o(ATI_texture_mirror_once),          PIPE_CAP_TEXTURE_MIRROR_CLAMP             },
+      { o(INTEL_conservative_rasterization), PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE },
       { o(MESA_tile_raster_order),           PIPE_CAP_TILE_RASTER_ORDER                },
+      { o(NV_compute_shader_derivatives),    PIPE_CAP_COMPUTE_SHADER_DERIVATIVES       },
       { o(NV_conditional_render),            PIPE_CAP_CONDITIONAL_RENDER               },
       { o(NV_fill_rectangle),                PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE      },
       { o(NV_primitive_restart),             PIPE_CAP_PRIMITIVE_RESTART                },
@@ -817,6 +822,12 @@ void st_init_extensions(struct pipe_screen *screen,
           PIPE_FORMAT_R16G16B16A16_SNORM } },
    };
 
+   /* Required: render target, sampler, and blending */
+   static const struct st_extension_format_mapping rt_blendable[] = {
+      { { o(EXT_float_blend) },
+        { PIPE_FORMAT_R32G32B32A32_FLOAT } },
+   };
+
    /* Required: depth stencil and sampler support */
    static const struct st_extension_format_mapping depthstencil_mapping[] = {
       { { o(ARB_depth_buffer_float) },
@@ -844,6 +855,12 @@ void st_init_extensions(struct pipe_screen *screen,
           PIPE_FORMAT_DXT1_RGBA,
           PIPE_FORMAT_DXT3_RGBA,
           PIPE_FORMAT_DXT5_RGBA } },
+
+      { { o(EXT_texture_compression_s3tc_srgb) },
+        { PIPE_FORMAT_DXT1_SRGB,
+          PIPE_FORMAT_DXT1_SRGBA,
+          PIPE_FORMAT_DXT3_SRGBA,
+          PIPE_FORMAT_DXT5_SRGBA } },
 
       { { o(ARB_texture_compression_bptc) },
         { PIPE_FORMAT_BPTC_RGBA_UNORM,
@@ -929,6 +946,11 @@ void st_init_extensions(struct pipe_screen *screen,
         { PIPE_FORMAT_X24S8_UINT,
           PIPE_FORMAT_S8X24_UINT },
         GL_TRUE }, /* at least one format must be supported */
+
+      { { o(AMD_compressed_ATC_texture) },
+        { PIPE_FORMAT_ATC_RGB,
+          PIPE_FORMAT_ATC_RGBA_EXPLICIT,
+          PIPE_FORMAT_ATC_RGBA_INTERPOLATED } },
    };
 
    /* Required: vertex fetch support. */
@@ -1016,6 +1038,10 @@ void st_init_extensions(struct pipe_screen *screen,
    init_format_extensions(screen, extensions, rendertarget_mapping,
                           ARRAY_SIZE(rendertarget_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW);
+   init_format_extensions(screen, extensions, rt_blendable,
+                          ARRAY_SIZE(rt_blendable), PIPE_TEXTURE_2D,
+                          PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW |
+                          PIPE_BIND_BLENDABLE);
    init_format_extensions(screen, extensions, depthstencil_mapping,
                           ARRAY_SIZE(depthstencil_mapping), PIPE_TEXTURE_2D,
                           PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_SAMPLER_VIEW);
@@ -1031,6 +1057,8 @@ void st_init_extensions(struct pipe_screen *screen,
    consts->GLSLVersionCompat =
       screen->get_param(screen, PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY);
 
+   const unsigned ESSLVersion =
+      screen->get_param(screen, PIPE_CAP_ESSL_FEATURE_LEVEL);
    const unsigned GLSLVersion =
       api == API_OPENGL_COMPAT ? consts->GLSLVersionCompat :
                                  consts->GLSLVersion;
@@ -1052,6 +1080,13 @@ void st_init_extensions(struct pipe_screen *screen,
 
    consts->AllowGLSLCrossStageInterpolationMismatch = options->allow_glsl_cross_stage_interpolation_mismatch;
 
+   /* Technically we are turning on the EXT_gpu_shader5 extension,
+    * ARB_gpu_shader5 does not exist in GLES, but this flag is what
+    * switches on EXT_gpu_shader5:
+    */
+   if (api == API_OPENGLES2 && ESSLVersion >= 320)
+      extensions->ARB_gpu_shader5 = GL_TRUE;
+
    if (GLSLVersion >= 400)
       extensions->ARB_gpu_shader5 = GL_TRUE;
    if (GLSLVersion >= 410)
@@ -1065,6 +1100,14 @@ void st_init_extensions(struct pipe_screen *screen,
    }
 
    if (GLSLVersion >= 140) {
+      /* Since GLSL 1.40 has support for all of the features of gpu_shader4,
+       * we can always expose it if the driver can do 140. Supporting
+       * gpu_shader4 on drivers without GLSL 1.40 is left for a future
+       * pipe cap.
+       */
+      extensions->EXT_gpu_shader4 = GL_TRUE;
+      extensions->EXT_texture_buffer_object = GL_TRUE;
+
       if (screen->get_param(screen, PIPE_CAP_TGSI_ARRAY_COMPONENTS))
          extensions->ARB_enhanced_layouts = GL_TRUE;
    }
@@ -1515,16 +1558,18 @@ void st_init_extensions(struct pipe_screen *screen,
       extensions->EXT_shader_integer_mix;
 
    extensions->OES_texture_cube_map_array =
-      extensions->ARB_ES3_1_compatibility &&
+      (extensions->ARB_ES3_1_compatibility || ESSLVersion >= 310) &&
       extensions->OES_geometry_shader &&
       extensions->ARB_texture_cube_map_array;
 
    extensions->OES_viewport_array =
-      extensions->ARB_ES3_1_compatibility &&
+      (extensions->ARB_ES3_1_compatibility || ESSLVersion >= 310) &&
       extensions->OES_geometry_shader &&
       extensions->ARB_viewport_array;
 
-   extensions->OES_primitive_bounding_box = extensions->ARB_ES3_1_compatibility;
+   extensions->OES_primitive_bounding_box =
+      extensions->ARB_ES3_1_compatibility || ESSLVersion >= 310;
+
    consts->NoPrimitiveBoundingBoxOutput = true;
 
    extensions->ANDROID_extension_pack_es31a =

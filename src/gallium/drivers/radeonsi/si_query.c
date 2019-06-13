@@ -1439,7 +1439,8 @@ static void si_restore_qbo_state(struct si_context *sctx,
 	sctx->b.set_constant_buffer(&sctx->b, PIPE_SHADER_COMPUTE, 0, &st->saved_const0);
 	pipe_resource_reference(&st->saved_const0.buffer, NULL);
 
-	sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, 3, st->saved_ssbo);
+	sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, 3, st->saved_ssbo,
+				   st->saved_ssbo_writable_mask);
 	for (unsigned i = 0; i < 3; ++i)
 		pipe_resource_reference(&st->saved_ssbo[i].buffer, NULL);
 }
@@ -1570,7 +1571,8 @@ static void si_query_hw_get_result_resource(struct si_context *sctx,
 			si_resource(resource)->TC_L2_dirty = true;
 		}
 
-		sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, 3, ssbo);
+		sctx->b.set_shader_buffers(&sctx->b, PIPE_SHADER_COMPUTE, 0, 3, ssbo,
+					   1 << 2);
 
 		if (wait && qbuf == &query->buffer) {
 			uint64_t va;

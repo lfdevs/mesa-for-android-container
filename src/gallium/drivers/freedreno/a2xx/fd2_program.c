@@ -32,6 +32,7 @@
 #include "util/u_format.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
+#include "nir/tgsi_to_nir.h"
 
 #include "freedreno_program.h"
 
@@ -83,7 +84,7 @@ emit(struct fd_ringbuffer *ring, gl_shader_stage type,
 }
 
 static int
-ir2_glsl_type_size(const struct glsl_type *type)
+ir2_glsl_type_size(const struct glsl_type *type, bool bindless)
 {
 	return glsl_count_attribute_slots(type, false);
 }
@@ -96,14 +97,11 @@ fd2_fp_state_create(struct pipe_context *pctx,
 	if (!so)
 		return NULL;
 
-	if (cso->type == PIPE_SHADER_IR_NIR) {
-		so->nir = cso->ir.nir;
-		NIR_PASS_V(so->nir, nir_lower_io, nir_var_all, ir2_glsl_type_size,
+	so->nir = (cso->type == PIPE_SHADER_IR_NIR) ? cso->ir.nir :
+		tgsi_to_nir(cso->tokens, pctx->screen);
+
+	NIR_PASS_V(so->nir, nir_lower_io, nir_var_all, ir2_glsl_type_size,
 			   (nir_lower_io_options)0);
-	} else {
-		assert(cso->type == PIPE_SHADER_IR_TGSI);
-		so->nir = ir2_tgsi_to_nir(cso->tokens);
-	}
 
 	if (ir2_optimize_nir(so->nir, true))
 		goto fail;
@@ -136,14 +134,11 @@ fd2_vp_state_create(struct pipe_context *pctx,
 	if (!so)
 		return NULL;
 
-	if (cso->type == PIPE_SHADER_IR_NIR) {
-		so->nir = cso->ir.nir;
-		NIR_PASS_V(so->nir, nir_lower_io, nir_var_all, ir2_glsl_type_size,
+	so->nir = (cso->type == PIPE_SHADER_IR_NIR) ? cso->ir.nir :
+		tgsi_to_nir(cso->tokens, pctx->screen);
+
+	NIR_PASS_V(so->nir, nir_lower_io, nir_var_all, ir2_glsl_type_size,
 			   (nir_lower_io_options)0);
-	} else {
-		assert(cso->type == PIPE_SHADER_IR_TGSI);
-		so->nir = ir2_tgsi_to_nir(cso->tokens);
-	}
 
 	if (ir2_optimize_nir(so->nir, true))
 		goto fail;

@@ -78,6 +78,14 @@ fd_set_sample_mask(struct pipe_context *pctx, unsigned sample_mask)
 	ctx->dirty |= FD_DIRTY_SAMPLE_MASK;
 }
 
+static void
+fd_set_min_samples(struct pipe_context *pctx, unsigned min_samples)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->min_samples = min_samples;
+	ctx->dirty |= FD_DIRTY_MIN_SAMPLES;
+}
+
 /* notes from calim on #dri-devel:
  * index==0 will be non-UBO (ie. glUniformXYZ()) all packed together padded
  * out to vec4's
@@ -113,7 +121,8 @@ static void
 fd_set_shader_buffers(struct pipe_context *pctx,
 		enum pipe_shader_type shader,
 		unsigned start, unsigned count,
-		const struct pipe_shader_buffer *buffers)
+		const struct pipe_shader_buffer *buffers,
+		unsigned writable_bitmask)
 {
 	struct fd_context *ctx = fd_context(pctx);
 	struct fd_shaderbuf_stateobj *so = &ctx->shaderbuf[shader];
@@ -581,6 +590,7 @@ fd_state_init(struct pipe_context *pctx)
 	pctx->set_stencil_ref = fd_set_stencil_ref;
 	pctx->set_clip_state = fd_set_clip_state;
 	pctx->set_sample_mask = fd_set_sample_mask;
+	pctx->set_min_samples = fd_set_min_samples;
 	pctx->set_constant_buffer = fd_set_constant_buffer;
 	pctx->set_shader_buffers = fd_set_shader_buffers;
 	pctx->set_shader_images = fd_set_shader_images;

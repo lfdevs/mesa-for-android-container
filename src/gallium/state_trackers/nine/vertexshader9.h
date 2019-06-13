@@ -55,15 +55,23 @@ struct NineVertexShader9
     boolean point_size; /* if true, set rasterizer.point_size_per_vertex to 1 */
     boolean swvp_only;
 
-    unsigned const_used_size; /* in bytes */
-
     struct nine_lconstf lconstf;
+
+    boolean int_slots_used[NINE_MAX_CONST_I];
+    boolean bool_slots_used[NINE_MAX_CONST_B];
+
+    unsigned const_int_slots;
+    unsigned const_bool_slots;
+
+    struct nine_shader_constant_combination *c_combinations;
 
     uint64_t ff_key[3];
     void *ff_cso;
 
     uint64_t last_key;
     void *last_cso;
+    unsigned *last_const_ranges;
+    unsigned last_const_used_size; /* in bytes */
 
     uint64_t next_key;
 
@@ -93,6 +101,13 @@ NineVertexShader9_UpdateKey( struct NineVertexShader9 *vs,
         key |= (uint32_t) ((!!context->rs[D3DRS_FOGENABLE]) << 8);
     key |= (uint32_t) (context->swvp << 9);
 
+    if ((vs->const_int_slots > 0 || vs->const_bool_slots > 0) && context->inline_constants && !context->swvp)
+        key |= ((uint64_t)nine_shader_constant_combination_key(&vs->c_combinations,
+                                                               vs->int_slots_used,
+                                                               vs->bool_slots_used,
+                                                               context->vs_const_i,
+                                                               context->vs_const_b)) << 16;
+
     /* We want to use a 64 bits key for performance.
      * Use compressed float16 values for the pointsize min/max in the key.
      * Shaders do not usually output psize.*/
@@ -108,7 +123,9 @@ NineVertexShader9_UpdateKey( struct NineVertexShader9 *vs,
 }
 
 void *
-NineVertexShader9_GetVariant( struct NineVertexShader9 *vs );
+NineVertexShader9_GetVariant( struct NineVertexShader9 *vs,
+                              unsigned **const_ranges,
+                              unsigned *const_used_size );
 
 void *
 NineVertexShader9_GetVariantProcessVertices( struct NineVertexShader9 *vs,

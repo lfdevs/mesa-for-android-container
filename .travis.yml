@@ -1,0 +1,40 @@
+language: c
+
+os: osx
+
+cache:
+  ccache: true
+
+env:
+  global:
+    - PKG_CONFIG_PATH=""
+
+before_install:
+  - HOMEBREW_NO_AUTO_UPDATE=1 brew install python3 ninja expat gettext
+  # Set PATH for homebrew pip3 installs
+  - PATH="$HOME/Library/Python/3.6/bin:${PATH}"
+  # Set PKG_CONFIG_PATH for keg-only expat
+  - PKG_CONFIG_PATH="/usr/local/opt/expat/lib/pkgconfig:${PKG_CONFIG_PATH}"
+  # Set PATH for keg-only gettext
+  - PATH="/usr/local/opt/gettext/bin:${PATH}"
+
+  # Install xquartz for prereqs ...
+  - XQUARTZ_VERSION="2.7.11"
+  - wget -nv https://dl.bintray.com/xquartz/downloads/XQuartz-${XQUARTZ_VERSION}.dmg
+  - hdiutil attach XQuartz-${XQUARTZ_VERSION}.dmg
+  - sudo installer -pkg /Volumes/XQuartz-${XQUARTZ_VERSION}/XQuartz.pkg -target /
+  - hdiutil detach /Volumes/XQuartz-${XQUARTZ_VERSION}
+  # ... and set paths
+  - PKG_CONFIG_PATH="/opt/X11/share/pkgconfig:/opt/X11/lib/pkgconfig:${PKG_CONFIG_PATH}"
+
+install:
+  - pip3 install --user meson
+  - pip3 install --user mako
+
+script:
+  - meson _build
+      -Dbuild-tests=true
+      -Dplatforms=x11
+      -Dgallium-drivers=swrast
+  - ninja -C _build
+  - ninja -C _build test

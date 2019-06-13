@@ -124,25 +124,25 @@ copy_constant_to_storage(union gl_constant_value *storage,
       for (unsigned int row = 0; row < n_rows; row++) {
          switch (base_type) {
          case GLSL_TYPE_UINT:
-            storage[i].u = val->values[column].u32[row];
+            storage[i].u = val->values[column][row].u32;
             break;
          case GLSL_TYPE_INT:
          case GLSL_TYPE_SAMPLER:
-            storage[i].i = val->values[column].i32[row];
+            storage[i].i = val->values[column][row].i32;
             break;
          case GLSL_TYPE_FLOAT:
-            storage[i].f = val->values[column].f32[row];
+            storage[i].f = val->values[column][row].f32;
             break;
          case GLSL_TYPE_DOUBLE:
          case GLSL_TYPE_UINT64:
          case GLSL_TYPE_INT64:
             /* XXX need to check on big-endian */
             memcpy(&storage[i * 2].u,
-                   &val->values[column].f64[row],
+                   &val->values[column][row].f64,
                    sizeof(double));
             break;
          case GLSL_TYPE_BOOL:
-            storage[i].b = val->values[column].u32[row] ? boolean_true : 0;
+            storage[i].b = val->values[column][row].u32 ? boolean_true : 0;
             break;
          case GLSL_TYPE_ARRAY:
          case GLSL_TYPE_STRUCT:
@@ -184,7 +184,7 @@ set_uniform_initializer(struct set_uniform_initializer_closure *data,
 {
    const struct glsl_type *t_without_array = glsl_without_array(type);
 
-   if (glsl_type_is_struct(type)) {
+   if (glsl_type_is_struct_or_ifc(type)) {
       for (unsigned int i = 0; i < glsl_get_length(type); i++) {
          const struct glsl_type *field_type = glsl_get_struct_field(type, i);
          set_uniform_initializer(data, field_type, val->elements[i]);
@@ -192,7 +192,7 @@ set_uniform_initializer(struct set_uniform_initializer_closure *data,
       return;
    }
 
-   if (glsl_type_is_struct(t_without_array) ||
+   if (glsl_type_is_struct_or_ifc(t_without_array) ||
        (glsl_type_is_array(type) &&
         glsl_type_is_array(glsl_get_array_element(type)))) {
       const struct glsl_type *element_type = glsl_get_array_element(type);

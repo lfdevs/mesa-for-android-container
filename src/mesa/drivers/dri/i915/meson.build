@@ -92,6 +92,3 @@ libi915 = static_library(
   cpp_args : [cpp_vis_args],
   dependencies : [dep_libdrm, dep_libdrm_intel],
 )
-
-dri_drivers += libi915
-dri_link += 'i915_dri.so'

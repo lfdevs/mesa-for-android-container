@@ -87,63 +87,63 @@ struct wl_buffer;
 struct dri2_egl_display_vtbl {
    int (*authenticate)(_EGLDisplay *disp, uint32_t id);
 
-   _EGLSurface* (*create_window_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+   _EGLSurface* (*create_window_surface)(_EGLDriver *drv, _EGLDisplay *disp,
                                          _EGLConfig *config,
                                          void *native_window,
                                          const EGLint *attrib_list);
 
-   _EGLSurface* (*create_pixmap_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+   _EGLSurface* (*create_pixmap_surface)(_EGLDriver *drv, _EGLDisplay *disp,
                                          _EGLConfig *config,
                                          void *native_pixmap,
                                          const EGLint *attrib_list);
 
-   _EGLSurface* (*create_pbuffer_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+   _EGLSurface* (*create_pbuffer_surface)(_EGLDriver *drv, _EGLDisplay *disp,
                                           _EGLConfig *config,
                                           const EGLint *attrib_list);
 
-   EGLBoolean (*destroy_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*destroy_surface)(_EGLDriver *drv, _EGLDisplay *disp,
                                  _EGLSurface *surface);
 
-   EGLBoolean (*swap_interval)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*swap_interval)(_EGLDriver *drv, _EGLDisplay *disp,
                                _EGLSurface *surf, EGLint interval);
 
-   _EGLImage* (*create_image)(_EGLDriver *drv, _EGLDisplay *dpy,
+   _EGLImage* (*create_image)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLContext *ctx, EGLenum target,
                               EGLClientBuffer buffer,
                               const EGLint *attr_list);
 
-   EGLBoolean (*swap_buffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*swap_buffers)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLSurface *surf);
 
-   EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *disp,
                                           _EGLSurface *surface,
                                           const EGLint *rects, EGLint n_rects);
 
-   EGLBoolean (*set_damage_region)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*set_damage_region)(_EGLDriver *drv, _EGLDisplay *disp,
                                    _EGLSurface *surface,
                                    const EGLint *rects, EGLint n_rects);
 
-   EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *disp,
                                      _EGLSurface *surf, EGLint numRects,
                                      const EGLint *rects);
 
-   EGLBoolean (*post_sub_buffer)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*post_sub_buffer)(_EGLDriver *drv, _EGLDisplay *disp,
                                  _EGLSurface *surf,
                                  EGLint x, EGLint y,
                                  EGLint width, EGLint height);
 
-   EGLBoolean (*copy_buffers)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*copy_buffers)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLSurface *surf, void *native_pixmap_target);
 
-   EGLint (*query_buffer_age)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLint (*query_buffer_age)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLSurface *surf);
 
-   EGLBoolean (*query_surface)(_EGLDriver *drv, _EGLDisplay *dpy,
+   EGLBoolean (*query_surface)(_EGLDriver *drv, _EGLDisplay *disp,
                                _EGLSurface *surf, EGLint attribute,
                                EGLint *value);
 
    struct wl_buffer* (*create_wayland_buffer_from_image)(
-                        _EGLDriver *drv, _EGLDisplay *dpy, _EGLImage *img);
+                        _EGLDriver *drv, _EGLDisplay *disp, _EGLImage *img);
 
    EGLBoolean (*get_sync_values)(_EGLDisplay *display, _EGLSurface *surface,
                                  EGLuint64KHR *ust, EGLuint64KHR *msc,
@@ -151,12 +151,12 @@ struct dri2_egl_display_vtbl {
 
    __DRIdrawable *(*get_dri_drawable)(_EGLSurface *surf);
 
-   void (*close_screen_notify)(_EGLDisplay *dpy);
+   void (*close_screen_notify)(_EGLDisplay *disp);
 
    /* Used in EGL_KHR_mutable_render_buffer to update the native window's
     * shared buffer mode.
     */
-   bool (*set_shared_buffer_mode)(_EGLDisplay *dpy, _EGLSurface *surf,
+   bool (*set_shared_buffer_mode)(_EGLDisplay *disp, _EGLSurface *surf,
                                   bool mode);
 };
 
@@ -534,11 +534,16 @@ void
 dri2_egl_surface_free_local_buffers(struct dri2_egl_surface *dri2_surf);
 
 EGLBoolean
-dri2_init_surface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
+dri2_init_surface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
         _EGLConfig *conf, const EGLint *attrib_list, EGLBoolean enable_out_fence);
 
 void
 dri2_fini_surface(_EGLSurface *surf);
+
+EGLBoolean
+dri2_create_drawable(struct dri2_egl_display *dri2_dpy,
+                     const __DRIconfig *config,
+                     struct dri2_egl_surface *dri2_surf);
 
 static inline uint64_t
 combine_u32_into_u64(uint32_t hi, uint32_t lo)

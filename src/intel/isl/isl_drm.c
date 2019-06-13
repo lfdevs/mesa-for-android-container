@@ -24,8 +24,8 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include <drm_fourcc.h>
-#include <i915_drm.h>
+#include "drm-uapi/drm_fourcc.h"
+#include "drm-uapi/i915_drm.h"
 
 #include "isl.h"
 #include "dev/gen_device_info.h"

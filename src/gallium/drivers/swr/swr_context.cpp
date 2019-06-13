@@ -494,6 +494,7 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    createInfo.pfnClearTile = swr_StoreHotTileClear;
    createInfo.pfnUpdateStats = swr_UpdateStats;
    createInfo.pfnUpdateStatsFE = swr_UpdateStatsFE;
+   createInfo.pfnMakeGfxPtr = swr_MakeGfxPtr;
 
    SWR_THREADING_INFO threadingInfo {0};
 

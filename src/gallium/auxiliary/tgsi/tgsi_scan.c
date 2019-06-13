@@ -683,6 +683,9 @@ scan_declaration(struct tgsi_shader_info *info,
          case TGSI_SEMANTIC_BASEVERTEX:
             info->uses_basevertex = TRUE;
             break;
+         case TGSI_SEMANTIC_DRAWID:
+            info->uses_drawid = TRUE;
+            break;
          case TGSI_SEMANTIC_PRIMID:
             info->uses_primid = TRUE;
             break;

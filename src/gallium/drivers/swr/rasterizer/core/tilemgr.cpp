@@ -244,7 +244,6 @@ HOTTILE* HotTileMgr::GetHotTileNoLoad(SWR_CONTEXT*                pContext,
     return &hotTile;
 }
 
-#if USE_8x2_TILE_BACKEND
 void HotTileMgr::ClearColorHotTile(
     const HOTTILE* pHotTile) // clear a macro tile from float4 clear data.
 {
@@ -330,91 +329,6 @@ void HotTileMgr::ClearStencilHotTile(const HOTTILE* pHotTile)
     }
 }
 
-#else
-void HotTileMgr::ClearColorHotTile(
-    const HOTTILE* pHotTile) // clear a macro tile from float4 clear data.
-{
-    // Load clear color into SIMD register...
-    float*     pClearData = (float*)(pHotTile->clearData);
-    simdscalar valR       = _simd_broadcast_ss(&pClearData[0]);
-    simdscalar valG       = _simd_broadcast_ss(&pClearData[1]);
-    simdscalar valB       = _simd_broadcast_ss(&pClearData[2]);
-    simdscalar valA       = _simd_broadcast_ss(&pClearData[3]);
-
-    float*   pfBuf      = (float*)pHotTile->pBuffer;
-    uint32_t numSamples = pHotTile->numSamples;
-
-    for (uint32_t row = 0; row < KNOB_MACROTILE_Y_DIM; row += KNOB_TILE_Y_DIM)
-    {
-        for (uint32_t col = 0; col < KNOB_MACROTILE_X_DIM; col += KNOB_TILE_X_DIM)
-        {
-            for (uint32_t si = 0; si < (KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * numSamples);
-                 si +=
-                 SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM) // SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM); si++)
-            {
-                _simd_store_ps(pfBuf, valR);
-                pfBuf += KNOB_SIMD_WIDTH;
-                _simd_store_ps(pfBuf, valG);
-                pfBuf += KNOB_SIMD_WIDTH;
-                _simd_store_ps(pfBuf, valB);
-                pfBuf += KNOB_SIMD_WIDTH;
-                _simd_store_ps(pfBuf, valA);
-                pfBuf += KNOB_SIMD_WIDTH;
-            }
-        }
-    }
-}
-
-void HotTileMgr::ClearDepthHotTile(
-    const HOTTILE* pHotTile) // clear a macro tile from float4 clear data.
-{
-    // Load clear color into SIMD register...
-    float*     pClearData = (float*)(pHotTile->clearData);
-    simdscalar valZ       = _simd_broadcast_ss(&pClearData[0]);
-
-    float*   pfBuf      = (float*)pHotTile->pBuffer;
-    uint32_t numSamples = pHotTile->numSamples;
-
-    for (uint32_t row = 0; row < KNOB_MACROTILE_Y_DIM; row += KNOB_TILE_Y_DIM)
-    {
-        for (uint32_t col = 0; col < KNOB_MACROTILE_X_DIM; col += KNOB_TILE_X_DIM)
-        {
-            for (uint32_t si = 0; si < (KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * numSamples);
-                 si += SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM)
-            {
-                _simd_store_ps(pfBuf, valZ);
-                pfBuf += KNOB_SIMD_WIDTH;
-            }
-        }
-    }
-}
-
-void HotTileMgr::ClearStencilHotTile(const HOTTILE* pHotTile)
-{
-    // convert from F32 to U8.
-    uint8_t clearVal = (uint8_t)(pHotTile->clearData[0]);
-    // broadcast 32x into __m256i...
-    simdscalari valS = _simd_set1_epi8(clearVal);
-
-    simdscalari* pBuf       = (simdscalari*)pHotTile->pBuffer;
-    uint32_t     numSamples = pHotTile->numSamples;
-
-    for (uint32_t row = 0; row < KNOB_MACROTILE_Y_DIM; row += KNOB_TILE_Y_DIM)
-    {
-        for (uint32_t col = 0; col < KNOB_MACROTILE_X_DIM; col += KNOB_TILE_X_DIM)
-        {
-            // We're putting 4 pixels in each of the 32-bit slots, so increment 4 times as quickly.
-            for (uint32_t si = 0; si < (KNOB_TILE_X_DIM * KNOB_TILE_Y_DIM * numSamples);
-                 si += SIMD_TILE_X_DIM * SIMD_TILE_Y_DIM * 4)
-            {
-                _simd_store_si(pBuf, valS);
-                pBuf += 1;
-            }
-        }
-    }
-}
-
-#endif
 //////////////////////////////////////////////////////////////////////////
 /// @brief InitializeHotTiles
 /// for draw calls, we initialize the active hot tiles and perform deferred

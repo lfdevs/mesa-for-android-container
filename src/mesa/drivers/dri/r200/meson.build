@@ -86,6 +86,3 @@ libr200 = static_library(
   cpp_args : [cpp_vis_args],
   dependencies : [dep_libdrm, dep_libdrm_radeon],
 )
-
-dri_drivers += libr200
-dri_link += 'r200_dri.so'

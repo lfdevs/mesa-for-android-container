@@ -366,7 +366,6 @@ svga_search_shader_token_key(struct svga_shader *pshader,
  */
 static enum pipe_error
 define_gb_shader_vgpu9(struct svga_context *svga,
-                       SVGA3dShaderType type,
                        struct svga_shader_variant *variant,
                        unsigned codeLen)
 {
@@ -378,7 +377,7 @@ define_gb_shader_vgpu9(struct svga_context *svga,
     * Kernel module will allocate an id for the shader and issue
     * the DefineGBShader command.
     */
-   variant->gb_shader = sws->shader_create(sws, type,
+   variant->gb_shader = sws->shader_create(sws, variant->type,
                                            variant->tokens, codeLen);
 
    if (!variant->gb_shader)
@@ -394,7 +393,6 @@ define_gb_shader_vgpu9(struct svga_context *svga,
  */
 static enum pipe_error
 define_gb_shader_vgpu10(struct svga_context *svga,
-                        SVGA3dShaderType type,
                         struct svga_shader_variant *variant,
                         unsigned codeLen)
 {
@@ -413,7 +411,7 @@ define_gb_shader_vgpu10(struct svga_context *svga,
 
    /* Create gb memory for the shader and upload the shader code */
    variant->gb_shader = swc->shader_create(swc,
-                                           variant->id, type,
+                                           variant->id, variant->type,
                                            variant->tokens, codeLen);
 
    if (!variant->gb_shader) {
@@ -431,7 +429,7 @@ define_gb_shader_vgpu10(struct svga_context *svga,
     * the shader creation and return an error.
     */
    ret = SVGA3D_vgpu10_DefineAndBindShader(swc, variant->gb_shader,
-                                           variant->id, type, codeLen);
+                                           variant->id, variant->type, codeLen);
 
    if (ret != PIPE_OK)
       goto fail;
@@ -456,7 +454,6 @@ fail_no_allocation:
  */
 enum pipe_error
 svga_define_shader(struct svga_context *svga,
-                   SVGA3dShaderType type,
                    struct svga_shader_variant *variant)
 {
    unsigned codeLen = variant->nr_tokens * sizeof(variant->tokens[0]);
@@ -468,9 +465,9 @@ svga_define_shader(struct svga_context *svga,
 
    if (svga_have_gb_objects(svga)) {
       if (svga_have_vgpu10(svga))
-         ret = define_gb_shader_vgpu10(svga, type, variant, codeLen);
+         ret = define_gb_shader_vgpu10(svga, variant, codeLen);
       else
-         ret = define_gb_shader_vgpu9(svga, type, variant, codeLen);
+         ret = define_gb_shader_vgpu9(svga, variant, codeLen);
    }
    else {
       /* Allocate an integer ID for the shader */
@@ -483,7 +480,7 @@ svga_define_shader(struct svga_context *svga,
       /* Issue SVGA3D device command to define the shader */
       ret = SVGA3D_DefineShader(svga->swc,
                                 variant->id,
-                                type,
+                                variant->type,
                                 variant->tokens,
                                 codeLen);
       if (ret != PIPE_OK) {
@@ -534,16 +531,20 @@ svga_set_shader(struct svga_context *svga,
 
 
 struct svga_shader_variant *
-svga_new_shader_variant(struct svga_context *svga)
+svga_new_shader_variant(struct svga_context *svga, enum pipe_shader_type type)
 {
-   svga->hud.num_shaders++;
-   return CALLOC_STRUCT(svga_shader_variant);
+   struct svga_shader_variant *variant = CALLOC_STRUCT(svga_shader_variant);
+
+   if (variant) {
+      variant->type = svga_shader_type(type);
+      svga->hud.num_shaders++;
+   }
+   return variant;
 }
 
 
 void
 svga_destroy_shader_variant(struct svga_context *svga,
-                            SVGA3dShaderType type,
                             struct svga_shader_variant *variant)
 {
    enum pipe_error ret = PIPE_OK;
@@ -569,11 +570,11 @@ svga_destroy_shader_variant(struct svga_context *svga,
    }
    else {
       if (variant->id != UTIL_BITMASK_INVALID_INDEX) {
-         ret = SVGA3D_DestroyShader(svga->swc, variant->id, type);
+         ret = SVGA3D_DestroyShader(svga->swc, variant->id, variant->type);
          if (ret != PIPE_OK) {
             /* flush and try again */
             svga_context_flush(svga, NULL);
-            ret = SVGA3D_DestroyShader(svga->swc, variant->id, type);
+            ret = SVGA3D_DestroyShader(svga->swc, variant->id, variant->type);
             assert(ret == PIPE_OK);
          }
          util_bitmask_clear(svga->shader_id_bm, variant->id);

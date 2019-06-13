@@ -34,7 +34,7 @@ TEST(ir_variable_constructor, interface)
       glsl_struct_field(glsl_type::vec(4), "v")
    };
 
-   const glsl_type *const interface =
+   const glsl_type *const iface =
       glsl_type::get_interface_instance(f,
                                         ARRAY_SIZE(f),
                                         GLSL_INTERFACE_PACKING_STD140,
@@ -44,12 +44,12 @@ TEST(ir_variable_constructor, interface)
    static const char name[] = "named_instance";
 
    ir_variable *const v =
-      new(mem_ctx) ir_variable(interface, name, ir_var_uniform);
+      new(mem_ctx) ir_variable(iface, name, ir_var_uniform);
 
    EXPECT_STREQ(name, v->name);
    EXPECT_NE(name, v->name);
-   EXPECT_EQ(interface, v->type);
-   EXPECT_EQ(interface, v->get_interface_type());
+   EXPECT_EQ(iface, v->type);
+   EXPECT_EQ(iface, v->get_interface_type());
 }
 
 TEST(ir_variable_constructor, interface_array)
@@ -60,7 +60,7 @@ TEST(ir_variable_constructor, interface_array)
       glsl_struct_field(glsl_type::vec(4), "v")
    };
 
-   const glsl_type *const interface =
+   const glsl_type *const iface =
       glsl_type::get_interface_instance(f,
                                         ARRAY_SIZE(f),
                                         GLSL_INTERFACE_PACKING_STD140,
@@ -68,7 +68,7 @@ TEST(ir_variable_constructor, interface_array)
                                         "simple_interface");
 
    const glsl_type *const interface_array =
-      glsl_type::get_array_instance(interface, 2);
+      glsl_type::get_array_instance(iface, 2);
 
    static const char name[] = "array_instance";
 
@@ -78,5 +78,5 @@ TEST(ir_variable_constructor, interface_array)
    EXPECT_STREQ(name, v->name);
    EXPECT_NE(name, v->name);
    EXPECT_EQ(interface_array, v->type);
-   EXPECT_EQ(interface, v->get_interface_type());
+   EXPECT_EQ(iface, v->get_interface_type());
 }

@@ -263,6 +263,10 @@ dri2_create_context_attribs(struct glx_screen *base,
                                  &api, &reset, &release, error))
       goto error_exit;
 
+   if (!dri2_check_no_error(flags, shareList, major_ver, error)) {
+      goto error_exit;
+   }
+
    /* Check the renderType value */
    if (!validate_renderType_against_config(config_base, renderType))
        goto error_exit;
@@ -313,6 +317,9 @@ dri2_create_context_attribs(struct glx_screen *base,
     *  of GLX_RGBA_TYPE.
     */
    pcp->base.renderType = renderType;
+
+   if (flags & __DRI_CTX_FLAG_NO_ERROR)
+      pcp->base.noError = GL_TRUE;
 
    pcp->driContext =
       (*psc->dri2->createContextAttribs) (psc->driScreen,
@@ -1163,6 +1170,14 @@ dri2BindExtensions(struct dri2_screen *psc, struct glx_display * priv,
           && strcmp(extensions[i]->name, __DRI2_ROBUSTNESS) == 0)
          __glXEnableDirectExtension(&psc->base,
                                     "GLX_ARB_create_context_robustness");
+
+      /* DRI2 version 3 is also required because
+       * GLX_ARB_create_context_no_error requires GLX_ARB_create_context.
+       */
+      if (psc->dri2->base.version >= 3
+          && strcmp(extensions[i]->name, __DRI2_NO_ERROR) == 0)
+         __glXEnableDirectExtension(&psc->base,
+                                    "GLX_ARB_create_context_no_error");
 
       /* DRI2 version 3 is also required because GLX_MESA_query_renderer
        * requires GLX_ARB_create_context_profile.

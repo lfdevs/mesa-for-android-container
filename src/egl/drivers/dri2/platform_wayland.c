@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <xf86drm.h>
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 #include <sys/mman.h>
 
 #include "egl_dri2.h"
@@ -272,7 +272,6 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLConfig *conf, void *native_window,
                               const EGLint *attrib_list)
 {
-   __DRIcreateNewDrawableFunc createNewDrawable;
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_config *dri2_conf = dri2_egl_config(conf);
    struct wl_egl_window *window = native_window;
@@ -349,19 +348,8 @@ dri2_wl_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    if (dri2_dpy->flush)
       dri2_surf->wl_win->resize_callback = resize_callback;
 
-   if (dri2_dpy->image_driver)
-      createNewDrawable = dri2_dpy->image_driver->createNewDrawable;
-   else if (dri2_dpy->dri2)
-      createNewDrawable = dri2_dpy->dri2->createNewDrawable;
-   else
-      createNewDrawable = dri2_dpy->swrast->createNewDrawable;
-
-   dri2_surf->dri_drawable = (*createNewDrawable)(dri2_dpy->dri_screen, config,
-                                                  dri2_surf);
-    if (dri2_surf->dri_drawable == NULL) {
-      _eglError(EGL_BAD_ALLOC, "createNewDrawable");
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf))
        goto cleanup_surf_wrapper;
-    }
 
    dri2_surf->base.SwapInterval = dri2_dpy->default_swap_interval;
 

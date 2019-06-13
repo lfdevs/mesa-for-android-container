@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 
-#include "i915_drm.h"
+#include "drm-uapi/i915_drm.h"
 
 #include "state_tracker/drm_driver.h"
 

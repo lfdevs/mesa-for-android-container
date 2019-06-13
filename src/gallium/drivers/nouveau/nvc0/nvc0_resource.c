@@ -1,4 +1,4 @@
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 #include "pipe/p_context.h"
 #include "nvc0/nvc0_resource.h"

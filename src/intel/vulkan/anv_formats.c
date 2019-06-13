@@ -22,7 +22,7 @@
  */
 
 #include "anv_private.h"
-#include "drm_fourcc.h"
+#include "drm-uapi/drm_fourcc.h"
 #include "vk_enum_to_str.h"
 #include "vk_format_info.h"
 #include "vk_util.h"

@@ -33,7 +33,8 @@
 
 
 #include "main/glheader.h"
-
+#include "program/prog_parameter.h"
+#include "util/bitset.h"
 
 struct gl_shader_program;
 struct gl_shader;
@@ -98,7 +99,9 @@ public:
    bool store(struct gl_context *ctx, struct gl_shader_program *prog,
               struct gl_transform_feedback_info *info, unsigned buffer,
               unsigned buffer_index, const unsigned max_outputs,
-              bool *explicit_stride, bool has_xfb_qualifiers) const;
+              BITSET_WORD *used_components[MAX_FEEDBACK_BUFFERS],
+              bool *explicit_stride, bool has_xfb_qualifiers,
+              const void *mem_ctx) const;
    const tfeedback_candidate *find_candidate(gl_shader_program *prog,
                                              hash_table *tfeedback_candidates);
 
@@ -161,32 +164,7 @@ private:
 
    bool is_64bit() const
    {
-      switch (this->type) {
-      case GL_DOUBLE:
-      case GL_DOUBLE_VEC2:
-      case GL_DOUBLE_VEC3:
-      case GL_DOUBLE_VEC4:
-      case GL_DOUBLE_MAT2:
-      case GL_DOUBLE_MAT2x3:
-      case GL_DOUBLE_MAT2x4:
-      case GL_DOUBLE_MAT3:
-      case GL_DOUBLE_MAT3x2:
-      case GL_DOUBLE_MAT3x4:
-      case GL_DOUBLE_MAT4:
-      case GL_DOUBLE_MAT4x2:
-      case GL_DOUBLE_MAT4x3:
-      case GL_INT64_ARB:
-      case GL_INT64_VEC2_ARB:
-      case GL_INT64_VEC3_ARB:
-      case GL_INT64_VEC4_ARB:
-      case GL_UNSIGNED_INT64_ARB:
-      case GL_UNSIGNED_INT64_VEC2_ARB:
-      case GL_UNSIGNED_INT64_VEC3_ARB:
-      case GL_UNSIGNED_INT64_VEC4_ARB:
-         return true;
-      default:
-         return false;
-      }
+      return _mesa_gl_datatype_is_64bit(this->type);
    }
 
    /**
@@ -300,10 +278,10 @@ link_varyings(struct gl_shader_program *prog, unsigned first, unsigned last,
               struct gl_context *ctx, void *mem_ctx);
 
 void
-validate_sso_explicit_locations(struct gl_context *ctx,
-                                struct gl_shader_program *prog,
-                                gl_shader_stage first,
-                                gl_shader_stage last);
+validate_first_and_last_interface_explicit_locations(struct gl_context *ctx,
+                                                     struct gl_shader_program *prog,
+                                                     gl_shader_stage first,
+                                                     gl_shader_stage last);
 
 void
 cross_validate_outputs_to_inputs(struct gl_context *ctx,

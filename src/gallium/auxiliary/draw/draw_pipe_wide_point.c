@@ -266,14 +266,7 @@ widepoint_first_point(struct draw_stage *stage,
    wide->psize_slot = -1;
    if (rast->point_size_per_vertex) {
       /* find PSIZ vertex output */
-      const struct draw_vertex_shader *vs = draw->vs.vertex_shader;
-      uint i;
-      for (i = 0; i < vs->info.num_outputs; i++) {
-         if (vs->info.output_semantic_name[i] == TGSI_SEMANTIC_PSIZE) {
-            wide->psize_slot = i;
-            break;
-         }
-      }
+      wide->psize_slot = draw_find_shader_output(draw, TGSI_SEMANTIC_PSIZE, 0);
    }
    
    stage->point( stage, header );

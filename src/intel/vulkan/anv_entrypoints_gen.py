@@ -454,7 +454,7 @@ class StringIntMap(object):
     def add_string(self, string, num):
         assert not self.baked
         assert string not in self.strings
-        assert num >= 0 and num < 2**31
+        assert 0 <= num < 2**31
         self.strings[string] = StringIntMapEntry(string, num)
 
     def bake(self):
@@ -496,7 +496,7 @@ class EntrypointBase(object):
         self.extensions = []
 
 class Entrypoint(EntrypointBase):
-    def __init__(self, name, return_type, params, guard = None):
+    def __init__(self, name, return_type, params, guard=None):
         super(Entrypoint, self).__init__(name)
         self.return_type = return_type
         self.params = params
@@ -526,7 +526,7 @@ class EntrypointAlias(EntrypointBase):
     def prefixed_name(self, prefix):
         return self.alias.prefixed_name(prefix)
 
-def get_entrypoints(doc, entrypoints_to_defines, start_index):
+def get_entrypoints(doc, entrypoints_to_defines):
     """Extract the entry points from the registry."""
     entrypoints = OrderedDict()
 
@@ -539,9 +539,9 @@ def get_entrypoints(doc, entrypoints_to_defines, start_index):
             name = command.find('./proto/name').text
             ret_type = command.find('./proto/type').text
             params = [EntrypointParam(
-                type = p.find('./type').text,
-                name = p.find('./name').text,
-                decl = ''.join(p.itertext())
+                type=p.find('./type').text,
+                name=p.find('./name').text,
+                decl=''.join(p.itertext())
             ) for p in command.findall('./param')]
             guard = entrypoints_to_defines.get(name)
             # They really need to be unique
@@ -582,12 +582,15 @@ def get_entrypoints_defines(doc):
     """Maps entry points to extension defines."""
     entrypoints_to_defines = {}
 
+    platform_define = {}
+    for platform in doc.findall('./platforms/platform'):
+        name = platform.attrib['name']
+        define = platform.attrib['protect']
+        platform_define[name] = define
+
     for extension in doc.findall('./extensions/extension[@platform]'):
         platform = extension.attrib['platform']
-        ext = '_KHR'
-        if platform.upper() == 'XLIB_XRANDR':
-            ext = '_EXT'
-        define = 'VK_USE_PLATFORM_' + platform.upper() + ext
+        define = platform_define[platform]
 
         for entrypoint in extension.findall('./require/command'):
             fullname = entrypoint.attrib['name']
@@ -611,8 +614,7 @@ def main():
 
     for filename in args.xml_files:
         doc = et.parse(filename)
-        entrypoints += get_entrypoints(doc, get_entrypoints_defines(doc),
-                                       start_index=len(entrypoints))
+        entrypoints += get_entrypoints(doc, get_entrypoints_defines(doc))
 
     # Manually add CreateDmaBufImageINTEL for which we don't have an extension
     # defined.
@@ -662,7 +664,7 @@ def main():
                                       device_strmap=device_strmap,
                                       filename=os.path.basename(__file__)))
     except Exception:
-        # In the even there's an error this imports some helpers from mako
+        # In the event there's an error, this imports some helpers from mako
         # to print a useful stack trace and prints it, then exits with
         # status 1, if python is run with debug; otherwise it just raises
         # the exception

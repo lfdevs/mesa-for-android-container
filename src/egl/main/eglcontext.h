@@ -69,12 +69,12 @@ struct _egl_context
 
 
 extern EGLBoolean
-_eglInitContext(_EGLContext *ctx, _EGLDisplay *dpy,
+_eglInitContext(_EGLContext *ctx, _EGLDisplay *disp,
                 _EGLConfig *config, const EGLint *attrib_list);
 
 
 extern EGLBoolean
-_eglQueryContext(_EGLDriver *drv, _EGLDisplay *dpy, _EGLContext *ctx, EGLint attribute, EGLint *value);
+_eglQueryContext(_EGLDriver *drv, _EGLDisplay *disp, _EGLContext *ctx, EGLint attribute, EGLint *value);
 
 
 extern EGLBoolean
@@ -136,10 +136,10 @@ _eglUnlinkContext(_EGLContext *ctx)
  * Return NULL if the handle has no corresponding linked context.
  */
 static inline _EGLContext *
-_eglLookupContext(EGLContext context, _EGLDisplay *dpy)
+_eglLookupContext(EGLContext context, _EGLDisplay *disp)
 {
    _EGLContext *ctx = (_EGLContext *) context;
-   if (!dpy || !_eglCheckResource((void *) ctx, _EGL_RESOURCE_CONTEXT, dpy))
+   if (!disp || !_eglCheckResource((void *) ctx, _EGL_RESOURCE_CONTEXT, disp))
       ctx = NULL;
    return ctx;
 }

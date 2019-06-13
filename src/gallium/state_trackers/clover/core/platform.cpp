@@ -39,3 +39,8 @@ platform::platform() : adaptor_range(evals(), devs) {
       }
    }
 }
+
+std::string
+platform::supported_extensions() const {
+   return "cl_khr_icd";
+}

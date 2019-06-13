@@ -129,6 +129,15 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
    fprintf(outfile, "\n");
 }
 
+static struct gen_batch_decode_bo
+get_bo(void *user_data, bool ppgtt, uint64_t addr)
+{
+   if (ppgtt)
+      return aub_mem_get_ppgtt_bo(user_data, addr);
+   else
+      return aub_mem_get_ggtt_bo(user_data, addr);
+}
+
 static void
 handle_execlist_write(void *user_data, enum drm_i915_gem_engine_class engine, uint64_t context_descriptor)
 {
@@ -152,17 +161,19 @@ handle_execlist_write(void *user_data, enum drm_i915_gem_engine_class engine, ui
    assert(ring_bo.size > 0);
    void *commands = (uint8_t *)ring_bo.map + (ring_buffer_start - ring_bo.addr) + ring_buffer_head;
 
-   if (context_descriptor & 0x100 /* ppgtt */) {
-      batch_ctx.get_bo = aub_mem_get_ppgtt_bo;
-   } else {
-      batch_ctx.get_bo = aub_mem_get_ggtt_bo;
-   }
+   batch_ctx.get_bo = get_bo;
 
    batch_ctx.engine = engine;
    gen_print_batch(&batch_ctx, commands,
                    MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
-                   ring_bo.addr + ring_buffer_head);
+                   ring_bo.addr + ring_buffer_head, true);
    aub_mem_clear_bo_maps(&mem);
+}
+
+static struct gen_batch_decode_bo
+get_legacy_bo(void *user_data, bool ppgtt, uint64_t addr)
+{
+   return aub_mem_get_ggtt_bo(user_data, addr);
 }
 
 static void
@@ -170,10 +181,10 @@ handle_ring_write(void *user_data, enum drm_i915_gem_engine_class engine,
                   const void *data, uint32_t data_len)
 {
    batch_ctx.user_data = &mem;
-   batch_ctx.get_bo = aub_mem_get_ggtt_bo;
+   batch_ctx.get_bo = get_legacy_bo;
 
    batch_ctx.engine = engine;
-   gen_print_batch(&batch_ctx, data, data_len, 0);
+   gen_print_batch(&batch_ctx, data, data_len, 0, false);
 
    aub_mem_clear_bo_maps(&mem);
 }

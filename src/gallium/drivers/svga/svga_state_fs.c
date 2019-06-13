@@ -149,7 +149,7 @@ compile_fs(struct svga_context *svga,
                    (unsigned) (variant->nr_tokens
                                * sizeof(variant->tokens[0])));
       /* Free the too-large variant */
-      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_PS, variant);
+      svga_destroy_shader_variant(svga, variant);
       /* Use simple pass-through shader instead */
       variant = get_compiled_dummy_shader(svga, fs, key);
    }
@@ -158,9 +158,9 @@ compile_fs(struct svga_context *svga,
       return PIPE_ERROR;
    }
 
-   ret = svga_define_shader(svga, SVGA3D_SHADERTYPE_PS, variant);
+   ret = svga_define_shader(svga, variant);
    if (ret != PIPE_OK) {
-      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_PS, variant);
+      svga_destroy_shader_variant(svga, variant);
       return ret;
    }
 

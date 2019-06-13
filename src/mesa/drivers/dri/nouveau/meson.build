@@ -87,6 +87,3 @@ libnouveau_vieux = static_library(
   cpp_args : [cpp_vis_args],
   dependencies : [dep_libdrm, dep_libdrm_nouveau],
 )
-
-dri_drivers += libnouveau_vieux
-dri_link += 'nouveau_vieux_dri.so'

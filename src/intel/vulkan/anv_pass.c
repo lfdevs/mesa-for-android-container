@@ -348,6 +348,10 @@ VkResult anv_CreateRenderPass(
 
    vk_foreach_struct(ext, pCreateInfo->pNext) {
       switch (ext->sType) {
+      case VK_STRUCTURE_TYPE_RENDER_PASS_INPUT_ATTACHMENT_ASPECT_CREATE_INFO:
+         /* We don't care about this information */
+         break;
+
       case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO: {
          VkRenderPassMultiviewCreateInfo *mv = (void *)ext;
 

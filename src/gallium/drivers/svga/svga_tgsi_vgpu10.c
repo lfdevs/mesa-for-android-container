@@ -7066,7 +7066,7 @@ svga_tgsi_vgpu10_translate(struct svga_context *svga,
    /*
     * Create, initialize the 'variant' object.
     */
-   variant = svga_new_shader_variant(svga);
+   variant = svga_new_shader_variant(svga, unit);
    if (!variant)
       goto cleanup;
 

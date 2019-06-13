@@ -179,8 +179,6 @@ _mesa_vertex_attrib_binding(struct gl_context *ctx,
       array->BufferBindingIndex = bindingIndex;
 
       vao->NewArrays |= vao->Enabled & array_bit;
-      if (vao == ctx->Array.VAO)
-         ctx->NewState |= _NEW_ARRAY;
    }
 }
 
@@ -209,14 +207,14 @@ _mesa_bind_vertex_buffer(struct gl_context *ctx,
       binding->Offset = offset;
       binding->Stride = stride;
 
-      if (!_mesa_is_bufferobj(vbo))
+      if (!_mesa_is_bufferobj(vbo)) {
          vao->VertexAttribBufferMask &= ~binding->_BoundArrays;
-      else
+      } else {
          vao->VertexAttribBufferMask |= binding->_BoundArrays;
+         vbo->UsageHistory |= USAGE_ARRAY_BUFFER;
+      }
 
       vao->NewArrays |= vao->Enabled & binding->_BoundArrays;
-      if (vao == ctx->Array.VAO)
-         ctx->NewState |= _NEW_ARRAY;
    }
 }
 
@@ -238,8 +236,6 @@ vertex_binding_divisor(struct gl_context *ctx,
    if (binding->InstanceDivisor != divisor) {
       binding->InstanceDivisor = divisor;
       vao->NewArrays |= vao->Enabled & binding->_BoundArrays;
-      if (vao == ctx->Array.VAO)
-         ctx->NewState |= _NEW_ARRAY;
    }
 }
 
@@ -358,8 +354,6 @@ _mesa_update_array_format(struct gl_context *ctx,
                            normalized, integer, doubles);
 
    vao->NewArrays |= vao->Enabled & VERT_BIT(attrib);
-   if (vao == ctx->Array.VAO)
-      ctx->NewState |= _NEW_ARRAY;
 }
 
 /**
@@ -1096,9 +1090,6 @@ _mesa_enable_vertex_array_attribs(struct gl_context *ctx,
       vao->Enabled |= attrib_bits;
       vao->NewArrays |= attrib_bits;
 
-      if (vao == ctx->Array.VAO)
-         ctx->NewState |= _NEW_ARRAY;
-
       /* Update the map mode if needed */
       if (attrib_bits & (VERT_BIT_POS|VERT_BIT_GENERIC0))
          update_attribute_map_mode(ctx, vao);
@@ -1182,9 +1173,6 @@ _mesa_disable_vertex_array_attribs(struct gl_context *ctx,
       /* was enabled, now being disabled */
       vao->Enabled &= ~attrib_bits;
       vao->NewArrays |= attrib_bits;
-
-      if (vao == ctx->Array.VAO)
-         ctx->NewState |= _NEW_ARRAY;
 
       /* Update the map mode if needed */
       if (attrib_bits & (VERT_BIT_POS|VERT_BIT_GENERIC0))
@@ -1892,8 +1880,6 @@ _mesa_LockArraysEXT(GLint first, GLsizei count)
 
    ctx->Array.LockFirst = first;
    ctx->Array.LockCount = count;
-
-   ctx->NewState |= _NEW_ARRAY;
 }
 
 
@@ -1912,7 +1898,6 @@ _mesa_UnlockArraysEXT( void )
 
    ctx->Array.LockFirst = 0;
    ctx->Array.LockCount = 0;
-   ctx->NewState |= _NEW_ARRAY;
 }
 
 

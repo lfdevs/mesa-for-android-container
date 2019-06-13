@@ -280,6 +280,9 @@ descriptor=[
 # GL_ARB_draw_buffers
   [ "MAX_DRAW_BUFFERS_ARB", "CONTEXT_INT(Const.MaxDrawBuffers), NO_EXTRA" ],
 
+# GL_ARB_parallel_shader_compile
+  [ "MAX_SHADER_COMPILER_THREADS_ARB", "CONTEXT_INT(Hint.MaxShaderCompilerThreads), NO_EXTRA" ],
+
 # GL_EXT_framebuffer_object / GL_NV_fbo_color_attachments
   [ "MAX_COLOR_ATTACHMENTS", "CONTEXT_INT(Const.MaxColorAttachments), NO_EXTRA" ],
 
@@ -436,8 +439,8 @@ descriptor=[
   [ "READ_FRAMEBUFFER_BINDING_EXT", "LOC_CUSTOM, TYPE_INT, 0, NO_EXTRA" ],
 
 # GL_EXT_gpu_shader4 / GLSL 1.30
-  [ "MIN_PROGRAM_TEXEL_OFFSET", "CONTEXT_INT(Const.MinProgramTexelOffset), extra_GLSL_130_es3" ],
-  [ "MAX_PROGRAM_TEXEL_OFFSET", "CONTEXT_INT(Const.MaxProgramTexelOffset), extra_GLSL_130_es3" ],
+  [ "MIN_PROGRAM_TEXEL_OFFSET", "CONTEXT_INT(Const.MinProgramTexelOffset), extra_GLSL_130_es3_gpushader4" ],
+  [ "MAX_PROGRAM_TEXEL_OFFSET", "CONTEXT_INT(Const.MaxProgramTexelOffset), extra_GLSL_130_es3_gpushader4" ],
 
 # GL_EXT_pixel_buffer_object
   [ "PIXEL_PACK_BUFFER_BINDING_EXT", "LOC_CUSTOM, TYPE_INT, 0, extra_EXT_pixel_buffer_object" ],

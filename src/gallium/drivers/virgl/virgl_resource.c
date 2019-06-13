@@ -27,24 +27,32 @@
 #include "virgl_resource.h"
 #include "virgl_screen.h"
 
-bool virgl_res_needs_flush_wait(struct virgl_context *vctx,
-                                struct virgl_resource *res,
-                                unsigned usage)
+bool virgl_res_needs_flush(struct virgl_context *vctx,
+                           struct virgl_transfer *trans)
 {
    struct virgl_screen *vs = virgl_screen(vctx->base.screen);
+   struct virgl_resource *res = virgl_resource(trans->base.resource);
 
-   if ((!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) && vs->vws->res_is_referenced(vs->vws, vctx->cbuf, res->hw_res)) {
-      return true;
+   if (trans->base.usage & PIPE_TRANSFER_UNSYNCHRONIZED)
+      return false;
+   if (!vs->vws->res_is_referenced(vs->vws, vctx->cbuf, res->hw_res))
+      return false;
+   if (res->clean_mask & (1 << trans->base.level)) {
+      if (vctx->num_draws == 0 && vctx->num_compute == 0)
+         return false;
+      if (!virgl_transfer_queue_is_queued(&vctx->queue, trans))
+         return false;
    }
-   return false;
+
+   return true;
 }
 
 bool virgl_res_needs_readback(struct virgl_context *vctx,
                               struct virgl_resource *res,
-                              unsigned usage)
+                              unsigned usage, unsigned level)
 {
    bool readback = true;
-   if (res->clean)
+   if (res->clean_mask & (1 << level))
       readback = false;
    else if (usage & PIPE_TRANSFER_DISCARD_RANGE)
       readback = false;
@@ -61,11 +69,10 @@ static struct pipe_resource *virgl_resource_create(struct pipe_screen *screen,
    struct virgl_screen *vs = virgl_screen(screen);
    struct virgl_resource *res = CALLOC_STRUCT(virgl_resource);
 
-   res->clean = TRUE;
    res->u.b = *templ;
    res->u.b.screen = &vs->base;
    pipe_reference_init(&res->u.b.reference, 1);
-   vbind = pipe_to_virgl_bind(templ->bind);
+   vbind = pipe_to_virgl_bind(vs, templ->bind);
    virgl_resource_layout(&res->u.b, &res->metadata);
    res->hw_res = vs->vws->resource_create(vs->vws, templ->target,
                                           templ->format, vbind,
@@ -80,6 +87,8 @@ static struct pipe_resource *virgl_resource_create(struct pipe_screen *screen,
       FREE(res);
       return NULL;
    }
+
+   res->clean_mask = (1 << VR_MAX_TEXTURE_2D_LEVELS) - 1;
 
    if (templ->target == PIPE_BUFFER)
       virgl_buffer_init(res);
@@ -123,12 +132,54 @@ void virgl_init_screen_resource_functions(struct pipe_screen *screen)
     screen->resource_destroy = u_resource_destroy_vtbl;
 }
 
+static bool virgl_buffer_transfer_extend(struct pipe_context *ctx,
+                                         struct pipe_resource *resource,
+                                         unsigned usage,
+                                         const struct pipe_box *box,
+                                         const void *data)
+{
+   struct virgl_context *vctx = virgl_context(ctx);
+   struct virgl_resource *vbuf = virgl_resource(resource);
+   struct virgl_transfer dummy_trans = { 0 };
+   bool flush;
+   struct virgl_transfer *queued;
+
+   /*
+    * Attempts to short circuit the entire process of mapping and unmapping
+    * a resource if there is an existing transfer that can be extended.
+    * Pessimestically falls back if a flush is required.
+    */
+   dummy_trans.base.resource = resource;
+   dummy_trans.base.usage = usage;
+   dummy_trans.base.box = *box;
+   dummy_trans.base.stride = vbuf->metadata.stride[0];
+   dummy_trans.base.layer_stride = vbuf->metadata.layer_stride[0];
+   dummy_trans.offset = box->x;
+
+   flush = virgl_res_needs_flush(vctx, &dummy_trans);
+   if (flush)
+      return false;
+
+   queued = virgl_transfer_queue_extend(&vctx->queue, &dummy_trans);
+   if (!queued || !queued->hw_res_map)
+      return false;
+
+   memcpy(queued->hw_res_map + dummy_trans.offset, data, box->width);
+
+   return true;
+}
+
 static void virgl_buffer_subdata(struct pipe_context *pipe,
                                  struct pipe_resource *resource,
                                  unsigned usage, unsigned offset,
                                  unsigned size, const void *data)
 {
    struct pipe_box box;
+
+   assert(!(usage & PIPE_TRANSFER_READ));
+
+   /* the write flag is implicit by the nature of buffer_subdata */
+   usage |= PIPE_TRANSFER_WRITE;
 
    if (offset == 0 && size == resource->width0)
       usage |= PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
@@ -137,7 +188,11 @@ static void virgl_buffer_subdata(struct pipe_context *pipe,
 
    u_box_1d(offset, size, &box);
 
-   if (size >= (VIRGL_MAX_CMDBUF_DWORDS * 4))
+   if (usage & PIPE_TRANSFER_DISCARD_RANGE &&
+       virgl_buffer_transfer_extend(pipe, resource, usage, &box, data))
+      return;
+
+   if (resource->width0 >= getpagesize())
       u_default_buffer_subdata(pipe, resource, usage, offset, size, data);
    else
       virgl_transfer_inline_write(pipe, resource, 0, usage, &box, data, 0, 0);
@@ -190,7 +245,7 @@ void virgl_resource_layout(struct pipe_resource *pt,
 }
 
 struct virgl_transfer *
-virgl_resource_create_transfer(struct pipe_context *ctx,
+virgl_resource_create_transfer(struct slab_child_pool *pool,
                                struct pipe_resource *pres,
                                const struct virgl_resource_metadata *metadata,
                                unsigned level, unsigned usage,
@@ -198,7 +253,6 @@ virgl_resource_create_transfer(struct pipe_context *ctx,
 {
    struct virgl_transfer *trans;
    enum pipe_format format = pres->format;
-   struct virgl_context *vctx = virgl_context(ctx);
    const unsigned blocksy = box->y / util_format_get_blockheight(format);
    const unsigned blocksx = box->x / util_format_get_blockwidth(format);
 
@@ -221,7 +275,7 @@ virgl_resource_create_transfer(struct pipe_context *ctx,
    offset += blocksy * metadata->stride[level];
    offset += blocksx * util_format_get_blocksize(format);
 
-   trans = slab_alloc(&vctx->transfer_pool);
+   trans = slab_alloc(pool);
    if (!trans)
       return NULL;
 
@@ -246,11 +300,11 @@ virgl_resource_create_transfer(struct pipe_context *ctx,
    return trans;
 }
 
-void virgl_resource_destroy_transfer(struct virgl_context *vctx,
+void virgl_resource_destroy_transfer(struct slab_child_pool *pool,
                                      struct virgl_transfer *trans)
 {
    util_range_destroy(&trans->range);
-   slab_free(&vctx->transfer_pool, trans);
+   slab_free(pool, trans);
 }
 
 void virgl_resource_destroy(struct pipe_screen *screen,
@@ -275,4 +329,14 @@ boolean virgl_resource_get_handle(struct pipe_screen *screen,
    return vs->vws->resource_get_handle(vs->vws, res->hw_res,
                                        res->metadata.stride[0],
                                        whandle);
+}
+
+void virgl_resource_dirty(struct virgl_resource *res, uint32_t level)
+{
+   if (res) {
+      if (res->u.b.target == PIPE_BUFFER)
+         res->clean_mask &= ~1;
+      else
+         res->clean_mask &= ~(1 << level);
+   }
 }

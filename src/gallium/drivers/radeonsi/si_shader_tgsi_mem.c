@@ -783,6 +783,7 @@ static void atomic_emit_memory(struct si_shader_context *ctx,
 	LLVMBuilderRef builder = ctx->ac.builder;
 	const struct tgsi_full_instruction * inst = emit_data->inst;
 	LLVMValueRef ptr, result, arg;
+	const char *sync_scope = HAVE_LLVM >= 0x0900 ? "workgroup-one-as" : "workgroup";
 
 	ptr = get_memory_ptr(ctx, inst, ctx->i32, 1);
 
@@ -796,11 +797,8 @@ static void atomic_emit_memory(struct si_shader_context *ctx,
 
 		new_data = ac_to_integer(&ctx->ac, new_data);
 
-		result = LLVMBuildAtomicCmpXchg(builder, ptr, arg, new_data,
-		                       LLVMAtomicOrderingSequentiallyConsistent,
-		                       LLVMAtomicOrderingSequentiallyConsistent,
-		                       false);
-
+		result = ac_build_atomic_cmp_xchg(&ctx->ac, ptr, arg, new_data,
+						  sync_scope);
 		result = LLVMBuildExtractValue(builder, result, 0, "");
 	} else {
 		LLVMAtomicRMWBinOp op;
@@ -837,9 +835,7 @@ static void atomic_emit_memory(struct si_shader_context *ctx,
 				unreachable("unknown atomic opcode");
 		}
 
-		result = LLVMBuildAtomicRMW(builder, op, ptr, arg,
-		                       LLVMAtomicOrderingSequentiallyConsistent,
-		                       false);
+		result = ac_build_atomic_rmw(&ctx->ac, op, ptr, arg, sync_scope);
 	}
 	emit_data->output[emit_data->chan] =
 		LLVMBuildBitCast(builder, result, ctx->f32, "");
@@ -1042,6 +1038,7 @@ static void resq_emit(
 	args.opcode = ac_image_get_resinfo;
 	args.dim = ac_texture_dim_from_tgsi_target(ctx->screen, target);
 	args.dmask = 0xf;
+	args.attributes = AC_FUNC_ATTR_READNONE;
 
 	if (inst->Instruction.Opcode == TGSI_OPCODE_TXQ) {
 		tex_fetch_ptrs(bld_base, emit_data, &args.resource, NULL, NULL);
@@ -1088,6 +1085,13 @@ LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx,
 		list = LLVMBuildPointerCast(builder, list,
 					    ac_array_in_const32_addr_space(ctx->v4i32), "");
 		break;
+	case AC_DESC_PLANE_0:
+	case AC_DESC_PLANE_1:
+	case AC_DESC_PLANE_2:
+		/* Only used for the multiplane image support for Vulkan. Should
+		 * never be reached in radeonsi.
+		 */
+		unreachable("Plane descriptor requested in radeonsi.");
 	}
 
 	return ac_build_load_to_sgpr(&ctx->ac, list, index);
@@ -1272,6 +1276,7 @@ si_lower_gather4_integer(struct si_shader_context *ctx,
 		resinfo.sampler = args->sampler;
 		resinfo.lod = ctx->ac.i32_0;
 		resinfo.dmask = 0xf;
+		resinfo.attributes = AC_FUNC_ATTR_READNONE;
 
 		LLVMValueRef texsize =
 			fix_resinfo(ctx, target,
@@ -1776,6 +1781,8 @@ static void si_llvm_emit_fbfetch(const struct lp_build_tgsi_action *action,
 	args.opcode = ac_image_load;
 	args.resource = image;
 	args.dmask = 0xf;
+	args.attributes = AC_FUNC_ATTR_READNONE;
+
 	if (ctx->shader->key.mono.u.ps.fbfetch_msaa)
 		args.dim = ctx->shader->key.mono.u.ps.fbfetch_layered ?
 			ac_image_2darraymsaa : ac_image_2dmsaa;

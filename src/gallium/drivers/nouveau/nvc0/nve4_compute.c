@@ -779,6 +779,8 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    BEGIN_NVC0(push, SUBC_CP(NV50_GRAPH_SERIALIZE), 1);
    PUSH_DATA (push, 0);
 
+   nvc0_update_compute_invocations_counter(nvc0, info);
+
 out:
    if (ret)
       NOUVEAU_ERR("Failed to launch grid !\n");

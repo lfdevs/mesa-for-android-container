@@ -478,22 +478,24 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
    request.alloc_size = size;
    request.phys_alignment = alignment;
 
-   if (initial_domain & RADEON_DOMAIN_VRAM)
+   if (initial_domain & RADEON_DOMAIN_VRAM) {
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_VRAM;
+
+      /* Since VRAM and GTT have almost the same performance on APUs, we could
+       * just set GTT. However, in order to decrease GTT(RAM) usage, which is
+       * shared with the OS, allow VRAM placements too. The idea is not to use
+       * VRAM usefully, but to use it so that it's not unused and wasted.
+       */
+      if (!ws->info.has_dedicated_vram)
+         request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
+   }
+
    if (initial_domain & RADEON_DOMAIN_GTT)
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
    if (initial_domain & RADEON_DOMAIN_GDS)
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_GDS;
    if (initial_domain & RADEON_DOMAIN_OA)
       request.preferred_heap |= AMDGPU_GEM_DOMAIN_OA;
-
-   /* Since VRAM and GTT have almost the same performance on APUs, we could
-    * just set GTT. However, in order to decrease GTT(RAM) usage, which is
-    * shared with the OS, allow VRAM placements too. The idea is not to use
-    * VRAM usefully, but to use it so that it's not unused and wasted.
-    */
-   if (!ws->info.has_dedicated_vram)
-      request.preferred_heap |= AMDGPU_GEM_DOMAIN_GTT;
 
    if (flags & RADEON_FLAG_NO_CPU_ACCESS)
       request.flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
@@ -1226,6 +1228,10 @@ static void amdgpu_buffer_get_metadata(struct pb_buffer *_buf,
 
    if (bo->ws->info.chip_class >= GFX9) {
       md->u.gfx9.swizzle_mode = AMDGPU_TILING_GET(tiling_flags, SWIZZLE_MODE);
+
+      md->u.gfx9.dcc_offset_256B = AMDGPU_TILING_GET(tiling_flags, DCC_OFFSET_256B);
+      md->u.gfx9.dcc_pitch_max = AMDGPU_TILING_GET(tiling_flags, DCC_PITCH_MAX);
+      md->u.gfx9.dcc_independent_64B = AMDGPU_TILING_GET(tiling_flags, DCC_INDEPENDENT_64B);
    } else {
       md->u.legacy.microtile = RADEON_LAYOUT_LINEAR;
       md->u.legacy.macrotile = RADEON_LAYOUT_LINEAR;
@@ -1259,6 +1265,10 @@ static void amdgpu_buffer_set_metadata(struct pb_buffer *_buf,
 
    if (bo->ws->info.chip_class >= GFX9) {
       tiling_flags |= AMDGPU_TILING_SET(SWIZZLE_MODE, md->u.gfx9.swizzle_mode);
+
+      tiling_flags |= AMDGPU_TILING_SET(DCC_OFFSET_256B, md->u.gfx9.dcc_offset_256B);
+      tiling_flags |= AMDGPU_TILING_SET(DCC_PITCH_MAX, md->u.gfx9.dcc_pitch_max);
+      tiling_flags |= AMDGPU_TILING_SET(DCC_INDEPENDENT_64B, md->u.gfx9.dcc_independent_64B);
    } else {
       if (md->u.legacy.macrotile == RADEON_LAYOUT_TILED)
          tiling_flags |= AMDGPU_TILING_SET(ARRAY_MODE, 4); /* 2D_TILED_THIN1 */

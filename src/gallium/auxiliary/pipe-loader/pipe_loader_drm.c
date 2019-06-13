@@ -69,74 +69,74 @@ static const struct drm_driver_descriptor driver_descriptors[] = {
     {
         .driver_name = "i915",
         .create_screen = pipe_i915_create_screen,
-        .configuration = pipe_default_configuration_query,
+    },
+    {
+        .driver_name = "iris",
+        .create_screen = pipe_iris_create_screen,
+        .driconf_xml = &iris_driconf_xml,
     },
     {
         .driver_name = "nouveau",
         .create_screen = pipe_nouveau_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "r300",
         .create_screen = pipe_r300_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "r600",
         .create_screen = pipe_r600_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "radeonsi",
         .create_screen = pipe_radeonsi_create_screen,
-        .configuration = pipe_radeonsi_configuration_query,
+        .driconf_xml = &radeonsi_driconf_xml,
     },
     {
         .driver_name = "vmwgfx",
         .create_screen = pipe_vmwgfx_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "kgsl",
         .create_screen = pipe_freedreno_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "msm",
         .create_screen = pipe_freedreno_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "virtio_gpu",
         .create_screen = pipe_virgl_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "v3d",
         .create_screen = pipe_v3d_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "vc4",
         .create_screen = pipe_vc4_create_screen,
-        .configuration = pipe_default_configuration_query,
+    },
+    {
+        .driver_name = "panfrost",
+        .create_screen = pipe_panfrost_create_screen,
     },
     {
         .driver_name = "etnaviv",
         .create_screen = pipe_etna_create_screen,
-        .configuration = pipe_default_configuration_query,
     },
     {
         .driver_name = "tegra",
         .create_screen = pipe_tegra_create_screen,
-        .configuration = pipe_default_configuration_query,
+    },
+    {
+        .driver_name = "lima",
+        .create_screen = pipe_lima_create_screen,
     },
 };
 
 static const struct drm_driver_descriptor default_driver_descriptor = {
         .driver_name = "kmsro",
         .create_screen = pipe_kmsro_create_screen,
-        .configuration = pipe_default_configuration_query,
 };
 
 #endif
@@ -281,16 +281,15 @@ pipe_loader_drm_release(struct pipe_loader_device **dev)
    pipe_loader_base_release(dev);
 }
 
-static const struct drm_conf_ret *
-pipe_loader_drm_configuration(struct pipe_loader_device *dev,
-                              enum drm_conf conf)
+static const char *
+pipe_loader_drm_get_driconf_xml(struct pipe_loader_device *dev)
 {
    struct pipe_loader_drm_device *ddev = pipe_loader_drm_device(dev);
 
-   if (!ddev->dd->configuration)
+   if (!ddev->dd->driconf_xml)
       return NULL;
 
-   return ddev->dd->configuration(conf);
+   return *ddev->dd->driconf_xml;
 }
 
 static struct pipe_screen *
@@ -309,16 +308,10 @@ pipe_loader_drm_get_driinfo_xml(const char *driver_name)
    struct util_dl_library *lib = NULL;
    const struct drm_driver_descriptor *dd =
       get_driver_descriptor(driver_name, &lib);
-   if (!dd)
-      goto out;
 
-   const struct drm_conf_ret *conf = dd->configuration(DRM_CONF_XML_OPTIONS);
-   if (!conf)
-      goto out;
+   if (dd && dd->driconf_xml)
+      xml = strdup(*dd->driconf_xml);
 
-   xml = strdup((const char *)conf->val.val_pointer);
-
-out:
    if (lib)
       util_dl_close(lib);
    return xml;
@@ -326,6 +319,6 @@ out:
 
 static const struct pipe_loader_ops pipe_loader_drm_ops = {
    .create_screen = pipe_loader_drm_create_screen,
-   .configuration = pipe_loader_drm_configuration,
+   .get_driconf_xml = pipe_loader_drm_get_driconf_xml,
    .release = pipe_loader_drm_release
 };

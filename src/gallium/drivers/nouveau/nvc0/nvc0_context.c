@@ -60,6 +60,9 @@ nvc0_memory_barrier(struct pipe_context *pipe, unsigned flags)
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
    int i, s;
 
+   if (!(flags & ~PIPE_BARRIER_UPDATE))
+      return;
+
    if (flags & PIPE_BARRIER_MAPPED_BUFFER) {
       for (i = 0; i < nvc0->num_vtxbufs; ++i) {
          if (!nvc0->vtxbuf[i].buffer.resource && !nvc0->vtxbuf[i].is_user_buffer)

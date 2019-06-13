@@ -281,7 +281,14 @@ struct tgsi_sampler
 #define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 8)
 #define TGSI_EXEC_NUM_ADDRS         3
 
-#define TGSI_EXEC_NUM_TEMP_EXTRAS   12
+#define TGSI_EXEC_TEMP_PRIMITIVE_S1_I  (TGSI_EXEC_NUM_TEMPS + 11)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S1_C  0
+#define TGSI_EXEC_TEMP_PRIMITIVE_S2_I  (TGSI_EXEC_NUM_TEMPS + 12)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S2_C  1
+#define TGSI_EXEC_TEMP_PRIMITIVE_S3_I  (TGSI_EXEC_NUM_TEMPS + 13)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S3_C  2
+
+#define TGSI_EXEC_NUM_TEMP_EXTRAS   14
 
 
 
@@ -311,6 +318,8 @@ struct tgsi_sampler
 #define TGSI_MAX_TOTAL_VERTICES (TGSI_MAX_PRIM_VERTICES * TGSI_MAX_PRIMITIVES * PIPE_MAX_ATTRIBS)
 
 #define TGSI_MAX_MISC_INPUTS 8
+
+#define TGSI_MAX_VERTEX_STREAMS 4
 
 /** function call/activation record */
 struct tgsi_call_record
@@ -342,6 +351,16 @@ enum tgsi_break_type {
 
 typedef float float4[4];
 
+struct tgsi_exec_machine;
+
+typedef void (* apply_sample_offset_func)(
+   const struct tgsi_exec_machine *mach,
+   unsigned attrib,
+   unsigned chan,
+   float ofs_x,
+   float ofs_y,
+   union tgsi_exec_channel *out_chan);
+
 /**
  * Run-time virtual machine state for executing TGSI shader.
  */
@@ -357,6 +376,7 @@ struct tgsi_exec_machine
 
    struct tgsi_exec_vector       *Inputs;
    struct tgsi_exec_vector       *Outputs;
+   apply_sample_offset_func           *InputSampleOffsetApply;
 
    /* System values */
    unsigned                      SysSemanticToIndex[TGSI_SEMANTIC_COUNT];
@@ -377,7 +397,8 @@ struct tgsi_exec_machine
    enum pipe_shader_type         ShaderType; /**< PIPE_SHADER_x */
 
    /* GEOMETRY processor only. */
-   unsigned                      *Primitives;
+   unsigned                      *Primitives[TGSI_MAX_VERTEX_STREAMS];
+   unsigned                      *PrimitiveOffsets[TGSI_MAX_VERTEX_STREAMS];
    unsigned                       NumOutputs;
    unsigned                       MaxGeometryShaderOutputs;
    unsigned                       MaxOutputVertices;

@@ -32,7 +32,7 @@
 #include "brw_cfg.h"
 #include "brw_fs.h"
 #include "brw_nir.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 
 namespace brw {
 

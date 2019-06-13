@@ -23,5 +23,5 @@ libxlib = static_library(
   files('glx_api.c', 'glx_getproc.c', 'glx_usefont.c', 'xm_api.c', 'xm_st.c'),
   c_args : c_vis_args,
   include_directories : [inc_common, inc_mapi, inc_mesa],
-  dependencies : [dep_x11, dep_xext, dep_xcb],
+  dependencies : [dep_x11, dep_xext, dep_xcb, dep_glproto],
 )

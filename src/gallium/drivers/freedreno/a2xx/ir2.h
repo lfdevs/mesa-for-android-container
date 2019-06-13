@@ -28,6 +28,7 @@
 #define IR2_H_
 
 #include "compiler/nir/nir.h"
+#include "pipe/p_context.h"
 
 struct ir2_fetch_info {
 	/* dword offset of the fetch instruction */
@@ -85,7 +86,8 @@ struct tgsi_token;
 void ir2_compile(struct fd2_shader_stateobj *so, unsigned variant,
 		struct fd2_shader_stateobj *fp);
 
-struct nir_shader *ir2_tgsi_to_nir(const struct tgsi_token *tokens);
+struct nir_shader *ir2_tgsi_to_nir(const struct tgsi_token *tokens,
+				   struct pipe_screen *screen);
 
 const nir_shader_compiler_options *ir2_get_compiler_options(void);
 

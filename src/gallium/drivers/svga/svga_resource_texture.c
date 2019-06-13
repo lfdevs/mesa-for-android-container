@@ -116,7 +116,7 @@ svga_transfer_dma(struct svga_context *svga,
    /* Ensure any pending operations on host surfaces are queued on the command
     * buffer first.
     */
-   svga_surfaces_flush( svga );
+   svga_surfaces_flush(svga);
 
    if (!st->swbuf) {
       /* Do the DMA transfer in a single go */
@@ -223,7 +223,7 @@ svga_texture_get_handle(struct pipe_screen *screen,
 
 static void
 svga_texture_destroy(struct pipe_screen *screen,
-		     struct pipe_resource *pt)
+                     struct pipe_resource *pt)
 {
    struct svga_screen *ss = svga_screen(screen);
    struct svga_texture *tex = svga_texture(pt);
@@ -241,7 +241,7 @@ svga_texture_destroy(struct pipe_screen *screen,
    /* Destroy the backed surface handle if exists */
    if (tex->backed_handle)
       svga_screen_surface_destroy(ss, &tex->backed_key, &tex->backed_handle);
-      
+
    ss->hud.total_resource_bytes -= tex->size;
 
    FREE(tex->defined);
@@ -743,11 +743,11 @@ update_image_vgpu10(struct svga_context *svga,
  */
 static void
 svga_texture_transfer_unmap_dma(struct svga_context *svga,
-			        struct svga_transfer *st)
+                                struct svga_transfer *st)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
 
-   if (st->hwbuf) 
+   if (st->hwbuf)
       sws->buffer_unmap(sws, st->hwbuf);
 
    if (st->base.usage & PIPE_TRANSFER_WRITE) {
@@ -775,7 +775,7 @@ svga_texture_transfer_unmap_dma(struct svga_context *svga,
  */
 static void
 svga_texture_transfer_unmap_direct(struct svga_context *svga,
-			           struct svga_transfer *st)
+                                   struct svga_transfer *st)
 {
    struct pipe_transfer *transfer = &st->base;
    struct svga_texture *tex = svga_texture(transfer->resource);
@@ -830,9 +830,10 @@ svga_texture_transfer_unmap_direct(struct svga_context *svga,
    }
 }
 
+
 static void
 svga_texture_transfer_unmap(struct pipe_context *pipe,
-			    struct pipe_transfer *transfer)
+                            struct pipe_transfer *transfer)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_screen *ss = svga_screen(pipe->screen);
@@ -1334,7 +1335,7 @@ boolean
 svga_texture_transfer_map_upload_create(struct svga_context *svga)
 {
    svga->tex_upload = u_upload_create(&svga->pipe, TEX_UPLOAD_DEFAULT_SIZE,
-                                      0, PIPE_USAGE_STAGING, 0);
+                                      PIPE_BIND_CUSTOM, PIPE_USAGE_STAGING, 0);
    return svga->tex_upload != NULL;
 }
 
@@ -1480,7 +1481,7 @@ svga_texture_transfer_unmap_upload(struct svga_context *svga,
    struct svga_winsys_surface *dstsurf;
    struct pipe_resource *texture = st->base.resource;
    struct svga_texture *tex = svga_texture(texture);
-   enum pipe_error ret; 
+   enum pipe_error ret;
    unsigned subResource;
    unsigned numMipLevels;
    unsigned i, layer;
@@ -1488,7 +1489,7 @@ svga_texture_transfer_unmap_upload(struct svga_context *svga,
 
    assert(svga->tex_upload);
    assert(st->upload.buf);
-   
+
    /* unmap the texture upload buffer */
    u_upload_unmap(svga->tex_upload);
 

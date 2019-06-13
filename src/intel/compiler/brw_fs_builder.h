@@ -733,13 +733,26 @@ namespace brw {
       src_reg
       fix_3src_operand(const src_reg &src) const
       {
-         if (src.file == VGRF || src.file == UNIFORM || src.stride > 1) {
+         switch (src.file) {
+         case FIXED_GRF:
+            /* FINISHME: Could handle scalar region, other stride=1 regions */
+            if (src.vstride != BRW_VERTICAL_STRIDE_8 ||
+                src.width != BRW_WIDTH_8 ||
+                src.hstride != BRW_HORIZONTAL_STRIDE_1)
+               break;
+            /* fallthrough */
+         case ATTR:
+         case VGRF:
+         case UNIFORM:
+         case IMM:
             return src;
-         } else {
-            dst_reg expanded = vgrf(src.type);
-            MOV(expanded, src);
-            return expanded;
+         default:
+            break;
          }
+
+         dst_reg expanded = vgrf(src.type);
+         MOV(expanded, src);
+         return expanded;
       }
 
       /**

@@ -190,7 +190,7 @@ try_constant_propagate(const struct gen_device_info *devinfo,
       inst->src[arg] = value;
       return true;
 
-   case SHADER_OPCODE_UNTYPED_ATOMIC:
+   case VEC4_OPCODE_UNTYPED_ATOMIC:
       if (arg == 1) {
          inst->src[arg] = value;
          return true;

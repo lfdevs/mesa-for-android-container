@@ -66,7 +66,7 @@ pkg.generate(
   libraries_private : '-ldl',  # FIXME: autotools lists this a incomplete
 )
 
-if with_tests
+if with_tests and prog_nm.found()
   test(
     'gbm-symbols-check',
     find_program('gbm-symbols-check'),

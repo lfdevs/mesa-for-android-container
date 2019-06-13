@@ -82,6 +82,24 @@ brw_reg_type_is_floating_point(enum brw_reg_type type)
    }
 }
 
+static inline bool
+brw_reg_type_is_integer(enum brw_reg_type type)
+{
+   switch (type) {
+   case BRW_REGISTER_TYPE_Q:
+   case BRW_REGISTER_TYPE_UQ:
+   case BRW_REGISTER_TYPE_D:
+   case BRW_REGISTER_TYPE_UD:
+   case BRW_REGISTER_TYPE_W:
+   case BRW_REGISTER_TYPE_UW:
+   case BRW_REGISTER_TYPE_B:
+   case BRW_REGISTER_TYPE_UB:
+      return true;
+   default:
+      return false;
+   }
+}
+
 unsigned
 brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
                         enum brw_reg_file file, enum brw_reg_type type);

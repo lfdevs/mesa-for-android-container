@@ -119,8 +119,32 @@ intel_finalize_mipmap_tree(struct brw_context *brw,
    /* May need to create a new tree:
     */
    if (!intelObj->mt) {
+      const unsigned level = firstImage->base.Base.Level;
       intel_get_image_dims(&firstImage->base.Base, &width, &height, &depth);
-
+      /* Figure out image dimensions at start level. */
+      switch(intelObj->base.Target) {
+      case GL_TEXTURE_2D_MULTISAMPLE:
+      case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+      case GL_TEXTURE_RECTANGLE:
+      case GL_TEXTURE_EXTERNAL_OES:
+          assert(level == 0);
+          break;
+      case GL_TEXTURE_3D:
+          depth = depth << level;
+          /* Fall through */
+      case GL_TEXTURE_2D:
+      case GL_TEXTURE_2D_ARRAY:
+      case GL_TEXTURE_CUBE_MAP:
+      case GL_TEXTURE_CUBE_MAP_ARRAY:
+          height = height << level;
+          /* Fall through */
+      case GL_TEXTURE_1D:
+      case GL_TEXTURE_1D_ARRAY:
+          width = width << level;
+          break;
+      default:
+          unreachable("Unexpected target");
+      }
       perf_debug("Creating new %s %dx%dx%d %d-level miptree to handle "
                  "finalized texture miptree.\n",
                  _mesa_get_format_name(firstImage->base.Base.TexFormat),

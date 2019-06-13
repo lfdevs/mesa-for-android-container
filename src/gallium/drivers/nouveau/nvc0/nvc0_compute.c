@@ -500,4 +500,36 @@ nvc0_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    nouveau_bufctx_reset(nvc0->bufctx_cp, NVC0_BIND_CP_SUF);
    nvc0->dirty_cp |= NVC0_NEW_CP_SURFACES;
    nvc0->images_dirty[5] |= nvc0->images_valid[5];
+
+   nvc0_update_compute_invocations_counter(nvc0, info);
+}
+
+static void
+nvc0_compute_update_indirect_invocations(struct nvc0_context *nvc0,
+                                         const struct pipe_grid_info *info) {
+   struct nouveau_pushbuf *push = nvc0->base.pushbuf;
+   struct nv04_resource *res = nv04_resource(info->indirect);
+   uint32_t offset = res->offset + info->indirect_offset;
+
+   nouveau_pushbuf_space(push, 16, 0, 8);
+   PUSH_REFN(push, res->bo, NOUVEAU_BO_RD | res->domain);
+   BEGIN_1IC0(push, NVC0_3D(MACRO_COMPUTE_COUNTER), 7);
+   PUSH_DATA(push, 6);
+   PUSH_DATA(push, info->block[0]);
+   PUSH_DATA(push, info->block[1]);
+   PUSH_DATA(push, info->block[2]);
+   nouveau_pushbuf_data(push, res->bo, offset,
+                        NVC0_IB_ENTRY_1_NO_PREFETCH | 3 * 4);
+}
+
+void
+nvc0_update_compute_invocations_counter(struct nvc0_context *nvc0,
+                                        const struct pipe_grid_info *info) {
+   if (unlikely(info->indirect)) {
+      nvc0_compute_update_indirect_invocations(nvc0, info);
+   } else {
+      uint64_t invocations = info->block[0] * info->block[1] * info->block[2];
+      invocations *= info->grid[0] * info->grid[1] * info->grid[2];
+      nvc0->compute_invocations += invocations;
+   }
 }

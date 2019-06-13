@@ -313,15 +313,6 @@ get_format_info(enum isl_format fmt)
 }
 
 static nir_ssa_def *
-nir_zero_vec(nir_builder *b, unsigned num_components)
-{
-   nir_const_value v;
-   memset(&v, 0, sizeof(v));
-
-   return nir_build_imm(b, num_components, 32, v);
-}
-
-static nir_ssa_def *
 convert_color_for_load(nir_builder *b, const struct gen_device_info *devinfo,
                        nir_ssa_def *color,
                        enum isl_format image_fmt, enum isl_format lower_fmt,
@@ -498,7 +489,7 @@ lower_image_load_instr(nir_builder *b,
 
       nir_push_else(b, NULL);
 
-      nir_ssa_def *zero = nir_zero_vec(b, load->num_components);
+      nir_ssa_def *zero = nir_imm_zero(b, load->num_components, 32);
 
       nir_pop_if(b, NULL);
 
@@ -800,45 +791,4 @@ brw_nir_lower_image_load_store(nir_shader *shader,
    }
 
    return progress;
-}
-
-void
-brw_nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin,
-                                nir_ssa_def *index)
-{
-   nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
-
-   switch (intrin->intrinsic) {
-#define CASE(op) \
-   case nir_intrinsic_image_deref_##op: \
-      intrin->intrinsic = nir_intrinsic_image_##op; \
-      break;
-   CASE(load)
-   CASE(store)
-   CASE(atomic_add)
-   CASE(atomic_min)
-   CASE(atomic_max)
-   CASE(atomic_and)
-   CASE(atomic_or)
-   CASE(atomic_xor)
-   CASE(atomic_exchange)
-   CASE(atomic_comp_swap)
-   CASE(atomic_fadd)
-   CASE(size)
-   CASE(samples)
-   CASE(load_raw_intel)
-   CASE(store_raw_intel)
-#undef CASE
-   default:
-      unreachable("Unhanded image intrinsic");
-   }
-
-   nir_intrinsic_set_image_dim(intrin, glsl_get_sampler_dim(deref->type));
-   nir_intrinsic_set_image_array(intrin, glsl_sampler_type_is_array(deref->type));
-   nir_intrinsic_set_access(intrin, var->data.image.access);
-   nir_intrinsic_set_format(intrin, var->data.image.format);
-
-   nir_instr_rewrite_src(&intrin->instr, &intrin->src[0],
-                         nir_src_for_ssa(index));
 }

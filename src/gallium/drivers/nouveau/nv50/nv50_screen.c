@@ -27,6 +27,7 @@
 #include "util/u_format_s3tc.h"
 #include "util/u_screen.h"
 #include "pipe/p_screen.h"
+#include "compiler/nir/nir.h"
 
 #include "nv50/nv50_context.h"
 #include "nv50/nv50_screen.h"
@@ -206,7 +207,6 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_COPY_BETWEEN_COMPRESSED_AND_PLAIN_FORMATS:
    case PIPE_CAP_SHAREABLE_SHADERS:
    case PIPE_CAP_CLEAR_TEXTURE:
-   case PIPE_CAP_COMPUTE:
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
    case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_STRING_MARKER:
@@ -316,6 +316,9 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE:
    case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
+   case PIPE_CAP_NIR_COMPACT_ARRAYS:
+   case PIPE_CAP_COMPUTE:
+   case PIPE_CAP_IMAGE_LOAD_FORMATTED:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -345,6 +348,8 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
                              enum pipe_shader_type shader,
                              enum pipe_shader_cap param)
 {
+   const struct nouveau_screen *screen = nouveau_screen(pscreen);
+
    switch (shader) {
    case PIPE_SHADER_VERTEX:
    case PIPE_SHADER_GEOMETRY:
@@ -398,7 +403,7 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return MIN2(16, PIPE_MAX_SAMPLERS);
    case PIPE_SHADER_CAP_PREFERRED_IR:
-      return PIPE_SHADER_IR_TGSI;
+      return screen->prefer_nir ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    case PIPE_SHADER_CAP_TGSI_DROUND_SUPPORTED:
@@ -872,6 +877,44 @@ int nv50_tls_realloc(struct nv50_screen *screen, unsigned tls_space)
    return 1;
 }
 
+static const nir_shader_compiler_options nir_options = {
+   .fuse_ffma = false, /* nir doesn't track mad vs fma */
+   .lower_flrp32 = true,
+   .lower_flrp64 = true,
+   .lower_fpow = false,
+   .lower_fmod64 = true,
+   .lower_uadd_carry = true,
+   .lower_usub_borrow = true,
+   .lower_ffract = true,
+   .lower_pack_half_2x16 = true,
+   .lower_pack_unorm_2x16 = true,
+   .lower_pack_snorm_2x16 = true,
+   .lower_pack_unorm_4x8 = true,
+   .lower_pack_snorm_4x8 = true,
+   .lower_unpack_half_2x16 = true,
+   .lower_unpack_unorm_2x16 = true,
+   .lower_unpack_snorm_2x16 = true,
+   .lower_unpack_unorm_4x8 = true,
+   .lower_unpack_snorm_4x8 = true,
+   .lower_extract_byte = true,
+   .lower_extract_word = true,
+   .lower_all_io_to_temps = false,
+   .native_integers = true,
+   .lower_cs_local_index_from_id = true,
+   .use_interpolated_input_intrinsics = true,
+   .max_unroll_iterations = 32,
+};
+
+static const void *
+nv50_screen_get_compiler_options(struct pipe_screen *pscreen,
+                                 enum pipe_shader_ir ir,
+                                 enum pipe_shader_type shader)
+{
+   if (ir == PIPE_SHADER_IR_NIR)
+      return &nir_options;
+   return NULL;
+}
+
 struct nouveau_screen *
 nv50_screen_create(struct nouveau_device *dev)
 {
@@ -916,6 +959,9 @@ nv50_screen_create(struct nouveau_device *dev)
    pscreen->get_compute_param = nv50_screen_get_compute_param;
    pscreen->get_driver_query_info = nv50_screen_get_driver_query_info;
    pscreen->get_driver_query_group_info = nv50_screen_get_driver_query_group_info;
+
+   /* nir stuff */
+   pscreen->get_compiler_options = nv50_screen_get_compiler_options;
 
    nv50_screen_init_resource_functions(pscreen);
 

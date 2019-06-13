@@ -21,6 +21,8 @@
 # TODO: android?
 
 files_libintel_dev = files(
+  'gen_debug.c',
+  'gen_debug.h',
   'gen_device_info.c',
   'gen_device_info.h',
 )
@@ -28,6 +30,18 @@ files_libintel_dev = files(
 libintel_dev = static_library(
   ['intel_dev'],
   files_libintel_dev,
-  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  include_directories : [inc_common, inc_intel, inc_include],
   c_args : [c_vis_args, no_override_init_args],
 )
+
+if with_tests
+  test('gen_device_info_test',
+       executable(
+         'gen_device_info_test',
+         'gen_device_info_test.c',
+         include_directories : [inc_include, inc_src],
+         link_with : libintel_dev,
+       ),
+       suite : ['intel'],
+      )
+endif

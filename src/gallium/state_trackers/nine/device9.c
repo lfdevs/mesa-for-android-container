@@ -266,13 +266,15 @@ NineDevice9_ctor( struct NineDevice9 *This,
     }
 
     /* Initialize CSMT */
+    /* r600, radeonsi and iris are thread safe. */
     if (pCTX->csmt_force == 1)
         This->csmt_active = true;
     else if (pCTX->csmt_force == 0)
         This->csmt_active = false;
-    else
-        /* r600 and radeonsi are thread safe. */
-        This->csmt_active = strstr(pScreen->get_name(pScreen), "AMD") != NULL;
+    else if (strstr(pScreen->get_name(pScreen), "AMD") != NULL)
+        This->csmt_active = true;
+    else if (strstr(pScreen->get_name(pScreen), "Intel") != NULL)
+        This->csmt_active = true;
 
     /* We rely on u_upload_mgr using persistent coherent buffers (which don't
      * require flush to work in multi-pipe_context scenario) for vertex and
@@ -288,6 +290,8 @@ NineDevice9_ctor( struct NineDevice9 *This,
 
     if (This->csmt_active)
         DBG("\033[1;32mCSMT is active\033[0m\n");
+
+    This->workarounds.dynamic_texture_workaround = pCTX->dynamic_texture_workaround;
 
     This->buffer_upload = nine_upload_create(This->pipe_secondary, 4 * 1024 * 1024, 4);
 
@@ -487,6 +491,11 @@ NineDevice9_ctor( struct NineDevice9 *This,
     This->driver_caps.ps_integer = pScreen->get_shader_param(pScreen, PIPE_SHADER_FRAGMENT, PIPE_SHADER_CAP_INTEGERS);
     This->driver_caps.offset_units_unscaled = GET_PCAP(POLYGON_OFFSET_UNITS_UNSCALED);
 
+    This->context.inline_constants = pCTX->shader_inline_constants;
+    /* Code would be needed when integers are not available to correctly
+     * handle the conversion of integer constants */
+    This->context.inline_constants &= This->driver_caps.vs_integer && This->driver_caps.ps_integer;
+
     nine_ff_init(This); /* initialize fixed function code */
 
     NineDevice9_SetDefaultState(This, FALSE);
@@ -529,7 +538,7 @@ NineDevice9_dtor( struct NineDevice9 *This )
 
     nine_ff_fini(This);
     nine_state_destroy_sw(This);
-    nine_state_clear(&This->state, TRUE);
+    nine_device_state_clear(This);
     nine_context_clear(This);
 
     nine_bind(&This->record, NULL);
@@ -791,9 +800,11 @@ NineDevice9_SetCursorPosition( struct NineDevice9 *This,
 
     DBG("This=%p X=%d Y=%d Flags=%d\n", This, X, Y, Flags);
 
-    if (This->cursor.pos.x == X &&
-        This->cursor.pos.y == Y)
-        return;
+    /* present >= v1.4 handles this itself */
+    if (This->minor_version_num < 4) {
+        if (This->cursor.pos.x == X && This->cursor.pos.y == Y)
+            return;
+    }
 
     This->cursor.pos.x = X;
     This->cursor.pos.y = Y;
@@ -903,7 +914,7 @@ NineDevice9_Reset( struct NineDevice9 *This,
     }
 
     nine_csmt_process(This);
-    nine_state_clear(&This->state, TRUE);
+    nine_device_state_clear(This);
     nine_context_clear(This);
 
     NineDevice9_SetDefaultState(This, TRUE);
@@ -2712,7 +2723,7 @@ NineDevice9_SetSoftwareVertexProcessing( struct NineDevice9 *This,
         nine_context_set_swvp(This, bSoftware);
         return D3D_OK;
     } else
-        return D3DERR_INVALIDCALL; /* msdn. TODO: check in practice */
+        return D3D_OK; /* msdn seems to indicate INVALIDCALL, but at least Halo expects OK */
 }
 
 BOOL NINE_WINAPI

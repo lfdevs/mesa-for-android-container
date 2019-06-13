@@ -352,7 +352,8 @@ static void radv_pick_resolve_method_images(struct radv_image *src_image,
 	
 	if (radv_layout_dcc_compressed(dest_image, dest_image_layout, queue_mask)) {
 		*method = RESOLVE_FRAGMENT;
-	} else if (dest_image->surface.micro_tile_mode != src_image->surface.micro_tile_mode) {
+	} else if (dest_image->planes[0].surface.micro_tile_mode !=
+	           src_image->planes[0].surface.micro_tile_mode) {
 		*method = RESOLVE_COMPUTE;
 	}
 }
@@ -633,8 +634,7 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_subpass_attachment src_att = subpass->color_attachments[i];
 		struct radv_subpass_attachment dest_att = subpass->resolve_attachments[i];
 
-		if (src_att.attachment == VK_ATTACHMENT_UNUSED ||
-		    dest_att.attachment == VK_ATTACHMENT_UNUSED)
+		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
 			continue;
 
 		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
@@ -661,8 +661,7 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_subpass_attachment src_att = subpass->color_attachments[i];
 		struct radv_subpass_attachment dest_att = subpass->resolve_attachments[i];
 
-		if (src_att.attachment == VK_ATTACHMENT_UNUSED ||
-		    dest_att.attachment == VK_ATTACHMENT_UNUSED)
+		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
 			continue;
 
 		struct radv_image *dst_img = cmd_buffer->state.framebuffer->attachments[dest_att.attachment].attachment->image;
@@ -675,10 +674,10 @@ radv_cmd_buffer_resolve_subpass(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_subpass resolve_subpass = {
 			.color_count = 2,
 			.color_attachments = (struct radv_subpass_attachment[]) { src_att, dest_att },
-			.depth_stencil_attachment = { .attachment = VK_ATTACHMENT_UNUSED },
+			.depth_stencil_attachment = NULL,
 		};
 
-		radv_cmd_buffer_set_subpass(cmd_buffer, &resolve_subpass, false);
+		radv_cmd_buffer_set_subpass(cmd_buffer, &resolve_subpass);
 
 		VkResult ret = build_resolve_pipeline(cmd_buffer->device, radv_format_meta_fs_key(dst_img->vk_format));
 		if (ret != VK_SUCCESS) {
@@ -710,8 +709,7 @@ radv_decompress_resolve_subpass_src(struct radv_cmd_buffer *cmd_buffer)
 		struct radv_subpass_attachment src_att = subpass->color_attachments[i];
 		struct radv_subpass_attachment dest_att = subpass->resolve_attachments[i];
 
-		if (src_att.attachment == VK_ATTACHMENT_UNUSED ||
-		    dest_att.attachment == VK_ATTACHMENT_UNUSED)
+		if (dest_att.attachment == VK_ATTACHMENT_UNUSED)
 			continue;
 
 		struct radv_image *src_image =

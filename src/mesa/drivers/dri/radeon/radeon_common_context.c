@@ -270,7 +270,7 @@ void radeonDestroyContext(__DRIcontext *driContextPriv )
 
 	/* free atom list */
 	/* free the Mesa context data */
-	_mesa_free_context_data(&radeon->glCtx);
+	_mesa_free_context_data(&radeon->glCtx, true);
 
 	/* free the option cache */
 	driDestroyOptionCache(&radeon->optionCache);

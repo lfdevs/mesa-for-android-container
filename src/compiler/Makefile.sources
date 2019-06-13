@@ -26,6 +26,8 @@ LIBGLSL_FILES = \
 	glsl/builtin_variables.cpp \
 	glsl/generate_ir.cpp \
 	glsl/gl_nir_lower_atomics.c \
+	glsl/gl_nir_lower_bindless_images.c \
+	glsl/gl_nir_lower_buffers.c \
 	glsl/gl_nir_lower_samplers.c \
 	glsl/gl_nir_lower_samplers_as_deref.c \
 	glsl/gl_nir_link_atomics.c \
@@ -217,6 +219,7 @@ NIR_FILES = \
 	nir/nir_format_convert.h \
 	nir/nir_from_ssa.c \
 	nir/nir_gather_info.c \
+	nir/nir_gather_ssa_types.c \
 	nir/nir_gather_xfb_info.c \
 	nir/nir_gs_count_vertices.c \
 	nir/nir_inline_functions.c \
@@ -241,6 +244,9 @@ NIR_FILES = \
 	nir/nir_lower_constant_initializers.c \
 	nir/nir_lower_double_ops.c \
 	nir/nir_lower_drawpixels.c \
+	nir/nir_lower_fb_read.c \
+	nir/nir_lower_fragcoord_wtrans.c \
+	nir/nir_lower_frexp.c \
 	nir/nir_lower_global_vars_to_local.c \
 	nir/nir_lower_gs_intrinsics.c \
 	nir/nir_lower_load_const_to_scalar.c \
@@ -253,26 +259,32 @@ NIR_FILES = \
 	nir/nir_lower_io_to_temporaries.c \
 	nir/nir_lower_io_to_scalar.c \
 	nir/nir_lower_io_to_vector.c \
+	nir/nir_lower_non_uniform_access.c \
 	nir/nir_lower_packing.c \
 	nir/nir_lower_passthrough_edgeflags.c \
 	nir/nir_lower_patch_vertices.c \
 	nir/nir_lower_phis_to_scalar.c \
 	nir/nir_lower_regs_to_ssa.c \
 	nir/nir_lower_returns.c \
+	nir/nir_lower_scratch.c \
 	nir/nir_lower_subgroups.c \
 	nir/nir_lower_system_values.c \
 	nir/nir_lower_tex.c \
 	nir/nir_lower_to_source_mods.c \
 	nir/nir_lower_two_sided_color.c \
+	nir/nir_lower_uniforms_to_ubo.c \
 	nir/nir_lower_vars_to_ssa.c \
 	nir/nir_lower_var_copies.c \
 	nir/nir_lower_vec_to_movs.c \
+	nir/nir_lower_viewport_transform.c \
 	nir/nir_lower_wpos_center.c \
 	nir/nir_lower_wpos_ytransform.c \
 	nir/nir_metadata.c \
 	nir/nir_move_load_const.c \
 	nir/nir_move_vec_src_uses_to_dest.c \
 	nir/nir_normalize_cubemap_coords.c \
+	nir/nir_opt_combine_stores.c \
+	nir/nir_opt_comparison_pre.c \
 	nir/nir_opt_conditional_discard.c \
 	nir/nir_opt_constant_folding.c \
 	nir/nir_opt_copy_prop_vars.c \
@@ -283,7 +295,6 @@ NIR_FILES = \
 	nir/nir_opt_dead_write_vars.c \
 	nir/nir_opt_find_array_copies.c \
 	nir/nir_opt_gcm.c \
-	nir/nir_opt_global_to_local.c \
 	nir/nir_opt_idiv_const.c \
 	nir/nir_opt_if.c \
 	nir/nir_opt_intrinsics.c \
@@ -307,6 +318,7 @@ NIR_FILES = \
 	nir/nir_search_helpers.h \
 	nir/nir_serialize.c \
 	nir/nir_serialize.h \
+	nir/nir_strip.c \
 	nir/nir_split_per_member_structs.c \
 	nir/nir_split_var_copies.c \
 	nir/nir_split_vars.c \
@@ -327,6 +339,7 @@ SPIRV_FILES = \
 	spirv/GLSL.std.450.h \
 	spirv/gl_spirv.c \
 	spirv/nir_spirv.h \
+	spirv/OpenCL.std.h \
 	spirv/spirv.h \
 	spirv/spirv_info.h \
 	spirv/spirv_to_nir.c \
@@ -334,6 +347,7 @@ SPIRV_FILES = \
 	spirv/vtn_amd.c \
 	spirv/vtn_cfg.c \
 	spirv/vtn_glsl450.c \
+	spirv/vtn_opencl.c \
 	spirv/vtn_private.h \
 	spirv/vtn_subgroup.c \
 	spirv/vtn_variables.c

@@ -92,14 +92,14 @@ struct _egl_image
 
 
 EGLBoolean
-_eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *dpy,
+_eglParseImageAttribList(_EGLImageAttribs *attrs, _EGLDisplay *disp,
                          const EGLint *attrib_list);
 
 
 static inline void
-_eglInitImage(_EGLImage *img, _EGLDisplay *dpy)
+_eglInitImage(_EGLImage *img, _EGLDisplay *disp)
 {
-   _eglInitResource(&img->Resource, sizeof(*img), dpy);
+   _eglInitResource(&img->Resource, sizeof(*img), disp);
 }
 
 
@@ -153,10 +153,10 @@ _eglUnlinkImage(_EGLImage *img)
  * Return NULL if the handle has no corresponding linked image.
  */
 static inline _EGLImage *
-_eglLookupImage(EGLImage image, _EGLDisplay *dpy)
+_eglLookupImage(EGLImage image, _EGLDisplay *disp)
 {
    _EGLImage *img = (_EGLImage *) image;
-   if (!dpy || !_eglCheckResource((void *) img, _EGL_RESOURCE_IMAGE, dpy))
+   if (!disp || !_eglCheckResource((void *) img, _EGL_RESOURCE_IMAGE, disp))
       img = NULL;
    return img;
 }

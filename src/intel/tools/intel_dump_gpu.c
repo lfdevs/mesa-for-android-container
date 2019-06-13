@@ -37,7 +37,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
-#include <i915_drm.h>
+#include "drm-uapi/i915_drm.h"
 #include <inttypes.h>
 
 #include "intel_aub.h"
@@ -58,6 +58,7 @@ static FILE *output_file = NULL;
 static int verbose = 0;
 static bool device_override;
 
+#define MAX_FD_COUNT 64
 #define MAX_BO_COUNT 64 * 1024
 
 struct bo {
@@ -94,12 +95,13 @@ fail_if(int cond, const char *format, ...)
 }
 
 static struct bo *
-get_bo(uint32_t handle)
+get_bo(unsigned fd, uint32_t handle)
 {
    struct bo *bo;
 
    fail_if(handle >= MAX_BO_COUNT, "bo handle too large\n");
-   bo = &bos[handle];
+   fail_if(fd >= MAX_FD_COUNT, "bo fd too large\n");
+   bo = &bos[handle + fd * MAX_BO_COUNT];
 
    return bo;
 }
@@ -115,7 +117,7 @@ static uint32_t device = 0;
 static struct aub_file aub_file;
 
 static void *
-relocate_bo(struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
+relocate_bo(int fd, struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
             const struct drm_i915_gem_exec_object2 *obj)
 {
    const struct drm_i915_gem_exec_object2 *exec_objects =
@@ -137,7 +139,7 @@ relocate_bo(struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
          handle = relocs[i].target_handle;
 
       aub_write_reloc(&devinfo, ((char *)relocated) + relocs[i].offset,
-                      get_bo(handle)->offset + relocs[i].delta);
+                      get_bo(fd, handle)->offset + relocs[i].delta);
    }
 
    return relocated;
@@ -185,6 +187,24 @@ gem_get_param(int fd, uint32_t param)
    return value;
 }
 
+static enum drm_i915_gem_engine_class
+engine_class_from_ring_flag(uint32_t ring_flag)
+{
+   switch (ring_flag) {
+   case I915_EXEC_DEFAULT:
+   case I915_EXEC_RENDER:
+      return I915_ENGINE_CLASS_RENDER;
+   case I915_EXEC_BSD:
+      return I915_ENGINE_CLASS_VIDEO;
+   case I915_EXEC_BLT:
+      return I915_ENGINE_CLASS_COPY;
+   case I915_EXEC_VEBOX:
+      return I915_ENGINE_CLASS_VIDEO_ENHANCE;
+   default:
+      return I915_ENGINE_CLASS_INVALID;
+   }
+}
+
 static void
 dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 {
@@ -206,10 +226,10 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
       fail_if(!gen_get_device_info(device, &devinfo),
               "failed to identify chipset=0x%x\n", device);
 
-      aub_file_init(&aub_file, output_file, device);
-      if (verbose == 2)
-         aub_file.verbose_log_file = stdout;
-      aub_write_header(&aub_file, program_invocation_short_name);
+      aub_file_init(&aub_file, output_file,
+                    verbose == 2 ? stdout : NULL,
+                    device, program_invocation_short_name);
+      aub_write_default_setup(&aub_file);
 
       if (verbose)
          printf("[running, output file %s, chipset id 0x%04x, gen %d]\n",
@@ -226,7 +246,7 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 
    for (uint32_t i = 0; i < execbuffer2->buffer_count; i++) {
       obj = &exec_objects[i];
-      bo = get_bo(obj->handle);
+      bo = get_bo(fd, obj->handle);
 
       /* If bo->size == 0, this means they passed us an invalid
        * buffer.  The kernel will reject it and so should we.
@@ -262,13 +282,13 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 
    batch_index = (execbuffer2->flags & I915_EXEC_BATCH_FIRST) ? 0 :
       execbuffer2->buffer_count - 1;
-   batch_bo = get_bo(exec_objects[batch_index].handle);
+   batch_bo = get_bo(fd, exec_objects[batch_index].handle);
    for (uint32_t i = 0; i < execbuffer2->buffer_count; i++) {
       obj = &exec_objects[i];
-      bo = get_bo(obj->handle);
+      bo = get_bo(fd, obj->handle);
 
       if (obj->relocation_count > 0)
-         data = relocate_bo(bo, execbuffer2, obj);
+         data = relocate_bo(fd, bo, execbuffer2, obj);
       else
          data = bo->map;
 
@@ -286,7 +306,7 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 
    aub_write_exec(&aub_file,
                   batch_bo->offset + execbuffer2->batch_start_offset,
-                  offset, ring_flag);
+                  offset, engine_class_from_ring_flag(ring_flag));
 
    if (device_override &&
        (execbuffer2->flags & I915_EXEC_FENCE_ARRAY) != 0) {
@@ -306,11 +326,12 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 }
 
 static void
-add_new_bo(int handle, uint64_t size, void *map)
+add_new_bo(unsigned fd, int handle, uint64_t size, void *map)
 {
-   struct bo *bo = &bos[handle];
+   struct bo *bo = &bos[handle + fd * MAX_BO_COUNT];
 
    fail_if(handle >= MAX_BO_COUNT, "bo handle out of range\n");
+   fail_if(fd >= MAX_FD_COUNT, "bo fd out of range\n");
    fail_if(size == 0, "bo size is invalid\n");
 
    bo->size = size;
@@ -318,9 +339,9 @@ add_new_bo(int handle, uint64_t size, void *map)
 }
 
 static void
-remove_bo(int handle)
+remove_bo(int fd, int handle)
 {
-   struct bo *bo = get_bo(handle);
+   struct bo *bo = get_bo(fd, handle);
 
    if (bo->map && !IS_USERPTR(bo->map))
       munmap(bo->map, bo->size);
@@ -383,7 +404,7 @@ maybe_init(void)
    }
    fclose(config);
 
-   bos = calloc(MAX_BO_COUNT, sizeof(bos[0]));
+   bos = calloc(MAX_FD_COUNT * MAX_BO_COUNT, sizeof(bos[0]));
    fail_if(bos == NULL, "out of memory\n");
 }
 
@@ -455,7 +476,7 @@ ioctl(int fd, unsigned long request, ...)
 
          ret = libc_ioctl(fd, request, argp);
          if (ret == 0)
-            add_new_bo(create->handle, create->size, NULL);
+            add_new_bo(fd, create->handle, create->size, NULL);
 
          return ret;
       }
@@ -465,15 +486,16 @@ ioctl(int fd, unsigned long request, ...)
 
          ret = libc_ioctl(fd, request, argp);
          if (ret == 0)
-            add_new_bo(userptr->handle, userptr->user_size,
+            add_new_bo(fd, userptr->handle, userptr->user_size,
                        (void *) (uintptr_t) (userptr->user_ptr | USERPTR_FLAG));
+
          return ret;
       }
 
       case DRM_IOCTL_GEM_CLOSE: {
          struct drm_gem_close *close = argp;
 
-         remove_bo(close->handle);
+         remove_bo(fd, close->handle);
 
          return libc_ioctl(fd, request, argp);
       }
@@ -483,7 +505,7 @@ ioctl(int fd, unsigned long request, ...)
 
          ret = libc_ioctl(fd, request, argp);
          if (ret == 0)
-            add_new_bo(open->handle, open->size, NULL);
+            add_new_bo(fd, open->handle, open->size, NULL);
 
          return ret;
       }
@@ -497,7 +519,8 @@ ioctl(int fd, unsigned long request, ...)
 
             size = lseek(prime->fd, 0, SEEK_END);
             fail_if(size == -1, "failed to get prime bo size\n");
-            add_new_bo(prime->handle, size, NULL);
+            add_new_bo(fd, prime->handle, size, NULL);
+
          }
 
          return ret;

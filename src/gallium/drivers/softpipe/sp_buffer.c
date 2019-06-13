@@ -155,14 +155,14 @@ sp_tgsi_store(const struct tgsi_buffer *buffer,
  * Implement atomic operations on unsigned integers.
  */
 static void
-handle_op_uint(const struct pipe_shader_buffer *bview,
-               bool just_read,
-               unsigned char *data_ptr,
-               uint qi,
-               enum tgsi_opcode opcode,
-               unsigned writemask,
-               float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
-               float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
+handle_op_atomic(const struct pipe_shader_buffer *bview,
+                 bool just_read,
+                 unsigned char *data_ptr,
+                 uint qi,
+                 enum tgsi_opcode opcode,
+                 unsigned writemask,
+                 float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE],
+                 float rgba2[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE])
 {
    uint c;
    const struct util_format_description *format_desc = util_format_description(PIPE_FORMAT_R32_UINT);
@@ -260,6 +260,13 @@ handle_op_uint(const struct pipe_shader_buffer *bview,
          ((uint32_t *)rgba[c])[qi] = dst_x;
       }
       break;
+   case TGSI_OPCODE_ATOMFADD:
+      for (c = 0; c < 4; c++) {
+         float temp = uif(sdata[c]);
+         sdata[c] = fui(temp + rgba[c][qi]);
+         rgba[c][qi] = temp;
+      }
+      break;
    default:
       assert(!"Unexpected TGSI opcode in sp_tgsi_op");
       break;
@@ -324,8 +331,8 @@ sp_tgsi_op(const struct tgsi_buffer *buffer,
       data_ptr = (unsigned char *)spr->data + bview->buffer_offset + s_coord;
       /* we should see atomic operations on r32 formats */
 
-      handle_op_uint(bview, just_read, data_ptr, j,
-                     opcode, params->writemask, rgba, rgba2);
+      handle_op_atomic(bview, just_read, data_ptr, j,
+                       opcode, params->writemask, rgba, rgba2);
    }
    return;
 fail_write_all_zero:

@@ -361,6 +361,8 @@ lp_setup_flush( struct lp_setup_context *setup,
 
    if (fence) {
       lp_fence_reference((struct lp_fence **)fence, setup->last_fence);
+      if (!*fence)
+         *fence = (struct pipe_fence_handle *)lp_fence_create(0);
    }
 }
 

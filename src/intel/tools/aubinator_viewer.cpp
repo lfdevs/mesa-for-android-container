@@ -221,13 +221,13 @@ update_mem_for_exec(struct aub_mem *mem, struct aub_file *file, int exec_idx)
 
 #include <epoxy/gl.h>
 
-#include "imgui.h"
+#include "imgui/imgui.h"
+#include "imgui/imgui_memory_editor.h"
 #include "imgui_impl_gtk3.h"
 #include "imgui_impl_opengl3.h"
 
 #include "aubinator_viewer.h"
 #include "aubinator_viewer_urb.h"
-#include "imgui_memory_editor.h"
 
 struct window {
    struct list_head link; /* link in the global list of windows */
@@ -322,6 +322,8 @@ static struct Context {
    struct window commands_window;
    struct window registers_window;
 } context;
+
+thread_local ImGuiContext* __MesaImGui;
 
 static int
 map_key(int k)
@@ -671,11 +673,11 @@ batch_edit_address(void *user_data, uint64_t address, uint32_t len)
 }
 
 static struct gen_batch_decode_bo
-batch_get_bo(void *user_data, uint64_t address)
+batch_get_bo(void *user_data, bool ppgtt, uint64_t address)
 {
    struct batch_window *window = (struct batch_window *) user_data;
 
-   if (window->uses_ppgtt)
+   if (window->uses_ppgtt && ppgtt)
       return aub_mem_get_ppgtt_bo(&window->mem, address);
    else
       return aub_mem_get_ggtt_bo(&window->mem, address);
@@ -700,7 +702,7 @@ display_batch_ring_write(void *user_data, enum drm_i915_gem_engine_class engine,
 
    window->uses_ppgtt = false;
 
-   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0);
+   aub_viewer_render_batch(&window->decode_ctx, data, data_len, 0, false);
 }
 
 static void
@@ -735,7 +737,7 @@ display_batch_execlist_write(void *user_data,
    window->decode_ctx.engine = engine;
    aub_viewer_render_batch(&window->decode_ctx, commands,
                            MIN2(ring_buffer_tail - ring_buffer_head, ring_buffer_length),
-                           ring_buffer_start + ring_buffer_head);
+                           ring_buffer_start + ring_buffer_head, true);
 }
 
 static void
@@ -1006,7 +1008,7 @@ display_aubfile_window(struct window *win)
    ImGui::Text("Execbufs          %u", context.file->n_execs);
    ImGui::Text("PCI ID:           0x%x", context.file->pci_id);
    ImGui::Text("Application name: %s", context.file->app_name);
-   ImGui::Text(gen_get_device_name(context.file->pci_id));
+   ImGui::Text("%s", gen_get_device_name(context.file->pci_id));
 
    ImGui::SetNextWindowContentWidth(500);
    if (ImGui::BeginPopupModal("Help", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -1028,7 +1030,7 @@ display_aubfile_window(struct window *win)
       align += ImGui::GetStyle().WindowPadding.x + 10;
 
       for (uint32_t i = 0; i < ARRAY_SIZE(texts); i += 2) {
-         ImGui::Text(texts[i]); ImGui::SameLine(align); ImGui::Text(texts[i + 1]);
+         ImGui::Text("%s", texts[i]); ImGui::SameLine(align); ImGui::Text("%s", texts[i + 1]);
       }
 
       if (ImGui::Button("Done") || ImGui::IsKeyPressed(ImGuiKey_Escape))

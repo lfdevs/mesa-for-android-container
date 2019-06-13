@@ -139,22 +139,26 @@ NineSurface9_ctor( struct NineSurface9 *This,
     }
 
     /* Get true format */
-    This->format_conversion = d3d9_to_pipe_format_checked(This->base.info.screen,
+    This->format_internal = d3d9_to_pipe_format_checked(This->base.info.screen,
                                                          pDesc->Format,
                                                          This->base.info.target,
                                                          This->base.info.nr_samples,
                                                          This->base.info.bind,
                                                          FALSE,
                                                          TRUE);
-    if (This->base.info.format != This->format_conversion) {
-        This->data_conversion = align_calloc(
-            nine_format_get_level_alloc_size(This->format_conversion,
+    if (This->base.info.format != This->format_internal ||
+        /* DYNAMIC Textures requires same stride as ram buffers.
+         * Do not use workaround by default as it eats more virtual space */
+        (pParams->device->workarounds.dynamic_texture_workaround &&
+         pDesc->Pool == D3DPOOL_DEFAULT && pDesc->Usage & D3DUSAGE_DYNAMIC)) {
+        This->data_internal = align_calloc(
+            nine_format_get_level_alloc_size(This->format_internal,
                                              pDesc->Width,
                                              pDesc->Height,
                                              0), 32);
-        if (!This->data_conversion)
+        if (!This->data_internal)
             return E_OUTOFMEMORY;
-        This->stride_conversion = nine_format_get_stride(This->format_conversion,
+        This->stride_internal = nine_format_get_stride(This->format_internal,
                                                          pDesc->Width);
     }
 
@@ -225,8 +229,8 @@ NineSurface9_dtor( struct NineSurface9 *This )
     /* Release system memory when we have to manage it (no parent) */
     if (!This->base.base.container && This->data)
         align_free(This->data);
-    if (This->data_conversion)
-        align_free(This->data_conversion);
+    if (This->data_internal)
+        align_free(This->data_internal);
     NineResource9_dtor(&This->base);
 }
 
@@ -394,15 +398,15 @@ NineSurface9_AddDirtyRect( struct NineSurface9 *This,
     }
 }
 
-static inline uint8_t *
-NineSurface9_GetSystemMemPointer(struct NineSurface9 *This, int x, int y)
+static inline unsigned
+NineSurface9_GetSystemMemOffset(enum pipe_format format, unsigned stride,
+                                int x, int y)
 {
-    unsigned x_offset = util_format_get_stride(This->base.info.format, x);
+    unsigned x_offset = util_format_get_stride(format, x);
 
-    y = util_format_get_nblocksy(This->base.info.format, y);
+    y = util_format_get_nblocksy(format, y);
 
-    assert(This->data);
-    return This->data + (y * This->stride + x_offset);
+    return y * stride + x_offset;
 }
 
 HRESULT NINE_WINAPI
@@ -481,25 +485,30 @@ NineSurface9_LockRect( struct NineSurface9 *This,
     if (p_atomic_read(&This->pending_uploads_counter))
         nine_csmt_process(This->base.base.device);
 
-    if (This->data_conversion) {
-        /* For now we only have uncompressed formats here */
-        pLockedRect->Pitch = This->stride_conversion;
-        pLockedRect->pBits = This->data_conversion + box.y * This->stride_conversion +
-            util_format_get_stride(This->format_conversion, box.x);
-    } else if (This->data) {
+    if (This->data_internal || This->data) {
+        enum pipe_format format = This->base.info.format;
+        unsigned stride = This->stride;
+        uint8_t *data = This->data;
+        if (This->data_internal) {
+            format = This->format_internal;
+            stride = This->stride_internal;
+            data = This->data_internal;
+        }
         DBG("returning system memory\n");
         /* ATI1 and ATI2 need special handling, because of d3d9 bug.
          * We must advertise to the application as if it is uncompressed
          * and bpp 8, and the app has a workaround to work with the fact
          * that it is actually compressed. */
-        if (is_ATI1_ATI2(This->base.info.format)) {
+        if (is_ATI1_ATI2(format)) {
             pLockedRect->Pitch = This->desc.Width;
-            pLockedRect->pBits = This->data + box.y * This->desc.Width + box.x;
+            pLockedRect->pBits = data + box.y * This->desc.Width + box.x;
         } else {
-            pLockedRect->Pitch = This->stride;
-            pLockedRect->pBits = NineSurface9_GetSystemMemPointer(This,
-                                                                  box.x,
-                                                                  box.y);
+            pLockedRect->Pitch = stride;
+            pLockedRect->pBits = data +
+                NineSurface9_GetSystemMemOffset(format,
+                                                stride,
+                                                box.x,
+                                                box.y);
         }
     } else {
         bool no_refs = !p_atomic_read(&This->base.base.bind) &&
@@ -539,6 +548,7 @@ NineSurface9_LockRect( struct NineSurface9 *This,
 HRESULT NINE_WINAPI
 NineSurface9_UnlockRect( struct NineSurface9 *This )
 {
+    struct pipe_box dst_box, src_box;
     struct pipe_context *pipe;
     DBG("This=%p lock_count=%u\n", This, This->lock_count);
     user_assert(This->lock_count, D3DERR_INVALIDCALL);
@@ -550,36 +560,34 @@ NineSurface9_UnlockRect( struct NineSurface9 *This )
     }
     --This->lock_count;
 
-    if (This->data_conversion) {
-        struct pipe_transfer *transfer;
-        uint8_t *dst = This->data;
-        struct pipe_box box;
+    if (This->data_internal) {
+        if (This->data) {
+            (void) util_format_translate(This->base.info.format,
+                                         This->data, This->stride,
+                                         0, 0,
+                                         This->format_internal,
+                                         This->data_internal,
+                                         This->stride_internal,
+                                         0, 0,
+                                         This->desc.Width, This->desc.Height);
+        } else {
+            u_box_2d_zslice(0, 0, This->layer,
+                            This->desc.Width, This->desc.Height, &dst_box);
+            u_box_2d_zslice(0, 0, 0,
+                            This->desc.Width, This->desc.Height, &src_box);
 
-        u_box_origin_2d(This->desc.Width, This->desc.Height, &box);
-
-        pipe = NineDevice9_GetPipe(This->base.base.device);
-        if (!dst) {
-            dst = pipe->transfer_map(pipe,
-                                     This->base.resource,
-                                     This->level,
-                                     PIPE_TRANSFER_WRITE |
-                                     PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE,
-                                     &box, &transfer);
-            if (!dst)
-                return D3D_OK;
+            nine_context_box_upload(This->base.base.device,
+                                    &This->pending_uploads_counter,
+                                    (struct NineUnknown *)This,
+                                    This->base.resource,
+                                    This->level,
+                                    &dst_box,
+                                    This->format_internal,
+                                    This->data_internal,
+                                    This->stride_internal,
+                                    0, /* depth = 1 */
+                                    &src_box);
         }
-
-        (void) util_format_translate(This->base.info.format,
-                                     dst, This->data ? This->stride : transfer->stride,
-                                     0, 0,
-                                     This->format_conversion,
-                                     This->data_conversion,
-                                     This->stride_conversion,
-                                     0, 0,
-                                     This->desc.Width, This->desc.Height);
-
-        if (!This->data)
-            pipe_transfer_unmap(pipe, transfer);
     }
     return D3D_OK;
 }
@@ -682,10 +690,10 @@ NineSurface9_CopyMemToDefault( struct NineSurface9 *This,
             nine_csmt_process(This->base.base.device);
     }
 
-    if (This->data_conversion)
-        (void) util_format_translate(This->format_conversion,
-                                     This->data_conversion,
-                                     This->stride_conversion,
+    if (This->data_internal)
+        (void) util_format_translate(This->format_internal,
+                                     This->data_internal,
+                                     This->stride_internal,
                                      dst_x, dst_y,
                                      From->base.info.format,
                                      From->data, From->stride,
@@ -722,7 +730,7 @@ NineSurface9_CopyDefaultToMem( struct NineSurface9 *This,
     p_src = pipe->transfer_map(pipe, r_src, From->level,
                                PIPE_TRANSFER_READ,
                                &src_box, &transfer);
-    p_dst = NineSurface9_GetSystemMemPointer(This, 0, 0);
+    p_dst = This->data;
 
     assert (p_src && p_dst);
 

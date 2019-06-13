@@ -42,6 +42,22 @@
 
 /** \brief Begin __driConfigOptions */
 #define DRI_CONF_BEGIN \
+"<?xml version=\"1.0\" standalone=\"yes\"?>" \
+"<!DOCTYPE driinfo [" \
+"   <!ELEMENT driinfo      (section*)>" \
+"   <!ELEMENT section      (description+, option+)>" \
+"   <!ELEMENT description  (enum*)>" \
+"   <!ATTLIST description  lang CDATA #REQUIRED" \
+"                          text CDATA #REQUIRED>" \
+"   <!ELEMENT option       (description+)>" \
+"   <!ATTLIST option       name CDATA #REQUIRED" \
+"                          type (bool|enum|int|float) #REQUIRED" \
+"                          default CDATA #REQUIRED" \
+"                          valid CDATA #IMPLIED>" \
+"   <!ELEMENT enum         EMPTY>" \
+"   <!ATTLIST enum         value CDATA #REQUIRED" \
+"                          text CDATA #REQUIRED>" \
+"]>" \
 "<driinfo>\n"
 
 /** \brief End __driConfigOptions */
@@ -66,10 +82,6 @@
  */
 #define DRI_CONF_OPT_BEGIN_B(name,def) \
 "<option name=\""#name"\" type=\"bool\" default="#def">\n"
-
-/** \brief Begin an option definition with quoted default value */
-#define DRI_CONF_OPT_BEGIN_Q(name,type,def) \
-"<option name=\""#name"\" type=\""#type"\" default="#def">\n"
 
 /** \brief Begin an option definition with restrictions on valid values */
 #define DRI_CONF_OPT_BEGIN_V(name,type,def,valid) \

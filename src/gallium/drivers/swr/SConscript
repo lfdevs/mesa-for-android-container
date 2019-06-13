@@ -103,44 +103,26 @@ Depends('rasterizer/jitter/gen_state_llvm.h',
         swrroot + 'rasterizer/codegen/templates/gen_llvm.hpp')
 
 env.CodeGenerate(
-    target = 'rasterizer/archrast/gen_ar_event.hpp',
     script = swrroot + 'rasterizer/codegen/gen_archrast.py',
-    source = 'rasterizer/archrast/events.proto',
-    command = python_cmd + ' $SCRIPT --proto $SOURCE --proto_private ' + srcroot + '/rasterizer/archrast/events_private.proto --output $TARGET --gen_event_hpp'
-)
+    target = ['rasterizer/archrast/gen_ar_event.hpp',
+              'rasterizer/archrast/gen_ar_event.cpp',
+              'rasterizer/archrast/gen_ar_eventhandler.hpp',
+              'rasterizer/archrast/gen_ar_eventhandlerfile.hpp'],
+    source = [srcroot + '/rasterizer/archrast/events.proto',
+              srcroot + '/rasterizer/archrast/events_private.proto'],
+    command = python_cmd + ' $SCRIPT --proto $SOURCES --output-dir ' + bldroot + '/rasterizer/archrast')
 Depends('rasterizer/archrast/gen_ar_event.hpp',
         swrroot + 'rasterizer/archrast/events_private.proto')
 Depends('rasterizer/jitter/gen_state_llvm.h',
         swrroot + 'rasterizer/codegen/templates/gen_ar_event.hpp')
-
-env.CodeGenerate(
-    target = 'rasterizer/archrast/gen_ar_event.cpp',
-    script = swrroot + 'rasterizer/codegen/gen_archrast.py',
-    source = 'rasterizer/archrast/events.proto',
-    command = python_cmd + ' $SCRIPT --proto $SOURCE --proto_private ' + srcroot + '/rasterizer/archrast/events_private.proto --output $TARGET --gen_event_cpp'
-)
 Depends('rasterizer/archrast/gen_ar_event.cpp',
         swrroot + 'rasterizer/archrast/events_private.proto')
 Depends('rasterizer/jitter/gen_state_llvm.h',
         swrroot + 'rasterizer/codegen/templates/gen_ar_event.cpp')
-
-env.CodeGenerate(
-    target = 'rasterizer/archrast/gen_ar_eventhandler.hpp',
-    script = swrroot + 'rasterizer/codegen/gen_archrast.py',
-    source = 'rasterizer/archrast/events.proto',
-    command = python_cmd + ' $SCRIPT --proto $SOURCE --proto_private ' + srcroot + '/rasterizer/archrast/events_private.proto --output $TARGET --gen_eventhandler_hpp'
-)
 Depends('rasterizer/archrast/gen_ar_eventhandler.hpp',
         swrroot + 'rasterizer/archrast/events_private.proto')
 Depends('rasterizer/jitter/gen_state_llvm.h',
         swrroot + 'rasterizer/codegen/templates/gen_ar_eventhandler.hpp')
-
-env.CodeGenerate(
-    target = 'rasterizer/archrast/gen_ar_eventhandlerfile.hpp',
-    script = swrroot + 'rasterizer/codegen/gen_archrast.py',
-    source = 'rasterizer/archrast/events.proto',
-    command = python_cmd + ' $SCRIPT --proto $SOURCE --proto_private ' + srcroot + '/rasterizer/archrast/events_private.proto --output $TARGET --gen_eventhandlerfile_hpp'
-)
 Depends('rasterizer/archrast/gen_ar_eventhandlerfile.hpp',
         swrroot + 'rasterizer/archrast/events_private.proto')
 Depends('rasterizer/jitter/gen_state_llvm.h',

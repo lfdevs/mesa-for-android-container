@@ -108,7 +108,7 @@ svga_delete_fs_state(struct pipe_context *pipe, void *shader)
          svga->state.hw_draw.fs = NULL;
       }
 
-      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_PS, variant);
+      svga_destroy_shader_variant(svga, variant);
    }
 
    FREE((void *)fs->base.tokens);

@@ -239,7 +239,11 @@ struct nine_context {
 
     struct {
         void *vs;
+        unsigned *vs_const_ranges;
+        unsigned vs_const_used_size;
         void *ps;
+        unsigned *ps_const_ranges;
+        unsigned ps_const_used_size;
     } cso_shader;
 
     struct pipe_context *pipe;
@@ -299,6 +303,8 @@ struct nine_context {
 
     int dummy_vbo_bound_at; /* -1 = not bound , >= 0 = bound index */
     boolean vbo_bound_done;
+
+    boolean inline_constants;
 
     struct nine_ff_state ff;
 
@@ -598,7 +604,7 @@ nine_context_get_query_result(struct NineDevice9 *device, struct pipe_query *que
 void nine_state_restore_non_cso(struct NineDevice9 *device);
 void nine_state_set_defaults(struct NineDevice9 *, const D3DCAPS9 *,
                              boolean is_reset);
-void nine_state_clear(struct nine_state *, const boolean device);
+void nine_device_state_clear(struct NineDevice9 *);
 void nine_context_clear(struct NineDevice9 *);
 
 void nine_state_init_sw(struct NineDevice9 *device);

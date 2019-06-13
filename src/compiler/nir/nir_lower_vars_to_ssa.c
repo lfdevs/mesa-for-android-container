@@ -150,7 +150,7 @@ get_deref_node_recur(nir_deref_instr *deref,
 
    switch (deref->deref_type) {
    case nir_deref_type_struct:
-      assert(glsl_type_is_struct(parent->type));
+      assert(glsl_type_is_struct_or_ifc(parent->type));
       assert(deref->strct.index < glsl_get_length(parent->type));
 
       if (parent->children[deref->strct.index] == NULL) {
@@ -534,7 +534,7 @@ rename_variables(struct lower_variables_state *state)
                                                       nir_op_imov);
             mov->src[0].src = nir_src_for_ssa(
                nir_phi_builder_value_get_block_def(node->pb_value, block));
-            for (unsigned i = intrin->num_components; i < 4; i++)
+            for (unsigned i = intrin->num_components; i < NIR_MAX_VEC_COMPONENTS; i++)
                mov->src[0].swizzle[i] = 0;
 
             assert(intrin->dest.is_ssa);
@@ -584,8 +584,8 @@ rename_variables(struct lower_variables_state *state)
                 * intrin->num_components and value->num_components
                 * may differ.
                 */
-               unsigned swiz[4];
-               for (unsigned i = 0; i < 4; i++)
+               unsigned swiz[NIR_MAX_VEC_COMPONENTS];
+               for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
                   swiz[i] = i < intrin->num_components ? i : 0;
 
                new_def = nir_swizzle(&b, value, swiz,
@@ -597,7 +597,7 @@ rename_variables(struct lower_variables_state *state)
                 * written values with the existing contents of unwritten
                 * channels, creating a new SSA value for the whole vector.
                 */
-               nir_ssa_def *srcs[4];
+               nir_ssa_def *srcs[NIR_MAX_VEC_COMPONENTS];
                for (unsigned i = 0; i < intrin->num_components; i++) {
                   if (wrmask & (1 << i)) {
                      srcs[i] = nir_channel(&b, value, i);

@@ -104,7 +104,8 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       if (cp->compiled_once) {
-         _mesa_problem(&brw->ctx, "CS programs shouldn't need recompiles");
+         brw_debug_recompile(brw, MESA_SHADER_COMPUTE, cp->program.Id,
+                             key->program_string_id, key);
       }
       cp->compiled_once = true;
 

@@ -1,3 +1,18 @@
+mesa (19.1.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * watch: Upstream switched to xz tarballs.
+  * rules: Use pkg-info.mk for gentarball.
+  * Drop upstreamed patches.
+  * libegl-mesa0.symbols: Updated.
+  * rules, libgles2-mesa-dev.install: GLES2 files aren't built anymore
+    now that GLVND is used.
+  * rules: Enable iris gallium driver.
+  * rules: Enable lima, panfrost on armhf/arm64. (Closes: #927893)
+  * rules: Update clean target.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 13 Jun 2019 10:52:07 +0300
+
 mesa (19.0.3-1) experimental; urgency=medium
 
   * New upstream release.
@@ -56,6 +71,14 @@ mesa (19.0.0~rc2-1) experimental; urgency=medium
   * 1-5-meson-remove-duplicate-definition.patch: Dropped, upstream.
 
  -- Timo Aaltonen <tjaalton@debian.org>  Fri, 08 Feb 2019 10:44:48 +0200
+
+mesa (18.3.6-2) unstable; urgency=medium
+
+  * Cherry-pick c77acc3ceba (meson: remove meson-created megadrivers
+    symlinks) from upstream master branch. Removes a broken symlink
+    (Closes: #926857).
+
+ -- Andreas Boll <aboll@debian.org>  Sat, 11 May 2019 15:43:07 +0200
 
 mesa (18.3.6-1) unstable; urgency=medium
 

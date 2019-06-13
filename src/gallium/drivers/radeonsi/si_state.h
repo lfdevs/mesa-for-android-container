@@ -224,7 +224,8 @@ static inline unsigned si_atoms_that_always_roll_context(void)
 		SI_ATOM_BIT(scissors) |
 		SI_ATOM_BIT(viewports) |
 		SI_ATOM_BIT(stencil_ref) |
-		SI_ATOM_BIT(scratch_state));
+		SI_ATOM_BIT(scratch_state) |
+		SI_ATOM_BIT(window_rectangles));
 }
 
 struct si_shader_data {
@@ -408,14 +409,14 @@ struct si_descriptors {
 
 struct si_buffer_resources {
 	struct pipe_resource		**buffers; /* this has num_buffers elements */
+	unsigned			*offsets; /* this has num_buffers elements */
 
-	enum radeon_bo_usage		shader_usage:4; /* READ, WRITE, or READWRITE */
-	enum radeon_bo_usage		shader_usage_constbuf:4;
 	enum radeon_bo_priority		priority:6;
 	enum radeon_bo_priority		priority_constbuf:6;
 
 	/* The i-th bit is set if that element is enabled (non-NULL resource). */
 	unsigned			enabled_mask;
+	unsigned			writable_mask;
 };
 
 #define si_pm4_state_changed(sctx, member) \
@@ -463,8 +464,9 @@ bool si_upload_vertex_buffer_descriptors(struct si_context *sctx);
 bool si_upload_graphics_shader_descriptors(struct si_context *sctx);
 bool si_upload_compute_shader_descriptors(struct si_context *sctx);
 void si_release_all_descriptors(struct si_context *sctx);
+void si_gfx_resources_add_all_to_bo_list(struct si_context *sctx);
+void si_compute_resources_add_all_to_bo_list(struct si_context *sctx);
 void si_all_descriptors_begin_new_cs(struct si_context *sctx);
-void si_all_resident_buffers_begin_new_cs(struct si_context *sctx);
 void si_upload_const_buffer(struct si_context *sctx, struct si_resource **buf,
 			    const uint8_t *ptr, unsigned size, uint32_t *const_offset);
 void si_update_all_texture_descriptors(struct si_context *sctx);
@@ -486,9 +488,9 @@ struct pb_slab *si_bindless_descriptor_slab_alloc(void *priv, unsigned heap,
 						  unsigned entry_size,
 						  unsigned group_index);
 void si_bindless_descriptor_slab_free(void *priv, struct pb_slab *pslab);
-void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf,
-		      uint64_t old_va);
+void si_rebind_buffer(struct si_context *sctx, struct pipe_resource *buf);
 /* si_state.c */
+void si_init_state_compute_functions(struct si_context *sctx);
 void si_init_state_functions(struct si_context *sctx);
 void si_init_screen_state_functions(struct si_screen *sscreen);
 void

@@ -580,3 +580,93 @@ crs_loop:
    /* Enable */
    exit maddr 0x1452 /* CONSERVATIVE_RASTER */
    send 0x1
+
+/* NVC0_3D_MACRO_COMPUTE_COUNTER
+ *
+ * This macro takes 6 values, num_groups_* and group_size_*, and adds their
+ * product to the current value
+ *
+ * It's used for keeping track of the number of executed indirect
+ * compute invocations for statistics.
+ *
+ * SCRATCH[4] = current counter [low]
+ * SCRATCH[5] = current counter [high]
+ *
+ * arg     = number of parameters to muliply together, ideally 6
+ * parm[0] = num_groups_x
+ * parm[1] = num_groups_y
+ * parm[2] = num_groups_z
+ * parm[3] = group_size_x
+ * parm[4] = group_size_y
+ * parm[5] = group_size_z
+ */
+.section #mme9097_compute_counter
+   mov $r7 $r1
+   mov $r1 1 /* low result */
+   mov $r2 0 /* high result */
+iic_loop_start:
+   parm $r3 /* val, next integer to multiply in */
+   /* multiplication start - look at low bit, add if set, shift right/left */
+   mov $r4 0 /* low temp */
+   mov $r5 0 /* high temp */
+iic_mul_start: /* temp = result * val */
+   braz annul $r3 #iic_mul_done
+iic_mul_body:
+   mov $r6 (extrinsrt 0x0 $r3 0 1 0) /* val & 1 - check low bit */
+   braz $r6 #iic_mul_cont /* bit not set */
+   mov $r3 (extrinsrt 0x0 $r3 1 31 0) /* val >>= 1 - shift right */
+
+   mov $r4 (add $r4 $r1) /* temp += result */
+   mov $r5 (adc $r5 $r2)
+iic_mul_cont:
+   mov $r1 (add $r1 $r1) /* shift left, part 1 (result *= 2) */
+   bra #iic_mul_start
+   mov $r2 (adc $r2 $r2) /* shift left, part 2 */
+iic_mul_done:
+   /* decrease loop counter, keep going if necessary */
+   mov $r7 (add $r7 -1)
+   /* result = temp ( = result * val ) */
+   mov $r1 $r4
+   branz $r7 #iic_loop_start
+   mov $r2 $r5
+
+   /* increment current value by newly-calculated invocation count */
+   read $r3 0xd04 /* SCRATCH[4] */
+   read $r4 0xd05 /* SCRATCH[5] */
+   maddr 0x1d04 /* SCRATCH[4] */
+   exit send (add $r3 $r1)
+   send (adc $r4 $r2)
+
+/* NVC0_3D_MACRO_COMPUTE_COUNTER_TO_QUERY
+ *
+ * This macro writes out the indirect counter plus a direct value to
+ * the given address using QUERY_GET (64-bit value).
+ *
+ * arg     = direct counter low
+ * parm[0] = direct counter high
+ * parm[1] = query address high
+ * parm[2] = query address low
+ */
+.section #mme9097_compute_counter_to_query
+   parm $r2 /* counter high */
+   read $r3 0xd04 /* SCRATCH[4] */
+   read $r4 0xd05 /* SCRATCH[5] */
+   mov $r1 (add $r1 $r3)
+   mov $r2 (adc $r2 $r4)
+
+   parm $r3 maddr 0x16c0 /* QUERY_ADDRESS_HIGH */
+   parm $r4 send $r3
+   send $r4 /* r3 = addr high, r4 = addr low */
+   send $r1 /* sum low */
+   mov $r5 0x1000
+   send (extrinsrt 0x0 $r5 0x0 0x10 0x10) /* GET_SHORT */
+
+   /* add 4 to the address */
+   mov $r1 0x4
+   mov $r4 (add $r4 $r1) /* addr low */
+   mov $r3 (adc $r3 0x0) /* addr high */
+   maddr 0x16c0 /* QUERY_ADDRESS_HIGH */
+   send $r3 /* addr high */
+   send $r4 /* addr low */
+   exit send $r2 /* sum high */
+   send (extrinsrt 0x0 $r5 0x0 0x10 0x10) /* GET_SHORT */

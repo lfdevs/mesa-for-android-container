@@ -4,7 +4,7 @@
 
 #include "i915/i915_batchbuffer.h"
 
-#include "drm.h"
+#include "drm-uapi/drm.h"
 #include "intel_bufmgr.h"
 
 

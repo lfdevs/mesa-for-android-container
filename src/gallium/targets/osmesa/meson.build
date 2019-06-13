@@ -43,9 +43,9 @@ libosmesa = shared_library(
     inc_gallium_drivers,
   ],
   link_depends : osmesa_link_deps,
-  link_whole : [libosmesa_st],
+  link_whole : [libosmesa_st, libglapi_static],
   link_with : [
-    libmesa_gallium, libgallium, libglapi_static, libws_null, osmesa_link_with,
+    libmesa_gallium, libgallium, libws_null, osmesa_link_with,
   ],
   dependencies : [
     dep_selinux, dep_thread, dep_clock, dep_unwind,

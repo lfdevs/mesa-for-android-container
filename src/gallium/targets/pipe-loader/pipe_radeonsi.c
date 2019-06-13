@@ -20,36 +20,9 @@ create_screen(int fd, const struct pipe_screen_config *config)
    return rw ? debug_screen_wrap(rw->screen) : NULL;
 }
 
-static const struct drm_conf_ret throttle_ret = {
-   .type = DRM_CONF_INT,
-   .val.val_int = 2,
-};
-
-static const struct drm_conf_ret share_fd_ret = {
-   .type = DRM_CONF_BOOL,
-   .val.val_bool = true,
-};
-
-static const struct drm_conf_ret *drm_configuration(enum drm_conf conf)
-{
-   static const struct drm_conf_ret xml_options_ret = {
-      .type = DRM_CONF_POINTER,
-      .val.val_pointer =
-#include "radeonsi/si_driinfo.h"
-   };
-
-   switch (conf) {
-   case DRM_CONF_THROTTLE:
-      return &throttle_ret;
-   case DRM_CONF_SHARE_FD:
-      return &share_fd_ret;
-   case DRM_CONF_XML_OPTIONS:
-      return &xml_options_ret;
-   default:
-      break;
-   }
-   return NULL;
-}
+static const char *driconf_xml =
+   #include "radeonsi/si_driinfo.h"
+   ;
 
 PUBLIC
-DRM_DRIVER_DESCRIPTOR("radeonsi", create_screen, drm_configuration)
+DRM_DRIVER_DESCRIPTOR("radeonsi", &driconf_xml, create_screen)

@@ -134,7 +134,7 @@ the common case.</p>
 <tr><td><pre>
 #define GET_DISPATCH() \
     (_glapi_Dispatch != NULL) \
-        ? _glapi_Dispatch : pthread_getspecific(&_glapi_Dispatch_key)
+        ? _glapi_Dispatch : pthread_getspecific(&amp;_glapi_Dispatch_key)
 </pre></td></tr>
 <tr><td>Improved <tt>GET_DISPATCH</tt> Implementation</td></tr></table>
 </blockquote>

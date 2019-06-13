@@ -23,6 +23,7 @@
 
 #include <math.h>
 #include "vtn_private.h"
+#include "spirv_info.h"
 
 /*
  * Normally, column vectors in SPIR-V correspond to a single NIR SSA
@@ -207,7 +208,7 @@ vtn_handle_matrix_alu(struct vtn_builder *b, SpvOp opcode,
       }
       break;
 
-   default: vtn_fail("unknown matrix opcode");
+   default: vtn_fail_with_opcode("unknown matrix opcode", opcode);
    }
 }
 
@@ -363,7 +364,7 @@ handle_rounding_mode(struct vtn_builder *b, struct vtn_value *val, int member,
    assert(dec->scope == VTN_DEC_DECORATION);
    if (dec->decoration != SpvDecorationFPRoundingMode)
       return;
-   switch (dec->literals[0]) {
+   switch (dec->operands[0]) {
    case SpvFPRoundingModeRTE:
       *out_rounding_mode = nir_rounding_mode_rtne;
       break;
@@ -454,28 +455,32 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       break;
 
    case SpvOpIAddCarry:
-      vtn_assert(glsl_type_is_struct(val->ssa->type));
+      vtn_assert(glsl_type_is_struct_or_ifc(val->ssa->type));
       val->ssa->elems[0]->def = nir_iadd(&b->nb, src[0], src[1]);
       val->ssa->elems[1]->def = nir_uadd_carry(&b->nb, src[0], src[1]);
       break;
 
    case SpvOpISubBorrow:
-      vtn_assert(glsl_type_is_struct(val->ssa->type));
+      vtn_assert(glsl_type_is_struct_or_ifc(val->ssa->type));
       val->ssa->elems[0]->def = nir_isub(&b->nb, src[0], src[1]);
       val->ssa->elems[1]->def = nir_usub_borrow(&b->nb, src[0], src[1]);
       break;
 
-   case SpvOpUMulExtended:
-      vtn_assert(glsl_type_is_struct(val->ssa->type));
-      val->ssa->elems[0]->def = nir_imul(&b->nb, src[0], src[1]);
-      val->ssa->elems[1]->def = nir_umul_high(&b->nb, src[0], src[1]);
+   case SpvOpUMulExtended: {
+      vtn_assert(glsl_type_is_struct_or_ifc(val->ssa->type));
+      nir_ssa_def *umul = nir_umul_2x32_64(&b->nb, src[0], src[1]);
+      val->ssa->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, umul);
+      val->ssa->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, umul);
       break;
+   }
 
-   case SpvOpSMulExtended:
-      vtn_assert(glsl_type_is_struct(val->ssa->type));
-      val->ssa->elems[0]->def = nir_imul(&b->nb, src[0], src[1]);
-      val->ssa->elems[1]->def = nir_imul_high(&b->nb, src[0], src[1]);
+   case SpvOpSMulExtended: {
+      vtn_assert(glsl_type_is_struct_or_ifc(val->ssa->type));
+      nir_ssa_def *smul = nir_imul_2x32_64(&b->nb, src[0], src[1]);
+      val->ssa->elems[0]->def = nir_unpack_64_2x32_split_x(&b->nb, smul);
+      val->ssa->elems[1]->def = nir_unpack_64_2x32_split_y(&b->nb, smul);
       break;
+   }
 
    case SpvOpFwidth:
       val->ssa->def = nir_fadd(&b->nb,
@@ -557,34 +562,6 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       break;
    }
 
-   case SpvOpBitcast:
-      /* From the definition of OpBitcast in the SPIR-V 1.2 spec:
-       *
-       *    "If Result Type has the same number of components as Operand, they
-       *    must also have the same component width, and results are computed
-       *    per component.
-       *
-       *    If Result Type has a different number of components than Operand,
-       *    the total number of bits in Result Type must equal the total
-       *    number of bits in Operand. Let L be the type, either Result Type
-       *    or Operand’s type, that has the larger number of components. Let S
-       *    be the other type, with the smaller number of components. The
-       *    number of components in L must be an integer multiple of the
-       *    number of components in S.  The first component (that is, the only
-       *    or lowest-numbered component) of S maps to the first components of
-       *    L, and so on, up to the last component of S mapping to the last
-       *    components of L. Within this mapping, any single component of S
-       *    (mapping to multiple components of L) maps its lower-ordered bits
-       *    to the lower-numbered components of L."
-       */
-      vtn_fail_if(src[0]->num_components * src[0]->bit_size !=
-                  glsl_get_vector_elements(type) * glsl_get_bit_size(type),
-                  "Source and destination of OpBitcast must have the same "
-                  "total number of bits");
-      val->ssa->def = nir_bitcast_vector(&b->nb, src[0],
-                                         glsl_get_bit_size(type));
-      break;
-
    case SpvOpFConvert: {
       nir_alu_type src_alu_type = nir_get_nir_type_for_glsl_type(vtn_src[0]->type);
       nir_alu_type dst_alu_type = nir_get_nir_type_for_glsl_type(type);
@@ -632,6 +609,19 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
       break;
    }
 
+   case SpvOpSignBitSet: {
+      unsigned src_bit_size = glsl_get_bit_size(vtn_src[0]->type);
+      if (src[0]->num_components == 1)
+         val->ssa->def =
+            nir_ushr(&b->nb, src[0], nir_imm_int(&b->nb, src_bit_size - 1));
+      else
+         val->ssa->def =
+            nir_ishr(&b->nb, src[0], nir_imm_int(&b->nb, src_bit_size - 1));
+
+      val->ssa->def = nir_i2b(&b->nb, val->ssa->def);
+      break;
+   }
+
    default: {
       bool swap;
       unsigned src_bit_size = glsl_get_bit_size(vtn_src[0]->type);
@@ -662,4 +652,42 @@ vtn_handle_alu(struct vtn_builder *b, SpvOp opcode,
    }
 
    b->nb.exact = b->exact;
+}
+
+void
+vtn_handle_bitcast(struct vtn_builder *b, const uint32_t *w, unsigned count)
+{
+   vtn_assert(count == 4);
+   /* From the definition of OpBitcast in the SPIR-V 1.2 spec:
+    *
+    *    "If Result Type has the same number of components as Operand, they
+    *    must also have the same component width, and results are computed per
+    *    component.
+    *
+    *    If Result Type has a different number of components than Operand, the
+    *    total number of bits in Result Type must equal the total number of
+    *    bits in Operand. Let L be the type, either Result Type or Operand’s
+    *    type, that has the larger number of components. Let S be the other
+    *    type, with the smaller number of components. The number of components
+    *    in L must be an integer multiple of the number of components in S.
+    *    The first component (that is, the only or lowest-numbered component)
+    *    of S maps to the first components of L, and so on, up to the last
+    *    component of S mapping to the last components of L. Within this
+    *    mapping, any single component of S (mapping to multiple components of
+    *    L) maps its lower-ordered bits to the lower-numbered components of L."
+    */
+
+   struct vtn_type *type = vtn_value(b, w[1], vtn_value_type_type)->type;
+   struct vtn_ssa_value *vtn_src = vtn_ssa_value(b, w[3]);
+   struct nir_ssa_def *src = vtn_src->def;
+   struct vtn_ssa_value *val = vtn_create_ssa_value(b, type->type);
+
+   vtn_assert(glsl_type_is_vector_or_scalar(vtn_src->type));
+
+   vtn_fail_if(src->num_components * src->bit_size !=
+               glsl_get_vector_elements(type->type) * glsl_get_bit_size(type->type),
+               "Source and destination of OpBitcast must have the same "
+               "total number of bits");
+   val->def = nir_bitcast_vector(&b->nb, src, glsl_get_bit_size(type->type));
+   vtn_push_ssa(b, w[2], type, val);
 }

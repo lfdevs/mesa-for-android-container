@@ -126,6 +126,7 @@ enum fd_dirty_3d_state {
 	FD_DIRTY_VIEWPORT    = BIT(8),
 	FD_DIRTY_VTXSTATE    = BIT(9),
 	FD_DIRTY_VTXBUF      = BIT(10),
+	FD_DIRTY_MIN_SAMPLES = BIT(11),
 
 	FD_DIRTY_SCISSOR     = BIT(12),
 	FD_DIRTY_STREAMOUT   = BIT(13),
@@ -228,6 +229,14 @@ struct fd_context {
 	 */
 	struct pipe_fence_handle *last_fence;
 
+	/* track last known reset status globally and per-context to
+	 * determine if more resets occurred since then.  If global reset
+	 * count increases, it means some other context crashed.  If
+	 * per-context reset count increases, it means we crashed the
+	 * gpu.
+	 */
+	uint32_t context_reset_count, global_reset_count;
+
 	/* Are we in process of shadowing a resource? Used to detect recursion
 	 * in transfer_map, and skip unneeded synchronization.
 	 */
@@ -277,6 +286,7 @@ struct fd_context {
 	struct pipe_blend_color blend_color;
 	struct pipe_stencil_ref stencil_ref;
 	unsigned sample_mask;
+	unsigned min_samples;
 	/* local context fb state, for when ctx->batch is null: */
 	struct pipe_framebuffer_state framebuffer;
 	struct pipe_poly_stipple stipple;
@@ -341,6 +351,9 @@ struct fd_context {
 	void (*mem_to_mem)(struct fd_ringbuffer *ring, struct pipe_resource *dst,
 			unsigned dst_off, struct pipe_resource *src, unsigned src_off,
 			unsigned sizedwords);
+
+	/* handling for barriers: */
+	void (*framebuffer_barrier)(struct fd_context *ctx);
 
 	/*
 	 * Common pre-cooked VBO state (used for a3xx and later):

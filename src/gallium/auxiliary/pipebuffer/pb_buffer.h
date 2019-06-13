@@ -28,15 +28,15 @@
 /**
  * \file
  * Generic code for buffers.
- * 
- * Behind a pipe buffle handle there can be DMA buffers, client (or user) 
- * buffers, regular malloced buffers, etc. This file provides an abstract base 
- * buffer handle that allows the driver to cope with all those kinds of buffers 
+ *
+ * Behind a pipe buffle handle there can be DMA buffers, client (or user)
+ * buffers, regular malloced buffers, etc. This file provides an abstract base
+ * buffer handle that allows the driver to cope with all those kinds of buffers
  * in a more flexible way.
- * 
+ *
  * There is no obligation of a winsys driver to use this library. And a pipe
  * driver should be completly agnostic about it.
- * 
+ *
  * \author Jose Fonseca <jfonseca@vmware.com>
  */
 
@@ -59,30 +59,37 @@ struct pb_vtbl;
 struct pb_validate;
 struct pipe_fence_handle;
 
+enum pb_usage_flags {
+   PB_USAGE_CPU_READ = (1 << 0),
+   PB_USAGE_CPU_WRITE = (1 << 1),
+   PB_USAGE_GPU_READ = (1 << 2),
+   PB_USAGE_GPU_WRITE = (1 << 3),
+   PB_USAGE_DONTBLOCK = (1 << 9),
+   PB_USAGE_UNSYNCHRONIZED = (1 << 10),
+};
 
-#define PB_USAGE_CPU_READ  (1 << 0)
-#define PB_USAGE_CPU_WRITE (1 << 1)
-#define PB_USAGE_GPU_READ  (1 << 2)
-#define PB_USAGE_GPU_WRITE (1 << 3)
-#define PB_USAGE_UNSYNCHRONIZED (1 << 10)
-#define PB_USAGE_DONTBLOCK (1 << 9)
+/* For error checking elsewhere */
+#define PB_USAGE_ALL (PB_USAGE_CPU_READ | \
+                      PB_USAGE_CPU_WRITE | \
+                      PB_USAGE_GPU_READ | \
+                      PB_USAGE_GPU_WRITE | \
+                      PB_USAGE_DONTBLOCK | \
+                      PB_USAGE_UNSYNCHRONIZED)
 
-#define PB_USAGE_CPU_READ_WRITE \
-   ( PB_USAGE_CPU_READ | PB_USAGE_CPU_WRITE )
-#define PB_USAGE_GPU_READ_WRITE \
-   ( PB_USAGE_GPU_READ | PB_USAGE_GPU_WRITE )
-#define PB_USAGE_WRITE \
-   ( PB_USAGE_CPU_WRITE | PB_USAGE_GPU_WRITE )
+#define PB_USAGE_CPU_READ_WRITE  (PB_USAGE_CPU_READ | PB_USAGE_CPU_WRITE)
+#define PB_USAGE_GPU_READ_WRITE  (PB_USAGE_GPU_READ | PB_USAGE_GPU_WRITE)
+#define PB_USAGE_WRITE           (PB_USAGE_CPU_WRITE | PB_USAGE_GPU_WRITE)
+
 
 /**
  * Buffer description.
- * 
+ *
  * Used when allocating the buffer.
  */
 struct pb_desc
 {
    unsigned alignment;
-   unsigned usage;
+   enum pb_usage_flags usage;
 };
 
 
@@ -95,18 +102,18 @@ typedef uint64_t pb_size;
 /**
  * Base class for all pb_* buffers.
  */
-struct pb_buffer 
+struct pb_buffer
 {
    struct pipe_reference  reference;
    unsigned               alignment;
    pb_size                size;
-   unsigned               usage;
+   enum pb_usage_flags    usage;
 
    /**
     * Pointer to the virtual function table.
     *
-    * Avoid accessing this table directly. Use the inline functions below 
-    * instead to avoid mistakes. 
+    * Avoid accessing this table directly. Use the inline functions below
+    * instead to avoid mistakes.
     */
    const struct pb_vtbl *vtbl;
 };
@@ -114,44 +121,43 @@ struct pb_buffer
 
 /**
  * Virtual function table for the buffer storage operations.
- * 
+ *
  * Note that creation is not done through this table.
  */
 struct pb_vtbl
 {
-   void (*destroy)( struct pb_buffer *buf );
+   void (*destroy)(struct pb_buffer *buf);
 
-   /** 
+   /**
     * Map the entire data store of a buffer object into the client's address.
-    * flags is bitmask of PB_USAGE_CPU_READ/WRITE. 
+    * flags is bitmask of PB_USAGE_CPU_READ/WRITE.
     */
-   void *(*map)( struct pb_buffer *buf, 
-                 unsigned flags, void *flush_ctx );
-   
-   void (*unmap)( struct pb_buffer *buf );
+   void *(*map)(struct pb_buffer *buf,
+                enum pb_usage_flags flags, void *flush_ctx);
 
-   enum pipe_error (*validate)( struct pb_buffer *buf, 
-                                struct pb_validate *vl,
-                                unsigned flags );
+   void (*unmap)(struct pb_buffer *buf);
 
-   void (*fence)( struct pb_buffer *buf, 
-                  struct pipe_fence_handle *fence );
+   enum pipe_error (*validate)(struct pb_buffer *buf,
+                               struct pb_validate *vl,
+                               enum pb_usage_flags flags);
+
+   void (*fence)(struct pb_buffer *buf,
+                 struct pipe_fence_handle *fence);
 
    /**
     * Get the base buffer and the offset.
-    * 
+    *
     * A buffer can be subdivided in smaller buffers. This method should return
     * the underlaying buffer, and the relative offset.
-    * 
-    * Buffers without an underlaying base buffer should return themselves, with 
+    *
+    * Buffers without an underlaying base buffer should return themselves, with
     * a zero offset.
-    * 
+    *
     * Note that this will increase the reference count of the base buffer.
     */
-   void (*get_base_buffer)( struct pb_buffer *buf,
-                            struct pb_buffer **base_buf,
-                            pb_size *offset );
-   
+   void (*get_base_buffer)(struct pb_buffer *buf,
+                           struct pb_buffer **base_buf,
+                           pb_size *offset);
 };
 
 
@@ -159,8 +165,7 @@ struct pb_vtbl
 /* Accessor functions for pb->vtbl:
  */
 static inline void *
-pb_map(struct pb_buffer *buf, 
-       unsigned flags, void *flush_ctx)
+pb_map(struct pb_buffer *buf, enum pb_usage_flags flags, void *flush_ctx)
 {
    assert(buf);
    if (!buf)
@@ -170,7 +175,7 @@ pb_map(struct pb_buffer *buf,
 }
 
 
-static inline void 
+static inline void
 pb_unmap(struct pb_buffer *buf)
 {
    assert(buf);
@@ -182,9 +187,9 @@ pb_unmap(struct pb_buffer *buf)
 
 
 static inline void
-pb_get_base_buffer( struct pb_buffer *buf,
-		    struct pb_buffer **base_buf,
-		    pb_size *offset )
+pb_get_base_buffer(struct pb_buffer *buf,
+                   struct pb_buffer **base_buf,
+                   pb_size *offset)
 {
    assert(buf);
    if (!buf) {
@@ -200,8 +205,9 @@ pb_get_base_buffer( struct pb_buffer *buf,
 }
 
 
-static inline enum pipe_error 
-pb_validate(struct pb_buffer *buf, struct pb_validate *vl, unsigned flags)
+static inline enum pipe_error
+pb_validate(struct pb_buffer *buf, struct pb_validate *vl,
+            enum pb_usage_flags flags)
 {
    assert(buf);
    if (!buf)
@@ -211,7 +217,7 @@ pb_validate(struct pb_buffer *buf, struct pb_validate *vl, unsigned flags)
 }
 
 
-static inline void 
+static inline void
 pb_fence(struct pb_buffer *buf, struct pipe_fence_handle *fence)
 {
    assert(buf);
@@ -222,7 +228,7 @@ pb_fence(struct pb_buffer *buf, struct pipe_fence_handle *fence)
 }
 
 
-static inline void 
+static inline void
 pb_destroy(struct pb_buffer *buf)
 {
    assert(buf);
@@ -232,6 +238,7 @@ pb_destroy(struct pb_buffer *buf)
    buf->vtbl->destroy(buf);
 }
 
+
 static inline void
 pb_reference(struct pb_buffer **dst,
              struct pb_buffer *src)
@@ -239,7 +246,7 @@ pb_reference(struct pb_buffer **dst,
    struct pb_buffer *old = *dst;
 
    if (pipe_reference(&(*dst)->reference, &src->reference))
-      pb_destroy( old );
+      pb_destroy(old);
    *dst = src;
 }
 
@@ -251,11 +258,11 @@ pb_reference(struct pb_buffer **dst,
 static inline boolean
 pb_check_alignment(pb_size requested, pb_size provided)
 {
-   if(!requested)
+   if (!requested)
       return TRUE;
-   if(requested > provided)
+   if (requested > provided)
       return FALSE;
-   if(provided % requested != 0)
+   if (provided % requested != 0)
       return FALSE;
    return TRUE;
 }
@@ -273,11 +280,11 @@ pb_check_usage(unsigned requested, unsigned provided)
 
 
 /**
- * Malloc-based buffer to store data that can't be used by the graphics 
+ * Malloc-based buffer to store data that can't be used by the graphics
  * hardware.
  */
 struct pb_buffer *
-pb_malloc_buffer_create(pb_size size, 
+pb_malloc_buffer_create(pb_size size,
                         const struct pb_desc *desc);
 
 

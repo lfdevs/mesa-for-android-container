@@ -39,8 +39,8 @@ radv_extensions_c = custom_target(
   ],
 )
 
-vk_format_table_c = custom_target(
-  'vk_format_table.c',
+amd_vk_format_table_c = custom_target(
+  'amd_vk_format_table.c',
   input : ['vk_format_table.py', 'vk_format_layout.csv'],
   output : 'vk_format_table.c',
   command : [prog_python, '@INPUT@'],
@@ -82,6 +82,7 @@ libradv_files = files(
   'radv_meta_resolve.c',
   'radv_meta_resolve_cs.c',
   'radv_meta_resolve_fs.c',
+  'radv_nir_lower_ycbcr_textures.c',
   'radv_nir_to_llvm.c',
   'radv_pass.c',
   'radv_pipeline.c',
@@ -130,19 +131,18 @@ endif
 
 libvulkan_radeon = shared_library(
   'vulkan_radeon',
-  [libradv_files, radv_entrypoints, radv_extensions_c, vk_format_table_c, sha1_h],
+  [libradv_files, radv_entrypoints, radv_extensions_c, amd_vk_format_table_c, sha1_h, xmlpool_options_h],
   include_directories : [
-    inc_common, inc_amd, inc_amd_common, inc_compiler, inc_vulkan_util,
-    inc_vulkan_wsi,
+    inc_common, inc_amd, inc_amd_common, inc_compiler, inc_util, inc_vulkan_wsi,
   ],
   link_with : [
-    libamd_common, libamdgpu_addrlib, libvulkan_util, libvulkan_wsi,
-    libmesa_util,
+    libamd_common, libamdgpu_addrlib, libvulkan_wsi,
+    libmesa_util, libxmlconfig
   ],
   dependencies : [
     dep_llvm, dep_libdrm_amdgpu, dep_thread, dep_elf, dep_dl, dep_m,
     dep_valgrind, radv_deps,
-    idep_nir,
+    idep_nir, idep_vulkan_util,
   ],
   c_args : [c_vis_args, no_override_init_args, radv_flags],
   cpp_args : [cpp_vis_args, radv_flags],

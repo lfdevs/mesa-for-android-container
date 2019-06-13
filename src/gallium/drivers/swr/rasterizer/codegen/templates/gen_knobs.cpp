@@ -95,6 +95,13 @@ void KnobBase::autoExpandEnvironmentVariables(std::string& text)
 //========================================================
 // Static Data Members
 //========================================================
+% for knob in knobs:
+% if knob[1]['type'] == 'std::string':
+${knob[1]['type']} GlobalKnobs::Knob_${knob[0]}::m_default = "${repr(knob[1]['default'])[1:-1]}";
+% else:
+${knob[1]['type']} GlobalKnobs::Knob_${knob[0]}::m_default = ${knob[1]['default']};
+% endif
+% endfor
 GlobalKnobs g_GlobalKnobs;
 
 //========================================================

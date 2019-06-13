@@ -4043,7 +4043,8 @@ static void evergreen_set_hw_atomic_buffers(struct pipe_context *ctx,
 static void evergreen_set_shader_buffers(struct pipe_context *ctx,
 					 enum pipe_shader_type shader, unsigned start_slot,
 					 unsigned count,
-					 const struct pipe_shader_buffer *buffers)
+					 const struct pipe_shader_buffer *buffers,
+					 unsigned writable_bitmask)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 	struct r600_image_state *istate = NULL;

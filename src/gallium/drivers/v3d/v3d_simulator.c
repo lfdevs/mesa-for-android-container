@@ -52,6 +52,7 @@
 #include "util/hash_table.h"
 #include "util/ralloc.h"
 #include "util/set.h"
+#include "util/u_dynarray.h"
 #include "util/u_memory.h"
 #include "util/u_mm.h"
 #include "drm-uapi/i915_drm.h"
@@ -63,6 +64,7 @@
 /** Global (across GEM fds) state for the simulator */
 static struct v3d_simulator_state {
         mtx_t mutex;
+        mtx_t submit_lock;
 
         struct v3d_hw *v3d;
         int ver;
@@ -80,6 +82,7 @@ static struct v3d_simulator_state {
         /** Mapping from GEM fd to struct v3d_simulator_file * */
         struct hash_table *fd_map;
 
+        struct util_dynarray bin_oom;
         int refcount;
 } sim_state = {
         .mutex = _MTX_INITIALIZER_NP,
@@ -162,7 +165,7 @@ set_gmp_flags(struct v3d_simulator_file *file,
  * that also contains the drm_gem_cma_object struct.
  */
 static struct v3d_simulator_bo *
-v3d_create_simulator_bo(int fd, int handle, unsigned size)
+v3d_create_simulator_bo(int fd, unsigned size)
 {
         struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
         struct v3d_simulator_bo *sim_bo = rzalloc(file,
@@ -170,7 +173,6 @@ v3d_create_simulator_bo(int fd, int handle, unsigned size)
         size = align(size, 4096);
 
         sim_bo->file = file;
-        sim_bo->handle = handle;
 
         mtx_lock(&sim_state.mutex);
         sim_bo->block = u_mmAllocMem(sim_state.heap, size + 4, GMP_ALIGN2, 0);
@@ -186,6 +188,18 @@ v3d_create_simulator_bo(int fd, int handle, unsigned size)
         memset(sim_bo->sim_vaddr, 0xd0, size);
 
         *(uint32_t *)(sim_bo->sim_vaddr + sim_bo->size) = BO_SENTINEL;
+
+        return sim_bo;
+}
+
+static struct v3d_simulator_bo *
+v3d_create_simulator_bo_for_gem(int fd, int handle, unsigned size)
+{
+        struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+        struct v3d_simulator_bo *sim_bo =
+                v3d_create_simulator_bo(fd, size);
+
+        sim_bo->handle = handle;
 
         /* Map the GEM buffer for copy in/out to the simulator.  i915 blocks
          * dumb mmap on render nodes, so use their ioctl directly if we're on
@@ -236,6 +250,20 @@ v3d_create_simulator_bo(int fd, int handle, unsigned size)
         }
 
         return sim_bo;
+}
+
+static int bin_fd;
+
+uint32_t
+v3d_simulator_get_spill(uint32_t spill_size)
+{
+        struct v3d_simulator_bo *sim_bo =
+                v3d_create_simulator_bo(bin_fd, spill_size);
+
+        util_dynarray_append(&sim_state.bin_oom, struct v3d_simulator_bo *,
+                             sim_bo);
+
+        return sim_bo->block->ofs;
 }
 
 static void
@@ -331,10 +359,20 @@ v3d_simulator_submit_cl_ioctl(int fd, struct drm_v3d_submit_cl *submit)
         if (ret)
                 return ret;
 
+        mtx_lock(&sim_state.submit_lock);
+        bin_fd = fd;
         if (sim_state.ver >= 41)
                 v3d41_simulator_submit_cl_ioctl(sim_state.v3d, submit, file->gmp->ofs);
         else
                 v3d33_simulator_submit_cl_ioctl(sim_state.v3d, submit, file->gmp->ofs);
+
+        util_dynarray_foreach(&sim_state.bin_oom, struct v3d_simulator_bo *,
+                              sim_bo) {
+                v3d_free_simulator_bo(*sim_bo);
+        }
+        util_dynarray_clear(&sim_state.bin_oom);
+
+        mtx_unlock(&sim_state.submit_lock);
 
         ret = v3d_simulator_unpin_bos(file, submit);
         if (ret)
@@ -352,7 +390,7 @@ v3d_simulator_submit_cl_ioctl(int fd, struct drm_v3d_submit_cl *submit)
  */
 void v3d_simulator_open_from_handle(int fd, int handle, uint32_t size)
 {
-        v3d_create_simulator_bo(fd, handle, size);
+        v3d_create_simulator_bo_for_gem(fd, handle, size);
 }
 
 /**
@@ -391,7 +429,8 @@ v3d_simulator_create_bo_ioctl(int fd, struct drm_v3d_create_bo *args)
 
         if (ret == 0) {
                 struct v3d_simulator_bo *sim_bo =
-                        v3d_create_simulator_bo(fd, args->handle, args->size);
+                        v3d_create_simulator_bo_for_gem(fd, args->handle,
+                                                        args->size);
 
                 args->offset = sim_bo->block->ofs;
         }
@@ -548,6 +587,8 @@ v3d_simulator_init_global(const struct v3d_device_info *devinfo)
                                         _mesa_hash_pointer,
                                         _mesa_key_pointer_equal);
 
+        util_dynarray_init(&sim_state.bin_oom, NULL);
+
         if (sim_state.ver >= 41)
                 v3d41_simulator_init_regs(sim_state.v3d);
         else
@@ -580,6 +621,7 @@ v3d_simulator_init(struct v3d_screen *screen)
         sim_file->gmp = u_mmAllocMem(sim_state.heap, 8096, GMP_ALIGN2, 0);
         sim_file->gmp_vaddr = (sim_state.mem + sim_file->gmp->ofs -
                                sim_state.mem_base);
+        memset(sim_file->gmp_vaddr, 0, 8096);
 }
 
 void
@@ -588,6 +630,7 @@ v3d_simulator_destroy(struct v3d_screen *screen)
         mtx_lock(&sim_state.mutex);
         if (!--sim_state.refcount) {
                 _mesa_hash_table_destroy(sim_state.fd_map, NULL);
+                util_dynarray_fini(&sim_state.bin_oom);
                 u_mmDestroy(sim_state.heap);
                 /* No memsetting the struct, because it contains the mutex. */
                 sim_state.mem = NULL;

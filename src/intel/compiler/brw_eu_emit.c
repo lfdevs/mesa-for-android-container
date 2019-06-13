@@ -94,6 +94,17 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
    else if (dest.file == BRW_GENERAL_REGISTER_FILE)
       assert(dest.nr < 128);
 
+   /* The hardware has a restriction where if the destination is Byte,
+    * the instruction needs to have a stride of 2 (except for packed byte
+    * MOV). This seems to be required even if the destination is the NULL
+    * register.
+    */
+   if (dest.file == BRW_ARCHITECTURE_REGISTER_FILE &&
+       dest.nr == BRW_ARF_NULL &&
+       type_sz(dest.type) == 1) {
+      dest.hstride = BRW_HORIZONTAL_STRIDE_2;
+   }
+
    gen7_convert_mrf_to_grf(p, &dest);
 
    if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_SENDS ||
@@ -696,9 +707,9 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
    gen7_convert_mrf_to_grf(p, &dest);
 
    assert(dest.nr < 128);
-   assert(src0.file != BRW_IMMEDIATE_VALUE || src0.nr < 128);
-   assert(src1.file != BRW_IMMEDIATE_VALUE || src1.nr < 128);
-   assert(src2.file != BRW_IMMEDIATE_VALUE || src2.nr < 128);
+   assert(src0.file == BRW_IMMEDIATE_VALUE || src0.nr < 128);
+   assert(src1.file != BRW_IMMEDIATE_VALUE && src1.nr < 128);
+   assert(src2.file == BRW_IMMEDIATE_VALUE || src2.nr < 128);
    assert(dest.address_mode == BRW_ADDRESS_DIRECT);
    assert(src0.address_mode == BRW_ADDRESS_DIRECT);
    assert(src1.address_mode == BRW_ADDRESS_DIRECT);
@@ -797,7 +808,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
       assert(dest.type == BRW_REGISTER_TYPE_F  ||
              dest.type == BRW_REGISTER_TYPE_DF ||
              dest.type == BRW_REGISTER_TYPE_D  ||
-             dest.type == BRW_REGISTER_TYPE_UD);
+             dest.type == BRW_REGISTER_TYPE_UD ||
+             (dest.type == BRW_REGISTER_TYPE_HF && devinfo->gen >= 8));
       if (devinfo->gen == 6) {
          brw_inst_set_3src_a16_dst_reg_file(devinfo, inst,
                                             dest.file == BRW_MESSAGE_REGISTER_FILE);
@@ -842,6 +854,22 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
           */
          brw_inst_set_3src_a16_src_type(devinfo, inst, dest.type);
          brw_inst_set_3src_a16_dst_type(devinfo, inst, dest.type);
+
+         /* From the Bspec, 3D Media GPGPU, Instruction fields, srcType:
+          *
+          *    "Three source instructions can use operands with mixed-mode
+          *     precision. When SrcType field is set to :f or :hf it defines
+          *     precision for source 0 only, and fields Src1Type and Src2Type
+          *     define precision for other source operands:
+          *
+          *     0b = :f. Single precision Float (32-bit).
+          *     1b = :hf. Half precision Float (16-bit)."
+          */
+         if (src1.type == BRW_REGISTER_TYPE_HF)
+            brw_inst_set_3src_a16_src1_type(devinfo, inst, 1);
+
+         if (src2.type == BRW_REGISTER_TYPE_HF)
+            brw_inst_set_3src_a16_src2_type(devinfo, inst, 1);
       }
    }
 
@@ -1916,8 +1944,10 @@ void gen6_math(struct brw_codegen *p,
       assert(src1.file == BRW_GENERAL_REGISTER_FILE ||
              (devinfo->gen >= 8 && src1.file == BRW_IMMEDIATE_VALUE));
    } else {
-      assert(src0.type == BRW_REGISTER_TYPE_F);
-      assert(src1.type == BRW_REGISTER_TYPE_F);
+      assert(src0.type == BRW_REGISTER_TYPE_F ||
+             (src0.type == BRW_REGISTER_TYPE_HF && devinfo->gen >= 9));
+      assert(src1.type == BRW_REGISTER_TYPE_F ||
+             (src1.type == BRW_REGISTER_TYPE_HF && devinfo->gen >= 9));
    }
 
    /* Source modifiers are ignored for extended math instructions on Gen6. */
@@ -2481,7 +2511,8 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm)
+                          unsigned desc_imm,
+                          bool eot)
 {
    const struct gen_device_info *devinfo = p->devinfo;
    struct brw_inst *send;
@@ -2518,6 +2549,7 @@ brw_send_indirect_message(struct brw_codegen *p,
    brw_set_dest(p, send, dst);
    brw_set_src0(p, send, retype(payload, BRW_REGISTER_TYPE_UD));
    brw_inst_set_sfid(devinfo, send, sfid);
+   brw_inst_set_eot(devinfo, send, eot);
 }
 
 void
@@ -2529,7 +2561,8 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg desc,
                                 unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm)
+                                unsigned ex_desc_imm,
+                                bool eot)
 {
    const struct gen_device_info *devinfo = p->devinfo;
    struct brw_inst *send;
@@ -2574,13 +2607,13 @@ brw_send_indirect_split_message(struct brw_codegen *p,
        * so the caller can specify additional descriptor bits with the
        * desc_imm immediate.
        *
-       * Even though the instruction dispatcher always pulls the SFID from the
-       * instruction itself, the extended descriptor sent to the actual unit
-       * gets the SFID from the extended descriptor which comes from the
-       * address register.  If we don't OR it in, the external unit gets
-       * confused and hangs the GPU.
+       * Even though the instruction dispatcher always pulls the SFID and EOT
+       * fields from the instruction itself, actual external unit which
+       * processes the message gets the SFID and EOT from the extended
+       * descriptor which comes from the address register.  If we don't OR
+       * those two bits in, the external unit may get confused and hang.
        */
-      brw_OR(p, addr, ex_desc, brw_imm_ud(ex_desc_imm | sfid));
+      brw_OR(p, addr, ex_desc, brw_imm_ud(ex_desc_imm | sfid | eot << 5));
 
       brw_pop_insn_state(p);
       ex_desc = addr;
@@ -2613,6 +2646,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    }
 
    brw_inst_set_sfid(devinfo, send, sfid);
+   brw_inst_set_eot(devinfo, send, eot);
 }
 
 static void
@@ -2645,7 +2679,7 @@ brw_send_indirect_surface_message(struct brw_codegen *p,
       surface = addr;
    }
 
-   brw_send_indirect_message(p, sfid, dst, payload, surface, desc_imm);
+   brw_send_indirect_message(p, sfid, dst, payload, surface, desc_imm, false);
 }
 
 static bool
@@ -2972,95 +3006,6 @@ brw_untyped_surface_write(struct brw_codegen *p,
                                      payload, surface, desc);
 }
 
-void
-brw_typed_atomic(struct brw_codegen *p,
-                 struct brw_reg dst,
-                 struct brw_reg payload,
-                 struct brw_reg surface,
-                 unsigned atomic_op,
-                 unsigned msg_length,
-                 bool response_expected,
-                 bool header_present) {
-   const struct gen_device_info *devinfo = p->devinfo;
-   const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
-                          HSW_SFID_DATAPORT_DATA_CACHE_1 :
-                          GEN6_SFID_DATAPORT_RENDER_CACHE);
-   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
-   /* SIMD4x2 typed atomic instructions only exist on HSW+ */
-   const bool has_simd4x2 = devinfo->gen >= 8 || devinfo->is_haswell;
-   const unsigned exec_size = align1 ? 1 << brw_get_default_exec_size(p) :
-                              has_simd4x2 ? 0 : 8;
-   /* Typed atomics don't support SIMD16 */
-   assert(exec_size <= 8);
-   const unsigned response_length =
-      brw_surface_payload_size(p, response_expected, exec_size);
-   const unsigned desc =
-      brw_message_desc(devinfo, msg_length, response_length, header_present) |
-      brw_dp_typed_atomic_desc(devinfo, exec_size, brw_get_default_group(p),
-                               atomic_op, response_expected);
-   /* Mask out unused components -- See comment in brw_untyped_atomic(). */
-   const unsigned mask = align1 ? WRITEMASK_XYZW : WRITEMASK_X;
-
-   brw_send_indirect_surface_message(p, sfid, brw_writemask(dst, mask),
-                                     payload, surface, desc);
-}
-
-void
-brw_typed_surface_read(struct brw_codegen *p,
-                       struct brw_reg dst,
-                       struct brw_reg payload,
-                       struct brw_reg surface,
-                       unsigned msg_length,
-                       unsigned num_channels,
-                       bool header_present)
-{
-   const struct gen_device_info *devinfo = p->devinfo;
-   const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
-                          HSW_SFID_DATAPORT_DATA_CACHE_1 :
-                          GEN6_SFID_DATAPORT_RENDER_CACHE);
-   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
-   /* SIMD4x2 typed read instructions only exist on HSW+ */
-   const bool has_simd4x2 = devinfo->gen >= 8 || devinfo->is_haswell;
-   const unsigned exec_size = align1 ? 1 << brw_get_default_exec_size(p) :
-                              has_simd4x2 ? 0 : 8;
-   const unsigned response_length =
-      brw_surface_payload_size(p, num_channels, exec_size);
-   const unsigned desc =
-      brw_message_desc(devinfo, msg_length, response_length, header_present) |
-      brw_dp_typed_surface_rw_desc(devinfo, exec_size, brw_get_default_group(p),
-                                   num_channels, false);
-
-   brw_send_indirect_surface_message(p, sfid, dst, payload, surface, desc);
-}
-
-void
-brw_typed_surface_write(struct brw_codegen *p,
-                        struct brw_reg payload,
-                        struct brw_reg surface,
-                        unsigned msg_length,
-                        unsigned num_channels,
-                        bool header_present)
-{
-   const struct gen_device_info *devinfo = p->devinfo;
-   const unsigned sfid = (devinfo->gen >= 8 || devinfo->is_haswell ?
-                          HSW_SFID_DATAPORT_DATA_CACHE_1 :
-                          GEN6_SFID_DATAPORT_RENDER_CACHE);
-   const bool align1 = brw_get_default_access_mode(p) == BRW_ALIGN_1;
-   /* SIMD4x2 typed read instructions only exist on HSW+ */
-   const bool has_simd4x2 = devinfo->gen >= 8 || devinfo->is_haswell;
-   const unsigned exec_size = align1 ? 1 << brw_get_default_exec_size(p) :
-                              has_simd4x2 ? 0 : 8;
-   const unsigned desc =
-      brw_message_desc(devinfo, msg_length, 0, header_present) |
-      brw_dp_typed_surface_rw_desc(devinfo, exec_size, brw_get_default_group(p),
-                                   num_channels, true);
-   /* Mask out unused components -- See comment in brw_untyped_atomic(). */
-   const unsigned mask = !has_simd4x2 && !align1 ? WRITEMASK_X : WRITEMASK_XYZW;
-
-   brw_send_indirect_surface_message(p, sfid, brw_writemask(brw_null_reg(), mask),
-                                     payload, surface, desc);
-}
-
 static void
 brw_set_memory_fence_message(struct brw_codegen *p,
                              struct brw_inst *insn,
@@ -3092,10 +3037,12 @@ brw_set_memory_fence_message(struct brw_codegen *p,
 void
 brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst,
-                 enum opcode send_op)
+                 struct brw_reg src,
+                 enum opcode send_op,
+                 bool stall)
 {
    const struct gen_device_info *devinfo = p->devinfo;
-   const bool commit_enable =
+   const bool commit_enable = stall ||
       devinfo->gen >= 10 || /* HSD ES # 1404612949 */
       (devinfo->gen == 7 && !devinfo->is_haswell);
    struct brw_inst *insn;
@@ -3103,15 +3050,15 @@ brw_memory_fence(struct brw_codegen *p,
    brw_push_insn_state(p);
    brw_set_default_mask_control(p, BRW_MASK_DISABLE);
    brw_set_default_exec_size(p, BRW_EXECUTE_1);
-   dst = vec1(dst);
+   dst = retype(vec1(dst), BRW_REGISTER_TYPE_UW);
+   src = retype(vec1(src), BRW_REGISTER_TYPE_UD);
 
    /* Set dst as destination for dependency tracking, the MEMORY_FENCE
     * message doesn't write anything back.
     */
    insn = next_insn(p, send_op);
-   dst = retype(dst, BRW_REGISTER_TYPE_UW);
    brw_set_dest(p, insn, dst);
-   brw_set_src0(p, insn, dst);
+   brw_set_src0(p, insn, src);
    brw_set_memory_fence_message(p, insn, GEN7_SFID_DATAPORT_DATA_CACHE,
                                 commit_enable);
 
@@ -3122,7 +3069,7 @@ brw_memory_fence(struct brw_codegen *p,
        */
       insn = next_insn(p, send_op);
       brw_set_dest(p, insn, offset(dst, 1));
-      brw_set_src0(p, insn, offset(dst, 1));
+      brw_set_src0(p, insn, src);
       brw_set_memory_fence_message(p, insn, GEN6_SFID_DATAPORT_RENDER_CACHE,
                                    commit_enable);
 
@@ -3133,6 +3080,9 @@ brw_memory_fence(struct brw_codegen *p,
        */
       brw_MOV(p, dst, offset(dst, 1));
    }
+
+   if (stall)
+      brw_MOV(p, retype(brw_null_reg(), BRW_REGISTER_TYPE_UW), dst);
 
    brw_pop_insn_state(p);
 }
@@ -3164,7 +3114,8 @@ brw_pixel_interpolator_query(struct brw_codegen *p,
                              dest,
                              mrf,
                              vec1(data),
-                             desc);
+                             desc,
+                             false);
 }
 
 void

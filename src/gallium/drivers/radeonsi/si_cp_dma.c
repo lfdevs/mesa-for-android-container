@@ -131,7 +131,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs,
 	 * indices. If we wanted to execute CP DMA in PFP, this packet
 	 * should precede it.
 	 */
-	if (flags & CP_DMA_PFP_SYNC_ME) {
+	if (sctx->has_graphics && flags & CP_DMA_PFP_SYNC_ME) {
 		radeon_emit(cs, PKT3(PKT3_PFP_SYNC_ME, 0, 0));
 		radeon_emit(cs, 0);
 	}
@@ -605,4 +605,32 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf,
 	radeon_emit(cs, va);
 	radeon_emit(cs, va >> 32);
 	radeon_emit_array(cs, (const uint32_t*)data, size/4);
+}
+
+void si_cp_copy_data(struct si_context *sctx,
+		     unsigned dst_sel, struct si_resource *dst, unsigned dst_offset,
+		     unsigned src_sel, struct si_resource *src, unsigned src_offset)
+{
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
+
+	if (dst) {
+		radeon_add_to_buffer_list(sctx, cs, dst,
+					  RADEON_USAGE_WRITE, RADEON_PRIO_CP_DMA);
+	}
+	if (src) {
+		radeon_add_to_buffer_list(sctx, cs, src,
+					  RADEON_USAGE_READ, RADEON_PRIO_CP_DMA);
+	}
+
+	uint64_t dst_va = (dst ? dst->gpu_address : 0ull) + dst_offset;
+	uint64_t src_va = (src ? src->gpu_address : 0ull) + src_offset;
+
+	radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
+	radeon_emit(cs, COPY_DATA_SRC_SEL(src_sel) |
+			COPY_DATA_DST_SEL(dst_sel) |
+			COPY_DATA_WR_CONFIRM);
+	radeon_emit(cs, src_va);
+	radeon_emit(cs, src_va >> 32);
+	radeon_emit(cs, dst_va);
+	radeon_emit(cs, dst_va >> 32);
 }

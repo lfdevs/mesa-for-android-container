@@ -83,12 +83,12 @@ _eglParseSyncAttribList(_EGLSync *sync, const EGLAttrib *attrib_list)
 
 
 EGLBoolean
-_eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
+_eglInitSync(_EGLSync *sync, _EGLDisplay *disp, EGLenum type,
              const EGLAttrib *attrib_list)
 {
    EGLint err;
 
-   _eglInitResource(&sync->Resource, sizeof(*sync), dpy);
+   _eglInitResource(&sync->Resource, sizeof(*sync), disp);
    sync->Type = type;
    sync->SyncStatus = EGL_UNSIGNALED_KHR;
    sync->SyncFd = EGL_NO_NATIVE_FENCE_FD_ANDROID;
@@ -120,7 +120,7 @@ _eglInitSync(_EGLSync *sync, _EGLDisplay *dpy, EGLenum type,
 
 
 EGLBoolean
-_eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
+_eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync,
                   EGLint attribute, EGLAttrib *value)
 {
    switch (attribute) {
@@ -134,7 +134,7 @@ _eglGetSyncAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSync *sync,
            sync->Type == EGL_SYNC_CL_EVENT_KHR ||
            sync->Type == EGL_SYNC_REUSABLE_KHR ||
            sync->Type == EGL_SYNC_NATIVE_FENCE_ANDROID))
-         drv->API.ClientWaitSyncKHR(drv, dpy, sync, 0, 0);
+         drv->API.ClientWaitSyncKHR(drv, disp, sync, 0, 0);
 
       *value = sync->SyncStatus;
       break;

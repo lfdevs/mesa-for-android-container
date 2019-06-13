@@ -36,30 +36,6 @@
 #include "compiler/glsl/ir_uniform.h"
 
 static void
-brw_gs_debug_recompile(struct brw_context *brw, struct gl_program *prog,
-                       const struct brw_gs_prog_key *key)
-{
-   perf_debug("Recompiling geometry shader for program %d\n", prog->Id);
-
-   bool found = false;
-   const struct brw_gs_prog_key *old_key =
-      brw_find_previous_compile(&brw->cache, BRW_CACHE_GS_PROG,
-                                key->program_string_id);
-
-   if (!old_key) {
-      perf_debug("  Didn't find previous compile in the shader cache for "
-                 "debug\n");
-      return;
-   }
-
-   found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
-
-   if (!found) {
-      perf_debug("  Something else\n");
-   }
-}
-
-static void
 assign_gs_binding_table_offsets(const struct gen_device_info *devinfo,
                                 const struct gl_program *prog,
                                 struct brw_gs_prog_data *prog_data)
@@ -128,7 +104,8 @@ brw_codegen_gs_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       if (gp->compiled_once) {
-         brw_gs_debug_recompile(brw, &gp->program, key);
+         brw_debug_recompile(brw, MESA_SHADER_GEOMETRY, gp->program.Id,
+                             key->program_string_id, key);
       }
       if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("GS compile took %.03f ms and stalled the GPU\n",

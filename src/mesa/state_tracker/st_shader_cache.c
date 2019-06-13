@@ -25,6 +25,7 @@
 #include "st_debug.h"
 #include "st_program.h"
 #include "st_shader_cache.h"
+#include "st_util.h"
 #include "compiler/glsl/program.h"
 #include "compiler/nir/nir.h"
 #include "compiler/nir/nir_serialize.h"
@@ -365,7 +366,7 @@ st_deserialise_ir_program(struct gl_context *ctx,
    }
 
    st_set_prog_affected_state_flags(prog);
-   _mesa_associate_uniform_storage(ctx, shProg, prog, false);
+   _mesa_associate_uniform_storage(ctx, shProg, prog);
 
    /* Create Gallium shaders now instead of on demand. */
    if (ST_DEBUG & DEBUG_PRECOMPILE ||

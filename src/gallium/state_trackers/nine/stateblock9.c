@@ -63,8 +63,20 @@ NineStateBlock9_dtor( struct NineStateBlock9 *This )
     struct nine_state *state = &This->state;
     struct nine_range *r;
     struct nine_range_pool *pool = &This->base.device->range_pool;
+    unsigned i;
 
-    nine_state_clear(state, false);
+    for (i = 0; i < ARRAY_SIZE(state->rt); ++i)
+       nine_bind(&state->rt[i], NULL);
+    nine_bind(&state->ds, NULL);
+    nine_bind(&state->vs, NULL);
+    nine_bind(&state->ps, NULL);
+    nine_bind(&state->vdecl, NULL);
+    for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
+        nine_bind(&state->stream[i], NULL);
+
+    nine_bind(&state->idxbuf, NULL);
+    for (i = 0; i < NINE_MAX_SAMPLERS; ++i)
+        nine_bind(&state->texture[i], NULL);
 
     FREE(state->vs_const_f);
     FREE(state->ps_const_f);

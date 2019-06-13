@@ -285,7 +285,7 @@ brw_message_desc_rlen(const struct gen_device_info *devinfo, uint32_t desc)
 }
 
 static inline bool
-brw_message_desc_header_present(const struct gen_device_info *devinfo,
+brw_message_desc_header_present(MAYBE_UNUSED const struct gen_device_info *devinfo,
                                 uint32_t desc)
 {
    assert(devinfo->gen >= 5);
@@ -293,14 +293,14 @@ brw_message_desc_header_present(const struct gen_device_info *devinfo,
 }
 
 static inline unsigned
-brw_message_ex_desc(const struct gen_device_info *devinfo,
+brw_message_ex_desc(UNUSED const struct gen_device_info *devinfo,
                     unsigned ex_msg_length)
 {
    return SET_BITS(ex_msg_length, 9, 6);
 }
 
 static inline unsigned
-brw_message_ex_desc_ex_mlen(const struct gen_device_info *devinfo,
+brw_message_ex_desc_ex_mlen(UNUSED const struct gen_device_info *devinfo,
                             uint32_t ex_desc)
 {
    return GET_BITS(ex_desc, 9, 6);
@@ -334,14 +334,14 @@ brw_sampler_desc(const struct gen_device_info *devinfo,
 }
 
 static inline unsigned
-brw_sampler_desc_binding_table_index(const struct gen_device_info *devinfo,
+brw_sampler_desc_binding_table_index(UNUSED const struct gen_device_info *devinfo,
                                      uint32_t desc)
 {
    return GET_BITS(desc, 7, 0);
 }
 
 static inline unsigned
-brw_sampler_desc_sampler(const struct gen_device_info *devinfo, uint32_t desc)
+brw_sampler_desc_sampler(UNUSED const struct gen_device_info *devinfo, uint32_t desc)
 {
    return GET_BITS(desc, 11, 8);
 }
@@ -368,7 +368,7 @@ brw_sampler_desc_simd_mode(const struct gen_device_info *devinfo, uint32_t desc)
 }
 
 static  inline unsigned
-brw_sampler_desc_return_format(const struct gen_device_info *devinfo,
+brw_sampler_desc_return_format(MAYBE_UNUSED const struct gen_device_info *devinfo,
                                uint32_t desc)
 {
    assert(devinfo->gen == 4 && !devinfo->is_g4x);
@@ -402,7 +402,7 @@ brw_dp_desc(const struct gen_device_info *devinfo,
 }
 
 static inline unsigned
-brw_dp_desc_binding_table_index(const struct gen_device_info *devinfo,
+brw_dp_desc_binding_table_index(UNUSED const struct gen_device_info *devinfo,
                                 uint32_t desc)
 {
    return GET_BITS(desc, 7, 0);
@@ -688,6 +688,108 @@ brw_dp_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
 }
 
 static inline uint32_t
+brw_dp_a64_untyped_surface_rw_desc(const struct gen_device_info *devinfo,
+                                   unsigned exec_size, /**< 0 for SIMD4x2 */
+                                   unsigned num_channels,
+                                   bool write)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+   assert(devinfo->gen >= 8);
+
+   unsigned msg_type =
+      write ? GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE :
+              GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ;
+
+   /* See also MDC_SM3 in the SKL PRM Vol 2d. */
+   const unsigned simd_mode = exec_size == 0 ? 0 : /* SIMD4x2 */
+                              exec_size <= 8 ? 2 : 1;
+
+   const unsigned msg_control =
+      SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
+      SET_BITS(simd_mode, 5, 4);
+
+   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+}
+
+/**
+ * Calculate the data size (see MDC_A64_DS in the "Structures" volume of the
+ * Skylake PRM).
+ */
+static inline uint32_t
+brw_mdc_a64_ds(unsigned elems)
+{
+   switch (elems) {
+   case 1:  return 0;
+   case 2:  return 1;
+   case 4:  return 2;
+   case 8:  return 3;
+   default:
+      unreachable("Unsupported elmeent count for A64 scattered message");
+   }
+}
+
+static inline uint32_t
+brw_dp_a64_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
+                                  unsigned exec_size, /**< 0 for SIMD4x2 */
+                                  unsigned bit_size,
+                                  bool write)
+{
+   assert(exec_size <= 8 || exec_size == 16);
+   assert(devinfo->gen >= 8);
+
+   unsigned msg_type =
+      write ? GEN8_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE :
+              GEN9_DATAPORT_DC_PORT1_A64_SCATTERED_READ;
+
+   const unsigned msg_control =
+      SET_BITS(GEN8_A64_SCATTERED_SUBTYPE_BYTE, 1, 0) |
+      SET_BITS(brw_mdc_a64_ds(bit_size / 8), 3, 2) |
+      SET_BITS(exec_size == 16, 4, 4);
+
+   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_a64_untyped_atomic_desc(const struct gen_device_info *devinfo,
+                               MAYBE_UNUSED unsigned exec_size, /**< 0 for SIMD4x2 */
+                               unsigned bit_size,
+                               unsigned atomic_op,
+                               bool response_expected)
+{
+   assert(exec_size == 8);
+   assert(devinfo->gen >= 8);
+   assert(bit_size == 32 || bit_size == 64);
+
+   const unsigned msg_type = GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP;
+
+   const unsigned msg_control =
+      SET_BITS(atomic_op, 3, 0) |
+      SET_BITS(bit_size == 64, 4, 4) |
+      SET_BITS(response_expected, 5, 5);
+
+   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_a64_untyped_atomic_float_desc(const struct gen_device_info *devinfo,
+                                     MAYBE_UNUSED unsigned exec_size,
+                                     unsigned atomic_op,
+                                     bool response_expected)
+{
+   assert(exec_size == 8);
+   assert(devinfo->gen >= 9);
+
+   assert(exec_size > 0);
+   const unsigned msg_type = GEN9_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP;
+
+   const unsigned msg_control =
+      SET_BITS(atomic_op, 1, 0) |
+      SET_BITS(response_expected, 5, 5);
+
+   return brw_dp_desc(devinfo, BRW_BTI_STATELESS, msg_type, msg_control);
+}
+
+static inline uint32_t
 brw_dp_typed_atomic_desc(const struct gen_device_info *devinfo,
                          unsigned exec_size,
                          unsigned exec_group,
@@ -809,7 +911,8 @@ brw_send_indirect_message(struct brw_codegen *p,
                           struct brw_reg dst,
                           struct brw_reg payload,
                           struct brw_reg desc,
-                          unsigned desc_imm);
+                          unsigned desc_imm,
+                          bool eot);
 
 void
 brw_send_indirect_split_message(struct brw_codegen *p,
@@ -820,7 +923,8 @@ brw_send_indirect_split_message(struct brw_codegen *p,
                                 struct brw_reg desc,
                                 unsigned desc_imm,
                                 struct brw_reg ex_desc,
-                                unsigned ex_desc_imm);
+                                unsigned ex_desc_imm,
+                                bool eot);
 
 void brw_ff_sync(struct brw_codegen *p,
 		   struct brw_reg dest,
@@ -1007,36 +1111,11 @@ brw_untyped_surface_write(struct brw_codegen *p,
                           bool header_present);
 
 void
-brw_typed_atomic(struct brw_codegen *p,
-                 struct brw_reg dst,
-                 struct brw_reg payload,
-                 struct brw_reg surface,
-                 unsigned atomic_op,
-                 unsigned msg_length,
-                 bool response_expected,
-                 bool header_present);
-
-void
-brw_typed_surface_read(struct brw_codegen *p,
-                       struct brw_reg dst,
-                       struct brw_reg payload,
-                       struct brw_reg surface,
-                       unsigned msg_length,
-                       unsigned num_channels,
-                       bool header_present);
-
-void
-brw_typed_surface_write(struct brw_codegen *p,
-                        struct brw_reg payload,
-                        struct brw_reg surface,
-                        unsigned msg_length,
-                        unsigned num_channels,
-                        bool header_present);
-
-void
 brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst,
-                 enum opcode send_op);
+                 struct brw_reg src,
+                 enum opcode send_op,
+                 bool stall);
 
 void
 brw_pixel_interpolator_query(struct brw_codegen *p,

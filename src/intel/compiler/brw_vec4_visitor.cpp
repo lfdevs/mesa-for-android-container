@@ -576,7 +576,7 @@ vec4_visitor::emit_pack_snorm_4x8(const dst_reg &dst, const src_reg &src0)
  * false) elements needed to pack a type.
  */
 static int
-type_size_xvec4(const struct glsl_type *type, bool as_vec4)
+type_size_xvec4(const struct glsl_type *type, bool as_vec4, bool bindless)
 {
    unsigned int i;
    int size;
@@ -609,11 +609,14 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
       }
    case GLSL_TYPE_ARRAY:
       assert(type->length > 0);
-      return type_size_xvec4(type->fields.array, as_vec4) * type->length;
+      return type_size_xvec4(type->fields.array, as_vec4, bindless) *
+             type->length;
    case GLSL_TYPE_STRUCT:
+   case GLSL_TYPE_INTERFACE:
       size = 0;
       for (i = 0; i < type->length; i++) {
-	 size += type_size_xvec4(type->fields.structure[i].type, as_vec4);
+	 size += type_size_xvec4(type->fields.structure[i].type, as_vec4,
+                                 bindless);
       }
       return size;
    case GLSL_TYPE_SUBROUTINE:
@@ -623,14 +626,13 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
       /* Samplers take up no register space, since they're baked in at
        * link time.
        */
-      return 0;
+      return bindless ? 1 : 0;
    case GLSL_TYPE_ATOMIC_UINT:
       return 0;
    case GLSL_TYPE_IMAGE:
-      return DIV_ROUND_UP(BRW_IMAGE_PARAM_SIZE, 4);
+      return bindless ? 1 : DIV_ROUND_UP(BRW_IMAGE_PARAM_SIZE, 4);
    case GLSL_TYPE_VOID:
    case GLSL_TYPE_ERROR:
-   case GLSL_TYPE_INTERFACE:
    case GLSL_TYPE_FUNCTION:
       unreachable("not reached");
    }
@@ -649,9 +651,9 @@ type_size_xvec4(const struct glsl_type *type, bool as_vec4)
  * store a particular type.
  */
 extern "C" int
-type_size_vec4(const struct glsl_type *type)
+type_size_vec4(const struct glsl_type *type, bool bindless)
 {
-   return type_size_xvec4(type, true);
+   return type_size_xvec4(type, true, bindless);
 }
 
 /**
@@ -674,9 +676,9 @@ type_size_vec4(const struct glsl_type *type)
  * type fits in one or two vec4 slots.
  */
 extern "C" int
-type_size_dvec4(const struct glsl_type *type)
+type_size_dvec4(const struct glsl_type *type, bool bindless)
 {
-   return type_size_xvec4(type, false);
+   return type_size_xvec4(type, false, bindless);
 }
 
 src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type)
@@ -684,9 +686,9 @@ src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type)
    init();
 
    this->file = VGRF;
-   this->nr = v->alloc.allocate(type_size_vec4(type));
+   this->nr = v->alloc.allocate(type_size_vec4(type, false));
 
-   if (type->is_array() || type->is_record()) {
+   if (type->is_array() || type->is_struct()) {
       this->swizzle = BRW_SWIZZLE_NOOP;
    } else {
       this->swizzle = brw_swizzle_for_size(type->vector_elements);
@@ -702,7 +704,7 @@ src_reg::src_reg(class vec4_visitor *v, const struct glsl_type *type, int size)
    init();
 
    this->file = VGRF;
-   this->nr = v->alloc.allocate(type_size_vec4(type) * size);
+   this->nr = v->alloc.allocate(type_size_vec4(type, false) * size);
 
    this->swizzle = BRW_SWIZZLE_NOOP;
 
@@ -714,9 +716,9 @@ dst_reg::dst_reg(class vec4_visitor *v, const struct glsl_type *type)
    init();
 
    this->file = VGRF;
-   this->nr = v->alloc.allocate(type_size_vec4(type));
+   this->nr = v->alloc.allocate(type_size_vec4(type, false));
 
-   if (type->is_array() || type->is_record()) {
+   if (type->is_array() || type->is_struct()) {
       this->writemask = WRITEMASK_XYZW;
    } else {
       this->writemask = (1 << type->vector_elements) - 1;
@@ -863,7 +865,7 @@ vec4_visitor::emit_mcs_fetch(const glsl_type *coordinate_type,
                                     dst_reg(this, glsl_type::uvec4_type));
    inst->base_mrf = 2;
    inst->src[1] = surface;
-   inst->src[2] = surface;
+   inst->src[2] = brw_imm_ud(0); /* sampler */
 
    int param_base;
 
@@ -1887,6 +1889,9 @@ vec4_visitor::vec4_visitor(const struct brw_compiler *compiler,
    this->max_grf = devinfo->gen >= 7 ? GEN7_MRF_HACK_START : BRW_MAX_GRF;
 
    this->uniforms = 0;
+
+   this->nir_locals = NULL;
+   this->nir_ssa_values = NULL;
 }
 
 

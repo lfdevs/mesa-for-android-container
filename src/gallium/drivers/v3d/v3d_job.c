@@ -38,13 +38,6 @@
 #include "broadcom/clif/clif_dump.h"
 
 static void
-remove_from_ht(struct hash_table *ht, void *key)
-{
-        struct hash_entry *entry = _mesa_hash_table_search(ht, key);
-        _mesa_hash_table_remove(ht, entry);
-}
-
-static void
 v3d_job_free(struct v3d_context *v3d, struct v3d_job *job)
 {
         set_foreach(job->bos, entry) {
@@ -52,29 +45,31 @@ v3d_job_free(struct v3d_context *v3d, struct v3d_job *job)
                 v3d_bo_unreference(&bo);
         }
 
-        remove_from_ht(v3d->jobs, &job->key);
+        _mesa_hash_table_remove_key(v3d->jobs, &job->key);
 
         if (job->write_prscs) {
                 set_foreach(job->write_prscs, entry) {
                         const struct pipe_resource *prsc = entry->key;
 
-                        remove_from_ht(v3d->write_jobs, (void *)prsc);
+                        _mesa_hash_table_remove_key(v3d->write_jobs, prsc);
                 }
         }
 
         for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 if (job->cbufs[i]) {
-                        remove_from_ht(v3d->write_jobs, job->cbufs[i]->texture);
+                        _mesa_hash_table_remove_key(v3d->write_jobs,
+                                                    job->cbufs[i]->texture);
                         pipe_surface_reference(&job->cbufs[i], NULL);
                 }
         }
         if (job->zsbuf) {
                 struct v3d_resource *rsc = v3d_resource(job->zsbuf->texture);
                 if (rsc->separate_stencil)
-                        remove_from_ht(v3d->write_jobs,
-                                       &rsc->separate_stencil->base);
+                        _mesa_hash_table_remove_key(v3d->write_jobs,
+                                                    &rsc->separate_stencil->base);
 
-                remove_from_ht(v3d->write_jobs, job->zsbuf->texture);
+                _mesa_hash_table_remove_key(v3d->write_jobs,
+                                            job->zsbuf->texture);
                 pipe_surface_reference(&job->zsbuf, NULL);
         }
 

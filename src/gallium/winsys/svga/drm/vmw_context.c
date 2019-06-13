@@ -161,10 +161,10 @@ vmw_svga_winsys_context(struct svga_winsys_context *swc)
 }
 
 
-static inline unsigned
+static inline enum pb_usage_flags
 vmw_translate_to_pb_flags(unsigned flags)
 {
-   unsigned f = 0;
+   enum pb_usage_flags f = 0;
    if (flags & SVGA_RELOC_READ)
       f |= PB_USAGE_GPU_READ;
 

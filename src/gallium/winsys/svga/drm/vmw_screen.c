@@ -96,6 +96,7 @@ vmw_winsys_create( int fd )
    if (!vmw_ioctl_init(vws))
       goto out_no_ioctl;
 
+   vws->base.have_transfer_from_buffer_cmd = vws->base.have_vgpu10;
    vws->fence_ops = vmw_fence_ops_create(vws);
    if (!vws->fence_ops)
       goto out_no_fence_ops;

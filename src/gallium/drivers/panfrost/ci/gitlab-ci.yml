@@ -1,0 +1,117 @@
+variables:
+  DOCKER_DRIVER: overlay2
+
+stages:
+  - build-container
+  - build
+  - test
+
+# Build Docker image with deqp, the rootfs and the build deps for Mesa
+build-container:
+  stage: build-container
+  when: always
+  services:
+    - docker:dind
+  image: docker:latest
+  before_script:
+    - mkdir -p results
+  script:
+    - docker login -u gitlab-ci-token -p $CI_BUILD_TOKEN $CI_REGISTRY
+    - time docker pull $CI_REGISTRY_IMAGE:latest || true
+    - time docker build
+             -t $CI_REGISTRY_IMAGE
+             --cache-from $CI_REGISTRY_IMAGE:latest
+             src/gallium/drivers/panfrost/ci
+             2>&1 | tee results/docker_build_log.txt
+    - time docker push $CI_REGISTRY_IMAGE:latest 2>&1 | tee results/docker_push_log.txt
+
+    - docker history $CI_REGISTRY_IMAGE:latest
+
+    - "grep -o 'digest: sha256:[0-9a-f]\\+' results/docker_push_log.txt |
+       cut -f 2 -d ' ' |
+       tee results/docker_image_digest.txt"
+  artifacts:
+    when: always
+    paths:
+      - results/
+
+build:
+  stage: build
+  image: $CI_REGISTRY_IMAGE:latest
+  cache:
+    paths:
+      - ccache
+  before_script:
+    - mkdir -p results mesa-build
+    - mkdir -p ccache
+  script:
+    - export CCACHE_BASEDIR=$CI_PROJECT_DIR
+    - export CCACHE_DIR=$CI_PROJECT_DIR/ccache
+    - export PATH="/usr/lib/ccache:$PATH"
+    - ccache -s
+
+    - /usr/share/meson/debcrossgen --arch arm64 -o /tmp/cross_file.txt
+    - meson . mesa-build
+        --cross-file /tmp/cross_file.txt
+        --libdir /artifacts/rootfs/mesa/lib/aarch64-linux-gnu
+        --buildtype release
+        -Dgallium-drivers=kmsro,panfrost
+        -Ddri-drivers=
+        -Dprefix=/artifacts/rootfs/mesa
+    - ninja -C mesa-build install
+    - du -sh /artifacts/rootfs/mesa/*
+    - rm -rf /artifacts/rootfs/mesa/include
+    - cp src/gallium/drivers/panfrost/ci/deqp-runner.sh /artifacts/rootfs/deqp/.
+    - du -sh /artifacts/rootfs/deqp/*
+    - find /artifacts/rootfs/ -type f -printf "%s\t%p\n" | sort -n
+    - cd /artifacts/rootfs/ ; find -H  |  cpio -H newc -v -o | gzip -c - > $CI_PROJECT_DIR/results/panfrost-rootfs.cpio.gz
+    - cp /artifacts/Image /artifacts/rk3399-gru-kevin.dtb $CI_PROJECT_DIR/results/.
+
+    - cd $CI_PROJECT_DIR
+    - src/gallium/drivers/panfrost/ci/generate_lava.py
+        --template src/gallium/drivers/panfrost/ci/lava-deqp.yml.jinja2
+        --base-artifacts-url $CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/results
+        > results/lava-deqp.yml
+  artifacts:
+    when: always
+    paths:
+      - results/
+
+test:
+  stage: test
+  image: $CI_REGISTRY_IMAGE:latest
+  script:
+    - mkdir -p ~/.config/
+    - |
+      echo "default:
+        uri: https://lava.collabora.co.uk/RPC2
+        timeout: 120
+        username: jenkins-fdo
+        token: $LAVA_TOKEN
+      " > ~/.config/lavacli.yaml
+    - lava_job_id=`lavacli jobs submit $CI_PROJECT_DIR/results/lava-deqp.yml`
+    - echo $lava_job_id
+    - lavacli jobs logs $lava_job_id | grep -a -v "{'case':" | tee results/lava-deqp-$lava_job_id.log
+    - lavacli jobs show $lava_job_id
+    - curl "https://lava.collabora.co.uk/results/$lava_job_id/csv?user=jenkins-fdo&token=$LAVA_TOKEN" > raw_results.csv
+    - cat raw_results.csv | csvcut -c 12,3 | grep dEQP-GLES2 | sort > results/results-$lava_job_id.csv
+
+    # FIXME: Remove flip-flops from comparison files
+    - sed -i '/dEQP-GLES2.functional.shaders.invariance.highp.loop_4/d' src/gallium/drivers/panfrost/ci/expected-failures.txt results/results-$lava_job_id.csv
+    - sed -i '/dEQP-GLES2.functional.texture.units.2_units.mixed.1/d' src/gallium/drivers/panfrost/ci/expected-failures.txt results/results-$lava_job_id.csv
+    - sed -i '/dEQP-GLES2.functional.texture.units.4_units.mixed.5/d' src/gallium/drivers/panfrost/ci/expected-failures.txt results/results-$lava_job_id.csv
+    - sed -i '/dEQP-GLES2.functional.texture.units.all_units.only_cube.7/d' src/gallium/drivers/panfrost/ci/expected-failures.txt results/results-$lava_job_id.csv
+
+    - PASSED=$(grep pass$ results/results-$lava_job_id.csv | wc -l)
+    - FAILED=$(grep fail$ results/results-$lava_job_id.csv | wc -l)
+    - TOTAL=$(wc -l < results/results-$lava_job_id.csv)
+    - 'echo "Passed: $PASSED ($(expr $PASSED \* 100 / $TOTAL)%)"'
+    - 'echo "Failed: $FAILED ($(expr $FAILED \* 100 / $TOTAL)%)"'
+    - 'echo "Total: $TOTAL"'
+
+    - sed '/,pass/d' results/results-$lava_job_id.csv | sed 's/,fail//' > results/failures-$lava_job_id.txt
+    - diff -u src/gallium/drivers/panfrost/ci/expected-failures.txt results/failures-$lava_job_id.txt
+  artifacts:
+    when: always
+    paths:
+      - results/

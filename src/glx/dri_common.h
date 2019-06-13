@@ -78,4 +78,9 @@ dri2_convert_glx_attribs(unsigned num_attribs, const uint32_t *attribs,
                          uint32_t *render_type, uint32_t *flags, unsigned *api,
                          int *reset, int *release, unsigned *error);
 
+extern bool
+dri2_check_no_error(uint32_t flags, struct glx_context *share_context,
+                    int major, unsigned *error);
+
+
 #endif /* _DRI_COMMON_H */

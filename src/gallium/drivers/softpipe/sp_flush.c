@@ -192,5 +192,8 @@ void softpipe_texture_barrier(struct pipe_context *pipe, unsigned flags)
 
 void softpipe_memory_barrier(struct pipe_context *pipe, unsigned flags)
 {
+   if (!(flags & ~PIPE_BARRIER_UPDATE))
+      return;
+
    softpipe_texture_barrier(pipe, 0);
 }

@@ -30,6 +30,7 @@
 
 #include "freedreno_resource.h"
 
+uint32_t fd6_fill_ubwc_buffer_sizes(struct fd_resource *rsc);
 uint32_t fd6_setup_slices(struct fd_resource *rsc);
 
 #endif /* FD6_RESOURCE_H_ */

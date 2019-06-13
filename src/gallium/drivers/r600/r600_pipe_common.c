@@ -47,10 +47,6 @@
 #include <llvm-c/TargetMachine.h>
 #endif
 
-#ifndef MESA_LLVM_VERSION_PATCH
-#define MESA_LLVM_VERSION_PATCH 0
-#endif
-
 struct r600_multi_fence {
 	struct pipe_reference reference;
 	struct pipe_fence_handle *gfx;
@@ -809,13 +805,6 @@ static const char* r600_get_device_vendor(struct pipe_screen* pscreen)
 	return "AMD";
 }
 
-static const char *r600_get_marketing_name(struct radeon_winsys *ws)
-{
-	if (!ws->get_chip_name)
-		return NULL;
-	return ws->get_chip_name(ws);
-}
-
 static const char *r600_get_family_name(const struct r600_common_screen *rscreen)
 {
 	switch (rscreen->info.family) {
@@ -1271,34 +1260,28 @@ struct pipe_resource *r600_resource_create_common(struct pipe_screen *screen,
 bool r600_common_screen_init(struct r600_common_screen *rscreen,
 			     struct radeon_winsys *ws)
 {
-	char family_name[32] = {}, llvm_string[32] = {}, kernel_version[128] = {};
+	char family_name[32] = {}, kernel_version[128] = {};
 	struct utsname uname_data;
 	const char *chip_name;
 
 	ws->query_info(ws, &rscreen->info);
 	rscreen->ws = ws;
 
-	if ((chip_name = r600_get_marketing_name(ws)))
-		snprintf(family_name, sizeof(family_name), "%s / ",
-			 r600_get_family_name(rscreen) + 4);
-	else
-		chip_name = r600_get_family_name(rscreen);
+	chip_name = r600_get_family_name(rscreen);
 
 	if (uname(&uname_data) == 0)
 		snprintf(kernel_version, sizeof(kernel_version),
 			 " / %s", uname_data.release);
 
-	if (HAVE_LLVM > 0) {
-		snprintf(llvm_string, sizeof(llvm_string),
-			 ", LLVM %i.%i.%i", (HAVE_LLVM >> 8) & 0xff,
-			 HAVE_LLVM & 0xff, MESA_LLVM_VERSION_PATCH);
-	}
-
 	snprintf(rscreen->renderer_string, sizeof(rscreen->renderer_string),
-		 "%s (%sDRM %i.%i.%i%s%s)",
+		 "%s (%sDRM %i.%i.%i%s"
+#if HAVE_LLVM > 0
+		 ", LLVM " MESA_LLVM_VERSION_STRING
+#endif
+		 ")",
 		 chip_name, family_name, rscreen->info.drm_major,
 		 rscreen->info.drm_minor, rscreen->info.drm_patchlevel,
-		 kernel_version, llvm_string);
+		 kernel_version);
 
 	rscreen->b.get_name = r600_get_name;
 	rscreen->b.get_vendor = r600_get_vendor;

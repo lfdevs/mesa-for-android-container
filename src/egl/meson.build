@@ -24,7 +24,7 @@ inc_egl_dri2 = include_directories('drivers/dri2')
 c_args_for_egl = []
 link_for_egl = []
 deps_for_egl = []
-incs_for_egl = [inc_include, inc_drm_uapi, inc_src, inc_egl]
+incs_for_egl = [inc_include, inc_src, inc_egl]
 
 files_egl = files(
   'main/eglapi.c',
@@ -143,7 +143,7 @@ if cc.has_function('mincore')
 endif
 
 if not with_glvnd
-  egl_lib_name = 'EGL'
+  egl_lib_name = 'EGL' + get_option('egl-lib-suffix')
   egl_lib_version = '1.0.0'
 else
   egl_lib_name = 'EGL_mesa'
@@ -192,7 +192,7 @@ pkg.generate(
   extra_cflags : gl_pkgconfig_c_flags,
 )
 
-if with_tests
+if with_tests and prog_nm.found()
   if with_glvnd
     # TODO: add glvnd symbol check
   else

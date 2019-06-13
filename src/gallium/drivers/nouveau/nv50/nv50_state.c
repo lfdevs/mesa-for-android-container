@@ -28,6 +28,7 @@
 #include "util/format_srgb.h"
 
 #include "tgsi/tgsi_parse.h"
+#include "compiler/nir/nir.h"
 
 #include "nv50/nv50_stateobj.h"
 #include "nv50/nv50_context.h"
@@ -756,7 +757,19 @@ nv50_sp_state_create(struct pipe_context *pipe,
       return NULL;
 
    prog->type = type;
-   prog->pipe.tokens = tgsi_dup_tokens(cso->tokens);
+   prog->pipe.type = cso->type;
+
+   switch (cso->type) {
+   case PIPE_SHADER_IR_TGSI:
+      prog->pipe.tokens = tgsi_dup_tokens(cso->tokens);
+      break;
+   case PIPE_SHADER_IR_NIR:
+      prog->pipe.ir.nir = cso->ir.nir;
+      break;
+   default:
+      assert(!"unsupported IR!");
+      return NULL;
+   }
 
    if (cso->stream_output.num_outputs)
       prog->pipe.stream_output = cso->stream_output;
@@ -775,7 +788,10 @@ nv50_sp_state_delete(struct pipe_context *pipe, void *hwcso)
 
    nv50_program_destroy(nv50_context(pipe), prog);
 
-   FREE((void *)prog->pipe.tokens);
+   if (prog->pipe.type == PIPE_SHADER_IR_TGSI)
+      FREE((void *)prog->pipe.tokens);
+   else if (prog->pipe.type == PIPE_SHADER_IR_NIR)
+      ralloc_free(prog->pipe.ir.nir);
    FREE(prog);
 }
 
@@ -837,12 +853,23 @@ nv50_cp_state_create(struct pipe_context *pipe,
    if (!prog)
       return NULL;
    prog->type = PIPE_SHADER_COMPUTE;
+   prog->pipe.type = cso->ir_type;
+
+   switch(cso->ir_type) {
+   case PIPE_SHADER_IR_TGSI:
+      prog->pipe.tokens = tgsi_dup_tokens((const struct tgsi_token *)cso->prog);
+      break;
+   case PIPE_SHADER_IR_NIR:
+      prog->pipe.ir.nir = (nir_shader *)cso->prog;
+      break;
+   default:
+      assert(!"unsupported IR!");
+      return NULL;
+   }
 
    prog->cp.smem_size = cso->req_local_mem;
    prog->cp.lmem_size = cso->req_private_mem;
    prog->parm_size = cso->req_input_mem;
-
-   prog->pipe.tokens = tgsi_dup_tokens((const struct tgsi_token *)cso->prog);
 
    return (void *)prog;
 }

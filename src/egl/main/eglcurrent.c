@@ -42,7 +42,7 @@ static _EGLThreadInfo dummy_thread;
 static mtx_t _egl_TSDMutex = _MTX_INITIALIZER_NP;
 static EGLBoolean _egl_TSDInitialized;
 static tss_t _egl_TSD;
-static void (*_egl_FreeTSD)(_EGLThreadInfo *);
+static void _eglDestroyThreadInfo(_EGLThreadInfo *t);
 
 #ifdef GLX_USE_TLS
 static __thread const _EGLThreadInfo *_egl_TLS
@@ -73,25 +73,23 @@ static inline void _eglFiniTSD(void)
       _EGLThreadInfo *t = _eglGetTSD();
 
       _egl_TSDInitialized = EGL_FALSE;
-      if (t && _egl_FreeTSD)
-         _egl_FreeTSD((void *) t);
+      _eglDestroyThreadInfo(t);
       tss_delete(_egl_TSD);
    }
    mtx_unlock(&_egl_TSDMutex);
 }
 
-static inline EGLBoolean _eglInitTSD(void (*dtor)(_EGLThreadInfo *))
+static inline EGLBoolean _eglInitTSD()
 {
    if (!_egl_TSDInitialized) {
       mtx_lock(&_egl_TSDMutex);
 
       /* check again after acquiring lock */
       if (!_egl_TSDInitialized) {
-         if (tss_create(&_egl_TSD, (void (*)(void *)) dtor) != thrd_success) {
+         if (tss_create(&_egl_TSD, (void (*)(void *)) _eglDestroyThreadInfo) != thrd_success) {
             mtx_unlock(&_egl_TSDMutex);
             return EGL_FALSE;
          }
-         _egl_FreeTSD = dtor;
          _eglAddAtExitCall(_eglFiniTSD);
          _egl_TSDInitialized = EGL_TRUE;
       }
@@ -143,7 +141,7 @@ _eglDestroyThreadInfo(_EGLThreadInfo *t)
 static inline _EGLThreadInfo *
 _eglCheckedGetTSD(void)
 {
-   if (_eglInitTSD(&_eglDestroyThreadInfo) != EGL_TRUE) {
+   if (_eglInitTSD() != EGL_TRUE) {
       _eglLog(_EGL_FATAL, "failed to initialize \"current\" system");
       return NULL;
    }

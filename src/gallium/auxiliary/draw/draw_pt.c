@@ -464,6 +464,9 @@ draw_vbo(struct draw_context *draw,
    unsigned fpstate = util_fpstate_get();
    struct pipe_draw_info resolved_info;
 
+   if (info->instance_count == 0)
+      return;
+
    /* Make sure that denorms are treated like zeros. This is 
     * the behavior required by D3D10. OpenGL doesn't care.
     */
@@ -472,7 +475,6 @@ draw_vbo(struct draw_context *draw,
    resolve_draw_info(info, &resolved_info, &(draw->pt.vertex_buffer[0]));
    info = &resolved_info;
 
-   assert(info->instance_count > 0);
    if (info->index_size)
       assert(draw->pt.user.elts);
 

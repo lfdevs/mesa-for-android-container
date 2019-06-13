@@ -38,7 +38,6 @@
 #include "vc4_context.h"
 #include "vc4_qpu.h"
 #include "vc4_qir.h"
-#include "mesa/state_tracker/st_glsl_types.h"
 
 static struct qreg
 ntq_get_src(struct vc4_compile *c, nir_src src, int i);
@@ -46,15 +45,9 @@ static void
 ntq_emit_cf_list(struct vc4_compile *c, struct exec_list *list);
 
 static int
-type_size(const struct glsl_type *type)
+type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
-}
-
-static int
-uniforms_type_size(const struct glsl_type *type)
-{
-        return st_glsl_storage_type_size(type, false);
 }
 
 static void
@@ -99,43 +92,17 @@ static struct qreg
 indirect_uniform_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 {
         struct qreg indirect_offset = ntq_get_src(c, intr->src[0], 0);
-        uint32_t offset = nir_intrinsic_base(intr);
-        struct vc4_compiler_ubo_range *range = NULL;
-        unsigned i;
-        for (i = 0; i < c->num_uniform_ranges; i++) {
-                range = &c->ubo_ranges[i];
-                if (offset >= range->src_offset &&
-                    offset < range->src_offset + range->size) {
-                        break;
-                }
-        }
-        /* The driver-location-based offset always has to be within a declared
-         * uniform range.
-         */
-        assert(range);
-        if (!range->used) {
-                range->used = true;
-                range->dst_offset = c->next_ubo_dst_offset;
-                c->next_ubo_dst_offset += range->size;
-                c->num_ubo_ranges++;
-        }
-
-        offset -= range->src_offset;
-
-        /* Adjust for where we stored the TGSI register base. */
-        indirect_offset = qir_ADD(c, indirect_offset,
-                                  qir_uniform_ui(c, (range->dst_offset +
-                                                     offset)));
 
         /* Clamp to [0, array size).  Note that MIN/MAX are signed. */
+        uint32_t range = nir_intrinsic_range(intr);
         indirect_offset = qir_MAX(c, indirect_offset, qir_uniform_ui(c, 0));
         indirect_offset = qir_MIN_NOIMM(c, indirect_offset,
-                                        qir_uniform_ui(c, (range->dst_offset +
-                                                           range->size - 4)));
+                                        qir_uniform_ui(c, range - 4));
 
         qir_ADD_dest(c, qir_reg(QFILE_TEX_S_DIRECT, 0),
                      indirect_offset,
-                     qir_uniform(c, QUNIFORM_UBO_ADDR, 0));
+                     qir_uniform(c, QUNIFORM_UBO0_ADDR,
+                                 nir_intrinsic_base(intr)));
 
         c->num_texture_samples++;
 
@@ -147,9 +114,8 @@ indirect_uniform_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 static struct qreg
 vc4_ubo_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 {
-        nir_const_value *buffer_index =
-                nir_src_as_const_value(intr->src[0]);
-        assert(buffer_index->u32[0] == 1);
+        int buffer_index = nir_src_as_uint(intr->src[0]);
+        assert(buffer_index == 1);
         assert(c->stage == QSTAGE_FRAG);
 
         struct qreg offset = ntq_get_src(c, intr->src[1], 0);
@@ -161,7 +127,7 @@ vc4_ubo_load(struct vc4_compile *c, nir_intrinsic_instr *intr)
 
         qir_ADD_dest(c, qir_reg(QFILE_TEX_S_DIRECT, 0),
                      offset,
-                     qir_uniform(c, QUNIFORM_UBO_ADDR, buffer_index->u32[0]));
+                     qir_uniform(c, QUNIFORM_UBO1_ADDR, 0));
 
         c->num_texture_samples++;
 
@@ -858,24 +824,6 @@ add_output(struct vc4_compile *c,
 
         c->output_slots[decl_offset].slot = slot;
         c->output_slots[decl_offset].swizzle = swizzle;
-}
-
-static void
-declare_uniform_range(struct vc4_compile *c, uint32_t start, uint32_t size)
-{
-        unsigned array_id = c->num_uniform_ranges++;
-        if (array_id >= c->ubo_ranges_array_size) {
-                c->ubo_ranges_array_size = MAX2(c->ubo_ranges_array_size * 2,
-                                                array_id + 1);
-                c->ubo_ranges = reralloc(c, c->ubo_ranges,
-                                         struct vc4_compiler_ubo_range,
-                                         c->ubo_ranges_array_size);
-        }
-
-        c->ubo_ranges[array_id].dst_offset = 0;
-        c->ubo_ranges[array_id].src_offset = start;
-        c->ubo_ranges[array_id].size = size;
-        c->ubo_ranges[array_id].used = false;
 }
 
 static bool
@@ -1591,7 +1539,7 @@ vc4_optimize_nir(struct nir_shader *s)
                 NIR_PASS(progress, s, nir_opt_dce);
                 NIR_PASS(progress, s, nir_opt_dead_cf);
                 NIR_PASS(progress, s, nir_opt_cse);
-                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true);
+                NIR_PASS(progress, s, nir_opt_peephole_select, 8, true, true);
                 NIR_PASS(progress, s, nir_opt_algebraic);
                 NIR_PASS(progress, s, nir_opt_constant_folding);
                 NIR_PASS(progress, s, nir_opt_undef);
@@ -1699,19 +1647,6 @@ ntq_setup_outputs(struct vc4_compile *c)
         }
 }
 
-static void
-ntq_setup_uniforms(struct vc4_compile *c)
-{
-        nir_foreach_variable(var, &c->s->uniforms) {
-                uint32_t vec4_count = uniforms_type_size(var->type);
-                unsigned vec4_size = 4 * sizeof(float);
-
-                declare_uniform_range(c, var->data.driver_location * vec4_size,
-                                      vec4_count * vec4_size);
-
-        }
-}
-
 /**
  * Sets up the mapping from nir_register to struct qreg *.
  *
@@ -1738,7 +1673,7 @@ ntq_emit_load_const(struct vc4_compile *c, nir_load_const_instr *instr)
 {
         struct qreg *qregs = ntq_init_ssa_def(c, &instr->def);
         for (int i = 0; i < instr->def.num_components; i++)
-                qregs[i] = qir_uniform_ui(c, instr->value.u32[i]);
+                qregs[i] = qir_uniform_ui(c, instr->value[i].u32);
 
         _mesa_hash_table_insert(c->def_ht, &instr->def, qregs);
 }
@@ -1758,7 +1693,7 @@ ntq_emit_ssa_undef(struct vc4_compile *c, nir_ssa_undef_instr *instr)
 static void
 ntq_emit_color_read(struct vc4_compile *c, nir_intrinsic_instr *instr)
 {
-        assert(nir_src_as_const_value(instr->src[0])->u32[0] == 0);
+        assert(nir_src_as_uint(instr->src[0]) == 0);
 
         /* Reads of the per-sample color need to be done in
          * order.
@@ -1779,9 +1714,8 @@ static void
 ntq_emit_load_input(struct vc4_compile *c, nir_intrinsic_instr *instr)
 {
         assert(instr->num_components == 1);
-
-        nir_const_value *const_offset = nir_src_as_const_value(instr->src[0]);
-        assert(const_offset && "vc4 doesn't support indirect inputs");
+        assert(nir_src_is_const(instr->src[0]) &&
+               "vc4 doesn't support indirect inputs");
 
         if (c->stage == QSTAGE_FRAG &&
             nir_intrinsic_base(instr) >= VC4_NIR_TLB_COLOR_READ_INPUT) {
@@ -1789,7 +1723,8 @@ ntq_emit_load_input(struct vc4_compile *c, nir_intrinsic_instr *instr)
                 return;
         }
 
-        uint32_t offset = nir_intrinsic_base(instr) + const_offset->u32[0];
+        uint32_t offset = nir_intrinsic_base(instr) +
+                          nir_src_as_uint(instr->src[0]);
         int comp = nir_intrinsic_component(instr);
         ntq_store_dest(c, &instr->dest, 0,
                        qir_MOV(c, c->inputs[offset * 4 + comp]));
@@ -1798,15 +1733,14 @@ ntq_emit_load_input(struct vc4_compile *c, nir_intrinsic_instr *instr)
 static void
 ntq_emit_intrinsic(struct vc4_compile *c, nir_intrinsic_instr *instr)
 {
-        nir_const_value *const_offset;
         unsigned offset;
 
         switch (instr->intrinsic) {
         case nir_intrinsic_load_uniform:
                 assert(instr->num_components == 1);
-                const_offset = nir_src_as_const_value(instr->src[0]);
-                if (const_offset) {
-                        offset = nir_intrinsic_base(instr) + const_offset->u32[0];
+                if (nir_src_is_const(instr->src[0])) {
+                        offset = nir_intrinsic_base(instr) +
+                                 nir_src_as_uint(instr->src[0]);
                         assert(offset % 4 == 0);
                         /* We need dwords */
                         offset = offset / 4;
@@ -1881,9 +1815,10 @@ ntq_emit_intrinsic(struct vc4_compile *c, nir_intrinsic_instr *instr)
                 break;
 
         case nir_intrinsic_store_output:
-                const_offset = nir_src_as_const_value(instr->src[1]);
-                assert(const_offset && "vc4 doesn't support indirect outputs");
-                offset = nir_intrinsic_base(instr) + const_offset->u32[0];
+                assert(nir_src_is_const(instr->src[1]) &&
+                       "vc4 doesn't support indirect outputs");
+                offset = nir_intrinsic_base(instr) +
+                         nir_src_as_uint(instr->src[1]);
 
                 /* MSAA color outputs are the only case where we have an
                  * output that's not lowered to being a store of a single 32
@@ -2217,8 +2152,6 @@ nir_to_qir(struct vc4_compile *c)
 
         ntq_setup_inputs(c);
         ntq_setup_outputs(c);
-        ntq_setup_uniforms(c);
-        ntq_setup_registers(c, &c->s->registers);
 
         /* Find the main function and emit the body. */
         nir_foreach_function(function, c->s) {
@@ -2489,10 +2422,6 @@ vc4_shader_state_create(struct pipe_context *pctx,
                  * creation.
                  */
                 s = cso->ir.nir;
-
-                NIR_PASS_V(s, nir_lower_io, nir_var_uniform,
-                           uniforms_type_size,
-                           (nir_lower_io_options)0);
        } else {
                 assert(cso->type == PIPE_SHADER_IR_TGSI);
 
@@ -2502,14 +2431,12 @@ vc4_shader_state_create(struct pipe_context *pctx,
                         tgsi_dump(cso->tokens, 0);
                         fprintf(stderr, "\n");
                 }
-                s = tgsi_to_nir(cso->tokens, &nir_options);
+                s = tgsi_to_nir(cso->tokens, pctx->screen);
         }
 
-        NIR_PASS_V(s, nir_lower_io, nir_var_all & ~nir_var_uniform,
-                   type_size,
+        NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size,
                    (nir_lower_io_options)0);
 
-        NIR_PASS_V(s, nir_opt_global_to_local);
         NIR_PASS_V(s, nir_lower_regs_to_ssa);
         NIR_PASS_V(s, nir_normalize_cubemap_coords);
 
@@ -2684,39 +2611,6 @@ vc4_get_compiled_shader(struct vc4_context *vc4, enum qstage stage,
         }
 
         shader->fs_threaded = c->fs_threaded;
-
-        /* Copy the compiler UBO range state to the compiled shader, dropping
-         * out arrays that were never referenced by an indirect load.
-         *
-         * (Note that QIR dead code elimination of an array access still
-         * leaves that array alive, though)
-         */
-        if (c->num_ubo_ranges) {
-                shader->num_ubo_ranges = c->num_ubo_ranges;
-                shader->ubo_ranges = ralloc_array(shader, struct vc4_ubo_range,
-                                                  c->num_ubo_ranges);
-                uint32_t j = 0;
-                for (int i = 0; i < c->num_uniform_ranges; i++) {
-                        struct vc4_compiler_ubo_range *range =
-                                &c->ubo_ranges[i];
-                        if (!range->used)
-                                continue;
-
-                        shader->ubo_ranges[j].dst_offset = range->dst_offset;
-                        shader->ubo_ranges[j].src_offset = range->src_offset;
-                        shader->ubo_ranges[j].size = range->size;
-                        shader->ubo_size += c->ubo_ranges[i].size;
-                        j++;
-                }
-        }
-        if (shader->ubo_size) {
-                if (vc4_debug & VC4_DEBUG_SHADERDB) {
-                        fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d UBO uniforms\n",
-                                qir_get_stage_name(c->stage),
-                                c->program_id, c->variant_id,
-                                shader->ubo_size / 4);
-                }
-        }
 
         if ((vc4_debug & VC4_DEBUG_SHADERDB) && stage == QSTAGE_FRAG) {
                 fprintf(stderr, "SHADER-DB: %s prog %d/%d: %d FS threads\n",

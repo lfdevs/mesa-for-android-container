@@ -127,6 +127,14 @@ vlVaHandleVAEncSequenceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *con
    context->desc.h264enc.rate_ctrl.frame_rate_num = h264->time_scale / 2;
    context->desc.h264enc.rate_ctrl.frame_rate_den = h264->num_units_in_tick;
    context->desc.h264enc.pic_order_cnt_type = h264->seq_fields.bits.pic_order_cnt_type;
+
+   if (h264->frame_cropping_flag) {
+      context->desc.h264enc.pic_ctrl.enc_frame_cropping_flag = h264->frame_cropping_flag;
+      context->desc.h264enc.pic_ctrl.enc_frame_crop_left_offset = h264->frame_crop_left_offset;
+      context->desc.h264enc.pic_ctrl.enc_frame_crop_right_offset = h264->frame_crop_right_offset;
+      context->desc.h264enc.pic_ctrl.enc_frame_crop_top_offset = h264->frame_crop_top_offset;
+      context->desc.h264enc.pic_ctrl.enc_frame_crop_bottom_offset = h264->frame_crop_bottom_offset;
+   }
    return VA_STATUS_SUCCESS;
 }
 

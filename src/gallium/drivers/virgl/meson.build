@@ -26,6 +26,7 @@ files_libvirgl = files(
   'virgl_resource.c',
   'virgl_screen.c',
   'virgl_streamout.c',
+  'virgl_transfer_queue.c',
   'virgl_texture.c',
   'virgl_tgsi.c',
 )

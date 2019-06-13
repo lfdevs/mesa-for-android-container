@@ -510,7 +510,9 @@ etna_try_blt_blit(struct pipe_context *pctx,
    etna_stall(ctx->stream, SYNC_RECIPIENT_FE, SYNC_RECIPIENT_BLT);
    etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE, 0x00000c23);
 
+   resource_read(ctx, &src->base);
    resource_written(ctx, &dst->base);
+
    dst->seqno++;
    dst_lev->ts_valid = false;
 

@@ -47,6 +47,7 @@ struct msm_pipe {
 	struct fd_pipe base;
 	uint32_t pipe;
 	uint32_t gpu_id;
+	uint64_t gmem_base;
 	uint32_t gmem;
 	uint32_t chip_id;
 	uint32_t queue_id;

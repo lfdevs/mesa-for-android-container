@@ -257,7 +257,7 @@ svga_create_rasterizer_state(struct pipe_context *pipe,
    {
       int fill_front = templ->fill_front;
       int fill_back = templ->fill_back;
-      int fill;
+      int fill = PIPE_POLYGON_MODE_FILL;
       boolean offset_front = util_get_offset(templ, fill_front);
       boolean offset_back = util_get_offset(templ, fill_back);
       boolean offset = FALSE;

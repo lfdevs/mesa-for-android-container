@@ -688,6 +688,28 @@ isl_format_has_sint_channel(enum isl_format fmt)
    return isl_format_has_channel_type(fmt, ISL_SINT);
 }
 
+bool
+isl_format_has_color_component(enum isl_format fmt, int component)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(fmt);
+   const uint8_t intensity = fmtl->channels.i.bits;
+   const uint8_t luminance = fmtl->channels.l.bits;
+
+   switch (component) {
+   case 0:
+      return (fmtl->channels.r.bits + intensity + luminance) > 0;
+   case 1:
+      return (fmtl->channels.g.bits + intensity + luminance) > 0;
+   case 2:
+      return (fmtl->channels.b.bits + intensity + luminance) > 0;
+   case 3:
+      return (fmtl->channels.a.bits + intensity) > 0;
+   default:
+      assert(!"Invalid color component: must be 0..3");
+      return false;
+   }
+}
+
 unsigned
 isl_format_get_num_channels(enum isl_format fmt)
 {

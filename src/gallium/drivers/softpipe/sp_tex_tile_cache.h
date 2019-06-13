@@ -43,18 +43,17 @@ struct softpipe_tex_tile_cache;
 #define TEX_TILE_SIZE_LOG2 5
 #define TEX_TILE_SIZE (1 << TEX_TILE_SIZE_LOG2)
 
-
-#define TEX_ADDR_BITS (SP_MAX_TEXTURE_2D_LEVELS - 1 - TEX_TILE_SIZE_LOG2)
-#define TEX_Z_BITS (SP_MAX_TEXTURE_2D_LEVELS - 1)
+#define TEX_ADDR_BITS (SP_MAX_TEXTURE_2D_LEVELS - 1)
+#define TEX_Y_BITS (SP_MAX_TEXTURE_2D_LEVELS - 1 - TEX_TILE_SIZE_LOG2)
 
 /**
  * Texture tile address as a union for fast compares.
  */
 union tex_tile_address {
    struct {
-      unsigned x:TEX_ADDR_BITS;  /* 16K / TILE_SIZE */
-      unsigned y:TEX_ADDR_BITS;  /* 16K / TILE_SIZE */
-      unsigned z:TEX_Z_BITS;     /* 16K -- z not tiled */
+      unsigned x:TEX_ADDR_BITS;  /* 16K -- need extra bits for texture buffers */
+      unsigned y:TEX_Y_BITS;  /* 16K / TILE_SIZE */
+      unsigned z:TEX_ADDR_BITS;  /* 16K -- z not tiled */
       unsigned level:4;
       unsigned invalid:1;
    } bits;

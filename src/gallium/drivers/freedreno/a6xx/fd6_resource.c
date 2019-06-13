@@ -26,6 +26,9 @@
  */
 
 #include "fd6_resource.h"
+#include "fd6_format.h"
+
+#include "a6xx.xml.h"
 
 /* indexed by cpp, including msaa 2x and 4x: */
 static const struct {
@@ -157,6 +160,104 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	}
 
 	return size;
+}
+
+/* A subset of the valid tiled formats can be compressed.  We do
+ * already require tiled in order to be compressed, but just because
+ * it can be tiled doesn't mean it can be compressed.
+ */
+static bool
+ok_ubwc_format(enum a6xx_color_fmt fmt)
+{
+	switch (fmt) {
+	case RB6_R10G10B10A2_UINT:
+	case RB6_R10G10B10A2_UNORM:
+	case RB6_R11G11B10_FLOAT:
+	case RB6_R16_FLOAT:
+	case RB6_R16G16B16A16_FLOAT:
+	case RB6_R16G16B16A16_SINT:
+	case RB6_R16G16B16A16_UINT:
+	case RB6_R16G16_FLOAT:
+	case RB6_R16G16_SINT:
+	case RB6_R16G16_UINT:
+	case RB6_R16_SINT:
+	case RB6_R16_UINT:
+	case RB6_R32G32B32A32_SINT:
+	case RB6_R32G32B32A32_UINT:
+	case RB6_R32G32_SINT:
+	case RB6_R32G32_UINT:
+	case RB6_R32_SINT:
+	case RB6_R32_UINT:
+	case RB6_R5G6B5_UNORM:
+	case RB6_R8G8B8A8_SINT:
+	case RB6_R8G8B8A8_UINT:
+	case RB6_R8G8B8A8_UNORM:
+	case RB6_R8G8B8_UNORM:
+	case RB6_R8G8_SINT:
+	case RB6_R8G8_UINT:
+	case RB6_R8G8_UNORM:
+	case RB6_X8Z24_UNORM:
+		return true;
+	default:
+		return false;
+	}
+}
+
+uint32_t
+fd6_fill_ubwc_buffer_sizes(struct fd_resource *rsc)
+{
+#define RBG_TILE_WIDTH_ALIGNMENT 64
+#define RGB_TILE_HEIGHT_ALIGNMENT 16
+#define UBWC_PLANE_SIZE_ALIGNMENT 4096
+
+	struct pipe_resource *prsc = &rsc->base;
+	uint32_t width = prsc->width0;
+	uint32_t height = prsc->height0;
+
+	if (!ok_ubwc_format(fd6_pipe2color(prsc->format)))
+		return 0;
+
+	/* limit things to simple single level 2d for now: */
+	if ((prsc->depth0 != 1) || (prsc->array_size != 1) || (prsc->last_level != 0))
+		return 0;
+
+	uint32_t block_width, block_height;
+	switch (rsc->cpp) {
+	case 2:
+	case 4:
+		block_width = 16;
+		block_height = 4;
+		break;
+	case 8:
+		block_width = 8;
+		block_height = 4;
+		break;
+	case 16:
+		block_width = 4;
+		block_height = 4;
+		break;
+	default:
+		return 0;
+	}
+
+	uint32_t meta_stride =
+		ALIGN_POT(DIV_ROUND_UP(width, block_width), RBG_TILE_WIDTH_ALIGNMENT);
+	uint32_t meta_height =
+		ALIGN_POT(DIV_ROUND_UP(height, block_height), RGB_TILE_HEIGHT_ALIGNMENT);
+	uint32_t meta_size =
+		ALIGN_POT(meta_stride * meta_height, UBWC_PLANE_SIZE_ALIGNMENT);
+
+	/* UBWC goes first, then color data.. this constraint is mainly only
+	 * because it is what the kernel expects for scanout.  For non-2D we
+	 * could just use a separate UBWC buffer..
+	 */
+	rsc->ubwc_offset = 0;
+	rsc->offset = meta_size;
+	rsc->ubwc_pitch = meta_stride;
+	rsc->ubwc_size = meta_size >> 2;   /* in dwords??? */
+	rsc->tile_mode = TILE6_3;
+
+	return meta_size;
 }
 
 uint32_t

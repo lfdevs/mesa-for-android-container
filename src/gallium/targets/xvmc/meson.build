@@ -50,6 +50,7 @@ libxvmc_gallium = shared_library(
   # Will be deleted during installation, see install_megadrivers.py
   install : true,
   install_dir : xvmc_drivers_path,
+  name_suffix : 'so',
 )
 
 foreach d : [[with_gallium_r600, 'r600'], [with_gallium_nouveau, 'nouveau']]

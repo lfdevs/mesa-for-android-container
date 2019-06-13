@@ -59,9 +59,7 @@ get_deref_offset(nir_deref_instr *instr,
 
 	if (var->data.compact) {
 		assert(instr->deref_type == nir_deref_type_array);
-		nir_const_value *v = nir_src_as_const_value(instr->arr.index);
-		assert(v);
-		*const_out = v->u32[0];
+		*const_out = nir_src_as_uint(instr->arr.index);
 		return;
 	}
 
@@ -80,9 +78,8 @@ get_deref_offset(nir_deref_instr *instr,
 			}
 		} else if(path.path[idx_lvl]->deref_type == nir_deref_type_array) {
 			unsigned size = glsl_count_attribute_slots(path.path[idx_lvl]->type, false);
-			nir_const_value *v = nir_src_as_const_value(path.path[idx_lvl]->arr.index);
-			if (v)
-				const_offset += v->u32[0] * size;
+			if (nir_src_is_const(path.path[idx_lvl]->arr.index))
+				const_offset += nir_src_as_uint(path.path[idx_lvl]->arr.index) * size;
 		} else
 			unreachable("Uhandled deref type in get_deref_instr_offset");
 	}
@@ -115,6 +112,15 @@ gather_intrinsic_load_deref_info(const nir_shader *nir,
 	}
 }
 
+static uint32_t
+widen_writemask(uint32_t wrmask)
+{
+	uint32_t new_wrmask = 0;
+	for(unsigned i = 0; i < 4; i++)
+		new_wrmask |= (wrmask & (1 << i) ? 0x3 : 0x0) << (i * 2);
+	return new_wrmask;
+}
+
 static void
 set_output_usage_mask(const nir_shader *nir, const nir_intrinsic_instr *instr,
 		      uint8_t *output_usage_mask)
@@ -122,7 +128,7 @@ set_output_usage_mask(const nir_shader *nir, const nir_intrinsic_instr *instr,
 	nir_deref_instr *deref_instr =
 		nir_instr_as_deref(instr->src[0].ssa->parent_instr);
 	nir_variable *var = nir_deref_instr_get_variable(deref_instr);
-	unsigned attrib_count = glsl_count_attribute_slots(var->type, false);
+	unsigned attrib_count = glsl_count_attribute_slots(deref_instr->type, false);
 	unsigned idx = var->data.location;
 	unsigned comp = var->data.location_frac;
 	unsigned const_offset = 0;
@@ -130,15 +136,19 @@ set_output_usage_mask(const nir_shader *nir, const nir_intrinsic_instr *instr,
 	get_deref_offset(deref_instr, &const_offset);
 
 	if (var->data.compact) {
+		assert(!glsl_type_is_64bit(deref_instr->type));
 		const_offset += comp;
 		output_usage_mask[idx + const_offset / 4] |= 1 << (const_offset % 4);
 		return;
 	}
 
-	for (unsigned i = 0; i < attrib_count; i++) {
+	uint32_t wrmask = nir_intrinsic_write_mask(instr);
+	if (glsl_type_is_64bit(deref_instr->type))
+		wrmask = widen_writemask(wrmask);
+
+	for (unsigned i = 0; i < attrib_count; i++)
 		output_usage_mask[idx + i + const_offset] |=
-			instr->const_index[0] << comp;
-	}
+			((wrmask >> (i * 4)) & 0xf) << comp;
 }
 
 static void
@@ -182,6 +192,31 @@ gather_intrinsic_store_deref_info(const nir_shader *nir,
 			break;
 		}
 	}
+}
+
+static void
+gather_push_constant_info(const nir_shader *nir,
+			  const nir_intrinsic_instr *instr,
+			  struct radv_shader_info *info)
+{
+	int base = nir_intrinsic_base(instr);
+
+	if (!nir_src_is_const(instr->src[0])) {
+		info->has_indirect_push_constants = true;
+	} else {
+		uint32_t min = base + nir_src_as_uint(instr->src[0]);
+		uint32_t max = min + instr->num_components * 4;
+
+		info->max_push_constant_used =
+			MAX2(max, info->max_push_constant_used);
+		info->min_push_constant_used =
+			MIN2(min, info->min_push_constant_used);
+	}
+
+	if (instr->dest.ssa.bit_size != 32)
+		info->has_only_32bit_push_constants = false;
+
+	info->loads_push_constants = true;
 }
 
 static void
@@ -237,7 +272,7 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr,
 		info->uses_prim_id = true;
 		break;
 	case nir_intrinsic_load_push_constant:
-		info->loads_push_constants = true;
+		gather_push_constant_info(nir, instr, info);
 		break;
 	case nir_intrinsic_vulkan_resource_index:
 		info->desc_set_used_mask |= (1 << nir_intrinsic_desc_set(instr));
@@ -493,10 +528,18 @@ gather_xfb_info(const nir_shader *nir, struct radv_shader_info *info)
 	}
 
 	for (unsigned i = 0; i < NIR_MAX_XFB_BUFFERS; i++) {
-		so->strides[i] = xfb->strides[i] / 4;
+		so->strides[i] = xfb->buffers[i].stride / 4;
 	}
 
 	ralloc_free(xfb);
+}
+
+void
+radv_nir_shader_info_init(struct radv_shader_info *info)
+{
+	/* Assume that shaders only have 32-bit push constants by default. */
+	info->min_push_constant_used = UINT8_MAX;
+	info->has_only_32bit_push_constants = true;
 }
 
 void
@@ -510,6 +553,7 @@ radv_nir_shader_info_pass(const struct nir_shader *nir,
 	if (options->layout && options->layout->dynamic_offset_count &&
 	    (options->layout->dynamic_shader_stages & mesa_to_vk_shader_stage(nir->info.stage))) {
 		info->loads_push_constants = true;
+		info->loads_dynamic_offsets = true;
 	}
 
 	nir_foreach_variable(variable, &nir->inputs)

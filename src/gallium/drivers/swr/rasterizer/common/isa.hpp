@@ -38,7 +38,9 @@
 #include <intrin.h>
 #else
 #include <string.h>
+#if !defined(__cpuid)
 #include <cpuid.h>
+#endif
 #endif
 
 class InstructionSet

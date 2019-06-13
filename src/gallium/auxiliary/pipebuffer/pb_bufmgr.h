@@ -33,13 +33,11 @@
  * "buffer factory" would probably a more accurate description.
  * 
  * You can chain buffer managers so that you can have a finer grained memory
- * management and pooling.
+ * management.
  * 
  * For example, for a simple batch buffer manager you would chain:
  * - the native buffer manager, which provides DMA memory from the graphics
  * memory space;
- * - the pool buffer manager, which keep around a pool of equally sized buffers
- * to avoid latency associated with the native buffer manager; 
  * - the fenced buffer manager, which will delay buffer destruction until the 
  * the moment the card finishing processing it. 
  * 
@@ -87,30 +85,6 @@ struct pb_manager
    (*is_buffer_busy)( struct pb_manager *mgr,
                       struct pb_buffer *buf );
 };
-
-
-/**
- * Malloc buffer provider.
- * 
- * Simple wrapper around pb_malloc_buffer_create for convenience.
- */
-struct pb_manager *
-pb_malloc_bufmgr_create(void);
-
-
-/** 
- * Static buffer pool sub-allocator.
- * 
- * Manages the allocation of equally sized buffers. It does so by allocating
- * a single big buffer and divide it equally sized buffers. 
- * 
- * It is meant to manage the allocation of batch buffer pools.
- */
-struct pb_manager *
-pool_bufmgr_create(struct pb_manager *provider, 
-                   pb_size n, pb_size size,
-                   const struct pb_desc *desc);
-
 
 /** 
  * Static sub-allocator based the old memory manager.
@@ -188,26 +162,6 @@ fenced_bufmgr_create(struct pb_manager *provider,
                      struct pb_fence_ops *ops,
                      pb_size max_buffer_size,
                      pb_size max_cpu_total_size);
-
-
-struct pb_manager *
-pb_alt_manager_create(struct pb_manager *provider1, 
-                      struct pb_manager *provider2);
-
-
-/** 
- * Ondemand buffer manager.
- * 
- * Buffers are created in malloc'ed memory (fast and cached), and the constents
- * is transfered to a buffer from the provider (typically in slow uncached 
- * memory) when there is an attempt to validate the buffer.
- * 
- * Ideal for situations where one does not know before hand whether a given
- * buffer will effectively be used by the hardware or not. 
- */
-struct pb_manager *
-pb_ondemand_manager_create(struct pb_manager *provider); 
-
 
 /** 
  * Debug buffer manager to detect buffer under- and overflows.

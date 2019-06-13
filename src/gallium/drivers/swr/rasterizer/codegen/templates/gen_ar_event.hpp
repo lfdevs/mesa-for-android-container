@@ -68,11 +68,14 @@ namespace ArchRast
 #pragma pack(push, 1)
     struct ${name}Data
     {<%
-        field_names = protos['events'][name]['field_names']
-        field_types = protos['events'][name]['field_types'] %>
+        fields = protos['events'][name]['fields'] %>
         // Fields
-        % for i in range(len(field_names)):
-        ${field_types[i]} ${field_names[i]};
+        % for i in range(len(fields)):
+            % if fields[i]['size'] > 1:
+        ${fields[i]['type']} ${fields[i]['name']}[${fields[i]['size']}];
+            % else:
+        ${fields[i]['type']} ${fields[i]['name']};
+            % endif
         % endfor
     };
 #pragma pack(pop)
@@ -82,24 +85,44 @@ namespace ArchRast
     //////////////////////////////////////////////////////////////////////////
     struct ${name} : Event
     {<%
-        field_names = protos['events'][name]['field_names']
-        field_types = protos['events'][name]['field_types'] %>
+        fields = protos['events'][name]['fields'] %>
         ${name}Data data;
 
         // Constructor
         ${name}(
-        % for i in range(len(field_names)):
-            % if i < len(field_names)-1:
-            ${field_types[i]} ${field_names[i]},
+        % for i in range(len(fields)):
+            % if i < len(fields)-1:
+                % if fields[i]['size'] > 1:
+            ${fields[i]['type']}* ${fields[i]['name']},
+            uint32_t ${fields[i]['name']}_size,
+                % else:
+            ${fields[i]['type']} ${fields[i]['name']},
+                % endif
             % endif
-            % if i == len(field_names)-1:
-            ${field_types[i]} ${field_names[i]}
+            % if i == len(fields)-1:
+                % if fields[i]['size'] > 1:
+            ${fields[i]['type']}* ${fields[i]['name']},
+            uint32_t ${fields[i]['name']}_size
+                % else:
+            ${fields[i]['type']} ${fields[i]['name']}
+                % endif
             % endif
         % endfor
         )
         {
-        % for i in range(len(field_names)):
-            data.${field_names[i]} = ${field_names[i]};
+        % for i in range(len(fields)):
+            % if fields[i]['size'] > 1:
+                % if fields[i]['type'] == 'char':
+            // Copy size of string (null-terminated) followed by string into entire buffer
+            SWR_ASSERT(${fields[i]['name']}_size + 1 < ${fields[i]['size']} - sizeof(uint32_t), "String length must be less than size of char buffer - size(uint32_t)!");
+            memcpy(data.${fields[i]['name']}, &${fields[i]['name']}_size, sizeof(uint32_t));
+            strcpy_s(data.${fields[i]['name']} + sizeof(uint32_t), ${fields[i]['name']}_size + 1, ${fields[i]['name']});
+                % else:
+            memcpy(data.${fields[i]['name']}, ${fields[i]['name']}, ${fields[i]['name']}_size);
+                % endif
+            % else:
+            data.${fields[i]['name']} = ${fields[i]['name']};
+            % endif
         % endfor
         }
 

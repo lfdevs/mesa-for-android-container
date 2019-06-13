@@ -129,6 +129,7 @@
 #include "util/disk_cache.h"
 #include "util/strtod.h"
 #include "stencil.h"
+#include "shaderimage.h"
 #include "texcompress_s3tc.h"
 #include "texstate.h"
 #include "transformfeedback.h"
@@ -1195,6 +1196,8 @@ _mesa_initialize_context(struct gl_context *ctx,
    /* misc one-time initializations */
    one_time_init(ctx);
 
+   _mesa_init_shader_compiler_types();
+
    /* Plug in driver functions and context pointer here.
     * This is important because when we call alloc_shared_state() below
     * we'll call ctx->Driver.NewTextureObject() to create the default
@@ -1307,7 +1310,7 @@ fail:
  * \sa _mesa_initialize_context() and init_attrib_groups().
  */
 void
-_mesa_free_context_data( struct gl_context *ctx )
+_mesa_free_context_data(struct gl_context *ctx, bool destroy_compiler_types)
 {
    if (!_mesa_get_current_context()){
       /* No current context, but we may need one in order to delete
@@ -1345,6 +1348,7 @@ _mesa_free_context_data( struct gl_context *ctx )
    _mesa_free_buffer_objects(ctx);
    _mesa_free_eval_data( ctx );
    _mesa_free_texture_data( ctx );
+   _mesa_free_image_textures(ctx);
    _mesa_free_matrix_data( ctx );
    _mesa_free_pipeline_data(ctx);
    _mesa_free_program_data(ctx);
@@ -1381,6 +1385,9 @@ _mesa_free_context_data( struct gl_context *ctx )
 
    free(ctx->VersionString);
 
+   if (destroy_compiler_types)
+      _mesa_destroy_shader_compiler_types();
+
    /* unbind the context if it's currently bound */
    if (ctx == _mesa_get_current_context()) {
       _mesa_make_current(NULL, NULL, NULL);
@@ -1399,7 +1406,7 @@ void
 _mesa_destroy_context( struct gl_context *ctx )
 {
    if (ctx) {
-      _mesa_free_context_data(ctx);
+      _mesa_free_context_data(ctx, true);
       free( (void *) ctx );
    }
 }

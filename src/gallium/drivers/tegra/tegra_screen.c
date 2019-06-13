@@ -28,8 +28,8 @@
 
 #include <sys/stat.h>
 
-#include <drm_fourcc.h>
-#include <tegra_drm.h>
+#include "drm-uapi/drm_fourcc.h"
+#include "drm-uapi/tegra_drm.h"
 #include <xf86drm.h>
 
 #include "loader/loader.h"

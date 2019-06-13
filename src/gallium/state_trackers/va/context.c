@@ -364,6 +364,8 @@ vlVaDestroyContext(VADriverContextP ctx, VAContextID context_id)
       }
       context->decoder->destroy(context->decoder);
    }
+   if (context->blit_cs)
+      drv->pipe->delete_compute_state(drv->pipe, context->blit_cs);
    if (context->deint) {
       vl_deint_filter_cleanup(context->deint);
       FREE(context->deint);

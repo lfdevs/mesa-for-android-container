@@ -91,16 +91,6 @@ struct pipe_screen *
 pipe_loader_create_screen(struct pipe_loader_device *dev);
 
 /**
- * Query the configuration parameters for the specified device.
- *
- * \param dev Device that will be queried.
- * \param conf The drm_conf id of the option to be queried.
- */
-const struct drm_conf_ret *
-pipe_loader_configuration(struct pipe_loader_device *dev,
-                          enum drm_conf conf);
-
-/**
  * Ensure that dev->option_cache is initialized appropriately for the driver.
  *
  * This function can be called multiple times.

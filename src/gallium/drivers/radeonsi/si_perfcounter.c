@@ -671,16 +671,9 @@ static void si_pc_emit_start(struct si_context *sctx,
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	radeon_add_to_buffer_list(sctx, sctx->gfx_cs, buffer,
-				  RADEON_USAGE_WRITE, RADEON_PRIO_QUERY);
-
-	radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-	radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) |
-			COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM));
-	radeon_emit(cs, 1); /* immediate */
-	radeon_emit(cs, 0); /* unused */
-	radeon_emit(cs, va);
-	radeon_emit(cs, va >> 32);
+	si_cp_copy_data(sctx,
+			COPY_DATA_DST_MEM, buffer, va - buffer->gpu_address,
+			COPY_DATA_IMM, NULL, 1);
 
 	radeon_set_uconfig_reg(cs, R_036020_CP_PERFMON_CNTL,
 			       S_036020_PERFMON_STATE(V_036020_DISABLE_AND_RESET));
@@ -732,7 +725,7 @@ static void si_pc_emit_read(struct si_context *sctx,
 
 			radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 			radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_PERF) |
-					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM) |
+					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) |
 					COPY_DATA_COUNT_SEL); /* 64 bits */
 			radeon_emit(cs, reg >> 2);
 			radeon_emit(cs, 0); /* unused */
@@ -745,7 +738,7 @@ static void si_pc_emit_read(struct si_context *sctx,
 		for (idx = 0; idx < count; ++idx) {
 			radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
 			radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_IMM) |
-					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM_GRBM) |
+					COPY_DATA_DST_SEL(COPY_DATA_DST_MEM) |
 					COPY_DATA_COUNT_SEL);
 			radeon_emit(cs, 0); /* immediate */
 			radeon_emit(cs, 0);

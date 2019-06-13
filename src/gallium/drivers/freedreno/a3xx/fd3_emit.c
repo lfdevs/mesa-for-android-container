@@ -552,7 +552,7 @@ fd3_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			val |= A3XX_RB_DEPTH_CONTROL_FRAG_WRITES_Z;
 			val |= A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 		}
-		if (fp->has_kill) {
+		if (fp->no_earlyz) {
 			val |= A3XX_RB_DEPTH_CONTROL_EARLY_Z_DISABLE;
 		}
 		if (!ctx->rasterizer->depth_clip_near) {

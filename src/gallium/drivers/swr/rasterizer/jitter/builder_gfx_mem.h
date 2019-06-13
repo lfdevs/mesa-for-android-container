@@ -76,6 +76,12 @@ namespace SwrJit
                                       Type*          Ty       = nullptr,
                                       JIT_MEM_CLIENT usage    = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
 
+        virtual StoreInst* STORE(Value *Val, Value *Ptr, bool isVolatile = false, Type* Ty = nullptr, JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
+        
+        virtual StoreInst* STORE(Value* Val, Value* BasePtr, const std::initializer_list<uint32_t>& offset, Type* Ty = nullptr, JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
+
+        virtual CallInst* MASKED_STORE(Value *Val, Value *Ptr, unsigned Align, Value *Mask, Type* Ty = nullptr, JIT_MEM_CLIENT usage = JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL);
+
         virtual Value* GATHERPS(Value*         src,
                                 Value*         pBase,
                                 Value*         indices,

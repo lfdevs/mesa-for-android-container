@@ -160,6 +160,9 @@ blorp_buffer_copy(struct blorp_batch *batch,
                   struct blorp_address dst,
                   uint64_t size);
 
+union isl_color_value
+swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle);
+
 void
 blorp_fast_clear(struct blorp_batch *batch,
                  const struct blorp_surf *surf, enum isl_format format,

@@ -559,7 +559,7 @@ static SIMDINLINE Float SIMDCALL
 //
 //      SELECT4(src, control) {
 //          CASE(control[1:0])
-//              0:	tmp[127:0] : = src[127:0]
+//              0 : tmp[127:0] : = src[127:0]
 //              1 : tmp[127:0] : = src[255:128]
 //              2 : tmp[127:0] : = src[383:256]
 //              3 : tmp[127:0] : = src[511:384]
@@ -631,13 +631,23 @@ SIMD_WRAPPER_2(unpacklo_ps);
 //-----------------------------------------------------------------------
 // Load / store operations
 //-----------------------------------------------------------------------
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         i32gather_ps(float const* p, Integer const& idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
     return Float{
         SIMD256T::template i32gather_ps<ScaleT>(p, idx.v8[0]),
         SIMD256T::template i32gather_ps<ScaleT>(p, idx.v8[1]),
+    };
+}
+
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
+static SIMDINLINE Float SIMDCALL
+                        sw_i32gather_ps(float const* p, Integer const& idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
+{
+    return Float{
+        SIMD256T::template sw_i32gather_ps<ScaleT>(p, idx.v8[0]),
+        SIMD256T::template sw_i32gather_ps<ScaleT>(p, idx.v8[1]),
     };
 }
 
@@ -677,13 +687,23 @@ static SIMDINLINE Integer SIMDCALL
 }
 
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         mask_i32gather_ps(Float const& old, float const* p, Integer const& idx, Float const& mask)
 {
     return Float{
         SIMD256T::template mask_i32gather_ps<ScaleT>(old.v8[0], p, idx.v8[0], mask.v8[0]),
         SIMD256T::template mask_i32gather_ps<ScaleT>(old.v8[1], p, idx.v8[1], mask.v8[1]),
+    };
+}
+
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
+static SIMDINLINE Float SIMDCALL
+                        sw_mask_i32gather_ps(Float const& old, float const* p, Integer const& idx, Float const& mask)
+{
+    return Float{
+        SIMD256T::template sw_mask_i32gather_ps<ScaleT>(old.v8[0], p, idx.v8[0], mask.v8[0]),
+        SIMD256T::template sw_mask_i32gather_ps<ScaleT>(old.v8[1], p, idx.v8[1], mask.v8[1]),
     };
 }
 

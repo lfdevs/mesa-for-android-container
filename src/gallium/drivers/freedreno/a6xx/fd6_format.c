@@ -434,38 +434,73 @@ fd6_pipe2swiz(unsigned swiz)
 	}
 }
 
-uint32_t
-fd6_tex_swiz(struct pipe_resource *prsc, unsigned swizzle_r, unsigned swizzle_g,
-		unsigned swizzle_b, unsigned swizzle_a)
+void
+fd6_tex_swiz(enum pipe_format format, unsigned char *swiz,
+			 unsigned swizzle_r, unsigned swizzle_g,
+			 unsigned swizzle_b, unsigned swizzle_a)
 {
 	const struct util_format_description *desc =
-			util_format_description(prsc->format);
-	unsigned char swiz[4] = {
-			swizzle_r, swizzle_g, swizzle_b, swizzle_a,
-	}, rswiz[4], *swizp;
+			util_format_description(format);
+	const unsigned char uswiz[4] = {
+		swizzle_r, swizzle_g, swizzle_b, swizzle_a
+	};
 
-	util_format_compose_swizzles(desc->swizzle, swiz, rswiz);
-
-	if (fd_resource(prsc)->tile_mode) {
-		/* for tiled modes, we don't get SWAP, so manually apply that
-		 * extra step of swizzle:
-		 */
-		enum a3xx_color_swap swap = fd6_pipe2swap(prsc->format);
-		unsigned char swapswiz[][4] = {
-				[WZYX] = { 0, 1, 2, 3 },
-				[WXYZ] = { 2, 1, 0, 3 },
-				[ZYXW] = { 3, 0, 1, 2 },
-				[XYZW] = { 3, 2, 1, 0 },
+	/* Gallium expects stencil sampler to return (s,s,s,s), so massage
+	 * the swizzle to do so.
+	 */
+	if (format == PIPE_FORMAT_X24S8_UINT) {
+		const unsigned char stencil_swiz[4] = {
+			PIPE_SWIZZLE_X, PIPE_SWIZZLE_X, PIPE_SWIZZLE_X, PIPE_SWIZZLE_X
 		};
-
-		util_format_compose_swizzles(swapswiz[swap], rswiz, swiz);
-		swizp = swiz;
+		util_format_compose_swizzles(stencil_swiz, uswiz, swiz);
+	} else if (fd6_pipe2swap(format) != WZYX) {
+		/* Formats with a non-pass-through swap are permutations of RGBA
+		 * formats. We program the permutation using the swap and don't
+		 * need to compose the format swizzle with the user swizzle.
+		 */
+		memcpy(swiz, uswiz, sizeof(uswiz));
 	} else {
-		swizp = rswiz;
+		/* Otherwise, it's an unswapped RGBA format or a format like L8 where
+		 * we need the XXX1 swizzle from the gallium format description.
+		 */
+		util_format_compose_swizzles(desc->swizzle, uswiz, swiz);
+	}
+}
+
+/* Compute the TEX_CONST_0 value for texture state, including SWIZ/SWAP/etc: */
+uint32_t
+fd6_tex_const_0(struct pipe_resource *prsc,
+			 unsigned level, enum pipe_format format,
+			 unsigned swizzle_r, unsigned swizzle_g,
+			 unsigned swizzle_b, unsigned swizzle_a)
+{
+	struct fd_resource *rsc = fd_resource(prsc);
+	uint32_t swap, texconst0 = 0;
+	unsigned char swiz[4];
+
+	if (util_format_is_srgb(format)) {
+		texconst0 |= A6XX_TEX_CONST_0_SRGB;
 	}
 
-	return A6XX_TEX_CONST_0_SWIZ_X(fd6_pipe2swiz(swizp[0])) |
-			A6XX_TEX_CONST_0_SWIZ_Y(fd6_pipe2swiz(swizp[1])) |
-			A6XX_TEX_CONST_0_SWIZ_Z(fd6_pipe2swiz(swizp[2])) |
-			A6XX_TEX_CONST_0_SWIZ_W(fd6_pipe2swiz(swizp[3]));
+	if (rsc->tile_mode && !fd_resource_level_linear(prsc, level)) {
+		texconst0 |= A6XX_TEX_CONST_0_TILE_MODE(rsc->tile_mode);
+		swap = WZYX;
+	} else {
+		swap = fd6_pipe2swap(format);
+	}
+
+	fd6_tex_swiz(format, swiz,
+			swizzle_r, swizzle_g,
+			swizzle_b, swizzle_a);
+
+	texconst0 |=
+		A6XX_TEX_CONST_0_FMT(fd6_pipe2tex(format)) |
+		A6XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
+		A6XX_TEX_CONST_0_SWAP(swap) |
+		A6XX_TEX_CONST_0_SWIZ_X(fd6_pipe2swiz(swiz[0])) |
+		A6XX_TEX_CONST_0_SWIZ_Y(fd6_pipe2swiz(swiz[1])) |
+		A6XX_TEX_CONST_0_SWIZ_Z(fd6_pipe2swiz(swiz[2])) |
+		A6XX_TEX_CONST_0_SWIZ_W(fd6_pipe2swiz(swiz[3]));
+
+	return texconst0;
 }

@@ -88,7 +88,6 @@ struct vl_dri3_screen
    uint64_t send_sbc, recv_sbc;
    int64_t last_ust, ns_frame, last_msc, next_msc;
 
-   bool flushed;
    bool is_different_gpu;
 };
 
@@ -570,11 +569,9 @@ vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
    if (!back)
        return;
 
-   if (scrn->flushed) {
-      while (scrn->special_event && scrn->recv_sbc < scrn->send_sbc)
-         if (!dri3_wait_present_events(scrn))
-            return;
-   }
+   while (scrn->special_event && scrn->recv_sbc < scrn->send_sbc)
+      if (!dri3_wait_present_events(scrn))
+         return;
 
    rectangle.x = 0;
    rectangle.y = 0;
@@ -610,8 +607,6 @@ vl_dri3_flush_frontbuffer(struct pipe_screen *screen,
 
    xcb_flush(scrn->conn);
 
-   scrn->flushed = true;
-
    return;
 }
 
@@ -625,13 +620,6 @@ vl_dri3_screen_texture_from_drawable(struct vl_screen *vscreen, void *drawable)
 
    if (!dri3_set_drawable(scrn, (Drawable)drawable))
       return NULL;
-
-   if (scrn->flushed) {
-      while (scrn->special_event && scrn->recv_sbc < scrn->send_sbc)
-         if (!dri3_wait_present_events(scrn))
-            return NULL;
-   }
-   scrn->flushed = false;
 
    buffer = (scrn->is_pixmap) ?
             dri3_get_front_buffer(scrn) :

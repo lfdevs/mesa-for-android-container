@@ -65,7 +65,7 @@ void cmod_propagation_test::SetUp()
 
    v = new cmod_propagation_fs_visitor(compiler, prog_data, shader);
 
-   devinfo->gen = 4;
+   devinfo->gen = 7;
 }
 
 static fs_inst *

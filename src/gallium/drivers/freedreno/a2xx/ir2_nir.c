@@ -25,7 +25,6 @@
  */
 
 #include "ir2_private.h"
-#include "nir/tgsi_to_nir.h"
 
 #include "freedreno_util.h"
 #include "fd2_program.h"
@@ -41,12 +40,6 @@ static const nir_shader_compiler_options options = {
 	.lower_all_io_to_temps = true,
 	.vertex_id_zero_based = true, /* its not implemented anyway */
 };
-
-struct nir_shader *
-ir2_tgsi_to_nir(const struct tgsi_token *tokens)
-{
-	return tgsi_to_nir(tokens, &options);
-}
 
 const nir_shader_compiler_options *
 ir2_get_compiler_options(void)
@@ -74,7 +67,7 @@ ir2_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_opt_dce);
 		progress |= OPT(s, nir_opt_cse);
 		/* progress |= OPT(s, nir_opt_gcm, true); */
-		progress |= OPT(s, nir_opt_peephole_select, UINT_MAX, true);
+		progress |= OPT(s, nir_opt_peephole_select, UINT_MAX, true, true);
 		progress |= OPT(s, nir_opt_intrinsics);
 		progress |= OPT(s, nir_opt_algebraic);
 		progress |= OPT(s, nir_opt_constant_folding);
@@ -89,7 +82,7 @@ ir2_optimize_loop(nir_shader *s)
 			OPT(s, nir_opt_dce);
 		}
 		progress |= OPT(s, nir_opt_loop_unroll, nir_var_all);
-		progress |= OPT(s, nir_opt_if);
+		progress |= OPT(s, nir_opt_if, false);
 		progress |= OPT(s, nir_opt_remove_phis);
 		progress |= OPT(s, nir_opt_undef);
 
@@ -114,7 +107,6 @@ ir2_optimize_nir(nir_shader *s, bool lower)
 		debug_printf("----------------------\n");
 	}
 
-	OPT_V(s, nir_opt_global_to_local);
 	OPT_V(s, nir_lower_regs_to_ssa);
 	OPT_V(s, nir_lower_vars_to_ssa);
 	OPT_V(s, nir_lower_indirect_derefs, nir_var_shader_in | nir_var_shader_out);
@@ -230,7 +222,9 @@ make_src(struct ir2_context *ctx, nir_src src)
 
 	if (const_value) {
 		assert(src.is_ssa);
-		return load_const(ctx, &const_value->f32[0], src.ssa->num_components);
+		float c[src.ssa->num_components];
+		nir_const_value_to_array(c, const_value, src.ssa->num_components, f32);
+		return load_const(ctx, c, src.ssa->num_components);
 	}
 
 	if (!src.is_ssa) {
@@ -592,7 +586,6 @@ emit_intrinsic(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 {
 	struct ir2_instr *instr;
 	nir_const_value *const_offset;
-	nir_deref_instr *deref;
 	unsigned idx;
 
 	switch (intr->intrinsic) {
@@ -602,21 +595,11 @@ emit_intrinsic(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 	case nir_intrinsic_store_output:
 		store_output(ctx, intr->src[0], output_slot(ctx, intr), intr->num_components);
 		break;
-	case nir_intrinsic_load_deref:
-		deref = nir_src_as_deref(intr->src[0]);
-		assert(deref->deref_type == nir_deref_type_var);
-		load_input(ctx, &intr->dest, deref->var->data.driver_location);
-		break;
-	case nir_intrinsic_store_deref:
-		deref = nir_src_as_deref(intr->src[0]);
-		assert(deref->deref_type == nir_deref_type_var);
-		store_output(ctx, intr->src[1], deref->var->data.location, intr->num_components);
-		break;
 	case nir_intrinsic_load_uniform:
 		const_offset = nir_src_as_const_value(intr->src[0]);
 		assert(const_offset); /* TODO can be false in ES2? */
 		idx = nir_intrinsic_base(intr);
-		idx += (uint32_t) nir_src_as_const_value(intr->src[0])->f32[0];
+		idx += (uint32_t) nir_src_as_const_value(intr->src[0])[0].f32;
 		instr = instr_create_alu_dest(ctx, nir_op_fmov, &intr->dest);
 		instr->src[0] = ir2_src(idx, 0, IR2_SRC_CONST);
 		break;
@@ -1060,21 +1043,10 @@ static void cleanup_binning(struct ir2_context *ctx)
 				continue;
 
 			nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-			unsigned slot;
-			switch (intr->intrinsic) {
-			case nir_intrinsic_store_deref: {
-				nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-				assert(deref->deref_type == nir_deref_type_var);
-				slot = deref->var->data.location;
-			} break;
-			case nir_intrinsic_store_output:
-				slot = output_slot(ctx, intr);
-				break;
-			default:
+			if (intr->intrinsic != nir_intrinsic_store_output)
 				continue;
-			}
 
-			if (slot != VARYING_SLOT_POS)
+			if (output_slot(ctx, intr) != VARYING_SLOT_POS)
 				nir_instr_remove(instr);
 		}
 	}

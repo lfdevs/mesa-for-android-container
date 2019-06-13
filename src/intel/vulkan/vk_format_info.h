@@ -27,7 +27,7 @@
 #include <stdbool.h>
 #include <vulkan/vulkan.h>
 
-#ifdef ANDROID
+#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
 #include <vndk/hardware_buffer.h>
 /* See i915_private_android_types.h in minigbm. */
 #define HAL_PIXEL_FORMAT_NV12_Y_TILED_INTEL 0x100

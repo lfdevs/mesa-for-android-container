@@ -111,47 +111,6 @@ brw_vs_outputs_written(struct brw_context *brw, struct brw_vs_prog_key *key,
    return outputs_written;
 }
 
-static void
-brw_vs_debug_recompile(struct brw_context *brw, struct gl_program *prog,
-                       const struct brw_vs_prog_key *key)
-{
-   perf_debug("Recompiling vertex shader for program %d\n", prog->Id);
-
-   bool found = false;
-   const struct brw_vs_prog_key *old_key =
-      brw_find_previous_compile(&brw->cache, BRW_CACHE_VS_PROG,
-                                key->program_string_id);
-
-   if (!old_key) {
-      perf_debug("  Didn't find previous compile in the shader cache for "
-                 "debug\n");
-      return;
-   }
-
-   for (unsigned int i = 0; i < VERT_ATTRIB_MAX; i++) {
-      found |= key_debug(brw, "Vertex attrib w/a flags",
-                         old_key->gl_attrib_wa_flags[i],
-                         key->gl_attrib_wa_flags[i]);
-   }
-
-   found |= key_debug(brw, "legacy user clipping",
-                      old_key->nr_userclip_plane_consts,
-                      key->nr_userclip_plane_consts);
-
-   found |= key_debug(brw, "copy edgeflag",
-                      old_key->copy_edgeflag, key->copy_edgeflag);
-   found |= key_debug(brw, "PointCoord replace",
-                      old_key->point_coord_replace, key->point_coord_replace);
-   found |= key_debug(brw, "vertex color clamping",
-                      old_key->clamp_vertex_color, key->clamp_vertex_color);
-
-   found |= brw_debug_recompile_sampler_key(brw, &old_key->tex, &key->tex);
-
-   if (!found) {
-      perf_debug("  Something else\n");
-   }
-}
-
 static bool
 brw_codegen_vs_prog(struct brw_context *brw,
                     struct brw_program *vp,
@@ -237,7 +196,8 @@ brw_codegen_vs_prog(struct brw_context *brw,
 
    if (unlikely(brw->perf_debug)) {
       if (vp->compiled_once) {
-         brw_vs_debug_recompile(brw, &vp->program, key);
+         brw_debug_recompile(brw, MESA_SHADER_VERTEX, vp->program.Id,
+                             key->program_string_id, key);
       }
       if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("VS compile took %.03f ms and stalled the GPU\n",

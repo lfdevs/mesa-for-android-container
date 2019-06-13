@@ -15,4 +15,6 @@ C_SOURCES := \
 	virgl_streamout.c \
 	virgl_texture.c \
 	virgl_tgsi.c \
+	virgl_transfer_queue.c \
+	virgl_transfer_queue.h \
 	virgl_winsys.h

@@ -433,10 +433,11 @@ static void
 prepare_vs_constants_userbuf(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
+    uint8_t *upload_ptr = NULL;
     struct pipe_constant_buffer cb;
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = context->vs->const_used_size;
+    cb.buffer_size = context->cso_shader.vs_const_used_size;
     cb.user_buffer = context->vs_const_f;
 
     if (context->swvp) {
@@ -478,6 +479,42 @@ prepare_vs_constants_userbuf(struct NineDevice9 *device)
         cb.user_buffer = dst;
     }
 
+    /* Note: We probably don't want to do separate memcpy to
+     * upload_ptr directly, if we have to copy some constants
+     * at random locations (context->vs->lconstf.ranges),
+     * to have efficient WC. Thus for this case we really want
+     * that intermediate buffer. */
+
+    u_upload_alloc(context->pipe->const_uploader,
+                  0,
+                  cb.buffer_size,
+                  256, /* Be conservative about alignment */
+                  &(cb.buffer_offset),
+                  &(cb.buffer),
+                  (void**)&upload_ptr);
+
+    assert(cb.buffer && upload_ptr);
+
+    if (!context->cso_shader.vs_const_ranges) {
+        memcpy(upload_ptr, cb.user_buffer, cb.buffer_size);
+    } else {
+        unsigned i = 0;
+        unsigned offset = 0;
+        while (context->cso_shader.vs_const_ranges[i*2+1] != 0) {
+            memcpy(upload_ptr+offset,
+                   &((float*)cb.user_buffer)[4*context->cso_shader.vs_const_ranges[i*2]],
+                   context->cso_shader.vs_const_ranges[i*2+1] * sizeof(float[4]));
+            offset += context->cso_shader.vs_const_ranges[i*2+1] * sizeof(float[4]);
+            i++;
+        }
+    }
+
+    u_upload_unmap(context->pipe->const_uploader);
+    cb.user_buffer = NULL;
+
+    /* Free previous resource */
+    pipe_resource_reference(&context->pipe_data.cb_vs.buffer, NULL);
+
     context->pipe_data.cb_vs = cb;
     context->changed.vs_const_f = 0;
 
@@ -489,10 +526,11 @@ static void
 prepare_ps_constants_userbuf(struct NineDevice9 *device)
 {
     struct nine_context *context = &device->context;
+    uint8_t *upload_ptr = NULL;
     struct pipe_constant_buffer cb;
     cb.buffer = NULL;
     cb.buffer_offset = 0;
-    cb.buffer_size = context->ps->const_used_size;
+    cb.buffer_size = context->cso_shader.ps_const_used_size;
     cb.user_buffer = context->ps_const_f;
 
     if (context->changed.ps_const_i) {
@@ -509,7 +547,7 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
 
     /* Upload special constants needed to implement PS1.x instructions like TEXBEM,TEXBEML and BEM */
     if (context->ps->bumpenvmat_needed) {
-        memcpy(context->ps_lconstf_temp, cb.user_buffer, cb.buffer_size);
+        memcpy(context->ps_lconstf_temp, cb.user_buffer, 8 * sizeof(float[4]));
         memcpy(&context->ps_lconstf_temp[4 * 8], &device->context.bumpmap_vars, sizeof(device->context.bumpmap_vars));
 
         cb.user_buffer = context->ps_lconstf_temp;
@@ -519,7 +557,7 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
         context->rs[D3DRS_FOGENABLE]) {
         float *dst = &context->ps_lconstf_temp[4 * 32];
         if (cb.user_buffer != context->ps_lconstf_temp) {
-            memcpy(context->ps_lconstf_temp, cb.user_buffer, cb.buffer_size);
+            memcpy(context->ps_lconstf_temp, cb.user_buffer, 32 * sizeof(float[4]));
             cb.user_buffer = context->ps_lconstf_temp;
         }
 
@@ -530,11 +568,40 @@ prepare_ps_constants_userbuf(struct NineDevice9 *device)
         } else if (context->rs[D3DRS_FOGTABLEMODE] != D3DFOG_NONE) {
             dst[4] = asfloat(context->rs[D3DRS_FOGDENSITY]);
         }
-        cb.buffer_size = 4 * 4 * 34;
     }
 
     if (!cb.buffer_size)
         return;
+
+    u_upload_alloc(context->pipe->const_uploader,
+                  0,
+                  cb.buffer_size,
+                  256, /* Be conservative about alignment */
+                  &(cb.buffer_offset),
+                  &(cb.buffer),
+                  (void**)&upload_ptr);
+
+    assert(cb.buffer && upload_ptr);
+
+    if (!context->cso_shader.ps_const_ranges) {
+        memcpy(upload_ptr, cb.user_buffer, cb.buffer_size);
+    } else {
+        unsigned i = 0;
+        unsigned offset = 0;
+        while (context->cso_shader.ps_const_ranges[i*2+1] != 0) {
+            memcpy(upload_ptr+offset,
+                   &((float*)cb.user_buffer)[4*context->cso_shader.ps_const_ranges[i*2]],
+                   context->cso_shader.ps_const_ranges[i*2+1] * sizeof(float[4]));
+            offset += context->cso_shader.ps_const_ranges[i*2+1] * sizeof(float[4]);
+            i++;
+        }
+    }
+
+    u_upload_unmap(context->pipe->const_uploader);
+    cb.user_buffer = NULL;
+
+    /* Free previous resource */
+    pipe_resource_reference(&context->pipe_data.cb_ps.buffer, NULL);
 
     context->pipe_data.cb_ps = cb;
     context->changed.ps_const_f = 0;
@@ -559,7 +626,9 @@ prepare_vs(struct NineDevice9 *device, uint8_t shader_changed)
 
     /* likely because we dislike FF */
     if (likely(context->programmable_vs)) {
-        context->cso_shader.vs = NineVertexShader9_GetVariant(vs);
+        context->cso_shader.vs = NineVertexShader9_GetVariant(vs,
+                                                              &context->cso_shader.vs_const_ranges,
+                                                              &context->cso_shader.vs_const_used_size);
     } else {
         vs = device->ff.vs;
         context->cso_shader.vs = vs->ff_cso;
@@ -593,7 +662,9 @@ prepare_ps(struct NineDevice9 *device, uint8_t shader_changed)
         return 0;
 
     if (likely(ps)) {
-        context->cso_shader.ps = NinePixelShader9_GetVariant(ps);
+        context->cso_shader.ps = NinePixelShader9_GetVariant(ps,
+                                                             &context->cso_shader.ps_const_ranges,
+                                                             &context->cso_shader.ps_const_used_size);
     } else {
         ps = device->ff.ps;
         context->cso_shader.ps = ps->ff_cso;
@@ -1595,7 +1666,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_i,
     }
 
     context->changed.vs_const_i = TRUE;
-    context->changed.group |= NINE_STATE_VS_CONST;
+    context->changed.group |= NINE_STATE_VS_CONST | NINE_STATE_VS_PARAMS_MISC;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_b,
@@ -1614,7 +1685,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_vertex_shader_constant_b,
         context->vs_const_b[StartRegister + i] = pConstantData[i] ? bool_true : 0;
 
     context->changed.vs_const_b = TRUE;
-    context->changed.group |= NINE_STATE_VS_CONST;
+    context->changed.group |= NINE_STATE_VS_CONST | NINE_STATE_VS_PARAMS_MISC;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader,
@@ -1669,7 +1740,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_i_transformed,
            Vector4iCount * sizeof(context->ps_const_i[0]));
 
     context->changed.ps_const_i = TRUE;
-    context->changed.group |= NINE_STATE_PS_CONST;
+    context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_i,
@@ -1694,7 +1765,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_i,
         }
     }
     context->changed.ps_const_i = TRUE;
-    context->changed.group |= NINE_STATE_PS_CONST;
+    context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
 CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_b,
@@ -1713,7 +1784,7 @@ CSMT_ITEM_NO_WAIT(nine_context_set_pixel_shader_constant_b,
         context->ps_const_b[StartRegister + i] = pConstantData[i] ? bool_true : 0;
 
     context->changed.ps_const_b = TRUE;
-    context->changed.group |= NINE_STATE_PS_CONST;
+    context->changed.group |= NINE_STATE_PS_CONST | NINE_STATE_PS_PARAMS_MISC;
 }
 
 /* XXX: use resource, as resource might change */
@@ -2790,8 +2861,9 @@ nine_state_set_defaults(struct NineDevice9 *device, const D3DCAPS9 *caps,
 }
 
 void
-nine_state_clear(struct nine_state *state, const boolean device)
+nine_device_state_clear(struct NineDevice9 *device)
 {
+    struct nine_state *state = &device->state;
     unsigned i;
 
     for (i = 0; i < ARRAY_SIZE(state->rt); ++i)
@@ -2801,16 +2873,15 @@ nine_state_clear(struct nine_state *state, const boolean device)
     nine_bind(&state->ps, NULL);
     nine_bind(&state->vdecl, NULL);
     for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
-        nine_bind(&state->stream[i], NULL);
+        NineBindBufferToDevice(device,
+                               (struct NineBuffer9 **)&state->stream[i],
+                               NULL);
+    NineBindBufferToDevice(device,
+                           (struct NineBuffer9 **)&state->idxbuf,
+                           NULL);
 
-    nine_bind(&state->idxbuf, NULL);
-    for (i = 0; i < NINE_MAX_SAMPLERS; ++i) {
-        if (device &&
-            state->texture[i] &&
-          --state->texture[i]->bind_count == 0)
-            list_delinit(&state->texture[i]->list);
-        nine_bind(&state->texture[i], NULL);
-    }
+    for (i = 0; i < NINE_MAX_SAMPLERS; ++i)
+        NineBindTextureToDevice(device, &state->texture[i], NULL);
 }
 
 void
@@ -2849,6 +2920,8 @@ nine_context_clear(struct NineDevice9 *device)
     for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
         pipe_vertex_buffer_unreference(&context->vtxbuf[i]);
     pipe_resource_reference(&context->idxbuf, NULL);
+    pipe_resource_reference(&context->pipe_data.cb_vs.buffer, NULL);
+    pipe_resource_reference(&context->pipe_data.cb_ps.buffer, NULL);
 
     for (i = 0; i < NINE_MAX_SAMPLERS; ++i) {
         context->texture[i].enabled = FALSE;

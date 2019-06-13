@@ -30,6 +30,7 @@
 #include "anv_private.h"
 
 #include "vk_format_info.h"
+#include "vk_util.h"
 
 /** \file anv_cmd_buffer.c
  *
@@ -593,6 +594,14 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
 
          *dynamic_offsets += set_layout->dynamic_offset_count;
          *dynamic_offset_count -= set_layout->dynamic_offset_count;
+
+         if (bind_point == VK_PIPELINE_BIND_POINT_COMPUTE) {
+            cmd_buffer->state.push_constants_dirty |=
+               VK_SHADER_STAGE_COMPUTE_BIT;
+         } else {
+            cmd_buffer->state.push_constants_dirty |=
+               VK_SHADER_STAGE_ALL_GRAPHICS;
+         }
       }
    }
 
@@ -738,7 +747,8 @@ anv_cmd_buffer_merge_dynamic(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static uint32_t
-anv_push_constant_value(struct anv_push_constants *data, uint32_t param)
+anv_push_constant_value(const struct anv_cmd_pipeline_state *state,
+                        const struct anv_push_constants *data, uint32_t param)
 {
    if (BRW_PARAM_IS_BUILTIN(param)) {
       switch (param) {
@@ -753,20 +763,28 @@ anv_push_constant_value(struct anv_push_constants *data, uint32_t param)
       default:
          unreachable("Invalid param builtin");
       }
-   } else {
+   } else if (ANV_PARAM_IS_PUSH(param)) {
       uint32_t offset = ANV_PARAM_PUSH_OFFSET(param);
       assert(offset % sizeof(uint32_t) == 0);
       if (offset < data->size)
          return *(uint32_t *)((uint8_t *)data + offset);
       else
          return 0;
+   } else if (ANV_PARAM_IS_DYN_OFFSET(param)) {
+      unsigned idx = ANV_PARAM_DYN_OFFSET_IDX(param);
+      assert(idx < MAX_DYNAMIC_BUFFERS);
+      return state->dynamic_offsets[idx];
    }
+
+   assert(!"Invalid param");
+   return 0;
 }
 
 struct anv_state
 anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
                               gl_shader_stage stage)
 {
+   struct anv_cmd_pipeline_state *pipeline_state = &cmd_buffer->state.gfx.base;
    struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
 
    /* If we don't have this stage, bail. */
@@ -779,7 +797,7 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
       pipeline->shaders[stage]->prog_data;
 
    /* If we don't actually have any push constants, bail. */
-   if (data == NULL || prog_data == NULL || prog_data->nr_params == 0)
+   if (prog_data == NULL || prog_data->nr_params == 0 || data == NULL)
       return (struct anv_state) { .offset = 0 };
 
    struct anv_state state =
@@ -789,8 +807,10 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
 
    /* Walk through the param array and fill the buffer with data */
    uint32_t *u32_map = state.map;
-   for (unsigned i = 0; i < prog_data->nr_params; i++)
-      u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
+   for (unsigned i = 0; i < prog_data->nr_params; i++) {
+      u32_map[i] = anv_push_constant_value(pipeline_state, data,
+                                           prog_data->param[i]);
+   }
 
    return state;
 }
@@ -798,6 +818,7 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
 struct anv_state
 anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
 {
+   struct anv_cmd_pipeline_state *pipeline_state = &cmd_buffer->state.compute.base;
    struct anv_push_constants *data =
       cmd_buffer->state.push_constants[MESA_SHADER_COMPUTE];
    struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
@@ -825,7 +846,8 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
            i < cs_prog_data->push.cross_thread.dwords;
            i++) {
          assert(prog_data->param[i] != BRW_PARAM_BUILTIN_SUBGROUP_ID);
-         u32_map[i] = anv_push_constant_value(data, prog_data->param[i]);
+         u32_map[i] = anv_push_constant_value(pipeline_state, data,
+                                              prog_data->param[i]);
       }
    }
 
@@ -839,8 +861,8 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
             if (prog_data->param[src] == BRW_PARAM_BUILTIN_SUBGROUP_ID) {
                u32_map[dst] = t;
             } else {
-               u32_map[dst] =
-                  anv_push_constant_value(data, prog_data->param[src]);
+               u32_map[dst] = anv_push_constant_value(pipeline_state, data,
+                                                      prog_data->param[src]);
             }
          }
       }
@@ -998,8 +1020,39 @@ anv_cmd_buffer_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
       set->layout = layout;
    }
    set->size = anv_descriptor_set_layout_size(layout);
-   set->buffer_count = layout->buffer_count;
+   set->buffer_view_count = layout->buffer_view_count;
    set->buffer_views = (*push_set)->buffer_views;
+
+   if (layout->descriptor_buffer_size &&
+       ((*push_set)->set_used_on_gpu ||
+        set->desc_mem.alloc_size < layout->descriptor_buffer_size)) {
+      /* The previous buffer is either actively used by some GPU command (so
+       * we can't modify it) or is too small.  Allocate a new one.
+       */
+      struct anv_state desc_mem =
+         anv_state_stream_alloc(&cmd_buffer->dynamic_state_stream,
+                                layout->descriptor_buffer_size, 32);
+      if (set->desc_mem.alloc_size) {
+         /* TODO: Do we really need to copy all the time? */
+         memcpy(desc_mem.map, set->desc_mem.map,
+                MIN2(desc_mem.alloc_size, set->desc_mem.alloc_size));
+      }
+      set->desc_mem = desc_mem;
+
+      struct anv_address addr = {
+         .bo = cmd_buffer->dynamic_state_stream.state_pool->block_pool.bo,
+         .offset = set->desc_mem.offset,
+      };
+
+      const struct isl_device *isl_dev = &cmd_buffer->device->isl_dev;
+      set->desc_surface_state =
+         anv_state_stream_alloc(&cmd_buffer->surface_state_stream,
+                                isl_dev->ss.size, isl_dev->ss.align);
+      anv_fill_buffer_surface_state(cmd_buffer->device,
+                                    set->desc_surface_state,
+                                    ISL_FORMAT_R32G32B32A32_FLOAT,
+                                    addr, layout->descriptor_buffer_size, 1);
+   }
 
    return set;
 }
@@ -1036,7 +1089,7 @@ void anv_CmdPushDescriptorSetKHR(
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
          for (uint32_t j = 0; j < write->descriptorCount; j++) {
-            anv_descriptor_set_write_image_view(set, &cmd_buffer->device->info,
+            anv_descriptor_set_write_image_view(cmd_buffer->device, set,
                                                 write->pImageInfo + j,
                                                 write->descriptorType,
                                                 write->dstBinding,
@@ -1050,7 +1103,7 @@ void anv_CmdPushDescriptorSetKHR(
             ANV_FROM_HANDLE(anv_buffer_view, bview,
                             write->pTexelBufferView[j]);
 
-            anv_descriptor_set_write_buffer_view(set,
+            anv_descriptor_set_write_buffer_view(cmd_buffer->device, set,
                                                  write->descriptorType,
                                                  bview,
                                                  write->dstBinding,
@@ -1067,8 +1120,7 @@ void anv_CmdPushDescriptorSetKHR(
             ANV_FROM_HANDLE(anv_buffer, buffer, write->pBufferInfo[j].buffer);
             assert(buffer);
 
-            anv_descriptor_set_write_buffer(set,
-                                            cmd_buffer->device,
+            anv_descriptor_set_write_buffer(cmd_buffer->device, set,
                                             &cmd_buffer->surface_state_stream,
                                             write->descriptorType,
                                             buffer,
@@ -1078,6 +1130,19 @@ void anv_CmdPushDescriptorSetKHR(
                                             write->pBufferInfo[j].range);
          }
          break;
+
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT: {
+         const VkWriteDescriptorSetInlineUniformBlockEXT *inline_write =
+            vk_find_struct_const(write->pNext,
+                                 WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT);
+         assert(inline_write->dataSize == write->descriptorCount);
+         anv_descriptor_set_write_inline_uniform_data(cmd_buffer->device, set,
+                                                      write->dstBinding,
+                                                      inline_write->pData,
+                                                      write->dstArrayElement,
+                                                      inline_write->dataSize);
+         break;
+      }
 
       default:
          break;
@@ -1110,8 +1175,7 @@ void anv_CmdPushDescriptorSetWithTemplateKHR(
    if (!set)
       return;
 
-   anv_descriptor_set_write_template(set,
-                                     cmd_buffer->device,
+   anv_descriptor_set_write_template(cmd_buffer->device, set,
                                      &cmd_buffer->surface_state_stream,
                                      template,
                                      pData);

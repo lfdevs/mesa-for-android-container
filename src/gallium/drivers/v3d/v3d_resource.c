@@ -31,8 +31,9 @@
 #include "util/u_transfer_helper.h"
 #include "util/u_upload_mgr.h"
 #include "util/u_format_zs.h"
+#include "util/u_drm.h"
 
-#include "drm_fourcc.h"
+#include "drm-uapi/drm_fourcc.h"
 #include "v3d_screen.h"
 #include "v3d_context.h"
 #include "v3d_resource.h"
@@ -402,7 +403,9 @@ v3d_resource_get_handle(struct pipe_screen *pscreen,
         case WINSYS_HANDLE_TYPE_KMS:
                 if (screen->ro) {
                         assert(rsc->scanout);
-                        return renderonly_get_handle(rsc->scanout, whandle);
+                        bool ok = renderonly_get_handle(rsc->scanout, whandle);
+                        whandle->stride = rsc->slices[0].stride;
+                        return ok;
                 }
                 whandle->handle = bo->handle;
                 return TRUE;
@@ -461,7 +464,8 @@ v3d_get_ub_pad(struct v3d_resource *rsc, uint32_t height)
 }
 
 static void
-v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride)
+v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride,
+                 bool uif_top)
 {
         struct pipe_resource *prsc = &rsc->base;
         uint32_t width = prsc->width0;
@@ -483,10 +487,11 @@ v3d_setup_slices(struct v3d_resource *rsc, uint32_t winsys_stride)
         uint32_t block_width = util_format_get_blockwidth(prsc->format);
         uint32_t block_height = util_format_get_blockheight(prsc->format);
         bool msaa = prsc->nr_samples > 1;
+
         /* MSAA textures/renderbuffers are always laid out as single-level
          * UIF.
          */
-        bool uif_top = msaa;
+        uif_top |= msaa;
 
         /* Check some easy mistakes to make in a resource_create() call that
          * will break our setup.
@@ -685,19 +690,6 @@ v3d_resource_setup(struct pipe_screen *pscreen,
         return rsc;
 }
 
-static bool
-find_modifier(uint64_t needle, const uint64_t *haystack, int count)
-{
-        int i;
-
-        for (i = 0; i < count; i++) {
-                if (haystack[i] == needle)
-                        return true;
-        }
-
-        return false;
-}
-
 static struct pipe_resource *
 v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
                                    const struct pipe_resource *tmpl,
@@ -706,42 +698,7 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
 {
         struct v3d_screen *screen = v3d_screen(pscreen);
 
-        /* If we're in a renderonly setup, use the other device to perform our
-         * (linear) allocation and just import it to v3d.  The other device
-         * may be using CMA, and V3D can import from CMA but doesn't do CMA
-         * allocations on its own.
-         *
-         * We always allocate this way for SHARED, because get_handle will
-         * need a resource on the display fd.
-         */
-        if (screen->ro && (tmpl->bind & (PIPE_BIND_SCANOUT |
-                                         PIPE_BIND_SHARED))) {
-                struct winsys_handle handle;
-                struct pipe_resource scanout_tmpl = *tmpl;
-                struct renderonly_scanout *scanout =
-                        renderonly_scanout_for_resource(&scanout_tmpl,
-                                                        screen->ro,
-                                                        &handle);
-                if (!scanout) {
-                        fprintf(stderr, "Failed to create scanout resource\n");
-                        return NULL;
-                }
-                assert(handle.type == WINSYS_HANDLE_TYPE_FD);
-                /* The fd is all we need.  Destroy the old scanout (and its
-                 * GEM handle on kms_fd) before resource_from_handle()'s
-                 * renderonly_create_gpu_import_for_resource() call which will
-                 * also get a kms_fd GEM handle for the fd.
-                 */
-                renderonly_scanout_destroy(scanout, screen->ro);
-                struct pipe_resource *prsc =
-                        pscreen->resource_from_handle(pscreen, tmpl,
-                                                      &handle,
-                                                      PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE);
-                close(handle.handle);
-                return prsc;
-        }
-
-        bool linear_ok = find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count);
+        bool linear_ok = drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count);
         struct v3d_resource *rsc = v3d_resource_setup(pscreen, tmpl);
         struct pipe_resource *prsc = &rsc->base;
         /* Use a tiled layout if we can, for better 3D performance. */
@@ -768,12 +725,18 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
             tmpl->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT))
                 should_tile = false;
 
+        /* If using the old-school SCANOUT flag, we don't know what the screen
+         * might support other than linear. Just force linear.
+         */
+        if (tmpl->bind & PIPE_BIND_SCANOUT)
+                should_tile = false;
+
         /* No user-specified modifier; determine our own. */
         if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID) {
                 linear_ok = true;
                 rsc->tiled = should_tile;
         } else if (should_tile &&
-                   find_modifier(DRM_FORMAT_MOD_BROADCOM_UIF,
+                   drm_find_modifier(DRM_FORMAT_MOD_BROADCOM_UIF,
                                  modifiers, count)) {
                 rsc->tiled = true;
         } else if (linear_ok) {
@@ -785,10 +748,51 @@ v3d_resource_create_with_modifiers(struct pipe_screen *pscreen,
 
         rsc->internal_format = prsc->format;
 
-        v3d_setup_slices(rsc, 0);
+        v3d_setup_slices(rsc, 0, tmpl->bind & PIPE_BIND_SHARED);
 
-        if (!v3d_resource_bo_alloc(rsc))
-           goto fail;
+        /* If we're in a renderonly setup, use the other device to perform our
+         * allocation and just import it to v3d.  The other device may be
+         * using CMA, and V3D can import from CMA but doesn't do CMA
+         * allocations on its own.
+         *
+         * We always allocate this way for SHARED, because get_handle will
+         * need a resource on the display fd.
+         */
+        if (screen->ro && (tmpl->bind & (PIPE_BIND_SCANOUT |
+                                         PIPE_BIND_SHARED))) {
+                struct winsys_handle handle;
+                struct pipe_resource scanout_tmpl = {
+                        .target = prsc->target,
+                        .format = PIPE_FORMAT_RGBA8888_UNORM,
+                        .width0 = 1024, /* one page */
+                        .height0 = align(rsc->size, 4096) / 4096,
+                        .depth0 = 1,
+                        .array_size = 1,
+                };
+
+                rsc->scanout =
+                        renderonly_scanout_for_resource(&scanout_tmpl,
+                                                        screen->ro,
+                                                        &handle);
+
+                if (!rsc->scanout) {
+                        fprintf(stderr, "Failed to create scanout resource\n");
+                        return NULL;
+                }
+                assert(handle.type == WINSYS_HANDLE_TYPE_FD);
+                rsc->bo = v3d_bo_open_dmabuf(screen, handle.handle);
+                close(handle.handle);
+
+                if (!rsc->bo)
+                        goto fail;
+
+                v3d_debug_resource_layout(rsc, "renderonly");
+
+                return prsc;
+        } else {
+                if (!v3d_resource_bo_alloc(rsc))
+                        goto fail;
+        }
 
         return prsc;
 fail:
@@ -861,7 +865,7 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
 
         rsc->internal_format = prsc->format;
 
-        v3d_setup_slices(rsc, whandle->stride);
+        v3d_setup_slices(rsc, whandle->stride, true);
         v3d_debug_resource_layout(rsc, "import");
 
         if (screen->ro) {

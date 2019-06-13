@@ -34,7 +34,15 @@
 #include <set>
 #include <vector>
 
+#ifndef _WIN32
 #include <err.h>
+#else
+#define errx(code, msg, ...)             \
+   do {                                  \
+      fprintf(stderr, msg, __VA_ARGS__); \
+      exit(code);                        \
+   } while (0);
+#endif
 
 #include "vma.h"
 

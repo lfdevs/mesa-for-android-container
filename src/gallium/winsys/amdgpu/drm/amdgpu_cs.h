@@ -67,10 +67,23 @@ struct amdgpu_ib {
    struct pb_buffer        *big_ib_buffer;
    uint8_t                 *ib_mapped;
    unsigned                used_ib_space;
+
+   /* The maximum seen size from cs_check_space. If the driver does
+    * cs_check_space and flush, the newly allocated IB should have at least
+    * this size.
+    */
+   unsigned                max_check_space_size;
+
    unsigned                max_ib_size;
    uint32_t                *ptr_ib_size;
    bool                    ptr_ib_size_inside_ib;
    enum ib_type            ib_type;
+};
+
+struct amdgpu_fence_list {
+   struct pipe_fence_handle    **list;
+   unsigned                    num;
+   unsigned                    max;
 };
 
 struct amdgpu_cs_context {
@@ -96,13 +109,9 @@ struct amdgpu_cs_context {
    unsigned                    last_added_bo_usage;
    uint32_t                    last_added_bo_priority_usage;
 
-   struct pipe_fence_handle    **fence_dependencies;
-   unsigned                    num_fence_dependencies;
-   unsigned                    max_fence_dependencies;
-
-   struct pipe_fence_handle    **syncobj_to_signal;
-   unsigned                    num_syncobj_to_signal;
-   unsigned                    max_syncobj_to_signal;
+   struct amdgpu_fence_list    fence_dependencies;
+   struct amdgpu_fence_list    syncobj_dependencies;
+   struct amdgpu_fence_list    syncobj_to_signal;
 
    struct pipe_fence_handle    *fence;
 

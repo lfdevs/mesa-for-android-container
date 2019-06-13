@@ -174,27 +174,27 @@ struct _egl_surface
 
 
 extern EGLBoolean
-_eglInitSurface(_EGLSurface *surf, _EGLDisplay *dpy, EGLint type,
+_eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
                 _EGLConfig *config, const EGLint *attrib_list);
 
 
 extern EGLBoolean
-_eglQuerySurface(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint attribute, EGLint *value);
+_eglQuerySurface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint attribute, EGLint *value);
 
 
 extern EGLBoolean
-_eglSurfaceAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint attribute, EGLint value);
+_eglSurfaceAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint attribute, EGLint value);
 
 
 extern EGLBoolean
-_eglBindTexImage(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint buffer);
+_eglBindTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint buffer);
 
 extern EGLBoolean
 _eglReleaseTexImage(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint buffer);
 
 
 extern EGLBoolean
-_eglSwapInterval(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf, EGLint interval);
+_eglSwapInterval(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf, EGLint interval);
 
 extern EGLBoolean
 _eglSurfaceHasMutableRenderBuffer(_EGLSurface *surf);
@@ -252,10 +252,10 @@ _eglUnlinkSurface(_EGLSurface *surf)
  * Return NULL if the handle has no corresponding linked surface.
  */
 static inline _EGLSurface *
-_eglLookupSurface(EGLSurface surface, _EGLDisplay *dpy)
+_eglLookupSurface(EGLSurface surface, _EGLDisplay *disp)
 {
    _EGLSurface *surf = (_EGLSurface *) surface;
-   if (!dpy || !_eglCheckResource((void *) surf, _EGL_RESOURCE_SURFACE, dpy))
+   if (!disp || !_eglCheckResource((void *) surf, _EGL_RESOURCE_SURFACE, disp))
       surf = NULL;
    return surf;
 }

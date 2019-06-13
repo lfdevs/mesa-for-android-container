@@ -151,6 +151,7 @@ nouveau_disk_cache_create(struct nouveau_screen *screen)
    struct mesa_sha1 ctx;
    unsigned char sha1[20];
    char cache_id[20 * 2 + 1];
+   uint64_t driver_flags = 0;
 
    _mesa_sha1_init(&ctx);
    if (!disk_cache_get_function_identifier(nouveau_disk_cache_create,
@@ -160,9 +161,14 @@ nouveau_disk_cache_create(struct nouveau_screen *screen)
    _mesa_sha1_final(&ctx, sha1);
    disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 
+   if (screen->prefer_nir)
+      driver_flags |= NOUVEAU_SHADER_CACHE_FLAGS_IR_NIR;
+   else
+      driver_flags |= NOUVEAU_SHADER_CACHE_FLAGS_IR_TGSI;
+
    screen->disk_shader_cache =
       disk_cache_create(nouveau_screen_get_name(&screen->base),
-                        cache_id, 0);
+                        cache_id, driver_flags);
 }
 
 int
@@ -179,6 +185,8 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
    char *nv_dbg = getenv("NOUVEAU_MESA_DEBUG");
    if (nv_dbg)
       nouveau_mesa_debug = atoi(nv_dbg);
+
+   screen->prefer_nir = debug_get_bool_option("NV50_PROG_USE_NIR", false);
 
    /* These must be set before any failure is possible, as the cleanup
     * paths assume they're responsible for deleting them.

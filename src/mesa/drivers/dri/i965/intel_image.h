@@ -62,6 +62,7 @@ struct intel_image_format {
       uint32_t dri_format;
       int cpp;
    } planes[3];
+   float scaling_factor;
 };
 
 struct __DRIimageRec {

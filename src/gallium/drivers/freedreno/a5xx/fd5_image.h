@@ -29,7 +29,8 @@
 
 #include "freedreno_context.h"
 
+struct ir3_shader_variant;
 void fd5_emit_images(struct fd_context *ctx, struct fd_ringbuffer *ring,
-		enum pipe_shader_type shader);
+		enum pipe_shader_type shader, const struct ir3_shader_variant *v);
 
 #endif /* FD5_IMAGE_H_ */

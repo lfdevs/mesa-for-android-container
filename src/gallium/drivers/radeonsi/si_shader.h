@@ -710,6 +710,7 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
 			   struct tgsi_tessctrl_info *out);
 void si_lower_nir(struct si_shader_selector *sel);
+void si_nir_opts(struct nir_shader *nir);
 
 /* Inline helpers. */
 

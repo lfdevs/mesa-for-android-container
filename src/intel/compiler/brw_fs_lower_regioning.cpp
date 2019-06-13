@@ -71,15 +71,33 @@ namespace {
           !is_byte_raw_mov(inst)) {
          return get_exec_type_size(inst);
       } else {
-         unsigned stride = inst->dst.stride * type_sz(inst->dst.type);
+         /* Calculate the maximum byte stride and the minimum/maximum type
+          * size across all source and destination operands we are required to
+          * lower.
+          */
+         unsigned max_stride = inst->dst.stride * type_sz(inst->dst.type);
+         unsigned min_size = type_sz(inst->dst.type);
+         unsigned max_size = type_sz(inst->dst.type);
 
          for (unsigned i = 0; i < inst->sources; i++) {
-            if (!is_uniform(inst->src[i]) && !inst->is_control_source(i))
-               stride = MAX2(stride, inst->src[i].stride *
-                             type_sz(inst->src[i].type));
+            if (!is_uniform(inst->src[i]) && !inst->is_control_source(i)) {
+               const unsigned size = type_sz(inst->src[i].type);
+               max_stride = MAX2(max_stride, inst->src[i].stride * size);
+               min_size = MIN2(min_size, size);
+               max_size = MAX2(max_size, size);
+            }
          }
 
-         return stride;
+         /* All operands involved in lowering need to fit in the calculated
+          * stride.
+          */
+         assert(max_size <= 4 * min_size);
+
+         /* Attempt to use the largest byte stride among all present operands,
+          * but never exceed a stride of 4 since that would lead to illegal
+          * destination regions during lowering.
+          */
+         return MIN2(max_stride, 4 * min_size);
       }
    }
 
@@ -109,20 +127,37 @@ namespace {
    has_invalid_src_region(const gen_device_info *devinfo, const fs_inst *inst,
                           unsigned i)
    {
-      if (is_unordered(inst) || inst->is_control_source(i)) {
+      if (is_unordered(inst) || inst->is_control_source(i))
          return false;
-      } else {
-         const unsigned dst_byte_stride = inst->dst.stride * type_sz(inst->dst.type);
-         const unsigned src_byte_stride = inst->src[i].stride *
-            type_sz(inst->src[i].type);
-         const unsigned dst_byte_offset = reg_offset(inst->dst) % REG_SIZE;
-         const unsigned src_byte_offset = reg_offset(inst->src[i]) % REG_SIZE;
 
-         return has_dst_aligned_region_restriction(devinfo, inst) &&
-                !is_uniform(inst->src[i]) &&
-                (src_byte_stride != dst_byte_stride ||
-                 src_byte_offset != dst_byte_offset);
+      /* Empirical testing shows that Broadwell has a bug affecting half-float
+       * MAD instructions when any of its sources has a non-zero offset, such
+       * as:
+       *
+       * mad(8) g18<1>HF -g17<4,4,1>HF g14.8<4,4,1>HF g11<4,4,1>HF { align16 1Q };
+       *
+       * We used to generate code like this for SIMD8 executions where we
+       * used to pack components Y and W of a vector at offset 16B of a SIMD
+       * register. The problem doesn't occur if the stride of the source is 0.
+       */
+      if (devinfo->gen == 8 &&
+          inst->opcode == BRW_OPCODE_MAD &&
+          inst->src[i].type == BRW_REGISTER_TYPE_HF &&
+          reg_offset(inst->src[i]) % REG_SIZE > 0 &&
+          inst->src[i].stride != 0) {
+         return true;
       }
+
+      const unsigned dst_byte_stride = inst->dst.stride * type_sz(inst->dst.type);
+      const unsigned src_byte_stride = inst->src[i].stride *
+         type_sz(inst->src[i].type);
+      const unsigned dst_byte_offset = reg_offset(inst->dst) % REG_SIZE;
+      const unsigned src_byte_offset = reg_offset(inst->src[i]) % REG_SIZE;
+
+      return has_dst_aligned_region_restriction(devinfo, inst) &&
+             !is_uniform(inst->src[i]) &&
+             (src_byte_stride != dst_byte_stride ||
+              src_byte_offset != dst_byte_offset);
    }
 
    /*

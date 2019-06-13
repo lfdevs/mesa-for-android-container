@@ -757,6 +757,66 @@ NVC0LegalizePostRA::propagateJoin(BasicBlock *bb)
    bb->remove(bb->getEntry());
 }
 
+// replaces instructions which would end up as f2f or i2i with faster
+// alternatives:
+//  - fabs(a)     -> fadd(0, abs a)
+//  - fneg(a)     -> fadd(neg 0, neg a)
+//  - ineg(a)     -> iadd(0, neg a)
+//  - fneg(abs a) -> fadd(neg 0, neg abs a)
+//  - sat(a)      -> sat add(0, a)
+void
+NVC0LegalizePostRA::replaceCvt(Instruction *cvt)
+{
+   if (!isFloatType(cvt->sType) && typeSizeof(cvt->sType) != 4)
+      return;
+   if (cvt->sType != cvt->dType)
+      return;
+   // we could make it work, but in this case we have optimizations disabled
+   // and we don't really care either way.
+   if (cvt->src(0).getFile() != FILE_GPR &&
+       cvt->src(0).getFile() != FILE_MEMORY_CONST)
+      return;
+
+   Modifier mod0, mod1;
+
+   switch (cvt->op) {
+   case OP_ABS:
+      if (cvt->src(0).mod)
+         return;
+      if (!isFloatType(cvt->sType))
+         return;
+      mod0 = 0;
+      mod1 = NV50_IR_MOD_ABS;
+      break;
+   case OP_NEG:
+      if (!isFloatType(cvt->sType) && cvt->src(0).mod)
+         return;
+      if (isFloatType(cvt->sType) &&
+          (cvt->src(0).mod && cvt->src(0).mod != Modifier(NV50_IR_MOD_ABS)))
+         return;
+
+      mod0 = isFloatType(cvt->sType) ? NV50_IR_MOD_NEG : 0;
+      mod1 = cvt->src(0).mod == Modifier(NV50_IR_MOD_ABS) ?
+         NV50_IR_MOD_NEG_ABS : NV50_IR_MOD_NEG;
+      break;
+   case OP_SAT:
+      if (!isFloatType(cvt->sType) && cvt->src(0).mod.abs())
+         return;
+      mod0 = 0;
+      mod1 = cvt->src(0).mod;
+      cvt->saturate = true;
+      break;
+   default:
+      return;
+   }
+
+   cvt->op = OP_ADD;
+   cvt->moveSources(0, 1);
+   cvt->setSrc(0, rZero);
+   cvt->src(0).mod = mod0;
+   cvt->src(1).mod = mod1;
+}
+
 bool
 NVC0LegalizePostRA::visit(BasicBlock *bb)
 {
@@ -795,6 +855,9 @@ NVC0LegalizePostRA::visit(BasicBlock *bb)
             if (hi)
                next = hi;
          }
+
+         if (i->op == OP_SAT || i->op == OP_NEG || i->op == OP_ABS)
+            replaceCvt(i);
 
          if (i->op != OP_MOV && i->op != OP_PFETCH)
             replaceZero(i);

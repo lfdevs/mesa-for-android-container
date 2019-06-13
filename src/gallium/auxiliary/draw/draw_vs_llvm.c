@@ -53,7 +53,8 @@ vs_llvm_run_linear( struct draw_vertex_shader *shader,
                     const unsigned constants_size[PIPE_MAX_CONSTANT_BUFFERS],
 		    unsigned count,
 		    unsigned input_stride,
-		    unsigned output_stride )
+		    unsigned output_stride,
+		    const unsigned *elts)
 {
    /* we should never get here since the entire pipeline is
     * generated in draw_pt_fetch_shade_pipeline_llvm.c */

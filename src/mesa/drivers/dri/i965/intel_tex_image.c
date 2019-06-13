@@ -14,6 +14,7 @@
 #include "main/texobj.h"
 #include "main/teximage.h"
 #include "main/texstore.h"
+#include "main/glthread.h"
 
 #include "drivers/common/meta.h"
 
@@ -441,6 +442,8 @@ intelSetTexBuffer2(__DRIcontext *pDRICtx, GLint target,
    struct gl_texture_image *texImage;
    mesa_format texFormat = MESA_FORMAT_NONE;
    GLenum internal_format = 0;
+
+   _mesa_glthread_finish(ctx);
 
    texObj = _mesa_get_current_tex_object(ctx, target);
 

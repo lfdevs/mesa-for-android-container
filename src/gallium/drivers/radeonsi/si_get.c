@@ -48,13 +48,6 @@ static const char *si_get_device_vendor(struct pipe_screen *pscreen)
 	return "AMD";
 }
 
-static const char *si_get_marketing_name(struct radeon_winsys *ws)
-{
-	if (!ws->get_chip_name)
-		return NULL;
-	return ws->get_chip_name(ws);
-}
-
 static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 {
 	struct si_screen *sscreen = (struct si_screen *)pscreen;
@@ -160,6 +153,9 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_BALLOT:
 	case PIPE_CAP_TGSI_VOTE:
 	case PIPE_CAP_TGSI_FS_FBFETCH:
+	case PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK:
+	case PIPE_CAP_IMAGE_LOAD_FORMATTED:
+	case PIPE_CAP_PREFER_COMPUTE_BLIT_FOR_MULTIMEDIA:
 		return 1;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
@@ -208,7 +204,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 				RADEON_SPARSE_PAGE_SIZE : 0;
 
 	case PIPE_CAP_PACKED_UNIFORMS:
-		if (sscreen->debug_flags & DBG(NIR))
+		if (sscreen->options.enable_nir)
 			return 1;
 		return 0;
 
@@ -423,11 +419,11 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 		return SI_NUM_IMAGES;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
-		if (sscreen->debug_flags & DBG(NIR))
+		if (sscreen->options.enable_nir)
 			return 0;
 		return 32;
 	case PIPE_SHADER_CAP_PREFERRED_IR:
-		if (sscreen->debug_flags & DBG(NIR))
+		if (sscreen->options.enable_nir)
 			return PIPE_SHADER_IR_NIR;
 		return PIPE_SHADER_IR_TGSI;
 	case PIPE_SHADER_CAP_LOWER_IF_THRESHOLD:
@@ -486,7 +482,6 @@ static const struct nir_shader_compiler_options nir_options = {
 	.lower_scmp = true,
 	.lower_flrp32 = true,
 	.lower_flrp64 = true,
-	.lower_fpow = true,
 	.lower_fsat = true,
 	.lower_fdiv = true,
 	.lower_sub = true,
@@ -501,6 +496,7 @@ static const struct nir_shader_compiler_options nir_options = {
 	.lower_unpack_unorm_4x8 = true,
 	.lower_extract_byte = true,
 	.lower_extract_word = true,
+	.optimize_sample_mask_in = true,
 	.max_unroll_iterations = 32,
 	.native_integers = true,
 };
@@ -941,14 +937,12 @@ static struct disk_cache *si_get_disk_shader_cache(struct pipe_screen *pscreen)
 
 static void si_init_renderer_string(struct si_screen *sscreen)
 {
-	struct radeon_winsys *ws = sscreen->ws;
 	char first_name[256], second_name[32] = {}, kernel_version[128] = {};
 	struct utsname uname_data;
 
-	const char *marketing_name = si_get_marketing_name(ws);
-
-	if (marketing_name) {
-		snprintf(first_name, sizeof(first_name), "%s", marketing_name);
+	if (sscreen->info.marketing_name) {
+		snprintf(first_name, sizeof(first_name), "%s",
+			 sscreen->info.marketing_name);
 		snprintf(second_name, sizeof(second_name), "%s, ",
 			 sscreen->info.name);
 	} else {
@@ -961,13 +955,10 @@ static void si_init_renderer_string(struct si_screen *sscreen)
 			 ", %s", uname_data.release);
 
 	snprintf(sscreen->renderer_string, sizeof(sscreen->renderer_string),
-		 "%s (%sDRM %i.%i.%i%s, LLVM %i.%i.%i)",
+		 "%s (%sDRM %i.%i.%i%s, LLVM " MESA_LLVM_VERSION_STRING ")",
 		 first_name, second_name, sscreen->info.drm_major,
 		 sscreen->info.drm_minor, sscreen->info.drm_patchlevel,
-		 kernel_version,
-		 (HAVE_LLVM >> 8) & 0xff,
-		 HAVE_LLVM & 0xff,
-		 MESA_LLVM_VERSION_PATCH);
+		 kernel_version);
 }
 
 void si_init_screen_get_functions(struct si_screen *sscreen)

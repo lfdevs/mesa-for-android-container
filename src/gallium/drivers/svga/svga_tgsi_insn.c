@@ -2951,7 +2951,7 @@ svga_emit_immediate(struct svga_shader_emitter *emit,
    unsigned i;
 
    assert(1 <= imm->Immediate.NrTokens && imm->Immediate.NrTokens <= 5);
-   for (i = 0; i < imm->Immediate.NrTokens - 1; i++) {
+   for (i = 0; i < 4 && i < imm->Immediate.NrTokens - 1; i++) {
       float f = imm->u[i].Float;
       value[i] = util_is_inf_or_nan(f) ? 0.0f : f;
    }

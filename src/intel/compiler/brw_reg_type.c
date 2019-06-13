@@ -138,6 +138,7 @@ enum hw_3src_reg_type {
    GEN7_3SRC_TYPE_D  = 1,
    GEN7_3SRC_TYPE_UD = 2,
    GEN7_3SRC_TYPE_DF = 3,
+   GEN8_3SRC_TYPE_HF = 4,
 
    /** When ExecutionDatatype is 1: @{ */
    GEN10_ALIGN1_3SRC_REG_TYPE_HF = 0b000,
@@ -166,6 +167,7 @@ static const struct hw_3src_type {
    [BRW_REGISTER_TYPE_D]  = { GEN7_3SRC_TYPE_D  },
    [BRW_REGISTER_TYPE_UD] = { GEN7_3SRC_TYPE_UD },
    [BRW_REGISTER_TYPE_DF] = { GEN7_3SRC_TYPE_DF },
+   [BRW_REGISTER_TYPE_HF] = { GEN8_3SRC_TYPE_HF },
 }, gen10_hw_3src_align1_type[] = {
 #define E(x) BRW_ALIGN1_3SRC_EXEC_TYPE_##x
    [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
@@ -258,6 +260,7 @@ brw_reg_type_to_a16_hw_3src_type(const struct gen_device_info *devinfo,
                                  enum brw_reg_type type)
 {
    assert(type < ARRAY_SIZE(gen7_hw_3src_type));
+   assert(devinfo->gen >= 8 || type != BRW_REGISTER_TYPE_HF);
    assert(gen7_hw_3src_type[type].reg_type != (enum hw_3src_reg_type)INVALID);
    return gen7_hw_3src_type[type].reg_type;
 }
@@ -283,6 +286,7 @@ enum brw_reg_type
 brw_a16_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
                                  unsigned hw_type)
 {
+   assert(devinfo->gen >= 8 || hw_type != GEN8_3SRC_TYPE_HF);
    for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
       if (gen7_hw_3src_type[i].reg_type == hw_type) {
          return i;

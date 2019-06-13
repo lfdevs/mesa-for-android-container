@@ -41,7 +41,7 @@
 
 
 #include "brw_compiler.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 
 static inline void
 assign_vue_slot(struct brw_vue_map *vue_map, int varying, int slot)

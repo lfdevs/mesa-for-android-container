@@ -53,6 +53,10 @@ typedef float (*compute_lambda_func)(const struct sp_sampler_view *sp_sview,
                                      const float t[TGSI_QUAD_SIZE],
                                      const float p[TGSI_QUAD_SIZE]);
 
+typedef float (*compute_lambda_from_grad_func)(const struct sp_sampler_view *sp_sview,
+                                               const float derivs[3][2][TGSI_QUAD_SIZE],
+                                               uint quad);
+
 struct img_filter_args {
    float s;
    float t;
@@ -82,7 +86,7 @@ typedef void (*mip_filter_func)(const struct sp_sampler_view *sp_sview,
                                 const float s[TGSI_QUAD_SIZE],
                                 const float t[TGSI_QUAD_SIZE],
                                 const float p[TGSI_QUAD_SIZE],
-                                const float c0[TGSI_QUAD_SIZE],
+                                int gather_comp,
                                 const float lod[TGSI_QUAD_SIZE],
                                 const struct filter_args *args,
                                 float rgba[TGSI_NUM_CHANNELS][TGSI_QUAD_SIZE]);
@@ -116,7 +120,7 @@ struct sp_sampler_view
    /* these are different per shader type */
    struct softpipe_tex_tile_cache *cache;
    compute_lambda_func compute_lambda;
-
+   compute_lambda_from_grad_func compute_lambda_from_grad;
 };
 
 struct sp_filter_funcs {
@@ -158,6 +162,9 @@ compute_lambda_func
 softpipe_get_lambda_func(const struct pipe_sampler_view *view,
                          enum pipe_shader_type shader);
 
+compute_lambda_from_grad_func
+softpipe_get_lambda_from_grad_func(const struct pipe_sampler_view *view,
+                                   enum pipe_shader_type shader);
 
 void *
 softpipe_create_sampler_state(struct pipe_context *pipe,

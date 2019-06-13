@@ -263,6 +263,15 @@ struct pipe_screen {
 				  unsigned usage);
 
    /**
+    * Get stride and offset for the given pipe resource without the need to get
+    * a winsys_handle.
+    */
+   void (*resource_get_info)(struct pipe_screen *screen,
+                             struct pipe_resource *resource,
+                             unsigned *stride,
+                             unsigned *offset);
+
+   /**
     * Mark the resource as changed so derived internal resources will be
     * recreated on next use.
     *
@@ -442,6 +451,19 @@ struct pipe_screen {
     * \param uuid    pointer to a memory region of PIPE_UUID_SIZE bytes
     */
    void (*get_device_uuid)(struct pipe_screen *screen, char *uuid);
+
+   /**
+    * Set the maximum number of parallel shader compiler threads.
+    */
+   void (*set_max_shader_compiler_threads)(struct pipe_screen *screen,
+                                           unsigned max_threads);
+
+   /**
+    * Return whether parallel shader compilation has finished.
+    */
+   bool (*is_parallel_shader_compilation_finished)(struct pipe_screen *screen,
+                                                   void *shader,
+                                                   unsigned shader_type);
 };
 
 

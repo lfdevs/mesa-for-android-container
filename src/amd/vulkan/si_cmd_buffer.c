@@ -561,6 +561,7 @@ radv_prims_for_vertices(struct radv_prim_vertex_count *info, unsigned num)
 uint32_t
 si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 			  bool instanced_draw, bool indirect_draw,
+			  bool count_from_stream_output,
 			  uint32_t draw_vertex_count)
 {
 	enum chip_class chip_class = cmd_buffer->device->physical_device->rad_info.chip_class;
@@ -621,6 +622,12 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer,
 		if (family == CHIP_BONAIRE && ia_switch_on_eoi &&
 		    (instanced_draw || indirect_draw))
 			partial_vs_wave = true;
+
+		/* Hardware requirement when drawing primitives from a stream
+		 * output buffer.
+		 */
+		if (count_from_stream_output)
+			wd_switch_on_eop = true;
 
 		/* If the WD switch is false, the IA switch must be false too. */
 		assert(wd_switch_on_eop || !ia_switch_on_eop);

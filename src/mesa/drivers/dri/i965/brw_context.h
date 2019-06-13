@@ -46,7 +46,7 @@
 
 #include <brw_bufmgr.h>
 
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 #include "common/gen_decoder.h"
 #include "intel_screen.h"
 #include "intel_tex_obj.h"
@@ -388,11 +388,11 @@ struct brw_cache {
    if (unlikely(INTEL_DEBUG & DEBUG_PERF))                      \
       dbg_printf(__VA_ARGS__);                                  \
    if (brw->perf_debug)                                         \
-      _mesa_gl_debug(&brw->ctx, &msg_id,                        \
-                     MESA_DEBUG_SOURCE_API,                     \
-                     MESA_DEBUG_TYPE_PERFORMANCE,               \
-                     MESA_DEBUG_SEVERITY_MEDIUM,                \
-                     __VA_ARGS__);                              \
+      _mesa_gl_debugf(&brw->ctx, &msg_id,                       \
+                      MESA_DEBUG_SOURCE_API,                    \
+                      MESA_DEBUG_TYPE_PERFORMANCE,              \
+                      MESA_DEBUG_SEVERITY_MEDIUM,               \
+                      __VA_ARGS__);                             \
 } while(0)
 
 #define WARN_ONCE(cond, fmt...) do {                            \
@@ -404,10 +404,10 @@ struct brw_cache {
          fprintf(stderr, fmt);                                  \
          _warned = true;                                        \
                                                                 \
-         _mesa_gl_debug(ctx, &msg_id,                           \
-                        MESA_DEBUG_SOURCE_API,                  \
-                        MESA_DEBUG_TYPE_OTHER,                  \
-                        MESA_DEBUG_SEVERITY_HIGH, fmt);         \
+         _mesa_gl_debugf(ctx, &msg_id,                          \
+                         MESA_DEBUG_SOURCE_API,                 \
+                         MESA_DEBUG_TYPE_OTHER,                 \
+                         MESA_DEBUG_SEVERITY_HIGH, fmt);        \
       }                                                         \
    }                                                            \
 } while (0)
@@ -681,48 +681,7 @@ enum brw_predicate_state {
 struct shader_times;
 
 struct gen_l3_config;
-
-enum brw_query_kind {
-   OA_COUNTERS,
-   OA_COUNTERS_RAW,
-   PIPELINE_STATS,
-};
-
-struct brw_perf_query_register_prog {
-   uint32_t reg;
-   uint32_t val;
-};
-
-struct brw_perf_query_info
-{
-   enum brw_query_kind kind;
-   const char *name;
-   const char *guid;
-   struct brw_perf_query_counter *counters;
-   int n_counters;
-   size_t data_size;
-
-   /* OA specific */
-   uint64_t oa_metrics_set_id;
-   int oa_format;
-
-   /* For indexing into the accumulator[] ... */
-   int gpu_time_offset;
-   int gpu_clock_offset;
-   int a_offset;
-   int b_offset;
-   int c_offset;
-
-   /* Register programming for a given query */
-   struct brw_perf_query_register_prog *flex_regs;
-   uint32_t n_flex_regs;
-
-   struct brw_perf_query_register_prog *mux_regs;
-   uint32_t n_mux_regs;
-
-   struct brw_perf_query_register_prog *b_counter_regs;
-   uint32_t n_b_counter_regs;
-};
+struct gen_perf;
 
 struct brw_uploader {
    struct brw_bufmgr *bufmgr;
@@ -754,6 +713,9 @@ struct brw_context
                                         uint32_t report_id);
 
       void (*emit_compute_walker)(struct brw_context *brw);
+      void (*emit_raw_pipe_control)(struct brw_context *brw, uint32_t flags,
+                                    struct brw_bo *bo, uint32_t offset,
+                                    uint64_t imm);
    } vtbl;
 
    struct brw_bufmgr *bufmgr;
@@ -1200,35 +1162,7 @@ struct brw_context
    } predicate;
 
    struct {
-      /* Variables referenced in the XML meta data for OA performance
-       * counters, e.g in the normalization equations.
-       *
-       * All uint64_t for consistent operand types in generated code
-       */
-      struct {
-         uint64_t timestamp_frequency; /** $GpuTimestampFrequency */
-         uint64_t n_eus;               /** $EuCoresTotalCount */
-         uint64_t n_eu_slices;         /** $EuSlicesTotalCount */
-         uint64_t n_eu_sub_slices;     /** $EuSubslicesTotalCount */
-         uint64_t eu_threads_count;    /** $EuThreadsCount */
-         uint64_t slice_mask;          /** $SliceMask */
-         uint64_t subslice_mask;       /** $SubsliceMask */
-         uint64_t gt_min_freq;         /** $GpuMinFrequency */
-         uint64_t gt_max_freq;         /** $GpuMaxFrequency */
-         uint64_t revision;            /** $SkuRevisionId */
-      } sys_vars;
-
-      /* OA metric sets, indexed by GUID, as know by Mesa at build time,
-       * to cross-reference with the GUIDs of configs advertised by the
-       * kernel at runtime
-       */
-      struct hash_table *oa_metrics_table;
-
-      /* Location of the device's sysfs entry. */
-      char sysfs_dev_dir[256];
-
-      struct brw_perf_query_info *queries;
-      int n_queries;
+      struct gen_perf *perf;
 
       /* The i915 perf stream we open to setup + enable the OA counters */
       int oa_stream_fd;
@@ -1399,7 +1333,6 @@ void brw_emit_query_begin(struct brw_context *brw);
 void brw_emit_query_end(struct brw_context *brw);
 void brw_query_counter(struct gl_context *ctx, struct gl_query_object *q);
 bool brw_is_query_pipelined(struct brw_query_object *query);
-uint64_t brw_timebase_scale(struct brw_context *brw, uint64_t gpu_timestamp);
 uint64_t brw_raw_timestamp_delta(struct brw_context *brw,
                                  uint64_t time0, uint64_t time1);
 
@@ -1453,16 +1386,6 @@ void brw_validate_textures( struct brw_context *brw );
 /*======================================================================
  * brw_program.c
  */
-static inline bool
-key_debug(struct brw_context *brw, const char *name, int a, int b)
-{
-   if (a != b) {
-      perf_debug("  %s %d->%d\n", name, a, b);
-      return true;
-   }
-   return false;
-}
-
 void brwInitFragProgFuncs( struct dd_function_table *functions );
 
 void brw_get_scratch_bo(struct brw_context *brw,

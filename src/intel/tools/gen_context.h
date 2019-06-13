@@ -75,31 +75,28 @@
 #define NUM_PT_ENTRIES (ALIGN(MEMORY_MAP_SIZE, 4096) / 4096)
 #define PT_SIZE ALIGN(NUM_PT_ENTRIES * GEN8_PTE_SIZE, 4096)
 
-#define STATIC_GGTT_MAP_START 0
-
-#define RENDER_RING_ADDR STATIC_GGTT_MAP_START
-#define RENDER_CONTEXT_ADDR (RENDER_RING_ADDR + RING_SIZE)
-
-#define BLITTER_RING_ADDR (RENDER_CONTEXT_ADDR + PPHWSP_SIZE + GEN9_LR_CONTEXT_RENDER_SIZE)
-#define BLITTER_CONTEXT_ADDR (BLITTER_RING_ADDR + RING_SIZE)
-
-#define VIDEO_RING_ADDR (BLITTER_CONTEXT_ADDR + PPHWSP_SIZE + GEN8_LR_CONTEXT_OTHER_SIZE)
-#define VIDEO_CONTEXT_ADDR (VIDEO_RING_ADDR + RING_SIZE)
-
-#define STATIC_GGTT_MAP_END (VIDEO_CONTEXT_ADDR + PPHWSP_SIZE + GEN8_LR_CONTEXT_OTHER_SIZE)
-#define STATIC_GGTT_MAP_SIZE (STATIC_GGTT_MAP_END - STATIC_GGTT_MAP_START)
-
-#define PML4_PHYS_ADDR ((uint64_t)(STATIC_GGTT_MAP_END))
-
 #define CONTEXT_FLAGS (0x339)   /* Normal Priority | L3-LLC Coherency |
                                  * PPGTT Enabled |
                                  * Legacy Context with 64 bit VA support |
                                  * Valid
                                  */
 
-#define RENDER_CONTEXT_DESCRIPTOR  ((uint64_t)1 << 62 | RENDER_CONTEXT_ADDR  | CONTEXT_FLAGS)
-#define BLITTER_CONTEXT_DESCRIPTOR ((uint64_t)2 << 62 | BLITTER_CONTEXT_ADDR | CONTEXT_FLAGS)
-#define VIDEO_CONTEXT_DESCRIPTOR   ((uint64_t)3 << 62 | VIDEO_CONTEXT_ADDR   | CONTEXT_FLAGS)
+#define MI_LOAD_REGISTER_IMM_vals(data, flags, ...) do {                \
+      uint32_t __regs[] = { __VA_ARGS__ };                              \
+      assert((ARRAY_SIZE(__regs) % 2) == 0);                            \
+      *(data)++ = MI_LOAD_REGISTER_IMM_n(ARRAY_SIZE(__regs) / 2) | (flags); \
+      for (unsigned __e = 0; __e < ARRAY_SIZE(__regs); __e++)           \
+         *(data)++ = __regs[__e];                                       \
+   } while (0)
+
+
+struct gen_context_parameters {
+   uint64_t pml4_addr;
+   uint64_t ring_addr;
+   uint32_t ring_size;
+};
+
+typedef void (*gen_context_init_t)(const struct gen_context_parameters *, uint32_t *, uint32_t *);
 
 #include "gen8_context.h"
 #include "gen10_context.h"

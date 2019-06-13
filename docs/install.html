@@ -40,10 +40,10 @@ Build system.
 </p>
 
 <ul>
-<li><a href="https://mesonbuild.com">meson</a> is recommended when building on *nix platforms.
-<li>Autoconf is another option when building on *nix platforms.
+<li><a href="https://mesonbuild.com">meson</a> is required when building on *nix platforms.
+<li>Autoconf was removed in 19.1.0, use meson instead
 <li><a href="http://www.scons.org/">SCons</a> is required for building on
-Windows and optional for Linux (it's an alternative to autoconf/automake or meson.)
+Windows and optional for Linux (it's an alternative to meson.)
 </li>
 <li>Android Build system when building as native Android component. Autoconf
 is used when when building ARC.
@@ -76,7 +76,6 @@ you think you've spotted a bug let developers know by filing a
 <li><a href="https://www.python.org/">Python</a> - Python is required.
 When building with scons 2.7 is required.
 When building with meson 3.5 or newer is required.
-When building with autotools 2.7, or 3.5 or later are required.
 </li>
 <li><a href="http://www.makotemplates.org/">Python Mako module</a> -
 Python Mako module is required. Version 0.8.0 or later should work.
@@ -138,21 +137,7 @@ for more information
 <h1 id="autoconf">3. Building with autoconf (Linux/Unix/X11)</h1>
 
 <p>
-Although meson is recommended, another supported way to build on *nix systems
-is with autoconf.
-</p>
-
-<p>
-The general approach is the standard:
-</p>
-<pre>
-  ./configure
-  make
-  sudo make install
-</pre>
-<p>
-But please read the <a href="autoconf.html">detailed autoconf instructions</a>
-for more details.
+  Autoconf support was removed in Mesa 19.1.0. Please use meson instead.
 </p>
 
 
@@ -220,11 +205,11 @@ When compilation has finished, look in the top-level <code>lib/</code>
 You'll see a set of library files similar to this:
 </p>
 <pre>
-lrwxrwxrwx    1 brian    users          10 Mar 26 07:53 libGL.so -> libGL.so.1*
-lrwxrwxrwx    1 brian    users          19 Mar 26 07:53 libGL.so.1 -> libGL.so.1.5.060100*
+lrwxrwxrwx    1 brian    users          10 Mar 26 07:53 libGL.so -&gt; libGL.so.1*
+lrwxrwxrwx    1 brian    users          19 Mar 26 07:53 libGL.so.1 -&gt; libGL.so.1.5.060100*
 -rwxr-xr-x    1 brian    users     3375861 Mar 26 07:53 libGL.so.1.5.060100*
-lrwxrwxrwx    1 brian    users          14 Mar 26 07:53 libOSMesa.so -> libOSMesa.so.6*
-lrwxrwxrwx    1 brian    users          23 Mar 26 07:53 libOSMesa.so.6 -> libOSMesa.so.6.1.060100*
+lrwxrwxrwx    1 brian    users          14 Mar 26 07:53 libOSMesa.so -&gt; libOSMesa.so.6*
+lrwxrwxrwx    1 brian    users          23 Mar 26 07:53 libOSMesa.so.6 -&gt; libOSMesa.so.6.1.060100*
 -rwxr-xr-x    1 brian    users       23871 Mar 26 07:53 libOSMesa.so.6.1.060100*
 </pre>
 
@@ -253,7 +238,7 @@ versions of libGL and device drivers.
 <h1 id="pkg-config">7. Building OpenGL programs with pkg-config</h1>
 
 <p>
-Running <code>make install</code> will install package configuration files
+Running <code>ninja install</code> will install package configuration files
 for the pkg-config utility.
 </p>
 

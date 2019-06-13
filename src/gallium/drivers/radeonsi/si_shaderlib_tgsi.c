@@ -220,7 +220,82 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 
 	void *cs = ctx->create_compute_state(ctx, &state);
 	ureg_destroy(ureg);
+        ureg_free_tokens(state.prog);
+
 	free(values);
+	return cs;
+}
+
+/* Create a compute shader that copies DCC from one buffer to another
+ * where each DCC buffer has a different layout.
+ *
+ * image[0]: offset remap table (pairs of <src_offset, dst_offset>),
+ *           2 pairs are read
+ * image[1]: DCC source buffer, typed r8_uint
+ * image[2]: DCC destination buffer, typed r8_uint
+ */
+void *si_create_dcc_retile_cs(struct pipe_context *ctx)
+{
+	struct ureg_program *ureg = ureg_create(PIPE_SHADER_COMPUTE);
+	if (!ureg)
+		return NULL;
+
+	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH, 64);
+	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT, 1);
+	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_DEPTH, 1);
+
+	/* Compute the global thread ID (in idx). */
+	struct ureg_src tid = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_THREAD_ID, 0);
+	struct ureg_src blk = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_BLOCK_ID, 0);
+	struct ureg_dst idx = ureg_writemask(ureg_DECL_temporary(ureg),
+					     TGSI_WRITEMASK_X);
+	ureg_UMAD(ureg, idx, blk, ureg_imm1u(ureg, 64), tid);
+
+	/* Load 2 pairs of offsets for DCC load & store. */
+	struct ureg_src map = ureg_DECL_image(ureg, 0, TGSI_TEXTURE_BUFFER, 0, false, false);
+	struct ureg_dst offsets = ureg_DECL_temporary(ureg);
+	struct ureg_src map_load_args[] = {map, ureg_src(idx)};
+
+	ureg_memory_insn(ureg, TGSI_OPCODE_LOAD, &offsets, 1, map_load_args, 2,
+			 TGSI_MEMORY_RESTRICT, TGSI_TEXTURE_BUFFER, 0);
+
+	struct ureg_src dcc_src = ureg_DECL_image(ureg, 1, TGSI_TEXTURE_BUFFER,
+						  0, false, false);
+	struct ureg_dst dcc_dst = ureg_dst(ureg_DECL_image(ureg, 2, TGSI_TEXTURE_BUFFER,
+							   0, true, false));
+	struct ureg_dst dcc_value[2];
+
+	/* Copy DCC values:
+	 *   dst[offsets.y] = src[offsets.x];
+	 *   dst[offsets.w] = src[offsets.z];
+	 */
+	for (unsigned i = 0; i < 2; i++) {
+		dcc_value[i] = ureg_writemask(ureg_DECL_temporary(ureg), TGSI_WRITEMASK_X);
+
+		struct ureg_src load_args[] =
+			{dcc_src, ureg_scalar(ureg_src(offsets), TGSI_SWIZZLE_X + i*2)};
+		ureg_memory_insn(ureg, TGSI_OPCODE_LOAD, &dcc_value[i], 1, load_args, 2,
+				 TGSI_MEMORY_RESTRICT, TGSI_TEXTURE_BUFFER, 0);
+	}
+
+	dcc_dst = ureg_writemask(dcc_dst, TGSI_WRITEMASK_X);
+
+	for (unsigned i = 0; i < 2; i++) {
+		struct ureg_src store_args[] = {
+			ureg_scalar(ureg_src(offsets), TGSI_SWIZZLE_Y + i*2),
+			ureg_src(dcc_value[i])
+		};
+		ureg_memory_insn(ureg, TGSI_OPCODE_STORE, &dcc_dst, 1, store_args, 2,
+				 TGSI_MEMORY_RESTRICT, TGSI_TEXTURE_BUFFER, 0);
+	}
+	ureg_END(ureg);
+
+	struct pipe_compute_state state = {};
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = ureg_get_tokens(ureg, NULL);
+
+	void *cs = ctx->create_compute_state(ctx, &state);
+	ureg_destroy(ureg);
 	return cs;
 }
 
@@ -501,6 +576,75 @@ void *si_create_copy_image_compute_shader_1d_array(struct pipe_context *ctx)
 		"MOV TEMP[4].xy, CONST[0][1].xzzw\n"
 		"UADD TEMP[2].xy, TEMP[1].xyzx, TEMP[4].xyzx\n"
 		"STORE IMAGE[1], TEMP[2].xyzz, TEMP[3], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {0};
+
+	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return ctx->create_compute_state(ctx, &state);
+}
+
+void *si_clear_render_target_shader(struct pipe_context *ctx)
+{
+	static const char text[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 8\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 8\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL SV[0], THREAD_ID\n"
+		"DCL SV[1], BLOCK_ID\n"
+		"DCL IMAGE[0], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
+		"DCL TEMP[0..3], LOCAL\n"
+		"IMM[0] UINT32 {8, 1, 0, 0}\n"
+		"MOV TEMP[0].xyz, CONST[0][0].xyzw\n"
+		"UMAD TEMP[1].xyz, SV[1].xyzz, IMM[0].xxyy, SV[0].xyzz\n"
+		"UADD TEMP[2].xyz, TEMP[1].xyzx, TEMP[0].xyzx\n"
+		"MOV TEMP[3].xyzw, CONST[0][1].xyzw\n"
+		"STORE IMAGE[0], TEMP[2].xyzz, TEMP[3], 2D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {0};
+
+	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return ctx->create_compute_state(ctx, &state);
+}
+
+/* TODO: Didn't really test 1D_ARRAY */
+void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx)
+{
+	static const char text[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL SV[0], THREAD_ID\n"
+		"DCL SV[1], BLOCK_ID\n"
+		"DCL IMAGE[0], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT, WR\n"
+		"DCL CONST[0][0..1]\n" // 0:xyzw 1:xyzw
+		"DCL TEMP[0..3], LOCAL\n"
+		"IMM[0] UINT32 {64, 1, 0, 0}\n"
+		"MOV TEMP[0].xy, CONST[0][0].xzzw\n"
+		"UMAD TEMP[1].xy, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
+		"UADD TEMP[2].xy, TEMP[1].xyzx, TEMP[0].xyzx\n"
+		"MOV TEMP[3].xyzw, CONST[0][1].xyzw\n"
+		"STORE IMAGE[0], TEMP[2].xyzz, TEMP[3], 1D_ARRAY, PIPE_FORMAT_R32G32B32A32_FLOAT\n"
 		"END\n";
 
 	struct tgsi_token tokens[1024];

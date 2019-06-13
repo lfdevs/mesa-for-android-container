@@ -110,26 +110,37 @@ is_zero_to_one(nir_alu_instr *instr, unsigned src, unsigned num_components,
 }
 
 static inline bool
+is_not_const_zero(nir_alu_instr *instr, unsigned src, unsigned num_components,
+                  const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return true;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      switch (nir_op_infos[instr->op].input_types[src]) {
+      case nir_type_float:
+         if (nir_src_comp_as_float(instr->src[src].src, swizzle[i]) == 0.0)
+            return false;
+         break;
+      case nir_type_bool:
+      case nir_type_int:
+      case nir_type_uint:
+         if (nir_src_comp_as_uint(instr->src[src].src, swizzle[i]) == 0)
+            return false;
+         break;
+      default:
+         return false;
+      }
+   }
+
+   return true;
+}
+
+static inline bool
 is_not_const(nir_alu_instr *instr, unsigned src, UNUSED unsigned num_components,
              UNUSED const uint8_t *swizzle)
 {
    return !nir_src_is_const(instr->src[src].src);
-}
-
-static inline bool
-is_used_more_than_once(nir_alu_instr *instr)
-{
-   bool zero_if_use = list_empty(&instr->dest.dest.ssa.if_uses);
-   bool zero_use = list_empty(&instr->dest.dest.ssa.uses);
-
-   if (zero_use && zero_if_use)
-      return false;
-   else if (zero_use && list_is_singular(&instr->dest.dest.ssa.if_uses))
-      return false;
-   else if (zero_if_use && list_is_singular(&instr->dest.dest.ssa.uses))
-      return false;
-
-   return true;
 }
 
 static inline bool
@@ -152,6 +163,12 @@ is_used_once(nir_alu_instr *instr)
       return false;
 
    return true;
+}
+
+static inline bool
+is_used_by_if(nir_alu_instr *instr)
+{
+   return !list_empty(&instr->dest.dest.ssa.if_uses);
 }
 
 static inline bool

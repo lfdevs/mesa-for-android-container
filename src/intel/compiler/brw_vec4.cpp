@@ -29,7 +29,7 @@
 #include "brw_vec4_live_variables.h"
 #include "brw_vec4_vs.h"
 #include "brw_dead_control_flow.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 #include "program/prog_parameter.h"
 #include "util/u_math.h"
 
@@ -153,12 +153,9 @@ vec4_instruction::is_send_from_grf()
    switch (opcode) {
    case SHADER_OPCODE_SHADER_TIME_ADD:
    case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
-   case SHADER_OPCODE_UNTYPED_ATOMIC:
-   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
-   case SHADER_OPCODE_TYPED_ATOMIC:
-   case SHADER_OPCODE_TYPED_SURFACE_READ:
-   case SHADER_OPCODE_TYPED_SURFACE_WRITE:
+   case VEC4_OPCODE_UNTYPED_ATOMIC:
+   case VEC4_OPCODE_UNTYPED_SURFACE_READ:
+   case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
    case VEC4_OPCODE_URB_READ:
    case TCS_OPCODE_URB_WRITE:
    case TCS_OPCODE_RELEASE_INPUT:
@@ -212,12 +209,9 @@ vec4_instruction::size_read(unsigned arg) const
 {
    switch (opcode) {
    case SHADER_OPCODE_SHADER_TIME_ADD:
-   case SHADER_OPCODE_UNTYPED_ATOMIC:
-   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
-   case SHADER_OPCODE_TYPED_ATOMIC:
-   case SHADER_OPCODE_TYPED_SURFACE_READ:
-   case SHADER_OPCODE_TYPED_SURFACE_WRITE:
+   case VEC4_OPCODE_UNTYPED_ATOMIC:
+   case VEC4_OPCODE_UNTYPED_SURFACE_READ:
+   case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
    case TCS_OPCODE_URB_WRITE:
       if (arg == 0)
          return mlen * REG_SIZE;
@@ -420,7 +414,7 @@ vec4_visitor::opt_vector_float()
 
       foreach_inst_in_block_safe(vec4_instruction, inst, block) {
          int vf = -1;
-         enum brw_reg_type need_type;
+         enum brw_reg_type need_type = BRW_REGISTER_TYPE_LAST;
 
          /* Look for unconditional MOVs from an immediate with a partial
           * writemask.  Skip type-conversion MOVs other than integer 0,

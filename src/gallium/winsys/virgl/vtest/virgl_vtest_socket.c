@@ -72,6 +72,49 @@ static int virgl_block_read(int fd, void *buf, int size)
    return size;
 }
 
+static int virgl_vtest_receive_fd(int socket_fd)
+{
+    struct cmsghdr *cmsgh;
+    struct msghdr msgh = { 0 };
+    char buf[CMSG_SPACE(sizeof(int))], c;
+    struct iovec iovec;
+
+    iovec.iov_base = &c;
+    iovec.iov_len = sizeof(char);
+
+    msgh.msg_name = NULL;
+    msgh.msg_namelen = 0;
+    msgh.msg_iov = &iovec;
+    msgh.msg_iovlen = 1;
+    msgh.msg_control = buf;
+    msgh.msg_controllen = sizeof(buf);
+    msgh.msg_flags = 0;
+
+    int size = recvmsg(socket_fd, &msgh, 0);
+    if (size < 0) {
+      fprintf(stderr, "Failed with %s\n", strerror(errno));
+      return -1;
+    }
+
+    cmsgh = CMSG_FIRSTHDR(&msgh);
+    if (!cmsgh) {
+      fprintf(stderr, "No headers available\n");
+      return -1;
+    }
+
+    if (cmsgh->cmsg_level != SOL_SOCKET) {
+      fprintf(stderr, "invalid cmsg_level %d\n", cmsgh->cmsg_level);
+      return -1;
+    }
+
+    if (cmsgh->cmsg_type != SCM_RIGHTS) {
+      fprintf(stderr, "invalid cmsg_type %d\n", cmsgh->cmsg_type);
+      return -1;
+    }
+
+    return *((int *) CMSG_DATA(cmsgh));
+}
+
 static int virgl_vtest_send_init(struct virgl_vtest_winsys *vws)
 {
    uint32_t buf[VTEST_HDR_SIZE];
@@ -173,6 +216,11 @@ int virgl_vtest_connect(struct virgl_vtest_winsys *vws)
    vws->sock_fd = sock;
    virgl_vtest_send_init(vws);
    vws->protocol_version = virgl_vtest_negotiate_version(vws);
+
+   /* Version 1 is deprecated. */
+   if (vws->protocol_version == 1)
+      vws->protocol_version = 0;
+
    return 0;
 }
 
@@ -230,7 +278,8 @@ static int virgl_vtest_send_resource_create2(struct virgl_vtest_winsys *vws,
                                              uint32_t array_size,
                                              uint32_t last_level,
                                              uint32_t nr_samples,
-                                             uint32_t size)
+                                             uint32_t size,
+                                             int *out_fd)
 {
    uint32_t res_create_buf[VCMD_RES_CREATE2_SIZE], vtest_hdr[VTEST_HDR_SIZE];
 
@@ -252,6 +301,16 @@ static int virgl_vtest_send_resource_create2(struct virgl_vtest_winsys *vws,
    virgl_block_write(vws->sock_fd, &vtest_hdr, sizeof(vtest_hdr));
    virgl_block_write(vws->sock_fd, &res_create_buf, sizeof(res_create_buf));
 
+   /* Multi-sampled textures have no backing store attached. */
+   if (size == 0)
+      return 0;
+
+   *out_fd = virgl_vtest_receive_fd(vws->sock_fd);
+   if (*out_fd < 0) {
+      fprintf(stderr, "failed to get fd\n");
+      return -1;
+   }
+
    return 0;
 }
 
@@ -266,15 +325,16 @@ int virgl_vtest_send_resource_create(struct virgl_vtest_winsys *vws,
                                      uint32_t array_size,
                                      uint32_t last_level,
                                      uint32_t nr_samples,
-                                     uint32_t size)
+                                     uint32_t size,
+                                     int *out_fd)
 {
    uint32_t res_create_buf[VCMD_RES_CREATE_SIZE], vtest_hdr[VTEST_HDR_SIZE];
 
-   if (vws->protocol_version >= 1)
+   if (vws->protocol_version >= 2)
       return virgl_vtest_send_resource_create2(vws, handle, target, format,
                                                bind, width, height, depth,
                                                array_size, last_level,
-                                               nr_samples, size);
+                                               nr_samples, size, out_fd);
 
    vtest_hdr[VTEST_CMD_LEN] = VCMD_RES_CREATE_SIZE;
    vtest_hdr[VTEST_CMD_ID] = VCMD_RESOURCE_CREATE;
@@ -400,7 +460,7 @@ int virgl_vtest_send_transfer_get(struct virgl_vtest_winsys *vws,
                                   uint32_t data_size,
                                   uint32_t offset)
 {
-   if (vws->protocol_version < 1)
+   if (vws->protocol_version < 2)
       return virgl_vtest_send_transfer_cmd(vws, VCMD_TRANSFER_GET, handle,
                                            level, stride, layer_stride, box,
                                            data_size);
@@ -417,7 +477,7 @@ int virgl_vtest_send_transfer_put(struct virgl_vtest_winsys *vws,
                                   uint32_t data_size,
                                   uint32_t offset)
 {
-   if (vws->protocol_version < 1)
+   if (vws->protocol_version < 2)
       return virgl_vtest_send_transfer_cmd(vws, VCMD_TRANSFER_PUT, handle,
                                            level, stride, layer_stride, box,
                                            data_size);
@@ -438,27 +498,20 @@ int virgl_vtest_recv_transfer_get_data(struct virgl_vtest_winsys *vws,
                                        uint32_t data_size,
                                        uint32_t stride,
                                        const struct pipe_box *box,
-                                       uint32_t format, uint32_t res_stride)
+                                       uint32_t format)
 {
-   char *ptr = data;
-   uint32_t bytes_to_read = data_size;
-   char dump[1024];
+   void *line;
+   void *ptr = data;
+   int hblocks = util_format_get_nblocksy(format, box->height);
 
-   /* Copy the date from the IOV to the target resource respecting
-    * the different strides */
-   for (int y = 0 ; y < box->height && bytes_to_read > 0; ++y) {
-      uint32_t btr = MIN2(res_stride, bytes_to_read);
-      virgl_block_read(vws->sock_fd, ptr, btr);
+   line = malloc(stride);
+   while (hblocks) {
+      virgl_block_read(vws->sock_fd, line, stride);
+      memcpy(ptr, line, util_format_get_stride(format, box->width));
       ptr += stride;
-      bytes_to_read -= btr;
+      hblocks--;
    }
-
-   /* It seems that there may be extra bytes that need to be read */
-   while (bytes_to_read > 0 && bytes_to_read < data_size) {
-      uint32_t btr = MIN2(sizeof(dump), bytes_to_read);
-      virgl_block_read(vws->sock_fd, dump, btr);
-      bytes_to_read -= btr;
-   }
+   free(line);
    return 0;
 }
 

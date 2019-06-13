@@ -64,7 +64,8 @@ opt_saturate_propagation_local(fs_visitor *v, bblock_t *block)
 
       bool interfered = false;
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
-         if (regions_overlap(scan_inst->dst, scan_inst->size_written,
+         if (scan_inst->exec_size == inst->exec_size &&
+             regions_overlap(scan_inst->dst, scan_inst->size_written,
                              inst->src[0], inst->size_read(0))) {
             if (scan_inst->is_partial_write() ||
                 (scan_inst->dst.type != inst->dst.type &&

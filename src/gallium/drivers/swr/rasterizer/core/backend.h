@@ -53,7 +53,7 @@ typedef void (*PFN_CLEAR_TILES)(DRAW_CONTEXT*,
                                 SWR_RENDERTARGET_ATTACHMENT rt,
                                 uint32_t,
                                 uint32_t,
-                                DWORD[4],
+                                uint32_t[4],
                                 const SWR_RECT& rect);
 
 extern PFN_CLEAR_TILES  gClearTilesTable[NUM_SWR_FORMATS];

@@ -43,17 +43,25 @@ struct NinePixelShader9
         uint8_t version; /* (major << 4) | minor */
     } byte_code;
 
-    unsigned const_used_size; /* in bytes */
-
     uint8_t bumpenvmat_needed;
     uint16_t sampler_mask;
     uint8_t rt_mask;
+
+    boolean int_slots_used[NINE_MAX_CONST_I];
+    boolean bool_slots_used[NINE_MAX_CONST_B];
+
+    unsigned const_int_slots;
+    unsigned const_bool_slots;
+
+    struct nine_shader_constant_combination *c_combinations;
 
     uint64_t ff_key[6];
     void *ff_cso;
 
     uint64_t last_key;
     void *last_cso;
+    unsigned *last_const_ranges;
+    unsigned last_const_used_size; /* in bytes */
 
     uint64_t next_key;
 };
@@ -69,7 +77,7 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
 {
     uint16_t samplers_shadow;
     uint16_t samplers_ps1_types;
-    uint16_t projected;
+    uint8_t projected;
     uint64_t key;
     BOOL res;
 
@@ -86,23 +94,35 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
             samplers_ps1_types |= (context->texture[s].enabled ? context->texture[s].pstype : 1) << (s * 2);
         }
         /* Note: For ps 1.X, only samplers 0 1 2 and 3 are available (except 1.4 where 4 and 5 are available).
-         * Thus there is no overflow of samplers_ps1_types. */
-        key |= samplers_ps1_types << 16;
+         * ps < 1.4: samplers_shadow 4b, samplers_ps1_types 8b, projected 8b
+         * ps 1.4: samplers_shadow 6b, samplers_ps1_types 12b
+         * Tot ps X.X samplers_shadow + extra: 20b */
+        assert((ps->byte_code.version < 0x14 && !(ps->sampler_mask & 0xFFF0)) || !(ps->sampler_mask & 0xFFC0));
+
+        if (unlikely(ps->byte_code.version < 0x14)) {
+            key |= samplers_ps1_types << 4;
+            projected = nine_ff_get_projected_key_programmable(context);
+            key |= ((uint64_t) projected) << 12;
+        } else {
+            key |= samplers_ps1_types << 6;
+        }
     }
 
     if (ps->byte_code.version < 0x30) {
-        key |= ((uint64_t)context->rs[D3DRS_FOGENABLE]) << 32;
-        key |= ((uint64_t)context->rs[D3DRS_FOGTABLEMODE]) << 33;
+        key |= ((uint64_t)context->rs[D3DRS_FOGENABLE]) << 20;
+        key |= ((uint64_t)context->rs[D3DRS_FOGTABLEMODE]) << 21;
     }
 
     /* centroid interpolation automatically used for color ps inputs */
     if (context->rt[0]->base.info.nr_samples)
-        key |= ((uint64_t)1) << 34;
+        key |= ((uint64_t)1) << 22;
 
-    if (unlikely(ps->byte_code.version < 0x14)) {
-        projected = nine_ff_get_projected_key(context);
-        key |= ((uint64_t) projected) << 48;
-    }
+    if ((ps->const_int_slots > 0 || ps->const_bool_slots > 0) && context->inline_constants)
+        key |= ((uint64_t)nine_shader_constant_combination_key(&ps->c_combinations,
+                                                               ps->int_slots_used,
+                                                               ps->bool_slots_used,
+                                                               (void *)context->ps_const_i,
+                                                               context->ps_const_b)) << 24;
 
     res = ps->last_key != key;
     if (res)
@@ -111,7 +131,9 @@ NinePixelShader9_UpdateKey( struct NinePixelShader9 *ps,
 }
 
 void *
-NinePixelShader9_GetVariant( struct NinePixelShader9 *ps );
+NinePixelShader9_GetVariant( struct NinePixelShader9 *ps,
+                             unsigned **const_ranges,
+                             unsigned *const_used_size );
 
 /*** public ***/
 

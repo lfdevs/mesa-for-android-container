@@ -303,6 +303,7 @@ void si_emit_streamout_end(struct si_context *sctx)
 		 * buffer bound. This ensures that the primitives-emitted query
 		 * won't increment. */
 		radeon_set_context_reg(cs, R_028AD0_VGT_STRMOUT_BUFFER_SIZE_0 + 16*i, 0);
+		sctx->context_roll = true;
 
 		t[i]->buf_filled_size_valid = true;
 	}

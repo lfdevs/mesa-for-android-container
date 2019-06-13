@@ -94,6 +94,10 @@ void r600_emit_alphatest_state(struct r600_context *rctx, struct r600_atom *atom
 static void r600_memory_barrier(struct pipe_context *ctx, unsigned flags)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
+
+	if (!(flags & ~PIPE_BARRIER_UPDATE))
+		return;
+
 	if (flags & PIPE_BARRIER_CONSTANT_BUFFER)
 		rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE;
 

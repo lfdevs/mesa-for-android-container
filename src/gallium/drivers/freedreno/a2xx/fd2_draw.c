@@ -551,22 +551,20 @@ fd2_clear(struct fd_context *ctx, unsigned buffers,
 
 		if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
 			uint32_t clear_mask, depth_clear;
-			if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
-				switch (fd_pipe2depth(fb->zsbuf->format)) {
-				case DEPTHX_24_8:
-					clear_mask = ((buffers & PIPE_CLEAR_DEPTH) ? 0xe : 0) |
-						((buffers & PIPE_CLEAR_STENCIL) ? 0x1 : 0);
-					depth_clear = (((uint32_t)(0xffffff * depth)) << 8) |
-						(stencil & 0xff);
-					break;
-				case DEPTHX_16:
-					clear_mask = 0xf;
-					depth_clear = (uint32_t)(0xffffffff * depth);
-					break;
-				default:
-					debug_assert(0);
-					break;
-				}
+			switch (fd_pipe2depth(fb->zsbuf->format)) {
+			case DEPTHX_24_8:
+				clear_mask = ((buffers & PIPE_CLEAR_DEPTH) ? 0xe : 0) |
+					((buffers & PIPE_CLEAR_STENCIL) ? 0x1 : 0);
+				depth_clear = (((uint32_t)(0xffffff * depth)) << 8) |
+					(stencil & 0xff);
+				break;
+			case DEPTHX_16:
+				clear_mask = 0xf;
+				depth_clear = (uint32_t)(0xffffffff * depth);
+				break;
+			default:
+				unreachable("invalid depth");
+				break;
 			}
 
 			OUT_PKT3(ring, CP_SET_CONSTANT, 2);

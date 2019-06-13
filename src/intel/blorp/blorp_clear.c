@@ -63,8 +63,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, NULL);
-   b.shader->info.name = ralloc_strdup(b.shader, "BLORP-clear");
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, "BLORP-clear");
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());
@@ -75,7 +74,6 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
          nir_variable_create(b.shader, nir_var_shader_in,
                              glsl_vec4_type(), "gl_FragCoord");
       frag_coord->data.location = VARYING_SLOT_POS;
-      frag_coord->data.origin_upper_left = true;
 
       nir_ssa_def *pos = nir_f2i32(&b, nir_load_var(&b, frag_coord));
       nir_ssa_def *comp = nir_umod(&b, nir_channel(&b, pos, 0),
@@ -146,8 +144,7 @@ blorp_params_get_layer_offset_vs(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_VERTEX, NULL);
-   b.shader->info.name = ralloc_strdup(b.shader, "BLORP-layer-offset-vs");
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_VERTEX, "BLORP-layer-offset-vs");
 
    const struct glsl_type *uvec4_type = glsl_vector_type(GLSL_TYPE_UINT, 4);
 
@@ -364,7 +361,7 @@ blorp_fast_clear(struct blorp_batch *batch,
    batch->blorp->exec(batch, &params);
 }
 
-static union isl_color_value
+union isl_color_value
 swizzle_color_value(union isl_color_value src, struct isl_swizzle swizzle)
 {
    union isl_color_value dst = { .u32 = { 0, } };
@@ -957,8 +954,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
    void *mem_ctx = ralloc_context(NULL);
 
    nir_builder b;
-   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, NULL);
-   b.shader->info.name = ralloc_strdup(b.shader, "BLORP-mcs-partial-resolve");
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT,
+                         "BLORP-mcs-partial-resolve");
 
    nir_variable *v_color =
       BLORP_CREATE_NIR_INPUT(b.shader, clear_color, glsl_vec4_type());

@@ -443,10 +443,11 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		DBG("%p: rendering non-draw", batch);
 		ctx->stats.batch_nondraw++;
 	} else if (sysmem) {
-		DBG("%p: rendering sysmem %ux%u (%s/%s)",
+		DBG("%p: rendering sysmem %ux%u (%s/%s), num_draws=%u",
 			batch, pfb->width, pfb->height,
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
-			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
+			util_format_short_name(pipe_surface_format(pfb->zsbuf)),
+			batch->num_draws);
 		if (ctx->query_prepare)
 			ctx->query_prepare(batch, 1);
 		render_sysmem(batch);

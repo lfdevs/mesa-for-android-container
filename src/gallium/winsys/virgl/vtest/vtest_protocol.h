@@ -24,7 +24,7 @@
 #define VTEST_PROTOCOL
 
 #define VTEST_DEFAULT_SOCKET_NAME "/tmp/.virgl_test"
-#define VTEST_PROTOCOL_VERSION 1
+#define VTEST_PROTOCOL_VERSION 2
 
 /* 32-bit length field */
 /* 32-bit cmd field */

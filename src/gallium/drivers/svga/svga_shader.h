@@ -135,6 +135,9 @@ struct svga_shader_variant
    /** Parameters used to generate this variant */
    struct svga_compile_key key;
 
+   /* svga shader type */
+   SVGA3dShaderType type;
+
    /* Compiled shader tokens:
     */
    const unsigned *tokens;
@@ -274,7 +277,6 @@ svga_search_shader_token_key(struct svga_shader *shader,
 
 enum pipe_error
 svga_define_shader(struct svga_context *svga,
-                   SVGA3dShaderType type,
                    struct svga_shader_variant *variant);
 
 enum pipe_error
@@ -283,11 +285,10 @@ svga_set_shader(struct svga_context *svga,
                 struct svga_shader_variant *variant);
 
 struct svga_shader_variant *
-svga_new_shader_variant(struct svga_context *svga);
+svga_new_shader_variant(struct svga_context *svga, enum pipe_shader_type type);
 
 void
 svga_destroy_shader_variant(struct svga_context *svga,
-                            SVGA3dShaderType type,
                             struct svga_shader_variant *variant);
 
 enum pipe_error

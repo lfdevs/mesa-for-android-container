@@ -78,9 +78,6 @@ struct fd6_context {
 	 */
 	uint16_t fsaturate_s, fsaturate_t, fsaturate_r;
 
-	/* bitmask of samplers which need astc srgb workaround: */
-	uint16_t vastc_srgb, fastc_srgb;
-
 	/* some state changes require a different shader variant.  Keep
 	 * track of this so we know when we need to re-emit shader state
 	 * due to variant change.  See fixup_shader_state()

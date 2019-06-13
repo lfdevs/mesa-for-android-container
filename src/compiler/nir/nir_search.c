@@ -30,9 +30,12 @@
 #include "nir_builder.h"
 #include "util/half_float.h"
 
+#define NIR_SEARCH_MAX_COMM_OPS 4
+
 struct match_state {
    bool inexact_match;
    bool has_exact_alu;
+   uint8_t comm_op_direction;
    unsigned variables_seen;
    nir_alu_src variables[NIR_SEARCH_MAX_VARIABLES];
 };
@@ -131,6 +134,50 @@ nir_op_matches_search_op(nir_op nop, uint16_t sop)
 
 #undef MATCH_FCONV_CASE
 #undef MATCH_ICONV_CASE
+#undef MATCH_BCONV_CASE
+}
+
+uint16_t
+nir_search_op_for_nir_op(nir_op nop)
+{
+#define MATCH_FCONV_CASE(op) \
+   case nir_op_##op##16: \
+   case nir_op_##op##32: \
+   case nir_op_##op##64: \
+      return nir_search_op_##op;
+
+#define MATCH_ICONV_CASE(op) \
+   case nir_op_##op##8: \
+   case nir_op_##op##16: \
+   case nir_op_##op##32: \
+   case nir_op_##op##64: \
+      return nir_search_op_##op;
+
+#define MATCH_BCONV_CASE(op) \
+   case nir_op_##op##1: \
+   case nir_op_##op##32: \
+      return nir_search_op_##op;
+
+
+   switch (nop) {
+   MATCH_FCONV_CASE(i2f)
+   MATCH_FCONV_CASE(u2f)
+   MATCH_FCONV_CASE(f2f)
+   MATCH_ICONV_CASE(f2u)
+   MATCH_ICONV_CASE(f2i)
+   MATCH_ICONV_CASE(u2u)
+   MATCH_ICONV_CASE(i2i)
+   MATCH_FCONV_CASE(b2f)
+   MATCH_ICONV_CASE(b2i)
+   MATCH_BCONV_CASE(i2b)
+   MATCH_BCONV_CASE(f2b)
+   default:
+      return nop;
+   }
+
+#undef MATCH_FCONV_CASE
+#undef MATCH_ICONV_CASE
+#undef MATCH_BCONV_CASE
 }
 
 static nir_op
@@ -184,6 +231,7 @@ nir_op_for_search_op(uint16_t sop, unsigned bit_size)
 
 #undef RET_FCONV_CASE
 #undef RET_ICONV_CASE
+#undef RET_BCONV_CASE
 }
 
 static bool
@@ -200,8 +248,7 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
     * replacing so those reads will happen after the original reads and may
     * not be valid if they're register reads.
     */
-   if (!instr->src[src].src.is_ssa)
-      return false;
+   assert(instr->src[src].src.is_ssa);
 
    /* If the source is an explicitly sized source, then we need to reset
     * both the number of components and the swizzle.
@@ -350,41 +397,25 @@ match_expression(const nir_search_expression *expr, nir_alu_instr *instr,
       }
    }
 
-   /* Stash off the current variables_seen bitmask.  This way we can
-    * restore it prior to matching in the commutative case below.
+   /* If this is a commutative expression and it's one of the first few, look
+    * up its direction for the current search operation.  We'll use that value
+    * to possibly flip the sources for the match.
     */
-   unsigned variables_seen_stash = state->variables_seen;
+   unsigned comm_op_flip =
+      (expr->comm_expr_idx >= 0 &&
+       expr->comm_expr_idx < NIR_SEARCH_MAX_COMM_OPS) ?
+      ((state->comm_op_direction >> expr->comm_expr_idx) & 1) : 0;
 
    bool matched = true;
    for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
-      if (!match_value(expr->srcs[i], instr, i, num_components,
-                       swizzle, state)) {
+      if (!match_value(expr->srcs[i], instr, i ^ comm_op_flip,
+                       num_components, swizzle, state)) {
          matched = false;
          break;
       }
    }
 
-   if (matched)
-      return true;
-
-   if (nir_op_infos[instr->op].algebraic_properties & NIR_OP_IS_COMMUTATIVE) {
-      assert(nir_op_infos[instr->op].num_inputs == 2);
-
-      /* Restore the variables_seen bitmask.  If we don't do this, then we
-       * could end up with an erroneous failure due to variables found in the
-       * first match attempt above not matching those in the second.
-       */
-      state->variables_seen = variables_seen_stash;
-
-      if (!match_value(expr->srcs[0], instr, 1, num_components,
-                       swizzle, state))
-         return false;
-
-      return match_value(expr->srcs[1], instr, 0, num_components,
-                         swizzle, state);
-   } else {
-      return false;
-   }
+   return matched;
 }
 
 static unsigned
@@ -499,6 +530,73 @@ construct_value(nir_builder *build,
    }
 }
 
+MAYBE_UNUSED static void dump_value(const nir_search_value *val)
+{
+   switch (val->type) {
+   case nir_search_value_constant: {
+      const nir_search_constant *sconst = nir_search_value_as_constant(val);
+      switch (sconst->type) {
+      case nir_type_float:
+         printf("%f", sconst->data.d);
+         break;
+      case nir_type_int:
+         printf("%"PRId64, sconst->data.i);
+         break;
+      case nir_type_uint:
+         printf("0x%"PRIx64, sconst->data.u);
+         break;
+      default:
+         unreachable("bad const type");
+      }
+      break;
+   }
+
+   case nir_search_value_variable: {
+      const nir_search_variable *var = nir_search_value_as_variable(val);
+      if (var->is_constant)
+         printf("#");
+      printf("%c", var->variable + 'a');
+      break;
+   }
+
+   case nir_search_value_expression: {
+      const nir_search_expression *expr = nir_search_value_as_expression(val);
+      printf("(");
+      if (expr->inexact)
+         printf("~");
+      switch (expr->opcode) {
+#define CASE(n) \
+      case nir_search_op_##n: printf(#n); break;
+      CASE(f2b)
+      CASE(b2f)
+      CASE(b2i)
+      CASE(i2b)
+      CASE(i2i)
+      CASE(f2i)
+      CASE(i2f)
+#undef CASE
+      default:
+         printf("%s", nir_op_infos[expr->opcode].name);
+      }
+
+      unsigned num_srcs = 1;
+      if (expr->opcode <= nir_last_opcode)
+         num_srcs = nir_op_infos[expr->opcode].num_inputs;
+
+      for (unsigned i = 0; i < num_srcs; i++) {
+         printf(" ");
+         dump_value(expr->srcs[i]);
+      }
+
+      printf(")");
+      break;
+   }
+   }
+
+   if (val->bit_size > 0)
+      printf("@%d", val->bit_size);
+}
+
 nir_ssa_def *
 nir_replace_instr(nir_builder *build, nir_alu_instr *instr,
                   const nir_search_expression *search,
@@ -514,11 +612,35 @@ nir_replace_instr(nir_builder *build, nir_alu_instr *instr,
    struct match_state state;
    state.inexact_match = false;
    state.has_exact_alu = false;
-   state.variables_seen = 0;
 
-   if (!match_expression(search, instr, instr->dest.dest.ssa.num_components,
-                         swizzle, &state))
+   unsigned comm_expr_combinations =
+      1 << MIN2(search->comm_exprs, NIR_SEARCH_MAX_COMM_OPS);
+
+   bool found = false;
+   for (unsigned comb = 0; comb < comm_expr_combinations; comb++) {
+      /* The bitfield of directions is just the current iteration.  Hooray for
+       * binary.
+       */
+      state.comm_op_direction = comb;
+      state.variables_seen = 0;
+
+      if (match_expression(search, instr,
+                           instr->dest.dest.ssa.num_components,
+                           swizzle, &state)) {
+         found = true;
+         break;
+      }
+   }
+   if (!found)
       return NULL;
+
+#if 0
+   printf("matched: ");
+   dump_value(&search->value);
+   printf(" -> ");
+   dump_value(replace);
+   printf(" ssa_%d\n", instr->dest.dest.ssa.index);
+#endif
 
    build->cursor = nir_before_instr(&instr->instr);
 

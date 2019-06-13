@@ -48,6 +48,8 @@ struct radeon_info {
 
 	/* Device info. */
 	const char                  *name;
+	const char                  *marketing_name;
+	bool                        is_pro_graphics;
 	uint32_t                    pci_id;
 	enum radeon_family          family;
 	enum chip_class             chip_class;
@@ -55,6 +57,12 @@ struct radeon_info {
 	uint32_t                    num_sdma_rings;
 	uint32_t                    clock_crystal_freq;
 	uint32_t                    tcc_cache_line_size;
+
+	/* There are 2 display DCC codepaths, because display expects unaligned DCC. */
+	/* Disable RB and pipe alignment to skip the retile blit. (1 RB chips only) */
+	bool                        use_display_dcc_unaligned;
+	/* Allocate both aligned and unaligned DCC and use the retile blit. */
+	bool                        use_display_dcc_with_retile_blit;
 
 	/* Memory info. */
 	uint32_t                    pte_fragment_size;
@@ -170,6 +178,12 @@ static inline unsigned ac_get_max_simd_waves(enum radeon_family family)
 	default:
 		return 10;
 	}
+}
+
+static inline uint32_t
+ac_get_num_physical_sgprs(enum chip_class chip_class)
+{
+	return chip_class >= VI ? 800 : 512;
 }
 
 #ifdef __cplusplus

@@ -415,7 +415,7 @@ SIMD_WRAPPER_2(unpacklo_ps);
 //-----------------------------------------------------------------------
 // Load / store operations
 //-----------------------------------------------------------------------
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         i32gather_ps(float const* p, Integer idx) // return *(float*)(((int8*)p) + (idx * ScaleT))
 {
@@ -462,7 +462,7 @@ static SIMDINLINE Integer SIMDCALL
 }
 
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
-template <ScaleFactor ScaleT>
+template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
                         mask_i32gather_ps(Float old, float const* p, Integer idx, Float mask)
 {

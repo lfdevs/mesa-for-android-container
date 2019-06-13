@@ -28,6 +28,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#ifdef _MSC_VER
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
 
 #include "util/ralloc.h"
 #include "blob.h"

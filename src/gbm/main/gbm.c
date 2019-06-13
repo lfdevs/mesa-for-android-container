@@ -490,17 +490,19 @@ gbm_bo_create_with_modifiers(struct gbm_device *gbm,
 
    return gbm->bo_create(gbm, width, height, format, 0, modifiers, count);
 }
+
 /**
- * Create a gbm buffer object from an foreign object
+ * Create a gbm buffer object from a foreign object
  *
  * This function imports a foreign object and creates a new gbm bo for it.
- * This enabled using the foreign object with a display API such as KMS.
- * Currently three types of foreign objects are supported, indicated by the type
+ * This enables using the foreign object with a display API such as KMS.
+ * Currently these types of foreign objects are supported, indicated by the type
  * argument:
  *
  *   GBM_BO_IMPORT_WL_BUFFER
  *   GBM_BO_IMPORT_EGL_IMAGE
  *   GBM_BO_IMPORT_FD
+ *   GBM_BO_IMPORT_FD_MODIFIER
  *
  * The gbm bo shares the underlying pixels but its life-time is
  * independent of the foreign object.

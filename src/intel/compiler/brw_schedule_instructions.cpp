@@ -367,49 +367,14 @@ schedule_node::set_latency_gen7(bool is_haswell)
       latency = 50;
       break;
 
-   case SHADER_OPCODE_UNTYPED_ATOMIC:
-   case SHADER_OPCODE_UNTYPED_ATOMIC_FLOAT:
-   case SHADER_OPCODE_TYPED_ATOMIC:
-      /* Test code:
-       *   mov(8)    g112<1>ud       0x00000000ud       { align1 WE_all 1Q };
-       *   mov(1)    g112.7<1>ud     g1.7<0,1,0>ud      { align1 WE_all };
-       *   mov(8)    g113<1>ud       0x00000000ud       { align1 WE_normal 1Q };
-       *   send(8)   g4<1>ud         g112<8,8,1>ud
-       *             data (38, 5, 6) mlen 2 rlen 1      { align1 WE_normal 1Q };
-       *
-       * Running it 100 times as fragment shader on a 128x128 quad
-       * gives an average latency of 13867 cycles per atomic op,
-       * standard deviation 3%.  Note that this is a rather
-       * pessimistic estimate, the actual latency in cases with few
-       * collisions between threads and favorable pipelining has been
-       * seen to be reduced by a factor of 100.
-       */
+   case VEC4_OPCODE_UNTYPED_ATOMIC:
+      /* See GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP */
       latency = 14000;
       break;
 
-   case SHADER_OPCODE_UNTYPED_SURFACE_READ:
-   case SHADER_OPCODE_UNTYPED_SURFACE_WRITE:
-   case SHADER_OPCODE_TYPED_SURFACE_READ:
-   case SHADER_OPCODE_TYPED_SURFACE_WRITE:
-      /* Test code:
-       *   mov(8)    g112<1>UD       0x00000000UD       { align1 WE_all 1Q };
-       *   mov(1)    g112.7<1>UD     g1.7<0,1,0>UD      { align1 WE_all };
-       *   mov(8)    g113<1>UD       0x00000000UD       { align1 WE_normal 1Q };
-       *   send(8)   g4<1>UD         g112<8,8,1>UD
-       *             data (38, 6, 5) mlen 2 rlen 1      { align1 WE_normal 1Q };
-       *   .
-       *   . [repeats 8 times]
-       *   .
-       *   mov(8)    g112<1>UD       0x00000000UD       { align1 WE_all 1Q };
-       *   mov(1)    g112.7<1>UD     g1.7<0,1,0>UD      { align1 WE_all };
-       *   mov(8)    g113<1>UD       0x00000000UD       { align1 WE_normal 1Q };
-       *   send(8)   g4<1>UD         g112<8,8,1>UD
-       *             data (38, 6, 5) mlen 2 rlen 1      { align1 WE_normal 1Q };
-       *
-       * Running it 100 times as fragment shader on a 128x128 quad
-       * gives an average latency of 583 cycles per surface read,
-       * standard deviation 0.9%.
-       */
+   case VEC4_OPCODE_UNTYPED_SURFACE_READ:
+   case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
+      /* See also GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ */
       latency = is_haswell ? 300 : 600;
       break;
 
@@ -464,13 +429,44 @@ schedule_node::set_latency_gen7(bool is_haswell)
 
          case GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ:
          case GEN7_DATAPORT_DC_UNTYPED_SURFACE_WRITE:
-            /* See also SHADER_OPCODE_UNTYPED_SURFACE_READ */
+            /* Test code:
+             *   mov(8)    g112<1>UD       0x00000000UD       { align1 WE_all 1Q };
+             *   mov(1)    g112.7<1>UD     g1.7<0,1,0>UD      { align1 WE_all };
+             *   mov(8)    g113<1>UD       0x00000000UD       { align1 WE_normal 1Q };
+             *   send(8)   g4<1>UD         g112<8,8,1>UD
+             *             data (38, 6, 5) mlen 2 rlen 1      { align1 WE_normal 1Q };
+             *   .
+             *   . [repeats 8 times]
+             *   .
+             *   mov(8)    g112<1>UD       0x00000000UD       { align1 WE_all 1Q };
+             *   mov(1)    g112.7<1>UD     g1.7<0,1,0>UD      { align1 WE_all };
+             *   mov(8)    g113<1>UD       0x00000000UD       { align1 WE_normal 1Q };
+             *   send(8)   g4<1>UD         g112<8,8,1>UD
+             *             data (38, 6, 5) mlen 2 rlen 1      { align1 WE_normal 1Q };
+             *
+             * Running it 100 times as fragment shader on a 128x128 quad
+             * gives an average latency of 583 cycles per surface read,
+             * standard deviation 0.9%.
+             */
             assert(!is_haswell);
             latency = 600;
             break;
 
          case GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP:
-            /* See also SHADER_OPCODE_UNTYPED_ATOMIC */
+            /* Test code:
+             *   mov(8)    g112<1>ud       0x00000000ud       { align1 WE_all 1Q };
+             *   mov(1)    g112.7<1>ud     g1.7<0,1,0>ud      { align1 WE_all };
+             *   mov(8)    g113<1>ud       0x00000000ud       { align1 WE_normal 1Q };
+             *   send(8)   g4<1>ud         g112<8,8,1>ud
+             *             data (38, 5, 6) mlen 2 rlen 1      { align1 WE_normal 1Q };
+             *
+             * Running it 100 times as fragment shader on a 128x128 quad
+             * gives an average latency of 13867 cycles per atomic op,
+             * standard deviation 3%.  Note that this is a rather
+             * pessimistic estimate, the actual latency in cases with few
+             * collisions between threads and favorable pipelining has been
+             * seen to be reduced by a factor of 100.
+             */
             assert(!is_haswell);
             latency = 14000;
             break;
@@ -486,7 +482,11 @@ schedule_node::set_latency_gen7(bool is_haswell)
          case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE:
          case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ:
          case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE:
-            /* See also SHADER_OPCODE_UNTYPED_SURFACE_READ */
+         case GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE:
+         case GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ:
+         case GEN8_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE:
+         case GEN9_DATAPORT_DC_PORT1_A64_SCATTERED_READ:
+            /* See also GEN7_DATAPORT_DC_UNTYPED_SURFACE_READ */
             latency = 300;
             break;
 
@@ -495,7 +495,9 @@ schedule_node::set_latency_gen7(bool is_haswell)
          case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
          case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
          case GEN9_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP:
-            /* See also SHADER_OPCODE_UNTYPED_ATOMIC */
+         case GEN8_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP:
+         case GEN9_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP:
+            /* See also GEN7_DATAPORT_DC_UNTYPED_ATOMIC_OP */
             latency = 14000;
             break;
 

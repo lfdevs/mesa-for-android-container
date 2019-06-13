@@ -101,6 +101,21 @@ v3d_invalidate_caches(struct v3d_hw *v3d)
         v3d_invalidate_slices(v3d);
 }
 
+static uint32_t g_gmp_ofs;
+static void
+v3d_reload_gmp(struct v3d_hw *v3d)
+{
+        /* Completely reset the GMP. */
+        V3D_WRITE(V3D_GMP_0_CFG,
+                  V3D_GMP_0_CFG_PROTENABLE_SET);
+        V3D_WRITE(V3D_GMP_0_TABLE_ADDR, g_gmp_ofs);
+        V3D_WRITE(V3D_GMP_0_CLEAR_LOAD, ~0);
+        while (V3D_READ(V3D_GMP_0_STATUS) &
+               V3D_GMP_0_STATUS_CFG_BUSY_SET) {
+                ;
+        }
+}
+
 int
 v3dX(simulator_submit_tfu_ioctl)(struct v3d_hw *v3d,
                                  struct drm_v3d_submit_tfu *args)
@@ -167,6 +182,18 @@ v3d_isr(uint32_t hub_status)
         /* Check the per-core bits */
         if (hub_status & (1 << 0)) {
                 uint32_t core_status = V3D_READ(V3D_CTL_0_INT_STS);
+                V3D_WRITE(V3D_CTL_0_INT_CLR, core_status);
+
+                if (core_status & V3D_CTL_0_INT_STS_INT_OUTOMEM_SET) {
+                        uint32_t size = 256 * 1024;
+                        uint32_t offset = v3d_simulator_get_spill(size);
+
+                        v3d_reload_gmp(v3d);
+
+                        V3D_WRITE(V3D_PTB_0_BPOA, offset);
+                        V3D_WRITE(V3D_PTB_0_BPOS, size);
+                        return;
+                }
 
                 if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
                         fprintf(stderr, "GMP violation at 0x%08x\n",
@@ -198,7 +225,8 @@ v3dX(simulator_init_regs)(struct v3d_hw *v3d)
         V3D_WRITE(V3D_CTL_0_MISCCFG, V3D_CTL_1_MISCCFG_OVRTMUOUT_SET);
 #endif
 
-        uint32_t core_interrupts = V3D_CTL_0_INT_STS_INT_GMPV_SET;
+        uint32_t core_interrupts = (V3D_CTL_0_INT_STS_INT_GMPV_SET |
+                                    V3D_CTL_0_INT_STS_INT_OUTOMEM_SET);
         V3D_WRITE(V3D_CTL_0_INT_MSK_SET, ~core_interrupts);
         V3D_WRITE(V3D_CTL_0_INT_MSK_CLR, core_interrupts);
 
@@ -211,15 +239,8 @@ v3dX(simulator_submit_cl_ioctl)(struct v3d_hw *v3d,
                                 struct drm_v3d_submit_cl *submit,
                                 uint32_t gmp_ofs)
 {
-        /* Completely reset the GMP. */
-        V3D_WRITE(V3D_GMP_0_CFG,
-                  V3D_GMP_0_CFG_PROTENABLE_SET);
-        V3D_WRITE(V3D_GMP_0_TABLE_ADDR, gmp_ofs);
-        V3D_WRITE(V3D_GMP_0_CLEAR_LOAD, ~0);
-        while (V3D_READ(V3D_GMP_0_STATUS) &
-               V3D_GMP_0_STATUS_CFG_BUSY_SET) {
-                ;
-        }
+        g_gmp_ofs = gmp_ofs;
+        v3d_reload_gmp(v3d);
 
         v3d_invalidate_caches(v3d);
 

@@ -23,199 +23,9 @@
 
 #include "brw_context.h"
 #include "brw_defines.h"
+#include "brw_state.h"
 #include "intel_batchbuffer.h"
 #include "intel_fbo.h"
-
-/**
- * According to the latest documentation, any PIPE_CONTROL with the
- * "Command Streamer Stall" bit set must also have another bit set,
- * with five different options:
- *
- *  - Render Target Cache Flush
- *  - Depth Cache Flush
- *  - Stall at Pixel Scoreboard
- *  - Post-Sync Operation
- *  - Depth Stall
- *  - DC Flush Enable
- *
- * I chose "Stall at Pixel Scoreboard" since we've used it effectively
- * in the past, but the choice is fairly arbitrary.
- */
-static void
-gen8_add_cs_stall_workaround_bits(uint32_t *flags)
-{
-   uint32_t wa_bits = PIPE_CONTROL_RENDER_TARGET_FLUSH |
-                      PIPE_CONTROL_DEPTH_CACHE_FLUSH |
-                      PIPE_CONTROL_WRITE_IMMEDIATE |
-                      PIPE_CONTROL_WRITE_DEPTH_COUNT |
-                      PIPE_CONTROL_WRITE_TIMESTAMP |
-                      PIPE_CONTROL_STALL_AT_SCOREBOARD |
-                      PIPE_CONTROL_DEPTH_STALL |
-                      PIPE_CONTROL_DATA_CACHE_FLUSH;
-
-   /* If we're doing a CS stall, and don't already have one of the
-    * workaround bits set, add "Stall at Pixel Scoreboard."
-    */
-   if ((*flags & PIPE_CONTROL_CS_STALL) != 0 && (*flags & wa_bits) == 0)
-      *flags |= PIPE_CONTROL_STALL_AT_SCOREBOARD;
-}
-
-/* Implement the WaCsStallAtEveryFourthPipecontrol workaround on IVB, BYT:
- *
- * "Every 4th PIPE_CONTROL command, not counting the PIPE_CONTROL with
- *  only read-cache-invalidate bit(s) set, must have a CS_STALL bit set."
- *
- * Note that the kernel does CS stalls between batches, so we only need
- * to count them within a batch.
- */
-static uint32_t
-gen7_cs_stall_every_four_pipe_controls(struct brw_context *brw, uint32_t flags)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   if (devinfo->gen == 7 && !devinfo->is_haswell) {
-      if (flags & PIPE_CONTROL_CS_STALL) {
-         /* If we're doing a CS stall, reset the counter and carry on. */
-         brw->pipe_controls_since_last_cs_stall = 0;
-         return 0;
-      }
-
-      /* If this is the fourth pipe control without a CS stall, do one now. */
-      if (++brw->pipe_controls_since_last_cs_stall == 4) {
-         brw->pipe_controls_since_last_cs_stall = 0;
-         return PIPE_CONTROL_CS_STALL;
-      }
-   }
-   return 0;
-}
-
-/* #1130 from gen10 workarounds page in h/w specs:
- * "Enable Depth Stall on every Post Sync Op if Render target Cache Flush is
- *  not enabled in same PIPE CONTROL and Enable Pixel score board stall if
- *  Render target cache flush is enabled."
- *
- * Applicable to CNL B0 and C0 steppings only.
- */
-static void
-gen10_add_rcpfe_workaround_bits(uint32_t *flags)
-{
-   if (*flags & PIPE_CONTROL_RENDER_TARGET_FLUSH) {
-      *flags = *flags | PIPE_CONTROL_STALL_AT_SCOREBOARD;
-   } else if (*flags &
-             (PIPE_CONTROL_WRITE_IMMEDIATE |
-              PIPE_CONTROL_WRITE_DEPTH_COUNT |
-              PIPE_CONTROL_WRITE_TIMESTAMP)) {
-      *flags = *flags | PIPE_CONTROL_DEPTH_STALL;
-   }
-}
-
-static void
-brw_emit_pipe_control(struct brw_context *brw, uint32_t flags,
-                      struct brw_bo *bo, uint32_t offset, uint64_t imm)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   if (devinfo->gen >= 8) {
-      if (devinfo->gen == 8)
-         gen8_add_cs_stall_workaround_bits(&flags);
-
-      if (flags & PIPE_CONTROL_VF_CACHE_INVALIDATE) {
-         if (devinfo->gen == 9) {
-            /* The PIPE_CONTROL "VF Cache Invalidation Enable" bit description
-             * lists several workarounds:
-             *
-             *    "Project: SKL, KBL, BXT
-             *
-             *     If the VF Cache Invalidation Enable is set to a 1 in a
-             *     PIPE_CONTROL, a separate Null PIPE_CONTROL, all bitfields
-             *     sets to 0, with the VF Cache Invalidation Enable set to 0
-             *     needs to be sent prior to the PIPE_CONTROL with VF Cache
-             *     Invalidation Enable set to a 1."
-             */
-            brw_emit_pipe_control_flush(brw, 0);
-         }
-
-         if (devinfo->gen >= 9) {
-            /* THE PIPE_CONTROL "VF Cache Invalidation Enable" docs continue:
-             *
-             *    "Project: BDW+
-             *
-             *     When VF Cache Invalidate is set “Post Sync Operation” must
-             *     be enabled to “Write Immediate Data” or “Write PS Depth
-             *     Count” or “Write Timestamp”."
-             *
-             * If there's a BO, we're already doing some kind of write.
-             * If not, add a write to the workaround BO.
-             *
-             * XXX: This causes GPU hangs on Broadwell, so restrict it to
-             *      Gen9+ for now...see this bug for more information:
-             *      https://bugs.freedesktop.org/show_bug.cgi?id=103787
-             */
-            if (!bo) {
-               flags |= PIPE_CONTROL_WRITE_IMMEDIATE;
-               bo = brw->workaround_bo;
-            }
-         }
-      }
-
-      if (devinfo->gen == 10)
-         gen10_add_rcpfe_workaround_bits(&flags);
-
-      BEGIN_BATCH(6);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (6 - 2));
-      OUT_BATCH(flags);
-      if (bo) {
-         OUT_RELOC64(bo, RELOC_WRITE, offset);
-      } else {
-         OUT_BATCH(0);
-         OUT_BATCH(0);
-      }
-      OUT_BATCH(imm);
-      OUT_BATCH(imm >> 32);
-      ADVANCE_BATCH();
-   } else if (devinfo->gen >= 6) {
-      if (devinfo->gen == 6 &&
-          (flags & PIPE_CONTROL_RENDER_TARGET_FLUSH)) {
-         /* Hardware workaround: SNB B-Spec says:
-          *
-          *   [Dev-SNB{W/A}]: Before a PIPE_CONTROL with Write Cache Flush
-          *   Enable = 1, a PIPE_CONTROL with any non-zero post-sync-op is
-          *   required.
-          */
-         brw_emit_post_sync_nonzero_flush(brw);
-      }
-
-      flags |= gen7_cs_stall_every_four_pipe_controls(brw, flags);
-
-      /* PPGTT/GGTT is selected by DW2 bit 2 on Sandybridge, but DW1 bit 24
-       * on later platforms.  We always use PPGTT on Gen7+.
-       */
-      unsigned gen6_gtt = devinfo->gen == 6 ? PIPE_CONTROL_GLOBAL_GTT_WRITE : 0;
-
-      BEGIN_BATCH(5);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | (5 - 2));
-      OUT_BATCH(flags);
-      if (bo) {
-         OUT_RELOC(bo, RELOC_WRITE | RELOC_NEEDS_GGTT, gen6_gtt | offset);
-      } else {
-         OUT_BATCH(0);
-      }
-      OUT_BATCH(imm);
-      OUT_BATCH(imm >> 32);
-      ADVANCE_BATCH();
-   } else {
-      BEGIN_BATCH(4);
-      OUT_BATCH(_3DSTATE_PIPE_CONTROL | flags | (4 - 2));
-      if (bo) {
-         OUT_RELOC(bo, RELOC_WRITE, PIPE_CONTROL_GLOBAL_GTT_WRITE | offset);
-      } else {
-         OUT_BATCH(0);
-      }
-      OUT_BATCH(imm);
-      OUT_BATCH(imm >> 32);
-      ADVANCE_BATCH();
-   }
-}
 
 /**
  * Emit a PIPE_CONTROL with various flushing flags.
@@ -246,7 +56,7 @@ brw_emit_pipe_control_flush(struct brw_context *brw, uint32_t flags)
       flags &= ~(PIPE_CONTROL_CACHE_FLUSH_BITS | PIPE_CONTROL_CS_STALL);
    }
 
-   brw_emit_pipe_control(brw, flags, NULL, 0, 0);
+   brw->vtbl.emit_raw_pipe_control(brw, flags, NULL, 0, 0);
 }
 
 /**
@@ -262,7 +72,7 @@ brw_emit_pipe_control_write(struct brw_context *brw, uint32_t flags,
                             struct brw_bo *bo, uint32_t offset,
                             uint64_t imm)
 {
-   brw_emit_pipe_control(brw, flags, bo, offset, imm);
+   brw->vtbl.emit_raw_pipe_control(brw, flags, bo, offset, imm);
 }
 
 /**
@@ -357,14 +167,14 @@ gen7_emit_vs_workaround_flush(struct brw_context *brw)
 void
 gen10_emit_isp_disable(struct brw_context *brw)
 {
-   brw_emit_pipe_control(brw,
-                         PIPE_CONTROL_STALL_AT_SCOREBOARD |
-                         PIPE_CONTROL_CS_STALL,
-                         NULL, 0, 0);
-   brw_emit_pipe_control(brw,
-                         PIPE_CONTROL_ISP_DIS |
-                         PIPE_CONTROL_CS_STALL,
-                         NULL, 0, 0);
+   brw->vtbl.emit_raw_pipe_control(brw,
+                                   PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                                   PIPE_CONTROL_CS_STALL,
+                                   NULL, 0, 0);
+   brw->vtbl.emit_raw_pipe_control(brw,
+                                   PIPE_CONTROL_INDIRECT_STATE_POINTERS_DISABLE |
+                                   PIPE_CONTROL_CS_STALL,
+                                   NULL, 0, 0);
 
    brw->vs.base.push_constants_dirty = true;
    brw->tcs.base.push_constants_dirty = true;
@@ -561,6 +371,37 @@ int
 brw_init_pipe_control(struct brw_context *brw,
                       const struct gen_device_info *devinfo)
 {
+   switch (devinfo->gen) {
+   case 11:
+      brw->vtbl.emit_raw_pipe_control = gen11_emit_raw_pipe_control;
+      break;
+   case 10:
+      brw->vtbl.emit_raw_pipe_control = gen10_emit_raw_pipe_control;
+      break;
+   case 9:
+      brw->vtbl.emit_raw_pipe_control = gen9_emit_raw_pipe_control;
+      break;
+   case 8:
+      brw->vtbl.emit_raw_pipe_control = gen8_emit_raw_pipe_control;
+      break;
+   case 7:
+      brw->vtbl.emit_raw_pipe_control =
+         devinfo->is_haswell ? gen75_emit_raw_pipe_control
+                             : gen7_emit_raw_pipe_control;
+      break;
+   case 6:
+      brw->vtbl.emit_raw_pipe_control = gen6_emit_raw_pipe_control;
+      break;
+   case 5:
+      brw->vtbl.emit_raw_pipe_control = gen5_emit_raw_pipe_control;
+      break;
+   case 4:
+      brw->vtbl.emit_raw_pipe_control =
+         devinfo->is_g4x ? gen45_emit_raw_pipe_control
+                         : gen4_emit_raw_pipe_control;
+      break;
+   }
+
    if (devinfo->gen < 6)
       return 0;
 

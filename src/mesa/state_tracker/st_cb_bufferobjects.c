@@ -43,6 +43,7 @@
 #include "st_cb_bufferobjects.h"
 #include "st_cb_memoryobjects.h"
 #include "st_debug.h"
+#include "st_util.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
@@ -222,7 +223,7 @@ storage_flags_to_buffer_flags(GLbitfield storageFlags)
  * usage hint, return a pipe_resource_usage value (PIPE_USAGE_DYNAMIC,
  * STREAM, etc).
  */
-static const enum pipe_resource_usage
+static enum pipe_resource_usage
 buffer_usage(GLenum target, GLboolean immutable,
              GLbitfield storageFlags, GLenum usage)
 {
@@ -357,8 +358,10 @@ bufferobj_data(struct gl_context *ctx,
    /* The current buffer may be bound, so we have to revalidate all atoms that
     * might be using it.
     */
-   /* TODO: Add arrays to usage history */
-   ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+   if (st_obj->Base.UsageHistory & USAGE_ARRAY_BUFFER)
+      ctx->NewDriverState |= ST_NEW_VERTEX_ARRAYS;
+   /* if (st_obj->Base.UsageHistory & USAGE_ELEMENT_ARRAY_BUFFER) */
+   /*    ctx->NewDriverState |= TODO: Handle indices as gallium state; */
    if (st_obj->Base.UsageHistory & USAGE_UNIFORM_BUFFER)
       ctx->NewDriverState |= ST_NEW_UNIFORM_BUFFER;
    if (st_obj->Base.UsageHistory & USAGE_SHADER_STORAGE_BUFFER)

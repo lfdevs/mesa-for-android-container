@@ -123,12 +123,6 @@ llvmpipe_set_sampler_views(struct pipe_context *pipe,
 
    /* set the new sampler views */
    for (i = 0; i < num; i++) {
-      /* Note: we're using pipe_sampler_view_release() here to work around
-       * a possible crash when the old view belongs to another context that
-       * was already destroyed.
-       */
-      pipe_sampler_view_release(pipe,
-                                &llvmpipe->sampler_views[shader][start + i]);
       /*
        * Warn if someone tries to set a view created in a different context
        * (which is why we need the hack above in the first place).

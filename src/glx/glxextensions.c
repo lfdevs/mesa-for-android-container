@@ -134,6 +134,7 @@ struct extension_info
 static const struct extension_info known_glx_extensions[] = {
    { GLX(ARB_context_flush_control),   VER(0,0), Y, N, N, N },
    { GLX(ARB_create_context),          VER(0,0), Y, N, N, N },
+   { GLX(ARB_create_context_no_error), VER(1,4), Y, N, N, N },
    { GLX(ARB_create_context_profile),  VER(0,0), Y, N, N, N },
    { GLX(ARB_create_context_robustness), VER(0,0), Y, N, N, N },
    { GLX(ARB_fbconfig_float),          VER(0,0), Y, Y, N, N },

@@ -121,7 +121,10 @@ enum nir_search_op {
    nir_search_op_b2i,
    nir_search_op_i2b,
    nir_search_op_f2b,
+   nir_num_search_ops,
 };
+
+uint16_t nir_search_op_for_nir_op(nir_op op);
 
 typedef struct {
    nir_search_value value;
@@ -131,6 +134,18 @@ typedef struct {
     * on the SSA value is ignored.
     */
    bool inexact;
+
+   /* Commutative expression index.  This is assigned by opt_algebraic.py when
+    * search structures are constructed and is a unique (to this structure)
+    * index within the commutative operation bitfield used for searching for
+    * all combinations of expressions containing commutative operations.
+    */
+   int8_t comm_expr_idx;
+
+   /* Number of commutative expressions in this expression including this one
+    * (if it is commutative).
+    */
+   uint8_t comm_exprs;
 
    /* One of nir_op or nir_search_op */
    uint16_t opcode;

@@ -81,8 +81,15 @@ static void get_pic_control_param(struct rvce_encoder *enc, struct pipe_h264_enc
 	unsigned encNumMBsPerSlice;
 	encNumMBsPerSlice = align(enc->base.width, 16) / 16;
 	encNumMBsPerSlice *= align(enc->base.height, 16) / 16;
-	enc->enc_pic.pc.enc_crop_right_offset = (align(enc->base.width, 16) - enc->base.width) >> 1;
-	enc->enc_pic.pc.enc_crop_bottom_offset = (align(enc->base.height, 16) - enc->base.height) >> 1;
+	if (pic->pic_ctrl.enc_frame_cropping_flag) {
+		enc->enc_pic.pc.enc_crop_left_offset = pic->pic_ctrl.enc_frame_crop_left_offset;
+		enc->enc_pic.pc.enc_crop_right_offset = pic->pic_ctrl.enc_frame_crop_right_offset;
+		enc->enc_pic.pc.enc_crop_top_offset = pic->pic_ctrl.enc_frame_crop_top_offset;
+		enc->enc_pic.pc.enc_crop_bottom_offset = pic->pic_ctrl.enc_frame_crop_bottom_offset;
+	} else {
+		enc->enc_pic.pc.enc_crop_right_offset = (align(enc->base.width, 16) - enc->base.width) >> 1;
+		enc->enc_pic.pc.enc_crop_bottom_offset = (align(enc->base.height, 16) - enc->base.height) >> 1;
+	}
 	enc->enc_pic.pc.enc_num_mbs_per_slice = encNumMBsPerSlice;
 	enc->enc_pic.pc.enc_b_pic_pattern = MAX2(enc->base.max_references, 1) - 1;
 	enc->enc_pic.pc.enc_number_of_reference_frames = MIN2(enc->base.max_references, 2);

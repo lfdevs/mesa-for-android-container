@@ -32,7 +32,7 @@
 #include "util/mesa-sha1.h"
 
 #include "compiler/brw_eu.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 
 #include "brw_context.h"
 #include "brw_program.h"

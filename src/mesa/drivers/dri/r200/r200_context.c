@@ -256,7 +256,6 @@ GLboolean r200CreateContext( gl_api api,
    _vbo_CreateContext( ctx );
    _tnl_CreateContext( ctx );
    _swsetup_CreateContext( ctx );
-   _ae_create_context( ctx );
 
    ctx->Const.MaxTextureUnits = driQueryOptioni (&rmesa->radeon.optionCache,
 						 "texture_units");

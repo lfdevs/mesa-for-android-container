@@ -140,7 +140,7 @@ haiku_destroy_surface(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 
 
 static EGLBoolean
-haiku_add_configs_for_visuals(_EGLDisplay *dpy)
+haiku_add_configs_for_visuals(_EGLDisplay *disp)
 {
 	CALLED();
 
@@ -149,7 +149,7 @@ haiku_add_configs_for_visuals(_EGLDisplay *dpy)
 	if (!conf)
 		return _eglError(EGL_BAD_ALLOC, "haiku_add_configs_for_visuals");
 
-	_eglInitConfig(&conf->base, dpy, 1);
+	_eglInitConfig(&conf->base, disp, 1);
 	TRACE("Config inited\n");
 
 	_eglSetConfigKey(&conf->base, EGL_RED_SIZE, 8);
@@ -190,7 +190,7 @@ haiku_add_configs_for_visuals(_EGLDisplay *dpy)
 	TRACE("Validated config\n");
 
 	_eglLinkConfig(&conf->base);
-	if (!_eglGetArraySize(dpy->Configs)) {
+	if (!_eglGetArraySize(disp->Configs)) {
 		_eglLog(_EGL_WARNING, "Haiku: failed to create any config");
 		goto cleanup;
 	}
@@ -206,7 +206,7 @@ cleanup:
 
 extern "C"
 EGLBoolean
-init_haiku(_EGLDriver *drv, _EGLDisplay *dpy)
+init_haiku(_EGLDriver *drv, _EGLDisplay *disp)
 {
 	_EGLDevice *dev;
 	CALLED();
@@ -216,13 +216,13 @@ init_haiku(_EGLDriver *drv, _EGLDisplay *dpy)
 		_eglError(EGL_NOT_INITIALIZED, "DRI2: failed to find EGLDevice");
 		return EGL_FALSE;
 	}
-	dpy->Device = dev;
+	disp->Device = dev;
 
 	TRACE("Add configs\n");
-	if (!haiku_add_configs_for_visuals(dpy))
+	if (!haiku_add_configs_for_visuals(disp))
 		return EGL_FALSE;
 
-	dpy->Version = 14;
+	disp->Version = 14;
 
 	TRACE("Initialization finished\n");
 
@@ -232,7 +232,7 @@ init_haiku(_EGLDriver *drv, _EGLDisplay *dpy)
 
 extern "C"
 EGLBoolean
-haiku_terminate(_EGLDriver* drv,_EGLDisplay* dpy)
+haiku_terminate(_EGLDriver* drv,_EGLDisplay *disp)
 {
 	return EGL_TRUE;
 }
@@ -281,7 +281,7 @@ haiku_destroy_context(_EGLDriver* drv, _EGLDisplay *disp, _EGLContext* ctx)
 
 extern "C"
 EGLBoolean
-haiku_make_current(_EGLDriver* drv, _EGLDisplay* dpy, _EGLSurface *dsurf,
+haiku_make_current(_EGLDriver* drv, _EGLDisplay *disp, _EGLSurface *dsurf,
 	_EGLSurface *rsurf, _EGLContext *ctx)
 {
 	CALLED();
@@ -302,7 +302,7 @@ haiku_make_current(_EGLDriver* drv, _EGLDisplay* dpy, _EGLSurface *dsurf,
 
 extern "C"
 EGLBoolean
-haiku_swap_buffers(_EGLDriver *drv, _EGLDisplay *dpy, _EGLSurface *surf)
+haiku_swap_buffers(_EGLDriver *drv, _EGLDisplay *disp, _EGLSurface *surf)
 {
 	struct haiku_egl_surface* surface = haiku_egl_surface(surf);
 

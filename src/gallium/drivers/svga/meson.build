@@ -27,7 +27,6 @@ files_svga = files(
   'svga_draw_elements.c',
   'svga_format.c',
   'svga_link.c',
-  'svga_msg.c',
   'svga_pipe_blend.c',
   'svga_pipe_blit.c',
   'svga_pipe_clear.c',

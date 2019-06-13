@@ -45,7 +45,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tnl/t_vertex.h"
 #include "dri_util.h"
-#include "drm.h"
+#include "drm-uapi/drm.h"
 #include "radeon_drm.h"
 #include "main/macros.h"
 #include "main/mtypes.h"

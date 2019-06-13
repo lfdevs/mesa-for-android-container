@@ -1674,6 +1674,11 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GLK_SCEC_BARRIER_MODE_GPGPU       (0 << 7)
 # define GLK_SCEC_BARRIER_MODE_3D_HULL     (1 << 7)
 # define GLK_SCEC_BARRIER_MODE_MASK        REG_MASK(1 << 7)
+# define GEN11_STATE_CACHE_REDIRECT_TO_CS_SECTION_ENABLE (1 << 11)
+
+#define COMMON_SLICE_CHICKEN3              0x7304
+# define PS_THREAD_PANIC_DISPATCH          (3 << 6)
+# define PS_THREAD_PANIC_DISPATCH_MASK     REG_MASK(3 << 6)
 
 #define HALF_SLICE_CHICKEN7                0xE194
 # define TEXEL_OFFSET_FIX_ENABLE           (1 << 1)

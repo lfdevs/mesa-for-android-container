@@ -34,7 +34,6 @@ aubinator = executable(
   include_directories : [inc_common, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util, libaub],
   c_args : [c_vis_args, no_override_init_args],
-  build_by_default : true,
   install : true
 )
 
@@ -45,7 +44,6 @@ aubinator_error_decode = executable(
   include_directories : [inc_common, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
   c_args : [c_vis_args, no_override_init_args],
-  build_by_default : true,
   install : true
 )
 
@@ -56,7 +54,6 @@ i965_disasm = executable(
   include_directories : [inc_common, inc_intel],
   link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
   c_args : [c_vis_args, no_override_init_args],
-  build_by_default : true,
   install : true
 )
 
@@ -64,10 +61,9 @@ error2aub = executable(
   'intel_error2aub',
   files('aub_write.h', 'aub_write.c', 'error2aub.c'),
   dependencies : [dep_zlib, dep_dl, dep_thread, dep_m],
-  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  include_directories : [inc_common, inc_intel, inc_include],
   link_with : [libintel_dev],
   c_args : [c_vis_args, no_override_init_args],
-  build_by_default : true,
   install : true
 )
 
@@ -77,44 +73,44 @@ sanitize_data.set(
   join_paths(get_option('prefix'), get_option('libexecdir'))
 )
 configure_file(
-  input: 'intel_sanitize_gpu.in',
-  output: '@BASENAME@',
-  install_dir: get_option('bindir'),
-  install: true,
-  configuration: sanitize_data
+  input : 'intel_sanitize_gpu.in',
+  output : '@BASENAME@',
+  install_dir : get_option('bindir'),
+  install : true,
+  configuration : sanitize_data
 )
 
 libintel_sanitize_gpu = shared_library(
   'intel_sanitize_gpu',
   files('intel_sanitize_gpu.c'),
   dependencies : [dep_dl, dep_thread],
-  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  include_directories : [inc_common, inc_intel, inc_include],
   link_with : [libintel_common, libmesa_util],
   c_args : [c_vis_args, no_override_init_args, c_sse2_args],
-  build_by_default : true,
-  install_dir: get_option('libexecdir'),
-  install: true
+  install_dir : get_option('libexecdir'),
+  install : true
 )
 
 configure_file(
   input : 'intel_dump_gpu.in',
   output : '@BASENAME@',
-  install_dir: get_option('bindir'),
-  configuration: sanitize_data,
-  install: true
+  install_dir : get_option('bindir'),
+  configuration : sanitize_data,
+  install : true
 )
 
 libintel_dump_gpu = shared_library(
   'intel_dump_gpu',
-  files('gen_context.h', 'gen8_context.h', 'gen10_context.h',
-        'intel_aub.h', 'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c'),
+  files(
+    'gen_context.h', 'gen8_context.h', 'gen10_context.h', 'intel_aub.h',
+    'aub_write.h', 'aub_write.c', 'intel_dump_gpu.c',
+  ),
   dependencies : dep_dl,
-  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  include_directories : [inc_common, inc_intel, inc_include],
   link_with : libintel_dev,
   c_args : [c_vis_args, no_override_init_args],
-  build_by_default : true,
-  install_dir: get_option('libexecdir'),
-  install: true
+  install_dir : get_option('libexecdir'),
+  install : true
 )
 
 if with_tools.contains('intel-ui')
@@ -127,8 +123,7 @@ if with_tools.contains('intel-ui')
     include_directories : [inc_common, inc_intel],
     link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util, libaub],
     c_args : [c_vis_args, no_override_init_args],
-    cpp_args : [ '-fpermissive', '-std=c++11', '-Wno-parentheses', '-Wno-class-memaccess' ],
-    build_by_default : true,
+    cpp_args : ['-fpermissive', '-Wno-parentheses', '-Wno-class-memaccess'],
     install : true
   )
 endif

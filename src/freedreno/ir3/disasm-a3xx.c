@@ -424,7 +424,7 @@ static void print_instr_cat5(struct disasm_ctx *ctx, instr_t *instr)
 			[opc_op(OPC_SAMGP3)]   = { true,  false, true,  true,  },
 			[opc_op(OPC_DSXPP_1)]  = { true,  false, false, false, },
 			[opc_op(OPC_DSYPP_1)]  = { true,  false, false, false, },
-			[opc_op(OPC_RGETPOS)]  = { false, false, false, false, },
+			[opc_op(OPC_RGETPOS)]  = { true,  false, false, false, },
 			[opc_op(OPC_RGETINFO)] = { false, false, false, false, },
 	};
 	instr_cat5_t *cat5 = &instr->cat5;
@@ -463,9 +463,11 @@ static void print_instr_cat5(struct disasm_ctx *ctx, instr_t *instr)
 	}
 
 	if (cat5->is_s2en) {
-		fprintf(ctx->out, ", ");
-		print_reg_src(ctx, (reg_t)(cat5->s2en.src2), cat5->full, false, false, false,
-				false, false, false);
+		if (cat5->is_o || info[cat5->opc].src2) {
+			fprintf(ctx->out, ", ");
+			print_reg_src(ctx, (reg_t)(cat5->s2en.src2), cat5->full,
+					false, false, false, false, false, false);
+		}
 		fprintf(ctx->out, ", ");
 		print_reg_src(ctx, (reg_t)(cat5->s2en.src3), false, false, false, false,
 				false, false, false);
@@ -520,7 +522,6 @@ static void print_instr_cat6_a3xx(struct disasm_ctx *ctx, instr_t *instr)
 	case OPC_STG:
 	case OPC_STL:
 	case OPC_STP:
-	case OPC_STI:
 	case OPC_STLW:
 	case OPC_STIB:
 		dst.full  = true;
@@ -616,10 +617,6 @@ static void print_instr_cat6_a3xx(struct disasm_ctx *ctx, instr_t *instr)
 	case OPC_PREFETCH:
 		ss = 'g';
 		nodst = true;
-		break;
-
-	case OPC_STI:
-		dst.full = false;  // XXX or inverts??
 		break;
 	}
 
@@ -788,6 +785,7 @@ static void print_instr_cat6_a6xx(struct disasm_ctx *ctx, instr_t *instr)
 {
 	instr_cat6_a6xx_t *cat6 = &instr->cat6_a6xx;
 	struct reginfo src1, src2;
+	bool has_dest = _OPC(6, cat6->opc) == OPC_LDIB;
 	char ss = 0;
 
 	memset(&src1, 0, sizeof(src1));
@@ -798,6 +796,14 @@ static void print_instr_cat6_a6xx(struct disasm_ctx *ctx, instr_t *instr)
 	fprintf(ctx->out, ".%s", type[cat6->type]);
 	fprintf(ctx->out, ".%u ", cat6->type_size + 1);
 
+	if (has_dest) {
+		src2.reg = (reg_t)(cat6->src2);
+		src2.full = true; // XXX
+		print_src(ctx, &src2);
+
+		fprintf(ctx->out, ", ");
+	}
+
 	/* NOTE: blob seems to use old encoding for ldl/stl (local memory) */
 	ss = 'g';
 
@@ -806,11 +812,14 @@ static void print_instr_cat6_a6xx(struct disasm_ctx *ctx, instr_t *instr)
 	src1.reg = (reg_t)(cat6->src1);
 	src1.full = true; // XXX
 	print_src(ctx, &src1);
-	fprintf(ctx->out, ", ");
 
-	src2.reg = (reg_t)(cat6->src2);
-	src2.full = true; // XXX
-	print_src(ctx, &src2);
+	if (!has_dest) {
+		fprintf(ctx->out, ", ");
+
+		src2.reg = (reg_t)(cat6->src2);
+		src2.full = true; // XXX
+		print_src(ctx, &src2);
+	}
 
 	if (debug & PRINT_VERBOSE) {
 		fprintf(ctx->out, " (pad1=%x, pad2=%x, pad3=%x, pad4=%x)", cat6->pad1,
@@ -820,10 +829,7 @@ static void print_instr_cat6_a6xx(struct disasm_ctx *ctx, instr_t *instr)
 
 static void print_instr_cat6(struct disasm_ctx *ctx, instr_t *instr)
 {
-	// TODO not sure if this is the best way to figure
-	// out if new vs old encoding, but it kinda seems
-	// to work:
-	if ((ctx->gpu_id >= 600) && (instr->cat6.opc == 0)) {
+	if (!is_cat6_legacy(instr, ctx->gpu_id)) {
 		print_instr_cat6_a6xx(ctx, instr);
 		if (debug & PRINT_VERBOSE)
 			fprintf(ctx->out, " NEW");
@@ -990,7 +996,7 @@ static const struct opc_info {
 	OPC(6, OPC_STG,          stg),
 	OPC(6, OPC_STL,          stl),
 	OPC(6, OPC_STP,          stp),
-	OPC(6, OPC_STI,          sti),
+	OPC(6, OPC_LDIB,         ldib),
 	OPC(6, OPC_G2L,          g2l),
 	OPC(6, OPC_L2G,          l2g),
 	OPC(6, OPC_PREFETCH,     prefetch),

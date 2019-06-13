@@ -8,7 +8,6 @@ env = env.Clone()
 
 env.Append(CPPPATH = [
     '#/include',
-    '#/include/drm-uapi',
     '#/include/HaikuGL',
     '#/src/egl/main',
     '#/src',

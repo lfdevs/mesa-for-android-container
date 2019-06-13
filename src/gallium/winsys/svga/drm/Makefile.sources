@@ -8,6 +8,8 @@ C_SOURCES := \
 	vmw_fence.c \
 	vmw_fence.h \
 	vmwgfx_drm.h \
+	vmw_msg.c \
+	vmw_msg.h \
 	vmw_screen.c \
 	vmw_screen_dri.c \
 	vmw_screen.h \

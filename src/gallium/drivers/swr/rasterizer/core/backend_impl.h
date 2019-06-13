@@ -894,87 +894,6 @@ static INLINE void CalcSampleBarycentrics(const BarycentricCoeffs& coeffs,
                                           psContext.vJ.sample);
 }
 
-// Merge Output to 4x2 SIMD Tile Format
-INLINE void OutputMerger4x2(DRAW_CONTEXT*   pDC,
-                            SWR_PS_CONTEXT& psContext,
-                            uint8_t* (&pColorBase)[SWR_NUM_RENDERTARGETS],
-                            uint32_t               sample,
-                            const SWR_BLEND_STATE* pBlendState,
-                            const PFN_BLEND_JIT_FUNC (&pfnBlendFunc)[SWR_NUM_RENDERTARGETS],
-                            simdscalar&       coverageMask,
-                            simdscalar const& depthPassMask,
-                            uint32_t          renderTargetMask,
-                            uint32_t          workerId)
-{
-    // type safety guaranteed from template instantiation in BEChooser<>::GetFunc
-    const uint32_t rasterTileColorOffset = RasterTileColorOffset(sample);
-    simdvector     blendOut;
-
-    DWORD rt = 0;
-    while (_BitScanForward(&rt, renderTargetMask))
-    {
-        renderTargetMask &= ~(1 << rt);
-        uint8_t* pColorSample = pColorBase[rt] + rasterTileColorOffset;
-
-        const SWR_RENDER_TARGET_BLEND_STATE* pRTBlend = &pBlendState->renderTarget[rt];
-
-        SWR_BLEND_CONTEXT blendContext = {0};
-        {
-            // pfnBlendFunc may not update all channels.  Initialize with PS output.
-            /// TODO: move this into the blend JIT.
-            blendOut = psContext.shaded[rt];
-
-            blendContext.pBlendState = pBlendState;
-            blendContext.src         = &psContext.shaded[rt];
-            blendContext.src1        = &psContext.shaded[1];
-            blendContext.src0alpha   = reinterpret_cast<simdvector*>(&psContext.shaded[0].w);
-            blendContext.sampleNum   = sample;
-            blendContext.pDst        = (simdvector*)&pColorSample;
-            blendContext.result      = &blendOut;
-            blendContext.oMask       = &psContext.oMask;
-            blendContext.pMask       = reinterpret_cast<simdscalari*>(&coverageMask);
-
-            // Blend outputs and update coverage mask for alpha test
-            if (pfnBlendFunc[rt] != nullptr)
-            {
-                pfnBlendFunc[rt](&blendContext);
-            }
-        }
-
-        // Track alpha events
-        AR_EVENT(
-            AlphaInfoEvent(pDC->drawId, blendContext.isAlphaTested, blendContext.isAlphaBlended));
-
-        // final write mask
-        simdscalari outputMask = _simd_castps_si(_simd_and_ps(coverageMask, depthPassMask));
-
-        ///@todo can only use maskstore fast path if bpc is 32. Assuming hot tile is RGBA32_FLOAT.
-        static_assert(KNOB_COLOR_HOT_TILE_FORMAT == R32G32B32A32_FLOAT,
-                      "Unsupported hot tile format");
-
-        const uint32_t simd = KNOB_SIMD_WIDTH * sizeof(float);
-
-        // store with color mask
-        if (!pRTBlend->writeDisableRed)
-        {
-            _simd_maskstore_ps((float*)pColorSample, outputMask, blendOut.x);
-        }
-        if (!pRTBlend->writeDisableGreen)
-        {
-            _simd_maskstore_ps((float*)(pColorSample + simd), outputMask, blendOut.y);
-        }
-        if (!pRTBlend->writeDisableBlue)
-        {
-            _simd_maskstore_ps((float*)(pColorSample + simd * 2), outputMask, blendOut.z);
-        }
-        if (!pRTBlend->writeDisableAlpha)
-        {
-            _simd_maskstore_ps((float*)(pColorSample + simd * 3), outputMask, blendOut.w);
-        }
-    }
-}
-
-#if USE_8x2_TILE_BACKEND
 // Merge Output to 8x2 SIMD16 Tile Format
 INLINE void OutputMerger8x2(DRAW_CONTEXT*   pDC,
                             SWR_PS_CONTEXT& psContext,
@@ -1076,8 +995,6 @@ INLINE void OutputMerger8x2(DRAW_CONTEXT*   pDC,
     }
 }
 
-#endif
-
 template <typename T>
 void BackendPixelRate(DRAW_CONTEXT*        pDC,
                       uint32_t             workerId,
@@ -1137,9 +1054,10 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
 
         for (uint32_t xx = x; xx < x + KNOB_TILE_X_DIM; xx += SIMD_TILE_X_DIM)
         {
-#if USE_8x2_TILE_BACKEND
             const bool useAlternateOffset = ((xx & SIMD_TILE_X_DIM) != 0);
-#endif
+
+            psContext.alternateOffset = useAlternateOffset ? 1 : 0;
+
             simdscalar activeLanes;
             if (!(work.anyCoveredSamples & MASK))
             {
@@ -1212,7 +1130,7 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
 
             // update stats
             UPDATE_STAT_BE(PsInvocations, _mm_popcnt_u32(_simd_movemask_ps(activeLanes)));
-            AR_EVENT(PSStats(psContext.stats.numInstExecuted));
+            AR_EVENT(PSStats((HANDLE)&psContext.stats));
 
             // update active lanes to remove any discarded or oMask'd pixels
             activeLanes = _simd_castsi_ps(_simd_and_si(
@@ -1264,7 +1182,7 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
                 }
 
                 // broadcast the results of the PS to all passing pixels
-#if USE_8x2_TILE_BACKEND
+
                 OutputMerger8x2(pDC,
                                 psContext,
                                 psContext.pColorBuffer,
@@ -1276,18 +1194,7 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
                                 state.psState.renderTargetMask,
                                 useAlternateOffset,
                                 workerId);
-#else  // USE_8x2_TILE_BACKEND
-                OutputMerger4x2(pDC,
-                                psContext,
-                                psContext.pColorBuffer,
-                                sample,
-                                &state.blendState,
-                                state.pfnBlendFunc,
-                                coverageMask,
-                                depthMask,
-                                state.psState.renderTargetMask,
-                                workerId);
-#endif // USE_8x2_TILE_BACKEND
+
 
                 if (!state.psState.forceEarlyZ && !T::bForcedSampleCount)
                 {
@@ -1320,7 +1227,6 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
             }
             work.anyCoveredSamples >>= (SIMD_TILE_Y_DIM * SIMD_TILE_X_DIM);
 
-#if USE_8x2_TILE_BACKEND
             if (useAlternateOffset)
             {
                 DWORD    rt;
@@ -1332,16 +1238,7 @@ void BackendPixelRate(DRAW_CONTEXT*        pDC,
                         (2 * KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
                 }
             }
-#else
-            DWORD    rt;
-            uint32_t rtMask = state.colorHottileEnable;
-            while (_BitScanForward(&rt, rtMask))
-            {
-                rtMask &= ~(1 << rt);
-                psContext.pColorBuffer[rt] +=
-                    (KNOB_SIMD_WIDTH * FormatTraits<KNOB_COLOR_HOT_TILE_FORMAT>::bpp) / 8;
-            }
-#endif
+
             pDepthBuffer += (KNOB_SIMD_WIDTH * FormatTraits<KNOB_DEPTH_HOT_TILE_FORMAT>::bpp) / 8;
             pStencilBuffer +=
                 (KNOB_SIMD_WIDTH * FormatTraits<KNOB_STENCIL_HOT_TILE_FORMAT>::bpp) / 8;

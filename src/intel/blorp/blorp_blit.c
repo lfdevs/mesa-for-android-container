@@ -87,7 +87,6 @@ brw_blorp_blit_vars_init(nir_builder *b, struct brw_blorp_blit_vars *v,
    v->frag_coord = nir_variable_create(b->shader, nir_var_shader_in,
                                        glsl_vec4_type(), "gl_FragCoord");
    v->frag_coord->data.location = VARYING_SLOT_POS;
-   v->frag_coord->data.origin_upper_left = true;
 
    v->color_out = nir_variable_create(b->shader, nir_var_shader_out,
                                       glsl_vec4_type(), "gl_FragColor");
@@ -744,18 +743,6 @@ blorp_nir_combine_samples(nir_builder *b, struct brw_blorp_blit_vars *v,
    return nir_load_var(b, color);
 }
 
-static inline nir_ssa_def *
-nir_imm_vec2(nir_builder *build, float x, float y)
-{
-   nir_const_value v;
-
-   memset(&v, 0, sizeof(v));
-   v.f32[0] = x;
-   v.f32[1] = y;
-
-   return nir_build_imm(build, 4, 32, v);
-}
-
 static nir_ssa_def *
 blorp_nir_manual_blend_bilinear(nir_builder *b, nir_ssa_def *pos,
                                 unsigned tex_samples,
@@ -1232,7 +1219,7 @@ brw_blorp_build_nir_shader(struct blorp_context *blorp, void *mem_ctx,
           (key->dst_samples <= 1));
 
    nir_builder b;
-   nir_builder_init_simple_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, NULL);
+   blorp_nir_init_shader(&b, mem_ctx, MESA_SHADER_FRAGMENT, NULL);
 
    struct brw_blorp_blit_vars v;
    brw_blorp_blit_vars_init(&b, &v, key);

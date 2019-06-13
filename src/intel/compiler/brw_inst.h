@@ -222,6 +222,8 @@ F8(3src_src1_negate,        39, 39, 40, 40)
 F8(3src_src1_abs,           38, 38, 39, 39)
 F8(3src_src0_negate,        37, 37, 38, 38)
 F8(3src_src0_abs,           36, 36, 37, 37)
+F8(3src_a16_src1_type,      -1, -1, 36, 36)
+F8(3src_a16_src2_type,      -1, -1, 35, 35)
 F8(3src_a16_flag_reg_nr,    34, 34, 33, 33)
 F8(3src_a16_flag_subreg_nr, 33, 33, 32, 32)
 FF(3src_a16_dst_reg_file,

@@ -594,7 +594,7 @@ ir_to_mesa_visitor::get_temp(const glsl_type *type)
    src.reladdr = NULL;
    next_temp += type_size(type);
 
-   if (type->is_array() || type->is_record()) {
+   if (type->is_array() || type->is_struct()) {
       src.swizzle = SWIZZLE_NOOP;
    } else {
       src.swizzle = swizzle_for_size(type->vector_elements);
@@ -618,11 +618,6 @@ ir_to_mesa_visitor::find_variable_storage(const ir_variable *var)
 void
 ir_to_mesa_visitor::visit(ir_variable *ir)
 {
-   if (strcmp(ir->name, "gl_FragCoord") == 0) {
-      this->prog->OriginUpperLeft = ir->data.origin_upper_left;
-      this->prog->PixelCenterInteger = ir->data.pixel_center_integer;
-   }
-
    if (ir->data.mode == ir_var_uniform && strncmp(ir->name, "gl_", 3) == 0) {
       unsigned int i;
       const ir_state_slot *const slots = ir->get_state_slots();
@@ -1684,7 +1679,7 @@ calc_sampler_offsets(struct gl_shader_program *prog, ir_dereference *deref,
       ir_dereference_record *deref_record = deref->as_dereference_record();
       unsigned field_index = deref_record->field_idx;
       *location +=
-         deref_record->record->type->record_location_offset(field_index);
+         deref_record->record->type->struct_location_offset(field_index);
       calc_sampler_offsets(prog, deref_record->record->as_dereference(),
                            offset, array_elements, location);
       break;
@@ -1884,7 +1879,7 @@ ir_to_mesa_visitor::visit(ir_constant *ir)
     * get lucky, copy propagation will eliminate the extra moves.
     */
 
-   if (ir->type->is_record()) {
+   if (ir->type->is_struct()) {
       src_reg temp_base = get_temp(ir->type);
       dst_reg temp = dst_reg(temp_base);
 
@@ -2511,8 +2506,7 @@ _mesa_generate_parameters_list_for_uniforms(struct gl_context *ctx,
 void
 _mesa_associate_uniform_storage(struct gl_context *ctx,
                                 struct gl_shader_program *shader_program,
-                                struct gl_program *prog,
-                                bool propagate_to_storage)
+                                struct gl_program *prog)
 {
    struct gl_program_parameter_list *params = prog->Parameters;
    gl_shader_stage shader_type = prog->info.stage;
@@ -2638,26 +2632,24 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
           * data from the linker's backing store.  This will cause values from
           * initializers in the source code to be copied over.
           */
-         if (propagate_to_storage) {
-            unsigned array_elements = MAX2(1, storage->array_elements);
-            if (ctx->Const.PackedDriverUniformStorage && !prog->is_arb_asm &&
-                (storage->is_bindless || !storage->type->contains_opaque())) {
-               const int dmul = storage->type->is_64bit() ? 2 : 1;
-               const unsigned components =
-                  storage->type->vector_elements *
-                  storage->type->matrix_columns;
+         unsigned array_elements = MAX2(1, storage->array_elements);
+         if (ctx->Const.PackedDriverUniformStorage && !prog->is_arb_asm &&
+             (storage->is_bindless || !storage->type->contains_opaque())) {
+            const int dmul = storage->type->is_64bit() ? 2 : 1;
+            const unsigned components =
+               storage->type->vector_elements *
+               storage->type->matrix_columns;
 
-               for (unsigned s = 0; s < storage->num_driver_storage; s++) {
-                  gl_constant_value *uni_storage = (gl_constant_value *)
-                     storage->driver_storage[s].data;
-                  memcpy(uni_storage, storage->storage,
-                         sizeof(storage->storage[0]) * components *
-                         array_elements * dmul);
-               }
-            } else {
-               _mesa_propagate_uniforms_to_driver_storage(storage, 0,
-                                                          array_elements);
+            for (unsigned s = 0; s < storage->num_driver_storage; s++) {
+               gl_constant_value *uni_storage = (gl_constant_value *)
+                  storage->driver_storage[s].data;
+               memcpy(uni_storage, storage->storage,
+                      sizeof(storage->storage[0]) * components *
+                      array_elements * dmul);
             }
+         } else {
+            _mesa_propagate_uniforms_to_driver_storage(storage, 0,
+                                                       array_elements);
          }
 
 	      last_location = location;
@@ -3016,7 +3008,7 @@ get_mesa_program(struct gl_context *ctx,
     * prog->ParameterValues to get reallocated (e.g., anything that adds a
     * program constant) has to happen before creating this linkage.
     */
-   _mesa_associate_uniform_storage(ctx, shader_program, prog, true);
+   _mesa_associate_uniform_storage(ctx, shader_program, prog);
    if (!shader_program->data->LinkStatus) {
       goto fail_exit;
    }
@@ -3058,6 +3050,7 @@ _mesa_ir_link_shader(struct gl_context *ctx, struct gl_shader_program *prog)
 	 do_mat_op_to_vec(ir);
 	 lower_instructions(ir, (MOD_TO_FLOOR | DIV_TO_MUL_RCP | EXP_TO_EXP2
 				 | LOG_TO_LOG2 | INT_DIV_TO_MUL_RCP
+				 | MUL64_TO_MUL_AND_MUL_HIGH
 				 | ((options->EmitNoPow) ? POW_TO_EXP2 : 0)));
 
 	 progress = do_common_optimization(ir, true, true,

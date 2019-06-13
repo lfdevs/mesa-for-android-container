@@ -106,6 +106,7 @@ static void si_create_compute_state_async(void *job, int thread_index)
 		assert(program->ir_type == PIPE_SHADER_IR_NIR);
 		sel.nir = program->ir.nir;
 
+		si_nir_opts(sel.nir);
 		si_nir_scan_shader(sel.nir, &sel.info);
 		si_lower_nir(&sel);
 	}
@@ -724,22 +725,11 @@ static void si_setup_tgsi_user_data(struct si_context *sctx,
 
 	if (info->indirect) {
 		if (program->uses_grid_size) {
-			uint64_t base_va = si_resource(info->indirect)->gpu_address;
-			uint64_t va = base_va + info->indirect_offset;
-			int i;
-
-			radeon_add_to_buffer_list(sctx, sctx->gfx_cs,
-					 si_resource(info->indirect),
-					 RADEON_USAGE_READ, RADEON_PRIO_DRAW_INDIRECT);
-
-			for (i = 0; i < 3; ++i) {
-				radeon_emit(cs, PKT3(PKT3_COPY_DATA, 4, 0));
-				radeon_emit(cs, COPY_DATA_SRC_SEL(COPY_DATA_SRC_MEM) |
-						COPY_DATA_DST_SEL(COPY_DATA_REG));
-				radeon_emit(cs, (va + 4 * i));
-				radeon_emit(cs, (va + 4 * i) >> 32);
-				radeon_emit(cs, (grid_size_reg >> 2) + i);
-				radeon_emit(cs, 0);
+			for (unsigned i = 0; i < 3; ++i) {
+				si_cp_copy_data(sctx,
+						COPY_DATA_REG, NULL, (grid_size_reg >> 2) + i,
+						COPY_DATA_SRC_MEM, si_resource(info->indirect),
+						info->indirect_offset + 4 * i);
 			}
 		}
 	} else {
@@ -804,7 +794,7 @@ static void si_emit_dispatch_packets(struct si_context *sctx,
 		 * allow launching waves out-of-order. (same as Vulkan) */
 		S_00B800_ORDER_MODE(sctx->chip_class >= CIK);
 
-	uint *last_block = sctx->compute_last_block;
+	const uint *last_block = info->last_block;
 	bool partial_block_en = last_block[0] || last_block[1] || last_block[2];
 
 	radeon_set_sh_reg_seq(cs, R_00B81C_COMPUTE_NUM_THREAD_X, 3);
@@ -887,12 +877,14 @@ static void si_launch_grid(
 	    program->shader.compilation_failed)
 		return;
 
-	if (sctx->last_num_draw_calls != sctx->num_draw_calls) {
-		si_update_fb_dirtiness_after_rendering(sctx);
-		sctx->last_num_draw_calls = sctx->num_draw_calls;
-	}
+	if (sctx->has_graphics) {
+		if (sctx->last_num_draw_calls != sctx->num_draw_calls) {
+			si_update_fb_dirtiness_after_rendering(sctx);
+			sctx->last_num_draw_calls = sctx->num_draw_calls;
+		}
 
-	si_decompress_textures(sctx, 1 << PIPE_SHADER_COMPUTE);
+		si_decompress_textures(sctx, 1 << PIPE_SHADER_COMPUTE);
+	}
 
 	/* Add buffer sizes for memory checking in need_cs_space. */
 	si_context_add_resource_size(sctx, &program->shader.bo->b.b);
@@ -911,6 +903,9 @@ static void si_launch_grid(
 
 	si_need_gfx_cs_space(sctx);
 
+	if (sctx->bo_list_add_all_compute_resources)
+		si_compute_resources_add_all_to_bo_list(sctx);
+
 	if (!sctx->cs_shader_state.initialized)
 		si_initialize_compute(sctx);
 
@@ -924,7 +919,8 @@ static void si_launch_grid(
 	si_upload_compute_shader_descriptors(sctx);
 	si_emit_compute_shader_pointers(sctx);
 
-	if (si_is_atom_dirty(sctx, &sctx->atoms.s.render_cond)) {
+	if (sctx->has_graphics &&
+	    si_is_atom_dirty(sctx, &sctx->atoms.s.render_cond)) {
 		sctx->atoms.s.render_cond.emit(sctx);
 		si_set_atom_dirty(sctx, &sctx->atoms.s.render_cond, false);
 	}

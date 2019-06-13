@@ -54,10 +54,6 @@ struct fd6_program_state {
 	/* cached state about current emitted shader program (3d): */
 	struct fd6_streamout_state tf;
 
-	/* index and # of varyings: */
-	uint8_t fs_inputs[16];
-	uint8_t fs_inputs_count;
-
 	uint32_t vinterp[8];
 };
 

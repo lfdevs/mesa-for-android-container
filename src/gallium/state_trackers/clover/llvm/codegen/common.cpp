@@ -33,6 +33,7 @@
 #include "llvm/codegen.hpp"
 #include "llvm/metadata.hpp"
 
+#define CL_TARGET_OPENCL_VERSION 220
 #include "CL/cl.h"
 
 #include "pipe/p_state.h"

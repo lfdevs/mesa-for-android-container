@@ -58,7 +58,7 @@
 
 
 /**
- * Map --with-platforms names to platform types.
+ * Map build-system platform names to platform types.
  */
 static const struct {
    _EGLPlatformType platform;
@@ -184,25 +184,25 @@ _eglGetNativePlatform(void *nativeDisplay)
 void
 _eglFiniDisplay(void)
 {
-   _EGLDisplay *dpyList, *dpy;
+   _EGLDisplay *dispList, *disp;
 
    /* atexit function is called with global mutex locked */
-   dpyList = _eglGlobal.DisplayList;
-   while (dpyList) {
+   dispList = _eglGlobal.DisplayList;
+   while (dispList) {
       EGLint i;
 
       /* pop list head */
-      dpy = dpyList;
-      dpyList = dpyList->Next;
+      disp = dispList;
+      dispList = dispList->Next;
 
       for (i = 0; i < _EGL_NUM_RESOURCES; i++) {
-         if (dpy->ResourceLists[i]) {
-            _eglLog(_EGL_DEBUG, "Display %p is destroyed with resources", dpy);
+         if (disp->ResourceLists[i]) {
+            _eglLog(_EGL_DEBUG, "Display %p is destroyed with resources", disp);
             break;
          }
       }
 
-      free(dpy);
+      free(disp);
    }
    _eglGlobal.DisplayList = NULL;
 }
@@ -215,7 +215,7 @@ _eglFiniDisplay(void)
 _EGLDisplay *
 _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy)
 {
-   _EGLDisplay *dpy;
+   _EGLDisplay *disp;
 
    if (plat == _EGL_INVALID_PLATFORM)
       return NULL;
@@ -223,30 +223,30 @@ _eglFindDisplay(_EGLPlatformType plat, void *plat_dpy)
    mtx_lock(_eglGlobal.Mutex);
 
    /* search the display list first */
-   dpy = _eglGlobal.DisplayList;
-   while (dpy) {
-      if (dpy->Platform == plat && dpy->PlatformDisplay == plat_dpy)
+   disp = _eglGlobal.DisplayList;
+   while (disp) {
+      if (disp->Platform == plat && disp->PlatformDisplay == plat_dpy)
          break;
-      dpy = dpy->Next;
+      disp = disp->Next;
    }
 
    /* create a new display */
-   if (!dpy) {
-      dpy = calloc(1, sizeof(_EGLDisplay));
-      if (dpy) {
-         mtx_init(&dpy->Mutex, mtx_plain);
-         dpy->Platform = plat;
-         dpy->PlatformDisplay = plat_dpy;
+   if (!disp) {
+      disp = calloc(1, sizeof(_EGLDisplay));
+      if (disp) {
+         mtx_init(&disp->Mutex, mtx_plain);
+         disp->Platform = plat;
+         disp->PlatformDisplay = plat_dpy;
 
          /* add to the display list */ 
-         dpy->Next = _eglGlobal.DisplayList;
-         _eglGlobal.DisplayList = dpy;
+         disp->Next = _eglGlobal.DisplayList;
+         _eglGlobal.DisplayList = disp;
       }
    }
 
    mtx_unlock(_eglGlobal.Mutex);
 
-   return dpy;
+   return disp;
 }
 
 
@@ -341,16 +341,16 @@ _eglCheckDisplayHandle(EGLDisplay dpy)
  * own the resource.
  */
 EGLBoolean
-_eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *dpy)
+_eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *disp)
 {
-   _EGLResource *list = dpy->ResourceLists[type];
+   _EGLResource *list = disp->ResourceLists[type];
    
    if (!res)
       return EGL_FALSE;
 
    while (list) {
       if (res == (void *) list) {
-         assert(list->Display == dpy);
+         assert(list->Display == disp);
          break;
       }
       list = list->Next;
@@ -368,10 +368,10 @@ _eglCheckResource(void *res, _EGLResourceType type, _EGLDisplay *dpy)
  * _eglInitContext or _eglInitSurface.
  */
 void
-_eglInitResource(_EGLResource *res, EGLint size, _EGLDisplay *dpy)
+_eglInitResource(_EGLResource *res, EGLint size, _EGLDisplay *disp)
 {
    memset(res, 0, size);
-   res->Display = dpy;
+   res->Display = disp;
    res->RefCount = 1;
 }
 

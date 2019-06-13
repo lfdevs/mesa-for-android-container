@@ -420,7 +420,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
     oCol[0] = ureg_saturate(ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 0));
     oCol[1] = ureg_saturate(ureg_DECL_output(ureg, TGSI_SEMANTIC_COLOR, 1));
     if (key->fog || key->passthrough & (1 << NINE_DECLUSAGE_FOG)) {
-        oFog = ureg_DECL_output(ureg, TGSI_SEMANTIC_FOG, 0);
+        oFog = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 16);
         oFog = ureg_writemask(oFog, TGSI_WRITEMASK_X);
     }
 
@@ -1000,35 +1000,35 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
         struct ureg_src input;
         struct ureg_dst output;
         input = vs->aWgt;
-        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 18);
+        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 19);
         ureg_MOV(ureg, output, input);
     }
     if (key->passthrough & (1 << NINE_DECLUSAGE_BLENDINDICES)) {
         struct ureg_src input;
         struct ureg_dst output;
         input = vs->aInd;
-        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 19);
+        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 20);
         ureg_MOV(ureg, output, input);
     }
     if (key->passthrough & (1 << NINE_DECLUSAGE_NORMAL)) {
         struct ureg_src input;
         struct ureg_dst output;
         input = vs->aNrm;
-        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 20);
+        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 21);
         ureg_MOV(ureg, output, input);
     }
     if (key->passthrough & (1 << NINE_DECLUSAGE_TANGENT)) {
         struct ureg_src input;
         struct ureg_dst output;
         input = build_vs_add_input(vs, NINE_DECLUSAGE_TANGENT);
-        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 21);
+        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 22);
         ureg_MOV(ureg, output, input);
     }
     if (key->passthrough & (1 << NINE_DECLUSAGE_BINORMAL)) {
         struct ureg_src input;
         struct ureg_dst output;
         input = build_vs_add_input(vs, NINE_DECLUSAGE_BINORMAL);
-        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 22);
+        output = ureg_DECL_output(ureg, TGSI_SEMANTIC_GENERIC, 23);
         ureg_MOV(ureg, output, input);
     }
     if (key->passthrough & (1 << NINE_DECLUSAGE_FOG)) {
@@ -1546,7 +1546,7 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
         ureg_MOV(ureg, ureg_writemask(oCol, TGSI_WRITEMASK_W), ps.rCurSrc);
     } else
     if (key->fog) {
-        struct ureg_src vFog = ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_FOG, 0, TGSI_INTERPOLATE_PERSPECTIVE);
+        struct ureg_src vFog = ureg_DECL_fs_input(ureg, TGSI_SEMANTIC_GENERIC, 16, TGSI_INTERPOLATE_PERSPECTIVE);
         ureg_LRP(ureg, ureg_writemask(oCol, TGSI_WRITEMASK_XYZ), _XXXX(vFog), ps.rCurSrc, _CONST(21));
         ureg_MOV(ureg, ureg_writemask(oCol, TGSI_WRITEMASK_W), ps.rCurSrc);
     } else {
@@ -1819,7 +1819,7 @@ nine_ff_get_ps(struct NineDevice9 *device)
     if (s >= 1)
         key.ts[s-1].resultarg = 0;
 
-    key.projected = nine_ff_get_projected_key(context);
+    key.projected = nine_ff_get_projected_key_ff(context);
     key.specular = !!context->rs[D3DRS_SPECULARENABLE];
 
     for (; s < 8; ++s)

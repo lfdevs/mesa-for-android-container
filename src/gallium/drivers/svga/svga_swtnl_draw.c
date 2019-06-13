@@ -155,7 +155,7 @@ svga_init_swtnl(struct svga_context *svga)
    struct svga_screen *screen = svga_screen(svga->pipe.screen);
 
    svga->swtnl.backend = svga_vbuf_render_create(svga);
-   if(!svga->swtnl.backend)
+   if (!svga->swtnl.backend)
       goto fail;
 
    /*

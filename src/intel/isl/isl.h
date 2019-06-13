@@ -1361,6 +1361,11 @@ struct isl_buffer_fill_state_info {
     */
    enum isl_format format;
 
+   /**
+    * The swizzle to use in the surface state
+    */
+   struct isl_swizzle swizzle;
+
    uint32_t stride_B;
 };
 
@@ -1497,6 +1502,9 @@ isl_format_has_int_channel(enum isl_format fmt)
    return isl_format_has_uint_channel(fmt) ||
           isl_format_has_sint_channel(fmt);
 }
+
+bool isl_format_has_color_component(enum isl_format fmt,
+                                    int component) ATTRIBUTE_CONST;
 
 unsigned isl_format_get_num_channels(enum isl_format fmt);
 

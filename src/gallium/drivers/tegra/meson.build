@@ -31,8 +31,9 @@ libtegra = static_library(
   c_args : [c_vis_args],
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
-    inc_gallium_winsys, inc_drm_uapi
+    inc_gallium_winsys,
   ],
+  dependencies : dep_libdrm,
 )
 
 driver_tegra = declare_dependency(

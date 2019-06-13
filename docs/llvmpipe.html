@@ -120,10 +120,12 @@ To build everything on Linux invoke scons as:
   scons build=debug libgl-xlib
 </pre>
 
-Alternatively, you can build it with autoconf/make with:
+Alternatively, you can build it with meson with:
 <pre>
-  ./configure --enable-glx=gallium-xlib --with-gallium-drivers=swrast --disable-dri --disable-gbm --disable-egl
-  make
+  mkdir build
+  cd build
+  meson -D glx=gallium-xlib -D gallium-drivers=swrast
+  ninja
 </pre>
 
 but the rest of these instructions assume that scons is used.
@@ -306,7 +308,7 @@ for later analysis, e.g.:
       <li><a href="http://www.drdobbs.com/optimizing-pixomatic-for-modern-x86-proc/184405807">Optimizing Pixomatic For Modern x86 Processors</a></li>
       <li><a href="http://www.intel.com/content/www/us/en/architecture-and-technology/64-ia-32-architectures-optimization-manual.html">Intel 64 and IA-32 Architectures Optimization Reference Manual</a></li>
       <li><a href="http://www.agner.org/optimize/">Software optimization resources</a></li>
-      <li><a href="https://software.intel.com/en-us/articles/intel-intrinsics-guide">Intel Intrinsics Guide</a><li>
+      <li><a href="https://software.intel.com/en-us/articles/intel-intrinsics-guide">Intel Intrinsics Guide</a></li>
     </ul>
   </li>
   <li>

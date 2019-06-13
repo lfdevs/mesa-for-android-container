@@ -93,7 +93,7 @@ DRI_CONF_END
 #include "intel_tex.h"
 #include "intel_regions.h"
 
-#include "i915_drm.h"
+#include "drm-uapi/i915_drm.h"
 
 /**
  * For debugging purposes, this returns a time in seconds.

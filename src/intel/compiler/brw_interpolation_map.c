@@ -58,8 +58,7 @@ gen4_frag_prog_set_interp_modes(struct brw_wm_prog_data *prog_data,
 /* Set up interpolation modes for every element in the VUE */
 void
 brw_setup_vue_interpolation(struct brw_vue_map *vue_map, nir_shader *nir,
-                            struct brw_wm_prog_data *prog_data,
-                            const struct gen_device_info *devinfo)
+                            struct brw_wm_prog_data *prog_data)
 {
    /* Initialise interp_mode. INTERP_MODE_NONE == 0 */
    memset(prog_data->interp_mode, 0, sizeof(prog_data->interp_mode));

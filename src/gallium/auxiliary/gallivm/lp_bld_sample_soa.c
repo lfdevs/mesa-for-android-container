@@ -3112,6 +3112,11 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       use_aos &= bld.num_lods <= num_quads ||
                  derived_sampler_state.min_img_filter ==
                     derived_sampler_state.mag_img_filter;
+
+      if(gallivm_perf & GALLIVM_PERF_NO_AOS_SAMPLING) {
+         use_aos = 0;
+      }
+
       if (dims > 1) {
          use_aos &= lp_is_simple_wrap_mode(derived_sampler_state.wrap_t);
          if (dims > 2) {

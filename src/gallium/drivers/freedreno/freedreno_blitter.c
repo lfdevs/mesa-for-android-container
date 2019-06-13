@@ -30,6 +30,7 @@
 #include "freedreno_blitter.h"
 #include "freedreno_context.h"
 #include "freedreno_resource.h"
+#include "freedreno_fence.h"
 
 /* generic blit using u_blitter.. slightly modified version of util_blitter_blit
  * which also handles PIPE_BUFFER:
@@ -82,6 +83,52 @@ default_src_texture(struct pipe_sampler_view *src_templ,
 	src_templ->swizzle_a = PIPE_SWIZZLE_W;
 }
 
+static void
+fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond, bool discard,
+		enum fd_render_stage stage)
+{
+	fd_fence_ref(ctx->base.screen, &ctx->last_fence, NULL);
+
+	util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
+			ctx->constbuf[PIPE_SHADER_FRAGMENT].cb);
+	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vtx.vertexbuf.vb);
+	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx.vtx);
+	util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vp);
+	util_blitter_save_so_targets(ctx->blitter, ctx->streamout.num_targets,
+			ctx->streamout.targets);
+	util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
+	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
+	util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
+	util_blitter_save_fragment_shader(ctx->blitter, ctx->prog.fp);
+	util_blitter_save_blend(ctx->blitter, ctx->blend);
+	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
+	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
+	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
+	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer);
+	util_blitter_save_fragment_sampler_states(ctx->blitter,
+			ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers,
+			(void **)ctx->tex[PIPE_SHADER_FRAGMENT].samplers);
+	util_blitter_save_fragment_sampler_views(ctx->blitter,
+			ctx->tex[PIPE_SHADER_FRAGMENT].num_textures,
+			ctx->tex[PIPE_SHADER_FRAGMENT].textures);
+	if (!render_cond)
+		util_blitter_save_render_condition(ctx->blitter,
+			ctx->cond_query, ctx->cond_cond, ctx->cond_mode);
+
+	if (ctx->batch)
+		fd_batch_set_stage(ctx->batch, stage);
+
+	ctx->in_blit = discard;
+}
+
+static void
+fd_blitter_pipe_end(struct fd_context *ctx)
+{
+	if (ctx->batch)
+		fd_batch_set_stage(ctx->batch, FD_STAGE_NULL);
+	ctx->in_blit = false;
+}
+
 bool
 fd_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 {
@@ -126,6 +173,107 @@ fd_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
 	/* The fallback blitter must never fail: */
 	return true;
+}
+
+/* Generic clear implementation (partially) using u_blitter: */
+void
+fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
+		const union pipe_color_union *color, double depth, unsigned stencil)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct pipe_framebuffer_state *pfb = &ctx->batch->framebuffer;
+	struct blitter_context *blitter = ctx->blitter;
+
+	fd_blitter_pipe_begin(ctx, false, true, FD_STAGE_CLEAR);
+
+	util_blitter_common_clear_setup(blitter, pfb->width, pfb->height,
+			buffers, NULL, NULL);
+
+	struct pipe_stencil_ref sr = {
+		.ref_value = { stencil & 0xff }
+	};
+	pctx->set_stencil_ref(pctx, &sr);
+
+	struct pipe_constant_buffer cb = {
+		.buffer_size = 16,
+		.user_buffer = &color->ui,
+	};
+	pctx->set_constant_buffer(pctx, PIPE_SHADER_FRAGMENT, 0, &cb);
+
+	if (!ctx->clear_rs_state) {
+		const struct pipe_rasterizer_state tmpl = {
+			.cull_face = PIPE_FACE_NONE,
+			.half_pixel_center = 1,
+			.bottom_edge_rule = 1,
+			.flatshade = 1,
+			.depth_clip_near = 1,
+			.depth_clip_far = 1,
+		};
+		ctx->clear_rs_state = pctx->create_rasterizer_state(pctx, &tmpl);
+	}
+	pctx->bind_rasterizer_state(pctx, ctx->clear_rs_state);
+
+	struct pipe_viewport_state vp = {
+		.scale     = { 0.5f * pfb->width, -0.5f * pfb->height, depth },
+		.translate = { 0.5f * pfb->width,  0.5f * pfb->height, 0.0f },
+	};
+	pctx->set_viewport_states(pctx, 0, 1, &vp);
+
+	pctx->bind_vertex_elements_state(pctx, ctx->solid_vbuf_state.vtx);
+	pctx->set_vertex_buffers(pctx, blitter->vb_slot, 1,
+			&ctx->solid_vbuf_state.vertexbuf.vb[0]);
+	pctx->set_stream_output_targets(pctx, 0, NULL, NULL);
+	pctx->bind_vs_state(pctx, ctx->solid_prog.vp);
+	pctx->bind_fs_state(pctx, ctx->solid_prog.fp);
+
+	struct pipe_draw_info info = {
+		.mode = PIPE_PRIM_MAX,    /* maps to DI_PT_RECTLIST */
+		.count = 2,
+		.max_index = 1,
+		.instance_count = 1,
+	};
+	ctx->draw_vbo(ctx, &info, 0);
+
+	util_blitter_restore_constant_buffer_state(blitter);
+	util_blitter_restore_vertex_states(blitter);
+	util_blitter_restore_fragment_states(blitter);
+	util_blitter_restore_textures(blitter);
+	util_blitter_restore_fb_state(blitter);
+	util_blitter_restore_render_cond(blitter);
+	util_blitter_unset_running_flag(blitter);
+
+	fd_blitter_pipe_end(ctx);
+}
+
+/**
+ * Optimal hardware path for blitting pixels.
+ * Scaling, format conversion, up- and downsampling (resolve) are allowed.
+ */
+bool
+fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct pipe_blit_info info = *blit_info;
+
+	if (info.render_condition_enable && !fd_render_condition_check(pctx))
+		return true;
+
+	if (ctx->blit && ctx->blit(ctx, &info))
+		return true;
+
+	if (info.mask & PIPE_MASK_S) {
+		DBG("cannot blit stencil, skipping");
+		info.mask &= ~PIPE_MASK_S;
+	}
+
+	if (!util_blitter_is_blit_supported(ctx->blitter, &info)) {
+		DBG("blit unsupported %s -> %s",
+				util_format_short_name(info.src.resource->format),
+				util_format_short_name(info.dst.resource->format));
+		return false;
+	}
+
+	return fd_blitter_blit(ctx, &info);
 }
 
 /**

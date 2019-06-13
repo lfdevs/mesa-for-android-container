@@ -172,7 +172,7 @@ typedef enum {
 	OPC_STG             = _OPC(6, 3),        /* store-global */
 	OPC_STL             = _OPC(6, 4),
 	OPC_STP             = _OPC(6, 5),
-	OPC_STI             = _OPC(6, 6),
+	OPC_LDIB            = _OPC(6, 6),
 	OPC_G2L             = _OPC(6, 7),
 	OPC_L2G             = _OPC(6, 8),
 	OPC_PREFETCH        = _OPC(6, 9),
@@ -741,6 +741,10 @@ typedef union PACKED {
  *    src1    - vecN offset/coords
  *    src2    - value to store
  *
+ * For ldib:
+ *    pad1=1, pad2=c, pad3=0, pad4=2
+ *    src1    - vecN offset/coords
+ *
  * for ldc (load from UBO using descriptor):
  *    pad1=0, pad2=8, pad3=0, pad4=2
  */
@@ -755,7 +759,7 @@ typedef struct PACKED {
 	uint32_t src1     : 8;  /* coordinate/offset */
 
 	/* dword1: */
-	uint32_t src2     : 8;
+	uint32_t src2     : 8;  /* or the dst for load instructions */
 	uint32_t pad3     : 1;  //mustbe0 ?? or zero means imm vs reg for ssbo??
 	uint32_t ssbo     : 8;  /* ssbo/image binding point */
 	uint32_t type     : 3;
@@ -831,6 +835,28 @@ static inline bool instr_sat(instr_t *instr)
 	}
 }
 
+/* We can probably drop the gpu_id arg, but keeping it for now so we can
+ * assert if we see something we think should be new encoding on an older
+ * gpu.
+ */
+static inline bool is_cat6_legacy(instr_t *instr, unsigned gpu_id)
+{
+	instr_cat6_a6xx_t *cat6 = &instr->cat6_a6xx;
+
+	/* At least one of these two bits is pad in all the possible
+	 * "legacy" cat6 encodings, and a analysis of all the pre-a6xx
+	 * cmdstream traces I have indicates that the pad bit is zero
+	 * in all cases.  So we can use this to detect new encoding:
+	 */
+	if ((cat6->pad2 & 0x8) && (cat6->pad4 & 0x2)) {
+		assert(gpu_id >= 600);
+		assert(instr->cat6.opc == 0);
+		return false;
+	}
+
+	return true;
+}
+
 static inline uint32_t instr_opc(instr_t *instr, unsigned gpu_id)
 {
 	switch (instr->opc_cat) {
@@ -841,10 +867,7 @@ static inline uint32_t instr_opc(instr_t *instr, unsigned gpu_id)
 	case 4:  return instr->cat4.opc;
 	case 5:  return instr->cat5.opc;
 	case 6:
-		// TODO not sure if this is the best way to figure
-		// out if new vs old encoding, but it kinda seems
-		// to work:
-		if ((gpu_id >= 600) && (instr->cat6.opc == 0))
+		if (!is_cat6_legacy(instr, gpu_id))
 			return instr->cat6_a6xx.opc;
 		return instr->cat6.opc;
 	case 7:  return instr->cat7.opc;
@@ -906,6 +929,18 @@ static inline bool is_ssbo(opc_t opc)
 	case OPC_LDGB:
 	case OPC_STGB:
 	case OPC_STIB:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static inline bool is_isam(opc_t opc)
+{
+	switch (opc) {
+	case OPC_ISAM:
+	case OPC_ISAML:
+	case OPC_ISAMM:
 		return true;
 	default:
 		return false;

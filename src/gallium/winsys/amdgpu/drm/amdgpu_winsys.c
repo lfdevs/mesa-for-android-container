@@ -273,12 +273,6 @@ static bool amdgpu_winsys_unref(struct radeon_winsys *rws)
    return destroy;
 }
 
-static const char* amdgpu_get_chip_name(struct radeon_winsys *ws)
-{
-   amdgpu_device_handle dev = ((struct amdgpu_winsys *)ws)->dev;
-   return amdgpu_get_marketing_name(dev);
-}
-
 static void amdgpu_pin_threads_to_L3_cache(struct radeon_winsys *rws,
                                            unsigned cache)
 {
@@ -388,7 +382,6 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    ws->base.cs_request_feature = amdgpu_cs_request_feature;
    ws->base.query_value = amdgpu_query_value;
    ws->base.read_registers = amdgpu_read_registers;
-   ws->base.get_chip_name = amdgpu_get_chip_name;
    ws->base.pin_threads_to_L3_cache = amdgpu_pin_threads_to_L3_cache;
 
    amdgpu_bo_init_functions(ws);

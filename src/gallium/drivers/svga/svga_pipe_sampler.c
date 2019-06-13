@@ -405,28 +405,18 @@ svga_sampler_view_destroy(struct pipe_context *pipe,
    struct svga_pipe_sampler_view *sv = svga_pipe_sampler_view(view);
 
    if (svga_have_vgpu10(svga) && sv->id != SVGA3D_INVALID_ID) {
-      if (view->context != pipe) {
-         /* The SVGA3D device will generate an error (and on Linux, cause
-          * us to abort) if we try to destroy a shader resource view from
-          * a context other than the one it was created with.  Skip the
-          * SVGA3D_vgpu10_DestroyShaderResourceView() and leak the sampler
-          * view for now.  This should only sometimes happen when a shared
-          * texture is deleted.
-          */
-         _debug_printf("context mismatch in %s\n", __func__);
-      }
-      else {
-         enum pipe_error ret;
+      enum pipe_error ret;
 
-         svga_hwtnl_flush_retry(svga); /* XXX is this needed? */
+      assert(view->context == pipe);
 
+      svga_hwtnl_flush_retry(svga);
+
+      ret = SVGA3D_vgpu10_DestroyShaderResourceView(svga->swc, sv->id);
+      if (ret != PIPE_OK) {
+         svga_context_flush(svga, NULL);
          ret = SVGA3D_vgpu10_DestroyShaderResourceView(svga->swc, sv->id);
-         if (ret != PIPE_OK) {
-            svga_context_flush(svga, NULL);
-            ret = SVGA3D_vgpu10_DestroyShaderResourceView(svga->swc, sv->id);
-         }
-         util_bitmask_clear(svga->sampler_view_id_bm, sv->id);
       }
+      util_bitmask_clear(svga->sampler_view_id_bm, sv->id);
    }
 
    pipe_resource_reference(&sv->base.texture, NULL);
@@ -465,7 +455,8 @@ svga_set_sampler_views(struct pipe_context *pipe,
     */
    if (start == 0 && num == 0 && svga->curr.num_sampler_views[shader] > 0) {
       for (i = 0; i < svga->curr.num_sampler_views[shader]; i++) {
-         pipe_sampler_view_release(pipe, &svga->curr.sampler_views[shader][i]);
+         pipe_sampler_view_reference(&svga->curr.sampler_views[shader][i],
+                                     NULL);
       }
       any_change = TRUE;
    }
@@ -474,11 +465,6 @@ svga_set_sampler_views(struct pipe_context *pipe,
       enum pipe_texture_target target;
 
       if (svga->curr.sampler_views[shader][start + i] != views[i]) {
-         /* Note: we're using pipe_sampler_view_release() here to work around
-          * a possible crash when the old view belongs to another context that
-          * was already destroyed.
-          */
-         pipe_sampler_view_release(pipe, &svga->curr.sampler_views[shader][start + i]);
          pipe_sampler_view_reference(&svga->curr.sampler_views[shader][start + i],
                                      views[i]);
          any_change = TRUE;
@@ -552,8 +538,8 @@ svga_cleanup_sampler_state(struct svga_context *svga)
       unsigned i;
 
       for (i = 0; i < svga->state.hw_draw.num_sampler_views[shader]; i++) {
-         pipe_sampler_view_release(&svga->pipe,
-                                   &svga->state.hw_draw.sampler_views[shader][i]);
+         pipe_sampler_view_reference(&svga->state.hw_draw.sampler_views[shader][i],
+                                     NULL);
       }
    }
    

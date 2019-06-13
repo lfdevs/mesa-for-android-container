@@ -62,11 +62,11 @@ nine_decltype_get_dim(BYTE type)
 }
 
 static inline uint16_t
-nine_ff_get_projected_key(struct nine_context *context)
+nine_ff_get_projected_key(struct nine_context *context, unsigned num_stages)
 {
     unsigned s, i;
     uint16_t projected = 0;
-    char input_texture_coord[8];
+    char input_texture_coord[num_stages];
     memset(&input_texture_coord, 0, sizeof(input_texture_coord));
 
     if (context->vdecl) {
@@ -74,13 +74,13 @@ nine_ff_get_projected_key(struct nine_context *context)
             uint16_t usage = context->vdecl->usage_map[i];
             if (usage % NINE_DECLUSAGE_COUNT == NINE_DECLUSAGE_TEXCOORD) {
                 s = usage / NINE_DECLUSAGE_COUNT;
-                if (s < 8)
+                if (s < num_stages)
                     input_texture_coord[s] = nine_decltype_get_dim(context->vdecl->decls[i].Type);
             }
         }
     }
 
-    for (s = 0; s < 8; ++s) {
+    for (s = 0; s < num_stages; ++s) {
         unsigned gen = (context->ff.tex_stage[s][D3DTSS_TEXCOORDINDEX] >> 16) + 1;
         unsigned dim = context->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & 0x7;
         unsigned proj = !!(context->ff.tex_stage[s][D3DTSS_TEXTURETRANSFORMFLAGS] & D3DTTFF_PROJECTED);
@@ -105,6 +105,22 @@ nine_ff_get_projected_key(struct nine_context *context)
             projected |= (dim-1) << (2 * s);
     }
     return projected;
+}
+
+static inline uint16_t
+nine_ff_get_projected_key_ff(struct nine_context *context)
+{
+    /* 8 stages */
+    return nine_ff_get_projected_key(context, 8);
+}
+
+static inline uint8_t
+nine_ff_get_projected_key_programmable(struct nine_context *context)
+{
+    /* We only look at the 4 stages because this function
+     * is used only for ps 1.1-3, where only the first four
+     * slots are available */
+    return (uint8_t)nine_ff_get_projected_key(context, 4);
 }
 
 #endif /* _NINE_FF_H_ */

@@ -67,7 +67,6 @@ struct LoadRasterTile
         uint32_t x, uint32_t y,
         uint8_t* pDst)
     {
-#if USE_8x2_TILE_BACKEND
         typedef SimdTile_16<DstFormat, SrcFormat> SimdT;
 
         SimdT* pDstSimdTiles = (SimdT*)pDst;
@@ -81,21 +80,6 @@ struct LoadRasterTile
         uint32_t simdOffset = (y % SIMD16_TILE_Y_DIM) * SIMD16_TILE_X_DIM + (x % SIMD16_TILE_X_DIM);
 
         pSimdTile->SetSwizzledColor(simdOffset, srcColor);
-#else
-        typedef SimdTile<DstFormat, SrcFormat> SimdT;
-
-        SimdT* pDstSimdTiles = (SimdT*)pDst;
-
-        // Compute which simd tile we're accessing within 8x8 tile.
-        //   i.e. Compute linear simd tile coordinate given (x, y) in pixel coordinates.
-        uint32_t simdIndex = (y / SIMD_TILE_Y_DIM) * (KNOB_TILE_X_DIM / SIMD_TILE_X_DIM) + (x / SIMD_TILE_X_DIM);
-
-        SimdT* pSimdTile = &pDstSimdTiles[simdIndex];
-
-        uint32_t simdOffset = (y % SIMD_TILE_Y_DIM) * SIMD_TILE_X_DIM + (x % SIMD_TILE_X_DIM);
-
-        pSimdTile->SetSwizzledColor(simdOffset, srcColor);
-#endif
     }
 
     //////////////////////////////////////////////////////////////////////////

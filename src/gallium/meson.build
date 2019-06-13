@@ -89,6 +89,12 @@ if with_gallium_vc4
 else
   driver_vc4 = declare_dependency()
 endif
+if with_gallium_panfrost
+  subdir('winsys/panfrost/drm')
+  subdir('drivers/panfrost')
+else
+  driver_panfrost = declare_dependency()
+endif
 if with_gallium_etnaviv
   subdir('winsys/etnaviv/drm')
   subdir('drivers/etnaviv')
@@ -112,6 +118,12 @@ if with_gallium_tegra
 else
   driver_tegra = declare_dependency()
 endif
+if with_gallium_iris
+  subdir('winsys/iris/drm')
+  subdir('drivers/iris')
+else
+  driver_iris = declare_dependency()
+endif
 if with_gallium_i915
   subdir('winsys/i915/drm')
   subdir('drivers/i915')
@@ -130,6 +142,12 @@ if with_gallium_virgl
   subdir('drivers/virgl')
 else
   driver_virgl = declare_dependency()
+endif
+if with_gallium_lima
+  subdir('winsys/lima/drm')
+  subdir('drivers/lima')
+else
+  driver_lima = declare_dependency()
 endif
 if with_gallium_opencl
   # TODO: this isn't really clover specific, but ATM clover is the only

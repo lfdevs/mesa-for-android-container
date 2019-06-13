@@ -65,15 +65,17 @@ build_umod(nir_builder *b, nir_ssa_def *n, uint64_t d)
 static nir_ssa_def *
 build_idiv(nir_builder *b, nir_ssa_def *n, int64_t d)
 {
+   uint64_t abs_d = d < 0 ? -d : d;
+
    if (d == 0) {
       return nir_imm_intN_t(b, 0, n->bit_size);
    } else if (d == 1) {
       return n;
    } else if (d == -1) {
       return nir_ineg(b, n);
-   } else if (util_is_power_of_two_or_zero64(d)) {
-      uint64_t abs_d = d < 0 ? -d : d;
-      nir_ssa_def *uq = nir_ishr(b, n, nir_imm_int(b, util_logbase2_64(abs_d)));
+   } else if (util_is_power_of_two_or_zero64(abs_d)) {
+      nir_ssa_def *uq = nir_ushr(b, nir_iabs(b, n),
+                                    nir_imm_int(b, util_logbase2_64(abs_d)));
       nir_ssa_def *n_neg = nir_ilt(b, n, nir_imm_intN_t(b, 0, n->bit_size));
       nir_ssa_def *neg = d < 0 ? nir_inot(b, n_neg) : n_neg;
       return nir_bcsel(b, neg, nir_ineg(b, uq), uq);
@@ -119,16 +121,16 @@ nir_opt_idiv_const_instr(nir_builder *b, nir_alu_instr *alu)
       int64_t d;
       switch (bit_size) {
       case 8:
-         d = const_denom->i8[alu->src[1].swizzle[comp]];
+         d = const_denom[alu->src[1].swizzle[comp]].i8;
          break;
       case 16:
-         d = const_denom->i16[alu->src[1].swizzle[comp]];
+         d = const_denom[alu->src[1].swizzle[comp]].i16;
          break;
       case 32:
-         d = const_denom->i32[alu->src[1].swizzle[comp]];
+         d = const_denom[alu->src[1].swizzle[comp]].i32;
          break;
       case 64:
-         d = const_denom->i64[alu->src[1].swizzle[comp]];
+         d = const_denom[alu->src[1].swizzle[comp]].i64;
          break;
       default:
          unreachable("Invalid bit size");

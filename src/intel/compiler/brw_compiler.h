@@ -196,6 +196,10 @@ struct brw_sampler_prog_key_data {
    uint32_t yx_xuxv_image_mask;
    uint32_t xy_uxvx_image_mask;
    uint32_t ayuv_image_mask;
+   uint32_t xyuv_image_mask;
+
+   /* Scale factor for each texture. */
+   float scale_factors[32];
 };
 
 /**
@@ -394,7 +398,8 @@ struct brw_wm_prog_key {
    bool stats_wm:1;
    bool flat_shade:1;
    unsigned nr_color_regions:5;
-   bool replicate_alpha:1;
+   bool alpha_test_replicate_alpha:1;
+   bool alpha_to_coverage:1;
    bool clamp_fragment_color:1;
    bool persample_interp:1;
    bool multisample_fbo:1;
@@ -564,6 +569,8 @@ enum brw_param_builtin {
    BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_X,
    BRW_PARAM_BUILTIN_TESS_LEVEL_INNER_Y,
 
+   BRW_PARAM_BUILTIN_PATCH_VERTICES_IN,
+
    BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_X,
    BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_Y,
    BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_Z,
@@ -701,6 +708,7 @@ struct brw_wm_prog_data {
    bool dispatch_16;
    bool dispatch_32;
    bool dual_src_blend;
+   bool replicate_alpha;
    bool persample_dispatch;
    bool uses_pos_offset;
    bool uses_omask;
@@ -987,8 +995,7 @@ void brw_compute_tess_vue_map(struct brw_vue_map *const vue_map,
 /* brw_interpolation_map.c */
 void brw_setup_vue_interpolation(struct brw_vue_map *vue_map,
                                  struct nir_shader *nir,
-                                 struct brw_wm_prog_data *prog_data,
-                                 const struct gen_device_info *devinfo);
+                                 struct brw_wm_prog_data *prog_data);
 
 enum shader_dispatch_mode {
    DISPATCH_MODE_4X1_SINGLE = 0,
@@ -1340,6 +1347,10 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
                const struct nir_shader *shader,
                int shader_time_index,
                char **error_str);
+
+void brw_debug_key_recompile(const struct brw_compiler *c, void *log,
+                             gl_shader_stage stage,
+                             const void *old_key, const void *key);
 
 static inline uint32_t
 encode_slm_size(unsigned gen, uint32_t bytes)

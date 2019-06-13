@@ -100,7 +100,9 @@ DERIVEDCLASS(vid_enc_PrivateType, omx_base_filter_PrivateType)
 	struct pipe_video_buffer *scale_buffer[OMX_VID_ENC_NUM_SCALING_BUFFERS]; \
 	OMX_CONFIG_SCALEFACTORTYPE scale; \
 	OMX_U32 current_scale_buffer; \
-	OMX_U32 stacked_frames_num;
+	OMX_U32 stacked_frames_num; \
+	void *copy_y_shader; \
+	void *copy_uv_shader;
 ENDCLASS(vid_enc_PrivateType)
 
 #else
@@ -151,6 +153,8 @@ struct h264e_prc
    bool eos_;
    bool in_port_disabled_;
    bool out_port_disabled_;
+   void *copy_y_shader;
+   void *copy_uv_shader;
 };
 #endif
 
@@ -167,6 +171,8 @@ void enc_ScaleInput_common(vid_enc_PrivateType * priv,
                                          struct pipe_video_buffer **vbuf, unsigned *size);
 void enc_ControlPicture_common(vid_enc_PrivateType * priv,
                                struct pipe_h264_enc_picture_desc *picture);
+void enc_InitCompute_common(vid_enc_PrivateType *priv);
+void enc_ReleaseCompute_common(vid_enc_PrivateType *priv);
 OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEFINITIONTYPE *def,
                                    OMX_BUFFERHEADERTYPE *buf,
                                    struct pipe_video_buffer *vbuf);

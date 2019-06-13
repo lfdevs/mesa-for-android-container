@@ -30,9 +30,10 @@ build_buffer_fill_shader(struct radv_device *dev)
 	nir_intrinsic_instr *dst_buf = nir_intrinsic_instr_create(b.shader,
 	                                                          nir_intrinsic_vulkan_resource_index);
 	dst_buf->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	dst_buf->num_components = 1;
 	nir_intrinsic_set_desc_set(dst_buf, 0);
 	nir_intrinsic_set_binding(dst_buf, 0);
-	nir_ssa_dest_init(&dst_buf->instr, &dst_buf->dest, 1, 32, NULL);
+	nir_ssa_dest_init(&dst_buf->instr, &dst_buf->dest, dst_buf->num_components, 32, NULL);
 	nir_builder_instr_insert(&b, &dst_buf->instr);
 
 	nir_intrinsic_instr *load = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_push_constant);
@@ -50,6 +51,7 @@ build_buffer_fill_shader(struct radv_device *dev)
 	store->src[1] = nir_src_for_ssa(&dst_buf->dest.ssa);
 	store->src[2] = nir_src_for_ssa(offset);
 	nir_intrinsic_set_write_mask(store, 0xf);
+	nir_intrinsic_set_access(store, ACCESS_NON_READABLE);
 	store->num_components = 4;
 	nir_builder_instr_insert(&b, &store->instr);
 
@@ -82,17 +84,19 @@ build_buffer_copy_shader(struct radv_device *dev)
 	nir_intrinsic_instr *dst_buf = nir_intrinsic_instr_create(b.shader,
 	                                                          nir_intrinsic_vulkan_resource_index);
 	dst_buf->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	dst_buf->num_components = 1;
 	nir_intrinsic_set_desc_set(dst_buf, 0);
 	nir_intrinsic_set_binding(dst_buf, 0);
-	nir_ssa_dest_init(&dst_buf->instr, &dst_buf->dest, 1, 32, NULL);
+	nir_ssa_dest_init(&dst_buf->instr, &dst_buf->dest, dst_buf->num_components, 32, NULL);
 	nir_builder_instr_insert(&b, &dst_buf->instr);
 
 	nir_intrinsic_instr *src_buf = nir_intrinsic_instr_create(b.shader,
 	                                                          nir_intrinsic_vulkan_resource_index);
 	src_buf->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+	src_buf->num_components = 1;
 	nir_intrinsic_set_desc_set(src_buf, 0);
 	nir_intrinsic_set_binding(src_buf, 1);
-	nir_ssa_dest_init(&src_buf->instr, &src_buf->dest, 1, 32, NULL);
+	nir_ssa_dest_init(&src_buf->instr, &src_buf->dest, src_buf->num_components, 32, NULL);
 	nir_builder_instr_insert(&b, &src_buf->instr);
 
 	nir_intrinsic_instr *load = nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_ssbo);
@@ -107,6 +111,7 @@ build_buffer_copy_shader(struct radv_device *dev)
 	store->src[1] = nir_src_for_ssa(&dst_buf->dest.ssa);
 	store->src[2] = nir_src_for_ssa(offset);
 	nir_intrinsic_set_write_mask(store, 0xf);
+	nir_intrinsic_set_access(store, ACCESS_NON_READABLE);
 	store->num_components = 4;
 	nir_builder_instr_insert(&b, &store->instr);
 

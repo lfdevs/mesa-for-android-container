@@ -48,6 +48,7 @@
 #include "vmw_surface.h"
 #include "vmw_buffer.h"
 #include "vmw_fence.h"
+#include "vmw_msg.h"
 #include "vmw_shader.h"
 #include "vmw_query.h"
 #include "svga3d_surfacedefs.h"
@@ -508,6 +509,8 @@ vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws)
    vws->base.stats_inc = vmw_svga_winsys_stats_inc;
    vws->base.stats_time_push = vmw_svga_winsys_stats_time_push;
    vws->base.stats_time_pop = vmw_svga_winsys_stats_time_pop;
+
+   vws->base.host_log = vmw_svga_winsys_host_log;
 
    return TRUE;
 }

@@ -11,6 +11,14 @@ DRI_CONF_SECTION_PERFORMANCE
 DRI_CONF_SECTION_END
 
 DRI_CONF_SECTION_DEBUG
-   DRI_CONF_RADEONSI_CLEAR_DB_CACHE_BEFORE_CLEAR("false")
-   DRI_CONF_RADEONSI_ENABLE_NIR("false")
+
+//= BEGIN VERBATIM
+#define OPT_BOOL(name, dflt, description) \
+	DRI_CONF_OPT_BEGIN_B(radeonsi_##name, #dflt) \
+		DRI_CONF_DESC(en, description) \
+	DRI_CONF_OPT_END
+
+#include "radeonsi/si_debug_options.h"
+//= END VERBATIM
+
 DRI_CONF_SECTION_END

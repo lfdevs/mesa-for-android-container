@@ -578,7 +578,7 @@ svga_translate_decl_sm30(struct svga_shader_emitter *emit,
    unsigned last = decl->Range.Last;
    unsigned idx;
 
-   for(idx = first; idx <= last; idx++) {
+   for (idx = first; idx <= last; idx++) {
       boolean ok = TRUE;
 
       switch (decl->Declaration.File) {

@@ -32,20 +32,20 @@
 extern "C" {
 #endif
 
-int type_size_scalar(const struct glsl_type *type);
-int type_size_vec4(const struct glsl_type *type);
-int type_size_dvec4(const struct glsl_type *type);
+int type_size_scalar(const struct glsl_type *type, bool bindless);
+int type_size_vec4(const struct glsl_type *type, bool bindless);
+int type_size_dvec4(const struct glsl_type *type, bool bindless);
 
 static inline int
-type_size_scalar_bytes(const struct glsl_type *type)
+type_size_scalar_bytes(const struct glsl_type *type, bool bindless)
 {
-   return type_size_scalar(type) * 4;
+   return type_size_scalar(type, bindless) * 4;
 }
 
 static inline int
-type_size_vec4_bytes(const struct glsl_type *type)
+type_size_vec4_bytes(const struct glsl_type *type, bool bindless)
 {
-   return type_size_vec4(type) * 16;
+   return type_size_vec4(type, bindless) * 16;
 }
 
 /* Flags set in the instr->pass_flags field by i965 analysis passes */
@@ -93,7 +93,8 @@ enum {
 void brw_nir_analyze_boolean_resolves(nir_shader *nir);
 
 nir_shader *brw_preprocess_nir(const struct brw_compiler *compiler,
-                               nir_shader *nir);
+                               nir_shader *nir,
+                               const nir_shader *softfp64);
 
 void
 brw_nir_link_shaders(const struct brw_compiler *compiler,
@@ -114,10 +115,14 @@ void brw_nir_lower_tcs_outputs(nir_shader *nir, const struct brw_vue_map *vue,
                                GLenum tes_primitive_mode);
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 
+bool brw_nir_lower_conversions(nir_shader *nir);
+
 bool brw_nir_lower_image_load_store(nir_shader *nir,
                                     const struct gen_device_info *devinfo);
 void brw_nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin,
                                      nir_ssa_def *index);
+void brw_nir_rewrite_bindless_image_intrinsic(nir_intrinsic_instr *intrin,
+                                              nir_ssa_def *handle);
 
 bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader);
 

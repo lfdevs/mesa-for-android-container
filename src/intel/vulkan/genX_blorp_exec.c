@@ -258,11 +258,6 @@ genX(blorp_exec)(struct blorp_batch *batch,
     */
    genX(cmd_buffer_enable_pma_fix)(cmd_buffer, false);
 
-   /* Disable VF statistics */
-   blorp_emit(batch, GENX(3DSTATE_VF_STATISTICS), vf) {
-      vf.StatisticsEnable = false;
-   }
-
    blorp_exec(batch, params);
 
    cmd_buffer->state.gfx.vb_dirty = ~0;

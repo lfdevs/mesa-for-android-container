@@ -193,6 +193,7 @@ struct radeon_cmdbuf {
     /* Memory usage of the buffer list. These are always 0 for preamble IBs. */
     uint64_t                      used_vram;
     uint64_t                      used_gart;
+    uint64_t                      gpu_address;
 };
 
 /* Tiling info for display code, DRI sharing, and other data. */
@@ -217,6 +218,12 @@ struct radeon_bo_metadata {
         struct {
             /* surface flags */
             unsigned swizzle_mode:5;
+
+            /* DCC flags */
+            /* [31:8]: max offset = 4GB - 256; 0 = DCC disabled */
+            unsigned dcc_offset_256B:24;
+            unsigned dcc_pitch_max:14;   /* (mip chain pitch - 1) for DCN */
+            unsigned dcc_independent_64B:1;
         } gfx9;
     } u;
 
@@ -677,8 +684,6 @@ struct radeon_winsys {
 
     bool (*read_registers)(struct radeon_winsys *ws, unsigned reg_offset,
                            unsigned num_registers, uint32_t *out);
-
-    const char* (*get_chip_name)(struct radeon_winsys *ws);
 };
 
 static inline bool radeon_emitted(struct radeon_cmdbuf *cs, unsigned num_dw)

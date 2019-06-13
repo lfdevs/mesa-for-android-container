@@ -27,7 +27,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 #include "anv_private.h"
 #include "util/debug.h"
@@ -638,6 +638,70 @@ fail:
    return r;
 }
 
+static struct anv_image *
+anv_swapchain_get_image(VkSwapchainKHR swapchain,
+                        uint32_t index)
+{
+   uint32_t n_images = index + 1;
+   VkImage *images = malloc(sizeof(*images) * n_images);
+   VkResult result = wsi_common_get_images(swapchain, &n_images, images);
+
+   if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+      free(images);
+      return NULL;
+   }
+
+   ANV_FROM_HANDLE(anv_image, image, images[index]);
+   free(images);
+
+   return image;
+}
+
+static VkResult
+anv_image_from_swapchain(VkDevice device,
+                         const VkImageCreateInfo *pCreateInfo,
+                         const VkImageSwapchainCreateInfoKHR *swapchain_info,
+                         const VkAllocationCallbacks *pAllocator,
+                         VkImage *pImage)
+{
+   struct anv_image *swapchain_image = anv_swapchain_get_image(swapchain_info->swapchain, 0);
+   assert(swapchain_image);
+
+   assert(swapchain_image->type == pCreateInfo->imageType);
+   assert(swapchain_image->vk_format == pCreateInfo->format);
+   assert(swapchain_image->extent.width == pCreateInfo->extent.width);
+   assert(swapchain_image->extent.height == pCreateInfo->extent.height);
+   assert(swapchain_image->extent.depth == pCreateInfo->extent.depth);
+   assert(swapchain_image->array_size == pCreateInfo->arrayLayers);
+   /* Color attachment is added by the wsi code. */
+   assert(swapchain_image->usage == (pCreateInfo->usage | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT));
+
+   VkImageCreateInfo local_create_info;
+   local_create_info = *pCreateInfo;
+   local_create_info.pNext = NULL;
+   /* The following parameters are implictly selected by the wsi code. */
+   local_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+   local_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+   local_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+   /* If the image has a particular modifier, specify that modifier. */
+   struct wsi_image_create_info local_wsi_info = {
+      .sType = VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA,
+      .modifier_count = 1,
+      .modifiers = &swapchain_image->drm_format_mod,
+   };
+   if (swapchain_image->drm_format_mod != DRM_FORMAT_MOD_INVALID)
+      __vk_append_struct(&local_create_info, &local_wsi_info);
+
+   return anv_image_create(device,
+      &(struct anv_image_create_info) {
+         .vk_info = &local_create_info,
+         .external_format = swapchain_image->external_format,
+      },
+      pAllocator,
+      pImage);
+}
+
 VkResult
 anv_CreateImage(VkDevice device,
                 const VkImageCreateInfo *pCreateInfo,
@@ -657,6 +721,12 @@ anv_CreateImage(VkDevice device,
    if (gralloc_info)
       return anv_image_from_gralloc(device, pCreateInfo, gralloc_info,
                                     pAllocator, pImage);
+
+   const VkImageSwapchainCreateInfoKHR *swapchain_info =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_SWAPCHAIN_CREATE_INFO_KHR);
+   if (swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE)
+      return anv_image_from_swapchain(device, pCreateInfo, swapchain_info,
+                                      pAllocator, pImage);
 
    return anv_image_create(device,
       &(struct anv_image_create_info) {
@@ -714,7 +784,7 @@ resolve_ahw_image(struct anv_device *device,
                   struct anv_image *image,
                   struct anv_device_memory *mem)
 {
-#ifdef ANDROID
+#if defined(ANDROID) && ANDROID_API_LEVEL >= 26
    assert(mem->ahw);
    AHardwareBuffer_Desc desc;
    AHardwareBuffer_describe(mem->ahw, &desc);
@@ -751,7 +821,7 @@ resolve_ahw_image(struct anv_device *device,
                                                 vk_format,
                                                 VK_IMAGE_ASPECT_COLOR_BIT,
                                                 vk_tiling);
-   assert(format != ISL_FORMAT_UNSUPPORTED);
+   assert(isl_fmt != ISL_FORMAT_UNSUPPORTED);
 
    /* Handle RGB(X)->RGBA fallback. */
    switch (desc.format) {
@@ -818,7 +888,8 @@ VkResult anv_BindImageMemory2(
       ANV_FROM_HANDLE(anv_device_memory, mem, bind_info->memory);
       ANV_FROM_HANDLE(anv_image, image, bind_info->image);
 
-      if (mem->ahw)
+      /* Resolve will alter the image's aspects, do this first. */
+      if (mem && mem->ahw)
          resolve_ahw_image(device, image, mem);
 
       VkImageAspectFlags aspects = image->aspects;
@@ -831,11 +902,40 @@ VkResult anv_BindImageMemory2(
             aspects = plane_info->planeAspect;
             break;
          }
+         case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR: {
+            const VkBindImageMemorySwapchainInfoKHR *swapchain_info =
+               (const VkBindImageMemorySwapchainInfoKHR *) s;
+            struct anv_image *swapchain_image =
+               anv_swapchain_get_image(swapchain_info->swapchain,
+                                       swapchain_info->imageIndex);
+            assert(swapchain_image);
+            assert(image->aspects == swapchain_image->aspects);
+            assert(mem == NULL);
+
+            uint32_t aspect_bit;
+            anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
+               uint32_t plane =
+                  anv_image_aspect_to_plane(image->aspects, 1UL << aspect_bit);
+               struct anv_device_memory mem = {
+                  .bo = swapchain_image->planes[plane].address.bo,
+               };
+               anv_image_bind_memory_plane(device, image, plane,
+                                           &mem, bind_info->memoryOffset);
+            }
+            break;
+         }
          default:
             anv_debug_ignored_stype(s->sType);
             break;
          }
       }
+
+      /* VkBindImageMemorySwapchainInfoKHR requires memory to be
+       * VK_NULL_HANDLE. In such case, just carry one with the next bind
+       * item.
+       */
+      if (!mem)
+         continue;
 
       uint32_t aspect_bit;
       anv_foreach_image_aspect_bit(aspect_bit, image, aspects) {
@@ -1178,6 +1278,10 @@ anv_image_fill_surface_state(struct anv_device *device,
    if (view_usage == ISL_SURF_USAGE_RENDER_TARGET_BIT)
       view.swizzle = anv_swizzle_for_render(view.swizzle);
 
+   /* On Ivy Bridge and Bay Trail we do the swizzle in the shader */
+   if (device->info.gen == 7 && !device->info.is_haswell)
+      view.swizzle = ISL_SWIZZLE_IDENTITY;
+
    /* If this is a HiZ buffer we can sample from with a programmable clear
     * value (SKL+), define the clear value to the optimal constant.
     */
@@ -1203,6 +1307,7 @@ anv_image_fill_surface_state(struct anv_device *device,
                             .address = anv_address_physical(address),
                             .size_B = surface->isl.size_B,
                             .format = ISL_FORMAT_RAW,
+                            .swizzle = ISL_SWIZZLE_IDENTITY,
                             .stride_B = 1,
                             .mocs = anv_mocs_for_bo(device, address.bo));
       state_inout->address = address,

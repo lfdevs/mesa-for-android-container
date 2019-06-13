@@ -591,7 +591,7 @@ fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
     */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
       if (inst->dst.file == VGRF && inst->has_source_and_destination_hazard()) {
-         for (unsigned i = 0; i < 3; i++) {
+         for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->src[i].file == VGRF) {
                ra_add_node_interference(g, inst->dst.nr, inst->src[i].nr);
             }
@@ -710,14 +710,9 @@ fs_visitor::assign_regs(bool allow_spilling, bool spill_all)
          if (inst->opcode == SHADER_OPCODE_SEND && inst->ex_mlen > 0 &&
              inst->src[2].file == VGRF &&
              inst->src[3].file == VGRF &&
-             inst->src[2].nr != inst->src[3].nr) {
-            for (unsigned i = 0; i < inst->mlen; i++) {
-               for (unsigned j = 0; j < inst->ex_mlen; j++) {
-                  ra_add_node_interference(g, inst->src[2].nr + i,
-                                           inst->src[3].nr + j);
-               }
-            }
-         }
+             inst->src[2].nr != inst->src[3].nr)
+            ra_add_node_interference(g, inst->src[2].nr,
+                                     inst->src[3].nr);
       }
    }
 
@@ -932,8 +927,20 @@ fs_visitor::choose_spill_reg(struct ra_graph *g)
    }
 
    for (unsigned i = 0; i < this->alloc.count; i++) {
+      int live_length = virtual_grf_end[i] - virtual_grf_start[i];
+      if (live_length <= 0)
+         continue;
+
+      /* Divide the cost (in number of spills/fills) by the log of the length
+       * of the live range of the register.  This will encourage spill logic
+       * to spill long-living things before spilling short-lived things where
+       * spilling is less likely to actually do us any good.  We use the log
+       * of the length because it will fall off very quickly and not cause us
+       * to spill medium length registers with more uses.
+       */
+      float adjusted_cost = spill_costs[i] / logf(live_length);
       if (!no_spill[i])
-	 ra_set_node_spill_cost(g, i, spill_costs[i]);
+	 ra_set_node_spill_cost(g, i, adjusted_cost);
    }
 
    return ra_get_best_spill_node(g);

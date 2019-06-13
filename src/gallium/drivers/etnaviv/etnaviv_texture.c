@@ -37,7 +37,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 static void
 etna_bind_sampler_states(struct pipe_context *pctx, enum pipe_shader_type shader,

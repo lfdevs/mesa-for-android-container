@@ -291,6 +291,10 @@ lower_io_arrays_to_elements(nir_shader *shader, nir_variable_mode mask,
 
                nir_variable *var = nir_deref_instr_get_variable(deref);
 
+               /* Drivers assume compact arrays are, in fact, arrays. */
+               if (var->data.compact)
+                  continue;
+
                /* Skip indirects */
                uint64_t loc_mask = ((uint64_t)1) << var->data.location;
                if (var->data.patch) {
@@ -314,7 +318,7 @@ lower_io_arrays_to_elements(nir_shader *shader, nir_variable_mode mask,
                 * TODO: Add support for struct splitting.
                 */
                if ((!glsl_type_is_array(type) && !glsl_type_is_matrix(type))||
-                   glsl_type_is_struct(glsl_without_array(type)))
+                   glsl_type_is_struct_or_ifc(glsl_without_array(type)))
                   continue;
 
                /* Skip builtins */

@@ -53,8 +53,7 @@ draw_emit_indirect(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 	if (info->index_size) {
 		struct pipe_resource *idx = info->index.resource;
-		unsigned max_indicies = (idx->width0 - info->indirect->offset) /
-			info->index_size;
+		unsigned max_indicies = idx->width0 / info->index_size;
 
 		OUT_PKT7(ring, CP_DRAW_INDX_INDIRECT, 6);
 		OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_DMA,
@@ -159,19 +158,18 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 				.fclamp_color = ctx->rasterizer->clamp_fragment_color,
 				.rasterflat = ctx->rasterizer->flatshade,
 				.ucp_enables = ctx->rasterizer->clip_plane_enable,
-				.has_per_samp = (fd6_ctx->fsaturate || fd6_ctx->vsaturate ||
-						fd6_ctx->fastc_srgb || fd6_ctx->vastc_srgb),
+				.has_per_samp = (fd6_ctx->fsaturate || fd6_ctx->vsaturate),
 				.vsaturate_s = fd6_ctx->vsaturate_s,
 				.vsaturate_t = fd6_ctx->vsaturate_t,
 				.vsaturate_r = fd6_ctx->vsaturate_r,
 				.fsaturate_s = fd6_ctx->fsaturate_s,
 				.fsaturate_t = fd6_ctx->fsaturate_t,
 				.fsaturate_r = fd6_ctx->fsaturate_r,
-				.vastc_srgb = fd6_ctx->vastc_srgb,
-				.fastc_srgb = fd6_ctx->fastc_srgb,
 				.vsamples = ctx->tex[PIPE_SHADER_VERTEX].samples,
 				.fsamples = ctx->tex[PIPE_SHADER_FRAGMENT].samples,
-			}
+				.sample_shading = (ctx->min_samples > 1),
+				.msaa = (ctx->framebuffer.samples > 1),
+			},
 		},
 		.rasterflat = ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
@@ -186,6 +184,10 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		fd6_ctx->prog = fd6_emit_get_prog(&emit);
 	}
 
+	/* bail if compile failed: */
+	if (!fd6_ctx->prog)
+		return NULL;
+
 	emit.dirty = ctx->dirty;      /* *after* fixup_shader_state() */
 	emit.bs = fd6_emit_get_prog(&emit)->bs;
 	emit.vs = fd6_emit_get_prog(&emit)->vs;
@@ -194,18 +196,13 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	const struct ir3_shader_variant *vp = emit.vs;
 	const struct ir3_shader_variant *fp = emit.fs;
 
-	/* do regular pass first, since that is more likely to fail compiling: */
-
-	if (!vp || !fp)
-		return false;
-
 	ctx->stats.vs_regs += ir3_shader_halfregs(vp);
 	ctx->stats.fs_regs += ir3_shader_halfregs(fp);
 
 	/* figure out whether we need to disable LRZ write for binning
 	 * pass using draw pass's fp:
 	 */
-	emit.no_lrz_write = fp->writes_pos || fp->has_kill;
+	emit.no_lrz_write = fp->writes_pos || fp->no_earlyz;
 
 	struct fd_ringbuffer *ring = ctx->batch->draw;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
@@ -368,7 +365,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	fd6_event_write(batch, ring, FACENESS_FLUSH, true);
 	fd6_event_write(batch, ring, CACHE_FLUSH_TS, true);
 
-	fd6_cache_flush(batch, ring);
+	fd6_cache_inv(batch, ring);
 }
 
 static bool is_z32(enum pipe_format format)

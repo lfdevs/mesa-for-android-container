@@ -10,8 +10,6 @@ BLORP_FILES = \
 COMMON_FILES = \
 	common/gen_clflush.h \
 	common/gen_batch_decoder.c \
-	common/gen_debug.c \
-	common/gen_debug.h \
 	common/gen_decoder.c \
 	common/gen_decoder.h \
 	common/gen_disasm.c \
@@ -40,6 +38,7 @@ COMPILER_FILES = \
 	compiler/brw_compiler.h \
 	compiler/brw_dead_control_flow.cpp \
 	compiler/brw_dead_control_flow.h \
+	compiler/brw_debug_recompile.c \
 	compiler/brw_disasm.c \
 	compiler/brw_disasm_info.c \
 	compiler/brw_disasm_info.h \
@@ -69,8 +68,6 @@ COMPILER_FILES = \
 	compiler/brw_fs_register_coalesce.cpp \
 	compiler/brw_fs_saturate_propagation.cpp \
 	compiler/brw_fs_sel_peephole.cpp \
-	compiler/brw_fs_surface_builder.cpp \
-	compiler/brw_fs_surface_builder.h \
 	compiler/brw_fs_validate.cpp \
 	compiler/brw_fs_visitor.cpp \
 	compiler/brw_inst.h \
@@ -83,6 +80,7 @@ COMPILER_FILES = \
 	compiler/brw_nir_analyze_boolean_resolves.c \
 	compiler/brw_nir_analyze_ubo_ranges.c \
 	compiler/brw_nir_attribute_workarounds.c \
+	compiler/brw_nir_lower_conversions.c \
 	compiler/brw_nir_lower_cs_intrinsics.c \
 	compiler/brw_nir_lower_image_load_store.c \
 	compiler/brw_nir_lower_mem_access_bit_sizes.c \
@@ -129,6 +127,8 @@ COMPILER_GENERATED_FILES = \
 	compiler/brw_nir_trig_workarounds.c
 
 DEV_FILES = \
+	dev/gen_debug.c \
+	dev/gen_debug.h \
 	dev/gen_device_info.c \
 	dev/gen_device_info.h
 
@@ -315,3 +315,29 @@ VULKAN_GEN10_FILES := \
 VULKAN_GEN11_FILES := \
 	vulkan/gen8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
+
+GEN_PERF_XML_FILES = \
+	perf/oa-hsw.xml \
+	perf/oa-bdw.xml \
+	perf/oa-chv.xml \
+	perf/oa-sklgt2.xml \
+	perf/oa-sklgt3.xml \
+	perf/oa-sklgt4.xml \
+	perf/oa-bxt.xml \
+	perf/oa-kblgt2.xml \
+	perf/oa-kblgt3.xml \
+	perf/oa-glk.xml \
+	perf/oa-cflgt2.xml \
+	perf/oa-cflgt3.xml \
+	perf/oa-cnl.xml \
+	perf/oa-icl.xml
+
+GEN_PERF_FILES = \
+	perf/gen_perf.c \
+	perf/gen_perf.h \
+	perf/gen_perf_mdapi.h \
+	perf/gen_perf_mdapi.c
+
+GEN_PERF_GENERATED_FILES = \
+	perf/gen_perf_metrics.c \
+	perf/gen_perf_metrics.h

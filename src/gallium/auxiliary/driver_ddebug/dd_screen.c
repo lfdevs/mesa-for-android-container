@@ -311,6 +311,17 @@ dd_screen_resource_get_handle(struct pipe_screen *_screen,
    return screen->resource_get_handle(screen, pipe, resource, handle, usage);
 }
 
+static void
+dd_screen_resource_get_info(struct pipe_screen *_screen,
+                            struct pipe_resource *resource,
+                            unsigned *stride,
+                            unsigned *offset)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   screen->resource_get_info(screen, resource, stride, offset);
+}
+
 static bool
 dd_screen_check_resource_capability(struct pipe_screen *_screen,
                                     struct pipe_resource *resource,
@@ -346,6 +357,15 @@ dd_screen_fence_finish(struct pipe_screen *_screen,
    struct pipe_context *ctx = _ctx ? dd_context(_ctx)->pipe : NULL;
 
    return screen->fence_finish(screen, ctx, fence, timeout);
+}
+
+static int
+dd_screen_fence_get_fd(struct pipe_screen *_screen,
+                       struct pipe_fence_handle *fence)
+{
+   struct pipe_screen *screen = dd_screen(_screen)->screen;
+
+   return screen->fence_get_fd(screen, fence);
 }
 
 /********************************************************************
@@ -545,11 +565,13 @@ ddebug_screen_create(struct pipe_screen *screen)
    SCR_INIT(resource_from_user_memory);
    SCR_INIT(check_resource_capability);
    dscreen->base.resource_get_handle = dd_screen_resource_get_handle;
+   SCR_INIT(resource_get_info);
    SCR_INIT(resource_changed);
    dscreen->base.resource_destroy = dd_screen_resource_destroy;
    SCR_INIT(flush_frontbuffer);
    SCR_INIT(fence_reference);
    SCR_INIT(fence_finish);
+   SCR_INIT(fence_get_fd);
    SCR_INIT(memobj_create_from_handle);
    SCR_INIT(memobj_destroy);
    SCR_INIT(get_driver_query_info);

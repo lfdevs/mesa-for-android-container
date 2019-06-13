@@ -321,7 +321,7 @@ static void si_emit_dpbb_disable(struct si_context *sctx)
 				   S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }
 
 void si_emit_dpbb_state(struct si_context *sctx)
@@ -443,5 +443,5 @@ void si_emit_dpbb_state(struct si_context *sctx)
 				   S_028060_PUNCHOUT_MODE(punchout_mode) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
-		sctx->context_roll_counter++;
+		sctx->context_roll = true;
 }

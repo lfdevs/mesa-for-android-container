@@ -79,6 +79,10 @@ wsi_swapchain_init(const struct wsi_device *wsi,
                    const VkSwapchainCreateInfoKHR *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator);
 
+enum VkPresentModeKHR
+wsi_swapchain_get_present_mode(struct wsi_device *wsi,
+                               const VkSwapchainCreateInfoKHR *pCreateInfo);
+
 void wsi_swapchain_finish(struct wsi_swapchain *chain);
 
 VkResult
@@ -106,6 +110,7 @@ struct wsi_interface {
                            uint32_t queueFamilyIndex,
                            VkBool32* pSupported);
    VkResult (*get_capabilities2)(VkIcdSurfaceBase *surface,
+                                 struct wsi_device *wsi_device,
                                  const void *info_next,
                                  VkSurfaceCapabilities2KHR* pSurfaceCapabilities);
    VkResult (*get_formats)(VkIcdSurfaceBase *surface,

@@ -27,7 +27,7 @@
 #define INTEL_BUFFERS_H
 
 #include "dri_util.h"
-#include "drm.h"
+#include "drm-uapi/drm.h"
 #include "brw_context.h"
 
 extern void intelInitBufferFuncs(struct dd_function_table *functions);

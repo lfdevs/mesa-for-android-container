@@ -141,7 +141,7 @@ namespace SwrJit
     }
 
     StoreInst*
-    Builder::STORE(Value* val, Value* basePtr, const std::initializer_list<uint32_t>& indices)
+    Builder::STORE(Value* val, Value* basePtr, const std::initializer_list<uint32_t>& indices, Type* Ty, JIT_MEM_CLIENT usage)
     {
         std::vector<Value*> valIndices;
         for (auto i : indices)

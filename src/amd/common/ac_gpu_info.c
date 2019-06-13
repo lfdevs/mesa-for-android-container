@@ -333,6 +333,12 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 		return false;
 	}
 
+	info->marketing_name = amdgpu_get_marketing_name(dev);
+	info->is_pro_graphics = info->marketing_name &&
+				(!strcmp(info->marketing_name, "Pro") ||
+				 !strcmp(info->marketing_name, "PRO") ||
+				 !strcmp(info->marketing_name, "Frontier"));
+
 	/* Set which chips have dedicated VRAM. */
 	info->has_dedicated_vram =
 		!(amdinfo->ids_flags & AMDGPU_IDS_FLAGS_FUSION);
@@ -456,6 +462,14 @@ bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
 	assert(ib_align);
 	info->ib_start_alignment = ib_align;
 
+	if (info->drm_minor >= 31 &&
+	    (info->family == CHIP_RAVEN ||
+	     info->family == CHIP_RAVEN2)) {
+		if (info->num_render_backends == 1)
+			info->use_display_dcc_unaligned = true;
+		else
+			info->use_display_dcc_with_retile_blit = true;
+	}
 	return true;
 }
 
@@ -500,6 +514,9 @@ void ac_print_gpu_info(struct radeon_info *info)
 	printf("    num_sdma_rings = %i\n", info->num_sdma_rings);
 	printf("    clock_crystal_freq = %i\n", info->clock_crystal_freq);
 	printf("    tcc_cache_line_size = %u\n", info->tcc_cache_line_size);
+
+	printf("    use_display_dcc_unaligned = %u\n", info->use_display_dcc_unaligned);
+	printf("    use_display_dcc_with_retile_blit = %u\n", info->use_display_dcc_with_retile_blit);
 
 	printf("Memory info:\n");
 	printf("    pte_fragment_size = %u\n", info->pte_fragment_size);

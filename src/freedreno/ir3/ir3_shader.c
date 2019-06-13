@@ -35,7 +35,7 @@
 #include "ir3_nir.h"
 
 int
-ir3_glsl_type_size(const struct glsl_type *type)
+ir3_glsl_type_size(const struct glsl_type *type, bool bindless)
 {
 	return glsl_count_attribute_slots(type, false);
 }
@@ -63,7 +63,7 @@ delete_variant(struct ir3_shader_variant *v)
  * the reg off.
  */
 static void
-fixup_regfootprint(struct ir3_shader_variant *v)
+fixup_regfootprint(struct ir3_shader_variant *v, uint32_t gpu_id)
 {
 	unsigned i;
 
@@ -83,14 +83,30 @@ fixup_regfootprint(struct ir3_shader_variant *v)
 
 		if (v->inputs[i].compmask) {
 			unsigned n = util_last_bit(v->inputs[i].compmask) - 1;
-			int32_t regid = (v->inputs[i].regid + n) >> 2;
-			v->info.max_reg = MAX2(v->info.max_reg, regid);
+			int32_t regid = v->inputs[i].regid + n;
+			if (v->inputs[i].half) {
+				if (gpu_id < 500) {
+					v->info.max_half_reg = MAX2(v->info.max_half_reg, regid >> 2);
+				} else {
+					v->info.max_reg = MAX2(v->info.max_reg, regid >> 3);
+				}
+			} else {
+				v->info.max_reg = MAX2(v->info.max_reg, regid >> 2);
+			}
 		}
 	}
 
 	for (i = 0; i < v->outputs_count; i++) {
-		int32_t regid = (v->outputs[i].regid + 3) >> 2;
-		v->info.max_reg = MAX2(v->info.max_reg, regid);
+		int32_t regid = v->outputs[i].regid + 3;
+		if (v->outputs[i].half) {
+			if (gpu_id < 500) {
+				v->info.max_half_reg = MAX2(v->info.max_half_reg, regid >> 2);
+			} else {
+				v->info.max_reg = MAX2(v->info.max_reg, regid >> 3);
+			}
+		} else {
+			v->info.max_reg = MAX2(v->info.max_reg, regid >> 2);
+		}
 	}
 }
 
@@ -115,9 +131,9 @@ void * ir3_shader_assemble(struct ir3_shader_variant *v, uint32_t gpu_id)
 	 * the compiler (to worst-case value) since we don't know in
 	 * the assembler what the max addr reg value can be:
 	 */
-	v->constlen = MIN2(255, MAX2(v->constlen, v->info.max_const + 1));
+	v->constlen = MAX2(v->constlen, v->info.max_const + 1);
 
-	fixup_regfootprint(v);
+	fixup_regfootprint(v, gpu_id);
 
 	return bin;
 }
@@ -228,7 +244,7 @@ ir3_shader_get_variant(struct ir3_shader *shader, struct ir3_shader_key *key,
 	struct ir3_shader_variant *v =
 			shader_variant(shader, key, created);
 
-	if (binning_pass) {
+	if (v && binning_pass) {
 		if (!v->binning)
 			v->binning = create_variant(shader, key, true);
 		return v->binning;
@@ -261,6 +277,18 @@ ir3_shader_from_nir(struct ir3_compiler *compiler, nir_shader *nir)
 
 	NIR_PASS_V(nir, nir_lower_io, nir_var_all, ir3_glsl_type_size,
 			   (nir_lower_io_options)0);
+
+	if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+		/* NOTE: lower load_barycentric_at_sample first, since it
+		 * produces load_barycentric_at_offset:
+		 */
+		NIR_PASS_V(nir, ir3_nir_lower_load_barycentric_at_sample);
+		NIR_PASS_V(nir, ir3_nir_lower_load_barycentric_at_offset);
+
+		NIR_PASS_V(nir, ir3_nir_move_varying_inputs);
+	}
+
+	NIR_PASS_V(nir, nir_lower_io_arrays_to_elements_no_indirects, false);
 
 	/* do first pass optimization, ignoring the key: */
 	shader->nir = ir3_optimize_nir(shader, nir, NULL);
@@ -393,6 +421,8 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 
 	fprintf(out, "; %u (ss), %u (sy)\n", so->info.ss, so->info.sy);
 
+	fprintf(out, "; max_sun=%u\n", ir->max_sun);
+
 	/* print shader type specific info: */
 	switch (so->type) {
 	case MESA_SHADER_VERTEX:
@@ -400,8 +430,12 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 		dump_output(out, so, VARYING_SLOT_PSIZ, "psize");
 		break;
 	case MESA_SHADER_FRAGMENT:
-		dump_reg(out, "pos (bary)",
-			ir3_find_sysval_regid(so, SYSTEM_VALUE_VARYING_COORD));
+		dump_reg(out, "pos (ij_pixel)",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_BARYCENTRIC_PIXEL));
+		dump_reg(out, "pos (ij_centroid)",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_BARYCENTRIC_CENTROID));
+		dump_reg(out, "pos (ij_size)",
+			ir3_find_sysval_regid(so, SYSTEM_VALUE_BARYCENTRIC_SIZE));
 		dump_output(out, so, FRAG_RESULT_DEPTH, "posz");
 		if (so->color0_mrt) {
 			dump_output(out, so, FRAG_RESULT_COLOR, "color");

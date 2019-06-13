@@ -219,7 +219,7 @@ struct gen_batch_decode_ctx {
     * If the given address is inside a buffer, the map pointer should be
     * offset accordingly so it points at the data corresponding to address.
     */
-   struct gen_batch_decode_bo (*get_bo)(void *user_data, uint64_t address);
+   struct gen_batch_decode_bo (*get_bo)(void *user_data, bool ppgtt, uint64_t address);
    unsigned (*get_state_size)(void *user_data,
                               uint32_t offset_from_dynamic_state_base_addr);
    void *user_data;
@@ -237,6 +237,8 @@ struct gen_batch_decode_ctx {
    int max_vbo_decoded_lines;
 
    enum drm_i915_gem_engine_class engine;
+
+   int n_batch_buffer_start;
 };
 
 void gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
@@ -244,6 +246,7 @@ void gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
                                FILE *fp, enum gen_batch_decode_flags flags,
                                const char *xml_path,
                                struct gen_batch_decode_bo (*get_bo)(void *,
+                                                                    bool,
                                                                     uint64_t),
 
                                unsigned (*get_state_size)(void *, uint32_t),
@@ -253,7 +256,7 @@ void gen_batch_decode_ctx_finish(struct gen_batch_decode_ctx *ctx);
 
 void gen_print_batch(struct gen_batch_decode_ctx *ctx,
                      const uint32_t *batch, uint32_t batch_size,
-                     uint64_t batch_addr);
+                     uint64_t batch_addr, bool from_ring);
 
 #ifdef __cplusplus
 }

@@ -1198,6 +1198,8 @@ const struct function common_desktop_functions_possible[] = {
    { "glRenderbufferStorageMultisampleAdvancedAMD", 11, -1 },
    { "glNamedRenderbufferStorageMultisampleAdvancedAMD", 11, -1 },
 
+   { "glMaxShaderCompilerThreadsKHR", 11, -1 },
+
    { NULL, 0, -1 }
 };
 
@@ -2227,6 +2229,10 @@ const struct function gles2_functions_possible[] = {
    /* GL_EXT_shader_framebuffer_fetch_non_coherent */
    { "glFramebufferFetchBarrierEXT", 20, -1 },
 
+   /* GL_NV_conditional_render */
+   { "glBeginConditionalRenderNV", 20, -1 },
+   { "glEndConditionalRenderNV", 20, -1 },
+
    /* GL_NV_conservative_raster */
    { "glSubpixelPrecisionBiasNV", 20, -1 },
 
@@ -2239,6 +2245,9 @@ const struct function gles2_functions_possible[] = {
    /* GL_EXT_multisampled_render_to_texture */
    { "glRenderbufferStorageMultisampleEXT", 20, -1 },
    { "glFramebufferTexture2DMultisampleEXT", 20, -1 },
+
+   /* GL_KHR_parallel_shader_compile */
+   { "glMaxShaderCompilerThreadsKHR", 20, -1 },
 
    { NULL, 0, -1 }
 };

@@ -133,6 +133,13 @@ D3DWindowBuffer_release(struct NineSwapChain9 *This,
                         D3DWindowBuffer *present_handle)
 {
     int i;
+
+    /* IsBufferReleased API not available */
+    if (This->base.device->minor_version_num <= 2) {
+        ID3DPresent_DestroyD3DWindowBuffer(This->present, present_handle);
+        return;
+    }
+
     /* Add it to the 'pending release' list */
     for (i = 0; i < D3DPRESENT_BACK_BUFFERS_MAX_EX + 1; i++) {
         if (!This->present_handles_pending_release[i]) {
@@ -686,12 +693,13 @@ static void work_present(void *data)
 }
 
 static void pend_present(struct NineSwapChain9 *This,
+                         struct pipe_fence_handle *fence,
                          HWND hDestWindowOverride)
 {
     struct end_present_struct *work = calloc(1, sizeof(struct end_present_struct));
 
     work->screen = This->screen;
-    work->fence_to_wait = swap_fences_pop_front(This);
+    This->screen->fence_reference(This->screen, &work->fence_to_wait, fence);
     work->present = This->present;
     work->present_handle = This->present_handles[0];
     work->hDestWindowOverride = hDestWindowOverride;
@@ -754,8 +762,11 @@ present( struct NineSwapChain9 *This,
     (void)target_depth;
 
     /* Can happen with old Wine (presentation can still succeed),
-     * or at window destruction. */
-    if (FAILED(hr) || target_width == 0 || target_height == 0) {
+     * or at window destruction.
+     * Also disable for very old wine as D3DWindowBuffer_release
+     * cannot do the DestroyD3DWindowBuffer workaround. */
+    if (FAILED(hr) || target_width == 0 || target_height == 0 ||
+        This->base.device->minor_version_num <= 2) {
         target_width = resource->width0;
         target_height = resource->height0;
     }
@@ -857,6 +868,12 @@ present( struct NineSwapChain9 *This,
 
     fence = NULL;
     pipe->flush(pipe, &fence, PIPE_FLUSH_END_OF_FRAME);
+
+    /* Present now for thread_submit, because we have the fence.
+     * It's possible we return WASSTILLDRAWING and still Present,
+     * but it should be fine. */
+    if (This->enable_threadpool)
+        pend_present(This, fence, hDestWindowOverride);
     if (fence) {
         swap_fences_push_back(This, fence);
         This->screen->fence_reference(This->screen, &fence, NULL);
@@ -877,21 +894,22 @@ bypass_rendering:
             return D3DERR_WASSTILLDRAWING;
     }
 
+    /* Throttle rendering if needed */
+    fence = swap_fences_pop_front(This);
+    if (fence) {
+        (void) This->screen->fence_finish(This->screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
+        This->screen->fence_reference(This->screen, &fence, NULL);
+    }
+
+    This->rendering_done = FALSE;
+
     if (!This->enable_threadpool) {
         This->tasks[0]=NULL;
-        fence = swap_fences_pop_front(This);
-        if (fence) {
-            (void) This->screen->fence_finish(This->screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
-            This->screen->fence_reference(This->screen, &fence, NULL);
-        }
 
         hr = ID3DPresent_PresentBuffer(This->present, This->present_handles[0], hDestWindowOverride, pSourceRect, pDestRect, pDirtyRegion, dwFlags);
 
         if (FAILED(hr)) { UNTESTED(3);return hr; }
-    } else {
-        pend_present(This, hDestWindowOverride);
     }
-    This->rendering_done = FALSE;
 
     return D3D_OK;
 }
@@ -940,6 +958,7 @@ NineSwapChain9_Present( struct NineSwapChain9 *This,
         return hr;
 
     if (This->base.device->minor_version_num > 2 &&
+        This->actx->discard_delayed_release &&
         This->params.SwapEffect == D3DSWAPEFFECT_DISCARD &&
         This->params.PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE) {
         int next_buffer = -1;
@@ -1252,12 +1271,11 @@ NineSwapChain9_GetBackBufferCountForParams( struct NineSwapChain9 *This,
     /* With DISCARD, as there is no guarantee about the buffer contents, we can use
      * an arbitrary number of buffers */
     if (pParams->SwapEffect == D3DSWAPEFFECT_DISCARD) {
-        /* thread_submit has a throttling equivalent to the throttling
-         * with throttling_value set to count-1. Most drivers use
-         * 2 for throttling_value. For performance use count of at least 3
-         * for thread_submit. */
-        if (This->actx->thread_submit && count < 3)
-            count = 3;
+        /* thread_submit's can have maximum count or This->actx->throttling_value + 1
+         * frames in flight being rendered and not shown.
+         * Do not let count decrease that number */
+        if (This->actx->thread_submit && count < This->desired_fences)
+            count = This->desired_fences;
         /* When we enable AllowDISCARDDelayedRelease, we must ensure
          * to have at least 4 buffers to meet INTERVAL_IMMEDIATE,
          * since the display server/compositor can hold 3 buffers
@@ -1266,6 +1284,7 @@ NineSwapChain9_GetBackBufferCountForParams( struct NineSwapChain9 *This,
          * . Buffer scheduled kernel side to be next on screen.
          * . Last buffer sent. */
         if (This->base.device->minor_version_num > 2 &&
+            This->actx->discard_delayed_release &&
             pParams->PresentationInterval == D3DPRESENT_INTERVAL_IMMEDIATE) {
             if (This->actx->thread_submit && count < 4)
                 count = 4;

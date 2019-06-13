@@ -73,11 +73,10 @@ handle_xerror(Display *dpy, XErrorEvent *event)
    (void) dpy;
 
    assert(xshm_opcode != -1);
-   if (event->request_code != xshm_opcode ||
-       event->minor_code != X_ShmAttach)
+   if (event->request_code != xshm_opcode)
       return 0;
 
-   xshm_error = 1;
+   xshm_error = event->error_code;
    return 0;
 }
 
@@ -599,6 +598,9 @@ drisw_create_context_attribs(struct glx_screen *base,
                                  &api, &reset, &release, error))
       return NULL;
 
+   if (!dri2_check_no_error(flags, shareList, major_ver, error))
+      return NULL;
+
    /* Check the renderType value */
    if (!validate_renderType_against_config(config_base, renderType)) {
        return NULL;
@@ -641,6 +643,9 @@ drisw_create_context_attribs(struct glx_screen *base,
        * GLX_CONTEXT_*_BIT values.
        */
       ctx_attribs[num_ctx_attribs++] = flags;
+
+      if (flags & __DRI_CTX_FLAG_NO_ERROR)
+         pcp->base.noError = GL_TRUE;
    }
 
    pcp->base.renderType = renderType;
@@ -820,9 +825,27 @@ driswBindExtensions(struct drisw_screen *psc, const __DRIextension **extensions)
 static int
 check_xshm(Display *dpy)
 {
-   int ignore;
+   int (*old_handler)(Display *, XErrorEvent *);
 
-   return XQueryExtension(dpy, "MIT-SHM", &xshm_opcode, &ignore, &ignore);
+   int ignore;
+   XShmSegmentInfo info = { 0, };
+
+   if (!XQueryExtension(dpy, "MIT-SHM", &xshm_opcode, &ignore, &ignore))
+      return False;
+
+   old_handler = XSetErrorHandler(handle_xerror);
+   XShmDetach(dpy, &info);
+   XSync(dpy, False);
+   (void) XSetErrorHandler(old_handler);
+
+   /* BadRequest means we're a remote client. If we were local we'd
+    * expect BadValue since 'info' has an invalid segment name.
+    */
+   if (xshm_error == BadRequest)
+      return False;
+
+   xshm_error = 0;
+   return True;
 }
 
 static struct glx_screen *

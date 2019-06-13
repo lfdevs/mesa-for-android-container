@@ -405,14 +405,9 @@ st_setup_arrays(struct st_context *st,
       const unsigned bufidx = (*num_vbuffers)++;
 
       if (_mesa_is_bufferobj(binding->BufferObj)) {
-         struct st_buffer_object *stobj = st_buffer_object(binding->BufferObj);
-         if (!stobj || !stobj->buffer) {
-            st->vertex_array_out_of_memory = true;
-            return; /* out-of-memory error probably */
-         }
-
          /* Set the binding */
-         vbuffer[bufidx].buffer.resource = stobj->buffer;
+         struct st_buffer_object *stobj = st_buffer_object(binding->BufferObj);
+         vbuffer[bufidx].buffer.resource = stobj ? stobj->buffer : NULL;
          vbuffer[bufidx].is_user_buffer = false;
          vbuffer[bufidx].buffer_offset = _mesa_draw_binding_offset(binding);
       } else {
@@ -496,17 +491,15 @@ st_setup_current(struct st_context *st,
        * times (thousands of times), so a better placement is going to
        * perform better.
        */
-      u_upload_data(st->can_bind_const_buffer_as_vertex ?
-                    st->pipe->const_uploader :
-                    st->pipe->stream_uploader,
+      struct u_upload_mgr *uploader = st->can_bind_const_buffer_as_vertex ?
+                                      st->pipe->const_uploader :
+                                      st->pipe->stream_uploader;
+      u_upload_data(uploader,
                     0, cursor - data, max_alignment, data,
                     &vbuffer[bufidx].buffer_offset,
                     &vbuffer[bufidx].buffer.resource);
-
-      if (!ctx->Const.AllowMappedBuffersDuringExecution &&
-          !st->can_bind_const_buffer_as_vertex) {
-         u_upload_unmap(st->pipe->stream_uploader);
-      }
+      /* Always unmap. The uploader might use explicit flushes. */
+      u_upload_unmap(uploader);
    }
 }
 
@@ -553,21 +546,16 @@ st_update_array(struct st_context *st)
    struct pipe_vertex_element velements[PIPE_MAX_ATTRIBS];
    unsigned num_velements;
 
-   st->vertex_array_out_of_memory = FALSE;
    st->draw_needs_minmax_index = false;
 
    /* ST_NEW_VERTEX_ARRAYS alias ctx->DriverFlags.NewArray */
    /* Setup arrays */
    st_setup_arrays(st, vp, vp_variant, velements, vbuffer, &num_vbuffers);
-   if (st->vertex_array_out_of_memory)
-      return;
 
    /* _NEW_CURRENT_ATTRIB */
    /* Setup current uploads */
    first_upload_vbuffer = num_vbuffers;
    st_setup_current(st, vp, vp_variant, velements, vbuffer, &num_vbuffers);
-   if (st->vertex_array_out_of_memory)
-      return;
 
    /* Set the array into cso */
    num_velements = vp_variant->num_inputs;

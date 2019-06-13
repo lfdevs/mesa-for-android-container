@@ -273,7 +273,7 @@ struct SIMD256 // or SIMD4 or SIMD16
         SF_8,   // Scale offset by 8
     };
 
-    template<ScaleFactor ScaleT>
+    template<ScaleFactor ScaleT = ScaleFactor::SF_1>
     static Float    i32gather_ps(float const* p, Integer idx);  // return *(float*)(((int8*)p) + (idx * ScaleT))
     static Float    load1_ps(float const *p);                   // return *p    (broadcast 1 value to all elements)
     static Float    load_ps(float const *p);                    // return *p    (loads SIMD width elements from memory)

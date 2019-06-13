@@ -136,7 +136,7 @@ build_view_index(struct lower_multiview_state *state)
 
          nir_deref_instr *deref = nir_build_deref_var(b, idx_var);
          if (glsl_type_is_array(type))
-            deref = nir_build_deref_array(b, deref, nir_imm_int(b, 0));
+            deref = nir_build_deref_array_imm(b, deref, 0);
 
          state->view_index = nir_load_deref(b, deref);
       }

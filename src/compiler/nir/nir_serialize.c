@@ -141,8 +141,11 @@ write_variable(write_ctx *ctx, const nir_variable *var)
       blob_write_string(ctx->blob, var->name);
    blob_write_bytes(ctx->blob, (uint8_t *) &var->data, sizeof(var->data));
    blob_write_uint32(ctx->blob, var->num_state_slots);
-   blob_write_bytes(ctx->blob, (uint8_t *) var->state_slots,
-                    var->num_state_slots * sizeof(nir_state_slot));
+   for (unsigned i = 0; i < var->num_state_slots; i++) {
+      for (unsigned j = 0; j < STATE_LENGTH; j++)
+         blob_write_uint32(ctx->blob, var->state_slots[i].tokens[j]);
+      blob_write_uint32(ctx->blob, var->state_slots[i].swizzle);
+   }
    blob_write_uint32(ctx->blob, !!(var->constant_initializer));
    if (var->constant_initializer)
       write_constant(ctx, var->constant_initializer);
@@ -172,9 +175,15 @@ read_variable(read_ctx *ctx)
    }
    blob_copy_bytes(ctx->blob, (uint8_t *) &var->data, sizeof(var->data));
    var->num_state_slots = blob_read_uint32(ctx->blob);
-   var->state_slots = ralloc_array(var, nir_state_slot, var->num_state_slots);
-   blob_copy_bytes(ctx->blob, (uint8_t *) var->state_slots,
-                   var->num_state_slots * sizeof(nir_state_slot));
+   if (var->num_state_slots != 0) {
+      var->state_slots = ralloc_array(var, nir_state_slot,
+                                      var->num_state_slots);
+      for (unsigned i = 0; i < var->num_state_slots; i++) {
+         for (unsigned j = 0; j < STATE_LENGTH; j++)
+            var->state_slots[i].tokens[j] = blob_read_uint32(ctx->blob);
+         var->state_slots[i].swizzle = blob_read_uint32(ctx->blob);
+      }
+   }
    bool has_const_initializer = blob_read_uint32(ctx->blob);
    if (has_const_initializer)
       var->constant_initializer = read_constant(ctx, var);
@@ -227,7 +236,6 @@ write_register(write_ctx *ctx, const nir_register *reg)
    blob_write_uint32(ctx->blob, !!(reg->name));
    if (reg->name)
       blob_write_string(ctx->blob, reg->name);
-   blob_write_uint32(ctx->blob, reg->is_global << 1 | reg->is_packed);
 }
 
 static nir_register *
@@ -246,9 +254,6 @@ read_register(read_ctx *ctx)
    } else {
       reg->name = NULL;
    }
-   unsigned flags = blob_read_uint32(ctx->blob);
-   reg->is_global = flags & 0x2;
-   reg->is_packed = flags & 0x1;
 
    list_inithead(&reg->uses);
    list_inithead(&reg->defs);
@@ -548,7 +553,7 @@ write_load_const(write_ctx *ctx, const nir_load_const_instr *lc)
    uint32_t val = lc->def.num_components;
    val |= lc->def.bit_size << 3;
    blob_write_uint32(ctx->blob, val);
-   blob_write_bytes(ctx->blob, (uint8_t *) &lc->value, sizeof(lc->value));
+   blob_write_bytes(ctx->blob, lc->value, sizeof(*lc->value) * lc->def.num_components);
    write_add_object(ctx, &lc->def);
 }
 
@@ -560,7 +565,7 @@ read_load_const(read_ctx *ctx)
    nir_load_const_instr *lc =
       nir_load_const_instr_create(ctx->nir, val & 0x7, val >> 3);
 
-   blob_copy_bytes(ctx->blob, (uint8_t *) &lc->value, sizeof(lc->value));
+   blob_copy_bytes(ctx->blob, lc->value, sizeof(*lc->value) * lc->def.num_components);
    read_add_object(ctx, &lc->def);
    return lc;
 }
@@ -608,6 +613,7 @@ write_tex(write_ctx *ctx, const nir_tex_instr *tex)
    blob_write_uint32(ctx->blob, tex->texture_index);
    blob_write_uint32(ctx->blob, tex->texture_array_size);
    blob_write_uint32(ctx->blob, tex->sampler_index);
+   blob_write_bytes(ctx->blob, tex->tg4_offsets, sizeof(tex->tg4_offsets));
 
    STATIC_ASSERT(sizeof(union packed_tex_data) == sizeof(uint32_t));
    union packed_tex_data packed = {
@@ -638,6 +644,7 @@ read_tex(read_ctx *ctx)
    tex->texture_index = blob_read_uint32(ctx->blob);
    tex->texture_array_size = blob_read_uint32(ctx->blob);
    tex->sampler_index = blob_read_uint32(ctx->blob);
+   blob_copy_bytes(ctx->blob, tex->tg4_offsets, sizeof(tex->tg4_offsets));
 
    union packed_tex_data packed;
    packed.u32 = blob_read_uint32(ctx->blob);
@@ -1111,12 +1118,11 @@ nir_serialize(struct blob *blob, const nir_shader *nir)
    write_var_list(&ctx, &nir->globals);
    write_var_list(&ctx, &nir->system_values);
 
-   write_reg_list(&ctx, &nir->registers);
-   blob_write_uint32(blob, nir->reg_alloc);
    blob_write_uint32(blob, nir->num_inputs);
    blob_write_uint32(blob, nir->num_uniforms);
    blob_write_uint32(blob, nir->num_outputs);
    blob_write_uint32(blob, nir->num_shared);
+   blob_write_uint32(blob, nir->scratch_size);
 
    blob_write_uint32(blob, exec_list_length(&nir->functions));
    nir_foreach_function(fxn, nir) {
@@ -1170,12 +1176,11 @@ nir_deserialize(void *mem_ctx,
    read_var_list(&ctx, &ctx.nir->globals);
    read_var_list(&ctx, &ctx.nir->system_values);
 
-   read_reg_list(&ctx, &ctx.nir->registers);
-   ctx.nir->reg_alloc = blob_read_uint32(blob);
    ctx.nir->num_inputs = blob_read_uint32(blob);
    ctx.nir->num_uniforms = blob_read_uint32(blob);
    ctx.nir->num_outputs = blob_read_uint32(blob);
    ctx.nir->num_shared = blob_read_uint32(blob);
+   ctx.nir->scratch_size = blob_read_uint32(blob);
 
    unsigned num_functions = blob_read_uint32(blob);
    for (unsigned i = 0; i < num_functions; i++)

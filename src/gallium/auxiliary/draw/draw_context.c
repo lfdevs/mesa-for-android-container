@@ -950,6 +950,8 @@ draw_set_mapped_so_targets(struct draw_context *draw,
 {
    int i;
 
+   draw_do_flush( draw, DRAW_FLUSH_STATE_CHANGE );
+
    for (i = 0; i < num_targets; i++)
       draw->so.targets[i] = targets[i];
    for (i = num_targets; i < PIPE_MAX_SO_BUFFERS; i++)

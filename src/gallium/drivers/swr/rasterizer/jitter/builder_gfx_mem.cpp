@@ -237,6 +237,30 @@ namespace SwrJit
         return Builder::MASKED_LOAD(Ptr, Align, Mask, PassThru, Name, Ty, usage);
     }
 
+    StoreInst* BuilderGfxMem::STORE(Value *Val, Value *Ptr, bool isVolatile, Type* Ty, JIT_MEM_CLIENT usage)
+    {
+        AssertGFXMemoryParams(Ptr, usage);
+
+        Ptr = TranslationHelper(Ptr, Ty);
+        return Builder::STORE(Val, Ptr, isVolatile, Ty, usage);
+    }
+
+    StoreInst* BuilderGfxMem::STORE(Value* Val, Value* BasePtr, const std::initializer_list<uint32_t>& offset, Type* Ty, JIT_MEM_CLIENT usage)
+    {
+        AssertGFXMemoryParams(BasePtr, usage);
+
+        BasePtr = TranslationHelper(BasePtr, Ty);
+        return Builder::STORE(Val, BasePtr, offset, Ty, usage);
+    }
+
+    CallInst* BuilderGfxMem::MASKED_STORE(Value *Val, Value *Ptr, unsigned Align, Value *Mask, Type* Ty, JIT_MEM_CLIENT usage)
+    {
+        AssertGFXMemoryParams(Ptr, usage);
+
+        Ptr = TranslationHelper(Ptr, Ty);
+        return Builder::MASKED_STORE(Val, Ptr, Align, Mask, Ty, usage);
+    }
+
     Value* BuilderGfxMem::TranslateGfxAddressForRead(Value*       xpGfxAddress,
                                                      Type*        PtrTy,
                                                      const Twine& Name,

@@ -38,28 +38,10 @@
 #include <algorithm>
 
 template <SWR_FORMAT format>
-void ClearRasterTile(uint8_t* pTileBuffer, simdvector& value)
-{
-    auto lambda = [&](int32_t comp) {
-        FormatTraits<format>::storeSOA(comp, pTileBuffer, value.v[comp]);
-
-        pTileBuffer += (KNOB_SIMD_WIDTH * FormatTraits<format>::GetBPC(comp) / 8);
-    };
-
-    const uint32_t numIter =
-        (KNOB_TILE_Y_DIM / SIMD_TILE_Y_DIM) * (KNOB_TILE_X_DIM / SIMD_TILE_X_DIM);
-
-    for (uint32_t i = 0; i < numIter; ++i)
-    {
-        UnrollerL<0, FormatTraits<format>::numComps, 1>::step(lambda);
-    }
-}
-
-#if USE_8x2_TILE_BACKEND
-template <SWR_FORMAT format>
 void ClearRasterTile(uint8_t* pTileBuffer, simd16vector& value)
 {
-    auto lambda = [&](int32_t comp) {
+    auto lambda = [&](int32_t comp)
+    {
         FormatTraits<format>::storeSOA(comp, pTileBuffer, value.v[comp]);
 
         pTileBuffer += (KNOB_SIMD16_WIDTH * FormatTraits<format>::GetBPC(comp) / 8);
@@ -74,49 +56,33 @@ void ClearRasterTile(uint8_t* pTileBuffer, simd16vector& value)
     }
 }
 
-#endif
 template <SWR_FORMAT format>
 INLINE void ClearMacroTile(DRAW_CONTEXT*               pDC,
                            HANDLE                      hWorkerPrivateData,
                            SWR_RENDERTARGET_ATTACHMENT rt,
                            uint32_t                    macroTile,
                            uint32_t                    renderTargetArrayIndex,
-                           DWORD                       clear[4],
+                           uint32_t                    clear[4],
                            const SWR_RECT&             rect)
 {
     // convert clear color to hottile format
     // clear color is in RGBA float/uint32
-#if USE_8x2_TILE_BACKEND
+
     simd16vector vClear;
     for (uint32_t comp = 0; comp < FormatTraits<format>::numComps; ++comp)
     {
-        simd16scalar vComp;
-        vComp = _simd16_load1_ps((const float*)&clear[comp]);
+        simd16scalar vComp = _simd16_load1_ps((const float*)&clear[comp]);
+
         if (FormatTraits<format>::isNormalized(comp))
         {
             vComp = _simd16_mul_ps(vComp, _simd16_set1_ps(FormatTraits<format>::fromFloat(comp)));
             vComp = _simd16_castsi_ps(_simd16_cvtps_epi32(vComp));
         }
-        vComp                                         = FormatTraits<format>::pack(comp, vComp);
+        vComp = FormatTraits<format>::pack(comp, vComp);
+
         vClear.v[FormatTraits<format>::swizzle(comp)] = vComp;
     }
 
-#else
-    simdvector vClear;
-    for (uint32_t comp = 0; comp < FormatTraits<format>::numComps; ++comp)
-    {
-        simdscalar vComp;
-        vComp = _simd_load1_ps((const float*)&clear[comp]);
-        if (FormatTraits<format>::isNormalized(comp))
-        {
-            vComp = _simd_mul_ps(vComp, _simd_set1_ps(FormatTraits<format>::fromFloat(comp)));
-            vComp = _simd_castsi_ps(_simd_cvtps_epi32(vComp));
-        }
-        vComp                                         = FormatTraits<format>::pack(comp, vComp);
-        vClear.v[FormatTraits<format>::swizzle(comp)] = vComp;
-    }
-
-#endif
     uint32_t tileX, tileY;
     MacroTileMgr::getTileIndices(macroTile, tileX, tileY);
 
@@ -223,10 +189,10 @@ void ProcessClearBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, vo
                                                       pClear->renderTargetArrayIndex);
 
                 // All we want to do here is to mark the hot tile as being in a "needs clear" state.
-                pHotTile->clearData[0] = *(DWORD*)&(pClear->clearRTColor[0]);
-                pHotTile->clearData[1] = *(DWORD*)&(pClear->clearRTColor[1]);
-                pHotTile->clearData[2] = *(DWORD*)&(pClear->clearRTColor[2]);
-                pHotTile->clearData[3] = *(DWORD*)&(pClear->clearRTColor[3]);
+                pHotTile->clearData[0] = *(uint32_t*)&(pClear->clearRTColor[0]);
+                pHotTile->clearData[1] = *(uint32_t*)&(pClear->clearRTColor[1]);
+                pHotTile->clearData[2] = *(uint32_t*)&(pClear->clearRTColor[2]);
+                pHotTile->clearData[3] = *(uint32_t*)&(pClear->clearRTColor[3]);
                 pHotTile->state        = HOTTILE_CLEAR;
             }
         }
@@ -241,7 +207,7 @@ void ProcessClearBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, vo
                                                                   true,
                                                                   numSamples,
                                                                   pClear->renderTargetArrayIndex);
-            pHotTile->clearData[0] = *(DWORD*)&pClear->clearDepth;
+            pHotTile->clearData[0] = *(uint32_t*)&pClear->clearDepth;
             pHotTile->state        = HOTTILE_CLEAR;
         }
 
@@ -270,11 +236,11 @@ void ProcessClearBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, vo
 
         if (pClear->attachmentMask & SWR_ATTACHMENT_MASK_COLOR)
         {
-            DWORD clearData[4];
-            clearData[0] = *(DWORD*)&(pClear->clearRTColor[0]);
-            clearData[1] = *(DWORD*)&(pClear->clearRTColor[1]);
-            clearData[2] = *(DWORD*)&(pClear->clearRTColor[2]);
-            clearData[3] = *(DWORD*)&(pClear->clearRTColor[3]);
+            uint32_t clearData[4];
+            clearData[0] = *(uint32_t*)&(pClear->clearRTColor[0]);
+            clearData[1] = *(uint32_t*)&(pClear->clearRTColor[1]);
+            clearData[2] = *(uint32_t*)&(pClear->clearRTColor[2]);
+            clearData[3] = *(uint32_t*)&(pClear->clearRTColor[3]);
 
             PFN_CLEAR_TILES pfnClearTiles = gClearTilesTable[KNOB_COLOR_HOT_TILE_FORMAT];
             SWR_ASSERT(pfnClearTiles != nullptr);
@@ -297,8 +263,8 @@ void ProcessClearBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, vo
 
         if (pClear->attachmentMask & SWR_ATTACHMENT_DEPTH_BIT)
         {
-            DWORD clearData[4];
-            clearData[0]                  = *(DWORD*)&pClear->clearDepth;
+            uint32_t clearData[4];
+            clearData[0]                  = *(uint32_t*)&pClear->clearDepth;
             PFN_CLEAR_TILES pfnClearTiles = gClearTilesTable[KNOB_DEPTH_HOT_TILE_FORMAT];
             SWR_ASSERT(pfnClearTiles != nullptr);
 
@@ -313,7 +279,7 @@ void ProcessClearBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, vo
 
         if (pClear->attachmentMask & SWR_ATTACHMENT_STENCIL_BIT)
         {
-            DWORD clearData[4];
+            uint32_t clearData[4];
             clearData[0]                  = pClear->clearStencil;
             PFN_CLEAR_TILES pfnClearTiles = gClearTilesTable[KNOB_STENCIL_HOT_TILE_FORMAT];
 

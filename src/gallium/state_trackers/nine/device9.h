@@ -138,6 +138,10 @@ struct NineDevice9
         boolean buggy_barycentrics;
     } driver_bugs;
 
+    struct {
+        boolean dynamic_texture_workaround;
+    } workarounds;
+
     struct u_upload_mgr *vertex_uploader;
 
     struct nine_range_pool range_pool;

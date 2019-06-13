@@ -1393,6 +1393,15 @@ setup_execbuf_for_cmd_buffer(struct anv_execbuf *execbuf,
       anv_execbuf_add_bo_set(execbuf, cmd_buffer->surface_relocs.deps, 0,
                              &cmd_buffer->device->alloc);
 
+      /* Add the BOs for all memory objects */
+      list_for_each_entry(struct anv_device_memory, mem,
+                          &cmd_buffer->device->memory_objects, link) {
+         result = anv_execbuf_add_bo(execbuf, mem->bo, NULL, 0,
+                                     &cmd_buffer->device->alloc);
+         if (result != VK_SUCCESS)
+            return result;
+      }
+
       struct anv_block_pool *pool;
       pool = &cmd_buffer->device->dynamic_state_pool.block_pool;
       anv_block_pool_foreach_bo(bo, pool) {
@@ -1715,10 +1724,20 @@ anv_cmd_buffer_execbuf(struct anv_device *device,
       }
    }
 
-   if (cmd_buffer)
+   if (cmd_buffer) {
+      if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
+         struct anv_batch_bo **bo = u_vector_head(&cmd_buffer->seen_bbos);
+
+         device->cmd_buffer_being_decoded = cmd_buffer;
+         gen_print_batch(&device->decoder_ctx, (*bo)->bo.map,
+                         (*bo)->bo.size, (*bo)->bo.offset, false);
+         device->cmd_buffer_being_decoded = NULL;
+      }
+
       result = setup_execbuf_for_cmd_buffer(&execbuf, cmd_buffer);
-   else
+   } else {
       result = setup_empty_execbuf(&execbuf, device);
+   }
 
    if (result != VK_SUCCESS)
       return result;

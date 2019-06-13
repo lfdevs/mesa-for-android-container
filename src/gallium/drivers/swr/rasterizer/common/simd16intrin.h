@@ -24,8 +24,6 @@
 #ifndef __SWR_SIMD16INTRIN_H__
 #define __SWR_SIMD16INTRIN_H__
 
-#if ENABLE_AVX512_SIMD16
-
 #if KNOB_SIMD16_WIDTH == 16
 typedef SIMD512 SIMD16;
 #else
@@ -166,7 +164,5 @@ typedef SIMD512 SIMD16;
 #define _simd16_int2mask(mask) simd16mask(mask)
 #define _simd16_mask2int(mask) int(mask)
 #define _simd16_vmask_ps SIMD16::vmask_ps
-
-#endif // ENABLE_AVX512_SIMD16
 
 #endif //__SWR_SIMD16INTRIN_H_

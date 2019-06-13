@@ -191,6 +191,12 @@ fd2_pipe2surface(enum pipe_format format)
 		return FMT_DXT2_3;
 	case PIPE_FORMAT_DXT5_RGBA:
 		return FMT_DXT4_5;
+	case PIPE_FORMAT_ATC_RGB:
+		return FMT_ATI_TC_555_565_RGB;
+	case PIPE_FORMAT_ATC_RGBA_EXPLICIT:
+		return FMT_ATI_TC_555_565_RGBA;
+	case PIPE_FORMAT_ATC_RGBA_INTERPOLATED:
+		return FMT_ATI_TC_555_565_RGBA_INTERP;
 
 	/* YUV buffers. */
 	case PIPE_FORMAT_UYVY:

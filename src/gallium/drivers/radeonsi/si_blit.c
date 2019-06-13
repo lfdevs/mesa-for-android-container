@@ -58,7 +58,7 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op)
 		util_blitter_save_stencil_ref(sctx->blitter, &sctx->stencil_ref.state);
 		util_blitter_save_fragment_shader(sctx->blitter, sctx->ps_shader.cso);
 		util_blitter_save_sample_mask(sctx->blitter, sctx->sample_mask);
-		util_blitter_save_scissor(sctx->blitter, &sctx->scissors.states[0]);
+		util_blitter_save_scissor(sctx->blitter, &sctx->scissors[0]);
 		util_blitter_save_window_rectangles(sctx->blitter,
 						    sctx->window_rectangles_include,
 						    sctx->num_window_rectangles,
@@ -421,7 +421,7 @@ si_decompress_depth(struct si_context *sctx,
 	 */
 	if (copy_planes && tex->buffer.b.b.nr_samples > 1)
 		si_make_CB_shader_coherent(sctx, tex->buffer.b.b.nr_samples,
-					   false);
+					   false, true /* no DCC */);
 }
 
 static void
@@ -534,7 +534,8 @@ static void si_blit_decompress_color(struct si_context *sctx,
 
 	sctx->decompression_enabled = false;
 	si_make_CB_shader_coherent(sctx, tex->buffer.b.b.nr_samples,
-				   vi_dcc_enabled(tex, first_level));
+				   vi_dcc_enabled(tex, first_level),
+				   tex->surface.u.gfx9.dcc.pipe_aligned);
 }
 
 static void
@@ -1076,7 +1077,7 @@ static void si_do_CB_resolve(struct si_context *sctx,
 	si_blitter_end(sctx);
 
 	/* Flush caches for possible texturing. */
-	si_make_CB_shader_coherent(sctx, 1, false);
+	si_make_CB_shader_coherent(sctx, 1, false, true /* no DCC */);
 }
 
 static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
@@ -1317,6 +1318,9 @@ static void si_flush_resource(struct pipe_context *ctx,
 		si_blit_decompress_color(sctx, tex, 0, res->last_level,
 					 0, util_max_layer(res, 0),
 					 tex->dcc_separate_buffer != NULL);
+
+		if (tex->display_dcc_offset)
+			si_retile_dcc(sctx, tex);
 	}
 
 	/* Always do the analysis even if DCC is disabled at the moment. */
@@ -1352,7 +1356,10 @@ static void si_flush_resource(struct pipe_context *ctx,
 
 void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex)
 {
-	if (!tex->dcc_offset)
+	/* If graphics is disabled, we can't decompress DCC, but it shouldn't
+	 * be compressed either. The caller should simply discard it.
+	 */
+	if (!tex->dcc_offset || !sctx->has_graphics)
 		return;
 
 	si_blit_decompress_color(sctx, tex, 0, tex->buffer.b.b.last_level,
@@ -1363,7 +1370,10 @@ void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex)
 void si_init_blit_functions(struct si_context *sctx)
 {
 	sctx->b.resource_copy_region = si_resource_copy_region;
-	sctx->b.blit = si_blit;
-	sctx->b.flush_resource = si_flush_resource;
-	sctx->b.generate_mipmap = si_generate_mipmap;
+
+	if (sctx->has_graphics) {
+		sctx->b.blit = si_blit;
+		sctx->b.flush_resource = si_flush_resource;
+		sctx->b.generate_mipmap = si_generate_mipmap;
+	}
 }

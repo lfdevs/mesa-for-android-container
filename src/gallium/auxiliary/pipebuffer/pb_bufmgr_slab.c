@@ -226,7 +226,7 @@ pb_slab_buffer_destroy(struct pb_buffer *_buf)
 
 static void *
 pb_slab_buffer_map(struct pb_buffer *_buf, 
-                   unsigned flags,
+                   enum pb_usage_flags flags,
                    void *flush_ctx)
 {
    struct pb_slab_buffer *buf = pb_slab_buffer(_buf);
@@ -252,7 +252,7 @@ pb_slab_buffer_unmap(struct pb_buffer *_buf)
 static enum pipe_error 
 pb_slab_buffer_validate(struct pb_buffer *_buf, 
                          struct pb_validate *vl,
-                         unsigned flags)
+                         enum pb_usage_flags flags)
 {
    struct pb_slab_buffer *buf = pb_slab_buffer(_buf);
    return pb_validate(buf->slab->bo, vl, flags);
@@ -486,7 +486,7 @@ pb_slab_range_manager_create_buffer(struct pb_manager *_mgr,
    struct pb_slab_range_manager *mgr = pb_slab_range_manager(_mgr);
    pb_size bufSize;
    pb_size reqSize = size;
-   unsigned i;
+   enum pb_usage_flags i;
 
    if(desc->alignment > reqSize)
 	   reqSize = desc->alignment;

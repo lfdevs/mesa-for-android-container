@@ -188,6 +188,7 @@ struct pt_so_emit;
 void draw_pt_so_emit_prepare(struct pt_so_emit *emit, boolean use_pre_clip_pos);
 
 void draw_pt_so_emit( struct pt_so_emit *emit,
+                      int num_vertex_streams,
                       const struct draw_vertex_info *vert_info,
                       const struct draw_prim_info *prim_info );
 

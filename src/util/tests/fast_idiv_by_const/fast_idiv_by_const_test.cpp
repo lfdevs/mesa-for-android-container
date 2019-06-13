@@ -21,6 +21,8 @@
  * IN THE SOFTWARE.
  */
 
+#undef NDEBUG
+
 #include <gtest/gtest.h>
 #include "util/bigmath.h"
 #include "util/fast_idiv_by_const.h"

@@ -169,6 +169,8 @@ a6xx_SOURCES := \
 	a6xx/fd6_blend.h \
 	a6xx/fd6_blitter.c \
 	a6xx/fd6_blitter.h \
+	a6xx/fd6_compute.c \
+	a6xx/fd6_compute.h \
 	a6xx/fd6_context.c \
 	a6xx/fd6_context.h \
 	a6xx/fd6_draw.c \
@@ -181,6 +183,7 @@ a6xx_SOURCES := \
 	a6xx/fd6_gmem.h \
 	a6xx/fd6_image.c \
 	a6xx/fd6_image.h \
+	a6xx/fd6_perfcntr.c \
 	a6xx/fd6_program.c \
 	a6xx/fd6_program.h \
 	a6xx/fd6_query.c \

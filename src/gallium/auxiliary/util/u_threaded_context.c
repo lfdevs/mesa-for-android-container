@@ -676,6 +676,7 @@ tc_set_constant_buffer(struct pipe_context *_pipe,
    if (cb && cb->user_buffer) {
       u_upload_data(tc->base.const_uploader, 0, cb->buffer_size, 64,
                     cb->user_buffer, &offset, &buffer);
+      u_upload_unmap(tc->base.const_uploader);
    }
 
    struct tc_constant_buffer *p =
@@ -889,6 +890,7 @@ tc_set_shader_images(struct pipe_context *_pipe,
 struct tc_shader_buffers {
    ubyte shader, start, count;
    bool unbind;
+   unsigned writable_bitmask;
    struct pipe_shader_buffer slot[0]; /* more will be allocated if needed */
 };
 
@@ -899,11 +901,12 @@ tc_call_set_shader_buffers(struct pipe_context *pipe, union tc_payload *payload)
    unsigned count = p->count;
 
    if (p->unbind) {
-      pipe->set_shader_buffers(pipe, p->shader, p->start, p->count, NULL);
+      pipe->set_shader_buffers(pipe, p->shader, p->start, p->count, NULL, 0);
       return;
    }
 
-   pipe->set_shader_buffers(pipe, p->shader, p->start, p->count, p->slot);
+   pipe->set_shader_buffers(pipe, p->shader, p->start, p->count, p->slot,
+                            p->writable_bitmask);
 
    for (unsigned i = 0; i < count; i++)
       pipe_resource_reference(&p->slot[i].buffer, NULL);
@@ -913,7 +916,8 @@ static void
 tc_set_shader_buffers(struct pipe_context *_pipe,
                       enum pipe_shader_type shader,
                       unsigned start, unsigned count,
-                      const struct pipe_shader_buffer *buffers)
+                      const struct pipe_shader_buffer *buffers,
+                      unsigned writable_bitmask)
 {
    if (!count)
       return;
@@ -927,6 +931,7 @@ tc_set_shader_buffers(struct pipe_context *_pipe,
    p->start = start;
    p->count = count;
    p->unbind = buffers == NULL;
+   p->writable_bitmask = writable_bitmask;
 
    if (buffers) {
       for (unsigned i = 0; i < count; i++) {

@@ -246,7 +246,7 @@ struct HOTTILE
 {
     uint8_t*      pBuffer;
     HOTTILE_STATE state;
-    DWORD clearData[4]; // May need to change based on pfnClearTile implementation.  Reorder for
+    uint32_t clearData[4]; // May need to change based on pfnClearTile implementation.  Reorder for
                         // alignment?
     uint32_t numSamples;
     uint32_t renderTargetArrayIndex; // current render target array index loaded

@@ -248,7 +248,7 @@ pb_debug_buffer_destroy(struct pb_buffer *_buf)
 
 static void *
 pb_debug_buffer_map(struct pb_buffer *_buf, 
-                    unsigned flags, void *flush_ctx)
+                    enum pb_usage_flags flags, void *flush_ctx)
 {
    struct pb_debug_buffer *buf = pb_debug_buffer(_buf);
    void *map;
@@ -299,10 +299,12 @@ pb_debug_buffer_get_base_buffer(struct pb_buffer *_buf,
 static enum pipe_error 
 pb_debug_buffer_validate(struct pb_buffer *_buf, 
                          struct pb_validate *vl,
-                         unsigned flags)
+                         enum pb_usage_flags flags)
 {
    struct pb_debug_buffer *buf = pb_debug_buffer(_buf);
    
+   assert((flags & ~PB_USAGE_ALL) == 0);
+
    mtx_lock(&buf->mutex);
    if(buf->map_count) {
       debug_printf("%s: attempting to validate a mapped buffer\n", __FUNCTION__);

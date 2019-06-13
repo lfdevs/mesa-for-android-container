@@ -115,59 +115,60 @@ i965_FILES = \
 
 i965_gen4_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen45_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen5_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen6_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen7_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen75_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen8_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen9_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen10_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
 
 i965_gen11_FILES = \
 	genX_blorp_exec.c \
+	genX_boilerplate.h \
+	genX_pipe_control.c \
 	genX_state_upload.c
-
-i965_oa_GENERATED_FILES = \
-	brw_oa_metrics.c \
-	brw_oa_metrics.h
-
-i965_oa_xml_FILES = \
-	brw_oa_hsw.xml \
-	brw_oa_bdw.xml \
-	brw_oa_chv.xml \
-	brw_oa_sklgt2.xml \
-	brw_oa_sklgt3.xml \
-	brw_oa_sklgt4.xml \
-	brw_oa_bxt.xml \
-	brw_oa_kblgt2.xml \
-	brw_oa_kblgt3.xml \
-	brw_oa_glk.xml \
-	brw_oa_cflgt2.xml \
-	brw_oa_cflgt3.xml \
-	brw_oa_cnl.xml

@@ -50,7 +50,7 @@ sp_create_tex_tile_cache( struct pipe_context *pipe )
    uint pos;
 
    /* make sure max texture size works */
-   assert((TEX_TILE_SIZE << TEX_ADDR_BITS) >= (1 << (SP_MAX_TEXTURE_2D_LEVELS-1)));
+   assert((TEX_TILE_SIZE << TEX_Y_BITS) >= (1 << (SP_MAX_TEXTURE_2D_LEVELS-1)));
 
    tc = CALLOC_STRUCT( softpipe_tex_tile_cache );
    if (tc) {

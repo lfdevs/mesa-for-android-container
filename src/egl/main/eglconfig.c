@@ -56,11 +56,11 @@
  * IDs are from 1 to N respectively.
  */
 void
-_eglInitConfig(_EGLConfig *conf, _EGLDisplay *dpy, EGLint id)
+_eglInitConfig(_EGLConfig *conf, _EGLDisplay *disp, EGLint id)
 {
    memset(conf, 0, sizeof(*conf));
 
-   conf->Display = dpy;
+   conf->Display = disp;
 
    /* some attributes take non-zero default values */
    conf->ConfigID = id;
@@ -81,19 +81,19 @@ _eglInitConfig(_EGLConfig *conf, _EGLDisplay *dpy, EGLint id)
 EGLConfig
 _eglLinkConfig(_EGLConfig *conf)
 {
-   _EGLDisplay *dpy = conf->Display;
+   _EGLDisplay *disp = conf->Display;
 
    /* sanity check */
-   assert(dpy);
+   assert(disp);
    assert(conf->ConfigID > 0);
 
-   if (!dpy->Configs) {
-      dpy->Configs = _eglCreateArray("Config", 16);
-      if (!dpy->Configs)
+   if (!disp->Configs) {
+      disp->Configs = _eglCreateArray("Config", 16);
+      if (!disp->Configs)
          return (EGLConfig) NULL;
    }
 
-   _eglAppendArray(dpy->Configs, (void *) conf);
+   _eglAppendArray(disp->Configs, (void *) conf);
 
    return (EGLConfig) conf;
 }
@@ -104,16 +104,16 @@ _eglLinkConfig(_EGLConfig *conf)
  * Return NULL if the handle has no corresponding linked config.
  */
 _EGLConfig *
-_eglLookupConfig(EGLConfig config, _EGLDisplay *dpy)
+_eglLookupConfig(EGLConfig config, _EGLDisplay *disp)
 {
    _EGLConfig *conf;
 
-   if (!dpy)
+   if (!disp)
       return NULL;
 
-   conf = (_EGLConfig *) _eglFindArray(dpy->Configs, (void *) config);
+   conf = (_EGLConfig *) _eglFindArray(disp->Configs, (void *) config);
    if (conf)
-      assert(conf->Display == dpy);
+      assert(conf->Display == disp);
 
    return conf;
 }
@@ -521,12 +521,12 @@ _eglIsConfigAttribValid(_EGLConfig *conf, EGLint attr)
  * Return EGL_FALSE if any of the attribute is invalid.
  */
 EGLBoolean
-_eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *dpy,
+_eglParseConfigAttribList(_EGLConfig *conf, _EGLDisplay *disp,
                           const EGLint *attrib_list)
 {
    EGLint attr, val, i;
 
-   _eglInitConfig(conf, dpy, EGL_DONT_CARE);
+   _eglInitConfig(conf, disp, EGL_DONT_CARE);
 
    /* reset to default values */
    for (i = 0; i < ARRAY_SIZE(_eglValidationTable); i++) {
@@ -812,7 +812,7 @@ _eglChooseConfig(_EGLDriver *drv, _EGLDisplay *disp, const EGLint *attrib_list,
  * Fallback for eglGetConfigAttrib.
  */
 EGLBoolean
-_eglGetConfigAttrib(_EGLDriver *drv, _EGLDisplay *dpy, _EGLConfig *conf,
+_eglGetConfigAttrib(_EGLDriver *drv, _EGLDisplay *disp, _EGLConfig *conf,
                     EGLint attribute, EGLint *value)
 {
    if (!_eglIsConfigAttribValid(conf, attribute))

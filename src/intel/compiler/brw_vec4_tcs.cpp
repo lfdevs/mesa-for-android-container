@@ -30,7 +30,7 @@
 #include "brw_nir.h"
 #include "brw_vec4_tcs.h"
 #include "brw_fs.h"
-#include "common/gen_debug.h"
+#include "dev/gen_debug.h"
 
 namespace brw {
 

@@ -56,7 +56,7 @@ fd5_create_compute_state(struct pipe_context *pctx,
 
 	struct ir3_compiler *compiler = ctx->screen->compiler;
 	struct fd5_compute_stateobj *so = CALLOC_STRUCT(fd5_compute_stateobj);
-	so->shader = ir3_shader_create_compute(compiler, cso, &ctx->debug);
+	so->shader = ir3_shader_create_compute(compiler, cso, &ctx->debug, pctx->screen);
 	return so;
 }
 

@@ -237,7 +237,7 @@ const char *tgsi_memory_names[4] =
 };
 
 
-static inline void
+UNUSED static inline void
 tgsi_strings_check(void)
 {
    STATIC_ASSERT(ARRAY_SIZE(tgsi_semantic_names) == TGSI_SEMANTIC_COUNT);

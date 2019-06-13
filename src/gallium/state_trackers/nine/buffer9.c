@@ -276,14 +276,19 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
      * Our tests: SYSTEMMEM doesn't DISCARD */
 
     if (This->base.pool == D3DPOOL_SYSTEMMEM)
-        Flags &= ~D3DLOCK_DISCARD;
+        Flags &= ~(D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE);
 
     if (Flags & D3DLOCK_DISCARD)
         usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
     else if (Flags & D3DLOCK_NOOVERWRITE)
         usage = PIPE_TRANSFER_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED;
     else
-        usage = PIPE_TRANSFER_READ_WRITE;
+        /* Do not ask for READ if writeonly and default pool (should be safe enough,
+         * as the doc says app shouldn't expect reading to work with writeonly).
+         * Ignore for Systemmem as it has special behaviours. */
+        usage = ((This->base.usage & D3DUSAGE_WRITEONLY) && This->base.pool == D3DPOOL_DEFAULT) ?
+            PIPE_TRANSFER_WRITE :
+            PIPE_TRANSFER_READ_WRITE;
     if (Flags & D3DLOCK_DONOTWAIT && !(This->base.usage & D3DUSAGE_DYNAMIC))
         usage |= PIPE_TRANSFER_DONTBLOCK;
 
@@ -357,6 +362,23 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
             This->discard_nooverwrite_only = false;
         }
     }
+
+    /* Previous mappings may need pending commands to write to the
+     * buffer (staging buffer for example). Before a NOOVERWRITE,
+     * we thus need a finish, to guarantee any upload is finished.
+     * Note for discard_nooverwrite_only we don't need to do this
+     * check as neither discard nor nooverwrite have issues there */
+    if (This->need_sync_if_nooverwrite && !(Flags & D3DLOCK_DISCARD) &&
+        (Flags & D3DLOCK_NOOVERWRITE)) {
+        struct pipe_screen *screen = NineDevice9_GetScreen(device);
+        struct pipe_fence_handle *fence = NULL;
+
+        pipe = NineDevice9_GetPipe(device);
+        pipe->flush(pipe, &fence, 0);
+        (void) screen->fence_finish(screen, NULL, fence, PIPE_TIMEOUT_INFINITE);
+        screen->fence_reference(screen, &fence, NULL);
+    }
+    This->need_sync_if_nooverwrite = !(Flags & (D3DLOCK_DISCARD | D3DLOCK_NOOVERWRITE));
 
     /* When csmt is active, we want to avoid stalls as much as possible,
      * and thus we want to create a new resource on discard and map it

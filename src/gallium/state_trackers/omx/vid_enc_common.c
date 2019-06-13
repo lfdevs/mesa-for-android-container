@@ -28,6 +28,7 @@
 #include "vid_enc_common.h"
 
 #include "vl/vl_video_buffer.h"
+#include "tgsi/tgsi_text.h"
 
 void enc_ReleaseTasks(struct list_head *head)
 {
@@ -306,10 +307,97 @@ void enc_ControlPicture_common(vid_enc_PrivateType * priv, struct pipe_h264_enc_
    enc_GetPictureParamPreset(picture);
 }
 
+static void *create_compute_state(struct pipe_context *pipe,
+                                  const char *source)
+{
+   struct tgsi_token tokens[1024];
+   struct pipe_compute_state state = {0};
+
+   if (!tgsi_text_translate(source, tokens, ARRAY_SIZE(tokens))) {
+           assert(false);
+           return NULL;
+   }
+
+   state.ir_type = PIPE_SHADER_IR_TGSI;
+   state.prog = tokens;
+
+   return pipe->create_compute_state(pipe, &state);
+}
+
+void enc_InitCompute_common(vid_enc_PrivateType *priv)
+{
+   struct pipe_context *pipe = priv->s_pipe;
+   struct pipe_screen *screen = pipe->screen;
+
+   /* We need the partial last block support. */
+   if (!screen->get_param(screen, PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK))
+      return;
+
+   static const char *copy_y =
+         "COMP\n"
+         "PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
+         "PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+         "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+         "DCL SV[0], THREAD_ID\n"
+         "DCL SV[1], BLOCK_ID\n"
+         "DCL IMAGE[0], 2D, PIPE_FORMAT_R8_UINT\n"
+         "DCL IMAGE[1], 2D, PIPE_FORMAT_R8_UINT, WR\n"
+         "DCL TEMP[0..1]\n"
+         "IMM[0] UINT32 {64, 0, 0, 0}\n"
+
+         "UMAD TEMP[0].x, SV[1], IMM[0], SV[0]\n"
+         "MOV TEMP[0].y, SV[1]\n"
+         "LOAD TEMP[1].x, IMAGE[0], TEMP[0], 2D, PIPE_FORMAT_R8_UINT\n"
+         "STORE IMAGE[1].x, TEMP[0], TEMP[1], 2D, PIPE_FORMAT_R8_UINT\n"
+         "END\n";
+
+   static const char *copy_uv =
+         "COMP\n"
+         "PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
+         "PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+         "PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+         "DCL SV[0], THREAD_ID\n"
+         "DCL SV[1], BLOCK_ID\n"
+         "DCL IMAGE[0], 2D, PIPE_FORMAT_R8_UINT\n"
+         "DCL IMAGE[2], 2D, PIPE_FORMAT_R8G8_UINT, WR\n"
+         "DCL CONST[0][0]\n" /* .x = offset of the UV portion in the y direction */
+         "DCL TEMP[0..4]\n"
+         "IMM[0] UINT32 {64, 0, 2, 1}\n"
+         /* Destination R8G8 coordinates */
+         "UMAD TEMP[0].x, SV[1], IMM[0], SV[0]\n"
+         "MOV TEMP[0].y, SV[1]\n"
+         /* Source R8 coordinates of U */
+         "UMUL TEMP[1].x, TEMP[0], IMM[0].zzzz\n"
+         "UADD TEMP[1].y, TEMP[0], CONST[0].xxxx\n"
+         /* Source R8 coordinates of V */
+         "UADD TEMP[2].x, TEMP[1], IMM[0].wwww\n"
+         "MOV TEMP[2].y, TEMP[1]\n"
+
+         "LOAD TEMP[3].x, IMAGE[0], TEMP[1], 2D, PIPE_FORMAT_R8_UINT\n"
+         "LOAD TEMP[4].x, IMAGE[0], TEMP[2], 2D, PIPE_FORMAT_R8_UINT\n"
+         "MOV TEMP[3].y, TEMP[4].xxxx\n"
+         "STORE IMAGE[2], TEMP[0], TEMP[3], 2D, PIPE_FORMAT_R8G8_UINT\n"
+         "END\n";
+
+   priv->copy_y_shader = create_compute_state(pipe, copy_y);
+   priv->copy_uv_shader = create_compute_state(pipe, copy_uv);
+}
+
+void enc_ReleaseCompute_common(vid_enc_PrivateType *priv)
+{
+   struct pipe_context *pipe = priv->s_pipe;
+
+   if (priv->copy_y_shader)
+      pipe->delete_compute_state(pipe, priv->copy_y_shader);
+   if (priv->copy_uv_shader)
+      pipe->delete_compute_state(pipe, priv->copy_uv_shader);
+}
+
 OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEFINITIONTYPE *def,
                                    OMX_BUFFERHEADERTYPE *buf,
                                    struct pipe_video_buffer *vbuf)
 {
+   struct pipe_context *pipe = priv->s_pipe;
    struct pipe_box box = {};
    struct input_buf_private *inp = buf->pInputPortPrivate;
 
@@ -325,62 +413,142 @@ OMX_ERRORTYPE enc_LoadImage_common(vid_enc_PrivateType * priv, OMX_VIDEO_PORTDEF
       box.width = def->nFrameWidth;
       box.height = def->nFrameHeight;
       box.depth = 1;
-      priv->s_pipe->texture_subdata(priv->s_pipe, views[0]->texture, 0,
-                                    PIPE_TRANSFER_WRITE, &box,
-                                    ptr, def->nStride, 0);
+      pipe->texture_subdata(pipe, views[0]->texture, 0,
+                            PIPE_TRANSFER_WRITE, &box,
+                            ptr, def->nStride, 0);
       ptr = ((uint8_t*)buf->pBuffer) + (def->nStride * box.height);
       box.width = def->nFrameWidth / 2;
       box.height = def->nFrameHeight / 2;
       box.depth = 1;
-      priv->s_pipe->texture_subdata(priv->s_pipe, views[1]->texture, 0,
-                                    PIPE_TRANSFER_WRITE, &box,
-                                    ptr, def->nStride, 0);
+      pipe->texture_subdata(pipe, views[1]->texture, 0,
+                            PIPE_TRANSFER_WRITE, &box,
+                            ptr, def->nStride, 0);
    } else {
-      struct pipe_blit_info blit;
       struct vl_video_buffer *dst_buf = (struct vl_video_buffer *)vbuf;
 
-      pipe_transfer_unmap(priv->s_pipe, inp->transfer);
+      pipe_transfer_unmap(pipe, inp->transfer);
 
-      box.width = def->nFrameWidth;
-      box.height = def->nFrameHeight;
-      box.depth = 1;
+      /* inp->resource uses PIPE_FORMAT_I8 and the layout looks like this:
+       *
+       * def->nFrameWidth = 4, def->nFrameHeight = 4:
+       * |----|
+       * |YYYY|
+       * |YYYY|
+       * |YYYY|
+       * |YYYY|
+       * |UVUV|
+       * |UVUV|
+       * |----|
+       *
+       * The copy has 2 steps:
+       * - Copy Y to dst_buf->resources[0] as R8.
+       * - Copy UV to dst_buf->resources[1] as R8G8.
+       */
+      if (priv->copy_y_shader && priv->copy_uv_shader) {
+         /* Compute path */
+         /* Set shader images for both copies. */
+         struct pipe_image_view image[3] = {0};
+         image[0].resource = inp->resource;
+         image[0].shader_access = image[0].access = PIPE_IMAGE_ACCESS_READ;
+         image[0].format = PIPE_FORMAT_R8_UINT;
 
-      priv->s_pipe->resource_copy_region(priv->s_pipe,
-                                         dst_buf->resources[0],
-                                         0, 0, 0, 0, inp->resource, 0, &box);
+         image[1].resource = dst_buf->resources[0];
+         image[1].shader_access = image[1].access = PIPE_IMAGE_ACCESS_WRITE;
+         image[1].format = PIPE_FORMAT_R8_UINT;
 
-      memset(&blit, 0, sizeof(blit));
-      blit.src.resource = inp->resource;
-      blit.src.format = inp->resource->format;
+         image[2].resource = dst_buf->resources[1];
+         image[2].shader_access = image[1].access = PIPE_IMAGE_ACCESS_WRITE;
+         image[2].format = PIPE_FORMAT_R8G8_UINT;
 
-      blit.src.box.x = -1;
-      blit.src.box.y = def->nFrameHeight;
-      blit.src.box.width = def->nFrameWidth;
-      blit.src.box.height = def->nFrameHeight / 2 ;
-      blit.src.box.depth = 1;
+         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 3, image);
 
-      blit.dst.resource = dst_buf->resources[1];
-      blit.dst.format = blit.dst.resource->format;
+         /* Set the constant buffer. */
+         uint32_t constants[4] = {def->nFrameHeight};
+         struct pipe_constant_buffer cb = {};
 
-      blit.dst.box.width = def->nFrameWidth / 2;
-      blit.dst.box.height = def->nFrameHeight / 2;
-      blit.dst.box.depth = 1;
-      blit.filter = PIPE_TEX_FILTER_NEAREST;
+         cb.buffer_size = sizeof(constants);
+         cb.user_buffer = constants;
+         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, &cb);
 
-      blit.mask = PIPE_MASK_R;
-      priv->s_pipe->blit(priv->s_pipe, &blit);
+         /* Use the optimal block size for the linear image layout. */
+         struct pipe_grid_info info = {};
+         info.block[0] = 64;
+         info.block[1] = 1;
+         info.block[2] = 1;
+         info.grid[2] = 1;
 
-      blit.src.box.x = 0;
-      blit.mask = PIPE_MASK_G;
-      priv->s_pipe->blit(priv->s_pipe, &blit);
-      priv->s_pipe->flush(priv->s_pipe, NULL, 0);
+         /* Copy Y */
+         pipe->bind_compute_state(pipe, priv->copy_y_shader);
+
+         info.grid[0] = DIV_ROUND_UP(def->nFrameWidth, 64);
+         info.grid[1] = def->nFrameHeight;
+         info.last_block[0] = def->nFrameWidth % 64;
+         pipe->launch_grid(pipe, &info);
+
+         /* Copy UV */
+         pipe->bind_compute_state(pipe, priv->copy_uv_shader);
+
+         info.grid[0] = DIV_ROUND_UP(def->nFrameWidth / 2, 64);
+         info.grid[1] = def->nFrameHeight / 2;
+         info.last_block[0] = (def->nFrameWidth / 2) % 64;
+         pipe->launch_grid(pipe, &info);
+
+         /* Make the result visible to all clients. */
+         pipe->memory_barrier(pipe, PIPE_BARRIER_ALL);
+
+         /* Unbind. */
+         pipe->set_shader_images(pipe, PIPE_SHADER_COMPUTE, 0, 3, NULL);
+         pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, NULL);
+         pipe->bind_compute_state(pipe, NULL);
+      } else {
+         /* Graphics path */
+         struct pipe_blit_info blit;
+
+         box.width = def->nFrameWidth;
+         box.height = def->nFrameHeight;
+         box.depth = 1;
+
+         /* Copy Y */
+         pipe->resource_copy_region(pipe,
+                                    dst_buf->resources[0],
+                                    0, 0, 0, 0, inp->resource, 0, &box);
+
+         /* Copy U */
+         memset(&blit, 0, sizeof(blit));
+         blit.src.resource = inp->resource;
+         blit.src.format = inp->resource->format;
+
+         blit.src.box.x = -1;
+         blit.src.box.y = def->nFrameHeight;
+         blit.src.box.width = def->nFrameWidth;
+         blit.src.box.height = def->nFrameHeight / 2 ;
+         blit.src.box.depth = 1;
+
+         blit.dst.resource = dst_buf->resources[1];
+         blit.dst.format = blit.dst.resource->format;
+
+         blit.dst.box.width = def->nFrameWidth / 2;
+         blit.dst.box.height = def->nFrameHeight / 2;
+         blit.dst.box.depth = 1;
+         blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+         blit.mask = PIPE_MASK_R;
+         pipe->blit(pipe, &blit);
+
+         /* Copy V */
+         blit.src.box.x = 0;
+         blit.mask = PIPE_MASK_G;
+         pipe->blit(pipe, &blit);
+      }
+
+      pipe->flush(pipe, NULL, 0);
 
       box.width = inp->resource->width0;
       box.height = inp->resource->height0;
       box.depth = inp->resource->depth0;
-      buf->pBuffer = priv->s_pipe->transfer_map(priv->s_pipe, inp->resource, 0,
-                                                PIPE_TRANSFER_WRITE, &box,
-                                                &inp->transfer);
+      buf->pBuffer = pipe->transfer_map(pipe, inp->resource, 0,
+                                        PIPE_TRANSFER_WRITE, &box,
+                                        &inp->transfer);
    }
 
    return OMX_ErrorNone;

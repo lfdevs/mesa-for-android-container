@@ -520,8 +520,8 @@ static void brw_update_texture_surface(struct gl_context *ctx,
           * is safe because texture views aren't allowed on depth/stencil.
           */
          mesa_fmt = mt->format;
-      } else if (mt->etc_format != MESA_FORMAT_NONE) {
-         mesa_fmt = mt->format;
+      } else if (intel_miptree_has_etc_shadow(brw, mt)) {
+         mesa_fmt = mt->shadow_mt->format;
       } else if (plane > 0) {
          mesa_fmt = mt->format;
       } else {
@@ -571,16 +571,19 @@ static void brw_update_texture_surface(struct gl_context *ctx,
 
       if (obj->StencilSampling && firstImage->_BaseFormat == GL_DEPTH_STENCIL) {
          if (devinfo->gen <= 7) {
-            assert(mt->r8stencil_mt && !mt->stencil_mt->r8stencil_needs_update);
-            mt = mt->r8stencil_mt;
+            assert(mt->shadow_mt && !mt->stencil_mt->shadow_needs_update);
+            mt = mt->shadow_mt;
          } else {
             mt = mt->stencil_mt;
          }
          format = ISL_FORMAT_R8_UINT;
       } else if (devinfo->gen <= 7 && mt->format == MESA_FORMAT_S_UINT8) {
-         assert(mt->r8stencil_mt && !mt->r8stencil_needs_update);
-         mt = mt->r8stencil_mt;
+         assert(mt->shadow_mt && !mt->shadow_needs_update);
+         mt = mt->shadow_mt;
          format = ISL_FORMAT_R8_UINT;
+      } else if (intel_miptree_needs_fake_etc(brw, mt)) {
+         assert(mt->shadow_mt && !mt->shadow_needs_update);
+         mt = mt->shadow_mt;
       }
 
       const int surf_index = surf_offset - &brw->wm.base.surf_offset[0];
@@ -644,6 +647,7 @@ brw_emit_buffer_surface_state(struct brw_context *brw,
                                                     reloc_flags),
                          .size_B = buffer_size,
                          .format = surface_format,
+                         .swizzle = ISL_SWIZZLE_IDENTITY,
                          .stride_B = pitch,
                          .mocs = brw_get_bo_mocs(devinfo, bo));
 }
@@ -1171,11 +1175,11 @@ update_stage_texture_surfaces(struct brw_context *brw,
    else
       surf_offset += stage_state->prog_data->binding_table.plane_start[plane];
 
-   unsigned num_samplers = util_last_bit(prog->SamplersUsed);
+   unsigned num_samplers = util_last_bit(prog->info.textures_used);
    for (unsigned s = 0; s < num_samplers; s++) {
       surf_offset[s] = 0;
 
-      if (prog->SamplersUsed & (1 << s)) {
+      if (prog->info.textures_used & (1 << s)) {
          const unsigned unit = prog->SamplerUnits[s];
          const bool used_by_txf = prog->info.textures_used_by_txf & (1 << s);
          struct gl_texture_object *obj = ctx->Texture.Unit[unit]._Current;
@@ -1681,6 +1685,11 @@ brw_upload_cs_work_groups_surface(struct brw_context *brw)
                                     ISL_FORMAT_RAW,
                                     3 * sizeof(GLuint), 1,
                                     RELOC_WRITE);
+
+      /* The state buffer now holds a reference to our upload, drop ours. */
+      if (bo != brw->compute.num_work_groups_bo)
+         brw_bo_unreference(bo);
+
       brw->ctx.NewDriverState |= BRW_NEW_SURFACES;
    }
 }

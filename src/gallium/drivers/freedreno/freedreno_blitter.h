@@ -33,6 +33,10 @@
 
 bool fd_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info);
 
+void
+fd_blitter_clear(struct pipe_context *pctx, unsigned buffers,
+		const union pipe_color_union *color, double depth, unsigned stencil);
+
 void fd_resource_copy_region(struct pipe_context *pctx,
 		struct pipe_resource *dst,
 		unsigned dst_level,
@@ -40,5 +44,7 @@ void fd_resource_copy_region(struct pipe_context *pctx,
 		struct pipe_resource *src,
 		unsigned src_level,
 		const struct pipe_box *src_box);
+
+bool fd_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
 
 #endif /* FREEDRENO_BLIT_H_ */

@@ -23,6 +23,7 @@ files_svgadrm = files(
   'vmw_buffer.c',
   'vmw_context.c',
   'vmw_fence.c',
+  'vmw_msg.c',
   'vmw_screen.c',
   'vmw_screen_dri.c',
   'vmw_screen_ioctl.c',

@@ -36,8 +36,11 @@ nine_convert_dsa_state(struct pipe_depth_stencil_alpha_state *dsa_state,
 
     if (rs[D3DRS_ZENABLE]) {
         dsa.depth.enabled = 1;
-        dsa.depth.writemask = !!rs[D3DRS_ZWRITEENABLE];
         dsa.depth.func = d3dcmpfunc_to_pipe_func(rs[D3DRS_ZFUNC]);
+        /* Disable depth write if no change can occur */
+        dsa.depth.writemask = !!rs[D3DRS_ZWRITEENABLE] &&
+            dsa.depth.func != PIPE_FUNC_EQUAL &&
+            dsa.depth.func != PIPE_FUNC_NEVER;
     }
 
     if (rs[D3DRS_STENCILENABLE]) {
@@ -283,10 +286,10 @@ const enum pipe_format nine_d3d9_to_pipe_format_map[120] =
    [D3DFMT_A2W10V10U10]   = PIPE_FORMAT_R10SG10SB10SA2U_NORM,
    [D3DFMT_D16_LOCKABLE]  = PIPE_FORMAT_Z16_UNORM,
    [D3DFMT_D32]           = PIPE_FORMAT_Z32_UNORM,
-   [D3DFMT_D15S1]         = PIPE_FORMAT_Z24_UNORM_S8_UINT,
+   [D3DFMT_D15S1]         = PIPE_FORMAT_NONE,
    [D3DFMT_D24S8]         = PIPE_FORMAT_S8_UINT_Z24_UNORM,
    [D3DFMT_D24X8]         = PIPE_FORMAT_X8Z24_UNORM,
-   [D3DFMT_D24X4S4]       = PIPE_FORMAT_Z24_UNORM_S8_UINT,
+   [D3DFMT_D24X4S4]       = PIPE_FORMAT_NONE,
    [D3DFMT_D16]           = PIPE_FORMAT_Z16_UNORM,
    [D3DFMT_D32F_LOCKABLE] = PIPE_FORMAT_Z32_FLOAT,
    [D3DFMT_D24FS8]        = PIPE_FORMAT_Z32_FLOAT_S8X24_UINT,

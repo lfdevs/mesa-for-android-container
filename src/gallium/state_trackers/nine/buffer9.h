@@ -56,6 +56,7 @@ struct NineBuffer9
     /* Whether only discard and nooverwrite were used so far
      * for this buffer. Allows some optimization. */
     boolean discard_nooverwrite_only;
+    boolean need_sync_if_nooverwrite;
     struct nine_subbuffer *buf;
 
     /* Specific to managed buffers */
@@ -125,8 +126,11 @@ NineBindBufferToDevice( struct NineDevice9 *device,
             list_add(&buf->managed.list, &device->update_buffers);
         buf->bind_count++;
     }
-    if (old)
+    if (old) {
         old->bind_count--;
+        if (!old->bind_count && old->managed.dirty)
+            list_delinit(&old->managed.list);
+    }
 
     nine_bind(slot, buf);
 }

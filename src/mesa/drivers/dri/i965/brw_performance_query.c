@@ -40,7 +40,6 @@
  */
 
 #include <limits.h>
-#include <dirent.h>
 
 /* put before sys/types.h to silence glibc warnings */
 #ifdef MAJOR_IN_MKDEV
@@ -56,7 +55,7 @@
 #include <sys/ioctl.h>
 
 #include <xf86drm.h>
-#include <i915_drm.h>
+#include "drm-uapi/i915_drm.h"
 
 #include "main/hash.h"
 #include "main/macros.h"
@@ -72,8 +71,10 @@
 #include "brw_context.h"
 #include "brw_defines.h"
 #include "brw_performance_query.h"
-#include "brw_oa_metrics.h"
 #include "intel_batchbuffer.h"
+
+#include "perf/gen_perf.h"
+#include "perf/gen_perf_mdapi.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
@@ -223,61 +224,20 @@ brw_perf_query(struct gl_perf_query_object *o)
 /******************************************************************************/
 
 static bool
-read_file_uint64(const char *file, uint64_t *val)
-{
-    char buf[32];
-    int fd, n;
-
-    fd = open(file, 0);
-    if (fd < 0)
-       return false;
-    while ((n = read(fd, buf, sizeof (buf) - 1)) < 0 &&
-           errno == EINTR);
-    close(fd);
-    if (n < 0)
-       return false;
-
-    buf[n] = '\0';
-    *val = strtoull(buf, NULL, 0);
-
-    return true;
-}
-
-static bool
-read_sysfs_drm_device_file_uint64(struct brw_context *brw,
-                                  const char *file,
-                                  uint64_t *value)
-{
-   char buf[512];
-   int len;
-
-   len = snprintf(buf, sizeof(buf), "%s/%s",
-                  brw->perfquery.sysfs_dev_dir, file);
-   if (len < 0 || len >= sizeof(buf)) {
-      DBG("Failed to concatenate sys filename to read u64 from\n");
-      return false;
-   }
-
-   return read_file_uint64(buf, value);
-}
-
-/******************************************************************************/
-
-static bool
 brw_is_perf_query_ready(struct gl_context *ctx,
                         struct gl_perf_query_object *o);
 
 static uint64_t
 brw_perf_query_get_metric_id(struct brw_context *brw,
-                             const struct brw_perf_query_info *query)
+                             const struct gen_perf_query_info *query)
 {
    /* These queries are know not to ever change, their config ID has been
     * loaded upon the first query creation. No need to look them up again.
     */
-   if (query->kind == OA_COUNTERS)
+   if (query->kind == GEN_PERF_QUERY_TYPE_OA)
       return query->oa_metrics_set_id;
 
-   assert(query->kind == OA_COUNTERS_RAW);
+   assert(query->kind == GEN_PERF_QUERY_TYPE_RAW);
 
    /* Raw queries can be reprogrammed up by an external application/library.
     * When a raw query is used for the first time it's id is set to a value !=
@@ -290,12 +250,9 @@ brw_perf_query_get_metric_id(struct brw_context *brw,
       return query->oa_metrics_set_id;
    }
 
-   char metric_id_file[280];
-   snprintf(metric_id_file, sizeof(metric_id_file),
-            "%s/metrics/%s/id", brw->perfquery.sysfs_dev_dir, query->guid);
-
-   struct brw_perf_query_info *raw_query = (struct brw_perf_query_info *)query;
-   if (!read_file_uint64(metric_id_file, &raw_query->oa_metrics_set_id)) {
+   struct gen_perf_query_info *raw_query = (struct gen_perf_query_info *)query;
+   if (!gen_perf_load_metric_id(brw->perfquery.perf, query->guid,
+                                &raw_query->oa_metrics_set_id)) {
       DBG("Unable to read query guid=%s ID, falling back to test config\n", query->guid);
       raw_query->oa_metrics_set_id = 1ULL;
    } else {
@@ -313,8 +270,8 @@ dump_perf_query_callback(GLuint id, void *query_void, void *brw_void)
    struct brw_perf_query_object *obj = query_void;
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       DBG("%4d: %-6s %-8s BO: %-4s OA data: %-10s %-15s\n",
           id,
           o->Used ? "Dirty," : "New,",
@@ -323,7 +280,7 @@ dump_perf_query_callback(GLuint id, void *query_void, void *brw_void)
           brw_is_perf_query_ready(ctx, o) ? "ready," : "not ready,",
           obj->oa.results_accumulated ? "accumulated" : "not accumulated");
       break;
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       DBG("%4d: %-6s %-8s BO: %-4s\n",
           id,
           o->Used ? "Dirty," : "New,",
@@ -414,26 +371,55 @@ brw_get_perf_query_info(struct gl_context *ctx,
                         GLuint *n_active)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct brw_perf_query_info *query =
-      &brw->perfquery.queries[query_index];
+   const struct gen_perf_query_info *query =
+      &brw->perfquery.perf->queries[query_index];
 
    *name = query->name;
    *data_size = query->data_size;
    *n_counters = query->n_counters;
 
    switch (query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       *n_active = brw->perfquery.n_active_oa_queries;
       break;
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       *n_active = brw->perfquery.n_active_pipeline_stats_queries;
       break;
 
    default:
       unreachable("Unknown query type");
       break;
+   }
+}
+
+static GLuint
+gen_counter_type_enum_to_gl_type(enum gen_perf_counter_type type)
+{
+   switch (type) {
+   case GEN_PERF_COUNTER_TYPE_EVENT: return GL_PERFQUERY_COUNTER_EVENT_INTEL;
+   case GEN_PERF_COUNTER_TYPE_DURATION_NORM: return GL_PERFQUERY_COUNTER_DURATION_NORM_INTEL;
+   case GEN_PERF_COUNTER_TYPE_DURATION_RAW: return GL_PERFQUERY_COUNTER_DURATION_RAW_INTEL;
+   case GEN_PERF_COUNTER_TYPE_THROUGHPUT: return GL_PERFQUERY_COUNTER_THROUGHPUT_INTEL;
+   case GEN_PERF_COUNTER_TYPE_RAW: return GL_PERFQUERY_COUNTER_RAW_INTEL;
+   case GEN_PERF_COUNTER_TYPE_TIMESTAMP: return GL_PERFQUERY_COUNTER_TIMESTAMP_INTEL;
+   default:
+      unreachable("Unknown counter type");
+   }
+}
+
+static GLuint
+gen_counter_data_type_to_gl_type(enum gen_perf_counter_data_type type)
+{
+   switch (type) {
+   case GEN_PERF_COUNTER_DATA_TYPE_BOOL32: return GL_PERFQUERY_COUNTER_DATA_BOOL32_INTEL;
+   case GEN_PERF_COUNTER_DATA_TYPE_UINT32: return GL_PERFQUERY_COUNTER_DATA_UINT32_INTEL;
+   case GEN_PERF_COUNTER_DATA_TYPE_UINT64: return GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
+   case GEN_PERF_COUNTER_DATA_TYPE_FLOAT: return GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL;
+   case GEN_PERF_COUNTER_DATA_TYPE_DOUBLE: return GL_PERFQUERY_COUNTER_DATA_DOUBLE_INTEL;
+   default:
+      unreachable("Unknown counter data type");
    }
 }
 
@@ -453,17 +439,17 @@ brw_get_perf_counter_info(struct gl_context *ctx,
                           GLuint64 *raw_max)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct brw_perf_query_info *query =
-      &brw->perfquery.queries[query_index];
-   const struct brw_perf_query_counter *counter =
+   const struct gen_perf_query_info *query =
+      &brw->perfquery.perf->queries[query_index];
+   const struct gen_perf_query_counter *counter =
       &query->counters[counter_index];
 
    *name = counter->name;
    *desc = counter->desc;
    *offset = counter->offset;
-   *data_size = counter->size;
-   *type_enum = counter->type;
-   *data_type_enum = counter->data_type;
+   *data_size = gen_perf_query_counter_get_size(counter);
+   *type_enum = gen_counter_type_enum_to_gl_type(counter->type);
+   *data_type_enum = gen_counter_data_type_to_gl_type(counter->data_type);
    *raw_max = counter->raw_max;
 }
 
@@ -478,13 +464,13 @@ snapshot_statistics_registers(struct brw_context *brw,
                               struct brw_perf_query_object *obj,
                               uint32_t offset_in_bytes)
 {
-   const struct brw_perf_query_info *query = obj->query;
+   const struct gen_perf_query_info *query = obj->query;
    const int n_counters = query->n_counters;
 
    for (int i = 0; i < n_counters; i++) {
-      const struct brw_perf_query_counter *counter = &query->counters[i];
+      const struct gen_perf_query_counter *counter = &query->counters[i];
 
-      assert(counter->data_type == GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL);
+      assert(counter->data_type == GEN_PERF_COUNTER_DATA_TYPE_UINT64);
 
       brw_store_register_mem64(brw, obj->pipeline_stats.bo,
                                counter->pipeline_stat.reg,
@@ -555,55 +541,6 @@ drop_from_unaccumulated_query_list(struct brw_context *brw,
    obj->oa.samples_head = NULL;
 
    reap_old_sample_buffers(brw);
-}
-
-/**
- * Given pointers to starting and ending OA snapshots, add the deltas for each
- * counter to the results.
- */
-static void
-add_deltas(struct brw_context *brw,
-           struct brw_perf_query_object *obj,
-           const uint32_t *start,
-           const uint32_t *end)
-{
-   const struct brw_perf_query_info *query = obj->query;
-   uint64_t *accumulator = obj->oa.accumulator;
-   int idx = 0;
-   int i;
-
-   obj->oa.reports_accumulated++;
-
-   switch (query->oa_format) {
-   case I915_OA_FORMAT_A32u40_A4u32_B8_C8:
-      brw_perf_query_accumulate_uint32(start + 1, end + 1, accumulator + idx++); /* timestamp */
-      brw_perf_query_accumulate_uint32(start + 3, end + 3, accumulator + idx++); /* clock */
-
-      /* 32x 40bit A counters... */
-      for (i = 0; i < 32; i++)
-         brw_perf_query_accumulate_uint40(i, start, end, accumulator + idx++);
-
-      /* 4x 32bit A counters... */
-      for (i = 0; i < 4; i++)
-         brw_perf_query_accumulate_uint32(start + 36 + i, end + 36 + i,
-                                          accumulator + idx++);
-
-      /* 8x 32bit B counters + 8x 32bit C counters... */
-      for (i = 0; i < 16; i++)
-         brw_perf_query_accumulate_uint32(start + 48 + i, end + 48 + i,
-                                          accumulator + idx++);
-
-      break;
-   case I915_OA_FORMAT_A45_B8_C8:
-      brw_perf_query_accumulate_uint32(start + 1, end + 1, accumulator); /* timestamp */
-
-      for (i = 0; i < 61; i++)
-         brw_perf_query_accumulate_uint32(start + 3 + i, end + 3 + i, accumulator + 1 + i);
-
-      break;
-   default:
-      unreachable("Can't accumulate OA counters in unknown format");
-   }
 }
 
 static bool
@@ -816,8 +753,6 @@ accumulate_oa_reports(struct brw_context *brw,
       goto error;
    }
 
-   obj->oa.hw_id = start[2];
-
    /* See if we have any periodic reports to accumulate too... */
 
    /* N.B. The oa.samples_head was set when the query began and
@@ -852,14 +787,18 @@ accumulate_oa_reports(struct brw_context *brw,
             /* Ignore reports that come before the start marker.
              * (Note: takes care to allow overflow of 32bit timestamps)
              */
-            if (brw_timebase_scale(brw, report[1] - start[1]) > 5000000000)
+            if (gen_device_info_timebase_scale(devinfo,
+                                               report[1] - start[1]) > 5000000000) {
                continue;
+            }
 
             /* Ignore reports that come after the end marker.
              * (Note: takes care to allow overflow of 32bit timestamps)
              */
-            if (brw_timebase_scale(brw, report[1] - end[1]) <= 5000000000)
+            if (gen_device_info_timebase_scale(devinfo,
+                                               report[1] - end[1]) <= 5000000000) {
                goto end;
+            }
 
             /* For Gen8+ since the counters continue while other
              * contexts are running we need to discount any unrelated
@@ -871,11 +810,11 @@ accumulate_oa_reports(struct brw_context *brw,
              * of OA counters while any other context is acctive.
              */
             if (devinfo->gen >= 8) {
-               if (in_ctx && report[2] != obj->oa.hw_id) {
+               if (in_ctx && report[2] != obj->oa.result.hw_id) {
                   DBG("i915 perf: Switch AWAY (observed by ID change)\n");
                   in_ctx = false;
                   out_duration = 0;
-               } else if (in_ctx == false && report[2] == obj->oa.hw_id) {
+               } else if (in_ctx == false && report[2] == obj->oa.result.hw_id) {
                   DBG("i915 perf: Switch TO\n");
                   in_ctx = true;
 
@@ -892,18 +831,20 @@ accumulate_oa_reports(struct brw_context *brw,
                   if (out_duration >= 1)
                      add = false;
                } else if (in_ctx) {
-                  assert(report[2] == obj->oa.hw_id);
+                  assert(report[2] == obj->oa.result.hw_id);
                   DBG("i915 perf: Continuation IN\n");
                } else {
-                  assert(report[2] != obj->oa.hw_id);
+                  assert(report[2] != obj->oa.result.hw_id);
                   DBG("i915 perf: Continuation OUT\n");
                   add = false;
                   out_duration++;
                }
             }
 
-            if (add)
-               add_deltas(brw, obj, last, report);
+            if (add) {
+               gen_perf_query_result_accumulate(&obj->oa.result, obj->query,
+                                                last, report);
+            }
 
             last = report;
 
@@ -922,7 +863,8 @@ accumulate_oa_reports(struct brw_context *brw,
 
 end:
 
-   add_deltas(brw, obj, last, end);
+   gen_perf_query_result_accumulate(&obj->oa.result, obj->query,
+                                    last, end);
 
    DBG("Marking %d accumulated - results gathered\n", o->Id);
 
@@ -982,15 +924,15 @@ open_i915_perf_oa_stream(struct brw_context *brw,
 
 static void
 close_perf(struct brw_context *brw,
-           const struct brw_perf_query_info *query)
+           const struct gen_perf_query_info *query)
 {
    if (brw->perfquery.oa_stream_fd != -1) {
       close(brw->perfquery.oa_stream_fd);
       brw->perfquery.oa_stream_fd = -1;
    }
-   if (query->kind == OA_COUNTERS_RAW) {
-      struct brw_perf_query_info *raw_query =
-         (struct brw_perf_query_info *) query;
+   if (query->kind == GEN_PERF_QUERY_TYPE_RAW) {
+      struct gen_perf_query_info *raw_query =
+         (struct gen_perf_query_info *) query;
       raw_query->oa_metrics_set_id = 0;
    }
 }
@@ -1019,7 +961,7 @@ brw_begin_perf_query(struct gl_context *ctx,
 {
    struct brw_context *brw = brw_context(ctx);
    struct brw_perf_query_object *obj = brw_perf_query(o);
-   const struct brw_perf_query_info *query = obj->query;
+   const struct gen_perf_query_info *query = obj->query;
 
    /* We can assume the frontend hides mistaken attempts to Begin a
     * query object multiple times before its End. Similarly if an
@@ -1079,8 +1021,8 @@ brw_begin_perf_query(struct gl_context *ctx,
    brw_emit_mi_flush(brw);
 
    switch (query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW: {
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW: {
 
       /* Opening an i915 perf stream implies exclusive access to the OA unit
        * which will generate counter reports for a specific counter set with a
@@ -1130,12 +1072,12 @@ brw_begin_perf_query(struct gl_context *ctx,
             a_counter_in_bits = 40;
 
          uint64_t overflow_period = pow(2, a_counter_in_bits) /
-            (brw->perfquery.sys_vars.n_eus *
+            (brw->perfquery.perf->sys_vars.n_eus *
              /* drop 1GHz freq to have units in nanoseconds */
              2);
 
          DBG("A counter overflow period: %"PRIu64"ns, %"PRIu64"ms (n_eus=%"PRIu64")\n",
-             overflow_period, overflow_period / 1000000ul, brw->perfquery.sys_vars.n_eus);
+             overflow_period, overflow_period / 1000000ul, brw->perfquery.perf->sys_vars.n_eus);
 
          int period_exponent = 0;
          uint64_t prev_sample_period, next_sample_period;
@@ -1226,15 +1168,14 @@ brw_begin_perf_query(struct gl_context *ctx,
        */
       buf->refcount++;
 
-      obj->oa.hw_id = 0xffffffff;
-      memset(obj->oa.accumulator, 0, sizeof(obj->oa.accumulator));
+      gen_perf_query_result_clear(&obj->oa.result);
       obj->oa.results_accumulated = false;
 
       add_to_unaccumulated_query_list(brw, obj);
       break;
    }
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       if (obj->pipeline_stats.bo) {
          brw_bo_unreference(obj->pipeline_stats.bo);
          obj->pipeline_stats.bo = NULL;
@@ -1282,8 +1223,8 @@ brw_end_perf_query(struct gl_context *ctx,
    brw_emit_mi_flush(brw);
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
 
       /* NB: It's possible that the query will have already been marked
        * as 'accumulated' if an error was seen while reading samples
@@ -1306,7 +1247,7 @@ brw_end_perf_query(struct gl_context *ctx,
        */
       break;
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       snapshot_statistics_registers(brw, obj,
                                     STATS_BO_END_OFFSET_BYTES);
       --brw->perfquery.n_active_pipeline_stats_queries;
@@ -1328,12 +1269,12 @@ brw_wait_perf_query(struct gl_context *ctx, struct gl_perf_query_object *o)
    assert(!o->Ready);
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       bo = obj->oa.bo;
       break;
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       bo = obj->pipeline_stats.bo;
       break;
 
@@ -1358,8 +1299,8 @@ brw_wait_perf_query(struct gl_context *ctx, struct gl_perf_query_object *o)
     * we need to wait for all the reports to come in before we can
     * read them.
     */
-   if (obj->query->kind == OA_COUNTERS ||
-       obj->query->kind == OA_COUNTERS_RAW) {
+   if (obj->query->kind == GEN_PERF_QUERY_TYPE_OA ||
+       obj->query->kind == GEN_PERF_QUERY_TYPE_RAW) {
       while (!read_oa_samples_for_query(brw, obj))
          ;
    }
@@ -1376,14 +1317,14 @@ brw_is_perf_query_ready(struct gl_context *ctx,
       return true;
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       return (obj->oa.results_accumulated ||
               (obj->oa.bo &&
                !brw_batch_references(&brw->batch, obj->oa.bo) &&
                !brw_bo_busy(obj->oa.bo) &&
                read_oa_samples_for_query(brw, obj)));
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       return (obj->pipeline_stats.bo &&
               !brw_batch_references(&brw->batch, obj->pipeline_stats.bo) &&
               !brw_bo_busy(obj->pipeline_stats.bo));
@@ -1397,61 +1338,14 @@ brw_is_perf_query_ready(struct gl_context *ctx,
 }
 
 static void
-gen8_read_report_clock_ratios(const uint32_t *report,
-                              uint64_t *slice_freq_hz,
-                              uint64_t *unslice_freq_hz)
-{
-   /* The lower 16bits of the RPT_ID field of the OA reports contains a
-    * snapshot of the bits coming from the RP_FREQ_NORMAL register and is
-    * divided this way :
-    *
-    * RPT_ID[31:25]: RP_FREQ_NORMAL[20:14] (low squashed_slice_clock_frequency)
-    * RPT_ID[10:9]:  RP_FREQ_NORMAL[22:21] (high squashed_slice_clock_frequency)
-    * RPT_ID[8:0]:   RP_FREQ_NORMAL[31:23] (squashed_unslice_clock_frequency)
-    *
-    * RP_FREQ_NORMAL[31:23]: Software Unslice Ratio Request
-    *                        Multiple of 33.33MHz 2xclk (16 MHz 1xclk)
-    *
-    * RP_FREQ_NORMAL[22:14]: Software Slice Ratio Request
-    *                        Multiple of 33.33MHz 2xclk (16 MHz 1xclk)
-    */
-
-   uint32_t unslice_freq = report[0] & 0x1ff;
-   uint32_t slice_freq_low = (report[0] >> 25) & 0x7f;
-   uint32_t slice_freq_high = (report[0] >> 9) & 0x3;
-   uint32_t slice_freq = slice_freq_low | (slice_freq_high << 7);
-
-   *slice_freq_hz = slice_freq * 16666667ULL;
-   *unslice_freq_hz = unslice_freq * 16666667ULL;
-}
-
-static void
 read_slice_unslice_frequencies(struct brw_context *brw,
                                struct brw_perf_query_object *obj)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   uint32_t *begin_report, *end_report;
+   uint32_t *begin_report = obj->oa.map, *end_report = obj->oa.map + MI_RPC_BO_END_OFFSET_BYTES;
 
-   /* Slice/Unslice frequency is only available in the OA reports when the
-    * "Disable OA reports due to clock ratio change" field in
-    * OA_DEBUG_REGISTER is set to 1. This is how the kernel programs this
-    * global register (see drivers/gpu/drm/i915/i915_perf.c)
-    *
-    * Documentation says this should be available on Gen9+ but experimentation
-    * shows that Gen8 reports similar values, so we enable it there too.
-    */
-   if (devinfo->gen < 8)
-      return;
-
-   begin_report = obj->oa.map;
-   end_report = obj->oa.map + MI_RPC_BO_END_OFFSET_BYTES;
-
-   gen8_read_report_clock_ratios(begin_report,
-                                 &obj->oa.slice_frequency[0],
-                                 &obj->oa.unslice_frequency[0]);
-   gen8_read_report_clock_ratios(end_report,
-                                 &obj->oa.slice_frequency[1],
-                                 &obj->oa.unslice_frequency[1]);
+   gen_perf_query_result_read_frequencies(&obj->oa.result,
+                                          devinfo, begin_report, end_report);
 }
 
 static void
@@ -1489,32 +1383,36 @@ get_oa_counter_data(struct brw_context *brw,
                     size_t data_size,
                     uint8_t *data)
 {
-   const struct brw_perf_query_info *query = obj->query;
+   struct gen_perf *perf = brw->perfquery.perf;
+   const struct gen_perf_query_info *query = obj->query;
    int n_counters = query->n_counters;
    int written = 0;
 
    for (int i = 0; i < n_counters; i++) {
-      const struct brw_perf_query_counter *counter = &query->counters[i];
+      const struct gen_perf_query_counter *counter = &query->counters[i];
       uint64_t *out_uint64;
       float *out_float;
+      size_t counter_size = gen_perf_query_counter_get_size(counter);
 
-      if (counter->size) {
+      if (counter_size) {
          switch (counter->data_type) {
-         case GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL:
+         case GEN_PERF_COUNTER_DATA_TYPE_UINT64:
             out_uint64 = (uint64_t *)(data + counter->offset);
-            *out_uint64 = counter->oa_counter_read_uint64(brw, query,
-                                                          obj->oa.accumulator);
+            *out_uint64 =
+               counter->oa_counter_read_uint64(perf, query,
+                                               obj->oa.result.accumulator);
             break;
-         case GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL:
+         case GEN_PERF_COUNTER_DATA_TYPE_FLOAT:
             out_float = (float *)(data + counter->offset);
-            *out_float = counter->oa_counter_read_float(brw, query,
-                                                        obj->oa.accumulator);
+            *out_float =
+               counter->oa_counter_read_float(perf, query,
+                                              obj->oa.result.accumulator);
             break;
          default:
             /* So far we aren't using uint32, double or bool32... */
             unreachable("unexpected counter data type");
          }
-         written = counter->offset + counter->size;
+         written = counter->offset + counter_size;
       }
    }
 
@@ -1528,7 +1426,7 @@ get_pipeline_stats_data(struct brw_context *brw,
                         uint8_t *data)
 
 {
-   const struct brw_perf_query_info *query = obj->query;
+   const struct gen_perf_query_info *query = obj->query;
    int n_counters = obj->query->n_counters;
    uint8_t *p = data;
 
@@ -1536,7 +1434,7 @@ get_pipeline_stats_data(struct brw_context *brw,
    uint64_t *end = start + (STATS_BO_END_OFFSET_BYTES / sizeof(uint64_t));
 
    for (int i = 0; i < n_counters; i++) {
-      const struct brw_perf_query_counter *counter = &query->counters[i];
+      const struct gen_perf_query_counter *counter = &query->counters[i];
       uint64_t value = end[i] - start[i];
 
       if (counter->pipeline_stat.numerator !=
@@ -1581,8 +1479,8 @@ brw_get_perf_query_data(struct gl_context *ctx,
    assert(o->Ready);
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       if (!obj->oa.results_accumulated) {
          read_gt_frequency(brw, obj);
          read_slice_unslice_frequencies(brw, obj);
@@ -1592,13 +1490,19 @@ brw_get_perf_query_data(struct gl_context *ctx,
          brw_bo_unmap(obj->oa.bo);
          obj->oa.map = NULL;
       }
-      if (obj->query->kind == OA_COUNTERS)
+      if (obj->query->kind == GEN_PERF_QUERY_TYPE_OA) {
          written = get_oa_counter_data(brw, obj, data_size, (uint8_t *)data);
-      else
-         written = brw_perf_query_get_mdapi_oa_data(brw, obj, data_size, (uint8_t *)data);
+      } else {
+         const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+         written = gen_perf_query_result_write_mdapi((uint8_t *)data, data_size,
+                                                     devinfo, &obj->oa.result,
+                                                     obj->oa.gt_frequency[0],
+                                                     obj->oa.gt_frequency[1]);
+      }
       break;
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       written = get_pipeline_stats_data(brw, obj, data_size, (uint8_t *)data);
       break;
 
@@ -1615,8 +1519,8 @@ static struct gl_perf_query_object *
 brw_new_perf_query_object(struct gl_context *ctx, unsigned query_index)
 {
    struct brw_context *brw = brw_context(ctx);
-   const struct brw_perf_query_info *query =
-      &brw->perfquery.queries[query_index];
+   const struct gen_perf_query_info *query =
+      &brw->perfquery.perf->queries[query_index];
    struct brw_perf_query_object *obj =
       calloc(1, sizeof(struct brw_perf_query_object));
 
@@ -1650,8 +1554,8 @@ brw_delete_perf_query(struct gl_context *ctx,
    DBG("Delete(%d)\n", o->Id);
 
    switch (obj->query->kind) {
-   case OA_COUNTERS:
-   case OA_COUNTERS_RAW:
+   case GEN_PERF_QUERY_TYPE_OA:
+   case GEN_PERF_QUERY_TYPE_RAW:
       if (obj->oa.bo) {
          if (!obj->oa.results_accumulated) {
             drop_from_unaccumulated_query_list(brw, obj);
@@ -1665,7 +1569,7 @@ brw_delete_perf_query(struct gl_context *ctx,
       obj->oa.results_accumulated = false;
       break;
 
-   case PIPELINE_STATS:
+   case GEN_PERF_QUERY_TYPE_PIPELINE:
       if (obj->pipeline_stats.bo) {
          brw_bo_unreference(obj->pipeline_stats.bo);
          obj->pipeline_stats.bo = NULL;
@@ -1695,223 +1599,87 @@ static void
 init_pipeline_statistic_query_registers(struct brw_context *brw)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   struct brw_perf_query_info *query = brw_perf_query_append_query_info(brw);
+   struct gen_perf *perf = brw->perfquery.perf;
+   struct gen_perf_query_info *query =
+      gen_perf_query_append_query_info(perf, MAX_STAT_COUNTERS);
 
-   query->kind = PIPELINE_STATS;
+   query->kind = GEN_PERF_QUERY_TYPE_PIPELINE;
    query->name = "Pipeline Statistics Registers";
-   query->n_counters = 0;
-   query->counters =
-      rzalloc_array(brw, struct brw_perf_query_counter, MAX_STAT_COUNTERS);
 
-   brw_perf_query_info_add_basic_stat_reg(query, IA_VERTICES_COUNT,
-                                          "N vertices submitted");
-   brw_perf_query_info_add_basic_stat_reg(query, IA_PRIMITIVES_COUNT,
-                                          "N primitives submitted");
-   brw_perf_query_info_add_basic_stat_reg(query, VS_INVOCATION_COUNT,
-                                          "N vertex shader invocations");
+   gen_perf_query_info_add_basic_stat_reg(query, IA_VERTICES_COUNT,
+                                            "N vertices submitted");
+   gen_perf_query_info_add_basic_stat_reg(query, IA_PRIMITIVES_COUNT,
+                                            "N primitives submitted");
+   gen_perf_query_info_add_basic_stat_reg(query, VS_INVOCATION_COUNT,
+                                            "N vertex shader invocations");
 
    if (devinfo->gen == 6) {
-      brw_perf_query_info_add_stat_reg(query, GEN6_SO_PRIM_STORAGE_NEEDED, 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN6_SO_PRIM_STORAGE_NEEDED, 1, 1,
                                        "SO_PRIM_STORAGE_NEEDED",
                                        "N geometry shader stream-out primitives (total)");
-      brw_perf_query_info_add_stat_reg(query, GEN6_SO_NUM_PRIMS_WRITTEN, 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN6_SO_NUM_PRIMS_WRITTEN, 1, 1,
                                        "SO_NUM_PRIMS_WRITTEN",
                                        "N geometry shader stream-out primitives (written)");
    } else {
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(0), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(0), 1, 1,
                                        "SO_PRIM_STORAGE_NEEDED (Stream 0)",
                                        "N stream-out (stream 0) primitives (total)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(1), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(1), 1, 1,
                                        "SO_PRIM_STORAGE_NEEDED (Stream 1)",
                                        "N stream-out (stream 1) primitives (total)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(2), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(2), 1, 1,
                                        "SO_PRIM_STORAGE_NEEDED (Stream 2)",
                                        "N stream-out (stream 2) primitives (total)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(3), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_PRIM_STORAGE_NEEDED(3), 1, 1,
                                        "SO_PRIM_STORAGE_NEEDED (Stream 3)",
                                        "N stream-out (stream 3) primitives (total)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(0), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(0), 1, 1,
                                        "SO_NUM_PRIMS_WRITTEN (Stream 0)",
                                        "N stream-out (stream 0) primitives (written)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(1), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(1), 1, 1,
                                        "SO_NUM_PRIMS_WRITTEN (Stream 1)",
                                        "N stream-out (stream 1) primitives (written)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(2), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(2), 1, 1,
                                        "SO_NUM_PRIMS_WRITTEN (Stream 2)",
                                        "N stream-out (stream 2) primitives (written)");
-      brw_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(3), 1, 1,
+      gen_perf_query_info_add_stat_reg(query, GEN7_SO_NUM_PRIMS_WRITTEN(3), 1, 1,
                                        "SO_NUM_PRIMS_WRITTEN (Stream 3)",
                                        "N stream-out (stream 3) primitives (written)");
    }
 
-   brw_perf_query_info_add_basic_stat_reg(query, HS_INVOCATION_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, HS_INVOCATION_COUNT,
                                           "N TCS shader invocations");
-   brw_perf_query_info_add_basic_stat_reg(query, DS_INVOCATION_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, DS_INVOCATION_COUNT,
                                           "N TES shader invocations");
 
-   brw_perf_query_info_add_basic_stat_reg(query, GS_INVOCATION_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, GS_INVOCATION_COUNT,
                                           "N geometry shader invocations");
-   brw_perf_query_info_add_basic_stat_reg(query, GS_PRIMITIVES_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, GS_PRIMITIVES_COUNT,
                                           "N geometry shader primitives emitted");
 
-   brw_perf_query_info_add_basic_stat_reg(query, CL_INVOCATION_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, CL_INVOCATION_COUNT,
                                           "N primitives entering clipping");
-   brw_perf_query_info_add_basic_stat_reg(query, CL_PRIMITIVES_COUNT,
+   gen_perf_query_info_add_basic_stat_reg(query, CL_PRIMITIVES_COUNT,
                                           "N primitives leaving clipping");
 
-   if (devinfo->is_haswell || devinfo->gen == 8)
-      brw_perf_query_info_add_stat_reg(query, PS_INVOCATION_COUNT, 1, 4,
+   if (devinfo->is_haswell || devinfo->gen == 8) {
+      gen_perf_query_info_add_stat_reg(query, PS_INVOCATION_COUNT, 1, 4,
                                        "N fragment shader invocations",
                                        "N fragment shader invocations");
-   else
-      brw_perf_query_info_add_basic_stat_reg(query, PS_INVOCATION_COUNT,
+   } else {
+      gen_perf_query_info_add_basic_stat_reg(query, PS_INVOCATION_COUNT,
                                              "N fragment shader invocations");
+   }
 
-   brw_perf_query_info_add_basic_stat_reg(query, PS_DEPTH_COUNT, "N z-pass fragments");
+   gen_perf_query_info_add_basic_stat_reg(query, PS_DEPTH_COUNT,
+                                          "N z-pass fragments");
 
-   if (devinfo->gen >= 7)
-      brw_perf_query_info_add_basic_stat_reg(query, CS_INVOCATION_COUNT,
+   if (devinfo->gen >= 7) {
+      gen_perf_query_info_add_basic_stat_reg(query, CS_INVOCATION_COUNT,
                                              "N compute shader invocations");
+   }
 
    query->data_size = sizeof(uint64_t) * query->n_counters;
-}
-
-static void
-register_oa_config(struct brw_context *brw,
-                   const struct brw_perf_query_info *query,
-                   uint64_t config_id)
-{
-   struct brw_perf_query_info *registred_query =
-      brw_perf_query_append_query_info(brw);
-
-   *registred_query = *query;
-   registred_query->oa_metrics_set_id = config_id;
-   DBG("metric set registred: id = %" PRIu64", guid = %s\n",
-       registred_query->oa_metrics_set_id, query->guid);
-}
-
-static void
-enumerate_sysfs_metrics(struct brw_context *brw)
-{
-   char buf[256];
-   DIR *metricsdir = NULL;
-   struct dirent *metric_entry;
-   int len;
-
-   len = snprintf(buf, sizeof(buf), "%s/metrics", brw->perfquery.sysfs_dev_dir);
-   if (len < 0 || len >= sizeof(buf)) {
-      DBG("Failed to concatenate path to sysfs metrics/ directory\n");
-      return;
-   }
-
-   metricsdir = opendir(buf);
-   if (!metricsdir) {
-      DBG("Failed to open %s: %m\n", buf);
-      return;
-   }
-
-   while ((metric_entry = readdir(metricsdir))) {
-      struct hash_entry *entry;
-
-      if ((metric_entry->d_type != DT_DIR &&
-           metric_entry->d_type != DT_LNK) ||
-          metric_entry->d_name[0] == '.')
-         continue;
-
-      DBG("metric set: %s\n", metric_entry->d_name);
-      entry = _mesa_hash_table_search(brw->perfquery.oa_metrics_table,
-                                      metric_entry->d_name);
-      if (entry) {
-         uint64_t id;
-
-         len = snprintf(buf, sizeof(buf), "%s/metrics/%s/id",
-                        brw->perfquery.sysfs_dev_dir, metric_entry->d_name);
-         if (len < 0 || len >= sizeof(buf)) {
-            DBG("Failed to concatenate path to sysfs metric id file\n");
-            continue;
-         }
-
-         if (!read_file_uint64(buf, &id)) {
-            DBG("Failed to read metric set id from %s: %m", buf);
-            continue;
-         }
-
-         register_oa_config(brw, (const struct brw_perf_query_info *)entry->data, id);
-      } else
-         DBG("metric set not known by mesa (skipping)\n");
-   }
-
-   closedir(metricsdir);
-}
-
-static bool
-kernel_has_dynamic_config_support(struct brw_context *brw)
-{
-   __DRIscreen *screen = brw->screen->driScrnPriv;
-
-   hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
-      struct brw_perf_query_info *query = entry->data;
-      char config_path[280];
-      uint64_t config_id;
-
-      snprintf(config_path, sizeof(config_path), "%s/metrics/%s/id",
-               brw->perfquery.sysfs_dev_dir, query->guid);
-
-      /* Look for the test config, which we know we can't replace. */
-      if (read_file_uint64(config_path, &config_id) && config_id == 1) {
-         return drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_REMOVE_CONFIG,
-                         &config_id) < 0 && errno == ENOENT;
-      }
-   }
-
-   return false;
-}
-
-static void
-init_oa_configs(struct brw_context *brw)
-{
-   __DRIscreen *screen = brw->screen->driScrnPriv;
-
-   hash_table_foreach(brw->perfquery.oa_metrics_table, entry) {
-      const struct brw_perf_query_info *query = entry->data;
-      struct drm_i915_perf_oa_config config;
-      char config_path[280];
-      uint64_t config_id;
-      int ret;
-
-      snprintf(config_path, sizeof(config_path), "%s/metrics/%s/id",
-               brw->perfquery.sysfs_dev_dir, query->guid);
-
-      /* Don't recreate already loaded configs. */
-      if (read_file_uint64(config_path, &config_id)) {
-         DBG("metric set: %s (already loaded)\n", query->guid);
-         register_oa_config(brw, query, config_id);
-         continue;
-      }
-
-      memset(&config, 0, sizeof(config));
-
-      memcpy(config.uuid, query->guid, sizeof(config.uuid));
-
-      config.n_mux_regs = query->n_mux_regs;
-      config.mux_regs_ptr = (uintptr_t) query->mux_regs;
-
-      config.n_boolean_regs = query->n_b_counter_regs;
-      config.boolean_regs_ptr = (uintptr_t) query->b_counter_regs;
-
-      config.n_flex_regs = query->n_flex_regs;
-      config.flex_regs_ptr = (uintptr_t) query->flex_regs;
-
-      ret = drmIoctl(screen->fd, DRM_IOCTL_I915_PERF_ADD_CONFIG, &config);
-      if (ret < 0) {
-         DBG("Failed to load \"%s\" (%s) metrics set in kernel: %s\n",
-             query->name, query->guid, strerror(errno));
-         continue;
-      }
-
-      register_oa_config(brw, query, ret);
-      DBG("metric set: %s (added)\n", query->guid);
-   }
 }
 
 static bool
@@ -1974,52 +1742,20 @@ getparam_topology(struct brw_context *brw)
    return true;
 }
 
-static void
-compute_topology_builtins(struct brw_context *brw)
+static unsigned
+brw_init_perf_query_info(struct gl_context *ctx)
 {
+   struct brw_context *brw = brw_context(ctx);
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   brw->perfquery.sys_vars.slice_mask = devinfo->slice_masks;
-   brw->perfquery.sys_vars.n_eu_slices = devinfo->num_slices;
-
-   for (int i = 0; i < sizeof(devinfo->subslice_masks[i]); i++) {
-      brw->perfquery.sys_vars.n_eu_sub_slices +=
-         util_bitcount(devinfo->subslice_masks[i]);
-   }
-
-   for (int i = 0; i < sizeof(devinfo->eu_masks); i++)
-      brw->perfquery.sys_vars.n_eus += util_bitcount(devinfo->eu_masks[i]);
-
-   brw->perfquery.sys_vars.eu_threads_count =
-      brw->perfquery.sys_vars.n_eus * devinfo->num_thread_per_eu;
-
-   /* At the moment the subslice mask builtin has groups of 3bits for each
-    * slice.
-    *
-    * Ideally equations would be updated to have a slice/subslice query
-    * function/operator.
-    */
-   brw->perfquery.sys_vars.subslice_mask = 0;
-   for (int s = 0; s < util_last_bit(devinfo->slice_masks); s++) {
-      for (int ss = 0; ss < (devinfo->subslice_slice_stride * 8); ss++) {
-         if (gen_device_info_subslice_available(devinfo, s, ss))
-            brw->perfquery.sys_vars.subslice_mask |= 1UL << (s * 3 + ss);
-      }
-   }
-}
-
-static bool
-init_oa_sys_vars(struct brw_context *brw)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   uint64_t min_freq_mhz = 0, max_freq_mhz = 0;
    __DRIscreen *screen = brw->screen->driScrnPriv;
 
-   if (!read_sysfs_drm_device_file_uint64(brw, "gt_min_freq_mhz", &min_freq_mhz))
-      return false;
+   if (brw->perfquery.perf)
+      return brw->perfquery.perf->n_queries;
 
-   if (!read_sysfs_drm_device_file_uint64(brw,  "gt_max_freq_mhz", &max_freq_mhz))
-      return false;
+   brw->perfquery.perf = gen_perf_new(brw, drmIoctl);
+
+   init_pipeline_statistic_query_registers(brw);
+   brw_perf_query_register_mdapi_statistic_query(brw);
 
    if (!query_topology(brw)) {
       /* We need the i915 query uAPI on CNL+ (kernel 4.17+). */
@@ -2037,180 +1773,8 @@ init_oa_sys_vars(struct brw_context *brw)
       }
    }
 
-   memset(&brw->perfquery.sys_vars, 0, sizeof(brw->perfquery.sys_vars));
-   brw->perfquery.sys_vars.gt_min_freq = min_freq_mhz * 1000000;
-   brw->perfquery.sys_vars.gt_max_freq = max_freq_mhz * 1000000;
-   brw->perfquery.sys_vars.timestamp_frequency = devinfo->timestamp_frequency;
-   brw->perfquery.sys_vars.revision = intel_device_get_revision(screen->fd);
-   compute_topology_builtins(brw);
-
-   return true;
-}
-
-static bool
-get_sysfs_dev_dir(struct brw_context *brw)
-{
-   __DRIscreen *screen = brw->screen->driScrnPriv;
-   struct stat sb;
-   int min, maj;
-   DIR *drmdir;
-   struct dirent *drm_entry;
-   int len;
-
-   brw->perfquery.sysfs_dev_dir[0] = '\0';
-
-   if (fstat(screen->fd, &sb)) {
-      DBG("Failed to stat DRM fd\n");
-      return false;
-   }
-
-   maj = major(sb.st_rdev);
-   min = minor(sb.st_rdev);
-
-   if (!S_ISCHR(sb.st_mode)) {
-      DBG("DRM fd is not a character device as expected\n");
-      return false;
-   }
-
-   len = snprintf(brw->perfquery.sysfs_dev_dir,
-                  sizeof(brw->perfquery.sysfs_dev_dir),
-                  "/sys/dev/char/%d:%d/device/drm", maj, min);
-   if (len < 0 || len >= sizeof(brw->perfquery.sysfs_dev_dir)) {
-      DBG("Failed to concatenate sysfs path to drm device\n");
-      return false;
-   }
-
-   drmdir = opendir(brw->perfquery.sysfs_dev_dir);
-   if (!drmdir) {
-      DBG("Failed to open %s: %m\n", brw->perfquery.sysfs_dev_dir);
-      return false;
-   }
-
-   while ((drm_entry = readdir(drmdir))) {
-      if ((drm_entry->d_type == DT_DIR ||
-           drm_entry->d_type == DT_LNK) &&
-          strncmp(drm_entry->d_name, "card", 4) == 0)
-      {
-         len = snprintf(brw->perfquery.sysfs_dev_dir,
-                        sizeof(brw->perfquery.sysfs_dev_dir),
-                        "/sys/dev/char/%d:%d/device/drm/%s",
-                        maj, min, drm_entry->d_name);
-         closedir(drmdir);
-         if (len < 0 || len >= sizeof(brw->perfquery.sysfs_dev_dir))
-            return false;
-         else
-            return true;
-      }
-   }
-
-   closedir(drmdir);
-
-   DBG("Failed to find cardX directory under /sys/dev/char/%d:%d/device/drm\n",
-       maj, min);
-
-   return false;
-}
-
-typedef void (*perf_register_oa_queries_t)(struct brw_context *);
-
-static perf_register_oa_queries_t
-get_register_queries_function(const struct gen_device_info *devinfo)
-{
-   if (devinfo->is_haswell)
-      return brw_oa_register_queries_hsw;
-   if (devinfo->is_cherryview)
-      return brw_oa_register_queries_chv;
-   if (devinfo->is_broadwell)
-      return brw_oa_register_queries_bdw;
-   if (devinfo->is_broxton)
-      return brw_oa_register_queries_bxt;
-   if (devinfo->is_skylake) {
-      if (devinfo->gt == 2)
-         return brw_oa_register_queries_sklgt2;
-      if (devinfo->gt == 3)
-         return brw_oa_register_queries_sklgt3;
-      if (devinfo->gt == 4)
-         return brw_oa_register_queries_sklgt4;
-   }
-   if (devinfo->is_kabylake) {
-      if (devinfo->gt == 2)
-         return brw_oa_register_queries_kblgt2;
-      if (devinfo->gt == 3)
-         return brw_oa_register_queries_kblgt3;
-   }
-   if (devinfo->is_geminilake)
-      return brw_oa_register_queries_glk;
-   if (devinfo->is_coffeelake) {
-      if (devinfo->gt == 2)
-         return brw_oa_register_queries_cflgt2;
-      if (devinfo->gt == 3)
-         return brw_oa_register_queries_cflgt3;
-   }
-   if (devinfo->is_cannonlake)
-      return brw_oa_register_queries_cnl;
-
-   return NULL;
-}
-
-static unsigned
-brw_init_perf_query_info(struct gl_context *ctx)
-{
-   struct brw_context *brw = brw_context(ctx);
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   bool i915_perf_oa_available = false;
-   struct stat sb;
-   perf_register_oa_queries_t oa_register;
-
-   if (brw->perfquery.n_queries)
-      return brw->perfquery.n_queries;
-
-   init_pipeline_statistic_query_registers(brw);
-   brw_perf_query_register_mdapi_statistic_query(brw);
-
-   oa_register = get_register_queries_function(devinfo);
-
-   /* The existence of this sysctl parameter implies the kernel supports
-    * the i915 perf interface.
-    */
-   if (stat("/proc/sys/dev/i915/perf_stream_paranoid", &sb) == 0) {
-
-      /* If _paranoid == 1 then on Gen8+ we won't be able to access OA
-       * metrics unless running as root.
-       */
-      if (devinfo->is_haswell)
-         i915_perf_oa_available = true;
-      else {
-         uint64_t paranoid = 1;
-
-         read_file_uint64("/proc/sys/dev/i915/perf_stream_paranoid", &paranoid);
-
-         if (paranoid == 0 || geteuid() == 0)
-            i915_perf_oa_available = true;
-      }
-   }
-
-   if (i915_perf_oa_available &&
-       oa_register &&
-       get_sysfs_dev_dir(brw) &&
-       init_oa_sys_vars(brw))
-   {
-      brw->perfquery.oa_metrics_table =
-         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
-                                 _mesa_key_string_equal);
-
-      /* Index all the metric sets mesa knows about before looking to see what
-       * the kernel is advertising.
-       */
-      oa_register(brw);
-
-      if (likely((INTEL_DEBUG & DEBUG_NO_OACONFIG) == 0) &&
-          kernel_has_dynamic_config_support(brw))
-         init_oa_configs(brw);
-      else
-         enumerate_sysfs_metrics(brw);
-
+   if (gen_perf_load_oa_metrics(brw->perfquery.perf, screen->fd, devinfo))
       brw_perf_query_register_mdapi_oa_query(brw);
-   }
 
    brw->perfquery.unaccumulated =
       ralloc_array(brw, struct brw_perf_query_object *, 2);
@@ -2232,7 +1796,7 @@ brw_init_perf_query_info(struct gl_context *ctx)
 
    brw->perfquery.next_query_start_report_id = 1000;
 
-   return brw->perfquery.n_queries;
+   return brw->perfquery.perf->n_queries;
 }
 
 void

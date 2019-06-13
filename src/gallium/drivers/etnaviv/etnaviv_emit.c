@@ -250,21 +250,6 @@ etna_emit_state(struct etna_context *ctx)
       etna_set_state(stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
    }
 
-   /* If MULTI_SAMPLE_CONFIG.MSAA_SAMPLES changed, clobber affected shader
-    * state to make sure it is always rewritten. */
-   if (unlikely(dirty & (ETNA_DIRTY_FRAMEBUFFER))) {
-      if ((ctx->gpu3d.GL_MULTI_SAMPLE_CONFIG & VIVS_GL_MULTI_SAMPLE_CONFIG_MSAA_SAMPLES__MASK) !=
-          (ctx->framebuffer.GL_MULTI_SAMPLE_CONFIG & VIVS_GL_MULTI_SAMPLE_CONFIG_MSAA_SAMPLES__MASK)) {
-         /* XXX what does the GPU set these states to on MSAA samples change?
-          * Does it do the right thing?
-          * (increase/decrease as necessary) or something else? Just set some
-          * invalid value until we know for
-          * sure. */
-         ctx->gpu3d.PS_INPUT_COUNT = 0xffffffff;
-         ctx->gpu3d.PS_TEMP_REGISTER_CONTROL = 0xffffffff;
-      }
-   }
-
    /* Update vertex elements. This is different from any of the other states, in that
     * a) the number of vertex elements written matters: so write only active ones
     * b) the vertex element states must all be written: do not skip entries that stay the same */
@@ -592,12 +577,12 @@ etna_emit_state(struct etna_context *ctx)
    static const uint32_t uniform_dirty_bits =
       ETNA_DIRTY_SHADER | ETNA_DIRTY_CONSTBUF;
 
-   if (dirty & (uniform_dirty_bits | ctx->shader.fs->uniforms_dirty_bits))
+   if (dirty & (uniform_dirty_bits | ctx->shader.vs->uniforms_dirty_bits))
       etna_uniforms_write(
          ctx, ctx->shader.vs, &ctx->constant_buffer[PIPE_SHADER_VERTEX],
          ctx->shader_state.VS_UNIFORMS, &ctx->shader_state.vs_uniforms_size);
 
-   if (dirty & (uniform_dirty_bits | ctx->shader.vs->uniforms_dirty_bits))
+   if (dirty & (uniform_dirty_bits | ctx->shader.fs->uniforms_dirty_bits))
       etna_uniforms_write(
          ctx, ctx->shader.fs, &ctx->constant_buffer[PIPE_SHADER_FRAGMENT],
          ctx->shader_state.PS_UNIFORMS, &ctx->shader_state.ps_uniforms_size);
@@ -693,8 +678,6 @@ etna_emit_state(struct etna_context *ctx)
       /* Copy uniforms to gpu3d, so that incremental updates to uniforms are
        * possible as long as the
        * same shader remains bound */
-      ctx->gpu3d.vs_uniforms_size = ctx->shader_state.vs_uniforms_size;
-      ctx->gpu3d.ps_uniforms_size = ctx->shader_state.ps_uniforms_size;
       memcpy(ctx->gpu3d.VS_UNIFORMS, ctx->shader_state.VS_UNIFORMS,
              ctx->shader_state.vs_uniforms_size * 4);
       memcpy(ctx->gpu3d.PS_UNIFORMS, ctx->shader_state.PS_UNIFORMS,

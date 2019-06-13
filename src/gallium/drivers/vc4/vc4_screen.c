@@ -37,8 +37,8 @@
 #include "util/ralloc.h"
 
 #include <xf86drm.h>
-#include "drm_fourcc.h"
-#include "vc4_drm.h"
+#include "drm-uapi/drm_fourcc.h"
+#include "drm-uapi/vc4_drm.h"
 #include "vc4_screen.h"
 #include "vc4_context.h"
 #include "vc4_resource.h"

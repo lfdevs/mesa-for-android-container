@@ -32,7 +32,7 @@
 #include <sys/time.h>
 #include "dri_util.h"
 #include "intel_bufmgr.h"
-#include "i915_drm.h"
+#include "drm-uapi/i915_drm.h"
 #include "util/xmlconfig.h"
 
 struct intel_screen

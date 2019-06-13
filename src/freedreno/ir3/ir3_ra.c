@@ -286,13 +286,20 @@ ir3_ra_alloc_reg_set(struct ir3_compiler *compiler)
 		/* because of transitivity, we can get away with just setting up
 		 * conflicts between the first class of full and half regs:
 		 */
-		for (unsigned j = 0; j < CLASS_REGS(0) / 2; j++) {
-			unsigned freg  = set->gpr_to_ra_reg[0][j];
-			unsigned hreg0 = set->gpr_to_ra_reg[HALF_OFFSET][(j * 2) + 0];
-			unsigned hreg1 = set->gpr_to_ra_reg[HALF_OFFSET][(j * 2) + 1];
+		for (unsigned i = 0; i < half_class_count; i++) {
+			/* NOTE there are fewer half class sizes, but they match the
+			 * first N full class sizes.. but assert in case that ever
+			 * accidentially changes:
+			 */
+			debug_assert(class_sizes[i] == half_class_sizes[i]);
+			for (unsigned j = 0; j < CLASS_REGS(i) / 2; j++) {
+				unsigned freg  = set->gpr_to_ra_reg[i][j];
+				unsigned hreg0 = set->gpr_to_ra_reg[i + HALF_OFFSET][(j * 2) + 0];
+				unsigned hreg1 = set->gpr_to_ra_reg[i + HALF_OFFSET][(j * 2) + 1];
 
-			ra_add_transitive_reg_conflict(set->regs, freg, hreg0);
-			ra_add_transitive_reg_conflict(set->regs, freg, hreg1);
+				ra_add_transitive_reg_conflict(set->regs, freg, hreg0);
+				ra_add_transitive_reg_conflict(set->regs, freg, hreg1);
+			}
 		}
 
 		// TODO also need to update q_values, but for now:
@@ -503,8 +510,8 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 
 		*sz = MAX2(*sz, dsz);
 
-		debug_assert(instr->opc == OPC_META_FO);
-		*off = MAX2(*off, instr->fo.off);
+		if (instr->opc == OPC_META_FO)
+			*off = MAX2(*off, instr->fo.off);
 
 		d = dd;
 	}
@@ -531,8 +538,36 @@ ra_block_find_definers(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 		} else if (instr->regs[0]->flags & IR3_REG_ARRAY) {
 			id->cls = total_class_count;
 		} else {
+			/* and the normal case: */
 			id->defn = get_definer(ctx, instr, &id->sz, &id->off);
 			id->cls = size_to_class(id->sz, is_half(id->defn), is_high(id->defn));
+
+			/* this is a bit of duct-tape.. if we have a scenario like:
+			 *
+			 *   sam (f32)(x) out.x, ...
+			 *   sam (f32)(x) out.y, ...
+			 *
+			 * Then the fanout/split meta instructions for the two different
+			 * tex instructions end up grouped as left/right neighbors.  The
+			 * upshot is that in when you get_definer() on one of the meta:fo's
+			 * you get definer as the first sam with sz=2, but when you call
+			 * get_definer() on the either of the sam's you get itself as the
+			 * definer with sz=1.
+			 *
+			 * (We actually avoid this scenario exactly, the neighbor links
+			 * prevent one of the output mov's from being eliminated, so this
+			 * hack should be enough.  But probably we need to rethink how we
+			 * find the "defining" instruction.)
+			 *
+			 * TODO how do we figure out offset properly...
+			 */
+			if (id->defn != instr) {
+				struct ir3_ra_instr_data *did = &ctx->instrd[id->defn->ip];
+				if (did->sz < id->sz) {
+					did->sz = id->sz;
+					did->cls = id->cls;
+				}
+			}
 		}
 	}
 }

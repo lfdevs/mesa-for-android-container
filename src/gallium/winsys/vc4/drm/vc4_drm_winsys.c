@@ -23,15 +23,36 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 
 #include "renderonly/renderonly.h"
+#include "kmsro/drm/kmsro_drm_public.h"
 #include "vc4_drm_public.h"
 #include "vc4/vc4_screen.h"
+#include "drm-uapi/vc4_drm.h"
 
 struct pipe_screen *
 vc4_drm_screen_create(int fd)
 {
-   return vc4_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3), NULL);
+   bool v3d_present = true;
+
+#ifndef USE_VC4_SIMULATOR
+   struct drm_vc4_get_param ident0 = {
+      .param = DRM_VC4_PARAM_V3D_IDENT0,
+   };
+
+   int ret = ioctl(fd, DRM_IOCTL_VC4_GET_PARAM, &ident0);
+   v3d_present = ret == 0;
+#endif
+
+   if (v3d_present)
+      return vc4_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3), NULL);
+
+#ifdef GALLIUM_KMSRO
+   return kmsro_drm_screen_create(fd);
+#endif
+
+   return NULL;
 }
 
 struct pipe_screen *

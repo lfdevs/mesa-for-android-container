@@ -38,39 +38,35 @@ static void *virgl_buffer_transfer_map(struct pipe_context *ctx,
    struct virgl_screen *vs = virgl_screen(ctx->screen);
    struct virgl_resource *vbuf = virgl_resource(resource);
    struct virgl_transfer *trans;
-   void *ptr;
    bool readback;
-   bool doflushwait = false;
+   bool flush = false;
 
+   trans = virgl_resource_create_transfer(&vctx->transfer_pool, resource,
+                                          &vbuf->metadata, level, usage, box);
    if (usage & PIPE_TRANSFER_READ)
-      doflushwait = true;
+      flush = true;
    else
-      doflushwait = virgl_res_needs_flush_wait(vctx, vbuf, usage);
+      flush = virgl_res_needs_flush(vctx, trans);
 
-   if (doflushwait)
+   if (flush)
       ctx->flush(ctx, NULL, 0);
 
-   trans = virgl_resource_create_transfer(ctx, resource, &vbuf->metadata, level,
-                                          usage, box);
-
-   readback = virgl_res_needs_readback(vctx, vbuf, usage);
+   readback = virgl_res_needs_readback(vctx, vbuf, usage, 0);
    if (readback)
       vs->vws->transfer_get(vs->vws, vbuf->hw_res, box, trans->base.stride,
                             trans->l_stride, trans->offset, level);
 
-   if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED))
-      doflushwait = true;
-
-   if (doflushwait || readback)
+   if (readback || flush)
       vs->vws->resource_wait(vs->vws, vbuf->hw_res);
 
-   ptr = vs->vws->resource_map(vs->vws, vbuf->hw_res);
-   if (!ptr) {
+   trans->hw_res_map = vs->vws->resource_map(vs->vws, vbuf->hw_res);
+   if (!trans->hw_res_map) {
+      virgl_resource_destroy_transfer(&vctx->transfer_pool, trans);
       return NULL;
    }
 
    *transfer = &trans->base;
-   return ptr + trans->offset;
+   return trans->hw_res_map + trans->offset;
 }
 
 static void virgl_buffer_transfer_unmap(struct pipe_context *ctx,
@@ -78,36 +74,28 @@ static void virgl_buffer_transfer_unmap(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_transfer *trans = virgl_transfer(transfer);
-   struct virgl_resource *vbuf = virgl_resource(transfer->resource);
 
    if (trans->base.usage & PIPE_TRANSFER_WRITE) {
-      struct virgl_screen *vs = virgl_screen(ctx->screen);
       if (transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT) {
-         if (trans->range.end <= trans->range.start)
-            goto out;
+         if (trans->range.end <= trans->range.start) {
+            virgl_resource_destroy_transfer(&vctx->transfer_pool, trans);
+            return;
+         }
 
          transfer->box.x += trans->range.start;
          transfer->box.width = trans->range.end - trans->range.start;
          trans->offset = transfer->box.x;
       }
 
-      vctx->num_transfers++;
-      vs->vws->transfer_put(vs->vws, vbuf->hw_res,
-                            &transfer->box, trans->base.stride,
-                            trans->l_stride, trans->offset,
-                            transfer->level);
-
-   }
-
-out:
-   virgl_resource_destroy_transfer(vctx, trans);
+      virgl_transfer_queue_unmap(&vctx->queue, trans);
+   } else
+      virgl_resource_destroy_transfer(&vctx->transfer_pool, trans);
 }
 
 static void virgl_buffer_transfer_flush_region(struct pipe_context *ctx,
                                                struct pipe_transfer *transfer,
                                                const struct pipe_box *box)
 {
-   struct virgl_resource *vbuf = virgl_resource(transfer->resource);
    struct virgl_transfer *trans = virgl_transfer(transfer);
 
    /*
@@ -120,7 +108,6 @@ static void virgl_buffer_transfer_flush_region(struct pipe_context *ctx,
     * We'll end up flushing 25 --> 70.
     */
    util_range_add(&trans->range, box->x, box->x + box->width);
-   vbuf->clean = FALSE;
 }
 
 static const struct u_resource_vtbl virgl_buffer_vtbl =

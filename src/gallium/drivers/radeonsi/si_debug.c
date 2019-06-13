@@ -482,6 +482,23 @@ void si_log_hw_flush(struct si_context *sctx)
 		return;
 
 	si_log_cs(sctx, sctx->log, true);
+
+	if (&sctx->b == sctx->screen->aux_context) {
+		/* The aux context isn't captured by the ddebug wrapper,
+		 * so we dump it on a flush-by-flush basis here.
+		 */
+		FILE *f = dd_get_debug_file(false);
+		if (!f) {
+			fprintf(stderr, "radeonsi: error opening aux context dump file.\n");
+		} else {
+			dd_write_header(f, &sctx->screen->b, 0);
+
+			fprintf(f, "Aux context dump:\n\n");
+			u_log_new_page_print(sctx->log, f);
+
+			fclose(f);
+		}
+	}
 }
 
 static const char *priority_to_string(enum radeon_bo_priority priority)

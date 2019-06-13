@@ -199,7 +199,7 @@ svga_delete_vs_state(struct pipe_context *pipe, void *shader)
          svga->state.hw_draw.vs = NULL;
       }
 
-      svga_destroy_shader_variant(svga, SVGA3D_SHADERTYPE_VS, variant);
+      svga_destroy_shader_variant(svga, variant);
    }
 
    FREE((void *)vs->base.tokens);

@@ -507,6 +507,231 @@ vertex_buffers_equal(unsigned count,
 }
 
 
+/*
+ * Prepare the vertex buffers for a drawing command.
+ */
+static enum pipe_error
+validate_vertex_buffers(struct svga_hwtnl *hwtnl)
+{
+   struct svga_context *svga = hwtnl->svga;
+   struct pipe_resource *vbuffers[SVGA3D_INPUTREG_MAX];
+   struct svga_winsys_surface *vbuffer_handles[SVGA3D_INPUTREG_MAX];
+   const unsigned vbuf_count = hwtnl->cmd.vbuf_count;
+   int last_vbuf = -1;
+   unsigned i;
+
+   assert(svga_have_vgpu10(svga));
+
+   /* Get handle for each referenced vertex buffer */
+   for (i = 0; i < vbuf_count; i++) {
+      struct svga_buffer *sbuf =
+         svga_buffer(hwtnl->cmd.vbufs[i].buffer.resource);
+
+      if (sbuf) {
+         vbuffer_handles[i] = svga_buffer_handle(svga, &sbuf->b.b,
+                                                 PIPE_BIND_VERTEX_BUFFER);
+         assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_VERTEX_BUFFER);
+         if (vbuffer_handles[i] == NULL)
+            return PIPE_ERROR_OUT_OF_MEMORY;
+         vbuffers[i] = &sbuf->b.b;
+         last_vbuf = i;
+      }
+      else {
+         vbuffers[i] = NULL;
+         vbuffer_handles[i] = NULL;
+      }
+   }
+
+   for (; i < svga->state.hw_draw.num_vbuffers; i++) {
+      vbuffers[i] = NULL;
+      vbuffer_handles[i] = NULL;
+   }
+
+   /* setup vertex attribute input layout */
+   if (svga->state.hw_draw.layout_id != hwtnl->cmd.vdecl_layout_id) {
+      enum pipe_error ret =
+         SVGA3D_vgpu10_SetInputLayout(svga->swc,
+                                      hwtnl->cmd.vdecl_layout_id);
+      if (ret != PIPE_OK)
+         return ret;
+
+      svga->state.hw_draw.layout_id = hwtnl->cmd.vdecl_layout_id;
+   }
+
+   /* setup vertex buffers */
+   {
+      SVGA3dVertexBuffer vbuffer_attrs[PIPE_MAX_ATTRIBS];
+
+      for (i = 0; i < vbuf_count; i++) {
+         vbuffer_attrs[i].stride = hwtnl->cmd.vbufs[i].stride;
+         vbuffer_attrs[i].offset = hwtnl->cmd.vbufs[i].buffer_offset;
+         vbuffer_attrs[i].sid = 0;
+      }
+
+      /* If any of the vertex buffer state has changed, issue
+       * the SetVertexBuffers command. Otherwise, we will just
+       * need to rebind the resources.
+       */
+      if (vbuf_count != svga->state.hw_draw.num_vbuffers ||
+          !vertex_buffers_equal(vbuf_count,
+                                vbuffer_attrs,
+                                vbuffers,
+                                svga->state.hw_draw.vbuffer_attrs,
+                                svga->state.hw_draw.vbuffers)) {
+
+         unsigned num_vbuffers;
+
+         /* get the max of the current bound vertex buffers count and
+          * the to-be-bound vertex buffers count, so as to unbind
+          * the unused vertex buffers.
+          */
+         num_vbuffers = MAX2(vbuf_count, svga->state.hw_draw.num_vbuffers);
+
+         /* Zero-out the old buffers we want to unbind (the number of loop
+          * iterations here is typically very small, and often zero.)
+          */
+         for (i = vbuf_count; i < num_vbuffers; i++) {
+            vbuffer_attrs[i].sid = 0;
+            vbuffer_attrs[i].stride = 0;
+            vbuffer_attrs[i].offset = 0;
+            vbuffer_handles[i] = NULL;
+         }
+
+         if (num_vbuffers > 0) {
+            SVGA3dVertexBuffer *pbufAttrs = vbuffer_attrs;
+            struct svga_winsys_surface **pbufHandles = vbuffer_handles;
+            unsigned numVBuf = 0;
+
+            /* Loop through the vertex buffer lists to only emit
+             * those vertex buffers that are not already in the
+             * corresponding entries in the device's vertex buffer list.
+             */
+            for (i = 0; i < num_vbuffers; i++) {
+               boolean emit =
+                  vertex_buffers_equal(1,
+                                       &vbuffer_attrs[i],
+                                       &vbuffers[i],
+                                       &svga->state.hw_draw.vbuffer_attrs[i],
+                                       &svga->state.hw_draw.vbuffers[i]);
+
+               if (!emit && i == num_vbuffers-1) {
+                  /* Include the last vertex buffer in the next emit
+                   * if it is different.
+                   */
+                  emit = TRUE;
+                  numVBuf++;
+                  i++;
+               }
+
+               if (emit) {
+                  /* numVBuf can only be 0 if the first vertex buffer
+                   * is the same as the one in the device's list.
+                   * In this case, there is nothing to send yet.
+                   */
+                  if (numVBuf) {
+                     enum pipe_error ret =
+                        SVGA3D_vgpu10_SetVertexBuffers(svga->swc,
+                                                       numVBuf,
+                                                       i - numVBuf,
+                                                       pbufAttrs, pbufHandles);
+                     if (ret != PIPE_OK)
+                        return ret;
+                  }
+                  pbufAttrs += (numVBuf + 1);
+                  pbufHandles += (numVBuf + 1);
+                  numVBuf = 0;
+               }
+               else
+                  numVBuf++;
+            }
+
+            /* save the number of vertex buffers sent to the device, not
+             * including trailing unbound vertex buffers.
+             */
+            svga->state.hw_draw.num_vbuffers = last_vbuf + 1;
+            memcpy(svga->state.hw_draw.vbuffer_attrs, vbuffer_attrs,
+                   num_vbuffers * sizeof(vbuffer_attrs[0]));
+            for (i = 0; i < num_vbuffers; i++) {
+               pipe_resource_reference(&svga->state.hw_draw.vbuffers[i],
+                                       vbuffers[i]);
+            }
+         }
+      }
+      else {
+         /* Even though we can avoid emitting the redundant SetVertexBuffers
+          * command, we still need to reference the vertex buffers surfaces.
+          */
+         for (i = 0; i < vbuf_count; i++) {
+            if (vbuffer_handles[i] && !last_command_was_draw(svga)) {
+               enum pipe_error ret =
+                  svga->swc->resource_rebind(svga->swc, vbuffer_handles[i],
+                                             NULL, SVGA_RELOC_READ);
+               if (ret != PIPE_OK)
+                  return ret;
+            }
+         }
+      }
+   }
+
+   return PIPE_OK;
+}
+
+
+/*
+ * Prepare the index buffer for a drawing command.
+ */
+static enum pipe_error
+validate_index_buffer(struct svga_hwtnl *hwtnl,
+                      const SVGA3dPrimitiveRange *range,
+                      struct pipe_resource *ib)
+{
+   struct svga_context *svga = hwtnl->svga;
+   struct svga_winsys_surface *ib_handle =
+      svga_buffer_handle(svga, ib, PIPE_BIND_INDEX_BUFFER);
+
+   if (!ib_handle)
+      return PIPE_ERROR_OUT_OF_MEMORY;
+
+   struct svga_buffer *sbuf = svga_buffer(ib);
+   assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
+   (void) sbuf; /* silence unused var warning */
+
+   SVGA3dSurfaceFormat indexFormat = xlate_index_format(range->indexWidth);
+
+   if (ib != svga->state.hw_draw.ib ||
+       indexFormat != svga->state.hw_draw.ib_format ||
+       range->indexArray.offset != svga->state.hw_draw.ib_offset) {
+
+      assert(indexFormat != SVGA3D_FORMAT_INVALID);
+      enum pipe_error ret =
+         SVGA3D_vgpu10_SetIndexBuffer(svga->swc, ib_handle,
+                                      indexFormat,
+                                      range->indexArray.offset);
+      if (ret != PIPE_OK)
+         return ret;
+
+      pipe_resource_reference(&svga->state.hw_draw.ib, ib);
+      svga->state.hw_draw.ib_format = indexFormat;
+      svga->state.hw_draw.ib_offset = range->indexArray.offset;
+   }
+   else {
+      /* Even though we can avoid emitting the redundant SetIndexBuffer
+       * command, we still need to reference the index buffer surface.
+       */
+      if (!last_command_was_draw(svga)) {
+         enum pipe_error ret = svga->swc->resource_rebind(svga->swc,
+                                                          ib_handle,
+                                                          NULL,
+                                                          SVGA_RELOC_READ);
+         if (ret != PIPE_OK)
+            return ret;
+      }
+   }
+
+   return PIPE_OK;
+}
+
+
 static enum pipe_error
 draw_vgpu10(struct svga_hwtnl *hwtnl,
             const SVGA3dPrimitiveRange *range,
@@ -515,13 +740,7 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
             unsigned start_instance, unsigned instance_count)
 {
    struct svga_context *svga = hwtnl->svga;
-   struct pipe_resource *vbuffers[SVGA3D_INPUTREG_MAX];
-   struct svga_winsys_surface *vbuffer_handles[SVGA3D_INPUTREG_MAX];
-   struct svga_winsys_surface *ib_handle;
-   const unsigned vbuf_count = hwtnl->cmd.vbuf_count;
-   int last_vbuf = -1;
    enum pipe_error ret;
-   unsigned i;
 
    assert(svga_have_vgpu10(svga));
    assert(hwtnl->cmd.prim_count == 0);
@@ -560,167 +779,14 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
    if (ret != PIPE_OK)
       return ret;
 
-   /* Get handle for each referenced vertex buffer */
-   for (i = 0; i < vbuf_count; i++) {
-      struct svga_buffer *sbuf = svga_buffer(hwtnl->cmd.vbufs[i].buffer.resource);
+   ret = validate_vertex_buffers(hwtnl);
+   if (ret != PIPE_OK)
+      return ret;
 
-      if (sbuf) {
-         vbuffer_handles[i] = svga_buffer_handle(svga, &sbuf->b.b,
-                                                 PIPE_BIND_VERTEX_BUFFER);
-         assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_VERTEX_BUFFER);
-         if (vbuffer_handles[i] == NULL)
-            return PIPE_ERROR_OUT_OF_MEMORY;
-         vbuffers[i] = &sbuf->b.b;
-         last_vbuf = i;
-      }
-      else {
-         vbuffers[i] = NULL;
-         vbuffer_handles[i] = NULL;
-      }
-   }
-
-   for (; i < svga->state.hw_draw.num_vbuffers; i++) {
-      vbuffers[i] = NULL;
-      vbuffer_handles[i] = NULL;
-   }
-
-   /* Get handle for the index buffer */
    if (ib) {
-      struct svga_buffer *sbuf = svga_buffer(ib);
-
-      ib_handle = svga_buffer_handle(svga, ib, PIPE_BIND_INDEX_BUFFER);
-      if (!ib_handle)
-         return PIPE_ERROR_OUT_OF_MEMORY;
-
-      assert(sbuf->key.flags & SVGA3D_SURFACE_BIND_INDEX_BUFFER);
-      (void) sbuf; /* silence unused var warning */
-   }
-   else {
-      ib_handle = NULL;
-   }
-
-   /* setup vertex attribute input layout */
-   if (svga->state.hw_draw.layout_id != hwtnl->cmd.vdecl_layout_id) {
-      ret = SVGA3D_vgpu10_SetInputLayout(svga->swc,
-                                         hwtnl->cmd.vdecl_layout_id);
+      ret = validate_index_buffer(hwtnl, range, ib);
       if (ret != PIPE_OK)
          return ret;
-
-      svga->state.hw_draw.layout_id = hwtnl->cmd.vdecl_layout_id;
-   }
-
-   /* setup vertex buffers */
-   {
-      SVGA3dVertexBuffer vbuffer_attrs[PIPE_MAX_ATTRIBS];
-
-      for (i = 0; i < vbuf_count; i++) {
-         vbuffer_attrs[i].stride = hwtnl->cmd.vbufs[i].stride;
-         vbuffer_attrs[i].offset = hwtnl->cmd.vbufs[i].buffer_offset;
-         vbuffer_attrs[i].sid = 0;
-      }
-
-      /* If we haven't yet emitted a drawing command or if any
-       * vertex buffer state is changing, issue that state now.
-       */
-      if (((hwtnl->cmd.swc->hints & SVGA_HINT_FLAG_CAN_PRE_FLUSH) == 0) ||
-          vbuf_count != svga->state.hw_draw.num_vbuffers ||
-          !vertex_buffers_equal(vbuf_count,
-                                vbuffer_attrs,
-                                vbuffers,
-                                svga->state.hw_draw.vbuffer_attrs,
-                                svga->state.hw_draw.vbuffers)) {
-
-         unsigned num_vbuffers;
-
-         /* get the max of the current bound vertex buffers count and
-          * the to-be-bound vertex buffers count, so as to unbind
-          * the unused vertex buffers.
-          */
-         num_vbuffers = MAX2(vbuf_count, svga->state.hw_draw.num_vbuffers);
-
-         /* Zero-out the old buffers we want to unbind (the number of loop
-          * iterations here is typically very small, and often zero.)
-          */
-         for (i = vbuf_count; i < num_vbuffers; i++) {
-            vbuffer_attrs[i].sid = 0;
-            vbuffer_attrs[i].stride = 0;
-            vbuffer_attrs[i].offset = 0;
-            vbuffer_handles[i] = NULL;
-         }
-
-         if (num_vbuffers > 0) {
-            SVGA3dVertexBuffer *pbufAttrs = vbuffer_attrs;
-            struct svga_winsys_surface **pbufHandles = vbuffer_handles;
-            unsigned numVBuf = 0;
-
-            /* Loop through the vertex buffer lists to only emit
-             * those vertex buffers that are not already in the
-             * corresponding entries in the device's vertex buffer list.
-             */
-            for (i = 0; i < num_vbuffers; i++) {
-               boolean emit;
-
-               emit = vertex_buffers_equal(1,
-                                           &vbuffer_attrs[i],
-                                           &vbuffers[i],
-                                           &svga->state.hw_draw.vbuffer_attrs[i],
-                                           &svga->state.hw_draw.vbuffers[i]);
-                                               
-               if (!emit && i == num_vbuffers-1) {
-                  /* Include the last vertex buffer in the next emit
-                   * if it is different.
-                   */
-                  emit = TRUE;
-                  numVBuf++;
-                  i++;
-               }
-
-               if (emit) {
-                  /* numVBuf can only be 0 if the first vertex buffer
-                   * is the same as the one in the device's list.
-                   * In this case, there is nothing to send yet.
-                   */
-                  if (numVBuf) {
-                     ret = SVGA3D_vgpu10_SetVertexBuffers(svga->swc,
-                                                          numVBuf,
-                                                          i - numVBuf,
-                                                          pbufAttrs, pbufHandles);
-                     if (ret != PIPE_OK)
-                        return ret;
-                  }
-                  pbufAttrs += (numVBuf + 1);
-                  pbufHandles += (numVBuf + 1);
-                  numVBuf = 0;
-               }
-               else
-                  numVBuf++;
-            }
-
-            /* save the number of vertex buffers sent to the device, not
-             * including trailing unbound vertex buffers.
-             */
-            svga->state.hw_draw.num_vbuffers = last_vbuf + 1;
-            memcpy(svga->state.hw_draw.vbuffer_attrs, vbuffer_attrs,
-                   num_vbuffers * sizeof(vbuffer_attrs[0]));
-            for (i = 0; i < num_vbuffers; i++) {
-               pipe_resource_reference(&svga->state.hw_draw.vbuffers[i],
-                                       vbuffers[i]);
-            }
-         }
-      }
-      else {
-         /* Even though we can avoid emitting the redundant SetVertexBuffers
-          * command, we still need to reference the vertex buffers surfaces.
-          */
-         for (i = 0; i < vbuf_count; i++) {
-            if (vbuffer_handles[i] && !last_command_was_draw(svga)) {
-               ret = svga->swc->resource_rebind(svga->swc, vbuffer_handles[i],
-                                                NULL, SVGA_RELOC_READ);
-               if (ret != PIPE_OK)
-                  return ret;
-            }
-         }
-      }
    }
 
    /* Set primitive type (line, tri, etc) */
@@ -732,38 +798,8 @@ draw_vgpu10(struct svga_hwtnl *hwtnl,
       svga->state.hw_draw.topology = range->primType;
    }
 
-   if (ib_handle) {
+   if (ib) {
       /* indexed drawing */
-      SVGA3dSurfaceFormat indexFormat = xlate_index_format(range->indexWidth);
-
-      /* setup index buffer */
-      if (ib != svga->state.hw_draw.ib ||
-          indexFormat != svga->state.hw_draw.ib_format ||
-          range->indexArray.offset != svga->state.hw_draw.ib_offset) {
-
-         assert(indexFormat != SVGA3D_FORMAT_INVALID);
-         ret = SVGA3D_vgpu10_SetIndexBuffer(svga->swc, ib_handle,
-                                            indexFormat,
-                                            range->indexArray.offset);
-         if (ret != PIPE_OK)
-            return ret;
-
-         pipe_resource_reference(&svga->state.hw_draw.ib, ib);
-         svga->state.hw_draw.ib_format = indexFormat;
-         svga->state.hw_draw.ib_offset = range->indexArray.offset;
-      }
-      else {
-         /* Even though we can avoid emitting the redundant SetIndexBuffer
-          * command, we still need to reference the index buffer surface.
-          */
-         if (!last_command_was_draw(svga)) {
-            ret = svga->swc->resource_rebind(svga->swc, ib_handle,
-                                             NULL, SVGA_RELOC_READ);
-            if (ret != PIPE_OK)
-               return ret;
-         }
-      }
-
       if (instance_count > 1) {
          ret = SVGA3D_vgpu10_DrawIndexedInstanced(svga->swc,
                                                   vcount,

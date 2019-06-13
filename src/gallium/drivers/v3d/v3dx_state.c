@@ -1221,7 +1221,8 @@ static void
 v3d_set_shader_buffers(struct pipe_context *pctx,
                        enum pipe_shader_type shader,
                        unsigned start, unsigned count,
-                       const struct pipe_shader_buffer *buffers)
+                       const struct pipe_shader_buffer *buffers,
+                       unsigned writable_bitmask)
 {
         struct v3d_context *v3d = v3d_context(pctx);
         struct v3d_ssbo_stateobj *so = &v3d->ssbo[shader];

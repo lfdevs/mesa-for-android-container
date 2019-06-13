@@ -24,10 +24,8 @@ COPYRIGHT = """\
  */
 """
 
-import argparse
 import copy
 import re
-import xml.etree.cElementTree as et
 
 def _bool_to_c_expr(b):
     if b is True:
@@ -47,7 +45,7 @@ class ApiVersion:
         self.version = version
         self.enable = _bool_to_c_expr(enable)
 
-API_PATCH_VERSION = 96
+API_PATCH_VERSION = 102
 
 # Supported API versions.  Each one is the maximum patch version for the given
 # version.  Version come in increasing order and each version is available if
@@ -69,8 +67,6 @@ MAX_API_VERSION = None # Computed later
 # the those extension strings, then tests dEQP-VK.api.info.instance.extensions
 # and dEQP-VK.api.info.device fail due to the duplicated strings.
 EXTENSIONS = [
-    Extension('VK_ANDROID_external_memory_android_hardware_buffer', 3, 'ANDROID'),
-    Extension('VK_ANDROID_native_buffer',                 5, 'ANDROID'),
     Extension('VK_KHR_8bit_storage',                      1, 'device->info.gen >= 8'),
     Extension('VK_KHR_16bit_storage',                     1, 'device->info.gen >= 8'),
     Extension('VK_KHR_bind_memory2',                      1, True),
@@ -108,35 +104,73 @@ EXTENSIONS = [
     Extension('VK_KHR_relaxed_block_layout',              1, True),
     Extension('VK_KHR_sampler_mirror_clamp_to_edge',      1, True),
     Extension('VK_KHR_sampler_ycbcr_conversion',          1, True),
+    Extension('VK_KHR_shader_atomic_int64',               1,
+              'device->info.gen >= 9 && device->use_softpin'),
     Extension('VK_KHR_shader_draw_parameters',            1, True),
+    Extension('VK_KHR_shader_float16_int8',               1, 'device->info.gen >= 8'),
     Extension('VK_KHR_storage_buffer_storage_class',      1, True),
     Extension('VK_KHR_surface',                          25, 'ANV_HAS_SURFACE'),
-    Extension('VK_KHR_swapchain',                        68, 'ANV_HAS_SURFACE'),
+    Extension('VK_KHR_surface_protected_capabilities',    1, 'ANV_HAS_SURFACE'),
+    Extension('VK_KHR_swapchain',                        70, 'ANV_HAS_SURFACE'),
     Extension('VK_KHR_variable_pointers',                 1, True),
     Extension('VK_KHR_wayland_surface',                   6, 'VK_USE_PLATFORM_WAYLAND_KHR'),
     Extension('VK_KHR_xcb_surface',                       6, 'VK_USE_PLATFORM_XCB_KHR'),
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
     Extension('VK_EXT_acquire_xlib_display',              1, 'VK_USE_PLATFORM_XLIB_XRANDR_EXT'),
+    Extension('VK_EXT_buffer_device_address',             1, 'device->has_a64_buffer_access'),
     Extension('VK_EXT_calibrated_timestamps',             1, True),
     Extension('VK_EXT_conditional_rendering',             1, 'device->info.gen >= 8 || device->info.is_haswell'),
     Extension('VK_EXT_debug_report',                      8, True),
+    Extension('VK_EXT_depth_clip_enable',                 1, True),
+    Extension('VK_EXT_descriptor_indexing',               2,
+              'device->has_a64_buffer_access && device->has_bindless_images'),
     Extension('VK_EXT_direct_mode_display',               1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_display_control',                   1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_display_surface_counter',           1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_external_memory_dma_buf',           1, True),
+    Extension('VK_EXT_external_memory_host',              1, True),
     Extension('VK_EXT_global_priority',                   1,
               'device->has_context_priority'),
+    Extension('VK_EXT_host_query_reset',                  1, True),
+    Extension('VK_EXT_inline_uniform_block',              1, True),
+    Extension('VK_EXT_memory_budget',                     1, 'device->has_mem_available'),
     Extension('VK_EXT_pci_bus_info',                      2, True),
+    Extension('VK_EXT_pipeline_creation_feedback',        1, True),
     Extension('VK_EXT_post_depth_coverage',               1, 'device->info.gen >= 9'),
+    Extension('VK_EXT_queue_family_foreign',              1, 'ANDROID'),
     Extension('VK_EXT_sampler_filter_minmax',             1, 'device->info.gen >= 9'),
     Extension('VK_EXT_scalar_block_layout',               1, True),
-    Extension('VK_EXT_shader_viewport_index_layer',       1, True),
     Extension('VK_EXT_shader_stencil_export',             1, 'device->info.gen >= 9'),
+    Extension('VK_EXT_shader_viewport_index_layer',       1, True),
     Extension('VK_EXT_transform_feedback',                1, True),
     Extension('VK_EXT_vertex_attribute_divisor',          3, True),
+    Extension('VK_EXT_ycbcr_image_arrays',                1, True),
+    Extension('VK_ANDROID_external_memory_android_hardware_buffer', 3, 'ANDROID'),
+    Extension('VK_ANDROID_native_buffer',                 5, 'ANDROID'),
     Extension('VK_GOOGLE_decorate_string',                1, True),
     Extension('VK_GOOGLE_hlsl_functionality1',            1, True),
+    Extension('VK_NV_compute_shader_derivatives',         1, True),
 ]
+
+# Sort the extension list the way we expect: KHR, then EXT, then vendors
+# alphabetically. For digits, read them as a whole number sort that.
+# eg.: VK_KHR_8bit_storage < VK_KHR_16bit_storage < VK_EXT_acquire_xlib_display
+def extension_order(ext):
+    order = []
+    for substring in re.split('(KHR|EXT|[0-9]+)', ext.name):
+        if substring == 'KHR':
+            order.append(1)
+        if substring == 'EXT':
+            order.append(2)
+        elif substring.isdigit():
+            order.append(int(substring))
+        else:
+            order.append(substring)
+    return order
+for i in range(len(EXTENSIONS) - 1):
+    if extension_order(EXTENSIONS[i + 1]) < extension_order(EXTENSIONS[i]):
+        print(EXTENSIONS[i + 1].name + ' should come before ' + EXTENSIONS[i].name)
+        exit(1)
 
 class VkVersion:
     def __init__(self, string):

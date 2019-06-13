@@ -50,7 +50,11 @@ ${func['decl']}
     %else:
     FunctionType* pFuncTy = FunctionType::get(${ func['returnType'] }, {}, false);
     %endif:
+#if LLVM_VERSION_MAJOR >= 9
+    Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("meta.intrinsic.${func['name']}", pFuncTy).getCallee());
+#else
     Function* pFunc = cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("meta.intrinsic.${func['name']}", pFuncTy));
+#endif
     return CALL(pFunc, std::initializer_list<Value*>{${argList}}, name);
 %elif isIntrin:
     %if len(func['types']) != 0:

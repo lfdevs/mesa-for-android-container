@@ -339,40 +339,57 @@ namespace ArchRast
                 _mm_popcnt_u32(event.data.validMask & ~event.data.clipMask);
         }
 
-        struct ShaderStats
+        void UpdateStats(SWR_SHADER_STATS* pStatTotals, const SWR_SHADER_STATS* pStatUpdate)
         {
-            uint32_t numInstExecuted;
-        };
+            pStatTotals->numInstExecuted += pStatUpdate->numInstExecuted;
+            pStatTotals->numSampleExecuted += pStatUpdate->numSampleExecuted;
+            pStatTotals->numSampleLExecuted += pStatUpdate->numSampleLExecuted;
+            pStatTotals->numSampleBExecuted += pStatUpdate->numSampleBExecuted;
+            pStatTotals->numSampleCExecuted += pStatUpdate->numSampleCExecuted;
+            pStatTotals->numSampleCLZExecuted += pStatUpdate->numSampleCLZExecuted;
+            pStatTotals->numSampleCDExecuted += pStatUpdate->numSampleCDExecuted;
+            pStatTotals->numGather4Executed += pStatUpdate->numGather4Executed;
+            pStatTotals->numGather4CExecuted += pStatUpdate->numGather4CExecuted;
+            pStatTotals->numGather4CPOExecuted += pStatUpdate->numGather4CPOExecuted;
+            pStatTotals->numGather4CPOCExecuted += pStatUpdate->numGather4CPOCExecuted;
+            pStatTotals->numLodExecuted += pStatUpdate->numLodExecuted;
+        }
 
         virtual void Handle(const VSStats& event)
         {
-            mShaderStats[SHADER_VERTEX].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_VERTEX], pStats);
         }
 
         virtual void Handle(const GSStats& event)
         {
-            mShaderStats[SHADER_GEOMETRY].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_GEOMETRY], pStats);
         }
 
         virtual void Handle(const DSStats& event)
         {
-            mShaderStats[SHADER_DOMAIN].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_DOMAIN], pStats);
         }
 
         virtual void Handle(const HSStats& event)
         {
-            mShaderStats[SHADER_HULL].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_HULL], pStats);
         }
 
         virtual void Handle(const PSStats& event)
         {
-            mShaderStats[SHADER_PIXEL].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_PIXEL], pStats);
             mNeedFlush = true;
         }
 
         virtual void Handle(const CSStats& event)
         {
-            mShaderStats[SHADER_COMPUTE].numInstExecuted += event.data.numInstExecuted;
+            SWR_SHADER_STATS* pStats = (SWR_SHADER_STATS*)event.data.hStats;
+            UpdateStats(&mShaderStats[SHADER_COMPUTE], pStats);
             mNeedFlush = true;
         }
 
@@ -382,8 +399,32 @@ namespace ArchRast
             if (mNeedFlush == false)
                 return;
 
-            EventHandlerFile::Handle(PSInfo(drawId, mShaderStats[SHADER_PIXEL].numInstExecuted));
-            EventHandlerFile::Handle(CSInfo(drawId, mShaderStats[SHADER_COMPUTE].numInstExecuted));
+            EventHandlerFile::Handle(PSInfo(drawId,
+                                            mShaderStats[SHADER_PIXEL].numInstExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleLExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleBExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleCExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_PIXEL].numSampleCDExecuted,
+                                            mShaderStats[SHADER_PIXEL].numGather4Executed,
+                                            mShaderStats[SHADER_PIXEL].numGather4CExecuted,
+                                            mShaderStats[SHADER_PIXEL].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_PIXEL].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_PIXEL].numLodExecuted));
+            EventHandlerFile::Handle(CSInfo(drawId,
+                                            mShaderStats[SHADER_COMPUTE].numInstExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleLExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleBExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleCExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numSampleCDExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numGather4Executed,
+                                            mShaderStats[SHADER_COMPUTE].numGather4CExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_COMPUTE].numLodExecuted));
 
             // singleSample
             EventHandlerFile::Handle(EarlyZSingleSample(
@@ -480,14 +521,58 @@ namespace ArchRast
             EventHandlerFile::Handle(GSPrimsGen(event.data.drawId, mGS.primGeneratedCount));
             EventHandlerFile::Handle(GSVertsInput(event.data.drawId, mGS.vertsInput));
 
-            EventHandlerFile::Handle(
-                VSInfo(event.data.drawId, mShaderStats[SHADER_VERTEX].numInstExecuted));
-            EventHandlerFile::Handle(
-                HSInfo(event.data.drawId, mShaderStats[SHADER_HULL].numInstExecuted));
-            EventHandlerFile::Handle(
-                DSInfo(event.data.drawId, mShaderStats[SHADER_DOMAIN].numInstExecuted));
-            EventHandlerFile::Handle(
-                GSInfo(event.data.drawId, mShaderStats[SHADER_GEOMETRY].numInstExecuted));
+            EventHandlerFile::Handle(VSInfo(event.data.drawId,
+                                            mShaderStats[SHADER_VERTEX].numInstExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleLExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleBExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleCExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_VERTEX].numSampleCDExecuted,
+                                            mShaderStats[SHADER_VERTEX].numGather4Executed,
+                                            mShaderStats[SHADER_VERTEX].numGather4CExecuted,
+                                            mShaderStats[SHADER_VERTEX].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_VERTEX].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_VERTEX].numLodExecuted));
+            EventHandlerFile::Handle(HSInfo(event.data.drawId,
+                                            mShaderStats[SHADER_HULL].numInstExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleLExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleBExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleCExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_HULL].numSampleCDExecuted,
+                                            mShaderStats[SHADER_HULL].numGather4Executed,
+                                            mShaderStats[SHADER_HULL].numGather4CExecuted,
+                                            mShaderStats[SHADER_HULL].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_HULL].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_HULL].numLodExecuted));
+            EventHandlerFile::Handle(DSInfo(event.data.drawId,
+                                            mShaderStats[SHADER_DOMAIN].numInstExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleLExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleBExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleCExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numSampleCDExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numGather4Executed,
+                                            mShaderStats[SHADER_DOMAIN].numGather4CExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_DOMAIN].numLodExecuted));
+            EventHandlerFile::Handle(GSInfo(event.data.drawId,
+                                            mShaderStats[SHADER_GEOMETRY].numInstExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleLExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleBExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleCExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleCLZExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numSampleCDExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numGather4Executed,
+                                            mShaderStats[SHADER_GEOMETRY].numGather4CExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numGather4CPOExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numGather4CPOCExecuted,
+                                            mShaderStats[SHADER_GEOMETRY].numLodExecuted));
 
             mShaderStats[SHADER_VERTEX]   = {};
             mShaderStats[SHADER_HULL]     = {};
@@ -544,7 +629,7 @@ namespace ArchRast
         CullStats         mCullStats      = {};
         AlphaStats        mAlphaStats     = {};
 
-        ShaderStats mShaderStats[NUM_SHADER_TYPES];
+        SWR_SHADER_STATS mShaderStats[NUM_SHADER_TYPES];
 
     };
 

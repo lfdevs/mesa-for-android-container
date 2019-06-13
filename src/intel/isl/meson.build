@@ -81,7 +81,7 @@ isl_tiled_memcpy = static_library(
   'isl_tiled_memcpy',
   [files_isl_tiled_memcpy],
   include_directories : [
-    inc_common, inc_intel, inc_drm_uapi,
+    inc_common, inc_intel, inc_include,
   ],
   c_args : [c_vis_args, no_override_init_args, '-msse2'],
   extra_files : ['isl_tiled_memcpy.c']
@@ -92,7 +92,7 @@ if with_sse41
     'isl_tiled_memcpy_sse41',
     [files_isl_tiled_memcpy_sse41],
     include_directories : [
-      inc_common, inc_intel, inc_drm_uapi,
+      inc_common, inc_intel, inc_include,
     ],
     link_args : ['-Wl,--exclude-libs=ALL'],
     c_args : [c_vis_args, no_override_init_args, '-msse2', sse41_args],
@@ -115,7 +115,7 @@ libisl_files = files(
 libisl = static_library(
   'isl',
   [libisl_files, isl_format_layout_c, genX_bits_h],
-  include_directories : [inc_common, inc_intel, inc_drm_uapi],
+  include_directories : [inc_common, inc_intel, inc_include],
   link_with : [isl_gen_libs, isl_tiled_memcpy, isl_tiled_memcpy_sse41],
   c_args : [c_vis_args, no_override_init_args],
 )

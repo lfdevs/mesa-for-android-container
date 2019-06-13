@@ -1837,18 +1837,17 @@ static void r600_emit_sampler_states(struct r600_context *rctx,
 
 		/* TEX_ARRAY_OVERRIDE must be set for array textures to disable
 		 * filtering between layers.
-		 * Don't update TEX_ARRAY_OVERRIDE if we don't have the sampler view.
 		 */
-		if (rview) {
-			enum pipe_texture_target target = rview->base.texture->target;
-			if (target == PIPE_TEXTURE_1D_ARRAY ||
-			    target == PIPE_TEXTURE_2D_ARRAY) {
-				rstate->tex_sampler_words[0] |= S_03C000_TEX_ARRAY_OVERRIDE(1);
-				texinfo->is_array_sampler[i] = true;
-			} else {
-				rstate->tex_sampler_words[0] &= C_03C000_TEX_ARRAY_OVERRIDE;
-				texinfo->is_array_sampler[i] = false;
-			}
+		enum pipe_texture_target target = PIPE_BUFFER;
+		if (rview)
+			target = rview->base.texture->target;
+		if (target == PIPE_TEXTURE_1D_ARRAY ||
+		    target == PIPE_TEXTURE_2D_ARRAY) {
+			rstate->tex_sampler_words[0] |= S_03C000_TEX_ARRAY_OVERRIDE(1);
+			texinfo->is_array_sampler[i] = true;
+		} else {
+			rstate->tex_sampler_words[0] &= C_03C000_TEX_ARRAY_OVERRIDE;
+			texinfo->is_array_sampler[i] = false;
 		}
 
 		radeon_emit(cs, PKT3(PKT3_SET_SAMPLER, 3, 0));

@@ -58,3 +58,21 @@ in memory:
      have to call a function to do this, but with the pack function we
      generate code in the pack function to do this for us. That's a
      lot less error prone and less work.
+
+Keeping genxml files tidy :
+
+   In order to spot differences easily between generations, we keep genxml files sorted.
+   You can trigger the sort by running :
+
+      $ cd src/intel/genxml; ./sort_xml.sh
+
+   gen_sort_tags.py is the script that sorts genxml files using with
+   the following rules :
+
+      1) Tags are grouped in the following order <enum>, <struct>,
+         <instruction>, <register>
+
+      2) <field> tags are sorted through the value of their start attribute
+
+      3) Sort <struct> tags by dependency so that other scripts have
+         everything properly ordered.

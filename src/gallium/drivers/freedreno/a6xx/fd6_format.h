@@ -28,6 +28,7 @@
 #ifndef FD6_UTIL_H_
 #define FD6_UTIL_H_
 
+#include "freedreno_resource.h"
 #include "freedreno_util.h"
 
 #include "a6xx.xml.h"
@@ -40,8 +41,14 @@ enum a6xx_tex_fetchsize fd6_pipe2fetchsize(enum pipe_format format);
 enum a6xx_depth_format fd6_pipe2depth(enum pipe_format format);
 enum a6xx_tex_swiz fd6_pipe2swiz(unsigned swiz);
 
-uint32_t fd6_tex_swiz(struct pipe_resource *prsc, unsigned swizzle_r,
-		unsigned swizzle_g, unsigned swizzle_b, unsigned swizzle_a);
+void fd6_tex_swiz(enum pipe_format format, unsigned char *swiz,
+			 unsigned swizzle_r, unsigned swizzle_g,
+			 unsigned swizzle_b, unsigned swizzle_a);
+
+uint32_t fd6_tex_const_0(struct pipe_resource *prsc,
+					  unsigned level, enum pipe_format format,
+					  unsigned swizzle_r, unsigned swizzle_g,
+					  unsigned swizzle_b, unsigned swizzle_a);
 
 static inline enum a6xx_2d_ifmt
 fd6_ifmt(enum a6xx_color_fmt fmt)

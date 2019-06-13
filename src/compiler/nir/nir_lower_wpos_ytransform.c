@@ -77,18 +77,18 @@ nir_cmp(nir_builder *b, nir_ssa_def *src0, nir_ssa_def *src1, nir_ssa_def *src2)
 /* see emit_wpos_adjustment() in st_mesa_to_tgsi.c */
 static void
 emit_wpos_adjustment(lower_wpos_ytransform_state *state,
-                     nir_intrinsic_instr *intr, nir_variable *fragcoord,
-                     bool invert, float adjX, float adjY[2])
+                     nir_intrinsic_instr *intr, bool invert,
+                     float adjX, float adjY[2])
 {
    nir_builder *b = &state->b;
    nir_ssa_def *wpostrans, *wpos_temp, *wpos_temp_y, *wpos_input;
 
    assert(intr->dest.is_ssa);
+   wpos_input = &intr->dest.ssa;
 
-   b->cursor = nir_before_instr(&intr->instr);
+   b->cursor = nir_after_instr(&intr->instr);
 
    wpostrans = get_transform(state);
-   wpos_input = nir_load_var(b, fragcoord);
 
    /* First, apply the coordinate shift: */
    if (adjX || adjY[0] || adjY[1]) {
@@ -139,12 +139,13 @@ emit_wpos_adjustment(lower_wpos_ytransform_state *state,
                         nir_channel(b, wpos_temp, 2),
                         nir_channel(b, wpos_temp, 3));
 
-   nir_ssa_def_rewrite_uses(&intr->dest.ssa, nir_src_for_ssa(wpos_temp));
+   nir_ssa_def_rewrite_uses_after(&intr->dest.ssa,
+                                  nir_src_for_ssa(wpos_temp),
+                                  wpos_temp->parent_instr);
 }
 
 static void
-lower_fragcoord(lower_wpos_ytransform_state *state,
-                nir_intrinsic_instr *intr, nir_variable *fragcoord)
+lower_fragcoord(lower_wpos_ytransform_state *state, nir_intrinsic_instr *intr)
 {
    const nir_lower_wpos_ytransform_options *options = state->options;
    float adjX = 0.0f;
@@ -181,7 +182,7 @@ lower_fragcoord(lower_wpos_ytransform_state *state,
     * u,h -> l,i: (99.5 + 0.5) * -1 + 100 = 0
     */
 
-   if (fragcoord->data.origin_upper_left) {
+   if (state->shader->info.fs.origin_upper_left) {
       /* Fragment shader wants origin in upper-left */
       if (options->fs_coord_origin_upper_left) {
          /* the driver supports upper-left origin */
@@ -203,7 +204,7 @@ lower_fragcoord(lower_wpos_ytransform_state *state,
       }
    }
 
-   if (fragcoord->data.pixel_center_integer) {
+   if (state->shader->info.fs.pixel_center_integer) {
       /* Fragment shader wants pixel center integer */
       if (options->fs_coord_pixel_center_integer) {
          /* the driver supports pixel center integer */
@@ -228,7 +229,7 @@ lower_fragcoord(lower_wpos_ytransform_state *state,
       }
    }
 
-   emit_wpos_adjustment(state, intr, fragcoord, invert, adjX, adjY);
+   emit_wpos_adjustment(state, intr, invert, adjX, adjY);
 }
 
 static void
@@ -331,7 +332,7 @@ lower_wpos_ytransform_block(lower_wpos_ytransform_state *state, nir_block *block
                 (var->data.mode == nir_var_system_value &&
                  var->data.location == SYSTEM_VALUE_FRAG_COORD)) {
                /* gl_FragCoord should not have array/struct derefs: */
-               lower_fragcoord(state, intr, var);
+               lower_fragcoord(state, intr);
             } else if (var->data.mode == nir_var_system_value &&
                        var->data.location == SYSTEM_VALUE_SAMPLE_POS) {
                lower_load_sample_pos(state, intr);
@@ -341,7 +342,7 @@ lower_wpos_ytransform_block(lower_wpos_ytransform_state *state, nir_block *block
                lower_load_pointcoord(state, intr);
             }
          } else if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
-            lower_fragcoord(state, intr, NULL);
+            lower_fragcoord(state, intr);
          } else if (intr->intrinsic == nir_intrinsic_load_sample_pos) {
             lower_load_sample_pos(state, intr);
          } else if (intr->intrinsic == nir_intrinsic_interp_deref_at_offset) {

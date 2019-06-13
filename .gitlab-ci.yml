@@ -1,0 +1,264 @@
+# This is the tag of the docker image used for the build jobs. If the
+# image doesn't exist yet, the containers-build stage generates it.
+#
+# In order to generate a new image, one should generally change the tag.
+# While removing the image from the registry would also work, that's not
+# recommended except for ephemeral images during development: Replacing
+# an image after a significant amount of time might pull in newer
+# versions of gcc/clang or other packages, which might break the build
+# with older commits using the same tag.
+#
+# After merging a change resulting in generating a new image to the
+# main repository, it's recommended to remove the image from the source
+# repository's container registry, so that the image from the main
+# repository's registry will be used there as well.
+#
+# The format of the tag is "%Y-%m-%d-${counter}" where ${counter} stays
+# at "01" unless you have multiple updates on the same day :)
+variables:
+  UPSTREAM_REPO: mesa/mesa
+  DEBIAN_TAG: "2019-05-01"
+  DEBIAN_VERSION: stretch-slim
+  DEBIAN_IMAGE: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
+
+include:
+  - project: 'wayland/ci-templates'
+    ref: c73dae8b84697ef18e2dbbf4fed7386d9652b0cd
+    file: '/templates/debian.yml'
+
+stages:
+  - containers-build
+  - build+test
+
+
+# When to automatically run the CI
+.ci-run-policy: &ci-run-policy
+  only:
+    - branches@mesa/mesa
+    - merge_requests
+    - /^ci([-/].*)?$/
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+
+
+# CONTAINERS
+
+debian:
+  extends: .debian@container-ifnot-exists
+  stage: containers-build
+  <<: *ci-run-policy
+  variables:
+    GIT_STRATEGY: none # no need to pull the whole tree for rebuilding the image
+    DEBIAN_EXEC: 'bash .gitlab-ci/debian-install.sh'
+
+
+# BUILD
+
+.build:
+  <<: *ci-run-policy
+  image: $DEBIAN_IMAGE
+  stage: build+test
+  cache:
+    paths:
+      - ccache
+  artifacts:
+    when: on_failure
+    untracked: true
+  variables:
+    CCACHE_COMPILERCHECK: "content"
+  # Use ccache transparently, and print stats before/after
+  before_script:
+    - export PATH="/usr/lib/ccache:$PATH"
+    - export CCACHE_BASEDIR="$PWD"
+    - export CCACHE_DIR="$PWD/ccache"
+    - ccache --zero-stats || true
+    - ccache --show-stats || true
+  after_script:
+    - export CCACHE_DIR="$PWD/ccache"
+    - ccache --show-stats
+
+.meson-build:
+  extends: .build
+  script:
+    # We need to control the version of llvm-config we're using, so we'll
+    # generate a native file to do so. This requires meson >=0.49
+    - if test -n "$LLVM_VERSION"; then
+        LLVM_CONFIG="llvm-config-${LLVM_VERSION}";
+        echo -e "[binaries]\nllvm-config = '`which $LLVM_CONFIG`'" > native.file;
+        $LLVM_CONFIG --version;
+      else
+        touch native.file;
+      fi
+    - meson --version
+    - meson _build
+            --native-file=native.file
+            -D buildtype=debug
+            -D build-tests=true
+            -D libunwind=${UNWIND}
+            ${DRI_LOADERS}
+            -D dri-drivers=${DRI_DRIVERS:-[]}
+            ${GALLIUM_ST}
+            -D gallium-drivers=${GALLIUM_DRIVERS:-[]}
+            -D vulkan-drivers=${VULKAN_DRIVERS:-[]}
+            -D I-love-half-baked-turnips=true
+    - cd _build
+    - meson configure
+    - ninja -j4
+    - LC_ALL=C.UTF-8 ninja test
+
+.scons-build:
+  extends: .build
+  variables:
+    SCONSFLAGS: "-j4"
+  script:
+    - if test -n "$LLVM_VERSION"; then
+        export LLVM_CONFIG="llvm-config-${LLVM_VERSION}";
+      fi
+    - scons $SCONS_TARGET
+    - eval $SCONS_CHECK_COMMAND
+
+# NOTE: Building SWR is 2x (yes two) times slower than all the other
+# gallium drivers combined.
+# Start this early so that it doesn't limit the total run time.
+#
+# We also put softpipe (and therefore gallium nine, which requires
+# it) here, since softpipe/llvmpipe can't be built alongside classic
+# swrast.
+#
+# Putting glvnd here is arbitrary, but we want it in one of the builds
+# for coverage.
+meson-swr-glvnd:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glvnd=true
+      -D egl=true
+    GALLIUM_ST: >
+      -D dri3=true
+      -D gallium-vdpau=false
+      -D gallium-xvmc=false
+      -D gallium-omx=disabled
+      -D gallium-va=false
+      -D gallium-xa=false
+      -D gallium-nine=true
+      -D gallium-opencl=disabled
+      -D osmesa=gallium
+    GALLIUM_DRIVERS: "swr,swrast,iris"
+    LLVM_VERSION: "6.0"
+
+meson-clang:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_DRIVERS: "auto"
+    GALLIUM_DRIVERS: "auto"
+    VULKAN_DRIVERS: intel,amd,freedreno
+    CC: "ccache clang-8"
+    CXX: "ccache clang++-8"
+  before_script:
+    - export CCACHE_BASEDIR="$PWD" CCACHE_DIR="$PWD/ccache"
+    - ccache --zero-stats --show-stats || true
+     # clang++ breaks if it picks up the GCC 8 directory without libstdc++.so
+    - apt-get remove -y libgcc-8-dev
+
+meson-vulkan:
+  extends: .meson-build
+  variables:
+    UNWIND: "false"
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D gbm=false
+      -D egl=false
+      -D platforms=x11,wayland,drm
+      -D osmesa=none
+    GALLIUM_ST: >
+      -D dri3=true
+      -D gallium-vdpau=false
+      -D gallium-xvmc=false
+      -D gallium-omx=disabled
+      -D gallium-va=false
+      -D gallium-xa=false
+      -D gallium-nine=false
+      -D gallium-opencl=disabled
+    VULKAN_DRIVERS: intel,amd,freedreno
+    LLVM_VERSION: "7"
+
+meson-main:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glx=dri
+      -D gbm=true
+      -D egl=true
+      -D platforms=x11,wayland,drm,surfaceless
+      -D osmesa=classic
+    DRI_DRIVERS: "i915,i965,r100,r200,swrast,nouveau"
+    GALLIUM_ST: >
+      -D dri3=true
+      -D gallium-extra-hud=true
+      -D gallium-vdpau=true
+      -D gallium-xvmc=true
+      -D gallium-omx=bellagio
+      -D gallium-va=true
+      -D gallium-xa=true
+      -D gallium-nine=false
+      -D gallium-opencl=disabled
+    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,svga,v3d,vc4,virgl,etnaviv,panfrost,lima"
+    LLVM_VERSION: "7"
+
+meson-clover-llvm:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D egl=false
+      -D gbm=false
+    GALLIUM_ST: >
+      -D dri3=false
+      -D gallium-vdpau=false
+      -D gallium-xvmc=false
+      -D gallium-omx=disabled
+      -D gallium-va=false
+      -D gallium-xa=false
+      -D gallium-nine=false
+      -D gallium-opencl=icd
+    GALLIUM_DRIVERS: "r600,radeonsi"
+
+meson-clover-llvm39:
+  extends: meson-clover-llvm
+  variables:
+    GALLIUM_DRIVERS: "i915,r600"
+    LLVM_VERSION: "3.9"
+
+scons-nollvm:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: "llvm=0"
+    SCONS_CHECK_COMMAND: "scons llvm=0 check"
+
+scons-llvm:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: "llvm=1"
+    SCONS_CHECK_COMMAND: "scons llvm=1 check"
+    LLVM_VERSION: "3.4"
+    # LLVM 3.4 packages were built with an old libstdc++ ABI
+    CXX: "g++ -D_GLIBCXX_USE_CXX11_ABI=0"
+
+scons-swr:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: "swr=1"
+    SCONS_CHECK_COMMAND: "true"
+    LLVM_VERSION: "6.0"
+
+scons-win64:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: platform=windows machine=x86_64
+    SCONS_CHECK_COMMAND: "true"

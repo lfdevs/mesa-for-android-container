@@ -61,26 +61,16 @@ foreach x : [[swr_context_files, 'gen_swr_context_llvm.h'],
   )
 endforeach
 
-foreach x : [['gen_ar_event.hpp', '--gen_event_hpp'],
-             ['gen_ar_event.cpp', '--gen_event_cpp'],
-             ['gen_ar_eventhandler.hpp', '--gen_eventhandler_h'],
-             ['gen_ar_eventhandlerfile.hpp', '--gen_eventhandlerfile_h']]
-  files_swr_common += custom_target(
-    x[0],
-    input : ['gen_archrast.py', swr_event_proto_files, swr_event_pproto_files],
-    output : x[0],
-    command : [
-      prog_python,
-      '@INPUT0@',
-      '--proto', '@INPUT1@',
-      '--proto_private', '@INPUT2@',
-      '--output', '@OUTPUT@',
-      x[1],
-    ],
-    depend_files : files(
-      join_paths('templates', x[0]),
-      'gen_common.py',
-    ),
-  )
+ar_output_filenames = ['gen_ar_event.hpp', 'gen_ar_event.cpp', 'gen_ar_eventhandler.hpp', 'gen_ar_eventhandlerfile.hpp']
+ar_template_filenames = []
+foreach fname : ar_output_filenames
+    ar_template_filenames += join_paths('templates', fname)
 endforeach
 
+files_swr_common += custom_target(
+    'gen_archrast',
+    input : ['gen_archrast.py', swr_event_proto_files, swr_event_pproto_files],
+    output : ar_output_filenames,
+    command : [prog_python, '@INPUT0@', '--proto', '@INPUT1@', '@INPUT2@', '--output-dir', meson.current_build_dir()],
+    depend_files : files('gen_common.py', ar_template_filenames)
+)

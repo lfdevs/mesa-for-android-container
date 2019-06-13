@@ -23,10 +23,18 @@
 #ifndef API_DISPATCH_HPP
 #define API_DISPATCH_HPP
 
+#define CL_TARGET_OPENCL_VERSION 220
+
+#define CL_USE_DEPRECATED_OPENCL_1_0_APIS
 #define CL_USE_DEPRECATED_OPENCL_1_1_APIS
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+#define CL_USE_DEPRECATED_OPENCL_2_0_APIS
+#define CL_USE_DEPRECATED_OPENCL_2_1_APIS
+
 
 #include "CL/cl.h"
 #include "CL/cl_ext.h"
+#include "CL/cl_egl.h"
 #include "CL/cl_gl.h"
 
 ///
@@ -765,6 +773,195 @@ struct _cl_icd_dispatch {
    void *clGetDeviceIDsFromDX9MediaAdapterKHR;
    void *clEnqueueAcquireDX9MediaSurfacesKHR;
    void *clEnqueueReleaseDX9MediaSurfacesKHR;
+
+   CL_API_ENTRY void (CL_API_CALL *clCreateFromEGLImageKHR)(
+      cl_context context,
+      CLeglDisplayKHR display,
+      CLeglImageKHR image,
+      cl_mem_flags flags,
+      const cl_egl_image_properties_khr *properties,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY void (CL_API_CALL *clEnqueueAcquireEGLObjectsKHR)(
+      cl_command_queue command_queue,
+      cl_uint num_objects,
+      const cl_mem *mem_objects,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY void (CL_API_CALL *clEnqueueReleaseEGLObjectsKHR)(
+      cl_command_queue command_queue,
+      cl_uint num_objects,
+      const cl_mem *mem_objects,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY void (CL_API_CALL *clCreateEventFromEGLSyncKHR)(
+      cl_context context,
+      CLeglSyncKHR sync,
+      CLeglDisplayKHR display,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY cl_command_queue (CL_API_CALL *clCreateCommandQueueWithProperties)(
+      cl_context context,
+      cl_device_id device,
+      const cl_queue_properties *properties,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY void (CL_API_CALL *clCreatePipe)(
+      cl_context context,
+      cl_mem_flags flags,
+      cl_uint pipe_packet_size,
+      cl_uint pipe_max_packets,
+      const cl_pipe_properties *properties,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY void (CL_API_CALL *clGetPipeInfo)(
+      cl_mem pipe,
+      cl_pipe_info param_name,
+      size_t param_value_size,
+      void *param_value,
+      size_t *param_value_size_ret);
+
+   CL_API_ENTRY void (CL_API_CALL *clSVMAlloc)(
+      cl_context context,
+      cl_svm_mem_flags flags,
+      size_t size,
+      unsigned int alignment);
+
+   CL_API_ENTRY void (CL_API_CALL *clSVMFree)(
+      cl_context context,
+      void *svm_pointer);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMFree)(
+      cl_command_queue command_queue,
+      cl_uint num_svm_pointers,
+      void **svm_pointers,
+      void (CL_CALLBACK *pfn_free_func)(cl_command_queue, cl_uint, void **, void *),
+      void *user_data,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMMemcpy)(
+      cl_command_queue command_queue,
+      cl_bool blocking_copy,
+      void *dst_ptr,
+      const void *src_ptr,
+      size_t size,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMMemFill)(
+      cl_command_queue command_queue,
+      void *svm_ptr,
+      const void *pattern,
+      size_t pattern_size,
+      size_t size,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMMap)(
+      cl_command_queue command_queue,
+      cl_bool blocking_map,
+      cl_map_flags map_flags,
+      void *svm_ptr,
+      size_t size,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMUnmap)(
+      cl_command_queue command_queue,
+      void *svm_ptr,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY void (CL_API_CALL *clCreateSamplerWithProperties)(
+      cl_context context,
+      const cl_sampler_properties *sampler_properties,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clSetKernelArgSVMPointer)(
+      cl_kernel kernel,
+      cl_uint arg_index,
+      const void *arg_value);
+
+   CL_API_ENTRY void (CL_API_CALL *clSetKernelExecInfo)(
+      cl_kernel kernel,
+      cl_kernel_exec_info param_name,
+      size_t param_value_size,
+      const void *param_value);
+
+   CL_API_ENTRY void (CL_API_CALL *clGetKernelSubGroupInfoKHR)(
+      cl_kernel kernel,
+      cl_device_id device,
+      cl_kernel_sub_group_info param_name,
+      size_t input_value_size,
+      const void *input_value,
+      size_t param_value_size,
+      void *param_value,
+      size_t *param_value_size_ret);
+
+   CL_API_ENTRY cl_kernel (CL_API_CALL *clCloneKernel)(
+      cl_kernel source_kernel,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY cl_program (CL_API_CALL *clCreateProgramWithIL)(
+      cl_context context,
+      const void *il,
+      size_t length,
+      cl_int *errcode_ret);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clEnqueueSVMMigrateMem)(
+      cl_command_queue command_queue,
+      cl_uint num_svm_pointers,
+      const void **svm_pointers,
+      const size_t *sizes,
+      cl_mem_migration_flags flags,
+      cl_uint num_events_in_wait_list,
+      const cl_event *event_wait_list,
+      cl_event *event);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clGetDeviceAndHostTimer)(
+      cl_device_id device,
+      cl_ulong *device_timestamp,
+      cl_ulong *host_timestamp);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clGetHostTimer)(
+      cl_device_id device,
+      cl_ulong *host_timestamp);
+
+   CL_API_ENTRY void (CL_API_CALL *clGetKernelSubGroupInfo)(
+      cl_kernel kernel,
+      cl_device_id device,
+      cl_kernel_sub_group_info param_name,
+      size_t input_value_size,
+      const void *input_value,
+      size_t param_value_size,
+      void *param_value,
+      size_t *param_value_size_ret);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clSetDefaultDeviceCommandQueue)(
+      cl_context context,
+      cl_device_id device,
+      cl_command_queue command_queue);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clSetProgramReleaseCallback)(
+      cl_program program,
+      void (CL_CALLBACK *pfn_notify)(cl_program program, void *user_data),
+      void *user_data);
+
+   CL_API_ENTRY cl_int (CL_API_CALL *clSetProgramSpecializationConstant)(
+      cl_program program,
+      cl_uint spec_id,
+      size_t spec_size,
+      const void *spec_value);
 };
 
 namespace clover {

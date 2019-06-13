@@ -73,10 +73,8 @@ void brw_setup_tex_for_precompile(const struct gen_device_info *devinfo,
 void brw_populate_sampler_prog_key_data(struct gl_context *ctx,
 				        const struct gl_program *prog,
 				        struct brw_sampler_prog_key_data *key);
-bool brw_debug_recompile_sampler_key(struct brw_context *brw,
-                                     const struct brw_sampler_prog_key_data *old_key,
-                                     const struct brw_sampler_prog_key_data *key);
-
+void brw_debug_recompile(struct brw_context *brw, gl_shader_stage stage,
+                         unsigned api_id, unsigned prog_string_id, void *key);
 uint32_t
 brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
                                         const struct gl_program *prog,

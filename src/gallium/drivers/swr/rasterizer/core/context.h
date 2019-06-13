@@ -230,7 +230,6 @@ typedef void (*PFN_PROCESS_PRIMS)(DRAW_CONTEXT*      pDC,
                                   simdscalari const& viewportIdx,
                                   simdscalari const& rtIdx);
 
-#if ENABLE_AVX512_SIMD16
 // function signature for pipeline stages that execute after primitive assembly
 typedef void(SIMDCALL* PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT*        pDC,
                                                  PA_STATE&            pa,
@@ -241,7 +240,6 @@ typedef void(SIMDCALL* PFN_PROCESS_PRIMS_SIMD16)(DRAW_CONTEXT*        pDC,
                                                  simd16scalari const& viewportIdx,
                                                  simd16scalari const& rtIdx);
 
-#endif
 OSALIGNLINE(struct) API_STATE
 {
     // Vertex Buffers
@@ -264,8 +262,8 @@ OSALIGNLINE(struct) API_STATE
     PFN_CS_FUNC pfnCsFunc;
     uint32_t    totalThreadsInGroup;
     uint32_t    totalSpillFillSize;
-    uint32_t    scratchSpaceSize;
-    uint32_t    scratchSpaceNumInstances;
+    uint32_t    scratchSpaceSizePerWarp;
+    uint32_t    scratchSpaceNumWarps;
 
     // FE - Frontend State
     SWR_FRONTEND_STATE frontendState;
@@ -525,12 +523,15 @@ struct SWR_CONTEXT
     HotTileMgr* pHotTileMgr;
 
     // Callback functions, passed in at create context time
-    PFN_LOAD_TILE              pfnLoadTile;
-    PFN_STORE_TILE             pfnStoreTile;
-    PFN_CLEAR_TILE             pfnClearTile;
-    PFN_UPDATE_SO_WRITE_OFFSET pfnUpdateSoWriteOffset;
-    PFN_UPDATE_STATS           pfnUpdateStats;
-    PFN_UPDATE_STATS_FE        pfnUpdateStatsFE;
+    PFN_LOAD_TILE                   pfnLoadTile;
+    PFN_STORE_TILE                  pfnStoreTile;
+    PFN_CLEAR_TILE                  pfnClearTile;
+    PFN_TRANSLATE_GFXPTR_FOR_READ   pfnTranslateGfxptrForRead;
+    PFN_TRANSLATE_GFXPTR_FOR_WRITE  pfnTranslateGfxptrForWrite;
+    PFN_MAKE_GFXPTR                 pfnMakeGfxPtr;
+    PFN_UPDATE_SO_WRITE_OFFSET      pfnUpdateSoWriteOffset;
+    PFN_UPDATE_STATS                pfnUpdateStats;
+    PFN_UPDATE_STATS_FE             pfnUpdateStatsFE;
 
 
     // Global Stats

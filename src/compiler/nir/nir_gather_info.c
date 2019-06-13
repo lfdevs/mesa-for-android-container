@@ -286,13 +286,6 @@ gather_tex_info(nir_tex_instr *instr, nir_shader *shader)
    case nir_texop_tg4:
       shader->info.uses_texture_gather = true;
       break;
-   case nir_texop_txf:
-   case nir_texop_txf_ms:
-   case nir_texop_txf_ms_mcs:
-      shader->info.textures_used_by_txf |=
-         ((1 << MAX2(instr->texture_array_size, 1)) - 1) <<
-         instr->texture_index;
-      break;
    default:
       break;
    }
@@ -337,48 +330,6 @@ gather_info_block(nir_block *block, nir_shader *shader, void *dead_ctx)
          break;
       }
    }
-}
-
-static unsigned
-glsl_type_get_sampler_count(const struct glsl_type *type)
-{
-   if (glsl_type_is_array(type)) {
-      return (glsl_get_aoa_size(type) *
-              glsl_type_get_sampler_count(glsl_without_array(type)));
-   }
-
-   if (glsl_type_is_struct(type)) {
-      unsigned count = 0;
-      for (int i = 0; i < glsl_get_length(type); i++)
-         count += glsl_type_get_sampler_count(glsl_get_struct_field(type, i));
-      return count;
-   }
-
-   if (glsl_type_is_sampler(type))
-      return 1;
-
-   return 0;
-}
-
-static unsigned
-glsl_type_get_image_count(const struct glsl_type *type)
-{
-   if (glsl_type_is_array(type)) {
-      return (glsl_get_aoa_size(type) *
-              glsl_type_get_image_count(glsl_without_array(type)));
-   }
-
-   if (glsl_type_is_struct(type)) {
-      unsigned count = 0;
-      for (int i = 0; i < glsl_get_length(type); i++)
-         count += glsl_type_get_image_count(glsl_get_struct_field(type, i));
-      return count;
-   }
-
-   if (glsl_type_is_image(type))
-      return 1;
-
-   return 0;
 }
 
 void

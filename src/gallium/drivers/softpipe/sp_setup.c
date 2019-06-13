@@ -390,17 +390,6 @@ setup_sort_vertices(struct setup_context *setup,
 	 return FALSE;
    }
 
-
-   /* Prepare pixel offset for rasterisation:
-    *  - pixel center (0.5, 0.5) for GL, or
-    *  - assume (0.0, 0.0) for other APIs.
-    */
-   if (setup->softpipe->rasterizer->half_pixel_center) {
-      setup->pixel_offset = 0.5f;
-   } else {
-      setup->pixel_offset = 0.0f;
-   }
-
    return TRUE;
 }
 
@@ -1474,6 +1463,16 @@ sp_setup_prepare(struct setup_context *setup)
                           cbuf->u.tex.last_layer - cbuf->u.tex.first_layer);
 
       }
+   }
+
+   /* Prepare pixel offset for rasterisation:
+    *  - pixel center (0.5, 0.5) for GL, or
+    *  - assume (0.0, 0.0) for other APIs.
+    */
+   if (setup->softpipe->rasterizer->half_pixel_center) {
+      setup->pixel_offset = 0.5f;
+   } else {
+      setup->pixel_offset = 0.0f;
    }
 
    setup->max_layer = max_layer;

@@ -129,14 +129,10 @@ files_libgallium = files(
   'pipebuffer/pb_buffer_fenced.c',
   'pipebuffer/pb_buffer_fenced.h',
   'pipebuffer/pb_buffer.h',
-  'pipebuffer/pb_buffer_malloc.c',
-  'pipebuffer/pb_bufmgr_alt.c',
   'pipebuffer/pb_bufmgr_cache.c',
   'pipebuffer/pb_bufmgr_debug.c',
   'pipebuffer/pb_bufmgr.h',
   'pipebuffer/pb_bufmgr_mm.c',
-  'pipebuffer/pb_bufmgr_ondemand.c',
-  'pipebuffer/pb_bufmgr_pool.c',
   'pipebuffer/pb_bufmgr_slab.c',
   'pipebuffer/pb_cache.c',
   'pipebuffer/pb_cache.h',
@@ -238,6 +234,8 @@ files_libgallium = files(
   'util/u_box.h',
   'util/u_cache.c',
   'util/u_cache.h',
+  'util/u_compute.c',
+  'util/u_compute.h',
   'util/u_debug_gallium.h',
   'util/u_debug_gallium.c',
   'util/u_debug_describe.c',
@@ -445,6 +443,10 @@ files_libgalliumvl = files(
   'vl/vl_bicubic_filter.h',
   'vl/vl_compositor.c',
   'vl/vl_compositor.h',
+  'vl/vl_compositor_gfx.c',
+  'vl/vl_compositor_gfx.h',
+  'vl/vl_compositor_cs.c',
+  'vl/vl_compositor_cs.h',
   'vl/vl_csc.c',
   'vl/vl_csc.h',
   'vl/vl_decoder.c',
@@ -530,6 +532,9 @@ libgallium = static_library(
     idep_nir_headers,
   ],
   build_by_default : false,
+  link_with: [
+    libglsl
+  ]
 )
 
 libgalliumvl_stub = static_library(

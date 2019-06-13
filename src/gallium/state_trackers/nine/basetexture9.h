@@ -144,8 +144,11 @@ NineBindTextureToDevice( struct NineDevice9 *device,
 
         tex->bind_count++;
     }
-    if (old)
+    if (old) {
         old->bind_count--;
+        if (!old->bind_count)
+            list_delinit(&old->list);
+    }
 
     nine_bind(slot, tex);
 }

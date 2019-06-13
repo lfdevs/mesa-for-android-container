@@ -36,7 +36,7 @@
 #include <sys/sysmacros.h>
 #include <dlfcn.h>
 #include <pthread.h>
-#include <i915_drm.h>
+#include "drm-uapi/i915_drm.h"
 
 #include "util/hash_table.h"
 #include "util/u_math.h"

@@ -215,20 +215,10 @@ struct intel_mipmap_tree
     * MESA_FORMAT_Z_FLOAT32, otherwise for MESA_FORMAT_Z24_UNORM_S8_UINT objects it will be
     * MESA_FORMAT_Z24_UNORM_X8_UINT.
     *
-    * For ETC1/ETC2 textures, this is one of the uncompressed mesa texture
-    * formats if the hardware lacks support for ETC1/ETC2. See @ref etc_format.
-    *
     * @see RENDER_SURFACE_STATE.SurfaceFormat
     * @see 3DSTATE_DEPTH_BUFFER.SurfaceFormat
     */
    mesa_format format;
-
-   /**
-    * This variable stores the value of ETC compressed texture format
-    *
-    * @see RENDER_SURFACE_STATE.SurfaceFormat
-    */
-   mesa_format etc_format;
 
    GLuint first_level;
    GLuint last_level;
@@ -294,16 +284,18 @@ struct intel_mipmap_tree
    struct intel_mipmap_tree *stencil_mt;
 
    /**
-    * \brief Stencil texturing miptree for sampling from a stencil texture
+    * \brief Shadow miptree for sampling when the main isn't supported by HW.
     *
-    * Some hardware doesn't support sampling from the stencil texture as
-    * required by the GL_ARB_stencil_texturing extenion. To workaround this we
-    * blit the texture into a new texture that can be sampled.
+    * To workaround various sampler bugs and limitations, we blit the main
+    * texture into a new texture that can be sampled.
     *
-    * \see intel_update_r8stencil()
+    * This miptree may be used for:
+    * - Stencil texturing (pre-BDW) as required by GL_ARB_stencil_texturing.
+    * - To store the decompressed ETC/EAC data in case we emulate the ETC
+    *   compression on Gen 7 or earlier GPUs.
     */
-   struct intel_mipmap_tree *r8stencil_mt;
-   bool r8stencil_needs_update;
+   struct intel_mipmap_tree *shadow_mt;
+   bool shadow_needs_update;
 
    /**
     * \brief CCS, MCS, or HiZ auxiliary buffer.
@@ -729,6 +721,28 @@ intel_miptree_blt_pitch(struct intel_mipmap_tree *mt)
 isl_memcpy_type
 intel_miptree_get_memcpy_type(mesa_format tiledFormat, GLenum format, GLenum type,
                               uint32_t *cpp);
+
+static inline bool
+intel_miptree_needs_fake_etc(struct brw_context *brw,
+                             struct intel_mipmap_tree *mt)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   bool is_etc = _mesa_is_format_etc2(mt->format) ||
+                 (mt->format == MESA_FORMAT_ETC1_RGB8);
+
+   return devinfo->gen < 8 && !devinfo->is_baytrail && is_etc;
+}
+
+static inline bool
+intel_miptree_has_etc_shadow(struct brw_context *brw,
+                             struct intel_mipmap_tree *mt)
+{
+   return intel_miptree_needs_fake_etc(brw, mt) && mt->shadow_mt;
+}
+
+void
+intel_miptree_update_etc_shadow_levels(struct brw_context *brw,
+                                       struct intel_mipmap_tree *mt);
 
 #ifdef __cplusplus
 }

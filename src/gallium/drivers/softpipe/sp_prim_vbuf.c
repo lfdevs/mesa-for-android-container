@@ -597,13 +597,13 @@ sp_vbuf_draw_arrays(struct vbuf_render *vbr, uint start, uint nr)
  * increase too should call this from outside streamout code.
  */
 static void
-sp_vbuf_so_info(struct vbuf_render *vbr, uint primitives, uint prim_generated)
+sp_vbuf_so_info(struct vbuf_render *vbr, uint stream, uint primitives, uint prim_generated)
 {
    struct softpipe_vbuf_render *cvbr = softpipe_vbuf_render(vbr);
    struct softpipe_context *softpipe = cvbr->softpipe;
 
-   softpipe->so_stats.num_primitives_written += primitives;
-   softpipe->so_stats.primitives_storage_needed += prim_generated;
+   softpipe->so_stats[stream].num_primitives_written += primitives;
+   softpipe->so_stats[stream].primitives_storage_needed += prim_generated;
 }
 
 static void

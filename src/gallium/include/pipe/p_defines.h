@@ -425,7 +425,12 @@ enum pipe_flush_flags
 #define PIPE_BARRIER_FRAMEBUFFER       (1 << 9)
 #define PIPE_BARRIER_STREAMOUT_BUFFER  (1 << 10)
 #define PIPE_BARRIER_GLOBAL_BUFFER     (1 << 11)
-#define PIPE_BARRIER_ALL               ((1 << 12) - 1)
+#define PIPE_BARRIER_UPDATE_BUFFER     (1 << 12)
+#define PIPE_BARRIER_UPDATE_TEXTURE    (1 << 13)
+#define PIPE_BARRIER_ALL               ((1 << 14) - 1)
+
+#define PIPE_BARRIER_UPDATE \
+   (PIPE_BARRIER_UPDATE_BUFFER | PIPE_BARRIER_UPDATE_TEXTURE)
 
 /**
  * Flags for pipe_context::texture_barrier.
@@ -487,7 +492,7 @@ enum pipe_flush_flags
 #define PIPE_RESOURCE_FLAG_MAP_COHERENT   (1 << 1)
 #define PIPE_RESOURCE_FLAG_TEXTURING_MORE_LIKELY (1 << 2)
 #define PIPE_RESOURCE_FLAG_SPARSE                (1 << 3)
-#define PIPE_RESOURCE_FLAG_DRV_PRIV    (1 << 16) /* driver/winsys private */
+#define PIPE_RESOURCE_FLAG_DRV_PRIV    (1 << 8) /* driver/winsys private */
 #define PIPE_RESOURCE_FLAG_ST_PRIV     (1 << 24) /* state-tracker/winsys private */
 
 /**
@@ -639,7 +644,18 @@ enum pipe_reset_status
 enum pipe_conservative_raster_mode
 {
    PIPE_CONSERVATIVE_RASTER_OFF,
+
+   /**
+    * The post-snap mode means the conservative rasterization occurs after
+    * the conversion from floating-point to fixed-point coordinates
+    * on the subpixel grid.
+    */
    PIPE_CONSERVATIVE_RASTER_POST_SNAP,
+
+   /**
+    * The pre-snap mode means the conservative rasterization occurs before
+    * the conversion from floating-point to fixed-point coordinates.
+    */
    PIPE_CONSERVATIVE_RASTER_PRE_SNAP,
 };
 
@@ -713,6 +729,7 @@ enum pipe_cap
    PIPE_CAP_VERTEX_COLOR_CLAMPED,
    PIPE_CAP_GLSL_FEATURE_LEVEL,
    PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY,
+   PIPE_CAP_ESSL_FEATURE_LEVEL,
    PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION,
    PIPE_CAP_USER_VERTEX_BUFFERS,
    PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY,
@@ -842,6 +859,7 @@ enum pipe_cap
    PIPE_CAP_CONSERVATIVE_RASTER_PRE_SNAP_POINTS_LINES,
    PIPE_CAP_MAX_CONSERVATIVE_RASTER_SUBPIXEL_PRECISION_BIAS,
    PIPE_CAP_CONSERVATIVE_RASTER_POST_DEPTH_COVERAGE,
+   PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE,
    PIPE_CAP_PROGRAMMABLE_SAMPLE_LOCATIONS,
    PIPE_CAP_MAX_GS_INVOCATIONS,
    PIPE_CAP_MAX_SHADER_BUFFER_SIZE,
@@ -856,7 +874,15 @@ enum pipe_cap
    PIPE_CAP_QUERY_PIPELINE_STATISTICS_SINGLE,
    PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND,
    PIPE_CAP_DEST_SURFACE_SRGB_CONTROL,
+   PIPE_CAP_NIR_COMPACT_ARRAYS,
    PIPE_CAP_MAX_VARYINGS,
+   PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK,
+   PIPE_CAP_COMPUTE_SHADER_DERIVATIVES,
+   PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS,
+   PIPE_CAP_IMAGE_LOAD_FORMATTED,
+   PIPE_CAP_MAX_FRAMES_IN_FLIGHT,
+   PIPE_CAP_DMABUF,
+   PIPE_CAP_PREFER_COMPUTE_BLIT_FOR_MULTIMEDIA,
 };
 
 /**

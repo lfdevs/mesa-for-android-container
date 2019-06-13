@@ -80,15 +80,15 @@ setup_vec4_image_param(uint32_t *params, uint32_t idx,
 }
 
 static void
-brw_setup_image_uniform_values(gl_shader_stage stage,
-                               struct brw_stage_prog_data *stage_prog_data,
-                               unsigned param_start_index,
-                               const gl_uniform_storage *storage)
+brw_setup_image_uniform_values(nir_variable *var,
+                               struct brw_stage_prog_data *prog_data)
 {
-   uint32_t *param = &stage_prog_data->param[param_start_index];
+   unsigned param_start_index = var->data.driver_location / 4;
+   uint32_t *param = &prog_data->param[param_start_index];
+   unsigned num_images = MAX2(1, var->type->arrays_of_arrays_size());
 
-   for (unsigned i = 0; i < MAX2(storage->array_elements, 1); i++) {
-      const unsigned image_idx = storage->opaque[stage].index + i;
+   for (unsigned i = 0; i < num_images; i++) {
+      const unsigned image_idx = var->data.binding + i;
 
       /* Upload the brw_image_param structure.  The order is expected to match
        * the BRW_IMAGE_PARAM_*_OFFSET defines.
@@ -119,7 +119,7 @@ count_uniform_storage_slots(const struct glsl_type *type)
     * type is a composite type or an array where each element occupies
     * more than one slot than we need to recursively process it.
     */
-   if (glsl_type_is_struct(type)) {
+   if (glsl_type_is_struct_or_ifc(type)) {
       unsigned location_count = 0;
 
       for (unsigned i = 0; i < glsl_get_length(type); i++) {
@@ -135,7 +135,7 @@ count_uniform_storage_slots(const struct glsl_type *type)
       const struct glsl_type *element_type = glsl_get_array_element(type);
 
       if (glsl_type_is_array(element_type) ||
-          glsl_type_is_struct(element_type)) {
+          glsl_type_is_struct_or_ifc(element_type)) {
          unsigned element_count = count_uniform_storage_slots(element_type);
          return element_count * glsl_get_length(type);
       }
@@ -150,6 +150,14 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
                            struct brw_stage_prog_data *stage_prog_data,
                            bool is_scalar)
 {
+   if (var->type->without_array()->is_sampler())
+      return;
+
+   if (var->type->without_array()->is_image()) {
+      brw_setup_image_uniform_values(var, stage_prog_data);
+      return;
+   }
+
    /* The data for our (non-builtin) uniforms is stored in a series of
     * gl_uniform_storage structs for each subcomponent that
     * glGetUniformLocation() could name.  We know it's been set up in the same
@@ -162,42 +170,42 @@ brw_nir_setup_glsl_uniform(gl_shader_stage stage, nir_variable *var,
       struct gl_uniform_storage *storage =
          &prog->sh.data->UniformStorage[var->data.location + u];
 
-      if (storage->builtin || storage->type->is_sampler())
+      /* We already handled samplers and images via the separate top-level
+       * variables created by gl_nir_lower_samplers_as_deref(), but they're
+       * still part of the structure's storage, and so we'll see them while
+       * walking it to set up the other regular fields.  Just skip over them.
+       */
+      if (storage->builtin ||
+          storage->type->is_sampler() ||
+          storage->type->is_image())
          continue;
 
-      if (storage->type->is_image()) {
-         brw_setup_image_uniform_values(stage, stage_prog_data,
-                                        uniform_index, storage);
-         uniform_index +=
-            BRW_IMAGE_PARAM_SIZE * MAX2(storage->array_elements, 1);
-      } else {
-         gl_constant_value *components = storage->storage;
-         unsigned vector_count = (MAX2(storage->array_elements, 1) *
-                                  storage->type->matrix_columns);
-         unsigned vector_size = storage->type->vector_elements;
-         unsigned max_vector_size = 4;
-         if (storage->type->base_type == GLSL_TYPE_DOUBLE ||
-             storage->type->base_type == GLSL_TYPE_UINT64 ||
-             storage->type->base_type == GLSL_TYPE_INT64) {
-            vector_size *= 2;
-            if (vector_size > 4)
-               max_vector_size = 8;
+      gl_constant_value *components = storage->storage;
+      unsigned vector_count = (MAX2(storage->array_elements, 1) *
+                               storage->type->matrix_columns);
+      unsigned vector_size = storage->type->vector_elements;
+      unsigned max_vector_size = 4;
+      if (storage->type->base_type == GLSL_TYPE_DOUBLE ||
+          storage->type->base_type == GLSL_TYPE_UINT64 ||
+          storage->type->base_type == GLSL_TYPE_INT64) {
+         vector_size *= 2;
+         if (vector_size > 4)
+            max_vector_size = 8;
+      }
+
+      for (unsigned s = 0; s < vector_count; s++) {
+         unsigned i;
+         for (i = 0; i < vector_size; i++) {
+            uint32_t idx = components - prog->sh.data->UniformDataSlots;
+            stage_prog_data->param[uniform_index++] = BRW_PARAM_UNIFORM(idx);
+            components++;
          }
 
-         for (unsigned s = 0; s < vector_count; s++) {
-            unsigned i;
-            for (i = 0; i < vector_size; i++) {
-               uint32_t idx = components - prog->sh.data->UniformDataSlots;
-               stage_prog_data->param[uniform_index++] = BRW_PARAM_UNIFORM(idx);
-               components++;
-            }
-
-            if (!is_scalar) {
-               /* Pad out with zeros if needed (only needed for vec4) */
-               for (; i < max_vector_size; i++) {
-                  stage_prog_data->param[uniform_index++] =
-                     BRW_PARAM_BUILTIN_ZERO;
-               }
+         if (!is_scalar) {
+            /* Pad out with zeros if needed (only needed for vec4) */
+            for (; i < max_vector_size; i++) {
+               stage_prog_data->param[uniform_index++] =
+                  BRW_PARAM_BUILTIN_ZERO;
             }
          }
       }
@@ -347,7 +355,7 @@ brw_nir_lower_gl_images(nir_shader *shader,
             b.cursor = nir_before_instr(&intrin->instr);
             nir_ssa_def *index = nir_iadd(&b, nir_imm_int(&b, image_var_idx),
                                           get_aoa_deref_offset(&b, deref, 1));
-            brw_nir_rewrite_image_intrinsic(intrin, index);
+            nir_rewrite_image_intrinsic(intrin, index, false);
             break;
          }
 

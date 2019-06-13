@@ -418,6 +418,9 @@ u_vbuf_translate_buffers(struct u_vbuf *mgr, struct translate_key *key,
          unsigned size = vb->stride ? num_vertices * vb->stride
                                     : sizeof(double)*4;
 
+         if (!vb->buffer.resource)
+            continue;
+
          if (offset + size > vb->buffer.resource->width0) {
             /* Don't try to map past end of buffer.  This often happens when
              * we're translating an attribute that's at offset > 0 from the
@@ -1093,10 +1096,9 @@ u_vbuf_get_minmax_index_mapped(const struct pipe_draw_info *info,
    *out_max_index = max;
 }
 
-static void
-u_vbuf_get_minmax_index(struct pipe_context *pipe,
-                        const struct pipe_draw_info *info,
-                        unsigned *out_min_index, unsigned *out_max_index)
+void u_vbuf_get_minmax_index(struct pipe_context *pipe,
+                             const struct pipe_draw_info *info,
+                             unsigned *out_min_index, unsigned *out_max_index)
 {
    struct pipe_transfer *transfer = NULL;
    const void *indices;

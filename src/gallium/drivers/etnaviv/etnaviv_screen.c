@@ -38,6 +38,7 @@
 #include "etnaviv_resource.h"
 #include "etnaviv_translate.h"
 
+#include "util/hash_table.h"
 #include "util/os_time.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
@@ -46,7 +47,7 @@
 
 #include "state_tracker/drm_driver.h"
 
-#include <drm_fourcc.h>
+#include "drm-uapi/drm_fourcc.h"
 
 #define ETNA_DRM_VERSION(major, minor) ((major) << 16 | (minor))
 #define ETNA_DRM_VERSION_FENCE_FD      ETNA_DRM_VERSION(1, 1)
@@ -81,6 +82,9 @@ static void
 etna_screen_destroy(struct pipe_screen *pscreen)
 {
    struct etna_screen *screen = etna_screen(pscreen);
+
+   _mesa_set_destroy(screen->used_resources, NULL);
+   mtx_destroy(&screen->lock);
 
    if (screen->perfmon)
       etna_perfmon_del(screen->perfmon);
@@ -518,18 +522,8 @@ gpu_supports_texure_format(struct etna_screen *screen, uint32_t fmt,
    if (util_format_is_srgb(format))
       supported = VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
 
-   if (fmt & EXT_FORMAT) {
+   if (fmt & EXT_FORMAT)
       supported = VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
-
-      /* ETC1 is checked above, as it has its own feature bit. ETC2 is
-       * supported with HALTI0, however that implementation is buggy in hardware.
-       * The blob driver does per-block patching to work around this. As this
-       * is currently not implemented by etnaviv, enable it for HALTI1 (GC3000)
-       * only.
-       */
-      if (util_format_is_etc(format))
-         supported = VIV_FEATURE(screen, chipMinorFeatures2, HALTI1);
-   }
 
    if (fmt & ASTC_FORMAT) {
       supported = screen->specs.tex_astc;
@@ -1029,8 +1023,16 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    if (screen->drm_version >= ETNA_DRM_VERSION_PERFMON)
       etna_pm_query_setup(screen);
 
+   mtx_init(&screen->lock, mtx_recursive);
+   screen->used_resources = _mesa_set_create(NULL, _mesa_hash_pointer,
+                                             _mesa_key_pointer_equal);
+   if (!screen->used_resources)
+      goto fail2;
+
    return pscreen;
 
+fail2:
+   mtx_destroy(&screen->lock);
 fail:
    etna_screen_destroy(pscreen);
    return NULL;
