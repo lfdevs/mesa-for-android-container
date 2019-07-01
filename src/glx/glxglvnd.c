@@ -41,7 +41,7 @@ static void *__glXGLVNDGetDispatchAddress(const GLubyte *procName)
 {
     unsigned internalIndex = FindGLXFunction(procName);
 
-    return __glXDispatchFunctions[internalIndex];
+    return (void*)__glXDispatchFunctions[internalIndex];
 }
 
 static void __glXGLVNDSetDispatchIndex(const GLubyte *procName, int index)

@@ -567,7 +567,9 @@ ioctl_init_helper(int fd, unsigned long request, ...)
 static void __attribute__ ((destructor))
 fini(void)
 {
-   free(output_filename);
-   aub_file_finish(&aub_file);
-   free(bos);
+   if (devinfo.gen != 0) {
+      free(output_filename);
+      aub_file_finish(&aub_file);
+      free(bos);
+   }
 }

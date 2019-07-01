@@ -1383,7 +1383,8 @@ intel_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
       for (i = 0; i < num_mods && i < max; i++) {
          if (f->components == __DRI_IMAGE_COMPONENTS_Y_U_V ||
              f->components == __DRI_IMAGE_COMPONENTS_Y_UV ||
-             f->components == __DRI_IMAGE_COMPONENTS_Y_XUXV) {
+             f->components == __DRI_IMAGE_COMPONENTS_Y_XUXV ||
+             f->components == __DRI_IMAGE_COMPONENTS_Y_UXVX) {
             external_only[i] = GL_TRUE;
          }
          else {

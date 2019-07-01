@@ -607,6 +607,7 @@ nvc0_sp_state_create(struct pipe_context *pipe,
       break;
    default:
       assert(!"unsupported IR!");
+      free(prog);
       return NULL;
    }
 
@@ -739,6 +740,7 @@ nvc0_cp_state_create(struct pipe_context *pipe,
       break;
    default:
       assert(!"unsupported IR!");
+      free(prog);
       return NULL;
    }
 

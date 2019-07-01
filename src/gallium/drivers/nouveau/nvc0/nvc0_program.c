@@ -594,6 +594,7 @@ nvc0_program_translate(struct nvc0_program *prog, uint16_t chipset,
       break;
    default:
       assert(!"unsupported IR!");
+      free(info);
       return false;
    }
 

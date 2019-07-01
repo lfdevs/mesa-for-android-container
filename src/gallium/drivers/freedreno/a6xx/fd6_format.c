@@ -216,7 +216,7 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	_T(R9G9B9E5_FLOAT,  9_9_9_E5_FLOAT, NONE,            WZYX),
 
 	_T(Z24X8_UNORM,       X8Z24_UNORM,  X8Z24_UNORM,   WZYX),
-	_T(X24S8_UINT,        8_8_8_8_UINT, X8Z24_UNORM,   XYZW),  // XXX
+	_T(X24S8_UINT,        8_8_8_8_UINT, X8Z24_UNORM,   WZYX),
 	_T(Z24_UNORM_S8_UINT, X8Z24_UNORM,  X8Z24_UNORM,   WZYX),
 	_T(Z32_FLOAT,         32_FLOAT,     R32_FLOAT,     WZYX),
 	_T(Z32_FLOAT_S8X24_UINT, 32_FLOAT,  R32_FLOAT,     WZYX),
@@ -450,7 +450,7 @@ fd6_tex_swiz(enum pipe_format format, unsigned char *swiz,
 	 */
 	if (format == PIPE_FORMAT_X24S8_UINT) {
 		const unsigned char stencil_swiz[4] = {
-			PIPE_SWIZZLE_X, PIPE_SWIZZLE_X, PIPE_SWIZZLE_X, PIPE_SWIZZLE_X
+			PIPE_SWIZZLE_W, PIPE_SWIZZLE_W, PIPE_SWIZZLE_W, PIPE_SWIZZLE_W
 		};
 		util_format_compose_swizzles(stencil_swiz, uswiz, swiz);
 	} else if (fd6_pipe2swap(format) != WZYX) {

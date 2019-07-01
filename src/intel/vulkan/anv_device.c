@@ -2151,16 +2151,18 @@ VkResult anv_CreateDevice(
    if (!device)
       return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   const unsigned decode_flags =
-      GEN_BATCH_DECODE_FULL |
-      ((INTEL_DEBUG & DEBUG_COLOR) ? GEN_BATCH_DECODE_IN_COLOR : 0) |
-      GEN_BATCH_DECODE_OFFSETS |
-      GEN_BATCH_DECODE_FLOATS;
+   if (INTEL_DEBUG & DEBUG_BATCH) {
+      const unsigned decode_flags =
+         GEN_BATCH_DECODE_FULL |
+         ((INTEL_DEBUG & DEBUG_COLOR) ? GEN_BATCH_DECODE_IN_COLOR : 0) |
+         GEN_BATCH_DECODE_OFFSETS |
+         GEN_BATCH_DECODE_FLOATS;
 
-   gen_batch_decode_ctx_init(&device->decoder_ctx,
-                             &physical_device->info,
-                             stderr, decode_flags, NULL,
-                             decode_get_bo, NULL, device);
+      gen_batch_decode_ctx_init(&device->decoder_ctx,
+                                &physical_device->info,
+                                stderr, decode_flags, NULL,
+                                decode_get_bo, NULL, device);
+   }
 
    device->_loader_data.loaderMagic = ICD_LOADER_MAGIC;
    device->instance = physical_device->instance;
@@ -2443,7 +2445,8 @@ void anv_DestroyDevice(
 
    anv_gem_destroy_context(device, device->context_id);
 
-   gen_batch_decode_ctx_finish(&device->decoder_ctx);
+   if (INTEL_DEBUG & DEBUG_BATCH)
+      gen_batch_decode_ctx_finish(&device->decoder_ctx);
 
    close(device->fd);
 

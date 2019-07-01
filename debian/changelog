@@ -1,3 +1,15 @@
+mesa (19.1.1-1) experimental; urgency=medium
+
+  * New upstream bugfix release.
+  * rules: Disable panfrost for now, revisit it again for 19.2. (Closes:
+    #930879)
+  * control, rules: Enable vulkan-overlay, add glslang-tools to build-depends.
+    (Closes: #930945)
+  * rules, libgles2-mesa-dev.install: Re-add the pkgconfig file for now.
+    (Closes: #930514)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 01 Jul 2019 17:24:52 +0300
+
 mesa (19.1.0-1) experimental; urgency=medium
 
   * New upstream release.

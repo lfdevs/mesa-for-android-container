@@ -183,7 +183,7 @@ kms_sw_displaytarget_create(struct sw_winsys *ws,
    kms_sw_dt->format = format;
 
    memset(&create_req, 0, sizeof(create_req));
-   create_req.bpp = 32;
+   create_req.bpp = util_format_get_blocksizebits(format);
    create_req.width = width;
    create_req.height = height;
    ret = drmIoctl(kms_sw->fd, DRM_IOCTL_MODE_CREATE_DUMB, &create_req);

@@ -112,7 +112,6 @@ endforeach
 
 libanv_files = files(
   'anv_allocator.c',
-  'anv_android_stubs.c',
   'anv_android.h',
   'anv_batch_chain.c',
   'anv_blorp.c',
@@ -176,6 +175,13 @@ endif
 if with_xlib_lease
   anv_deps += [dep_xcb_xrandr, dep_xlib_xrandr]
   anv_flags += '-DVK_USE_PLATFORM_XLIB_XRANDR_EXT'
+endif
+
+if with_platform_android
+  anv_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
+  libanv_files += files('anv_android.c')
+else
+  libanv_files += files('anv_android_stubs.c')
 endif
 
 libanv_common = static_library(

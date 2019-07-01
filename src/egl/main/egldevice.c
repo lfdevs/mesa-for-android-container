@@ -108,9 +108,9 @@ static int
 _eglAddDRMDevice(drmDevicePtr device, _EGLDevice **out_dev)
 {
    _EGLDevice *dev;
+   const int wanted_nodes = 1 << DRM_NODE_RENDER | 1 << DRM_NODE_PRIMARY;
 
-   if ((device->available_nodes & (1 << DRM_NODE_PRIMARY |
-                                   1 << DRM_NODE_RENDER)) == 0)
+   if ((device->available_nodes & wanted_nodes) != wanted_nodes)
       return -1;
 
    dev = _eglGlobal.DeviceList;

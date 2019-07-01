@@ -353,12 +353,12 @@ else
   with_egl = false
 endif
 
-if with_egl and not (with_platform_drm or with_platform_surfaceless)
+if with_egl and not (with_platform_drm or with_platform_surfaceless or with_platform_android)
   if with_gallium_radeonsi
-    error('RadeonSI requires drm or surfaceless platform when using EGL')
+    error('RadeonSI requires the drm, surfaceless or android platform when using EGL')
   endif
   if with_gallium_virgl
-    error('Virgl requires drm or surfaceless platform when using EGL')
+    error('Virgl requires the drm, surfaceless or android platform when using EGL')
   endif
 endif
 

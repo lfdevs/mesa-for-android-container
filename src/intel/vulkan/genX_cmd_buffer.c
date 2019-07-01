@@ -108,6 +108,23 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
       sba.IndirectObjectBufferSizeModifyEnable  = true;
       sba.InstructionBufferSize                 = 0xfffff;
       sba.InstructionBuffersizeModifyEnable     = true;
+#  else
+      /* On gen7, we have upper bounds instead.  According to the docs,
+       * setting an upper bound of zero means that no bounds checking is
+       * performed so, in theory, we should be able to leave them zero.
+       * However, border color is broken and the GPU bounds-checks anyway.
+       * To avoid this and other potential problems, we may as well set it
+       * for everything.
+       */
+      sba.GeneralStateAccessUpperBound =
+         (struct anv_address) { .bo = NULL, .offset = 0xfffff000 };
+      sba.GeneralStateAccessUpperBoundModifyEnable = true;
+      sba.DynamicStateAccessUpperBound =
+         (struct anv_address) { .bo = NULL, .offset = 0xfffff000 };
+      sba.DynamicStateAccessUpperBoundModifyEnable = true;
+      sba.InstructionAccessUpperBound =
+         (struct anv_address) { .bo = NULL, .offset = 0xfffff000 };
+      sba.InstructionAccessUpperBoundModifyEnable = true;
 #  endif
 #  if (GEN_GEN >= 9)
       if (cmd_buffer->device->instance->physicalDevice.use_softpin) {

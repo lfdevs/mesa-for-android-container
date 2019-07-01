@@ -1586,6 +1586,8 @@ iris_flush_and_dirty_for_history(struct iris_context *ice,
       flush |= PIPE_CONTROL_RENDER_TARGET_FLUSH;
 
    iris_emit_pipe_control_flush(batch, flush);
+
+   iris_dirty_for_history(ice, res);
 }
 
 bool

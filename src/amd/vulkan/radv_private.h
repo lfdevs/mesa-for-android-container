@@ -1456,6 +1456,7 @@ uint32_t radv_translate_buffer_dataformat(const struct vk_format_description *de
 					  int first_non_void);
 uint32_t radv_translate_buffer_numformat(const struct vk_format_description *desc,
 					 int first_non_void);
+bool radv_is_buffer_format_supported(VkFormat format, bool *scaled);
 uint32_t radv_translate_colorformat(VkFormat format);
 uint32_t radv_translate_color_numformat(VkFormat format,
 					const struct vk_format_description *desc,

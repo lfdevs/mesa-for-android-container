@@ -98,8 +98,7 @@ fd5_draw_emit(struct fd_batch *batch, struct fd_ringbuffer *ring,
 
 		if (info->index_size) {
 			struct pipe_resource *idx = info->index.resource;
-			unsigned max_indicies = (idx->width0 - info->indirect->offset) /
-					info->index_size;
+			unsigned max_indicies = idx->width0 / info->index_size;
 
 			OUT_PKT7(ring, CP_DRAW_INDX_INDIRECT, 6);
 			OUT_RINGP(ring, DRAW4(primtype, DI_SRC_SEL_DMA,

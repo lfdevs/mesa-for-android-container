@@ -346,6 +346,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
       break;
    default:
       assert(!"unsupported IR!");
+      free(info);
       return false;
    }
 

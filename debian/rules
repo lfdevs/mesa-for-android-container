@@ -58,7 +58,7 @@ else
 
 	# etnaviv, kmsro, tegra, vc4 and v3d kernel support are only available on armhf and arm64
 	ifneq (,$(filter $(DEB_HOST_ARCH), armhf arm64))
-		GALLIUM_DRIVERS += etnaviv, kmsro, lima, panfrost, tegra, vc4, v3d,
+		GALLIUM_DRIVERS += etnaviv, kmsro, lima, tegra, vc4, v3d,
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
@@ -106,6 +106,7 @@ else
   # arches where we have LLVM enabled and where the Vulkan loader is built.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	VULKAN_DRIVERS += amd,
+	confflags_VULKAN += -Dvulkan-overlay-layer=true
   endif
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
@@ -146,7 +147,8 @@ confflags += \
 	$(confflags_EGL) \
 	$(confflags_GALLIUM) \
 	$(confflags_GLES) \
-	$(confflags_OSMESA)
+	$(confflags_OSMESA) \
+	$(confflags_VULKAN)
 
 override_dh_clean:
 	rm -rf .pc
@@ -193,6 +195,9 @@ override_dh_install:
 	rm debian/tmp/usr/lib/*/libglapi.so
 	rm debian/tmp/usr/lib/*/libEGL_mesa.so
 	rm debian/tmp/usr/lib/*/libGLX_mesa.so
+
+	# we only need the pkgconfig file
+	rm debian/tmp/usr/lib/*/libGLESv2*
 
 	# Copy the hardlinked *_dri.so correctly.
 	install -m755 -d debian/libgl1-mesa-dri/usr/lib/${DEB_HOST_MULTIARCH}/dri/

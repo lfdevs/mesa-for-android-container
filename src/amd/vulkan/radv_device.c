@@ -1485,40 +1485,46 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
 	 * Note that the application heap usages are not really accurate (eg.
 	 * in presence of shared buffers).
 	 */
-	if (vram_size) {
-		heap_usage = device->ws->query_value(device->ws,
-						     RADEON_ALLOCATED_VRAM);
+	for (int i = 0; i < device->memory_properties.memoryTypeCount; i++) {
+		uint32_t heap_index = device->memory_properties.memoryTypes[i].heapIndex;
 
-		heap_budget = vram_size -
-			device->ws->query_value(device->ws, RADEON_VRAM_USAGE) +
-			heap_usage;
+		switch (device->mem_type_indices[i]) {
+		case RADV_MEM_TYPE_VRAM:
+			heap_usage = device->ws->query_value(device->ws,
+							     RADEON_ALLOCATED_VRAM);
 
-		memoryBudget->heapBudget[RADV_MEM_HEAP_VRAM] = heap_budget;
-		memoryBudget->heapUsage[RADV_MEM_HEAP_VRAM] = heap_usage;
-	}
+			heap_budget = vram_size -
+				device->ws->query_value(device->ws, RADEON_VRAM_USAGE) +
+				heap_usage;
 
-	if (visible_vram_size) {
-		heap_usage = device->ws->query_value(device->ws,
-						     RADEON_ALLOCATED_VRAM_VIS);
+			memoryBudget->heapBudget[heap_index] = heap_budget;
+			memoryBudget->heapUsage[heap_index] = heap_usage;
+			break;
+		case RADV_MEM_TYPE_VRAM_CPU_ACCESS:
+			heap_usage = device->ws->query_value(device->ws,
+							     RADEON_ALLOCATED_VRAM_VIS);
 
-		heap_budget = visible_vram_size -
-			device->ws->query_value(device->ws, RADEON_VRAM_VIS_USAGE) +
-			heap_usage;
+			heap_budget = visible_vram_size -
+				device->ws->query_value(device->ws, RADEON_VRAM_VIS_USAGE) +
+				heap_usage;
 
-		memoryBudget->heapBudget[RADV_MEM_HEAP_VRAM_CPU_ACCESS] = heap_budget;
-		memoryBudget->heapUsage[RADV_MEM_HEAP_VRAM_CPU_ACCESS] = heap_usage;
-	}
+			memoryBudget->heapBudget[heap_index] = heap_budget;
+			memoryBudget->heapUsage[heap_index] = heap_usage;
+			break;
+		case RADV_MEM_TYPE_GTT_WRITE_COMBINE:
+			heap_usage = device->ws->query_value(device->ws,
+							     RADEON_ALLOCATED_GTT);
 
-	if (gtt_size) {
-		heap_usage = device->ws->query_value(device->ws,
-						     RADEON_ALLOCATED_GTT);
+			heap_budget = gtt_size -
+				device->ws->query_value(device->ws, RADEON_GTT_USAGE) +
+				heap_usage;
 
-		heap_budget = gtt_size -
-			device->ws->query_value(device->ws, RADEON_GTT_USAGE) +
-			heap_usage;
-
-		memoryBudget->heapBudget[RADV_MEM_HEAP_GTT] = heap_budget;
-		memoryBudget->heapUsage[RADV_MEM_HEAP_GTT] = heap_usage;
+			memoryBudget->heapBudget[heap_index] = heap_budget;
+			memoryBudget->heapUsage[heap_index] = heap_usage;
+			break;
+		default:
+			break;
+		}
 	}
 
 	/* The heapBudget and heapUsage values must be zero for array elements
