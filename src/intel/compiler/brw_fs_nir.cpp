@@ -1318,9 +1318,16 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
    case nir_op_ine32: {
       fs_reg dest = result;
 
+      /* On Gen11 we have an additional issue being that src1 cannot be a byte
+       * type. So we convert both operands for the comparison.
+       */
+      fs_reg temp_op[2];
+      temp_op[0] = bld.fix_byte_src(op[0]);
+      temp_op[1] = bld.fix_byte_src(op[1]);
+
       const uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
       if (bit_size != 32)
-         dest = bld.vgrf(op[0].type, 1);
+         dest = bld.vgrf(temp_op[0].type, 1);
 
       brw_conditional_mod cond;
       switch (instr->op) {
@@ -1341,7 +1348,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr)
       default:
          unreachable("bad opcode");
       }
-      bld.CMP(dest, op[0], op[1], cond);
+      bld.CMP(dest, temp_op[0], temp_op[1], cond);
 
       if (bit_size > 32) {
          bld.MOV(result, subscript(dest, BRW_REGISTER_TYPE_UD, 0));

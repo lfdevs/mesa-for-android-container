@@ -913,6 +913,19 @@ destroy_tex_sampler_cb(GLuint id, void *data, void *userData)
    st_texture_release_context_sampler_view(st, st_texture_object(texObj));
 }
 
+static void
+destroy_framebuffer_attachment_sampler_cb(GLuint id, void *data, void *userData)
+{
+   struct gl_framebuffer* glfb = (struct gl_framebuffer*) data;
+   struct st_context *st = (struct st_context *) userData;
+
+    for (unsigned i = 0; i < BUFFER_COUNT; i++) {
+      struct gl_renderbuffer_attachment *att = &glfb->Attachment[i];
+      if (att->Texture) {
+        st_texture_release_context_sampler_view(st, st_texture_object(att->Texture));
+      }
+   }
+}
 
 void
 st_destroy_context(struct st_context *st)
@@ -970,6 +983,8 @@ st_destroy_context(struct st_context *st)
    LIST_FOR_EACH_ENTRY_SAFE_REV(stfb, next, &st->winsys_buffers, head) {
       st_framebuffer_reference(&stfb, NULL);
    }
+
+   _mesa_HashWalk(ctx->Shared->FrameBuffers, destroy_framebuffer_attachment_sampler_cb, st);
 
    pipe_sampler_view_reference(&st->pixel_xfer.pixelmap_sampler_view, NULL);
    pipe_resource_reference(&st->pixel_xfer.pixelmap_texture, NULL);

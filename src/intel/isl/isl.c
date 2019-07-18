@@ -717,7 +717,7 @@ isl_surf_choose_dim_layout(const struct isl_device *dev,
 
 /**
  * Calculate the physical extent of the surface's first level, in units of
- * surface samples. The result is aligned to the format's compression block.
+ * surface samples.
  */
 static void
 isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
@@ -746,8 +746,8 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
       case ISL_DIM_LAYOUT_GEN4_2D:
       case ISL_DIM_LAYOUT_GEN6_STENCIL_HIZ:
          *phys_level0_sa = (struct isl_extent4d) {
-            .w = isl_align_npot(info->width, fmtl->bw),
-            .h = fmtl->bh,
+            .w = info->width,
+            .h = 1,
             .d = 1,
             .a = info->array_len,
          };
@@ -771,8 +771,8 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
          assert(info->samples == 1);
 
          *phys_level0_sa = (struct isl_extent4d) {
-            .w = isl_align_npot(info->width, fmtl->bw),
-            .h = isl_align_npot(info->height, fmtl->bh),
+            .w = info->width,
+            .h = info->height,
             .d = 1,
             .a = info->array_len,
          };
@@ -807,9 +807,6 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
          isl_msaa_interleaved_scale_px_to_sa(info->samples,
                                              &phys_level0_sa->w,
                                              &phys_level0_sa->h);
-
-         phys_level0_sa->w = isl_align(phys_level0_sa->w, fmtl->bw);
-         phys_level0_sa->h = isl_align(phys_level0_sa->h, fmtl->bh);
          break;
       }
       break;
@@ -832,8 +829,8 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
          assert(ISL_DEV_GEN(dev) >= 9);
 
          *phys_level0_sa = (struct isl_extent4d) {
-            .w = isl_align_npot(info->width, fmtl->bw),
-            .h = isl_align_npot(info->height, fmtl->bh),
+            .w = info->width,
+            .h = info->height,
             .d = 1,
             .a = info->depth,
          };
@@ -842,8 +839,8 @@ isl_calc_phys_level0_extent_sa(const struct isl_device *dev,
       case ISL_DIM_LAYOUT_GEN4_3D:
          assert(ISL_DEV_GEN(dev) < 9);
          *phys_level0_sa = (struct isl_extent4d) {
-            .w = isl_align(info->width, fmtl->bw),
-            .h = isl_align(info->height, fmtl->bh),
+            .w = info->width,
+            .h = info->height,
             .d = info->depth,
             .a = 1,
          };
@@ -968,13 +965,10 @@ isl_calc_phys_slice0_extent_sa_gen4_2d(
       const struct isl_extent4d *phys_level0_sa,
       struct isl_extent2d *phys_slice0_sa)
 {
-   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
-
    assert(phys_level0_sa->depth == 1);
 
    if (info->levels == 1) {
-      /* Do not pad the surface to the image alignment. Instead, pad it only
-       * to the pixel format's block alignment.
+      /* Do not pad the surface to the image alignment.
        *
        * For tiled surfaces, using a reduced alignment here avoids wasting CPU
        * cycles on the below mipmap layout caluclations. Reducing the
@@ -989,8 +983,8 @@ isl_calc_phys_slice0_extent_sa_gen4_2d(
        * VkBufferImageCopy::bufferRowLength.
        */
       *phys_slice0_sa = (struct isl_extent2d) {
-         .w = isl_align_npot(phys_level0_sa->w, fmtl->bw),
-         .h = isl_align_npot(phys_level0_sa->h, fmtl->bh),
+         .w = phys_level0_sa->w,
+         .h = phys_level0_sa->h,
       };
       return;
    }
@@ -1055,9 +1049,9 @@ isl_calc_phys_total_extent_el_gen4_2d(
                                            array_pitch_span,
                                            &phys_slice0_sa);
    *total_extent_el = (struct isl_extent2d) {
-      .w = isl_assert_div(phys_slice0_sa.w, fmtl->bw),
+      .w = isl_align_div_npot(phys_slice0_sa.w, fmtl->bw),
       .h = *array_pitch_el_rows * (phys_level0_sa->array_len - 1) +
-           isl_assert_div(phys_slice0_sa.h, fmtl->bh),
+           isl_align_div_npot(phys_slice0_sa.h, fmtl->bh),
    };
 }
 
@@ -1201,7 +1195,7 @@ isl_calc_phys_total_extent_el_gen9_1d(
 {
    MAYBE_UNUSED const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
 
-   assert(phys_level0_sa->height / fmtl->bh == 1);
+   assert(phys_level0_sa->height == 1);
    assert(phys_level0_sa->depth == 1);
    assert(info->samples == 1);
    assert(image_align_sa->w >= fmtl->bw);
@@ -1478,8 +1472,6 @@ isl_surf_init_s(const struct isl_device *dev,
    struct isl_extent4d phys_level0_sa;
    isl_calc_phys_level0_extent_sa(dev, info, dim_layout, tiling, msaa_layout,
                                   &phys_level0_sa);
-   assert(phys_level0_sa.w % fmtl->bw == 0);
-   assert(phys_level0_sa.h % fmtl->bh == 0);
 
    enum isl_array_pitch_span array_pitch_span =
       isl_choose_array_pitch_span(dev, info, dim_layout, &phys_level0_sa);

@@ -734,19 +734,11 @@ iris_init_render_context(struct iris_screen *screen,
       }
       iris_emit_lri(batch, HALF_SLICE_CHICKEN7, reg_val);
 
-      /* WA_2204188704: Pixel Shader Panic dispatch must be disabled. */
-      iris_pack_state(GENX(COMMON_SLICE_CHICKEN3), &reg_val, reg) {
-         reg.PSThreadPanicDispatch = 0x3;
-         reg.PSThreadPanicDispatchMask = 0x3;
-      }
-      iris_emit_lri(batch, COMMON_SLICE_CHICKEN3, reg_val);
-
       iris_pack_state(GENX(SLICE_COMMON_ECO_CHICKEN1), &reg_val, reg) {
          reg.StateCacheRedirectToCSSectionEnable = true;
          reg.StateCacheRedirectToCSSectionEnableMask = true;
       }
       iris_emit_lri(batch, SLICE_COMMON_ECO_CHICKEN1, reg_val);
-
 
       // XXX: 3D_MODE?
 #endif
@@ -1902,7 +1894,8 @@ iris_create_surface(struct pipe_context *ctx,
       return NULL;
    }
 
-   surf->view = (struct isl_view) {
+   struct isl_view *view = &surf->view;
+   *view = (struct isl_view) {
       .format = fmt.fmt,
       .base_level = tmpl->u.tex.level,
       .levels = 1,
@@ -1926,15 +1919,98 @@ iris_create_surface(struct pipe_context *ctx,
    if (!unlikely(map))
       return NULL;
 
-   unsigned aux_modes = res->aux.possible_usages;
-   while (aux_modes) {
-      enum isl_aux_usage aux_usage = u_bit_scan(&aux_modes);
+   if (!isl_format_is_compressed(res->surf.format)) {
+      /* This is a normal surface.  Fill out a SURFACE_STATE for each possible
+       * auxiliary surface mode and return the pipe_surface.
+       */
+      unsigned aux_modes = res->aux.possible_usages;
+      while (aux_modes) {
+         enum isl_aux_usage aux_usage = u_bit_scan(&aux_modes);
 
-      fill_surface_state(&screen->isl_dev, map, res, &surf->view, aux_usage);
+         fill_surface_state(&screen->isl_dev, map, res, view, aux_usage);
 
-      map += SURFACE_STATE_ALIGNMENT;
+         map += SURFACE_STATE_ALIGNMENT;
+      }
+
+      return psurf;
    }
 
+   /* The resource has a compressed format, which is not renderable, but we
+    * have a renderable view format.  We must be attempting to upload blocks
+    * of compressed data via an uncompressed view.
+    *
+    * In this case, we can assume there are no auxiliary buffers, a single
+    * miplevel, and that the resource is single-sampled.  Gallium may try
+    * and create an uncompressed view with multiple layers, however.
+    */
+   assert(!isl_format_is_compressed(fmt.fmt));
+   assert(res->aux.possible_usages == 1 << ISL_AUX_USAGE_NONE);
+   assert(res->surf.samples == 1);
+   assert(view->levels == 1);
+
+   struct isl_surf isl_surf;
+   uint32_t offset_B = 0, tile_x_sa = 0, tile_y_sa = 0;
+
+   if (view->base_level > 0) {
+      /* We can't rely on the hardware's miplevel selection with such
+       * a substantial lie about the format, so we select a single image
+       * using the Tile X/Y Offset fields.  In this case, we can't handle
+       * multiple array slices.
+       *
+       * On Broadwell, HALIGN and VALIGN are specified in pixels and are
+       * hard-coded to align to exactly the block size of the compressed
+       * texture.  This means that, when reinterpreted as a non-compressed
+       * texture, the tile offsets may be anything and we can't rely on
+       * X/Y Offset.
+       *
+       * Return NULL to force the state tracker to take fallback paths.
+       */
+      if (view->array_len > 1 || GEN_GEN == 8)
+         return NULL;
+
+      const bool is_3d = res->surf.dim == ISL_SURF_DIM_3D;
+      isl_surf_get_image_surf(&screen->isl_dev, &res->surf,
+                              view->base_level,
+                              is_3d ? 0 : view->base_array_layer,
+                              is_3d ? view->base_array_layer : 0,
+                              &isl_surf,
+                              &offset_B, &tile_x_sa, &tile_y_sa);
+
+      /* We use address and tile offsets to access a single level/layer
+       * as a subimage, so reset level/layer so it doesn't offset again.
+       */
+      view->base_array_layer = 0;
+      view->base_level = 0;
+   } else {
+      /* Level 0 doesn't require tile offsets, and the hardware can find
+       * array slices using QPitch even with the format override, so we
+       * can allow layers in this case.  Copy the original ISL surface.
+       */
+      memcpy(&isl_surf, &res->surf, sizeof(isl_surf));
+   }
+
+   /* Scale down the image dimensions by the block size. */
+   const struct isl_format_layout *fmtl =
+      isl_format_get_layout(res->surf.format);
+   isl_surf.format = fmt.fmt;
+   isl_surf.logical_level0_px = isl_surf_get_logical_level0_el(&isl_surf);
+   isl_surf.phys_level0_sa = isl_surf_get_phys_level0_el(&isl_surf);
+   tile_x_sa /= fmtl->bw;
+   tile_y_sa /= fmtl->bh;
+
+   psurf->width = isl_surf.logical_level0_px.width;
+   psurf->height = isl_surf.logical_level0_px.height;
+
+   struct isl_surf_fill_state_info f = {
+      .surf = &isl_surf,
+      .view = view,
+      .mocs = mocs(res->bo),
+      .address = res->bo->gtt_offset + offset_B,
+      .x_offset_sa = tile_x_sa,
+      .y_offset_sa = tile_y_sa,
+   };
+
+   isl_surf_fill_state_s(&screen->isl_dev, map, &f);
    return psurf;
 }
 

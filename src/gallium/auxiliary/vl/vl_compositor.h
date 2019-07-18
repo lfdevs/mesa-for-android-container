@@ -121,7 +121,7 @@ struct vl_compositor
    void *cs_weave_rgb;
    void *cs_rgba;
 
-   bool pipe_compute_supported;
+   bool pipe_cs_composit_supported;
 
    struct {
       struct {

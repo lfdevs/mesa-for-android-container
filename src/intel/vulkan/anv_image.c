@@ -816,7 +816,7 @@ resolve_ahw_image(struct anv_device *device,
           vk_tiling == VK_IMAGE_TILING_OPTIMAL);
 
    /* Check format. */
-   VkFormat vk_format = vk_format_from_android(desc.format);
+   VkFormat vk_format = vk_format_from_android(desc.format, desc.usage);
    enum isl_format isl_fmt = anv_get_isl_format(&device->info,
                                                 vk_format,
                                                 VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1359,13 +1359,10 @@ anv_image_fill_surface_state(struct anv_device *device,
           */
          const struct isl_format_layout *fmtl =
             isl_format_get_layout(surface->isl.format);
+         tmp_surf.logical_level0_px =
+            isl_surf_get_logical_level0_el(&tmp_surf);
+         tmp_surf.phys_level0_sa = isl_surf_get_phys_level0_el(&tmp_surf);
          tmp_surf.format = view.format;
-         tmp_surf.logical_level0_px.width =
-            DIV_ROUND_UP(tmp_surf.logical_level0_px.width, fmtl->bw);
-         tmp_surf.logical_level0_px.height =
-            DIV_ROUND_UP(tmp_surf.logical_level0_px.height, fmtl->bh);
-         tmp_surf.phys_level0_sa.width /= fmtl->bw;
-         tmp_surf.phys_level0_sa.height /= fmtl->bh;
          tile_x_sa /= fmtl->bw;
          tile_y_sa /= fmtl->bh;
 

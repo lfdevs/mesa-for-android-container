@@ -2372,3 +2372,124 @@ TEST_P(validation_test, qword_low_power_no_depctrl)
       clear_instructions(p);
    }
 }
+
+TEST_P(validation_test, gen11_no_byte_src_1_2)
+{
+   static const struct {
+      enum opcode opcode;
+      unsigned access_mode;
+
+      enum brw_reg_type dst_type;
+      struct {
+         enum brw_reg_type type;
+         unsigned vstride;
+         unsigned width;
+         unsigned hstride;
+      } srcs[3];
+
+      int  gen;
+      bool expected_result;
+   } inst[] = {
+#define INST(opcode, access_mode, dst_type,                             \
+             src0_type, src0_vstride, src0_width, src0_hstride,         \
+             src1_type, src1_vstride, src1_width, src1_hstride,         \
+             src2_type,                                                 \
+             gen, expected_result)                                      \
+      {                                                                 \
+         BRW_OPCODE_##opcode,                                           \
+         BRW_ALIGN_##access_mode,                                       \
+         BRW_REGISTER_TYPE_##dst_type,                                  \
+         {                                                              \
+            {                                                           \
+               BRW_REGISTER_TYPE_##src0_type,                           \
+               BRW_VERTICAL_STRIDE_##src0_vstride,                      \
+               BRW_WIDTH_##src0_width,                                  \
+               BRW_HORIZONTAL_STRIDE_##src0_hstride,                    \
+            },                                                          \
+            {                                                           \
+               BRW_REGISTER_TYPE_##src1_type,                           \
+               BRW_VERTICAL_STRIDE_##src1_vstride,                      \
+               BRW_WIDTH_##src1_width,                                  \
+               BRW_HORIZONTAL_STRIDE_##src1_hstride,                    \
+            },                                                          \
+            {                                                           \
+               BRW_REGISTER_TYPE_##src2_type,                           \
+            },                                                          \
+         },                                                             \
+         gen,                                                           \
+         expected_result,                                               \
+      }
+
+      /* Passes on < 11 */
+      INST(MOV, 16,  F, B, 2, 4, 0, UD, 0, 4, 0,  D,  8, true ),
+      INST(ADD, 16, UD, F, 0, 4, 0, UB, 0, 1, 0,  D,  7, true ),
+      INST(MAD, 16,  D, B, 0, 4, 0, UB, 0, 1, 0,  B, 10, true ),
+
+      /* Fails on 11+ */
+      INST(MAD,  1, UB, W, 1, 1, 0,  D, 0, 4, 0,  B, 11, false ),
+      INST(MAD,  1, UB, W, 1, 1, 1, UB, 1, 1, 0,  W, 11, false ),
+      INST(ADD,  1,  W, W, 1, 4, 1,  B, 1, 1, 0,  D, 11, false ),
+
+      /* Passes on 11+ */
+      INST(MOV,  1,  W, B, 8, 8, 1,  D, 8, 8, 1,  D, 11, true ),
+      INST(ADD,  1, UD, B, 8, 8, 1,  W, 8, 8, 1,  D, 11, true ),
+      INST(MAD,  1,  B, B, 0, 1, 0,  D, 0, 4, 0,  W, 11, true ),
+
+#undef INST
+   };
+
+
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      /* Skip instruction not meant for this gen. */
+      if (devinfo.gen != inst[i].gen)
+         continue;
+
+      brw_push_insn_state(p);
+
+      brw_set_default_exec_size(p, BRW_EXECUTE_8);
+      brw_set_default_access_mode(p, inst[i].access_mode);
+
+      switch (inst[i].opcode) {
+      case BRW_OPCODE_MOV:
+         brw_MOV(p, retype(g0, inst[i].dst_type),
+                    retype(g0, inst[i].srcs[0].type));
+         brw_inst_set_src0_vstride(&devinfo, last_inst, inst[i].srcs[0].vstride);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].srcs[0].hstride);
+         break;
+      case BRW_OPCODE_ADD:
+         brw_ADD(p, retype(g0, inst[i].dst_type),
+                    retype(g0, inst[i].srcs[0].type),
+                    retype(g0, inst[i].srcs[1].type));
+         brw_inst_set_src0_vstride(&devinfo, last_inst, inst[i].srcs[0].vstride);
+         brw_inst_set_src0_width(&devinfo, last_inst, inst[i].srcs[0].width);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, inst[i].srcs[0].hstride);
+         brw_inst_set_src1_vstride(&devinfo, last_inst, inst[i].srcs[1].vstride);
+         brw_inst_set_src1_width(&devinfo, last_inst, inst[i].srcs[1].width);
+         brw_inst_set_src1_hstride(&devinfo, last_inst, inst[i].srcs[1].hstride);
+         break;
+      case BRW_OPCODE_MAD:
+         brw_MAD(p, retype(g0, inst[i].dst_type),
+                    retype(g0, inst[i].srcs[0].type),
+                    retype(g0, inst[i].srcs[1].type),
+                    retype(g0, inst[i].srcs[2].type));
+         brw_inst_set_3src_a1_src0_vstride(&devinfo, last_inst, inst[i].srcs[0].vstride);
+         brw_inst_set_3src_a1_src0_hstride(&devinfo, last_inst, inst[i].srcs[0].hstride);
+         brw_inst_set_3src_a1_src1_vstride(&devinfo, last_inst, inst[i].srcs[0].vstride);
+         brw_inst_set_3src_a1_src1_hstride(&devinfo, last_inst, inst[i].srcs[0].hstride);
+         break;
+      default:
+         unreachable("invalid opcode");
+      }
+
+      brw_inst_set_dst_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+
+      brw_inst_set_src0_width(&devinfo, last_inst, inst[i].srcs[0].width);
+      brw_inst_set_src1_width(&devinfo, last_inst, inst[i].srcs[1].width);
+
+      brw_pop_insn_state(p);
+
+      EXPECT_EQ(inst[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}

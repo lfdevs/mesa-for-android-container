@@ -126,7 +126,7 @@ get_ahw_buffer_format_properties(
    /* Fill properties fields based on description. */
    VkAndroidHardwareBufferFormatPropertiesANDROID *p = pProperties;
 
-   p->format = vk_format_from_android(desc.format);
+   p->format = vk_format_from_android(desc.format, desc.usage);
 
    const struct anv_format *anv_format = anv_get_format(p->format);
    p->externalFormat = (uint64_t) (uintptr_t) anv_format;

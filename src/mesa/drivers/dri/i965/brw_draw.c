@@ -875,6 +875,16 @@ brw_finish_drawing(struct gl_context *ctx)
       brw_bo_unreference(brw->draw.draw_params_count_bo);
       brw->draw.draw_params_count_bo = NULL;
    }
+
+   if (brw->draw.draw_params_bo) {
+      brw_bo_unreference(brw->draw.draw_params_bo);
+      brw->draw.draw_params_bo = NULL;
+   }
+
+   if (brw->draw.derived_draw_params_bo) {
+      brw_bo_unreference(brw->draw.derived_draw_params_bo);
+      brw->draw.derived_draw_params_bo = NULL;
+   }
 }
 
 /**

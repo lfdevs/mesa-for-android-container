@@ -57,7 +57,7 @@
  */
 #define DEBUG_BACKTRACE_SIZE 0
 
-#if DEBUG_BACKTRACE_SIZE == 0
+#if DEBUG_BACKTRACE_SIZE == 0 || !defined(HAVE_EXECINFO_H)
 /* Use the standard debug output */
 #define _DBG(...) DBG(__VA_ARGS__)
 #else

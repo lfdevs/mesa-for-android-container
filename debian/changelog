@@ -1,3 +1,11 @@
+mesa (19.1.2-1) unstable; urgency=medium
+
+  * New upstream bugfix release.
+  * control: Add python3-setuptools to build-depends.
+  * rules: Use dh_missing.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 18 Jul 2019 17:07:07 +0300
+
 mesa (19.1.1-1) experimental; urgency=medium
 
   * New upstream bugfix release.

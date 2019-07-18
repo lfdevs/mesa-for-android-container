@@ -482,6 +482,7 @@ fd5_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 	batch->needs_flush = true;
 
 	fd_batch_flush(batch, false, false);
+	fd_batch_reference(&batch, NULL);
 
 	return true;
 }

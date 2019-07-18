@@ -32,11 +32,11 @@ get_ubo_load_range(nir_intrinsic_instr *instr)
 {
 	struct ir3_ubo_range r;
 
-	const int bytes = nir_intrinsic_dest_components(instr) *
-		(nir_dest_bit_size(instr->dest) / 8);
+	const int offset = nir_src_as_uint(instr->src[1]);
+	const int bytes = nir_intrinsic_dest_components(instr) * 4;
 
-	r.start = ROUND_DOWN_TO(nir_src_as_uint(instr->src[1]), 16 * 4);
-	r.end = ALIGN(r.start + bytes, 16 * 4);
+	r.start = ROUND_DOWN_TO(offset, 16 * 4);
+	r.end = ALIGN(offset + bytes, 16 * 4);
 
 	return r;
 }

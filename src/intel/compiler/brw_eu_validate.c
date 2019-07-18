@@ -289,6 +289,18 @@ sources_not_null(const struct gen_device_info *devinfo,
    return error_msg;
 }
 
+static struct string
+alignment_supported(const struct gen_device_info *devinfo,
+                    const brw_inst *inst)
+{
+   struct string error_msg = { .str = NULL, .len = 0 };
+
+   ERROR_IF(devinfo->gen >= 11 && brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_16,
+            "Align16 not supported");
+
+   return error_msg;
+}
+
 static bool
 inst_uses_src_acc(const struct gen_device_info *devinfo, const brw_inst *inst)
 {
@@ -600,17 +612,31 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
    unsigned exec_size = 1 << brw_inst_exec_size(devinfo, inst);
    struct string error_msg = { .str = NULL, .len = 0 };
 
+   if (devinfo->gen >= 11) {
+      if (num_sources == 3) {
+         ERROR_IF(brw_reg_type_to_size(brw_inst_3src_a1_src1_type(devinfo, inst)) == 1 ||
+                  brw_reg_type_to_size(brw_inst_3src_a1_src2_type(devinfo, inst)) == 1,
+                  "Byte data type is not supported for src1/2 register regioning. This includes "
+                  "byte broadcast as well.");
+      }
+      if (num_sources == 2) {
+         ERROR_IF(brw_reg_type_to_size(brw_inst_src1_type(devinfo, inst)) == 1,
+                  "Byte data type is not supported for src1 register regioning. This includes "
+                  "byte broadcast as well.");
+      }
+   }
+
    if (num_sources == 3)
-      return (struct string){};
+      return error_msg;
 
    if (inst_is_send(devinfo, inst))
-      return (struct string){};
+      return error_msg;
 
    if (exec_size == 1)
-      return (struct string){};
+      return error_msg;
 
    if (desc->ndst == 0)
-      return (struct string){};
+      return error_msg;
 
    /* The PRMs say:
     *
@@ -635,12 +661,9 @@ general_restrictions_based_on_operand_types(const struct gen_device_info *devinf
 
    if (dst_type_is_byte) {
       if (is_packed(exec_size * dst_stride, exec_size, dst_stride)) {
-         if (!inst_is_raw_move(devinfo, inst)) {
+         if (!inst_is_raw_move(devinfo, inst))
             ERROR("Only raw MOV supports a packed-byte destination");
-            return error_msg;
-         } else {
-            return (struct string){};
-         }
+         return error_msg;
       }
    }
 
@@ -1823,6 +1846,7 @@ brw_validate_instructions(const struct gen_device_info *devinfo,
       } else {
          CHECK(sources_not_null);
          CHECK(send_restrictions);
+         CHECK(alignment_supported);
          CHECK(general_restrictions_based_on_operand_types);
          CHECK(general_restrictions_on_region_parameters);
          CHECK(special_restrictions_for_mixed_float_mode);

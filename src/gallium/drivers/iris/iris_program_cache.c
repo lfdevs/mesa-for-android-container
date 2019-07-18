@@ -45,7 +45,7 @@
 #include "iris_resource.h"
 
 struct keybox {
-   uint8_t size;
+   uint16_t size;
    enum iris_program_cache_id cache_id;
    uint8_t data[0];
 };

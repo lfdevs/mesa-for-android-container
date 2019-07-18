@@ -70,7 +70,7 @@ init_shaders(struct vl_compositor *c)
       return false;
    }
 
-   if (c->pipe_compute_supported) {
+   if (c->pipe_cs_composit_supported) {
       c->cs_video_buffer = vl_compositor_cs_create_shader(c, compute_shader_video_buffer);
       if (!c->cs_video_buffer) {
          debug_printf("Unable to create video_buffer compute shader.\n");
@@ -125,7 +125,7 @@ static void cleanup_shaders(struct vl_compositor *c)
    c->pipe->delete_fs_state(c->pipe, c->fs_rgb_yuv.y);
    c->pipe->delete_fs_state(c->pipe, c->fs_rgb_yuv.uv);
 
-   if (c->pipe_compute_supported) {
+   if (c->pipe_cs_composit_supported) {
       c->pipe->delete_compute_state(c->pipe, c->cs_video_buffer);
       c->pipe->delete_compute_state(c->pipe, c->cs_weave_rgb);
       c->pipe->delete_compute_state(c->pipe, c->cs_rgba);
@@ -561,7 +561,7 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
       float half_a_line = 0.5f / s->layers[layer].zw.y;
       switch(deinterlace) {
       case VL_COMPOSITOR_WEAVE:
-         if (c->pipe_compute_supported)
+         if (c->pipe_cs_composit_supported)
             s->layers[layer].cs = c->cs_weave_rgb;
          else
             s->layers[layer].fs = c->fs_weave_rgb;
@@ -571,7 +571,7 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
          s->layers[layer].zw.x = 0.0f;
          s->layers[layer].src.tl.y += half_a_line;
          s->layers[layer].src.br.y += half_a_line;
-         if (c->pipe_compute_supported)
+         if (c->pipe_cs_composit_supported)
             s->layers[layer].cs = c->cs_video_buffer;
          else
             s->layers[layer].fs = c->fs_video_buffer;
@@ -581,7 +581,7 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
          s->layers[layer].zw.x = 1.0f;
          s->layers[layer].src.tl.y -= half_a_line;
          s->layers[layer].src.br.y -= half_a_line;
-         if (c->pipe_compute_supported)
+         if (c->pipe_cs_composit_supported)
             s->layers[layer].cs = c->cs_video_buffer;
          else
             s->layers[layer].fs = c->fs_video_buffer;
@@ -589,7 +589,7 @@ vl_compositor_set_buffer_layer(struct vl_compositor_state *s,
       }
 
    } else {
-      if (c->pipe_compute_supported)
+      if (c->pipe_cs_composit_supported)
          s->layers[layer].cs = c->cs_video_buffer;
       else
          s->layers[layer].fs = c->fs_video_buffer;
@@ -757,7 +757,10 @@ vl_compositor_init(struct vl_compositor *c, struct pipe_context *pipe)
 
    memset(c, 0, sizeof(*c));
 
-   c->pipe_compute_supported = pipe->screen->get_param(pipe->screen, PIPE_CAP_COMPUTE);
+   c->pipe_cs_composit_supported = pipe->screen->get_param(pipe->screen, PIPE_CAP_COMPUTE) &&
+            pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_TEX_TXF_LZ) &&
+            pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_DIV);
+
    c->pipe = pipe;
 
    if (!init_pipe_state(c)) {

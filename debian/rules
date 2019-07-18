@@ -225,7 +225,7 @@ override_dh_install:
     endif
   endif
 
-	dh_install -a --fail-missing
+	dh_install -a
 
 	# Install bug control and script:
 	set -e; for p in $(allpkg); do \
@@ -233,6 +233,9 @@ override_dh_install:
 		install -m 644 debian/local/control debian/$$p/usr/share/bug/$$p && \
 		install -m 755 debian/local/script  debian/$$p/usr/share/bug/$$p; \
 	done
+
+override_dh_missing:
+	dh_missing --fail-missing
 
 override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4

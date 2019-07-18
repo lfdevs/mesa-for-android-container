@@ -2506,15 +2506,8 @@ blorp_surf_convert_to_uncompressed(const struct isl_device *isl_dev,
       *y /= fmtl->bh;
    }
 
-   info->surf.logical_level0_px.width =
-      DIV_ROUND_UP(info->surf.logical_level0_px.width, fmtl->bw);
-   info->surf.logical_level0_px.height =
-      DIV_ROUND_UP(info->surf.logical_level0_px.height, fmtl->bh);
-
-   assert(info->surf.phys_level0_sa.width % fmtl->bw == 0);
-   assert(info->surf.phys_level0_sa.height % fmtl->bh == 0);
-   info->surf.phys_level0_sa.width /= fmtl->bw;
-   info->surf.phys_level0_sa.height /= fmtl->bh;
+   info->surf.logical_level0_px = isl_surf_get_logical_level0_el(&info->surf);
+   info->surf.phys_level0_sa = isl_surf_get_phys_level0_el(&info->surf);
 
    assert(info->tile_x_sa % fmtl->bw == 0);
    assert(info->tile_y_sa % fmtl->bh == 0);

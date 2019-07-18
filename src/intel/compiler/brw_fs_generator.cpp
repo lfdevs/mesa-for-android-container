@@ -1256,31 +1256,15 @@ fs_generator::generate_ddy(const fs_inst *inst,
       if (devinfo->gen >= 11 ||
           (devinfo->is_broadwell && src.type == BRW_REGISTER_TYPE_HF)) {
          src = stride(src, 0, 2, 1);
-         struct brw_reg src_0  = byte_offset(src,  0 * type_size);
-         struct brw_reg src_2  = byte_offset(src,  2 * type_size);
-         struct brw_reg src_4  = byte_offset(src,  4 * type_size);
-         struct brw_reg src_6  = byte_offset(src,  6 * type_size);
-         struct brw_reg src_8  = byte_offset(src,  8 * type_size);
-         struct brw_reg src_10 = byte_offset(src, 10 * type_size);
-         struct brw_reg src_12 = byte_offset(src, 12 * type_size);
-         struct brw_reg src_14 = byte_offset(src, 14 * type_size);
-
-         struct brw_reg dst_0  = byte_offset(dst,  0 * type_size);
-         struct brw_reg dst_4  = byte_offset(dst,  4 * type_size);
-         struct brw_reg dst_8  = byte_offset(dst,  8 * type_size);
-         struct brw_reg dst_12 = byte_offset(dst, 12 * type_size);
 
          brw_push_insn_state(p);
          brw_set_default_exec_size(p, BRW_EXECUTE_4);
-
-         brw_ADD(p, dst_0, negate(src_0), src_2);
-         brw_ADD(p, dst_4, negate(src_4), src_6);
-
-         if (inst->exec_size == 16) {
-            brw_ADD(p, dst_8,  negate(src_8),  src_10);
-            brw_ADD(p, dst_12, negate(src_12), src_14);
+         for (uint32_t g = 0; g < inst->exec_size; g += 4) {
+            brw_set_default_group(p, inst->group + g);
+            brw_ADD(p, byte_offset(dst, g * type_size),
+                       negate(byte_offset(src,  g * type_size)),
+                       byte_offset(src, (g + 2) * type_size));
          }
-
          brw_pop_insn_state(p);
       } else {
          struct brw_reg src0 = stride(src, 4, 4, 1);
