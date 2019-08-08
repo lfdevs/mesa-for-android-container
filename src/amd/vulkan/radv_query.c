@@ -1139,7 +1139,7 @@ VkResult radv_GetQueryPoolResults(
 			if (flags & VK_QUERY_RESULT_WAIT_BIT) {
 				while (*(volatile uint64_t *)src == TIMESTAMP_NOT_READY)
 					;
-				available = *(uint64_t *)src != TIMESTAMP_NOT_READY;
+				available = true;
 			}
 
 			if (!available && !(flags & VK_QUERY_RESULT_PARTIAL_BIT))

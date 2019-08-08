@@ -2930,8 +2930,11 @@ radv_pipeline_generate_vgt_gs_mode(struct radeon_cmdbuf *ctx_cs,
                                    struct radv_pipeline *pipeline)
 {
 	const struct radv_vs_output_info *outinfo = get_vs_output_info(pipeline);
-
 	uint32_t vgt_primitiveid_en = false;
+	const struct radv_shader_variant *vs =
+		pipeline->shaders[MESA_SHADER_TESS_EVAL] ?
+		pipeline->shaders[MESA_SHADER_TESS_EVAL] :
+		pipeline->shaders[MESA_SHADER_VERTEX];
 	uint32_t vgt_gs_mode = 0;
 
 	if (radv_pipeline_has_gs(pipeline)) {
@@ -2940,7 +2943,7 @@ radv_pipeline_generate_vgt_gs_mode(struct radeon_cmdbuf *ctx_cs,
 
 		vgt_gs_mode = ac_vgt_gs_mode(gs->info.gs.vertices_out,
 		                             pipeline->device->physical_device->rad_info.chip_class);
-	} else if (outinfo->export_prim_id) {
+	} else if (outinfo->export_prim_id || vs->info.info.uses_prim_id) {
 		vgt_gs_mode = S_028A40_MODE(V_028A40_GS_SCENARIO_A);
 		vgt_primitiveid_en = true;
 	}

@@ -573,7 +573,13 @@ radeon_uvd_enc_nalu_pps_hevc(struct radeon_uvd_encoder *enc)
                                   enc->enc_pic.hevc_spec_misc.
                                   constrained_intra_pred_flag, 1);
    radeon_uvd_enc_code_fixed_bits(enc, 0x0, 1);
-   radeon_uvd_enc_code_fixed_bits(enc, 0x0, 1);
+   if (enc->enc_pic.rc_session_init.rate_control_method ==
+      RENC_UVD_RATE_CONTROL_METHOD_NONE)
+      radeon_uvd_enc_code_fixed_bits(enc, 0x0, 1);
+   else {
+      radeon_uvd_enc_code_fixed_bits(enc, 0x1, 1);
+      radeon_uvd_enc_code_ue(enc, 0x0);
+   }
    radeon_uvd_enc_code_se(enc, enc->enc_pic.hevc_deblock.cb_qp_offset);
    radeon_uvd_enc_code_se(enc, enc->enc_pic.hevc_deblock.cr_qp_offset);
    radeon_uvd_enc_code_fixed_bits(enc, 0x0, 1);
@@ -768,8 +774,7 @@ radeon_uvd_enc_slice_header_hevc(struct radeon_uvd_encoder *enc)
    if ((enc->enc_pic.nal_unit_type != 19)
        && (enc->enc_pic.nal_unit_type != 20)) {
       radeon_uvd_enc_code_fixed_bits(enc,
-                                     enc->enc_pic.frame_num %
-                                     enc->enc_pic.max_poc,
+                                     enc->enc_pic.pic_order_cnt,
                                      enc->enc_pic.log2_max_poc);
       if (enc->enc_pic.picture_type == PIPE_H265_ENC_PICTURE_TYPE_P)
          radeon_uvd_enc_code_fixed_bits(enc, 0x1, 1);

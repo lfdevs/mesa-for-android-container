@@ -765,7 +765,7 @@ generate_shader_stats(struct radv_device *device,
 				     lds_increment);
 	} else if (stage == MESA_SHADER_COMPUTE) {
 		unsigned max_workgroup_size =
-				radv_nir_get_max_workgroup_size(chip_class, variant->nir);
+			radv_nir_get_max_workgroup_size(chip_class, stage, variant->nir);
 		lds_per_wave = (conf->lds_size * lds_increment) /
 			       DIV_ROUND_UP(max_workgroup_size, 64);
 	}

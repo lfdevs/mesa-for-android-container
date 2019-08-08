@@ -1075,7 +1075,7 @@ emit_3dstate_clip(struct anv_pipeline *pipeline,
       clip.ClipEnable               = true;
       clip.StatisticsEnable         = true;
       clip.EarlyCullEnable          = true;
-      clip.APIMode                  = APIMODE_D3D,
+      clip.APIMode                  = APIMODE_D3D;
       clip.ViewportXYClipTestEnable = true;
 
 #if GEN_GEN >= 8

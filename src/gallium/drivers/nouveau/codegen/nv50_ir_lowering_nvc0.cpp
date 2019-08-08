@@ -51,12 +51,12 @@ NVC0LegalizeSSA::handleDIV(Instruction *i)
    // Generate movs to the input regs for the call we want to generate
    for (int s = 0; i->srcExists(s); ++s) {
       Instruction *ld = i->getSrc(s)->getInsn();
-      assert(ld->getSrc(0) != NULL);
       // check if we are moving an immediate, propagate it in that case
       if (!ld || ld->fixed || (ld->op != OP_LOAD && ld->op != OP_MOV) ||
             !(ld->src(0).getFile() == FILE_IMMEDIATE))
          bld.mkMovToReg(s, i->getSrc(s));
       else {
+         assert(ld->getSrc(0) != NULL);
          bld.mkMovToReg(s, ld->getSrc(0));
          // Clear the src, to make code elimination possible here before we
          // delete the instruction i later

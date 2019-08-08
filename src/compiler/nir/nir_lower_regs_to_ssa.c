@@ -251,9 +251,17 @@ nir_lower_regs_to_ssa_impl(nir_function_impl *impl)
 
    nir_foreach_block(block, impl) {
       nir_foreach_instr(instr, block) {
-         if (instr->type == nir_instr_type_alu) {
+         switch (instr->type) {
+         case nir_instr_type_alu:
             rewrite_alu_instr(nir_instr_as_alu(instr), &state);
-         } else {
+            break;
+
+         case nir_instr_type_phi:
+            /* We rewrite sources as a separate pass */
+            nir_foreach_dest(instr, rewrite_dest, &state);
+            break;
+
+         default:
             nir_foreach_src(instr, rewrite_src, &state);
             nir_foreach_dest(instr, rewrite_dest, &state);
          }
@@ -262,6 +270,28 @@ nir_lower_regs_to_ssa_impl(nir_function_impl *impl)
       nir_if *following_if = nir_block_get_following_if(block);
       if (following_if)
          rewrite_if_condition(following_if, &state);
+
+      /* Handle phi sources that source from this block.  We have to do this
+       * as a separate pass because the phi builder assumes that uses and
+       * defs are processed in an order that respects dominance.  When we have
+       * loops, a phi source may be a back-edge so we have to handle it as if
+       * it were one of the last instructions in the predecessor block.
+       */
+      for (unsigned i = 0; i < ARRAY_SIZE(block->successors); i++) {
+         if (block->successors[i] == NULL)
+            continue;
+
+         nir_foreach_instr(instr, block->successors[i]) {
+            if (instr->type != nir_instr_type_phi)
+               break;
+
+            nir_phi_instr *phi = nir_instr_as_phi(instr);
+            nir_foreach_phi_src(phi_src, phi) {
+               if (phi_src->pred == block)
+                  rewrite_src(&phi_src->src, &state);
+            }
+         }
+      }
    }
 
    nir_phi_builder_finish(phi_build);

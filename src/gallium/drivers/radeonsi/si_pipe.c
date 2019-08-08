@@ -464,9 +464,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 						 0, PIPE_USAGE_DEFAULT,
 						 SI_RESOURCE_FLAG_32BIT |
 						 (use_sdma_upload ?
-							  SI_RESOURCE_FLAG_UPLOAD_FLUSH_EXPLICIT_VIA_SDMA :
-							  (sscreen->cpdma_prefetch_writes_memory ?
-								   0 : SI_RESOURCE_FLAG_READ_ONLY)));
+							  SI_RESOURCE_FLAG_UPLOAD_FLUSH_EXPLICIT_VIA_SDMA : 0));
 	if (!sctx->b.const_uploader)
 		goto fail;
 

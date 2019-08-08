@@ -289,7 +289,7 @@ get_alignment_for_imm(const struct imm *imm)
 }
 
 static bool
-needs_negate(const struct fs_reg *reg, const struct imm *imm)
+needs_negate(const fs_reg *reg, const struct imm *imm)
 {
    switch (reg->type) {
    case BRW_REGISTER_TYPE_DF:

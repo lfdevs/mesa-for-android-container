@@ -1,3 +1,9 @@
+mesa (19.1.4-1) unstable; urgency=medium
+
+  * New upstream release. (Closes: #933753, #933906)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 08 Aug 2019 07:30:48 +0300
+
 mesa (19.1.2-1) unstable; urgency=medium
 
   * New upstream bugfix release.

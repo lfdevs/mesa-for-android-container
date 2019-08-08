@@ -1994,6 +1994,7 @@ void radv_compile_nir_shader(struct ac_llvm_compiler *ac_llvm,
 			     const struct radv_nir_compiler_options *options);
 
 unsigned radv_nir_get_max_workgroup_size(enum chip_class chip_class,
+					 gl_shader_stage stage,
 					 const struct nir_shader *nir);
 
 /* radv_shader_info.h */

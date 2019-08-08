@@ -599,19 +599,20 @@ nv50_sampler_state_delete(struct pipe_context *pipe, void *hwcso)
 
 static inline void
 nv50_stage_sampler_states_bind(struct nv50_context *nv50, int s,
-                               unsigned nr, void **hwcso)
+                               unsigned nr, void **hwcsos)
 {
    unsigned highest_found = 0;
    unsigned i;
 
    assert(nr <= PIPE_MAX_SAMPLERS);
    for (i = 0; i < nr; ++i) {
+      struct nv50_tsc_entry *hwcso = hwcsos ? nv50_tsc_entry(hwcsos[i]) : NULL;
       struct nv50_tsc_entry *old = nv50->samplers[s][i];
 
-      if (hwcso[i])
+      if (hwcso)
          highest_found = i;
 
-      nv50->samplers[s][i] = nv50_tsc_entry(hwcso[i]);
+      nv50->samplers[s][i] = hwcso;
       if (old)
          nv50_screen_tsc_unlock(nv50->screen, old);
    }
@@ -685,12 +686,13 @@ nv50_stage_set_sampler_views(struct nv50_context *nv50, int s,
 
    assert(nr <= PIPE_MAX_SAMPLERS);
    for (i = 0; i < nr; ++i) {
+      struct pipe_sampler_view *view = views ? views[i] : NULL;
       struct nv50_tic_entry *old = nv50_tic_entry(nv50->textures[s][i]);
       if (old)
          nv50_screen_tic_unlock(nv50->screen, old);
 
-      if (views[i] && views[i]->texture) {
-         struct pipe_resource *res = views[i]->texture;
+      if (view && view->texture) {
+         struct pipe_resource *res = view->texture;
          if (res->target == PIPE_BUFFER &&
              (res->flags & PIPE_RESOURCE_FLAG_MAP_COHERENT))
             nv50->textures_coherent[s] |= 1 << i;
@@ -700,7 +702,7 @@ nv50_stage_set_sampler_views(struct nv50_context *nv50, int s,
          nv50->textures_coherent[s] &= ~(1 << i);
       }
 
-      pipe_sampler_view_reference(&nv50->textures[s][i], views[i]);
+      pipe_sampler_view_reference(&nv50->textures[s][i], view);
    }
 
    assert(nv50->num_textures[s] <= PIPE_MAX_SAMPLERS);

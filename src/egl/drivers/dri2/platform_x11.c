@@ -765,9 +765,49 @@ dri2_x11_config_match_attrib(struct dri2_egl_display *dri2_dpy,
    return config_val == value;
 }
 
+/**
+ * See if the X server can export a pixmap with the given color depth.
+ *
+ * Glamor in xorg-server 1.20 can't export pixmaps which have a different
+ * color depth than the root window as a DRI image.  This makes it impossible
+ * to expose pbuffer-only visuals with, say, 16bpp on a 24bpp X display.
+ */
+static bool
+x11_can_export_pixmap_with_bpp(struct dri2_egl_display *dri2_dpy, int bpp)
+{
+   bool supported = false;
+
+#ifdef HAVE_DRI3
+   xcb_dri3_buffer_from_pixmap_cookie_t cookie;
+   xcb_dri3_buffer_from_pixmap_reply_t *reply;
+
+   xcb_pixmap_t pixmap = xcb_generate_id(dri2_dpy->conn);
+   xcb_create_pixmap(dri2_dpy->conn, bpp, pixmap, dri2_dpy->screen->root, 1, 1);
+   cookie = xcb_dri3_buffer_from_pixmap(dri2_dpy->conn, pixmap);
+   reply = xcb_dri3_buffer_from_pixmap_reply(dri2_dpy->conn, cookie, NULL);
+
+   if (reply) {
+      int *fds = xcb_dri3_buffer_from_pixmap_reply_fds(dri2_dpy->conn, reply);
+
+      for (int i = 0; i < reply->nfd; i++) {
+         close(fds[i]);
+      }
+
+      supported = true;
+
+      free(reply);
+   }
+
+   xcb_free_pixmap(dri2_dpy->conn, pixmap);
+#endif
+
+   return supported;
+}
+
 static EGLBoolean
 dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
-                                 _EGLDisplay *disp, bool supports_preserved)
+                                 _EGLDisplay *disp, bool supports_preserved,
+                                 bool add_pbuffer_configs)
 {
    xcb_depth_iterator_t d;
    xcb_visualtype_t *visuals;
@@ -846,35 +886,41 @@ dri2_x11_add_configs_for_visuals(struct dri2_egl_display *dri2_dpy,
    /* Add a 565-no-depth-no-stencil pbuffer-only config.  If X11 is depth 24,
     * we wouldn't have 565 available, which the CTS demands.
     */
-   for (int j = 0; dri2_dpy->driver_configs[j]; j++) {
-      const __DRIconfig *config = dri2_dpy->driver_configs[j];
-      const EGLint config_attrs[] = {
-         EGL_NATIVE_VISUAL_ID,    0,
-         EGL_NATIVE_VISUAL_TYPE,  EGL_NONE,
-         EGL_NONE
-      };
-      EGLint surface_type = EGL_PBUFFER_BIT;
-      unsigned int rgba_masks[4] = {
-         0x1f << 11,
-         0x3f << 5,
-         0x1f << 0,
-         0,
-      };
+   if (add_pbuffer_configs && x11_can_export_pixmap_with_bpp(dri2_dpy, 16)) {
+      for (int j = 0; dri2_dpy->driver_configs[j]; j++) {
+         const __DRIconfig *config = dri2_dpy->driver_configs[j];
+         const EGLint config_attrs[] = {
+            EGL_NATIVE_VISUAL_ID,    0,
+            EGL_NATIVE_VISUAL_TYPE,  EGL_NONE,
+            EGL_NONE
+         };
+         EGLint surface_type = EGL_PBUFFER_BIT;
+         unsigned int rgba_masks[4] = {
+            0x1f << 11,
+            0x3f << 5,
+            0x1f << 0,
+            0,
+         };
 
-      /* Check that we've found single-sample, no depth, no stencil. */
-      if (!dri2_x11_config_match_attrib(dri2_dpy, config,
-                                        __DRI_ATTRIB_DEPTH_SIZE, 0) ||
-          !dri2_x11_config_match_attrib(dri2_dpy, config,
-                                        __DRI_ATTRIB_STENCIL_SIZE, 0) ||
-          !dri2_x11_config_match_attrib(dri2_dpy, config,
-                                        __DRI_ATTRIB_SAMPLES, 0)) {
-         continue;
-      }
+         /* Check that we've found single-sample, no depth, no stencil,
+          * and single-buffered.
+          */
+         if (!dri2_x11_config_match_attrib(dri2_dpy, config,
+                                           __DRI_ATTRIB_DEPTH_SIZE, 0) ||
+             !dri2_x11_config_match_attrib(dri2_dpy, config,
+                                           __DRI_ATTRIB_STENCIL_SIZE, 0) ||
+             !dri2_x11_config_match_attrib(dri2_dpy, config,
+                                           __DRI_ATTRIB_SAMPLES, 0) ||
+             !dri2_x11_config_match_attrib(dri2_dpy, config,
+                                           __DRI_ATTRIB_DOUBLE_BUFFER, 0)) {
+            continue;
+         }
 
-      if (dri2_add_config(disp, config, config_count + 1, surface_type,
-                          config_attrs, rgba_masks)) {
-         config_count++;
-         break;
+         if (dri2_add_config(disp, config, config_count + 1, surface_type,
+                             config_attrs, rgba_masks)) {
+            config_count++;
+            break;
+         }
       }
    }
 
@@ -1342,7 +1388,7 @@ dri2_initialize_x11_swrast(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_setup_screen(disp);
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true))
+   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true, false))
       goto cleanup;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during
@@ -1440,7 +1486,7 @@ dri2_initialize_x11_dri3(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_set_WL_bind_wayland_display(drv, disp);
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false))
+   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, false, true))
       goto cleanup;
 
    dri2_dpy->loader_dri3_ext.core = dri2_dpy->core;
@@ -1550,7 +1596,7 @@ dri2_initialize_x11_dri2(_EGLDriver *drv, _EGLDisplay *disp)
 
    dri2_set_WL_bind_wayland_display(drv, disp);
 
-   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true))
+   if (!dri2_x11_add_configs_for_visuals(dri2_dpy, disp, true, false))
       goto cleanup;
 
    /* Fill vtbl last to prevent accidentally calling virtual function during

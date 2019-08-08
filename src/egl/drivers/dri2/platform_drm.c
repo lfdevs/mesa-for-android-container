@@ -715,6 +715,7 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
          goto cleanup;
       }
    }
+   dri2_dpy->gbm_dri = gbm_dri_device(gbm);
 
    if (strcmp(gbm_device_get_backend_name(gbm), "drm") != 0) {
       err = "DRI2: gbm device using incorrect/incompatible backend";
@@ -729,7 +730,6 @@ dri2_initialize_drm(_EGLDriver *drv, _EGLDisplay *disp)
 
    disp->Device = dev;
 
-   dri2_dpy->gbm_dri = gbm_dri_device(gbm);
    dri2_dpy->driver_name = strdup(dri2_dpy->gbm_dri->driver_name);
 
    dri2_dpy->dri_screen = dri2_dpy->gbm_dri->screen;

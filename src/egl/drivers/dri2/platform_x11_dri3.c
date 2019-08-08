@@ -402,13 +402,15 @@ dri3_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,
 static void
 dri3_flush_front_buffer(__DRIdrawable *driDrawable, void *loaderPrivate)
 {
+   struct loader_dri3_drawable *draw = loaderPrivate;
+   (void) driDrawable;
+
    /* There does not seem to be any kind of consensus on whether we should
     * support front-buffer rendering or not:
     * http://lists.freedesktop.org/archives/mesa-dev/2013-June/040129.html
     */
-   _eglLog(_EGL_WARNING, "FIXME: egl/x11 doesn't support front buffer rendering.");
-   (void) driDrawable;
-   (void) loaderPrivate;
+   if (!draw->is_pixmap)
+      _eglLog(_EGL_WARNING, "FIXME: egl/x11 doesn't support front buffer rendering.");
 }
 
 const __DRIimageLoaderExtension dri3_image_loader_extension = {

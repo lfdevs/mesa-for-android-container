@@ -1432,7 +1432,7 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
             val->type->align = align;
 
             /* Override any ArrayStride previously set. */
-            val->type->stride = size;
+            val->type->stride = vtn_align_u32(size, align);
          }
       }
       break;
@@ -2091,19 +2091,17 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
          vtn_value(b, w[4], vtn_value_type_pointer)->pointer;
       return;
    } else if (opcode == SpvOpImage) {
-      struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_pointer);
       struct vtn_value *src_val = vtn_untyped_value(b, w[3]);
       if (src_val->value_type == vtn_value_type_sampled_image) {
-         val->pointer = src_val->sampled_image->image;
+         vtn_push_value_pointer(b, w[2], src_val->sampled_image->image);
       } else {
          vtn_assert(src_val->value_type == vtn_value_type_pointer);
-         val->pointer = src_val->pointer;
+         vtn_push_value_pointer(b, w[2], src_val->pointer);
       }
       return;
    }
 
    struct vtn_type *ret_type = vtn_value(b, w[1], vtn_value_type_type)->type;
-   struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_ssa);
 
    struct vtn_sampled_image sampled;
    struct vtn_value *sampled_val = vtn_untyped_value(b, w[3]);
@@ -2417,8 +2415,9 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       }
    }
 
-   val->ssa = vtn_create_ssa_value(b, ret_type->type);
-   val->ssa->def = &instr->dest.ssa;
+   struct vtn_ssa_value *ssa = vtn_create_ssa_value(b, ret_type->type);
+   ssa->def = &instr->dest.ssa;
+   vtn_push_ssa(b, w[2], ret_type, ssa);
 
    nir_builder_instr_insert(&b->nb, &instr->instr);
 }
@@ -2608,6 +2607,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       intrin->src[2] = nir_src_for_ssa(image.sample);
    }
 
+   nir_intrinsic_set_access(intrin, image.image->access);
+
    switch (opcode) {
    case SpvOpAtomicLoad:
    case SpvOpImageQuerySize:
@@ -2646,7 +2647,6 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    }
 
    if (opcode != SpvOpImageWrite && opcode != SpvOpAtomicStore) {
-      struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_ssa);
       struct vtn_type *type = vtn_value(b, w[1], vtn_value_type_type)->type;
 
       unsigned dest_components = glsl_get_vector_elements(type->type);
@@ -2663,7 +2663,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       if (intrin->num_components != dest_components)
          result = nir_channels(&b->nb, result, (1 << dest_components) - 1);
 
-      val->ssa = vtn_create_ssa_value(b, type->type);
+      struct vtn_value *val =
+         vtn_push_ssa(b, w[2], type, vtn_create_ssa_value(b, type->type));
       val->ssa->def = result;
    } else {
       nir_builder_instr_insert(&b->nb, &intrin->instr);
@@ -2974,10 +2975,10 @@ vtn_handle_atomics(struct vtn_builder *b, SpvOp opcode,
                         glsl_get_vector_elements(type->type),
                         glsl_get_bit_size(type->type), NULL);
 
-      struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_ssa);
-      val->ssa = rzalloc(b, struct vtn_ssa_value);
-      val->ssa->def = &atomic->dest.ssa;
-      val->ssa->type = type->type;
+      struct vtn_ssa_value *ssa = rzalloc(b, struct vtn_ssa_value);
+      ssa->def = &atomic->dest.ssa;
+      ssa->type = type->type;
+      vtn_push_ssa(b, w[2], type, ssa);
    }
 
    nir_builder_instr_insert(&b->nb, &atomic->instr);
@@ -3217,65 +3218,65 @@ static void
 vtn_handle_composite(struct vtn_builder *b, SpvOp opcode,
                      const uint32_t *w, unsigned count)
 {
-   struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_ssa);
-   const struct glsl_type *type =
-      vtn_value(b, w[1], vtn_value_type_type)->type->type;
-   val->ssa = vtn_create_ssa_value(b, type);
+   struct vtn_type *type = vtn_value(b, w[1], vtn_value_type_type)->type;
+   struct vtn_ssa_value *ssa = vtn_create_ssa_value(b, type->type);
 
    switch (opcode) {
    case SpvOpVectorExtractDynamic:
-      val->ssa->def = vtn_vector_extract_dynamic(b, vtn_ssa_value(b, w[3])->def,
-                                                 vtn_ssa_value(b, w[4])->def);
+      ssa->def = vtn_vector_extract_dynamic(b, vtn_ssa_value(b, w[3])->def,
+                                            vtn_ssa_value(b, w[4])->def);
       break;
 
    case SpvOpVectorInsertDynamic:
-      val->ssa->def = vtn_vector_insert_dynamic(b, vtn_ssa_value(b, w[3])->def,
-                                                vtn_ssa_value(b, w[4])->def,
-                                                vtn_ssa_value(b, w[5])->def);
+      ssa->def = vtn_vector_insert_dynamic(b, vtn_ssa_value(b, w[3])->def,
+                                           vtn_ssa_value(b, w[4])->def,
+                                           vtn_ssa_value(b, w[5])->def);
       break;
 
    case SpvOpVectorShuffle:
-      val->ssa->def = vtn_vector_shuffle(b, glsl_get_vector_elements(type),
-                                         vtn_ssa_value(b, w[3])->def,
-                                         vtn_ssa_value(b, w[4])->def,
-                                         w + 5);
+      ssa->def = vtn_vector_shuffle(b, glsl_get_vector_elements(type->type),
+                                    vtn_ssa_value(b, w[3])->def,
+                                    vtn_ssa_value(b, w[4])->def,
+                                    w + 5);
       break;
 
    case SpvOpCompositeConstruct: {
       unsigned elems = count - 3;
       assume(elems >= 1);
-      if (glsl_type_is_vector_or_scalar(type)) {
+      if (glsl_type_is_vector_or_scalar(type->type)) {
          nir_ssa_def *srcs[NIR_MAX_VEC_COMPONENTS];
          for (unsigned i = 0; i < elems; i++)
             srcs[i] = vtn_ssa_value(b, w[3 + i])->def;
-         val->ssa->def =
-            vtn_vector_construct(b, glsl_get_vector_elements(type),
+         ssa->def =
+            vtn_vector_construct(b, glsl_get_vector_elements(type->type),
                                  elems, srcs);
       } else {
-         val->ssa->elems = ralloc_array(b, struct vtn_ssa_value *, elems);
+         ssa->elems = ralloc_array(b, struct vtn_ssa_value *, elems);
          for (unsigned i = 0; i < elems; i++)
-            val->ssa->elems[i] = vtn_ssa_value(b, w[3 + i]);
+            ssa->elems[i] = vtn_ssa_value(b, w[3 + i]);
       }
       break;
    }
    case SpvOpCompositeExtract:
-      val->ssa = vtn_composite_extract(b, vtn_ssa_value(b, w[3]),
-                                       w + 4, count - 4);
+      ssa = vtn_composite_extract(b, vtn_ssa_value(b, w[3]),
+                                  w + 4, count - 4);
       break;
 
    case SpvOpCompositeInsert:
-      val->ssa = vtn_composite_insert(b, vtn_ssa_value(b, w[4]),
-                                      vtn_ssa_value(b, w[3]),
-                                      w + 5, count - 5);
+      ssa = vtn_composite_insert(b, vtn_ssa_value(b, w[4]),
+                                 vtn_ssa_value(b, w[3]),
+                                 w + 5, count - 5);
       break;
 
    case SpvOpCopyObject:
-      val->ssa = vtn_composite_copy(b, vtn_ssa_value(b, w[3]));
+      ssa = vtn_composite_copy(b, vtn_ssa_value(b, w[3]));
       break;
 
    default:
       vtn_fail_with_opcode("unknown composite operation", opcode);
    }
+
+   vtn_push_ssa(b, w[2], type, ssa);
 }
 
 static void
@@ -3391,13 +3392,13 @@ vtn_handle_barrier(struct vtn_builder *b, SpvOp opcode,
    }
 
    case SpvOpControlBarrier: {
-      SpvScope execution_scope = vtn_constant_uint(b, w[1]);
-      if (execution_scope == SpvScopeWorkgroup)
-         vtn_emit_barrier(b, nir_intrinsic_barrier);
-
       SpvScope memory_scope = vtn_constant_uint(b, w[2]);
       SpvMemorySemanticsMask memory_semantics = vtn_constant_uint(b, w[3]);
       vtn_emit_memory_barrier(b, memory_scope, memory_semantics);
+
+      SpvScope execution_scope = vtn_constant_uint(b, w[1]);
+      if (execution_scope == SpvScopeWorkgroup)
+         vtn_emit_barrier(b, nir_intrinsic_barrier);
       break;
    }
 

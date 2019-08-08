@@ -1301,7 +1301,7 @@ void anv_GetPhysicalDeviceProperties(
       .sampledImageStencilSampleCounts          = sample_counts,
       .storageImageSampleCounts                 = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords                       = 1,
-      .timestampComputeAndGraphics              = false,
+      .timestampComputeAndGraphics              = true,
       .timestampPeriod                          = 1000000000.0 / devinfo->timestamp_frequency,
       .maxClipDistances                         = 8,
       .maxCullDistances                         = 8,

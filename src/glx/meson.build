@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017-2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -70,7 +70,7 @@ extra_libs_libglx = []
 extra_deps_libgl = []
 extra_ld_args_libgl = []
 
-if with_dri
+if with_glx == 'dri'
   files_libglx += files(
     'dri_common.c',
     'dri_common.h',
@@ -83,7 +83,7 @@ if with_dri
 endif
 
 # dri2
-if with_dri and with_dri_platform == 'drm' and dep_libdrm.found()
+if with_glx == 'dri' and with_dri_platform == 'drm' and dep_libdrm.found()
   files_libglx += files(
     'dri2.c',
     'dri2_glx.c',

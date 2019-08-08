@@ -478,6 +478,11 @@ anv_block_pool_init(struct anv_block_pool *pool,
    if (result != VK_SUCCESS)
       goto fail_mmap_cleanups;
 
+   /* Make the entire pool available in the front of the pool.  If back
+    * allocation needs to use this space, the "ends" will be re-arranged.
+    */
+   pool->state.end = pool->size;
+
    return VK_SUCCESS;
 
  fail_mmap_cleanups:

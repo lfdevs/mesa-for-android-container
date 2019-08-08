@@ -771,6 +771,8 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
       [NIR_INTRINSIC_IMAGE_DIM] = "image_dim",
       [NIR_INTRINSIC_IMAGE_ARRAY] = "image_array",
       [NIR_INTRINSIC_ACCESS] = "access",
+      [NIR_INTRINSIC_SRC_ACCESS] = "src-access",
+      [NIR_INTRINSIC_DST_ACCESS] = "dst-access",
       [NIR_INTRINSIC_FORMAT] = "format",
       [NIR_INTRINSIC_ALIGN_MUL] = "align_mul",
       [NIR_INTRINSIC_ALIGN_OFFSET] = "align_offset",

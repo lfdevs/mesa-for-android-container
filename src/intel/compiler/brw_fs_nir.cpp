@@ -4829,16 +4829,29 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
    case nir_intrinsic_quad_swap_horizontal: {
       const fs_reg value = get_nir_src(instr->src[0]);
       const fs_reg tmp = bld.vgrf(value.type);
-      const fs_builder ubld = bld.exec_all().group(dispatch_width / 2, 0);
+      if (devinfo->gen <= 7) {
+         /* The hardware doesn't seem to support these crazy regions with
+          * compressed instructions on gen7 and earlier so we fall back to
+          * using quad swizzles.  Fortunately, we don't support 64-bit
+          * anything in Vulkan on gen7.
+          */
+         assert(nir_src_bit_size(instr->src[0]) == 32);
+         const fs_builder ubld = bld.exec_all();
+         ubld.emit(SHADER_OPCODE_QUAD_SWIZZLE, tmp, value,
+                   brw_imm_ud(BRW_SWIZZLE4(1,0,3,2)));
+         bld.MOV(retype(dest, value.type), tmp);
+      } else {
+         const fs_builder ubld = bld.exec_all().group(dispatch_width / 2, 0);
 
-      const fs_reg src_left = horiz_stride(value, 2);
-      const fs_reg src_right = horiz_stride(horiz_offset(value, 1), 2);
-      const fs_reg tmp_left = horiz_stride(tmp, 2);
-      const fs_reg tmp_right = horiz_stride(horiz_offset(tmp, 1), 2);
+         const fs_reg src_left = horiz_stride(value, 2);
+         const fs_reg src_right = horiz_stride(horiz_offset(value, 1), 2);
+         const fs_reg tmp_left = horiz_stride(tmp, 2);
+         const fs_reg tmp_right = horiz_stride(horiz_offset(tmp, 1), 2);
 
-      ubld.MOV(tmp_left, src_right);
-      ubld.MOV(tmp_right, src_left);
+         ubld.MOV(tmp_left, src_right);
+         ubld.MOV(tmp_right, src_left);
 
+      }
       bld.MOV(retype(dest, value.type), tmp);
       break;
    }

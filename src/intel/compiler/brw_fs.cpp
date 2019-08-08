@@ -1890,8 +1890,8 @@ fs_visitor::split_virtual_grfs()
     * destination), we mark the used slots as inseparable.  Then we go
     * through and split the registers into the smallest pieces we can.
     */
-   bool split_points[reg_count];
-   memset(split_points, 0, sizeof(split_points));
+   bool *split_points = new bool[reg_count];
+   memset(split_points, 0, reg_count * sizeof(*split_points));
 
    /* Mark all used registers as fully splittable */
    foreach_block_and_inst(block, fs_inst, inst, cfg) {
@@ -1925,8 +1925,8 @@ fs_visitor::split_virtual_grfs()
       }
    }
 
-   int new_virtual_grf[reg_count];
-   int new_reg_offset[reg_count];
+   int *new_virtual_grf = new int[reg_count];
+   int *new_reg_offset = new int[reg_count];
 
    int reg = 0;
    for (int i = 0; i < num_vars; i++) {
@@ -1982,6 +1982,10 @@ fs_visitor::split_virtual_grfs()
       }
    }
    invalidate_live_intervals();
+
+   delete[] split_points;
+   delete[] new_virtual_grf;
+   delete[] new_reg_offset;
 }
 
 /**
@@ -1997,8 +2001,8 @@ bool
 fs_visitor::compact_virtual_grfs()
 {
    bool progress = false;
-   int remap_table[this->alloc.count];
-   memset(remap_table, -1, sizeof(remap_table));
+   int *remap_table = new int[this->alloc.count];
+   memset(remap_table, -1, this->alloc.count * sizeof(int));
 
    /* Mark which virtual GRFs are used. */
    foreach_block_and_inst(block, const fs_inst, inst, cfg) {
@@ -2053,6 +2057,8 @@ fs_visitor::compact_virtual_grfs()
          }
       }
    }
+
+   delete[] remap_table;
 
    return progress;
 }
@@ -6124,9 +6130,6 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
 
    case FS_OPCODE_LINTERP:
    case SHADER_OPCODE_GET_BUFFER_SIZE:
-   case FS_OPCODE_DDX_COARSE:
-   case FS_OPCODE_DDX_FINE:
-   case FS_OPCODE_DDY_COARSE:
    case FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD:
    case FS_OPCODE_PACK_HALF_2x16_SPLIT:
    case FS_OPCODE_INTERPOLATE_AT_SAMPLE:
@@ -6143,6 +6146,9 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
        */
       return (devinfo->gen == 4 ? 16 : MIN2(16, inst->exec_size));
 
+   case FS_OPCODE_DDX_COARSE:
+   case FS_OPCODE_DDX_FINE:
+   case FS_OPCODE_DDY_COARSE:
    case FS_OPCODE_DDY_FINE:
       /* The implementation of this virtual opcode may require emitting
        * compressed Align16 instructions, which are severely limited on some

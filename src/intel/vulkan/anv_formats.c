@@ -69,6 +69,7 @@
            .aspect = VK_IMAGE_ASPECT_DEPTH_BIT, \
          }, \
       }, \
+      .vk_format = __vk_fmt, \
       .n_planes = 1, \
    }
 
@@ -80,6 +81,7 @@
            .aspect = VK_IMAGE_ASPECT_STENCIL_BIT, \
          }, \
       }, \
+      .vk_format = __vk_fmt, \
       .n_planes = 1, \
    }
 
@@ -465,6 +467,14 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
    const struct isl_format_layout *isl_layout =
       isl_format_get_layout(plane_format.isl_format);
 
+   /* On Ivy Bridge we don't even have enough 24 and 48-bit formats that we
+    * can reliably do texture upload with BLORP so just don't claim support
+    * for any of them.
+    */
+   if (devinfo->gen == 7 && !devinfo->is_haswell &&
+       (isl_layout->bpb == 24 || isl_layout->bpb == 48))
+      return unsupported;
+
    if (tiling == VK_IMAGE_TILING_OPTIMAL &&
        !util_is_power_of_two_or_zero(isl_layout->bpb)) {
       /* Tiled formats *must* be power-of-two because we need up upload
@@ -798,6 +808,7 @@ anv_get_image_format_properties(
    if (format == NULL)
       goto unsupported;
 
+   assert(format->vk_format == info->format);
    format_feature_flags = anv_get_image_format_features(devinfo, info->format,
                                                         format, info->tiling);
 
@@ -977,6 +988,13 @@ static const VkExternalMemoryProperties prime_fd_props = {
       VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
 };
 
+static const VkExternalMemoryProperties userptr_props = {
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes = 0,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT,
+};
+
 static const VkExternalMemoryProperties android_buffer_props = {
    .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
                              VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
@@ -1069,6 +1087,10 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
          if (external_props)
             external_props->externalMemoryProperties = prime_fd_props;
          break;
+      case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
+         if (external_props)
+            external_props->externalMemoryProperties = userptr_props;
+         break;
       case VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID:
          if (ahw_supported && external_props) {
             external_props->externalMemoryProperties = android_image_props;
@@ -1159,6 +1181,9 @@ void anv_GetPhysicalDeviceExternalBufferProperties(
    case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
       pExternalBufferProperties->externalMemoryProperties = prime_fd_props;
       return;
+   case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
+      pExternalBufferProperties->externalMemoryProperties = userptr_props;
+      return;
    case VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID:
       if (physical_device->supported_extensions.ANDROID_external_memory_android_hardware_buffer) {
          pExternalBufferProperties->externalMemoryProperties = android_buffer_props;
@@ -1170,8 +1195,14 @@ void anv_GetPhysicalDeviceExternalBufferProperties(
    }
 
  unsupported:
+   /* From the Vulkan 1.1.113 spec:
+    *
+    *    compatibleHandleTypes must include at least handleType.
+    */
    pExternalBufferProperties->externalMemoryProperties =
-      (VkExternalMemoryProperties) {0};
+      (VkExternalMemoryProperties) {
+         .compatibleHandleTypes = pExternalBufferInfo->handleType,
+      };
 }
 
 VkResult anv_CreateSamplerYcbcrConversion(

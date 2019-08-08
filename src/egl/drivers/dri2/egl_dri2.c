@@ -2658,21 +2658,39 @@ dri2_export_dma_buf_image_query_mesa(_EGLDriver *drv, _EGLDisplay *disp,
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
    struct dri2_egl_image *dri2_img = dri2_egl_image(img);
+   int num_planes;
 
    (void) drv;
 
    if (!dri2_can_export_dma_buf_image(disp, img))
       return EGL_FALSE;
 
+   dri2_dpy->image->queryImage(dri2_img->dri_image,
+                               __DRI_IMAGE_ATTRIB_NUM_PLANES, &num_planes);
    if (nplanes)
-      dri2_dpy->image->queryImage(dri2_img->dri_image,
-                                  __DRI_IMAGE_ATTRIB_NUM_PLANES, nplanes);
+     *nplanes = num_planes;
+
    if (fourcc)
       dri2_dpy->image->queryImage(dri2_img->dri_image,
                                   __DRI_IMAGE_ATTRIB_FOURCC, fourcc);
 
-   if (modifiers)
-      *modifiers = 0;
+   if (modifiers) {
+      int mod_hi, mod_lo;
+      uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+      bool query;
+
+      query = dri2_dpy->image->queryImage(dri2_img->dri_image,
+                                          __DRI_IMAGE_ATTRIB_MODIFIER_UPPER,
+                                          &mod_hi);
+      query &= dri2_dpy->image->queryImage(dri2_img->dri_image,
+                                           __DRI_IMAGE_ATTRIB_MODIFIER_LOWER,
+                                           &mod_lo);
+      if (query)
+         modifier = combine_u32_into_u64 (mod_hi, mod_lo);
+
+      for (int i = 0; i < num_planes; i++)
+        modifiers[i] = modifier;
+   }
 
    return EGL_TRUE;
 }

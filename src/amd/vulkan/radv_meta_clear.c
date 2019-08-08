@@ -1576,6 +1576,9 @@ emit_clear(struct radv_cmd_buffer *cmd_buffer,
 			emit_color_clear(cmd_buffer, clear_att, clear_rect, view_mask);
 		}
 	} else {
+		if (!subpass->depth_stencil_attachment)
+			return;
+
 		const uint32_t pass_att = subpass->depth_stencil_attachment->attachment;
 		if (pass_att == VK_ATTACHMENT_UNUSED)
 			return;

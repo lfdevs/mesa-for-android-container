@@ -659,15 +659,6 @@ compute_lambda_vert(const struct sp_sampler_view *sview,
 }
 
 
-static float
-compute_lambda_vert_explicite_gradients(UNUSED const struct sp_sampler_view *sview,
-                                        UNUSED const float derivs[3][2][TGSI_QUAD_SIZE],
-                                        UNUSED int quad)
-{
-   return 0.0f;
-}
-
-
 compute_lambda_from_grad_func
 softpipe_get_lambda_from_grad_func(const struct pipe_sampler_view *view,
                                    enum pipe_shader_type shader)

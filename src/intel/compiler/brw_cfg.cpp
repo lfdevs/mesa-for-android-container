@@ -128,9 +128,6 @@ void
 bblock_t::combine_with(bblock_t *that)
 {
    assert(this->can_combine_with(that));
-   foreach_list_typed (bblock_link, link, link, &this->children) {
-      assert(link->block == that);
-   }
    foreach_list_typed (bblock_link, link, link, &that->parents) {
       assert(link->block == this);
    }

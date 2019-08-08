@@ -78,6 +78,7 @@ fd5_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 		return NULL;
 
 	pctx = &fd5_ctx->base.base;
+	pctx->screen = pscreen;
 
 	fd5_ctx->base.dev = fd_device_ref(screen->dev);
 	fd5_ctx->base.screen = fd_screen(pscreen);

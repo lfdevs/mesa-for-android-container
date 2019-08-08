@@ -128,14 +128,8 @@ opt_predicated_break(backend_shader *s)
          while_inst->predicate = jump_inst->predicate;
          while_inst->predicate_inverse = !jump_inst->predicate_inverse;
 
-         earlier_block->children.make_empty();
-         earlier_block->add_successor(s->cfg->mem_ctx, while_block);
-
          assert(earlier_block->can_combine_with(while_block));
          earlier_block->combine_with(while_block);
-
-         earlier_block->next()->parents.make_empty();
-         earlier_block->add_successor(s->cfg->mem_ctx, earlier_block->next());
       }
 
       progress = true;

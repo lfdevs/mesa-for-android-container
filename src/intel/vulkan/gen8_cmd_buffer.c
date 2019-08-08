@@ -355,6 +355,8 @@ want_stencil_pma_fix(struct anv_cmd_buffer *cmd_buffer)
     */
    const bool stc_write_en =
       (ds_iview->image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+      (cmd_buffer->state.gfx.dynamic.stencil_write_mask.front ||
+       cmd_buffer->state.gfx.dynamic.stencil_write_mask.back) &&
       pipeline->writes_stencil;
 
    /* STC_TEST_EN && 3DSTATE_PS_EXTRA::PixelShaderComputesStencil */

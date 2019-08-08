@@ -825,13 +825,23 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
          continue;
 
       const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
-      /* Unused or out-of-bounds */
-      if (rt >= MAX_RTS || !(stage->key.wm.color_outputs_valid & (1 << rt)))
+      /* Out-of-bounds */
+      if (rt >= MAX_RTS)
          continue;
 
       const unsigned array_len =
          glsl_type_is_array(var->type) ? glsl_get_length(var->type) : 1;
       assert(rt + array_len <= max_rt);
+
+      /* Unused */
+      if (!(stage->key.wm.color_outputs_valid & BITFIELD_RANGE(rt, array_len))) {
+         /* If this is the RT at location 0 and we have alpha to coverage
+          * enabled we will have to create a null RT for it, so mark it as
+          * used.
+          */
+         if (rt > 0 || !stage->key.wm.alpha_to_coverage)
+            continue;
+      }
 
       for (unsigned i = 0; i < array_len; i++)
          rt_used[rt + i] = true;
@@ -843,11 +853,22 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
          continue;
 
       rt_to_bindings[i] = num_rts;
-      rt_bindings[rt_to_bindings[i]] = (struct anv_pipeline_binding) {
-         .set = ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS,
-         .binding = 0,
-         .index = i,
-      };
+
+      if (stage->key.wm.color_outputs_valid & (1 << i)) {
+         rt_bindings[rt_to_bindings[i]] = (struct anv_pipeline_binding) {
+            .set = ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS,
+            .binding = 0,
+            .index = i,
+         };
+      } else {
+         /* Setup a null render target */
+         rt_bindings[rt_to_bindings[i]] = (struct anv_pipeline_binding) {
+            .set = ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS,
+            .binding = 0,
+            .index = UINT32_MAX,
+         };
+      }
+
       num_rts++;
    }
 
@@ -857,9 +878,11 @@ anv_pipeline_link_fs(const struct brw_compiler *compiler,
          continue;
 
       const unsigned rt = var->data.location - FRAG_RESULT_DATA0;
-      if (rt >= MAX_RTS ||
-          !(stage->key.wm.color_outputs_valid & (1 << rt))) {
-         /* Unused or out-of-bounds, throw it away */
+
+      if (rt >= MAX_RTS || !rt_used[rt]) {
+         /* Unused or out-of-bounds, throw it away, unless it is the first
+          * RT and we have alpha to coverage enabled.
+          */
          deleted_output = true;
          var->data.mode = nir_var_function_temp;
          exec_node_remove(&var->node);

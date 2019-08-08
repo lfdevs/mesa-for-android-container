@@ -2080,14 +2080,15 @@ void
 AlgebraicOpt::handleCVT_CVT(Instruction *cvt)
 {
    Instruction *insn = cvt->getSrc(0)->getInsn();
-   RoundMode rnd = insn->rnd;
 
-   if (insn->saturate ||
+   if (!insn ||
+       insn->saturate ||
        insn->subOp ||
        insn->dType != insn->sType ||
        insn->dType != cvt->sType)
       return;
 
+   RoundMode rnd = insn->rnd;
    switch (insn->op) {
    case OP_CEIL:
       rnd = ROUND_PI;

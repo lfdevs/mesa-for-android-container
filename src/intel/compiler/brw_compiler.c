@@ -141,7 +141,8 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
                        nir_lower_ineg64 |
                        nir_lower_logic64 |
                        nir_lower_minmax64 |
-                       nir_lower_shift64;
+                       nir_lower_shift64 |
+                       nir_lower_extract64;
       fp64_options |= nir_lower_fp64_full_software;
    }
 

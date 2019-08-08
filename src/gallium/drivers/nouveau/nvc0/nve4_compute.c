@@ -393,23 +393,24 @@ nve4_compute_validate_constbufs(struct nvc0_context *nvc0)
             uint64_t address
                = nvc0->screen->uniform_bo->offset + NVC0_CB_AUX_INFO(s);
 
-            assert(i > 0); /* we really only want uniform buffer objects */
+            /* constbufs above 0 will are fetched via ubo info in the shader */
+            if (i > 0) {
+               BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
+               PUSH_DATAh(push, address + NVC0_CB_AUX_UBO_INFO(i - 1));
+               PUSH_DATA (push, address + NVC0_CB_AUX_UBO_INFO(i - 1));
+               BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
+               PUSH_DATA (push, 4 * 4);
+               PUSH_DATA (push, 0x1);
+               BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 4);
+               PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
 
-            BEGIN_NVC0(push, NVE4_CP(UPLOAD_DST_ADDRESS_HIGH), 2);
-            PUSH_DATAh(push, address + NVC0_CB_AUX_UBO_INFO(i - 1));
-            PUSH_DATA (push, address + NVC0_CB_AUX_UBO_INFO(i - 1));
-            BEGIN_NVC0(push, NVE4_CP(UPLOAD_LINE_LENGTH_IN), 2);
-            PUSH_DATA (push, 4 * 4);
-            PUSH_DATA (push, 0x1);
-            BEGIN_1IC0(push, NVE4_CP(UPLOAD_EXEC), 1 + 4);
-            PUSH_DATA (push, NVE4_COMPUTE_UPLOAD_EXEC_LINEAR | (0x20 << 1));
+               PUSH_DATA (push, res->address + nvc0->constbuf[s][i].offset);
+               PUSH_DATAh(push, res->address + nvc0->constbuf[s][i].offset);
+               PUSH_DATA (push, nvc0->constbuf[s][i].size);
+               PUSH_DATA (push, 0);
+            }
 
-            PUSH_DATA (push, res->address + nvc0->constbuf[s][i].offset);
-            PUSH_DATAh(push, res->address + nvc0->constbuf[s][i].offset);
-            PUSH_DATA (push, nvc0->constbuf[5][i].size);
-            PUSH_DATA (push, 0);
             BCTX_REFN(nvc0->bufctx_cp, CP_CB(i), res, RD);
-
             res->cb_bindings[s] |= 1 << i;
          }
       }
@@ -554,9 +555,9 @@ nve4_compute_derive_cache_split(struct nvc0_context *nvc0, uint32_t shared_size)
 static void
 nve4_compute_setup_buf_cb(struct nvc0_context *nvc0, bool gp100, void *desc)
 {
-   // only user constant buffers 1-6 can be put in the descriptor, the rest are
+   // only user constant buffers 0-6 can be put in the descriptor, the rest are
    // loaded through global memory
-   for (int i = 1; i <= 6; i++) {
+   for (int i = 0; i <= 6; i++) {
       if (nvc0->constbuf[5][i].user || !nvc0->constbuf[5][i].u.buf)
          continue;
 
@@ -609,6 +610,10 @@ nve4_compute_setup_launch_desc(struct nvc0_context *nvc0,
    if (nvc0->constbuf[5][0].user || cp->parm_size) {
       nve4_cp_launch_desc_set_cb(desc, 0, screen->uniform_bo,
                                  NVC0_CB_USR_INFO(5), 1 << 16);
+
+      // Later logic will attempt to bind a real buffer at position 0. That
+      // should not happen if we've bound a user buffer.
+      assert(nvc0->constbuf[5][0].user || !nvc0->constbuf[5][0].u.buf);
    }
    nve4_cp_launch_desc_set_cb(desc, 7, screen->uniform_bo,
                               NVC0_CB_AUX_INFO(5), 1 << 11);
@@ -649,6 +654,10 @@ gp100_compute_setup_launch_desc(struct nvc0_context *nvc0,
    if (nvc0->constbuf[5][0].user || cp->parm_size) {
       gp100_cp_launch_desc_set_cb(desc, 0, screen->uniform_bo,
                                   NVC0_CB_USR_INFO(5), 1 << 16);
+
+      // Later logic will attempt to bind a real buffer at position 0. That
+      // should not happen if we've bound a user buffer.
+      assert(nvc0->constbuf[5][0].user || !nvc0->constbuf[5][0].u.buf);
    }
    gp100_cp_launch_desc_set_cb(desc, 7, screen->uniform_bo,
                                NVC0_CB_AUX_INFO(5), 1 << 11);

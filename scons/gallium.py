@@ -352,6 +352,7 @@ def generate(env):
                 '_DARWIN_C_SOURCE',
                 'GLX_USE_APPLEGL',
                 'GLX_DIRECT_RENDERING',
+                'BUILDING_MESA',
             ]
         else:
             cppdefines += [

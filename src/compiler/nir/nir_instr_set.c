@@ -25,6 +25,64 @@
 #include "nir_vla.h"
 #include "util/half_float.h"
 
+static bool
+src_is_ssa(nir_src *src, void *data)
+{
+   (void) data;
+   return src->is_ssa;
+}
+
+static bool
+dest_is_ssa(nir_dest *dest, void *data)
+{
+   (void) data;
+   return dest->is_ssa;
+}
+
+static inline bool
+instr_each_src_and_dest_is_ssa(const nir_instr *instr)
+{
+   if (!nir_foreach_dest((nir_instr *)instr, dest_is_ssa, NULL) ||
+       !nir_foreach_src((nir_instr *)instr, src_is_ssa, NULL))
+      return false;
+
+   return true;
+}
+
+/* This function determines if uses of an instruction can safely be rewritten
+ * to use another identical instruction instead. Note that this function must
+ * be kept in sync with hash_instr() and nir_instrs_equal() -- only
+ * instructions that pass this test will be handed on to those functions, and
+ * conversely they must handle everything that this function returns true for.
+ */
+static bool
+instr_can_rewrite(const nir_instr *instr)
+{
+   /* We only handle SSA. */
+   assert(instr_each_src_and_dest_is_ssa(instr));
+
+   switch (instr->type) {
+   case nir_instr_type_alu:
+   case nir_instr_type_deref:
+   case nir_instr_type_tex:
+   case nir_instr_type_load_const:
+   case nir_instr_type_phi:
+      return true;
+   case nir_instr_type_intrinsic:
+      return nir_intrinsic_can_reorder(nir_instr_as_intrinsic(instr));
+   case nir_instr_type_call:
+   case nir_instr_type_jump:
+   case nir_instr_type_ssa_undef:
+      return false;
+   case nir_instr_type_parallel_copy:
+   default:
+      unreachable("Invalid instruction type");
+   }
+
+   return false;
+}
+
+
 #define HASH(hash, data) _mesa_fnv32_1a_accumulate((hash), (data))
 
 static uint32_t
@@ -430,12 +488,16 @@ nir_alu_srcs_negative_equal(const nir_alu_instr *alu1,
       if (const2 == NULL)
          return false;
 
+      if (nir_src_bit_size(alu1->src[src1].src) !=
+          nir_src_bit_size(alu2->src[src2].src))
+         return false;
+
       /* FINISHME: Apply the swizzle? */
       return nir_const_value_negative_equal(const1,
                                             const2,
                                             nir_ssa_alu_instr_src_components(alu1, src1),
                                             nir_op_infos[alu1->op].input_types[src1],
-                                            alu1->dest.dest.ssa.bit_size);
+                                            nir_src_bit_size(alu1->src[src1].src));
    }
 
    uint8_t alu1_swizzle[4] = {0};
@@ -503,9 +565,11 @@ nir_alu_srcs_equal(const nir_alu_instr *alu1, const nir_alu_instr *alu2,
  * the same hash for (ignoring collisions, of course).
  */
 
-static bool
+bool
 nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
 {
+   assert(instr_can_rewrite(instr1) && instr_can_rewrite(instr2));
+
    if (instr1->type != instr2->type)
       return false;
 
@@ -699,68 +763,6 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
    }
 
    unreachable("All cases in the above switch should return");
-}
-
-static bool
-src_is_ssa(nir_src *src, void *data)
-{
-   (void) data;
-   return src->is_ssa;
-}
-
-static bool
-dest_is_ssa(nir_dest *dest, void *data)
-{
-   (void) data;
-   return dest->is_ssa;
-}
-
-static inline bool
-instr_each_src_and_dest_is_ssa(nir_instr *instr)
-{
-   if (!nir_foreach_dest(instr, dest_is_ssa, NULL) ||
-       !nir_foreach_src(instr, src_is_ssa, NULL))
-      return false;
-
-   return true;
-}
-
-/* This function determines if uses of an instruction can safely be rewritten
- * to use another identical instruction instead. Note that this function must
- * be kept in sync with hash_instr() and nir_instrs_equal() -- only
- * instructions that pass this test will be handed on to those functions, and
- * conversely they must handle everything that this function returns true for.
- */
-
-static bool
-instr_can_rewrite(nir_instr *instr)
-{
-   /* We only handle SSA. */
-   assert(instr_each_src_and_dest_is_ssa(instr));
-
-   switch (instr->type) {
-   case nir_instr_type_alu:
-   case nir_instr_type_deref:
-   case nir_instr_type_tex:
-   case nir_instr_type_load_const:
-   case nir_instr_type_phi:
-      return true;
-   case nir_instr_type_intrinsic: {
-      const nir_intrinsic_info *info =
-         &nir_intrinsic_infos[nir_instr_as_intrinsic(instr)->intrinsic];
-      return (info->flags & NIR_INTRINSIC_CAN_ELIMINATE) &&
-             (info->flags & NIR_INTRINSIC_CAN_REORDER);
-   }
-   case nir_instr_type_call:
-   case nir_instr_type_jump:
-   case nir_instr_type_ssa_undef:
-      return false;
-   case nir_instr_type_parallel_copy:
-   default:
-      unreachable("Invalid instruction type");
-   }
-
-   return false;
 }
 
 static nir_ssa_def *

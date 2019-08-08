@@ -146,9 +146,6 @@ anv_cmd_state_finish(struct anv_cmd_buffer *cmd_buffer)
    anv_cmd_pipeline_state_finish(cmd_buffer, &state->gfx.base);
    anv_cmd_pipeline_state_finish(cmd_buffer, &state->compute.base);
 
-   for (uint32_t i = 0; i < MESA_SHADER_STAGES; i++)
-      vk_free(&cmd_buffer->pool->alloc, state->push_constants[i]);
-
    vk_free(&cmd_buffer->pool->alloc, state->attachments);
 }
 
@@ -157,47 +154,6 @@ anv_cmd_state_reset(struct anv_cmd_buffer *cmd_buffer)
 {
    anv_cmd_state_finish(cmd_buffer);
    anv_cmd_state_init(cmd_buffer);
-}
-
-/**
- * This function updates the size of the push constant buffer we need to emit.
- * This is called in various parts of the driver to ensure that different
- * pieces of push constant data get emitted as needed. However, it is important
- * that we never shrink the size of the buffer. For example, a compute shader
- * dispatch will always call this for the base group id, which has an
- * offset in the push constant buffer that is smaller than the offset for
- * storage image data. If the compute shader has storage images, we will call
- * this again with a larger size during binding table emission. However,
- * if we dispatch the compute shader again without dirtying our descriptors,
- * we would still call this function with a smaller size for the base group
- * id, and not for the images, which would incorrectly shrink the size of the
- * push constant data we emit with that dispatch, making us drop the image data.
- */
-VkResult
-anv_cmd_buffer_ensure_push_constants_size(struct anv_cmd_buffer *cmd_buffer,
-                                          gl_shader_stage stage, uint32_t size)
-{
-   struct anv_push_constants **ptr = &cmd_buffer->state.push_constants[stage];
-
-   if (*ptr == NULL) {
-      *ptr = vk_alloc(&cmd_buffer->pool->alloc, size, 8,
-                       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (*ptr == NULL) {
-         anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
-      (*ptr)->size = size;
-   } else if ((*ptr)->size < size) {
-      *ptr = vk_realloc(&cmd_buffer->pool->alloc, *ptr, size, 8,
-                         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (*ptr == NULL) {
-         anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
-      (*ptr)->size = size;
-   }
-
-   return VK_SUCCESS;
 }
 
 static VkResult anv_create_cmd_buffer(
@@ -766,7 +722,7 @@ anv_push_constant_value(const struct anv_cmd_pipeline_state *state,
    } else if (ANV_PARAM_IS_PUSH(param)) {
       uint32_t offset = ANV_PARAM_PUSH_OFFSET(param);
       assert(offset % sizeof(uint32_t) == 0);
-      if (offset < data->size)
+      if (offset < sizeof(data->client_data))
          return *(uint32_t *)((uint8_t *)data + offset);
       else
          return 0;
@@ -792,12 +748,12 @@ anv_cmd_buffer_push_constants(struct anv_cmd_buffer *cmd_buffer,
       return (struct anv_state) { .offset = 0 };
 
    struct anv_push_constants *data =
-      cmd_buffer->state.push_constants[stage];
+      &cmd_buffer->state.push_constants[stage];
    const struct brw_stage_prog_data *prog_data =
       pipeline->shaders[stage]->prog_data;
 
    /* If we don't actually have any push constants, bail. */
-   if (prog_data == NULL || prog_data->nr_params == 0 || data == NULL)
+   if (prog_data == NULL || prog_data->nr_params == 0)
       return (struct anv_state) { .offset = 0 };
 
    struct anv_state state =
@@ -820,7 +776,7 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_cmd_pipeline_state *pipeline_state = &cmd_buffer->state.compute.base;
    struct anv_push_constants *data =
-      cmd_buffer->state.push_constants[MESA_SHADER_COMPUTE];
+      &cmd_buffer->state.push_constants[MESA_SHADER_COMPUTE];
    struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
    const struct brw_cs_prog_data *cs_prog_data = get_cs_prog_data(pipeline);
    const struct brw_stage_prog_data *prog_data = &cs_prog_data->base;
@@ -882,13 +838,7 @@ void anv_CmdPushConstants(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
    anv_foreach_stage(stage, stageFlags) {
-      VkResult result =
-         anv_cmd_buffer_ensure_push_constant_field(cmd_buffer,
-                                                   stage, client_data);
-      if (result != VK_SUCCESS)
-         return;
-
-      memcpy(cmd_buffer->state.push_constants[stage]->client_data + offset,
+      memcpy(cmd_buffer->state.push_constants[stage].client_data + offset,
              pValues, size);
    }
 

@@ -1857,6 +1857,8 @@ static VkResult overlay_BeginCommandBuffer(
    struct command_buffer_data *cmd_buffer_data = FIND_CMD_BUFFER_DATA(commandBuffer);
    struct device_data *device_data = cmd_buffer_data->device;
 
+   memset(&cmd_buffer_data->stats, 0, sizeof(cmd_buffer_data->stats));
+
    /* We don't record any query in secondary command buffers, just make sure
     * we have the right inheritance.
     */
@@ -2042,6 +2044,10 @@ static void overlay_FreeCommandBuffers(
    for (uint32_t i = 0; i < commandBufferCount; i++) {
       struct command_buffer_data *cmd_buffer_data =
          FIND_CMD_BUFFER_DATA(pCommandBuffers[i]);
+      /* It is legal to free a NULL command buffer*/
+      if (!cmd_buffer_data)
+         continue;
+
       uint64_t count = (uintptr_t)find_object_data(HKEY(cmd_buffer_data->pipeline_query_pool));
       if (count == 1) {
          unmap_object(HKEY(cmd_buffer_data->pipeline_query_pool));

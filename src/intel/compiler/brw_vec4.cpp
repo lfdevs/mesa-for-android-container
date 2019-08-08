@@ -1204,8 +1204,30 @@ vec4_instruction::reswizzle(int dst_writemask, int swizzle)
        opcode != BRW_OPCODE_DP3 && opcode != BRW_OPCODE_DP2 &&
        opcode != VEC4_OPCODE_PACK_BYTES) {
       for (int i = 0; i < 3; i++) {
-         if (src[i].file == BAD_FILE || src[i].file == IMM)
+         if (src[i].file == BAD_FILE)
             continue;
+
+         if (src[i].file == IMM) {
+            assert(src[i].type != BRW_REGISTER_TYPE_V &&
+                   src[i].type != BRW_REGISTER_TYPE_UV);
+
+            /* Vector immediate types need to be reswizzled. */
+            if (src[i].type == BRW_REGISTER_TYPE_VF) {
+               const unsigned imm[] = {
+                  (src[i].ud >>  0) & 0x0ff,
+                  (src[i].ud >>  8) & 0x0ff,
+                  (src[i].ud >> 16) & 0x0ff,
+                  (src[i].ud >> 24) & 0x0ff,
+               };
+
+               src[i] = brw_imm_vf4(imm[BRW_GET_SWZ(swizzle, 0)],
+                                    imm[BRW_GET_SWZ(swizzle, 1)],
+                                    imm[BRW_GET_SWZ(swizzle, 2)],
+                                    imm[BRW_GET_SWZ(swizzle, 3)]);
+            }
+
+            continue;
+         }
 
          src[i].swizzle = brw_compose_swizzle(swizzle, src[i].swizzle);
       }

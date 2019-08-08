@@ -1204,6 +1204,41 @@ nir_foreach_src(nir_instr *instr, nir_foreach_src_cb cb, void *state)
    return nir_foreach_dest(instr, visit_dest_indirect, &dest_state);
 }
 
+nir_const_value
+nir_const_value_for_float(double f, unsigned bit_size)
+{
+   nir_const_value v;
+   memset(&v, 0, sizeof(v));
+
+   switch (bit_size) {
+   case 16:
+      v.u16 = _mesa_float_to_half(f);
+      break;
+   case 32:
+      v.f32 = f;
+      break;
+   case 64:
+      v.f64 = f;
+      break;
+   default:
+      unreachable("Invalid bit size");
+   }
+
+   return v;
+}
+
+double
+nir_const_value_as_float(nir_const_value value, unsigned bit_size)
+{
+   switch (bit_size) {
+   case 16: return _mesa_half_to_float(value.u16);
+   case 32: return value.f32;
+   case 64: return value.f64;
+   default:
+      unreachable("Invalid bit size");
+   }
+}
+
 int64_t
 nir_src_comp_as_int(nir_src src, unsigned comp)
 {
@@ -1997,6 +2032,8 @@ void
 nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
                             bool bindless)
 {
+   enum gl_access_qualifier access = nir_intrinsic_access(intrin);
+
    switch (intrin->intrinsic) {
 #define CASE(op) \
    case nir_intrinsic_image_deref_##op: \
@@ -2028,7 +2065,7 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_ssa_def *src,
 
    nir_intrinsic_set_image_dim(intrin, glsl_get_sampler_dim(deref->type));
    nir_intrinsic_set_image_array(intrin, glsl_sampler_type_is_array(deref->type));
-   nir_intrinsic_set_access(intrin, var->data.image.access);
+   nir_intrinsic_set_access(intrin, access | var->data.image.access);
    nir_intrinsic_set_format(intrin, var->data.image.format);
 
    nir_instr_rewrite_src(&intrin->instr, &intrin->src[0],

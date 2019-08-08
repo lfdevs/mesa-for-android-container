@@ -361,6 +361,7 @@ static void
 one_time_fini(void)
 {
    _mesa_destroy_shader_compiler();
+   _mesa_destroy_shader_compiler_types();
    _mesa_locale_fini();
 }
 
@@ -392,6 +393,8 @@ one_time_init( struct gl_context *ctx )
       STATIC_ASSERT(sizeof(GLuint) == 4);
 
       _mesa_locale_init();
+
+      _mesa_init_shader_compiler_types();
 
       _mesa_one_time_init_extension_overrides(ctx);
 
@@ -615,6 +618,17 @@ _mesa_init_constants(struct gl_constants *consts, gl_api api)
 
    consts->MaxProgramMatrices = MAX_PROGRAM_MATRICES;
    consts->MaxProgramMatrixStackDepth = MAX_PROGRAM_MATRIX_STACK_DEPTH;
+
+   /* Set the absolute minimum possible GLSL version.  API_OPENGL_CORE can
+    * mean an OpenGL 3.0 forward-compatible context, so that implies a minimum
+    * possible version of 1.30.  Otherwise, the minimum possible version 1.20.
+    * Since Mesa unconditionally advertises GL_ARB_shading_language_100 and
+    * GL_ARB_shader_objects, every driver has GLSL 1.20... even if they don't
+    * advertise any extensions to enable any shader stages (e.g.,
+    * GL_ARB_vertex_shader).
+    */
+   consts->GLSLVersion = api == API_OPENGL_CORE ? 130 : 120;
+   consts->GLSLVersionCompat = consts->GLSLVersion;
 
    /* Assume that if GLSL 1.30+ (or GLSL ES 3.00+) is supported that
     * gl_VertexID is implemented using a native hardware register with OpenGL
