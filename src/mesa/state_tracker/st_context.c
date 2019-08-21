@@ -237,9 +237,23 @@ st_invalidate_state(struct gl_context *ctx)
    if (new_state & _NEW_CURRENT_ATTRIB && st_vp_uses_current_values(ctx))
       st->dirty |= ST_NEW_VERTEX_ARRAYS;
 
+   if (st->clamp_frag_depth_in_shader && (new_state & _NEW_VIEWPORT)) {
+      if (ctx->GeometryProgram._Current)
+         st->dirty |= ST_NEW_GS_CONSTANTS;
+      else if (ctx->TessEvalProgram._Current)
+         st->dirty |= ST_NEW_TES_CONSTANTS;
+      else
+         st->dirty |= ST_NEW_VS_CONSTANTS;
+      st->dirty |= ST_NEW_FS_CONSTANTS;
+   }
+
    /* Update the vertex shader if ctx->Light._ClampVertexColor was changed. */
-   if (st->clamp_vert_color_in_shader && (new_state & _NEW_LIGHT))
+   if (st->clamp_vert_color_in_shader && (new_state & _NEW_LIGHT)) {
       st->dirty |= ST_NEW_VS_STATE;
+      if (st->ctx->API == API_OPENGL_COMPAT && ctx->Version >= 32) {
+         st->dirty |= ST_NEW_GS_STATE | ST_NEW_TES_STATE;
+      }
+   }
 
    /* Which shaders are dirty will be determined manually. */
    if (new_state & _NEW_PROGRAM) {
@@ -507,7 +521,17 @@ st_init_driver_flags(struct st_context *st)
    f->NewClipControl = ST_NEW_VIEWPORT | ST_NEW_RASTERIZER;
    f->NewClipPlane = ST_NEW_CLIP_STATE;
    f->NewClipPlaneEnable = ST_NEW_RASTERIZER;
-   f->NewDepthClamp = ST_NEW_RASTERIZER;
+
+   if (st->clamp_frag_depth_in_shader) {
+      f->NewClipControl |= ST_NEW_VS_STATE | ST_NEW_GS_STATE |
+                           ST_NEW_TES_STATE;
+
+      f->NewDepthClamp = ST_NEW_FS_STATE | ST_NEW_VS_STATE |
+                         ST_NEW_GS_STATE | ST_NEW_TES_STATE;
+   } else {
+      f->NewDepthClamp = ST_NEW_RASTERIZER;
+   }
+
    f->NewLineState = ST_NEW_RASTERIZER;
    f->NewPolygonState = ST_NEW_RASTERIZER;
    f->NewPolygonStipple = ST_NEW_POLY_STIPPLE;
@@ -599,7 +623,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
 
    st->has_stencil_export =
       screen->get_param(screen, PIPE_CAP_SHADER_STENCIL_EXPORT);
-   st->has_shader_model3 = screen->get_param(screen, PIPE_CAP_SM3);
    st->has_etc1 = screen->is_format_supported(screen, PIPE_FORMAT_ETC1_RGB8,
                                               PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
@@ -634,6 +657,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       screen->get_param(screen, PIPE_CAP_INDEP_BLEND_FUNC);
    st->needs_rgb_dst_alpha_override =
       screen->get_param(screen, PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND);
+   st->has_signed_vertex_buffer_offset =
+      screen->get_param(screen, PIPE_CAP_SIGNED_VERTEX_BUFFER_OFFSET);
 
    st->has_hw_atomics =
       screen->get_shader_param(screen, PIPE_SHADER_FRAGMENT,
@@ -674,6 +699,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       }
    }
 
+   if (screen->get_param(screen, PIPE_CAP_DEPTH_CLIP_DISABLE) == 2)
+      st->clamp_frag_depth_in_shader = true;
+
    /* called after _mesa_create_context/_mesa_init_point, fix default user
     * settable max point size up
     */
@@ -683,9 +711,9 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
     * is not supported
     */
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoSat =
-      !st->has_shader_model3;
+      !screen->get_param(screen, PIPE_CAP_VERTEX_SHADER_SATURATE);
 
-   if (!ctx->Extensions.ARB_gpu_shader5) {
+   if (ctx->Const.GLSLVersion < 400) {
       for (i = 0; i < MESA_SHADER_STAGES; i++)
          ctx->Const.ShaderCompilerOptions[i].EmitNoIndirectSampler = true;
    }
@@ -693,16 +721,24 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    /* Set which shader types can be compiled at link time. */
    st->shader_has_one_variant[MESA_SHADER_VERTEX] =
          st->has_shareable_shaders &&
+         !st->clamp_frag_depth_in_shader &&
          !st->clamp_vert_color_in_shader;
 
    st->shader_has_one_variant[MESA_SHADER_FRAGMENT] =
          st->has_shareable_shaders &&
          !st->clamp_frag_color_in_shader &&
+         !st->clamp_frag_depth_in_shader &&
          !st->force_persample_in_shader;
 
    st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->has_shareable_shaders;
-   st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] = st->has_shareable_shaders;
-   st->shader_has_one_variant[MESA_SHADER_GEOMETRY] = st->has_shareable_shaders;
+   st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =
+         st->has_shareable_shaders &&
+         !st->clamp_frag_depth_in_shader &&
+         !st->clamp_vert_color_in_shader;
+   st->shader_has_one_variant[MESA_SHADER_GEOMETRY] =
+         st->has_shareable_shaders &&
+         !st->clamp_frag_depth_in_shader &&
+         !st->clamp_vert_color_in_shader;
    st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
 
    st->bitmap.cache.empty = true;

@@ -44,5 +44,6 @@ namespace ArchRast
 
     // Dispatch event for this thread.
     void Dispatch(HANDLE hThreadContext, const Event& event);
+
     void FlushDraw(HANDLE hThreadContext, uint32_t drawId);
 }; // namespace ArchRast

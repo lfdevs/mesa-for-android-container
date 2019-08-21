@@ -124,7 +124,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
                             key, &prog_data, nir,
                             &fp->program, st_index8, st_index16, st_index32,
                             true, false, vue_map,
-                            &error_str);
+                            NULL, &error_str);
 
    if (program == NULL) {
       if (!fp->program.is_arb_asm) {
@@ -141,7 +141,7 @@ brw_codegen_wm_prog(struct brw_context *brw,
    if (unlikely(brw->perf_debug)) {
       if (fp->compiled_once) {
          brw_debug_recompile(brw, MESA_SHADER_FRAGMENT, fp->program.Id,
-                             key->program_string_id, key);
+                             &key->base);
       }
       fp->compiled_once = true;
 
@@ -186,7 +186,7 @@ gen6_gather_workaround(GLenum internalformat)
    }
 }
 
-void
+static void
 brw_populate_sampler_prog_key_data(struct gl_context *ctx,
                                    const struct gl_program *prog,
                                    struct brw_sampler_prog_key_data *key)
@@ -329,6 +329,26 @@ brw_populate_sampler_prog_key_data(struct gl_context *ctx,
    }
 }
 
+void
+brw_populate_base_prog_key(struct gl_context *ctx,
+                           const struct brw_program *prog,
+                           struct brw_base_prog_key *key)
+{
+   key->program_string_id = prog->id;
+   key->subgroup_size_type = BRW_SUBGROUP_SIZE_UNIFORM;
+   brw_populate_sampler_prog_key_data(ctx, &prog->program, &key->tex);
+}
+
+void
+brw_populate_default_base_prog_key(const struct gen_device_info *devinfo,
+                                   const struct brw_program *prog,
+                                   struct brw_base_prog_key *key)
+{
+   key->program_string_id = prog->id;
+   key->subgroup_size_type = BRW_SUBGROUP_SIZE_UNIFORM;
+   brw_setup_tex_for_precompile(devinfo, &key->tex, &prog->program);
+}
+
 static bool
 brw_wm_state_dirty(const struct brw_context *brw)
 {
@@ -442,7 +462,7 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
    key->clamp_fragment_color = ctx->Color._ClampFragmentColor;
 
    /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, &key->tex);
+   brw_populate_base_prog_key(ctx, fp, &key->base);
 
    /* _NEW_BUFFERS */
    key->nr_color_regions = ctx->DrawBuffer->_NumColorDrawBuffers;
@@ -488,9 +508,6 @@ brw_wm_populate_key(struct brw_context *brw, struct brw_wm_prog_key *key)
       key->alpha_test_ref = ctx->Color.AlphaRef;
    }
 
-   /* The unique fragment program ID */
-   key->program_string_id = fp->id;
-
    /* Whether reads from the framebuffer should behave coherently. */
    key->coherent_fb_fetch = ctx->Extensions.EXT_shader_framebuffer_fetch;
 }
@@ -516,19 +533,24 @@ brw_upload_wm_prog(struct brw_context *brw)
       return;
 
    fp = (struct brw_program *) brw->programs[MESA_SHADER_FRAGMENT];
-   fp->id = key.program_string_id;
+   fp->id = key.base.program_string_id;
 
-   MAYBE_UNUSED bool success = brw_codegen_wm_prog(brw, fp, &key,
+   ASSERTED bool success = brw_codegen_wm_prog(brw, fp, &key,
                                                    &brw->vue_map_geom_out);
    assert(success);
 }
 
 void
-brw_wm_populate_default_key(const struct gen_device_info *devinfo,
+brw_wm_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_wm_prog_key *key,
                             struct gl_program *prog)
 {
+   const struct gen_device_info *devinfo = compiler->devinfo;
+
    memset(key, 0, sizeof(*key));
+
+   brw_populate_default_base_prog_key(devinfo, brw_program(prog),
+                                      &key->base);
 
    uint64_t outputs_written = prog->info.outputs_written;
 
@@ -549,14 +571,10 @@ brw_wm_populate_default_key(const struct gen_device_info *devinfo,
       key->input_slots_valid = prog->info.inputs_read | VARYING_BIT_POS;
    }
 
-   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
-
    key->nr_color_regions = util_bitcount64(outputs_written &
          ~(BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
            BITFIELD64_BIT(FRAG_RESULT_STENCIL) |
            BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)));
-
-   key->program_string_id = brw_program(prog)->id;
 
    /* Whether reads from the framebuffer should behave coherently. */
    key->coherent_fb_fetch = devinfo->gen >= 9;
@@ -571,7 +589,7 @@ brw_fs_precompile(struct gl_context *ctx, struct gl_program *prog)
 
    struct brw_program *bfp = brw_program(prog);
 
-   brw_wm_populate_default_key(&brw->screen->devinfo, &key, prog);
+   brw_wm_populate_default_key(brw->screen->compiler, &key, prog);
 
    /* check brw_wm_populate_default_key coherent_fb_fetch setting */
    assert(key.coherent_fb_fetch ==

@@ -111,3 +111,14 @@ test(
   ],
   suite : ['compiler', 'glsl'],
 )
+
+if with_tools.contains('glsl')
+  test(
+    'glsl dump-builder test',
+    glsl_compiler,
+    args : ['--version', '110', '--dump-builder',
+            join_paths(meson.current_source_dir(), 'standalone_dump-builder.frag'),
+           ],
+    suite : ['compiler', 'glsl'],
+  )
+endif

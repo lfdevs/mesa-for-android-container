@@ -67,7 +67,7 @@ void KnobBase::autoExpandEnvironmentVariables(std::string& text)
 #else
     {
         // unix style variable replacement
-        static std::regex env("\\$\\{([^}]+)\\}");
+        static std::regex env("\\$\\{([^}]+?)\\}");
         std::smatch       match;
         while (std::regex_search(text, match, env))
         {
@@ -79,7 +79,7 @@ void KnobBase::autoExpandEnvironmentVariables(std::string& text)
     }
     {
         // win32 style variable replacement
-        static std::regex env("\\%([^}]+)\\%");
+        static std::regex env("%([^%]+?)%");
         std::smatch       match;
         while (std::regex_search(text, match, env))
         {

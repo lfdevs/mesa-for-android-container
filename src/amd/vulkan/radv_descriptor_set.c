@@ -860,9 +860,16 @@ static void write_buffer_descriptor(struct radv_device *device,
 	dst[3] = S_008F0C_DST_SEL_X(V_008F0C_SQ_SEL_X) |
 		S_008F0C_DST_SEL_Y(V_008F0C_SQ_SEL_Y) |
 		S_008F0C_DST_SEL_Z(V_008F0C_SQ_SEL_Z) |
-		S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W) |
-		S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
-		S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
+		S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
+
+	if (device->physical_device->rad_info.chip_class >= GFX10) {
+		dst[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_FLOAT) |
+			  S_008F0C_OOB_SELECT(3) |
+			  S_008F0C_RESOURCE_LEVEL(1);
+	} else {
+		dst[3] |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_FLOAT) |
+			  S_008F0C_DATA_FORMAT(V_008F0C_BUF_DATA_FORMAT_32);
+	}
 
 	if (cmd_buffer)
 		radv_cs_add_buffer(device->ws, cmd_buffer->cs, buffer->bo);

@@ -328,12 +328,23 @@ make_surface(const struct anv_device *dev,
     * just use RENDER_SURFACE_STATE::X/Y Offset.
     */
    bool needs_shadow = false;
+   isl_surf_usage_flags_t shadow_usage = 0;
    if (dev->info.gen <= 8 &&
        (image->create_flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
        image->tiling == VK_IMAGE_TILING_OPTIMAL) {
       assert(isl_format_is_compressed(plane_format.isl_format));
       tiling_flags = ISL_TILING_LINEAR_BIT;
       needs_shadow = true;
+      shadow_usage = ISL_SURF_USAGE_TEXTURE_BIT |
+                     (usage & ISL_SURF_USAGE_CUBE_BIT);
+   }
+
+   if (dev->info.gen <= 7 &&
+       aspect == VK_IMAGE_ASPECT_STENCIL_BIT &&
+       (image->stencil_usage & VK_IMAGE_USAGE_SAMPLED_BIT)) {
+      needs_shadow = true;
+      shadow_usage = ISL_SURF_USAGE_TEXTURE_BIT |
+                     (usage & ISL_SURF_USAGE_CUBE_BIT);
    }
 
    ok = isl_surf_init(&dev->isl_dev, &anv_surf->isl,
@@ -359,12 +370,11 @@ make_surface(const struct anv_device *dev,
 
    /* If an image is created as BLOCK_TEXEL_VIEW_COMPATIBLE, then we need to
     * create an identical tiled shadow surface for use while texturing so we
-    * don't get garbage performance.
+    * don't get garbage performance.  If we're on gen7 and the image contains
+    * stencil, then we need to maintain a shadow because we can't texture from
+    * W-tiled images.
     */
    if (needs_shadow) {
-      assert(aspect == VK_IMAGE_ASPECT_COLOR_BIT);
-      assert(tiling_flags == ISL_TILING_LINEAR_BIT);
-
       ok = isl_surf_init(&dev->isl_dev, &image->planes[plane].shadow_surface.isl,
          .dim = vk_to_isl_surf_dim[image->type],
          .format = plane_format.isl_format,
@@ -376,7 +386,7 @@ make_surface(const struct anv_device *dev,
          .samples = image->samples,
          .min_alignment_B = 0,
          .row_pitch_B = stride,
-         .usage = usage,
+         .usage = shadow_usage,
          .tiling_flags = ISL_TILING_ANY_MASK);
 
       /* isl_surf_init() will fail only if provided invalid input. Invalid input
@@ -593,6 +603,15 @@ anv_image_create(VkDevice _device,
    image->needs_set_tiling = wsi_info && wsi_info->scanout;
    image->drm_format_mod = isl_mod_info ? isl_mod_info->modifier :
                                           DRM_FORMAT_MOD_INVALID;
+
+   if (image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
+      image->stencil_usage = pCreateInfo->usage;
+      const VkImageStencilUsageCreateInfoEXT *stencil_usage_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              IMAGE_STENCIL_USAGE_CREATE_INFO_EXT);
+      if (stencil_usage_info)
+         image->stencil_usage = stencil_usage_info->stencilUsage;
+   }
 
    /* In case of external format, We don't know format yet,
     * so skip the rest for now.
@@ -1275,6 +1294,16 @@ anv_image_fill_surface_state(struct anv_device *device,
       surface = &image->planes[plane].shadow_surface;
    }
 
+   /* For texturing from stencil on gen7, we have to sample from a shadow
+    * surface because we don't support W-tiling in the sampler.
+    */
+   if (image->planes[plane].shadow_surface.isl.size_B > 0 &&
+       aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+      assert(device->info.gen == 7);
+      assert(view_usage & ISL_SURF_USAGE_TEXTURE_BIT);
+      surface = &image->planes[plane].shadow_surface;
+   }
+
    if (view_usage == ISL_SURF_USAGE_RENDER_TARGET_BIT)
       view.swizzle = anv_swizzle_for_render(view.swizzle);
 
@@ -1510,11 +1539,18 @@ anv_CreateImageView(VkDevice _device,
       conv_format = conversion->format;
    }
 
+   VkImageUsageFlags image_usage = 0;
+   if (range->aspectMask & ~VK_IMAGE_ASPECT_STENCIL_BIT)
+      image_usage |= image->usage;
+   if (range->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+      image_usage |= image->stencil_usage;
+
    const VkImageViewUsageCreateInfo *usage_info =
       vk_find_struct_const(pCreateInfo, IMAGE_VIEW_USAGE_CREATE_INFO);
-   VkImageUsageFlags view_usage = usage_info ? usage_info->usage : image->usage;
+   VkImageUsageFlags view_usage = usage_info ? usage_info->usage : image_usage;
+
    /* View usage should be a subset of image usage */
-   assert((view_usage & ~image->usage) == 0);
+   assert((view_usage & ~image_usage) == 0);
    assert(view_usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
                         VK_IMAGE_USAGE_STORAGE_BIT |
                         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |

@@ -180,7 +180,7 @@ softpipe_is_resource_referenced( struct pipe_context *pipe,
 static void
 softpipe_render_condition(struct pipe_context *pipe,
                           struct pipe_query *query,
-                          boolean condition,
+                          bool condition,
                           enum pipe_render_cond_flag mode)
 {
    struct softpipe_context *softpipe = softpipe_context( pipe );
@@ -214,9 +214,9 @@ softpipe_create_context(struct pipe_screen *screen,
       softpipe->tgsi.buffer[i] = sp_create_tgsi_buffer();
    }
 
-   softpipe->dump_fs = debug_get_bool_option( "SOFTPIPE_DUMP_FS", FALSE );
-   softpipe->dump_gs = debug_get_bool_option( "SOFTPIPE_DUMP_GS", FALSE );
-   softpipe->dump_cs = debug_get_bool_option( "SOFTPIPE_DUMP_CS", FALSE );
+   softpipe->dump_fs = debug_get_bool_option( "SOFTPIPE_DUMP_FS", false );
+   softpipe->dump_gs = debug_get_bool_option( "SOFTPIPE_DUMP_GS", false );
+   softpipe->dump_cs = debug_get_bool_option( "SOFTPIPE_DUMP_CS", false );
 
    softpipe->pipe.screen = screen;
    softpipe->pipe.destroy = softpipe_destroy;
@@ -316,7 +316,7 @@ softpipe_create_context(struct pipe_screen *screen,
               (struct tgsi_buffer *)
               softpipe->tgsi.buffer[PIPE_SHADER_GEOMETRY]);
 
-   if (debug_get_bool_option( "SOFTPIPE_NO_RAST", FALSE ))
+   if (debug_get_bool_option( "SOFTPIPE_NO_RAST", false ))
       softpipe->no_rast = TRUE;
 
    softpipe->vbuf_backend = sp_create_vbuf_backend(softpipe);

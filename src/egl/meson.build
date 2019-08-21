@@ -44,7 +44,6 @@ files_egl = files(
   'main/egldisplay.h',
   'main/egldriver.c',
   'main/egldriver.h',
-  'main/eglfallbacks.c',
   'main/eglglobals.c',
   'main/eglglobals.h',
   'main/eglimage.c',
@@ -93,9 +92,11 @@ if with_dri2
     'drivers/dri2/egl_dri2.h',
     'drivers/dri2/egl_dri2_fallbacks.h',
   )
-  link_for_egl += [libloader, libxmlconfig]
+  deps_for_egl += idep_xmlconfig
+  link_for_egl += libloader
   incs_for_egl += inc_loader
 
+  files_egl += files('drivers/dri2/platform_device.c')
   if with_platform_x11
     files_egl += files('drivers/dri2/platform_x11.c')
     if with_dri3
@@ -165,47 +166,43 @@ libegl = shared_library(
     '-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_@0@'.format(egl_native_platform.to_upper()),
   ],
   include_directories : incs_for_egl,
-  link_with : [link_for_egl, libglapi, libmesa_util],
+  link_with : [link_for_egl, libglapi],
   link_args : [ld_args_bsymbolic, ld_args_gc_sections],
-  dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread],
+  dependencies : [deps_for_egl, dep_dl, dep_libdrm, dep_clock, dep_thread, idep_mesautil],
   install : true,
   version : egl_lib_version,
 )
 
-# If using glvnd the pkg-config header should not point to EGL_mesa, it should
-# point to EGL. glvnd is only available on unix like platforms so adding -l
-# should be safe here
-# TODO: in the glvnd case glvnd itself should really be providing this.
-if with_glvnd
-  _egl = '-L${libdir} -lEGL'
-else
-  _egl = libegl
+if not with_glvnd
+  pkg.generate(
+    name : 'egl',
+    description : 'Mesa EGL Library',
+    version : meson.project_version(),
+    libraries : libegl,
+    libraries_private: gl_priv_libs,
+    requires_private : gl_priv_reqs,
+    extra_cflags : gl_pkgconfig_c_flags,
+  )
 endif
-
-pkg.generate(
-  name : 'egl',
-  description : 'Mesa EGL Library',
-  version : meson.project_version(),
-  libraries : _egl,
-  libraries_private: gl_priv_libs,
-  requires_private : gl_priv_reqs,
-  extra_cflags : gl_pkgconfig_c_flags,
-)
 
 if with_tests and prog_nm.found()
   if with_glvnd
-    # TODO: add glvnd symbol check
+    egl_symbols = files('egl-glvnd-symbols.txt')
   else
-    test('egl-symbols-check',
-      find_program('egl-symbols-check'),
-      env : env_test,
-      args : libegl,
-      suite : ['egl'],
-    )
+    egl_symbols = files('egl-symbols.txt')
   endif
+  test('egl-symbols-check',
+    symbols_check,
+    args : [
+      '--lib', libegl,
+      '--symbols-file', egl_symbols,
+      '--nm', prog_nm.path(),
+    ],
+    suite : ['egl'],
+  )
   test('egl-entrypoint-check',
-    find_program('egl-entrypoint-check'),
-    env : ['srcdir=' + meson.current_source_dir()],
+    prog_python,
+    args : files('egl-entrypoint-check.py', 'main/eglentrypoint.h'),
     suite : ['egl'],
   )
 endif

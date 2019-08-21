@@ -6,6 +6,8 @@ struct pipe_screen_config;
 
 const char *iris_driconf_xml;
 const char *radeonsi_driconf_xml;
+const char *v3d_driconf_xml;
+const char *virgl_driconf_xml;
 
 struct pipe_screen *
 pipe_i915_create_screen(int fd, const struct pipe_screen_config *config);

@@ -121,6 +121,7 @@ struct sp_sampler_view
    struct softpipe_tex_tile_cache *cache;
    compute_lambda_func compute_lambda;
    compute_lambda_from_grad_func compute_lambda_from_grad;
+   union pipe_color_union border_color;
 };
 
 struct sp_filter_funcs {

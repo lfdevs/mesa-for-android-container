@@ -31,6 +31,7 @@
 
 struct etna_context;
 struct etna_shader_variant;
+struct nir_shader;
 
 struct etna_shader_key
 {
@@ -56,14 +57,15 @@ etna_shader_key_equal(struct etna_shader_key *a, struct etna_shader_key *b)
 }
 
 struct etna_shader {
-    /* shader id (for debug): */
-    uint32_t id;
-    uint32_t variant_count;
+   /* shader id (for debug): */
+   uint32_t id;
+   uint32_t variant_count;
 
-    struct tgsi_token *tokens;
-    const struct etna_specs *specs;
+   struct tgsi_token *tokens;
+   struct nir_shader *nir;
+   const struct etna_specs *specs;
 
-    struct etna_shader_variant *variants;
+   struct etna_shader_variant *variants;
 };
 
 bool

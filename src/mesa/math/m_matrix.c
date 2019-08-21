@@ -33,12 +33,15 @@
  * -# Transformation of a point p by a matrix M is: p' = M * p
  */
 
+#include <stddef.h>
 
 #include "c99_math.h"
 #include "main/errors.h"
 #include "main/glheader.h"
 #include "main/imports.h"
 #include "main/macros.h"
+#define MATH_ASM_PTR_SIZE sizeof(void *)
+#include "math/m_vector_asm.h"
 
 #include "m_matrix.h"
 
@@ -1137,6 +1140,9 @@ _math_matrix_viewport(GLmatrix *m, const float scale[3],
 void
 _math_matrix_set_identity( GLmatrix *mat )
 {
+   STATIC_ASSERT(MATRIX_M == offsetof(GLmatrix, m));
+   STATIC_ASSERT(MATRIX_INV == offsetof(GLmatrix, inv));
+
    memcpy( mat->m, Identity, sizeof(Identity) );
    memcpy( mat->inv, Identity, sizeof(Identity) );
 

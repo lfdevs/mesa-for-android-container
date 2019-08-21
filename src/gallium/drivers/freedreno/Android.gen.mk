@@ -28,9 +28,17 @@ ir3_nir_trig_deps := \
 	$(MESA_TOP)/src/freedreno/ir3/ir3_nir_trig.py \
 	$(MESA_TOP)/src/compiler/nir/nir_algebraic.py
 
+ir3_nir_imul_deps := \
+	$(MESA_TOP)/src/freedreno/ir3/ir3_nir_imul.py \
+	$(MESA_TOP)/src/compiler/nir/nir_algebraic.py
+
 intermediates := $(call local-generated-sources-dir)
 
 $(intermediates)/ir3/ir3_nir_trig.c: $(ir3_nir_trig_deps)
+	@mkdir -p $(dir $@)
+	$(hide) $(MESA_PYTHON2) $< -p $(MESA_TOP)/src/compiler/nir > $@
+
+$(intermediates)/ir3/ir3_nir_imul.c: $(ir3_nir_imul_deps)
 	@mkdir -p $(dir $@)
 	$(hide) $(MESA_PYTHON2) $< -p $(MESA_TOP)/src/compiler/nir > $@
 

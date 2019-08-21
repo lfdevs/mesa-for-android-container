@@ -44,7 +44,7 @@ build_buffer_fill_shader(struct radv_device *dev)
 	nir_ssa_dest_init(&load->instr, &load->dest, 1, 32, "fill_value");
 	nir_builder_instr_insert(&b, &load->instr);
 
-	nir_ssa_def *swizzled_load = nir_swizzle(&b, &load->dest.ssa, (unsigned[]) { 0, 0, 0, 0}, 4, false);
+	nir_ssa_def *swizzled_load = nir_swizzle(&b, &load->dest.ssa, (unsigned[]) { 0, 0, 0, 0}, 4);
 
 	nir_intrinsic_instr *store = nir_intrinsic_instr_create(b.shader, nir_intrinsic_store_ssbo);
 	store->src[0] = nir_src_for_ssa(swizzled_load);
@@ -415,8 +415,8 @@ uint32_t radv_fill_buffer(struct radv_cmd_buffer *cmd_buffer,
 	if (size >= RADV_BUFFER_OPS_CS_THRESHOLD) {
 		fill_buffer_shader(cmd_buffer, bo, offset, size, value);
 		flush_bits = RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-			     RADV_CMD_FLAG_INV_VMEM_L1 |
-			     RADV_CMD_FLAG_WRITEBACK_GLOBAL_L2;
+			     RADV_CMD_FLAG_INV_VCACHE |
+			     RADV_CMD_FLAG_WB_L2;
 	} else if (size) {
 		uint64_t va = radv_buffer_get_va(bo);
 		va += offset;

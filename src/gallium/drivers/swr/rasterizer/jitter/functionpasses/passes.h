@@ -25,6 +25,7 @@
  * @brief Include file for llvm passes
  *
  ******************************************************************************/
+#pragma once
 
 #include "JitManager.h"
 #include "builder.h"

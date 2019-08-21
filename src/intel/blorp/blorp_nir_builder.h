@@ -37,18 +37,6 @@ blorp_nir_init_shader(nir_builder *b,
 }
 
 static inline nir_ssa_def *
-blorp_nir_frag_coord(nir_builder *b)
-{
-   nir_variable *frag_coord =
-      nir_variable_create(b->shader, nir_var_shader_in,
-                          glsl_vec4_type(), "gl_FragCoord");
-
-   frag_coord->data.location = VARYING_SLOT_POS;
-
-   return nir_load_var(b, frag_coord);
-}
-
-static inline nir_ssa_def *
 blorp_nir_txf_ms_mcs(nir_builder *b, nir_ssa_def *xy_pos, nir_ssa_def *layer)
 {
    nir_tex_instr *tex = nir_tex_instr_create(b->shader, 1);

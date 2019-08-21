@@ -39,7 +39,7 @@
 #define MAX_BATCH_SIZE (256 * 1024)
 
 /* Our target batch size - flush approximately at this point. */
-#define BATCH_SZ (20 * 1024)
+#define BATCH_SZ (64 * 1024)
 
 enum iris_batch_name {
    IRIS_BATCH_RENDER,
@@ -58,6 +58,7 @@ struct iris_batch {
    struct iris_screen *screen;
    struct iris_vtable *vtbl;
    struct pipe_debug_callback *dbg;
+   struct pipe_device_reset_callback *reset;
 
    /** What batch is this? (e.g. IRIS_BATCH_RENDER/COMPUTE) */
    enum iris_batch_name name;
@@ -121,6 +122,7 @@ struct iris_batch {
    } cache;
 
    struct gen_batch_decode_ctx decoder;
+   struct hash_table_u64 *state_sizes;
 
    /** Have we emitted any draw calls to this batch? */
    bool contains_draw;
@@ -130,6 +132,8 @@ void iris_init_batch(struct iris_batch *batch,
                      struct iris_screen *screen,
                      struct iris_vtable *vtbl,
                      struct pipe_debug_callback *dbg,
+                     struct pipe_device_reset_callback *reset,
+                     struct hash_table_u64 *state_sizes,
                      struct iris_batch *all_batches,
                      enum iris_batch_name name,
                      uint8_t ring,
@@ -147,6 +151,8 @@ bool iris_batch_references(struct iris_batch *batch, struct iris_bo *bo);
 
 void iris_use_pinned_bo(struct iris_batch *batch, struct iris_bo *bo,
                         bool writable);
+
+enum pipe_reset_status iris_batch_check_for_reset(struct iris_batch *batch);
 
 static inline unsigned
 iris_batch_bytes_used(struct iris_batch *batch)
@@ -197,6 +203,19 @@ iris_batch_emit(struct iris_batch *batch, const void *data, unsigned size)
 }
 
 /**
+ * Get a pointer to the batch's signalling syncpt.  Does not refcount.
+ */
+static inline struct iris_syncpt *
+iris_batch_get_signal_syncpt(struct iris_batch *batch)
+{
+   /* The signalling syncpt is the first one in the list. */
+   struct iris_syncpt *syncpt =
+      ((struct iris_syncpt **) util_dynarray_begin(&batch->syncpts))[0];
+   return syncpt;
+}
+
+
+/**
  * Take a reference to the batch's signalling syncpt.
  *
  * Callers can use this to wait for the the current batch under construction
@@ -206,10 +225,22 @@ static inline void
 iris_batch_reference_signal_syncpt(struct iris_batch *batch,
                                    struct iris_syncpt **out_syncpt)
 {
-   /* The signalling syncpt is the first one in the list. */
-   struct iris_syncpt *syncpt =
-      ((struct iris_syncpt **) util_dynarray_begin(&batch->syncpts))[0];
+   struct iris_syncpt *syncpt = iris_batch_get_signal_syncpt(batch);
    iris_syncpt_reference(batch->screen, out_syncpt, syncpt);
+}
+
+/**
+ * Record the size of a piece of state for use in INTEL_DEBUG=bat printing.
+ */
+static inline void
+iris_record_state_size(struct hash_table_u64 *ht,
+                       uint32_t offset_from_base,
+                       uint32_t size)
+{
+   if (ht) {
+      _mesa_hash_table_u64_insert(ht, offset_from_base,
+                                  (void *)(uintptr_t) size);
+   }
 }
 
 #endif

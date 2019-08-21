@@ -462,7 +462,7 @@
       <value name="FRONT" value="2"/>
       <value name="BACK" value="3"/>
     </field>
-    <field name="Anti-Aliasing Enable" start="223" end="223" type="bool"/>
+    <field name="Antialiasing Enable" start="223" end="223" type="bool"/>
     <field name="Point Width" start="224" end="234" type="u8.3"/>
     <field name="Point Width Source" start="235" end="235" type="uint">
       <value name="Vertex" value="0"/>

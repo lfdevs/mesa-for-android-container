@@ -1106,6 +1106,8 @@ enum ir_intrinsic_id {
    ir_intrinsic_image_atomic_comp_swap,
    ir_intrinsic_image_size,
    ir_intrinsic_image_samples,
+   ir_intrinsic_image_atomic_inc_wrap,
+   ir_intrinsic_image_atomic_dec_wrap,
 
    ir_intrinsic_ssbo_load,
    ir_intrinsic_ssbo_store = MAKE_INTRINSIC_FOR_TYPE(store, ssbo),

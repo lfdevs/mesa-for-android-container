@@ -334,7 +334,8 @@ _eglParseSurfaceAttribList(_EGLSurface *surf, const EGLint *attrib_list)
  */
 EGLBoolean
 _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
-                _EGLConfig *conf, const EGLint *attrib_list)
+                _EGLConfig *conf, const EGLint *attrib_list,
+                void *native_surface)
 {
    const char *func;
    EGLint renderBuffer = EGL_BACK_BUFFER;
@@ -420,6 +421,8 @@ _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
       surf->Width = MIN2(surf->Width, _EGL_MAX_PBUFFER_WIDTH);
       surf->Height = MIN2(surf->Height, _EGL_MAX_PBUFFER_HEIGHT);
    }
+
+   surf->NativeSurface = native_surface;
 
    return EGL_TRUE;
 }

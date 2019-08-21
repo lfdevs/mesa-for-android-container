@@ -134,7 +134,7 @@ i915_program_error(struct i915_fp_compile *p, const char *msg, ...)
 
    debug_printf("i915_program_error: ");
    va_start( args, msg );
-   util_vsnprintf( buffer, sizeof(buffer), msg, args );
+   vsnprintf( buffer, sizeof(buffer), msg, args );
    va_end( args );
    debug_printf("%s", buffer);
    debug_printf("\n");

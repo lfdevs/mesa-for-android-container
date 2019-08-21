@@ -27,7 +27,6 @@
 
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/eventfd.h>
 
 #include "anv_private.h"
 #include "vk_util.h"
@@ -637,7 +636,7 @@ anv_wait_for_bo_fences(struct anv_device *device,
                .tv_nsec = abs_timeout_ns % NSEC_PER_SEC,
             };
 
-            MAYBE_UNUSED int ret;
+            ASSERTED int ret;
             ret = pthread_cond_timedwait(&device->queue_submit,
                                          &device->mutex, &abstime);
             assert(ret != EINVAL);
@@ -967,9 +966,13 @@ VkResult anv_CreateSemaphore(
       }
    } else if (handleTypes & VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) {
       assert(handleTypes == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT);
-
-      semaphore->permanent.type = ANV_SEMAPHORE_TYPE_SYNC_FILE;
-      semaphore->permanent.fd = -1;
+      if (device->instance->physicalDevice.has_syncobj) {
+         semaphore->permanent.type = ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ;
+         semaphore->permanent.syncobj = anv_gem_syncobj_create(device, 0);
+      } else {
+         semaphore->permanent.type = ANV_SEMAPHORE_TYPE_SYNC_FILE;
+         semaphore->permanent.fd = -1;
+      }
    } else {
       assert(!"Unknown handle type");
       vk_free2(&device->alloc, pAllocator, semaphore);
@@ -1132,10 +1135,30 @@ VkResult anv_ImportSemaphoreFdKHR(
       break;
 
    case VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT:
-      new_impl = (struct anv_semaphore_impl) {
-         .type = ANV_SEMAPHORE_TYPE_SYNC_FILE,
-         .fd = fd,
-      };
+      if (device->instance->physicalDevice.has_syncobj) {
+         new_impl = (struct anv_semaphore_impl) {
+            .type = ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ,
+            .syncobj = anv_gem_syncobj_create(device, 0),
+         };
+         if (!new_impl.syncobj)
+            return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+         if (anv_gem_syncobj_import_sync_file(device, new_impl.syncobj, fd)) {
+            anv_gem_syncobj_destroy(device, new_impl.syncobj);
+            return vk_errorf(device->instance, NULL,
+                             VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                             "syncobj sync file import failed: %m");
+         }
+         /* Ownership of the FD is transfered to Anv. Since we don't need it
+          * anymore because the associated fence has been put into a syncobj,
+          * we must close the FD.
+          */
+         close(fd);
+      } else {
+         new_impl = (struct anv_semaphore_impl) {
+            .type = ANV_SEMAPHORE_TYPE_SYNC_FILE,
+            .fd = fd,
+         };
+      }
       break;
 
    default:
@@ -1205,7 +1228,12 @@ VkResult anv_GetSemaphoreFdKHR(
       return VK_SUCCESS;
 
    case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ:
-      fd = anv_gem_syncobj_handle_to_fd(device, impl->syncobj);
+      if (pGetFdInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT)
+         fd = anv_gem_syncobj_export_sync_file(device, impl->syncobj);
+      else {
+         assert(pGetFdInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+         fd = anv_gem_syncobj_handle_to_fd(device, impl->syncobj);
+      }
       if (fd < 0)
          return vk_error(VK_ERROR_TOO_MANY_OBJECTS);
       *pFd = fd;

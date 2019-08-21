@@ -140,7 +140,7 @@ void _mesa_print_info( struct gl_context *ctx )
 static void
 set_verbose_flags(const char *str)
 {
-#ifdef DEBUG
+#ifndef NDEBUG
    struct option {
       const char *name;
       GLbitfield flag;
@@ -181,7 +181,7 @@ set_verbose_flags(const char *str)
 static void
 set_debug_flags(const char *str)
 {
-#ifdef DEBUG
+#ifndef NDEBUG
    struct option {
       const char *name;
       GLbitfield flag;

@@ -54,6 +54,7 @@ struct gen_group *gen_spec_find_struct(struct gen_spec *spec, const char *name);
 struct gen_spec *gen_spec_load(const struct gen_device_info *devinfo);
 struct gen_spec *gen_spec_load_from_path(const struct gen_device_info *devinfo,
                                          const char *path);
+struct gen_spec *gen_spec_load_filename(const char *filename);
 void gen_spec_destroy(struct gen_spec *spec);
 uint32_t gen_spec_get_gen(struct gen_spec *spec);
 struct gen_group *gen_spec_find_instruction(struct gen_spec *spec,
@@ -71,6 +72,10 @@ struct gen_enum *gen_spec_find_enum(struct gen_spec *spec, const char *name);
 
 bool gen_field_is_header(struct gen_field *field);
 
+/* Only allow 5 levels of subgroup'ing
+ */
+#define DECODE_MAX_ARRAY_DEPTH 5
+
 struct gen_field_iterator {
    struct gen_group *group;
    char name[128];
@@ -83,7 +88,10 @@ struct gen_field_iterator {
    int start_bit; /**< current field starts at this bit offset into p */
    int end_bit; /**< current field ends at this bit offset into p */
 
-   int group_iter;
+   struct gen_field *fields[DECODE_MAX_ARRAY_DEPTH];
+   struct gen_group *groups[DECODE_MAX_ARRAY_DEPTH];
+   int array_iter[DECODE_MAX_ARRAY_DEPTH];
+   int level;
 
    struct gen_field *field;
    bool print_colors;
@@ -111,8 +119,9 @@ struct gen_group {
    uint32_t dw_length;
    uint32_t engine_mask; /* <instruction> specific */
    uint32_t bias; /* <instruction> specific */
-   uint32_t group_offset, group_count;
-   uint32_t group_size;
+   uint32_t array_offset; /* <group> specific */
+   uint32_t array_count; /* number of elements, <group> specific */
+   uint32_t array_item_size; /* <group> specific */
    bool variable; /* <group> specific */
    bool fixed_length; /* True for <struct> & <register> */
 
@@ -173,6 +182,7 @@ union gen_field_value {
 struct gen_field {
    struct gen_group *parent;
    struct gen_field *next;
+   struct gen_group *array;
 
    char *name;
    int start, end;

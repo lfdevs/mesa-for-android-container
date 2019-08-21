@@ -96,7 +96,8 @@ fs_visitor::dead_code_eliminate()
 
             if (!result_live &&
                 (can_omit_write(inst) || can_eliminate(inst, flag_live))) {
-               inst->dst = fs_reg(retype(brw_null_reg(), inst->dst.type));
+               inst->dst = fs_reg(spread(retype(brw_null_reg(), inst->dst.type),
+                                         inst->dst.stride));
                progress = true;
             }
          }

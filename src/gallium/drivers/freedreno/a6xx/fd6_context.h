@@ -48,18 +48,12 @@ struct fd6_context {
 	 */
 	struct fd_bo *vsc_data, *vsc_data2;
 
-// TODO annoyingly large sizes to prevent hangs with larger amounts
-// of geometry, like aquarium with max # of fish.  Need to figure
-// out how to calculate the required size.
-#define A6XX_VSC_DATA_PITCH  0x4400
-#define A6XX_VSC_DATA2_PITCH 0x10400
+	unsigned vsc_data_pitch, vsc_data2_pitch;
 
-	/* TODO not sure what this is for.. probably similar to
-	 * CACHE_FLUSH_TS on kernel side, where value gets written
-	 * to this address synchronized w/ 3d (ie. a way to
-	 * synchronize when the CP is running far ahead)
+	/* The 'control' mem BO is used for various housekeeping
+	 * functions.  See 'struct fd6_control'
 	 */
-	struct fd_bo *blit_mem;
+	struct fd_bo *control_mem;
 	uint32_t seqno;
 
 	struct u_upload_mgr *border_color_uploader;
@@ -107,6 +101,24 @@ fd6_context(struct fd_context *ctx)
 
 struct pipe_context *
 fd6_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
+
+
+/* This struct defines the layout of the fd6_context::control buffer: */
+struct fd6_control {
+	uint32_t seqno;          /* seqno for async CP_EVENT_WRITE, etc */
+	uint32_t _pad0;
+	uint32_t flush_base;     /* dummy address for VPC_SO[i].FLUSH_BASE_LO/HI */
+	uint32_t _pad1;
+	/* flag set from cmdstream when VSC overflow detected: */
+	volatile uint32_t vsc_overflow;
+	uint32_t _pad2;
+	uint32_t vsc_scratch;
+	uint32_t _pad3;
+};
+
+#define control_ptr(fd6_ctx, member)  \
+	(fd6_ctx)->control_mem, offsetof(struct fd6_control, member), 0, 0
+
 
 static inline void
 emit_marker6(struct fd_ringbuffer *ring, int scratch_idx)

@@ -19,13 +19,14 @@
 # SOFTWARE.
 
 foreach t : ['pipe_barrier_test', 'u_cache_test', 'u_half_test',
-             'u_format_test', 'u_format_compatible_test', 'translate_test']
+             'u_format_test', 'u_format_compatible_test', 'translate_test',
+             'u_prim_verts_test' ]
   exe = executable(
     t,
     '@0@.c'.format(t),
     include_directories : inc_common,
-    link_with : [libgallium, libmesa_util],
-    dependencies : [dep_thread],
+    link_with : libgallium,
+    dependencies : idep_mesautil,
     install : false,
   )
   # u_cache_test is slow, and translate_test fails.

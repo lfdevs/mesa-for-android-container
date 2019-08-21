@@ -55,6 +55,7 @@
 #include "st_cb_bitmap.h"
 #include "st_cb_drawpixels.h"
 #include "st_context.h"
+#include "st_tgsi_lower_depth_clamp.h"
 #include "st_tgsi_lower_yuv.h"
 #include "st_program.h"
 #include "st_mesa_to_tgsi.h"
@@ -633,6 +634,9 @@ st_translate_vertex_program(struct st_context *st,
    return stvp->tgsi.tokens != NULL;
 }
 
+static const gl_state_index16 depth_range_state[STATE_LENGTH] =
+   { STATE_DEPTH_RANGE };
+
 static struct st_vp_variant *
 st_create_vp_variant(struct st_context *st,
                      struct st_vertex_program *stvp,
@@ -640,6 +644,7 @@ st_create_vp_variant(struct st_context *st,
 {
    struct st_vp_variant *vpv = CALLOC_STRUCT(st_vp_variant);
    struct pipe_context *pipe = st->pipe;
+   struct gl_program_parameter_list *params = stvp->Base.Parameters;
 
    vpv->key = *key;
    vpv->tgsi.stream_output = stvp->tgsi.stream_output;
@@ -689,6 +694,18 @@ st_create_vp_variant(struct st_context *st,
             vpv->num_inputs++;
       } else
          fprintf(stderr, "mesa: cannot emulate deprecated features\n");
+   }
+
+   if (key->lower_depth_clamp) {
+      unsigned depth_range_const =
+            _mesa_add_state_reference(params, depth_range_state);
+
+      const struct tgsi_token *tokens;
+      tokens = st_tgsi_lower_depth_clamp(vpv->tgsi.tokens, depth_range_const,
+                                         key->clip_negative_one_to_one);
+      if (tokens != vpv->tgsi.tokens)
+         tgsi_free_tokens(vpv->tgsi.tokens);
+      vpv->tgsi.tokens = tokens;
    }
 
    if (ST_DEBUG & DEBUG_TGSI) {
@@ -1201,20 +1218,28 @@ st_create_fp_variant(struct st_context *st,
          NIR_PASS_V(tgsi.ir.nir, nir_lower_drawpixels, &options);
       }
 
-      if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv)) {
+      if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv ||
+                   key->external.lower_xy_uxvx || key->external.lower_yx_xuxv ||
+                   key->external.lower_ayuv || key->external.lower_xyuv)) {
          nir_lower_tex_options options = {0};
          options.lower_y_uv_external = key->external.lower_nv12;
          options.lower_y_u_v_external = key->external.lower_iyuv;
+         options.lower_xy_uxvx_external = key->external.lower_xy_uxvx;
+         options.lower_yx_xuxv_external = key->external.lower_yx_xuxv;
+         options.lower_ayuv_external = key->external.lower_ayuv;
+         options.lower_xyuv_external = key->external.lower_xyuv;
          NIR_PASS_V(tgsi.ir.nir, nir_lower_tex, &options);
       }
 
       st_finalize_nir(st, &stfp->Base, stfp->shader_program, tgsi.ir.nir);
 
-      if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv)) {
+      if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv ||
+                   key->external.lower_xy_uxvx || key->external.lower_yx_xuxv)) {
          /* This pass needs to happen *after* nir_lower_sampler */
          NIR_PASS_V(tgsi.ir.nir, st_nir_lower_tex_src_plane,
                     ~stfp->Base.SamplersUsed,
-                    key->external.lower_nv12,
+                    key->external.lower_nv12 || key->external.lower_xy_uxvx ||
+                       key->external.lower_yx_xuxv,
                     key->external.lower_iyuv);
       }
 
@@ -1318,7 +1343,8 @@ st_create_fp_variant(struct st_context *st,
          fprintf(stderr, "mesa: cannot create a shader for glDrawPixels\n");
    }
 
-   if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv)) {
+   if (unlikely(key->external.lower_nv12 || key->external.lower_iyuv ||
+                key->external.lower_xy_uxvx || key->external.lower_yx_xuxv)) {
       const struct tgsi_token *tokens;
 
       /* samplers inserted would conflict, but this should be unpossible: */
@@ -1326,7 +1352,9 @@ st_create_fp_variant(struct st_context *st,
 
       tokens = st_tgsi_lower_yuv(tgsi.tokens,
                                  ~stfp->Base.SamplersUsed,
-                                 key->external.lower_nv12,
+                                 key->external.lower_nv12 ||
+                                    key->external.lower_xy_uxvx ||
+                                    key->external.lower_yx_xuxv,
                                  key->external.lower_iyuv);
       if (tokens) {
          if (tgsi.tokens != stfp->tgsi.tokens)
@@ -1335,6 +1363,16 @@ st_create_fp_variant(struct st_context *st,
       } else {
          fprintf(stderr, "mesa: cannot create a shader for samplerExternalOES\n");
       }
+   }
+
+   if (key->lower_depth_clamp) {
+      unsigned depth_range_const = _mesa_add_state_reference(params, depth_range_state);
+
+      const struct tgsi_token *tokens;
+      tokens = st_tgsi_lower_depth_clamp_fs(tgsi.tokens, depth_range_const);
+      if (tgsi.tokens != stfp->tgsi.tokens)
+         tgsi_free_tokens(tgsi.tokens);
+      tgsi.tokens = tokens;
    }
 
    if (ST_DEBUG & DEBUG_TGSI) {
@@ -1632,18 +1670,16 @@ st_translate_geometry_program(struct st_context *st,
 struct st_basic_variant *
 st_get_basic_variant(struct st_context *st,
                      unsigned pipe_shader,
-                     struct st_common_program *prog)
+                     struct st_common_program *prog,
+                     const struct st_basic_variant_key *key)
 {
    struct pipe_context *pipe = st->pipe;
    struct st_basic_variant *v;
-   struct st_basic_variant_key key;
    struct pipe_shader_state tgsi = {0};
-   memset(&key, 0, sizeof(key));
-   key.st = st->has_shareable_shaders ? NULL : st;
 
    /* Search for existing variant */
    for (v = prog->variants; v; v = v->next) {
-      if (memcmp(&v->key, &key, sizeof(key)) == 0) {
+      if (memcmp(&v->key, key, sizeof(*key)) == 0) {
          break;
       }
    }
@@ -1656,9 +1692,32 @@ st_get_basic_variant(struct st_context *st,
 	 if (prog->tgsi.type == PIPE_SHADER_IR_NIR) {
 	    tgsi.type = PIPE_SHADER_IR_NIR;
 	    tgsi.ir.nir = nir_shader_clone(NULL, prog->tgsi.ir.nir);
+
+            if (key->clamp_color)
+               NIR_PASS_V(tgsi.ir.nir, nir_lower_clamp_color_outputs);
+
             tgsi.stream_output = prog->tgsi.stream_output;
-	 } else
+	 } else {
+            if (key->lower_depth_clamp) {
+               struct gl_program_parameter_list *params = prog->Base.Parameters;
+
+               unsigned depth_range_const =
+                     _mesa_add_state_reference(params, depth_range_state);
+
+               const struct tgsi_token *tokens;
+               tokens =
+                     st_tgsi_lower_depth_clamp(prog->tgsi.tokens,
+                                               depth_range_const,
+                                               key->clip_negative_one_to_one);
+
+               if (tokens != prog->tgsi.tokens)
+                  tgsi_free_tokens(prog->tgsi.tokens);
+
+               prog->tgsi.tokens = tokens;
+               prog->num_tgsi_tokens = tgsi_num_tokens(tokens);
+            }
 	    tgsi = prog->tgsi;
+         }
          /* fill in new variant */
          switch (pipe_shader) {
          case PIPE_SHADER_TESS_CTRL:
@@ -1676,7 +1735,7 @@ st_get_basic_variant(struct st_context *st,
             return NULL;
          }
 
-         v->key = key;
+         v->key = *key;
 
          /* insert into list */
          v->next = prog->variants;
@@ -2058,19 +2117,34 @@ st_precompile_shader_variant(struct st_context *st,
 
    case GL_TESS_CONTROL_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_TESS_CTRL, p);
+      struct st_basic_variant_key key;
+
+      memset(&key, 0, sizeof(key));
+
+      key.st = st->has_shareable_shaders ? NULL : st;
+      st_get_basic_variant(st, PIPE_SHADER_TESS_CTRL, p, &key);
       break;
    }
 
    case GL_TESS_EVALUATION_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_TESS_EVAL, p);
+      struct st_basic_variant_key key;
+
+      memset(&key, 0, sizeof(key));
+
+      key.st = st->has_shareable_shaders ? NULL : st;
+      st_get_basic_variant(st, PIPE_SHADER_TESS_EVAL, p, &key);
       break;
    }
 
    case GL_GEOMETRY_PROGRAM_NV: {
       struct st_common_program *p = st_common_program(prog);
-      st_get_basic_variant(st, PIPE_SHADER_GEOMETRY, p);
+      struct st_basic_variant_key key;
+
+      memset(&key, 0, sizeof(key));
+
+      key.st = st->has_shareable_shaders ? NULL : st;
+      st_get_basic_variant(st, PIPE_SHADER_GEOMETRY, p, &key);
       break;
    }
 

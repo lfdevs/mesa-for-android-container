@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <err.h>
 
+#include "nir/tgsi_to_nir.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_text.h"
 #include "tgsi/tgsi_dump.h"
@@ -235,27 +236,26 @@ load_spirv(const char *filename, const char *entry, gl_shader_stage stage)
 			.int64 = true,
 			.variable_pointers = true,
 		},
-		.lower_workgroup_access_to_offsets = true,
 		.lower_ubo_ssbo_access_to_offsets = true,
 		.debug = {
 			.func = debug_func,
 		}
 	};
-	nir_function *entry_point;
+	nir_shader *nir;
 	void *buf;
 	size_t size;
 
 	read_file(filename, &buf, &size);
 
-	entry_point = spirv_to_nir(buf, size / 4,
+	nir = spirv_to_nir(buf, size / 4,
 			NULL, 0, /* spec_entries */
 			stage, entry,
 			&spirv_options,
 			ir3_get_compiler_options(compiler));
 
-	nir_print_shader(entry_point->shader, stdout);
+	nir_print_shader(nir, stdout);
 
-	return entry_point->shader;
+	return nir;
 }
 
 static void print_usage(void)
@@ -452,6 +452,8 @@ int main(int argc, char **argv)
 
 	if (s.from_tgsi) {
 		struct tgsi_token toks[65536];
+		const nir_shader_compiler_options *nir_options =
+			ir3_get_compiler_options(compiler);
 
 		ret = read_file(filenames[0], &ptr, &size);
 		if (ret) {
@@ -468,7 +470,7 @@ int main(int argc, char **argv)
 		if (ir3_shader_debug & IR3_DBG_OPTMSGS)
 			tgsi_dump(toks, 0);
 
-		nir = ir3_tgsi_to_nir(compiler, toks, NULL);
+		nir = tgsi_to_nir_noscreen(toks, nir_options);
 		NIR_PASS_V(nir, nir_lower_global_vars_to_local);
 	} else if (from_spirv) {
 		nir = load_spirv(filenames[0], entry, stage);
@@ -487,7 +489,9 @@ int main(int argc, char **argv)
 	}
 
 	s.compiler = compiler;
-	s.nir = ir3_optimize_nir(&s, nir, NULL);
+	s.nir = nir;
+
+	ir3_optimize_nir(&s, nir, NULL);
 
 	v.key = key;
 	v.shader = &s;

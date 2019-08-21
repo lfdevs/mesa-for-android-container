@@ -28,8 +28,11 @@
 #include "pipe/p_state.h"
 
 #include "freedreno_resource.h"
+#include "freedreno_state.h"
+
 #include "fd6_image.h"
 #include "fd6_format.h"
+#include "fd6_resource.h"
 #include "fd6_texture.h"
 
 struct fd6_image {
@@ -300,4 +303,34 @@ fd6_build_ibo_state(struct fd_context *ctx, const struct ir3_shader_variant *v,
 	}
 
 	return state;
+}
+
+static void fd6_set_shader_images(struct pipe_context *pctx,
+		enum pipe_shader_type shader,
+		unsigned start, unsigned count,
+		const struct pipe_image_view *images)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct fd_shaderimg_stateobj *so = &ctx->shaderimg[shader];
+
+	fd_set_shader_images(pctx, shader, start, count, images);
+
+	if (!images)
+		return;
+
+	for (unsigned i = 0; i < count; i++) {
+		unsigned n = i + start;
+		struct pipe_image_view *buf = &so->si[n];
+
+		if (!buf->resource)
+			continue;
+
+		fd6_validate_format(ctx, fd_resource(buf->resource), buf->format);
+	}
+}
+
+void
+fd6_image_init(struct pipe_context *pctx)
+{
+	pctx->set_shader_images = fd6_set_shader_images;
 }

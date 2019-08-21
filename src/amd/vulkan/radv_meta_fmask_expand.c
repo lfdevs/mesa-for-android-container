@@ -31,10 +31,7 @@ build_fmask_expand_compute_shader(struct radv_device *device, int samples)
 {
 	nir_builder b;
 	char name[64];
-	const struct glsl_type *input_img_type =
-		glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false,
-				  GLSL_TYPE_FLOAT);
-	const struct glsl_type *output_img_type =
+	const struct glsl_type *img_type =
 		glsl_sampler_type(GLSL_SAMPLER_DIM_MS, false, false,
 				  GLSL_TYPE_FLOAT);
 
@@ -47,14 +44,15 @@ build_fmask_expand_compute_shader(struct radv_device *device, int samples)
 	b.shader->info.cs.local_size[2] = 1;
 
 	nir_variable *input_img = nir_variable_create(b.shader, nir_var_uniform,
-						      input_img_type, "s_tex");
+						      img_type, "s_tex");
 	input_img->data.descriptor_set = 0;
 	input_img->data.binding = 0;
 
 	nir_variable *output_img = nir_variable_create(b.shader, nir_var_uniform,
-						       output_img_type, "out_img");
+						       img_type, "out_img");
 	output_img->data.descriptor_set = 0;
-	output_img->data.binding = 1;
+	output_img->data.binding = 0;
+	output_img->data.image.access = ACCESS_NON_READABLE;
 
 	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
 	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
@@ -125,7 +123,7 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 	radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer),
 			     VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
 
-	for (unsigned l = 0; l < subresourceRange->layerCount; l++) {
+	for (unsigned l = 0; l < radv_get_layerCount(image, subresourceRange); l++) {
 		struct radv_image_view iview;
 
 		radv_image_view_init(&iview, device,
@@ -141,31 +139,17 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 						     .baseArrayLayer = subresourceRange->baseArrayLayer + l,
 						     .layerCount = 1,
 					     },
-				     });
+				     }, NULL);
 
 		radv_meta_push_descriptor_set(cmd_buffer,
 					      VK_PIPELINE_BIND_POINT_COMPUTE,
 					      cmd_buffer->device->meta_state.fmask_expand.p_layout,
 					      0, /* set */
-					      2, /* descriptorWriteCount */
+					      1, /* descriptorWriteCount */
 					      (VkWriteDescriptorSet[]) {
 					      {
 						      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 						      .dstBinding = 0,
-						      .dstArrayElement = 0,
-						      .descriptorCount = 1,
-						      .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-						      .pImageInfo = (VkDescriptorImageInfo[]) {
-							      {
-								      .sampler = VK_NULL_HANDLE,
-								      .imageView = radv_image_view_to_handle(&iview),
-								      .imageLayout = VK_IMAGE_LAYOUT_GENERAL
-							      },
-						      }
-					      },
-					      {
-						      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-						      .dstBinding = 1,
 						      .dstArrayElement = 0,
 						      .descriptorCount = 1,
 						      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
@@ -185,10 +169,10 @@ radv_expand_fmask_image_inplace(struct radv_cmd_buffer *cmd_buffer,
 	radv_meta_restore(&saved_state, cmd_buffer);
 
 	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
-					RADV_CMD_FLAG_INV_GLOBAL_L2;
+					RADV_CMD_FLAG_INV_L2;
 
 	/* Re-initialize FMASK in fully expanded mode. */
-	radv_initialize_fmask(cmd_buffer, image);
+	radv_initialize_fmask(cmd_buffer, image, subresourceRange);
 }
 
 void radv_device_finish_meta_fmask_expand_state(struct radv_device *device)
@@ -253,17 +237,10 @@ radv_device_init_meta_fmask_expand_state(struct radv_device *device)
 	VkDescriptorSetLayoutCreateInfo ds_create_info = {
 		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 		.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
-		.bindingCount = 2,
+		.bindingCount = 1,
 		.pBindings = (VkDescriptorSetLayoutBinding[]) {
 			{
 				.binding = 0,
-				.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
-				.pImmutableSamplers = NULL
-			},
-			{
-				.binding = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,

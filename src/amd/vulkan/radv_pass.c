@@ -64,6 +64,22 @@ radv_render_pass_compile(struct radv_render_pass *pass)
 {
 	for (uint32_t i = 0; i < pass->subpass_count; i++) {
 		struct radv_subpass *subpass = &pass->subpasses[i];
+
+		for (uint32_t j = 0; j < subpass->attachment_count; j++) {
+			struct radv_subpass_attachment *subpass_att =
+				&subpass->attachments[j];
+			if (subpass_att->attachment == VK_ATTACHMENT_UNUSED)
+				continue;
+
+			struct radv_render_pass_attachment *pass_att =
+				&pass->attachments[subpass_att->attachment];
+
+			pass_att->first_subpass_idx = UINT32_MAX;
+		}
+	}
+
+	for (uint32_t i = 0; i < pass->subpass_count; i++) {
+		struct radv_subpass *subpass = &pass->subpasses[i];
 		uint32_t color_sample_count = 1, depth_sample_count = 1;
 
 		/* We don't allow depth_stencil_attachment to be non-NULL and
@@ -75,6 +91,10 @@ radv_render_pass_compile(struct radv_render_pass *pass)
 		    subpass->depth_stencil_attachment->attachment == VK_ATTACHMENT_UNUSED)
 			subpass->depth_stencil_attachment = NULL;
 
+		if (subpass->ds_resolve_attachment &&
+		    subpass->ds_resolve_attachment->attachment == VK_ATTACHMENT_UNUSED)
+			subpass->ds_resolve_attachment = NULL;
+
 		for (uint32_t j = 0; j < subpass->attachment_count; j++) {
 			struct radv_subpass_attachment *subpass_att =
 				&subpass->attachments[j];
@@ -84,6 +104,8 @@ radv_render_pass_compile(struct radv_render_pass *pass)
 			struct radv_render_pass_attachment *pass_att =
 				&pass->attachments[subpass_att->attachment];
 
+			if (i < pass_att->first_subpass_idx)
+				pass_att->first_subpass_idx = i;
 			pass_att->last_subpass_idx = i;
 		}
 
@@ -114,7 +136,7 @@ radv_render_pass_compile(struct radv_render_pass *pass)
 						 depth_sample_count);
 
 		/* We have to handle resolve attachments specially */
-		subpass->has_resolve = false;
+		subpass->has_color_resolve = false;
 		if (subpass->resolve_attachments) {
 			for (uint32_t j = 0; j < subpass->color_count; j++) {
 				struct radv_subpass_attachment *resolve_att =
@@ -123,7 +145,25 @@ radv_render_pass_compile(struct radv_render_pass *pass)
 				if (resolve_att->attachment == VK_ATTACHMENT_UNUSED)
 					continue;
 
-				subpass->has_resolve = true;
+				subpass->has_color_resolve = true;
+			}
+		}
+
+		for (uint32_t j = 0; j < subpass->input_count; ++j) {
+			if (subpass->input_attachments[j].attachment == VK_ATTACHMENT_UNUSED)
+				continue;
+
+			for (uint32_t k = 0; k < subpass->color_count; ++k) {
+				if (subpass->color_attachments[k].attachment == subpass->input_attachments[j].attachment) {
+					subpass->input_attachments[j].in_render_loop = true;
+					subpass->color_attachments[k].in_render_loop = true;
+				}
+			}
+
+			if (subpass->depth_stencil_attachment &&
+			    subpass->depth_stencil_attachment->attachment == subpass->input_attachments[j].attachment) {
+				subpass->input_attachments[j].in_render_loop = true;
+				subpass->depth_stencil_attachment->in_render_loop = true;
 			}
 		}
 	}
@@ -291,10 +331,15 @@ VkResult radv_CreateRenderPass(
 static unsigned
 radv_num_subpass_attachments2(const VkSubpassDescription2KHR *desc)
 {
+	const VkSubpassDescriptionDepthStencilResolveKHR *ds_resolve =
+		vk_find_struct_const(desc->pNext,
+				     SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE_KHR);
+
 	return desc->inputAttachmentCount +
 	       desc->colorAttachmentCount +
 	       (desc->pResolveAttachments ? desc->colorAttachmentCount : 0) +
-	       (desc->pDepthStencilAttachment != NULL);
+	       (desc->pDepthStencilAttachment != NULL) +
+	       (ds_resolve && ds_resolve->pDepthStencilResolveAttachment);
 }
 
 VkResult radv_CreateRenderPass2KHR(
@@ -410,6 +455,22 @@ VkResult radv_CreateRenderPass2KHR(
 				.attachment = desc->pDepthStencilAttachment->attachment,
 				.layout = desc->pDepthStencilAttachment->layout,
 			};
+		}
+
+		const VkSubpassDescriptionDepthStencilResolveKHR *ds_resolve =
+			vk_find_struct_const(desc->pNext,
+					     SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE_KHR);
+
+		if (ds_resolve && ds_resolve->pDepthStencilResolveAttachment) {
+			subpass->ds_resolve_attachment = p++;
+
+			*subpass->ds_resolve_attachment = (struct radv_subpass_attachment) {
+				.attachment =  ds_resolve->pDepthStencilResolveAttachment->attachment,
+				.layout =      ds_resolve->pDepthStencilResolveAttachment->layout,
+			};
+
+			subpass->depth_resolve_mode = ds_resolve->depthResolveMode;
+			subpass->stencil_resolve_mode = ds_resolve->stencilResolveMode;
 		}
 	}
 

@@ -78,6 +78,7 @@ namespace SwrJit
         // Built in types: scalar
 
         Type* mVoidTy;
+        Type* mHandleTy;
         Type* mInt1Ty;
         Type* mInt8Ty;
         Type* mInt16Ty;
@@ -91,6 +92,7 @@ namespace SwrJit
         Type* mInt8PtrTy;
         Type* mInt16PtrTy;
         Type* mInt32PtrTy;
+        Type* mInt64PtrTy;
 
         Type* mSimd4FP64Ty;
 
@@ -106,6 +108,7 @@ namespace SwrJit
         Type* mSimdVectorTy;
         Type* mSimdVectorTRTy;
         Type* mSimdVectorIntTy;
+        Type* mSimdVectorTRIntTy;
 
         // Built in types: simd16
 

@@ -277,7 +277,7 @@ fail:
 static void
 pipe_loader_sw_release(struct pipe_loader_device **dev)
 {
-   MAYBE_UNUSED struct pipe_loader_sw_device *sdev =
+   UNUSED struct pipe_loader_sw_device *sdev =
       pipe_loader_sw_device(*dev);
 
 #ifndef GALLIUM_STATIC_TARGETS

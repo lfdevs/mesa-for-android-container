@@ -27,6 +27,8 @@
 #include "util/ralloc.h"
 #include "util/bitscan.h"
 #include "compiler/nir/nir.h"
+#include "pipe/p_state.h"
+
 
 #include "ppir.h"
 
@@ -109,21 +111,20 @@ static void ppir_node_add_src(ppir_compiler *comp, ppir_node *node,
       }
    }
 
-   ppir_dest *dest = ppir_node_get_dest(child);
-   ppir_node_target_assign(ps, dest);
+   ppir_node_target_assign(ps, child);
 }
 
 static int nir_to_ppir_opcodes[nir_num_opcodes] = {
    /* not supported */
    [0 ... nir_last_opcode] = -1,
 
-   [nir_op_fmov] = ppir_op_mov,
-   [nir_op_imov] = ppir_op_mov,
+   [nir_op_mov] = ppir_op_mov,
    [nir_op_fmul] = ppir_op_mul,
+   [nir_op_fabs] = ppir_op_abs,
+   [nir_op_fneg] = ppir_op_neg,
    [nir_op_fadd] = ppir_op_add,
-   [nir_op_fdot2] = ppir_op_dot2,
-   [nir_op_fdot3] = ppir_op_dot3,
-   [nir_op_fdot4] = ppir_op_dot4,
+   [nir_op_fsum3] = ppir_op_sum3,
+   [nir_op_fsum4] = ppir_op_sum4,
    [nir_op_frsq] = ppir_op_rsqrt,
    [nir_op_flog2] = ppir_op_log2,
    [nir_op_fexp2] = ppir_op_exp2,
@@ -136,9 +137,6 @@ static int nir_to_ppir_opcodes[nir_num_opcodes] = {
    [nir_op_ffloor] = ppir_op_floor,
    [nir_op_fceil] = ppir_op_ceil,
    [nir_op_ffract] = ppir_op_fract,
-   [nir_op_fand] = ppir_op_and,
-   [nir_op_for] = ppir_op_or,
-   [nir_op_fxor] = ppir_op_xor,
    [nir_op_sge] = ppir_op_ge,
    [nir_op_fge] = ppir_op_ge,
    [nir_op_slt] = ppir_op_lt,
@@ -147,10 +145,12 @@ static int nir_to_ppir_opcodes[nir_num_opcodes] = {
    [nir_op_feq] = ppir_op_eq,
    [nir_op_sne] = ppir_op_ne,
    [nir_op_fne] = ppir_op_ne,
-   [nir_op_fnot] = ppir_op_not,
    [nir_op_fcsel] = ppir_op_select,
    [nir_op_inot] = ppir_op_not,
    [nir_op_ftrunc] = ppir_op_trunc,
+   [nir_op_fsat] = ppir_op_sat,
+   [nir_op_fddx] = ppir_op_ddx,
+   [nir_op_fddy] = ppir_op_ddy,
 };
 
 static ppir_node *ppir_emit_alu(ppir_block *block, nir_instr *ni)
@@ -175,13 +175,10 @@ static ppir_node *ppir_emit_alu(ppir_block *block, nir_instr *ni)
 
    unsigned src_mask;
    switch (op) {
-   case ppir_op_dot2:
-      src_mask = 0b0011;
-      break;
-   case ppir_op_dot3:
+   case ppir_op_sum3:
       src_mask = 0b0111;
       break;
-   case ppir_op_dot4:
+   case ppir_op_sum4:
       src_mask = 0b1111;
       break;
    default:
@@ -205,6 +202,57 @@ static ppir_node *ppir_emit_alu(ppir_block *block, nir_instr *ni)
    return &node->node;
 }
 
+static ppir_block *ppir_block_create(ppir_compiler *comp);
+
+static bool ppir_emit_discard_block(ppir_compiler *comp)
+{
+   ppir_block *block = ppir_block_create(comp);
+   ppir_discard_node *discard;
+   if (!block)
+      return false;
+
+   comp->discard_block = block;
+   block->comp  = comp;
+
+   discard = ppir_node_create(block, ppir_op_discard, -1, 0);
+   if (discard)
+      list_addtail(&discard->node.list, &block->node_list);
+   else
+      return false;
+
+   return true;
+}
+
+static ppir_node *ppir_emit_discard_if(ppir_block *block, nir_instr *ni)
+{
+   nir_intrinsic_instr *instr = nir_instr_as_intrinsic(ni);
+   ppir_node *node;
+   ppir_compiler *comp = block->comp;
+   ppir_branch_node *branch;
+
+   if (!comp->discard_block && !ppir_emit_discard_block(comp))
+      return NULL;
+
+   node = ppir_node_create(block, ppir_op_branch, -1, 0);
+   if (!node)
+      return NULL;
+   branch = ppir_node_to_branch(node);
+
+   /* second src and condition will be updated during lowering */
+   ppir_node_add_src(block->comp, node, &branch->src[0],
+                     &instr->src[0], u_bit_consecutive(0, instr->num_components));
+   branch->target = comp->discard_block;
+
+   return node;
+}
+
+static ppir_node *ppir_emit_discard(ppir_block *block, nir_instr *ni)
+{
+   ppir_node *node = ppir_node_create(block, ppir_op_discard, -1, 0);
+
+   return node;
+}
+
 static ppir_node *ppir_emit_intrinsic(ppir_block *block, nir_instr *ni)
 {
    nir_intrinsic_instr *instr = nir_instr_as_intrinsic(ni);
@@ -226,10 +274,28 @@ static ppir_node *ppir_emit_intrinsic(ppir_block *block, nir_instr *ni)
       return &lnode->node;
 
    case nir_intrinsic_load_frag_coord:
+   case nir_intrinsic_load_point_coord:
+   case nir_intrinsic_load_front_face:
       if (!instr->dest.is_ssa)
          mask = u_bit_consecutive(0, instr->num_components);
 
-      lnode = ppir_node_create_dest(block, ppir_op_load_fragcoord, &instr->dest, mask);
+      ppir_op op;
+      switch (instr->intrinsic) {
+      case nir_intrinsic_load_frag_coord:
+         op = ppir_op_load_fragcoord;
+         break;
+      case nir_intrinsic_load_point_coord:
+         op = ppir_op_load_pointcoord;
+         break;
+      case nir_intrinsic_load_front_face:
+         op = ppir_op_load_frontface;
+         break;
+      default:
+         assert(0);
+         break;
+      }
+
+      lnode = ppir_node_create_dest(block, op, &instr->dest, mask);
       if (!lnode)
          return NULL;
 
@@ -265,8 +331,15 @@ static ppir_node *ppir_emit_intrinsic(ppir_block *block, nir_instr *ni)
 
       return &snode->node;
 
+   case nir_intrinsic_discard:
+      return ppir_emit_discard(block, ni);
+
+   case nir_intrinsic_discard_if:
+      return ppir_emit_discard_if(block, ni);
+
    default:
-      ppir_error("unsupported nir_intrinsic_instr %d\n", instr->intrinsic);
+      ppir_error("unsupported nir_intrinsic_instr %s\n",
+                 nir_intrinsic_infos[instr->intrinsic].name);
       return NULL;
    }
 }
@@ -315,7 +388,7 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
    case GLSL_SAMPLER_DIM_EXTERNAL:
       break;
    default:
-      ppir_debug("unsupported sampler dim: %d\n", instr->sampler_dim);
+      ppir_error("unsupported sampler dim: %d\n", instr->sampler_dim);
       return NULL;
    }
 
@@ -324,7 +397,6 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
    for (int i = 0; i < instr->coord_components; i++)
          node->src_coords.swizzle[i] = i;
 
-   assert(instr->num_srcs == 1);
    for (int i = 0; i < instr->num_srcs; i++) {
       switch (instr->src[i].src_type) {
       case nir_tex_src_coord:
@@ -332,7 +404,8 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
                            u_bit_consecutive(0, instr->coord_components));
          break;
       default:
-         ppir_debug("unknown texture source");
+         ppir_error("unsupported texture source type\n");
+         assert(0);
          return NULL;
       }
    }
@@ -379,8 +452,10 @@ static bool ppir_emit_block(ppir_compiler *comp, nir_block *nblock)
    nir_foreach_instr(instr, nblock) {
       assert(instr->type < nir_instr_type_phi);
       ppir_node *node = ppir_emit_instr[instr->type](block, instr);
-      if (node)
-         list_addtail(&node->list, &block->node_list);
+      if (!node)
+         return false;
+
+      list_addtail(&node->list, &block->node_list);
    }
 
    return true;
@@ -450,8 +525,70 @@ static ppir_compiler *ppir_compiler_create(void *prog, unsigned num_reg, unsigne
    return comp;
 }
 
+static void ppir_add_ordering_deps(ppir_compiler *comp)
+{
+   /* Some intrinsics do not have explicit dependencies and thus depend
+    * on instructions order. Consider discard_if and store_ouput as
+    * example. If we don't add fake dependency of discard_if to store_output
+    * scheduler may put store_output first and since store_output terminates
+    * shader on Utgard PP, rest of it will never be executed.
+    * Add fake dependencies for discard/branch/store to preserve
+    * instruction order.
+    *
+    * TODO: scheduler should schedule discard_if as early as possible otherwise
+    * we may end up with suboptimal code for cases like this:
+    *
+    * s3 = s1 < s2
+    * discard_if s3
+    * s4 = s1 + s2
+    * store s4
+    *
+    * In this case store depends on discard_if and s4, but since dependencies can
+    * be scheduled in any order it can result in code like this:
+    *
+    * instr1: s3 = s1 < s3
+    * instr2: s4 = s1 + s2
+    * instr3: discard_if s3
+    * instr4: store s4
+    */
+   list_for_each_entry(ppir_block, block, &comp->block_list, list) {
+      ppir_node *prev_node = NULL;
+      list_for_each_entry(ppir_node, node, &block->node_list, list) {
+         if (node->type == ppir_node_type_discard ||
+             node->type == ppir_node_type_store ||
+             node->type == ppir_node_type_branch) {
+            if (prev_node)
+               ppir_node_add_dep(node, prev_node);
+            prev_node = node;
+         }
+      }
+   }
+}
+
+static void ppir_print_shader_db(struct nir_shader *nir, ppir_compiler *comp,
+                                 struct pipe_debug_callback *debug)
+{
+   const struct shader_info *info = &nir->info;
+   char *shaderdb;
+   int ret = asprintf(&shaderdb,
+                      "%s shader: %d inst, %d loops, %d:%d spills:fills\n",
+                      gl_shader_stage_name(info->stage),
+                      comp->cur_instr_index,
+                      comp->num_loops,
+                      comp->num_spills,
+                      comp->num_fills);
+   assert(ret >= 0);
+
+   if (lima_debug & LIMA_DEBUG_SHADERDB)
+      fprintf(stderr, "SHADER-DB: %s\n", shaderdb);
+
+   pipe_debug_message(debug, SHADER_INFO, "%s", shaderdb);
+   free(shaderdb);
+}
+
 bool ppir_compile_nir(struct lima_fs_shader_state *prog, struct nir_shader *nir,
-                      struct ra_regs *ra)
+                      struct ra_regs *ra,
+                      struct pipe_debug_callback *debug)
 {
    nir_function_impl *func = nir_shader_get_entrypoint(nir);
    ppir_compiler *comp = ppir_compiler_create(prog, func->reg_alloc, func->ssa_alloc);
@@ -475,6 +612,13 @@ bool ppir_compile_nir(struct lima_fs_shader_state *prog, struct nir_shader *nir,
 
    if (!ppir_emit_cf_list(comp, &func->body))
       goto err_out0;
+
+   /* If we have discard block add it to the very end */
+   if (comp->discard_block)
+      list_addtail(&comp->discard_block->list, &comp->block_list);
+
+   ppir_add_ordering_deps(comp);
+
    ppir_node_print_prog(comp);
 
    if (!ppir_lower_prog(comp))
@@ -491,6 +635,8 @@ bool ppir_compile_nir(struct lima_fs_shader_state *prog, struct nir_shader *nir,
 
    if (!ppir_codegen_prog(comp))
       goto err_out0;
+
+   ppir_print_shader_db(nir, comp, debug);
 
    ralloc_free(comp);
    return true;

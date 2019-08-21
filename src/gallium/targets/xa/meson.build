@@ -43,12 +43,13 @@ libxatracker = shared_library(
   ],
   link_whole : [libxa_st],
   link_with : [
-    libgalliumvl_stub, libgallium, libmesa_util, libpipe_loader_static,
+    libgalliumvl_stub, libgallium, libpipe_loader_static,
     libws_null, libwsw, libswdri, libswkmsdri,
   ],
   link_depends : xa_link_depends,
   dependencies : [
-    dep_thread, driver_nouveau, driver_i915, driver_svga, driver_freedreno,
+    idep_mesautil,
+    driver_nouveau, driver_i915, driver_svga, driver_freedreno,
   ],
   version : _xa_version,
   install : true,

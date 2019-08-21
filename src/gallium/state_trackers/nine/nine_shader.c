@@ -34,6 +34,7 @@
 #include "pipe/p_shader_tokens.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_dump.h"
+#include "nir/tgsi_to_nir.h"
 
 #define DBG_CHANNEL DBG_SHADER
 
@@ -3789,6 +3790,123 @@ static void parse_shader(struct shader_translator *tx)
     ureg_END(tx->ureg);
 }
 
+#define NINE_SHADER_DEBUG_OPTION_NIR_VS           (1 << 0)
+#define NINE_SHADER_DEBUG_OPTION_NIR_PS           (1 << 1)
+#define NINE_SHADER_DEBUG_OPTION_NO_NIR_VS        (1 << 2)
+#define NINE_SHADER_DEBUG_OPTION_NO_NIR_PS        (1 << 3)
+#define NINE_SHADER_DEBUG_OPTION_DUMP_NIR         (1 << 4)
+#define NINE_SHADER_DEBUG_OPTION_DUMP_TGSI        (1 << 5)
+
+static const struct debug_named_value nine_shader_debug_options[] = {
+    { "nir_vs", NINE_SHADER_DEBUG_OPTION_NIR_VS, "Use NIR for vertex shaders even if the driver doesn't prefer it." },
+    { "nir_ps", NINE_SHADER_DEBUG_OPTION_NIR_PS, "Use NIR for pixel shaders even if the driver doesn't prefer it." },
+    { "no_nir_vs", NINE_SHADER_DEBUG_OPTION_NO_NIR_VS, "Never use NIR for vertex shaders even if the driver prefers it." },
+    { "no_nir_ps", NINE_SHADER_DEBUG_OPTION_NO_NIR_PS, "Never use NIR for pixel shaders even if the driver prefers it." },
+    { "dump_nir", NINE_SHADER_DEBUG_OPTION_DUMP_NIR, "Print translated NIR shaders." },
+    { "dump_tgsi", NINE_SHADER_DEBUG_OPTION_DUMP_TGSI, "Print TGSI shaders." },
+    DEBUG_NAMED_VALUE_END /* must be last */
+};
+
+static inline boolean
+nine_shader_get_debug_flag(uint64_t flag)
+{
+    static uint64_t flags = 0;
+    static boolean first_run = TRUE;
+
+    if (unlikely(first_run)) {
+        first_run = FALSE;
+        flags = debug_get_flags_option("NINE_SHADER", nine_shader_debug_options, 0);
+
+        // Check old TGSI dump envvar too
+        if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
+            flags |= NINE_SHADER_DEBUG_OPTION_DUMP_TGSI;
+        }
+    }
+
+    return !!(flags & flag);
+}
+
+static void
+nine_pipe_nir_shader_state_from_tgsi(struct pipe_shader_state *state, const struct tgsi_token *tgsi_tokens,
+                                     struct pipe_screen *screen)
+{
+    struct nir_shader *nir = tgsi_to_nir(tgsi_tokens, screen);
+
+    if (unlikely(nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_DUMP_NIR))) {
+        nir_print_shader(nir, stdout);
+    }
+
+    state->type = PIPE_SHADER_IR_NIR;
+    state->tokens = NULL;
+    state->ir.nir = nir;
+    memset(&state->stream_output, 0, sizeof(state->stream_output));
+}
+
+static void *
+nine_ureg_create_shader(struct ureg_program                  *ureg,
+                        struct pipe_context                  *pipe,
+                        const struct pipe_stream_output_info   *so)
+{
+    struct pipe_shader_state state;
+    const struct tgsi_token *tgsi_tokens;
+    struct pipe_screen *screen = pipe->screen;
+
+    tgsi_tokens = ureg_finalize(ureg);
+    if (!tgsi_tokens)
+        return NULL;
+
+    assert(((struct tgsi_header *) &tgsi_tokens[0])->HeaderSize >= 2);
+    enum pipe_shader_type shader_type = ((struct tgsi_processor *) &tgsi_tokens[1])->Processor;
+
+    int preferred_ir = screen->get_shader_param(screen, shader_type, PIPE_SHADER_CAP_PREFERRED_IR);
+    bool prefer_nir = (preferred_ir == PIPE_SHADER_IR_NIR);
+    bool use_nir = prefer_nir ||
+        ((shader_type == PIPE_SHADER_VERTEX) && nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_NIR_VS)) ||
+        ((shader_type == PIPE_SHADER_FRAGMENT) && nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_NIR_PS));
+
+    /* Allow user to override preferred IR, this is very useful for debugging */
+    if (unlikely(shader_type == PIPE_SHADER_VERTEX && nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_NO_NIR_VS)))
+        use_nir = false;
+    if (unlikely(shader_type == PIPE_SHADER_FRAGMENT && nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_NO_NIR_PS)))
+        use_nir = false;
+
+    DUMP("shader type: %s, preferred IR: %s, selected IR: %s\n",
+         shader_type == PIPE_SHADER_VERTEX ? "VS" : "PS",
+         prefer_nir ? "NIR" : "TGSI",
+         use_nir ? "NIR" : "TGSI");
+
+    if (use_nir) {
+        nine_pipe_nir_shader_state_from_tgsi(&state, tgsi_tokens, screen);
+    } else {
+        pipe_shader_state_from_tgsi(&state, tgsi_tokens);
+    }
+
+    assert(state.tokens || state.ir.nir);
+
+    if (so)
+        state.stream_output = *so;
+
+    switch (shader_type) {
+    case PIPE_SHADER_VERTEX:
+        return pipe->create_vs_state(pipe, &state);
+    case PIPE_SHADER_FRAGMENT:
+        return pipe->create_fs_state(pipe, &state);
+    default:
+        unreachable("unsupported shader type");
+    }
+}
+
+
+void *
+nine_create_shader_with_so_and_destroy(struct ureg_program                   *p,
+                                       struct pipe_context                *pipe,
+                                       const struct pipe_stream_output_info *so)
+{
+    void *result = nine_ureg_create_shader(p, pipe, so);
+    ureg_destroy(p);
+    return result;
+}
+
 HRESULT
 nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info, struct pipe_context *pipe)
 {
@@ -3984,7 +4102,7 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
     if (info->process_vertices)
         ureg_DECL_constant2D(tx->ureg, 0, 2, 4); /* Viewport data */
 
-    if (debug_get_bool_option("NINE_TGSI_DUMP", FALSE)) {
+    if (unlikely(nine_shader_get_debug_flag(NINE_SHADER_DEBUG_OPTION_DUMP_TGSI))) {
         const struct tgsi_token *toks = ureg_get_tokens(tx->ureg, NULL);
         tgsi_dump(toks, 0);
         ureg_free_tokens(toks);
@@ -3995,9 +4113,9 @@ nine_translate_shader(struct NineDevice9 *device, struct nine_shader_info *info,
                                                     tx->output_info,
                                                     tx->num_outputs,
                                                     &(info->so));
-        info->cso = ureg_create_shader_with_so_and_destroy(tx->ureg, pipe, &(info->so));
+        info->cso = nine_create_shader_with_so_and_destroy(tx->ureg, pipe, &(info->so));
     } else
-        info->cso = ureg_create_shader_and_destroy(tx->ureg, pipe);
+        info->cso = nine_create_shader_with_so_and_destroy(tx->ureg, pipe, NULL);
     if (!info->cso) {
         hr = D3DERR_DRIVERINTERNALERROR;
         FREE(info->lconstf.data);

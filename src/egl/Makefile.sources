@@ -16,7 +16,6 @@ LIBEGL_C_FILES := \
 	main/egldisplay.h \
 	main/egldriver.c \
 	main/egldriver.h \
-	main/eglfallbacks.c \
 	main/eglglobals.c \
 	main/eglglobals.h \
 	main/eglimage.c \

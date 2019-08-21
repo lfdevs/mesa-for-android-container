@@ -106,7 +106,8 @@ interstage_member_mismatch(struct gl_shader_program *prog,
 bool
 intrastage_match(ir_variable *a,
                  ir_variable *b,
-                 struct gl_shader_program *prog)
+                 struct gl_shader_program *prog,
+                 bool match_precision)
 {
    /* Types must match. */
    if (a->get_interface_type() != b->get_interface_type()) {
@@ -136,12 +137,16 @@ intrastage_match(ir_variable *a,
       return false;
    }
 
+   bool type_match = (match_precision ?
+                      a->type == b->type :
+                      a->type->compare_no_precision(b->type));
+
    /* If a block is an array then it must match across the shader.
     * Unsized arrays are also processed and matched agaist sized arrays.
     */
-   if (b->type != a->type && (b->type->is_array() || a->type->is_array()) &&
+   if (!type_match && (b->type->is_array() || a->type->is_array()) &&
        (b->is_interface_instance() || a->is_interface_instance()) &&
-       !validate_intrastage_arrays(prog, b, a))
+       !validate_intrastage_arrays(prog, b, a, match_precision))
       return false;
 
    return true;
@@ -234,7 +239,7 @@ public:
       if (var->data.explicit_location &&
           var->data.location >= VARYING_SLOT_VAR0) {
          char location_str[11];
-         util_snprintf(location_str, 11, "%d", var->data.location);
+         snprintf(location_str, 11, "%d", var->data.location);
 
          const struct hash_entry *entry =
             _mesa_hash_table_search(ht, location_str);
@@ -260,7 +265,7 @@ public:
           * unsigned location value which is overkill but future proof.
           */
          char location_str[11];
-         util_snprintf(location_str, 11, "%d", var->data.location);
+         snprintf(location_str, 11, "%d", var->data.location);
          _mesa_hash_table_insert(ht, ralloc_strdup(mem_ctx, location_str), var);
       } else {
          _mesa_hash_table_insert(ht,
@@ -337,7 +342,8 @@ validate_intrastage_interface_blocks(struct gl_shader_program *prog,
              * it into the appropriate data structure.
              */
             definitions->store(var);
-         } else if (!intrastage_match(prev_def, var, prog)) {
+         } else if (!intrastage_match(prev_def, var, prog,
+                                      true /* match_precision */)) {
             linker_error(prog, "definitions of interface block `%s' do not"
                          " match\n", iface_type->name);
             return;
@@ -467,7 +473,7 @@ validate_interstage_uniform_blocks(struct gl_shader_program *prog,
              * uniform matchin rules (for uniforms, it is as though all
              * shaders are in the same shader stage).
              */
-            if (!intrastage_match(old_def, var, prog)) {
+            if (!intrastage_match(old_def, var, prog, false /* precision */)) {
                linker_error(prog, "definitions of uniform block `%s' do not "
                             "match\n", var->get_interface_type()->name);
                return;

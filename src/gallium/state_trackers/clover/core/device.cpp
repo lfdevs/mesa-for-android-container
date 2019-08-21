@@ -25,6 +25,7 @@
 #include "core/platform.hpp"
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
+#include "util/bitscan.h"
 #include "util/u_debug.h"
 
 using namespace clover;
@@ -108,7 +109,7 @@ device::max_image_buffer_size() const {
 
 cl_uint
 device::max_image_levels_2d() const {
-   return pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+   return util_last_bit(pipe->get_param(pipe, PIPE_CAP_MAX_TEXTURE_2D_SIZE));
 }
 
 cl_uint

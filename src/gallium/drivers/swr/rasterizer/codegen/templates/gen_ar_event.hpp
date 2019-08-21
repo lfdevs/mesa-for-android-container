@@ -36,11 +36,20 @@
 #include "common/os.h"
 #include "core/state.h"
 
+<%
+    always_enabled_knob_groups = ['Framework', 'SWTagFramework', 'ApiSwr']
+    group_knob_remap_table = {
+        "ShaderStats": "KNOB_AR_ENABLE_SHADER_STATS",
+        "PipelineStats" : "KNOB_AR_ENABLE_PIPELINE_STATS",
+        "SWTagData" : "KNOB_AR_ENABLE_SWTAG_DATA",
+ }
+%>
 namespace ArchRast
 {
-% for name in protos['enum_names']:
+<% sorted_enums = sorted(protos['enums']['defs']) %>
+% for name in sorted_enums:
     enum ${name}
-    {<% names = protos['enums'][name]['names'] %>
+    {<% names = protos['enums']['defs'][name]['names'] %>
         % for i in range(len(names)):
         ${names[i].lstrip()}
         % endfor
@@ -55,20 +64,28 @@ namespace ArchRast
     //////////////////////////////////////////////////////////////////////////
     struct Event
     {
+        const uint32_t eventId = {0xFFFFFFFF};
         Event() {}
         virtual ~Event() {}
 
+        virtual bool IsEnabled() const { return true; };
+        virtual const uint32_t GetEventId() const = 0;
         virtual void Accept(EventHandler* pHandler) const = 0;
     };
-% for name in protos['event_names']:
 
+<%  sorted_groups = sorted(protos['events']['groups']) %>
+% for group in sorted_groups:
+    % for event_key in protos['events']['groups'][group]:
+<%
+        event = protos['events']['defs'][event_key]
+%>
     //////////////////////////////////////////////////////////////////////////
-    /// ${name}Data
+    /// ${event_key}Data
     //////////////////////////////////////////////////////////////////////////
 #pragma pack(push, 1)
-    struct ${name}Data
+    struct ${event['name']}Data
     {<%
-        fields = protos['events'][name]['fields'] %>
+        fields = event['fields'] %>
         // Fields
         % for i in range(len(fields)):
             % if fields[i]['size'] > 1:
@@ -81,15 +98,16 @@ namespace ArchRast
 #pragma pack(pop)
 
     //////////////////////////////////////////////////////////////////////////
-    /// ${name}
+    /// ${event_key}
     //////////////////////////////////////////////////////////////////////////
-    struct ${name} : Event
+    struct ${event['name']} : Event
     {<%
-        fields = protos['events'][name]['fields'] %>
-        ${name}Data data;
+        fields = event['fields'] %>
+        const uint32_t eventId = {${ event['id'] }};
+        ${event['name']}Data data;
 
         // Constructor
-        ${name}(
+        ${event['name']}(
         % for i in range(len(fields)):
             % if i < len(fields)-1:
                 % if fields[i]['size'] > 1:
@@ -127,7 +145,24 @@ namespace ArchRast
         }
 
         virtual void Accept(EventHandler* pHandler) const;
+        inline const uint32_t GetEventId() const { return eventId; }
+        % if group not in always_enabled_knob_groups:
+        <% 
+            if group in group_knob_remap_table:
+                group_knob_define = group_knob_remap_table[group]
+            else:
+                group_knob_define = 'KNOB_AR_ENABLE_' + group.upper() + '_EVENTS'
+        %>
+        bool IsEnabled() const
+        {
+            static const bool IsEventEnabled = true;    // TODO: Replace with knob for each event
+            return ${group_knob_define} && IsEventEnabled;
+        }
+        % endif
     };
+
     % endfor
+
+% endfor
 } // namespace ArchRast
 // clang-format on

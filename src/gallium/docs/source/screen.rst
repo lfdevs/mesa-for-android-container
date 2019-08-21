@@ -22,6 +22,8 @@ or integer values, use :ref:`get_param`.
 
 The integer capabilities:
 
+* ``PIPE_CAP_GRAPHICS``: Whether graphics is supported. If not, contexts can
+  only be created with PIPE_CONTEXT_COMPUTE_ONLY.
 * ``PIPE_CAP_NPOT_TEXTURES``: Whether :term:`NPOT` textures may have repeat modes,
   normalized coordinates, and mipmaps.
 * ``PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS``: How many dual-source blend RTs are support.
@@ -34,8 +36,7 @@ The integer capabilities:
 * ``PIPE_CAP_QUERY_TIME_ELAPSED``: Whether PIPE_QUERY_TIME_ELAPSED queries are available.
 * ``PIPE_CAP_TEXTURE_SWIZZLE``: Whether swizzling through sampler views is
   supported.
-* ``PIPE_CAP_MAX_TEXTURE_2D_LEVELS``: The maximum number of mipmap levels available
-  for a 2D texture.
+* ``PIPE_CAP_MAX_TEXTURE_2D_SIZE``: The maximum size of 2D (and 1D) textures.
 * ``PIPE_CAP_MAX_TEXTURE_3D_LEVELS``: The maximum number of mipmap levels available
   for a 3D texture.
 * ``PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS``: The maximum number of mipmap levels available
@@ -46,8 +47,6 @@ The integer capabilities:
   with clamp or clamp-to-border wrap modes.
 * ``PIPE_CAP_BLEND_EQUATION_SEPARATE``: Whether alpha blend equations may be different
   from color blend equations, in :ref:`Blend` state.
-* ``PIPE_CAP_SM3``: Whether the vertex shader and fragment shader support equivalent
-  opcodes to the Shader Model 3 specification. XXX oh god this is horrible
 * ``PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS``: The maximum number of stream buffers.
 * ``PIPE_CAP_PRIMITIVE_RESTART``: Whether primitive restart is supported.
 * ``PIPE_CAP_INDEP_BLEND_ENABLE``: Whether per-rendertarget blend enabling and channel
@@ -68,7 +67,9 @@ The integer capabilities:
 * ``PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER``: Whether the TGSI
   property FS_COORD_PIXEL_CENTER with value INTEGER is supported.
 * ``PIPE_CAP_DEPTH_CLIP_DISABLE``: Whether the driver is capable of disabling
-  depth clipping (through pipe_rasterizer_state)
+  depth clipping (=1) (through pipe_rasterizer_state) or supports lowering
+  depth_clamp in the client shader code (=2), for this the driver must
+  currently use TGSI.
 * ``PIPE_CAP_DEPTH_CLIP_DISABLE_SEPARATE``: Whether the driver is capable of
   disabling depth clipping (through pipe_rasterizer_state) separately for
   the near and far plane. If not, depth_clip_near and depth_clip_far will be
@@ -306,6 +307,8 @@ The integer capabilities:
   TGSI opcodes are supported.
 * ``PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL``: If state trackers should use
   a system value for the POSITION fragment shader input.
+* ``PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL``: If state trackers should use
+  a system value for the POINT fragment shader input.
 * ``PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL``: If state trackers should use
   a system value for the FACE fragment shader input.
   Also, the FACE system value is integer, not float.
@@ -379,8 +382,12 @@ The integer capabilities:
 * ``PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY``: Tell the GLSL compiler to use
   the minimum amount of optimizations just to be able to do all the linking
   and lowering.
-* ``PIPE_CAP_TGSI_FS_FBFETCH``: Whether a fragment shader can use the FBFETCH
-  opcode to retrieve the current value in the framebuffer.
+* ``PIPE_CAP_FBFETCH``: The number of render targets whose value in the
+  current framebuffer can be read in the shader.  0 means framebuffer fetch
+  is not supported.  1 means that only the first render target can be read,
+  and a larger value would mean that multiple render targets are supported.
+* ``PIPE_CAP_FBFETCH_COHERENT``: Whether framebuffer fetches from the fragment
+  shader can be guaranteed to be coherent with framebuffer writes.
 * ``PIPE_CAP_TGSI_MUL_ZERO_WINS``: Whether TGSI shaders support the
   ``TGSI_PROPERTY_MUL_ZERO_WINS`` shader property.
 * ``PIPE_CAP_DOUBLES``: Whether double precision floating-point operations
@@ -523,7 +530,24 @@ The integer capabilities:
   resource_from_handle and resource_get_handle.
 * ``PIPE_CAP_PREFER_COMPUTE_BLIT_FOR_MULTIMEDIA``: Whether VDPAU, VAAPI, and
   OpenMAX should use a compute-based blit instead of pipe_context::blit.
+* ``PIPE_CAP_FRAGMENT_SHADER_INTERLOCK``: True if fragment shader interlock
+  functionality is supported.
+* ``PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED``: True if driver handles
+  gl_LocalInvocationIndex and gl_GlobalInvocationID.  Otherwise, state tracker will
+  lower those system values.
+* ``PIPE_CAP_ATOMIC_FLOAT_MINMAX``: Atomic float point minimum,
+  maximum, exchange and compare-and-swap support to buffer and shared variables.
 * ``PIPE_CAP_TGSI_DIV``: Whether opcode DIV is supported
+* ``PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD``: Whether texture lookups with
+  explicit LOD is supported in the fragment shader.
+* ``PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES``: True if the driver supports
+  derivatives in fragment shaders.
+* ``PIPE_CAP_VERTEX_SHADER_SATURATE``: True if the driver supports saturate
+  modifiers in the vertex shader.
+* ``PIPE_CAP_TEXTURE_SHADOW_LOD``: True if the driver supports shadow sampler
+  types with texture functions having interaction with LOD of texture lookup.
+* ``PIPE_CAP_SHADER_SAMPLES_IDENTICAL``: True if the driver supports a shader query to tell whether all samples of a multisampled surface are definitely identical.
+* ``PIPE_CAP_TGSI_ATOMINC_WRAP``: Atomic increment/decrement + wrap around are supported.
 
 .. _pipe_capf:
 

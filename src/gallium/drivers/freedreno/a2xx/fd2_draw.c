@@ -428,16 +428,20 @@ fd2_clear_fast(struct fd_context *ctx, unsigned buffers,
 	if (buffers & PIPE_CLEAR_COLOR)
 		color_size = util_format_get_blocksizebits(format) == 32;
 
-	if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))
+	if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL)) {
+		/* no fast clear when clearing only one component of depth+stencil buffer */
+		if (!(buffers & PIPE_CLEAR_DEPTH))
+			return false;
+
+		if ((pfb->zsbuf->format == PIPE_FORMAT_Z24_UNORM_S8_UINT ||
+			 pfb->zsbuf->format == PIPE_FORMAT_S8_UINT_Z24_UNORM) &&
+			 !(buffers & PIPE_CLEAR_STENCIL))
+			return false;
+
 		depth_size = fd_pipe2depth(pfb->zsbuf->format) == DEPTHX_24_8;
+	}
 
 	assert(color_size >= 0 || depth_size >= 0);
-
-	/* when clearing 24_8, depth/stencil must be both cleared
-	 * TODO: if buffer isn't attached we can clear it anyway
-	 */
-	if (depth_size == 1 && !(buffers & PIPE_CLEAR_STENCIL) != !(buffers & PIPE_CLEAR_DEPTH))
-		return false;
 
 	if (color_size == 0) {
 		color_clear = pack_rgba(format, color->f);

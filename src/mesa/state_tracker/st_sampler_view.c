@@ -427,7 +427,7 @@ get_texture_format_swizzle(const struct st_context *st,
  *
  * \param stObj  the st texture object,
  */
-MAYBE_UNUSED static boolean
+ASSERTED static boolean
 check_sampler_swizzle(const struct st_context *st,
                       const struct st_texture_object *stObj,
                       const struct pipe_sampler_view *sv,
@@ -494,6 +494,19 @@ get_sampler_view_format(struct st_context *st,
    case PIPE_FORMAT_NV12:
    case PIPE_FORMAT_IYUV:
       format = PIPE_FORMAT_R8_UNORM;
+      break;
+   case PIPE_FORMAT_P016:
+      format = PIPE_FORMAT_R16_UNORM;
+      break;
+   case PIPE_FORMAT_YUYV:
+   case PIPE_FORMAT_UYVY:
+      format = PIPE_FORMAT_R8G8_UNORM;
+      break;
+   case PIPE_FORMAT_AYUV:
+      format = PIPE_FORMAT_RGBA8888_UNORM;
+      break;
+   case PIPE_FORMAT_XYUV:
+      format = PIPE_FORMAT_RGBX8888_UNORM;
       break;
    default:
       break;
@@ -616,8 +629,8 @@ st_get_buffer_sampler_view_from_stobj(struct st_context *st,
                                               stObj->base._BufferObjectFormat)
              == view->format);
          assert(view->target == PIPE_BUFFER);
-         unsigned base = stObj->base.BufferOffset;
-         MAYBE_UNUSED unsigned size = MIN2(buf->width0 - base,
+         ASSERTED unsigned base = stObj->base.BufferOffset;
+         ASSERTED unsigned size = MIN2(buf->width0 - base,
                            (unsigned) stObj->base.BufferSize);
          assert(view->u.buf.offset == base);
          assert(view->u.buf.size == size);

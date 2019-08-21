@@ -1250,7 +1250,7 @@ struct pipe_video_codec *si_common_uvd_create_decoder(struct pipe_context *conte
 	if (!dec)
 		return NULL;
 
-	if (sctx->screen->info.drm_major < 3)
+	if (!sctx->screen->info.is_amdgpu)
 		dec->use_legacy = true;
 
 	dec->base = *templ;

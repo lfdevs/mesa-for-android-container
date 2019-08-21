@@ -81,6 +81,7 @@
         return _mm256_##op(a, b, ImmT);                                       \
     }
 
+
 //-----------------------------------------------------------------------
 // Floating point arithmetic operations
 //-----------------------------------------------------------------------
@@ -116,7 +117,14 @@ SIMD_IWRAPPER_2(subs_epu8); // return (b > a) ? 0 : (a - b) (uint8)
 //-----------------------------------------------------------------------
 // Logical operations
 //-----------------------------------------------------------------------
-SIMD_IWRAPPER_2_(and_si, and_si256);       // return a & b       (int)
+#if _MSC_VER >= 1920 // && _MSC_FULL_VER < [some_fixed_version]
+// Some versions of MSVC 2019 don't handle constant folding of and_si() correctly.
+// Using and_ps instead inhibits the compiler's constant folding and actually issues
+// the and intrinsic even though both inputs are constant values.
+#else
+// Use native integer and intrinsic
+SIMD_IWRAPPER_2_(and_si, and_si256); // return a & b       (int)
+#endif
 SIMD_IWRAPPER_2_(andnot_si, andnot_si256); // return (~a) & b    (int)
 SIMD_IWRAPPER_2_(or_si, or_si256);         // return a | b       (int)
 SIMD_IWRAPPER_2_(xor_si, xor_si256);       // return a ^ b       (int)
@@ -213,6 +221,10 @@ static SIMDINLINE Float SIMDCALL
     return _mm256_i32gather_ps(p, idx, static_cast<int>(ScaleT));
 }
 
+#if _MSC_VER == 1920 // && _MSC_FULL_VER < [some_fixed_version]
+// Don't use _mm256_mask_i32gather_ps(), the compiler doesn't preserve the mask register
+// correctly in early versions of MSVC 2019
+#else
 // for each element: (mask & (1 << 31)) ? (i32gather_ps<ScaleT>(p, idx), mask = 0) : old
 template <ScaleFactor ScaleT = ScaleFactor::SF_1>
 static SIMDINLINE Float SIMDCALL
@@ -222,6 +234,7 @@ static SIMDINLINE Float SIMDCALL
     // Only for this intrinsic - not sure why. :(
     return _mm256_mask_i32gather_ps(old.v, p, idx.v, mask.v, static_cast<int>(ScaleT));
 }
+#endif
 
 static SIMDINLINE uint32_t SIMDCALL movemask_epi8(Integer const& a)
 {

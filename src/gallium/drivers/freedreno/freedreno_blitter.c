@@ -41,10 +41,6 @@ default_dst_texture(struct pipe_surface *dst_templ, struct pipe_resource *dst,
 		unsigned dstlevel, unsigned dstz)
 {
 	memset(dst_templ, 0, sizeof(*dst_templ));
-	if (dst->target == PIPE_BUFFER)
-		dst_templ->format = PIPE_FORMAT_R8_UINT;
-	else
-		dst_templ->format = util_format_linear(dst->format);
 	dst_templ->u.tex.level = dstlevel;
 	dst_templ->u.tex.first_layer = dstz;
 	dst_templ->u.tex.last_layer = dstz;
@@ -67,9 +63,6 @@ default_src_texture(struct pipe_sampler_view *src_templ,
 
 	if (src->target  == PIPE_BUFFER) {
 		src_templ->target = PIPE_TEXTURE_1D;
-		src_templ->format = PIPE_FORMAT_R8_UINT;
-	} else {
-		src_templ->format = util_format_linear(src->format);
 	}
 	src_templ->u.tex.first_level = srclevel;
 	src_templ->u.tex.last_level = srclevel;
@@ -87,7 +80,7 @@ static void
 fd_blitter_pipe_begin(struct fd_context *ctx, bool render_cond, bool discard,
 		enum fd_render_stage stage)
 {
-	fd_fence_ref(ctx->base.screen, &ctx->last_fence, NULL);
+	fd_fence_ref(&ctx->last_fence, NULL);
 
 	util_blitter_save_fragment_constant_buffer_slot(ctx->blitter,
 			ctx->constbuf[PIPE_SHADER_FRAGMENT].cb);

@@ -1,5 +1,5 @@
 /*
- * Copyright © 2007-2018 Advanced Micro Devices, Inc.
+ * Copyright © 2007-2019 Advanced Micro Devices, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -820,7 +820,7 @@ BOOL_32 ADDR_API ElemGetExportNorm(
     Addr::Lib* pLib = Lib::GetLib(hLib);
     BOOL_32 enabled = FALSE;
 
-    MAYBE_UNUSED ADDR_E_RETURNCODE returnCode = ADDR_OK;
+    ASSERTED ADDR_E_RETURNCODE returnCode = ADDR_OK;
 
     if (pLib != NULL)
     {
@@ -1070,7 +1070,7 @@ ADDR_E_RETURNCODE ADDR_API AddrComputePrtInfo(
 */
 ADDR_E_RETURNCODE ADDR_API AddrGetMaxAlignments(
     ADDR_HANDLE                     hLib, ///< address lib handle
-    ADDR_GET_MAX_ALINGMENTS_OUTPUT* pOut) ///< [out] output structure
+    ADDR_GET_MAX_ALIGNMENTS_OUTPUT* pOut) ///< [out] output structure
 {
     Addr::Lib* pLib = Lib::GetLib(hLib);
 
@@ -1101,7 +1101,7 @@ ADDR_E_RETURNCODE ADDR_API AddrGetMaxAlignments(
 */
 ADDR_E_RETURNCODE ADDR_API AddrGetMaxMetaAlignments(
     ADDR_HANDLE                     hLib, ///< address lib handle
-    ADDR_GET_MAX_ALINGMENTS_OUTPUT* pOut) ///< [out] output structure
+    ADDR_GET_MAX_ALIGNMENTS_OUTPUT* pOut) ///< [out] output structure
 {
     Addr::Lib* pLib = Lib::GetLib(hLib);
 
@@ -1725,6 +1725,7 @@ ADDR_E_RETURNCODE ADDR_API Addr2IsValidDisplaySwizzleMode(
     if (pLib != NULL)
     {
         ADDR2_COMPUTE_SURFACE_INFO_INPUT in;
+        in.resourceType = ADDR_RSRC_TEX_2D;
         in.swizzleMode = swizzleMode;
         in.bpp = bpp;
 

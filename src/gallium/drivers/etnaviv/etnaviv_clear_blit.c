@@ -179,9 +179,14 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
          MIN2(src_priv->levels[level].padded_width, dst_priv->levels[level].padded_width);
       blit.src.box.height = blit.dst.box.height =
          MIN2(src_priv->levels[level].padded_height, dst_priv->levels[level].padded_height);
+      unsigned depth = MIN2(src_priv->levels[level].depth, dst_priv->levels[level].depth);
+      if (dst->array_size > 1) {
+         assert(depth == 1); /* no array of 3d texture */
+         depth = dst->array_size;
+      }
 
-      for (int layer = 0; layer < dst->array_size; layer++) {
-         blit.src.box.z = blit.dst.box.z = layer;
+      for (int z = 0; z < depth; z++) {
+         blit.src.box.z = blit.dst.box.z = z;
          pctx->blit(pctx, &blit);
       }
    }
@@ -208,8 +213,8 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
    blit.dst.box.depth = blit.src.box.depth = 1;
    blit.src.level = blit.dst.level = level;
 
-   for (int layer = 0; layer < dst->array_size; layer++) {
-      blit.src.box.z = blit.dst.box.z = layer;
+   for (int z = 0; z < box->depth; z++) {
+      blit.src.box.z = blit.dst.box.z = box->z + z;
       pctx->blit(pctx, &blit);
    }
 }

@@ -90,12 +90,12 @@ vmw_winsys_create( int fd )
    vws->device = stat_buf.st_rdev;
    vws->open_count = 1;
    vws->ioctl.drm_fd = fcntl(fd, F_DUPFD_CLOEXEC, 3);
-   vws->base.have_gb_dma = TRUE;
-   vws->base.need_to_rebind_resources = FALSE;
-
+   vws->force_coherent = FALSE;
    if (!vmw_ioctl_init(vws))
       goto out_no_ioctl;
 
+   vws->base.have_gb_dma = !vws->force_coherent;
+   vws->base.need_to_rebind_resources = FALSE;
    vws->base.have_transfer_from_buffer_cmd = vws->base.have_vgpu10;
    vws->fence_ops = vmw_fence_ops_create(vws);
    if (!vws->fence_ops)

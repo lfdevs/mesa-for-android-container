@@ -71,8 +71,6 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
       ralloc_free(mem_ctx);
       return false;
-   } else {
-      prog_data.base.total_shared = cp->program.info.cs.shared_size;
    }
 
    assign_cs_binding_table_offsets(devinfo, &cp->program, &prog_data);
@@ -92,7 +90,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
 
    char *error_str;
    program = brw_compile_cs(brw->screen->compiler, brw, mem_ctx, key,
-                            &prog_data, nir, st_index, &error_str);
+                            &prog_data, nir, st_index, NULL, &error_str);
    if (program == NULL) {
       cp->program.sh.data->LinkStatus = LINKING_FAILURE;
       ralloc_strcat(&cp->program.sh.data->InfoLog, error_str);
@@ -105,7 +103,7 @@ brw_codegen_cs_prog(struct brw_context *brw,
    if (unlikely(brw->perf_debug)) {
       if (cp->compiled_once) {
          brw_debug_recompile(brw, MESA_SHADER_COMPUTE, cp->program.Id,
-                             key->program_string_id, key);
+                             &key->base);
       }
       cp->compiled_once = true;
 
@@ -138,15 +136,11 @@ brw_cs_populate_key(struct brw_context *brw, struct brw_cs_prog_key *key)
    /* BRW_NEW_COMPUTE_PROGRAM */
    const struct brw_program *cp =
       (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
-   const struct gl_program *prog = (struct gl_program *) cp;
 
    memset(key, 0, sizeof(*key));
 
    /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, &key->tex);
-
-   /* The unique compute program ID */
-   key->program_string_id = cp->id;
+   brw_populate_base_prog_key(ctx, cp, &key->base);
 }
 
 
@@ -178,21 +172,20 @@ brw_upload_cs_prog(struct brw_context *brw)
       return;
 
    cp = (struct brw_program *) brw->programs[MESA_SHADER_COMPUTE];
-   cp->id = key.program_string_id;
+   cp->id = key.base.program_string_id;
 
-   MAYBE_UNUSED bool success = brw_codegen_cs_prog(brw, cp, &key);
+   ASSERTED bool success = brw_codegen_cs_prog(brw, cp, &key);
    assert(success);
 }
 
 void
-brw_cs_populate_default_key(const struct gen_device_info *devinfo,
+brw_cs_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_cs_prog_key *key,
                             struct gl_program *prog)
 {
+   const struct gen_device_info *devinfo = compiler->devinfo;
    memset(key, 0, sizeof(*key));
-   key->program_string_id = brw_program(prog)->id;
-
-   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
+   brw_populate_default_base_prog_key(devinfo, brw_program(prog), &key->base);
 }
 
 bool
@@ -203,7 +196,7 @@ brw_cs_precompile(struct gl_context *ctx, struct gl_program *prog)
 
    struct brw_program *bcp = brw_program(prog);
 
-   brw_cs_populate_default_key(&brw->screen->devinfo, &key, prog);
+   brw_cs_populate_default_key(brw->screen->compiler, &key, prog);
 
    uint32_t old_prog_offset = brw->cs.base.prog_offset;
    struct brw_stage_prog_data *old_prog_data = brw->cs.base.prog_data;

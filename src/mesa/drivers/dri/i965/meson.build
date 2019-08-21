@@ -54,9 +54,7 @@ files_i965 = files(
   'brw_nir_uniforms.cpp',
   'brw_object_purgeable.c',
   'brw_pipe_control.c',
-  'brw_performance_query.h',
   'brw_performance_query.c',
-  'brw_performance_query_mdapi.c',
   'brw_program.c',
   'brw_program.h',
   'brw_program_binary.c',
@@ -150,15 +148,18 @@ endforeach
 
 libi965 = static_library(
   'i965',
-  [files_i965, ir_expression_operation_h, xmlpool_options_h],
+  [files_i965, ir_expression_operation_h],
   include_directories : [
-    inc_common, inc_intel, inc_dri_common, inc_util, inc_include,
+    inc_common, inc_intel, inc_dri_common, inc_include,
   ],
   c_args : [c_vis_args, no_override_init_args, c_sse2_args],
   cpp_args : [cpp_vis_args, c_sse2_args],
   link_with : [
-    i965_gen_libs, libintel_common, libintel_dev, libisl, libintel_compiler,
-    libblorp, libintel_perf
+    i965_gen_libs, libintel_dev, libisl, libintel_compiler, libblorp,
+    libintel_perf
   ],
-  dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml],
+  dependencies : [
+    dep_libdrm, dep_valgrind, idep_libintel_common, idep_nir_headers, idep_genxml,
+    idep_xmlconfig,
+  ],
 )

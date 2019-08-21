@@ -68,13 +68,11 @@ swr_clear(struct pipe_context *pipe,
    ((union pipe_color_union *)color)->f[3] = 1.0; /* cast off your const'd-ness */
 #endif
 
-   SWR_RECT clear_rect;
-   /* If enabled, clear to scissor; otherwise clear full surface */
-   if (ctx->rasterizer && ctx->rasterizer->scissor) {
-      clear_rect = ctx->swr_scissor;
-   } else {
-      clear_rect = {0, 0, (int32_t)fb->width, (int32_t)fb->height};
-   }
+   /* 
+    * Always clear full surface. When GL_SCISSOR_TEST is enabled
+    * glClear is handled by state tracker and there is no need to do this here
+    */
+   SWR_RECT clear_rect = {0, 0, (int32_t)fb->width, (int32_t)fb->height};
 
    for (unsigned i = 0; i < layers; ++i) {
       swr_update_draw_context(ctx);
@@ -94,65 +92,8 @@ swr_clear(struct pipe_context *pipe,
    }
 }
 
-
-#if 0 // XXX, these don't get called. how to get these called?  Do we need
-      // them?  Docs?
-static void
-swr_clear_render_target(struct pipe_context *pipe, struct pipe_surface *ps,
-                        const union pipe_color_union *color,
-                        unsigned x, unsigned y, unsigned w, unsigned h,
-                        bool render_condition_enabled)
-{
-   struct swr_context *ctx = swr_context(pipe);
-   fprintf(stderr, "SWR swr_clear_render_target!\n");
-
-   ctx->dirty |= SWR_NEW_FRAMEBUFFER | SWR_NEW_SCISSOR;
-}
-
-static void
-swr_clear_depth_stencil(struct pipe_context *pipe, struct pipe_surface *ps,
-                        unsigned buffers, double depth, unsigned stencil,
-                        unsigned x, unsigned y, unsigned w, unsigned h,
-                        bool render_condition_enabled)
-{
-   struct swr_context *ctx = swr_context(pipe);
-   fprintf(stderr, "SWR swr_clear_depth_stencil!\n");
-
-   ctx->dirty |= SWR_NEW_FRAMEBUFFER | SWR_NEW_SCISSOR;
-}
-
-static void
-swr_clear_buffer(struct pipe_context *pipe,
-                 struct pipe_resource *res,
-                 unsigned offset, unsigned size,
-                 const void *data, int data_size)
-{
-   fprintf(stderr, "SWR swr_clear_buffer!\n");
-   struct swr_context *ctx = swr_context(pipe);
-   struct swr_resource *buf = swr_resource(res);
-   union pipe_color_union color;
-   enum pipe_format dst_fmt;
-   unsigned width, height, elements;
-
-   assert(res->target == PIPE_BUFFER);
-   assert(buf);
-   assert(size % data_size == 0);
-
-   SWR_SURFACE_STATE &swr_buffer = buf->swr;
-
-   ctx->dirty |= SWR_NEW_FRAMEBUFFER | SWR_NEW_SCISSOR;
-}
-#endif
-
-
 void
 swr_clear_init(struct pipe_context *pipe)
 {
    pipe->clear = swr_clear;
-#if 0 // XXX, these don't get called. how to get these called?  Do we need
-      // them?  Docs?
-   pipe->clear_render_target = swr_clear_render_target;
-   pipe->clear_depth_stencil = swr_clear_depth_stencil;
-   pipe->clear_buffer = swr_clear_buffer;
-#endif
 }

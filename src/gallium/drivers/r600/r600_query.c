@@ -994,8 +994,8 @@ static void r600_destroy_query(struct pipe_context *ctx, struct pipe_query *quer
 	rquery->ops->destroy(rctx->screen, rquery);
 }
 
-static boolean r600_begin_query(struct pipe_context *ctx,
-                                struct pipe_query *query)
+static bool r600_begin_query(struct pipe_context *ctx,
+			     struct pipe_query *query)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
@@ -1294,9 +1294,9 @@ static void r600_query_hw_add_result(struct r600_common_screen *rscreen,
 	}
 }
 
-static boolean r600_get_query_result(struct pipe_context *ctx,
-				     struct pipe_query *query, boolean wait,
-				     union pipe_query_result *result)
+static bool r600_get_query_result(struct pipe_context *ctx,
+				  struct pipe_query *query, bool wait,
+				  union pipe_query_result *result)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
 	struct r600_query *rquery = (struct r600_query *)query;
@@ -1306,7 +1306,7 @@ static boolean r600_get_query_result(struct pipe_context *ctx,
 
 static void r600_get_query_result_resource(struct pipe_context *ctx,
                                            struct pipe_query *query,
-                                           boolean wait,
+                                           bool wait,
                                            enum pipe_query_value_type result_type,
                                            int index,
                                            struct pipe_resource *resource,
@@ -1753,7 +1753,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 
 static void r600_render_condition(struct pipe_context *ctx,
 				  struct pipe_query *query,
-				  boolean condition,
+				  bool condition,
 				  enum pipe_render_cond_flag mode)
 {
 	struct r600_common_context *rctx = (struct r600_common_context *)ctx;
@@ -2031,7 +2031,7 @@ static const struct pipe_driver_query_info r600_driver_query_list[] = {
 
 static unsigned r600_get_num_queries(struct r600_common_screen *rscreen)
 {
-	if (rscreen->info.drm_major == 2 && rscreen->info.drm_minor >= 42)
+	if (rscreen->info.drm_minor >= 42)
 		return ARRAY_SIZE(r600_driver_query_list);
 	else
 		return ARRAY_SIZE(r600_driver_query_list) - 25;

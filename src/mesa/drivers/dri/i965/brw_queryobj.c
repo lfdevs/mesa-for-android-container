@@ -36,6 +36,7 @@
  * needs.
  */
 #include "main/imports.h"
+#include "main/queryobj.h"
 
 #include "brw_context.h"
 #include "brw_defines.h"
@@ -239,7 +240,7 @@ brw_delete_query(struct gl_context *ctx, struct gl_query_object *q)
    struct brw_query_object *query = (struct brw_query_object *)q;
 
    brw_bo_unreference(query->bo);
-   free(query);
+   _mesa_delete_query(ctx, q);
 }
 
 /**

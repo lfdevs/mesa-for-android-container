@@ -149,7 +149,7 @@ dri2_drm_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    }
 
    if (!dri2_init_surface(&dri2_surf->base, disp, EGL_WINDOW_BIT, conf,
-                          attrib_list, false))
+                          attrib_list, false, native_surface))
       goto cleanup_surf;
 
    config = dri2_get_dri_config(dri2_conf, EGL_WINDOW_BIT,
@@ -171,7 +171,7 @@ dri2_drm_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
    dri2_surf->base.Height = surf->base.height;
    surf->dri_private = dri2_surf;
 
-   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf))
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf->gbm_surf))
       goto cleanup_surf;
 
    return &dri2_surf->base;
@@ -668,7 +668,6 @@ static const struct dri2_egl_display_vtbl dri2_drm_display_vtbl = {
    .swap_buffers = dri2_drm_swap_buffers,
    .swap_buffers_with_damage = dri2_fallback_swap_buffers_with_damage,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,
-   .set_damage_region = dri2_fallback_set_damage_region,
    .post_sub_buffer = dri2_fallback_post_sub_buffer,
    .copy_buffers = dri2_fallback_copy_buffers,
    .query_buffer_age = dri2_drm_query_buffer_age,

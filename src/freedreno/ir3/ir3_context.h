@@ -140,13 +140,6 @@ struct ir3_context * ir3_context_init(struct ir3_compiler *compiler,
 		struct ir3_shader_variant *so);
 void ir3_context_free(struct ir3_context *ctx);
 
-/* gpu pointer size in units of 32bit registers/slots */
-static inline
-unsigned ir3_pointer_size(struct ir3_context *ctx)
-{
-	return (ctx->compiler->gpu_id >= 500) ? 2 : 1;
-}
-
 struct ir3_instruction ** ir3_get_dst_ssa(struct ir3_context *ctx, nir_ssa_def *dst, unsigned n);
 struct ir3_instruction ** ir3_get_dst(struct ir3_context *ctx, nir_dest *dst, unsigned n);
 struct ir3_instruction * const * ir3_get_src(struct ir3_context *ctx, nir_src *src);
@@ -170,7 +163,8 @@ struct ir3_instruction * ir3_get_predicate(struct ir3_context *ctx,
 void ir3_declare_array(struct ir3_context *ctx, nir_register *reg);
 struct ir3_array * ir3_get_array(struct ir3_context *ctx, nir_register *reg);
 struct ir3_instruction *ir3_create_array_load(struct ir3_context *ctx,
-		struct ir3_array *arr, int n, struct ir3_instruction *address);
+		struct ir3_array *arr, int n, struct ir3_instruction *address,
+		unsigned bitsize);
 void ir3_create_array_store(struct ir3_context *ctx, struct ir3_array *arr, int n,
 		struct ir3_instruction *src, struct ir3_instruction *address);
 

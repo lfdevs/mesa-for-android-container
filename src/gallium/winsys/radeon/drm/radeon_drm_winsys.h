@@ -109,6 +109,7 @@ radeon_drm_winsys(struct radeon_winsys *base)
     return (struct radeon_drm_winsys*)base;
 }
 
+uint32_t radeon_drm_get_gpu_reset_counter(struct radeon_drm_winsys *ws);
 void radeon_surface_init_functions(struct radeon_drm_winsys *ws);
 
 #endif

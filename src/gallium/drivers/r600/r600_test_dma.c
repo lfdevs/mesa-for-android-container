@@ -177,11 +177,10 @@ void r600_test_dma(struct r600_common_screen *rscreen)
 	struct pipe_context *ctx = screen->context_create(screen, NULL, 0);
 	struct r600_common_context *rctx = (struct r600_common_context*)ctx;
 	uint64_t max_alloc_size;
-	unsigned i, iterations, num_partial_copies, max_levels, max_tex_side;
+	unsigned i, iterations, num_partial_copies, max_tex_side;
 	unsigned num_pass = 0, num_fail = 0;
 
-	max_levels = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
-	max_tex_side = 1 << (max_levels - 1);
+	max_tex_side = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 
 	/* Max 128 MB allowed for both textures. */
 	max_alloc_size = 128 * 1024 * 1024;

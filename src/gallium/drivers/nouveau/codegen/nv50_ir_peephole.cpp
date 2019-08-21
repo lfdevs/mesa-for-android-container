@@ -3514,7 +3514,7 @@ PostRaLoadPropagation::handleMADforNV50(Instruction *i)
          ImmediateValue val;
          // getImmediate() has side-effects on the argument so this *shouldn't*
          // be folded into the assert()
-         MAYBE_UNUSED bool ret = def->src(0).getImmediate(val);
+         ASSERTED bool ret = def->src(0).getImmediate(val);
          assert(ret);
          if (i->getSrc(1)->reg.data.id & 1)
             val.reg.data.u32 >>= 16;

@@ -180,12 +180,12 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	    copy_width <= (1 << 14) &&
 	    copy_height <= (1 << 14) &&
 	    copy_depth <= (1 << 11) &&
-	    /* HW limitation - CIK: */
-	    (sctx->chip_class != CIK ||
+	    /* HW limitation - GFX7: */
+	    (sctx->chip_class != GFX7 ||
 	     (copy_width < (1 << 14) &&
 	      copy_height < (1 << 14) &&
 	      copy_depth < (1 << 11))) &&
-	    /* HW limitation - some CIK parts: */
+	    /* HW limitation - some GFX7 parts: */
 	    ((sctx->family != CHIP_BONAIRE &&
 	      sctx->family != CHIP_KAVERI) ||
 	     (srcx + copy_width != (1 << 14) &&
@@ -207,7 +207,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		radeon_emit(cs, dstx | (dsty << 16));
 		radeon_emit(cs, dstz | ((dst_pitch - 1) << 16));
 		radeon_emit(cs, dst_slice_pitch - 1);
-		if (sctx->chip_class == CIK) {
+		if (sctx->chip_class == GFX7) {
 			radeon_emit(cs, copy_width | (copy_height << 16));
 			radeon_emit(cs, copy_depth);
 		} else {
@@ -264,7 +264,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		    bpp == 16)
 			return false;
 
-		if (sctx->chip_class == CIK &&
+		if (sctx->chip_class == GFX7 &&
 		    (copy_width_aligned == (1 << 14) ||
 		     copy_height == (1 << 14) ||
 		     copy_depth == (1 << 11)))
@@ -272,8 +272,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 
 		if ((sctx->family == CHIP_BONAIRE ||
 		     sctx->family == CHIP_KAVERI ||
-		     sctx->family == CHIP_KABINI ||
-		     sctx->family == CHIP_MULLINS) &&
+		     sctx->family == CHIP_KABINI) &&
 		    (tiled_x + copy_width == (1 << 14) ||
 		     tiled_y + copy_height == (1 << 14)))
 			return false;
@@ -371,7 +370,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			radeon_emit(cs, linear_x | (linear_y << 16));
 			radeon_emit(cs, linear_z | ((linear_pitch - 1) << 16));
 			radeon_emit(cs, linear_slice_pitch - 1);
-			if (sctx->chip_class == CIK) {
+			if (sctx->chip_class == GFX7) {
 				radeon_emit(cs, copy_width_aligned | (copy_height << 16));
 				radeon_emit(cs, copy_depth);
 			} else {
@@ -394,9 +393,9 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 	    dsty % 8 == 0 &&
 	    srcx % 8 == 0 &&
 	    srcy % 8 == 0 &&
-	    /* this can either be equal, or display->rotated (VI+ only) */
+	    /* this can either be equal, or display->rotated (GFX8+ only) */
 	    (src_micro_mode == dst_micro_mode ||
-	     (sctx->chip_class >= VI &&
+	     (sctx->chip_class >= GFX8 &&
 	      src_micro_mode == V_009910_ADDR_SURF_DISPLAY_MICRO_TILING &&
 	      dst_micro_mode == V_009910_ADDR_SURF_ROTATED_MICRO_TILING))) {
 		assert(src_pitch % 8 == 0);
@@ -434,16 +433,15 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 		    copy_depth <= (1 << 11) &&
 		    copy_width_aligned % 8 == 0 &&
 		    copy_height_aligned % 8 == 0 &&
-		    /* HW limitation - CIK: */
-		    (sctx->chip_class != CIK ||
+		    /* HW limitation - GFX7: */
+		    (sctx->chip_class != GFX7 ||
 		     (copy_width_aligned < (1 << 14) &&
 		      copy_height_aligned < (1 << 14) &&
 		      copy_depth < (1 << 11))) &&
-		    /* HW limitation - some CIK parts: */
+		    /* HW limitation - some GFX7 parts: */
 		    ((sctx->family != CHIP_BONAIRE &&
 		      sctx->family != CHIP_KAVERI &&
-		      sctx->family != CHIP_KABINI &&
-		      sctx->family != CHIP_MULLINS) ||
+		      sctx->family != CHIP_KABINI) ||
 		     (srcx + copy_width_aligned != (1 << 14) &&
 		      srcy + copy_height_aligned != (1 << 14) &&
 		      dstx + copy_width != (1 << 14)))) {
@@ -465,7 +463,7 @@ static bool cik_sdma_copy_texture(struct si_context *sctx,
 			radeon_emit(cs, dstz | (dst_pitch_tile_max << 16));
 			radeon_emit(cs, dst_slice_tile_max);
 			radeon_emit(cs, encode_tile_info(sctx, sdst, dst_level, false));
-			if (sctx->chip_class == CIK) {
+			if (sctx->chip_class == GFX7) {
 				radeon_emit(cs, copy_width_aligned |
 						(copy_height_aligned << 16));
 				radeon_emit(cs, copy_depth);
@@ -502,7 +500,15 @@ static void cik_sdma_copy(struct pipe_context *ctx,
 		return;
 	}
 
-	if ((sctx->chip_class == CIK || sctx->chip_class == VI) &&
+	/* SDMA causes corruption. See:
+	 *   https://bugs.freedesktop.org/show_bug.cgi?id=110575
+	 *   https://bugs.freedesktop.org/show_bug.cgi?id=110635
+	 *
+	 * Keep SDMA enabled on APUs.
+	 */
+	if ((sctx->screen->debug_flags & DBG(FORCE_DMA) ||
+	     !sctx->screen->info.has_dedicated_vram) &&
+	    (sctx->chip_class == GFX7 || sctx->chip_class == GFX8) &&
 	    cik_sdma_copy_texture(sctx, dst, dst_level, dstx, dsty, dstz,
 				  src, src_level, src_box))
 		return;

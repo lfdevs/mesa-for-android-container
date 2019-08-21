@@ -29,7 +29,6 @@
 
 #include "pipe/p_config.h"
 
-#include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 #include "pipe/p_format.h"
 #include "pipe/p_state.h"
@@ -51,16 +50,16 @@ void
 _debug_vprintf(const char *format, va_list ap)
 {
    static char buf[4096] = {'\0'};
-#if defined(PIPE_OS_WINDOWS) || defined(PIPE_SUBSYSTEM_EMBEDDED)
+#if DETECT_OS_WINDOWS || defined(EMBEDDED_DEVICE)
    /* We buffer until we find a newline. */
    size_t len = strlen(buf);
-   int ret = util_vsnprintf(buf + len, sizeof(buf) - len, format, ap);
-   if (ret > (int)(sizeof(buf) - len - 1) || util_strchr(buf + len, '\n')) {
+   int ret = vsnprintf(buf + len, sizeof(buf) - len, format, ap);
+   if (ret > (int)(sizeof(buf) - len - 1) || strchr(buf + len, '\n')) {
       os_log_message(buf);
       buf[0] = '\0';
    }
 #else
-   util_vsnprintf(buf, sizeof(buf), format, ap);
+   vsnprintf(buf, sizeof(buf), format, ap);
    os_log_message(buf);
 #endif
 }
@@ -123,11 +122,11 @@ debug_print_blob(const char *name, const void *blob, unsigned size)
 #endif
 
 
-static boolean
+static bool
 debug_get_option_should_print(void)
 {
-   static boolean first = TRUE;
-   static boolean value = FALSE;
+   static bool first = true;
+   static bool value = false;
 
    if (!first)
       return value;
@@ -135,8 +134,8 @@ debug_get_option_should_print(void)
    /* Oh hey this will call into this function,
     * but its cool since we set first to false
     */
-   first = FALSE;
-   value = debug_get_bool_option("GALLIUM_PRINT_OPTIONS", FALSE);
+   first = false;
+   value = debug_get_bool_option("GALLIUM_PRINT_OPTIONS", false);
    /* XXX should we print this option? Currently it wont */
    return value;
 }
@@ -159,30 +158,30 @@ debug_get_option(const char *name, const char *dfault)
 }
 
 
-boolean
-debug_get_bool_option(const char *name, boolean dfault)
+bool
+debug_get_bool_option(const char *name, bool dfault)
 {
    const char *str = os_get_option(name);
-   boolean result;
+   bool result;
 
    if (str == NULL)
       result = dfault;
-   else if (!util_strcmp(str, "n"))
-      result = FALSE;
-   else if (!util_strcmp(str, "no"))
-      result = FALSE;
-   else if (!util_strcmp(str, "0"))
-      result = FALSE;
-   else if (!util_strcmp(str, "f"))
-      result = FALSE;
-   else if (!util_strcmp(str, "F"))
-      result = FALSE;
-   else if (!util_strcmp(str, "false"))
-      result = FALSE;
-   else if (!util_strcmp(str, "FALSE"))
-      result = FALSE;
+   else if (!strcmp(str, "n"))
+      result = false;
+   else if (!strcmp(str, "no"))
+      result = false;
+   else if (!strcmp(str, "0"))
+      result = false;
+   else if (!strcmp(str, "f"))
+      result = false;
+   else if (!strcmp(str, "F"))
+      result = false;
+   else if (!strcmp(str, "false"))
+      result = false;
+   else if (!strcmp(str, "FALSE"))
+      result = false;
    else
-      result = TRUE;
+      result = true;
 
    if (debug_get_option_should_print())
       debug_printf("%s: %s = %s\n", __FUNCTION__, name,
@@ -218,17 +217,17 @@ debug_get_num_option(const char *name, long dfault)
 }
 
 
-static boolean
+static bool
 str_has_option(const char *str, const char *name)
 {
    /* Empty string. */
    if (!*str) {
-      return FALSE;
+      return false;
    }
 
    /* OPTION=all */
-   if (!util_strcmp(str, "all")) {
-      return TRUE;
+   if (!strcmp(str, "all")) {
+      return true;
    }
 
    /* Find 'name' in 'str' surrounded by non-alphanumeric characters. */
@@ -245,11 +244,11 @@ str_has_option(const char *str, const char *name)
          if (!*str || !(isalnum(*str) || *str == '_')) {
             if (str-start == name_len &&
                 !memcmp(start, name, name_len)) {
-               return TRUE;
+               return true;
             }
 
             if (!*str) {
-               return FALSE;
+               return false;
             }
 
             start = str+1;
@@ -259,7 +258,7 @@ str_has_option(const char *str, const char *name)
       }
    }
 
-   return FALSE;
+   return false;
 }
 
 
@@ -276,7 +275,7 @@ debug_get_flags_option(const char *name,
    str = os_get_option(name);
    if (!str)
       result = dfault;
-   else if (!util_strcmp(str, "help")) {
+   else if (!strcmp(str, "help")) {
       result = dfault;
       _debug_printf("%s: help for %s:\n", __FUNCTION__, name);
       for (; flags->name; ++flags)
@@ -330,7 +329,7 @@ debug_dump_enum(const struct debug_named_value *names,
       ++names;
    }
 
-   util_snprintf(rest, sizeof(rest), "0x%08lx", value);
+   snprintf(rest, sizeof(rest), "0x%08lx", value);
    return rest;
 }
 
@@ -354,7 +353,7 @@ debug_dump_enum_noprefix(const struct debug_named_value *names,
       ++names;
    }
 
-   util_snprintf(rest, sizeof(rest), "0x%08lx", value);
+   snprintf(rest, sizeof(rest), "0x%08lx", value);
    return rest;
 }
 
@@ -371,10 +370,10 @@ debug_dump_flags(const struct debug_named_value *names, unsigned long value)
    while (names->name) {
       if ((names->value & value) == names->value) {
 	 if (!first)
-	    util_strncat(output, "|", sizeof(output) - strlen(output) - 1);
+	    strncat(output, "|", sizeof(output) - strlen(output) - 1);
 	 else
 	    first = 0;
-	 util_strncat(output, names->name, sizeof(output) - strlen(output) - 1);
+	 strncat(output, names->name, sizeof(output) - strlen(output) - 1);
 	 output[sizeof(output) - 1] = '\0';
 	 value &= ~names->value;
       }
@@ -383,12 +382,12 @@ debug_dump_flags(const struct debug_named_value *names, unsigned long value)
 
    if (value) {
       if (!first)
-	 util_strncat(output, "|", sizeof(output) - strlen(output) - 1);
+	 strncat(output, "|", sizeof(output) - strlen(output) - 1);
       else
 	 first = 0;
 
-      util_snprintf(rest, sizeof(rest), "0x%08lx", value);
-      util_strncat(output, rest, sizeof(output) - strlen(output) - 1);
+      snprintf(rest, sizeof(rest), "0x%08lx", value);
+      strncat(output, rest, sizeof(output) - strlen(output) - 1);
       output[sizeof(output) - 1] = '\0';
    }
 

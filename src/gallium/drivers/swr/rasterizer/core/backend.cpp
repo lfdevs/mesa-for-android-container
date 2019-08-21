@@ -52,7 +52,7 @@ void ProcessComputeBE(DRAW_CONTEXT* pDC,
 {
     SWR_CONTEXT* pContext = pDC->pContext;
 
-    RDTSC_BEGIN(BEDispatch, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEDispatch, pDC->drawId);
 
     const COMPUTE_DESC* pTaskData = (COMPUTE_DESC*)pDC->pDispatch->GetTasksData();
     SWR_ASSERT(pTaskData != nullptr);
@@ -90,7 +90,7 @@ void ProcessComputeBE(DRAW_CONTEXT* pDC,
     UPDATE_STAT_BE(CsInvocations, state.totalThreadsInGroup);
     AR_EVENT(CSStats((HANDLE)&csContext.stats));
 
-    RDTSC_END(BEDispatch, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, BEDispatch, 1);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -119,7 +119,7 @@ void ProcessStoreTileBE(DRAW_CONTEXT*               pDC,
     SWR_CONTEXT* pContext           = pDC->pContext;
     HANDLE       hWorkerPrivateData = pContext->threadPool.pThreadData[workerId].pWorkerPrivateData;
 
-    RDTSC_BEGIN(BEStoreTiles, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEStoreTiles, pDC->drawId);
 
     SWR_FORMAT srcFormat;
     switch (attachment)
@@ -185,7 +185,7 @@ void ProcessStoreTileBE(DRAW_CONTEXT*               pDC,
                                    pHotTile->pBuffer);
         }
 
-        if (pHotTile->state == HOTTILE_DIRTY || pHotTile->state == HOTTILE_RESOLVED)
+        if (pHotTile->state == HOTTILE_DIRTY || pHotTile->state == HOTTILE_RESOLVED) 
         {
             if (!(pDesc->postStoreTileState == (SWR_TILE_STATE)HOTTILE_DIRTY &&
                   pHotTile->state == HOTTILE_RESOLVED))
@@ -194,7 +194,7 @@ void ProcessStoreTileBE(DRAW_CONTEXT*               pDC,
             }
         }
     }
-    RDTSC_END(BEStoreTiles, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, BEStoreTiles, 1);
 }
 
 void ProcessStoreTilesBE(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile, void* pData)
@@ -233,7 +233,17 @@ void ProcessDiscardInvalidateTilesBE(DRAW_CONTEXT* pDC,
                                                         numSamples);
             if (pHotTile)
             {
-                pHotTile->state = (HOTTILE_STATE)pDesc->newTileState;
+                HOTTILE_STATE newState = (HOTTILE_STATE)pDesc->newTileState;;
+                if (pHotTile->state == HOTTILE_DIRTY || pHotTile->state == HOTTILE_CLEAR)
+                {
+                    if (newState == HOTTILE_INVALID)
+                    {
+                        // This is OK for APIs that explicitly allow discards
+                        // (for e.g. depth / stencil data)
+                        //SWR_INVALID("Discarding valid data!");
+                    }
+                }
+                pHotTile->state = newState;
             }
         }
     }
@@ -247,9 +257,9 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
                    SWR_TRIANGLE_DESC&   work,
                    RenderOutputBuffers& renderBuffers)
 {
-    RDTSC_BEGIN(BENullBackend, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BENullBackend, pDC->drawId);
     ///@todo: handle center multisample pattern
-    RDTSC_BEGIN(BESetup, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BESetup, pDC->drawId);
 
     const API_STATE& state = GetApiState(pDC);
 
@@ -262,7 +272,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
     SWR_PS_CONTEXT psContext;
     // skip SetupPixelShaderContext(&psContext, ...); // not needed here
 
-    RDTSC_END(BESetup, 0);
+    RDTSC_END(pDC->pContext->pBucketMgr, BESetup, 0);
 
     simdscalar vYSamplePosUL = _simd_add_ps(vULOffsetsY, _simd_set1_ps(static_cast<float>(y)));
 
@@ -305,7 +315,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
                         coverageMask &= CalcDepthBoundsAcceptMask(z, minz, maxz);
                     }
 
-                    RDTSC_BEGIN(BEBarycentric, pDC->drawId);
+                    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEBarycentric, pDC->drawId);
 
                     // calculate per sample positions
                     psContext.vX.sample = _simd_add_ps(vXSamplePosUL, samplePos.vX(sample));
@@ -321,7 +331,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
                                             psContext.vJ.sample);
                     psContext.vZ = state.pfnQuantizeDepth(psContext.vZ);
 
-                    RDTSC_END(BEBarycentric, 0);
+                    RDTSC_END(pDC->pContext->pBucketMgr, BEBarycentric, 0);
 
                     // interpolate user clip distance if available
                     if (state.backendState.clipDistanceMask)
@@ -335,7 +345,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
                     simdscalar vCoverageMask   = _simd_vmask_ps(coverageMask);
                     simdscalar stencilPassMask = vCoverageMask;
 
-                    RDTSC_BEGIN(BEEarlyDepthTest, pDC->drawId);
+                    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEEarlyDepthTest, pDC->drawId);
                     simdscalar depthPassMask = DepthStencilTest(&state,
                                                                 work.triFlags.frontFacing,
                                                                 work.triFlags.viewportIndex,
@@ -356,7 +366,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
                                       vCoverageMask,
                                       pStencilSample,
                                       stencilPassMask);
-                    RDTSC_END(BEEarlyDepthTest, 0);
+                    RDTSC_END(pDC->pContext->pBucketMgr, BEEarlyDepthTest, 0);
 
                     uint32_t statMask  = _simd_movemask_ps(depthPassMask);
                     uint32_t statCount = _mm_popcnt_u32(statMask);
@@ -378,7 +388,7 @@ void BackendNullPS(DRAW_CONTEXT*        pDC,
         vYSamplePosUL = _simd_add_ps(vYSamplePosUL, dy);
     }
 
-    RDTSC_END(BENullBackend, 0);
+    RDTSC_END(pDC->pContext->pBucketMgr, BENullBackend, 0);
 }
 
 PFN_CLEAR_TILES  gClearTilesTable[NUM_SWR_FORMATS] = {};

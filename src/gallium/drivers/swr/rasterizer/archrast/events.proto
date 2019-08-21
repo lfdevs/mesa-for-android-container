@@ -29,438 +29,399 @@ enum AR_DRAW_TYPE
     IndexedInstancedSplit = 3
 };
 
-event ThreadStartApiEvent
+event Framework::ThreadStartApiEvent
 {
 };
 
-event ThreadStartWorkerEvent
+event Framework::ThreadStartWorkerEvent
 {
 };
 
-event DrawInfoEvent
+///@brief Used as a helper event to indicate end of frame. Does not gaurantee to capture end of frame on all APIs
+event ApiSwr::FrameEndEvent
 {
-    uint32_t drawId;
-    AR_DRAW_TYPE type;
-    uint32_t topology;
-    uint32_t numVertices;
-    uint32_t numIndices;
-    int32_t  indexOffset;
-    int32_t  baseVertex;
-    uint32_t numInstances;
-    uint32_t startInstance;
-    uint32_t tsEnable;
-    uint32_t gsEnable;
-    uint32_t soEnable;
-    uint32_t soTopology;
-    uint32_t splitId; // Split draw count or id.
+    uint32_t frameId;       // current frame id
+    uint32_t nextDrawId;    // next draw id (always incremental - does not reset)
 };
 
-event DispatchEvent
-{
-    uint32_t drawId;
-    uint32_t threadGroupCountX;
-    uint32_t threadGroupCountY;
-    uint32_t threadGroupCountZ;
-};
-
-event FrameEndEvent
-{
-    uint32_t frameId;
-    uint32_t nextDrawId;
-};
-
-///@brief API Stat: Synchonization event.
-event SwrSyncEvent
+///@brief Synchonization event.
+event ApiSwr::SwrSyncEvent
 {
     uint32_t drawId;
 };
 
-///@brief API Stat: Invalidate hot tiles (i.e. tile cache)
-event SwrInvalidateTilesEvent
+///@brief Invalidate hot tiles (i.e. tile cache)
+event ApiSwr::SwrInvalidateTilesEvent
 {
     uint32_t drawId;
 };
 
-///@brief API Stat: Invalidate and discard hot tiles within pixel region
-event SwrDiscardRectEvent
+///@brief Invalidate and discard hot tiles within pixel region
+event ApiSwr::SwrDiscardRectEvent
 {
     uint32_t drawId;
 };
 
-///@brief API Stat: Flush tiles out to memory that is typically owned by driver (e.g. Flush RT cache)
-event SwrStoreTilesEvent
+///@brief Flush tiles out to memory that is typically owned by driver (e.g. Flush RT cache)
+event ApiSwr::SwrStoreTilesEvent
 {
     uint32_t drawId;
 };
 
-event FrontendStatsEvent
+event PipelineStats::DrawInfoEvent
 {
     uint32_t drawId;
-    uint64_t counter IaVertices;
-    uint64_t counter IaPrimitives;
-    uint64_t counter VsInvocations;
-    uint64_t counter HsInvocations;
-    uint64_t counter DsInvocations;
-    uint64_t counter GsInvocations;
-    uint64_t counter GsPrimitives;
-    uint64_t counter CInvocations;
-    uint64_t counter CPrimitives;
-    uint64_t counter SoPrimStorageNeeded0;
-    uint64_t counter SoPrimStorageNeeded1;
-    uint64_t counter SoPrimStorageNeeded2;
-    uint64_t counter SoPrimStorageNeeded3;
-    uint64_t counter SoNumPrimsWritten0;
-    uint64_t counter SoNumPrimsWritten1;
-    uint64_t counter SoNumPrimsWritten2;
-    uint64_t counter SoNumPrimsWritten3;
+    AR_DRAW_TYPE type;  // type of draw (indexed, instanced, etc)
+    uint32_t topology;  // topology of draw
+    uint32_t numVertices; // number of vertices for draw
+    uint32_t numIndices; // number of indices for draw
+    int32_t  indexOffset; // offset into index buffer
+    int32_t  baseVertex; // which vertex to start with
+    uint32_t numInstances; // number of instances to draw
+    uint32_t startInstance; // which instance to start fetching
+    uint32_t tsEnable; // tesselation enabled
+    uint32_t gsEnable; // geometry shader enabled
+    uint32_t soEnable; // stream-out enabled
+    uint32_t soTopology; // topology of stream-out
+    uint32_t splitId; // split draw count or id
 };
 
-event BackendStatsEvent
+event PipelineStats::DispatchEvent
 {
     uint32_t drawId;
-    uint64_t counter DepthPassCount;
-    uint64_t counter PsInvocations;
-    uint64_t counter CsInvocations;
-
+    uint32_t threadGroupCountX; // num thread groups in X dimension
+    uint32_t threadGroupCountY; // num thread groups in Y dimension
+    uint32_t threadGroupCountZ; // num thread groups in Z dimension
 };
 
-event EarlyZSingleSample
+event PipelineStats::FrontendStatsEvent
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t IaVertices;
+    uint64_t IaPrimitives;
+    uint64_t VsInvocations;
+    uint64_t HsInvocations;
+    uint64_t DsInvocations;
+    uint64_t GsInvocations;
+    uint64_t GsPrimitives;
+    uint64_t CInvocations;
+    uint64_t CPrimitives;
+    uint64_t SoPrimStorageNeeded0;
+    uint64_t SoPrimStorageNeeded1;
+    uint64_t SoPrimStorageNeeded2;
+    uint64_t SoPrimStorageNeeded3;
+    uint64_t SoNumPrimsWritten0;
+    uint64_t SoNumPrimsWritten1;
+    uint64_t SoNumPrimsWritten2;
+    uint64_t SoNumPrimsWritten3;
 };
 
-event LateZSingleSample
+event PipelineStats::BackendStatsEvent
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t DepthPassCount;
+    uint64_t PsInvocations;
+    uint64_t CsInvocations;
+
 };
 
-event EarlyStencilSingleSample
+event PipelineStats::EarlyZSingleSample
+{
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
+};
+
+event PipelineStats::LateZSingleSample
+{
+    uint32_t drawId;
+    uint64_t passCount;
+    uint64_t failCount;
+};
+
+event PipelineStats::EarlyStencilSingleSample
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateStencilSingleSample
+event PipelineStats::LateStencilSingleSample
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyZSampleRate
+event PipelineStats::EarlyZSampleRate
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateZSampleRate
+event PipelineStats::LateZSampleRate
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyStencilSampleRate
+event PipelineStats::EarlyStencilSampleRate
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateStencilSampleRate
+event PipelineStats::LateStencilSampleRate
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 // Total Early-Z counts, SingleSample and SampleRate
-event EarlyZ
+event PipelineStats::EarlyZ
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 // Total LateZ counts, SingleSample and SampleRate
-event LateZ
+event PipelineStats::LateZ
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 // Total EarlyStencil counts, SingleSample and SampleRate
-event EarlyStencil
+event PipelineStats::EarlyStencil
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 // Total LateStencil counts, SingleSample and SampleRate
-event LateStencil
+event PipelineStats::LateStencil
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyZNullPS
+event PipelineStats::EarlyZNullPS
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyStencilNullPS
+event PipelineStats::EarlyStencilNullPS
 {
     uint32_t drawId; 
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyZPixelRate
+event PipelineStats::EarlyZPixelRate
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateZPixelRate
+event PipelineStats::LateZPixelRate
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
 
-event EarlyOmZ
+event PipelineStats::EarlyOmZ
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event EarlyOmStencil
+event PipelineStats::EarlyOmStencil
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateOmZ
+event PipelineStats::LateOmZ
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event LateOmStencil
+event PipelineStats::LateOmStencil
 {
     uint32_t drawId;
-    uint64_t counter passCount;
-    uint64_t counter failCount;
+    uint64_t passCount;
+    uint64_t failCount;
 };
 
-event GSInputPrims
+event PipelineStats::GSInputPrims
 {
     uint32_t drawId;
-    uint64_t counter inputPrimCount;
+    uint64_t inputPrimCount;
 };
 
-event GSPrimsGen
+event PipelineStats::GSPrimsGen
 {
     uint32_t drawId;
-    uint64_t counter primGeneratedCount;
+    uint64_t primGeneratedCount;
 };
 
-event GSVertsInput
+event PipelineStats::GSVertsInput
 {
     uint32_t drawId;
-    uint64_t counter vertsInput;
+    uint64_t vertsInput;
 };
 
-event TessPrims
+event PipelineStats::TessPrims
 {
     uint32_t drawId;
-    uint64_t counter primCount;
+    uint64_t primCount;
 };
 
-event RasterTiles
+event PipelineStats::RasterTiles
 {
     uint32_t drawId;
-    uint32_t counter rastTileCount;
+    uint32_t rastTileCount;
 };
 
-event ClipperEvent
+event PipelineStats::ClipperEvent
 {
     uint32_t drawId;
-    uint32_t counter trivialRejectCount;
-    uint32_t counter trivialAcceptCount;
-    uint32_t counter mustClipCount;
+    uint32_t trivialRejectCount;
+    uint32_t trivialAcceptCount;
+    uint32_t mustClipCount;
 };
 
-event CullEvent
+event PipelineStats::CullEvent
 {
     uint32_t drawId;
-    uint64_t counter backfacePrimCount;
-    uint64_t counter degeneratePrimCount;
+    uint64_t backfacePrimCount;
+    uint64_t degeneratePrimCount;
 };
 
-event AlphaEvent
+event PipelineStats::AlphaEvent
 {
     uint32_t drawId;
-    uint32_t counter alphaTestCount;
-    uint32_t counter alphaBlendCount;
+    uint32_t alphaTestCount;
+    uint32_t alphaBlendCount;
 };
 
-event VSInfo
+event ShaderStats::VSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 };
 
-event HSInfo
+event ShaderStats::HSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 };
 
-event DSInfo
+event ShaderStats::DSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 };
 
-event GSInfo
+event ShaderStats::GSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 
 };
 
-event PSInfo
+event ShaderStats::PSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 };
 
-event CSInfo
+event ShaderStats::CSInfo
 {
     uint32_t drawId;
-    uint32_t counter numInstExecuted;
-    uint32_t counter numSampleExecuted;
-    uint32_t counter numSampleLExecuted;
-    uint32_t counter numSampleBExecuted;
-    uint32_t counter numSampleCExecuted;
-    uint32_t counter numSampleCLZExecuted;
-    uint32_t counter numSampleCDExecuted;
-    uint32_t counter numGather4Executed;
-    uint32_t counter numGather4CExecuted;
-    uint32_t counter numGather4CPOExecuted;
-    uint32_t counter numGather4CPOCExecuted;
-    uint32_t counter numLodExecuted;
+    uint32_t numInstExecuted;
+    uint32_t numSampleExecuted;
+    uint32_t numSampleLExecuted;
+    uint32_t numSampleBExecuted;
+    uint32_t numSampleCExecuted;
+    uint32_t numSampleCLZExecuted;
+    uint32_t numSampleCDExecuted;
+    uint32_t numGather4Executed;
+    uint32_t numGather4CExecuted;
+    uint32_t numGather4CPOExecuted;
+    uint32_t numGather4CPOCExecuted;
+    uint32_t numLodExecuted;
 };
 
-event SWTagFrameEvent
-{
-	uint64_t swTagFrame;
-};
-
-event SWTagRenderpassEvent
-{
-	uint64_t swTagFrame;
-	uint32_t swTagDrawOrDispatch;
-	uint32_t swTagDraw;
-	uint32_t swTagDispatch;
-	uint32_t swTagRenderpassCount;
-};
-
-event SWTagDrawEvent
-{
-	uint64_t swTagFrame;
-	uint32_t swTagDrawOrDispatch;
-	uint32_t swTagDraw;
-	uint32_t swTagDispatch;
-};
-
-event SWTagDispatchEvent
-{
-	uint64_t swTagFrame;
-	uint32_t swTagDrawOrDispatch;
-	uint32_t swTagDraw;
-	uint32_t swTagDispatch;
-};
-
-event SWTagFlushEvent
-{
-	uint64_t swTagFrame;
-	uint32_t swTagDrawOrDispatch;
-	uint32_t swTagDraw;
-	uint32_t swTagDispatch;
-	uint32_t swTagFlushCounter;
-    char swTagFlushReason[256];
-    uint32_t swTagFlushType;
-};

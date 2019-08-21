@@ -276,24 +276,33 @@ translate_depth_format(enum pipe_format fmt)
 
 /* render target format for MSAA */
 static inline uint32_t
-translate_msaa_format(enum pipe_format fmt)
+translate_ts_format(enum pipe_format fmt)
 {
    /* Note: Pipe format convention is LSB to MSB, VIVS is MSB to LSB */
    switch (fmt) {
    case PIPE_FORMAT_B4G4R4X4_UNORM:
-      return COLOR_COMPRESSION_FORMAT_A4R4G4B4;
    case PIPE_FORMAT_B4G4R4A4_UNORM:
-      return COLOR_COMPRESSION_FORMAT_A4R4G4B4;
+      return COMPRESSION_FORMAT_A4R4G4B4;
    case PIPE_FORMAT_B5G5R5X1_UNORM:
-      return COLOR_COMPRESSION_FORMAT_A1R5G5B5;
+      return COMPRESSION_FORMAT_A1R5G5B5;
    case PIPE_FORMAT_B5G5R5A1_UNORM:
-      return COLOR_COMPRESSION_FORMAT_A1R5G5B5;
+      return COMPRESSION_FORMAT_A1R5G5B5;
    case PIPE_FORMAT_B5G6R5_UNORM:
-      return COLOR_COMPRESSION_FORMAT_R5G6B5;
+      return COMPRESSION_FORMAT_R5G6B5;
    case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return COLOR_COMPRESSION_FORMAT_X8R8G8B8;
+   case PIPE_FORMAT_B8G8R8X8_SRGB:
+   case PIPE_FORMAT_R8G8B8X8_UNORM:
+      return COMPRESSION_FORMAT_X8R8G8B8;
    case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return COLOR_COMPRESSION_FORMAT_A8R8G8B8;
+   case PIPE_FORMAT_B8G8R8A8_SRGB:
+   case PIPE_FORMAT_R8G8B8A8_UNORM:
+      return COMPRESSION_FORMAT_A8R8G8B8;
+   case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+      return COMPRESSION_FORMAT_D24S8;
+   case PIPE_FORMAT_X8Z24_UNORM:
+      return COMPRESSION_FORMAT_D24X8;
+   case PIPE_FORMAT_Z16_UNORM:
+      return COMPRESSION_FORMAT_D16;
    /* MSAA with YUYV not supported */
    default:
       return ETNA_NO_MATCH;
@@ -404,18 +413,6 @@ etna_layout_multiple(unsigned layout, unsigned pixel_pipes, bool rs_align,
    }
 }
 
-static inline void etna_adjust_rs_align(unsigned num_pixelpipes,
-                                        unsigned *paddingX, unsigned *paddingY)
-{
-   unsigned alignX = ETNA_RS_WIDTH_MASK + 1;
-   unsigned alignY = (ETNA_RS_HEIGHT_MASK + 1) * num_pixelpipes;
-
-   if (paddingX)
-      *paddingX = align(*paddingX, alignX);
-   if (paddingY)
-      *paddingY = align(*paddingY, alignY);
-}
-
 static inline uint32_t
 translate_clear_depth_stencil(enum pipe_format format, float depth,
                               unsigned stencil)
@@ -477,6 +474,27 @@ translate_samples_to_xyscale(int num_samples, int *xscale_out, int *yscale_out,
       *config_out = config;
 
    return true;
+}
+
+static inline uint32_t
+translate_texture_target(unsigned target)
+{
+   switch (target) {
+   case PIPE_TEXTURE_1D:
+      return TEXTURE_TYPE_1D;
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
+   case PIPE_TEXTURE_1D_ARRAY:
+      return TEXTURE_TYPE_2D;
+   case PIPE_TEXTURE_CUBE:
+      return TEXTURE_TYPE_CUBE_MAP;
+   case PIPE_TEXTURE_3D:
+   case PIPE_TEXTURE_2D_ARRAY:
+      return TEXTURE_TYPE_3D;
+   default:
+      DBG("Unhandled texture target: %i", target);
+      return ETNA_NO_MATCH;
+   }
 }
 
 #endif

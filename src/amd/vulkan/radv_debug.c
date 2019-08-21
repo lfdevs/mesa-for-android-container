@@ -31,7 +31,6 @@
 
 #include "util/mesa-sha1.h"
 #include "sid.h"
-#include "gfx9d.h"
 #include "ac_debug.h"
 #include "radv_debug.h"
 #include "radv_shader.h"
@@ -112,14 +111,11 @@ radv_dump_debug_registers(struct radv_device *device, FILE *f)
 {
 	struct radeon_info *info = &device->physical_device->rad_info;
 
-	if (info->drm_major == 2 && info->drm_minor < 42)
-		return; /* no radeon support */
-
 	fprintf(f, "Memory-mapped registers:\n");
 	radv_dump_mmapped_reg(device, f, R_008010_GRBM_STATUS);
 
 	/* No other registers can be read on DRM < 3.1.0. */
-	if (info->drm_major < 3 || info->drm_minor < 1) {
+	if (info->drm_minor < 1) {
 		fprintf(f, "\n");
 		return;
 	}
@@ -131,7 +127,7 @@ radv_dump_debug_registers(struct radv_device *device, FILE *f)
 	radv_dump_mmapped_reg(device, f, R_00803C_GRBM_STATUS_SE3);
 	radv_dump_mmapped_reg(device, f, R_00D034_SDMA0_STATUS_REG);
 	radv_dump_mmapped_reg(device, f, R_00D834_SDMA1_STATUS_REG);
-	if (info->chip_class <= VI) {
+	if (info->chip_class <= GFX8) {
 		radv_dump_mmapped_reg(device, f, R_000E50_SRBM_STATUS);
 		radv_dump_mmapped_reg(device, f, R_000E4C_SRBM_STATUS2);
 		radv_dump_mmapped_reg(device, f, R_000E54_SRBM_STATUS3);
@@ -194,14 +190,17 @@ static void
 radv_dump_image_descriptor(enum chip_class chip_class, const uint32_t *desc,
 			   FILE *f)
 {
+	unsigned sq_img_rsrc_word0 = chip_class >= GFX10 ? R_00A000_SQ_IMG_RSRC_WORD0
+							 : R_008F10_SQ_IMG_RSRC_WORD0;
+
 	fprintf(f, COLOR_CYAN "    Image:" COLOR_RESET "\n");
 	for (unsigned j = 0; j < 8; j++)
-		ac_dump_reg(f, chip_class, R_008F10_SQ_IMG_RSRC_WORD0 + j * 4,
+		ac_dump_reg(f, chip_class, sq_img_rsrc_word0 + j * 4,
 			    desc[j], 0xffffffff);
 
 	fprintf(f, COLOR_CYAN "    FMASK:" COLOR_RESET "\n");
 	for (unsigned j = 0; j < 8; j++)
-		ac_dump_reg(f, chip_class, R_008F10_SQ_IMG_RSRC_WORD0 + j * 4,
+		ac_dump_reg(f, chip_class, sq_img_rsrc_word0 + j * 4,
 			    desc[8 + j], 0xffffffff);
 }
 
@@ -407,7 +406,7 @@ radv_dump_annotated_shader(struct radv_shader_variant *shader,
 			    start_addr, &num_inst, instructions);
 
 	fprintf(f, COLOR_YELLOW "%s - annotated disassembly:" COLOR_RESET "\n",
-		radv_get_shader_name(shader, stage));
+		radv_get_shader_name(&shader->info, stage));
 
 	/* Print instructions with annotations. */
 	for (i = 0; i < num_inst; i++) {
@@ -446,7 +445,8 @@ radv_dump_annotated_shaders(struct radv_pipeline *pipeline,
 			    VkShaderStageFlagBits active_stages, FILE *f)
 {
 	struct ac_wave_info waves[AC_MAX_WAVES_PER_CHIP];
-	unsigned num_waves = ac_get_wave_info(waves);
+	enum chip_class chip_class = pipeline->device->physical_device->rad_info.chip_class;
+	unsigned num_waves = ac_get_wave_info(chip_class, waves);
 
 	fprintf(f, COLOR_CYAN "The number of active waves = %u" COLOR_RESET
 		"\n\n", num_waves);
@@ -490,7 +490,7 @@ radv_dump_shader(struct radv_pipeline *pipeline,
 	if (!shader)
 		return;
 
-	fprintf(f, "%s:\n\n", radv_get_shader_name(shader, stage));
+	fprintf(f, "%s:\n\n", radv_get_shader_name(&shader->info, stage));
 
 	if (shader->spirv) {
 		unsigned char sha1[21];
@@ -503,9 +503,8 @@ radv_dump_shader(struct radv_pipeline *pipeline,
 		radv_print_spirv(shader->spirv, shader->spirv_size, f);
 	}
 
-	if (shader->nir) {
-		fprintf(f, "NIR:\n");
-		nir_print_shader(shader->nir, f);
+	if (shader->nir_string) {
+		fprintf(f, "NIR:\n%s\n", shader->nir_string);
 	}
 
 	fprintf(f, "LLVM IR:\n%s\n", shader->llvm_ir_string);

@@ -6,7 +6,30 @@
 #include "os_file.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+
+
+#if defined(WIN32)
+#include <io.h>
+#define open _open
+#define fdopen _fdopen
+#define O_CREAT _O_CREAT
+#define O_EXCL _O_EXCL
+#define O_WRONLY _O_WRONLY
+#endif
+
+
+FILE *
+os_file_create_unique(const char *filename, int filemode)
+{
+   int fd = open(filename, O_CREAT | O_EXCL | O_WRONLY, filemode);
+   if (fd == -1)
+      return NULL;
+   return fdopen(fd, "w");
+}
+
 
 #if defined(__linux__)
 
@@ -37,7 +60,7 @@ readN(int fd, char *buf, size_t len)
       total += ret;
    } while (total != len);
 
-   return total ? total : err;
+   return total ? (ssize_t)total : err;
 }
 
 char *
@@ -70,9 +93,9 @@ os_read_file(const char *filename)
       return NULL;
    }
 
-   ssize_t read;
+   ssize_t actually_read;
    size_t offset = 0, remaining = len - 1;
-   while ((read = readN(fd, buf + offset, remaining)) == remaining) {
+   while ((actually_read = readN(fd, buf + offset, remaining)) == (ssize_t)remaining) {
       char *newbuf = realloc(buf, 2 * len);
       if (!newbuf) {
          free(buf);
@@ -83,14 +106,14 @@ os_read_file(const char *filename)
 
       buf = newbuf;
       len *= 2;
-      offset += read;
+      offset += actually_read;
       remaining = len - offset - 1;
    }
 
    close(fd);
 
-   if (read > 0)
-      offset += read;
+   if (actually_read > 0)
+      offset += actually_read;
 
    /* Final resize to actual size */
    len = offset + 1;

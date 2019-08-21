@@ -60,8 +60,6 @@ fd2_pipe_sampler_view(struct pipe_sampler_view *pview)
 unsigned fd2_get_const_idx(struct fd_context *ctx,
 		struct fd_texture_stateobj *tex, unsigned samp_id);
 
-bool fd2_texture_swap_xy(struct fd_texture_stateobj *tex, unsigned samp_id);
-
 void fd2_texture_init(struct pipe_context *pctx);
 
 #endif /* FD2_TEXTURE_H_ */

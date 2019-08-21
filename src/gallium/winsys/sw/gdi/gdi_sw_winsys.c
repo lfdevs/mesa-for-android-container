@@ -69,7 +69,7 @@ gdi_sw_displaytarget( struct sw_displaytarget *buf )
 }
 
 
-static boolean
+static bool
 gdi_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
                                                 unsigned tex_usage,
                                                 enum pipe_format format )
@@ -77,13 +77,13 @@ gdi_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
    switch(format) {
    case PIPE_FORMAT_B8G8R8X8_UNORM:
    case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return TRUE;
+      return true;
 
    /* TODO: Support other formats possible with BMPs, as described in 
     * http://msdn.microsoft.com/en-us/library/dd183376(VS.85).aspx */
       
    default:
-      return FALSE;
+      return false;
    }
 }
 
@@ -182,13 +182,13 @@ gdi_sw_displaytarget_from_handle(struct sw_winsys *winsys,
 }
 
 
-static boolean
+static bool
 gdi_sw_displaytarget_get_handle(struct sw_winsys *winsys,
                                 struct sw_displaytarget *dt,
                                 struct winsys_handle *whandle)
 {
    assert(0);
-   return FALSE;
+   return false;
 }
 
 

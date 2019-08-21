@@ -33,6 +33,7 @@
 #include "etnaviv_util.h"
 
 #include "tgsi/tgsi_parse.h"
+#include "nir/tgsi_to_nir.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 
@@ -49,7 +50,7 @@ static bool etna_icache_upload_shader(struct etna_context *ctx, struct etna_shad
    etna_bo_cpu_prep(v->bo, DRM_ETNA_PREP_WRITE);
    memcpy(buf, v->code, v->code_size*4);
    etna_bo_cpu_fini(v->bo);
-   DBG("Uploaded %s of %u words to bo %p", v->processor == PIPE_SHADER_FRAGMENT ? "fs":"vs", v->code_size, v->bo);
+   DBG("Uploaded %s of %u words to bo %p", v->stage == MESA_SHADER_FRAGMENT ? "fs":"vs", v->code_size, v->bo);
    return true;
 }
 
@@ -66,18 +67,29 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
                   struct etna_shader_variant *vs, struct etna_shader_variant *fs)
 {
    struct etna_shader_link_info link = { };
+   bool failed;
 
-   assert(vs->processor == PIPE_SHADER_VERTEX);
-   assert(fs->processor == PIPE_SHADER_FRAGMENT);
+   assert(vs->stage == MESA_SHADER_VERTEX);
+   assert(fs->stage == MESA_SHADER_FRAGMENT);
 
 #ifdef DEBUG
    if (DBG_ENABLED(ETNA_DBG_DUMP_SHADERS)) {
-      etna_dump_shader(vs);
-      etna_dump_shader(fs);
+      if (DBG_ENABLED(ETNA_DBG_NIR)) {
+         etna_dump_shader_nir(vs);
+         etna_dump_shader_nir(fs);
+      } else {
+         etna_dump_shader(vs);
+         etna_dump_shader(fs);
+      }
    }
 #endif
 
-   if (etna_link_shader(&link, vs, fs)) {
+   if (DBG_ENABLED(ETNA_DBG_NIR))
+      failed = etna_link_shader_nir(&link, vs, fs);
+   else
+      failed = etna_link_shader(&link, vs, fs);
+
+   if (failed) {
       /* linking failed: some fs inputs do not have corresponding
        * vs outputs */
       assert(0);
@@ -149,7 +161,7 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
       VIVS_PS_INPUT_COUNT_UNK8(fs->input_count_unk8);
    cs->PS_TEMP_REGISTER_CONTROL =
       VIVS_PS_TEMP_REGISTER_CONTROL_NUM_TEMPS(MAX2(fs->num_temps, link.num_varyings + 1));
-   cs->PS_CONTROL = VIVS_PS_CONTROL_UNK1; /* XXX when can we set BYPASS? */
+   cs->PS_CONTROL = VIVS_PS_CONTROL_SATURATE_RT0; /* XXX when can we set BYPASS? */
    cs->PS_START_PC = 0;
 
    /* Precompute PS_INPUT_COUNT and TEMP_REGISTER_CONTROL in the case of MSAA
@@ -275,10 +287,10 @@ etna_shader_update_vs_inputs(struct compiled_shader_state *cs,
 static inline const char *
 etna_shader_stage(struct etna_shader_variant *shader)
 {
-   switch (shader->processor) {
-   case PIPE_SHADER_VERTEX:     return "VERT";
-   case PIPE_SHADER_FRAGMENT:   return "FRAG";
-   case PIPE_SHADER_COMPUTE:    return "CL";
+   switch (shader->stage) {
+   case MESA_SHADER_VERTEX:     return "VERT";
+   case MESA_SHADER_FRAGMENT:   return "FRAG";
+   case MESA_SHADER_COMPUTE:    return "CL";
    default:
       unreachable("invalid type");
       return NULL;
@@ -293,8 +305,7 @@ dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debu
 
    pipe_debug_message(debug, SHADER_INFO, "\n"
          "SHADER-DB: %s prog %d/%d: %u instructions %u temps\n"
-         "SHADER-DB: %s prog %d/%d: %u immediates %u consts\n"
-         "SHADER-DB: %s prog %d/%d: %u loops\n",
+         "SHADER-DB: %s prog %d/%d: %u immediates %u loops\n",
          etna_shader_stage(v),
          v->shader->id, v->id,
          v->code_size,
@@ -302,9 +313,6 @@ dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debu
          etna_shader_stage(v),
          v->shader->id, v->id,
          v->uniforms.imm_count,
-         v->uniforms.const_count,
-         etna_shader_stage(v),
-         v->shader->id, v->id,
          v->num_loops);
 }
 
@@ -376,7 +384,14 @@ etna_create_shader_state(struct pipe_context *pctx,
    static uint32_t id;
    shader->id = id++;
    shader->specs = &ctx->specs;
-   shader->tokens = tgsi_dup_tokens(pss->tokens);
+
+   if (DBG_ENABLED(ETNA_DBG_NIR))
+      shader->nir = (pss->type == PIPE_SHADER_IR_NIR) ? pss->ir.nir :
+                     tgsi_to_nir(pss->tokens, pctx->screen);
+   else
+      shader->tokens = tgsi_dup_tokens(pss->tokens);
+
+
 
    if (etna_mesa_debug & ETNA_DBG_SHADERDB) {
       /* if shader-db run, create a standard variant immediately
@@ -402,10 +417,14 @@ etna_delete_shader_state(struct pipe_context *pctx, void *ss)
       v = v->next;
       if (t->bo)
          etna_bo_del(t->bo);
-      etna_destroy_shader(t);
+
+      if (DBG_ENABLED(ETNA_DBG_NIR))
+         etna_destroy_shader_nir(t);
+      else
+         etna_destroy_shader(t);
    }
 
-   FREE(shader->tokens);
+   ralloc_free(shader->nir);
    FREE(shader);
 }
 

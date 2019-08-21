@@ -211,9 +211,9 @@ dri3_bind_context(struct glx_context *context, struct glx_context *old,
       return GLXBadContext;
 
    if (dri_draw)
-      (*psc->f->invalidate)(dri_draw);
+      psc->f->invalidate(dri_draw);
    if (dri_read && dri_read != dri_draw)
-      (*psc->f->invalidate)(dri_read);
+      psc->f->invalidate(dri_read);
 
    return Success;
 }
@@ -502,7 +502,7 @@ dri3_flush_front_buffer(__DRIdrawable *driDrawable, void *loaderPrivate)
 
    loader_dri3_flush(draw, __DRI2_FLUSH_DRAWABLE, __DRI2_THROTTLE_FLUSHFRONT);
 
-   (*psc->f->invalidate)(driDrawable);
+   psc->f->invalidate(driDrawable);
    loader_dri3_wait_gl(draw);
 }
 
@@ -682,7 +682,7 @@ dri3_bind_tex_image(Display * dpy,
    if (pdraw != NULL) {
       psc = (struct dri3_screen *) base->psc;
 
-      (*psc->f->invalidate)(pdraw->loader_drawable.dri_drawable);
+      psc->f->invalidate(pdraw->loader_drawable.dri_drawable);
 
       XSync(dpy, false);
 
@@ -999,7 +999,7 @@ dri3_create_screen(int screen, struct glx_display * priv)
    return &psc->base;
 
 handle_error:
-   CriticalErrorMessageF("failed to load driver: %s\n", driverName);
+   CriticalErrorMessageF("failed to load driver: %s\n", driverName ? driverName : "(null)");
 
    if (configs)
        glx_config_destroy_list(configs);

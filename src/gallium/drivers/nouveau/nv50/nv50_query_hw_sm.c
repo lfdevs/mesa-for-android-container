@@ -158,7 +158,7 @@ nv50_hw_sm_destroy_query(struct nv50_context *nv50, struct nv50_hw_query *hq)
    FREE(hq);
 }
 
-static boolean
+static bool
 nv50_hw_sm_begin_query(struct nv50_context *nv50, struct nv50_hw_query *hq)
 {
    struct nv50_screen *screen = nv50->screen;
@@ -330,9 +330,9 @@ nv50_hw_sm_query_read_data(uint32_t count[32][4],
    return true;
 }
 
-static boolean
+static bool
 nv50_hw_sm_get_query_result(struct nv50_context *nv50, struct nv50_hw_query *hq,
-                            boolean wait, union pipe_query_result *result)
+                            bool wait, union pipe_query_result *result)
 {
    uint32_t count[32][4];
    uint64_t value = 0;

@@ -2707,11 +2707,11 @@ lp_build_sqrt(struct lp_build_context *bld,
 /**
  * Do one Newton-Raphson step to improve reciprocate precision:
  *
- *   x_{i+1} = x_i * (2 - a * x_i)
+ *   x_{i+1} = x_i + x_i * (1 - a * x_i)
  *
  * XXX: Unfortunately this won't give IEEE-754 conformant results for 0 or
  * +/-Inf, giving NaN instead.  Certain applications rely on this behavior,
- * such as Google Earth, which does RCP(RSQRT(0.0) when drawing the Earth's
+ * such as Google Earth, which does RCP(RSQRT(0.0)) when drawing the Earth's
  * halo. It would be necessary to clamp the argument to prevent this.
  *
  * See also:
@@ -2724,12 +2724,12 @@ lp_build_rcp_refine(struct lp_build_context *bld,
                     LLVMValueRef rcp_a)
 {
    LLVMBuilderRef builder = bld->gallivm->builder;
-   LLVMValueRef two = lp_build_const_vec(bld->gallivm, bld->type, 2.0);
+   LLVMValueRef neg_a;
    LLVMValueRef res;
 
-   res = LLVMBuildFMul(builder, a, rcp_a, "");
-   res = LLVMBuildFSub(builder, two, res, "");
-   res = LLVMBuildFMul(builder, rcp_a, res, "");
+   neg_a = LLVMBuildFNeg(builder, a, "");
+   res = lp_build_fmuladd(builder, neg_a, rcp_a, bld->one);
+   res = lp_build_fmuladd(builder, res, rcp_a, rcp_a);
 
    return res;
 }

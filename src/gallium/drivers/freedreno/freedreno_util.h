@@ -84,8 +84,7 @@ enum adreno_stencil_op fd_stencil_op(unsigned op);
 #define FD_DBG_HIPRIO 0x100000
 #define FD_DBG_TTILE  0x200000
 #define FD_DBG_PERFC  0x400000
-#define FD_DBG_SOFTPIN 0x800000
-#define FD_DBG_UBWC  0x1000000
+#define FD_DBG_NOUBWC 0x800000
 extern int fd_mesa_debug;
 extern bool fd_binning_enabled;
 
@@ -486,6 +485,19 @@ fd4_stage2shadersb(gl_shader_stage type)
 		unreachable("bad shader type");
 		return ~0;
 	}
+}
+
+static inline enum a4xx_index_size
+fd4_size2indextype(unsigned index_size)
+{
+	switch (index_size) {
+	case 1: return INDEX4_SIZE_8_BIT;
+	case 2: return INDEX4_SIZE_16_BIT;
+	case 4: return INDEX4_SIZE_32_BIT;
+	}
+	DBG("unsupported index size: %d", index_size);
+	assert(0);
+	return INDEX4_SIZE_32_BIT;
 }
 
 #endif /* FREEDRENO_UTIL_H_ */

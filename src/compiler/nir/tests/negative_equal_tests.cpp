@@ -26,10 +26,10 @@
 #include "util/half_float.h"
 
 static void count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS],
-                           nir_alu_type base_type, unsigned bits, int first);
+                           nir_alu_type full_type, int first);
 static void negate(nir_const_value dst[NIR_MAX_VEC_COMPONENTS],
                    const nir_const_value src[NIR_MAX_VEC_COMPONENTS],
-                   nir_alu_type base_type, unsigned bits, unsigned components);
+                   nir_alu_type full_type, unsigned components);
 
 class const_value_negative_equal_test : public ::testing::Test {
 protected:
@@ -54,6 +54,8 @@ protected:
    {
       static const nir_shader_compiler_options options = { };
       nir_builder_init_simple_shader(&bld, NULL, MESA_SHADER_VERTEX, &options);
+      memset(c1, 0, sizeof(c1));
+      memset(c2, 0, sizeof(c2));
    }
 
    ~alu_srcs_negative_equal_test()
@@ -62,95 +64,67 @@ protected:
    }
 
    struct nir_builder bld;
+   nir_const_value c1[NIR_MAX_VEC_COMPONENTS];
+   nir_const_value c2[NIR_MAX_VEC_COMPONENTS];
 };
 
 TEST_F(const_value_negative_equal_test, float32_zero)
 {
    /* Verify that 0.0 negative-equals 0.0. */
-   EXPECT_TRUE(nir_const_value_negative_equal(c1, c1, NIR_MAX_VEC_COMPONENTS,
-                                              nir_type_float, 32));
+   EXPECT_TRUE(nir_const_value_negative_equal(c1[0], c1[0], nir_type_float32));
 }
 
 TEST_F(const_value_negative_equal_test, float64_zero)
 {
    /* Verify that 0.0 negative-equals 0.0. */
-   EXPECT_TRUE(nir_const_value_negative_equal(c1, c1, NIR_MAX_VEC_COMPONENTS,
-                                              nir_type_float, 64));
+   EXPECT_TRUE(nir_const_value_negative_equal(c1[0], c1[0], nir_type_float64));
 }
 
 /* Compare an object with non-zero values to itself.  This should always be
  * false.
  */
-#define compare_with_self(base_type, bits) \
-TEST_F(const_value_negative_equal_test, base_type ## bits ## _self)     \
+#define compare_with_self(full_type)                                    \
+TEST_F(const_value_negative_equal_test, full_type ## _self)             \
 {                                                                       \
-   count_sequence(c1, base_type, bits, 1);                              \
-   EXPECT_FALSE(nir_const_value_negative_equal(c1, c1,                  \
-                                               NIR_MAX_VEC_COMPONENTS,  \
-                                               base_type, bits));       \
+   count_sequence(c1, full_type, 1);                                    \
+   EXPECT_FALSE(nir_const_value_negative_equal(c1[0], c1[0], full_type)); \
 }
 
-compare_with_self(nir_type_float, 16)
-compare_with_self(nir_type_float, 32)
-compare_with_self(nir_type_float, 64)
-compare_with_self(nir_type_int, 8)
-compare_with_self(nir_type_uint, 8)
-compare_with_self(nir_type_int, 16)
-compare_with_self(nir_type_uint, 16)
-compare_with_self(nir_type_int, 32)
-compare_with_self(nir_type_uint, 32)
-compare_with_self(nir_type_int, 64)
-compare_with_self(nir_type_uint, 64)
+compare_with_self(nir_type_float16)
+compare_with_self(nir_type_float32)
+compare_with_self(nir_type_float64)
+compare_with_self(nir_type_int8)
+compare_with_self(nir_type_uint8)
+compare_with_self(nir_type_int16)
+compare_with_self(nir_type_uint16)
+compare_with_self(nir_type_int32)
+compare_with_self(nir_type_uint32)
+compare_with_self(nir_type_int64)
+compare_with_self(nir_type_uint64)
+#undef compare_with_self
 
 /* Compare an object with the negation of itself.  This should always be true.
  */
-#define compare_with_negation(base_type, bits) \
-TEST_F(const_value_negative_equal_test, base_type ## bits ## _trivially_true) \
+#define compare_with_negation(full_type)                                \
+TEST_F(const_value_negative_equal_test, full_type ## _trivially_true)   \
 {                                                                       \
-   count_sequence(c1, base_type, bits, 1);                              \
-   negate(c2, c1, base_type, bits, NIR_MAX_VEC_COMPONENTS);             \
-   EXPECT_TRUE(nir_const_value_negative_equal(c1, c2,                   \
-                                              NIR_MAX_VEC_COMPONENTS,   \
-                                              base_type, bits));        \
+   count_sequence(c1, full_type, 1);                                    \
+   negate(c2, c1, full_type, 1);                                        \
+   EXPECT_TRUE(nir_const_value_negative_equal(c1[0], c2[0], full_type)); \
 }
 
-compare_with_negation(nir_type_float, 16)
-compare_with_negation(nir_type_float, 32)
-compare_with_negation(nir_type_float, 64)
-compare_with_negation(nir_type_int, 8)
-compare_with_negation(nir_type_uint, 8)
-compare_with_negation(nir_type_int, 16)
-compare_with_negation(nir_type_uint, 16)
-compare_with_negation(nir_type_int, 32)
-compare_with_negation(nir_type_uint, 32)
-compare_with_negation(nir_type_int, 64)
-compare_with_negation(nir_type_uint, 64)
-
-/* Compare fewer than the maximum possible components.  All of the components
- * that are compared a negative-equal, but the extra components are not.
- */
-#define compare_fewer_components(base_type, bits) \
-TEST_F(const_value_negative_equal_test, base_type ## bits ## _fewer_components) \
-{                                                                       \
-   count_sequence(c1, base_type, bits, 1);                              \
-   negate(c2, c1, base_type, bits, 3);                                  \
-   EXPECT_TRUE(nir_const_value_negative_equal(c1, c2, 3, base_type, bits)); \
-   EXPECT_FALSE(nir_const_value_negative_equal(c1, c2,                  \
-                                               NIR_MAX_VEC_COMPONENTS,  \
-                                               base_type, bits));       \
-}
-
-compare_fewer_components(nir_type_float, 16)
-compare_fewer_components(nir_type_float, 32)
-compare_fewer_components(nir_type_float, 64)
-compare_fewer_components(nir_type_int, 8)
-compare_fewer_components(nir_type_uint, 8)
-compare_fewer_components(nir_type_int, 16)
-compare_fewer_components(nir_type_uint, 16)
-compare_fewer_components(nir_type_int, 32)
-compare_fewer_components(nir_type_uint, 32)
-compare_fewer_components(nir_type_int, 64)
-compare_fewer_components(nir_type_uint, 64)
+compare_with_negation(nir_type_float16)
+compare_with_negation(nir_type_float32)
+compare_with_negation(nir_type_float64)
+compare_with_negation(nir_type_int8)
+compare_with_negation(nir_type_uint8)
+compare_with_negation(nir_type_int16)
+compare_with_negation(nir_type_uint16)
+compare_with_negation(nir_type_int32)
+compare_with_negation(nir_type_uint32)
+compare_with_negation(nir_type_int64)
+compare_with_negation(nir_type_uint64)
+#undef compare_with_negation
 
 TEST_F(alu_srcs_negative_equal_test, trivial_float)
 {
@@ -220,66 +194,166 @@ TEST_F(alu_srcs_negative_equal_test, trivial_negation_int)
    EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 1, 1));
 }
 
-static void
-count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS], nir_alu_type base_type, unsigned bits, int first)
+/* Compare an object with non-zero values to itself.  This should always be
+ * false.
+ */
+#define compare_with_self(full_type)                                    \
+TEST_F(alu_srcs_negative_equal_test, full_type ## _self)                \
+{                                                                       \
+   count_sequence(c1, full_type, 1);                                    \
+   nir_ssa_def *a = nir_build_imm(&bld,                                 \
+                                  NIR_MAX_VEC_COMPONENTS,               \
+                                  nir_alu_type_get_type_size(full_type), \
+                                  c1);                                  \
+   nir_ssa_def *result;                                                 \
+   if (nir_alu_type_get_base_type(full_type) == nir_type_float)         \
+      result = nir_fadd(&bld, a, a);                                    \
+   else                                                                 \
+      result = nir_iadd(&bld, a, a);                                    \
+   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);       \
+   ASSERT_NE((void *) 0, instr);                                        \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 0));       \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));       \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 1, 0));       \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 1, 1));       \
+}
+
+compare_with_self(nir_type_float16)
+compare_with_self(nir_type_float32)
+compare_with_self(nir_type_float64)
+compare_with_self(nir_type_int8)
+compare_with_self(nir_type_uint8)
+compare_with_self(nir_type_int16)
+compare_with_self(nir_type_uint16)
+compare_with_self(nir_type_int32)
+compare_with_self(nir_type_uint32)
+compare_with_self(nir_type_int64)
+compare_with_self(nir_type_uint64)
+
+/* Compare an object with the negation of itself.  This should always be true.
+ */
+#define compare_with_negation(full_type)                                \
+TEST_F(alu_srcs_negative_equal_test, full_type ## _trivially_true)      \
+{                                                                       \
+   count_sequence(c1, full_type, 1);                                    \
+   negate(c2, c1, full_type, NIR_MAX_VEC_COMPONENTS);                   \
+   nir_ssa_def *a = nir_build_imm(&bld,                                 \
+                                  NIR_MAX_VEC_COMPONENTS,               \
+                                  nir_alu_type_get_type_size(full_type), \
+                                  c1);                                  \
+   nir_ssa_def *b = nir_build_imm(&bld,                                 \
+                                  NIR_MAX_VEC_COMPONENTS,               \
+                                  nir_alu_type_get_type_size(full_type), \
+                                  c2);                                  \
+   nir_ssa_def *result;                                                 \
+   if (nir_alu_type_get_base_type(full_type) == nir_type_float)         \
+      result = nir_fadd(&bld, a, b);                                    \
+   else                                                                 \
+      result = nir_iadd(&bld, a, b);                                    \
+   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);       \
+   ASSERT_NE((void *) 0, instr);                                        \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 0, 0));       \
+   EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));        \
+   EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 1, 0));        \
+   EXPECT_FALSE(nir_alu_srcs_negative_equal(instr, instr, 1, 1));       \
+}
+
+compare_with_negation(nir_type_float16)
+compare_with_negation(nir_type_float32)
+compare_with_negation(nir_type_float64)
+compare_with_negation(nir_type_int8)
+compare_with_negation(nir_type_uint8)
+compare_with_negation(nir_type_int16)
+compare_with_negation(nir_type_uint16)
+compare_with_negation(nir_type_int32)
+compare_with_negation(nir_type_uint32)
+compare_with_negation(nir_type_int64)
+compare_with_negation(nir_type_uint64)
+
+TEST_F(alu_srcs_negative_equal_test, swizzle_scalar_to_vector)
 {
-   switch (base_type) {
-   case nir_type_float:
-      switch (bits) {
-      case 16:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].u16 = _mesa_float_to_half(float(i + first));
+   nir_ssa_def *v = nir_imm_vec2(&bld, 1.0, -1.0);
+   const uint8_t s0[4] = { 0, 0, 0, 0 };
+   const uint8_t s1[4] = { 1, 1, 1, 1 };
 
-         break;
+   /* We can't use nir_swizzle here because it inserts an extra MOV. */
+   nir_alu_instr *instr = nir_alu_instr_create(bld.shader, nir_op_fadd);
 
-      case 32:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].f32 = float(i + first);
+   instr->src[0].src = nir_src_for_ssa(v);
+   instr->src[1].src = nir_src_for_ssa(v);
 
-         break;
+   memcpy(&instr->src[0].swizzle, s0, sizeof(s0));
+   memcpy(&instr->src[1].swizzle, s1, sizeof(s1));
 
-      case 64:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].f64 = double(i + first);
+   nir_builder_alu_instr_finish_and_insert(&bld, instr);
 
-         break;
+   EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
+}
 
-      default:
-         unreachable("unknown bit size");
-      }
+TEST_F(alu_srcs_negative_equal_test, unused_components_mismatch)
+{
+   nir_ssa_def *v1 = nir_imm_vec4(&bld, -2.0, 18.0, 43.0,  1.0);
+   nir_ssa_def *v2 = nir_imm_vec4(&bld,  2.0, 99.0, 76.0, -1.0);
+
+   nir_ssa_def *result = nir_fadd(&bld, v1, v2);
+
+   nir_alu_instr *instr = nir_instr_as_alu(result->parent_instr);
+
+   /* Disable the channels that aren't negations of each other. */
+   instr->dest.dest.is_ssa = false;
+   instr->dest.write_mask = 8 + 1;
+
+   EXPECT_TRUE(nir_alu_srcs_negative_equal(instr, instr, 0, 1));
+}
+
+static void
+count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS],
+               nir_alu_type full_type, int first)
+{
+   switch (full_type) {
+   case nir_type_float16:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].u16 = _mesa_float_to_half(float(i + first));
 
       break;
 
-   case nir_type_int:
-   case nir_type_uint:
-      switch (bits) {
-      case 8:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].i8 = i + first;
+   case nir_type_float32:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].f32 = float(i + first);
 
-         break;
+      break;
 
-      case 16:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].i16 = i + first;
+   case nir_type_float64:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].f64 = double(i + first);
 
-         break;
+      break;
 
-      case 32:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].i32 = i + first;
+   case nir_type_int8:
+   case nir_type_uint8:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].i8 = i + first;
 
-         break;
+      break;
 
-      case 64:
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
-            c[i].i64 = i + first;
+   case nir_type_int16:
+   case nir_type_uint16:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].i16 = i + first;
 
-         break;
+      break;
 
-      default:
-         unreachable("unknown bit size");
-      }
+   case nir_type_int32:
+   case nir_type_uint32:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].i32 = i + first;
+
+      break;
+
+   case nir_type_int64:
+   case nir_type_uint64:
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         c[i].i64 = i + first;
 
       break;
 
@@ -292,65 +366,52 @@ count_sequence(nir_const_value c[NIR_MAX_VEC_COMPONENTS], nir_alu_type base_type
 static void
 negate(nir_const_value dst[NIR_MAX_VEC_COMPONENTS],
        const nir_const_value src[NIR_MAX_VEC_COMPONENTS],
-       nir_alu_type base_type, unsigned bits, unsigned components)
+       nir_alu_type full_type, unsigned components)
 {
-   switch (base_type) {
-   case nir_type_float:
-      switch (bits) {
-      case 16:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].u16 = _mesa_float_to_half(-_mesa_half_to_float(src[i].u16));
-
-         break;
-
-      case 32:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].f32 = -src[i].f32;
-
-         break;
-
-      case 64:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].f64 = -src[i].f64;
-
-         break;
-
-      default:
-         unreachable("unknown bit size");
-      }
+   switch (full_type) {
+   case nir_type_float16:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].u16 = _mesa_float_to_half(-_mesa_half_to_float(src[i].u16));
 
       break;
 
-   case nir_type_int:
-   case nir_type_uint:
-      switch (bits) {
-      case 8:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].i8 = -src[i].i8;
+   case nir_type_float32:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].f32 = -src[i].f32;
 
-         break;
+      break;
 
-      case 16:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].i16 = -src[i].i16;
+   case nir_type_float64:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].f64 = -src[i].f64;
 
-         break;
+      break;
 
-      case 32:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].i32 = -src[i].i32;
+   case nir_type_int8:
+   case nir_type_uint8:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].i8 = -src[i].i8;
 
-         break;
+      break;
 
-      case 64:
-         for (unsigned i = 0; i < components; i++)
-            dst[i].i64 = -src[i].i64;
+   case nir_type_int16:
+   case nir_type_uint16:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].i16 = -src[i].i16;
 
-         break;
+      break;
 
-      default:
-         unreachable("unknown bit size");
-      }
+   case nir_type_int32:
+   case nir_type_uint32:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].i32 = -src[i].i32;
+
+      break;
+
+   case nir_type_int64:
+   case nir_type_uint64:
+      for (unsigned i = 0; i < components; i++)
+         dst[i].i64 = -src[i].i64;
 
       break;
 

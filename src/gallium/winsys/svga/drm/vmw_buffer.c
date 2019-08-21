@@ -315,7 +315,7 @@ vmw_svga_winsys_buffer_wrap(struct pb_buffer *buffer)
    }
 
    buf->pb_buf = buffer;
-   buf->fbuf = debug_flush_buf_create(TRUE, VMW_DEBUG_FLUSH_STACK);
+   buf->fbuf = debug_flush_buf_create(FALSE, VMW_DEBUG_FLUSH_STACK);
    return buf;
 }
 
@@ -365,7 +365,7 @@ vmw_svga_winsys_buffer_map(struct svga_winsys_screen *sws,
    STATIC_ASSERT((unsigned) PB_USAGE_UNSYNCHRONIZED ==
                  (unsigned) PIPE_TRANSFER_UNSYNCHRONIZED);
 
-   map = pb_map(vmw_pb_buffer(buf), flags, NULL);
+   map = pb_map(vmw_pb_buffer(buf), flags & PB_USAGE_ALL, NULL);
 
 #ifdef DEBUG
    if (map != NULL)

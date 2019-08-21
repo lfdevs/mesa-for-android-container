@@ -128,7 +128,7 @@ fail(struct location *loc, const char *msg, ...)
 }
 
 static void
-get_group_offset_count(const char **atts, uint32_t *offset, uint32_t *count,
+get_array_offset_count(const char **atts, uint32_t *offset, uint32_t *count,
                        uint32_t *size, bool *variable)
 {
    for (int i = 0; atts[i]; i += 2) {
@@ -203,10 +203,10 @@ create_group(struct parser_context *ctx,
 
    if (parent) {
       group->parent = parent;
-      get_group_offset_count(atts,
-                             &group->group_offset,
-                             &group->group_count,
-                             &group->group_size,
+      get_array_offset_count(atts,
+                             &group->array_offset,
+                             &group->array_count,
+                             &group->array_item_size,
                              &group->variable);
    }
 
@@ -339,6 +339,20 @@ create_field(struct parser_context *ctx, const char **atts)
    return field;
 }
 
+static struct gen_field *
+create_array_field(struct parser_context *ctx, struct gen_group *array)
+{
+   struct gen_field *field;
+
+   field = rzalloc(ctx->group, struct gen_field);
+   field->parent = ctx->group;
+
+   field->array = array;
+   field->start = field->array->array_offset;
+
+   return field;
+}
+
 static struct gen_value *
 create_value(struct parser_context *ctx, const char **atts)
 {
@@ -356,9 +370,11 @@ create_value(struct parser_context *ctx, const char **atts)
 
 static struct gen_field *
 create_and_append_field(struct parser_context *ctx,
-                        const char **atts)
+                        const char **atts,
+                        struct gen_group *array)
 {
-   struct gen_field *field = create_field(ctx, atts);
+   struct gen_field *field = array ?
+      create_array_field(ctx, array) : create_field(ctx, atts);
    struct gen_field *prev = NULL, *list = ctx->group->fields;
 
    while (list && field->start > list->start) {
@@ -413,15 +429,11 @@ start_element(void *data, const char *element_name, const char **atts)
       ctx->group = create_group(ctx, name, atts, NULL, true);
       get_register_offset(atts, &ctx->group->register_offset);
    } else if (strcmp(element_name, "group") == 0) {
-      struct gen_group *previous_group = ctx->group;
-      while (previous_group->next)
-         previous_group = previous_group->next;
-
       struct gen_group *group = create_group(ctx, "", atts, ctx->group, false);
-      previous_group->next = group;
+      ctx->last_field = create_and_append_field(ctx, NULL, group);
       ctx->group = group;
    } else if (strcmp(element_name, "field") == 0) {
-      ctx->last_field = create_and_append_field(ctx, atts);
+      ctx->last_field = create_and_append_field(ctx, atts, NULL);
    } else if (strcmp(element_name, "enum") == 0) {
       ctx->enoom = create_enum(ctx, name, atts);
    } else if (strcmp(element_name, "value") == 0) {
@@ -589,7 +601,7 @@ gen_spec_load(const struct gen_device_info *devinfo)
    void *buf;
    uint8_t *text_data = NULL;
    uint32_t text_offset = 0, text_length = 0;
-   MAYBE_UNUSED uint32_t total_length;
+   ASSERTED uint32_t total_length;
    uint32_t gen_10 = devinfo_to_gen(devinfo, true);
 
    for (int i = 0; i < ARRAY_SIZE(genxml_files_table); i++) {
@@ -649,23 +661,16 @@ gen_spec_load(const struct gen_device_info *devinfo)
 }
 
 struct gen_spec *
-gen_spec_load_from_path(const struct gen_device_info *devinfo,
-                        const char *path)
+gen_spec_load_filename(const char *filename)
 {
    struct parser_context ctx;
-   size_t len, filename_len = strlen(path) + 20;
-   char *filename = malloc(filename_len);
-   void *buf;
    FILE *input;
-
-   len = snprintf(filename, filename_len, "%s/gen%i.xml",
-                  path, devinfo_to_gen(devinfo, false));
-   assert(len < filename_len);
+   void *buf;
+   size_t len;
 
    input = fopen(filename, "r");
    if (input == NULL) {
       fprintf(stderr, "failed to open xml description\n");
-      free(filename);
       return NULL;
    }
 
@@ -675,7 +680,6 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
    if (ctx.parser == NULL) {
       fprintf(stderr, "failed to create parser\n");
       fclose(input);
-      free(filename);
       return NULL;
    }
 
@@ -697,7 +701,7 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
          gen_spec_destroy(ctx.spec);
          ctx.spec = NULL;
          goto end;
-      } else if (feof(input))
+      } else if (len == 0 && feof(input))
          goto end;
 
       if (XML_ParseBuffer(ctx.parser, len, len == 0) == 0) {
@@ -716,15 +720,35 @@ gen_spec_load_from_path(const struct gen_device_info *devinfo,
    XML_ParserFree(ctx.parser);
 
    fclose(input);
-   free(filename);
 
    /* free ctx.spec if genxml is empty */
-   if (ctx.spec && _mesa_hash_table_num_entries(ctx.spec->commands) == 0) {
+   if (ctx.spec &&
+       _mesa_hash_table_num_entries(ctx.spec->commands) == 0 &&
+       _mesa_hash_table_num_entries(ctx.spec->structs) == 0) {
+      fprintf(stderr,
+              "Error parsing XML: empty spec.\n");
       gen_spec_destroy(ctx.spec);
       return NULL;
    }
 
    return ctx.spec;
+}
+
+struct gen_spec *
+gen_spec_load_from_path(const struct gen_device_info *devinfo,
+                        const char *path)
+{
+   size_t len, filename_len = strlen(path) + 20;
+   char *filename = malloc(filename_len);
+
+   len = snprintf(filename, filename_len, "%s/gen%i.xml",
+                  path, devinfo_to_gen(devinfo, false));
+   assert(len < filename_len);
+
+   struct gen_spec *spec = gen_spec_load_filename(filename);
+   free(filename);
+
+   return spec;
 }
 
 void gen_spec_destroy(struct gen_spec *spec)
@@ -862,49 +886,78 @@ iter_more_fields(const struct gen_field_iterator *iter)
 }
 
 static uint32_t
-iter_group_offset_bits(const struct gen_field_iterator *iter,
-                       uint32_t group_iter)
+iter_array_offset_bits(const struct gen_field_iterator *iter)
 {
-   return iter->group->group_offset + (group_iter * iter->group->group_size);
+   if (iter->level == 0)
+      return 0;
+
+   uint32_t offset = 0;
+   const struct gen_group *group = iter->groups[1];
+   for (int level = 1; level <= iter->level; level++, group = iter->groups[level]) {
+      uint32_t array_idx = iter->array_iter[level];
+      offset += group->array_offset + array_idx * group->array_item_size;
+   }
+
+   return offset;
 }
 
-static bool
-iter_more_groups(const struct gen_field_iterator *iter)
+/* Checks whether we have more items in the array to iterate, or more arrays to
+ * iterate through.
+ */
+/* descend into a non-array field */
+static void
+iter_push_array(struct gen_field_iterator *iter)
 {
-   if (iter->group->variable) {
-      int length = gen_group_get_length(iter->group, iter->p);
-      assert(length >= 0 && "error the length is unknown!");
-      return iter_group_offset_bits(iter, iter->group_iter + 1) <
-              (length * 32);
-   } else {
-      return (iter->group_iter + 1) < iter->group->group_count ||
-         iter->group->next != NULL;
-   }
+   assert(iter->level >= 0);
+
+   iter->group = iter->field->array;
+   iter->level++;
+   assert(iter->level < DECODE_MAX_ARRAY_DEPTH);
+   iter->groups[iter->level] = iter->group;
+   iter->array_iter[iter->level] = 0;
+
+   assert(iter->group->fields != NULL); /* an empty <group> makes no sense */
+   iter->field = iter->group->fields;
+   iter->fields[iter->level] = iter->field;
+}
+
+static void
+iter_pop_array(struct gen_field_iterator *iter)
+{
+   assert(iter->level > 0);
+
+   iter->level--;
+   iter->field = iter->fields[iter->level];
+   iter->group = iter->groups[iter->level];
 }
 
 static void
 iter_start_field(struct gen_field_iterator *iter, struct gen_field *field)
 {
    iter->field = field;
+   iter->fields[iter->level] = field;
 
-   int group_member_offset = iter_group_offset_bits(iter, iter->group_iter);
+   while (iter->field->array)
+      iter_push_array(iter);
 
-   iter->start_bit = group_member_offset + iter->field->start;
-   iter->end_bit = group_member_offset + iter->field->end;
+   int array_member_offset = iter_array_offset_bits(iter);
+
+   iter->start_bit = array_member_offset + iter->field->start;
+   iter->end_bit = array_member_offset + iter->field->end;
    iter->struct_desc = NULL;
 }
 
 static void
-iter_advance_group(struct gen_field_iterator *iter)
+iter_advance_array(struct gen_field_iterator *iter)
 {
+   assert(iter->level > 0);
+   int lvl = iter->level;
+
    if (iter->group->variable)
-      iter->group_iter++;
+      iter->array_iter[lvl]++;
    else {
-      if ((iter->group_iter + 1) < iter->group->group_count) {
-         iter->group_iter++;
-      } else {
-         iter->group = iter->group->next;
-         iter->group_iter = 0;
+      if ((iter->array_iter[lvl] + 1) < iter->group->array_count) {
+         iter->array_iter[lvl]++;
       }
    }
 
@@ -912,17 +965,48 @@ iter_advance_group(struct gen_field_iterator *iter)
 }
 
 static bool
+iter_more_array_elems(const struct gen_field_iterator *iter)
+{
+   int lvl = iter->level;
+   assert(lvl >= 0);
+
+   if (iter->group->variable) {
+      int length = gen_group_get_length(iter->group, iter->p);
+      assert(length >= 0 && "error the length is unknown!");
+      return iter_array_offset_bits(iter) + iter->group->array_item_size <
+         (length * 32);
+   } else {
+      return (iter->array_iter[lvl] + 1) < iter->group->array_count;
+   }
+}
+
+static bool
 iter_advance_field(struct gen_field_iterator *iter)
 {
-   if (iter_more_fields(iter)) {
-      iter_start_field(iter, iter->field->next);
-   } else {
-      if (!iter_more_groups(iter))
-         return false;
+   /* Keep looping while we either have more fields to look at, or we are
+    * inside a <group> and can go up a level.
+    */
+   while (iter_more_fields(iter) || iter->level > 0) {
+      if (iter_more_fields(iter)) {
+         iter_start_field(iter, iter->field->next);
+         return true;
+      }
 
-      iter_advance_group(iter);
+      assert(iter->level >= 0);
+
+      if (iter_more_array_elems(iter)) {
+         iter_advance_array(iter);
+         return true;
+      }
+
+      /* At this point, we reached the end of the <group> and were on the last
+       * iteration. So it's time to go back to the parent and then advance the
+       * field.
+       */
+      iter_pop_array(iter);
    }
-   return true;
+
+   return false;
 }
 
 static bool
@@ -1033,8 +1117,17 @@ iter_decode_field(struct gen_field_iterator *iter)
 
    if (strlen(iter->group->name) == 0) {
       int length = strlen(iter->name);
-      snprintf(iter->name + length, sizeof(iter->name) - length,
-               "[%i]", iter->group_iter);
+      assert(iter->level >= 0);
+
+      int level = 1;
+      char *buf = iter->name + length;
+      while (level <= iter->level) {
+         int printed = snprintf(buf, sizeof(iter->name) - length,
+                                "[%i]", iter->array_iter[level]);
+         level++;
+         length += printed;
+         buf += printed;
+      }
    }
 
    if (enum_name) {
@@ -1062,6 +1155,7 @@ gen_field_iterator_init(struct gen_field_iterator *iter,
 {
    memset(iter, 0, sizeof(*iter));
 
+   iter->groups[iter->level] = group;
    iter->group = group;
    iter->p = p;
    iter->p_bit = p_bit;
@@ -1079,8 +1173,6 @@ gen_field_iterator_next(struct gen_field_iterator *iter)
    if (!iter->field) {
       if (iter->group->fields)
          iter_start_field(iter, iter->group->fields);
-      else
-         iter_start_field(iter, iter->group->next->fields);
 
       bool result = iter_decode_field(iter);
       if (!result && iter->p_end) {

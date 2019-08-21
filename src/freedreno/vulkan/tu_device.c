@@ -42,7 +42,7 @@
 #include "vk_format.h"
 #include "vk_util.h"
 
-#include "drm/msm_drm.h"
+#include "drm-uapi/msm_drm.h"
 
 static int
 tu_device_get_cache_uuid(uint16_t family, void *uuid)

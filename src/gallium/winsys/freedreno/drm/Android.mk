@@ -28,6 +28,8 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := $(C_SOURCES)
 
 LOCAL_SHARED_LIBRARIES := libdrm_freedreno
+LOCAL_STATIC_LIBRARIES := libfreedreno_registers
+
 LOCAL_MODULE := libmesa_winsys_freedreno
 
 include $(GALLIUM_COMMON_MK)

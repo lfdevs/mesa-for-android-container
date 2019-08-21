@@ -134,7 +134,12 @@ def type_base_type(type_):
     assert m is not None, 'Invalid NIR type string: "{}"'.format(type_)
     return m.group('type')
 
-commutative = "commutative "
+# Operation where the first two sources are commutative.
+#
+# For 2-source operations, this just mathematical commutativity.  Some
+# 3-source operations, like ffma, are only commutative in the first two
+# sources.
+_2src_commutative = "2src_commutative "
 associative = "associative "
 
 # global dictionary of opcodes
@@ -180,16 +185,11 @@ def unop_reduce(name, output_size, output_type, input_type, prereduce_expr,
 def unop_numeric_convert(name, out_type, in_type, const_expr):
    opcode(name, 0, out_type, [0], [in_type], True, "", const_expr)
 
-# These two move instructions differ in what modifiers they support and what
-# the negate modifier means. Otherwise, they are identical.
-unop("fmov", tfloat, "src0")
-unop("imov", tint, "src0")
+unop("mov", tuint, "src0")
 
 unop("ineg", tint, "-src0")
 unop("fneg", tfloat, "-src0")
 unop("inot", tint, "~src0") # invert every bit of the integer
-unop("fnot", tfloat, ("bit_size == 64 ? ((src0 == 0.0) ? 1.0 : 0.0f) : " +
-                      "((src0 == 0.0f) ? 1.0f : 0.0f)"))
 unop("fsign", tfloat, ("bit_size == 64 ? " +
                        "((src0 == 0.0) ? 0.0 : ((src0 > 0.0) ? 1.0 : -1.0)) : " +
                        "((src0 == 0.0f) ? 0.0f : ((src0 > 0.0f) ? 1.0f : -1.0f))"))
@@ -439,6 +439,8 @@ if (src0.z >= 0 && absZ >= absX && absZ >= absY) dst.x = 4;
 if (src0.z < 0 && absZ >= absX && absZ >= absY) dst.x = 5;
 """)
 
+# Sum of vector components
+unop_reduce("fsum", 1, tfloat, tfloat, "{src}", "{src0} + {src1}", "{src}")
 
 def binop_convert(name, out_type, in_type, alg_props, const_expr):
    opcode(name, 0, out_type, [0, 0], [in_type, in_type],
@@ -471,23 +473,23 @@ def binop_reduce(name, output_size, output_type, src_type, prereduce_expr,
    src2 = prereduce("src0.z", "src1.z")
    src3 = prereduce("src0.w", "src1.w")
    opcode(name + "2", output_size, output_type,
-          [2, 2], [src_type, src_type], False, commutative,
+          [2, 2], [src_type, src_type], False, _2src_commutative,
           final(reduce_(src0, src1)))
    opcode(name + "3", output_size, output_type,
-          [3, 3], [src_type, src_type], False, commutative,
+          [3, 3], [src_type, src_type], False, _2src_commutative,
           final(reduce_(reduce_(src0, src1), src2)))
    opcode(name + "4", output_size, output_type,
-          [4, 4], [src_type, src_type], False, commutative,
+          [4, 4], [src_type, src_type], False, _2src_commutative,
           final(reduce_(reduce_(src0, src1), reduce_(src2, src3))))
 
-binop("fadd", tfloat, commutative + associative, "src0 + src1")
-binop("iadd", tint, commutative + associative, "src0 + src1")
-binop("iadd_sat", tint, commutative, """
+binop("fadd", tfloat, _2src_commutative + associative, "src0 + src1")
+binop("iadd", tint, _2src_commutative + associative, "src0 + src1")
+binop("iadd_sat", tint, _2src_commutative, """
       src1 > 0 ?
          (src0 + src1 < src0 ? (1ull << (bit_size - 1)) - 1 : src0 + src1) :
          (src0 < src0 + src1 ? (1ull << (bit_size - 1))     : src0 + src1)
 """)
-binop("uadd_sat", tuint, commutative,
+binop("uadd_sat", tuint, _2src_commutative,
       "(src0 + src1) < src0 ? MAX_UINT_FOR_SIZE(sizeof(src0) * 8) : (src0 + src1)")
 binop("isub_sat", tint, "", """
       src1 < 0 ?
@@ -499,18 +501,18 @@ binop("usub_sat", tuint, "", "src0 < src1 ? 0 : src0 - src1")
 binop("fsub", tfloat, "", "src0 - src1")
 binop("isub", tint, "", "src0 - src1")
 
-binop("fmul", tfloat, commutative + associative, "src0 * src1")
+binop("fmul", tfloat, _2src_commutative + associative, "src0 * src1")
 # low 32-bits of signed/unsigned integer multiply
-binop("imul", tint, commutative + associative, "src0 * src1")
+binop("imul", tint, _2src_commutative + associative, "src0 * src1")
 
 # Generate 64 bit result from 2 32 bits quantity
-binop_convert("imul_2x32_64", tint64, tint32, commutative,
+binop_convert("imul_2x32_64", tint64, tint32, _2src_commutative,
               "(int64_t)src0 * (int64_t)src1")
-binop_convert("umul_2x32_64", tuint64, tuint32, commutative,
+binop_convert("umul_2x32_64", tuint64, tuint32, _2src_commutative,
               "(uint64_t)src0 * (uint64_t)src1")
 
 # high 32-bits of signed integer multiply
-binop("imul_high", tint, commutative, """
+binop("imul_high", tint, _2src_commutative, """
 if (bit_size == 64) {
    /* We need to do a full 128-bit x 128-bit multiply in order for the sign
     * extension to work properly.  The casts are kind-of annoying but needed
@@ -537,7 +539,7 @@ if (bit_size == 64) {
 """)
 
 # high 32-bits of unsigned integer multiply
-binop("umul_high", tuint, commutative, """
+binop("umul_high", tuint, _2src_commutative, """
 if (bit_size == 64) {
    /* The casts are kind-of annoying but needed to prevent compiler warnings. */
    uint32_t src0_u32[2] = { src0, (uint64_t)src0 >> 32 };
@@ -550,6 +552,13 @@ if (bit_size == 64) {
 }
 """)
 
+# low 32-bits of unsigned integer multiply
+binop("umul_low", tuint32, _2src_commutative, """
+uint64_t mask = (1 << (bit_size / 2)) - 1;
+dst = ((uint64_t)src0 & mask) * ((uint64_t)src1 & mask);
+""")
+
+
 binop("fdiv", tfloat, "", "src0 / src1")
 binop("idiv", tint, "", "src1 == 0 ? 0 : (src0 / src1)")
 binop("udiv", tuint, "", "src1 == 0 ? 0 : (src0 / src1)")
@@ -557,7 +566,7 @@ binop("udiv", tuint, "", "src1 == 0 ? 0 : (src0 / src1)")
 # returns a boolean representing the carry resulting from the addition of
 # the two unsigned arguments.
 
-binop_convert("uadd_carry", tuint, tuint, commutative, "src0 + src1 < src0")
+binop_convert("uadd_carry", tuint, tuint, _2src_commutative, "src0 + src1 < src0")
 
 # returns a boolean representing the borrow resulting from the subtraction
 # of the two unsigned arguments.
@@ -574,8 +583,8 @@ binop_convert("usub_borrow", tuint, tuint, "", "src0 < src1")
 #
 # (x + y) >> 1 = (((x & y) << 1) + (x ^ y)) >> 1
 #              =   (x & y) +      ((x ^ y)  >> 1)
-binop("ihadd", tint, commutative, "(src0 & src1) + ((src0 ^ src1) >> 1)")
-binop("uhadd", tuint, commutative, "(src0 & src1) + ((src0 ^ src1) >> 1)")
+binop("ihadd", tint, _2src_commutative, "(src0 & src1) + ((src0 ^ src1) >> 1)")
+binop("uhadd", tuint, _2src_commutative, "(src0 & src1) + ((src0 ^ src1) >> 1)")
 
 # rhadd: (a + b + 1) >> 1 (without overflow)
 # x + y + 1 = x + (~x & y) - (~x & y) + y + (x & ~y) - (x & ~y) + 1
@@ -587,8 +596,8 @@ binop("uhadd", tuint, commutative, "(src0 & src1) + ((src0 ^ src1) >> 1)")
 #
 # (x + y + 1) >> 1 = (x | y) + (-(x ^ y) + 1) >> 1)
 #                  = (x | y) -  ((x ^ y)      >> 1)
-binop("irhadd", tint, commutative, "(src0 | src1) + ((src0 ^ src1) >> 1)")
-binop("urhadd", tuint, commutative, "(src0 | src1) + ((src0 ^ src1) >> 1)")
+binop("irhadd", tint, _2src_commutative, "(src0 | src1) + ((src0 ^ src1) >> 1)")
+binop("urhadd", tuint, _2src_commutative, "(src0 | src1) + ((src0 ^ src1) >> 1)")
 
 binop("umod", tuint, "", "src1 == 0 ? 0 : src0 % src1")
 
@@ -616,22 +625,22 @@ binop("frem", tfloat, "", "src0 - src1 * truncf(src0 / src1)")
 
 binop_compare("flt", tfloat, "", "src0 < src1")
 binop_compare("fge", tfloat, "", "src0 >= src1")
-binop_compare("feq", tfloat, commutative, "src0 == src1")
-binop_compare("fne", tfloat, commutative, "src0 != src1")
+binop_compare("feq", tfloat, _2src_commutative, "src0 == src1")
+binop_compare("fne", tfloat, _2src_commutative, "src0 != src1")
 binop_compare("ilt", tint, "", "src0 < src1")
 binop_compare("ige", tint, "", "src0 >= src1")
-binop_compare("ieq", tint, commutative, "src0 == src1")
-binop_compare("ine", tint, commutative, "src0 != src1")
+binop_compare("ieq", tint, _2src_commutative, "src0 == src1")
+binop_compare("ine", tint, _2src_commutative, "src0 != src1")
 binop_compare("ult", tuint, "", "src0 < src1")
 binop_compare("uge", tuint, "", "src0 >= src1")
 binop_compare32("flt32", tfloat, "", "src0 < src1")
 binop_compare32("fge32", tfloat, "", "src0 >= src1")
-binop_compare32("feq32", tfloat, commutative, "src0 == src1")
-binop_compare32("fne32", tfloat, commutative, "src0 != src1")
+binop_compare32("feq32", tfloat, _2src_commutative, "src0 == src1")
+binop_compare32("fne32", tfloat, _2src_commutative, "src0 != src1")
 binop_compare32("ilt32", tint, "", "src0 < src1")
 binop_compare32("ige32", tint, "", "src0 >= src1")
-binop_compare32("ieq32", tint, commutative, "src0 == src1")
-binop_compare32("ine32", tint, commutative, "src0 != src1")
+binop_compare32("ieq32", tint, _2src_commutative, "src0 == src1")
+binop_compare32("ine32", tint, _2src_commutative, "src0 != src1")
 binop_compare32("ult32", tuint, "", "src0 < src1")
 binop_compare32("uge32", tuint, "", "src0 >= src1")
 
@@ -667,8 +676,8 @@ binop_reduce("fany_nequal", 1, tfloat32, tfloat32, "{src0} != {src1}",
 
 binop("slt", tfloat32, "", "(src0 < src1) ? 1.0f : 0.0f") # Set on Less Than
 binop("sge", tfloat, "", "(src0 >= src1) ? 1.0f : 0.0f") # Set on Greater or Equal
-binop("seq", tfloat32, commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set on Equal
-binop("sne", tfloat32, commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
+binop("seq", tfloat32, _2src_commutative, "(src0 == src1) ? 1.0f : 0.0f") # Set on Equal
+binop("sne", tfloat32, _2src_commutative, "(src0 != src1) ? 1.0f : 0.0f") # Set on Not Equal
 
 # SPIRV shifts are undefined for shift-operands >= bitsize,
 # but SM5 shifts are defined to use the least significant bits, only
@@ -680,28 +689,27 @@ opcode("ishr", 0, tint, [0, 0], [tint, tuint32], False, "",
 opcode("ushr", 0, tuint, [0, 0], [tuint, tuint32], False, "",
        "src0 >> (src1 & (sizeof(src0) * 8 - 1))")
 
+opcode("urol", 0, tuint, [0, 0], [tuint, tuint32], False, "", """
+   uint32_t rotate_mask = sizeof(src0) * 8 - 1;
+   dst = (src0 << (src1 & rotate_mask)) |
+         (src0 >> (-src1 & rotate_mask));
+""")
+opcode("uror", 0, tuint, [0, 0], [tuint, tuint32], False, "", """
+   uint32_t rotate_mask = sizeof(src0) * 8 - 1;
+   dst = (src0 >> (src1 & rotate_mask)) |
+         (src0 << (-src1 & rotate_mask));
+""")
+
 # bitwise logic operators
 #
 # These are also used as boolean and, or, xor for hardware supporting
 # integers.
 
 
-binop("iand", tuint, commutative + associative, "src0 & src1")
-binop("ior", tuint, commutative + associative, "src0 | src1")
-binop("ixor", tuint, commutative + associative, "src0 ^ src1")
+binop("iand", tuint, _2src_commutative + associative, "src0 & src1")
+binop("ior", tuint, _2src_commutative + associative, "src0 | src1")
+binop("ixor", tuint, _2src_commutative + associative, "src0 ^ src1")
 
-
-# floating point logic operators
-#
-# These use (src != 0.0) for testing the truth of the input, and output 1.0
-# for true and 0.0 for false
-
-binop("fand", tfloat32, commutative,
-      "((src0 != 0.0f) && (src1 != 0.0f)) ? 1.0f : 0.0f")
-binop("for", tfloat32, commutative,
-      "((src0 != 0.0f) || (src1 != 0.0f)) ? 1.0f : 0.0f")
-binop("fxor", tfloat32, commutative,
-      "(src0 != 0.0f && src1 == 0.0f) || (src0 == 0.0f && src1 != 0.0f) ? 1.0f : 0.0f")
 
 binop_reduce("fdot", 1, tfloat, tfloat, "{src0} * {src1}", "{src0} + {src1}",
              "{src}")
@@ -715,14 +723,14 @@ opcode("fdph_replicated", 4, tfloat, [3, 4], [tfloat, tfloat], False, "",
        "src0.x * src1.x + src0.y * src1.y + src0.z * src1.z + src1.w")
 
 binop("fmin", tfloat, "", "fminf(src0, src1)")
-binop("imin", tint, commutative + associative, "src1 > src0 ? src0 : src1")
-binop("umin", tuint, commutative + associative, "src1 > src0 ? src0 : src1")
+binop("imin", tint, _2src_commutative + associative, "src1 > src0 ? src0 : src1")
+binop("umin", tuint, _2src_commutative + associative, "src1 > src0 ? src0 : src1")
 binop("fmax", tfloat, "", "fmaxf(src0, src1)")
-binop("imax", tint, commutative + associative, "src1 > src0 ? src1 : src0")
-binop("umax", tuint, commutative + associative, "src1 > src0 ? src1 : src0")
+binop("imax", tint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
+binop("umax", tuint, _2src_commutative + associative, "src1 > src0 ? src1 : src0")
 
 # Saturated vector add for 4 8bit ints.
-binop("usadd_4x8", tint32, commutative + associative, """
+binop("usadd_4x8", tint32, _2src_commutative + associative, """
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MIN2(((src0 >> i) & 0xff) + ((src1 >> i) & 0xff), 0xff) << i;
@@ -741,7 +749,7 @@ for (int i = 0; i < 32; i += 8) {
 """)
 
 # vector min for 4 8bit ints.
-binop("umin_4x8", tint32, commutative + associative, """
+binop("umin_4x8", tint32, _2src_commutative + associative, """
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MIN2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
@@ -749,7 +757,7 @@ for (int i = 0; i < 32; i += 8) {
 """)
 
 # vector max for 4 8bit ints.
-binop("umax_4x8", tint32, commutative + associative, """
+binop("umax_4x8", tint32, _2src_commutative + associative, """
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    dst |= MAX2((src0 >> i) & 0xff, (src1 >> i) & 0xff) << i;
@@ -757,7 +765,7 @@ for (int i = 0; i < 32; i += 8) {
 """)
 
 # unorm multiply: (a * b) / 255.
-binop("umul_unorm_4x8", tint32, commutative + associative, """
+binop("umul_unorm_4x8", tint32, _2src_commutative + associative, """
 dst = 0;
 for (int i = 0; i < 32; i += 8) {
    int src0_chan = (src0 >> i) & 0xff;
@@ -778,14 +786,12 @@ binop_convert("pack_32_2x16_split", tuint32, tuint16, "",
               "src0 | ((uint32_t)src1 << 16)")
 
 # bfm implements the behavior of the first operation of the SM5 "bfi" assembly
-# and that of the "bfi1" i965 instruction. That is, it has undefined behavior
-# if either of its arguments are 32.
+# and that of the "bfi1" i965 instruction. That is, the bits and offset values
+# are from the low five bits of src0 and src1, respectively.
 binop_convert("bfm", tuint32, tint32, "", """
-int bits = src0, offset = src1;
-if (offset < 0 || bits < 0 || offset > 31 || bits > 31 || offset + bits > 32)
-   dst = 0; /* undefined */
-else
-   dst = ((1u << bits) - 1) << offset;
+int bits = src0 & 0x1F;
+int offset = src1 & 0x1F;
+dst = ((1u << bits) - 1) << offset;
 """)
 
 opcode("ldexp", 0, tfloat, [0, 0], [tfloat, tint32], False, "", """
@@ -811,16 +817,16 @@ binop("extract_u16", tuint, "", "(uint16_t)(src0 >> (src1 * 16))")
 binop("extract_i16", tint, "", "(int16_t)(src0 >> (src1 * 16))")
 
 
-def triop(name, ty, const_expr):
-   opcode(name, 0, ty, [0, 0, 0], [ty, ty, ty], False, "", const_expr)
+def triop(name, ty, alg_props, const_expr):
+   opcode(name, 0, ty, [0, 0, 0], [ty, ty, ty], False, alg_props, const_expr)
 def triop_horiz(name, output_size, src1_size, src2_size, src3_size, const_expr):
    opcode(name, output_size, tuint,
    [src1_size, src2_size, src3_size],
    [tuint, tuint, tuint], False, "", const_expr)
 
-triop("ffma", tfloat, "src0 * src1 + src2")
+triop("ffma", tfloat, _2src_commutative, "src0 * src1 + src2")
 
-triop("flrp", tfloat, "src0 * (1 - src2) + src1 * src2")
+triop("flrp", tfloat, "", "src0 * (1 - src2) + src1 * src2")
 
 # Conditional Select
 #
@@ -829,20 +835,20 @@ triop("flrp", tfloat, "src0 * (1 - src2) + src1 * src2")
 # bools (0.0 vs 1.0) and one for integer bools (0 vs ~0).
 
 
-triop("fcsel", tfloat32, "(src0 != 0.0f) ? src1 : src2")
+triop("fcsel", tfloat32, "", "(src0 != 0.0f) ? src1 : src2")
 
 # 3 way min/max/med
-triop("fmin3", tfloat, "fminf(src0, fminf(src1, src2))")
-triop("imin3", tint, "MIN2(src0, MIN2(src1, src2))")
-triop("umin3", tuint, "MIN2(src0, MIN2(src1, src2))")
+triop("fmin3", tfloat, "", "fminf(src0, fminf(src1, src2))")
+triop("imin3", tint, "", "MIN2(src0, MIN2(src1, src2))")
+triop("umin3", tuint, "", "MIN2(src0, MIN2(src1, src2))")
 
-triop("fmax3", tfloat, "fmaxf(src0, fmaxf(src1, src2))")
-triop("imax3", tint, "MAX2(src0, MAX2(src1, src2))")
-triop("umax3", tuint, "MAX2(src0, MAX2(src1, src2))")
+triop("fmax3", tfloat, "", "fmaxf(src0, fmaxf(src1, src2))")
+triop("imax3", tint, "", "MAX2(src0, MAX2(src1, src2))")
+triop("umax3", tuint, "", "MAX2(src0, MAX2(src1, src2))")
 
-triop("fmed3", tfloat, "fmaxf(fminf(fmaxf(src0, src1), src2), fminf(src0, src1))")
-triop("imed3", tint, "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
-triop("umed3", tuint, "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
+triop("fmed3", tfloat, "", "fmaxf(fminf(fmaxf(src0, src1), src2), fminf(src0, src1))")
+triop("imed3", tint, "", "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
+triop("umed3", tuint, "", "MAX2(MIN2(MAX2(src0, src1), src2), MIN2(src0, src1))")
 
 opcode("bcsel", 0, tuint, [0, 0, 0],
       [tbool1, tuint, tuint], False, "", "src0 ? src1 : src2")
@@ -850,7 +856,7 @@ opcode("b32csel", 0, tuint, [0, 0, 0],
        [tbool32, tuint, tuint], False, "", "src0 ? src1 : src2")
 
 # SM5 bfi assembly
-triop("bfi", tuint32, """
+triop("bfi", tuint32, "", """
 unsigned mask = src0, insert = src1, base = src2;
 if (mask == 0) {
    dst = base;
@@ -864,15 +870,17 @@ if (mask == 0) {
 }
 """)
 
-# SM5 ubfe/ibfe assembly
+
+triop("bitfield_select", tuint, "", "(src0 & src1) | (~src0 & src2)")
+
+# SM5 ubfe/ibfe assembly: only the 5 least significant bits of offset and bits are used.
 opcode("ubfe", 0, tuint32,
-       [0, 0, 0], [tuint32, tint32, tint32], False, "", """
+       [0, 0, 0], [tuint32, tuint32, tuint32], False, "", """
 unsigned base = src0;
-int offset = src1, bits = src2;
+unsigned offset = src1 & 0x1F;
+unsigned bits = src2 & 0x1F;
 if (bits == 0) {
    dst = 0;
-} else if (bits < 0 || offset < 0) {
-   dst = 0; /* undefined */
 } else if (offset + bits < 32) {
    dst = (base << (32 - bits - offset)) >> (32 - bits);
 } else {
@@ -880,13 +888,12 @@ if (bits == 0) {
 }
 """)
 opcode("ibfe", 0, tint32,
-       [0, 0, 0], [tint32, tint32, tint32], False, "", """
+       [0, 0, 0], [tint32, tuint32, tuint32], False, "", """
 int base = src0;
-int offset = src1, bits = src2;
+unsigned offset = src1 & 0x1F;
+unsigned bits = src2 & 0x1F;
 if (bits == 0) {
    dst = 0;
-} else if (bits < 0 || offset < 0) {
-   dst = 0; /* undefined */
 } else if (offset + bits < 32) {
    dst = (base << (32 - bits - offset)) >> (32 - bits);
 } else {
@@ -956,4 +963,10 @@ dst.z = src2.x;
 dst.w = src3.x;
 """)
 
-
+# ir3-specific instruction that maps directly to mul-add shift high mix,
+# (IMADSH_MIX16 i.e. ah * bl << 16 + c). It is used for lowering integer
+# multiplication (imul) on Freedreno backend..
+opcode("imadsh_mix16", 1, tint32,
+       [1, 1, 1], [tint32, tint32, tint32], False, "", """
+dst.x = ((((src0.x & 0xffff0000) >> 16) * (src1.x & 0x0000ffff)) << 16) + src2.x;
+""")

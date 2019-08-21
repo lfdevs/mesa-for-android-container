@@ -1241,7 +1241,7 @@ static void validate( enum tgsi_opcode opcode,
                       unsigned nr_dst,
                       unsigned nr_src )
 {
-#ifdef DEBUG
+#ifndef NDEBUG
    const struct tgsi_opcode_info *info = tgsi_get_opcode_info( opcode );
    assert(info);
    if (info) {

@@ -32,7 +32,11 @@
 #include "passes.h"
 #include "JitManager.h"
 
+#include "common/simdlib.hpp"
+
 #include <unordered_map>
+
+extern "C" void ScatterPS_256(uint8_t*, SIMD256::Integer, SIMD256::Float, uint8_t, uint32_t);
 
 namespace llvm
 {
@@ -88,6 +92,8 @@ namespace SwrJit
     Instruction*
     VGATHER_EMU(LowerX86* pThis, TargetArch arch, TargetWidth width, CallInst* pCallInst);
     Instruction*
+    VSCATTER_EMU(LowerX86* pThis, TargetArch arch, TargetWidth width, CallInst* pCallInst);
+    Instruction*
     VROUND_EMU(LowerX86* pThis, TargetArch arch, TargetWidth width, CallInst* pCallInst);
     Instruction*
     VHSUB_EMU(LowerX86* pThis, TargetArch arch, TargetWidth width, CallInst* pCallInst);
@@ -102,88 +108,61 @@ namespace SwrJit
 
     static Intrinsic::ID DOUBLE = (Intrinsic::ID)-1;
 
+    // clang-format off
     static std::map<std::string, X86Intrinsic> intrinsicMap2[] = {
-        //                              256 wide                                    512 wide
+        //                               256 wide                               512 wide
         {
             // AVX
-            {"meta.intrinsic.VRCPPS", {{Intrinsic::x86_avx_rcp_ps_256, DOUBLE}, NO_EMU}},
-            {"meta.intrinsic.VPERMPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VPERM_EMU}},
-            {"meta.intrinsic.VPERMD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VPERM_EMU}},
-            {"meta.intrinsic.VGATHERPD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERDD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VCVTPD2PS",
-             {{Intrinsic::x86_avx_cvt_pd2_ps_256, Intrinsic::not_intrinsic}, NO_EMU}},
-            {"meta.intrinsic.VCVTPH2PS",
-             {{Intrinsic::x86_vcvtph2ps_256, Intrinsic::not_intrinsic}, NO_EMU}},
-            {"meta.intrinsic.VROUND", {{Intrinsic::x86_avx_round_ps_256, DOUBLE}, NO_EMU}},
-            {"meta.intrinsic.VHSUBPS", {{Intrinsic::x86_avx_hsub_ps_256, DOUBLE}, NO_EMU}},
+            {"meta.intrinsic.VRCPPS",    {{Intrinsic::x86_avx_rcp_ps_256,       DOUBLE},                    NO_EMU}},
+            {"meta.intrinsic.VPERMPS",   {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic},  VPERM_EMU}},
+            {"meta.intrinsic.VPERMD",    {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic},  VPERM_EMU}},
+            {"meta.intrinsic.VGATHERPD", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERPS", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERDD", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VSCATTERPS", {{Intrinsic::not_intrinsic,           Intrinsic::not_intrinsic}, VSCATTER_EMU}},
+            {"meta.intrinsic.VCVTPD2PS", {{Intrinsic::x86_avx_cvt_pd2_ps_256,   Intrinsic::not_intrinsic},  NO_EMU}},
+            {"meta.intrinsic.VCVTPH2PS", {{Intrinsic::x86_vcvtph2ps_256,        Intrinsic::not_intrinsic},  NO_EMU}},
+            {"meta.intrinsic.VROUND",    {{Intrinsic::x86_avx_round_ps_256,     DOUBLE},                    NO_EMU}},
+            {"meta.intrinsic.VHSUBPS",   {{Intrinsic::x86_avx_hsub_ps_256,      DOUBLE},                    NO_EMU}},
         },
         {
             // AVX2
-            {"meta.intrinsic.VRCPPS", {{Intrinsic::x86_avx_rcp_ps_256, DOUBLE}, NO_EMU}},
-            {"meta.intrinsic.VPERMPS",
-             {{Intrinsic::x86_avx2_permps, Intrinsic::not_intrinsic}, VPERM_EMU}},
-            {"meta.intrinsic.VPERMD",
-             {{Intrinsic::x86_avx2_permd, Intrinsic::not_intrinsic}, VPERM_EMU}},
-            {"meta.intrinsic.VGATHERPD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERDD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VCVTPD2PS", {{Intrinsic::x86_avx_cvt_pd2_ps_256, DOUBLE}, NO_EMU}},
-            {"meta.intrinsic.VCVTPH2PS",
-             {{Intrinsic::x86_vcvtph2ps_256, Intrinsic::not_intrinsic}, NO_EMU}},
-            {"meta.intrinsic.VROUND", {{Intrinsic::x86_avx_round_ps_256, DOUBLE}, NO_EMU}},
-            {"meta.intrinsic.VHSUBPS", {{Intrinsic::x86_avx_hsub_ps_256, DOUBLE}, NO_EMU}},
+            {"meta.intrinsic.VRCPPS",       {{Intrinsic::x86_avx_rcp_ps_256,    DOUBLE},                    NO_EMU}},
+            {"meta.intrinsic.VPERMPS",      {{Intrinsic::x86_avx2_permps,       Intrinsic::not_intrinsic},  VPERM_EMU}},
+            {"meta.intrinsic.VPERMD",       {{Intrinsic::x86_avx2_permd,        Intrinsic::not_intrinsic},  VPERM_EMU}},
+            {"meta.intrinsic.VGATHERPD",    {{Intrinsic::not_intrinsic,         Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERPS",    {{Intrinsic::not_intrinsic,         Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERDD",    {{Intrinsic::not_intrinsic,         Intrinsic::not_intrinsic},  VGATHER_EMU}},
+            {"meta.intrinsic.VSCATTERPS", {{Intrinsic::not_intrinsic,           Intrinsic::not_intrinsic}, VSCATTER_EMU}},
+            {"meta.intrinsic.VCVTPD2PS",    {{Intrinsic::x86_avx_cvt_pd2_ps_256, DOUBLE},                   NO_EMU}},
+            {"meta.intrinsic.VCVTPH2PS",    {{Intrinsic::x86_vcvtph2ps_256,     Intrinsic::not_intrinsic},  NO_EMU}},
+            {"meta.intrinsic.VROUND",       {{Intrinsic::x86_avx_round_ps_256,  DOUBLE},                    NO_EMU}},
+            {"meta.intrinsic.VHSUBPS",      {{Intrinsic::x86_avx_hsub_ps_256,   DOUBLE},                    NO_EMU}},
         },
         {
             // AVX512
-            {"meta.intrinsic.VRCPPS",
-             {{Intrinsic::x86_avx512_rcp14_ps_256, Intrinsic::x86_avx512_rcp14_ps_512}, NO_EMU}},
+            {"meta.intrinsic.VRCPPS", {{Intrinsic::x86_avx512_rcp14_ps_256,     Intrinsic::x86_avx512_rcp14_ps_512}, NO_EMU}},
 #if LLVM_VERSION_MAJOR < 7
-            {"meta.intrinsic.VPERMPS",
-             {{Intrinsic::x86_avx512_mask_permvar_sf_256,
-               Intrinsic::x86_avx512_mask_permvar_sf_512},
-              NO_EMU}},
-            {"meta.intrinsic.VPERMD",
-             {{Intrinsic::x86_avx512_mask_permvar_si_256,
-               Intrinsic::x86_avx512_mask_permvar_si_512},
-              NO_EMU}},
+            {"meta.intrinsic.VPERMPS", {{Intrinsic::x86_avx512_mask_permvar_sf_256, Intrinsic::x86_avx512_mask_permvar_sf_512}, NO_EMU}},
+            {"meta.intrinsic.VPERMD", {{Intrinsic::x86_avx512_mask_permvar_si_256, Intrinsic::x86_avx512_mask_permvar_si_512}, NO_EMU}},
 #else
-            {"meta.intrinsic.VPERMPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VPERM_EMU}},
-            {"meta.intrinsic.VPERMD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VPERM_EMU}},
+            {"meta.intrinsic.VPERMPS", {{Intrinsic::not_intrinsic,              Intrinsic::not_intrinsic}, VPERM_EMU}},
+            {"meta.intrinsic.VPERMD", {{Intrinsic::not_intrinsic,               Intrinsic::not_intrinsic}, VPERM_EMU}},
 #endif
-            {"meta.intrinsic.VGATHERPD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
-            {"meta.intrinsic.VGATHERDD",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERPD", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic}, VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERPS", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic}, VGATHER_EMU}},
+            {"meta.intrinsic.VGATHERDD", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic}, VGATHER_EMU}},
+            {"meta.intrinsic.VSCATTERPS", {{Intrinsic::not_intrinsic,           Intrinsic::not_intrinsic}, VSCATTER_EMU}},
 #if LLVM_VERSION_MAJOR < 7
-            {"meta.intrinsic.VCVTPD2PS",
-             {{Intrinsic::x86_avx512_mask_cvtpd2ps_256, Intrinsic::x86_avx512_mask_cvtpd2ps_512},
-              NO_EMU}},
+            {"meta.intrinsic.VCVTPD2PS", {{Intrinsic::x86_avx512_mask_cvtpd2ps_256, Intrinsic::x86_avx512_mask_cvtpd2ps_512}, NO_EMU}},
 #else
-            {"meta.intrinsic.VCVTPD2PS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VCONVERT_EMU}},
+            {"meta.intrinsic.VCVTPD2PS", {{Intrinsic::not_intrinsic,            Intrinsic::not_intrinsic}, VCONVERT_EMU}},
 #endif
-            {"meta.intrinsic.VCVTPH2PS",
-             {{Intrinsic::x86_avx512_mask_vcvtph2ps_256, Intrinsic::x86_avx512_mask_vcvtph2ps_512},
-              NO_EMU}},
-            {"meta.intrinsic.VROUND",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VROUND_EMU}},
-            {"meta.intrinsic.VHSUBPS",
-             {{Intrinsic::not_intrinsic, Intrinsic::not_intrinsic}, VHSUB_EMU}},
+            {"meta.intrinsic.VCVTPH2PS", {{Intrinsic::x86_avx512_mask_vcvtph2ps_256, Intrinsic::x86_avx512_mask_vcvtph2ps_512}, NO_EMU}},
+            {"meta.intrinsic.VROUND", {{Intrinsic::not_intrinsic,               Intrinsic::not_intrinsic}, VROUND_EMU}},
+            {"meta.intrinsic.VHSUBPS", {{Intrinsic::not_intrinsic,              Intrinsic::not_intrinsic}, VHSUB_EMU}},
         }};
+    // clang-format on
 
     struct LowerX86 : public FunctionPass
     {
@@ -209,6 +188,27 @@ namespace SwrJit
                 SWR_ASSERT(false, "Unsupported AVX architecture.");
                 mTarget = AVX;
             }
+
+            // Setup scatter function for 256 wide
+            uint32_t curWidth = B->mVWidth;
+            B->SetTargetWidth(8);
+            std::vector<Type*> args = {
+                B->mInt8PtrTy,   // pBase
+                B->mSimdInt32Ty, // vIndices
+                B->mSimdFP32Ty,  // vSrc
+                B->mInt8Ty,      // mask
+                B->mInt32Ty      // scale
+            };
+
+            FunctionType* pfnScatterTy = FunctionType::get(B->mVoidTy, args, false);
+            mPfnScatter256             = cast<Function>(
+                B->JM()->mpCurrentModule->getOrInsertFunction("ScatterPS_256", pfnScatterTy));
+            if (sys::DynamicLibrary::SearchForAddressOfSymbol("ScatterPS_256") == nullptr)
+            {
+                sys::DynamicLibrary::AddSymbol("ScatterPS_256", (void*)&ScatterPS_256);
+            }
+
+            B->SetTargetWidth(curWidth);
         }
 
         // Try to decipher the vector type of the instruction. This does not work properly
@@ -392,23 +392,39 @@ namespace SwrJit
         virtual bool runOnFunction(Function& F)
         {
             std::vector<Instruction*> toRemove;
+            std::vector<BasicBlock*>  bbs;
 
-            for (auto& BB : F.getBasicBlockList())
+            // Make temp copy of the basic blocks and instructions, as the intrinsic
+            // replacement code might invalidate the iterators
+            for (auto& b : F.getBasicBlockList())
             {
-                for (auto& I : BB.getInstList())
+                bbs.push_back(&b);
+            }
+
+            for (auto* BB : bbs)
+            {
+                std::vector<Instruction*> insts;
+                for (auto& i : BB->getInstList())
                 {
-                    if (CallInst* pCallInst = dyn_cast<CallInst>(&I))
+                    insts.push_back(&i);
+                }
+
+                for (auto* I : insts)
+                {
+                    if (CallInst* pCallInst = dyn_cast<CallInst>(I))
                     {
                         Function* pFunc = pCallInst->getCalledFunction();
                         if (pFunc)
                         {
                             if (pFunc->getName().startswith("meta.intrinsic"))
                             {
-                                B->IRB()->SetInsertPoint(&I);
+                                B->IRB()->SetInsertPoint(I);
                                 Instruction* pReplace = ProcessIntrinsic(pCallInst);
-                                SWR_ASSERT(pReplace);
                                 toRemove.push_back(pCallInst);
-                                pCallInst->replaceAllUsesWith(pReplace);
+                                if (pReplace)
+                                {
+                                    pCallInst->replaceAllUsesWith(pReplace);
+                                }
                             }
                         }
                     }
@@ -428,10 +444,9 @@ namespace SwrJit
         virtual void getAnalysisUsage(AnalysisUsage& AU) const {}
 
         JitManager* JM() { return B->JM(); }
-
-        Builder* B;
-
-        TargetArch mTarget;
+        Builder*    B;
+        TargetArch  mTarget;
+        Function*   mPfnScatter256;
 
         static char ID; ///< Needed by LLVM to generate ID for FunctionPass.
     };
@@ -638,6 +653,69 @@ namespace SwrJit
         }
 
         return cast<Instruction>(v32Gather);
+    }
+    Instruction*
+    VSCATTER_EMU(LowerX86* pThis, TargetArch arch, TargetWidth width, CallInst* pCallInst)
+    {
+        Builder* B           = pThis->B;
+        auto     pBase       = pCallInst->getArgOperand(0);
+        auto     vi1Mask     = pCallInst->getArgOperand(1);
+        auto     vi32Indices = pCallInst->getArgOperand(2);
+        auto     v32Src      = pCallInst->getArgOperand(3);
+        auto     i32Scale    = pCallInst->getArgOperand(4);
+
+        if (arch != AVX512)
+        {
+            // Call into C function to do the scatter. This has significantly better compile perf
+            // compared to jitting scatter loops for every scatter
+            if (width == W256)
+            {
+                auto mask = B->BITCAST(vi1Mask, B->mInt8Ty);
+                B->CALL(pThis->mPfnScatter256, {pBase, vi32Indices, v32Src, mask, i32Scale});
+            }
+            else
+            {
+                // Need to break up 512 wide scatter to two 256 wide
+                auto maskLo = B->VSHUFFLE(vi1Mask, vi1Mask, B->C({0, 1, 2, 3, 4, 5, 6, 7}));
+                auto indicesLo =
+                    B->VSHUFFLE(vi32Indices, vi32Indices, B->C({0, 1, 2, 3, 4, 5, 6, 7}));
+                auto srcLo = B->VSHUFFLE(v32Src, v32Src, B->C({0, 1, 2, 3, 4, 5, 6, 7}));
+
+                auto mask = B->BITCAST(maskLo, B->mInt8Ty);
+                B->CALL(pThis->mPfnScatter256, {pBase, indicesLo, srcLo, mask, i32Scale});
+
+                auto maskHi = B->VSHUFFLE(vi1Mask, vi1Mask, B->C({8, 9, 10, 11, 12, 13, 14, 15}));
+                auto indicesHi =
+                    B->VSHUFFLE(vi32Indices, vi32Indices, B->C({8, 9, 10, 11, 12, 13, 14, 15}));
+                auto srcHi = B->VSHUFFLE(v32Src, v32Src, B->C({8, 9, 10, 11, 12, 13, 14, 15}));
+
+                mask = B->BITCAST(maskHi, B->mInt8Ty);
+                B->CALL(pThis->mPfnScatter256, {pBase, indicesHi, srcHi, mask, i32Scale});
+            }
+            return nullptr;
+        }
+
+        Value*    iMask;
+        Function* pX86IntrinFunc;
+        if (width == W256)
+        {
+            // No direct intrinsic supported in llvm to scatter 8 elem with 32bit indices, but we
+            // can use the scatter of 8 elements with 64bit indices
+            pX86IntrinFunc = Intrinsic::getDeclaration(B->JM()->mpCurrentModule,
+                                                       Intrinsic::x86_avx512_scatter_qps_512);
+
+            auto vi32IndicesExt = B->Z_EXT(vi32Indices, B->mSimdInt64Ty);
+            iMask               = B->BITCAST(vi1Mask, B->mInt8Ty);
+            B->CALL(pX86IntrinFunc, {pBase, iMask, vi32IndicesExt, v32Src, i32Scale});
+        }
+        else if (width == W512)
+        {
+            pX86IntrinFunc = Intrinsic::getDeclaration(B->JM()->mpCurrentModule,
+                                                       Intrinsic::x86_avx512_scatter_dps_512);
+            iMask          = B->BITCAST(vi1Mask, B->mInt16Ty);
+            B->CALL(pX86IntrinFunc, {pBase, iMask, vi32Indices, v32Src, i32Scale});
+        }
+        return nullptr;
     }
 
     // No support for vroundps in avx512 (it is available in kncni), so emulate with avx

@@ -57,7 +57,7 @@ xmesa_st_framebuffer(struct st_framebuffer_iface *stfbi)
 /**
  * Display (present) an attachment to the xlib_drawable of the framebuffer.
  */
-static boolean
+static bool
 xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
                              enum st_attachment_type statt)
 {
@@ -66,7 +66,7 @@ xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
    struct pipe_resource *pres;
 
    if (!ptex)
-      return TRUE;
+      return true;
 
    pres = xstfb->display_resource;
    /* (re)allocate the surface for the texture to be displayed */
@@ -76,7 +76,7 @@ xmesa_st_framebuffer_display(struct st_framebuffer_iface *stfbi,
    }
 
    xstfb->screen->flush_frontbuffer(xstfb->screen, pres, 0, 0, &xstfb->buffer->ws, NULL);
-   return TRUE;
+   return true;
 }
 
 
@@ -113,7 +113,7 @@ xmesa_st_framebuffer_copy_textures(struct st_framebuffer_iface *stfbi,
  * Remove outdated textures and create the requested ones.
  * This is a helper used during framebuffer validation.
  */
-boolean
+bool
 xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
                                        unsigned width, unsigned height,
                                        unsigned mask)
@@ -183,7 +183,7 @@ xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
    xstfb->texture_height = height;
    xstfb->texture_mask = mask;
 
-   return TRUE;
+   return true;
 }
 
 
@@ -196,7 +196,7 @@ xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
  * \param count  number of framebuffer attachments in statts[]
  * \param out  returns resources for each of the attachments
  */
-static boolean
+static bool
 xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
                               struct st_framebuffer_iface *stfbi,
                               const enum st_attachment_type *statts,
@@ -205,8 +205,8 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
    unsigned statt_mask, new_mask, i;
-   boolean resized;
-   boolean ret;
+   bool resized;
+   bool ret;
 
    /* build mask of ST_ATTACHMENT bits */
    statt_mask = 0x0;
@@ -250,20 +250,20 @@ xmesa_st_framebuffer_validate(struct st_context_iface *stctx,
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], xstfb->textures[statts[i]]);
 
-   return TRUE;
+   return true;
 }
 
 
 /**
  * Called via st_framebuffer_iface::flush_front()
  */
-static boolean
+static bool
 xmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
                                  struct st_framebuffer_iface *stfbi,
                                  enum st_attachment_type statt)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
-   boolean ret;
+   bool ret;
 
    ret = xmesa_st_framebuffer_display(stfbi, statt);
 
@@ -345,7 +345,7 @@ void
 xmesa_swap_st_framebuffer(struct st_framebuffer_iface *stfbi)
 {
    struct xmesa_st_framebuffer *xstfb = xmesa_st_framebuffer(stfbi);
-   boolean ret;
+   bool ret;
 
    ret = xmesa_st_framebuffer_display(stfbi, ST_ATTACHMENT_BACK_LEFT);
    if (ret) {

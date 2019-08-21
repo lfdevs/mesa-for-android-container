@@ -313,6 +313,7 @@ generate_fs_loop(struct gallivm_state *gallivm,
    LLVMTypeRef vec_type, int_vec_type;
    LLVMValueRef mask_ptr, mask_val;
    LLVMValueRef consts_ptr, num_consts_ptr;
+   LLVMValueRef ssbo_ptr, num_ssbo_ptr;
    LLVMValueRef z;
    LLVMValueRef z_value, s_value;
    LLVMValueRef z_fb, s_fb;
@@ -391,6 +392,9 @@ generate_fs_loop(struct gallivm_state *gallivm,
 
    consts_ptr = lp_jit_context_constants(gallivm, context_ptr);
    num_consts_ptr = lp_jit_context_num_constants(gallivm, context_ptr);
+
+   ssbo_ptr = lp_jit_context_ssbos(gallivm, context_ptr);
+   num_ssbo_ptr = lp_jit_context_num_ssbos(gallivm, context_ptr);
 
    lp_build_for_loop_begin(&loop_state, gallivm,
                            lp_build_const_int32(gallivm, 0),
@@ -474,12 +478,25 @@ generate_fs_loop(struct gallivm_state *gallivm,
 
    lp_build_interp_soa_update_inputs_dyn(interp, gallivm, loop_state.counter);
 
+   struct lp_build_tgsi_params params;
+   memset(&params, 0, sizeof(params));
+
+   params.type = type;
+   params.mask = &mask;
+   params.consts_ptr = consts_ptr;
+   params.const_sizes_ptr = num_consts_ptr;
+   params.system_values = &system_values;
+   params.inputs = interp->inputs;
+   params.context_ptr = context_ptr;
+   params.thread_data_ptr = thread_data_ptr;
+   params.sampler = sampler;
+   params.info = &shader->info.base;
+   params.ssbo_ptr = ssbo_ptr;
+   params.ssbo_sizes_ptr = num_ssbo_ptr;
+
    /* Build the actual shader */
-   lp_build_tgsi_soa(gallivm, tokens, type, &mask,
-                     consts_ptr, num_consts_ptr, &system_values,
-                     interp->inputs,
-                     outputs, context_ptr, thread_data_ptr,
-                     sampler, &shader->info.base, NULL);
+   lp_build_tgsi_soa(gallivm, tokens, &params,
+                     outputs);
 
    /* Alpha test */
    if (key->alpha.enabled) {
@@ -2486,8 +2503,8 @@ generate_fragment(struct llvmpipe_context *lp,
 
    blend_vec_type = lp_build_vec_type(gallivm, blend_type);
 
-   util_snprintf(func_name, sizeof(func_name), "fs%u_variant%u_%s",
-                 shader->no, variant->no, partial_mask ? "partial" : "whole");
+   snprintf(func_name, sizeof(func_name), "fs%u_variant%u_%s",
+            shader->no, variant->no, partial_mask ? "partial" : "whole");
 
    arg_types[0] = variant->jit_context_ptr_type;       /* context */
    arg_types[1] = int32_type;                          /* x */
@@ -2825,8 +2842,8 @@ generate_variant(struct llvmpipe_context *lp,
    if (!variant)
       return NULL;
 
-   util_snprintf(module_name, sizeof(module_name), "fs%u_variant%u",
-                 shader->no, shader->variants_created);
+   snprintf(module_name, sizeof(module_name), "fs%u_variant%u",
+            shader->no, shader->variants_created);
 
    variant->gallivm = gallivm_create(module_name, lp->context);
    if (!variant->gallivm) {
@@ -3023,7 +3040,7 @@ llvmpipe_bind_fs_state(struct pipe_context *pipe, void *fs)
  * Remove shader variant from two lists: the shader's variant list
  * and the context's variant list.
  */
-void
+static void
 llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
                                struct lp_fragment_shader_variant *variant)
 {
@@ -3137,6 +3154,34 @@ llvmpipe_set_constant_buffer(struct pipe_context *pipe,
    }
 }
 
+static void
+llvmpipe_set_shader_buffers(struct pipe_context *pipe,
+                            enum pipe_shader_type shader, unsigned start_slot,
+                            unsigned count, const struct pipe_shader_buffer *buffers,
+                            unsigned writable_bitmask)
+{
+   struct llvmpipe_context *llvmpipe = llvmpipe_context(pipe);
+   unsigned i, idx;
+   for (i = start_slot, idx = 0; i < start_slot + count; i++, idx++) {
+      const struct pipe_shader_buffer *buffer = buffers ? &buffers[idx] : NULL;
+
+      util_copy_shader_buffer(&llvmpipe->ssbos[shader][i], buffer);
+
+      if (shader == PIPE_SHADER_VERTEX ||
+          shader == PIPE_SHADER_GEOMETRY) {
+         const unsigned size = buffer ? buffer->buffer_size : 0;
+         const ubyte *data = NULL;
+         if (buffer && buffer->buffer)
+            data = (ubyte *) llvmpipe_resource_data(buffer->buffer);
+         if (data)
+            data += buffer->buffer_offset;
+         draw_set_mapped_shader_buffer(llvmpipe->draw, shader,
+                                       i, data, size);
+      } else if (shader == PIPE_SHADER_FRAGMENT) {
+         llvmpipe->dirty |= LP_NEW_FS_SSBOS;
+      }
+   }
+}
 
 /**
  * Return the blend factor equivalent to a destination alpha of one.
@@ -3480,6 +3525,8 @@ llvmpipe_init_fs_funcs(struct llvmpipe_context *llvmpipe)
    llvmpipe->pipe.delete_fs_state = llvmpipe_delete_fs_state;
 
    llvmpipe->pipe.set_constant_buffer = llvmpipe_set_constant_buffer;
+
+   llvmpipe->pipe.set_shader_buffers = llvmpipe_set_shader_buffers;
 }
 
 

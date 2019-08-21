@@ -255,7 +255,7 @@ patch_draws(struct fd_batch *batch, enum pc_di_vis_cull_mode vismode)
 		struct fd_cs_patch *patch = fd_patch_element(&batch->draw_patches, i);
 		*patch->cs = patch->val | DRAW4(0, 0, 0, vismode);
 	}
-	util_dynarray_resize(&batch->draw_patches, 0);
+	util_dynarray_clear(&batch->draw_patches);
 }
 
 static void
@@ -345,7 +345,7 @@ emit_binning_pass(struct fd_batch *batch)
 			A5XX_RB_WINDOW_OFFSET_Y(0));
 
 	/* emit IB to binning drawcmds: */
-	ctx->emit_ib(ring, batch->binning);
+	fd5_emit_ib(ring, batch->binning);
 
 	fd_reset_wfi(batch);
 
@@ -376,7 +376,7 @@ fd5_emit_tile_init(struct fd_batch *batch)
 	fd5_emit_restore(batch, ring);
 
 	if (batch->lrz_clear)
-		ctx->emit_ib(ring, batch->lrz_clear);
+		fd5_emit_ib(ring, batch->lrz_clear);
 
 	fd5_emit_lrz_flush(ring);
 

@@ -50,6 +50,16 @@ files_per_version = files(
   'v3dx_state.c',
 )
 
+v3d_driinfo_h = custom_target(
+  'v3d_driinfo.h',
+  input : files(
+    '../../../util/merge_driinfo.py',
+    '../../auxiliary/pipe-loader/driinfo_gallium.h', 'driinfo_v3d.h'
+  ),
+  output : 'v3d_driinfo.h',
+  command : [prog_python, '@INPUT@'],
+  capture : true,
+)
 v3d_args = ['-DV3D_BUILD_NEON']
 
 dep_v3dv3 = dependency('v3dv3', required: false)
@@ -93,7 +103,11 @@ libv3d_neon = static_library(
 
 libv3d = static_library(
   'v3d',
-  [files_libv3d, v3d_xml_pack],
+  [
+    files_libv3d,
+    v3d_xml_pack,
+    v3d_driinfo_h
+  ],
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
     inc_gallium_drivers,
@@ -107,5 +121,6 @@ libv3d = static_library(
 driver_v3d = declare_dependency(
   compile_args : '-DGALLIUM_V3D',
   link_with : [libv3d, libv3dwinsys, libbroadcom_cle, libbroadcom_v3d],
+  sources : v3d_driinfo_h,
   dependencies : idep_nir,
 )

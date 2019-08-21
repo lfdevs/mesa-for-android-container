@@ -201,10 +201,11 @@ create_frag_shader(struct vl_bicubic_filter *filter, unsigned video_width,
 
    ureg_FLR(shader, ureg_writemask(t_array[22], TGSI_WRITEMASK_XY),
             ureg_src(t_array[22]));
-   ureg_DIV(shader, ureg_writemask(t_array[22], TGSI_WRITEMASK_XY),
-            ureg_src(t_array[22]), ureg_imm2f(shader, video_width, video_height));
-   ureg_ADD(shader, ureg_writemask(t_array[22], TGSI_WRITEMASK_XY),
-            ureg_src(t_array[22]), half_pixel);
+
+   ureg_MAD(shader, ureg_writemask(t_array[22], TGSI_WRITEMASK_XY),
+            ureg_src(t_array[22]),
+            ureg_imm2f(shader, 1.0f / video_width, 1.0f / video_height),
+            half_pixel);
 
    /*
     * t_array[0..*] = vtex + offset[0..*]

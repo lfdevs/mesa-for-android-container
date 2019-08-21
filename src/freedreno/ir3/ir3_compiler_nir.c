@@ -107,7 +107,8 @@ create_driver_param(struct ir3_context *ctx, enum ir3_driver_param dp)
 {
 	/* first four vec4 sysval's reserved for UBOs: */
 	/* NOTE: dp is in scalar, but there can be >4 dp components: */
-	unsigned n = ctx->so->constbase.driver_param;
+	struct ir3_const_state *const_state = &ctx->so->shader->const_state;
+	unsigned n = const_state->offsets.driver_param;
 	unsigned r = regid(n + dp / 4, dp % 4);
 	return create_uniform(ctx->block, r);
 }
@@ -293,6 +294,8 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 	unsigned bs[info->num_inputs];     /* bit size */
 	struct ir3_block *b = ctx->block;
 	unsigned dst_sz, wrmask;
+	type_t dst_type = nir_dest_bit_size(alu->dest.dest) < 32 ?
+			TYPE_U16 : TYPE_U32;
 
 	if (alu->dest.dest.is_ssa) {
 		dst_sz = alu->dest.dest.ssa.num_components;
@@ -320,8 +323,8 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 
 			src[i] = ir3_get_src(ctx, &asrc->src)[asrc->swizzle[0]];
 			if (!src[i])
-				src[i] = create_immed(ctx->block, 0);
-			dst[i] = ir3_MOV(b, src[i], TYPE_U32);
+				src[i] = create_immed_typed(ctx->block, 0, dst_type);
+			dst[i] = ir3_MOV(b, src[i], dst_type);
 		}
 
 		ir3_put_dst(ctx, &alu->dest.dest);
@@ -331,14 +334,13 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 	/* We also get mov's with more than one component for mov's so
 	 * handle those specially:
 	 */
-	if ((alu->op == nir_op_imov) || (alu->op == nir_op_fmov)) {
-		type_t type = (alu->op == nir_op_imov) ? TYPE_U32 : TYPE_F32;
+	if (alu->op == nir_op_mov) {
 		nir_alu_src *asrc = &alu->src[0];
 		struct ir3_instruction *const *src0 = ir3_get_src(ctx, &asrc->src);
 
 		for (unsigned i = 0; i < dst_sz; i++) {
 			if (wrmask & (1 << i)) {
-				dst[i] = ir3_MOV(b, src0[asrc->swizzle[i]], type);
+				dst[i] = ir3_MOV(b, src0[asrc->swizzle[i]], dst_type);
 			} else {
 				dst[i] = NULL;
 			}
@@ -391,6 +393,8 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 		dst[0] = ir3_n2b(b, dst[0]);
 		break;
 	case nir_op_b2f16:
+		dst[0] = ir3_COV(b, ir3_b2n(b, src[0]), TYPE_U32, TYPE_F16);
+		break;
 	case nir_op_b2f32:
 		dst[0] = ir3_COV(b, ir3_b2n(b, src[0]), TYPE_U32, TYPE_F32);
 		break;
@@ -429,7 +433,7 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 				(list_length(&alu->src[0].src.ssa->uses) == 1) &&
 				((opc_cat(src[0]->opc) == 2) || (opc_cat(src[0]->opc) == 3))) {
 			src[0]->flags |= IR3_INSTR_SAT;
-			dst[0] = ir3_MOV(b, src[0], TYPE_U32);
+			dst[0] = ir3_MOV(b, src[0], dst_type);
 		} else {
 			/* otherwise generate a max.f that saturates.. blob does
 			 * similar (generating a cat2 mov using max.f)
@@ -538,16 +542,11 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
 	case nir_op_umin:
 		dst[0] = ir3_MIN_U(b, src[0], 0, src[1], 0);
 		break;
-	case nir_op_imul:
-		/*
-		 * dst = (al * bl) + (ah * bl << 16) + (al * bh << 16)
-		 *   mull.u tmp0, a, b           ; mul low, i.e. al * bl
-		 *   madsh.m16 tmp1, a, b, tmp0  ; mul-add shift high mix, i.e. ah * bl << 16
-		 *   madsh.m16 dst, b, a, tmp1   ; i.e. al * bh << 16
-		 */
-		dst[0] = ir3_MADSH_M16(b, src[1], 0, src[0], 0,
-					ir3_MADSH_M16(b, src[0], 0, src[1], 0,
-						ir3_MULL_U(b, src[0], 0, src[1], 0), 0), 0);
+	case nir_op_umul_low:
+		dst[0] = ir3_MULL_U(b, src[0], 0, src[1], 0);
+		break;
+	case nir_op_imadsh_mix16:
+		dst[0] = ir3_MADSH_M16(b, src[0], 0, src[1], 0, src[2], 0);
 		break;
 	case nir_op_ineg:
 		dst[0] = ir3_ABSNEG_S(b, src[0], IR3_REG_SNEG);
@@ -683,8 +682,9 @@ emit_intrinsic_load_ubo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 	/* UBO addresses are the first driver params, but subtract 2 here to
 	 * account for nir_lower_uniforms_to_ubo rebasing the UBOs such that UBO 0
 	 * is the uniforms: */
-	unsigned ubo = regid(ctx->so->constbase.ubo, 0) - 2;
-	const unsigned ptrsz = ir3_pointer_size(ctx);
+	struct ir3_const_state *const_state = &ctx->so->shader->const_state;
+	unsigned ubo = regid(const_state->offsets.ubo, 0) - 2;
+	const unsigned ptrsz = ir3_pointer_size(ctx->compiler);
 
 	int off = 0;
 
@@ -697,6 +697,13 @@ emit_intrinsic_load_ubo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 	} else {
 		base_lo = create_uniform_indirect(b, ubo, ir3_get_addr(ctx, src0, ptrsz));
 		base_hi = create_uniform_indirect(b, ubo + 1, ir3_get_addr(ctx, src0, ptrsz));
+
+		/* NOTE: since relative addressing is used, make sure constlen is
+		 * at least big enough to cover all the UBO addresses, since the
+		 * assembler won't know what the max address reg is.
+		 */
+		ctx->so->constlen = MAX2(ctx->so->constlen,
+			const_state->offsets.ubo + (ctx->s->info.num_ubos * ptrsz));
 	}
 
 	/* note: on 32bit gpu's base_hi is ignored and DCE'd */
@@ -751,11 +758,12 @@ emit_intrinsic_ssbo_size(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 		struct ir3_instruction **dst)
 {
 	/* SSBO size stored as a const starting at ssbo_sizes: */
+	struct ir3_const_state *const_state = &ctx->so->shader->const_state;
 	unsigned blk_idx = nir_src_as_uint(intr->src[0]);
-	unsigned idx = regid(ctx->so->constbase.ssbo_sizes, 0) +
-		ctx->so->const_layout.ssbo_size.off[blk_idx];
+	unsigned idx = regid(const_state->offsets.ssbo_sizes, 0) +
+		const_state->ssbo_size.off[blk_idx];
 
-	debug_assert(ctx->so->const_layout.ssbo_size.mask & (1 << blk_idx));
+	debug_assert(const_state->ssbo_size.mask & (1 << blk_idx));
 
 	dst[0] = create_uniform(ctx->block, idx);
 }
@@ -1006,8 +1014,9 @@ emit_intrinsic_image_size(struct ir3_context *ctx, nir_intrinsic_instr *intr,
 		 * bytes-per-pixel should have been emitted in 2nd slot of
 		 * image_dims. See ir3_shader::emit_image_dims().
 		 */
-		unsigned cb = regid(ctx->so->constbase.image_dims, 0) +
-			ctx->so->const_layout.image_dims.off[var->data.driver_location];
+		struct ir3_const_state *const_state = &ctx->so->shader->const_state;
+		unsigned cb = regid(const_state->offsets.image_dims, 0) +
+			const_state->image_dims.off[var->data.driver_location];
 		struct ir3_instruction *aux = create_uniform(b, cb + 1);
 
 		tmp[0] = ir3_SHR_B(b, tmp[0], 0, aux, 0);
@@ -1239,7 +1248,8 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 		if (nir_src_is_const(intr->src[0])) {
 			idx += nir_src_as_uint(intr->src[0]);
 			for (int i = 0; i < intr->num_components; i++) {
-				dst[i] = create_uniform(b, idx + i);
+				dst[i] = create_uniform_typed(b, idx + i,
+					nir_dest_bit_size(intr->dest) < 32 ? TYPE_F16 : TYPE_F32);
 			}
 		} else {
 			src = ir3_get_src(ctx, &intr->src[0]);
@@ -1252,7 +1262,8 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 			 * since we don't know in the assembler what the max
 			 * addr reg value can be:
 			 */
-			ctx->so->constlen = ctx->s->num_uniforms;
+			ctx->so->constlen = MAX2(ctx->so->constlen,
+					ctx->so->shader->ubo_state.size / 16);
 		}
 		break;
 	case nir_intrinsic_load_ubo:
@@ -1575,10 +1586,19 @@ emit_load_const(struct ir3_context *ctx, nir_load_const_instr *instr)
 {
 	struct ir3_instruction **dst = ir3_get_dst_ssa(ctx, &instr->def,
 			instr->def.num_components);
-	type_t type = (instr->def.bit_size < 32) ? TYPE_U16 : TYPE_U32;
 
-	for (int i = 0; i < instr->def.num_components; i++)
-		dst[i] = create_immed_typed(ctx->block, instr->value[i].u32, type);
+	if (instr->def.bit_size < 32) {
+		for (int i = 0; i < instr->def.num_components; i++)
+			dst[i] = create_immed_typed(ctx->block,
+										instr->value[i].u16,
+										TYPE_U16);
+	} else {
+		for (int i = 0; i < instr->def.num_components; i++)
+			dst[i] = create_immed_typed(ctx->block,
+										instr->value[i].u32,
+										TYPE_U32);
+	}
+
 }
 
 static void
@@ -2165,6 +2185,7 @@ static void
 emit_loop(struct ir3_context *ctx, nir_loop *nloop)
 {
 	emit_cf_list(ctx, &nloop->body);
+	ctx->so->loops++;
 }
 
 static void
@@ -2227,7 +2248,6 @@ emit_cf_list(struct ir3_context *ctx, struct exec_list *list)
 static void
 emit_stream_out(struct ir3_context *ctx)
 {
-	struct ir3_shader_variant *v = ctx->so;
 	struct ir3 *ir = ctx->ir;
 	struct ir3_stream_output_info *strmout =
 			&ctx->so->shader->stream_output;
@@ -2285,10 +2305,11 @@ emit_stream_out(struct ir3_context *ctx)
 	 * stripped out in the backend.
 	 */
 	for (unsigned i = 0; i < IR3_MAX_SO_BUFFERS; i++) {
+		struct ir3_const_state *const_state = &ctx->so->shader->const_state;
 		unsigned stride = strmout->stride[i];
 		struct ir3_instruction *base, *off;
 
-		base = create_uniform(ctx->block, regid(v->constbase.tfbo, i));
+		base = create_uniform(ctx->block, regid(const_state->offsets.tfbo, i));
 
 		/* 24-bit should be enough: */
 		off = ir3_MUL_U(ctx->block, vtxcnt, 0,
@@ -2885,6 +2906,32 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 	if (so->binning_pass && (ctx->compiler->gpu_id >= 600))
 		fixup_binning_pass(ctx);
 
+	/* for a6xx+, binning and draw pass VS use same VBO state, so we
+	 * need to make sure not to remove any inputs that are used by
+	 * the nonbinning VS.
+	 */
+	if (ctx->compiler->gpu_id >= 600 && so->binning_pass) {
+		debug_assert(so->type == MESA_SHADER_VERTEX);
+		for (int i = 0; i < ir->ninputs; i++) {
+			struct ir3_instruction *in = ir->inputs[i];
+
+			if (!in)
+				continue;
+
+			unsigned n = i / 4;
+			unsigned c = i % 4;
+
+			debug_assert(n < so->nonbinning->inputs_count);
+
+			if (so->nonbinning->inputs[n].sysval)
+				continue;
+
+			/* be sure to keep inputs, even if only used in VS */
+			if (so->nonbinning->inputs[n].compmask & (1 << c))
+				array_insert(in->block, in->block->keeps, in);
+		}
+	}
+
 	/* Insert mov if there's same instruction for each output.
 	 * eg. dEQP-GLES31.functional.shaders.opaque_type_indexing.sampler.const_expression.vertex.sampler2dshadow
 	 */
@@ -2941,7 +2988,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 		ir3_print(ir);
 	}
 
-	ret = ir3_ra(ir, so->type, so->frag_coord, so->frag_face);
+	ret = ir3_ra(so);
 	if (ret) {
 		DBG("RA failed!");
 		goto out;
@@ -2982,13 +3029,17 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 		for (j = 0; j < 4; j++) {
 			struct ir3_instruction *in = inputs[(i*4) + j];
 
-			if (in && !(in->flags & IR3_INSTR_UNUSED)) {
-				reg = in->regs[0]->num - j;
-				if (half) {
-					compile_assert(ctx, in->regs[0]->flags & IR3_REG_HALF);
-				} else {
-					half = !!(in->regs[0]->flags & IR3_REG_HALF);
-				}
+			if (!in)
+				continue;
+
+			if (in->flags & IR3_INSTR_UNUSED)
+				continue;
+
+			reg = in->regs[0]->num - j;
+			if (half) {
+				compile_assert(ctx, in->regs[0]->flags & IR3_REG_HALF);
+			} else {
+				half = !!(in->regs[0]->flags & IR3_REG_HALF);
 			}
 		}
 		so->inputs[i].regid = reg;

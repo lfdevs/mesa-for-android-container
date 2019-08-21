@@ -145,8 +145,4 @@ struct lp_fragment_shader
 void
 lp_debug_fs_variant(const struct lp_fragment_shader_variant *variant);
 
-void
-llvmpipe_remove_shader_variant(struct llvmpipe_context *lp,
-                               struct lp_fragment_shader_variant *variant);
-
 #endif /* LP_STATE_FS_H_ */

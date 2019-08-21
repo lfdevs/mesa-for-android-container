@@ -167,6 +167,31 @@
 #define mmUVD_SOFT_RESET				0x05a0
 #define mmUVD_SOFT_RESET_BASE_IDX			1
 
+#define vcnipUVD_JPEG_DEC_SOFT_RST			0x402f
+#define vcnipUVD_JRBC_IB_COND_RD_TIMER			0x408e
+#define vcnipUVD_JRBC_IB_REF_DATA			0x408f
+#define vcnipUVD_LMI_JPEG_READ_64BIT_BAR_HIGH		0x40e1
+#define vcnipUVD_LMI_JPEG_READ_64BIT_BAR_LOW		0x40e0
+#define vcnipUVD_JPEG_RB_BASE				0x4001
+#define vcnipUVD_JPEG_RB_SIZE				0x4004
+#define vcnipUVD_JPEG_RB_WPTR				0x4002
+#define vcnipUVD_JPEG_PITCH				0x401f
+#define vcnipUVD_JPEG_UV_PITCH				0x4020
+#define vcnipJPEG_DEC_ADDR_MODE				0x4027
+#define vcnipJPEG_DEC_Y_GFX10_TILING_SURFACE		0x4024
+#define vcnipJPEG_DEC_UV_GFX10_TILING_SURFACE		0x4025
+#define vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH		0x40e3
+#define vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW		0x40e2
+#define vcnipUVD_JPEG_INDEX				0x402c
+#define vcnipUVD_JPEG_DATA				0x402d
+#define vcnipUVD_JPEG_TIER_CNTL2			0x400f
+#define vcnipUVD_JPEG_OUTBUF_RPTR			0x401e
+#define vcnipUVD_JPEG_OUTBUF_CNTL			0x401c
+#define vcnipUVD_JPEG_INT_EN				0x400a
+#define vcnipUVD_JPEG_CNTL				0x4000
+#define vcnipUVD_JPEG_RB_RPTR				0x4003
+#define vcnipUVD_JPEG_OUTBUF_WPTR			0x401d
+
 #define UVD_BASE_INST0_SEG0				0x00007800
 #define UVD_BASE_INST0_SEG1				0x00007E00
 #define UVD_BASE_INST0_SEG2				0
@@ -728,6 +753,7 @@ struct jpeg_params {
 	unsigned			dt_uv_pitch;
 	unsigned			dt_luma_top_offset;
 	unsigned			dt_chroma_top_offset;
+	bool				direct_reg;
 };
 
 struct radeon_decoder {
@@ -758,6 +784,12 @@ struct radeon_decoder {
 	void				*render_pic_list[16];
 	bool				show_frame;
 	unsigned			ref_idx;
+	struct {
+		unsigned 		data0;
+		unsigned		data1;
+		unsigned		cmd;
+		unsigned		cntl;
+	} reg;
 	struct jpeg_params		jpg;
 	void (*send_cmd)(struct radeon_decoder *dec,
 			 struct pipe_video_buffer *target,

@@ -25,9 +25,57 @@
 * @brief Provide access to tiles table initialization functions
 *
 ******************************************************************************/
+
+#pragma once
+
 #include "common/os.h"
+#include "memory/SurfaceState.h"
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Loads a full hottile from a render surface
+/// @param hPrivateContext - Handle to private DC
+/// @param dstFormat - Format for hot tile.
+/// @param renderTargetIndex - Index to src render target
+/// @param x, y - Coordinates to raster tile.
+/// @param pDstHotTile - Pointer to Hot Tile
+SWR_FUNC(void,
+         SwrLoadHotTile,
+         HANDLE                      hWorkerPrivateData,
+         const SWR_SURFACE_STATE*    pSrcSurface,
+         SWR_FORMAT                  dstFormat,
+         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
+         uint32_t                    x,
+         uint32_t                    y,
+         uint32_t                    renderTargetArrayIndex,
+         uint8_t*                    pDstHotTile);
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Deswizzles and stores a full hottile to a render surface
+/// @param hPrivateContext - Handle to private DC
+/// @param srcFormat - Format for hot tile.
+/// @param renderTargetIndex - Index to destination render target
+/// @param x, y - Coordinates to raster tile.
+/// @param pSrcHotTile - Pointer to Hot Tile
+SWR_FUNC(void,
+         SwrStoreHotTileToSurface,
+         HANDLE                      hWorkerPrivateData,
+         SWR_SURFACE_STATE*          pDstSurface,
+         SWR_FORMAT                  srcFormat,
+         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
+         uint32_t                    x,
+         uint32_t                    y,
+         uint32_t                    renderTargetArrayIndex,
+         uint8_t*                    pSrcHotTile);
+
+struct SWR_TILE_INTERFACE {
+    PFNSwrLoadHotTile           pfnSwrLoadHotTile;
+    PFNSwrStoreHotTileToSurface pfnSwrStoreHotTileToSurface;
+};
 
 extern "C"
 {
     SWR_VISIBLE void SWR_API InitTilesTable();
+
+    typedef void(SWR_API* PFNSwrGetTileInterface)(SWR_TILE_INTERFACE& out_funcs);
+    SWR_VISIBLE void SWR_API SwrGetTileIterface(SWR_TILE_INTERFACE &out_funcs);
 }

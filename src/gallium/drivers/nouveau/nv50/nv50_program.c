@@ -378,7 +378,7 @@ nv50_program_translate(struct nv50_program *prog, uint16_t chipset,
 
    info->driverPriv = prog;
 
-#ifdef DEBUG
+#ifndef NDEBUG
    info->optLevel = debug_get_num_option("NV50_PROG_OPTIMIZE", 3);
    info->dbgFlags = debug_get_num_option("NV50_PROG_DEBUG", 0);
    info->omitLineNum = debug_get_num_option("NV50_PROG_DEBUG_OMIT_LINENUM", 0);

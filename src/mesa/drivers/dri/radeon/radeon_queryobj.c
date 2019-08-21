@@ -29,6 +29,7 @@
 #include "radeon_debug.h"
 
 #include "main/imports.h"
+#include "main/queryobj.h"
 
 #include <inttypes.h>
 
@@ -80,7 +81,7 @@ static void radeonDeleteQuery(struct gl_context *ctx, struct gl_query_object *q)
 		radeon_bo_unref(query->bo);
 	}
 
-	free(query);
+	_mesa_delete_query(ctx, q);
 }
 
 static void radeonWaitQuery(struct gl_context *ctx, struct gl_query_object *q)

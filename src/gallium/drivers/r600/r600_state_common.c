@@ -3277,7 +3277,7 @@ static void r600_invalidate_buffer(struct pipe_context *ctx, struct pipe_resourc
 
 }
 
-static void r600_set_active_query_state(struct pipe_context *ctx, boolean enable)
+static void r600_set_active_query_state(struct pipe_context *ctx, bool enable)
 {
 	struct r600_context *rctx = (struct r600_context*)ctx;
 

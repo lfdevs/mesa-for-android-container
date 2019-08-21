@@ -250,7 +250,7 @@ static mesa_format
 intel_renderbuffer_format(struct gl_context * ctx, GLenum internalFormat)
 {
    struct brw_context *brw = brw_context(ctx);
-   MAYBE_UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    switch (internalFormat) {
    default:
@@ -860,8 +860,8 @@ intel_blit_framebuffer_with_blitter(struct gl_context *ctx,
          }
 
          if (ctx->Color.sRGBEnabled &&
-             _mesa_get_format_color_encoding(src_irb->mt->format) !=
-             _mesa_get_format_color_encoding(dst_irb->mt->format)) {
+             _mesa_is_format_srgb(src_irb->mt->format) !=
+             _mesa_is_format_srgb(dst_irb->mt->format)) {
             perf_debug("glBlitFramebuffer() with sRGB conversion cannot be "
                        "handled by BLT path.\n");
             return mask;

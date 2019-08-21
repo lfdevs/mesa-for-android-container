@@ -241,9 +241,9 @@ lp_profile(LLVMValueRef func, const void *code)
       if (getenv("PERF_BUILDID_DIR")) {
          pid_t pid = getpid();
          char filename[256];
-         util_snprintf(filename, sizeof filename, "/tmp/perf-%llu.map", (unsigned long long)pid);
+         snprintf(filename, sizeof filename, "/tmp/perf-%llu.map", (unsigned long long)pid);
          perf_map_file = fopen(filename, "wt");
-         util_snprintf(filename, sizeof filename, "/tmp/perf-%llu.map.asm", (unsigned long long)pid);
+         snprintf(filename, sizeof filename, "/tmp/perf-%llu.map.asm", (unsigned long long)pid);
          perf_asm_file.open(filename);
       }
       first_time = FALSE;

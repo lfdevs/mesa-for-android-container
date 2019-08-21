@@ -71,23 +71,16 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
     const char *
     vk_${enum.name[2:]}_to_str(${enum.name} input)
     {
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wswitch"
         switch(input) {
         % for v in sorted(enum.values.keys()):
-            % if enum.values[v] in FOREIGN_ENUM_VALUES:
-
-            #pragma GCC diagnostic push
-            #pragma GCC diagnostic ignored "-Wswitch"
-            % endif
             case ${v}:
                 return "${enum.values[v]}";
-            % if enum.values[v] in FOREIGN_ENUM_VALUES:
-            #pragma GCC diagnostic pop
-
-            % endif
         % endfor
-        default:
-            unreachable("Undefined enum value.");
         }
+        #pragma GCC diagnostic pop
+        unreachable("Undefined enum value.");
     }
 
       % if enum.guard:
@@ -97,6 +90,8 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
 
     size_t vk_structure_type_size(const struct VkBaseInStructure *item)
     {
+        #pragma GCC diagnostic push
+        #pragma GCC diagnostic ignored "-Wswitch"
         switch(item->sType) {
     % for struct in structs:
         % if struct.extension is not None and struct.extension.define is not None:
@@ -107,9 +102,9 @@ C_TEMPLATE = Template(textwrap.dedent(u"""\
         case ${struct.stype}: return sizeof(${struct.name});
         % endif
     %endfor
-        default:
-            unreachable("Undefined struct type.");
         }
+        #pragma GCC diagnostic pop
+        unreachable("Undefined struct type.");
     }
 
     void vk_load_instance_commands(VkInstance instance,
@@ -224,12 +219,6 @@ H_TEMPLATE = Template(textwrap.dedent(u"""\
 
     #endif"""),
     output_encoding='utf-8')
-
-# These enums are defined outside their respective enum blocks, and thus cause
-# -Wswitch warnings.
-FOREIGN_ENUM_VALUES = [
-    "VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID",
-]
 
 
 class NamedFactory(object):
@@ -433,8 +422,7 @@ def main():
                 enums=enums,
                 extensions=extensions,
                 structs=structs,
-                copyright=COPYRIGHT,
-                FOREIGN_ENUM_VALUES=FOREIGN_ENUM_VALUES))
+                copyright=COPYRIGHT))
 
 
 if __name__ == '__main__':

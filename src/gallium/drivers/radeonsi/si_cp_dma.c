@@ -61,7 +61,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs,
 	uint32_t header = 0, command = 0;
 
 	assert(size <= cp_dma_max_byte_count(sctx));
-	assert(sctx->chip_class != SI || cache_policy == L2_BYPASS);
+	assert(sctx->chip_class != GFX6 || cache_policy == L2_BYPASS);
 
 	if (sctx->chip_class >= GFX9)
 		command |= S_414_BYTE_COUNT_GFX9(size);
@@ -90,7 +90,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs,
 		/* GDS increments the address, not CP. */
 		command |= S_414_DAS(V_414_REGISTER) |
 			   S_414_DAIC(V_414_NO_INCREMENT);
-	} else if (sctx->chip_class >= CIK && cache_policy != L2_BYPASS) {
+	} else if (sctx->chip_class >= GFX7 && cache_policy != L2_BYPASS) {
 		header |= S_411_DST_SEL(V_411_DST_ADDR_TC_L2) |
 			  S_500_DST_CACHE_POLICY(cache_policy == L2_STREAM);
 	}
@@ -102,12 +102,12 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs,
 		/* Both of these are required for GDS. It does increment the address. */
 		command |= S_414_SAS(V_414_REGISTER) |
 			   S_414_SAIC(V_414_NO_INCREMENT);
-	} else if (sctx->chip_class >= CIK && cache_policy != L2_BYPASS) {
+	} else if (sctx->chip_class >= GFX7 && cache_policy != L2_BYPASS) {
 		header |= S_411_SRC_SEL(V_411_SRC_ADDR_TC_L2) |
 			  S_500_SRC_CACHE_POLICY(cache_policy == L2_STREAM);
 	}
 
-	if (sctx->chip_class >= CIK) {
+	if (sctx->chip_class >= GFX7) {
 		radeon_emit(cs, PKT3(PKT3_DMA_DATA, 5, 0));
 		radeon_emit(cs, header);
 		radeon_emit(cs, src_va);	/* SRC_ADDR_LO [31:0] */
@@ -187,7 +187,7 @@ static void si_cp_dma_prepare(struct si_context *sctx, struct pipe_resource *dst
 	 * Also wait for the previous CP DMA operations.
 	 */
 	if (!(user_flags & SI_CPDMA_SKIP_GFX_SYNC) && sctx->flags)
-		si_emit_cache_flush(sctx);
+		sctx->emit_cache_flush(sctx);
 
 	if (!(user_flags & SI_CPDMA_SKIP_SYNC_BEFORE) && *is_first &&
 	    !(*packet_flags & CP_DMA_CLEAR))
@@ -249,8 +249,10 @@ void si_cp_dma_clear_buffer(struct si_context *sctx, struct radeon_cmdbuf *cs,
 		sdst->TC_L2_dirty = true;
 
 	/* If it's not a framebuffer fast clear... */
-	if (coher == SI_COHERENCY_SHADER)
+	if (coher == SI_COHERENCY_SHADER) {
 		sctx->num_cp_dma_calls++;
+		si_prim_discard_signal_next_compute_ib_start(sctx);
+	}
 }
 
 /**
@@ -405,14 +407,16 @@ void si_cp_dma_copy_buffer(struct si_context *sctx,
 		si_resource(dst)->TC_L2_dirty = true;
 
 	/* If it's not a prefetch or GDS copy... */
-	if (dst && src && (dst != src || dst_offset != src_offset))
+	if (dst && src && (dst != src || dst_offset != src_offset)) {
 		sctx->num_cp_dma_calls++;
+		si_prim_discard_signal_next_compute_ib_start(sctx);
+	}
 }
 
 void cik_prefetch_TC_L2_async(struct si_context *sctx, struct pipe_resource *buf,
 			      uint64_t offset, unsigned size)
 {
-	assert(sctx->chip_class >= CIK);
+	assert(sctx->chip_class >= GFX7);
 
 	si_cp_dma_copy_buffer(sctx, buf, buf, offset, offset, size,
 			      SI_CPDMA_SKIP_ALL, SI_COHERENCY_SHADER, L2_LRU);
@@ -451,7 +455,7 @@ void cik_emit_prefetch_L2(struct si_context *sctx, bool vertex_stage_only)
 	/* Prefetch shaders and VBO descriptors to TC L2. */
 	if (sctx->chip_class >= GFX9) {
 		/* Choose the right spot for the VBO prefetch. */
-		if (sctx->tes_shader.cso) {
+		if (sctx->queued.named.hs) {
 			if (mask & SI_PREFETCH_HS)
 				cik_prefetch_shader_async(sctx, sctx->queued.named.hs);
 			if (mask & SI_PREFETCH_VBO_DESCRIPTORS)
@@ -466,7 +470,7 @@ void cik_emit_prefetch_L2(struct si_context *sctx, bool vertex_stage_only)
 				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
 			if (mask & SI_PREFETCH_VS)
 				cik_prefetch_shader_async(sctx, sctx->queued.named.vs);
-		} else if (sctx->gs_shader.cso) {
+		} else if (sctx->queued.named.gs) {
 			if (mask & SI_PREFETCH_GS)
 				cik_prefetch_shader_async(sctx, sctx->queued.named.gs);
 			if (mask & SI_PREFETCH_VBO_DESCRIPTORS)
@@ -491,7 +495,7 @@ void cik_emit_prefetch_L2(struct si_context *sctx, bool vertex_stage_only)
 			}
 		}
 	} else {
-		/* SI-CI-VI */
+		/* GFX6-GFX8 */
 		/* Choose the right spot for the VBO prefetch. */
 		if (sctx->tes_shader.cso) {
 			if (mask & SI_PREFETCH_LS)
@@ -591,7 +595,7 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf,
 	assert(offset % 4 == 0);
 	assert(size % 4 == 0);
 
-	if (sctx->chip_class == SI && dst_sel == V_370_MEM)
+	if (sctx->chip_class == GFX6 && dst_sel == V_370_MEM)
 		dst_sel = V_370_MEM_GRBM;
 
 	radeon_add_to_buffer_list(sctx, cs, buf,
@@ -607,18 +611,17 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf,
 	radeon_emit_array(cs, (const uint32_t*)data, size/4);
 }
 
-void si_cp_copy_data(struct si_context *sctx,
+void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs,
 		     unsigned dst_sel, struct si_resource *dst, unsigned dst_offset,
 		     unsigned src_sel, struct si_resource *src, unsigned src_offset)
 {
-	struct radeon_cmdbuf *cs = sctx->gfx_cs;
-
+	/* cs can point to the compute IB, which has the buffer list in gfx_cs. */
 	if (dst) {
-		radeon_add_to_buffer_list(sctx, cs, dst,
+		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, dst,
 					  RADEON_USAGE_WRITE, RADEON_PRIO_CP_DMA);
 	}
 	if (src) {
-		radeon_add_to_buffer_list(sctx, cs, src,
+		radeon_add_to_buffer_list(sctx, sctx->gfx_cs, src,
 					  RADEON_USAGE_READ, RADEON_PRIO_CP_DMA);
 	}
 

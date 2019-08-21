@@ -332,7 +332,7 @@ emit:
     * BRW_NEW_FRAGMENT_PROGRAM
     */
    if (devinfo->gen == 4 && !devinfo->is_g4x &&
-       (fp->info.inputs_read & (1 << VARYING_SLOT_POS))) {
+       (fp->info.system_values_read & (1ull << SYSTEM_VALUE_FRAG_COORD))) {
       BEGIN_BATCH(2);
       OUT_BATCH(_3DSTATE_GLOBAL_DEPTH_OFFSET_CLAMP << 16 | (2 - 2));
       OUT_BATCH(0);

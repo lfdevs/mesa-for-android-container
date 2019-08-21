@@ -25,7 +25,11 @@
 * @brief Provide access to tiles table initialization functions
 *
 ******************************************************************************/
+
 #include "memory/InitMemory.h"
+#include "memory/LoadTile.h"
+#include "memory/StoreTile.h"
+#include "InitMemory.h"
 
 void InitSimLoadTilesTable();
 void InitSimStoreTilesTable();
@@ -36,4 +40,11 @@ void InitTilesTable()
     InitSimLoadTilesTable();
     InitSimStoreTilesTable();
     InitSimClearTilesTable();
+}
+
+
+void SwrGetTileIterface(SWR_TILE_INTERFACE &out_funcs)
+{
+    out_funcs.pfnSwrLoadHotTile = SwrLoadHotTile;
+    out_funcs.pfnSwrStoreHotTileToSurface = SwrStoreHotTileToSurface;
 }

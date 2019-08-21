@@ -54,7 +54,7 @@ static void i915_destroy_query(struct pipe_context *ctx,
    FREE(query);
 }
 
-static boolean i915_begin_query(struct pipe_context *ctx,
+static bool i915_begin_query(struct pipe_context *ctx,
                              struct pipe_query *query)
 {
    return true;
@@ -65,20 +65,20 @@ static bool i915_end_query(struct pipe_context *ctx, struct pipe_query *query)
    return true;
 }
 
-static boolean i915_get_query_result(struct pipe_context *ctx,
-                                     struct pipe_query *query,
-                                     boolean wait,
-                                     union pipe_query_result *vresult)
+static bool i915_get_query_result(struct pipe_context *ctx,
+                                  struct pipe_query *query,
+                                  bool wait,
+                                  union pipe_query_result *vresult)
 {
    uint64_t *result = (uint64_t*)vresult;
 
    /* 2* viewport Max */
    *result = 512*1024*1024;
-   return TRUE;
+   return true;
 }
 
 static void
-i915_set_active_query_state(struct pipe_context *pipe, boolean enable)
+i915_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

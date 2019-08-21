@@ -41,7 +41,7 @@ nv98_decoder_decode_bitstream(struct pipe_video_codec *decoder,
    union pipe_desc desc;
 
    unsigned vp_caps, is_ref;
-   MAYBE_UNUSED unsigned ret; /* used in debug checks */
+   ASSERTED unsigned ret; /* used in debug checks */
    struct nouveau_vp3_video_buffer *refs[16] = {};
 
    desc.base = picture;

@@ -33,6 +33,7 @@
 #include "mtypes.h"
 #include "macros.h"
 #include "version.h"
+#include "spirv_extensions.h"
 
 /**
  * Return the string for a glGetString(GL_SHADING_LANGUAGE_VERSION) query.
@@ -123,6 +124,10 @@ _mesa_GetString( GLenum name )
 
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, NULL);
 
+   if (ctx->Const.VendorOverride && name == GL_VENDOR) {
+      return (const GLubyte *) ctx->Const.VendorOverride;
+   }
+
    /* this is a required driver function */
    assert(ctx->Driver.GetString);
    {
@@ -206,6 +211,18 @@ _mesa_GetStringi(GLenum name, GLuint index)
          }
          return (const GLubyte *) version;
       }
+   case GL_SPIR_V_EXTENSIONS:
+      if (!ctx->Extensions.ARB_spirv_extensions) {
+         _mesa_error(ctx, GL_INVALID_ENUM, "glGetStringi");
+         return (const GLubyte *) 0;
+      }
+
+      if (index >= _mesa_get_spirv_extension_count(ctx)) {
+         _mesa_error(ctx, GL_INVALID_VALUE, "glGetStringi(index=%u)", index);
+         return (const GLubyte *) 0;
+      }
+      return _mesa_get_enabled_spirv_extension(ctx, index);
+
    default:
       _mesa_error(ctx, GL_INVALID_ENUM, "glGetStringi");
       return (const GLubyte *) 0;
@@ -314,6 +331,32 @@ invalid_pname:
    return;
 }
 
+
+void GLAPIENTRY
+_mesa_GetPointerIndexedvEXT( GLenum pname, GLuint index, GLvoid **params )
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!params)
+      return;
+
+   if (MESA_VERBOSE & VERBOSE_API)
+      _mesa_debug(ctx, "%s %s\n", "glGetPointerIndexedvEXT", _mesa_enum_to_string(pname));
+
+   switch (pname) {
+      case GL_TEXTURE_COORD_ARRAY_POINTER:
+         *params = (GLvoid *) ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_TEX(index)].Ptr;
+         break;
+      default:
+         goto invalid_pname;
+   }
+
+   return;
+
+invalid_pname:
+   _mesa_error( ctx, GL_INVALID_ENUM, "glGetPointerIndexedvEXT");
+   return;
+}
 
 /**
  * Returns the current GL error code, or GL_NO_ERROR.

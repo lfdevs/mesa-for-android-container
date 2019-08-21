@@ -29,5 +29,7 @@ LOCAL_SRC_FILES := $(C_SOURCES)
 
 LOCAL_MODULE := libmesa_winsys_kmsro
 
+$(foreach d, $(MESA_BUILD_GALLIUM), $(eval LOCAL_CFLAGS += $(patsubst HAVE_%,-D%,$(d))))
+
 include $(GALLIUM_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)

@@ -77,7 +77,7 @@ pipe_reference_described(struct pipe_reference *dst,
    if (dst != src) {
       /* bump the src.count first */
       if (src) {
-         MAYBE_UNUSED int count = p_atomic_inc_return(&src->count);
+         ASSERTED int count = p_atomic_inc_return(&src->count);
          assert(count != 1); /* src had to be referenced */
          debug_reference(src, get_desc, 1);
       }
@@ -661,6 +661,22 @@ util_copy_constant_buffer(struct pipe_constant_buffer *dst,
 }
 
 static inline void
+util_copy_shader_buffer(struct pipe_shader_buffer *dst,
+                        const struct pipe_shader_buffer *src)
+{
+   if (src) {
+      pipe_resource_reference(&dst->buffer, src->buffer);
+      dst->buffer_offset = src->buffer_offset;
+      dst->buffer_size = src->buffer_size;
+   }
+   else {
+      pipe_resource_reference(&dst->buffer, NULL);
+      dst->buffer_offset = 0;
+      dst->buffer_size = 0;
+   }
+}
+
+static inline void
 util_copy_image_view(struct pipe_image_view *dst,
                      const struct pipe_image_view *src)
 {
@@ -713,6 +729,17 @@ util_texrange_covers_whole_level(const struct pipe_resource *tex,
           width == u_minify(tex->width0, level) &&
           height == u_minify(tex->height0, level) &&
           depth == util_num_layers(tex, level);
+}
+
+static inline struct pipe_context *
+pipe_create_multimedia_context(struct pipe_screen *screen)
+{
+   unsigned flags = 0;
+
+   if (!screen->get_param(screen, PIPE_CAP_GRAPHICS))
+      flags |= PIPE_CONTEXT_COMPUTE_ONLY;
+
+   return screen->context_create(screen, NULL, flags);
 }
 
 #ifdef __cplusplus

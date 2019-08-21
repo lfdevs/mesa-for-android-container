@@ -552,7 +552,7 @@ loader_open_driver(const char *driver_name,
          next = end;
 
       len = next - p;
-#if GLX_USE_TLS
+#if USE_ELF_TLS
       snprintf(path, sizeof(path), "%.*s/tls/%s_dri.so", len, p, driver_name);
       driver = dlopen(path, RTLD_NOW | RTLD_GLOBAL);
 #endif

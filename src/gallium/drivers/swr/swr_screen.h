@@ -33,6 +33,7 @@
 #include "api.h"
 
 #include "memory/TilingFunctions.h"
+#include "memory/InitMemory.h"
 
 struct sw_winsys;
 
@@ -45,7 +46,7 @@ struct swr_screen {
    struct sw_winsys *winsys;
 
    /* Configurable environment settings */
-   boolean msaa_force_enable;
+   bool msaa_force_enable;
    uint8_t msaa_max_count;
    uint32_t client_copy_limit;
 
@@ -54,6 +55,7 @@ struct swr_screen {
    /* Dynamic backend implementations */
    util_dl_library *pLibrary;
    PFNSwrGetInterface pfnSwrGetInterface;
+   PFNSwrGetTileInterface pfnSwrGetTileInterface;
 
    /* Do we run on Xeon Phi? */
    bool is_knl;

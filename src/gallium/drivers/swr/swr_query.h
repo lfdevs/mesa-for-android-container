@@ -44,5 +44,5 @@ OSALIGNLINE(struct) swr_query {
 
 extern void swr_query_init(struct pipe_context *pipe);
 
-extern boolean swr_check_render_cond(struct pipe_context *pipe);
+extern bool swr_check_render_cond(struct pipe_context *pipe);
 #endif

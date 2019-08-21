@@ -1,5 +1,5 @@
 job_name: panfrost-deqp
-device_type: rk3399-gru-kevin
+device_type: {{ device_type }}
 timeouts:
   job:
     minutes: 40
@@ -16,12 +16,12 @@ actions:
       minutes: 2
     to: tftp
     kernel:
-      url: {{ base_artifacts_url }}/Image
+      url: {{ base_artifacts_url }}/{{ kernel_image_name }}
     ramdisk:
-      url: {{ base_artifacts_url }}/panfrost-rootfs.cpio.gz
+      url: {{ base_artifacts_url }}/panfrost-rootfs-{{ arch }}.cpio.gz
       compression: gz
     dtb:
-      url: {{ base_artifacts_url }}/rk3399-gru-kevin.dtb
+      url: {{ base_artifacts_url }}/{{ device_type }}.dtb
     os: oe
 - boot:
     timeout:
@@ -51,7 +51,7 @@ actions:
           - mkdir -p /dev/pts
           - mount -t devpts devpts /dev/pts
           - echo 1 > /proc/sys/kernel/printk
-          - echo performance > /sys/devices/platform/ff9a0000.gpu/devfreq/devfreq0/governor
+#          - echo performance > /sys/devices/platform/ff9a0000.gpu/devfreq/devfreq0/governor
           - sh /deqp/deqp-runner.sh
         parse:
           pattern: 'Test case ''(?P<test_case_id>\S*)''..\s+(?P<result>(Pass|NotSupported|QualityWarning|CompatibilityWarning|Fail|ResourceError|Crash|Timeout|InternalError))'

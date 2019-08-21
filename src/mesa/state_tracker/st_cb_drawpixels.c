@@ -700,7 +700,7 @@ make_texture(struct st_context *st,
                               unpack);
       }
       else {
-         bool MAYBE_UNUSED success;
+         ASSERTED bool success;
          success = _mesa_texstore(ctx, 2,           /* dims */
                                   baseInternalFormat, /* baseInternalFormat */
                                   mformat,          /* mesa_format */
@@ -750,7 +750,7 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    const unsigned fb_width = _mesa_geometric_width(ctx->DrawBuffer);
    const unsigned fb_height = _mesa_geometric_height(ctx->DrawBuffer);
    GLfloat x0, y0, x1, y1;
-   GLsizei MAYBE_UNUSED maxSize;
+   ASSERTED GLsizei maxSize;
    boolean normalized = sv[0]->texture->target == PIPE_TEXTURE_2D;
    unsigned cso_state_mask;
 
@@ -760,8 +760,8 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
    /* XXX if DrawPixels image is larger than max texture size, break
     * it up into chunks.
     */
-   maxSize = 1 << (pipe->screen->get_param(pipe->screen,
-                                        PIPE_CAP_MAX_TEXTURE_2D_LEVELS) - 1);
+   maxSize = pipe->screen->get_param(pipe->screen,
+                                     PIPE_CAP_MAX_TEXTURE_2D_SIZE);
    assert(width <= maxSize);
    assert(height <= maxSize);
 
@@ -787,8 +787,10 @@ draw_textured_quad(struct gl_context *ctx, GLint x, GLint y, GLfloat z,
                                         ctx->Color._ClampFragmentColor;
       rasterizer.half_pixel_center = 1;
       rasterizer.bottom_edge_rule = 1;
-      rasterizer.depth_clip_near = !ctx->Transform.DepthClampNear;
-      rasterizer.depth_clip_far = !ctx->Transform.DepthClampFar;
+      rasterizer.depth_clip_near = st->clamp_frag_depth_in_shader ||
+                                   !ctx->Transform.DepthClampNear;
+      rasterizer.depth_clip_far = st->clamp_frag_depth_in_shader ||
+                                  !ctx->Transform.DepthClampFar;
       rasterizer.scissor = ctx->Scissor.EnableFlags;
       cso_set_rasterizer(cso, &rasterizer);
    }
@@ -1183,9 +1185,8 @@ static void
 clamp_size(struct pipe_context *pipe, GLsizei *width, GLsizei *height,
            struct gl_pixelstore_attrib *unpack)
 {
-   const int maxSize =
-      1 << (pipe->screen->get_param(pipe->screen,
-                                    PIPE_CAP_MAX_TEXTURE_2D_LEVELS) - 1);
+   const int maxSize = pipe->screen->get_param(pipe->screen,
+                                               PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 
    if (*width > maxSize) {
       if (unpack->RowLength == 0)
@@ -1258,6 +1259,34 @@ setup_sampler_swizzle(struct pipe_sampler_view *sv, GLenum format, GLenum type)
    else {
       /* use the default sampler swizzle */
    }
+}
+
+
+/**
+ * Compute the effective raster z position. This performs depth-clamping
+ * if needed.
+ */
+static float
+get_effective_raster_z(struct gl_context *ctx)
+{
+   float z = ctx->Current.RasterPos[2];
+   if (st_context(ctx)->clamp_frag_depth_in_shader) {
+      GLfloat depth_near;
+      GLfloat depth_far;
+      if (ctx->ViewportArray[0].Near < ctx->ViewportArray[0].Far) {
+         depth_near = ctx->ViewportArray[0].Near;
+         depth_far = ctx->ViewportArray[0].Far;
+      } else {
+         depth_near = ctx->ViewportArray[0].Far;
+         depth_far = ctx->ViewportArray[0].Near;
+      }
+
+      if (ctx->Transform.DepthClampNear)
+         z = MAX2(z, depth_near);
+      if (ctx->Transform.DepthClampFar)
+         z = MIN2(z, depth_far);
+   }
+   return z;
 }
 
 
@@ -1377,7 +1406,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       num_sampler_view++;
    }
 
-   draw_textured_quad(ctx, x, y, ctx->Current.RasterPos[2],
+   draw_textured_quad(ctx, x, y, get_effective_raster_z(ctx),
                       width, height,
                       ctx->Pixel.ZoomX, ctx->Pixel.ZoomY,
                       sv,
@@ -1518,21 +1547,21 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    struct gl_pixelstore_attrib pack, unpack;
    GLint readX, readY, readW, readH, drawX, drawY, drawW, drawH;
 
-   if (type == GL_COLOR &&
-       ctx->Pixel.ZoomX == 1.0 &&
+   if (ctx->Pixel.ZoomX == 1.0 &&
        ctx->Pixel.ZoomY == 1.0 &&
-       ctx->_ImageTransferState == 0x0 &&
-       !ctx->Color.BlendEnabled &&
-       !ctx->Color.AlphaEnabled &&
-       (!ctx->Color.ColorLogicOpEnabled || ctx->Color.LogicOp == GL_COPY) &&
-       !ctx->Depth.Test &&
-       !ctx->Fog.Enabled &&
-       !ctx->Stencil.Enabled &&
-       !ctx->FragmentProgram.Enabled &&
-       !ctx->VertexProgram.Enabled &&
-       !ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT] &&
-       !_mesa_ati_fragment_shader_enabled(ctx) &&
-       ctx->DrawBuffer->_NumColorDrawBuffers == 1 &&
+       (type != GL_COLOR ||
+        (ctx->_ImageTransferState == 0x0 &&
+         !ctx->Color.BlendEnabled &&
+         !ctx->Color.AlphaEnabled &&
+         (!ctx->Color.ColorLogicOpEnabled || ctx->Color.LogicOp == GL_COPY) &&
+         !ctx->Depth.Test &&
+         !ctx->Fog.Enabled &&
+         !ctx->Stencil.Enabled &&
+         !ctx->FragmentProgram.Enabled &&
+         !ctx->VertexProgram.Enabled &&
+         !ctx->_Shader->CurrentProgram[MESA_SHADER_FRAGMENT] &&
+         !_mesa_ati_fragment_shader_enabled(ctx) &&
+         ctx->DrawBuffer->_NumColorDrawBuffers == 1)) &&
        !ctx->Query.CondRenderQuery &&
        !ctx->Query.CurrentOcclusionObject) {
       struct st_renderbuffer *rbRead, *rbDraw;
@@ -1565,8 +1594,18 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       drawW = readW;
       drawH = readH;
 
-      rbRead = st_get_color_read_renderbuffer(ctx);
-      rbDraw = st_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
+      if (type == GL_COLOR) {
+         rbRead = st_get_color_read_renderbuffer(ctx);
+         rbDraw = st_renderbuffer(ctx->DrawBuffer->_ColorDrawBuffers[0]);
+      } else if (type == GL_DEPTH || type == GL_DEPTH_STENCIL) {
+         rbRead = st_renderbuffer(ctx->ReadBuffer->Attachment[BUFFER_DEPTH].Renderbuffer);
+         rbDraw = st_renderbuffer(ctx->DrawBuffer->Attachment[BUFFER_DEPTH].Renderbuffer);
+      } else if (type == GL_STENCIL) {
+         rbRead = st_renderbuffer(ctx->ReadBuffer->Attachment[BUFFER_STENCIL].Renderbuffer);
+         rbDraw = st_renderbuffer(ctx->DrawBuffer->Attachment[BUFFER_STENCIL].Renderbuffer);
+      } else {
+         return false;
+      }
 
       /* Flip src/dst position depending on the orientation of buffers. */
       if (st_fb_orientation(ctx->ReadBuffer) == Y_0_TOP) {
@@ -1607,8 +1646,16 @@ blit_copy_pixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          blit.dst.box.width = drawW;
          blit.dst.box.height = drawH;
          blit.dst.box.depth = 1;
-         blit.mask = PIPE_MASK_RGBA;
          blit.filter = PIPE_TEX_FILTER_NEAREST;
+
+         if (type == GL_COLOR)
+            blit.mask |= PIPE_MASK_RGBA;
+         if (type == GL_DEPTH)
+            blit.mask |= PIPE_MASK_Z;
+         if (type == GL_STENCIL)
+            blit.mask |= PIPE_MASK_S;
+         if (type == GL_DEPTH_STENCIL)
+            blit.mask |= PIPE_MASK_ZS;
 
          if (ctx->DrawBuffer != ctx->WinSysDrawBuffer)
             st_window_rectangles_to_blit(ctx, &blit);
@@ -1660,6 +1707,9 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 
    st_validate_state(st, ST_PIPELINE_META);
 
+   if (blit_copy_pixels(ctx, srcx, srcy, width, height, dstx, dsty, type))
+      return;
+
    if (type == GL_DEPTH_STENCIL) {
       /* XXX make this more efficient */
       st_CopyPixels(ctx, srcx, srcy, width, height, dstx, dsty, GL_STENCIL);
@@ -1672,9 +1722,6 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       copy_stencil_pixels(ctx, srcx, srcy, width, height, dstx, dsty);
       return;
    }
-
-   if (blit_copy_pixels(ctx, srcx, srcy, width, height, dstx, dsty, type))
-      return;
 
    /*
     * The subsequent code implements glCopyPixels by copying the source
@@ -1834,7 +1881,8 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
    /* OK, the texture 'pt' contains the src image/pixels.  Now draw a
     * textured quad with that texture.
     */
-   draw_textured_quad(ctx, dstx, dsty, ctx->Current.RasterPos[2],
+
+   draw_textured_quad(ctx, dstx, dsty, get_effective_raster_z(ctx),
                       width, height, ctx->Pixel.ZoomX, ctx->Pixel.ZoomY,
                       sv,
                       num_sampler_view,

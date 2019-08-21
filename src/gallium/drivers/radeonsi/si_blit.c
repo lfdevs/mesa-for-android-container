@@ -180,31 +180,6 @@ si_blit_dbcb_copy(struct si_context *sctx,
 	return fully_copied_levels;
 }
 
-void si_blit_decompress_depth(struct pipe_context *ctx,
-			      struct si_texture *texture,
-			      struct si_texture *staging,
-			      unsigned first_level, unsigned last_level,
-			      unsigned first_layer, unsigned last_layer,
-			      unsigned first_sample, unsigned last_sample)
-{
-	const struct util_format_description *desc;
-	unsigned planes = 0;
-
-	assert(staging != NULL && "use si_blit_decompress_zs_in_place instead");
-
-	desc = util_format_description(staging->buffer.b.b.format);
-
-	if (util_format_has_depth(desc))
-		planes |= PIPE_MASK_Z;
-	if (util_format_has_stencil(desc))
-		planes |= PIPE_MASK_S;
-
-	si_blit_dbcb_copy(
-		(struct si_context *)ctx, texture, staging, planes,
-		u_bit_consecutive(first_level, last_level - first_level + 1),
-		first_layer, last_layer, first_sample, last_sample);
-}
-
 /* Helper function for si_blit_decompress_zs_in_place.
  */
 static void
@@ -355,7 +330,7 @@ si_decompress_depth(struct si_context *sctx,
 	 */
 	if (copy_planes &&
 	    (tex->flushed_depth_texture ||
-	     si_init_flushed_depth_texture(&sctx->b, &tex->buffer.b.b, NULL))) {
+	     si_init_flushed_depth_texture(&sctx->b, &tex->buffer.b.b))) {
 		struct si_texture *dst = tex->flushed_depth_texture;
 		unsigned fully_copied_levels;
 		unsigned levels = 0;
@@ -386,8 +361,9 @@ si_decompress_depth(struct si_context *sctx,
 	}
 
 	if (inplace_planes) {
-		bool has_htile = si_htile_enabled(tex, first_level);
-		bool tc_compat_htile = vi_tc_compat_htile_enabled(tex, first_level);
+		bool has_htile = si_htile_enabled(tex, first_level, inplace_planes);
+		bool tc_compat_htile = vi_tc_compat_htile_enabled(tex, first_level,
+								  inplace_planes);
 
 		/* Don't decompress if there is no HTILE or when HTILE is
 		 * TC-compatible. */
@@ -827,9 +803,9 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
 
 		si_check_render_feedback(sctx);
 	} else if (shader_mask & (1 << PIPE_SHADER_COMPUTE)) {
-		if (sctx->cs_shader_state.program->uses_bindless_samplers)
+		if (sctx->cs_shader_state.program->sel.info.uses_bindless_samplers)
 			si_decompress_resident_textures(sctx);
-		if (sctx->cs_shader_state.program->uses_bindless_images)
+		if (sctx->cs_shader_state.program->sel.info.uses_bindless_images)
 			si_decompress_resident_images(sctx);
 	}
 }
@@ -1086,7 +1062,7 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 	struct si_context *sctx = (struct si_context*)ctx;
 	struct si_texture *src = (struct si_texture*)info->src.resource;
 	struct si_texture *dst = (struct si_texture*)info->dst.resource;
-	MAYBE_UNUSED struct si_texture *stmp;
+	ASSERTED struct si_texture *stmp;
 	unsigned dst_width = u_minify(info->dst.resource->width0, info->dst.level);
 	unsigned dst_height = u_minify(info->dst.resource->height0, info->dst.level);
 	enum pipe_format format = info->src.format;
@@ -1134,6 +1110,12 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 			/* The next fast clear will switch to this mode to
 			 * get direct hw resolve next time if the mode is
 			 * different now.
+			 *
+			 * TODO-GFX10: This does not work in GFX10 because MSAA
+			 * is restricted to 64KB_R_X and 64KB_Z_X swizzle modes.
+			 * In some cases we could change the swizzle of the
+			 * destination texture instead, but the more general
+			 * solution is to implement compute shader resolve.
 			 */
 			src->last_msaa_resolve_target_micro_mode =
 				dst->surface.micro_tile_mode;
@@ -1145,18 +1127,10 @@ static bool do_hardware_msaa_resolve(struct pipe_context *ctx,
 		 * This is still the fastest codepath even with this clear.
 		 */
 		if (vi_dcc_enabled(dst, info->dst.level)) {
-			/* TODO: Implement per-level DCC clears for GFX9. */
-			if (sctx->chip_class >= GFX9 &&
-			    info->dst.resource->last_level != 0)
+			if (!vi_dcc_clear_level(sctx, dst, info->dst.level,
+						DCC_UNCOMPRESSED))
 				goto resolve_to_temp;
 
-			/* This can happen with mipmapping. */
-			if (sctx->chip_class == VI &&
-			    !dst->surface.u.legacy.level[info->dst.level].dcc_fast_clear_size)
-				goto resolve_to_temp;
-
-			vi_dcc_clear_level(sctx, dst, info->dst.level,
-					   0xFFFFFFFF);
 			dst->dirty_level_mask &= ~(1 << info->dst.level);
 		}
 
@@ -1249,7 +1223,7 @@ static void si_blit(struct pipe_context *ctx,
 	vi_disable_dcc_if_incompatible_format(sctx, info->dst.resource,
 					      info->dst.level,
 					      info->dst.format);
-	si_decompress_subresource(ctx, info->src.resource, info->mask,
+	si_decompress_subresource(ctx, info->src.resource, PIPE_MASK_RGBAZS,
 				  info->src.level,
 				  info->src.box.z,
 				  info->src.box.z + info->src.box.depth - 1);
@@ -1264,11 +1238,11 @@ static void si_blit(struct pipe_context *ctx,
 	si_blitter_end(sctx);
 }
 
-static boolean si_generate_mipmap(struct pipe_context *ctx,
-				  struct pipe_resource *tex,
-				  enum pipe_format format,
-				  unsigned base_level, unsigned last_level,
-				  unsigned first_layer, unsigned last_layer)
+static bool si_generate_mipmap(struct pipe_context *ctx,
+			       struct pipe_resource *tex,
+			       enum pipe_format format,
+			       unsigned base_level, unsigned last_level,
+			       unsigned first_layer, unsigned last_layer)
 {
 	struct si_context *sctx = (struct si_context*)ctx;
 	struct si_texture *stex = (struct si_texture *)tex;

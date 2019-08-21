@@ -96,8 +96,8 @@ add_fetch_rgba_test(struct gallivm_state *gallivm, unsigned verbose,
    LLVMValueRef rgba;
    LLVMValueRef cache = NULL;
 
-   util_snprintf(name, sizeof name, "fetch_%s_%s", desc->short_name,
-                 type.floating ? "float" : "unorm8");
+   snprintf(name, sizeof name, "fetch_%s_%s", desc->short_name,
+            type.floating ? "float" : "unorm8");
 
    args[0] = LLVMPointerType(lp_build_vec_type(gallivm, type), 0);
    args[1] = LLVMPointerType(LLVMInt8TypeInContext(context), 0);

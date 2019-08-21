@@ -23,6 +23,8 @@ inc_util = include_directories('.')
 subdir('xmlpool')
 
 files_mesa_util = files(
+  'anon_file.h',
+  'anon_file.c',
   'bigmath.h',
   'bitscan.c',
   'bitscan.h',
@@ -82,6 +84,7 @@ files_mesa_util = files(
   'strtod.c',
   'strtod.h',
   'texcompress_rgtc_tmp.h',
+  'timespec.h',
   'u_atomic.c',
   'u_atomic.h',
   'u_dynarray.h',
@@ -131,7 +134,7 @@ format_srgb = custom_target(
   capture : true,
 )
 
-libmesa_util = static_library(
+_libmesa_util = static_library(
   'mesa_util',
   [files_mesa_util, format_srgb],
   include_directories : inc_common,
@@ -140,12 +143,17 @@ libmesa_util = static_library(
   build_by_default : false
 )
 
-libxmlconfig = static_library(
+idep_mesautil = declare_dependency(
+  link_with : _libmesa_util,
+  include_directories : inc_util,
+  dependencies : [dep_zlib, dep_clock, dep_thread, dep_atomic, dep_m],
+)
+
+_libxmlconfig = static_library(
   'xmlconfig',
   files_xmlconfig,
   include_directories : inc_common,
-  link_with : libmesa_util,
-  dependencies : [dep_expat, dep_m],
+  dependencies : [idep_mesautil, dep_expat, dep_m],
   c_args : [
     c_msvc_compat_args, c_vis_args,
     '-DSYSCONFDIR="@0@"'.format(
@@ -158,6 +166,13 @@ libxmlconfig = static_library(
   build_by_default : false,
 )
 
+idep_xmlconfig = declare_dependency(
+  sources : xmlpool_options_h,
+  include_directories : inc_util,
+  link_with : _libxmlconfig,
+  dependencies : dep_expat,
+)
+
 if with_tests
   test(
     'u_atomic',
@@ -165,7 +180,7 @@ if with_tests
       'u_atomic_test',
       files('u_atomic_test.c'),
       include_directories : inc_common,
-      link_with : libmesa_util,
+      dependencies : idep_mesautil,
       c_args : [c_msvc_compat_args],
     ),
     suite : ['util'],
@@ -189,7 +204,7 @@ if with_tests
       'mesa-sha1_test',
       files('mesa-sha1_test.c'),
       include_directories : inc_common,
-      link_with : libmesa_util,
+      dependencies : idep_mesautil,
       c_args : [c_msvc_compat_args],
     ),
     suite : ['util'],
@@ -201,15 +216,16 @@ if with_tests
        'bitset_test',
        files('bitset_test.cpp'),
        include_directories : inc_common,
-       dependencies : [dep_thread, dep_dl, idep_gtest],
-       link_with : libmesa_util,
+       dependencies : [idep_mesautil, idep_gtest],
      ),
      suite : ['util'],
   )
 
   subdir('tests/fast_idiv_by_const')
+  subdir('tests/fast_urem_by_const')
   subdir('tests/hash_table')
   subdir('tests/string_buffer')
+  subdir('tests/timespec')
   subdir('tests/vma')
   subdir('tests/set')
 endif

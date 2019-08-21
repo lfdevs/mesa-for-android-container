@@ -29,6 +29,7 @@
 
 #include "nir.h"
 #include "util/bitscan.h"
+#include "nir_range_analysis.h"
 #include <math.h>
 
 static inline bool
@@ -109,6 +110,36 @@ is_zero_to_one(nir_alu_instr *instr, unsigned src, unsigned num_components,
    return true;
 }
 
+/**
+ * Exclusive compare with (0, 1).
+ *
+ * This differs from \c is_zero_to_one because that function tests 0 <= src <=
+ * 1 while this function tests 0 < src < 1.
+ */
+static inline bool
+is_gt_0_and_lt_1(nir_alu_instr *instr, unsigned src, unsigned num_components,
+                 const uint8_t *swizzle)
+{
+   /* only constant srcs: */
+   if (!nir_src_is_const(instr->src[src].src))
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      switch (nir_op_infos[instr->op].input_types[src]) {
+      case nir_type_float: {
+         double val = nir_src_comp_as_float(instr->src[src].src, swizzle[i]);
+         if (isnan(val) || val <= 0.0f || val >= 1.0f)
+            return false;
+         break;
+      }
+      default:
+         return false;
+      }
+   }
+
+   return true;
+}
+
 static inline bool
 is_not_const_zero(nir_alu_instr *instr, unsigned src, unsigned num_components,
                   const uint8_t *swizzle)
@@ -144,6 +175,46 @@ is_not_const(nir_alu_instr *instr, unsigned src, UNUSED unsigned num_components,
 }
 
 static inline bool
+is_not_fmul(nir_alu_instr *instr, unsigned src,
+            UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   nir_alu_instr *src_alu =
+      nir_src_as_alu_instr(instr->src[src].src);
+
+   if (src_alu == NULL)
+      return true;
+
+   if (src_alu->op == nir_op_fneg)
+      return is_not_fmul(src_alu, 0, 0, NULL);
+
+   return src_alu->op != nir_op_fmul;
+}
+
+static inline bool
+is_fsign(nir_alu_instr *instr, unsigned src,
+         UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   nir_alu_instr *src_alu =
+      nir_src_as_alu_instr(instr->src[src].src);
+
+   if (src_alu == NULL)
+      return false;
+
+   if (src_alu->op == nir_op_fneg)
+      src_alu = nir_src_as_alu_instr(src_alu->src[0].src);
+
+   return src_alu->op == nir_op_fsign;
+}
+
+static inline bool
+is_not_const_and_not_fsign(nir_alu_instr *instr, unsigned src,
+                           unsigned num_components, const uint8_t *swizzle)
+{
+   return is_not_const(instr, src, num_components, swizzle) &&
+          !is_fsign(instr, src, num_components, swizzle);
+}
+
+static inline bool
 is_used_once(nir_alu_instr *instr)
 {
    bool zero_if_use = list_empty(&instr->dest.dest.ssa.if_uses);
@@ -175,6 +246,131 @@ static inline bool
 is_not_used_by_if(nir_alu_instr *instr)
 {
    return list_empty(&instr->dest.dest.ssa.if_uses);
+}
+
+static inline bool
+is_used_by_non_fsat(nir_alu_instr *instr)
+{
+   nir_foreach_use(src, &instr->dest.dest.ssa) {
+      const nir_instr *const user_instr = src->parent_instr;
+
+      if (user_instr->type != nir_instr_type_alu)
+         return true;
+
+      const nir_alu_instr *const user_alu = nir_instr_as_alu(user_instr);
+
+      assert(instr != user_alu);
+      if (user_alu->op != nir_op_fsat)
+         return true;
+   }
+
+   return false;
+}
+
+/**
+ * Returns true if a NIR ALU src represents a constant integer
+ * of either 32 or 64 bits, and the higher word (bit-size / 2)
+ * of all its components is zero.
+ */
+static inline bool
+is_upper_half_zero(nir_alu_instr *instr, unsigned src,
+                   unsigned num_components, const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      unsigned half_bit_size = nir_src_bit_size(instr->src[src].src) / 2;
+      uint32_t high_bits = ((1 << half_bit_size) - 1) << half_bit_size;
+      if ((nir_src_comp_as_uint(instr->src[src].src,
+                                swizzle[i]) & high_bits) != 0) {
+         return false;
+      }
+   }
+
+   return true;
+}
+
+/**
+ * Returns true if a NIR ALU src represents a constant integer
+ * of either 32 or 64 bits, and the lower word (bit-size / 2)
+ * of all its components is zero.
+ */
+static inline bool
+is_lower_half_zero(nir_alu_instr *instr, unsigned src,
+                   unsigned num_components, const uint8_t *swizzle)
+{
+   if (nir_src_as_const_value(instr->src[src].src) == NULL)
+      return false;
+
+   for (unsigned i = 0; i < num_components; i++) {
+      uint32_t low_bits =
+         (1 << (nir_src_bit_size(instr->src[src].src) / 2)) - 1;
+      if ((nir_src_comp_as_int(instr->src[src].src, swizzle[i]) & low_bits) != 0)
+         return false;
+   }
+
+   return true;
+}
+
+static inline bool
+no_signed_wrap(nir_alu_instr *instr)
+{
+   return instr->no_signed_wrap;
+}
+
+static inline bool
+no_unsigned_wrap(nir_alu_instr *instr)
+{
+   return instr->no_unsigned_wrap;
+}
+
+static inline bool
+is_integral(nir_alu_instr *instr, unsigned src,
+            UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range r = nir_analyze_range(instr, src);
+
+   return r.is_integral;
+}
+
+#define RELATION(r)                                                     \
+static inline bool                                                      \
+is_ ## r (nir_alu_instr *instr, unsigned src,                           \
+          UNUSED unsigned num_components, UNUSED const uint8_t *swizzle) \
+{                                                                       \
+   const struct ssa_result_range v = nir_analyze_range(instr, src);     \
+   return v.range == r;                                                 \
+}
+
+RELATION(lt_zero)
+RELATION(le_zero)
+RELATION(gt_zero)
+RELATION(ge_zero)
+RELATION(ne_zero)
+
+static inline bool
+is_not_negative(nir_alu_instr *instr, unsigned src,
+                UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(instr, src);
+   return v.range == ge_zero || v.range == gt_zero || v.range == eq_zero;
+}
+
+static inline bool
+is_not_positive(nir_alu_instr *instr, unsigned src,
+                UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(instr, src);
+   return v.range == le_zero || v.range == lt_zero || v.range == eq_zero;
+}
+
+static inline bool
+is_not_zero(nir_alu_instr *instr, unsigned src,
+            UNUSED unsigned num_components, UNUSED const uint8_t *swizzle)
+{
+   const struct ssa_result_range v = nir_analyze_range(instr, src);
+   return v.range == lt_zero || v.range == gt_zero || v.range == ne_zero;
 }
 
 #endif /* _NIR_SEARCH_ */

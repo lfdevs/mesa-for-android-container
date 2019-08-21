@@ -43,7 +43,7 @@ static uint32_t drifb_ID = 0;
 static void
 swap_fences_unref(struct dri_drawable *draw);
 
-static boolean
+static bool
 dri_st_framebuffer_validate(struct st_context_iface *stctx,
                             struct st_framebuffer_iface *stfbi,
                             const enum st_attachment_type *statts,
@@ -55,7 +55,7 @@ dri_st_framebuffer_validate(struct st_context_iface *stctx,
       (struct dri_drawable *) stfbi->st_manager_private;
    struct dri_screen *screen = dri_screen(drawable->sPriv);
    unsigned statt_mask, new_mask;
-   boolean new_stamp;
+   bool new_stamp;
    int i;
    unsigned int lastStamp;
    struct pipe_resource **textures =
@@ -96,16 +96,16 @@ dri_st_framebuffer_validate(struct st_context_iface *stctx,
    } while (lastStamp != drawable->dPriv->lastStamp);
 
    if (!out)
-      return TRUE;
+      return true;
 
    /* Set the window-system buffers for the state tracker. */
    for (i = 0; i < count; i++)
       pipe_resource_reference(&out[i], textures[statts[i]]);
 
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 dri_st_framebuffer_flush_front(struct st_context_iface *stctx,
                                struct st_framebuffer_iface *stfbi,
                                enum st_attachment_type statt)
@@ -117,13 +117,13 @@ dri_st_framebuffer_flush_front(struct st_context_iface *stctx,
    /* XXX remove this and just set the correct one on the framebuffer */
    drawable->flush_frontbuffer(ctx, drawable, statt);
 
-   return TRUE;
+   return true;
 }
 
 /**
  * The state tracker framebuffer interface flush_swapbuffers callback
  */
-static boolean
+static bool
 dri_st_framebuffer_flush_swapbuffers(struct st_context_iface *stctx,
                                      struct st_framebuffer_iface *stfbi)
 {
@@ -134,16 +134,16 @@ dri_st_framebuffer_flush_swapbuffers(struct st_context_iface *stctx,
    if (drawable->flush_swapbuffers)
       drawable->flush_swapbuffers(ctx, drawable);
 
-   return TRUE;
+   return true;
 }
 
 /**
  * This is called when we need to set up GL rendering to a new X window.
  */
-boolean
+bool
 dri_create_buffer(__DRIscreen * sPriv,
 		  __DRIdrawable * dPriv,
-		  const struct gl_config * visual, boolean isPixmap)
+		  const struct gl_config * visual, bool isPixmap)
 {
    struct dri_screen *screen = sPriv->driverPrivate;
    struct dri_drawable *drawable = NULL;
@@ -176,10 +176,10 @@ dri_create_buffer(__DRIscreen * sPriv,
    drawable->base.ID = p_atomic_inc_return(&drifb_ID);
    drawable->base.state_manager = &screen->base;
 
-   return GL_TRUE;
+   return true;
 fail:
    FREE(drawable);
-   return GL_FALSE;
+   return false;
 }
 
 void
@@ -281,7 +281,7 @@ dri_set_tex_buffer2(__DRIcontext *pDRICtx, GLint target,
 
       ctx->st->teximage(ctx->st,
             (target == GL_TEXTURE_2D) ? ST_TEXTURE_2D : ST_TEXTURE_RECT,
-            0, internal_format, pt, FALSE);
+            0, internal_format, pt, false);
    }
 }
 
@@ -480,7 +480,7 @@ dri_flush(__DRIcontext *cPriv,
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct st_context_iface *st;
    unsigned flush_flags;
-   boolean swap_msaa_buffers = FALSE;
+   bool swap_msaa_buffers = false;
 
    if (!ctx) {
       assert(0);
@@ -496,7 +496,7 @@ dri_flush(__DRIcontext *cPriv,
       if (drawable->flushing)
          return;
 
-      drawable->flushing = TRUE;
+      drawable->flushing = true;
    }
    else {
       flags &= ~__DRI2_FLUSH_DRAWABLE;
@@ -516,7 +516,7 @@ dri_flush(__DRIcontext *cPriv,
 
          if (drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT] &&
              drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]) {
-            swap_msaa_buffers = TRUE;
+            swap_msaa_buffers = true;
          }
 
          /* FRONT_LEFT is resolved in drawable->flush_frontbuffer. */
@@ -582,7 +582,7 @@ dri_flush(__DRIcontext *cPriv,
    }
 
    if (drawable) {
-      drawable->flushing = FALSE;
+      drawable->flushing = false;
    }
 
    /* Swap the MSAA front and back buffers, so that reading

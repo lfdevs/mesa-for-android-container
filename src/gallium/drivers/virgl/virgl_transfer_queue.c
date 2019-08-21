@@ -25,8 +25,10 @@
 #include "util/u_inlines.h"
 
 #include "virgl_protocol.h"
+#include "virgl_context.h"
 #include "virgl_screen.h"
 #include "virgl_encode.h"
+#include "virgl_resource.h"
 #include "virgl_transfer_queue.h"
 
 struct list_action_args
@@ -48,80 +50,120 @@ struct list_iteration_args
    list_action_t action;
    compare_transfers_t compare;
    struct virgl_transfer *current;
-   enum virgl_transfer_queue_lists type;
 };
+
+static int
+transfer_dim(const struct virgl_transfer *xfer)
+{
+   switch (xfer->base.resource->target) {
+   case PIPE_BUFFER:
+   case PIPE_TEXTURE_1D:
+      return 1;
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
+      return 2;
+   default:
+      return 3;
+   }
+}
+
+static void
+box_min_max(const struct pipe_box *box, int dim, int *min, int *max)
+{
+   switch (dim) {
+   case 0:
+      if (box->width > 0) {
+         *min = box->x;
+         *max = box->x + box->width;
+      } else {
+         *max = box->x;
+         *min = box->x + box->width;
+      }
+      break;
+   case 1:
+      if (box->height > 0) {
+         *min = box->y;
+         *max = box->y + box->height;
+      } else {
+         *max = box->y;
+         *min = box->y + box->height;
+      }
+      break;
+   default:
+      if (box->depth > 0) {
+         *min = box->z;
+         *max = box->z + box->depth;
+      } else {
+         *max = box->z;
+         *min = box->z + box->depth;
+      }
+      break;
+   }
+}
+
+static bool
+transfer_overlap(const struct virgl_transfer *xfer,
+                 const struct virgl_hw_res *hw_res,
+                 unsigned level,
+                 const struct pipe_box *box,
+                 bool include_touching)
+{
+   const int dim_count = transfer_dim(xfer);
+
+   if (xfer->hw_res != hw_res || xfer->base.level != level)
+      return false;
+
+   for (int dim = 0; dim < dim_count; dim++) {
+      int xfer_min;
+      int xfer_max;
+      int box_min;
+      int box_max;
+
+      box_min_max(&xfer->base.box, dim, &xfer_min, &xfer_max);
+      box_min_max(box, dim, &box_min, &box_max);
+
+      if (include_touching) {
+         /* touching is considered overlapping */
+         if (xfer_min > box_max || xfer_max < box_min)
+            return false;
+      } else {
+         /* touching is not considered overlapping */
+         if (xfer_min >= box_max || xfer_max <= box_min)
+            return false;
+      }
+   }
+
+   return true;
+}
+
+static struct virgl_transfer *
+virgl_transfer_queue_find_overlap(const struct virgl_transfer_queue *queue,
+                                  const struct virgl_hw_res *hw_res,
+                                  unsigned level,
+                                  const struct pipe_box *box,
+                                  bool include_touching)
+{
+   struct virgl_transfer *xfer;
+   LIST_FOR_EACH_ENTRY(xfer, &queue->transfer_list, queue_link) {
+      if (transfer_overlap(xfer, hw_res, level, box, include_touching))
+         return xfer;
+   }
+
+   return NULL;
+}
 
 static bool transfers_intersect(struct virgl_transfer *queued,
                                 struct virgl_transfer *current)
 {
-   boolean tmp;
-   struct pipe_resource *queued_res = queued->base.resource;
-   struct pipe_resource *current_res = current->base.resource;
-
-   if (queued_res != current_res)
-      return false;
-
-   tmp = u_box_test_intersection_2d(&queued->base.box, &current->base.box);
-   return (tmp == TRUE);
-}
-
-static bool transfers_overlap(struct virgl_transfer *queued,
-                              struct virgl_transfer *current)
-{
-   boolean tmp;
-   struct pipe_resource *queued_res = queued->base.resource;
-   struct pipe_resource *current_res = current->base.resource;
-
-   if (queued_res != current_res)
-      return false;
-
-   if (queued->base.level != current->base.level)
-      return false;
-
-   if (queued->base.box.z != current->base.box.z)
-      return true;
-
-   if (queued->base.box.depth != 1 || current->base.box.depth != 1)
-      return true;
-
-   /*
-    * Special case for boxes with [x: 0, width: 1] and [x: 1, width: 1].
-    */
-   if (queued_res->target == PIPE_BUFFER) {
-      if (queued->base.box.x + queued->base.box.width == current->base.box.x)
-         return false;
-
-      if (current->base.box.x + current->base.box.width == queued->base.box.x)
-         return false;
-   }
-
-   tmp = u_box_test_intersection_2d(&queued->base.box, &current->base.box);
-   return (tmp == TRUE);
-}
-
-static void set_true(UNUSED struct virgl_transfer_queue *queue,
-                     struct list_action_args *args)
-{
-   bool *val = args->data;
-   *val = true;
-}
-
-static void set_queued(UNUSED struct virgl_transfer_queue *queue,
-                       struct list_action_args *args)
-{
-   struct virgl_transfer *queued = args->queued;
-   struct virgl_transfer **val = args->data;
-   *val = queued;
+   return transfer_overlap(queued, current->hw_res, current->base.level,
+         &current->base.box, true);
 }
 
 static void remove_transfer(struct virgl_transfer_queue *queue,
-                            struct list_action_args *args)
+                            struct virgl_transfer *queued)
 {
-   struct virgl_transfer *queued = args->queued;
-   struct pipe_resource *pres = queued->base.resource;
    list_del(&queued->queue_link);
-   pipe_resource_reference(&pres, NULL);
-   virgl_resource_destroy_transfer(queue->pool, queued);
+   virgl_resource_destroy_transfer(queue->vctx, queued);
 }
 
 static void replace_unmapped_transfer(struct virgl_transfer_queue *queue,
@@ -133,7 +175,7 @@ static void replace_unmapped_transfer(struct virgl_transfer_queue *queue,
    u_box_union_2d(&current->base.box, &current->base.box, &queued->base.box);
    current->offset = current->base.box.x;
 
-   remove_transfer(queue, args);
+   remove_transfer(queue, queued);
    queue->num_dwords -= (VIRGL_TRANSFER3D_SIZE + 1);
 }
 
@@ -141,13 +183,13 @@ static void transfer_put(struct virgl_transfer_queue *queue,
                          struct list_action_args *args)
 {
    struct virgl_transfer *queued = args->queued;
-   struct virgl_resource *res = virgl_resource(queued->base.resource);
 
-   queue->vs->vws->transfer_put(queue->vs->vws, res->hw_res, &queued->base.box,
+   queue->vs->vws->transfer_put(queue->vs->vws, queued->hw_res,
+                                &queued->base.box,
                                 queued->base.stride, queued->l_stride,
                                 queued->offset, queued->base.level);
 
-   remove_transfer(queue, args);
+   remove_transfer(queue, queued);
 }
 
 static void transfer_write(struct virgl_transfer_queue *queue,
@@ -160,8 +202,7 @@ static void transfer_write(struct virgl_transfer_queue *queue,
    // the exec buffer command.
    virgl_encode_transfer(queue->vs, buf, queued, VIRGL_TRANSFER_TO_HOST);
 
-   list_delinit(&queued->queue_link);
-   list_addtail(&queued->queue_link, &queue->lists[COMPLETED_LIST]);
+   remove_transfer(queue, queued);
 }
 
 static void compare_and_perform_action(struct virgl_transfer_queue *queue,
@@ -169,36 +210,15 @@ static void compare_and_perform_action(struct virgl_transfer_queue *queue,
 {
    struct list_action_args args;
    struct virgl_transfer *queued, *tmp;
-   enum virgl_transfer_queue_lists type = iter->type;
 
    memset(&args, 0, sizeof(args));
    args.current = iter->current;
    args.data = iter->data;
 
-   LIST_FOR_EACH_ENTRY_SAFE(queued, tmp, &queue->lists[type], queue_link) {
+   LIST_FOR_EACH_ENTRY_SAFE(queued, tmp, &queue->transfer_list, queue_link) {
       if (iter->compare(queued, iter->current)) {
          args.queued = queued;
          iter->action(queue, &args);
-      }
-   }
-}
-
-static void intersect_and_set_queued_once(struct virgl_transfer_queue *queue,
-                                          struct list_iteration_args *iter)
-{
-   struct list_action_args args;
-   struct virgl_transfer *queued, *tmp;
-   enum virgl_transfer_queue_lists type = iter->type;
-
-   memset(&args, 0, sizeof(args));
-   args.current = iter->current;
-   args.data = iter->data;
-
-   LIST_FOR_EACH_ENTRY_SAFE(queued, tmp, &queue->lists[type], queue_link) {
-      if (transfers_intersect(queued, iter->current)) {
-         args.queued = queued;
-         set_queued(queue, &args);
-         return;
       }
    }
 }
@@ -208,12 +228,11 @@ static void perform_action(struct virgl_transfer_queue *queue,
 {
    struct list_action_args args;
    struct virgl_transfer *queued, *tmp;
-   enum virgl_transfer_queue_lists type = iter->type;
 
    memset(&args, 0, sizeof(args));
    args.data = iter->data;
 
-   LIST_FOR_EACH_ENTRY_SAFE(queued, tmp, &queue->lists[type], queue_link) {
+   LIST_FOR_EACH_ENTRY_SAFE(queued, tmp, &queue->transfer_list, queue_link) {
       args.queued = queued;
       iter->action(queue, &args);
    }
@@ -229,7 +248,6 @@ static void add_internal(struct virgl_transfer_queue *queue,
          struct virgl_winsys *vws = queue->vs->vws;
 
          memset(&iter, 0, sizeof(iter));
-         iter.type = PENDING_LIST;
          iter.action = transfer_write;
          iter.data = queue->tbuf;
          perform_action(queue, &iter);
@@ -239,21 +257,20 @@ static void add_internal(struct virgl_transfer_queue *queue,
       }
    }
 
-   list_addtail(&transfer->queue_link, &queue->lists[PENDING_LIST]);
+   list_addtail(&transfer->queue_link, &queue->transfer_list);
    queue->num_dwords += dwords;
 }
 
-
 void virgl_transfer_queue_init(struct virgl_transfer_queue *queue,
-                               struct virgl_screen *vs,
-                               struct slab_child_pool *pool)
+                               struct virgl_context *vctx)
 {
+   struct virgl_screen *vs = virgl_screen(vctx->base.screen);
+
    queue->vs = vs;
-   queue->pool = pool;
+   queue->vctx = vctx;
    queue->num_dwords = 0;
 
-   for (uint32_t i = 0; i < MAX_LISTS; i++)
-      list_inithead(&queue->lists[i]);
+   list_inithead(&queue->transfer_list);
 
    if ((vs->caps.caps.v2.capability_bits & VIRGL_CAP_TRANSFER) &&
         vs->vws->supports_encoded_transfers)
@@ -270,18 +287,13 @@ void virgl_transfer_queue_fini(struct virgl_transfer_queue *queue)
    memset(&iter, 0, sizeof(iter));
 
    iter.action = transfer_put;
-   iter.type = PENDING_LIST;
-   perform_action(queue, &iter);
-
-   iter.action = remove_transfer;
-   iter.type = COMPLETED_LIST;
    perform_action(queue, &iter);
 
    if (queue->tbuf)
       vws->cmd_buf_destroy(queue->tbuf);
 
    queue->vs = NULL;
-   queue->pool = NULL;
+   queue->vctx = NULL;
    queue->tbuf = NULL;
    queue->num_dwords = 0;
 }
@@ -289,19 +301,17 @@ void virgl_transfer_queue_fini(struct virgl_transfer_queue *queue)
 int virgl_transfer_queue_unmap(struct virgl_transfer_queue *queue,
                                struct virgl_transfer *transfer)
 {
-   struct pipe_resource *res, *pres;
    struct list_iteration_args iter;
 
-   pres = NULL;
-   res = transfer->base.resource;
-   pipe_resource_reference(&pres, res);
+   /* We don't support copy transfers in the transfer queue. */
+   assert(!transfer->copy_src_hw_res);
 
-   if (res->target == PIPE_BUFFER) {
+   /* Attempt to merge multiple intersecting transfers into a single one. */
+   if (transfer->base.resource->target == PIPE_BUFFER) {
       memset(&iter, 0, sizeof(iter));
       iter.current = transfer;
       iter.compare = transfers_intersect;
       iter.action = replace_unmapped_transfer;
-      iter.type = PENDING_LIST;
       compare_and_perform_action(queue, &iter);
    }
 
@@ -315,7 +325,6 @@ int virgl_transfer_queue_clear(struct virgl_transfer_queue *queue,
    struct list_iteration_args iter;
 
    memset(&iter, 0, sizeof(iter));
-   iter.type = PENDING_LIST;
    if (queue->tbuf) {
       uint32_t prior_num_dwords = cbuf->cdw;
       cbuf->cdw = 0;
@@ -331,9 +340,6 @@ int virgl_transfer_queue_clear(struct virgl_transfer_queue *queue,
       perform_action(queue, &iter);
    }
 
-   iter.action = remove_transfer;
-   iter.type = COMPLETED_LIST;
-   perform_action(queue, &iter);
    queue->num_dwords = 0;
 
    return 0;
@@ -342,43 +348,33 @@ int virgl_transfer_queue_clear(struct virgl_transfer_queue *queue,
 bool virgl_transfer_queue_is_queued(struct virgl_transfer_queue *queue,
                                     struct virgl_transfer *transfer)
 {
-   bool queued = false;
-   struct list_iteration_args iter;
-
-   memset(&iter, 0, sizeof(iter));
-   iter.current = transfer;
-   iter.compare = transfers_overlap;
-   iter.action = set_true;
-   iter.data = &queued;
-
-   iter.type = PENDING_LIST;
-   compare_and_perform_action(queue, &iter);
-
-   iter.type = COMPLETED_LIST;
-   compare_and_perform_action(queue, &iter);
-
-   return queued;
+   return virgl_transfer_queue_find_overlap(queue,
+                                            transfer->hw_res,
+                                            transfer->base.level,
+                                            &transfer->base.box,
+                                            false);
 }
 
-struct virgl_transfer *
-virgl_transfer_queue_extend(struct virgl_transfer_queue *queue,
-                            struct virgl_transfer *transfer)
+bool
+virgl_transfer_queue_extend_buffer(struct virgl_transfer_queue *queue,
+                                   const struct virgl_hw_res *hw_res,
+                                   unsigned offset, unsigned size,
+                                   const void *data)
 {
-   struct virgl_transfer *queued = NULL;
-   struct list_iteration_args iter;
+   struct virgl_transfer *queued;
+   struct pipe_box box;
 
-   if (transfer->base.resource->target == PIPE_BUFFER) {
-      memset(&iter, 0, sizeof(iter));
-      iter.current = transfer;
-      iter.data = &queued;
-      iter.type = PENDING_LIST;
-      intersect_and_set_queued_once(queue, &iter);
-   }
+   u_box_1d(offset, size, &box);
+   queued = virgl_transfer_queue_find_overlap(queue, hw_res, 0, &box, true);
+   if (!queued)
+      return false;
 
-   if (queued) {
-      u_box_union_2d(&queued->base.box, &queued->base.box, &transfer->base.box);
-      queued->offset = queued->base.box.x;
-   }
+   assert(queued->base.resource->target == PIPE_BUFFER);
+   assert(queued->hw_res_map);
 
-   return queued;
+   memcpy(queued->hw_res_map + offset, data, size);
+   u_box_union_2d(&queued->base.box, &queued->base.box, &box);
+   queued->offset = queued->base.box.x;
+
+   return true;
 }

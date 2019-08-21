@@ -109,7 +109,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
    char *error_str;
    const unsigned *program =
       brw_compile_tcs(compiler, brw, mem_ctx, key, &prog_data, nir, st_index,
-                      &error_str);
+                      NULL, &error_str);
    if (program == NULL) {
       if (tep) {
          tep->program.sh.data->LinkStatus = LINKING_FAILURE;
@@ -127,7 +127,7 @@ brw_codegen_tcs_prog(struct brw_context *brw, struct brw_program *tcp,
       if (tcp) {
          if (tcp->compiled_once) {
             brw_debug_recompile(brw, MESA_SHADER_TESS_CTRL, tcp->program.Id,
-                                key->program_string_id, key);
+                                &key->base);
          }
          tcp->compiled_once = true;
       }
@@ -160,6 +160,7 @@ brw_tcs_populate_key(struct brw_context *brw,
                      struct brw_tcs_prog_key *key)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   const struct brw_compiler *compiler = brw->screen->compiler;
    struct brw_program *tcp =
       (struct brw_program *) brw->programs[MESA_SHADER_TESS_CTRL];
    struct brw_program *tep =
@@ -177,7 +178,7 @@ brw_tcs_populate_key(struct brw_context *brw,
       per_patch_slots |= prog->info.patch_outputs_written;
    }
 
-   if (devinfo->gen < 8 || !tcp)
+   if (devinfo->gen < 8 || !tcp || compiler->use_tcs_8_patch)
       key->input_vertices = brw->ctx.TessCtrlProgram.patch_vertices;
    key->outputs_written = per_vertex_slots;
    key->patch_outputs_written = per_patch_slots;
@@ -191,10 +192,8 @@ brw_tcs_populate_key(struct brw_context *brw,
                            tep->program.info.tess.spacing == TESS_SPACING_EQUAL;
 
    if (tcp) {
-      key->program_string_id = tcp->id;
-
       /* _NEW_TEXTURE */
-      brw_populate_sampler_prog_key_data(&brw->ctx, &tcp->program, &key->tex);
+      brw_populate_base_prog_key(&brw->ctx, tcp, &key->base);
    }
 }
 
@@ -206,7 +205,7 @@ brw_upload_tcs_prog(struct brw_context *brw)
    /* BRW_NEW_TESS_PROGRAMS */
    struct brw_program *tcp =
       (struct brw_program *) brw->programs[MESA_SHADER_TESS_CTRL];
-   MAYBE_UNUSED struct brw_program *tep =
+   ASSERTED struct brw_program *tep =
       (struct brw_program *) brw->programs[MESA_SHADER_TESS_EVAL];
    assert(tep);
 
@@ -228,29 +227,29 @@ brw_upload_tcs_prog(struct brw_context *brw)
 
    tcp = (struct brw_program *) brw->programs[MESA_SHADER_TESS_CTRL];
    if (tcp)
-      tcp->id = key.program_string_id;
+      tcp->id = key.base.program_string_id;
 
-   MAYBE_UNUSED bool success = brw_codegen_tcs_prog(brw, tcp, tep, &key);
+   ASSERTED bool success = brw_codegen_tcs_prog(brw, tcp, tep, &key);
    assert(success);
 }
 
 void
-brw_tcs_populate_default_key(const struct gen_device_info *devinfo,
+brw_tcs_populate_default_key(const struct brw_compiler *compiler,
                              struct brw_tcs_prog_key *key,
                              struct gl_shader_program *sh_prog,
                              struct gl_program *prog)
 {
+   const struct gen_device_info *devinfo = compiler->devinfo;
    struct brw_program *btcp = brw_program(prog);
    const struct gl_linked_shader *tes =
       sh_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
 
    memset(key, 0, sizeof(*key));
 
-   key->program_string_id = btcp->id;
-   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
+   brw_populate_default_base_prog_key(devinfo, btcp, &key->base);
 
    /* Guess that the input and output patches have the same dimensionality. */
-   if (devinfo->gen < 8)
+   if (devinfo->gen < 8 || compiler->use_tcs_8_patch)
       key->input_vertices = prog->info.tess.tcs_vertices_out;
 
    if (tes) {
@@ -272,6 +271,7 @@ brw_tcs_precompile(struct gl_context *ctx,
                    struct gl_program *prog)
 {
    struct brw_context *brw = brw_context(ctx);
+   const struct brw_compiler *compiler = brw->screen->compiler;
    struct brw_tcs_prog_key key;
    uint32_t old_prog_offset = brw->tcs.base.prog_offset;
    struct brw_stage_prog_data *old_prog_data = brw->tcs.base.prog_data;
@@ -282,7 +282,7 @@ brw_tcs_precompile(struct gl_context *ctx,
       shader_prog->_LinkedShaders[MESA_SHADER_TESS_EVAL];
    struct brw_program *btep = tes ? brw_program(tes->Program) : NULL;
 
-   brw_tcs_populate_default_key(&brw->screen->devinfo, &key, shader_prog, prog);
+   brw_tcs_populate_default_key(compiler, &key, shader_prog, prog);
 
    success = brw_codegen_tcs_prog(brw, btcp, btep, &key);
 

@@ -45,6 +45,7 @@ intrinsics = [
     ['VGATHERPD',   ['src', 'pBase', 'indices', 'mask', 'scale'], 'src'],
     ['VGATHERPS',   ['src', 'pBase', 'indices', 'mask', 'scale'], 'src'],
     ['VGATHERDD',   ['src', 'pBase', 'indices', 'mask', 'scale'], 'src'],
+    ['VSCATTERPS',  ['pBase', 'mask', 'indices', 'src', 'scale'], 'src'],
     ['VRCPPS',      ['a'], 'a'],
     ['VROUND',      ['a', 'rounding'], 'a'],
     ['BEXTR_32',    ['src', 'control'], 'src'],

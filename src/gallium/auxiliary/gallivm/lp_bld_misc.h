@@ -76,6 +76,15 @@ lp_get_called_value(LLVMValueRef call);
 extern bool
 lp_is_function(LLVMValueRef v);
 
+/* LLVM 3.9 introduces this, provide our own for earlier */
+#if HAVE_LLVM < 0x309
+LLVMValueRef LLVMBuildAtomicCmpXchg(LLVMBuilderRef B, LLVMValueRef Ptr,
+                                    LLVMValueRef Cmp, LLVMValueRef New,
+                                    LLVMAtomicOrdering SuccessOrdering,
+                                    LLVMAtomicOrdering FailureOrdering,
+                                    LLVMBool SingleThread);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

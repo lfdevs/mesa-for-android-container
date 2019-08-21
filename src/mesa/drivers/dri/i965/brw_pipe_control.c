@@ -118,7 +118,7 @@ brw_emit_depth_stall_flushes(struct brw_context *brw)
 void
 gen7_emit_vs_workaround_flush(struct brw_context *brw)
 {
-   MAYBE_UNUSED const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    assert(devinfo->gen == 7);
    brw_emit_pipe_control_write(brw,

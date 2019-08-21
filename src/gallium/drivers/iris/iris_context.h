@@ -247,6 +247,71 @@ enum iris_predicate_state {
 /** @} */
 
 /**
+ * An uncompiled, API-facing shader.  This is the Gallium CSO for shaders.
+ * It primarily contains the NIR for the shader.
+ *
+ * Each API-facing shader can be compiled into multiple shader variants,
+ * based on non-orthogonal state dependencies, recorded in the shader key.
+ *
+ * See iris_compiled_shader, which represents a compiled shader variant.
+ */
+struct iris_uncompiled_shader {
+   struct nir_shader *nir;
+
+   struct pipe_stream_output_info stream_output;
+
+   /* A SHA1 of the serialized NIR for the disk cache. */
+   unsigned char nir_sha1[20];
+
+   unsigned program_id;
+
+   /** Bitfield of (1 << IRIS_NOS_*) flags. */
+   unsigned nos;
+
+   /** Have any shader variants been compiled yet? */
+   bool compiled_once;
+
+   /** Should we use ALT mode for math?  Useful for ARB programs. */
+   bool use_alt_mode;
+
+   /** Constant data scraped from the shader by nir_opt_large_constants */
+   struct pipe_resource *const_data;
+
+   /** Surface state for const_data */
+   struct iris_state_ref const_data_state;
+};
+
+enum iris_surface_group {
+   IRIS_SURFACE_GROUP_RENDER_TARGET,
+   IRIS_SURFACE_GROUP_RENDER_TARGET_READ,
+   IRIS_SURFACE_GROUP_CS_WORK_GROUPS,
+   IRIS_SURFACE_GROUP_TEXTURE,
+   IRIS_SURFACE_GROUP_IMAGE,
+   IRIS_SURFACE_GROUP_UBO,
+   IRIS_SURFACE_GROUP_SSBO,
+
+   IRIS_SURFACE_GROUP_COUNT,
+};
+
+enum {
+   /* Invalid value for a binding table index. */
+   IRIS_SURFACE_NOT_USED = 0xa0a0a0a0,
+};
+
+struct iris_binding_table {
+   uint32_t size_bytes;
+
+   /** Number of surfaces in each group, before compacting. */
+   uint32_t sizes[IRIS_SURFACE_GROUP_COUNT];
+
+   /** Initial offset of each group. */
+   uint32_t offsets[IRIS_SURFACE_GROUP_COUNT];
+
+   /** Mask of surfaces used in each group. */
+   uint64_t used_mask[IRIS_SURFACE_GROUP_COUNT];
+};
+
+/**
  * A compiled shader variant, containing a pointer to the GPU assembly,
  * as well as program data and other packets needed by state upload.
  *
@@ -276,6 +341,8 @@ struct iris_compiled_shader {
     */
    uint32_t *streamout;
 
+   struct iris_binding_table bt;
+
    /**
     * Shader packets and other data derived from prog_data.  These must be
     * completely determined from prog_data.
@@ -291,8 +358,7 @@ struct iris_shader_state {
    struct pipe_shader_buffer constbuf[PIPE_MAX_CONSTANT_BUFFERS];
    struct iris_state_ref constbuf_surf_state[PIPE_MAX_CONSTANT_BUFFERS];
 
-   struct pipe_constant_buffer cbuf0;
-   bool cbuf0_needs_upload;
+   bool sysvals_need_upload;
 
    /** Shader Storage Buffers */
    struct pipe_shader_buffer ssbo[PIPE_MAX_SHADER_BUFFERS];
@@ -330,7 +396,7 @@ struct iris_stream_output_target {
    /** Storage holding the offset where we're writing in the buffer */
    struct iris_state_ref offset;
 
-   /** Stride (dwords-per-vertex) during this transform feedback operation */
+   /** Stride (bytes-per-vertex) during this transform feedback operation */
    uint16_t stride;
 
    /** Has 3DSTATE_SO_BUFFER actually been emitted, zeroing the offsets? */
@@ -361,6 +427,7 @@ struct iris_vtable {
    void (*rebind_buffer)(struct iris_context *ice,
                          struct iris_resource *res,
                          uint64_t old_address);
+   void (*resolve_conditional_render)(struct iris_context *ice);
    void (*load_register_reg32)(struct iris_batch *batch, uint32_t dst,
                                uint32_t src);
    void (*load_register_reg64)(struct iris_batch *batch, uint32_t dst,
@@ -389,9 +456,15 @@ struct iris_vtable {
                         struct iris_bo *dst_bo, uint32_t dst_offset,
                         struct iris_bo *src_bo, uint32_t src_offset,
                         unsigned bytes);
-   void (*emit_raw_pipe_control)(struct iris_batch *batch, uint32_t flags,
+   void (*emit_raw_pipe_control)(struct iris_batch *batch,
+                                 const char *reason, uint32_t flags,
                                  struct iris_bo *bo, uint32_t offset,
                                  uint64_t imm);
+
+   void (*emit_mi_report_perf_count)(struct iris_batch *batch,
+                                     struct iris_bo *bo,
+                                     uint32_t offset_in_bytes,
+                                     uint32_t report_id);
 
    unsigned (*derived_program_state_size)(enum iris_program_cache_id id);
    void (*store_derived_program_state)(struct iris_context *ice,
@@ -401,18 +474,25 @@ struct iris_vtable {
                                     const struct brw_vue_map *vue_map);
    void (*populate_vs_key)(const struct iris_context *ice,
                            const struct shader_info *info,
+                           gl_shader_stage last_stage,
                            struct brw_vs_prog_key *key);
    void (*populate_tcs_key)(const struct iris_context *ice,
                             struct brw_tcs_prog_key *key);
    void (*populate_tes_key)(const struct iris_context *ice,
+                            const struct shader_info *info,
+                            gl_shader_stage last_stage,
                             struct brw_tes_prog_key *key);
    void (*populate_gs_key)(const struct iris_context *ice,
+                           const struct shader_info *info,
+                           gl_shader_stage last_stage,
                            struct brw_gs_prog_key *key);
    void (*populate_fs_key)(const struct iris_context *ice,
+                           const struct shader_info *info,
                            struct brw_wm_prog_key *key);
    void (*populate_cs_key)(const struct iris_context *ice,
                            struct brw_cs_prog_key *key);
    uint32_t (*mocs)(const struct iris_bo *bo);
+   void (*lost_genx_state)(struct iris_context *ice, struct iris_batch *batch);
 };
 
 /**
@@ -439,6 +519,9 @@ struct iris_context {
 
    /** A debug callback for KHR_debug output. */
    struct pipe_debug_callback dbg;
+
+   /** A device reset status callback for notifying that the GPU is hosed. */
+   struct pipe_device_reset_callback reset;
 
    /** Slab allocator for iris_transfer_map objects. */
    struct slab_child_pool transfer_pool;
@@ -524,6 +607,8 @@ struct iris_context {
       bool condition;
    } condition;
 
+   struct gen_perf_context *perf_ctx;
+
    struct {
       uint64_t dirty;
       uint64_t dirty_for_nos[IRIS_NOS_COUNT];
@@ -553,6 +638,8 @@ struct iris_context {
       enum pipe_prim_type prim_mode:8;
       bool prim_is_points_or_lines;
       uint8_t vertices_per_patch;
+
+      bool window_space_position;
 
       /** The last compute grid size */
       uint32_t last_grid[3];
@@ -612,9 +699,6 @@ struct iris_context {
       /** 3DSTATE_STREAMOUT and 3DSTATE_SO_DECL_LIST packets */
       uint32_t *streamout;
 
-      /** Current strides for each streamout buffer */
-      uint16_t *streamout_strides;
-
       /** The SURFACE_STATE for a 1x1x1 null surface. */
       struct iris_state_ref unbound_tex;
 
@@ -622,8 +706,6 @@ struct iris_context {
       struct iris_state_ref null_fb;
 
       struct u_upload_mgr *surface_uploader;
-      // XXX: may want a separate uploader for "hey I made a CSO!" vs
-      // "I'm streaming this out at draw time and never want it again!"
       struct u_upload_mgr *dynamic_uploader;
 
       struct iris_binder binder;
@@ -646,7 +728,15 @@ struct iris_context {
          struct pipe_resource *scissor;
          struct pipe_resource *blend;
          struct pipe_resource *index_buffer;
+         struct pipe_resource *cs_thread_ids;
+         struct pipe_resource *cs_desc;
       } last_res;
+
+      /** Records the size of variable-length state for INTEL_DEBUG=bat */
+      struct hash_table_u64 *sizes;
+
+      /** Last rendering scale argument provided to genX(emit_hashing_mode). */
+      unsigned current_hash_scale;
    } state;
 };
 
@@ -662,11 +752,12 @@ double get_time(void);
 struct pipe_context *
 iris_create_context(struct pipe_screen *screen, void *priv, unsigned flags);
 
+void iris_lost_context_state(struct iris_batch *batch);
+
 void iris_init_blit_functions(struct pipe_context *ctx);
 void iris_init_clear_functions(struct pipe_context *ctx);
 void iris_init_program_functions(struct pipe_context *ctx);
 void iris_init_resource_functions(struct pipe_context *ctx);
-void iris_init_query_functions(struct pipe_context *ctx);
 void iris_update_compiled_shaders(struct iris_context *ice);
 void iris_update_compiled_compute_shader(struct iris_context *ice);
 void iris_fill_cs_push_const_buffer(struct brw_cs_prog_data *cs_prog_data,
@@ -697,20 +788,15 @@ void iris_launch_grid(struct pipe_context *, const struct pipe_grid_info *);
 /* iris_pipe_control.c */
 
 void iris_emit_pipe_control_flush(struct iris_batch *batch,
-                                  uint32_t flags);
-void iris_emit_pipe_control_write(struct iris_batch *batch, uint32_t flags,
+                                  const char *reason, uint32_t flags);
+void iris_emit_pipe_control_write(struct iris_batch *batch,
+                                  const char *reason, uint32_t flags,
                                   struct iris_bo *bo, uint32_t offset,
                                   uint64_t imm);
 void iris_emit_end_of_pipe_sync(struct iris_batch *batch,
-                                uint32_t flags);
+                                const char *reason, uint32_t flags);
 
 void iris_init_flush_functions(struct pipe_context *ctx);
-
-/* iris_blorp.c */
-void gen8_init_blorp(struct iris_context *ice);
-void gen9_init_blorp(struct iris_context *ice);
-void gen10_init_blorp(struct iris_context *ice);
-void gen11_init_blorp(struct iris_context *ice);
 
 /* iris_border_color.c */
 
@@ -720,34 +806,35 @@ void iris_border_color_pool_reserve(struct iris_context *ice, unsigned count);
 uint32_t iris_upload_border_color(struct iris_context *ice,
                                   union pipe_color_union *color);
 
-/* iris_state.c */
-void gen8_init_state(struct iris_context *ice);
-void gen9_init_state(struct iris_context *ice);
-void gen10_init_state(struct iris_context *ice);
-void gen11_init_state(struct iris_context *ice);
-void gen8_emit_urb_setup(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          const unsigned size[4],
-                          bool tess_present, bool gs_present);
-void gen9_emit_urb_setup(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          const unsigned size[4],
-                          bool tess_present, bool gs_present);
-void gen10_emit_urb_setup(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          const unsigned size[4],
-                          bool tess_present, bool gs_present);
-void gen11_emit_urb_setup(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          const unsigned size[4],
-                          bool tess_present, bool gs_present);
-
 /* iris_program.c */
+void iris_upload_ubo_ssbo_surf_state(struct iris_context *ice,
+                                     struct pipe_shader_buffer *buf,
+                                     struct iris_state_ref *surf_state,
+                                     bool ssbo);
 const struct shader_info *iris_get_shader_info(const struct iris_context *ice,
                                                gl_shader_stage stage);
 struct iris_bo *iris_get_scratch_space(struct iris_context *ice,
                                        unsigned per_thread_scratch,
                                        gl_shader_stage stage);
+uint32_t iris_group_index_to_bti(const struct iris_binding_table *bt,
+                                 enum iris_surface_group group,
+                                 uint32_t index);
+uint32_t iris_bti_to_group_index(const struct iris_binding_table *bt,
+                                 enum iris_surface_group group,
+                                 uint32_t bti);
+
+/* iris_disk_cache.c */
+
+void iris_disk_cache_store(struct disk_cache *cache,
+                           const struct iris_uncompiled_shader *ish,
+                           const struct iris_compiled_shader *shader,
+                           const void *prog_key,
+                           uint32_t prog_key_size);
+struct iris_compiled_shader *
+iris_disk_cache_retrieve(struct iris_context *ice,
+                         const struct iris_uncompiled_shader *ish,
+                         const void *prog_key,
+                         uint32_t prog_key_size);
 
 /* iris_program_cache.c */
 
@@ -767,7 +854,8 @@ struct iris_compiled_shader *iris_upload_shader(struct iris_context *ice,
                                                 uint32_t *streamout,
                                                 enum brw_param_builtin *sysv,
                                                 unsigned num_system_values,
-                                                unsigned num_cbufs);
+                                                unsigned num_cbufs,
+                                                const struct iris_binding_table *bt);
 const void *iris_find_previous_compile(const struct iris_context *ice,
                                        enum iris_program_cache_id cache_id,
                                        unsigned program_string_id);
@@ -783,19 +871,6 @@ bool iris_blorp_upload_shader(struct blorp_batch *blorp_batch,
                               uint32_t prog_data_size,
                               uint32_t *kernel_out,
                               void *prog_data_out);
-
-/* iris_query.c */
-
-void iris_math_div32_gpr0(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          uint32_t D);
-void iris_math_add32_gpr0(struct iris_context *ice,
-                          struct iris_batch *batch,
-                          uint32_t x);
-
-uint64_t iris_timebase_scale(const struct gen_device_info *devinfo,
-                             uint64_t gpu_timestamp);
-void iris_resolve_conditional_render(struct iris_context *ice);
 
 /* iris_resolve.c */
 
@@ -822,9 +897,47 @@ void iris_render_cache_add_bo(struct iris_batch *batch,
                               enum isl_aux_usage aux_usage);
 void iris_cache_flush_for_depth(struct iris_batch *batch, struct iris_bo *bo);
 void iris_depth_cache_add_bo(struct iris_batch *batch, struct iris_bo *bo);
+int iris_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
+                               struct pipe_driver_query_info *info);
+int iris_get_driver_query_group_info(struct pipe_screen *pscreen,
+                                     unsigned index,
+                                     struct pipe_driver_query_group_info *info);
 
 /* iris_state.c */
 void gen9_toggle_preemption(struct iris_context *ice,
                             struct iris_batch *batch,
                             const struct pipe_draw_info *draw);
+
+#ifdef genX
+#  include "iris_genx_protos.h"
+#else
+#  define genX(x) gen4_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen5_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen6_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen7_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen75_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen8_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen9_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen10_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen11_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#endif
+
 #endif

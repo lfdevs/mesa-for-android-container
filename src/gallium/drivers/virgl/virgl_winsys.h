@@ -70,10 +70,14 @@ struct virgl_winsys {
                                uint32_t last_level, uint32_t nr_samples,
                                uint32_t size);
 
-   void (*resource_unref)(struct virgl_winsys *vws, struct virgl_hw_res *res);
+   void (*resource_reference)(struct virgl_winsys *qws,
+                              struct virgl_hw_res **dres,
+                              struct virgl_hw_res *sres);
 
    void *(*resource_map)(struct virgl_winsys *vws, struct virgl_hw_res *res);
    void (*resource_wait)(struct virgl_winsys *vws, struct virgl_hw_res *res);
+   boolean (*resource_is_busy)(struct virgl_winsys *vws,
+                               struct virgl_hw_res *res);
 
    struct virgl_hw_res *(*resource_create_from_handle)(struct virgl_winsys *vws,
                                                        struct winsys_handle *whandle);

@@ -1060,7 +1060,7 @@ nine_ff_build_vs(struct NineDevice9 *device, struct vs_build_ctx *vs)
 
     ureg_END(ureg);
     nine_ureg_tgsi_dump(ureg, FALSE);
-    return ureg_create_shader_and_destroy(ureg, device->context.pipe);
+    return nine_create_shader_with_so_and_destroy(ureg, device->context.pipe, NULL);
 }
 
 /* PS FF constants layout:
@@ -1555,7 +1555,7 @@ nine_ff_build_ps(struct NineDevice9 *device, struct nine_ff_ps_key *key)
 
     ureg_END(ureg);
     nine_ureg_tgsi_dump(ureg, FALSE);
-    return ureg_create_shader_and_destroy(ureg, device->context.pipe);
+    return nine_create_shader_with_so_and_destroy(ureg, device->context.pipe, NULL);
 }
 
 static struct NineVertexShader9 *

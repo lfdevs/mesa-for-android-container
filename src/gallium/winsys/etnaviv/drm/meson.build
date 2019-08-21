@@ -22,7 +22,9 @@ libetnavivdrm = static_library(
   'etnavivdrm',
   'etnaviv_drm_winsys.c',
   include_directories : [
-    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers
+    inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_drivers,
+    inc_etnaviv,
   ],
-  dependencies : dep_libdrm_etnaviv
+  link_with: libetnaviv_drm,
+  dependencies : [dep_libdrm, idep_nir_headers],
 )

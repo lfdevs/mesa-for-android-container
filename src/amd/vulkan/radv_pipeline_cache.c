@@ -31,18 +31,12 @@
 
 #include "ac_nir_to_llvm.h"
 
-struct cache_entry_variant_info {
-	struct radv_shader_variant_info variant_info;
-	struct ac_shader_config config;
-	uint32_t rsrc1, rsrc2;
-};
-
 struct cache_entry {
 	union {
 		unsigned char sha1[20];
 		uint32_t sha1_dw[5];
 	};
-	uint32_t code_sizes[MESA_SHADER_STAGES];
+	uint32_t binary_sizes[MESA_SHADER_STAGES];
 	struct radv_shader_variant *variants[MESA_SHADER_STAGES];
 	char code[0];
 };
@@ -65,8 +59,7 @@ radv_pipeline_cache_init(struct radv_pipeline_cache *cache,
 	 * cache. Disable caching when we want to keep shader debug info, since
 	 * we don't get the debug info on cached shaders. */
 	if (cache->hash_table == NULL ||
-	    (device->instance->debug_flags & RADV_DEBUG_NO_CACHE) ||
-	    device->keep_shader_info)
+	    (device->instance->debug_flags & RADV_DEBUG_NO_CACHE))
 		cache->table_size = 0;
 	else
 		memset(cache->hash_table, 0, byte_size);
@@ -93,8 +86,8 @@ entry_size(struct cache_entry *entry)
 {
 	size_t ret = sizeof(*entry);
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i)
-		if (entry->code_sizes[i])
-			ret += sizeof(struct cache_entry_variant_info) + entry->code_sizes[i];
+		if (entry->binary_sizes[i])
+			ret += entry->binary_sizes[i];
 	return ret;
 }
 
@@ -247,8 +240,7 @@ radv_is_cache_disabled(struct radv_device *device)
 	/* Pipeline caches can be disabled with RADV_DEBUG=nocache, with
 	 * MESA_GLSL_CACHE_DISABLE=1, and when VK_AMD_shader_info is requested.
 	 */
-	return (device->instance->debug_flags & RADV_DEBUG_NO_CACHE) ||
-	       device->keep_shader_info;
+	return (device->instance->debug_flags & RADV_DEBUG_NO_CACHE);
 }
 
 bool
@@ -309,33 +301,15 @@ radv_create_shader_variants_from_pipeline_cache(struct radv_device *device,
 
 	char *p = entry->code;
 	for(int i = 0; i < MESA_SHADER_STAGES; ++i) {
-		if (!entry->variants[i] && entry->code_sizes[i]) {
-			struct radv_shader_variant *variant;
-			struct cache_entry_variant_info info;
+		if (!entry->variants[i] && entry->binary_sizes[i]) {
+			struct radv_shader_binary *binary = calloc(1, entry->binary_sizes[i]);
+			memcpy(binary, p, entry->binary_sizes[i]);
+			p += entry->binary_sizes[i];
 
-			variant = calloc(1, sizeof(struct radv_shader_variant));
-			if (!variant) {
-				pthread_mutex_unlock(&cache->mutex);
-				return false;
-			}
-
-			memcpy(&info, p, sizeof(struct cache_entry_variant_info));
-			p += sizeof(struct cache_entry_variant_info);
-
-			variant->config = info.config;
-			variant->info = info.variant_info;
-			variant->rsrc1 = info.rsrc1;
-			variant->rsrc2 = info.rsrc2;
-			variant->code_size = entry->code_sizes[i];
-			variant->ref_count = 1;
-
-			void *ptr = radv_alloc_shader_memory(device, variant);
-			memcpy(ptr, p, entry->code_sizes[i]);
-			p += entry->code_sizes[i];
-
-			entry->variants[i] = variant;
-		} else if (entry->code_sizes[i]) {
-			p += sizeof(struct cache_entry_variant_info) + entry->code_sizes[i];
+			entry->variants[i] = radv_shader_variant_create(device, binary, false);
+			free(binary);
+		} else if (entry->binary_sizes[i]) {
+			p += entry->binary_sizes[i];
 		}
 
 	}
@@ -354,8 +328,7 @@ radv_pipeline_cache_insert_shaders(struct radv_device *device,
 				   struct radv_pipeline_cache *cache,
 				   const unsigned char *sha1,
 				   struct radv_shader_variant **variants,
-				   const void *const *codes,
-				   const unsigned *code_sizes)
+				   struct radv_shader_binary *const *binaries)
 {
 	if (!cache)
 		cache = device->mem_cache;
@@ -388,7 +361,7 @@ radv_pipeline_cache_insert_shaders(struct radv_device *device,
 	size_t size = sizeof(*entry);
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i)
 		if (variants[i])
-			size += sizeof(struct cache_entry_variant_info) + code_sizes[i];
+			size += binaries[i]->total_size;
 
 
 	entry = vk_alloc(&cache->alloc, size, 8,
@@ -402,24 +375,15 @@ radv_pipeline_cache_insert_shaders(struct radv_device *device,
 	memcpy(entry->sha1, sha1, 20);
 
 	char* p = entry->code;
-	struct cache_entry_variant_info info;
-	memset(&info, 0, sizeof(info));
 
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i) {
 		if (!variants[i])
 			continue;
 
-		entry->code_sizes[i] = code_sizes[i];
+		entry->binary_sizes[i] = binaries[i]->total_size;
 
-		info.config = variants[i]->config;
-		info.variant_info = variants[i]->info;
-		info.rsrc1 = variants[i]->rsrc1;
-		info.rsrc2 = variants[i]->rsrc2;
-		memcpy(p, &info, sizeof(struct cache_entry_variant_info));
-		p += sizeof(struct cache_entry_variant_info);
-
-		memcpy(p, codes[i], code_sizes[i]);
-		p += code_sizes[i];
+		memcpy(p, binaries[i], binaries[i]->total_size);
+		p += binaries[i]->total_size;
 	}
 
 	/* Always add cache items to disk. This will allow collection of

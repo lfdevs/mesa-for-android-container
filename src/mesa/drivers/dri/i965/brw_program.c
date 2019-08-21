@@ -110,24 +110,12 @@ brw_create_nir(struct brw_context *brw,
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   nir_shader *softfp64 = NULL;
-   if ((options->lower_doubles_options & nir_lower_fp64_full_software) &&
-       nir->info.uses_64bit) {
-      softfp64 = glsl_float64_funcs_to_nir(ctx, options);
-      ralloc_steal(ralloc_parent(nir), softfp64);
+   if (!ctx->SoftFP64 && nir->info.uses_64bit &&
+       (options->lower_doubles_options & nir_lower_fp64_full_software)) {
+      ctx->SoftFP64 = glsl_float64_funcs_to_nir(ctx, options);
    }
 
-   nir = brw_preprocess_nir(brw->screen->compiler, nir, softfp64);
-
-   NIR_PASS_V(nir, gl_nir_lower_samplers, shader_prog);
-   prog->info.textures_used = nir->info.textures_used;
-   prog->info.textures_used_by_txf = nir->info.textures_used_by_txf;
-
-   NIR_PASS_V(nir, brw_nir_lower_image_load_store, devinfo);
-
-   NIR_PASS_V(nir, gl_nir_lower_buffers, shader_prog);
-   /* Do a round of constant folding to clean up address calculations */
-   NIR_PASS_V(nir, nir_opt_constant_folding);
+   brw_preprocess_nir(brw->screen->compiler, nir, ctx->SoftFP64);
 
    if (stage == MESA_SHADER_TESS_CTRL) {
       /* Lower gl_PatchVerticesIn from a sys. value to a uniform on Gen8+. */
@@ -167,6 +155,42 @@ brw_create_nir(struct brw_context *brw,
    NIR_PASS_V(nir, brw_nir_lower_uniforms, is_scalar);
 
    return nir;
+}
+
+static void
+shared_type_info(const struct glsl_type *type, unsigned *size, unsigned *align)
+{
+   assert(glsl_type_is_vector_or_scalar(type));
+
+   uint32_t comp_size = glsl_type_is_boolean(type)
+      ? 4 : glsl_get_bit_size(type) / 8;
+   unsigned length = glsl_get_vector_elements(type);
+   *size = comp_size * length,
+   *align = comp_size * (length == 3 ? 4 : length);
+}
+
+void
+brw_nir_lower_resources(nir_shader *nir, struct gl_shader_program *shader_prog,
+                        struct gl_program *prog,
+                        const struct gen_device_info *devinfo)
+{
+   NIR_PASS_V(prog->nir, gl_nir_lower_samplers, shader_prog);
+   prog->info.textures_used = prog->nir->info.textures_used;
+   prog->info.textures_used_by_txf = prog->nir->info.textures_used_by_txf;
+
+   NIR_PASS_V(prog->nir, brw_nir_lower_image_load_store, devinfo);
+
+   if (prog->nir->info.stage == MESA_SHADER_COMPUTE &&
+       shader_prog->data->spirv) {
+      NIR_PASS_V(prog->nir, nir_lower_vars_to_explicit_types,
+                 nir_var_mem_shared, shared_type_info);
+      NIR_PASS_V(prog->nir, nir_lower_explicit_io,
+                 nir_var_mem_shared, nir_address_format_32bit_offset);
+   }
+
+   NIR_PASS_V(prog->nir, gl_nir_lower_buffers, shader_prog);
+   /* Do a round of constant folding to clean up address calculations */
+   NIR_PASS_V(prog->nir, nir_opt_constant_folding);
 }
 
 void
@@ -258,9 +282,12 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       if (newFP == curFP)
 	 brw->ctx.NewDriverState |= BRW_NEW_FRAGMENT_PROGRAM;
+      _mesa_program_fragment_position_to_sysval(&newFP->program);
       newFP->id = get_new_program_id(brw->screen);
 
       prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_FRAGMENT, true);
+
+      brw_nir_lower_resources(prog->nir, NULL, prog, &brw->screen->devinfo);
 
       brw_shader_gather_info(prog->nir, prog);
 
@@ -285,6 +312,8 @@ brwProgramStringNotify(struct gl_context *ctx,
 
       prog->nir = brw_create_nir(brw, NULL, prog, MESA_SHADER_VERTEX,
                                  compiler->scalar_stage[MESA_SHADER_VERTEX]);
+
+      brw_nir_lower_resources(prog->nir, NULL, prog, &brw->screen->devinfo);
 
       brw_shader_gather_info(prog->nir, prog);
 
@@ -768,7 +797,7 @@ brw_dump_arb_asm(const char *stage, struct gl_program *prog)
 void
 brw_setup_tex_for_precompile(const struct gen_device_info *devinfo,
                              struct brw_sampler_prog_key_data *tex,
-                             struct gl_program *prog)
+                             const struct gl_program *prog)
 {
    const bool has_shader_channel_select = devinfo->is_haswell || devinfo->gen >= 8;
    unsigned sampler_count = util_last_bit(prog->SamplersUsed);
@@ -869,45 +898,29 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
 }
 
 void
-brw_prog_key_set_id(union brw_any_prog_key *key, gl_shader_stage stage,
-                    unsigned id)
-{
-   static const unsigned stage_offsets[] = {
-      offsetof(struct brw_vs_prog_key, program_string_id),
-      offsetof(struct brw_tcs_prog_key, program_string_id),
-      offsetof(struct brw_tes_prog_key, program_string_id),
-      offsetof(struct brw_gs_prog_key, program_string_id),
-      offsetof(struct brw_wm_prog_key, program_string_id),
-      offsetof(struct brw_cs_prog_key, program_string_id),
-   };
-   assert((int)stage >= 0 && stage < ARRAY_SIZE(stage_offsets));
-   *(unsigned*)((uint8_t*)key + stage_offsets[stage]) = id;
-}
-
-void
-brw_populate_default_key(const struct gen_device_info *devinfo,
+brw_populate_default_key(const struct brw_compiler *compiler,
                          union brw_any_prog_key *prog_key,
                          struct gl_shader_program *sh_prog,
                          struct gl_program *prog)
 {
    switch (prog->info.stage) {
    case MESA_SHADER_VERTEX:
-      brw_vs_populate_default_key(devinfo, &prog_key->vs, prog);
+      brw_vs_populate_default_key(compiler, &prog_key->vs, prog);
       break;
    case MESA_SHADER_TESS_CTRL:
-      brw_tcs_populate_default_key(devinfo, &prog_key->tcs, sh_prog, prog);
+      brw_tcs_populate_default_key(compiler, &prog_key->tcs, sh_prog, prog);
       break;
    case MESA_SHADER_TESS_EVAL:
-      brw_tes_populate_default_key(devinfo, &prog_key->tes, sh_prog, prog);
+      brw_tes_populate_default_key(compiler, &prog_key->tes, sh_prog, prog);
       break;
    case MESA_SHADER_GEOMETRY:
-      brw_gs_populate_default_key(devinfo, &prog_key->gs, prog);
+      brw_gs_populate_default_key(compiler, &prog_key->gs, prog);
       break;
    case MESA_SHADER_FRAGMENT:
-      brw_wm_populate_default_key(devinfo, &prog_key->wm, prog);
+      brw_wm_populate_default_key(compiler, &prog_key->wm, prog);
       break;
    case MESA_SHADER_COMPUTE:
-      brw_cs_populate_default_key(devinfo, &prog_key->cs, prog);
+      brw_cs_populate_default_key(compiler, &prog_key->cs, prog);
       break;
    default:
       unreachable("Unsupported stage!");
@@ -918,8 +931,7 @@ void
 brw_debug_recompile(struct brw_context *brw,
                     gl_shader_stage stage,
                     unsigned api_id,
-                    unsigned key_program_string_id,
-                    void *key)
+                    struct brw_base_prog_key *key)
 {
    const struct brw_compiler *compiler = brw->screen->compiler;
    enum brw_cache_id cache_id = brw_stage_cache_id(stage);
@@ -928,7 +940,7 @@ brw_debug_recompile(struct brw_context *brw,
                              _mesa_shader_stage_to_string(stage), api_id);
 
    const void *old_key =
-      brw_find_previous_compile(&brw->cache, cache_id, key_program_string_id);
+      brw_find_previous_compile(&brw->cache, cache_id, key->program_string_id);
 
    brw_debug_key_recompile(compiler, brw, stage, old_key, key);
 }

@@ -155,9 +155,9 @@ if with_tests
         'test_@0@.cpp'.format(t),
         include_directories : [inc_common, inc_intel],
         link_with : [
-          libintel_compiler, libintel_common, libintel_dev, libmesa_util, libisl,
+          libintel_compiler, libintel_common, libintel_dev, libisl,
         ],
-        dependencies : [dep_thread, dep_dl, idep_gtest, idep_nir],
+        dependencies : [idep_gtest, idep_nir, idep_mesautil],
       ),
       suite : ['intel'],
     )

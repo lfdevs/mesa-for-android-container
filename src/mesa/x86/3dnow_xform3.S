@@ -25,7 +25,8 @@
 
 #ifdef USE_3DNOW_ASM
 #include "assyntax.h"
-#include "matypes.h"
+#define MATH_ASM_PTR_SIZE 4
+#include "math/m_vector_asm.h"
 #include "xform_args.h"
 
     SEG_TEXT
@@ -37,7 +38,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_general )
 HIDDEN(_mesa_3dnow_transform_points3_general)
 GLNAME( _mesa_3dnow_transform_points3_general ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -122,7 +123,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_perspective )
 HIDDEN(_mesa_3dnow_transform_points3_perspective)
 GLNAME( _mesa_3dnow_transform_points3_perspective ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -203,7 +204,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_3d )
 HIDDEN(_mesa_3dnow_transform_points3_3d)
 GLNAME( _mesa_3dnow_transform_points3_3d ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -291,7 +292,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_3d_no_rot )
 HIDDEN(_mesa_3dnow_transform_points3_3d_no_rot)
 GLNAME( _mesa_3dnow_transform_points3_3d_no_rot ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -367,7 +368,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_2d )
 HIDDEN(_mesa_3dnow_transform_points3_2d)
 GLNAME( _mesa_3dnow_transform_points3_2d ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -440,7 +441,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_2d_no_rot )
 HIDDEN(_mesa_3dnow_transform_points3_2d_no_rot)
 GLNAME( _mesa_3dnow_transform_points3_2d_no_rot ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )
@@ -507,7 +508,7 @@ ALIGNTEXT16
 GLOBL GLNAME( _mesa_3dnow_transform_points3_identity )
 HIDDEN(_mesa_3dnow_transform_points3_identity)
 GLNAME( _mesa_3dnow_transform_points3_identity ):
-
+    _CET_ENDBR
     PUSH_L    ( ESI )
 
     MOV_L     ( ARG_DEST, ECX )

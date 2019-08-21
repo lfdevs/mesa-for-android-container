@@ -167,7 +167,7 @@ brw_fast_clear_depth(struct gl_context *ctx)
     */
    float clear_value =
       mt->format == MESA_FORMAT_Z_FLOAT32 ? ctx->Depth.Clear :
-      (unsigned)(ctx->Depth.Clear * fb->_DepthMax) / (float)fb->_DepthMax;
+      _mesa_lroundeven(ctx->Depth.Clear * fb->_DepthMax) / (float)(fb->_DepthMax);
 
    const uint32_t num_layers = depth_att->Layered ? depth_irb->layer_count : 1;
 

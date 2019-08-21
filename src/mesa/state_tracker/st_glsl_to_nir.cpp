@@ -109,86 +109,6 @@ st_nir_assign_vs_in_locations(nir_shader *nir)
    }
 }
 
-static void
-st_nir_assign_var_locations(struct exec_list *var_list, unsigned *size,
-                            gl_shader_stage stage)
-{
-   unsigned location = 0;
-   unsigned assigned_locations[VARYING_SLOT_TESS_MAX];
-   uint64_t processed_locs[2] = {0};
-
-   const int base = stage == MESA_SHADER_FRAGMENT ?
-      (int) FRAG_RESULT_DATA0 : (int) VARYING_SLOT_VAR0;
-
-   int UNUSED last_loc = 0;
-   nir_foreach_variable(var, var_list) {
-
-      const struct glsl_type *type = var->type;
-      if (nir_is_per_vertex_io(var, stage)) {
-         assert(glsl_type_is_array(type));
-         type = glsl_get_array_element(type);
-      }
-
-      unsigned var_size = type_size(type);
-
-      /* Builtins don't allow component packing so we only need to worry about
-       * user defined varyings sharing the same location.
-       */
-      bool processed = false;
-      if (var->data.location >= base) {
-         unsigned glsl_location = var->data.location - base;
-
-         for (unsigned i = 0; i < var_size; i++) {
-            if (processed_locs[var->data.index] &
-                ((uint64_t)1 << (glsl_location + i)))
-               processed = true;
-            else
-               processed_locs[var->data.index] |=
-                  ((uint64_t)1 << (glsl_location + i));
-         }
-      }
-
-      /* Because component packing allows varyings to share the same location
-       * we may have already have processed this location.
-       */
-      if (processed) {
-         unsigned driver_location = assigned_locations[var->data.location];
-         var->data.driver_location = driver_location;
-         *size += type_size(type);
-
-         /* An array may be packed such that is crosses multiple other arrays
-          * or variables, we need to make sure we have allocated the elements
-          * consecutively if the previously proccessed var was shorter than
-          * the current array we are processing.
-          *
-          * NOTE: The code below assumes the var list is ordered in ascending
-          * location order.
-          */
-         assert(last_loc <= var->data.location);
-         last_loc = var->data.location;
-         unsigned last_slot_location = driver_location + var_size;
-         if (last_slot_location > location) {
-            unsigned num_unallocated_slots = last_slot_location - location;
-            unsigned first_unallocated_slot = var_size - num_unallocated_slots;
-            for (unsigned i = first_unallocated_slot; i < num_unallocated_slots; i++) {
-               assigned_locations[var->data.location + i] = location;
-               location++;
-            }
-         }
-         continue;
-      }
-
-      for (unsigned i = 0; i < var_size; i++) {
-         assigned_locations[var->data.location + i] = location + i;
-      }
-
-      var->data.driver_location = location;
-      location += var_size;
-   }
-
-   *size += location;
-}
-
 static int
 st_nir_lookup_parameter_index(const struct gl_program_parameter_list *params,
                               const char *name)
@@ -304,13 +224,21 @@ void
 st_nir_opts(nir_shader *nir, bool scalar)
 {
    bool progress;
+   unsigned lower_flrp =
+      (nir->options->lower_flrp16 ? 16 : 0) |
+      (nir->options->lower_flrp32 ? 32 : 0) |
+      (nir->options->lower_flrp64 ? 64 : 0);
+
    do {
       progress = false;
 
       NIR_PASS_V(nir, nir_lower_vars_to_ssa);
 
+      NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
+      NIR_PASS(progress, nir, nir_opt_dead_write_vars);
+
       if (scalar) {
-         NIR_PASS_V(nir, nir_lower_alu_to_scalar);
+         NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL);
          NIR_PASS_V(nir, nir_lower_phis_to_scalar);
       }
 
@@ -331,6 +259,27 @@ st_nir_opts(nir_shader *nir, bool scalar)
 
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
+
+      if (lower_flrp != 0) {
+         bool lower_flrp_progress = false;
+
+         NIR_PASS(lower_flrp_progress, nir, nir_lower_flrp,
+                  lower_flrp,
+                  false /* always_precise */,
+                  nir->options->lower_ffma);
+         if (lower_flrp_progress) {
+            NIR_PASS(progress, nir,
+                     nir_opt_constant_folding);
+            progress = true;
+         }
+
+         /* Nothing should rematerialize any flrps, so we only need to do this
+          * lowering once.
+          */
+         lower_flrp = 0;
+      }
+
+      NIR_PASS(progress, nir, gl_nir_opt_access);
 
       NIR_PASS(progress, nir, nir_opt_undef);
       NIR_PASS(progress, nir, nir_opt_conditional_discard);
@@ -379,11 +328,9 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
    }
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
-   nir_shader *softfp64 = NULL;
-   if (nir->info.uses_64bit &&
+   if (!st->ctx->SoftFP64 && nir->info.uses_64bit &&
        (options->lower_doubles_options & nir_lower_fp64_full_software) != 0) {
-      softfp64 = glsl_float64_funcs_to_nir(st->ctx, options);
-      ralloc_steal(ralloc_parent(nir), softfp64);
+      st->ctx->SoftFP64 = glsl_float64_funcs_to_nir(st->ctx, options);
    }
 
    nir_variable_mode mask =
@@ -407,7 +354,7 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
    NIR_PASS_V(nir, nir_lower_var_copies);
 
    if (is_scalar) {
-     NIR_PASS_V(nir, nir_lower_alu_to_scalar);
+     NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL);
    }
 
    /* before buffers and vars_to_ssa */
@@ -420,23 +367,14 @@ st_glsl_to_nir(struct st_context *st, struct gl_program *prog,
 
    if (lower_64bit) {
       bool lowered_64bit_ops = false;
-      bool progress = false;
-
-      NIR_PASS_V(nir, nir_opt_algebraic);
-
-      do {
-         progress = false;
-         if (options->lower_int64_options) {
-            NIR_PASS(progress, nir, nir_lower_int64,
-                     options->lower_int64_options);
-         }
-         if (options->lower_doubles_options) {
-            NIR_PASS(progress, nir, nir_lower_doubles,
-                     softfp64, options->lower_doubles_options);
-         }
-         NIR_PASS(progress, nir, nir_opt_algebraic);
-         lowered_64bit_ops |= progress;
-      } while (progress);
+      if (options->lower_doubles_options) {
+         NIR_PASS(lowered_64bit_ops, nir, nir_lower_doubles,
+                  st->ctx->SoftFP64, options->lower_doubles_options);
+      }
+      if (options->lower_int64_options) {
+         NIR_PASS(lowered_64bit_ops, nir, nir_lower_int64,
+                  options->lower_int64_options);
+      }
 
       if (lowered_64bit_ops)
          st_nir_opts(nir, is_scalar);
@@ -521,32 +459,6 @@ st_glsl_to_nir_post_opts(struct st_context *st, struct gl_program *prog,
    }
 }
 
-/* TODO any better helper somewhere to sort a list? */
-
-static void
-insert_sorted(struct exec_list *var_list, nir_variable *new_var)
-{
-   nir_foreach_variable(var, var_list) {
-      if (var->data.location > new_var->data.location) {
-         exec_node_insert_node_before(&var->node, &new_var->node);
-         return;
-      }
-   }
-   exec_list_push_tail(var_list, &new_var->node);
-}
-
-static void
-sort_varyings(struct exec_list *var_list)
-{
-   struct exec_list new_list;
-   exec_list_make_empty(&new_list);
-   nir_foreach_variable_safe(var, var_list) {
-      exec_node_remove(&var->node);
-      insert_sorted(&new_list, var);
-   }
-   exec_list_move_nodes_to(&new_list, var_list);
-}
-
 static void
 set_st_program(struct gl_program *prog,
                struct gl_shader_program *shader_program,
@@ -628,6 +540,28 @@ st_nir_get_mesa_program(struct gl_context *ctx,
 
    set_st_program(prog, shader_program, nir);
    prog->nir = nir;
+}
+
+static void
+st_nir_vectorize_io(nir_shader *producer, nir_shader *consumer)
+{
+   NIR_PASS_V(producer, nir_lower_io_to_vector, nir_var_shader_out);
+   NIR_PASS_V(producer, nir_opt_combine_stores, nir_var_shader_out);
+   NIR_PASS_V(consumer, nir_lower_io_to_vector, nir_var_shader_in);
+
+   if ((producer)->info.stage != MESA_SHADER_TESS_CTRL) {
+      /* Calling lower_io_to_vector creates output variable writes with
+       * write-masks.  We only support these for TCS outputs, so for other
+       * stages, we need to call nir_lower_io_to_temporaries to get rid of
+       * them.  This, in turn, creates temporary variables and extra
+       * copy_deref intrinsics that we need to clean up.
+       */
+      NIR_PASS_V(producer, nir_lower_io_to_temporaries,
+                 nir_shader_get_entrypoint(producer), true, false);
+      NIR_PASS_V(producer, nir_lower_global_vars_to_local);
+      NIR_PASS_V(producer, nir_split_var_copies);
+      NIR_PASS_V(producer, nir_lower_var_copies);
+   }
 }
 
 static void
@@ -820,6 +754,9 @@ st_link_nir(struct gl_context *ctx,
                prev_shader->sh.LinkedTransformFeedback->NumVarying > 0))
             nir_compact_varyings(shader_program->_LinkedShaders[prev]->Program->nir,
                               nir, ctx->API != API_OPENGL_COMPAT);
+
+         if (ctx->Const.ShaderCompilerOptions[i].NirOptions->vectorize_io)
+            st_nir_vectorize_io(prev_shader->nir, nir);
       }
       prev = i;
    }
@@ -860,32 +797,28 @@ st_nir_assign_varying_locations(struct st_context *st, nir_shader *nir)
       /* Re-lower global vars, to deal with any dead VS inputs. */
       NIR_PASS_V(nir, nir_lower_global_vars_to_local);
 
-      sort_varyings(&nir->outputs);
-      st_nir_assign_var_locations(&nir->outputs,
+      nir_assign_io_var_locations(&nir->outputs,
                                   &nir->num_outputs,
                                   nir->info.stage);
       st_nir_fixup_varying_slots(st, &nir->outputs);
    } else if (nir->info.stage == MESA_SHADER_GEOMETRY ||
               nir->info.stage == MESA_SHADER_TESS_CTRL ||
               nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      sort_varyings(&nir->inputs);
-      st_nir_assign_var_locations(&nir->inputs,
+      nir_assign_io_var_locations(&nir->inputs,
                                   &nir->num_inputs,
                                   nir->info.stage);
       st_nir_fixup_varying_slots(st, &nir->inputs);
 
-      sort_varyings(&nir->outputs);
-      st_nir_assign_var_locations(&nir->outputs,
+      nir_assign_io_var_locations(&nir->outputs,
                                   &nir->num_outputs,
                                   nir->info.stage);
       st_nir_fixup_varying_slots(st, &nir->outputs);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      sort_varyings(&nir->inputs);
-      st_nir_assign_var_locations(&nir->inputs,
+      nir_assign_io_var_locations(&nir->inputs,
                                   &nir->num_inputs,
                                   nir->info.stage);
       st_nir_fixup_varying_slots(st, &nir->inputs);
-      st_nir_assign_var_locations(&nir->outputs,
+      nir_assign_io_var_locations(&nir->outputs,
                                   &nir->num_outputs,
                                   nir->info.stage);
    } else if (nir->info.stage == MESA_SHADER_COMPUTE) {

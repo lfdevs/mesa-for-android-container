@@ -78,6 +78,7 @@ struct v3d_screen {
         uint32_t bo_count;
 
         bool has_csd;
+        bool nonmsaa_texture_size_limit;
 
         struct v3d_simulator_file *sim_file;
 };
@@ -88,7 +89,9 @@ v3d_screen(struct pipe_screen *screen)
         return (struct v3d_screen *)screen;
 }
 
-struct pipe_screen *v3d_screen_create(int fd, struct renderonly *ro);
+struct pipe_screen *v3d_screen_create(int fd,
+                                      const struct pipe_screen_config *config,
+                                      struct renderonly *ro);
 
 void
 v3d_fence_init(struct v3d_screen *screen);

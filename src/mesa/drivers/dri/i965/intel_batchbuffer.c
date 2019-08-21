@@ -108,22 +108,9 @@ decode_get_state_size(void *v_brw, uint32_t offset_from_dsba)
 {
    struct brw_context *brw = v_brw;
    struct intel_batchbuffer *batch = &brw->batch;
-   struct hash_entry *entry =
-      _mesa_hash_table_search(batch->state_batch_sizes,
-                              (void *) (uintptr_t) offset_from_dsba);
-   return entry ? (uintptr_t) entry->data : 0;
-}
-
-static bool
-uint_key_compare(const void *a, const void *b)
-{
-   return a == b;
-}
-
-static uint32_t
-uint_key_hash(const void *key)
-{
-   return (uintptr_t) key;
+   unsigned size = (uintptr_t) _mesa_hash_table_u64_search(
+      batch->state_batch_sizes, offset_from_dsba);
+   return size;
 }
 
 static void
@@ -158,7 +145,7 @@ intel_batchbuffer_init(struct brw_context *brw)
 
    if (INTEL_DEBUG & DEBUG_BATCH) {
       batch->state_batch_sizes =
-         _mesa_hash_table_create(NULL, uint_key_hash, uint_key_compare);
+         _mesa_hash_table_u64_create(NULL);
 
       const unsigned decode_flags =
          GEN_BATCH_DECODE_FULL |
@@ -284,7 +271,7 @@ intel_batchbuffer_reset(struct brw_context *brw)
    batch->state_base_address_emitted = false;
 
    if (batch->state_batch_sizes)
-      _mesa_hash_table_clear(batch->state_batch_sizes, NULL);
+      _mesa_hash_table_u64_clear(batch->state_batch_sizes, NULL);
 }
 
 static void
@@ -346,7 +333,7 @@ intel_batchbuffer_free(struct intel_batchbuffer *batch)
    brw_bo_unreference(batch->batch.bo);
    brw_bo_unreference(batch->state.bo);
    if (batch->state_batch_sizes) {
-      _mesa_hash_table_destroy(batch->state_batch_sizes, NULL);
+      _mesa_hash_table_u64_destroy(batch->state_batch_sizes, NULL);
       gen_batch_decode_ctx_finish(&batch->decoder);
    }
 }
@@ -1052,9 +1039,8 @@ brw_state_batch(struct brw_context *brw,
    }
 
    if (unlikely(INTEL_DEBUG & DEBUG_BATCH)) {
-      _mesa_hash_table_insert(batch->state_batch_sizes,
-                              (void *) (uintptr_t) offset,
-                              (void *) (uintptr_t) size);
+      _mesa_hash_table_u64_insert(batch->state_batch_sizes,
+                                  offset, (void *) (uintptr_t) size);
    }
 
    batch->state_used = offset + size;

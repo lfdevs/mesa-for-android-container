@@ -35,8 +35,6 @@
 extern "C" {
 #endif
 
-/* Prior to C11 the following may trigger a typedef redeclaration warning */
-typedef struct amdgpu_device *amdgpu_device_handle;
 struct amdgpu_gpu_info;
 
 struct radeon_info {
@@ -53,6 +51,9 @@ struct radeon_info {
 	uint32_t                    pci_id;
 	enum radeon_family          family;
 	enum chip_class             chip_class;
+	uint32_t                    family_id;
+	uint32_t                    chip_external_rev;
+	bool                        has_graphics; /* false if the chip is compute-only */
 	uint32_t                    num_compute_rings;
 	uint32_t                    num_sdma_rings;
 	uint32_t                    clock_crystal_freq;
@@ -99,6 +100,7 @@ struct radeon_info {
 	uint32_t                    drm_major; /* version */
 	uint32_t                    drm_minor;
 	uint32_t                    drm_patchlevel;
+	bool                        is_amdgpu;
 	bool                        has_userptr;
 	bool                        has_syncobj;
 	bool                        has_syncobj_wait_for_submit;
@@ -110,7 +112,6 @@ struct radeon_info {
 	bool                        si_TA_CS_BC_BASE_ADDR_allowed;
 	bool                        has_bo_metadata;
 	bool                        has_gpu_reset_status_query;
-	bool                        has_gpu_reset_counter_query;
 	bool                        has_eqaa_surface_allocator;
 	bool                        has_format_bc1_through_bc7;
 	bool                        kernel_flushes_tc_l2_after_ib;
@@ -119,6 +120,8 @@ struct radeon_info {
 	bool                        has_sparse_vm_mappings;
 	bool                        has_2d_tiling;
 	bool                        has_read_registers_query;
+	bool                        has_gds_ordered_append;
+	bool                        has_scheduled_fence_dependency;
 
 	/* Shader cores. */
 	uint32_t                    r600_max_quad_pipes; /* wave size / 16 */
@@ -136,6 +139,7 @@ struct radeon_info {
 	bool                        r600_gb_backend_map_valid;
 	uint32_t                    r600_num_banks;
 	uint32_t                    gb_addr_config;
+	uint32_t                    pa_sc_tile_steering_override; /* CLEAR_STATE also sets this */
 	uint32_t                    num_render_backends;
 	uint32_t                    num_tile_pipes; /* pipe count from PIPE_CONFIG */
 	uint32_t                    pipe_interleave_bytes;
@@ -147,7 +151,7 @@ struct radeon_info {
 	uint32_t                    cik_macrotile_mode_array[16];
 };
 
-bool ac_query_gpu_info(int fd, amdgpu_device_handle dev,
+bool ac_query_gpu_info(int fd, void *dev_p,
 		       struct radeon_info *info,
 		       struct amdgpu_gpu_info *amdinfo);
 
@@ -164,6 +168,10 @@ void ac_get_harvested_configs(struct radeon_info *info,
 			      unsigned raster_config,
 			      unsigned *cik_raster_config_1_p,
 			      unsigned *raster_config_se);
+unsigned ac_get_compute_resource_limits(struct radeon_info *info,
+					unsigned waves_per_threadgroup,
+					unsigned max_waves_per_sh,
+					unsigned threadgroups_per_cu);
 
 static inline unsigned ac_get_max_simd_waves(enum radeon_family family)
 {
@@ -183,7 +191,7 @@ static inline unsigned ac_get_max_simd_waves(enum radeon_family family)
 static inline uint32_t
 ac_get_num_physical_sgprs(enum chip_class chip_class)
 {
-	return chip_class >= VI ? 800 : 512;
+	return chip_class >= GFX8 ? 800 : 512;
 }
 
 #ifdef __cplusplus

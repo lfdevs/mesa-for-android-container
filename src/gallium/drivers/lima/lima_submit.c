@@ -106,11 +106,11 @@ bool lima_submit_add_bo(struct lima_submit *submit, struct lima_bo *bo, uint32_t
    }
 
    struct drm_lima_gem_submit_bo *submit_bo =
-      util_dynarray_grow(&submit->gem_bos, sizeof(*submit_bo));
+      util_dynarray_grow(&submit->gem_bos, struct drm_lima_gem_submit_bo, 1);
    submit_bo->handle = bo->handle;
    submit_bo->flags = flags;
 
-   struct lima_bo **jbo = util_dynarray_grow(&submit->bos, sizeof(*jbo));
+   struct lima_bo **jbo = util_dynarray_grow(&submit->bos, struct lima_bo *, 1);
    *jbo = bo;
 
    /* prevent bo from being freed when submit start */
@@ -155,6 +155,8 @@ bool lima_submit_start(struct lima_submit *submit, void *frame, uint32_t size)
 bool lima_submit_wait(struct lima_submit *submit, uint64_t timeout_ns)
 {
    int64_t abs_timeout = os_time_get_absolute_timeout(timeout_ns);
+   if (abs_timeout == OS_TIMEOUT_INFINITE)
+      abs_timeout = INT64_MAX;
 
    return !drmSyncobjWait(submit->screen->fd, &submit->out_sync, 1, abs_timeout, 0, NULL);
 }

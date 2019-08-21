@@ -51,6 +51,9 @@ subdir('util')
 subdir('mapi')
 # TODO: opengl
 subdir('compiler')
+if with_tools.contains('drm-shim')
+  subdir('drm-shim')
+endif
 subdir('imgui')
 if with_platform_wayland
   subdir('egl/wayland/wayland-drm')
@@ -64,8 +67,14 @@ endif
 if with_gallium_vc4 or with_gallium_v3d
   subdir('broadcom')
 endif
+if with_gallium_etnaviv
+  subdir('etnaviv')
+endif
 if with_gallium_freedreno or with_freedreno_vk
   subdir('freedreno')
+endif
+if with_gallium_panfrost or with_gallium_lima
+  subdir('panfrost')
 endif
 if with_dri_i965 or with_intel_vk or with_gallium_iris
   subdir('intel')

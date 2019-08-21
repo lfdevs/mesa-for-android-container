@@ -899,7 +899,7 @@ gen9_emit_preempt_wa(struct brw_context *brw,
                      const struct _mesa_prim *prim)
 {
    bool object_preemption = true;
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+   ASSERTED const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
    /* Only apply these workarounds for gen9 */
    assert(devinfo->gen == 9);

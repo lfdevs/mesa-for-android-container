@@ -49,8 +49,8 @@ libgbm = shared_library(
   include_directories : incs_gbm,
   c_args : [c_vis_args, args_gbm],
   link_args : [ld_args_gc_sections],
-  link_with : [libloader, libmesa_util, libxmlconfig],
-  dependencies : [deps_gbm, dep_dl, dep_thread],
+  link_with : libloader,
+  dependencies : [deps_gbm, dep_dl, dep_thread, idep_mesautil, idep_xmlconfig],
   version : '1.0.0',
   install : true,
 )
@@ -69,9 +69,12 @@ pkg.generate(
 if with_tests and prog_nm.found()
   test(
     'gbm-symbols-check',
-    find_program('gbm-symbols-check'),
-    env : env_test,
-    args : libgbm,
+    symbols_check,
+    args : [
+      '--lib', libgbm,
+      '--symbols-file', files('gbm-symbols.txt'),
+      '--nm', prog_nm.path(),
+    ],
     suite : ['gbm'],
   )
 endif

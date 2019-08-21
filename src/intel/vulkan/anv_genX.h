@@ -44,6 +44,10 @@ void genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer);
 
 void genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer);
 
+void genX(cmd_buffer_emit_hashing_mode)(struct anv_cmd_buffer *cmd_buffer,
+                                        unsigned width, unsigned height,
+                                        unsigned scale);
+
 void genX(flush_pipeline_select_3d)(struct anv_cmd_buffer *cmd_buffer);
 void genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer);
 

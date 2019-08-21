@@ -76,9 +76,13 @@ static gpir_codegen_src gpir_get_alu_input(gpir_node *parent, gpir_node *child)
          gpir_codegen_src_load_w, gpir_codegen_src_unused, gpir_codegen_src_unused },
    };
 
-   assert(child->sched.instr - parent->sched.instr < 3);
+   int diff = child->sched.instr->index - parent->sched.instr->index;
+   assert(diff < 3);
+   assert(diff >= 0);
 
-   return slot_to_src[child->sched.pos][child->sched.instr - parent->sched.instr];
+   int src = slot_to_src[child->sched.pos][diff];
+   assert(src != gpir_codegen_src_unused);
+   return src;
 }
 
 static void gpir_codegen_mul0_slot(gpir_codegen_instr *code, gpir_instr *instr)
@@ -372,6 +376,8 @@ static void gpir_codegen_complex_slot(gpir_codegen_instr *code, gpir_instr *inst
    case gpir_op_mov:
    case gpir_op_rcp_impl:
    case gpir_op_rsqrt_impl:
+   case gpir_op_exp2_impl:
+   case gpir_op_log2_impl:
    {
       gpir_alu_node *alu = gpir_node_to_alu(node);
       code->complex_src = gpir_get_alu_input(node, alu->children[0]);
@@ -391,6 +397,12 @@ static void gpir_codegen_complex_slot(gpir_codegen_instr *code, gpir_instr *inst
    case gpir_op_rsqrt_impl:
       code->complex_op = gpir_codegen_complex_op_rsqrt;
       break;
+   case gpir_op_exp2_impl:
+      code->complex_op = gpir_codegen_complex_op_exp2;
+      break;
+   case gpir_op_log2_impl:
+      code->complex_op = gpir_codegen_complex_op_log2;
+      break;
    default:
       assert(0);
    }
@@ -406,14 +418,19 @@ static void gpir_codegen_pass_slot(gpir_codegen_instr *code, gpir_instr *instr)
       return;
    }
 
+   gpir_alu_node *alu = gpir_node_to_alu(node);
+   code->pass_src = gpir_get_alu_input(node, alu->children[0]);
+
    switch (node->op) {
    case gpir_op_mov:
-   {
-      gpir_alu_node *alu = gpir_node_to_alu(node);
-      code->pass_src = gpir_get_alu_input(node, alu->children[0]);
       code->pass_op = gpir_codegen_pass_op_pass;
       break;
-   }
+   case gpir_op_preexp2:
+      code->pass_op = gpir_codegen_pass_op_preexp2;
+      break;
+   case gpir_op_postlog2:
+      code->pass_op = gpir_codegen_pass_op_postlog2;
+      break;
    default:
       assert(0);
    }
@@ -585,6 +602,7 @@ bool gpir_codegen_prog(gpir_compiler *comp)
 
    comp->prog->shader = code;
    comp->prog->shader_size = num_instr * sizeof(gpir_codegen_instr);
+   comp->num_instr = num_instr;
 
    if (lima_debug & LIMA_DEBUG_GP) {
       gpir_codegen_print_prog(comp);

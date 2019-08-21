@@ -28,6 +28,7 @@
 #include "util/slab.h"
 #include "util/list.h"
 
+#include "virgl_staging_mgr.h"
 #include "virgl_transfer_queue.h"
 
 struct pipe_screen;
@@ -46,14 +47,23 @@ struct virgl_so_target {
    uint32_t handle;
 };
 
-struct virgl_textures_info {
-   struct virgl_sampler_view *views[16];
-   uint32_t enabled_mask;
-};
-
 struct virgl_rasterizer_state {
    struct pipe_rasterizer_state rs;
    uint32_t handle;
+};
+
+struct virgl_shader_binding_state {
+   struct pipe_sampler_view *views[16];
+   uint32_t view_enabled_mask;
+
+   struct pipe_constant_buffer ubos[PIPE_MAX_CONSTANT_BUFFERS];
+   uint32_t ubo_enabled_mask;
+
+   struct pipe_shader_buffer ssbos[PIPE_MAX_SHADER_BUFFERS];
+   uint32_t ssbo_enabled_mask;
+
+   struct pipe_image_view images[PIPE_MAX_SHADER_IMAGES];
+   uint32_t image_enabled_mask;
 };
 
 struct virgl_context {
@@ -61,7 +71,10 @@ struct virgl_context {
    struct virgl_cmd_buf *cbuf;
    unsigned cbuf_initial_cdw;
 
-   struct virgl_textures_info samplers[PIPE_SHADER_TYPES];
+   struct virgl_shader_binding_state shader_bindings[PIPE_SHADER_TYPES];
+   struct pipe_shader_buffer atomic_buffers[PIPE_MAX_HW_ATOMIC_BUFFERS];
+   uint32_t atomic_buffer_enabled_mask;
+
    struct virgl_vertex_elements_state *vertex_elements;
 
    struct pipe_framebuffer_state framebuffer;
@@ -69,7 +82,9 @@ struct virgl_context {
    struct slab_child_pool transfer_pool;
    struct virgl_transfer_queue queue;
    struct u_upload_mgr *uploader;
+   struct virgl_staging_mgr staging;
    bool encoded_transfers;
+   bool supports_staging;
 
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
    unsigned num_vertex_buffers;
@@ -79,16 +94,13 @@ struct virgl_context {
    struct virgl_so_target so_targets[PIPE_MAX_SO_BUFFERS];
    unsigned num_so_targets;
 
-   struct pipe_resource *ubos[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
-
-   struct pipe_resource *ssbos[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
-   struct pipe_resource *images[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_BUFFERS];
    uint32_t num_draws, num_compute;
-
-   struct pipe_resource *atomic_buffers[PIPE_MAX_HW_ATOMIC_BUFFERS];
 
    struct primconvert_context *primconvert;
    uint32_t hw_sub_ctx_id;
+
+   /* The total size of staging resources used in queued copy transfers. */
+   uint64_t queued_staging_res_size;
 };
 
 static inline struct virgl_sampler_view *
@@ -115,15 +127,14 @@ void virgl_init_blit_functions(struct virgl_context *vctx);
 void virgl_init_query_functions(struct virgl_context *vctx);
 void virgl_init_so_functions(struct virgl_context *vctx);
 
-void virgl_transfer_inline_write(struct pipe_context *ctx,
-                                struct pipe_resource *res,
-                                unsigned level,
-                                unsigned usage,
-                                const struct pipe_box *box,
-                                const void *data,
-                                unsigned stride,
-                                unsigned layer_stride);
-
 struct tgsi_token *virgl_tgsi_transform(struct virgl_context *vctx, const struct tgsi_token *tokens_in);
+
+bool
+virgl_can_rebind_resource(struct virgl_context *vctx,
+                          struct pipe_resource *res);
+
+void
+virgl_rebind_resource(struct virgl_context *vctx,
+                      struct pipe_resource *res);
 
 #endif

@@ -31,6 +31,7 @@
 #include "fd5_blitter.h"
 #include "fd5_context.h"
 #include "fd5_format.h"
+#include "fd5_emit.h"
 #include "fd5_resource.h"
 
 #include "ir3/ir3_compiler.h"
@@ -49,7 +50,7 @@ valid_sample_count(unsigned sample_count)
 	}
 }
 
-static boolean
+static bool
 fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
@@ -63,7 +64,7 @@ fd5_screen_is_format_supported(struct pipe_screen *pscreen,
 			!valid_sample_count(sample_count)) {
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -140,4 +141,6 @@ fd5_screen_init(struct pipe_screen *pscreen)
 		screen->perfcntr_groups = a5xx_perfcntr_groups;
 		screen->num_perfcntr_groups = a5xx_num_perfcntr_groups;
 	}
+
+	fd5_emit_init_screen(pscreen);
 }

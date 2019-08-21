@@ -116,9 +116,9 @@ if with_tests and with_gallium_softpipe and with_llvm
       executable(
         t,
         ['@0@.c'.format(t), 'lp_test_main.c'],
-        dependencies : [dep_llvm, dep_dl, dep_thread, dep_clock],
+        dependencies : [dep_llvm, dep_dl, dep_clock, idep_mesautil],
         include_directories : [inc_gallium, inc_gallium_aux, inc_include, inc_src],
-        link_with : [libllvmpipe, libgallium, libmesa_util],
+        link_with : [libllvmpipe, libgallium],
       ),
       suite : ['llvmpipe'],
     )

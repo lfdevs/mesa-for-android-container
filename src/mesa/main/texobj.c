@@ -219,6 +219,42 @@ _mesa_get_current_tex_object(struct gl_context *ctx, GLenum target)
 
 
 /**
+ * Get the texture object for given target and texunit
+ * Proxy targets are accepted only allowProxyTarget is true.
+ * Return NULL if any error (and record the error).
+ */
+struct gl_texture_object *
+_mesa_get_texobj_by_target_and_texunit(struct gl_context *ctx, GLenum target,
+                                       GLuint texunit, bool allowProxyTarget,
+                                       const char* caller)
+{
+   struct gl_texture_unit *texUnit;
+   int targetIndex;
+
+   if (_mesa_is_proxy_texture(target) && allowProxyTarget) {
+      return _mesa_get_current_tex_object(ctx, target);
+   }
+
+   if (texunit >= ctx->Const.MaxCombinedTextureImageUnits) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(texunit=%d)", caller, texunit);
+      return NULL;
+   }
+
+   texUnit = _mesa_get_tex_unit(ctx, texunit);
+
+   targetIndex = _mesa_tex_target_to_index(ctx, target);
+   if (targetIndex < 0 || targetIndex == TEXTURE_BUFFER_INDEX) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(target)", caller);
+      return NULL;
+   }
+   assert(targetIndex < NUM_TEXTURE_TARGETS);
+
+   return texUnit->CurrentTex[targetIndex];
+}
+
+
+/**
  * Allocate and initialize a new texture object.  But don't put it into the
  * texture object hash table.
  *
@@ -715,33 +751,8 @@ _mesa_test_texobj_completeness( const struct gl_context *ctx,
       return;
    }
 
-   /* Compute _MaxLevel (the maximum mipmap level we'll sample from given the
-    * mipmap image sizes and GL_TEXTURE_MAX_LEVEL state).
-    */
-   switch (t->Target) {
-   case GL_TEXTURE_1D:
-   case GL_TEXTURE_1D_ARRAY_EXT:
-      maxLevels = ctx->Const.MaxTextureLevels;
-      break;
-   case GL_TEXTURE_2D:
-   case GL_TEXTURE_2D_ARRAY_EXT:
-      maxLevels = ctx->Const.MaxTextureLevels;
-      break;
-   case GL_TEXTURE_3D:
-      maxLevels = ctx->Const.Max3DTextureLevels;
-      break;
-   case GL_TEXTURE_CUBE_MAP:
-   case GL_TEXTURE_CUBE_MAP_ARRAY:
-      maxLevels = ctx->Const.MaxCubeTextureLevels;
-      break;
-   case GL_TEXTURE_RECTANGLE_NV:
-   case GL_TEXTURE_BUFFER:
-   case GL_TEXTURE_EXTERNAL_OES:
-   case GL_TEXTURE_2D_MULTISAMPLE:
-   case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
-      maxLevels = 1;  /* no mipmapping */
-      break;
-   default:
+   maxLevels = _mesa_max_texture_levels(ctx, t->Target);
+   if (maxLevels == 0) {
       _mesa_problem(ctx, "Bad t->Target in _mesa_test_texobj_completeness");
       return;
    }
@@ -1728,25 +1739,35 @@ _mesa_bind_texture(struct gl_context *ctx, GLenum target,
    bind_texture_object(ctx, ctx->Texture.CurrentUnit, tex_obj);
 }
 
-/**
- * Implement glBindTexture().  Do error checking, look-up or create a new
- * texture object, then bind it in the current texture unit.
- *
- * \param target texture target.
- * \param texName texture name.
- */
-static ALWAYS_INLINE void
-bind_texture(struct gl_context *ctx, GLenum target, GLuint texName,
-             bool no_error)
+struct gl_texture_object *
+_mesa_lookup_or_create_texture(struct gl_context *ctx, GLenum target,
+                               GLuint texName, bool no_error, bool is_ext_dsa,
+                               const char *caller)
 {
    struct gl_texture_object *newTexObj = NULL;
    int targetIndex;
 
+   if (is_ext_dsa) {
+      if (_mesa_is_proxy_texture(target)) {
+         /* EXT_dsa allows proxy targets only when texName is 0 */
+         if (texName != 0) {
+            _mesa_error(ctx, GL_INVALID_OPERATION, "%s(target = %s)", caller,
+                        _mesa_enum_to_string(target));
+            return NULL;
+         }
+         return _mesa_get_current_tex_object(ctx, target);
+      }
+      if (GL_TEXTURE_CUBE_MAP_POSITIVE_X <= target &&
+          target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z) {
+         target = GL_TEXTURE_CUBE_MAP;
+      }
+   }
+
    targetIndex = _mesa_tex_target_to_index(ctx, target);
    if (!no_error && targetIndex < 0) {
-      _mesa_error(ctx, GL_INVALID_ENUM, "glBindTexture(target = %s)",
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(target = %s)", caller,
                   _mesa_enum_to_string(target));
-      return;
+      return NULL;
    }
    assert(targetIndex < NUM_TEXTURE_TARGETS);
 
@@ -1766,26 +1787,25 @@ bind_texture(struct gl_context *ctx, GLenum target, GLuint texName,
             /* The named texture object's target doesn't match the
              * given target
              */
-            _mesa_error( ctx, GL_INVALID_OPERATION,
-                         "glBindTexture(target mismatch)" );
-            return;
+            _mesa_error(ctx, GL_INVALID_OPERATION,
+                        "%s(target mismatch)", caller);
+            return NULL;
          }
          if (newTexObj->Target == 0) {
             finish_texture_init(ctx, target, newTexObj, targetIndex);
          }
-      }
-      else {
+      } else {
          if (!no_error && ctx->API == API_OPENGL_CORE) {
             _mesa_error(ctx, GL_INVALID_OPERATION,
-                        "glBindTexture(non-gen name)");
-            return;
+                        "%s(non-gen name)", caller);
+            return NULL;
          }
 
          /* if this is a new texture id, allocate a texture object now */
          newTexObj = ctx->Driver.NewTextureObject(ctx, texName, target);
          if (!newTexObj) {
-            _mesa_error(ctx, GL_OUT_OF_MEMORY, "glBindTexture");
-            return;
+            _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
+            return NULL;
          }
 
          /* and insert it into hash table */
@@ -1796,14 +1816,36 @@ bind_texture(struct gl_context *ctx, GLenum target, GLuint texName,
    assert(newTexObj->Target == target);
    assert(newTexObj->TargetIndex == targetIndex);
 
-   bind_texture_object(ctx, ctx->Texture.CurrentUnit, newTexObj);
+   return newTexObj;
+}
+
+/**
+ * Implement glBindTexture().  Do error checking, look-up or create a new
+ * texture object, then bind it in the current texture unit.
+ *
+ * \param target texture target.
+ * \param texName texture name.
+ * \param texunit texture unit.
+ */
+static ALWAYS_INLINE void
+bind_texture(struct gl_context *ctx, GLenum target, GLuint texName,
+             GLenum texunit, bool no_error, const char *caller)
+{
+   struct gl_texture_object *newTexObj =
+      _mesa_lookup_or_create_texture(ctx, target, texName, no_error, false,
+                                     "glBindTexture");
+   if (!newTexObj)
+      return;
+
+   bind_texture_object(ctx, texunit, newTexObj);
 }
 
 void GLAPIENTRY
 _mesa_BindTexture_no_error(GLenum target, GLuint texName)
 {
    GET_CURRENT_CONTEXT(ctx);
-   bind_texture(ctx, target, texName, true);
+   bind_texture(ctx, target, texName, ctx->Texture.CurrentUnit, true,
+                "glBindTexture");
 }
 
 
@@ -1816,7 +1858,29 @@ _mesa_BindTexture(GLenum target, GLuint texName)
       _mesa_debug(ctx, "glBindTexture %s %d\n",
                   _mesa_enum_to_string(target), (GLint) texName);
 
-   bind_texture(ctx, target, texName, false);
+   bind_texture(ctx, target, texName, ctx->Texture.CurrentUnit, false,
+                "glBindTexture");
+}
+
+
+void GLAPIENTRY
+_mesa_BindMultiTextureEXT(GLenum texunit, GLenum target, GLuint texture)
+{
+   GET_CURRENT_CONTEXT(ctx);
+
+   unsigned unit = texunit - GL_TEXTURE0;
+
+   if (texunit < GL_TEXTURE0 || unit >= _mesa_max_tex_unit(ctx)) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "glBindMultiTextureEXT(texunit=%s)",
+                  _mesa_enum_to_string(texunit));
+      return;
+   }
+
+   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
+      _mesa_debug(ctx, "glBindMultiTextureEXT %s %d\n",
+                  _mesa_enum_to_string(texunit), (GLint) texture);
+
+   bind_texture(ctx, target, texture, unit, false, "glBindMultiTextureEXT");
 }
 
 

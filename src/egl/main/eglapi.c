@@ -340,22 +340,16 @@ _eglConvertIntsToAttribs(const EGLint *int_list, EGLAttrib **out_attrib_list)
 static EGLint *
 _eglConvertAttribsToInt(const EGLAttrib *attr_list)
 {
+   size_t size = _eglNumAttribs(attr_list);
    EGLint *int_attribs = NULL;
 
    /* Convert attributes from EGLAttrib[] to EGLint[] */
-   if (attr_list) {
-      int i, size = 0;
-
-      while (attr_list[size] != EGL_NONE)
-         size += 2;
-
-      size += 1; /* add space for EGL_NONE */
-
+   if (size) {
       int_attribs = calloc(size, sizeof(int_attribs[0]));
       if (!int_attribs)
          return NULL;
 
-      for (i = 0; i < size; i++)
+      for (size_t i = 0; i < size; i++)
          int_attribs[i] = attr_list[i];
    }
    return int_attribs;
@@ -379,7 +373,7 @@ eglGetDisplay(EGLNativeDisplayType nativeDisplay)
    native_display_ptr = (void*) nativeDisplay;
 
    plat = _eglGetNativePlatform(native_display_ptr);
-   disp = _eglFindDisplay(plat, native_display_ptr);
+   disp = _eglFindDisplay(plat, native_display_ptr, NULL);
    return _eglGetDisplayHandle(disp);
 }
 
@@ -412,6 +406,14 @@ _eglGetPlatformDisplayCommon(EGLenum platform, void *native_display,
       disp = _eglGetSurfacelessDisplay(native_display, attrib_list);
       break;
 #endif
+#ifdef HAVE_ANDROID_PLATFORM
+   case EGL_PLATFORM_ANDROID_KHR:
+      disp = _eglGetAndroidDisplay(native_display, attrib_list);
+      break;
+#endif
+   case EGL_PLATFORM_DEVICE_EXT:
+      disp = _eglGetDeviceDisplay(native_display, attrib_list);
+      break;
    default:
       RETURN_EGL_ERROR(NULL, EGL_BAD_PARAMETER, NULL);
    }
@@ -724,7 +726,11 @@ eglGetConfigs(EGLDisplay dpy, EGLConfig *configs,
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, EGL_FALSE);
 
    _EGL_CHECK_DISPLAY(disp, EGL_FALSE, drv);
-   ret = drv->API.GetConfigs(drv, disp, configs, config_size, num_config);
+
+   if (!num_config)
+      RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, EGL_FALSE);
+
+   ret = _eglGetConfigs(drv, disp, configs, config_size, num_config);
 
    RETURN_EGL_EVAL(disp, ret);
 }
@@ -741,8 +747,12 @@ eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs,
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, EGL_FALSE);
 
    _EGL_CHECK_DISPLAY(disp, EGL_FALSE, drv);
-   ret = drv->API.ChooseConfig(drv, disp, attrib_list, configs,
-                               config_size, num_config);
+
+   if (!num_config)
+      RETURN_EGL_ERROR(disp, EGL_BAD_PARAMETER, EGL_FALSE);
+
+   ret = _eglChooseConfig(drv, disp, attrib_list, configs,
+                          config_size, num_config);
 
    RETURN_EGL_EVAL(disp, ret);
 }
@@ -760,7 +770,8 @@ eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config,
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, EGL_FALSE);
 
    _EGL_CHECK_CONFIG(disp, conf, EGL_FALSE, drv);
-   ret = drv->API.GetConfigAttrib(drv, disp, conf, attribute, value);
+
+   ret = _eglGetConfigAttrib(drv, disp, conf, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
 }
@@ -884,9 +895,36 @@ eglQueryContext(EGLDisplay dpy, EGLContext ctx,
    _EGL_FUNC_START(disp, EGL_OBJECT_CONTEXT_KHR, context, EGL_FALSE);
 
    _EGL_CHECK_CONTEXT(disp, context, EGL_FALSE, drv);
-   ret = drv->API.QueryContext(drv, disp, context, attribute, value);
+
+   ret = _eglQueryContext(drv, disp, context, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
+}
+
+
+/* In EGL specs 1.4 and 1.5, at the end of sections 3.5.1 and 3.5.4, it says
+ * that if native_surface was already used to create a window or pixmap, we
+ * can't create a new one. This is what this function checks for.
+ */
+static bool
+_eglNativeSurfaceAlreadyUsed(_EGLDisplay *disp, void *native_surface)
+{
+   _EGLResource *list;
+
+   list = disp->ResourceLists[_EGL_RESOURCE_SURFACE];
+   while (list) {
+      _EGLSurface *surf = (_EGLSurface *) list;
+
+      list = list->Next;
+
+      if (surf->Type == EGL_PBUFFER_BIT)
+         continue;
+
+      if (surf->NativeSurface == native_surface)
+         return true;
+   }
+
+   return false;
 }
 
 
@@ -903,8 +941,8 @@ _eglCreateWindowSurfaceCommon(_EGLDisplay *disp, EGLConfig config,
    if (native_window == NULL)
       RETURN_EGL_ERROR(disp, EGL_BAD_NATIVE_WINDOW, EGL_NO_SURFACE);
 
-#ifdef HAVE_SURFACELESS_PLATFORM
-   if (disp && disp->Platform == _EGL_PLATFORM_SURFACELESS) {
+   if (disp && (disp->Platform == _EGL_PLATFORM_SURFACELESS ||
+                disp->Platform == _EGL_PLATFORM_DEVICE)) {
       /* From the EGL_MESA_platform_surfaceless spec (v1):
        *
        *    eglCreatePlatformWindowSurface fails when called with a <display>
@@ -919,12 +957,14 @@ _eglCreateWindowSurfaceCommon(_EGLDisplay *disp, EGLConfig config,
        */
       RETURN_EGL_ERROR(disp, EGL_BAD_NATIVE_WINDOW, EGL_NO_SURFACE);
    }
-#endif
 
    _EGL_CHECK_CONFIG(disp, conf, EGL_NO_SURFACE, drv);
 
    if ((conf->SurfaceType & EGL_WINDOW_BIT) == 0)
       RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_NO_SURFACE);
+
+   if (_eglNativeSurfaceAlreadyUsed(disp, native_window))
+      RETURN_EGL_ERROR(disp, EGL_BAD_ALLOC, EGL_NO_SURFACE);
 
    surf = drv->API.CreateWindowSurface(drv, disp, conf, native_window,
                                        attrib_list);
@@ -1027,8 +1067,8 @@ _eglCreatePixmapSurfaceCommon(_EGLDisplay *disp, EGLConfig config,
    _EGLSurface *surf;
    EGLSurface ret;
 
-#if HAVE_SURFACELESS_PLATFORM
-   if (disp && disp->Platform == _EGL_PLATFORM_SURFACELESS) {
+   if (disp && (disp->Platform == _EGL_PLATFORM_SURFACELESS ||
+                disp->Platform == _EGL_PLATFORM_DEVICE)) {
       /* From the EGL_MESA_platform_surfaceless spec (v1):
        *
        *   [Like eglCreatePlatformWindowSurface,] eglCreatePlatformPixmapSurface
@@ -1041,7 +1081,6 @@ _eglCreatePixmapSurfaceCommon(_EGLDisplay *disp, EGLConfig config,
        */
       RETURN_EGL_ERROR(disp, EGL_BAD_NATIVE_PIXMAP, EGL_NO_SURFACE);
    }
-#endif
 
    _EGL_CHECK_CONFIG(disp, conf, EGL_NO_SURFACE, drv);
 
@@ -1050,6 +1089,9 @@ _eglCreatePixmapSurfaceCommon(_EGLDisplay *disp, EGLConfig config,
 
    if (native_pixmap == NULL)
       RETURN_EGL_ERROR(disp, EGL_BAD_NATIVE_PIXMAP, EGL_NO_SURFACE);
+
+   if (_eglNativeSurfaceAlreadyUsed(disp, native_pixmap))
+      RETURN_EGL_ERROR(disp, EGL_BAD_ALLOC, EGL_NO_SURFACE);
 
    surf = drv->API.CreatePixmapSurface(drv, disp, conf, native_pixmap,
                                        attrib_list);
@@ -1158,7 +1200,11 @@ eglQuerySurface(EGLDisplay dpy, EGLSurface surface,
 
    _EGL_FUNC_START(disp, EGL_OBJECT_SURFACE_KHR, surf, EGL_FALSE);
    _EGL_CHECK_SURFACE(disp, surf, EGL_FALSE, drv);
-   ret = drv->API.QuerySurface(drv, disp, surf, attribute, value);
+
+   if (drv->API.QuerySurface)
+      ret = drv->API.QuerySurface(drv, disp, surf, attribute, value);
+   else
+      ret = _eglQuerySurface(drv, disp, surf, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
 }
@@ -1174,7 +1220,8 @@ eglSurfaceAttrib(EGLDisplay dpy, EGLSurface surface,
 
    _EGL_FUNC_START(disp, EGL_OBJECT_SURFACE_KHR, surf, EGL_FALSE);
    _EGL_CHECK_SURFACE(disp, surf, EGL_FALSE, drv);
-   ret = drv->API.SurfaceAttrib(drv, disp, surf, attribute, value);
+
+   ret = _eglSurfaceAttrib(drv, disp, surf, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
 }
@@ -1238,10 +1285,15 @@ eglSwapInterval(EGLDisplay dpy, EGLint interval)
                     surf->Config->MinSwapInterval,
                     surf->Config->MaxSwapInterval);
 
-   if (surf->SwapInterval != interval)
-      ret = drv->API.SwapInterval(drv, disp, surf, interval);
-   else
+   if (surf->SwapInterval != interval) {
+      if (drv->API.SwapInterval)
+         ret = drv->API.SwapInterval(drv, disp, surf, interval);
+      else
+         ret = _eglSwapInterval(drv, disp, surf, interval);
+   }
+   else {
       ret = EGL_TRUE;
+   }
 
    if (ret)
       surf->SwapInterval = interval;
@@ -1631,18 +1683,13 @@ eglCreatePbufferFromClientBuffer(EGLDisplay dpy, EGLenum buftype,
    _EGLDisplay *disp = _eglLockDisplay(dpy);
    _EGLConfig *conf = _eglLookupConfig(config, disp);
    _EGLDriver *drv;
-   _EGLSurface *surf;
-   EGLSurface ret;
 
    _EGL_FUNC_START(disp, EGL_OBJECT_DISPLAY_KHR, NULL, EGL_NO_SURFACE);
 
    _EGL_CHECK_CONFIG(disp, conf, EGL_NO_SURFACE, drv);
 
-   surf = drv->API.CreatePbufferFromClientBuffer(drv, disp, buftype, buffer,
-                                                 conf, attrib_list);
-   ret = (surf) ? _eglLinkSurface(surf) : EGL_NO_SURFACE;
-
-   RETURN_EGL_EVAL(disp, ret);
+   /* OpenVG is not supported */
+   RETURN_EGL_ERROR(disp, EGL_BAD_ALLOC, EGL_NO_SURFACE);
 }
 
 
@@ -2049,7 +2096,8 @@ _eglGetSyncAttribCommon(_EGLDisplay *disp, _EGLSync *s, EGLint attribute, EGLAtt
    assert(disp->Extensions.KHR_reusable_sync ||
           disp->Extensions.KHR_fence_sync ||
           disp->Extensions.ANDROID_native_fence_sync);
-   ret = drv->API.GetSyncAttrib(drv, disp, s, attribute, value);
+
+   ret = _eglGetSyncAttrib(drv, disp, s, attribute, value);
 
    RETURN_EGL_EVAL(disp, ret);
 }

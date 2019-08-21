@@ -81,6 +81,9 @@ struct zwp_linux_dmabuf_v1;
 #include "eglsync.h"
 
 #include "util/u_vector.h"
+#include "util/bitset.h"
+
+#define EGL_DRI2_MAX_FORMATS 8
 
 struct wl_buffer;
 
@@ -118,10 +121,6 @@ struct dri2_egl_display_vtbl {
    EGLBoolean (*swap_buffers_with_damage)(_EGLDriver *drv, _EGLDisplay *disp,
                                           _EGLSurface *surface,
                                           const EGLint *rects, EGLint n_rects);
-
-   EGLBoolean (*set_damage_region)(_EGLDriver *drv, _EGLDisplay *disp,
-                                   _EGLSurface *surface,
-                                   const EGLint *rects, EGLint n_rects);
 
    EGLBoolean (*swap_buffers_region)(_EGLDriver *drv, _EGLDisplay *disp,
                                      _EGLSurface *surf, EGLint numRects,
@@ -182,6 +181,7 @@ struct dri2_egl_display
    const __DRInoErrorExtension    *no_error;
    const __DRI2configQueryExtension *config;
    const __DRI2fenceExtension *fence;
+   const __DRI2bufferDamageExtension *buffer_damage;
    const __DRI2blobExtension *blob;
    const __DRI2rendererQueryExtension *rendererQuery;
    const __DRI2interopExtension *interop;
@@ -232,7 +232,7 @@ struct dri2_egl_display
    struct zwp_linux_dmabuf_v1 *wl_dmabuf;
    struct u_vector          *wl_modifiers;
    bool                      authenticated;
-   unsigned                  formats;
+   BITSET_DECLARE(formats, EGL_DRI2_MAX_FORMATS);
    uint32_t                  capabilities;
    char                     *device_name;
 #endif
@@ -332,10 +332,10 @@ struct dri2_egl_surface
    } *color_buffers, *back;
 #endif
 
-#if defined(HAVE_SURFACELESS_PLATFORM)
-      __DRIimage           *front;
-      unsigned int         visual;
-#endif
+   /* surfaceless and device */
+   __DRIimage           *front;
+   unsigned int         visual;
+
    int out_fence_fd;
    EGLBoolean enable_out_fence;
 };
@@ -374,6 +374,7 @@ _EGL_DRIVER_TYPECAST(dri2_egl_sync, _EGLSync, obj)
 extern const __DRIimageLookupExtension image_lookup_extension;
 extern const __DRIuseInvalidateExtension use_invalidate;
 extern const __DRIbackgroundCallableExtension background_callable_extension;
+extern const __DRIswrastLoaderExtension swrast_pbuffer_loader_extension;
 
 EGLBoolean
 dri2_load_driver(_EGLDisplay *disp);
@@ -493,6 +494,11 @@ dri2_initialize_surfaceless(_EGLDriver *drv, _EGLDisplay *disp)
 }
 #endif
 
+EGLBoolean
+dri2_initialize_device(_EGLDriver *drv, _EGLDisplay *disp);
+static inline void
+dri2_teardown_device(struct dri2_egl_display *dri2_dpy) { /* noop */ }
+
 void
 dri2_flush_drawable_for_swapbuffers(_EGLDisplay *disp, _EGLSurface *draw);
 
@@ -536,7 +542,8 @@ dri2_egl_surface_free_local_buffers(struct dri2_egl_surface *dri2_surf);
 
 EGLBoolean
 dri2_init_surface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
-        _EGLConfig *conf, const EGLint *attrib_list, EGLBoolean enable_out_fence);
+        _EGLConfig *conf, const EGLint *attrib_list,
+        EGLBoolean enable_out_fence, void *native_surface);
 
 void
 dri2_fini_surface(_EGLSurface *surf);
@@ -544,7 +551,8 @@ dri2_fini_surface(_EGLSurface *surf);
 EGLBoolean
 dri2_create_drawable(struct dri2_egl_display *dri2_dpy,
                      const __DRIconfig *config,
-                     struct dri2_egl_surface *dri2_surf);
+                     struct dri2_egl_surface *dri2_surf,
+                     void *loaderPrivate);
 
 static inline uint64_t
 combine_u32_into_u64(uint32_t hi, uint32_t lo)

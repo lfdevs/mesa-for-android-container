@@ -523,6 +523,18 @@ allocate_full_mipmap(const struct st_texture_object *stObj,
       /* not a mipmap minification filter */
       return FALSE;
 
+   /* If the following sequence of GL calls is used:
+    *   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, ...
+    *   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    *
+    * we would needlessly allocate a mipmapped texture, because the initial
+    * MinFilter is GL_NEAREST_MIPMAP_LINEAR. Catch this case and don't
+    * allocate a mipmapped texture by default. This may cause texture
+    * reallocation later, but GL_NEAREST_MIPMAP_LINEAR is pretty rare.
+    */
+   if (stObj->base.Sampler.MinFilter == GL_NEAREST_MIPMAP_LINEAR)
+      return FALSE;
+
    if (stObj->base.Target == GL_TEXTURE_3D)
       /* 3D textures are seldom mipmapped */
       return FALSE;
@@ -2537,7 +2549,7 @@ copy_image_data_to_texture(struct st_context *st,
 {
    /* debug checks */
    {
-      const struct gl_texture_image MAYBE_UNUSED *dstImage =
+      ASSERTED const struct gl_texture_image *dstImage =
          stObj->base.Image[stImage->base.Face][dstLevel];
       assert(dstImage);
       assert(dstImage->Width == stImage->base.Width);

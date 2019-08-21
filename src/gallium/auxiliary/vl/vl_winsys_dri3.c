@@ -438,6 +438,7 @@ dri3_set_drawable(struct vl_dri3_screen *scrn, Drawable drawable)
          ret = false;
       else {
          scrn->is_pixmap = true;
+         scrn->base.set_back_texture_from_output = NULL;
          if (scrn->front_buffer) {
             dri3_free_front_buffer(scrn, scrn->front_buffer);
             scrn->front_buffer = NULL;
@@ -831,8 +832,7 @@ vl_dri3_screen_create(Display *display, int screen)
    if (!scrn->base.pscreen)
       goto release_pipe;
 
-   scrn->pipe = scrn->base.pscreen->context_create(scrn->base.pscreen,
-                                                   NULL, 0);
+   scrn->pipe = pipe_create_multimedia_context(scrn->base.pscreen);
    if (!scrn->pipe)
        goto no_context;
 

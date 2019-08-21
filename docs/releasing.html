@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
-  <title>Releasing process</title>
+  <title>Releasing Process</title>
   <link rel="stylesheet" type="text/css" href="mesa.css">
 </head>
 <body>
 
 <div class="header">
-  <h1>The Mesa 3D Graphics Library</h1>
+  The Mesa 3D Graphics Library
 </div>
 
 <iframe src="contents.html"></iframe>
 <div class="content">
 
 
-<h1>Releasing process</h1>
+<h1>Releasing Process</h1>
 
 <ul>
 <li><a href="#overview">Overview</a>
@@ -31,12 +31,14 @@
 </ul>
 
 
-<h1 id="overview">Overview</h1>
+<h2 id="overview">Overview</h2>
 
 <p>
 This document uses the convention X.Y.Z for the release number with X.Y being
 the stable branch name.
-<br>
+</p>
+
+<p>
 Mesa provides feature and bugfix releases. Former use zero as patch version (Z),
 while the latter have a non-zero one.
 </p>
@@ -52,12 +54,14 @@ For example:
 </pre>
 
 
-<h1 id="schedule">Release schedule</h1>
+<h2 id="schedule">Release schedule</h2>
 
 <p>
 Releases should happen on Wednesdays. Delays can occur although those
 should be kept to a minimum.
-<br>
+</p>
+
+<p>
 See our <a href="release-calendar.html" target="_parent">calendar</a>
 for information about how the release schedule is planned, and the
 date and other details for individual releases.
@@ -85,10 +89,14 @@ approximately 48 hours before the actual release.
 
 <p>
 Note: There is one or two releases overlap when changing branches. For example:
-<br>
+</p>
+
+<p>
 The final release from the 12.0 series Mesa 12.0.5 will be out around the same
 time (or shortly after) 13.0.1 is out.
-<br>
+</p>
+
+<p>
 This also involves that, as a final release may be delayed due to the
 need of additional candidates to solve some blocking regression(s),
 the release manager might have to update
@@ -97,7 +105,7 @@ additional bug fix releases of the current stable branch.
 </p>
 
 
-<h1 id="pickntest">Cherry-picking and testing</h1>
+<h2 id="pickntest">Cherry-picking and testing</h2>
 
 <p>
 Commits nominated for the active branch are picked as based on the
@@ -114,7 +122,7 @@ a casual search for terms such as regression, fix, broken and similar.
 
 <p>
 Maintainer is also responsible for testing in various possible permutations of
-the autoconf and scons build.
+the meson and scons build.
 </p>
 
 <h2>Cherry-picking and build/check testing</h2>
@@ -167,9 +175,8 @@ good contact point.
 
 <p>
 <strong>Note:</strong> If a patch in the current queue needs any additional
-fix(es), then they should be squashed together.
-<br>
-The commit messages and the <code>cherry picked from</code> tags must be preserved.
+fix(es), then they should be squashed together. The commit messages and the
+&quot;<code>cherry picked from</code>&quot;-tags must be preserved.
 </p>
 
 <p>
@@ -223,7 +230,7 @@ system and making some every day's use until the release may be a good
 idea too.
 </p>
 
-<h1 id="stagingbranch">Staging branch</h1>
+<h2 id="stagingbranch">Staging branch</h2>
 
 <p>
 A live branch, which contains the currently merge/rejected patches is available
@@ -243,7 +250,7 @@ Notes:
 </ul>
 
 
-<h1 id="branch">Making a branchpoint</h1>
+<h2 id="branch">Making a branchpoint</h2>
 
 <p>
 A branchpoint is made such that new development can continue in parallel to
@@ -252,9 +259,8 @@ stabilisation and bugfixing.
 
 <p>
 Note: Before doing a branch ensure that basic build and <code>meson test</code>
-testing is done and there are little to-no issues.
-<br>
-Ideally all of those should be tackled already.
+testing is done and there are little to-no issues. Ideally all of those should
+be tackled already.
 </p>
 
 <p>
@@ -293,14 +299,15 @@ Proceed to <a href="#release">release</a> -rc1.
 </p>
 
 
-<h1 id="prerelease">Pre-release announcement</h1>
+<h2 id="prerelease">Pre-release announcement</h2>
 
 <p>
 It comes shortly after outstanding patches in the respective branch are pushed.
 Developers can check, in brief, what's the status of their patches. They,
 alongside very early testers, are strongly encouraged to test the branch and
 report any regressions.
-<br>
+</p>
+<p>
 It is followed by a brief period (normally 24 or 48 hours) before the actual
 release is made.
 </p>
@@ -330,10 +337,8 @@ Barring reported regressions or objections from developers.
 <p>
 Patch does not fit the
 <a href="submittingpatches.html#criteria" target="_parent">criteria</a> and
-is followed by a brief information.
-<br>
-The release maintainer is human so if you believe you've spotted a mistake do
-let them know.
+is followed by a brief information. The release maintainer is human so if you
+believe you've spotted a mistake do let them know.
 </p>
 
 <h2>Format/template</h2>
@@ -445,7 +450,7 @@ Reason: The patch was reverted shortly after it was merged.
 </pre>
 
 
-<h1 id="release">Making a new release</h1>
+<h2 id="release">Making a new release</h2>
 
 <p>
 These are the instructions for making a new Mesa release.
@@ -507,7 +512,7 @@ So we do a quick 'touch test'
     unset LIBGL_DEBUG
     unset LIBGL_ALWAYS_SOFTWARE
     unset GALLIUM_DRIVER
-    export VK_ICD_FILENAMES=`pwd`/src/intel/vulkan/dev_icd.json
+    export VK_ICD_FILENAMES=`pwd`/test/usr/local/share/vulkan/icd.d/intel_icd.x86_64.json
     steam steam://rungameid/570  -vconsole -vulkan
     unset VK_ICD_FILENAMES
 </pre>
@@ -599,7 +604,7 @@ docs/release-calendar.html. Then commit and push:
 </pre>
 
 
-<h1 id="announce">Announce the release</h1>
+<h2 id="announce">Announce the release</h2>
 
 <p>
 Use the generated template during the releasing process.
@@ -611,7 +616,7 @@ series, if that is the case.
 </p>
 
 
-<h1 id="website">Update the mesa3d.org website</h1>
+<h2 id="website">Update the mesa3d.org website</h2>
 
 <p>
 As the hosting was moved to freedesktop, git hooks are deployed to update the
@@ -619,14 +624,12 @@ website. Manually check that it is updated 5-10 minutes after the final <code>gi
 </p>
 
 
-<h1 id="bugzilla">Update Bugzilla</h1>
+<h2 id="bugzilla">Update Bugzilla</h2>
 
 <p>
 Parse through the bugreports as listed in the docs/relnotes/X.Y.Z.html
-document.
-<br>
-If there's outstanding action, close the bug referencing the commit ID which
-addresses the bug and mention the Mesa version that has the fix.
+document. If there's outstanding action, close the bug referencing the commit
+ID which addresses the bug and mention the Mesa version that has the fix.
 </p>
 
 <p>

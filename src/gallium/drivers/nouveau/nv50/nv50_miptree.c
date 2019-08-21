@@ -178,7 +178,7 @@ nv50_miptree_destroy(struct pipe_screen *pscreen, struct pipe_resource *pt)
    FREE(mt);
 }
 
-boolean
+bool
 nv50_miptree_get_handle(struct pipe_screen *pscreen,
                         struct pipe_resource *pt,
                         struct winsys_handle *whandle)

@@ -327,6 +327,9 @@ struct lima_bo *lima_bo_import(struct lima_screen *screen,
 bool lima_bo_wait(struct lima_bo *bo, uint32_t op, uint64_t timeout_ns)
 {
    int64_t abs_timeout = os_time_get_absolute_timeout(timeout_ns);
+   if (abs_timeout == OS_TIMEOUT_INFINITE)
+      abs_timeout = INT64_MAX;
+
    struct drm_lima_gem_wait req = {
       .handle = bo->handle,
       .op = op,

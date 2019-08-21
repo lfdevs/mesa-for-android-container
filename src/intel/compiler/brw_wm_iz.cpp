@@ -145,7 +145,7 @@ void fs_visitor::setup_fs_payload_gen4()
    payload.subspan_coord_reg[0] = reg++;
 
    prog_data->uses_src_depth =
-      (nir->info.inputs_read & (1 << VARYING_SLOT_POS)) != 0;
+      (nir->info.system_values_read & (1ull << SYSTEM_VALUE_FRAG_COORD)) != 0;
    if (wm_iz_table[lookup].sd_present || prog_data->uses_src_depth ||
        kill_stats_promoted_workaround) {
       payload.source_depth_reg[0] = reg;

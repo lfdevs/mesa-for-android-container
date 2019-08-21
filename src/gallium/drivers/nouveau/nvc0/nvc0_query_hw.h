@@ -17,10 +17,10 @@ struct nvc0_hw_query;
 
 struct nvc0_hw_query_funcs {
    void (*destroy_query)(struct nvc0_context *, struct nvc0_hw_query *);
-   boolean (*begin_query)(struct nvc0_context *, struct nvc0_hw_query *);
+   bool (*begin_query)(struct nvc0_context *, struct nvc0_hw_query *);
    void (*end_query)(struct nvc0_context *, struct nvc0_hw_query *);
-   boolean (*get_query_result)(struct nvc0_context *, struct nvc0_hw_query *,
-                               boolean, union pipe_query_result *);
+   bool (*get_query_result)(struct nvc0_context *, struct nvc0_hw_query *,
+                            bool, union pipe_query_result *);
 };
 
 struct nvc0_hw_query {
@@ -32,7 +32,7 @@ struct nvc0_hw_query {
    uint32_t base_offset;
    uint32_t offset; /* base_offset + i * rotate */
    uint8_t state;
-   boolean is64bit;
+   bool is64bit;
    uint8_t rotate;
    struct nouveau_mm_allocation *mm;
    struct nouveau_fence *fence;

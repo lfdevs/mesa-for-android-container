@@ -21,31 +21,20 @@
  * IN THE SOFTWARE.
  */
 
-#include <linux/memfd.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 
+#include "util/anon_file.h"
 #include "anv_private.h"
-
-#ifndef HAVE_MEMFD_CREATE
-static inline int
-memfd_create(const char *name, unsigned int flags)
-{
-   return syscall(SYS_memfd_create, name, flags);
-}
-#endif
 
 uint32_t
 anv_gem_create(struct anv_device *device, uint64_t size)
 {
-   int fd = memfd_create("fake bo", MFD_CLOEXEC);
+   int fd = os_create_anonymous_file(size, "fake bo");
    if (fd == -1)
       return 0;
 
    assert(fd != 0);
-
-   if (ftruncate(fd, size) == -1)
-      return 0;
 
    return fd;
 }

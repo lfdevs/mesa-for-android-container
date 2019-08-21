@@ -606,6 +606,8 @@ nv50_ir::DataType Instruction::inferSrcType() const
    case TGSI_OPCODE_ATOMXOR:
    case TGSI_OPCODE_ATOMUMIN:
    case TGSI_OPCODE_ATOMUMAX:
+   case TGSI_OPCODE_ATOMDEC_WRAP:
+   case TGSI_OPCODE_ATOMINC_WRAP:
    case TGSI_OPCODE_UBFE:
    case TGSI_OPCODE_UMSB:
    case TGSI_OPCODE_UP2H:
@@ -969,6 +971,8 @@ static nv50_ir::operation translateOpcode(uint opcode)
    NV50_IR_OPCODE_CASE(ATOMIMIN, ATOM);
    NV50_IR_OPCODE_CASE(ATOMIMAX, ATOM);
    NV50_IR_OPCODE_CASE(ATOMFADD, ATOM);
+   NV50_IR_OPCODE_CASE(ATOMDEC_WRAP, ATOM);
+   NV50_IR_OPCODE_CASE(ATOMINC_WRAP, ATOM);
 
    NV50_IR_OPCODE_CASE(TEX2, TEX);
    NV50_IR_OPCODE_CASE(TXB2, TXB);
@@ -1012,6 +1016,8 @@ static uint16_t opcodeToSubOp(uint opcode)
    case TGSI_OPCODE_ATOMUMAX: return NV50_IR_SUBOP_ATOM_MAX;
    case TGSI_OPCODE_ATOMIMAX: return NV50_IR_SUBOP_ATOM_MAX;
    case TGSI_OPCODE_ATOMFADD: return NV50_IR_SUBOP_ATOM_ADD;
+   case TGSI_OPCODE_ATOMDEC_WRAP: return NV50_IR_SUBOP_ATOM_DEC;
+   case TGSI_OPCODE_ATOMINC_WRAP: return NV50_IR_SUBOP_ATOM_INC;
    case TGSI_OPCODE_IMUL_HI:
    case TGSI_OPCODE_UMUL_HI:
       return NV50_IR_SUBOP_MUL_HIGH;
@@ -1628,6 +1634,8 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       case TGSI_OPCODE_ATOMUMAX:
       case TGSI_OPCODE_ATOMIMAX:
       case TGSI_OPCODE_ATOMFADD:
+      case TGSI_OPCODE_ATOMDEC_WRAP:
+      case TGSI_OPCODE_ATOMINC_WRAP:
       case TGSI_OPCODE_LOAD:
          info->io.globalAccess |= (insn.getOpcode() == TGSI_OPCODE_LOAD) ?
             0x1 : 0x2;
@@ -3779,6 +3787,8 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
    case TGSI_OPCODE_ATOMUMAX:
    case TGSI_OPCODE_ATOMIMAX:
    case TGSI_OPCODE_ATOMFADD:
+   case TGSI_OPCODE_ATOMDEC_WRAP:
+   case TGSI_OPCODE_ATOMINC_WRAP:
       handleATOM(dst0, dstTy, tgsi::opcodeToSubOp(tgsi.getOpcode()));
       break;
    case TGSI_OPCODE_RESQ:
@@ -4298,7 +4308,7 @@ Converter::BindArgumentsPass::visit(Function *f)
       }
    }
 
-   if (func == prog->main && prog->getType() != Program::TYPE_COMPUTE)
+   if (func == prog->main /* && prog->getType() != Program::TYPE_COMPUTE */)
       return true;
    updatePrototype(&BasicBlock::get(f->cfg.getRoot())->liveSet,
                    &Function::buildLiveSets, &Function::ins);

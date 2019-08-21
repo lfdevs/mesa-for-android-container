@@ -498,7 +498,7 @@ main(int argc, char *argv[])
             fprintf(stdout, "context dump:\n");
             for (int i = 0; i < 60; i++) {
                if (i % 4 == 0)
-                  fprintf(stdout, "\n 0x%08lx: ", bo_entry->addr + 8192 + i * 4);
+                  fprintf(stdout, "\n 0x%08" PRIx64 ": ", bo_entry->addr + 8192 + i * 4);
                fprintf(stdout, "0x%08x ", context[i]);
             }
             fprintf(stdout, "\n");

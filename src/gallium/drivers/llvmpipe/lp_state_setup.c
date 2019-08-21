@@ -727,8 +727,8 @@ generate_setup_variant(struct lp_setup_variant_key *key,
 
    variant->no = setup_no++;
 
-   util_snprintf(func_name, sizeof(func_name), "setup_variant_%u",
-                 variant->no);
+   snprintf(func_name, sizeof(func_name), "setup_variant_%u",
+            variant->no);
 
    variant->gallivm = gallivm = gallivm_create(func_name, lp->context);
    if (!variant->gallivm) {

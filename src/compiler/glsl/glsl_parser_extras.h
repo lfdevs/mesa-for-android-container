@@ -337,7 +337,9 @@ struct _mesa_glsl_parse_state {
 
    bool has_shader_image_load_store() const
    {
-      return ARB_shader_image_load_store_enable || is_version(420, 310);
+      return ARB_shader_image_load_store_enable ||
+             EXT_shader_image_load_store_enable ||
+             is_version(420, 310);
    }
 
    bool has_bindless() const
@@ -605,6 +607,10 @@ struct _mesa_glsl_parse_state {
    /** Have we found a return statement in this function? */
    bool found_return;
 
+   /** Have we found the interlock builtins in this function? */
+   bool found_begin_interlock;
+   bool found_end_interlock;
+
    /** Was there an error during compilation? */
    bool error;
 
@@ -832,6 +838,8 @@ struct _mesa_glsl_parse_state {
    bool EXT_shader_framebuffer_fetch_non_coherent_warn;
    bool EXT_shader_image_load_formatted_enable;
    bool EXT_shader_image_load_formatted_warn;
+   bool EXT_shader_image_load_store_enable;
+   bool EXT_shader_image_load_store_warn;
    bool EXT_shader_implicit_conversions_enable;
    bool EXT_shader_implicit_conversions_warn;
    bool EXT_shader_integer_mix_enable;
@@ -852,6 +860,8 @@ struct _mesa_glsl_parse_state {
    bool EXT_texture_cube_map_array_warn;
    bool EXT_texture_query_lod_enable;
    bool EXT_texture_query_lod_warn;
+   bool EXT_texture_shadow_lod_enable;
+   bool EXT_texture_shadow_lod_warn;
    bool INTEL_conservative_rasterization_enable;
    bool INTEL_conservative_rasterization_warn;
    bool INTEL_shader_atomic_float_minmax_enable;

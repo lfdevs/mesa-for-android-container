@@ -327,8 +327,8 @@ lp_build_gather_avx2(struct gallivm_state *gallivm,
       src_ptr = LLVMBuildGEP(builder, base_ptr, &offsets, 1, "vector-gep");
 
       char intrinsic[64];
-      util_snprintf(intrinsic, sizeof intrinsic, "llvm.masked.gather.v%u%s%u",
-                    length, dst_type.floating ? "f" : "i", src_width);
+      snprintf(intrinsic, sizeof intrinsic, "llvm.masked.gather.v%u%s%u",
+               length, dst_type.floating ? "f" : "i", src_width);
       LLVMValueRef alignment = LLVMConstInt(i32_type, src_width/8, 0);
       LLVMValueRef mask = LLVMConstAllOnes(i1_vec_type);
       LLVMValueRef passthru = LLVMGetUndef(src_vec_type);

@@ -278,7 +278,7 @@ def output_counter_read(gen, set, counter):
         read_eq = counter.get('equation')
 
         c("static " + ret_type)
-        c(counter.read_sym + "(MAYBE_UNUSED struct gen_perf *perf,\n")
+        c(counter.read_sym + "(UNUSED struct gen_perf_config *perf,\n")
         c_indent(len(counter.read_sym) + 1)
         c("const struct gen_perf_query_info *query,\n")
         c("const uint64_t *accumulator)\n")
@@ -313,7 +313,7 @@ def output_counter_max(gen, set, counter):
             ret_type = "uint64_t"
 
         c("static " + ret_type)
-        c(counter.max_sym() + "(struct gen_perf *perf)\n")
+        c(counter.max_sym() + "(struct gen_perf_config *perf)\n")
         c("{")
         c_indent(3)
         output_rpn_equation_code(set, counter, max_eq)
@@ -611,7 +611,7 @@ def main():
     h(textwrap.dedent("""\
         #pragma once
 
-        struct gen_perf;
+        struct gen_perf_config;
 
         """))
 
@@ -700,7 +700,7 @@ def main():
             c("};\n")
 
             c("\nstatic void\n")
-            c("{0}_register_{1}_counter_query(struct gen_perf *perf)\n".format(gen.chipset, set.underscore_name))
+            c("{0}_register_{1}_counter_query(struct gen_perf_config *perf)\n".format(gen.chipset, set.underscore_name))
             c("{\n")
             c_indent(3)
 
@@ -731,10 +731,10 @@ def main():
             c_outdent(3)
             c("}\n")
 
-        h("void gen_oa_register_queries_" + gen.chipset + "(struct gen_perf *perf);\n")
+        h("void gen_oa_register_queries_" + gen.chipset + "(struct gen_perf_config *perf);\n")
 
         c("\nvoid")
-        c("gen_oa_register_queries_" + gen.chipset + "(struct gen_perf *perf)")
+        c("gen_oa_register_queries_" + gen.chipset + "(struct gen_perf_config *perf)")
         c("{")
         c_indent(3)
 

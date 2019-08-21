@@ -27,6 +27,7 @@
 #include "r300_chipset.h"
 #include "radeon/radeon_winsys.h"
 #include "pipe/p_screen.h"
+#include "util/disk_cache.h"
 #include "util/slab.h"
 #include "os/os_thread.h"
 #include <stdio.h>
@@ -43,6 +44,8 @@ struct r300_screen {
 
     /** Combination of DBG_xxx flags */
     unsigned debug;
+
+    struct disk_cache *disk_shader_cache;
 
     struct slab_parent_pool pool_transfers;
 

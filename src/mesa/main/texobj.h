@@ -59,6 +59,12 @@ extern struct gl_texture_object *
 _mesa_get_current_tex_object(struct gl_context *ctx, GLenum target);
 
 extern struct gl_texture_object *
+_mesa_get_texobj_by_target_and_texunit(struct gl_context *ctx, GLenum target,
+                                       GLuint texunit,
+                                       bool allowProxyTargets,
+                                       const char* caller);
+
+extern struct gl_texture_object *
 _mesa_new_texture_object( struct gl_context *ctx, GLuint name, GLenum target );
 
 extern void
@@ -176,6 +182,12 @@ _mesa_delete_nameless_texture(struct gl_context *ctx,
 extern void
 _mesa_bind_texture(struct gl_context *ctx, GLenum target,
                    struct gl_texture_object *tex_obj);
+
+extern struct gl_texture_object *
+_mesa_lookup_or_create_texture(struct gl_context *ctx, GLenum target,
+                               GLuint texName, bool no_error, bool is_ext_dsa,
+                               const char *name);
+
 /*@}*/
 
 /**
@@ -207,6 +219,9 @@ _mesa_BindTexture_no_error(GLenum target, GLuint texture);
 
 extern void GLAPIENTRY
 _mesa_BindTexture( GLenum target, GLuint texture );
+
+void GLAPIENTRY
+_mesa_BindMultiTextureEXT(GLenum texunit, GLenum target, GLuint texture);
 
 void GLAPIENTRY
 _mesa_BindTextureUnit_no_error(GLuint unit, GLuint texture);

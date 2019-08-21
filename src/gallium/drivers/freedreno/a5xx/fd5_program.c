@@ -606,8 +606,7 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	OUT_PKT4(ring, REG_A5XX_SP_FS_OUTPUT_REG(0), 8);
 	for (i = 0; i < 8; i++) {
 		OUT_RING(ring, A5XX_SP_FS_OUTPUT_REG_REGID(color_regid[i]) |
-				COND(emit->key.half_precision,
-					A5XX_SP_FS_OUTPUT_REG_HALF_PRECISION));
+				COND(color_regid[i] & HALF_REG_ID, A5XX_SP_FS_OUTPUT_REG_HALF_PRECISION));
 	}
 
 

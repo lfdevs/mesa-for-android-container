@@ -2956,8 +2956,13 @@ struct gl_shader_program
 
    /**
     * Is the application intending to glGetProgramBinary this program?
+    *
+    * BinaryRetrievableHint is the currently active hint that gets set
+    * during initialization and after linking and BinaryRetrievableHintPending
+    * is the hint set by the user to be active when program is linked next time.
     */
-   GLboolean BinaryRetreivableHint;
+   GLboolean BinaryRetrievableHint;
+   GLboolean BinaryRetrievableHintPending;
 
    /**
     * Indicates whether program can be bound for individual pipeline stages
@@ -3649,7 +3654,7 @@ struct gl_program_constants
 struct gl_constants
 {
    GLuint MaxTextureMbytes;      /**< Max memory per image, in MB */
-   GLuint MaxTextureLevels;      /**< Max mipmap levels. */
+   GLuint MaxTextureSize;        /**< Max 1D/2D texture size, in pixels*/
    GLuint Max3DTextureLevels;    /**< Max mipmap levels for 3D textures */
    GLuint MaxCubeTextureLevels;  /**< Max mipmap levels for cube textures */
    GLuint MaxArrayTextureLayers; /**< Max layers in array textures */
@@ -3907,8 +3912,12 @@ struct gl_constants
     */
    GLboolean GLSLSkipStrictMaxUniformLimitCheck;
 
-   /** Whether gl_FragCoord and gl_FrontFacing are system values. */
+   /**
+    * Whether gl_FragCoord, gl_PointCoord and gl_FrontFacing
+    * are system values.
+    **/
    bool GLSLFragCoordIsSysVal;
+   bool GLSLPointCoordIsSysVal;
    bool GLSLFrontFacingIsSysVal;
 
    /**
@@ -4123,6 +4132,11 @@ struct gl_constants
 
    /** GL_ARB_gl_spirv */
    struct spirv_supported_capabilities SpirVCapabilities;
+
+   /** GL_ARB_spirv_extensions */
+   struct spirv_supported_extensions *SpirVExtensions;
+
+   char *VendorOverride;
 };
 
 
@@ -4215,6 +4229,7 @@ struct gl_extensions
    GLboolean ARB_shadow;
    GLboolean ARB_sparse_buffer;
    GLboolean ARB_stencil_texturing;
+   GLboolean ARB_spirv_extensions;
    GLboolean ARB_sync;
    GLboolean ARB_tessellation_shader;
    GLboolean ARB_texture_border_clamp;
@@ -4276,6 +4291,7 @@ struct gl_extensions
    GLboolean EXT_semaphore;
    GLboolean EXT_semaphore_fd;
    GLboolean EXT_shader_image_load_formatted;
+   GLboolean EXT_shader_image_load_store;
    GLboolean EXT_shader_integer_mix;
    GLboolean EXT_shader_samples_identical;
    GLboolean EXT_sRGB;
@@ -4289,6 +4305,7 @@ struct gl_extensions
    GLboolean EXT_texture_filter_anisotropic;
    GLboolean EXT_texture_integer;
    GLboolean EXT_texture_mirror_clamp;
+   GLboolean EXT_texture_shadow_lod;
    GLboolean EXT_texture_shared_exponent;
    GLboolean EXT_texture_snorm;
    GLboolean EXT_texture_sRGB;
@@ -4965,6 +4982,11 @@ struct gl_context
     */
    struct gl_pipeline_object *_Shader;
 
+   /**
+    * NIR containing the functions that implement software fp64 support.
+    */
+   struct nir_shader *SoftFP64;
+
    struct gl_query_state Query;  /**< occlusion, timer queries */
 
    struct gl_transform_feedback_state TransformFeedback;
@@ -5167,7 +5189,7 @@ struct gl_memory_info
    unsigned nr_device_memory_evictions; /**< # of evictions (monotonic counter) */
 };
 
-#ifdef DEBUG
+#ifndef NDEBUG
 extern int MESA_VERBOSE;
 extern int MESA_DEBUG_FLAGS;
 #else

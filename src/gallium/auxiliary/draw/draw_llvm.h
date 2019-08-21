@@ -128,6 +128,9 @@ struct draw_jit_context
 
    struct draw_jit_texture textures[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    struct draw_jit_sampler samplers[PIPE_MAX_SAMPLERS];
+
+   const uint32_t *vs_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+   int num_vs_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
 };
 
 enum {
@@ -137,6 +140,8 @@ enum {
    DRAW_JIT_CTX_VIEWPORT             = 3,
    DRAW_JIT_CTX_TEXTURES             = 4,
    DRAW_JIT_CTX_SAMPLERS             = 5,
+   DRAW_JIT_CTX_SSBOS                = 6,
+   DRAW_JIT_CTX_NUM_SSBOS            = 7,
    DRAW_JIT_CTX_NUM_FIELDS
 };
 
@@ -157,6 +162,13 @@ enum {
 
 #define draw_jit_context_samplers(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_CTX_SAMPLERS, "samplers")
+
+#define draw_jit_context_vs_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_CTX_SSBOS, "vs_ssbos")
+
+#define draw_jit_context_num_vs_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_CTX_NUM_SSBOS, "num_vs_ssbos")
+
 
 #define draw_jit_header_id(_gallivm, _ptr)              \
    lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_JIT_VERTEX_VERTEX_ID, "id")
@@ -213,6 +225,9 @@ struct draw_gs_jit_context
    int **prim_lengths;
    int *emitted_vertices;
    int *emitted_prims;
+   const uint32_t *ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+   int num_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+
 };
 
 enum {
@@ -229,7 +244,9 @@ enum {
    DRAW_GS_JIT_CTX_PRIM_LENGTHS = 6,
    DRAW_GS_JIT_CTX_EMITTED_VERTICES = 7,
    DRAW_GS_JIT_CTX_EMITTED_PRIMS = 8,
-   DRAW_GS_JIT_CTX_NUM_FIELDS = 9
+   DRAW_GS_JIT_CTX_SSBOS = 9,
+   DRAW_GS_JIT_CTX_NUM_SSBOS = 10,
+   DRAW_GS_JIT_CTX_NUM_FIELDS = 11
 };
 
 #define draw_gs_jit_context_constants(_gallivm, _ptr) \
@@ -259,7 +276,11 @@ enum {
 #define draw_gs_jit_emitted_prims(_gallivm, _ptr) \
    lp_build_struct_get(_gallivm, _ptr, DRAW_GS_JIT_CTX_EMITTED_PRIMS, "emitted_prims")
 
+#define draw_gs_jit_context_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_GS_JIT_CTX_SSBOS, "ssbos")
 
+#define draw_gs_jit_context_num_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, DRAW_GS_JIT_CTX_NUM_SSBOS, "num_ssbos")
 
 typedef boolean
 (*draw_jit_vert_func)(struct draw_jit_context *context,

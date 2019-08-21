@@ -470,11 +470,11 @@ nvc0_hw_metric_destroy_query(struct nvc0_context *nvc0,
    FREE(hmq);
 }
 
-static boolean
+static bool
 nvc0_hw_metric_begin_query(struct nvc0_context *nvc0, struct nvc0_hw_query *hq)
 {
    struct nvc0_hw_metric_query *hmq = nvc0_hw_metric_query(hq);
-   boolean ret = false;
+   bool ret = false;
    unsigned i;
 
    for (i = 0; i < hmq->num_queries; i++) {
@@ -659,9 +659,9 @@ sm35_hw_metric_calc_result(struct nvc0_hw_query *hq, uint64_t res64[8])
    return 0;
 }
 
-static boolean
+static bool
 nvc0_hw_metric_get_query_result(struct nvc0_context *nvc0,
-                                struct nvc0_hw_query *hq, boolean wait,
+                                struct nvc0_hw_query *hq, bool wait,
                                 union pipe_query_result *result)
 {
    struct nvc0_hw_metric_query *hmq = nvc0_hw_metric_query(hq);
@@ -670,7 +670,7 @@ nvc0_hw_metric_get_query_result(struct nvc0_context *nvc0,
    union pipe_query_result results[8] = {};
    uint64_t res64[8] = {};
    uint64_t value = 0;
-   boolean ret = false;
+   bool ret = false;
    unsigned i;
 
    for (i = 0; i < hmq->num_queries; i++) {

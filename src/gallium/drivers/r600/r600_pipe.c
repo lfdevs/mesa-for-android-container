@@ -277,7 +277,9 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
-	case PIPE_CAP_SM3:
+	case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
+	case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
+	case PIPE_CAP_VERTEX_SHADER_SATURATE:
 	case PIPE_CAP_SEAMLESS_CUBE_MAP:
 	case PIPE_CAP_PRIMITIVE_RESTART:
 	case PIPE_CAP_CONDITIONAL_RENDER:
@@ -322,7 +324,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 64 * 1024 * 1024;
 
 	case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
-		return rscreen->b.info.drm_major == 2 && rscreen->b.info.drm_minor >= 43;
+		return rscreen->b.info.drm_minor >= 43;
 
 	case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
 		return !R600_BIG_ENDIAN && rscreen->b.info.has_userptr;
@@ -423,7 +425,7 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 	case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
 	case PIPE_CAP_NATIVE_FENCE_FD:
 	case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
-	case PIPE_CAP_TGSI_FS_FBFETCH:
+	case PIPE_CAP_FBFETCH:
 	case PIPE_CAP_INT64:
 	case PIPE_CAP_INT64_DIVMOD:
 	case PIPE_CAP_TGSI_TEX_TXF_LZ:
@@ -497,7 +499,11 @@ static int r600_get_param(struct pipe_screen* pscreen, enum pipe_cap param)
 		return 2048;
 
 	/* Texturing. */
-	case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
+	case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+		if (family >= CHIP_CEDAR)
+			return 16384;
+		else
+			return 8192;
 	case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
 		if (family >= CHIP_CEDAR)
 			return 15;

@@ -48,7 +48,12 @@ static struct pipe_stream_output_target *virgl_create_so_target(
    t->base.buffer_offset = buffer_offset;
    t->base.buffer_size = buffer_size;
    t->handle = handle;
+
+   res->bind_history |= PIPE_BIND_STREAM_OUTPUT;
+   util_range_add(&res->valid_buffer_range, buffer_offset,
+                  buffer_offset + buffer_size);
    virgl_resource_dirty(res, 0);
+
    virgl_encoder_create_so_target(vctx, handle, res, buffer_offset, buffer_size);
    return &t->base;
 }
@@ -72,10 +77,16 @@ static void virgl_set_so_targets(struct pipe_context *ctx,
    struct virgl_context *vctx = virgl_context(ctx);
    int i;
    for (i = 0; i < num_targets; i++) {
-      if (targets[i])
+      if (targets[i]) {
+         struct virgl_winsys *vws = virgl_screen(vctx->base.screen)->vws;
+         struct virgl_resource *res = virgl_resource(targets[i]->buffer);
+
          pipe_resource_reference(&vctx->so_targets[i].base.buffer, targets[i]->buffer);
-      else
+
+         vws->emit_res(vws, vctx->cbuf, res->hw_res, FALSE);
+      } else {
          pipe_resource_reference(&vctx->so_targets[i].base.buffer, NULL);
+      }
    }
    for (i = num_targets; i < vctx->num_so_targets; i++)
       pipe_resource_reference(&vctx->so_targets[i].base.buffer, NULL);

@@ -16,6 +16,7 @@ COMMON_FILES = \
 	common/gen_disasm.h \
 	common/gen_defines.h \
 	common/gen_gem.h \
+	common/gen_guardband.h \
 	common/gen_l3_config.c \
 	common/gen_l3_config.h \
 	common/gen_urb_config.c \
@@ -244,7 +245,6 @@ VULKAN_FILES := \
 	vulkan/anv_nir.h \
 	vulkan/anv_nir_add_base_work_group_id.c \
 	vulkan/anv_nir_apply_pipeline_layout.c \
-	vulkan/anv_nir_lower_input_attachments.c \
 	vulkan/anv_nir_lower_multiview.c \
 	vulkan/anv_nir_lower_push_constants.c \
 	vulkan/anv_nir_lower_ycbcr_textures.c \

@@ -58,6 +58,7 @@
 #include "util/u_memory.h"
 
 #include "swr_tex_sample.h"
+#include "gen_surf_state_llvm.h"
 #include "gen_swr_context_llvm.h"
 
 using namespace SwrJit;

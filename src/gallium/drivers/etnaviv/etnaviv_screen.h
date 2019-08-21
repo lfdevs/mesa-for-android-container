@@ -38,6 +38,7 @@
 #include "util/slab.h"
 #include "util/u_dynarray.h"
 #include "util/u_helpers.h"
+#include "compiler/nir/nir.h"
 
 struct etna_bo;
 
@@ -50,6 +51,7 @@ enum viv_features_word {
    viv_chipMinorFeatures3 = 4,
    viv_chipMinorFeatures4 = 5,
    viv_chipMinorFeatures5 = 6,
+   viv_chipMinorFeatures6 = 7,
    VIV_FEATURES_WORD_COUNT /* Must be last */
 };
 
@@ -86,6 +88,8 @@ struct etna_screen {
    /* set of resources used by currently-unsubmitted renders */
    mtx_t lock;
    struct set *used_resources;
+
+   nir_shader_compiler_options options;
 };
 
 static inline struct etna_screen *

@@ -125,8 +125,16 @@ struct amdgpu_slab {
 };
 
 bool amdgpu_bo_can_reclaim(struct pb_buffer *_buf);
+struct pb_buffer *amdgpu_bo_create(struct amdgpu_winsys *ws,
+                                   uint64_t size,
+                                   unsigned alignment,
+                                   enum radeon_bo_domain domain,
+                                   enum radeon_bo_flag flags);
 void amdgpu_bo_destroy(struct pb_buffer *_buf);
-void amdgpu_bo_init_functions(struct amdgpu_winsys *ws);
+void *amdgpu_bo_map(struct pb_buffer *buf,
+                    struct radeon_cmdbuf *rcs,
+                    enum pipe_transfer_usage usage);
+void amdgpu_bo_init_functions(struct amdgpu_screen_winsys *ws);
 
 bool amdgpu_bo_can_reclaim_slab(void *priv, struct pb_slab_entry *entry);
 struct pb_slab *amdgpu_bo_slab_alloc(void *priv, unsigned heap,

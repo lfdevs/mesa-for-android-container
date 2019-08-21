@@ -563,15 +563,14 @@ fd2_emit_restore(struct fd_context *ctx, struct fd_ringbuffer *ring)
 			A2XX_PA_CL_VTE_CNTL_VPORT_Z_OFFSET_ENA);
 }
 
-static void
-fd2_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
+void
+fd2_emit_init_screen(struct pipe_screen *pscreen)
 {
-	__OUT_IB(ring, false, target);
+	struct fd_screen *screen = fd_screen(pscreen);
+	screen->emit_ib = fd2_emit_ib;
 }
 
 void
 fd2_emit_init(struct pipe_context *pctx)
 {
-	struct fd_context *ctx = fd_context(pctx);
-	ctx->emit_ib = fd2_emit_ib;
 }

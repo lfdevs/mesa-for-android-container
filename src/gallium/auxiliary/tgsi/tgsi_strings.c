@@ -108,6 +108,7 @@ const char *tgsi_semantic_names[TGSI_SEMANTIC_COUNT] =
    "SUBGROUP_GT_MASK",
    "SUBGROUP_LE_MASK",
    "SUBGROUP_LT_MASK",
+   "CS_USER_DATA_AMD",
 };
 
 const char *tgsi_texture_names[TGSI_TEXTURE_COUNT] =
@@ -159,6 +160,8 @@ const char *tgsi_property_names[TGSI_PROPERTY_COUNT] =
    "CS_FIXED_BLOCK_HEIGHT",
    "CS_FIXED_BLOCK_DEPTH",
    "MUL_ZERO_WINS",
+   "VS_BLIT_SGPRS_AMD",
+   "CS_USER_DATA_COMPONENTS_AMD",
 };
 
 const char *tgsi_return_type_names[TGSI_RETURN_TYPE_COUNT] =

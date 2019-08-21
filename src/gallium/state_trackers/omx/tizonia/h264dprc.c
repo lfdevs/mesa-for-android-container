@@ -407,7 +407,7 @@ static OMX_ERRORTYPE h264d_prc_allocate_resources(void *ap_obj, OMX_U32 a_pid)
       return OMX_ErrorInsufficientResources;
 
    screen = priv->screen->pscreen;
-   priv->pipe = screen->context_create(screen, priv->screen, 0);
+   priv->pipe = pipe_create_multimedia_context(screen);
    if (!priv->pipe)
       return OMX_ErrorInsufficientResources;
 

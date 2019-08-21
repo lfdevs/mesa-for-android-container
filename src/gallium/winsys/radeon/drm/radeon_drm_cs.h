@@ -29,6 +29,11 @@
 
 #include "radeon_drm_bo.h"
 
+struct radeon_ctx {
+   struct radeon_drm_winsys *ws;
+   uint32_t gpu_reset_counter;
+};
+
 struct radeon_bo_item {
     struct radeon_bo    *bo;
     union {

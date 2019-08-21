@@ -198,6 +198,21 @@ void fd5_emit_cs_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 
 void fd5_emit_restore(struct fd_batch *batch, struct fd_ringbuffer *ring);
 
+void fd5_emit_init_screen(struct pipe_screen *pscreen);
 void fd5_emit_init(struct pipe_context *pctx);
+
+static inline void
+fd5_emit_ib(struct fd_ringbuffer *ring, struct fd_ringbuffer *target)
+{
+	/* for debug after a lock up, write a unique counter value
+	 * to scratch6 for each IB, to make it easier to match up
+	 * register dumps to cmdstream.  The combination of IB and
+	 * DRAW (scratch7) is enough to "triangulate" the particular
+	 * draw that caused lockup.
+	 */
+	emit_marker5(ring, 6);
+	__OUT_IB5(ring, target);
+	emit_marker5(ring, 6);
+}
 
 #endif /* FD5_EMIT_H */

@@ -288,7 +288,9 @@ namespace {
       const unsigned stride =
          type_sz(inst->dst.type) * inst->dst.stride <= type_sz(type) ? 1 :
          type_sz(inst->dst.type) * inst->dst.stride / type_sz(type);
-      const fs_reg tmp = horiz_stride(ibld.vgrf(type, stride), stride);
+      fs_reg tmp = ibld.vgrf(type, stride);
+      ibld.UNDEF(tmp);
+      tmp = horiz_stride(tmp, stride);
 
       /* Emit a MOV taking care of all the destination modifiers. */
       fs_inst *mov = ibld.at(block, inst->next).MOV(inst->dst, tmp);
@@ -329,8 +331,9 @@ namespace {
       const unsigned stride = type_sz(inst->dst.type) * inst->dst.stride /
                               type_sz(inst->src[i].type);
       assert(stride > 0);
-      const fs_reg tmp = horiz_stride(ibld.vgrf(inst->src[i].type, stride),
-                                      stride);
+      fs_reg tmp = ibld.vgrf(inst->src[i].type, stride);
+      ibld.UNDEF(tmp);
+      tmp = horiz_stride(tmp, stride);
 
       /* Emit a series of 32-bit integer copies with any source modifiers
        * cleaned up (because their semantics are dependent on the type).
@@ -377,8 +380,9 @@ namespace {
       const unsigned stride = required_dst_byte_stride(inst) /
                               type_sz(inst->dst.type);
       assert(stride > 0);
-      const fs_reg tmp = horiz_stride(ibld.vgrf(inst->dst.type, stride),
-                                      stride);
+      fs_reg tmp = ibld.vgrf(inst->dst.type, stride);
+      ibld.UNDEF(tmp);
+      tmp = horiz_stride(tmp, stride);
 
       /* Emit a series of 32-bit integer copies from the temporary into the
        * original destination.

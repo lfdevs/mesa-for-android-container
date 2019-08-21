@@ -29,10 +29,11 @@
 
 #include "fd2_screen.h"
 #include "fd2_context.h"
+#include "fd2_emit.h"
 #include "fd2_util.h"
 #include "fd2_resource.h"
 
-static boolean
+static bool
 fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
@@ -46,7 +47,7 @@ fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 			(sample_count > 1)) { /* TODO add MSAA */
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -65,7 +66,7 @@ fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 			 (format != PIPE_FORMAT_R8G8B8X8_UNORM))) {
 		DBG("not supported render target: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if ((usage & (PIPE_BIND_SAMPLER_VIEW |
@@ -116,10 +117,15 @@ fd2_screen_init(struct pipe_screen *pscreen)
 	screen->max_rts = 1;
 	pscreen->context_create = fd2_context_create;
 	pscreen->is_format_supported = fd2_screen_is_format_supported;
+
 	screen->setup_slices = fd2_setup_slices;
+	if (fd_mesa_debug & FD_DBG_TTILE)
+		screen->tile_mode = fd2_tile_mode;
 
 	if (fd_mesa_debug & FD_DBG_PERFC) {
 		screen->perfcntr_groups = a2xx_perfcntr_groups;
 		screen->num_perfcntr_groups = a2xx_num_perfcntr_groups;
 	}
+
+	fd2_emit_init_screen(pscreen);
 }

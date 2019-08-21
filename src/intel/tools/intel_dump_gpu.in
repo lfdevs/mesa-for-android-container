@@ -115,9 +115,9 @@ tmp_file=`mktemp`
 echo -e $args > $tmp_file
 
 if [ -z $gdb ]; then
-    LD_PRELOAD="$ld_preload" INTEL_DUMP_GPU_CONFIG=$tmp_file $@
+    LD_PRELOAD="$ld_preload" INTEL_DUMP_GPU_CONFIG=$tmp_file "$@"
 else
-    gdb -iex "set exec-wrapper env LD_PRELOAD=$ld_preload INTEL_DUMP_GPU_CONFIG=$tmp_file" --args $@
+    gdb -iex "set exec-wrapper env LD_PRELOAD=$ld_preload INTEL_DUMP_GPU_CONFIG=$tmp_file" --args "$@"
 fi
 
 ret=$?

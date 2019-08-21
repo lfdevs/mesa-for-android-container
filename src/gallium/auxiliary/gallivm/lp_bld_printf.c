@@ -108,7 +108,7 @@ lp_build_print_value(struct gallivm_state *gallivm,
       type_fmt[5] = '\0';
    } else if (type_kind == LLVMIntegerTypeKind) {
       if (LLVMGetIntTypeWidth(type_ref) == 64) {
-         util_snprintf(type_fmt + 2, 3, "%s", PRId64);
+         snprintf(type_fmt + 2, 3, "%s", PRId64);
       } else if (LLVMGetIntTypeWidth(type_ref) == 8) {
          type_fmt[2] = 'u';
       } else {
@@ -126,12 +126,12 @@ lp_build_print_value(struct gallivm_state *gallivm,
 
    params[1] = lp_build_const_string(gallivm, msg);
    if (length == 1) {
-      util_strncat(format, type_fmt, sizeof(format) - strlen(format) - 1);
+      strncat(format, type_fmt, sizeof(format) - strlen(format) - 1);
       params[2] = value;
    } else {
       for (i = 0; i < length; ++i) {
          LLVMValueRef param;
-         util_strncat(format, type_fmt, sizeof(format) - strlen(format) - 1);
+         strncat(format, type_fmt, sizeof(format) - strlen(format) - 1);
          param = LLVMBuildExtractElement(builder, value, lp_build_const_int32(gallivm, i), "");
          if (type_kind == LLVMIntegerTypeKind &&
              LLVMGetIntTypeWidth(type_ref) < sizeof(int) * 8) {
@@ -146,7 +146,7 @@ lp_build_print_value(struct gallivm_state *gallivm,
       }
    }
 
-   util_strncat(format, "\n", sizeof(format) - strlen(format) - 1);
+   strncat(format, "\n", sizeof(format) - strlen(format) - 1);
 
    params[0] = lp_build_const_string(gallivm, format);
    return lp_build_print_args(gallivm, 2 + length, params);

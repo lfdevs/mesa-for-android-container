@@ -999,7 +999,7 @@
       <value name="FRONT" value="2"/>
       <value name="BACK" value="3"/>
     </field>
-    <field name="Anti-Aliasing Enable" start="127" end="127" type="bool"/>
+    <field name="Antialiasing Enable" start="127" end="127" type="bool"/>
     <field name="Point Width" start="128" end="138" type="u8.3"/>
     <field name="Point Width Source" start="139" end="139" type="uint">
       <value name="Vertex" value="0"/>

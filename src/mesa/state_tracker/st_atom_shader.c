@@ -131,6 +131,11 @@ st_update_fp( struct st_context *st )
          st->ctx->Multisample.MinSampleShadingValue *
          _mesa_geometric_samples(st->ctx->DrawBuffer) > 1;
 
+      key.lower_depth_clamp =
+         st->clamp_frag_depth_in_shader &&
+         (st->ctx->Transform.DepthClampNear ||
+          st->ctx->Transform.DepthClampFar);
+
       if (stfp->ati_fs) {
          key.fog = st->ctx->Fog._PackedEnabledMode;
 
@@ -193,6 +198,16 @@ st_update_vp( struct st_context *st )
                           VARYING_SLOT_BFC0 |
                           VARYING_SLOT_BFC1));
 
+      key.lower_depth_clamp =
+            !st->gp && !st->tep &&
+            st->clamp_frag_depth_in_shader &&
+            (st->ctx->Transform.DepthClampNear ||
+             st->ctx->Transform.DepthClampFar);
+
+      if (key.lower_depth_clamp)
+         key.clip_negative_one_to_one =
+               st->ctx->Transform.ClipDepthMode == GL_NEGATIVE_ONE_TO_ONE;
+
       st->vp_variant = st_get_vp_variant(st, stvp, &key);
    }
 
@@ -220,7 +235,36 @@ st_update_common_program(struct st_context *st, struct gl_program *prog,
    if (st->shader_has_one_variant[prog->info.stage] && stp->variants)
       return stp->variants->driver_shader;
 
-   return st_get_basic_variant(st, pipe_shader, stp)->driver_shader;
+   struct st_basic_variant_key key;
+
+   /* use memset, not an initializer to be sure all memory is zeroed */
+   memset(&key, 0, sizeof(key));
+
+   key.st = st->has_shareable_shaders ? NULL : st;
+
+   if (pipe_shader == PIPE_SHADER_GEOMETRY ||
+       pipe_shader == PIPE_SHADER_TESS_EVAL) {
+      key.clamp_color = st->clamp_vert_color_in_shader &&
+                        st->ctx->Light._ClampVertexColor &&
+                        (stp->Base.info.outputs_written &
+                         (VARYING_SLOT_COL0 |
+                          VARYING_SLOT_COL1 |
+                          VARYING_SLOT_BFC0 |
+                          VARYING_SLOT_BFC1));
+
+      key.lower_depth_clamp =
+            (pipe_shader == PIPE_SHADER_GEOMETRY || !st->gp) &&
+            st->clamp_frag_depth_in_shader &&
+            (st->ctx->Transform.DepthClampNear ||
+             st->ctx->Transform.DepthClampFar);
+
+      if (key.lower_depth_clamp)
+         key.clip_negative_one_to_one =
+               st->ctx->Transform.ClipDepthMode == GL_NEGATIVE_ONE_TO_ONE;
+
+   }
+
+   return st_get_basic_variant(st, pipe_shader, stp, &key)->driver_shader;
 }
 
 

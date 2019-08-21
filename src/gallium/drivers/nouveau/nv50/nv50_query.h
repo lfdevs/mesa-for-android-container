@@ -10,10 +10,10 @@ struct nv50_query;
 
 struct nv50_query_funcs {
    void (*destroy_query)(struct nv50_context *, struct nv50_query *);
-   boolean (*begin_query)(struct nv50_context *, struct nv50_query *);
+   bool (*begin_query)(struct nv50_context *, struct nv50_query *);
    void (*end_query)(struct nv50_context *, struct nv50_query *);
-   boolean (*get_query_result)(struct nv50_context *, struct nv50_query *,
-                               boolean, union pipe_query_result *);
+   bool (*get_query_result)(struct nv50_context *, struct nv50_query *,
+                            bool, union pipe_query_result *);
 };
 
 struct nv50_query {

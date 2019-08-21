@@ -458,6 +458,7 @@ INLINE int32_t CompleteDrawContextInl(SWR_CONTEXT* pContext, uint32_t workerId, 
     {
         ExecuteCallbacks(pContext, workerId, pDC);
 
+
         // Cleanup memory allocations
         pDC->pArena->Reset(true);
         if (!pDC->isCompute)
@@ -609,7 +610,7 @@ bool WorkOnFifoBE(SWR_CONTEXT* pContext,
             {
                 BE_WORK* pWork;
 
-                RDTSC_BEGIN(WorkerFoundWork, pDC->drawId);
+                RDTSC_BEGIN(pContext->pBucketMgr, WorkerFoundWork, pDC->drawId);
 
                 uint32_t numWorkItems = tile->getNumQueued();
                 SWR_ASSERT(numWorkItems);
@@ -630,7 +631,7 @@ bool WorkOnFifoBE(SWR_CONTEXT* pContext,
                     pWork->pfnWork(pDC, workerId, tileID, &pWork->desc);
                     tile->dequeue();
                 }
-                RDTSC_END(WorkerFoundWork, numWorkItems);
+                RDTSC_END(pContext->pBucketMgr, WorkerFoundWork, numWorkItems);
 
                 _ReadWriteBarrier();
 
@@ -868,7 +869,7 @@ DWORD workerThreadMain(LPVOID pData)
         SetCurrentThreadName(threadName);
     }
 
-    RDTSC_INIT(threadId);
+    RDTSC_INIT(pContext->pBucketMgr, threadId);
 
     // Only need offset numa index from base for correct masking
     uint32_t numaNode = pThreadData->numaId - pContext->threadInfo.BASE_NUMA_NODE;
@@ -936,10 +937,10 @@ DWORD workerThreadMain(LPVOID pData)
 
         if (IsBEThread)
         {
-            RDTSC_BEGIN(WorkerWorkOnFifoBE, 0);
+            RDTSC_BEGIN(pContext->pBucketMgr, WorkerWorkOnFifoBE, 0);
             bShutdown |=
                 WorkOnFifoBE(pContext, workerId, curDrawBE, lockedTiles, numaNode, numaMask);
-            RDTSC_END(WorkerWorkOnFifoBE, 0);
+            RDTSC_END(pContext->pBucketMgr, WorkerWorkOnFifoBE, 0);
 
             WorkOnCompute(pContext, workerId, curDrawBE);
         }
@@ -1193,26 +1194,31 @@ void CreateThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
 
     // Allocate worker private data
     pPool->pWorkerPrivateDataArray = nullptr;
-    if (pContext->workerPrivateState.perWorkerPrivateStateSize)
+    if (pContext->workerPrivateState.perWorkerPrivateStateSize == 0)
     {
-        size_t perWorkerSize =
-            AlignUpPow2(pContext->workerPrivateState.perWorkerPrivateStateSize, 64);
-        size_t totalSize = perWorkerSize * pPool->numThreads;
-        if (totalSize)
-        {
-            pPool->pWorkerPrivateDataArray = AlignedMalloc(totalSize, 64);
-            SWR_ASSERT(pPool->pWorkerPrivateDataArray);
+        pContext->workerPrivateState.perWorkerPrivateStateSize = sizeof(SWR_WORKER_DATA);
+        pContext->workerPrivateState.pfnInitWorkerData = nullptr;
+        pContext->workerPrivateState.pfnFinishWorkerData = nullptr;
+    }
+ 
+    // initialize contents of SWR_WORKER_DATA
+    size_t perWorkerSize =
+        AlignUpPow2(pContext->workerPrivateState.perWorkerPrivateStateSize, 64);
+    size_t totalSize = perWorkerSize * pPool->numThreads;
+    if (totalSize)
+    {
+        pPool->pWorkerPrivateDataArray = AlignedMalloc(totalSize, 64);
+        SWR_ASSERT(pPool->pWorkerPrivateDataArray);
 
-            void* pWorkerData = pPool->pWorkerPrivateDataArray;
-            for (uint32_t i = 0; i < pPool->numThreads; ++i)
+        void* pWorkerData = pPool->pWorkerPrivateDataArray;
+        for (uint32_t i = 0; i < pPool->numThreads; ++i)
+        {
+            pPool->pThreadData[i].pWorkerPrivateData = pWorkerData;
+            if (pContext->workerPrivateState.pfnInitWorkerData)
             {
-                pPool->pThreadData[i].pWorkerPrivateData = pWorkerData;
-                if (pContext->workerPrivateState.pfnInitWorkerData)
-                {
-                    pContext->workerPrivateState.pfnInitWorkerData(pWorkerData, i);
-                }
-                pWorkerData = PtrAdd(pWorkerData, perWorkerSize);
+                pContext->workerPrivateState.pfnInitWorkerData(pContext, pWorkerData, i);
             }
+            pWorkerData = PtrAdd(pWorkerData, perWorkerSize);
         }
     }
 
@@ -1390,7 +1396,7 @@ void DestroyThreadPool(SWR_CONTEXT* pContext, THREAD_POOL* pPool)
         if (pContext->workerPrivateState.pfnFinishWorkerData)
         {
             pContext->workerPrivateState.pfnFinishWorkerData(
-                pPool->pThreadData[t].pWorkerPrivateData, t);
+                pContext, pPool->pThreadData[t].pWorkerPrivateData, t);
         }
     }
 

@@ -53,5 +53,5 @@ ld_preload="@install_libexecdir@/libintel_sanitize_gpu.so${LD_PRELOAD:+:$LD_PREL
 if [ -z $gdb ]; then
     LD_PRELOAD=$ld_preload exec "$@"
 else
-    gdb -iex "set exec-wrapper env LD_PRELOAD=$ld_preload" --args $@
+    gdb -iex "set exec-wrapper env LD_PRELOAD=$ld_preload" --args "$@"
 fi

@@ -762,7 +762,7 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 	case VK_FORMAT_A2B10G10R10_SSCALED_PACK32:
 	case VK_FORMAT_A2R10G10B10_SINT_PACK32:
 	case VK_FORMAT_A2B10G10R10_SINT_PACK32:
-		if (physical_device->rad_info.chip_class <= VI &&
+		if (physical_device->rad_info.chip_class <= GFX8 &&
 		    physical_device->rad_info.family != CHIP_STONEY) {
 			buffer &= ~(VK_FORMAT_FEATURE_UNIFORM_TEXEL_BUFFER_BIT |
 			            VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT);
@@ -773,6 +773,10 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
 	default:
 		break;
 	}
+
+	/* addrlib does not support linear compressed textures. */
+	if (vk_format_is_compressed(format))
+		linear = 0;
 
 	out_properties->linearTilingFeatures = linear;
 	out_properties->optimalTilingFeatures = tiled;
@@ -1110,6 +1114,7 @@ static VkResult radv_get_image_format_properties(struct radv_physical_device *ph
 	uint32_t maxArraySize;
 	VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT;
 	const struct vk_format_description *desc = vk_format_description(info->format);
+	enum chip_class chip_class = physical_device->rad_info.chip_class;
 
 	radv_physical_device_get_format_properties(physical_device, info->format,
 						   &format_props);
@@ -1135,20 +1140,26 @@ static VkResult radv_get_image_format_properties(struct radv_physical_device *ph
 		maxExtent.height = 1;
 		maxExtent.depth = 1;
 		maxMipLevels = 15; /* log2(maxWidth) + 1 */
-		maxArraySize = 2048;
+		maxArraySize = chip_class >= GFX10 ? 8192 : 2048;
 		break;
 	case VK_IMAGE_TYPE_2D:
 		maxExtent.width = 16384;
 		maxExtent.height = 16384;
 		maxExtent.depth = 1;
 		maxMipLevels = 15; /* log2(maxWidth) + 1 */
-		maxArraySize = 2048;
+		maxArraySize = chip_class >= GFX10 ? 8192 : 2048;
 		break;
 	case VK_IMAGE_TYPE_3D:
-		maxExtent.width = 2048;
-		maxExtent.height = 2048;
-		maxExtent.depth = 2048;
-		maxMipLevels = 12; /* log2(maxWidth) + 1 */
+		if (chip_class >= GFX10) {
+			maxExtent.width = 8192;
+			maxExtent.height = 8192;
+			maxExtent.depth = 8192;
+		} else {
+			maxExtent.width = 2048;
+			maxExtent.height = 2048;
+			maxExtent.depth = 2048;
+		}
+		maxMipLevels = util_logbase2(maxExtent.width) + 1;
 		maxArraySize = 1;
 		break;
 	}

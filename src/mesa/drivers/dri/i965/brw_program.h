@@ -64,17 +64,26 @@ struct nir_shader *brw_create_nir(struct brw_context *brw,
                                   gl_shader_stage stage,
                                   bool is_scalar);
 
+void brw_nir_lower_resources(nir_shader *nir,
+                             struct gl_shader_program *shader_prog,
+                             struct gl_program *prog,
+                             const struct gen_device_info *devinfo);
+
 void brw_shader_gather_info(nir_shader *nir, struct gl_program *prog);
 
 void brw_setup_tex_for_precompile(const struct gen_device_info *devinfo,
                                   struct brw_sampler_prog_key_data *tex,
-                                  struct gl_program *prog);
+                                  const struct gl_program *prog);
 
-void brw_populate_sampler_prog_key_data(struct gl_context *ctx,
-				        const struct gl_program *prog,
-				        struct brw_sampler_prog_key_data *key);
+void brw_populate_base_prog_key(struct gl_context *ctx,
+                                const struct brw_program *prog,
+                                struct brw_base_prog_key *key);
+void brw_populate_default_base_prog_key(const struct gen_device_info *devinfo,
+                                        const struct brw_program *prog,
+                                        struct brw_base_prog_key *key);
 void brw_debug_recompile(struct brw_context *brw, gl_shader_stage stage,
-                         unsigned api_id, unsigned prog_string_id, void *key);
+                         unsigned api_id, struct brw_base_prog_key *key);
+
 uint32_t
 brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
                                         const struct gl_program *prog,
@@ -82,11 +91,7 @@ brw_assign_common_binding_table_offsets(const struct gen_device_info *devinfo,
                                         uint32_t next_binding_table_offset);
 
 void
-brw_prog_key_set_id(union brw_any_prog_key *key, gl_shader_stage stage,
-                    unsigned id);
-
-void
-brw_populate_default_key(const struct gen_device_info *devinfo,
+brw_populate_default_key(const struct brw_compiler *compiler,
                          union brw_any_prog_key *prog_key,
                          struct gl_shader_program *sh_prog,
                          struct gl_program *prog);
@@ -113,14 +118,14 @@ GLboolean brw_link_shader(struct gl_context *ctx, struct gl_shader_program *prog
 void brw_upload_tcs_prog(struct brw_context *brw);
 void brw_tcs_populate_key(struct brw_context *brw,
                           struct brw_tcs_prog_key *key);
-void brw_tcs_populate_default_key(const struct gen_device_info *devinfo,
+void brw_tcs_populate_default_key(const struct brw_compiler *compiler,
                                   struct brw_tcs_prog_key *key,
                                   struct gl_shader_program *sh_prog,
                                   struct gl_program *prog);
 void brw_upload_tes_prog(struct brw_context *brw);
 void brw_tes_populate_key(struct brw_context *brw,
                           struct brw_tes_prog_key *key);
-void brw_tes_populate_default_key(const struct gen_device_info *devinfo,
+void brw_tes_populate_default_key(const struct brw_compiler *compiler,
                                   struct brw_tes_prog_key *key,
                                   struct gl_shader_program *sh_prog,
                                   struct gl_program *prog);

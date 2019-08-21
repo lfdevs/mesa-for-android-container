@@ -75,7 +75,7 @@ void validation_test::SetUp()
    struct gen_info info = GetParam();
    int devid = gen_device_name_to_pci_device_id(info.name);
 
-   gen_get_device_info(devid, &devinfo);
+   gen_get_device_info_from_pci_id(devid, &devinfo);
 
    brw_init_codegen(&devinfo, p, p);
 }

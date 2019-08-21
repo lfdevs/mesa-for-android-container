@@ -159,7 +159,7 @@ bc_flush(struct fd_batch_cache *cache, struct fd_context *ctx, bool deferred)
 		fd_context_unlock(ctx);
 
 		for (unsigned i = 0; i < n; i++) {
-			fd_batch_flush(batches[i], false, false);
+			fd_batch_flush(batches[i], false);
 		}
 	}
 
@@ -307,7 +307,7 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool non
 		 */
 		mtx_unlock(&ctx->screen->lock);
 		DBG("%p: too many batches!  flush forced!", flush_batch);
-		fd_batch_flush(flush_batch, true, false);
+		fd_batch_flush(flush_batch, true);
 		mtx_lock(&ctx->screen->lock);
 
 		/* While the resources get cleaned up automatically, the flush_batch

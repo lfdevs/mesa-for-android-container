@@ -103,7 +103,7 @@ struct swr_poly_stipple {
  */
 struct swr_derived_state {
    SWR_RASTSTATE rastState;
-   SWR_VIEWPORT vp;
+   SWR_VIEWPORT vp[KNOB_NUM_VIEWPORTS_SCISSORS];
    SWR_VIEWPORT_MATRICES vpm;
 };
 

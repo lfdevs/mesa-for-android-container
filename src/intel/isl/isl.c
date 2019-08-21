@@ -1193,7 +1193,7 @@ isl_calc_phys_total_extent_el_gen9_1d(
       uint32_t *array_pitch_el_rows,
       struct isl_extent2d *phys_total_el)
 {
-   MAYBE_UNUSED const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
+   const struct isl_format_layout *fmtl = isl_format_get_layout(info->format);
 
    assert(phys_level0_sa->height == 1);
    assert(phys_level0_sa->depth == 1);
@@ -1264,6 +1264,8 @@ isl_calc_phys_total_extent_el(const struct isl_device *dev,
                                             total_extent_el);
       return;
    }
+
+   unreachable("invalid value for dim_layout");
 }
 
 static uint32_t
@@ -1599,6 +1601,31 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
 {
    assert(ISL_DEV_GEN(dev) >= 5 && ISL_DEV_USE_SEPARATE_STENCIL(dev));
 
+   /* HiZ only works with Y-tiled depth buffers */
+   if (!isl_tiling_is_any_y(surf->tiling))
+      return false;
+
+   /* On SNB+, compressed depth buffers cannot be interleaved with stencil. */
+   switch (surf->format) {
+   case ISL_FORMAT_R24_UNORM_X8_TYPELESS:
+      if (isl_surf_usage_is_depth_and_stencil(surf->usage)) {
+         assert(ISL_DEV_GEN(dev) == 5);
+         unreachable("This should work, but is untested");
+      }
+      /* Fall through */
+   case ISL_FORMAT_R16_UNORM:
+   case ISL_FORMAT_R32_FLOAT:
+      break;
+   case ISL_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+      if (ISL_DEV_GEN(dev) == 5) {
+         assert(isl_surf_usage_is_depth_and_stencil(surf->usage));
+         unreachable("This should work, but is untested");
+      }
+      /* Fall through */
+   default:
+      return false;
+   }
+
    /* Multisampled depth is always interleaved */
    assert(surf->msaa_layout == ISL_MSAA_LAYOUT_NONE ||
           surf->msaa_layout == ISL_MSAA_LAYOUT_INTERLEAVED);
@@ -1678,15 +1705,29 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
                       struct isl_surf *mcs_surf)
 {
-   assert(ISL_DEV_GEN(dev) >= 7);
-
-   /* It must be multisampled with an array layout */
-   assert(surf->samples > 1 && surf->msaa_layout == ISL_MSAA_LAYOUT_ARRAY);
-
    /* The following are true of all multisampled surfaces */
+   assert(surf->samples > 1);
    assert(surf->dim == ISL_SURF_DIM_2D);
    assert(surf->levels == 1);
    assert(surf->logical_level0_px.depth == 1);
+
+   /* It must be multisampled with an array layout */
+   if (surf->msaa_layout != ISL_MSAA_LAYOUT_ARRAY)
+      return false;
+
+   /* From the Ivy Bridge PRM, Vol4 Part1 p77 ("MCS Enable"):
+    *
+    *   This field must be set to 0 for all SINT MSRTs when all RT channels
+    *   are not written
+    *
+    * In practice this means that we have to disable MCS for all signed
+    * integer MSAA buffers.  The alternative, to disable MCS only when one
+    * of the render target channels is disabled, is impractical because it
+    * would require converting between CMS and UMS MSAA layouts on the fly,
+    * which is expensive.
+    */
+   if (ISL_DEV_GEN(dev) == 7 && isl_format_has_sint_channel(surf->format))
+      return false;
 
    /* The "Auxiliary Surface Pitch" field in RENDER_SURFACE_STATE is only 9
     * bits which means the maximum pitch of a compression surface is 512
@@ -1728,7 +1769,10 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
                       uint32_t row_pitch_B)
 {
    assert(surf->samples == 1 && surf->msaa_layout == ISL_MSAA_LAYOUT_NONE);
-   assert(ISL_DEV_GEN(dev) >= 7);
+
+   /* CCS support does not exist prior to Gen7 */
+   if (ISL_DEV_GEN(dev) <= 6)
+      return false;
 
    if (surf->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)
       return false;
@@ -1762,6 +1806,19 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
 
    /* TODO: More conditions where it can fail. */
 
+   /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
+    * Target(s)", beneath the "Fast Color Clear" bullet (p326):
+    *
+    *     - Support is limited to tiled render targets.
+    *     - MCS buffer for non-MSRT is supported only for RT formats 32bpp,
+    *       64bpp, and 128bpp.
+    *
+    * From the Skylake documentation, it is made clear that X-tiling is no
+    * longer supported:
+    *
+    *     - MCS and Lossless compression is supported for
+    *     TiledY/TileYs/TileYf non-MSRTs only.
+    */
    enum isl_format ccs_format;
    if (ISL_DEV_GEN(dev) >= 9) {
       if (!isl_tiling_is_any_y(surf->tiling))

@@ -23,4 +23,5 @@ libvirglvtest = static_library(
   ['virgl_vtest_socket.c', 'virgl_vtest_winsys.c'],
   c_args : c_vis_args,
   include_directories : [inc_common, inc_gallium_drivers],
+  dependencies : dep_libvirglcommon,
 )

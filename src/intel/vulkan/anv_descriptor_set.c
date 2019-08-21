@@ -139,6 +139,16 @@ anv_descriptor_data_size(enum anv_descriptor_data data)
    return size;
 }
 
+static bool
+anv_needs_descriptor_buffer(VkDescriptorType desc_type,
+                            enum anv_descriptor_data desc_data)
+{
+   if (desc_type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT ||
+       anv_descriptor_data_size(desc_data) > 0)
+      return true;
+   return false;
+}
+
 /** Returns the size in bytes of each descriptor with the given layout */
 unsigned
 anv_descriptor_size(const struct anv_descriptor_set_binding_layout *layout)
@@ -239,6 +249,7 @@ void anv_GetDescriptorSetLayoutSupport(
       &device->instance->physicalDevice;
 
    uint32_t surface_count[MESA_SHADER_STAGES] = { 0, };
+   bool needs_descriptor_buffer = false;
 
    for (uint32_t b = 0; b < pCreateInfo->bindingCount; b++) {
       const VkDescriptorSetLayoutBinding *binding = &pCreateInfo->pBindings[b];
@@ -246,9 +257,16 @@ void anv_GetDescriptorSetLayoutSupport(
       enum anv_descriptor_data desc_data =
          anv_descriptor_data_for_type(pdevice, binding->descriptorType);
 
+      if (anv_needs_descriptor_buffer(binding->descriptorType, desc_data))
+         needs_descriptor_buffer = true;
+
       switch (binding->descriptorType) {
       case VK_DESCRIPTOR_TYPE_SAMPLER:
          /* There is no real limit on samplers */
+         break;
+
+      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+         /* Inline uniforms don't use a binding */
          break;
 
       case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
@@ -276,6 +294,11 @@ void anv_GetDescriptorSetLayoutSupport(
             surface_count[s] += binding->descriptorCount;
          break;
       }
+   }
+
+   for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
+      if (needs_descriptor_buffer)
+         surface_count[s] += 1;
    }
 
    bool supported = true;

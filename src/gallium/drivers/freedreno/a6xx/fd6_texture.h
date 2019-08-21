@@ -142,6 +142,7 @@ struct fd6_texture_key {
 	struct {
 		uint16_t seqno;
 	} samp[16];
+	uint8_t type;
 	uint8_t bcolor_offset;
 };
 

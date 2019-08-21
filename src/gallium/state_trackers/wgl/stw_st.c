@@ -140,7 +140,7 @@ stw_st_framebuffer_validate_locked(struct st_framebuffer_iface *stfb,
    stwfb->texture_mask = mask;
 }
 
-static boolean 
+static bool
 stw_st_framebuffer_validate(struct st_context_iface *stctx,
                             struct st_framebuffer_iface *stfb,
                             const enum st_attachment_type *statts,
@@ -167,13 +167,13 @@ stw_st_framebuffer_validate(struct st_context_iface *stctx,
 
    stw_framebuffer_unlock(stwfb->fb);
 
-   return TRUE;
+   return true;
 }
 
 /**
  * Present an attachment of the framebuffer.
  */
-static boolean
+static bool
 stw_st_framebuffer_present_locked(HDC hdc,
                                   struct st_framebuffer_iface *stfb,
                                   enum st_attachment_type statt)
@@ -193,16 +193,16 @@ stw_st_framebuffer_present_locked(HDC hdc,
 
    assert(!stw_own_mutex(&stwfb->fb->mutex));
 
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 stw_st_framebuffer_flush_front(struct st_context_iface *stctx,
                                struct st_framebuffer_iface *stfb,
                                enum st_attachment_type statt)
 {
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
-   boolean ret;
+   bool ret;
    HDC hDC;
 
    stw_framebuffer_lock(stwfb->fb);
@@ -267,7 +267,7 @@ stw_st_destroy_framebuffer_locked(struct st_framebuffer_iface *stfb)
 /**
  * Swap the buffers of the given framebuffer.
  */
-boolean
+bool
 stw_st_swap_framebuffer_locked(HDC hdc, struct st_framebuffer_iface *stfb)
 {
    struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);

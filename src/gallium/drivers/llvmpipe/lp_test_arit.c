@@ -399,7 +399,7 @@ static boolean
 test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test, unsigned length)
 {
    char test_name[128];
-   util_snprintf(test_name, sizeof test_name, "%s.v%u", test->name, length);
+   snprintf(test_name, sizeof test_name, "%s.v%u", test->name, length);
    LLVMContextRef context;
    struct gallivm_state *gallivm;
    LLVMValueRef test_func;

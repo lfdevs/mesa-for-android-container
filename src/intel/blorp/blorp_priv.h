@@ -284,6 +284,12 @@ struct brw_blorp_blit_prog_key
    /* Whether or not the format workarounds are a bitcast operation */
    bool format_bit_cast;
 
+   /** True if we need to perform SINT -> UINT clamping. */
+   bool sint32_to_uint;
+
+   /** True if we need to perform UINT -> SINT clamping. */
+   bool uint32_to_sint;
+
    /* Type of the data to be read from the texture (one of
     * nir_type_(int|uint|float)).
     */

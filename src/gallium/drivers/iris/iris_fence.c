@@ -27,6 +27,7 @@
  */
 
 #include "util/u_inlines.h"
+#include "intel/common/gen_gem.h"
 
 #include "iris_batch.h"
 #include "iris_bufmgr.h"
@@ -41,7 +42,7 @@ gem_syncobj_create(int fd, uint32_t flags)
       .flags = flags,
    };
 
-   drm_ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE, &args);
+   gen_ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE, &args);
 
    return args.handle;
 }
@@ -53,7 +54,7 @@ gem_syncobj_destroy(int fd, uint32_t handle)
       .handle = handle,
    };
 
-   drm_ioctl(fd, DRM_IOCTL_SYNCOBJ_DESTROY, &args);
+   gen_ioctl(fd, DRM_IOCTL_SYNCOBJ_DESTROY, &args);
 }
 
 /**
@@ -93,7 +94,7 @@ iris_batch_add_syncpt(struct iris_batch *batch,
                       unsigned flags)
 {
    struct drm_i915_gem_exec_fence *fence =
-      util_dynarray_grow(&batch->exec_fences, sizeof(*fence));
+      util_dynarray_grow(&batch->exec_fences, struct drm_i915_gem_exec_fence, 1);
 
    *fence = (struct drm_i915_gem_exec_fence) {
       .handle = syncpt->handle,
@@ -101,7 +102,7 @@ iris_batch_add_syncpt(struct iris_batch *batch,
    };
 
    struct iris_syncpt **store =
-      util_dynarray_grow(&batch->syncpts, sizeof(*store));
+      util_dynarray_grow(&batch->syncpts, struct iris_syncpt *, 1);
 
    *store = NULL;
    iris_syncpt_reference(batch->screen, store, syncpt);
@@ -152,7 +153,7 @@ iris_wait_syncpt(struct pipe_screen *p_screen,
       .count_handles = 1,
       .timeout_nsec = timeout_nsec,
    };
-   return drm_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args);
+   return gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args);
 }
 
 static void
@@ -225,7 +226,7 @@ rel2abs(uint64_t timeout)
    return now + timeout;
 }
 
-static boolean
+static bool
 iris_fence_finish(struct pipe_screen *p_screen,
                   struct pipe_context *ctx,
                   struct pipe_fence_handle *fence,
@@ -246,7 +247,7 @@ iris_fence_finish(struct pipe_screen *p_screen,
       .timeout_nsec = rel2abs(timeout), /* XXX */
       .flags = DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL
    };
-   return drm_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args) == 0;
+   return gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_WAIT, &args) == 0;
 }
 
 #ifndef SYNC_IOC_MAGIC
@@ -282,7 +283,7 @@ sync_merge_fd(int sync_fd, int new_fd)
       .fence = -1,
    };
 
-   drm_ioctl(sync_fd, SYNC_IOC_MERGE, &args);
+   gen_ioctl(sync_fd, SYNC_IOC_MERGE, &args);
    close(new_fd);
    close(sync_fd);
 
@@ -303,7 +304,7 @@ iris_fence_get_fd(struct pipe_screen *p_screen,
          .fd = -1,
       };
 
-      drm_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
+      gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
       fd = sync_merge_fd(fd, args.fd);
    }
 
@@ -323,7 +324,7 @@ iris_fence_create_fd(struct pipe_context *ctx,
       .flags = DRM_SYNCOBJ_FD_TO_HANDLE_FLAGS_IMPORT_SYNC_FILE,
       .fd = fd,
    };
-   drm_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args);
+   gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args);
 
    struct iris_syncpt *syncpt = malloc(sizeof(*syncpt));
    syncpt->handle = args.handle;

@@ -34,14 +34,14 @@
 
 namespace SwrJit
 {
-    void Builder::AssertMemoryUsageParams(Value* ptr, JIT_MEM_CLIENT usage)
+    void Builder::AssertMemoryUsageParams(Value* ptr, MEM_CLIENT usage)
     {
         SWR_ASSERT(
             ptr->getType() != mInt64Ty,
             "Address appears to be GFX access.  Requires translation through BuilderGfxMem.");
     }
 
-    Value* Builder::GEP(Value* Ptr, Value* Idx, Type* Ty, const Twine& Name)
+    Value* Builder::GEP(Value* Ptr, Value* Idx, Type* Ty, bool isReadOnly, const Twine& Name)
     {
         return IRB()->CreateGEP(Ptr, Idx, Name);
     }
@@ -93,26 +93,26 @@ namespace SwrJit
         return IN_BOUNDS_GEP(ptr, indices);
     }
 
-    LoadInst* Builder::LOAD(Value* Ptr, const char* Name, Type* Ty, JIT_MEM_CLIENT usage)
+    LoadInst* Builder::LOAD(Value* Ptr, const char* Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(Ptr, usage);
         return IRB()->CreateLoad(Ptr, Name);
     }
 
-    LoadInst* Builder::LOAD(Value* Ptr, const Twine& Name, Type* Ty, JIT_MEM_CLIENT usage)
+    LoadInst* Builder::LOAD(Value* Ptr, const Twine& Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(Ptr, usage);
         return IRB()->CreateLoad(Ptr, Name);
     }
 
-    LoadInst* Builder::LOAD(Type* Ty, Value* Ptr, const Twine& Name, JIT_MEM_CLIENT usage)
+    LoadInst* Builder::LOAD(Type* Ty, Value* Ptr, const Twine& Name, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(Ptr, usage);
         return IRB()->CreateLoad(Ty, Ptr, Name);
     }
 
     LoadInst*
-    Builder::LOAD(Value* Ptr, bool isVolatile, const Twine& Name, Type* Ty, JIT_MEM_CLIENT usage)
+    Builder::LOAD(Value* Ptr, bool isVolatile, const Twine& Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(Ptr, usage);
         return IRB()->CreateLoad(Ptr, isVolatile, Name);
@@ -122,7 +122,7 @@ namespace SwrJit
                             const std::initializer_list<uint32_t>& indices,
                             const llvm::Twine&                     name,
                             Type*                                  Ty,
-                            JIT_MEM_CLIENT                         usage)
+                            MEM_CLIENT                             usage)
     {
         std::vector<Value*> valIndices;
         for (auto i : indices)
@@ -141,7 +141,7 @@ namespace SwrJit
     }
 
     StoreInst*
-    Builder::STORE(Value* val, Value* basePtr, const std::initializer_list<uint32_t>& indices, Type* Ty, JIT_MEM_CLIENT usage)
+    Builder::STORE(Value* val, Value* basePtr, const std::initializer_list<uint32_t>& indices, Type* Ty, MEM_CLIENT usage)
     {
         std::vector<Value*> valIndices;
         for (auto i : indices)
@@ -186,7 +186,7 @@ namespace SwrJit
                              Value*         vIndices,
                              Value*         vMask,
                              uint8_t        scale,
-                             JIT_MEM_CLIENT usage)
+                             MEM_CLIENT     usage)
     {
         AssertMemoryUsageParams(pBase, usage);
 
@@ -206,7 +206,7 @@ namespace SwrJit
                              Value*         vIndices,
                              Value*         vMask,
                              uint8_t        scale,
-                             JIT_MEM_CLIENT usage)
+                             MEM_CLIENT     usage)
     {
         AssertMemoryUsageParams(pBase, usage);
 
@@ -237,13 +237,18 @@ namespace SwrJit
         return MASKED_GATHER(pVecSrcPtr, 4, pVecMask, pVecPassthru);
     }
 
+    void Builder::SCATTER_PTR(Value* pVecDstPtr, Value* pVecSrc, Value* pVecMask)
+    {
+        MASKED_SCATTER(pVecSrc, pVecDstPtr, 4, pVecMask);
+    }
+
     void Builder::Gather4(const SWR_FORMAT format,
                           Value*           pSrcBase,
                           Value*           byteOffsets,
                           Value*           mask,
                           Value*           vGatherComponents[],
                           bool             bPackedOutput,
-                          JIT_MEM_CLIENT   usage)
+                          MEM_CLIENT       usage)
     {
         const SWR_FORMAT_INFO& info = GetFormatInfo(format);
         if (info.type[0] == SWR_TYPE_FLOAT && info.bpc[0] == 32)
@@ -262,7 +267,7 @@ namespace SwrJit
                             Value*                 vMask,
                             Value*                 vGatherComponents[],
                             bool                   bPackedOutput,
-                            JIT_MEM_CLIENT         usage)
+                            MEM_CLIENT             usage)
     {
         switch (info.bpp / info.numComps)
         {
@@ -336,7 +341,7 @@ namespace SwrJit
                             Value*                 vMask,
                             Value*                 vGatherComponents[],
                             bool                   bPackedOutput,
-                            JIT_MEM_CLIENT         usage)
+                            MEM_CLIENT             usage)
     {
         switch (info.bpp / info.numComps)
         {
@@ -643,9 +648,16 @@ namespace SwrJit
     /// @param vOffsets - vector of byte offsets from pDst
     /// @param vMask - mask of valid lanes
     void Builder::SCATTERPS(
-        Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask, JIT_MEM_CLIENT usage)
+        Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask, MEM_CLIENT usage)
     {
         AssertMemoryUsageParams(pDst, usage);
+//        if (vSrc->getType() != mSimdFP32Ty)
+//        {
+//            vSrc = BITCAST(vSrc, mSimdFP32Ty);
+//        }                                               
+        SWR_ASSERT(vSrc->getType()->getVectorElementType()->isFloatTy());
+        VSCATTERPS(pDst, vMask, vOffsets, vSrc, C(1));
+        return;
 
         /* Scatter algorithm
 
@@ -656,6 +668,10 @@ namespace SwrJit
         Update mask (&= ~(1<<Index)
 
         */
+
+        /*
+
+        // Reference implementation kept around for reference
 
         BasicBlock* pCurBB = IRB()->GetInsertBlock();
         Function*   pFunc  = pCurBB->getParent();
@@ -744,5 +760,7 @@ namespace SwrJit
 
         // Move builder to beginning of post loop
         IRB()->SetInsertPoint(pPostLoop, pPostLoop->begin());
+
+        */
     }
 } // namespace SwrJit

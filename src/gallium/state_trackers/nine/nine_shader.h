@@ -33,6 +33,7 @@
 
 struct NineDevice9;
 struct NineVertexDeclaration9;
+struct ureg_program;
 
 struct nine_lconstf /* NOTE: both pointers should be FREE'd by the user */
 {
@@ -107,6 +108,11 @@ struct nine_vs_output_info
     int mask;
     int output_index;
 };
+
+void *
+nine_create_shader_with_so_and_destroy(struct ureg_program *p,
+                                       struct pipe_context *pipe,
+                                       const struct pipe_stream_output_info *so);
 
 HRESULT
 nine_translate_shader(struct NineDevice9 *device,

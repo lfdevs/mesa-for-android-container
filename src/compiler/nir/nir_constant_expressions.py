@@ -384,9 +384,9 @@ struct ${type}${width}_vec {
 % for name, op in sorted(opcodes.items()):
 static void
 evaluate_${name}(nir_const_value *_dst_val,
-                 MAYBE_UNUSED unsigned num_components,
+                 UNUSED unsigned num_components,
                  ${"UNUSED" if op_bit_sizes(op) is None else ""} unsigned bit_size,
-                 MAYBE_UNUSED nir_const_value **_src)
+                 UNUSED nir_const_value **_src)
 {
    % if op_bit_sizes(op) is not None:
       switch (bit_size) {

@@ -287,7 +287,7 @@ svga_texture_from_handle(struct pipe_screen * screen,
                          const struct pipe_resource *template,
                          struct winsys_handle *whandle);
 
-boolean
+bool
 svga_texture_generate_mipmap(struct pipe_context *pipe,
                              struct pipe_resource *pt,
                              enum pipe_format format,

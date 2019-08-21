@@ -32,7 +32,7 @@
 #include "drm-uapi/vc4_drm.h"
 
 struct pipe_screen *
-vc4_drm_screen_create(int fd)
+vc4_drm_screen_create(int fd, const struct pipe_screen_config *config)
 {
    bool v3d_present = true;
 
@@ -49,14 +49,15 @@ vc4_drm_screen_create(int fd)
       return vc4_screen_create(fcntl(fd, F_DUPFD_CLOEXEC, 3), NULL);
 
 #ifdef GALLIUM_KMSRO
-   return kmsro_drm_screen_create(fd);
+   return kmsro_drm_screen_create(fd, config);
 #endif
 
    return NULL;
 }
 
 struct pipe_screen *
-vc4_drm_screen_create_renderonly(struct renderonly *ro)
+vc4_drm_screen_create_renderonly(struct renderonly *ro,
+                                 const struct pipe_screen_config *config)
 {
    return vc4_screen_create(ro->gpu_fd, ro);
 }

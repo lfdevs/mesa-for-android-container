@@ -517,7 +517,7 @@ patch_draws(struct fd_batch *batch, enum pc_di_vis_cull_mode vismode)
 		struct fd_cs_patch *patch = fd_patch_element(&batch->draw_patches, i);
 		*patch->cs = patch->val | DRAW4(0, 0, 0, vismode);
 	}
-	util_dynarray_resize(&batch->draw_patches, 0);
+	util_dynarray_clear(&batch->draw_patches);
 }
 
 /* for rendering directly to system memory: */
@@ -639,7 +639,7 @@ emit_binning_pass(struct fd_batch *batch)
 	}
 
 	/* emit IB to binning drawcmds: */
-	ctx->emit_ib(ring, batch->binning);
+	fd4_emit_ib(ring, batch->binning);
 
 	fd_reset_wfi(batch);
 	fd_wfi(batch, ring);
@@ -770,7 +770,7 @@ fd4_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	if (use_hw_binning(batch)) {
 		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
 
-		assert(pipe->w * pipe->h);
+		assert(pipe->w && pipe->h);
 
 		fd_event_write(batch, ring, HLSQ_FLUSH);
 		fd_wfi(batch, ring);

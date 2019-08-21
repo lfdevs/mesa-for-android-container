@@ -126,7 +126,7 @@ handle_info(void *user_data, int pci_id, const char *app_name)
    file->pci_id = pci_id;
    snprintf(file->app_name, sizeof(app_name), "%s", app_name);
 
-   if (!gen_get_device_info(file->pci_id, &file->devinfo)) {
+   if (!gen_get_device_info_from_pci_id(file->pci_id, &file->devinfo)) {
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", file->pci_id);
       exit(EXIT_FAILURE);
    }

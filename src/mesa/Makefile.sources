@@ -209,6 +209,8 @@ MAIN_FILES = \
 	main/shader_query.cpp \
 	main/shared.c \
 	main/shared.h \
+	main/spirv_extensions.c \
+	main/spirv_extensions.h \
 	main/state.c \
 	main/state.h \
 	main/stencil.c \
@@ -554,6 +556,8 @@ STATETRACKER_FILES = \
 	state_tracker/st_shader_cache.h \
 	state_tracker/st_texture.c \
 	state_tracker/st_texture.h \
+	state_tracker/st_tgsi_lower_depth_clamp.c \
+	state_tracker/st_tgsi_lower_depth_clamp.h \
 	state_tracker/st_tgsi_lower_yuv.c \
 	state_tracker/st_tgsi_lower_yuv.h \
 	state_tracker/st_util.h \

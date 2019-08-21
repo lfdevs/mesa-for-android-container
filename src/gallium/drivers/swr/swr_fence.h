@@ -54,14 +54,14 @@ swr_fence(struct pipe_fence_handle *fence)
 }
 
 
-static INLINE boolean
+static INLINE bool
 swr_is_fence_done(struct pipe_fence_handle *fence_handle)
 {
    struct swr_fence *fence = swr_fence(fence_handle);
    return (fence->read == fence->write);
 }
 
-static INLINE boolean
+static INLINE bool
 swr_is_fence_pending(struct pipe_fence_handle *fence_handle)
 {
    return swr_fence(fence_handle)->pending;
@@ -76,10 +76,10 @@ void swr_fence_reference(struct pipe_screen *screen,
                          struct pipe_fence_handle **ptr,
                          struct pipe_fence_handle *f);
 
-boolean swr_fence_finish(struct pipe_screen *screen,
-                         struct pipe_context *ctx,
-                         struct pipe_fence_handle *fence_handle,
-                         uint64_t timeout);
+bool swr_fence_finish(struct pipe_screen *screen,
+                      struct pipe_context *ctx,
+                      struct pipe_fence_handle *fence_handle,
+                      uint64_t timeout);
 
 void
 swr_fence_submit(struct swr_context *ctx, struct pipe_fence_handle *fence);

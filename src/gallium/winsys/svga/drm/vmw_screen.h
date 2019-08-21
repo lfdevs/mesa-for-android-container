@@ -104,6 +104,8 @@ struct vmw_winsys_screen
 
    cnd_t cs_cond;
    mtx_t cs_mutex;
+
+   boolean force_coherent;
 };
 
 

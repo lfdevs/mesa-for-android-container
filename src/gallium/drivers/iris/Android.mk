@@ -29,6 +29,7 @@ include $(CLEAR_VARS)
 
 LIBIRIS_SRC_FILES := \
 	iris_blorp.c \
+	iris_query.c \
 	iris_state.c
 
 LIBIRIS_STATIC_LIBS := \

@@ -621,7 +621,7 @@ void
 CodeEmitterNV50::emitLOAD(const Instruction *i)
 {
    DataFile sf = i->src(0).getFile();
-   MAYBE_UNUSED int32_t offset = i->getSrc(0)->reg.data.offset;
+   ASSERTED int32_t offset = i->getSrc(0)->reg.data.offset;
 
    switch (sf) {
    case FILE_SHADER_INPUT:

@@ -73,14 +73,32 @@ static void radeon_fence_reference(struct pipe_fence_handle **dst,
 
 static struct radeon_winsys_ctx *radeon_drm_ctx_create(struct radeon_winsys *ws)
 {
-    /* No context support here. Just return the winsys pointer
-     * as the "context". */
-    return (struct radeon_winsys_ctx*)ws;
+    struct radeon_ctx *ctx = CALLOC_STRUCT(radeon_ctx);
+    if (!ctx)
+        return NULL;
+
+    ctx->ws = (struct radeon_drm_winsys*)ws;
+    ctx->gpu_reset_counter = radeon_drm_get_gpu_reset_counter(ctx->ws);
+    return (struct radeon_winsys_ctx*)ctx;
 }
 
 static void radeon_drm_ctx_destroy(struct radeon_winsys_ctx *ctx)
 {
-    /* No context support here. */
+    FREE(ctx);
+}
+
+static enum pipe_reset_status
+radeon_drm_ctx_query_reset_status(struct radeon_winsys_ctx *rctx)
+{
+    struct radeon_ctx *ctx = (struct radeon_ctx*)rctx;
+
+    unsigned latest = radeon_drm_get_gpu_reset_counter(ctx->ws);
+
+    if (ctx->gpu_reset_counter == latest)
+        return PIPE_NO_RESET;
+
+    ctx->gpu_reset_counter = latest;
+    return PIPE_UNKNOWN_CONTEXT_RESET;
 }
 
 static bool radeon_init_cs_context(struct radeon_cs_context *csc,
@@ -153,7 +171,7 @@ radeon_drm_cs_create(struct radeon_winsys_ctx *ctx,
                      void *flush_ctx,
                      bool stop_exec_on_failure)
 {
-    struct radeon_drm_winsys *ws = (struct radeon_drm_winsys*)ctx;
+    struct radeon_drm_winsys *ws = ((struct radeon_ctx*)ctx)->ws;
     struct radeon_drm_cs *cs;
 
     cs = CALLOC_STRUCT(radeon_drm_cs);
@@ -424,7 +442,8 @@ static bool radeon_drm_cs_validate(struct radeon_cmdbuf *rcs)
     return status;
 }
 
-static bool radeon_drm_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw)
+static bool radeon_drm_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw,
+                                      bool force_chaining)
 {
    assert(rcs->current.cdw <= rcs->current.max_dw);
    return rcs->current.max_dw - rcs->current.cdw >= dw;
@@ -552,7 +571,7 @@ static int radeon_drm_cs_flush(struct radeon_cmdbuf *rcs,
     switch (cs->ring_type) {
     case RING_DMA:
         /* pad DMA ring to 8 DWs */
-        if (cs->ws->info.chip_class <= SI) {
+        if (cs->ws->info.chip_class <= GFX6) {
             while (rcs->current.cdw & 7)
                 radeon_emit(&cs->base, 0xf0000000); /* NOP packet */
         } else {
@@ -800,7 +819,8 @@ radeon_drm_cs_get_next_fence(struct radeon_cmdbuf *rcs)
 
 static void
 radeon_drm_cs_add_fence_dependency(struct radeon_cmdbuf *cs,
-                                   struct pipe_fence_handle *fence)
+                                   struct pipe_fence_handle *fence,
+                                   unsigned dependency_flags)
 {
    /* TODO: Handle the following unlikely multi-threaded scenario:
     *
@@ -820,6 +840,7 @@ void radeon_drm_cs_init_functions(struct radeon_drm_winsys *ws)
 {
     ws->base.ctx_create = radeon_drm_ctx_create;
     ws->base.ctx_destroy = radeon_drm_ctx_destroy;
+    ws->base.ctx_query_reset_status = radeon_drm_ctx_query_reset_status;
     ws->base.cs_create = radeon_drm_cs_create;
     ws->base.cs_destroy = radeon_drm_cs_destroy;
     ws->base.cs_add_buffer = radeon_drm_cs_add_buffer;

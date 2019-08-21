@@ -34,8 +34,6 @@
 
 #include <stdio.h>
 
-#include "amd/common/ac_binary.h"
-
 #include "radeon/radeon_winsys.h"
 
 #include "util/disk_cache.h"
@@ -48,7 +46,6 @@
 #include "util/u_threaded_context.h"
 
 struct u_log_context;
-
 #define ATI_VENDOR_ID 0x1002
 
 #define R600_RESOURCE_FLAG_TRANSFER		(PIPE_RESOURCE_FLAG_DRV_PRIV << 0)
@@ -131,9 +128,6 @@ struct r600_common_context;
 struct r600_perfcounters;
 struct tgsi_shader_info;
 struct r600_qbo_state;
-
-void radeon_shader_binary_init(struct ac_shader_binary *b);
-void radeon_shader_binary_clean(struct ac_shader_binary *b);
 
 /* Only 32-bit buffer allocations are supported, gallium doesn't support more
  * at the moment.
@@ -410,14 +404,6 @@ struct r600_common_screen {
 		 */
 		unsigned compute_to_L2;
 	} barrier_flags;
-
-	void (*query_opaque_metadata)(struct r600_common_screen *rscreen,
-				      struct r600_texture *rtex,
-				      struct radeon_bo_metadata *md);
-
-	void (*apply_opaque_metadata)(struct r600_common_screen *rscreen,
-				    struct r600_texture *rtex,
-				    struct radeon_bo_metadata *md);
 };
 
 /* This encapsulates a state or an operation which can emitted into the GPU
@@ -517,7 +503,6 @@ struct r600_common_context {
 	struct r600_resource		*eop_bug_scratch;
 	unsigned			num_gfx_cs_flushes;
 	unsigned			initial_gfx_cs_size;
-	unsigned			gpu_reset_counter;
 	unsigned			last_dirty_tex_counter;
 	unsigned			last_compressed_colortex_counter;
 	unsigned			last_num_draw_calls;

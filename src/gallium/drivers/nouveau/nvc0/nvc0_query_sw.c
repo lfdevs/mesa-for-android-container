@@ -71,7 +71,7 @@ nvc0_sw_destroy_query(struct nvc0_context *nvc0, struct nvc0_query *q)
    FREE(sq);
 }
 
-static boolean
+static bool
 nvc0_sw_begin_query(struct nvc0_context *nvc0, struct nvc0_query *q)
 {
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
@@ -95,9 +95,9 @@ nvc0_sw_end_query(struct nvc0_context *nvc0, struct nvc0_query *q)
 #endif
 }
 
-static boolean
+static bool
 nvc0_sw_get_query_result(struct nvc0_context *nvc0, struct nvc0_query *q,
-                         boolean wait, union pipe_query_result *result)
+                         bool wait, union pipe_query_result *result)
 {
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
    struct nvc0_sw_query *sq = nvc0_sw_query(q);

@@ -157,7 +157,7 @@ nv04_context_create(struct nouveau_screen *screen, gl_api api,
 		goto fail;
 
 	/* GL constants. */
-	ctx->Const.MaxTextureLevels = 11;
+	ctx->Const.MaxTextureSize = 1024;
 	ctx->Const.MaxTextureCoordUnits = NV04_TEXTURE_UNITS;
 	ctx->Const.Program[MESA_SHADER_FRAGMENT].MaxTextureImageUnits = NV04_TEXTURE_UNITS;
 	ctx->Const.MaxTextureUnits = NV04_TEXTURE_UNITS;

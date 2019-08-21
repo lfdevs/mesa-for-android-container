@@ -77,7 +77,8 @@ clear_buffers_with_quad(struct svga_context *svga,
                       fb->width, fb->height,
                       1, /* num_layers */
                       clear_buffers, color,
-                      depth, stencil);
+                      depth, stencil,
+                      util_framebuffer_get_num_samples(fb) > 1);
 }
 
 

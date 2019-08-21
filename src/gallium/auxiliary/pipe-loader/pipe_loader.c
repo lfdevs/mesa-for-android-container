@@ -138,16 +138,16 @@ pipe_loader_find_module(const char *driver_name,
    int len, ret;
 
    for (next = library_paths; *next; library_paths = next + 1) {
-      next = util_strchrnul(library_paths, ':');
+      next = strchrnul(library_paths, ':');
       len = next - library_paths;
 
       if (len)
-         ret = util_snprintf(path, sizeof(path), "%.*s/%s%s%s",
-                             len, library_paths,
-                             MODULE_PREFIX, driver_name, UTIL_DL_EXT);
+         ret = snprintf(path, sizeof(path), "%.*s/%s%s%s",
+                        len, library_paths,
+                        MODULE_PREFIX, driver_name, UTIL_DL_EXT);
       else
-         ret = util_snprintf(path, sizeof(path), "%s%s%s",
-                             MODULE_PREFIX, driver_name, UTIL_DL_EXT);
+         ret = snprintf(path, sizeof(path), "%s%s%s",
+                        MODULE_PREFIX, driver_name, UTIL_DL_EXT);
 
       if (ret > 0 && ret < sizeof(path) && u_file_access(path, 0) != -1) {
          lib = util_dl_open(path);

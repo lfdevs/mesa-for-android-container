@@ -51,6 +51,17 @@ Constant* C(const std::initializer_list<Ty>& constList)
 }
 
 template <typename Ty>
+Constant* C(const std::vector<Ty>& constList)
+{
+    std::vector<Constant*> vConsts;
+    for (auto i : constList)
+    {
+        vConsts.push_back(C((Ty)i));
+    }
+    return ConstantVector::get(vConsts);
+}
+
+template <typename Ty>
 Constant* CA(LLVMContext& ctx, ArrayRef<Ty> constList)
 {
     return ConstantDataArray::get(ctx, constList);
@@ -70,6 +81,9 @@ Constant* CInc(uint32_t base, uint32_t count)
 }
 
 Constant* PRED(bool pred);
+
+Value* VIMMED1(uint64_t i);
+Value* VIMMED1_16(uint64_t i);
 
 Value* VIMMED1(int i);
 Value* VIMMED1_16(int i);

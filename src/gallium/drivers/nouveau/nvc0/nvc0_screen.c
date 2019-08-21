@@ -39,7 +39,7 @@
 
 #include "nv50/g80_texture.xml.h"
 
-static boolean
+static bool
 nvc0_screen_is_format_supported(struct pipe_screen *pscreen,
                                 enum pipe_format format,
                                 enum pipe_texture_target target,
@@ -112,7 +112,8 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
    switch (param) {
    /* non-boolean caps */
-   case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
+   case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+      return 16384;
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
       return 15;
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -207,7 +208,9 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEPTH_CLIP_DISABLE:
    case PIPE_CAP_POINT_SPRITE:
    case PIPE_CAP_TGSI_TEXCOORD:
-   case PIPE_CAP_SM3:
+   case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
+   case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
+   case PIPE_CAP_VERTEX_SHADER_SATURATE:
    case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_VERTEX_COLOR_CLAMPED:
@@ -277,11 +280,12 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_QUERY_SO_OVERFLOW:
    case PIPE_CAP_DEST_SURFACE_SRGB_CONTROL:
    case PIPE_CAP_TGSI_DIV:
+   case PIPE_CAP_TGSI_ATOMINC_WRAP:
       return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
-   case PIPE_CAP_TGSI_FS_FBFETCH:
-      return class_3d >= NVE4_3D_CLASS; /* needs testing on fermi */
+   case PIPE_CAP_FBFETCH:
+      return class_3d >= NVE4_3D_CLASS ? 1 : 0; /* needs testing on fermi */
    case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
    case PIPE_CAP_TGSI_BALLOT:
       return class_3d >= NVE4_3D_CLASS;
@@ -354,6 +358,13 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_GLSL_TESS_LEVELS_AS_INPUTS:
    case PIPE_CAP_NIR_COMPACT_ARRAYS:
    case PIPE_CAP_IMAGE_LOAD_FORMATTED:
+   case PIPE_CAP_COMPUTE_SHADER_DERIVATIVES:
+   case PIPE_CAP_ATOMIC_FLOAT_MINMAX:
+   case PIPE_CAP_CONSERVATIVE_RASTER_INNER_COVERAGE:
+   case PIPE_CAP_FRAGMENT_SHADER_INTERLOCK:
+   case PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED:
+   case PIPE_CAP_FBFETCH_COHERENT:
+   case PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -372,8 +383,14 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return dev->vram_size >> 20;
    case PIPE_CAP_UMA:
       return 0;
+
    default:
       debug_printf("%s: unhandled cap %d\n", __func__, param);
+      /* fallthrough */
+   /* caps where we want the default value */
+   case PIPE_CAP_DMABUF:
+   case PIPE_CAP_ESSL_FEATURE_LEVEL:
+   case PIPE_CAP_MAX_FRAMES_IN_FLIGHT:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }
 }
@@ -905,15 +922,13 @@ static const nir_shader_compiler_options nir_options = {
    .lower_fpow = false,
    .lower_fsat = false,
    .lower_fsqrt = false, // TODO: only before gm200
-   .lower_fmod32 = true,
-   .lower_fmod64 = true,
+   .lower_fmod = true,
    .lower_bitfield_extract = false,
    .lower_bitfield_extract_to_shifts = false,
    .lower_bitfield_insert = false,
    .lower_bitfield_insert_to_shifts = false,
    .lower_bitfield_reverse = false,
    .lower_bit_count = false,
-   .lower_bfm = false,
    .lower_ifind_msb = false,
    .lower_find_lsb = false,
    .lower_uadd_carry = true, // TODO
@@ -942,7 +957,6 @@ static const nir_shader_compiler_options nir_options = {
    .lower_extract_byte = true,
    .lower_extract_word = true,
    .lower_all_io_to_temps = false,
-   .native_integers = true,
    .vertex_id_zero_based = false,
    .lower_base_vertex = false,
    .lower_helper_invocation = false,
@@ -956,7 +970,7 @@ static const nir_shader_compiler_options nir_options = {
    .lower_mul_2x32_64 = true, // TODO
    .max_unroll_iterations = 32,
    .lower_int64_options = nir_lower_divmod64, // TODO
-   .lower_doubles_options = 0, // TODO
+   .lower_doubles_options = nir_lower_dmod, // TODO
 };
 
 static const void *

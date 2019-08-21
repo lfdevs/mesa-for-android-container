@@ -41,7 +41,7 @@ void
 brw_gs_populate_key(struct brw_context *brw,
                     struct brw_gs_prog_key *key);
 void
-brw_gs_populate_default_key(const struct gen_device_info *devinfo,
+brw_gs_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_gs_prog_key *key,
                             struct gl_program *prog);
 

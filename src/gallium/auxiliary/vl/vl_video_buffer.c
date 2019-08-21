@@ -172,7 +172,7 @@ vl_video_buffer_surface_format(enum pipe_format format)
    return format;
 }
 
-boolean
+bool
 vl_video_buffer_is_format_supported(struct pipe_screen *screen,
                                     enum pipe_format format,
                                     enum pipe_video_profile profile,
@@ -206,11 +206,7 @@ vl_video_buffer_is_format_supported(struct pipe_screen *screen,
 unsigned
 vl_video_buffer_max_size(struct pipe_screen *screen)
 {
-   uint32_t max_2d_texture_level;
-
-   max_2d_texture_level = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
-
-   return 1 << (max_2d_texture_level-1);
+   return screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 }
 
 void

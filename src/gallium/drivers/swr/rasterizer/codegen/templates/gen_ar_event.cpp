@@ -36,12 +36,20 @@
 #include "gen_ar_eventhandler.hpp"
 
 using namespace ArchRast;
-% for name in protos['event_names']:
 
-void ${name}::Accept(EventHandler* pHandler) const
+<%  sorted_groups = sorted(protos['events']['groups']) %>
+%   for group in sorted_groups:
+%       for event_key in protos['events']['groups'][group]:
+<%
+        event = protos['events']['defs'][event_key]
+%>
+void ${event['name']}::Accept(EventHandler* pHandler) const
 {
     pHandler->Handle(*this);
 }
-% endfor
+%       endfor
+%   endfor
+
+
 // clan-format on
 

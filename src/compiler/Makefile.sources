@@ -31,11 +31,13 @@ LIBGLSL_FILES = \
 	glsl/gl_nir_lower_samplers.c \
 	glsl/gl_nir_lower_samplers_as_deref.c \
 	glsl/gl_nir_link_atomics.c \
+	glsl/gl_nir_link_uniform_blocks.c \
 	glsl/gl_nir_link_uniform_initializers.c \
 	glsl/gl_nir_link_uniforms.c \
 	glsl/gl_nir_link_xfb.c \
 	glsl/gl_nir_linker.c \
 	glsl/gl_nir_linker.h \
+	glsl/gl_nir_opt_access.c \
 	glsl/gl_nir.h \
 	glsl/glsl_parser_extras.cpp \
 	glsl/glsl_parser_extras.h \
@@ -245,6 +247,7 @@ NIR_FILES = \
 	nir/nir_lower_double_ops.c \
 	nir/nir_lower_drawpixels.c \
 	nir/nir_lower_fb_read.c \
+	nir/nir_lower_flrp.c \
 	nir/nir_lower_fragcoord_wtrans.c \
 	nir/nir_lower_frexp.c \
 	nir/nir_lower_global_vars_to_local.c \
@@ -253,7 +256,10 @@ NIR_FILES = \
 	nir/nir_lower_locals_to_regs.c \
 	nir/nir_lower_idiv.c \
 	nir/nir_lower_indirect_derefs.c \
+	nir/nir_lower_input_attachments.c \
 	nir/nir_lower_int64.c \
+	nir/nir_lower_interpolation.c \
+	nir/nir_lower_int_to_float.c \
 	nir/nir_lower_io.c \
 	nir/nir_lower_io_arrays_to_elements.c \
 	nir/nir_lower_io_to_temporaries.c \
@@ -280,7 +286,6 @@ NIR_FILES = \
 	nir/nir_lower_wpos_center.c \
 	nir/nir_lower_wpos_ytransform.c \
 	nir/nir_metadata.c \
-	nir/nir_move_load_const.c \
 	nir/nir_move_vec_src_uses_to_dest.c \
 	nir/nir_normalize_cubemap_coords.c \
 	nir/nir_opt_combine_stores.c \
@@ -300,17 +305,21 @@ NIR_FILES = \
 	nir/nir_opt_intrinsics.c \
 	nir/nir_opt_loop_unroll.c \
 	nir/nir_opt_large_constants.c \
-	nir/nir_opt_move_comparisons.c \
-	nir/nir_opt_move_load_ubo.c \
+	nir/nir_opt_move.c \
 	nir/nir_opt_peephole_select.c \
+	nir/nir_opt_rematerialize_compares.c \
 	nir/nir_opt_remove_phis.c \
 	nir/nir_opt_shrink_load.c \
+	nir/nir_opt_sink.c \
 	nir/nir_opt_trivial_continues.c \
 	nir/nir_opt_undef.c \
+	nir/nir_opt_vectorize.c \
 	nir/nir_phi_builder.c \
 	nir/nir_phi_builder.h \
 	nir/nir_print.c \
 	nir/nir_propagate_invariant.c \
+	nir/nir_range_analysis.c \
+	nir/nir_range_analysis.h \
 	nir/nir_remove_dead_variables.c \
 	nir/nir_repair_ssa.c \
 	nir/nir_search.c \

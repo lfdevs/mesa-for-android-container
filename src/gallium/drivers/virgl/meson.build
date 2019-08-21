@@ -25,21 +25,38 @@ files_libvirgl = files(
   'virgl_query.c',
   'virgl_resource.c',
   'virgl_screen.c',
+  'virgl_staging_mgr.c',
   'virgl_streamout.c',
   'virgl_transfer_queue.c',
   'virgl_texture.c',
   'virgl_tgsi.c',
 )
 
+virgl_driinfo_h = custom_target(
+  'virgl_driinfo.h',
+  input : files(
+    '../../../util/merge_driinfo.py',
+    '../../auxiliary/pipe-loader/driinfo_gallium.h', 'virgl_driinfo.h.in'
+  ),
+  output : 'virgl_driinfo.h',
+  command : [prog_python, '@INPUT@'],
+  capture : true,
+)
+
 libvirgl = static_library(
   'virgl',
-  files_libvirgl,
+  [ files_libvirgl, virgl_driinfo_h ],
   c_args : c_vis_args,
   include_directories : inc_common,
-  dependencies : dep_libdrm,
+  dependencies : dep_libdrm
 )
 
 driver_virgl = declare_dependency(
+  sources : virgl_driinfo_h,
   compile_args : '-DGALLIUM_VIRGL',
   link_with : [libvirgl, libvirgldrm, libvirglvtest],
 )
+
+if with_tests
+  subdir('tests')
+endif

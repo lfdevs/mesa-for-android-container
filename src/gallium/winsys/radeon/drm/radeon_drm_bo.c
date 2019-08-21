@@ -1285,7 +1285,8 @@ fail:
     return NULL;
 }
 
-static bool radeon_winsys_bo_get_handle(struct pb_buffer *buffer,
+static bool radeon_winsys_bo_get_handle(struct radeon_winsys *rws,
+                                        struct pb_buffer *buffer,
                                         unsigned stride, unsigned offset,
                                         unsigned slice_size,
                                         struct winsys_handle *whandle)

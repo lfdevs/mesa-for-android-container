@@ -79,11 +79,17 @@ namespace clover {
 #endif
          }
 
-#if HAVE_LLVM >= 0x0500
+#if HAVE_LLVM >= 0x1000
+         const clang::InputKind ik_opencl = clang::Language::OpenCL;
+#elif HAVE_LLVM >= 0x0500
          const clang::InputKind ik_opencl = clang::InputKind::OpenCL;
-         const clang::LangStandard::Kind lang_opencl10 = clang::LangStandard::lang_opencl10;
 #else
          const clang::InputKind ik_opencl = clang::IK_OpenCL;
+#endif
+
+#if HAVE_LLVM >= 0x0500
+         const clang::LangStandard::Kind lang_opencl10 = clang::LangStandard::lang_opencl10;
+#else
          const clang::LangStandard::Kind lang_opencl10 = clang::LangStandard::lang_opencl;
 #endif
 

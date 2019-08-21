@@ -25,6 +25,7 @@
 
 #include "pipe/p_screen.h"
 #include "state_tracker/drm_driver.h"
+#include "util/disk_cache.h"
 #include "util/slab.h"
 #include "util/u_screen.h"
 #include "intel/dev/gen_device_info.h"
@@ -32,6 +33,7 @@
 #include "iris_bufmgr.h"
 
 struct iris_bo;
+struct iris_monitor_config;
 
 #define READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
 #define WRITE_ONCE(x, v) *(volatile __typeof__(x) *)&(x) = (v)
@@ -68,27 +70,34 @@ struct iris_screen {
 
    unsigned subslice_total;
 
+   uint64_t aperture_bytes;
+
    struct gen_device_info devinfo;
    struct isl_device isl_dev;
    struct iris_bufmgr *bufmgr;
    struct brw_compiler *compiler;
+   struct iris_monitor_config *monitor_cfg;
 
    /**
     * A buffer containing nothing useful, for hardware workarounds that
     * require scratch writes or reads from some unimportant memory.
     */
    struct iris_bo *workaround_bo;
+
+   struct disk_cache *disk_cache;
 };
 
 struct pipe_screen *
 iris_screen_create(int fd, const struct pipe_screen_config *config);
 
-boolean
+bool
 iris_is_format_supported(struct pipe_screen *pscreen,
                          enum pipe_format format,
                          enum pipe_texture_target target,
                          unsigned sample_count,
                          unsigned storage_sample_count,
                          unsigned usage);
+
+void iris_disk_cache_init(struct iris_screen *screen);
 
 #endif

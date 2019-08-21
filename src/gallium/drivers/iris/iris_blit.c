@@ -238,6 +238,8 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
 {
    struct iris_resource *res = (void *) p_res;
 
+   assert(!iris_resource_unfinished_aux_import(res));
+
    if (aux_usage == ISL_AUX_USAGE_HIZ &&
        !iris_resource_level_has_hiz(res, level))
       aux_usage = ISL_AUX_USAGE_NONE;
@@ -246,7 +248,7 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
       .surf = &res->surf,
       .addr = (struct blorp_address) {
          .buffer = res->bo,
-         .offset = 0, // XXX: ???
+         .offset = res->offset,
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
          .mocs = vtbl->mocs(res->bo),
       },
@@ -289,8 +291,11 @@ tex_cache_flush_hack(struct iris_batch *batch)
     *
     * TODO: Remove this hack!
     */
-   iris_emit_pipe_control_flush(batch,
-                                PIPE_CONTROL_CS_STALL |
+   const char *reason =
+      "workaround: WaSamplerCacheFlushBetweenRedescribedSurfaceReads";
+
+   iris_emit_pipe_control_flush(batch, reason, PIPE_CONTROL_CS_STALL);
+   iris_emit_pipe_control_flush(batch, reason,
                                 PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE);
 }
 
@@ -423,10 +428,9 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       filter = BLORP_FILTER_NEAREST;
    }
 
-   bool flush_hack = src_fmt.fmt != src_res->surf.format &&
-                     iris_batch_references(batch, src_res->bo);
+   bool format_mismatch = src_fmt.fmt != src_res->surf.format;
 
-   if (flush_hack)
+   if (format_mismatch && iris_batch_references(batch, src_res->bo))
       tex_cache_flush_hack(batch);
 
    if (dst_res->base.target == PIPE_BUFFER)
@@ -483,14 +487,16 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
 
    blorp_batch_finish(&blorp_batch);
 
-   if (flush_hack)
+   if (format_mismatch)
       tex_cache_flush_hack(batch);
 
    iris_resource_finish_write(ice, dst_res, info->dst.level, info->dst.box.z,
                               info->dst.box.depth, dst_aux_usage);
 
    iris_flush_and_dirty_for_history(ice, batch, (struct iris_resource *)
-                                    info->dst.resource);
+                                    info->dst.resource,
+                                    PIPE_CONTROL_RENDER_TARGET_FLUSH,
+                                    "cache history: post-blit");
 }
 
 static void
@@ -549,8 +555,7 @@ iris_copy_region(struct blorp_context *blorp,
    get_copy_region_aux_settings(devinfo, dst_res, &dst_aux_usage,
                                 &dst_clear_supported);
 
-   bool flush_hack = iris_batch_references(batch, src_res->bo);
-   if (flush_hack)
+   if (iris_batch_references(batch, src_res->bo))
       tex_cache_flush_hack(batch);
 
    if (dst->target == PIPE_BUFFER)
@@ -570,9 +575,6 @@ iris_copy_region(struct blorp_context *blorp,
       blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
       blorp_buffer_copy(&blorp_batch, src_addr, dst_addr, src_box->width);
       blorp_batch_finish(&blorp_batch);
-
-      iris_flush_and_dirty_for_history(ice, batch,
-                                       (struct iris_resource *) dst);
    } else {
       // XXX: what about one surface being a buffer and not the other?
 
@@ -605,8 +607,20 @@ iris_copy_region(struct blorp_context *blorp,
                                  src_box->depth, dst_aux_usage);
    }
 
-   if (flush_hack)
-      tex_cache_flush_hack(batch);
+   tex_cache_flush_hack(batch);
+}
+
+static struct iris_batch *
+get_preferred_batch(struct iris_context *ice, struct iris_bo *bo)
+{
+   /* If the compute batch is already using this buffer, we'd prefer to
+    * continue queueing in the compute batch.
+    */
+   if (iris_batch_references(&ice->batches[IRIS_BATCH_COMPUTE], bo))
+      return &ice->batches[IRIS_BATCH_COMPUTE];
+
+   /* Otherwise default to the render batch. */
+   return &ice->batches[IRIS_BATCH_RENDER];
 }
 
 
@@ -628,8 +642,36 @@ iris_resource_copy_region(struct pipe_context *ctx,
    struct iris_context *ice = (void *) ctx;
    struct iris_batch *batch = &ice->batches[IRIS_BATCH_RENDER];
 
+   /* Use MI_COPY_MEM_MEM for tiny (<= 16 byte, % 4) buffer copies. */
+   if (src->target == PIPE_BUFFER && dst->target == PIPE_BUFFER &&
+       (src_box->width % 4 == 0) && src_box->width <= 16) {
+      struct iris_bo *dst_bo = iris_resource_bo(dst);
+      batch = get_preferred_batch(ice, dst_bo);
+      iris_batch_maybe_flush(batch, 24 + 5 * (src_box->width / 4));
+      iris_emit_pipe_control_flush(batch,
+                                   "stall for MI_COPY_MEM_MEM copy_region",
+                                   PIPE_CONTROL_CS_STALL);
+      ice->vtbl.copy_mem_mem(batch, dst_bo, dstx, iris_resource_bo(src),
+                             src_box->x, src_box->width);
+      return;
+   }
+
    iris_copy_region(&ice->blorp, batch, dst, dst_level, dstx, dsty, dstz,
                     src, src_level, src_box);
+
+   if (util_format_is_depth_and_stencil(dst->format) &&
+       util_format_has_stencil(util_format_description(src->format))) {
+      struct iris_resource *junk, *s_src_res, *s_dst_res;
+      iris_get_depth_stencil_resources(src, &junk, &s_src_res);
+      iris_get_depth_stencil_resources(dst, &junk, &s_dst_res);
+
+      iris_copy_region(&ice->blorp, batch, &s_dst_res->base, dst_level, dstx,
+                       dsty, dstz, &s_src_res->base, src_level, src_box);
+   }
+
+   iris_flush_and_dirty_for_history(ice, batch, (struct iris_resource *) dst,
+                                    PIPE_CONTROL_RENDER_TARGET_FLUSH,
+                                    "cache history: post copy_region");
 }
 
 void

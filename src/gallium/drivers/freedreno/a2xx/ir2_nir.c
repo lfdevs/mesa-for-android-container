@@ -32,13 +32,16 @@
 static const nir_shader_compiler_options options = {
 	.lower_fpow = true,
 	.lower_flrp32 = true,
-	.lower_fmod32 = true,
+	.lower_fmod = true,
 	.lower_fdiv = true,
 	.lower_fceil = true,
 	.fuse_ffma = true,
 	/* .fdot_replicates = true, it is replicated, but it makes things worse */
 	.lower_all_io_to_temps = true,
 	.vertex_id_zero_based = true, /* its not implemented anyway */
+	.lower_bitops = true,
+	.lower_rotate = true,
+	.lower_vector_cmp = true,
 };
 
 const nir_shader_compiler_options *
@@ -119,7 +122,7 @@ ir2_optimize_nir(nir_shader *s, bool lower)
 	ir2_optimize_loop(s);
 
 	OPT_V(s, nir_remove_dead_variables, nir_var_function_temp);
-	OPT_V(s, nir_move_load_const);
+	OPT_V(s, nir_opt_sink, nir_move_const_undef);
 
 	/* TODO we dont want to get shaders writing to depth for depth textures */
 	if (s->info.stage == MESA_SHADER_FRAGMENT) {
@@ -283,12 +286,11 @@ instr_create_alu(struct ir2_context *ctx, nir_op opcode, unsigned ncomp)
 	} nir_ir2_opc[nir_num_opcodes+1] = {
 		[0 ... nir_num_opcodes - 1] = {-1, -1},
 
-		[nir_op_fmov] = {MAXs, MAXv},
+		[nir_op_mov] = {MAXs, MAXv},
+		[nir_op_fneg] = {MAXs, MAXv},
+		[nir_op_fabs] = {MAXs, MAXv},
+		[nir_op_fsat] = {MAXs, MAXv},
 		[nir_op_fsign] = {-1, CNDGTEv},
-		[nir_op_fnot] = {SETEs, SETEv},
-		[nir_op_for] = {MAXs, MAXv},
-		[nir_op_fand] = {MINs, MINv},
-		[nir_op_fxor] = {-1, SETNEv},
 		[nir_op_fadd] = {ADDs, ADDv},
 		[nir_op_fsub] = {ADDs, ADDv},
 		[nir_op_fmul] = {MULs, MULv},
@@ -314,9 +316,6 @@ instr_create_alu(struct ir2_context *ctx, nir_op opcode, unsigned ncomp)
 		[nir_op_fcos] = {COS, -1},
 		[nir_op_fsin] = {SIN, -1},
 		/* no fsat, fneg, fabs since source mods deal with those */
-
-		/* some nir passes still generate nir_op_imov */
-		[nir_op_imov] = {MAXs, MAXv},
 
 		/* so we can use this function with non-nir op */
 #define ir2_op_cube nir_num_opcodes
@@ -383,7 +382,7 @@ make_src_noconst(struct ir2_context *ctx, nir_src src)
 
 	if (nir_src_as_const_value(src)) {
 		assert(src.is_ssa);
-		instr = instr_create_alu(ctx, nir_op_fmov, src.ssa->num_components);
+		instr = instr_create_alu(ctx, nir_op_mov, src.ssa->num_components);
 		instr->src[0] = make_src(ctx, src);
 		return ir2_src(instr->idx, 0, IR2_SRC_SSA);
 	}
@@ -433,6 +432,15 @@ emit_alu(struct ir2_context *ctx, nir_alu_instr * alu)
 
 	/* workarounds for NIR ops that don't map directly to a2xx ops */
 	switch (alu->op) {
+	case nir_op_fneg:
+		instr->src[0].negate = 1;
+		break;
+	case nir_op_fabs:
+		instr->src[0].abs = 1;
+		break;
+	case nir_op_fsat:
+		instr->alu.saturate = 1;
+		break;
 	case nir_op_slt:
 		tmp = instr->src[0];
 		instr->src[0] = instr->src[1];
@@ -509,24 +517,24 @@ load_input(struct ir2_context *ctx, nir_dest *dst, unsigned idx)
 		 * TODO: only components that are required by fragment shader
 		 */
 		instr = instr_create_alu_reg(ctx,
-			ctx->so->is_a20x ? nir_op_fadd : nir_op_fmov, 3, NULL);
+			ctx->so->is_a20x ? nir_op_fadd : nir_op_mov, 3, NULL);
 		instr->src[0] = ir2_src(ctx->f->inputs_count, 0, IR2_SRC_INPUT);
 		instr->src[0].abs = true;
 		/* on a20x, C64 contains the tile offset */
 		instr->src[1] = ir2_src(64, 0, IR2_SRC_CONST);
 
-		instr = instr_create_alu_reg(ctx, nir_op_fmov, 4, instr);
+		instr = instr_create_alu_reg(ctx, nir_op_mov, 4, instr);
 		instr->src[0] = ir2_src(ctx->f->fragcoord, 0, IR2_SRC_INPUT);
 
 		instr = instr_create_alu_reg(ctx, nir_op_frcp, 8, instr);
 		instr->src[0] = ir2_src(ctx->f->fragcoord, IR2_SWIZZLE_Y, IR2_SRC_INPUT);
 
 		unsigned reg_idx = instr->reg - ctx->reg; /* XXX */
-		instr = instr_create_alu_dest(ctx, nir_op_fmov, dst);
+		instr = instr_create_alu_dest(ctx, nir_op_mov, dst);
 		instr->src[0] = ir2_src(reg_idx, 0, IR2_SRC_REG);
 		break;
 	default:
-		instr = instr_create_alu_dest(ctx, nir_op_fmov, dst);
+		instr = instr_create_alu_dest(ctx, nir_op_mov, dst);
 		instr->src[0] = ir2_src(idx, 0, IR2_SRC_INPUT);
 		break;
 	}
@@ -576,7 +584,7 @@ store_output(struct ir2_context *ctx, nir_src src, unsigned slot, unsigned ncomp
 		return;
 	}
 
-	instr = instr_create_alu(ctx, nir_op_fmov, ncomp);
+	instr = instr_create_alu(ctx, nir_op_mov, ncomp);
 	instr->src[0] = make_src(ctx, src);
 	instr->alu.export = idx;
 }
@@ -600,7 +608,7 @@ emit_intrinsic(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 		assert(const_offset); /* TODO can be false in ES2? */
 		idx = nir_intrinsic_base(intr);
 		idx += (uint32_t) nir_src_as_const_value(intr->src[0])[0].f32;
-		instr = instr_create_alu_dest(ctx, nir_op_fmov, &intr->dest);
+		instr = instr_create_alu_dest(ctx, nir_op_mov, &intr->dest);
 		instr->src[0] = ir2_src(idx, 0, IR2_SRC_CONST);
 		break;
 	case nir_intrinsic_discard:
@@ -721,7 +729,7 @@ emit_tex(struct ir2_context *ctx, nir_tex_instr * tex)
 
 	instr = ir2_instr_create_fetch(ctx, &tex->dest, TEX_FETCH);
 	instr->src[0] = src_coord;
-	instr->src[0].swizzle = is_cube ? IR2_SWIZZLE_XYW : 0;
+	instr->src[0].swizzle = is_cube ? IR2_SWIZZLE_YXW : 0;
 	instr->fetch.tex.is_cube = is_cube;
 	instr->fetch.tex.is_rect = is_rect;
 	instr->fetch.tex.samp_id = tex->sampler_index;
@@ -780,7 +788,7 @@ emit_undef(struct ir2_context *ctx, nir_ssa_undef_instr * undef)
 
 	struct ir2_instr *instr;
 
-	instr = instr_create_alu_dest(ctx, nir_op_fmov,
+	instr = instr_create_alu_dest(ctx, nir_op_mov,
 		&(nir_dest) {.ssa = undef->def,.is_ssa = true});
 	instr->src[0] = ir2_src(0, 0, IR2_SRC_CONST);
 }
@@ -843,11 +851,11 @@ extra_position_exports(struct ir2_context *ctx, bool binning)
 
 	/* fragcoord z/w */
 	if (ctx->f->fragcoord >= 0 && !binning) {
-		instr = instr_create_alu(ctx, nir_op_fmov, 1);
+		instr = instr_create_alu(ctx, nir_op_mov, 1);
 		instr->src[0] = ir2_src(wincoord->idx, IR2_SWIZZLE_Z, IR2_SRC_SSA);
 		instr->alu.export = ctx->f->fragcoord;
 
-		instr = instr_create_alu(ctx, nir_op_fmov, 1);
+		instr = instr_create_alu(ctx, nir_op_mov, 1);
 		instr->src[0] = ctx->position;
 		instr->src[0].swizzle = IR2_SWIZZLE_W;
 		instr->alu.export = ctx->f->fragcoord;
@@ -1069,15 +1077,25 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
 	/* postprocess */
 	OPT_V(ctx->nir, nir_opt_algebraic_late);
 
-	OPT_V(ctx->nir, nir_lower_to_source_mods, nir_lower_all_source_mods);
 	OPT_V(ctx->nir, nir_copy_prop);
 	OPT_V(ctx->nir, nir_opt_dce);
-	OPT_V(ctx->nir, nir_opt_move_comparisons);
+	OPT_V(ctx->nir, nir_opt_move, nir_move_comparisons);
 
+	OPT_V(ctx->nir, nir_lower_int_to_float);
 	OPT_V(ctx->nir, nir_lower_bool_to_float);
+	OPT_V(ctx->nir, nir_lower_to_source_mods, nir_lower_all_source_mods);
 
-	/* lower to scalar instructions that can only be scalar on a2xx */
-	OPT_V(ctx->nir, ir2_nir_lower_scalar);
+	/* TODO: static bitset ? */
+	BITSET_DECLARE(scalar_ops, nir_num_opcodes);
+	BITSET_ZERO(scalar_ops);
+	BITSET_SET(scalar_ops, nir_op_frsq);
+	BITSET_SET(scalar_ops, nir_op_frcp);
+	BITSET_SET(scalar_ops, nir_op_flog2);
+	BITSET_SET(scalar_ops, nir_op_fexp2);
+	BITSET_SET(scalar_ops, nir_op_fsqrt);
+	BITSET_SET(scalar_ops, nir_op_fcos);
+	BITSET_SET(scalar_ops, nir_op_fsin);
+	OPT_V(ctx->nir, nir_lower_alu_to_scalar, scalar_ops);
 
 	OPT_V(ctx->nir, nir_lower_locals_to_regs);
 

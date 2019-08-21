@@ -38,6 +38,8 @@ struct si_query_buffer;
 struct si_query_hw;
 struct si_resource;
 
+#define SI_MAX_STREAMS 4
+
 enum {
 	SI_QUERY_DRAW_CALLS = PIPE_QUERY_DRIVER_SPECIFIC,
 	SI_QUERY_DECOMPRESS_CALLS,
@@ -112,6 +114,9 @@ enum {
 	SI_QUERY_GPIN_NUM_SE,
 	SI_QUERY_TIME_ELAPSED_SDMA,
 	SI_QUERY_TIME_ELAPSED_SDMA_SI, /* emulated, measured on the CPU */
+	SI_QUERY_PD_NUM_PRIMS_ACCEPTED,
+	SI_QUERY_PD_NUM_PRIMS_REJECTED,
+	SI_QUERY_PD_NUM_PRIMS_INELIGIBLE,
 
 	SI_QUERY_FIRST_PERFCOUNTER = PIPE_QUERY_DRIVER_SPECIFIC + 100,
 };
@@ -122,7 +127,7 @@ enum {
 };
 
 struct si_query_ops {
-	void (*destroy)(struct si_screen *, struct si_query *);
+	void (*destroy)(struct si_context *, struct si_query *);
 	bool (*begin)(struct si_context *, struct si_query *);
 	bool (*end)(struct si_context *, struct si_query *);
 	bool (*get_result)(struct si_context *,
@@ -211,7 +216,7 @@ struct si_query_hw {
 	unsigned workaround_offset;
 };
 
-void si_query_hw_destroy(struct si_screen *sscreen,
+void si_query_hw_destroy(struct si_context *sctx,
 			 struct si_query *squery);
 bool si_query_hw_begin(struct si_context *sctx,
 		       struct si_query *squery);
@@ -223,6 +228,12 @@ bool si_query_hw_get_result(struct si_context *sctx,
 			    union pipe_query_result *result);
 void si_query_hw_suspend(struct si_context *sctx, struct si_query *query);
 void si_query_hw_resume(struct si_context *sctx, struct si_query *query);
+
+
+/* Shader-based queries */
+struct pipe_query *gfx10_sh_query_create(struct si_screen *screen,
+					 enum pipe_query_type query_type,
+					 unsigned index);
 
 
 /* Performance counters */

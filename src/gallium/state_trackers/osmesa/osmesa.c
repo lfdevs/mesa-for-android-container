@@ -304,7 +304,7 @@ stfbi_to_osbuffer(struct st_framebuffer_iface *stfbi)
  * Called via glFlush/glFinish.  This is where we copy the contents
  * of the driver's color buffer into the user-specified buffer.
  */
-static boolean
+static bool
 osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
                                   struct st_framebuffer_iface *stfbi,
                                   enum st_attachment_type statt)
@@ -373,7 +373,7 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
 
    pipe->transfer_unmap(pipe, transfer);
 
-   return TRUE;
+   return true;
 }
 
 
@@ -381,7 +381,7 @@ osmesa_st_framebuffer_flush_front(struct st_context_iface *stctx,
  * Called by the st manager to validate the framebuffer (allocate
  * its resources).
  */
-static boolean
+static bool
 osmesa_st_framebuffer_validate(struct st_context_iface *stctx,
                                struct st_framebuffer_iface *stfbi,
                                const enum st_attachment_type *statts,
@@ -438,7 +438,7 @@ osmesa_st_framebuffer_validate(struct st_context_iface *stctx,
          screen->resource_create(screen, &templat);
    }
 
-   return TRUE;
+   return true;
 }
 
 static uint32_t osmesa_fb_ID = 0;
@@ -885,9 +885,7 @@ OSMesaGetIntegerv(GLint pname, GLint *value)
    case OSMESA_MAX_HEIGHT:
       {
          struct pipe_screen *screen = get_st_manager()->screen;
-         int maxLevels = screen->get_param(screen,
-                                           PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
-         *value = 1 << (maxLevels - 1);
+         *value = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
       }
       return;
    default:

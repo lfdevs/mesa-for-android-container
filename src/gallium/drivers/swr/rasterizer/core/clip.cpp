@@ -185,10 +185,10 @@ void ClipRectangles(DRAW_CONTEXT*      pDC,
                     simdscalari const& viewportIdx,
                     simdscalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipRectangles, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipRectangles, pDC->drawId);
     Clipper<SIMD256, 3> clipper(workerId, pDC);
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
-    RDTSC_END(FEClipRectangles, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipRectangles, 1);
 }
 
 void ClipTriangles(DRAW_CONTEXT*      pDC,
@@ -200,10 +200,10 @@ void ClipTriangles(DRAW_CONTEXT*      pDC,
                    simdscalari const& viewportIdx,
                    simdscalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipTriangles, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipTriangles, pDC->drawId);
     Clipper<SIMD256, 3> clipper(workerId, pDC);
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
-    RDTSC_END(FEClipTriangles, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipTriangles, 1);
 }
 
 void ClipLines(DRAW_CONTEXT*      pDC,
@@ -215,10 +215,10 @@ void ClipLines(DRAW_CONTEXT*      pDC,
                simdscalari const& viewportIdx,
                simdscalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipLines, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipLines, pDC->drawId);
     Clipper<SIMD256, 2> clipper(workerId, pDC);
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
-    RDTSC_END(FEClipLines, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipLines, 1);
 }
 
 void ClipPoints(DRAW_CONTEXT*      pDC,
@@ -230,10 +230,10 @@ void ClipPoints(DRAW_CONTEXT*      pDC,
                 simdscalari const& viewportIdx,
                 simdscalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipPoints, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipPoints, pDC->drawId);
     Clipper<SIMD256, 1> clipper(workerId, pDC);
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
-    RDTSC_END(FEClipPoints, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipPoints, 1);
 }
 
 #if USE_SIMD16_FRONTEND
@@ -246,7 +246,7 @@ void SIMDCALL ClipRectangles_simd16(DRAW_CONTEXT*        pDC,
                                     simd16scalari const& viewportIdx,
                                     simd16scalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipRectangles, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipRectangles, pDC->drawId);
 
     enum
     {
@@ -258,7 +258,7 @@ void SIMDCALL ClipRectangles_simd16(DRAW_CONTEXT*        pDC,
     pa.useAlternateOffset = false;
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
 
-    RDTSC_END(FEClipRectangles, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipRectangles, 1);
 }
 
 void SIMDCALL ClipTriangles_simd16(DRAW_CONTEXT*        pDC,
@@ -270,7 +270,7 @@ void SIMDCALL ClipTriangles_simd16(DRAW_CONTEXT*        pDC,
                                    simd16scalari const& viewportIdx,
                                    simd16scalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipTriangles, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipTriangles, pDC->drawId);
 
     enum
     {
@@ -282,7 +282,7 @@ void SIMDCALL ClipTriangles_simd16(DRAW_CONTEXT*        pDC,
     pa.useAlternateOffset = false;
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
 
-    RDTSC_END(FEClipTriangles, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipTriangles, 1);
 }
 
 void SIMDCALL ClipLines_simd16(DRAW_CONTEXT*        pDC,
@@ -294,7 +294,7 @@ void SIMDCALL ClipLines_simd16(DRAW_CONTEXT*        pDC,
                                simd16scalari const& viewportIdx,
                                simd16scalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipLines, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipLines, pDC->drawId);
 
     enum
     {
@@ -306,7 +306,7 @@ void SIMDCALL ClipLines_simd16(DRAW_CONTEXT*        pDC,
     pa.useAlternateOffset = false;
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
 
-    RDTSC_END(FEClipLines, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipLines, 1);
 }
 
 void SIMDCALL ClipPoints_simd16(DRAW_CONTEXT*        pDC,
@@ -318,7 +318,7 @@ void SIMDCALL ClipPoints_simd16(DRAW_CONTEXT*        pDC,
                                 simd16scalari const& viewportIdx,
                                 simd16scalari const& rtIdx)
 {
-    RDTSC_BEGIN(FEClipPoints, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, FEClipPoints, pDC->drawId);
 
     enum
     {
@@ -330,7 +330,7 @@ void SIMDCALL ClipPoints_simd16(DRAW_CONTEXT*        pDC,
     pa.useAlternateOffset = false;
     clipper.ExecuteStage(pa, prims, primMask, primId, viewportIdx, rtIdx);
 
-    RDTSC_END(FEClipPoints, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, FEClipPoints, 1);
 }
 
 #endif

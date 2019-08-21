@@ -82,6 +82,8 @@ struct llvmpipe_context {
    struct pipe_viewport_state viewports[PIPE_MAX_VIEWPORTS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
 
+   struct pipe_shader_buffer ssbos[PIPE_SHADER_TYPES][LP_MAX_TGSI_SHADER_BUFFERS];
+
    unsigned num_samplers[PIPE_SHADER_TYPES];
    unsigned num_sampler_views[PIPE_SHADER_TYPES];
 

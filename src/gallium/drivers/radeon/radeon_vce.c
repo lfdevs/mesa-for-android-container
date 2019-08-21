@@ -410,10 +410,10 @@ struct pipe_video_codec *si_vce_create_encoder(struct pipe_context *context,
 	if (!enc)
 		return NULL;
 
-	if (sscreen->info.drm_major == 3)
+	if (sscreen->info.is_amdgpu)
 		enc->use_vm = true;
-	if ((sscreen->info.drm_major == 2 && sscreen->info.drm_minor >= 42) ||
-            sscreen->info.drm_major == 3)
+	if ((!sscreen->info.is_amdgpu && sscreen->info.drm_minor >= 42) ||
+            sscreen->info.is_amdgpu)
 		enc->use_vui = true;
 	if (sscreen->info.family >= CHIP_TONGA &&
 	    sscreen->info.family != CHIP_STONEY &&

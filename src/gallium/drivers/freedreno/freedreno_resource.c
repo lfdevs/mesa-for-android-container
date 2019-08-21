@@ -50,6 +50,14 @@
 /* XXX this should go away, needed for 'struct winsys_handle' */
 #include "state_tracker/drm_driver.h"
 
+/* A private modifier for now, so we have a way to request tiled but not
+ * compressed.  It would perhaps be good to get real modifiers for the
+ * tiled formats, but would probably need to do some work to figure out
+ * the layout(s) of the tiled modes, and whether they are the same
+ * across generations.
+ */
+#define FD_FORMAT_MOD_QCOM_TILED	fourcc_mod_code(QCOM, 0xffffffff)
+
 /**
  * Go through the entire state and see if the resource is bound
  * anywhere. If it is, mark the relevant state as dirty. This is
@@ -84,6 +92,15 @@ rebind_resource(struct fd_context *ctx, struct pipe_resource *prsc)
 				break;
 			if (ctx->tex[stage].textures[i] && (ctx->tex[stage].textures[i]->texture == prsc))
 				ctx->dirty_shader[stage] |= FD_DIRTY_SHADER_TEX;
+		}
+
+		/* Images */
+		const unsigned num_images = util_last_bit(ctx->shaderimg[stage].enabled_mask);
+		for (unsigned i = 0; i < num_images; i++) {
+			if (ctx->dirty_shader[stage] & FD_DIRTY_SHADER_IMAGE)
+				break;
+			if (ctx->shaderimg[stage].si[i].resource == prsc)
+				ctx->dirty_shader[stage] |= FD_DIRTY_SHADER_IMAGE;
 		}
 
 		/* SSBOs */
@@ -136,9 +153,15 @@ do_blit(struct fd_context *ctx, const struct pipe_blit_info *blit, bool fallback
 	}
 }
 
+/**
+ * @rsc: the resource to shadow
+ * @level: the level to discard (if box != NULL, otherwise ignored)
+ * @box: the box to discard (or NULL if none)
+ * @modifier: the modifier for the new buffer state
+ */
 static bool
 fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
-		unsigned level, const struct pipe_box *box)
+		unsigned level, const struct pipe_box *box, uint64_t modifier)
 {
 	struct pipe_context *pctx = &ctx->base;
 	struct pipe_resource *prsc = &rsc->base;
@@ -160,15 +183,16 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	if (prsc->target == PIPE_BUFFER)
 		fallback = true;
 
-	bool whole_level = util_texrange_covers_whole_level(prsc, level,
+	bool discard_whole_level = box && util_texrange_covers_whole_level(prsc, level,
 		box->x, box->y, box->z, box->width, box->height, box->depth);
 
 	/* TODO need to be more clever about current level */
-	if ((prsc->target >= PIPE_TEXTURE_2D) && !whole_level)
+	if ((prsc->target >= PIPE_TEXTURE_2D) && box && !discard_whole_level)
 		return false;
 
 	struct pipe_resource *pshadow =
-		pctx->screen->resource_create(pctx->screen, prsc);
+		pctx->screen->resource_create_with_modifiers(pctx->screen,
+				prsc, &modifier, 1);
 
 	if (!pshadow)
 		return false;
@@ -199,6 +223,10 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	/* TODO valid_buffer_range?? */
 	swap(rsc->bo,        shadow->bo);
 	swap(rsc->write_batch,   shadow->write_batch);
+	swap(rsc->offset, shadow->offset);
+	swap(rsc->ubwc_offset, shadow->ubwc_offset);
+	swap(rsc->ubwc_pitch, shadow->ubwc_pitch);
+	swap(rsc->ubwc_size, shadow->ubwc_size);
 	rsc->seqno = p_atomic_inc_return(&ctx->screen->rsc_seqno);
 
 	/* at this point, the newly created shadow buffer is not referenced
@@ -231,7 +259,7 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 
 	/* blit the other levels in their entirety: */
 	for (unsigned l = 0; l <= prsc->last_level; l++) {
-		if (l == level)
+		if (box && l == level)
 			continue;
 
 		/* just blit whole level: */
@@ -246,7 +274,7 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	/* deal w/ current level specially, since we might need to split
 	 * it up into a couple blits:
 	 */
-	if (!whole_level) {
+	if (box && !discard_whole_level) {
 		set_box(level, level);
 
 		switch (prsc->target) {
@@ -284,6 +312,34 @@ fd_try_shadow_resource(struct fd_context *ctx, struct fd_resource *rsc,
 	return true;
 }
 
+/**
+ * Uncompress an UBWC compressed buffer "in place".  This works basically
+ * like resource shadowing, creating a new resource, and doing an uncompress
+ * blit, and swapping the state between shadow and original resource so it
+ * appears to the state tracker as if nothing changed.
+ */
+void
+fd_resource_uncompress(struct fd_context *ctx, struct fd_resource *rsc)
+{
+	bool success =
+		fd_try_shadow_resource(ctx, rsc, 0, NULL, FD_FORMAT_MOD_QCOM_TILED);
+
+	/* shadow should not fail in any cases where we need to uncompress: */
+	debug_assert(success);
+
+	/*
+	 * TODO what if rsc is used in other contexts, we don't currently
+	 * have a good way to rebind_resource() in other contexts.  And an
+	 * app that is reading one resource in multiple contexts, isn't
+	 * going to expect that the resource is modified.
+	 *
+	 * Hopefully the edge cases where we need to uncompress are rare
+	 * enough that they mostly only show up in deqp.
+	 */
+
+	rebind_resource(ctx, &rsc->base);
+}
+
 static struct fd_resource *
 fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
 		unsigned level, const struct pipe_box *box)
@@ -297,6 +353,8 @@ fd_alloc_staging(struct fd_context *ctx, struct fd_resource *rsc,
 	 * for 3d textures, it is the depth:
 	 */
 	if (tmpl.array_size > 1) {
+		if (tmpl.target == PIPE_TEXTURE_CUBE)
+			tmpl.target = PIPE_TEXTURE_2D_ARRAY;
 		tmpl.array_size = box->depth;
 		tmpl.depth0 = 1;
 	} else {
@@ -391,7 +449,7 @@ flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
 		mtx_unlock(&ctx->screen->lock);
 
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
-			fd_batch_flush(batch, false, false);
+			fd_batch_flush(batch, false);
 
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask) {
 			fd_batch_sync(batch);
@@ -399,7 +457,7 @@ flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
 		}
 		assert(rsc->batch_mask == 0);
 	} else if (write_batch) {
-		fd_batch_flush(write_batch, true, false);
+		fd_batch_flush(write_batch, true);
 	}
 
 	fd_batch_reference(&write_batch, NULL);
@@ -582,7 +640,8 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 			/* try shadowing only if it avoids a flush, otherwise staging would
 			 * be better:
 			 */
-			if (needs_flush && fd_try_shadow_resource(ctx, rsc, level, box)) {
+			if (needs_flush && fd_try_shadow_resource(ctx, rsc, level,
+							box, DRM_FORMAT_MOD_LINEAR)) {
 				needs_flush = busy = false;
 				rebind_resource(ctx, prsc);
 				ctx->stats.shadow_uploads++;
@@ -681,11 +740,14 @@ fd_resource_modifier(struct fd_resource *rsc)
 	if (!rsc->tile_mode)
 		return DRM_FORMAT_MOD_LINEAR;
 
+	if (rsc->ubwc_size)
+		return DRM_FORMAT_MOD_QCOM_COMPRESSED;
+
 	/* TODO invent a modifier for tiled but not UBWC buffers: */
 	return DRM_FORMAT_MOD_INVALID;
 }
 
-static boolean
+static bool
 fd_resource_get_handle(struct pipe_screen *pscreen,
 		struct pipe_context *pctx,
 		struct pipe_resource *prsc,
@@ -856,6 +918,9 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 		struct renderonly_scanout *scanout;
 		struct winsys_handle handle;
 
+		/* apply freedreno alignment requirement */
+		scanout_templat.width0 = align(tmpl->width0, screen->gmem_alignw);
+
 		scanout = renderonly_scanout_for_resource(&scanout_templat,
 												  screen->ro, &handle);
 		if (!scanout)
@@ -910,20 +975,7 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 	if (tmpl->bind & PIPE_BIND_SHARED)
 		allow_ubwc = drm_find_modifier(DRM_FORMAT_MOD_QCOM_COMPRESSED, modifiers, count);
 
-	/* TODO turn on UBWC for all internal buffers
-	 *
-	 * There are still some regressions in deqp with UBWC enabled.  I
-	 * think it is mostly related to sampler/image views using a format
-	 * that doesn't support compression with a resource created with
-	 * a format that does.  We need to track the compression state of
-	 * a buffer and do an (in-place, hopefully?) resolve if it is re-
-	 * interpreted with a format that does not support compression.
-	 *
-	 * It is possible (likely?) that we can't do atomic ops on a
-	 * compressed buffer as well, so this would also require transition
-	 * to a compressed state.
-	 */
-	allow_ubwc &= !!(fd_mesa_debug & FD_DBG_UBWC);
+	allow_ubwc &= !(fd_mesa_debug & FD_DBG_NOUBWC);
 
 	if (screen->tile_mode &&
 			(tmpl->target != PIPE_BUFFER) &&
@@ -1078,7 +1130,7 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
 	if (handle->modifier == DRM_FORMAT_MOD_QCOM_COMPRESSED) {
 		if (!is_supported_modifier(pscreen, tmpl->format,
 				DRM_FORMAT_MOD_QCOM_COMPRESSED)) {
-			DBG("bad modifier: %llx", handle->modifier);
+			DBG("bad modifier: %"PRIx64, handle->modifier);
 			goto fail;
 		}
 		debug_assert(screen->fill_ubwc_buffer_sizes);

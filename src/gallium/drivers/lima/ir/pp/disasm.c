@@ -304,10 +304,18 @@ print_uniform(void *code, unsigned offset)
       break;
    }
 
-   if (uniform->alignment)
-      printf(" %u", uniform->index);
-   else
-      printf(" %u.%c", uniform->index >> 2, "xyzw"[uniform->index & 3]);
+   int16_t index = uniform->index;
+   switch (uniform->alignment) {
+   case 2:
+      printf(" %d", index);
+      break;
+   case 1:
+      printf(" %d.%s", index / 2, (index & 1) ? "zw" : "xy");
+      break;
+   default:
+      printf(" %d.%c", index / 4, "xyzw"[index & 3]);
+      break;
+   }
 
    if (uniform->offset_en) {
       printf(" ");
@@ -649,11 +657,17 @@ print_temp_write(void *code, unsigned offset)
 
    printf("store.t");
 
-   if (temp_write->temp_write.alignment) {
-      printf(" %u", temp_write->temp_write.index);
-   } else {
-      printf(" %u.%c", temp_write->temp_write.index >> 2,
-             "xyzw"[temp_write->temp_write.index & 3]);
+   int16_t index = temp_write->temp_write.index;
+   switch (temp_write->temp_write.alignment) {
+   case 2:
+      printf(" %d", index);
+      break;
+   case 1:
+      printf(" %d.%s", index / 2, (index & 1) ? "zw" : "xy");
+      break;
+   default:
+      printf(" %d.%c", index / 4, "xyzw"[index & 3]);
+      break;
    }
 
    if (temp_write->temp_write.offset_en) {

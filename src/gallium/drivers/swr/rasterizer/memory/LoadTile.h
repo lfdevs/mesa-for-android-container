@@ -336,3 +336,18 @@ static INLINE void InitLoadTileDepthTable(PFN_LOAD_TILES(&table)[NUM_SWR_FORMATS
    table[R16_UNORM]                       = LoadMacroTile<TilingTraits<TTileMode, 16>, R16_UNORM, R32_FLOAT>::Load;
 }
 
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Loads a full hottile from a render surface
+/// @param hPrivateContext - Handle to private DC
+/// @param dstFormat - Format for hot tile.
+/// @param renderTargetIndex - Index to src render target
+/// @param x, y - Coordinates to raster tile.
+/// @param pDstHotTile - Pointer to Hot Tile
+void SwrLoadHotTile(
+        HANDLE hWorkerPrivateData,
+        const SWR_SURFACE_STATE *pSrcSurface,
+        SWR_FORMAT dstFormat,
+        SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
+        uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,
+        uint8_t *pDstHotTile);

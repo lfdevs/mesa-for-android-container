@@ -289,13 +289,13 @@ static uint64_t nvc0_miptree_get_modifier(struct nv50_miptree *mt)
    return modifier;
 }
 
-static boolean
+static bool
 nvc0_miptree_get_handle(struct pipe_screen *pscreen,
                         struct pipe_resource *pt,
                         struct winsys_handle *whandle)
 {
    struct nv50_miptree *mt = nv50_miptree(pt);
-   boolean ret;
+   bool ret;
 
    ret = nv50_miptree_get_handle(pscreen, pt, whandle);
    if (!ret)

@@ -27,16 +27,17 @@
 #include "virgl_encode.h"
 #include "virgl_protocol.h"
 #include "virgl_resource.h"
+#include "virgl_screen.h"
 
 struct virgl_query {
-   uint32_t handle;
    struct virgl_resource *buf;
+   uint32_t handle;
+   uint32_t result_size;
 
-   unsigned index;
-   unsigned type;
-   unsigned result_size;
-   unsigned result_gotten_sent;
+   bool ready;
+   uint64_t result;
 };
+
 #define VIRGL_QUERY_OCCLUSION_COUNTER     0
 #define VIRGL_QUERY_OCCLUSION_PREDICATE   1
 #define VIRGL_QUERY_TIMESTAMP             2
@@ -80,7 +81,7 @@ static inline struct virgl_query *virgl_query(struct pipe_query *q)
 
 static void virgl_render_condition(struct pipe_context *ctx,
                                   struct pipe_query *q,
-                                  boolean condition,
+                                  bool condition,
                                   enum pipe_render_cond_flag mode)
 {
    struct virgl_context *vctx = virgl_context(ctx);
@@ -96,25 +97,29 @@ static struct pipe_query *virgl_create_query(struct pipe_context *ctx,
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_query *query;
-   uint32_t handle;
 
    query = CALLOC_STRUCT(virgl_query);
    if (!query)
       return NULL;
 
-   query->buf = (struct virgl_resource *)pipe_buffer_create(ctx->screen, PIPE_BIND_CUSTOM,
-                                                           PIPE_USAGE_STAGING, sizeof(struct virgl_host_query_state));
+   query->buf = (struct virgl_resource *)
+      pipe_buffer_create(ctx->screen, PIPE_BIND_CUSTOM, PIPE_USAGE_STAGING,
+                         sizeof(struct virgl_host_query_state));
    if (!query->buf) {
       FREE(query);
       return NULL;
    }
 
-   handle = virgl_object_assign_handle();
-   query->type = pipe_to_virgl_query(query_type);
-   query->index = index;
-   query->handle = handle;
-   query->buf->clean_mask &= ~1;
-   virgl_encoder_create_query(vctx, handle, query->type, index, query->buf, 0);
+   query->handle = virgl_object_assign_handle();
+   query->result_size = (query_type == PIPE_QUERY_TIMESTAMP ||
+                         query_type == PIPE_QUERY_TIME_ELAPSED) ? 8 : 4;
+
+   util_range_add(&query->buf->valid_buffer_range, 0,
+                  sizeof(struct virgl_host_query_state));
+   virgl_resource_dirty(query->buf, 0);
+
+   virgl_encoder_create_query(vctx, query->handle,
+         pipe_to_virgl_query(query_type), index, query->buf, 0);
 
    return (struct pipe_query *)query;
 }
@@ -131,84 +136,108 @@ static void virgl_destroy_query(struct pipe_context *ctx,
    FREE(query);
 }
 
-static boolean virgl_begin_query(struct pipe_context *ctx,
+static bool virgl_begin_query(struct pipe_context *ctx,
                              struct pipe_query *q)
 {
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_query *query = virgl_query(q);
 
-   virgl_resource_dirty(query->buf, 0);
    virgl_encoder_begin_query(vctx, query->handle);
+
    return true;
 }
 
 static bool virgl_end_query(struct pipe_context *ctx,
                            struct pipe_query *q)
 {
+   struct virgl_screen *vs = virgl_screen(ctx->screen);
    struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_query *query = virgl_query(q);
-   struct pipe_box box;
+   struct virgl_host_query_state *host_state;
 
-   uint32_t qs = VIRGL_QUERY_STATE_WAIT_HOST;
-   u_box_1d(0, 4, &box);
-   virgl_transfer_inline_write(ctx, &query->buf->u.b, 0, PIPE_TRANSFER_WRITE,
-                              &box, &qs, 0, 0);
+   host_state = vs->vws->resource_map(vs->vws, query->buf->hw_res);
+   if (!host_state)
+      return false;
 
+   host_state->query_state = VIRGL_QUERY_STATE_WAIT_HOST;
+   query->ready = false;
 
    virgl_encoder_end_query(vctx, query->handle);
+
+   /* start polling now */
+   virgl_encoder_get_query_result(vctx, query->handle, 0);
+   vs->vws->emit_res(vs->vws, vctx->cbuf, query->buf->hw_res, false);
+
    return true;
 }
 
-static boolean virgl_get_query_result(struct pipe_context *ctx,
-                                     struct pipe_query *q,
-                                     boolean wait,
-                                     union pipe_query_result *result)
+static bool virgl_get_query_result(struct pipe_context *ctx,
+                                   struct pipe_query *q,
+                                   bool wait,
+                                   union pipe_query_result *result)
 {
-   struct virgl_context *vctx = virgl_context(ctx);
    struct virgl_query *query = virgl_query(q);
-   struct pipe_transfer *transfer;
-   struct virgl_host_query_state *host_state;
 
-   /* ask host for query result */
-   if (!query->result_gotten_sent) {
-      query->result_gotten_sent = 1;
-      virgl_encoder_get_query_result(vctx, query->handle, 0);
-      ctx->flush(ctx, NULL, 0);
-   }
+   if (!query->ready) {
+      struct virgl_screen *vs = virgl_screen(ctx->screen);
+      struct virgl_context *vctx = virgl_context(ctx);
+      volatile struct virgl_host_query_state *host_state;
+      struct pipe_transfer *transfer = NULL;
 
-   /* do we  have to flush? */
-   /* now we can do the transfer to get the result back? */
- remap:
-   host_state = pipe_buffer_map(ctx, &query->buf->u.b,
-                               PIPE_TRANSFER_READ, &transfer);
+      if (vs->vws->res_is_referenced(vs->vws, vctx->cbuf, query->buf->hw_res))
+         ctx->flush(ctx, NULL, 0);
 
-   if (host_state->query_state != VIRGL_QUERY_STATE_DONE) {
-      pipe_buffer_unmap(ctx, transfer);
       if (wait)
-         goto remap;
+         vs->vws->resource_wait(vs->vws, query->buf->hw_res);
+      else if (vs->vws->resource_is_busy(vs->vws, query->buf->hw_res))
+         return false;
+
+      host_state = vs->vws->resource_map(vs->vws, query->buf->hw_res);
+
+      /* The resouce is idle and the result should be available at this point,
+       * unless we are dealing with an older host.  In that case,
+       * VIRGL_CCMD_GET_QUERY_RESULT is not fenced, the buffer is not
+       * coherent, and transfers are unsynchronized.  We have to repeatedly
+       * transfer until we get the result back.
+       */
+      while (host_state->query_state != VIRGL_QUERY_STATE_DONE) {
+         debug_printf("VIRGL: get_query_result is forced blocking\n");
+
+         if (transfer) {
+            pipe_buffer_unmap(ctx, transfer);
+            if (!wait)
+               return false;
+         }
+
+         host_state = pipe_buffer_map(ctx, &query->buf->u.b,
+               PIPE_TRANSFER_READ, &transfer);
+      }
+
+      if (query->result_size == 8)
+         query->result = host_state->result;
       else
-         return FALSE;
+         query->result = (uint32_t) host_state->result;
+
+      if (transfer)
+         pipe_buffer_unmap(ctx, transfer);
+
+      query->ready = true;
    }
 
-   if (query->type == PIPE_QUERY_TIMESTAMP || query->type == PIPE_QUERY_TIME_ELAPSED)
-      result->u64 = host_state->result;
-   else
-      result->u64 = (uint32_t)host_state->result;
+   result->u64 = query->result;
 
-   pipe_buffer_unmap(ctx, transfer);
-   query->result_gotten_sent = 0;
-   return TRUE;
+   return true;
 }
 
 static void
-virgl_set_active_query_state(struct pipe_context *pipe, boolean enable)
+virgl_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 
 static void
 virgl_get_query_result_resource(struct pipe_context *ctx,
                                 struct pipe_query *q,
-                                boolean wait,
+                                bool wait,
                                 enum pipe_query_value_type result_type,
                                 int index,
                                 struct pipe_resource *resource,

@@ -124,10 +124,10 @@ windows_create_drawable(int type, void *handle)
       d->callbacks = &pixmap_callbacks;
 
       // Access file mapping object by a name
-      snprintf(name, sizeof(name), "Local\\CYGWINX_WINDOWSDRI_%08lx", (uintptr_t)handle);
+      snprintf(name, sizeof(name), "Local\\CYGWINX_WINDOWSDRI_%08x", (unsigned int)(uintptr_t)handle);
       d->hSection = OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
       if (!d->hSection)
-         printf("OpenFileMapping failed %x\n", GetLastError());
+         printf("OpenFileMapping failed %x\n", (int)GetLastError());
 
       // Create a screen-compatible DC
       d->dibDC = CreateCompatibleDC(NULL);
@@ -135,7 +135,7 @@ windows_create_drawable(int type, void *handle)
       // Map the shared memory section to access the BITMAPINFOHEADER
       pBmpHeader = (BITMAPINFOHEADER *)MapViewOfFile(d->hSection, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(BITMAPINFOHEADER));
       if (!pBmpHeader)
-         printf("MapViewOfFile failed %x\n", GetLastError());
+         printf("MapViewOfFile failed %x\n", (int)GetLastError());
 
       // Create a DIB using the file mapping
       d->hDIB = CreateDIBSection(d->dibDC, (BITMAPINFO *) pBmpHeader,

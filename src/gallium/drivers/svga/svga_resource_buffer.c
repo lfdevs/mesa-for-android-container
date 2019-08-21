@@ -71,6 +71,9 @@ svga_buffer_needs_hw_storage(const struct svga_screen *ss,
          bind_mask |= PIPE_BIND_CONSTANT_BUFFER;
    }
 
+   if (template->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)
+      return TRUE;
+
    return !!(template->bind & bind_mask);
 }
 
@@ -126,7 +129,8 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
       pipe_resource_reference(&sbuf->translated_indices.buffer, NULL);
    }
 
-   if ((usage & PIPE_TRANSFER_READ) && sbuf->dirty) {
+   if ((usage & PIPE_TRANSFER_READ) && sbuf->dirty &&
+       !sbuf->key.coherent && !svga->swc->force_coherent) {
       enum pipe_error ret;
 
       /* Host-side buffers can only be dirtied with vgpu10 features
@@ -160,7 +164,8 @@ svga_buffer_transfer_map(struct pipe_context *pipe,
    }
 
    if (usage & PIPE_TRANSFER_WRITE) {
-      if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
+      if ((usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) &&
+          !(resource->flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT)) {
          /*
           * Flush any pending primitives, finish writing any pending DMA
           * commands, and tell the host to discard the buffer contents on
@@ -310,16 +315,18 @@ svga_buffer_transfer_flush_region(struct pipe_context *pipe,
 {
    struct svga_screen *ss = svga_screen(pipe->screen);
    struct svga_buffer *sbuf = svga_buffer(transfer->resource);
-
+   struct svga_context *svga = svga_context(pipe);
    unsigned offset = transfer->box.x + box->x;
    unsigned length = box->width;
 
    assert(transfer->usage & PIPE_TRANSFER_WRITE);
    assert(transfer->usage & PIPE_TRANSFER_FLUSH_EXPLICIT);
 
-   mtx_lock(&ss->swc_mutex);
-   svga_buffer_add_range(sbuf, offset, offset + length);
-   mtx_unlock(&ss->swc_mutex);
+   if (!(svga->swc->force_coherent || sbuf->key.coherent) || sbuf->swbuf) {
+      mtx_lock(&ss->swc_mutex);
+      svga_buffer_add_range(sbuf, offset, offset + length);
+      mtx_unlock(&ss->swc_mutex);
+   }
 }
 
 
@@ -359,7 +366,8 @@ svga_buffer_transfer_unmap(struct pipe_context *pipe,
 
          sbuf->dma.flags.discard = TRUE;
 
-         svga_buffer_add_range(sbuf, 0, sbuf->b.b.width0);
+         if (!(svga->swc->force_coherent || sbuf->key.coherent) || sbuf->swbuf)
+            svga_buffer_add_range(sbuf, 0, sbuf->b.b.width0);
       }
    }
 

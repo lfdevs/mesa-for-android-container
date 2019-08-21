@@ -87,7 +87,7 @@ handle_trace_header(struct aub_read *read, const uint32_t *p)
 
    if (end > &p[12] && p[12] > 0) {
       if (sscanf((char *)&p[13], "PCI-ID=%i", &aub_pci_id) > 0) {
-         if (!gen_get_device_info(aub_pci_id, &read->devinfo)) {
+         if (!gen_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
             parse_error(read, p,
                         "can't find device information: pci_id=0x%x\n", aub_pci_id);
             return false;
@@ -118,7 +118,7 @@ handle_memtrace_version(struct aub_read *read, const uint32_t *p)
    app_name[app_name_len] = 0;
 
    if (sscanf(app_name, "PCI-ID=%i %n", &aub_pci_id, &pci_id_len) > 0) {
-      if (!gen_get_device_info(aub_pci_id, &read->devinfo)) {
+      if (!gen_get_device_info_from_pci_id(aub_pci_id, &read->devinfo)) {
          parse_error(read, p, "can't find device information: pci_id=0x%x\n", aub_pci_id);
          return false;
       }
@@ -290,7 +290,7 @@ int
 aub_read_command(struct aub_read *read, const void *data, uint32_t data_len)
 {
    const uint32_t *p = data, *next;
-   MAYBE_UNUSED const uint32_t *end = data + data_len;
+   ASSERTED const uint32_t *end = data + data_len;
    uint32_t h, header_length, bias;
 
    assert(data_len >= 4);

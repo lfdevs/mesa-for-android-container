@@ -78,7 +78,7 @@ aubinator_init(void *user_data, int aub_pci_id, const char *app_name)
 {
    pci_id = aub_pci_id;
 
-   if (!gen_get_device_info(pci_id, &devinfo)) {
+   if (!gen_get_device_info_from_pci_id(pci_id, &devinfo)) {
       fprintf(stderr, "can't find device information: pci_id=0x%x\n", pci_id);
       exit(EXIT_FAILURE);
    }

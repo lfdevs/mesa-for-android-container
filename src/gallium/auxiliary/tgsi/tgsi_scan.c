@@ -392,6 +392,8 @@ scan_instruction(struct tgsi_shader_info *info,
    case TGSI_OPCODE_ATOMIMIN:
    case TGSI_OPCODE_ATOMIMAX:
    case TGSI_OPCODE_ATOMFADD:
+   case TGSI_OPCODE_ATOMINC_WRAP:
+   case TGSI_OPCODE_ATOMDEC_WRAP:
       if (tgsi_is_bindless_image_file(fullinst->Src[0].Register.File)) {
          info->uses_bindless_images = true;
 
@@ -410,6 +412,9 @@ scan_instruction(struct tgsi_shader_info *info,
          else
             info->uses_bindless_image_store = true;
       }
+      break;
+   case TGSI_OPCODE_FBFETCH:
+      info->uses_fbfetch = true;
       break;
    default:
       break;
@@ -846,7 +851,6 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
       info->file_max[i] = -1;
    for (i = 0; i < ARRAY_SIZE(info->const_file_max); i++)
       info->const_file_max[i] = -1;
-   info->properties[TGSI_PROPERTY_GS_INVOCATIONS] = 1;
    for (i = 0; i < ARRAY_SIZE(info->sampler_targets); i++)
       info->sampler_targets[i] = TGSI_TEXTURE_UNKNOWN;
 
@@ -866,6 +870,9 @@ tgsi_scan_shader(const struct tgsi_token *tokens,
           procType == PIPE_SHADER_COMPUTE);
    info->processor = procType;
    info->num_tokens = tgsi_num_tokens(parse.Tokens);
+
+   if (procType == PIPE_SHADER_GEOMETRY)
+      info->properties[TGSI_PROPERTY_GS_INVOCATIONS] = 1;
 
    /**
     ** Loop over incoming program tokens/instructions

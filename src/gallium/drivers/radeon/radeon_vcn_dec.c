@@ -46,10 +46,20 @@
 #define VP9_PROBS_TABLE_SIZE		(RDECODE_VP9_PROBS_DATA_SIZE + 256)
 #define RDECODE_SESSION_CONTEXT_SIZE	(128 * 1024)
 
-#define RDECODE_GPCOM_VCPU_CMD		0x2070c
-#define RDECODE_GPCOM_VCPU_DATA0	0x20710
-#define RDECODE_GPCOM_VCPU_DATA1	0x20714
-#define RDECODE_ENGINE_CNTL		0x20718
+#define RDECODE_VCN1_GPCOM_VCPU_CMD		0x2070c
+#define RDECODE_VCN1_GPCOM_VCPU_DATA0		0x20710
+#define RDECODE_VCN1_GPCOM_VCPU_DATA1		0x20714
+#define RDECODE_VCN1_ENGINE_CNTL		0x20718
+
+#define RDECODE_VCN2_GPCOM_VCPU_CMD		(0x503 << 2)
+#define RDECODE_VCN2_GPCOM_VCPU_DATA0		(0x504 << 2)
+#define RDECODE_VCN2_GPCOM_VCPU_DATA1		(0x505 << 2)
+#define RDECODE_VCN2_ENGINE_CNTL		(0x506 << 2)
+
+#define RDECODE_VCN2_5_GPCOM_VCPU_CMD 		0x3c
+#define RDECODE_VCN2_5_GPCOM_VCPU_DATA0 	0x40
+#define RDECODE_VCN2_5_GPCOM_VCPU_DATA1 	0x44
+#define RDECODE_VCN2_5_ENGINE_CNTL 		0x9b4
 
 #define NUM_MPEG2_REFS			6
 #define NUM_H264_REFS			17
@@ -830,7 +840,10 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	decode->sc_coeff_size = 0;
 
 	decode->sw_ctxt_size = RDECODE_SESSION_CONTEXT_SIZE;
-	decode->db_pitch = align(dec->base.width, 32);
+	decode->db_pitch = (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS &&
+			dec->base.width > 32 && dec->stream_type == RDECODE_CODEC_VP9) ?
+			align(dec->base.width, 64) :
+			align(dec->base.width, 32) ;
 	decode->db_surf_tile_config = 0;
 
 	decode->dt_pitch = luma->surface.u.gfx9.surf_pitch * luma->surface.blk_w;
@@ -925,14 +938,18 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 			/* default probability + probability data */
 			ctx_size = 2304 * 5;
 
-			/* SRE collocated context data */
-			ctx_size += 32 * 2 * 64 * 64;
-
-			/* SMP collocated context data */
-			ctx_size += 9 * 64 * 2 * 64 * 64;
-
-			/* SDB left tile pixel */
-			ctx_size += 8 * 2 * 4096;
+			if (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS) {
+				/* SRE collocated context data */
+				ctx_size += 32 * 2 * 128 * 68;
+				/* SMP collocated context data */
+				ctx_size += 9 * 64 * 2 * 128 * 68;
+				/* SDB left tile pixel */
+				ctx_size += 8 * 2 * 8192;
+			} else {
+				ctx_size += 32 * 2 * 64 * 64;
+				ctx_size += 9 * 64 * 2 * 64 * 64;
+				ctx_size += 8 * 2 * 4096;
+			}
 
 			if (dec->base.profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2)
 				ctx_size += 8 * 2 * 4096;
@@ -1009,9 +1026,9 @@ static void send_cmd(struct radeon_decoder *dec, unsigned cmd,
 	addr = dec->ws->buffer_get_virtual_address(buf);
 	addr = addr + off;
 
-	set_reg(dec, RDECODE_GPCOM_VCPU_DATA0, addr);
-	set_reg(dec, RDECODE_GPCOM_VCPU_DATA1, addr >> 32);
-	set_reg(dec, RDECODE_GPCOM_VCPU_CMD, cmd << 1);
+	set_reg(dec, dec->reg.data0, addr);
+	set_reg(dec, dec->reg.data1, addr >> 32);
+	set_reg(dec, dec->reg.cmd, cmd << 1);
 }
 
 /* do the codec needs an IT buffer ?*/
@@ -1246,7 +1263,10 @@ static unsigned calc_dpb_size(struct radeon_decoder *dec)
 	case PIPE_VIDEO_FORMAT_VP9:
 		max_references = MAX2(max_references, 9);
 
-		dpb_size = (4096 * 3000 * 3 / 2) * max_references;
+		dpb_size = (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS) ?
+			(8192 * 4320 * 3 / 2) * max_references :
+			(4096 * 3000 * 3 / 2) * max_references;
+
 		if (dec->base.profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2)
 			dpb_size *= (3 / 2);
 		break;
@@ -1414,7 +1434,7 @@ void send_cmd_dec(struct radeon_decoder *dec,
 	else if (have_probs(dec))
 		send_cmd(dec, RDECODE_CMD_PROB_TBL_BUFFER, msg_fb_it_probs_buf->res->buf,
 			 FB_BUFFER_OFFSET + FB_BUFFER_SIZE, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
-	set_reg(dec, RDECODE_ENGINE_CNTL, 1);
+	set_reg(dec, dec->reg.cntl, 1);
 }
 
 /**
@@ -1432,7 +1452,6 @@ static void radeon_dec_end_frame(struct pipe_video_codec *decoder,
 		return;
 
 	dec->send_cmd(dec, target, picture);
-
 	flush(dec, PIPE_FLUSH_ASYNC);
 	next_buffer(dec);
 }
@@ -1582,6 +1601,25 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 		goto error;
 	}
 	si_vid_clear_buffer(context, &dec->sessionctx);
+
+	if (sctx->family == CHIP_ARCTURUS) {
+		dec->reg.data0 = RDECODE_VCN2_5_GPCOM_VCPU_DATA0;
+		dec->reg.data1 = RDECODE_VCN2_5_GPCOM_VCPU_DATA1;
+		dec->reg.cmd = RDECODE_VCN2_5_GPCOM_VCPU_CMD;
+		dec->reg.cntl = RDECODE_VCN2_5_ENGINE_CNTL;
+	} else if (sctx->family >= CHIP_NAVI10) {
+		dec->reg.data0 = RDECODE_VCN2_GPCOM_VCPU_DATA0;
+		dec->reg.data1 = RDECODE_VCN2_GPCOM_VCPU_DATA1;
+		dec->reg.cmd = RDECODE_VCN2_GPCOM_VCPU_CMD;
+		dec->reg.cntl = RDECODE_VCN2_ENGINE_CNTL;
+		dec->jpg.direct_reg = true;
+	} else {
+		dec->reg.data0 = RDECODE_VCN1_GPCOM_VCPU_DATA0;
+		dec->reg.data1 = RDECODE_VCN1_GPCOM_VCPU_DATA1;
+		dec->reg.cmd = RDECODE_VCN1_GPCOM_VCPU_CMD;
+		dec->reg.cntl = RDECODE_VCN1_ENGINE_CNTL;
+		dec->jpg.direct_reg = false;
+	}
 
 	map_msg_fb_it_probs_buf(dec);
 	rvcn_dec_message_create(dec);

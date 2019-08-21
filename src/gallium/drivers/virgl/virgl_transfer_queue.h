@@ -21,25 +21,27 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "virgl_resource.h"
+#ifndef VIRGL_TRANSFER_QUEUE_H
+#define VIRGL_TRANSFER_QUEUE_H
 
-enum virgl_transfer_queue_lists {
-   PENDING_LIST = 0,
-   COMPLETED_LIST = 1,
-   MAX_LISTS = 2,
-};
+#include "pipe/p_defines.h"
+#include "util/list.h"
+
+struct virgl_cmd_buf;
+struct virgl_screen;
+struct virgl_context;
+struct virgl_transfer;
 
 struct virgl_transfer_queue {
-   struct list_head lists[MAX_LISTS];
+   struct list_head transfer_list;
    struct virgl_screen *vs;
-   struct slab_child_pool *pool;
+   struct virgl_context *vctx;
    struct virgl_cmd_buf *tbuf;
    uint32_t num_dwords;
 };
 
 void virgl_transfer_queue_init(struct virgl_transfer_queue *queue,
-                               struct virgl_screen *vs,
-                               struct slab_child_pool *pool);
+                               struct virgl_context *vctx);
 
 void virgl_transfer_queue_fini(struct virgl_transfer_queue *queue);
 
@@ -54,7 +56,11 @@ bool virgl_transfer_queue_is_queued(struct virgl_transfer_queue *queue,
 
 /*
  * Search the transfer queue for a transfer suitable for extension and
- * extend it to include the new transfer.
+ * extend it to include the specified data.
  */
-struct virgl_transfer * virgl_transfer_queue_extend(
-   struct virgl_transfer_queue *queue, struct virgl_transfer *transfer);
+bool virgl_transfer_queue_extend_buffer(struct virgl_transfer_queue *queue,
+                                        const struct virgl_hw_res *hw_res,
+                                        unsigned offset, unsigned size,
+                                        const void *data);
+
+#endif /* VIRGL_TRANSFER_QUEUE_H */

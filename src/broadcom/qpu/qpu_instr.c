@@ -645,19 +645,10 @@ v3d_qpu_uses_tlb(const struct v3d_qpu_instr *inst)
 bool
 v3d_qpu_uses_sfu(const struct v3d_qpu_instr *inst)
 {
-        if (inst->type == V3D_QPU_INSTR_TYPE_ALU) {
-                switch (inst->alu.add.op) {
-                case V3D_QPU_A_RECIP:
-                case V3D_QPU_A_RSQRT:
-                case V3D_QPU_A_EXP:
-                case V3D_QPU_A_LOG:
-                case V3D_QPU_A_SIN:
-                case V3D_QPU_A_RSQRT2:
-                        return true;
-                default:
-                        break;
-                }
+        if (v3d_qpu_instr_is_sfu(inst))
+                return true;
 
+        if (inst->type == V3D_QPU_INSTR_TYPE_ALU) {
                 if (inst->alu.add.magic_write &&
                     v3d_qpu_magic_waddr_is_sfu(inst->alu.add.waddr)) {
                         return true;
@@ -673,6 +664,25 @@ v3d_qpu_uses_sfu(const struct v3d_qpu_instr *inst)
 }
 
 bool
+v3d_qpu_instr_is_sfu(const struct v3d_qpu_instr *inst)
+{
+        if (inst->type == V3D_QPU_INSTR_TYPE_ALU) {
+                switch (inst->alu.add.op) {
+                case V3D_QPU_A_RECIP:
+                case V3D_QPU_A_RSQRT:
+                case V3D_QPU_A_EXP:
+                case V3D_QPU_A_LOG:
+                case V3D_QPU_A_SIN:
+                case V3D_QPU_A_RSQRT2:
+                        return true;
+                default:
+                        return false;
+                }
+        }
+        return false;
+}
+
+bool
 v3d_qpu_writes_tmu(const struct v3d_qpu_instr *inst)
 {
         return (inst->type == V3D_QPU_INSTR_TYPE_ALU &&
@@ -680,6 +690,16 @@ v3d_qpu_writes_tmu(const struct v3d_qpu_instr *inst)
                   v3d_qpu_magic_waddr_is_tmu(inst->alu.add.waddr)) ||
                  (inst->alu.mul.magic_write &&
                   v3d_qpu_magic_waddr_is_tmu(inst->alu.mul.waddr))));
+}
+
+bool
+v3d_qpu_writes_tmu_not_tmuc(const struct v3d_qpu_instr *inst)
+{
+        return v3d_qpu_writes_tmu(inst) &&
+               (!inst->alu.add.magic_write ||
+                inst->alu.add.waddr != V3D_QPU_WADDR_TMUC) &&
+               (!inst->alu.mul.magic_write ||
+                inst->alu.mul.waddr != V3D_QPU_WADDR_TMUC);
 }
 
 bool

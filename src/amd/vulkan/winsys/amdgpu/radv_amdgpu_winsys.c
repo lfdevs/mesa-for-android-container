@@ -45,6 +45,12 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	if (!ac_query_gpu_info(fd, ws->dev, &ws->info, &ws->amdinfo))
 		return false;
 
+	/* LLVM 9.0 is required for GFX10. */
+	if (ws->info.chip_class == GFX10 && HAVE_LLVM < 0x0900) {
+		fprintf(stderr, "radv: Navi family support requires LLVM 9 or higher\n");
+		return false;
+	}
+
 	/* temporary */
 	ws->info.use_display_dcc_unaligned = false;
 	ws->info.use_display_dcc_with_retile_blit = false;
@@ -58,7 +64,7 @@ do_winsys_init(struct radv_amdgpu_winsys *ws, int fd)
 	ws->info.num_sdma_rings = MIN2(ws->info.num_sdma_rings, MAX_RINGS_PER_TYPE);
 	ws->info.num_compute_rings = MIN2(ws->info.num_compute_rings, MAX_RINGS_PER_TYPE);
 
-	ws->use_ib_bos = ws->info.chip_class >= CIK;
+	ws->use_ib_bos = ws->info.chip_class >= GFX7;
 	return true;
 }
 

@@ -70,7 +70,7 @@ lp_build_name(LLVMValueRef val, const char *format, ...)
    char name[32];
    va_list ap;
    va_start(ap, format);
-   util_vsnprintf(name, sizeof name, format, ap);
+   vsnprintf(name, sizeof name, format, ap);
    va_end(ap);
    LLVMSetValueName(val, name);
 #else

@@ -1002,10 +1002,10 @@ check_draw_params(struct svga_hwtnl *hwtnl,
    assert(range->indexWidth == range->indexArray.stride);
 
    if (ib) {
-      MAYBE_UNUSED unsigned size = ib->width0;
-      MAYBE_UNUSED unsigned offset = range->indexArray.offset;
-      MAYBE_UNUSED unsigned stride = range->indexArray.stride;
-      MAYBE_UNUSED unsigned count;
+      ASSERTED unsigned size = ib->width0;
+      ASSERTED unsigned offset = range->indexArray.offset;
+      ASSERTED unsigned stride = range->indexArray.stride;
+      ASSERTED unsigned count;
 
       assert(size);
       assert(offset < size);

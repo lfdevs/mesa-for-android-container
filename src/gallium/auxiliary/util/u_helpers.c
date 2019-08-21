@@ -102,6 +102,43 @@ void util_set_vertex_buffers_count(struct pipe_vertex_buffer *dst,
 }
 
 /**
+ * This function is used to copy an array of pipe_shader_buffer structures,
+ * while properly referencing the pipe_shader_buffer::buffer member.
+ *
+ * \sa util_set_vertex_buffer_mask
+ */
+void util_set_shader_buffers_mask(struct pipe_shader_buffer *dst,
+                                  uint32_t *enabled_buffers,
+                                  const struct pipe_shader_buffer *src,
+                                  unsigned start_slot, unsigned count)
+{
+   unsigned i;
+
+   dst += start_slot;
+
+   if (src) {
+      for (i = 0; i < count; i++) {
+         pipe_resource_reference(&dst[i].buffer, src[i].buffer);
+
+         if (src[i].buffer)
+            *enabled_buffers |= (1ull << (start_slot + i));
+         else
+            *enabled_buffers &= ~(1ull << (start_slot + i));
+      }
+
+      /* Copy over the other members of pipe_shader_buffer. */
+      memcpy(dst, src, count * sizeof(struct pipe_shader_buffer));
+   }
+   else {
+      /* Unreference the buffers. */
+      for (i = 0; i < count; i++)
+         pipe_resource_reference(&dst[i].buffer, NULL);
+
+      *enabled_buffers &= ~(((1ull << count) - 1) << start_slot);
+   }
+}
+
+/**
  * Given a user index buffer, save the structure to "saved", and upload it.
  */
 bool
@@ -196,7 +233,7 @@ util_end_pipestat_query(struct pipe_context *ctx, struct pipe_query *q,
            "    hs_invocations = %"PRIu64"\n"
            "    ds_invocations = %"PRIu64"\n"
            "    cs_invocations = %"PRIu64"\n",
-           p_atomic_inc_return(&counter),
+           (unsigned)p_atomic_inc_return(&counter),
            stats.ia_vertices,
            stats.ia_primitives,
            stats.vs_invocations,

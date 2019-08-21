@@ -35,7 +35,7 @@ confflags_DRI3 = -Ddri3=false
 
 # hurd doesn't do direct rendering
 ifeq ($(DEB_HOST_ARCH_OS), hurd)
-	EGL_PLATFORMS = x11,
+	EGL_PLATFORMS = x11
 
 	confflags_DIRECT_RENDERING = -Dglx-direct=false
 	confflags_GBM = -Dgbm=false
@@ -43,7 +43,7 @@ ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	DRI_DRIVERS = swrast,
 	with_libva = 
 else
-	EGL_PLATFORMS = x11,surfaceless,
+	EGL_PLATFORMS = x11,surfaceless
 
   ifeq ($(DEB_HOST_ARCH_OS), linux)
 	confflags_DRI3 = -Ddri3=true
@@ -69,11 +69,11 @@ else
 	endif
 
 	# Non-Linux ports also lack *_CLOEXEC and epoll, so wayland isn't ready yet:
-	EGL_PLATFORMS += wayland,
+	EGL_PLATFORMS += ,wayland
 
   endif
 
-	EGL_PLATFORMS += drm,
+	EGL_PLATFORMS += ,drm
 
   # Build intel drivers on archs where libdrm-intel is installed
   ifneq (,$(filter $(DEB_HOST_ARCH),amd64 i386 kfreebsd-amd64 kfreebsd-i386 x32))

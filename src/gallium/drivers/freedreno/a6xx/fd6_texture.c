@@ -33,6 +33,7 @@
 #include "util/hash_table.h"
 
 #include "fd6_texture.h"
+#include "fd6_resource.h"
 #include "fd6_format.h"
 #include "fd6_emit.h"
 
@@ -220,10 +221,12 @@ fd6_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	struct fd6_pipe_sampler_view *so = CALLOC_STRUCT(fd6_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
 	enum pipe_format format = cso->format;
-	unsigned lvl, layers;
+	unsigned lvl, layers = 0;
 
 	if (!so)
 		return NULL;
+
+	fd6_validate_format(fd_context(pctx), rsc, format);
 
 	if (format == PIPE_FORMAT_X32_S8X24_UINT) {
 		rsc = rsc->stencil;
@@ -396,6 +399,7 @@ fd6_texture_state(struct fd_context *ctx, enum pipe_shader_type type,
 		needs_border |= sampler->needs_border;
 	}
 
+	key.type = type;
 	key.bcolor_offset = fd6_border_color_offset(ctx, type, tex);
 
 	uint32_t hash = key_hash(&key);

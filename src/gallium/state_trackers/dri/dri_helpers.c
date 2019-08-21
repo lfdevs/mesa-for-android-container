@@ -379,4 +379,217 @@ dri2_create_from_texture(__DRIcontext *context, int target, unsigned texture,
    return img;
 }
 
+static const struct dri2_format_mapping dri2_format_table[] = {
+      { __DRI_IMAGE_FOURCC_ARGB2101010,   __DRI_IMAGE_FORMAT_ARGB2101010,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_B10G10R10A2_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB2101010, 4 } } },
+      { __DRI_IMAGE_FOURCC_XRGB2101010,   __DRI_IMAGE_FORMAT_XRGB2101010,
+        __DRI_IMAGE_COMPONENTS_RGB,       PIPE_FORMAT_B10G10R10X2_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB2101010, 4 } } },
+      { __DRI_IMAGE_FOURCC_ABGR2101010,   __DRI_IMAGE_FORMAT_ABGR2101010,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_R10G10B10A2_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR2101010, 4 } } },
+      { __DRI_IMAGE_FOURCC_XBGR2101010,   __DRI_IMAGE_FORMAT_XBGR2101010,
+        __DRI_IMAGE_COMPONENTS_RGB,       PIPE_FORMAT_R10G10B10X2_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR2101010, 4 } } },
+      { __DRI_IMAGE_FOURCC_ARGB8888,      __DRI_IMAGE_FORMAT_ARGB8888,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_BGRA8888_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
+      { __DRI_IMAGE_FOURCC_ABGR8888,      __DRI_IMAGE_FORMAT_ABGR8888,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_RGBA8888_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } },
+      { __DRI_IMAGE_FOURCC_SARGB8888,     __DRI_IMAGE_FORMAT_SARGB8,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_BGRA8888_SRGB, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
+      { __DRI_IMAGE_FOURCC_XRGB8888,      __DRI_IMAGE_FORMAT_XRGB8888,
+        __DRI_IMAGE_COMPONENTS_RGB,       PIPE_FORMAT_BGRX8888_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
+      { __DRI_IMAGE_FOURCC_XBGR8888,      __DRI_IMAGE_FORMAT_XBGR8888,
+        __DRI_IMAGE_COMPONENTS_RGB,       PIPE_FORMAT_RGBX8888_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR8888, 4 }, } },
+      { __DRI_IMAGE_FOURCC_ARGB1555,      __DRI_IMAGE_FORMAT_ARGB1555,
+        __DRI_IMAGE_COMPONENTS_RGBA,      PIPE_FORMAT_B5G5R5A1_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB1555, 2 } } },
+      { __DRI_IMAGE_FOURCC_RGB565,        __DRI_IMAGE_FORMAT_RGB565,
+        __DRI_IMAGE_COMPONENTS_RGB,       PIPE_FORMAT_B5G6R5_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_RGB565, 2 } } },
+      { __DRI_IMAGE_FOURCC_R8,            __DRI_IMAGE_FORMAT_R8,
+        __DRI_IMAGE_COMPONENTS_R,         PIPE_FORMAT_R8_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 }, } },
+      { __DRI_IMAGE_FOURCC_R16,           __DRI_IMAGE_FORMAT_R16,
+        __DRI_IMAGE_COMPONENTS_R,         PIPE_FORMAT_R16_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 1 }, } },
+      { __DRI_IMAGE_FOURCC_GR88,          __DRI_IMAGE_FORMAT_GR88,
+        __DRI_IMAGE_COMPONENTS_RG,        PIPE_FORMAT_RG88_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 }, } },
+      { __DRI_IMAGE_FOURCC_GR1616,        __DRI_IMAGE_FORMAT_GR1616,
+        __DRI_IMAGE_COMPONENTS_RG,        PIPE_FORMAT_RG1616_UNORM, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR1616, 2 }, } },
+
+      { __DRI_IMAGE_FOURCC_YUV410, __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YUV411, __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YUV420,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YUV422,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YUV444,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+
+      { __DRI_IMAGE_FOURCC_YVU410,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YVU411,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YVU420,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YVU422,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+      { __DRI_IMAGE_FOURCC_YVU444,        __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_U_V,     PIPE_FORMAT_IYUV, 3,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 2, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
+
+      { __DRI_IMAGE_FOURCC_NV12,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_NV12, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88, 2 } } },
+
+      { __DRI_IMAGE_FOURCC_P010,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_P016, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
+      { __DRI_IMAGE_FOURCC_P012,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_P016, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
+      { __DRI_IMAGE_FOURCC_P016,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_P016, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
+          { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
+
+      { __DRI_IMAGE_FOURCC_NV16,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UV,      PIPE_FORMAT_NV12, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
+          { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88, 2 } } },
+
+      { __DRI_IMAGE_FOURCC_AYUV,      __DRI_IMAGE_FORMAT_ABGR8888,
+        __DRI_IMAGE_COMPONENTS_AYUV,      PIPE_FORMAT_AYUV, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } },
+      { __DRI_IMAGE_FOURCC_XYUV8888,      __DRI_IMAGE_FORMAT_XBGR8888,
+        __DRI_IMAGE_COMPONENTS_XYUV,      PIPE_FORMAT_XYUV, 1,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR8888, 4 } } },
+
+      /* For YUYV and UYVY buffers, we set up two overlapping DRI images
+       * and treat them as planar buffers in the compositors.
+       * Plane 0 is GR88 and samples YU or YV pairs and places Y into
+       * the R component, while plane 1 is ARGB/ABGR and samples YUYV/UYVY
+       * clusters and places pairs and places U into the G component and
+       * V into A.  This lets the texture sampler interpolate the Y
+       * components correctly when sampling from plane 0, and interpolate
+       * U and V correctly when sampling from plane 1. */
+      { __DRI_IMAGE_FOURCC_YUYV,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_XUXV,    PIPE_FORMAT_YUYV, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
+          { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
+      { __DRI_IMAGE_FOURCC_UYVY,          __DRI_IMAGE_FORMAT_NONE,
+        __DRI_IMAGE_COMPONENTS_Y_UXVX,    PIPE_FORMAT_UYVY, 2,
+        { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
+          { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
+};
+
+const struct dri2_format_mapping *
+dri2_get_mapping_by_fourcc(int fourcc)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
+      if (dri2_format_table[i].dri_fourcc == fourcc)
+         return &dri2_format_table[i];
+   }
+
+   return NULL;
+}
+
+const struct dri2_format_mapping *
+dri2_get_mapping_by_format(int format)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
+      if (dri2_format_table[i].dri_format == format)
+         return &dri2_format_table[i];
+   }
+
+   return NULL;
+}
+
+enum pipe_format
+dri2_get_pipe_format_for_dri_format(int format)
+{
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_format_table); i++) {
+      if (dri2_format_table[i].dri_format == format)
+         return dri2_format_table[i].pipe_format;
+   }
+
+   return PIPE_FORMAT_NONE;
+}
+
+boolean
+dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
+                           int *count)
+{
+   struct dri_screen *screen = dri_screen(_screen);
+   struct pipe_screen *pscreen = screen->base.screen;
+   int i, j;
+
+   for (i = 0, j = 0; (i < ARRAY_SIZE(dri2_format_table)) &&
+         (j < max || max == 0); i++) {
+      const struct dri2_format_mapping *map = &dri2_format_table[i];
+
+      /* The sRGB format is not a real FourCC as defined by drm_fourcc.h, so we
+       * must not leak it out to clients.
+       */
+      if (dri2_format_table[i].dri_fourcc == __DRI_IMAGE_FOURCC_SARGB8888)
+         continue;
+
+      if (pscreen->is_format_supported(pscreen, map->pipe_format,
+                                       screen->target, 0, 0,
+                                       PIPE_BIND_RENDER_TARGET) ||
+          pscreen->is_format_supported(pscreen, map->pipe_format,
+                                       screen->target, 0, 0,
+                                       PIPE_BIND_SAMPLER_VIEW)) {
+         if (j < max)
+            formats[j] = map->dri_fourcc;
+         j++;
+      }
+   }
+   *count = j;
+   return true;
+}
+
 /* vim: set sw=3 ts=8 sts=3 expandtab: */

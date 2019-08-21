@@ -33,9 +33,8 @@
 
 #include "ir3_shader.h"
 
-void ir3_nir_scan_driver_consts(nir_shader *shader, struct ir3_driver_const_layout *layout);
-
 bool ir3_nir_apply_trig_workarounds(nir_shader *shader);
+bool ir3_nir_lower_imul(nir_shader *shader);
 bool ir3_nir_lower_tg4_to_tex(nir_shader *shader);
 bool ir3_nir_lower_io_offsets(nir_shader *shader);
 bool ir3_nir_lower_load_barycentric_at_sample(nir_shader *shader);
@@ -44,7 +43,7 @@ bool ir3_nir_move_varying_inputs(nir_shader *shader);
 
 const nir_shader_compiler_options * ir3_get_compiler_options(struct ir3_compiler *compiler);
 bool ir3_key_lowers_nir(const struct ir3_shader_key *key);
-struct nir_shader * ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
+void ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 		const struct ir3_shader_key *key);
 
 bool ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader *shader);

@@ -128,7 +128,7 @@ tegra_screen_get_timestamp(struct pipe_screen *pscreen)
    return screen->gpu->get_timestamp(screen->gpu);
 }
 
-static boolean
+static bool
 tegra_screen_is_format_supported(struct pipe_screen *pscreen,
                                  enum pipe_format format,
                                  enum pipe_texture_target target,
@@ -143,7 +143,7 @@ tegra_screen_is_format_supported(struct pipe_screen *pscreen,
                                            usage);
 }
 
-static boolean
+static bool
 tegra_screen_is_video_format_supported(struct pipe_screen *pscreen,
                                        enum pipe_format format,
                                        enum pipe_video_profile profile,
@@ -155,7 +155,7 @@ tegra_screen_is_video_format_supported(struct pipe_screen *pscreen,
                                                  entrypoint);
 }
 
-static boolean
+static bool
 tegra_screen_can_create_resource(struct pipe_screen *pscreen,
                                  const struct pipe_resource *template)
 {
@@ -168,7 +168,7 @@ static int tegra_screen_import_resource(struct tegra_screen *screen,
                                         struct tegra_resource *resource)
 {
    struct winsys_handle handle;
-   boolean status;
+   bool status;
    int fd, err;
 
    memset(&handle, 0, sizeof(handle));
@@ -314,7 +314,7 @@ tegra_screen_resource_from_user_memory(struct pipe_screen *pscreen,
    return resource;
 }
 
-static boolean
+static bool
 tegra_screen_resource_get_handle(struct pipe_screen *pscreen,
                                  struct pipe_context *pcontext,
                                  struct pipe_resource *presource,
@@ -324,7 +324,7 @@ tegra_screen_resource_get_handle(struct pipe_screen *pscreen,
    struct tegra_resource *resource = to_tegra_resource(presource);
    struct tegra_context *context = to_tegra_context(pcontext);
    struct tegra_screen *screen = to_tegra_screen(pscreen);
-   boolean ret = TRUE;
+   bool ret = true;
 
    /*
     * Assume that KMS handles for scanout resources will only ever be used
@@ -379,7 +379,7 @@ tegra_screen_fence_reference(struct pipe_screen *pscreen,
    screen->gpu->fence_reference(screen->gpu, ptr, fence);
 }
 
-static boolean
+static bool
 tegra_screen_fence_finish(struct pipe_screen *pscreen,
                           struct pipe_context *pcontext,
                           struct pipe_fence_handle *fence,

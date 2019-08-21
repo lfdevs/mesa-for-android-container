@@ -54,7 +54,7 @@ struct nv50_ir_varying
    ubyte si; /* TGSI semantic index */
 };
 
-#ifdef DEBUG
+#ifndef NDEBUG
 # define NV50_IR_DEBUG_BASIC     (1 << 0)
 # define NV50_IR_DEBUG_VERBOSE   (2 << 0)
 # define NV50_IR_DEBUG_REG_ALLOC (1 << 2)
@@ -123,7 +123,6 @@ struct nv50_ir_prog_info
          bool usesDrawParameters;
       } vp;
       struct {
-         uint8_t inputPatchSize;
          uint8_t outputPatchSize;
          uint8_t partitioning;    /* PIPE_TESS_PART */
          int8_t winding;          /* +1 (clockwise) / -1 (counter-clockwise) */

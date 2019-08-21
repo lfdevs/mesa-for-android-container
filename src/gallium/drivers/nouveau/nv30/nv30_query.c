@@ -146,7 +146,7 @@ nv30_query_destroy(struct pipe_context *pipe, struct pipe_query *pq)
    FREE(pq);
 }
 
-static boolean
+static bool
 nv30_query_begin(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nv30_context *nv30 = nv30_context(pipe);
@@ -198,9 +198,9 @@ nv30_query_end(struct pipe_context *pipe, struct pipe_query *pq)
    return true;
 }
 
-static boolean
+static bool
 nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
-                  boolean wait, union pipe_query_result *result)
+                  bool wait, union pipe_query_result *result)
 {
    struct nv30_screen *screen = nv30_screen(pipe->screen);
    struct nv30_query *q = nv30_query(pq);
@@ -240,7 +240,7 @@ nv30_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 static void
 nv40_query_render_condition(struct pipe_context *pipe,
                             struct pipe_query *pq,
-                            boolean condition, enum pipe_render_cond_flag mode)
+                            bool condition, enum pipe_render_cond_flag mode)
 {
    struct nv30_context *nv30 = nv30_context(pipe);
    struct nv30_query *q = nv30_query(pq);
@@ -267,7 +267,7 @@ nv40_query_render_condition(struct pipe_context *pipe,
 }
 
 static void
-nv30_set_active_query_state(struct pipe_context *pipe, boolean enable)
+nv30_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

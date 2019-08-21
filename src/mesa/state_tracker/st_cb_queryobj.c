@@ -36,6 +36,7 @@
 #include "main/imports.h"
 #include "main/compiler.h"
 #include "main/context.h"
+#include "main/queryobj.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
@@ -86,7 +87,7 @@ st_DeleteQuery(struct gl_context *ctx, struct gl_query_object *q)
 
    free_queries(pipe, stq);
 
-   free(stq);
+   _mesa_delete_query(ctx, q);
 }
 
 static int

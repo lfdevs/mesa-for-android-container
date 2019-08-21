@@ -90,9 +90,9 @@ lp_format_intrinsic(char *name,
    }
 
    if (length) {
-      util_snprintf(name, size, "%s.v%u%c%u", name_root, length, c, width);
+      snprintf(name, size, "%s.v%u%c%u", name_root, length, c, width);
    } else {
-      util_snprintf(name, size, "%s.%c%u", name_root, c, width);
+      snprintf(name, size, "%s.%c%u", name_root, c, width);
    }
 }
 

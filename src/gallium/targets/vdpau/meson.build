@@ -47,11 +47,12 @@ libvdpau_gallium = shared_library(
   ],
   link_whole : [libvdpau_st],
   link_with : [
-    libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
+    libgalliumvlwinsys, libgalliumvl, libgallium,
     libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
   dependencies : [
-    dep_thread, driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
+    idep_mesautil,
+    driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
   ],
   link_depends : vdpau_link_depends,
   soversion : '@0@.@1@.0'.format(VDPAU_MAJOR, VDPAU_MINOR),

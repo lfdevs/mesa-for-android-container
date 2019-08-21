@@ -95,11 +95,6 @@ extern void
 _eglUnloadDrivers(void);
 
 
-/* defined in eglfallbacks.c */
-extern void
-_eglInitDriverFallbacks(_EGLDriver *drv);
-
-
 extern void
 _eglSearchPathForEach(EGLBoolean (*callback)(const char *, size_t, void *),
                       void *callback_data);

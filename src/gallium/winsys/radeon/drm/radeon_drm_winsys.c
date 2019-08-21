@@ -166,6 +166,7 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     ws->info.drm_major = version->version_major;
     ws->info.drm_minor = version->version_minor;
     ws->info.drm_patchlevel = version->version_patchlevel;
+    ws->info.is_amdgpu = false;
     drmFreeVersion(version);
 
     /* Get PCI ID. */
@@ -269,14 +270,13 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     case CHIP_VERDE:
     case CHIP_OLAND:
     case CHIP_HAINAN:
-        ws->info.chip_class = SI;
+        ws->info.chip_class = GFX6;
         break;
     case CHIP_BONAIRE:
     case CHIP_KAVERI:
     case CHIP_KABINI:
     case CHIP_HAWAII:
-    case CHIP_MULLINS:
-        ws->info.chip_class = CIK;
+        ws->info.chip_class = GFX7;
         break;
     }
 
@@ -296,7 +296,6 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     case CHIP_ARUBA:
     case CHIP_KAVERI:
     case CHIP_KABINI:
-    case CHIP_MULLINS:
        ws->info.has_dedicated_vram = false;
        break;
 
@@ -482,7 +481,6 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     switch (ws->info.family) {
     case CHIP_HAINAN:
     case CHIP_KABINI:
-    case CHIP_MULLINS:
         ws->info.num_tcc_blocks = 2;
         break;
     case CHIP_VERDE:
@@ -542,18 +540,18 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
         return false;
     }
 
-    if (ws->info.chip_class == CIK) {
+    if (ws->info.chip_class == GFX7) {
         if (!radeon_get_drm_value(ws->fd, RADEON_INFO_CIK_MACROTILE_MODE_ARRAY, NULL,
                                   ws->info.cik_macrotile_mode_array)) {
-            fprintf(stderr, "radeon: Kernel 3.13 is required for CIK support.\n");
+            fprintf(stderr, "radeon: Kernel 3.13 is required for Sea Islands support.\n");
             return false;
         }
     }
 
-    if (ws->info.chip_class >= SI) {
+    if (ws->info.chip_class >= GFX6) {
         if (!radeon_get_drm_value(ws->fd, RADEON_INFO_SI_TILE_MODE_ARRAY, NULL,
                                   ws->info.si_tile_mode_array)) {
-            fprintf(stderr, "radeon: Kernel 3.10 is required for SI support.\n");
+            fprintf(stderr, "radeon: Kernel 3.10 is required for Southern Islands support.\n");
             return false;
         }
     }
@@ -561,35 +559,35 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     /* Hawaii with old firmware needs type2 nop packet.
      * accel_working2 with value 3 indicates the new firmware.
      */
-    ws->info.gfx_ib_pad_with_type2 = ws->info.chip_class <= SI ||
+    ws->info.gfx_ib_pad_with_type2 = ws->info.chip_class <= GFX6 ||
 				     (ws->info.family == CHIP_HAWAII &&
 				      ws->accel_working2 < 3);
     ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
     ws->info.ib_start_alignment = 4096;
     ws->info.kernel_flushes_hdp_before_ib = ws->info.drm_minor >= 40;
-    /* HTILE is broken with 1D tiling on old kernels and CIK. */
-    ws->info.htile_cmask_support_1d_tiling = ws->info.chip_class != CIK ||
+    /* HTILE is broken with 1D tiling on old kernels and GFX7. */
+    ws->info.htile_cmask_support_1d_tiling = ws->info.chip_class != GFX7 ||
                                              ws->info.drm_minor >= 38;
     ws->info.si_TA_CS_BC_BASE_ADDR_allowed = ws->info.drm_minor >= 48;
     ws->info.has_bo_metadata = false;
-    ws->info.has_gpu_reset_status_query = false;
-    ws->info.has_gpu_reset_counter_query = ws->info.drm_minor >= 43;
+    ws->info.has_gpu_reset_status_query = ws->info.drm_minor >= 43;
     ws->info.has_eqaa_surface_allocator = false;
     ws->info.has_format_bc1_through_bc7 = ws->info.drm_minor >= 31;
     ws->info.kernel_flushes_tc_l2_after_ib = true;
     /* Old kernels disallowed register writes via COPY_DATA
      * that are used for indirect compute dispatches. */
-    ws->info.has_indirect_compute_dispatch = ws->info.chip_class == CIK ||
-                                             (ws->info.chip_class == SI &&
+    ws->info.has_indirect_compute_dispatch = ws->info.chip_class == GFX7 ||
+                                             (ws->info.chip_class == GFX6 &&
                                               ws->info.drm_minor >= 45);
-    /* SI doesn't support unaligned loads. */
-    ws->info.has_unaligned_shader_loads = ws->info.chip_class == CIK &&
+    /* GFX6 doesn't support unaligned loads. */
+    ws->info.has_unaligned_shader_loads = ws->info.chip_class == GFX7 &&
                                           ws->info.drm_minor >= 50;
     ws->info.has_sparse_vm_mappings = false;
-    /* 2D tiling on CIK is supported since DRM 2.35.0 */
-    ws->info.has_2d_tiling = ws->info.chip_class <= SI || ws->info.drm_minor >= 35;
+    /* 2D tiling on GFX7 is supported since DRM 2.35.0 */
+    ws->info.has_2d_tiling = ws->info.chip_class <= GFX6 || ws->info.drm_minor >= 35;
     ws->info.has_read_registers_query = ws->info.drm_minor >= 42;
     ws->info.max_alignment = 1024*1024;
+    ws->info.has_graphics = true;
 
     ws->check_vm = strstr(debug_get_option("R600_DEBUG", ""), "check_vm") != NULL;
 
@@ -656,6 +654,18 @@ static bool radeon_cs_request_feature(struct radeon_cmdbuf *rcs,
     return false;
 }
 
+uint32_t radeon_drm_get_gpu_reset_counter(struct radeon_drm_winsys *ws)
+{
+    uint64_t retval = 0;
+
+    if (!ws->info.has_gpu_reset_status_query)
+        return 0;
+
+    radeon_get_drm_value(ws->fd, RADEON_INFO_GPU_RESET_COUNTER,
+                         "gpu-reset-counter", (uint32_t*)&retval);
+    return retval;
+}
+
 static uint64_t radeon_query_value(struct radeon_winsys *rws,
                                    enum radeon_value_id value)
 {
@@ -717,10 +727,6 @@ static uint64_t radeon_query_value(struct radeon_winsys *rws,
     case RADEON_CURRENT_MCLK:
         radeon_get_drm_value(ws->fd, RADEON_INFO_CURRENT_GPU_MCLK,
                              "current-gpu-mclk", (uint32_t*)&retval);
-        return retval;
-    case RADEON_GPU_RESET_COUNTER:
-        radeon_get_drm_value(ws->fd, RADEON_INFO_GPU_RESET_COUNTER,
-                             "gpu-reset-counter", (uint32_t*)&retval);
         return retval;
     case RADEON_CS_THREAD_TIME:
         return util_queue_get_thread_time_nano(&ws->cs_queue, 0);

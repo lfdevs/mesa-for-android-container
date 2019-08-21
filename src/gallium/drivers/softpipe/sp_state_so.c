@@ -70,6 +70,11 @@ softpipe_set_so_targets(struct pipe_context *pipe,
 
    for (i = 0; i < num_targets; i++) {
       pipe_so_target_reference((struct pipe_stream_output_target **)&softpipe->so_targets[i], targets[i]);
+
+      if (targets[i]) {
+         void *buf = softpipe_resource(targets[i]->buffer)->data;
+         softpipe->so_targets[i]->mapping = buf;
+      }
    }
 
    for (; i < softpipe->num_so_targets; i++) {
@@ -77,6 +82,9 @@ softpipe_set_so_targets(struct pipe_context *pipe,
    }
 
    softpipe->num_so_targets = num_targets;
+
+   draw_set_mapped_so_targets(softpipe->draw, softpipe->num_so_targets,
+                              softpipe->so_targets);
 }
 
 void
@@ -86,4 +94,3 @@ softpipe_init_streamout_funcs(struct pipe_context *pipe)
    pipe->stream_output_target_destroy = softpipe_so_target_destroy;
    pipe->set_stream_output_targets = softpipe_set_so_targets;
 }
-

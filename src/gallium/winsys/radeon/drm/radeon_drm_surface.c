@@ -50,14 +50,14 @@ static void set_micro_tile_mode(struct radeon_surf *surf,
 {
     uint32_t tile_mode;
 
-    if (info->chip_class < SI) {
+    if (info->chip_class < GFX6) {
         surf->micro_tile_mode = 0;
         return;
     }
 
     tile_mode = info->si_tile_mode_array[surf->u.legacy.tiling_index[0]];
 
-    if (info->chip_class >= CIK)
+    if (info->chip_class >= GFX7)
         surf->micro_tile_mode = G_009910_MICRO_TILE_MODE_NEW(tile_mode);
     else
         surf->micro_tile_mode = G_009910_MICRO_TILE_MODE(tile_mode);
@@ -231,7 +231,7 @@ static void si_compute_cmask(const struct radeon_info *info,
 	if (surf->flags & RADEON_SURF_Z_OR_SBUFFER)
 		return;
 
-	assert(info->chip_class <= VI);
+	assert(info->chip_class <= GFX8);
 
 	switch (num_pipes) {
 	case 2:

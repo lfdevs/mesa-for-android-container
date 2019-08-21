@@ -39,14 +39,14 @@ endif
 
 libgallium_dri = shared_library(
   'gallium_dri',
-  [files('target.c'), xmlpool_options_h],
+  files('target.c'),
   include_directories : [
     inc_common, inc_util, inc_dri_common, inc_gallium_drivers,
     inc_gallium_winsys, include_directories('../../state_trackers/dri'),
   ],
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],
-  link_args : [ld_args_gc_sections, gallium_dri_ld_args],
+  link_args : [ld_args_build_id, ld_args_gc_sections, gallium_dri_ld_args],
   link_depends : gallium_dri_link_depends,
   link_with : [
     libmesa_gallium, libdricommon, libmegadriver_stub, libdri, libgalliumvl,
@@ -54,7 +54,7 @@ libgallium_dri = shared_library(
     libswkmsdri,
   ],
   dependencies : [
-    dep_selinux, dep_expat, dep_libdrm, dep_llvm, dep_thread,
+    dep_selinux, dep_libdrm, dep_llvm, dep_thread, idep_xmlconfig,
     driver_swrast, driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
     driver_kmsro, driver_v3d, driver_vc4, driver_freedreno, driver_etnaviv,
     driver_tegra, driver_i915, driver_svga, driver_virgl,
@@ -75,11 +75,13 @@ foreach d : [[with_gallium_kmsro, [
                'imx-drm_dri.so',
                'meson_dri.so',
                'mi0283qt_dri.so',
+               'mxsfb-drm_dri.so',
                'pl111_dri.so',
                'repaper_dri.so',
                'rockchip_dri.so',
                'st7586_dri.so',
                'st7735r_dri.so',
+               'stm_dri.so',
 	       'sun4i-drm_dri.so',
              ]],
              [with_gallium_radeonsi, 'radeonsi_dri.so'],

@@ -84,6 +84,25 @@ writable images will consume TEX slots, VTX slots too because of linear indexing
 
 */
 
+#ifdef HAVE_OPENCL
+static void radeon_shader_binary_init(struct r600_shader_binary *b)
+{
+	memset(b, 0, sizeof(*b));
+}
+
+static void radeon_shader_binary_clean(struct r600_shader_binary *b)
+{
+	if (!b)
+		return;
+	FREE(b->code);
+	FREE(b->config);
+	FREE(b->rodata);
+	FREE(b->global_symbol_offsets);
+	FREE(b->relocs);
+	FREE(b->disasm_string);
+}
+#endif
+
 struct r600_resource *r600_compute_buffer_alloc_vram(struct r600_screen *screen,
 						     unsigned size)
 {
@@ -186,7 +205,7 @@ static void evergreen_cs_set_constant_buffer(struct r600_context *rctx,
 #ifdef HAVE_OPENCL
 static void parse_symbol_table(Elf_Data *symbol_table_data,
 				const GElf_Shdr *symbol_table_header,
-				struct ac_shader_binary *binary)
+				struct r600_shader_binary *binary)
 {
 	GElf_Sym symbol;
 	unsigned i = 0;
@@ -230,7 +249,7 @@ static void parse_symbol_table(Elf_Data *symbol_table_data,
 
 static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
 			unsigned symbol_sh_link,
-			struct ac_shader_binary *binary)
+			struct r600_shader_binary *binary)
 {
 	unsigned i;
 
@@ -238,12 +257,12 @@ static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
 		return;
 	}
 	binary->relocs = CALLOC(binary->reloc_count,
-			sizeof(struct ac_shader_reloc));
+			sizeof(struct r600_shader_reloc));
 	for (i = 0; i < binary->reloc_count; i++) {
 		GElf_Sym symbol;
 		GElf_Rel rel;
 		char *symbol_name;
-		struct ac_shader_reloc *reloc = &binary->relocs[i];
+		struct r600_shader_reloc *reloc = &binary->relocs[i];
 
 		gelf_getrel(relocs, i, &rel);
 		gelf_getsym(symbols, GELF_R_SYM(rel.r_info), &symbol);
@@ -256,7 +275,7 @@ static void parse_relocs(Elf *elf, Elf_Data *relocs, Elf_Data *symbols,
 }
 
 static void r600_elf_read(const char *elf_data, unsigned elf_size,
-		 struct ac_shader_binary *binary)
+		 struct r600_shader_binary *binary)
 {
 	char *elf_buffer;
 	Elf *elf;
@@ -335,7 +354,7 @@ static void r600_elf_read(const char *elf_data, unsigned elf_size,
 }
 
 static const unsigned char *r600_shader_binary_config_start(
-	const struct ac_shader_binary *binary,
+	const struct r600_shader_binary *binary,
 	uint64_t symbol_offset)
 {
 	unsigned i;
@@ -348,7 +367,7 @@ static const unsigned char *r600_shader_binary_config_start(
 	return binary->config;
 }
 
-static void r600_shader_binary_read_config(const struct ac_shader_binary *binary,
+static void r600_shader_binary_read_config(const struct r600_shader_binary *binary,
 					   struct r600_bytecode *bc,
 					   uint64_t symbol_offset,
 					   boolean *use_kill)
@@ -384,7 +403,7 @@ static void r600_shader_binary_read_config(const struct ac_shader_binary *binary
 }
 
 static unsigned r600_create_shader(struct r600_bytecode *bc,
-				   const struct ac_shader_binary *binary,
+				   const struct r600_shader_binary *binary,
 				   boolean *use_kill)
 
 {

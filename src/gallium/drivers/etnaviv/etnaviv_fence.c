@@ -60,7 +60,7 @@ etna_screen_fence_reference(struct pipe_screen *pscreen,
    *ptr = fence;
 }
 
-static boolean
+static bool
 etna_screen_fence_finish(struct pipe_screen *pscreen, struct pipe_context *ctx,
                          struct pipe_fence_handle *fence, uint64_t timeout)
 {

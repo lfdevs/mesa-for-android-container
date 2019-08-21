@@ -6,7 +6,7 @@
 #include "util/u_atomic.h"
 #include "util/u_memory.h"
 
-#ifdef DEBUG
+#ifndef NDEBUG
 # define NOUVEAU_ENABLE_DRIVER_STATISTICS
 #endif
 

@@ -77,3 +77,15 @@ fd2_setup_slices(struct fd_resource *rsc)
 	}
 	return size;
 }
+
+unsigned
+fd2_tile_mode(const struct pipe_resource *tmpl)
+{
+	/* disable tiling for cube maps, freedreno uses a 2D array for the staging texture,
+	* (a2xx supports 2D arrays but it is not implemented)
+	*/
+	if (tmpl->target == PIPE_TEXTURE_CUBE)
+		return 0;
+	/* we can enable tiling for any resource we can render to */
+	return (tmpl->bind & PIPE_BIND_RENDER_TARGET) ? 1 : 0;
+}

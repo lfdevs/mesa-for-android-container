@@ -1012,8 +1012,8 @@ static void radv_query_shader(struct radv_cmd_buffer *cmd_buffer,
 				      VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constants),
 				      &push_constants);
 
-	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_INV_GLOBAL_L2 |
-	                                RADV_CMD_FLAG_INV_VMEM_L1;
+	cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_INV_L2 |
+	                                RADV_CMD_FLAG_INV_VCACHE;
 
 	if (flags & VK_QUERY_RESULT_WAIT_BIT)
 		cmd_buffer->state.flush_bits |= RADV_CMD_FLUSH_AND_INV_FRAMEBUFFER;
@@ -1036,8 +1036,6 @@ VkResult radv_CreateQueryPool(
 	struct radv_query_pool *pool = vk_alloc2(&device->alloc, pAllocator,
 					       sizeof(*pool), 8,
 					       VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-	uint32_t initial_value = pCreateInfo->queryType == VK_QUERY_TYPE_TIMESTAMP
-				 ? TIMESTAMP_NOT_READY : 0;
 
 	if (!pool)
 		return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -1083,7 +1081,6 @@ VkResult radv_CreateQueryPool(
 		vk_free2(&device->alloc, pAllocator, pool);
 		return vk_error(device->instance, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 	}
-	memset(pool->ptr, initial_value, pool->size);
 
 	*pQueryPool = radv_query_pool_to_handle(pool);
 	return VK_SUCCESS;
@@ -1124,13 +1121,6 @@ VkResult radv_GetQueryPoolResults(
 		unsigned query = firstQuery + i;
 		char *src = pool->ptr + query * pool->stride;
 		uint32_t available;
-
-		if (pool->type == VK_QUERY_TYPE_PIPELINE_STATISTICS) {
-			if (flags & VK_QUERY_RESULT_WAIT_BIT)
-				while(!*(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query))
-					;
-			available = *(uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
-		}
 
 		switch (pool->type) {
 		case VK_QUERY_TYPE_TIMESTAMP: {
@@ -1196,6 +1186,11 @@ VkResult radv_GetQueryPoolResults(
 			break;
 		}
 		case VK_QUERY_TYPE_PIPELINE_STATISTICS: {
+			if (flags & VK_QUERY_RESULT_WAIT_BIT)
+				while(!*(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query))
+					;
+			available = *(uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
+
 			if (!available && !(flags & VK_QUERY_RESULT_PARTIAL_BIT))
 				result = VK_NOT_READY;
 
@@ -1283,6 +1278,21 @@ VkResult radv_GetQueryPoolResults(
 	return result;
 }
 
+static void emit_query_flush(struct radv_cmd_buffer *cmd_buffer,
+			     struct radv_query_pool *pool)
+{
+	if (cmd_buffer->pending_reset_query) {
+		if (pool->size >= RADV_BUFFER_OPS_CS_THRESHOLD) {
+			/* Only need to flush caches if the query pool size is
+			 * large enough to be resetted using the compute shader
+			 * path. Small pools don't need any cache flushes
+			 * because we use a CP dma clear.
+			 */
+			si_emit_cache_flush(cmd_buffer);
+		}
+	}
+}
+
 void radv_CmdCopyQueryPoolResults(
     VkCommandBuffer                             commandBuffer,
     VkQueryPool                                 queryPool,
@@ -1304,6 +1314,16 @@ void radv_CmdCopyQueryPoolResults(
 
 	radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, pool->bo);
 	radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, dst_buffer->bo);
+
+	/* From the Vulkan spec 1.1.108:
+	 *
+	 * "vkCmdCopyQueryPoolResults is guaranteed to see the effect of
+	 *  previous uses of vkCmdResetQueryPool in the same queue, without any
+	 *  additional synchronization."
+	 *
+	 * So, we have to flush the caches if the compute shader path was used.
+	 */
+	emit_query_flush(cmd_buffer, pool);
 
 	switch (pool->type) {
 	case VK_QUERY_TYPE_OCCLUSION:
@@ -1351,7 +1371,7 @@ void radv_CmdCopyQueryPoolResults(
 			unsigned query = firstQuery + i;
 			uint64_t local_src_va = va  + query * pool->stride;
 
-			MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 19);
+			ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 19);
 
 
 			if (flags & VK_QUERY_RESULT_WAIT_BIT) {
@@ -1430,6 +1450,12 @@ void radv_CmdResetQueryPool(
 			 ? TIMESTAMP_NOT_READY : 0;
 	uint32_t flush_bits = 0;
 
+	/* Make sure to sync all previous work if the given command buffer has
+	 * pending active queries. Otherwise the GPU might write queries data
+	 * after the reset operation.
+	 */
+	cmd_buffer->state.flush_bits |= cmd_buffer->active_query_flush_bits;
+
 	flush_bits |= radv_fill_buffer(cmd_buffer, pool->bo,
 				       firstQuery * pool->stride,
 				       queryCount * pool->stride, value);
@@ -1477,21 +1503,6 @@ static unsigned event_type_for_stream(unsigned stream)
 	case 1: return V_028A90_SAMPLE_STREAMOUTSTATS1;
 	case 2: return V_028A90_SAMPLE_STREAMOUTSTATS2;
 	case 3: return V_028A90_SAMPLE_STREAMOUTSTATS3;
-	}
-}
-
-static void emit_query_flush(struct radv_cmd_buffer *cmd_buffer,
-			     struct radv_query_pool *pool)
-{
-	if (cmd_buffer->pending_reset_query) {
-		if (pool->size >= RADV_BUFFER_OPS_CS_THRESHOLD) {
-			/* Only need to flush caches if the query pool size is
-			 * large enough to be resetted using the compute shader
-			 * path. Small pools don't need any cache flushes
-			 * because we use a CP dma clear.
-			 */
-			si_emit_cache_flush(cmd_buffer);
-		}
 	}
 }
 
@@ -1608,6 +1619,7 @@ static void emit_end_query(struct radv_cmd_buffer *cmd_buffer,
 					   cmd_buffer->device->physical_device->rad_info.chip_class,
 					   radv_cmd_buffer_uses_mec(cmd_buffer),
 					   V_028A90_BOTTOM_OF_PIPE_TS, 0,
+					   EOP_DST_SEL_MEM,
 					   EOP_DATA_SEL_VALUE_32BIT,
 					   avail_va, 1,
 					   cmd_buffer->gfx9_eop_bug_va);
@@ -1624,6 +1636,15 @@ static void emit_end_query(struct radv_cmd_buffer *cmd_buffer,
 		break;
 	default:
 		unreachable("ending unhandled query type");
+	}
+
+	cmd_buffer->active_query_flush_bits |= RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
+					       RADV_CMD_FLAG_CS_PARTIAL_FLUSH |
+					       RADV_CMD_FLAG_INV_L2 |
+					       RADV_CMD_FLAG_INV_VCACHE;
+	if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX9) {
+		cmd_buffer->active_query_flush_bits |= RADV_CMD_FLAG_FLUSH_AND_INV_CB |
+						       RADV_CMD_FLAG_FLUSH_AND_INV_DB;
 	}
 }
 
@@ -1724,7 +1745,7 @@ void radv_CmdWriteTimestamp(
 	if (cmd_buffer->state.subpass && cmd_buffer->state.subpass->view_mask)
 		num_queries = util_bitcount(cmd_buffer->state.subpass->view_mask);
 
-	MAYBE_UNUSED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 28 * num_queries);
+	ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cs, 28 * num_queries);
 
 	for (unsigned i = 0; i < num_queries; i++) {
 		switch(pipelineStage) {
@@ -1743,6 +1764,7 @@ void radv_CmdWriteTimestamp(
 						   cmd_buffer->device->physical_device->rad_info.chip_class,
 						   mec,
 						   V_028A90_BOTTOM_OF_PIPE_TS, 0,
+						   EOP_DST_SEL_MEM,
 						   EOP_DATA_SEL_TIMESTAMP,
 						   query_va, 0,
 						   cmd_buffer->gfx9_eop_bug_va);

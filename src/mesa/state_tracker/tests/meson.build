@@ -22,7 +22,21 @@ libmesa_st_test_common = static_library(
   'mesa_st_test_common',
   ['st_tests_common.cpp', ir_expression_operation_h],
   include_directories : inc_common,
-  dependencies : [dep_thread, idep_gtest],
+  dependencies : idep_gtest,
+)
+
+test(
+  'st_format_test',
+  executable(
+    'st_format_test',
+    ['st_format.c'],
+    include_directories : inc_common,
+    link_with : [
+      libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
+    ],
+    dependencies : idep_mesautil,
+  ),
+  suite : ['st_mesa'],
 )
 
 test(
@@ -33,9 +47,8 @@ test(
     include_directories : inc_common,
     link_with : [
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
-      libmesa_util,
     ],
-    dependencies : [idep_gtest, dep_thread],
+    dependencies : [idep_mesautil, idep_gtest],
   ),
   suite : ['st_mesa'],
 )
@@ -48,9 +61,8 @@ test(
     include_directories : inc_common,
     link_with : [
       libmesa_st_test_common, libmesa_gallium, libglapi, libgallium,
-      libmesa_util,
     ],
-    dependencies : [idep_gtest, dep_thread]
+    dependencies : [idep_mesautil, idep_gtest],
   ),
   suite : ['st_mesa'],
 )

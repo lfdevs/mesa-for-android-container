@@ -281,7 +281,7 @@ brw_nir_analyze_ubo_ranges(const struct brw_compiler *compiler,
          }
 
          struct ubo_range_entry *entry =
-            util_dynarray_grow(&ranges, sizeof(struct ubo_range_entry));
+            util_dynarray_grow(&ranges, struct ubo_range_entry, 1);
 
          entry->range.block = b;
          entry->range.start = first_bit;

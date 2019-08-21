@@ -80,7 +80,7 @@ apply_attr_wa_block(nir_block *block, struct attr_wa_state *state)
 
       /* Apply BGRA swizzle if required. */
       if (wa_flags & BRW_ATTRIB_WA_BGRA) {
-         val = nir_swizzle(b, val, (unsigned[4]){2,1,0,3}, 4, true);
+         val = nir_swizzle(b, val, (unsigned[4]){2,1,0,3}, 4);
       }
 
       if (wa_flags & BRW_ATTRIB_WA_NORMALIZE) {

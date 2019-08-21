@@ -102,7 +102,7 @@ struct glx_context dummyContext = {
 };
 __thread void *__glX_tls_Context = &dummyContext;
 
-#if !defined(GLX_USE_TLS)
+#if !defined(USE_ELF_TLS)
 extern "C" struct glx_context *
 __glXGetCurrentContext()
 {

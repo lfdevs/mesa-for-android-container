@@ -37,6 +37,15 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_END
       },
    },
+   [ppir_op_abs] = {
+      .name = "abs",
+   },
+   [ppir_op_neg] = {
+      .name = "neg",
+   },
+   [ppir_op_sat] = {
+      .name = "sat",
+   },
    [ppir_op_mul] = {
       .name = "mul",
       .slots = (int []) {
@@ -50,15 +59,6 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_ALU_SCL_ADD, PPIR_INSTR_SLOT_ALU_VEC_ADD,
          PPIR_INSTR_SLOT_END
       },
-   },
-   [ppir_op_dot2] = {
-      .name = "dot2",
-   },
-   [ppir_op_dot3] = {
-      .name = "dot3",
-   },
-   [ppir_op_dot4] = {
-      .name = "dot4",
    },
    [ppir_op_sum3] = {
       .name = "sum3",
@@ -145,6 +145,20 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_END
       },
    },
+   [ppir_op_ddx] = {
+      .name = "ddx",
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_ALU_SCL_ADD, PPIR_INSTR_SLOT_ALU_VEC_ADD,
+         PPIR_INSTR_SLOT_END
+      },
+   },
+   [ppir_op_ddy] = {
+      .name = "ddy",
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_ALU_SCL_ADD, PPIR_INSTR_SLOT_ALU_VEC_ADD,
+         PPIR_INSTR_SLOT_END
+      },
+   },
    [ppir_op_and] = {
       .name = "and",
       .slots = (int []) {
@@ -211,6 +225,14 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_END
       },
    },
+   [ppir_op_sel_cond] = {
+      /* effectively mov, but must be scheduled only to
+       * PPIR_INSTR_SLOT_ALU_SCL_MUL */
+      .name = "sel_cond",
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_ALU_SCL_MUL, PPIR_INSTR_SLOT_END
+      },
+   },
    [ppir_op_select] = {
       .name = "select",
       .slots = (int []) {
@@ -240,6 +262,20 @@ const ppir_op_info ppir_op_infos[] = {
    },
    [ppir_op_load_fragcoord] = {
       .name = "ld_fragcoord",
+      .type = ppir_node_type_load,
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_VARYING, PPIR_INSTR_SLOT_END
+      },
+   },
+   [ppir_op_load_pointcoord] = {
+      .name = "ld_pointcoord",
+      .type = ppir_node_type_load,
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_VARYING, PPIR_INSTR_SLOT_END
+      },
+   },
+   [ppir_op_load_frontface] = {
+      .name = "ld_frontface",
       .type = ppir_node_type_load,
       .slots = (int []) {
          PPIR_INSTR_SLOT_VARYING, PPIR_INSTR_SLOT_END
@@ -281,6 +317,20 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_STORE_TEMP, PPIR_INSTR_SLOT_END
       },
    },
+   [ppir_op_discard] = {
+      .name = "discard",
+      .type = ppir_node_type_discard,
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_BRANCH, PPIR_INSTR_SLOT_END
+      },
+   },
+   [ppir_op_branch] = {
+      .name = "branch",
+      .type = ppir_node_type_branch,
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_BRANCH, PPIR_INSTR_SLOT_END
+      },
+   },
 };
 
 void *ppir_node_create(ppir_block *block, ppir_op op, int index, unsigned mask)
@@ -292,6 +342,8 @@ void *ppir_node_create(ppir_block *block, ppir_op op, int index, unsigned mask)
       [ppir_node_type_load] = sizeof(ppir_load_node),
       [ppir_node_type_store] = sizeof(ppir_store_node),
       [ppir_node_type_load_texture] = sizeof(ppir_load_texture_node),
+      [ppir_node_type_discard] = sizeof(ppir_discard_node),
+      [ppir_node_type_branch] = sizeof(ppir_branch_node),
    };
 
    ppir_node_type type = ppir_op_infos[op].type;
@@ -355,21 +407,48 @@ static void _ppir_node_replace_child(ppir_src *src, ppir_node *old_child, ppir_n
 {
    ppir_dest *od = ppir_node_get_dest(old_child);
    if (ppir_node_target_equal(src, od)) {
-      ppir_dest *nd = ppir_node_get_dest(new_child);
-      ppir_node_target_assign(src, nd);
+      ppir_node_target_assign(src, new_child);
    }
 }
 
 void ppir_node_replace_child(ppir_node *parent, ppir_node *old_child, ppir_node *new_child)
 {
-   if (parent->type == ppir_node_type_alu) {
+   switch (parent->type) {
+   case ppir_node_type_alu:
+   {
       ppir_alu_node *alu = ppir_node_to_alu(parent);
       for (int i = 0; i < alu->num_src; i++)
          _ppir_node_replace_child(alu->src + i, old_child, new_child);
+      break;
    }
-   else if (parent->type == ppir_node_type_store) {
+   case ppir_node_type_branch:
+   {
+      ppir_branch_node *branch = ppir_node_to_branch(parent);
+      for (int i = 0; i < 2; i++)
+         _ppir_node_replace_child(branch->src + i, old_child, new_child);
+      break;
+   }
+   case ppir_node_type_load:
+   {
+      ppir_load_node *load = ppir_node_to_load(parent);
+      _ppir_node_replace_child(&load->src, old_child, new_child);
+      break;
+   }
+   case ppir_node_type_load_texture:
+   {
+      ppir_load_texture_node *load_texture = ppir_node_to_load_texture(parent);
+      _ppir_node_replace_child(&load_texture->src_coords, old_child, new_child);
+      break;
+   }
+   case ppir_node_type_store:
+   {
       ppir_store_node *store = ppir_node_to_store(parent);
       _ppir_node_replace_child(&store->src, old_child, new_child);
+      break;
+   }
+   default:
+      ppir_debug("unknown node type in %s\n", __func__);
+      break;
    }
 }
 
@@ -400,12 +479,66 @@ void ppir_node_delete(ppir_node *node)
    ralloc_free(node);
 }
 
+static void ppir_node_print_dest(ppir_dest *dest)
+{
+   switch (dest->type) {
+   case ppir_target_ssa:
+      printf("ssa%d", dest->ssa.index);
+      break;
+   case ppir_target_pipeline:
+      printf("pipeline %d", dest->pipeline);
+      break;
+   case ppir_target_register:
+      printf("reg %d", dest->reg->index);
+      break;
+   }
+}
+
+static void ppir_node_print_src(ppir_src *src)
+{
+   switch (src->type) {
+   case ppir_target_ssa: {
+      if (src->node)
+         printf("ssa node %d", src->node->index);
+      else
+         printf("ssa idx %d", src->ssa ? src->ssa->index : -1);
+      break;
+   }
+   case ppir_target_pipeline:
+      if (src->node)
+         printf("pipeline %d node %d", src->pipeline, src->node->index);
+      else
+         printf("pipeline %d", src->pipeline);
+      break;
+   case ppir_target_register:
+      printf("reg %d", src->reg->index);
+      break;
+   }
+}
+
 static void ppir_node_print_node(ppir_node *node, int space)
 {
    for (int i = 0; i < space; i++)
       printf(" ");
-   printf("%s%s %d %s\n", node->printed && !ppir_node_is_leaf(node) ? "+" : "",
-          ppir_op_infos[node->op].name, node->index, node->name);
+
+   printf("%s%d: %s %s: ", node->printed && !ppir_node_is_leaf(node) ? "+" : "",
+          node->index, ppir_op_infos[node->op].name, node->name);
+
+   ppir_dest *dest = ppir_node_get_dest(node);
+   if (dest) {
+      printf("dest: ");
+      ppir_node_print_dest(dest);
+   }
+
+   if (ppir_node_get_src_num(node) > 0) {
+      printf(" src: ");
+   }
+   for (int i = 0; i < ppir_node_get_src_num(node); i++) {
+      ppir_node_print_src(ppir_node_get_src(node, i));
+      if (i != (ppir_node_get_src_num(node) - 1))
+         printf(", ");
+   }
+   printf("\n");
 
    if (!node->printed) {
       ppir_node_foreach_pred(node, dep) {

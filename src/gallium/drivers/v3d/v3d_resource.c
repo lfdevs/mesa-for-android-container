@@ -169,7 +169,8 @@ v3d_map_usage_prep(struct pipe_context *pctx,
                         /* If we failed to reallocate, flush users so that we
                          * don't violate any syncing requirements.
                          */
-                        v3d_flush_jobs_reading_resource(v3d, prsc);
+                        v3d_flush_jobs_reading_resource(v3d, prsc,
+                                                        V3D_FLUSH_DEFAULT);
                 }
         } else if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
                 /* If we're writing and the buffer is being used by the CL, we
@@ -177,9 +178,11 @@ v3d_map_usage_prep(struct pipe_context *pctx,
                  * to flush if the CL has written our buffer.
                  */
                 if (usage & PIPE_TRANSFER_WRITE)
-                        v3d_flush_jobs_reading_resource(v3d, prsc);
+                        v3d_flush_jobs_reading_resource(v3d, prsc,
+                                                        V3D_FLUSH_ALWAYS);
                 else
-                        v3d_flush_jobs_writing_resource(v3d, prsc);
+                        v3d_flush_jobs_writing_resource(v3d, prsc,
+                                                        V3D_FLUSH_ALWAYS);
         }
 
         if (usage & PIPE_TRANSFER_WRITE) {
@@ -366,7 +369,7 @@ v3d_resource_destroy(struct pipe_screen *pscreen,
         free(rsc);
 }
 
-static boolean
+static bool
 v3d_resource_get_handle(struct pipe_screen *pscreen,
                         struct pipe_context *pctx,
                         struct pipe_resource *prsc,
@@ -408,13 +411,13 @@ v3d_resource_get_handle(struct pipe_screen *pscreen,
                         return ok;
                 }
                 whandle->handle = bo->handle;
-                return TRUE;
+                return true;
         case WINSYS_HANDLE_TYPE_FD:
                 whandle->handle = v3d_bo_get_dmabuf(bo);
                 return whandle->handle != -1;
         }
 
-        return FALSE;
+        return false;
 }
 
 #define PAGE_UB_ROWS (VC5_UIFCFG_PAGE_SIZE / VC5_UIFBLOCK_ROW_SIZE)

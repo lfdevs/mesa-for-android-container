@@ -126,9 +126,9 @@ if with_tests
     executable(
       'isl_surf_get_image_offset_test',
       'tests/isl_surf_get_image_offset_test.c',
-      dependencies : dep_m,
+      dependencies : [dep_m, idep_mesautil],
       include_directories : [inc_common, inc_intel],
-      link_with : [libisl, libintel_dev, libmesa_util],
+      link_with : [libisl, libintel_dev],
     ),
     suite : ['intel'],
   )

@@ -255,6 +255,13 @@ draw_set_mapped_constant_buffer(struct draw_context *draw,
                                 unsigned size);
 
 void
+draw_set_mapped_shader_buffer(struct draw_context *draw,
+                              enum pipe_shader_type shader_type,
+                              unsigned slot,
+                              const void *buffer,
+                              unsigned size);
+
+void
 draw_set_mapped_so_targets(struct draw_context *draw,
                            int num_targets,
                            struct draw_so_target *targets[PIPE_MAX_SO_BUFFERS]);

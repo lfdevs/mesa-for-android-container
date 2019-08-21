@@ -267,7 +267,8 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       return NULL;
    }
    
-   if (!dri2_init_surface(&dri2_surf->base, disp, type, conf, attrib_list, false))
+   if (!dri2_init_surface(&dri2_surf->base, disp, type, conf, attrib_list,
+                          false, native_surface))
       goto cleanup_surf;
 
    dri2_surf->region = XCB_NONE;
@@ -289,7 +290,7 @@ dri2_x11_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       goto cleanup_pixmap;
    }
 
-   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf))
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
       goto cleanup_pixmap;
 
    if (type != EGL_PBUFFER_BIT) {
@@ -1262,7 +1263,6 @@ static const struct dri2_egl_display_vtbl dri2_x11_swrast_display_vtbl = {
    .destroy_surface = dri2_x11_destroy_surface,
    .create_image = dri2_create_image_khr,
    .swap_buffers = dri2_x11_swap_buffers,
-   .set_damage_region = dri2_fallback_set_damage_region,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,
    .post_sub_buffer = dri2_fallback_post_sub_buffer,
    /* XXX: should really implement this since X11 has pixmaps */
@@ -1285,7 +1285,6 @@ static const struct dri2_egl_display_vtbl dri2_x11_display_vtbl = {
    .swap_buffers = dri2_x11_swap_buffers,
    .swap_buffers_with_damage = dri2_fallback_swap_buffers_with_damage,
    .swap_buffers_region = dri2_x11_swap_buffers_region,
-   .set_damage_region = dri2_fallback_set_damage_region,
    .post_sub_buffer = dri2_x11_post_sub_buffer,
    .copy_buffers = dri2_x11_copy_buffers,
    .query_buffer_age = dri2_fallback_query_buffer_age,
@@ -1309,21 +1308,34 @@ static const __DRIextension *swrast_loader_extensions[] = {
    NULL,
 };
 
+static int
+dri2_find_screen_for_display(const _EGLDisplay *disp, int fallback_screen)
+{
+   const EGLAttrib *attr;
+
+   for (attr = disp->Options.Attribs; attr; attr += 2) {
+      if (attr[0] == EGL_PLATFORM_X11_SCREEN_EXT)
+         return attr[1];
+   }
+
+   return fallback_screen;
+}
+
 static EGLBoolean
 dri2_get_xcb_connection(_EGLDriver *drv, _EGLDisplay *disp,
                         struct dri2_egl_display *dri2_dpy)
 {
    xcb_screen_iterator_t s;
-   int screen = (uintptr_t)disp->Options.Platform;
+   int screen;
    const char *msg;
 
    disp->DriverData = (void *) dri2_dpy;
    if (disp->PlatformDisplay == NULL) {
       dri2_dpy->conn = xcb_connect(NULL, &screen);
       dri2_dpy->own_device = true;
+      screen = dri2_find_screen_for_display(disp, screen);
    } else {
       Display *dpy = disp->PlatformDisplay;
-
       dri2_dpy->conn = XGetXCBConnection(dpy);
       screen = DefaultScreen(dpy);
    }

@@ -1,3 +1,12 @@
+mesa (19.2.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Avoid having an empty string for -Dplatforms.
+  * Revert-egl-drop-incorrect-pkg-config-file-for-glvnd.patch: We still
+    need to ship egl.pc from mesa.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 21 Aug 2019 07:45:14 +0300
+
 mesa (19.1.4-1) unstable; urgency=medium
 
   * New upstream release. (Closes: #933753, #933906)

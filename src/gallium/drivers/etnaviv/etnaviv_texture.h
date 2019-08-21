@@ -27,7 +27,7 @@
 #ifndef H_ETNAVIV_TEXTURE
 #define H_ETNAVIV_TEXTURE
 
-#include <etnaviv_drmif.h>
+#include "drm/etnaviv_drmif.h"
 
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
@@ -36,6 +36,7 @@ struct etna_context;
 
 struct etna_sampler_ts {
    unsigned enable:1;
+   unsigned mode:1;
    uint32_t TS_SAMPLER_CONFIG;
    struct etna_reloc TS_SAMPLER_STATUS_BASE;
    uint32_t TS_SAMPLER_CLEAR_VALUE;

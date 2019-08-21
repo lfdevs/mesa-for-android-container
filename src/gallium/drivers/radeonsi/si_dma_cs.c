@@ -30,7 +30,7 @@ static void si_dma_emit_wait_idle(struct si_context *sctx)
 	struct radeon_cmdbuf *cs = sctx->dma_cs;
 
 	/* NOP waits for idle. */
-	if (sctx->chip_class >= CIK)
+	if (sctx->chip_class >= GFX7)
 		radeon_emit(cs, 0x00000000); /* NOP */
 	else
 		radeon_emit(cs, 0xf0000000); /* NOP */
@@ -42,7 +42,7 @@ void si_dma_emit_timestamp(struct si_context *sctx, struct si_resource *dst,
 	struct radeon_cmdbuf *cs = sctx->dma_cs;
 	uint64_t va = dst->gpu_address + offset;
 
-	if (sctx->chip_class == SI) {
+	if (sctx->chip_class == GFX6) {
 		unreachable("SI DMA doesn't support the timestamp packet.");
 		return;
 	}
@@ -87,7 +87,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 
 	offset += sdst->gpu_address;
 
-	if (sctx->chip_class == SI) {
+	if (sctx->chip_class == GFX6) {
 		/* the same maximum size as for copying */
 		ncopy = DIV_ROUND_UP(size, SI_DMA_COPY_MAX_DWORD_ALIGNED_SIZE);
 		si_need_dma_space(sctx, ncopy * 4, sdst, NULL);
@@ -105,7 +105,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 		return;
 	}
 
-	/* The following code is for CI, VI, Vega/Raven, etc. */
+	/* The following code is for Sea Islands and later. */
 	/* the same maximum size as for copying */
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
 	si_need_dma_space(sctx, ncopy * 5, sdst, NULL);
@@ -164,7 +164,7 @@ void si_need_dma_space(struct si_context *ctx, unsigned num_dw,
 	 */
 	num_dw++; /* for emit_wait_idle below */
 	if (!ctx->sdma_uploads_in_progress &&
-	    (!ws->cs_check_space(ctx->dma_cs, num_dw) ||
+	    (!ws->cs_check_space(ctx->dma_cs, num_dw, false) ||
 	     ctx->dma_cs->used_vram + ctx->dma_cs->used_gart > 64 * 1024 * 1024 ||
 	     !radeon_cs_memory_below_limit(ctx->screen, ctx->dma_cs, vram, gtt))) {
 		si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC, NULL);

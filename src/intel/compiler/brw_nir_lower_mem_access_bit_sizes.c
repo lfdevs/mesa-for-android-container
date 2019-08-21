@@ -179,20 +179,24 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin)
    const unsigned const_offset =
       offset_is_const ? nir_src_as_uint(*offset_src) : 0;
 
-   assert(num_components * (bit_size / 8) <= 32);
-   uint32_t byte_mask = 0;
+   const unsigned byte_size = bit_size / 8;
+   assert(byte_size <= sizeof(uint64_t));
+
+   BITSET_DECLARE(mask, NIR_MAX_VEC_COMPONENTS * sizeof(uint64_t));
+   BITSET_ZERO(mask);
+
    for (unsigned i = 0; i < num_components; i++) {
-      if (writemask & (1 << i))
-         byte_mask |= ((1 << (bit_size / 8)) - 1) << i * (bit_size / 8);
+      if (writemask & (1u << i))
+         BITSET_SET_RANGE(mask, i * byte_size, ((i + 1) * byte_size) - 1);
    }
 
-   while (byte_mask) {
-      const int start = ffs(byte_mask) - 1;
-      assert(start % (bit_size / 8) == 0);
+   while (BITSET_FFS(mask) != 0) {
+      const int start = BITSET_FFS(mask) - 1;
+      assert(start % byte_size == 0);
 
       int end;
       for (end = start + 1; end < bytes_written; end++) {
-         if (!(byte_mask & (1 << end)))
+         if (!(BITSET_TEST(mask, end)))
             break;
       }
       /* The size of the current contiguous chunk in bytes */
@@ -217,22 +221,22 @@ lower_mem_store_bit_size(nir_builder *b, nir_intrinsic_instr *intrin)
       }
 
       const unsigned store_bytes = store_comps * (store_bit_size / 8);
-      assert(store_bytes % (bit_size / 8) == 0);
-      const unsigned store_first_src_comp = start / (bit_size / 8);
-      const unsigned store_src_comps = store_bytes / (bit_size / 8);
+      assert(store_bytes % byte_size == 0);
+      const unsigned store_first_src_comp = start / byte_size;
+      const unsigned store_src_comps = store_bytes / byte_size;
       assert(store_first_src_comp + store_src_comps <= num_components);
 
       unsigned src_swiz[4] = { 0, };
       for (unsigned i = 0; i < store_src_comps; i++)
          src_swiz[i] = store_first_src_comp + i;
       nir_ssa_def *store_value =
-         nir_swizzle(b, value, src_swiz, store_src_comps, false);
+         nir_swizzle(b, value, src_swiz, store_src_comps);
       nir_ssa_def *packed = nir_bitcast_vector(b, store_value, store_bit_size);
 
       dup_mem_intrinsic(b, intrin, packed, start,
                         store_comps, store_bit_size, store_align);
 
-      byte_mask &= ~(((1u << store_bytes) - 1) << start);
+      BITSET_CLEAR_RANGE(mask, start, (start + store_bytes - 1));
    }
 
    nir_instr_remove(&intrin->instr);

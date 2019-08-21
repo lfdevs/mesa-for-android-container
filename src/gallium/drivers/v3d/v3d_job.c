@@ -147,35 +147,115 @@ v3d_job_add_write_resource(struct v3d_job *job, struct pipe_resource *prsc)
 }
 
 void
-v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
-                                struct pipe_resource *prsc)
+v3d_flush_jobs_using_bo(struct v3d_context *v3d, struct v3d_bo *bo)
 {
-        struct hash_entry *entry = _mesa_hash_table_search(v3d->write_jobs,
-                                                           prsc);
-        if (entry) {
+        hash_table_foreach(v3d->jobs, entry) {
                 struct v3d_job *job = entry->data;
-                v3d_job_submit(v3d, job);
+
+                if (_mesa_set_search(job->bos, bo))
+                        v3d_job_submit(v3d, job);
         }
 }
 
 void
-v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
+v3d_job_add_tf_write_resource(struct v3d_job *job, struct pipe_resource *prsc)
+{
+        v3d_job_add_write_resource(job, prsc);
+
+        if (!job->tf_write_prscs)
+                job->tf_write_prscs = _mesa_pointer_set_create(job);
+
+        _mesa_set_add(job->tf_write_prscs, prsc);
+}
+
+static bool
+v3d_job_writes_resource_from_tf(struct v3d_job *job,
                                 struct pipe_resource *prsc)
+{
+        if (!job->tf_enabled)
+                return false;
+
+        if (!job->tf_write_prscs)
+                return false;
+
+        return _mesa_set_search(job->tf_write_prscs, prsc) != NULL;
+}
+
+void
+v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
+                                struct pipe_resource *prsc,
+                                enum v3d_flush_cond flush_cond)
+{
+        struct hash_entry *entry = _mesa_hash_table_search(v3d->write_jobs,
+                                                           prsc);
+        if (!entry)
+                return;
+
+        struct v3d_job *job = entry->data;
+
+        bool needs_flush;
+        switch (flush_cond) {
+        case V3D_FLUSH_ALWAYS:
+                needs_flush = true;
+                break;
+        case V3D_FLUSH_NOT_CURRENT_JOB:
+                needs_flush = !v3d->job || v3d->job != job;
+                break;
+        case V3D_FLUSH_DEFAULT:
+        default:
+                /* For writes from TF in the same job we use the "Wait for TF"
+                 * feature provided by the hardware so we don't want to flush.
+                 * The exception to this is when the caller is about to map the
+                 * resource since in that case we don't have a 'Wait for TF'
+                 * command the in command stream. In this scenario the caller
+                 * is expected to set 'always_flush' to True.
+                 */
+                needs_flush = !v3d_job_writes_resource_from_tf(job, prsc);
+        }
+
+        if (needs_flush)
+                v3d_job_submit(v3d, job);
+}
+
+void
+v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
+                                struct pipe_resource *prsc,
+                                enum v3d_flush_cond flush_cond)
 {
         struct v3d_resource *rsc = v3d_resource(prsc);
 
-        v3d_flush_jobs_writing_resource(v3d, prsc);
+        /* We only need to force the flush on TF writes, which is the only
+         * case where we might skip the flush to use the 'Wait for TF'
+         * command. Here we are flushing for a read, which means that the
+         * caller intends to write to the resource, so we don't care if
+         * there was a previous TF write to it.
+         */
+        v3d_flush_jobs_writing_resource(v3d, prsc, flush_cond);
 
         hash_table_foreach(v3d->jobs, entry) {
                 struct v3d_job *job = entry->data;
 
-                if (_mesa_set_search(job->bos, rsc->bo)) {
-                        v3d_job_submit(v3d, job);
-                        /* Reminder: v3d->jobs is safe to keep iterating even
-                         * after deletion of an entry.
-                         */
+                if (!_mesa_set_search(job->bos, rsc->bo))
                         continue;
+
+                bool needs_flush;
+                switch (flush_cond) {
+                case V3D_FLUSH_NOT_CURRENT_JOB:
+                        needs_flush = !v3d->job || v3d->job != job;
+                        break;
+                case V3D_FLUSH_ALWAYS:
+                case V3D_FLUSH_DEFAULT:
+                default:
+                        needs_flush = true;
                 }
+
+                if (needs_flush)
+                        v3d_job_submit(v3d, job);
+
+                /* Reminder: v3d->jobs is safe to keep iterating even
+                 * after deletion of an entry.
+                 */
+                continue;
         }
 }
 
@@ -248,7 +328,8 @@ v3d_get_job(struct v3d_context *v3d,
 
         for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 if (cbufs[i]) {
-                        v3d_flush_jobs_reading_resource(v3d, cbufs[i]->texture);
+                        v3d_flush_jobs_reading_resource(v3d, cbufs[i]->texture,
+                                                        V3D_FLUSH_DEFAULT);
                         pipe_surface_reference(&job->cbufs[i], cbufs[i]);
 
                         if (cbufs[i]->texture->nr_samples > 1)
@@ -256,7 +337,8 @@ v3d_get_job(struct v3d_context *v3d,
                 }
         }
         if (zsbuf) {
-                v3d_flush_jobs_reading_resource(v3d, zsbuf->texture);
+                v3d_flush_jobs_reading_resource(v3d, zsbuf->texture,
+                                                V3D_FLUSH_DEFAULT);
                 pipe_surface_reference(&job->zsbuf, zsbuf);
                 if (zsbuf->texture->nr_samples > 1)
                         job->msaa = true;
@@ -273,7 +355,8 @@ v3d_get_job(struct v3d_context *v3d,
                 struct v3d_resource *rsc = v3d_resource(zsbuf->texture);
                 if (rsc->separate_stencil) {
                         v3d_flush_jobs_reading_resource(v3d,
-                                                        &rsc->separate_stencil->base);
+                                                        &rsc->separate_stencil->base,
+                                                        V3D_FLUSH_DEFAULT);
                         _mesa_hash_table_insert(v3d->write_jobs,
                                                 &rsc->separate_stencil->base,
                                                 job);
@@ -321,7 +404,13 @@ v3d_get_job_for_fbo(struct v3d_context *v3d)
         if (zsbuf) {
                 struct v3d_resource *rsc = v3d_resource(zsbuf->texture);
                 if (!rsc->writes)
-                        job->clear |= PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL;
+                        job->clear |= PIPE_CLEAR_DEPTH;
+
+                if (rsc->separate_stencil)
+                        rsc = rsc->separate_stencil;
+
+                if (!rsc->writes)
+                        job->clear |= PIPE_CLEAR_STENCIL;
         }
 
         job->draw_tiles_x = DIV_ROUND_UP(v3d->framebuffer.width,
@@ -360,18 +449,31 @@ v3d_clif_dump(struct v3d_context *v3d, struct v3d_job *job)
         clif_dump_destroy(clif);
 }
 
+static void
+v3d_read_and_accumulate_primitive_counters(struct v3d_context *v3d)
+{
+        assert(v3d->prim_counts);
+
+        perf_debug("stalling on TF counts readback");
+        struct v3d_resource *rsc = v3d_resource(v3d->prim_counts);
+        if (v3d_bo_wait(rsc->bo, PIPE_TIMEOUT_INFINITE, "prim-counts")) {
+                uint32_t *map = v3d_bo_map(rsc->bo);
+                v3d->tf_prims_generated += map[V3D_PRIM_COUNTS_TF_WRITTEN];
+        }
+}
+
 /**
  * Submits the job to the kernel and then reinitializes it.
  */
 void
 v3d_job_submit(struct v3d_context *v3d, struct v3d_job *job)
 {
-        MAYBE_UNUSED struct v3d_screen *screen = v3d->screen;
+        struct v3d_screen *screen = v3d->screen;
 
         if (!job->needs_flush)
                 goto done;
 
-        if (v3d->screen->devinfo.ver >= 41)
+        if (screen->devinfo.ver >= 41)
                 v3d41_emit_rcl(job);
         else
                 v3d33_emit_rcl(job);
@@ -419,6 +521,14 @@ v3d_job_submit(struct v3d_context *v3d, struct v3d_job *job)
                                         "Expect corruption.\n", strerror(errno));
                         warned = true;
                 }
+
+                /* If we are submitting a job in the middle of transform
+                 * feedback we need to read the primitive counts and accumulate
+                 * them, otherwise they will be reset at the start of the next
+                 * draw when we emit the Tile Binning Mode Configuration packet.
+                 */
+                if (v3d->streamout.num_targets)
+                        v3d_read_and_accumulate_primitive_counters(v3d);
         }
 
 done:

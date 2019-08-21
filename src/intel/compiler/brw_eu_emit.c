@@ -981,6 +981,8 @@ ALU2(SHR)
 ALU2(SHL)
 ALU1(DIM)
 ALU2(ASR)
+ALU2(ROL)
+ALU2(ROR)
 ALU3(CSEL)
 ALU1(FRC)
 ALU1(RNDD)
@@ -3010,7 +3012,8 @@ static void
 brw_set_memory_fence_message(struct brw_codegen *p,
                              struct brw_inst *insn,
                              enum brw_message_target sfid,
-                             bool commit_enable)
+                             bool commit_enable,
+                             unsigned bti)
 {
    const struct gen_device_info *devinfo = p->devinfo;
 
@@ -3032,6 +3035,9 @@ brw_set_memory_fence_message(struct brw_codegen *p,
 
    if (commit_enable)
       brw_inst_set_dp_msg_control(devinfo, insn, 1 << 5);
+
+   assert(devinfo->gen >= 11 || bti == 0);
+   brw_inst_set_binding_table_index(devinfo, insn, bti);
 }
 
 void
@@ -3039,7 +3045,8 @@ brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst,
                  struct brw_reg src,
                  enum opcode send_op,
-                 bool stall)
+                 bool stall,
+                 unsigned bti)
 {
    const struct gen_device_info *devinfo = p->devinfo;
    const bool commit_enable = stall ||
@@ -3060,7 +3067,7 @@ brw_memory_fence(struct brw_codegen *p,
    brw_set_dest(p, insn, dst);
    brw_set_src0(p, insn, src);
    brw_set_memory_fence_message(p, insn, GEN7_SFID_DATAPORT_DATA_CACHE,
-                                commit_enable);
+                                commit_enable, bti);
 
    if (devinfo->gen == 7 && !devinfo->is_haswell) {
       /* IVB does typed surface access through the render cache, so we need to
@@ -3071,7 +3078,7 @@ brw_memory_fence(struct brw_codegen *p,
       brw_set_dest(p, insn, offset(dst, 1));
       brw_set_src0(p, insn, src);
       brw_set_memory_fence_message(p, insn, GEN6_SFID_DATAPORT_RENDER_CACHE,
-                                   commit_enable);
+                                   commit_enable, bti);
 
       /* Now write the response of the second message into the response of the
        * first to trigger a pipeline stall -- This way future render and data

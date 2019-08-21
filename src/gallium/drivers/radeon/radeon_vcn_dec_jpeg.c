@@ -63,7 +63,7 @@ static struct pb_buffer *radeon_jpeg_get_decode_param(struct radeon_decoder *dec
 static void set_reg_jpeg(struct radeon_decoder *dec, unsigned reg,
 			 unsigned cond, unsigned type, uint32_t val)
 {
-	radeon_emit(dec->cs, RDECODE_PKTJ(SOC15_REG_ADDR(reg), cond, type));
+	radeon_emit(dec->cs, RDECODE_PKTJ(reg, cond, type));
 	radeon_emit(dec->cs, val);
 }
 
@@ -75,22 +75,22 @@ static void send_cmd_bitstream(struct radeon_decoder *dec,
 	uint64_t addr;
 
 	// jpeg soft reset
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 1);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 1);
 
 	// ensuring the Reset is asserted in SCLK domain
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C2);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, 0x01400200);
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (1 << 9));
-	set_reg_jpeg(dec, mmUVD_SOFT_RESET, COND0, TYPE3, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C2);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, 0x01400200);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_SOFT_RESET), COND0, TYPE3, (1 << 9));
 
 	// wait mem
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 0);
 
 	// ensuring the Reset is de-asserted in SCLK domain
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (0 << 9));
-	set_reg_jpeg(dec, mmUVD_SOFT_RESET, COND0, TYPE3, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (0 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_SOFT_RESET), COND0, TYPE3, (1 << 9));
 
 	dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
 						   domain, 0);
@@ -98,17 +98,17 @@ static void send_cmd_bitstream(struct radeon_decoder *dec,
 	addr = addr + off;
 
 	// set UVD_LMI_JPEG_READ_64BIT_BAR_LOW/HIGH based on bitstream buffer address
-	set_reg_jpeg(dec, mmUVD_LMI_JPEG_READ_64BIT_BAR_HIGH, COND0, TYPE0, (addr >> 32));
-	set_reg_jpeg(dec, mmUVD_LMI_JPEG_READ_64BIT_BAR_LOW, COND0, TYPE0, addr);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_LMI_JPEG_READ_64BIT_BAR_HIGH), COND0, TYPE0, (addr >> 32));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_LMI_JPEG_READ_64BIT_BAR_LOW), COND0, TYPE0, addr);
 
 	// set jpeg_rb_base
-	set_reg_jpeg(dec, mmUVD_JPEG_RB_BASE, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_RB_BASE), COND0, TYPE0, 0);
 
 	// set jpeg_rb_base
-	set_reg_jpeg(dec, mmUVD_JPEG_RB_SIZE, COND0, TYPE0, 0xFFFFFFF0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_RB_SIZE), COND0, TYPE0, 0xFFFFFFF0);
 
 	// set jpeg_rb_wptr
-	set_reg_jpeg(dec, mmUVD_JPEG_RB_WPTR, COND0, TYPE0, (dec->jpg.bsd_size >> 2));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_RB_WPTR), COND0, TYPE0, (dec->jpg.bsd_size >> 2));
 }
 
 /* send a target buffer command */
@@ -118,11 +118,11 @@ static void send_cmd_target(struct radeon_decoder *dec,
 {
 	uint64_t addr;
 
-	set_reg_jpeg(dec, mmUVD_JPEG_PITCH, COND0, TYPE0, (dec->jpg.dt_pitch >> 4));
-	set_reg_jpeg(dec, mmUVD_JPEG_UV_PITCH, COND0, TYPE0, ((dec->jpg.dt_uv_pitch * 2) >> 4));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_PITCH), COND0, TYPE0, (dec->jpg.dt_pitch >> 4));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_UV_PITCH), COND0, TYPE0, ((dec->jpg.dt_uv_pitch * 2) >> 4));
 
-	set_reg_jpeg(dec, mmUVD_JPEG_TILING_CTRL, COND0, TYPE0, 0);
-	set_reg_jpeg(dec, mmUVD_JPEG_UV_TILING_CTRL, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_TILING_CTRL), COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_UV_TILING_CTRL), COND0, TYPE0, 0);
 
 	dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
 						   domain, 0);
@@ -130,64 +130,158 @@ static void send_cmd_target(struct radeon_decoder *dec,
 	addr = addr + off;
 
 	// set UVD_LMI_JPEG_WRITE_64BIT_BAR_LOW/HIGH based on target buffer address
-	set_reg_jpeg(dec, mmUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH, COND0, TYPE0, (addr >> 32));
-	set_reg_jpeg(dec, mmUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW, COND0, TYPE0, addr);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH), COND0, TYPE0, (addr >> 32));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW), COND0, TYPE0, addr);
 
 	// set output buffer data address
-	set_reg_jpeg(dec, mmUVD_JPEG_INDEX, COND0, TYPE0, 0);
-	set_reg_jpeg(dec, mmUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_luma_top_offset);
-	set_reg_jpeg(dec, mmUVD_JPEG_INDEX, COND0, TYPE0, 1);
-	set_reg_jpeg(dec, mmUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_chroma_top_offset);
-	set_reg_jpeg(dec, mmUVD_JPEG_TIER_CNTL2, COND0, TYPE3, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_INDEX), COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_DATA), COND0, TYPE0, dec->jpg.dt_luma_top_offset);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_INDEX), COND0, TYPE0, 1);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_DATA), COND0, TYPE0, dec->jpg.dt_chroma_top_offset);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_TIER_CNTL2), COND0, TYPE3, 0);
 
 	// set output buffer read pointer
-	set_reg_jpeg(dec, mmUVD_JPEG_OUTBUF_RPTR, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_OUTBUF_RPTR), COND0, TYPE0, 0);
 
 	// enable error interrupts
-	set_reg_jpeg(dec, mmUVD_JPEG_INT_EN, COND0, TYPE0, 0xFFFFFFFE);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_INT_EN), COND0, TYPE0, 0xFFFFFFFE);
 
 	// start engine command
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 0x6);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 0x6);
 
 	// wait for job completion, wait for job JBSI fetch done
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (dec->jpg.bsd_size >> 2));
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C2);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, 0x01400200);
-	set_reg_jpeg(dec, mmUVD_JPEG_RB_RPTR, COND0, TYPE3, 0xFFFFFFFF);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (dec->jpg.bsd_size >> 2));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C2);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, 0x01400200);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_RB_RPTR), COND0, TYPE3, 0xFFFFFFFF);
 
 	// wait for job jpeg outbuf idle
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, 0xFFFFFFFF);
-	set_reg_jpeg(dec, mmUVD_JPEG_OUTBUF_WPTR, COND0, TYPE3, 0x00000001);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, 0xFFFFFFFF);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_OUTBUF_WPTR), COND0, TYPE3, 0x00000001);
 
 	// stop engine
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 0x4);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 0x4);
 
 	// asserting jpeg lmi drop
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x0005);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (1 << 23 | 1 << 0));
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE1, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x0005);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (1 << 23 | 1 << 0));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE1, 0);
 
 	// asserting jpeg reset
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 1);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 1);
 
 	// ensure reset is asserted in sclk domain
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (1 << 9));
-	set_reg_jpeg(dec, mmUVD_SOFT_RESET, COND0, TYPE3, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_SOFT_RESET), COND0, TYPE3, (1 << 9));
 
 	// de-assert jpeg reset
-	set_reg_jpeg(dec, mmUVD_JPEG_CNTL, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_JPEG_CNTL), COND0, TYPE0, 0);
 
 	// ensure reset is de-asserted in sclk domain
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x01C3);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, (0 << 9));
-	set_reg_jpeg(dec, mmUVD_SOFT_RESET, COND0, TYPE3, (1 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x01C3);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, (0 << 9));
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_SOFT_RESET), COND0, TYPE3, (1 << 9));
 
 	// de-asserting jpeg lmi drop
-	set_reg_jpeg(dec, mmUVD_CTX_INDEX, COND0, TYPE0, 0x0005);
-	set_reg_jpeg(dec, mmUVD_CTX_DATA, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_INDEX), COND0, TYPE0, 0x0005);
+	set_reg_jpeg(dec, SOC15_REG_ADDR(mmUVD_CTX_DATA), COND0, TYPE0, 0);
+}
+
+/* send a bitstream buffer command */
+static void send_cmd_bitstream_direct(struct radeon_decoder *dec,
+		     struct pb_buffer* buf, uint32_t off,
+		     enum radeon_bo_usage usage, enum radeon_bo_domain domain)
+{
+	uint64_t addr;
+
+	// jpeg soft reset
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DEC_SOFT_RST, COND0, TYPE0, 1);
+
+	// ensuring the Reset is asserted in SCLK domain
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_COND_RD_TIMER, COND0, TYPE0, 0x01400200);
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_REF_DATA, COND0, TYPE0, (0x1 << 0x10));
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DEC_SOFT_RST, COND3, TYPE3, (0x1 << 0x10));
+
+	// wait mem
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DEC_SOFT_RST, COND0, TYPE0, 0);
+
+	// ensuring the Reset is de-asserted in SCLK domain
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_REF_DATA, COND0, TYPE0, (0 << 0x10));
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DEC_SOFT_RST, COND3, TYPE3, (0x1 << 0x10));
+
+	dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
+						   domain, 0);
+	addr = dec->ws->buffer_get_virtual_address(buf);
+	addr = addr + off;
+
+	// set UVD_LMI_JPEG_READ_64BIT_BAR_LOW/HIGH based on bitstream buffer address
+	set_reg_jpeg(dec, vcnipUVD_LMI_JPEG_READ_64BIT_BAR_HIGH, COND0, TYPE0, (addr >> 32));
+	set_reg_jpeg(dec, vcnipUVD_LMI_JPEG_READ_64BIT_BAR_LOW, COND0, TYPE0, addr);
+
+	// set jpeg_rb_base
+	set_reg_jpeg(dec, vcnipUVD_JPEG_RB_BASE, COND0, TYPE0, 0);
+
+	// set jpeg_rb_base
+	set_reg_jpeg(dec, vcnipUVD_JPEG_RB_SIZE, COND0, TYPE0, 0xFFFFFFF0);
+
+	// set jpeg_rb_wptr
+	set_reg_jpeg(dec, vcnipUVD_JPEG_RB_WPTR, COND0, TYPE0, (dec->jpg.bsd_size >> 2));
+}
+
+/* send a target buffer command */
+static void send_cmd_target_direct(struct radeon_decoder *dec,
+		     struct pb_buffer* buf, uint32_t off,
+		     enum radeon_bo_usage usage, enum radeon_bo_domain domain)
+{
+	uint64_t addr;
+
+	set_reg_jpeg(dec, vcnipUVD_JPEG_PITCH, COND0, TYPE0, (dec->jpg.dt_pitch >> 4));
+	set_reg_jpeg(dec, vcnipUVD_JPEG_UV_PITCH, COND0, TYPE0, ((dec->jpg.dt_uv_pitch * 2) >> 4));
+
+	set_reg_jpeg(dec, vcnipJPEG_DEC_ADDR_MODE, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, vcnipJPEG_DEC_Y_GFX10_TILING_SURFACE, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, vcnipJPEG_DEC_UV_GFX10_TILING_SURFACE, COND0, TYPE0, 0);
+
+	dec->ws->cs_add_buffer(dec->cs, buf, usage | RADEON_USAGE_SYNCHRONIZED,
+						   domain, 0);
+	addr = dec->ws->buffer_get_virtual_address(buf);
+	addr = addr + off;
+
+	// set UVD_LMI_JPEG_WRITE_64BIT_BAR_LOW/HIGH based on target buffer address
+	set_reg_jpeg(dec, vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_HIGH, COND0, TYPE0, (addr >> 32));
+	set_reg_jpeg(dec, vcnipUVD_LMI_JPEG_WRITE_64BIT_BAR_LOW, COND0, TYPE0, addr);
+
+	// set output buffer data address
+	set_reg_jpeg(dec, vcnipUVD_JPEG_INDEX, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_luma_top_offset);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_INDEX, COND0, TYPE0, 1);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_DATA, COND0, TYPE0, dec->jpg.dt_chroma_top_offset);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_TIER_CNTL2, COND0, 0, 0);
+
+	// set output buffer read pointer
+	set_reg_jpeg(dec, vcnipUVD_JPEG_OUTBUF_RPTR, COND0, TYPE0, 0);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_OUTBUF_CNTL, COND0, TYPE0, ((0x00001587 & (~0x00000180L)) | (0x1 << 0x7) | (0x1 << 0x6)));
+
+	// enable error interrupts
+	set_reg_jpeg(dec, vcnipUVD_JPEG_INT_EN, COND0, TYPE0, 0xFFFFFFFE);
+
+	// start engine command
+	set_reg_jpeg(dec, vcnipUVD_JPEG_CNTL, COND0, TYPE0, 0xE);
+
+	// wait for job completion, wait for job JBSI fetch done
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_REF_DATA, COND0, TYPE0, (dec->jpg.bsd_size >> 2));
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_COND_RD_TIMER, COND0, TYPE0, 0x01400200);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_RB_RPTR, COND3, TYPE3, 0xFFFFFFFF);
+
+	// wait for job jpeg outbuf idle
+	set_reg_jpeg(dec, vcnipUVD_JRBC_IB_REF_DATA, COND0, TYPE0, 0xFFFFFFFF);
+	set_reg_jpeg(dec, vcnipUVD_JPEG_OUTBUF_WPTR, COND3, TYPE3, 0x00000001);
+
+	// stop engine
+	set_reg_jpeg(dec, vcnipUVD_JPEG_CNTL, COND0, TYPE0, 0x4);
 }
 
 /**
@@ -207,8 +301,15 @@ void send_cmd_jpeg(struct radeon_decoder *dec,
 
 	dt = radeon_jpeg_get_decode_param(dec, target, picture);
 
-	send_cmd_bitstream(dec, bs_buf->res->buf,
-		 0, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
-	send_cmd_target(dec, dt, 0,
-		 RADEON_USAGE_WRITE, RADEON_DOMAIN_VRAM);
+	if (dec->jpg.direct_reg == true) {
+		send_cmd_bitstream_direct(dec, bs_buf->res->buf,
+			0, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
+		send_cmd_target_direct(dec, dt, 0,
+			RADEON_USAGE_WRITE, RADEON_DOMAIN_VRAM);
+	} else {
+		send_cmd_bitstream(dec, bs_buf->res->buf,
+			0, RADEON_USAGE_READ, RADEON_DOMAIN_GTT);
+		send_cmd_target(dec, dt, 0,
+			RADEON_USAGE_WRITE, RADEON_DOMAIN_VRAM);
+	}
 }

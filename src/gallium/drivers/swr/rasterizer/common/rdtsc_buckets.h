@@ -48,7 +48,17 @@ extern THREAD UINT tlsThreadId;
 class BucketManager
 {
 public:
-    BucketManager() {}
+
+    uint32_t mCurrentFrame;
+    std::vector<uint32_t> mBucketMap;
+    bool                  mBucketsInitialized;
+    std::string           mBucketMgrName;
+
+
+    BucketManager(std::string name) : mCurrentFrame(0), mBucketsInitialized(false), mBucketMgrName(name) 
+    {
+        mBucketMap.clear();
+    }
     ~BucketManager();
 
     // removes all registered thread data

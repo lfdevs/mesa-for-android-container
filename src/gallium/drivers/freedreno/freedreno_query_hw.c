@@ -132,7 +132,7 @@ fd_hw_destroy_query(struct fd_context *ctx, struct fd_query *q)
 	free(hq);
 }
 
-static boolean
+static bool
 fd_hw_begin_query(struct fd_context *ctx, struct fd_query *q)
 {
 	struct fd_batch *batch = fd_context_batch(ctx);
@@ -174,9 +174,9 @@ static void * sampptr(struct fd_hw_sample *samp, uint32_t n, void *ptr)
 	return ((char *)ptr) + (samp->tile_stride * n) + samp->offset;
 }
 
-static boolean
+static bool
 fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
-		boolean wait, union pipe_query_result *result)
+		bool wait, union pipe_query_result *result)
 {
 	struct fd_hw_query *hq = fd_hw_query(q);
 	const struct fd_hw_sample_provider *p = hq->provider;
@@ -209,7 +209,7 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 			 * spin forever:
 			 */
 			if (hq->no_wait_cnt++ > 5)
-				fd_batch_flush(rsc->write_batch, false, false);
+				fd_batch_flush(rsc->write_batch, false);
 			return false;
 		}
 
@@ -237,7 +237,7 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 		struct fd_resource *rsc = fd_resource(start->prsc);
 
 		if (rsc->write_batch)
-			fd_batch_flush(rsc->write_batch, true, false);
+			fd_batch_flush(rsc->write_batch, true);
 
 		/* some piglit tests at least do query with no draws, I guess: */
 		if (!rsc->bo)

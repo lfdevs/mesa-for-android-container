@@ -50,6 +50,7 @@
 #include "common/gen_decoder.h"
 #include "intel_screen.h"
 #include "intel_tex_obj.h"
+#include "perf/gen_perf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -524,7 +525,7 @@ struct intel_batchbuffer {
    } saved;
 
    /** Map from batch offset to brw_state_batch data (with DEBUG_BATCH) */
-   struct hash_table *state_batch_sizes;
+   struct hash_table_u64 *state_batch_sizes;
 
    struct gen_batch_decode_ctx decoder;
 };
@@ -1161,63 +1162,7 @@ struct brw_context
       bool supported;
    } predicate;
 
-   struct {
-      struct gen_perf *perf;
-
-      /* The i915 perf stream we open to setup + enable the OA counters */
-      int oa_stream_fd;
-
-      /* An i915 perf stream fd gives exclusive access to the OA unit that will
-       * report counter snapshots for a specific counter set/profile in a
-       * specific layout/format so we can only start OA queries that are
-       * compatible with the currently open fd...
-       */
-      int current_oa_metrics_set_id;
-      int current_oa_format;
-
-      /* List of buffers containing OA reports */
-      struct exec_list sample_buffers;
-
-      /* Cached list of empty sample buffers */
-      struct exec_list free_sample_buffers;
-
-      int n_active_oa_queries;
-      int n_active_pipeline_stats_queries;
-
-      /* The number of queries depending on running OA counters which
-       * extends beyond brw_end_perf_query() since we need to wait until
-       * the last MI_RPC command has parsed by the GPU.
-       *
-       * Accurate accounting is important here as emitting an
-       * MI_REPORT_PERF_COUNT command while the OA unit is disabled will
-       * effectively hang the gpu.
-       */
-      int n_oa_users;
-
-      /* To help catch an spurious problem with the hardware or perf
-       * forwarding samples, we emit each MI_REPORT_PERF_COUNT command
-       * with a unique ID that we can explicitly check for...
-       */
-      int next_query_start_report_id;
-
-      /**
-       * An array of queries whose results haven't yet been assembled
-       * based on the data in buffer objects.
-       *
-       * These may be active, or have already ended.  However, the
-       * results have not been requested.
-       */
-      struct brw_perf_query_object **unaccumulated;
-      int unaccumulated_elements;
-      int unaccumulated_array_size;
-
-      /* The total number of query objects so we can relinquish
-       * our exclusive access to perf if the application deletes
-       * all of its objects. (NB: We only disable perf while
-       * there are no active queries)
-       */
-      int n_query_instances;
-   } perfquery;
+   struct gen_perf_context *perf_ctx;
 
    int num_atoms[BRW_NUM_PIPELINES];
    const struct brw_tracked_state render_atoms[76];
@@ -1274,6 +1219,9 @@ struct brw_context
 
    enum gen9_astc5x5_wa_tex_type gen9_astc5x5_wa_tex_mask;
 
+   /** Last rendering scale argument provided to brw_emit_hashing_mode(). */
+   unsigned current_hash_scale;
+
    __DRIcontext *driContext;
    struct intel_screen *screen;
 };
@@ -1320,6 +1268,8 @@ GLboolean brwCreateContext(gl_api api,
  */
 void brw_workaround_depthstencil_alignment(struct brw_context *brw,
                                            GLbitfield clear_mask);
+void brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
+                           unsigned height, unsigned scale);
 
 /* brw_object_purgeable.c */
 void brw_init_object_purgeable_functions(struct dd_function_table *functions);

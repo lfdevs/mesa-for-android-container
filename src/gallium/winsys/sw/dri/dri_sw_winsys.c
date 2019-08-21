@@ -26,9 +26,7 @@
  *
  **************************************************************************/
 
-#if !defined(ANDROID) || ANDROID_API_LEVEL >= 26
-/* Android's libc began supporting shm in Oreo */
-#define HAVE_SHM
+#ifdef HAVE_SYS_SHM_H
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #endif
@@ -79,16 +77,16 @@ dri_sw_winsys( struct sw_winsys *ws )
 }
 
 
-static boolean
+static bool
 dri_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
                                           unsigned tex_usage,
                                           enum pipe_format format )
 {
    /* TODO: check visuals or other sensible thing here */
-   return TRUE;
+   return true;
 }
 
-#ifdef HAVE_SHM
+#ifdef HAVE_SYS_SHM_H
 static char *
 alloc_shm(struct dri_sw_displaytarget *dri_sw_dt, unsigned size)
 {
@@ -139,7 +137,7 @@ dri_sw_displaytarget_create(struct sw_winsys *winsys,
 
    dri_sw_dt->shmid = -1;
 
-#ifdef HAVE_SHM
+#ifdef HAVE_SYS_SHM_H
    if (ws->lf->put_image_shm)
       dri_sw_dt->data = alloc_shm(dri_sw_dt, size);
 #endif
@@ -166,7 +164,7 @@ dri_sw_displaytarget_destroy(struct sw_winsys *ws,
    struct dri_sw_displaytarget *dri_sw_dt = dri_sw_displaytarget(dt);
 
    if (dri_sw_dt->shmid >= 0) {
-#ifdef HAVE_SHM
+#ifdef HAVE_SYS_SHM_H
       shmdt(dri_sw_dt->data);
       shmctl(dri_sw_dt->shmid, IPC_RMID, 0);
 #endif
@@ -216,7 +214,7 @@ dri_sw_displaytarget_from_handle(struct sw_winsys *winsys,
    return NULL;
 }
 
-static boolean
+static bool
 dri_sw_displaytarget_get_handle(struct sw_winsys *winsys,
                                 struct sw_displaytarget *dt,
                                 struct winsys_handle *whandle)
@@ -225,12 +223,12 @@ dri_sw_displaytarget_get_handle(struct sw_winsys *winsys,
 
    if (whandle->type == WINSYS_HANDLE_TYPE_SHMID) {
       if (dri_sw_dt->shmid < 0)
-         return FALSE;
+         return false;
       whandle->handle = dri_sw_dt->shmid;
-      return TRUE;
+      return true;
    }
 
-   return FALSE;
+   return false;
 }
 
 static void

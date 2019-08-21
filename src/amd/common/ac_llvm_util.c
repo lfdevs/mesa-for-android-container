@@ -59,8 +59,8 @@ static void ac_init_llvm_target()
 	 * This option tells the backend to fall-back to SelectionDAG and print
 	 * a diagnostic message if global isel fails.
 	 */
-	const char *argv[3] = { "mesa", "-simplifycfg-sink-common=false", "-global-isel-abort=2" };
-	LLVMParseCommandLineOptions(3, argv, NULL);
+	const char *argv[] = { "mesa", "-simplifycfg-sink-common=false", "-global-isel-abort=2" };
+	LLVMParseCommandLineOptions(ARRAY_SIZE(argv), argv, NULL);
 }
 
 static once_flag ac_init_llvm_target_once_flag = ONCE_FLAG_INIT;
@@ -107,8 +107,6 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
 		return "kaveri";
 	case CHIP_HAWAII:
 		return "hawaii";
-	case CHIP_MULLINS:
-		return "mullins";
 	case CHIP_TONGA:
 		return "tonga";
 	case CHIP_ICELAND:
@@ -134,7 +132,16 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
 	case CHIP_VEGA20:
 		return "gfx906";
 	case CHIP_RAVEN2:
+	case CHIP_RENOIR:
 		return HAVE_LLVM >= 0x0800 ? "gfx909" : "gfx902";
+	case CHIP_ARCTURUS:
+		return "gfx908";
+	case CHIP_NAVI10:
+		return "gfx1010";
+	case CHIP_NAVI12:
+		return "gfx1011";
+	case CHIP_NAVI14:
+		return "gfx1012";
 	default:
 		return "";
 	}
@@ -151,8 +158,10 @@ static LLVMTargetMachineRef ac_create_target_machine(enum radeon_family family,
 	LLVMTargetRef target = ac_get_llvm_target(triple);
 
 	snprintf(features, sizeof(features),
-		 "+DumpCode,-fp32-denormals,+fp64-denormals%s%s%s%s%s%s",
+		 "+DumpCode,-fp32-denormals,+fp64-denormals%s%s%s%s%s%s%s",
 		 HAVE_LLVM >= 0x0800 ? "" : ",+vgpr-spilling",
+		 family >= CHIP_NAVI10 && !(tm_options & AC_TM_WAVE32) ?
+			 ",+wavefrontsize64,-wavefrontsize32" : "",
 		 tm_options & AC_TM_SISCHED ? ",+si-scheduler" : "",
 		 tm_options & AC_TM_FORCE_ENABLE_XNACK ? ",+xnack" : "",
 		 tm_options & AC_TM_FORCE_DISABLE_XNACK ? ",-xnack" : "",
@@ -271,6 +280,16 @@ ac_llvm_add_target_dep_function_attr(LLVMValueRef F,
 	LLVMAddTargetDependentFunctionAttr(F, name, str);
 }
 
+void ac_llvm_set_workgroup_size(LLVMValueRef F, unsigned size)
+{
+	if (!size)
+		return;
+
+	char str[32];
+	snprintf(str, sizeof(str), "%u,%u", size, size);
+	LLVMAddTargetDependentFunctionAttr(F, "amdgpu-flat-work-group-size", str);
+}
+
 unsigned
 ac_count_scratch_private_memory(LLVMValueRef function)
 {
@@ -322,6 +341,16 @@ ac_init_llvm_compiler(struct ac_llvm_compiler *compiler,
 			goto fail;
 	}
 
+	if (family >= CHIP_NAVI10) {
+		assert(!(tm_options & AC_TM_CREATE_LOW_OPT));
+		compiler->tm_wave32 = ac_create_target_machine(family,
+							       tm_options | AC_TM_WAVE32,
+							       LLVMCodeGenLevelDefault,
+							       NULL);
+		if (!compiler->tm_wave32)
+			goto fail;
+	}
+
 	compiler->target_library_info =
 		ac_create_target_library_info(triple);
 	if (!compiler->target_library_info)
@@ -341,6 +370,10 @@ fail:
 void
 ac_destroy_llvm_compiler(struct ac_llvm_compiler *compiler)
 {
+	ac_destroy_llvm_passes(compiler->passes);
+	ac_destroy_llvm_passes(compiler->passes_wave32);
+	ac_destroy_llvm_passes(compiler->low_opt_passes);
+
 	if (compiler->passmgr)
 		LLVMDisposePassManager(compiler->passmgr);
 	if (compiler->target_library_info)
@@ -349,4 +382,6 @@ ac_destroy_llvm_compiler(struct ac_llvm_compiler *compiler)
 		LLVMDisposeTargetMachine(compiler->low_opt_tm);
 	if (compiler->tm)
 		LLVMDisposeTargetMachine(compiler->tm);
+	if (compiler->tm_wave32)
+		LLVMDisposeTargetMachine(compiler->tm_wave32);
 }

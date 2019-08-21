@@ -125,7 +125,7 @@ static int virgl_vtest_send_init(struct virgl_vtest_winsys *vws)
    ret = os_get_process_name(cmdline, 63);
    if (ret == FALSE)
       strcpy(cmdline, nstr);
-#if defined(__GLIBC__) || defined(__CYGWIN__)
+#if defined(HAVE_PROGRAM_INVOCATION_NAME)
    if (!strcmp(cmdline, "shader_runner")) {
       const char *name;
       /* hack to get better testname */

@@ -12,12 +12,9 @@
 # main repository, it's recommended to remove the image from the source
 # repository's container registry, so that the image from the main
 # repository's registry will be used there as well.
-#
-# The format of the tag is "%Y-%m-%d-${counter}" where ${counter} stays
-# at "01" unless you have multiple updates on the same day :)
 variables:
   UPSTREAM_REPO: mesa/mesa
-  DEBIAN_TAG: "2019-05-01"
+  DEBIAN_TAG: "2019-08-09"
   DEBIAN_VERSION: stretch-slim
   DEBIAN_IMAGE: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
 
@@ -29,6 +26,7 @@ include:
 stages:
   - containers-build
   - build+test
+  - test
 
 
 # When to automatically run the CI
@@ -42,6 +40,14 @@ stages:
     when:
       - runner_system_failure
 
+.ci-deqp-artifacts: &ci-deqp-artifacts
+  artifacts:
+    when: always
+    untracked: false
+    paths:
+      # Watch out!  Artifacts are relative to the build dir.
+      # https://gitlab.com/gitlab-org/gitlab-ce/commit/8788fb925706cad594adf6917a6c5f6587dd1521
+      - artifacts
 
 # CONTAINERS
 
@@ -64,8 +70,12 @@ debian:
     paths:
       - ccache
   artifacts:
-    when: on_failure
-    untracked: true
+    when: always
+    paths:
+      - _build/meson-logs/*.txt
+      # scons:
+      - build/*/config.log
+      - shader-db
   variables:
     CCACHE_COMPILERCHECK: "content"
   # Use ccache transparently, and print stats before/after
@@ -76,37 +86,19 @@ debian:
     - ccache --zero-stats || true
     - ccache --show-stats || true
   after_script:
+    # In case the install dir is being saved as artifacts, tar it up
+    # so that symlinks and hardlinks aren't each packed separately in
+    # the zip file.
+    - if [ -d install ]; then
+        tar -cf artifacts/install.tar install;
+      fi
     - export CCACHE_DIR="$PWD/ccache"
     - ccache --show-stats
 
 .meson-build:
   extends: .build
   script:
-    # We need to control the version of llvm-config we're using, so we'll
-    # generate a native file to do so. This requires meson >=0.49
-    - if test -n "$LLVM_VERSION"; then
-        LLVM_CONFIG="llvm-config-${LLVM_VERSION}";
-        echo -e "[binaries]\nllvm-config = '`which $LLVM_CONFIG`'" > native.file;
-        $LLVM_CONFIG --version;
-      else
-        touch native.file;
-      fi
-    - meson --version
-    - meson _build
-            --native-file=native.file
-            -D buildtype=debug
-            -D build-tests=true
-            -D libunwind=${UNWIND}
-            ${DRI_LOADERS}
-            -D dri-drivers=${DRI_DRIVERS:-[]}
-            ${GALLIUM_ST}
-            -D gallium-drivers=${GALLIUM_DRIVERS:-[]}
-            -D vulkan-drivers=${VULKAN_DRIVERS:-[]}
-            -D I-love-half-baked-turnips=true
-    - cd _build
-    - meson configure
-    - ninja -j4
-    - LC_ALL=C.UTF-8 ninja test
+    - .gitlab-ci/meson-build.sh
 
 .scons-build:
   extends: .build
@@ -123,12 +115,8 @@ debian:
 # gallium drivers combined.
 # Start this early so that it doesn't limit the total run time.
 #
-# We also put softpipe (and therefore gallium nine, which requires
-# it) here, since softpipe/llvmpipe can't be built alongside classic
-# swrast.
-#
-# Putting glvnd here is arbitrary, but we want it in one of the builds
-# for coverage.
+# We also stick the glvnd build here, since we want non-glvnd in
+# meson-main for actual driver CI.
 meson-swr-glvnd:
   extends: .meson-build
   variables:
@@ -143,10 +131,9 @@ meson-swr-glvnd:
       -D gallium-omx=disabled
       -D gallium-va=false
       -D gallium-xa=false
-      -D gallium-nine=true
+      -D gallium-nine=false
       -D gallium-opencl=disabled
-      -D osmesa=gallium
-    GALLIUM_DRIVERS: "swr,swrast,iris"
+    GALLIUM_DRIVERS: "swr,iris"
     LLVM_VERSION: "6.0"
 
 meson-clang:
@@ -163,6 +150,75 @@ meson-clang:
     - ccache --zero-stats --show-stats || true
      # clang++ breaks if it picks up the GCC 8 directory without libstdc++.so
     - apt-get remove -y libgcc-8-dev
+
+scons-swr:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: "swr=1"
+    SCONS_CHECK_COMMAND: "true"
+    LLVM_VERSION: "6.0"
+
+scons-win64:
+  extends: .scons-build
+  variables:
+    SCONS_TARGET: platform=windows machine=x86_64
+    SCONS_CHECK_COMMAND: "true"
+
+meson-main:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glx=dri
+      -D gbm=true
+      -D egl=true
+      -D platforms=x11,wayland,drm,surfaceless
+    DRI_DRIVERS: "i915,i965,r100,r200,nouveau"
+    GALLIUM_ST: >
+      -D dri3=true
+      -D gallium-extra-hud=true
+      -D gallium-vdpau=true
+      -D gallium-xvmc=true
+      -D gallium-omx=bellagio
+      -D gallium-va=true
+      -D gallium-xa=true
+      -D gallium-nine=true
+      -D gallium-opencl=disabled
+    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima"
+    LLVM_VERSION: "7"
+    EXTRA_OPTION: >
+      -D osmesa=gallium
+      -D tools=all
+    MESON_SHADERDB: "true"
+    BUILDTYPE: "debugoptimized"
+  <<: *ci-deqp-artifacts
+
+meson-clover:
+  extends: .meson-build
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D egl=false
+      -D gbm=false
+    GALLIUM_ST: >
+      -D dri3=false
+      -D gallium-vdpau=false
+      -D gallium-xvmc=false
+      -D gallium-omx=disabled
+      -D gallium-va=false
+      -D gallium-xa=false
+      -D gallium-nine=false
+      -D gallium-opencl=icd
+  script:
+    - export GALLIUM_DRIVERS="r600,radeonsi"
+    - .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=7 .gitlab-ci/meson-build.sh
+    - export GALLIUM_DRIVERS="i915,r600"
+    - LLVM_VERSION=3.9 .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=4.0 .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=5.0 .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=6.0 .gitlab-ci/meson-build.sh
 
 meson-vulkan:
   extends: .meson-build
@@ -185,39 +241,19 @@ meson-vulkan:
       -D gallium-opencl=disabled
     VULKAN_DRIVERS: intel,amd,freedreno
     LLVM_VERSION: "7"
+    EXTRA_OPTION: >
+      -D vulkan-overlay-layer=true
 
-meson-main:
+.meson-cross:
   extends: .meson-build
   variables:
-    UNWIND: "true"
-    DRI_LOADERS: >
-      -D glx=dri
-      -D gbm=true
-      -D egl=true
-      -D platforms=x11,wayland,drm,surfaceless
-      -D osmesa=classic
-    DRI_DRIVERS: "i915,i965,r100,r200,swrast,nouveau"
-    GALLIUM_ST: >
-      -D dri3=true
-      -D gallium-extra-hud=true
-      -D gallium-vdpau=true
-      -D gallium-xvmc=true
-      -D gallium-omx=bellagio
-      -D gallium-va=true
-      -D gallium-xa=true
-      -D gallium-nine=false
-      -D gallium-opencl=disabled
-    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,svga,v3d,vc4,virgl,etnaviv,panfrost,lima"
-    LLVM_VERSION: "7"
-
-meson-clover-llvm:
-  extends: .meson-build
-  variables:
-    UNWIND: "true"
+    UNWIND: "false"
     DRI_LOADERS: >
       -D glx=disabled
-      -D egl=false
       -D gbm=false
+      -D egl=false
+      -D platforms=surfaceless
+      -D osmesa=none
     GALLIUM_ST: >
       -D dri3=false
       -D gallium-vdpau=false
@@ -226,14 +262,52 @@ meson-clover-llvm:
       -D gallium-va=false
       -D gallium-xa=false
       -D gallium-nine=false
-      -D gallium-opencl=icd
-    GALLIUM_DRIVERS: "r600,radeonsi"
+      -D llvm=false
+  <<: *ci-deqp-artifacts
+  script:
+    - .gitlab-ci/meson-build.sh
 
-meson-clover-llvm39:
-  extends: meson-clover-llvm
+meson-armhf:
+  extends: .meson-cross
   variables:
-    GALLIUM_DRIVERS: "i915,r600"
-    LLVM_VERSION: "3.9"
+    CROSS: armhf
+    VULKAN_DRIVERS: freedreno
+    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,tegra,v3d,vc4"
+    # Disable the tests since we're cross compiling.
+    EXTRA_OPTION: >
+      -D build-tests=false
+      -D I-love-half-baked-turnips=true
+      -D vulkan-overlay-layer=true
+
+meson-arm64:
+  extends: .meson-cross
+  variables:
+    CROSS: arm64
+    VULKAN_DRIVERS: freedreno
+    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,tegra,v3d,vc4"
+    # Disable the tests since we're cross compiling.
+    EXTRA_OPTION: >
+      -D build-tests=false
+      -D I-love-half-baked-turnips=true
+      -D vulkan-overlay-layer=true
+
+# While the main point of this build is testing the i386 cross build,
+# we also use this one to test some other options that are exclusive
+# with meson-main's choices (classic swrast and osmesa)
+meson-i386:
+  extends: .meson-cross
+  variables:
+    CROSS: i386
+    VULKAN_DRIVERS: intel
+    DRI_DRIVERS: "swrast"
+    GALLIUM_DRIVERS: "iris"
+    # Disable i386 tests, because u_format_tests gets precision
+    # failures in dxtn unpacking
+    EXTRA_OPTION: >
+      -D build-tests=false
+      -D vulkan-overlay-layer=true
+      -D llvm=false
+      -D osmesa=classic
 
 scons-nollvm:
   extends: .scons-build
@@ -250,15 +324,59 @@ scons-llvm:
     # LLVM 3.4 packages were built with an old libstdc++ ABI
     CXX: "g++ -D_GLIBCXX_USE_CXX11_ABI=0"
 
-scons-swr:
-  extends: .scons-build
+.deqp-test:
+  <<: *ci-run-policy
+  stage: test
+  image: $DEBIAN_IMAGE
   variables:
-    SCONS_TARGET: "swr=1"
-    SCONS_CHECK_COMMAND: "true"
-    LLVM_VERSION: "6.0"
+    GIT_STRATEGY: none # testing doesn't build anything from source
+    DEQP_SKIPS: deqp-default-skips.txt
+  script:
+    # Note: Build dir (and thus install) may be dirty due to GIT_STRATEGY
+    - rm -rf install
+    - tar -xf artifacts/install.tar
+    - ./artifacts/deqp-runner.sh
+  artifacts:
+    when: on_failure
+    name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
+    paths:
+      - results/
 
-scons-win64:
-  extends: .scons-build
+test-llvmpipe-gles2:
+  parallel: 4
   variables:
-    SCONS_TARGET: platform=windows machine=x86_64
-    SCONS_CHECK_COMMAND: "true"
+    DEQP_VER: gles2
+    DEQP_EXPECTED_FAILS: deqp-llvmpipe-fails.txt
+    LIBGL_ALWAYS_SOFTWARE: "true"
+    DEQP_RENDERER_MATCH: "llvmpipe"
+  extends: .deqp-test
+  dependencies:
+    - meson-main
+
+test-softpipe-gles2:
+  parallel: 4
+  variables:
+    DEQP_VER: gles2
+    DEQP_EXPECTED_FAILS: deqp-softpipe-fails.txt
+    LIBGL_ALWAYS_SOFTWARE: "true"
+    DEQP_RENDERER_MATCH: "softpipe"
+    GALLIUM_DRIVER: "softpipe"
+  extends: .deqp-test
+  dependencies:
+    - meson-main
+
+# The GLES2 CTS run takes about 8 minutes of CPU time, while GLES3 is
+# 25 minutes.  Until we can get its runtime down, just do a partial
+# (every 10 tests) run.
+test-softpipe-gles3-limited:
+  variables:
+    DEQP_VER: gles3
+    DEQP_EXPECTED_FAILS: deqp-softpipe-fails.txt
+    LIBGL_ALWAYS_SOFTWARE: "true"
+    DEQP_RENDERER_MATCH: "softpipe"
+    GALLIUM_DRIVER: "softpipe"
+    CI_NODE_INDEX: 1
+    CI_NODE_TOTAL: 10
+  extends: .deqp-test
+  dependencies:
+    - meson-main

@@ -73,11 +73,8 @@ _nine_debug_printf( unsigned long flag,
     }
 
 #if defined(HAVE_PTHREAD)
-#  if defined(__GNU_LIBRARY__) && defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
-      (__GLIBC__ >= 3 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 12))
     if (dbg_flags & DBG_TID)
         tid = pthread_self();
-#  endif
 #endif
 
     if (dbg_flags & flag) {

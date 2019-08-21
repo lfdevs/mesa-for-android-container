@@ -1,5 +1,4 @@
 COMMON_HEADER_FILES = \
-	common/gfx9d.h \
 	common/sid.h \
 	common/amd_family.h \
 	common/amd_kernel_code_t.h
@@ -24,6 +23,10 @@ ADDRLIB_FILES = \
 	addrlib/src/core/coord.h \
 	addrlib/src/gfx9/gfx9addrlib.cpp \
 	addrlib/src/gfx9/gfx9addrlib.h \
+	addrlib/src/gfx10/gfx10addrlib.cpp \
+	addrlib/src/gfx10/gfx10addrlib.h \
+	addrlib/src/gfx10/gfx10SwizzlePattern.h \
+	addrlib/src/chip/gfx10/gfx10_gb_reg.h \
 	addrlib/src/chip/gfx9/gfx9_gb_reg.h \
 	addrlib/src/chip/r800/si_gb_reg.h \
 	addrlib/src/r800/ciaddrlib.cpp \
@@ -39,9 +42,13 @@ AMD_COMPILER_FILES = \
 	common/ac_exp_param.h \
 	common/ac_llvm_build.c \
 	common/ac_llvm_build.h \
+	common/ac_llvm_cull.c \
+	common/ac_llvm_cull.h \
 	common/ac_llvm_helper.cpp \
 	common/ac_llvm_util.c \
 	common/ac_llvm_util.h \
+	common/ac_rtld.c \
+	common/ac_rtld.h \
 	common/ac_shader_abi.h \
 	common/ac_shader_util.c \
 	common/ac_shader_util.h
@@ -62,4 +69,5 @@ AMD_DEBUG_FILES = \
 	common/ac_debug.h
 
 AMD_GENERATED_FILES = \
+	common/amdgfxregs.h \
 	common/sid_tables.h

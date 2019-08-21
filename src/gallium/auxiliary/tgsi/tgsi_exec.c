@@ -218,6 +218,17 @@ micro_ddx(union tgsi_exec_channel *dst,
 }
 
 static void
+micro_ddx_fine(union tgsi_exec_channel *dst,
+          const union tgsi_exec_channel *src)
+{
+   dst->f[0] =
+   dst->f[1] = src->f[TILE_TOP_RIGHT] - src->f[TILE_TOP_LEFT];
+   dst->f[2] =
+   dst->f[3] = src->f[TILE_BOTTOM_RIGHT] - src->f[TILE_BOTTOM_LEFT];
+}
+
+
+static void
 micro_ddy(union tgsi_exec_channel *dst,
           const union tgsi_exec_channel *src)
 {
@@ -225,6 +236,16 @@ micro_ddy(union tgsi_exec_channel *dst,
    dst->f[1] =
    dst->f[2] =
    dst->f[3] = src->f[TILE_BOTTOM_LEFT] - src->f[TILE_TOP_LEFT];
+}
+
+static void
+micro_ddy_fine(union tgsi_exec_channel *dst,
+          const union tgsi_exec_channel *src)
+{
+   dst->f[0] =
+   dst->f[2] = src->f[TILE_BOTTOM_LEFT] - src->f[TILE_TOP_LEFT];
+   dst->f[1] =
+   dst->f[3] = src->f[TILE_BOTTOM_RIGHT] - src->f[TILE_TOP_RIGHT];
 }
 
 static void
@@ -1045,61 +1066,6 @@ tgsi_exec_set_constant_buffers(struct tgsi_exec_machine *mach,
    }
 }
 
-
-/**
- * Check if there's a potential src/dst register data dependency when
- * using SOA execution.
- * Example:
- *   MOV T, T.yxwz;
- * This would expand into:
- *   MOV t0, t1;
- *   MOV t1, t0;
- *   MOV t2, t3;
- *   MOV t3, t2;
- * The second instruction will have the wrong value for t0 if executed as-is.
- */
-boolean
-tgsi_check_soa_dependencies(const struct tgsi_full_instruction *inst)
-{
-   uint i, chan;
-
-   uint writemask = inst->Dst[0].Register.WriteMask;
-   if (writemask == TGSI_WRITEMASK_X ||
-       writemask == TGSI_WRITEMASK_Y ||
-       writemask == TGSI_WRITEMASK_Z ||
-       writemask == TGSI_WRITEMASK_W ||
-       writemask == TGSI_WRITEMASK_NONE) {
-      /* no chance of data dependency */
-      return FALSE;
-   }
-
-   /* loop over src regs */
-   for (i = 0; i < inst->Instruction.NumSrcRegs; i++) {
-      if ((inst->Src[i].Register.File ==
-           inst->Dst[0].Register.File) &&
-          ((inst->Src[i].Register.Index ==
-            inst->Dst[0].Register.Index) ||
-           inst->Src[i].Register.Indirect ||
-           inst->Dst[0].Register.Indirect)) {
-         /* loop over dest channels */
-         uint channelsWritten = 0x0;
-         for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
-            if (inst->Dst[0].Register.WriteMask & (1 << chan)) {
-               /* check if we're reading a channel that's been written */
-               uint swizzle = tgsi_util_get_full_src_register_swizzle(&inst->Src[i], chan);
-               if (channelsWritten & (1 << swizzle)) {
-                  return TRUE;
-               }
-
-               channelsWritten |= (1 << chan);
-            }
-         }
-      }
-   }
-   return FALSE;
-}
-
-
 /**
  * Initialize machine state by expanding tokens to full instructions,
  * allocating temporary storage, setting up constants, etc.
@@ -1330,20 +1296,6 @@ tgsi_exec_machine_create(enum pipe_shader_type shader_type)
          goto fail;
    }
 
-   /* Setup constants needed by the SSE2 executor. */
-   for( i = 0; i < 4; i++ ) {
-      mach->Temps[TGSI_EXEC_TEMP_00000000_I].xyzw[TGSI_EXEC_TEMP_00000000_C].u[i] = 0x00000000;
-      mach->Temps[TGSI_EXEC_TEMP_7FFFFFFF_I].xyzw[TGSI_EXEC_TEMP_7FFFFFFF_C].u[i] = 0x7FFFFFFF;
-      mach->Temps[TGSI_EXEC_TEMP_80000000_I].xyzw[TGSI_EXEC_TEMP_80000000_C].u[i] = 0x80000000;
-      mach->Temps[TGSI_EXEC_TEMP_FFFFFFFF_I].xyzw[TGSI_EXEC_TEMP_FFFFFFFF_C].u[i] = 0xFFFFFFFF;    /* not used */
-      mach->Temps[TGSI_EXEC_TEMP_ONE_I].xyzw[TGSI_EXEC_TEMP_ONE_C].f[i] = 1.0f;
-      mach->Temps[TGSI_EXEC_TEMP_TWO_I].xyzw[TGSI_EXEC_TEMP_TWO_C].f[i] = 2.0f;    /* not used */
-      mach->Temps[TGSI_EXEC_TEMP_128_I].xyzw[TGSI_EXEC_TEMP_128_C].f[i] = 128.0f;
-      mach->Temps[TGSI_EXEC_TEMP_MINUS_128_I].xyzw[TGSI_EXEC_TEMP_MINUS_128_C].f[i] = -128.0f;
-      mach->Temps[TGSI_EXEC_TEMP_THREE_I].xyzw[TGSI_EXEC_TEMP_THREE_C].f[i] = 3.0f;
-      mach->Temps[TGSI_EXEC_TEMP_HALF_I].xyzw[TGSI_EXEC_TEMP_HALF_C].f[i] = 0.5f;
-   }
-
 #ifdef DEBUG
    /* silence warnings */
    (void) print_chan;
@@ -1567,9 +1519,6 @@ fetch_src_file_channel(const struct tgsi_exec_machine *mach,
       break;
 
    case TGSI_FILE_SYSTEM_VALUE:
-      /* XXX no swizzling at this point.  Will be needed if we put
-       * gl_FragCoord, for example, in a sys value register.
-       */
       for (i = 0; i < TGSI_QUAD_SIZE; i++) {
          chan->u[i] = mach->SystemValue[index->i[i]].xyzw[swizzle].u[i];
       }
@@ -3087,6 +3036,7 @@ exec_declaration(struct tgsi_exec_machine *mach,
 
             case TGSI_INTERPOLATE_COLOR:
                eval = mach->flatshade_color ? eval_constant_coef : eval_perspective_coef;
+               interp = mach->flatshade_color ? interp_constant_offset : interp_perspective_offset;
                break;
 
             default:
@@ -5397,8 +5347,16 @@ exec_instruction(
       exec_scalar_unary(mach, inst, micro_cos, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_FLOAT);
       break;
 
+   case TGSI_OPCODE_DDX_FINE:
+      exec_vector_unary(mach, inst, micro_ddx_fine, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_FLOAT);
+      break;
+
    case TGSI_OPCODE_DDX:
       exec_vector_unary(mach, inst, micro_ddx, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_FLOAT);
+      break;
+
+   case TGSI_OPCODE_DDY_FINE:
+      exec_vector_unary(mach, inst, micro_ddy_fine, TGSI_EXEC_DATA_FLOAT, TGSI_EXEC_DATA_FLOAT);
       break;
 
    case TGSI_OPCODE_DDY:

@@ -51,6 +51,8 @@ struct hash_table {
    const void *deleted_key;
    uint32_t size;
    uint32_t rehash;
+   uint64_t size_magic;
+   uint64_t rehash_magic;
    uint32_t max_entries;
    uint32_t size_index;
    uint32_t entries;
@@ -171,6 +173,7 @@ hash_table_call_foreach(struct hash_table *ht,
  */
 struct hash_table_u64 {
    struct hash_table *table;
+   void *freed_key_data;
    void *deleted_key_data;
 };
 
@@ -190,6 +193,10 @@ _mesa_hash_table_u64_search(struct hash_table_u64 *ht, uint64_t key);
 
 void
 _mesa_hash_table_u64_remove(struct hash_table_u64 *ht, uint64_t key);
+
+void
+_mesa_hash_table_u64_clear(struct hash_table_u64 *ht,
+                           void (*delete_function)(struct hash_entry *entry));
 
 #ifdef __cplusplus
 } /* extern C */

@@ -161,8 +161,8 @@ void si_pm4_upload_indirect_buffer(struct si_context *sctx,
 	struct pipe_screen *screen = sctx->b.screen;
 	unsigned aligned_ndw = align(state->ndw, 8);
 
-	/* only supported on CIK and later */
-	if (sctx->chip_class < CIK)
+	/* only supported on GFX7 and later */
+	if (sctx->chip_class < GFX7)
 		return;
 
 	assert(state->ndw);

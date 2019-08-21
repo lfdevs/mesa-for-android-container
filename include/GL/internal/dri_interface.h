@@ -85,6 +85,7 @@ typedef struct __DRI2throttleExtensionRec	__DRI2throttleExtension;
 typedef struct __DRI2fenceExtensionRec          __DRI2fenceExtension;
 typedef struct __DRI2interopExtensionRec	__DRI2interopExtension;
 typedef struct __DRI2blobExtensionRec           __DRI2blobExtension;
+typedef struct __DRI2bufferDamageExtensionRec   __DRI2bufferDamageExtension;
 
 typedef struct __DRIimageLoaderExtensionRec     __DRIimageLoaderExtension;
 typedef struct __DRIimageDriverExtensionRec     __DRIimageDriverExtension;
@@ -486,6 +487,48 @@ struct __DRI2interopExtensionRec {
    int (*export_object)(__DRIcontext *ctx,
                         struct mesa_glinterop_export_in *in,
                         struct mesa_glinterop_export_out *out);
+};
+
+
+/**
+ * Extension for limiting window system back buffer rendering to user-defined
+ * scissor region.
+ */
+
+#define __DRI2_BUFFER_DAMAGE "DRI2_BufferDamage"
+#define __DRI2_BUFFER_DAMAGE_VERSION 1
+
+struct __DRI2bufferDamageExtensionRec {
+   __DRIextension base;
+
+   /**
+    * Provides an array of rectangles representing an overriding scissor region
+    * for rendering operations performed to the specified drawable. These
+    * rectangles do not replace client API scissor regions or draw
+    * co-ordinates, but instead inform the driver of the overall bounds of all
+    * operations which will be issued before the next flush.
+    *
+    * Any rendering operations writing pixels outside this region to the
+    * drawable will have an undefined effect on the entire drawable.
+    *
+    * This entrypoint may only be called after the drawable has either been
+    * newly created or flushed, and before any rendering operations which write
+    * pixels to the drawable. Calling this entrypoint at any other time will
+    * have an undefined effect on the entire drawable.
+    *
+    * Calling this entrypoint with @nrects 0 and @rects NULL will reset the
+    * region to the buffer's full size. This entrypoint may be called once to
+    * reset the region, followed by a second call with a populated region,
+    * before a rendering call is made.
+    *
+    * Used to implement EGL_KHR_partial_update.
+    *
+    * \param drawable affected drawable
+    * \param nrects   number of rectangles provided
+    * \param rects    the array of rectangles, lower-left origin
+    */
+   void (*set_damage_region)(__DRIdrawable *drawable, unsigned int nrects,
+                             int *rects);
 };
 
 /*@}*/

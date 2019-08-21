@@ -366,7 +366,7 @@ static void r600_reallocate_texture_inplace(struct r600_common_context *rctx,
 	templ.bind |= new_bind_flag;
 
 	/* r600g doesn't react to dirty_tex_descriptor_counter */
-	if (rctx->chip_class < SI)
+	if (rctx->chip_class < GFX6)
 		return;
 
 	if (rtex->resource.b.is_shared)
@@ -468,11 +468,11 @@ static void r600_texture_get_info(struct pipe_screen* screen,
 		*poffset = offset;
 }
 
-static boolean r600_texture_get_handle(struct pipe_screen* screen,
-				       struct pipe_context *ctx,
-				       struct pipe_resource *resource,
-				       struct winsys_handle *whandle,
-                                       unsigned usage)
+static bool r600_texture_get_handle(struct pipe_screen* screen,
+				    struct pipe_context *ctx,
+				    struct pipe_resource *resource,
+				    struct winsys_handle *whandle,
+				    unsigned usage)
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct r600_common_context *rctx;
@@ -519,9 +519,6 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 		/* Set metadata. */
 		if (!res->b.is_shared || update_metadata) {
 			r600_texture_init_metadata(rscreen, rtex, &metadata);
-			if (rscreen->query_opaque_metadata)
-				rscreen->query_opaque_metadata(rscreen, rtex,
-							       &metadata);
 
 			rscreen->ws->buffer_set_metadata(res->buf, &metadata);
 		}
@@ -572,8 +569,8 @@ static boolean r600_texture_get_handle(struct pipe_screen* screen,
 		res->external_usage = usage;
 	}
 
-	return rscreen->ws->buffer_get_handle(res->buf, stride, offset,
-					      slice_size, whandle);
+	return rscreen->ws->buffer_get_handle(rscreen->ws, res->buf, stride,
+					      offset, slice_size, whandle);
 }
 
 static void r600_texture_destroy(struct pipe_screen *screen,
@@ -762,7 +759,7 @@ static void r600_texture_get_htile_size(struct r600_common_screen *rscreen,
 	rtex->surface.htile_size = 0;
 
 	if (rscreen->chip_class <= EVERGREEN &&
-	    rscreen->info.drm_major == 2 && rscreen->info.drm_minor < 26)
+	    rscreen->info.drm_minor < 26)
 		return;
 
 	/* HW bug on R6xx. */
@@ -1154,9 +1151,6 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 	rtex->resource.b.is_shared = true;
 	rtex->resource.external_usage = usage;
 
-	if (rscreen->apply_opaque_metadata)
-		rscreen->apply_opaque_metadata(rscreen, rtex, &metadata);
-
 	assert(rtex->surface.tile_swizzle == 0);
 	return &rtex->resource.b.b;
 }
@@ -1264,7 +1258,7 @@ static bool r600_can_invalidate_texture(struct r600_common_screen *rscreen,
 					const struct pipe_box *box)
 {
 	/* r600g doesn't react to dirty_tex_descriptor_counter */
-	return rscreen->chip_class >= SI &&
+	return rscreen->chip_class >= GFX6 &&
 		!rtex->resource.b.is_shared &&
 		!(transfer_usage & PIPE_TRANSFER_READ) &&
 		rtex->resource.b.b.last_level == 0 &&
@@ -1969,9 +1963,6 @@ r600_texture_from_memobj(struct pipe_screen *screen,
 
 	rtex->resource.b.is_shared = true;
 	rtex->resource.external_usage = PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE;
-
-	if (rscreen->apply_opaque_metadata)
-		rscreen->apply_opaque_metadata(rscreen, rtex, &metadata);
 
 	return &rtex->resource.b.b;
 }

@@ -227,6 +227,7 @@ fd3_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.context = pctx;
 
 	so->texconst0 =
+	 		A3XX_TEX_CONST_0_TILE_MODE(rsc->tile_mode) |
 			A3XX_TEX_CONST_0_TYPE(tex_type(prsc->target)) |
 			A3XX_TEX_CONST_0_FMT(fd3_pipe2tex(cso->format)) |
 			fd3_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,

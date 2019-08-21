@@ -204,43 +204,11 @@ static ppir_reg *ppir_regalloc_build_liveness_info(ppir_compiler *comp)
          }
 
          /* update reg live_out from node src (read) */
-         switch (node->type) {
-         case ppir_node_type_alu:
+         for (int i = 0; i < ppir_node_get_src_num(node); i++)
          {
-            ppir_alu_node *alu = ppir_node_to_alu(node);
-            for (int i = 0; i < alu->num_src; i++) {
-               ppir_reg *reg = get_src_reg(alu->src + i);
-               if (reg && node->instr->seq > reg->live_out)
-                  reg->live_out = node->instr->seq;
-            }
-            break;
-         }
-         case ppir_node_type_store:
-         {
-            ppir_store_node *store = ppir_node_to_store(node);
-            ppir_reg *reg = get_src_reg(&store->src);
+            ppir_reg *reg = get_src_reg(ppir_node_get_src(node, i));
             if (reg && node->instr->seq > reg->live_out)
                reg->live_out = node->instr->seq;
-            break;
-         }
-         case ppir_node_type_load:
-         {
-            ppir_load_node *load = ppir_node_to_load(node);
-            ppir_reg *reg = get_src_reg(&load->src);
-            if (reg && node->instr->seq > reg->live_out)
-               reg->live_out = node->instr->seq;
-            break;
-         }
-         case ppir_node_type_load_texture:
-         {
-            ppir_load_texture_node *load_tex = ppir_node_to_load_texture(node);
-            ppir_reg *reg = get_src_reg(&load_tex->src_coords);
-            if (reg && node->instr->seq > reg->live_out)
-               reg->live_out = node->instr->seq;
-            break;
-         }
-         default:
-            break;
          }
       }
    }
@@ -284,39 +252,10 @@ static void ppir_regalloc_print_result(ppir_compiler *comp)
 
             printf("|");
 
-            switch (node->type) {
-            case ppir_node_type_alu:
-            {
-               ppir_alu_node *alu = ppir_node_to_alu(node);
-               for (int j = 0; j < alu->num_src; j++) {
-                  if (j)
-                     printf(" ");
-
-                  printf("%d", ppir_target_get_src_reg_index(alu->src + j));
-               }
-               break;
-            }
-            case ppir_node_type_store:
-            {
-               ppir_store_node *store = ppir_node_to_store(node);
-               printf("%d", ppir_target_get_src_reg_index(&store->src));
-               break;
-            }
-            case ppir_node_type_load:
-            {
-               ppir_load_node *load = ppir_node_to_load(node);
-               if (!load->num_components)
-                  printf("%d", ppir_target_get_src_reg_index(&load->src));
-               break;
-            }
-            case ppir_node_type_load_texture:
-            {
-               ppir_load_texture_node *load_tex = ppir_node_to_load_texture(node);
-               printf("%d", ppir_target_get_src_reg_index(&load_tex->src_coords));
-               break;
-            }
-            default:
-               break;
+            for (int i = 0; i < ppir_node_get_src_num(node); i++) {
+               if (i)
+                  printf(" ");
+               printf("%d", ppir_target_get_src_reg_index(ppir_node_get_src(node, i)));
             }
 
             printf(")");
@@ -385,11 +324,12 @@ static ppir_alu_node* ppir_update_spilled_src(ppir_compiler *comp,
    if (!load_node)
       return NULL;
    list_addtail(&load_node->list, &node->list);
+   comp->num_fills++;
 
    ppir_load_node *load = ppir_node_to_load(load_node);
 
    load->index = -comp->prog->stack_size; /* index sizes are negative */
-   load->num_components = src->reg->num_components;
+   load->num_components = 4;
 
    ppir_dest *ld_dest = &load->dest;
    ld_dest->type = ppir_target_pipeline;
@@ -477,6 +417,7 @@ static bool ppir_update_spilled_dest(ppir_compiler *comp, ppir_block *block,
    if (!load_node)
       return NULL;
    list_addtail(&load_node->list, &node->list);
+   comp->num_fills++;
 
    ppir_load_node *load = ppir_node_to_load(load_node);
 
@@ -526,6 +467,7 @@ static bool ppir_update_spilled_dest(ppir_compiler *comp, ppir_block *block,
    if (!store_node)
       return false;
    list_addtail(&store_node->list, &node->list);
+   comp->num_spills++;
 
    ppir_store_node *store = ppir_node_to_store(store_node);
 
@@ -582,36 +524,17 @@ static bool ppir_regalloc_spill_reg(ppir_compiler *comp, ppir_reg *chosen)
             }
             break;
          }
-         case ppir_node_type_store:
-         {
-            ppir_store_node *store = ppir_node_to_store(node);
-            reg = get_src_reg(&store->src);
-            if (reg == chosen) {
-               ppir_update_spilled_src(comp, block, node, &store->src, NULL);
-            }
-            break;
-         }
-         case ppir_node_type_load:
-         {
-            ppir_load_node *load = ppir_node_to_load(node);
-            reg = get_src_reg(&load->src);
-            if (reg == chosen) {
-               ppir_update_spilled_src(comp, block, node, &load->src, NULL);
-            }
-            break;
-         }
-         case ppir_node_type_load_texture:
-         {
-            ppir_load_texture_node *load_tex = ppir_node_to_load_texture(node);
-            reg = get_src_reg(&load_tex->src_coords);
-            if (reg == chosen) {
-               ppir_update_spilled_src(comp, block, node, &load_tex->src_coords,
-                                       NULL);
-            }
-            break;
-         }
          default:
+         {
+            for (int i = 0; i < ppir_node_get_src_num(node); i++) {
+               ppir_src *src = ppir_node_get_src(node, i);
+               reg = get_src_reg(src);
+               if (reg == chosen) {
+                  ppir_update_spilled_src(comp, block, node, src, NULL);
+               }
+            }
             break;
+         }
          }
       }
    }
@@ -622,20 +545,35 @@ static bool ppir_regalloc_spill_reg(ppir_compiler *comp, ppir_reg *chosen)
 static ppir_reg *ppir_regalloc_choose_spill_node(ppir_compiler *comp,
                                                  struct ra_graph *g)
 {
-   int max_range = -1;
+   int i = 0;
    ppir_reg *chosen = NULL;
 
    list_for_each_entry(ppir_reg, reg, &comp->reg_list, list) {
-      int range = reg->live_out - reg->live_in;
-
-      if (!reg->spilled && reg->live_out != INT_MAX && range > max_range) {
-         chosen = reg;
-         max_range = range;
+      if (reg->spilled || reg->live_out == INT_MAX) {
+         /* not considered for spilling */
+         ra_set_node_spill_cost(g, i++, 0.0f);
+         continue;
       }
+
+      /* It is beneficial to spill registers with higher component number,
+       * so increase the cost of spilling registers with few components */
+      float spill_cost = 4.0f / (float)reg->num_components;
+      ra_set_node_spill_cost(g, i++, spill_cost);
    }
 
-   if (chosen)
-      chosen->spilled = true;
+   int r = ra_get_best_spill_node(g);
+   if (r == -1)
+      return NULL;
+
+   i = 0;
+   list_for_each_entry(ppir_reg, reg, &comp->reg_list, list) {
+      if (i++ == r) {
+         chosen = reg;
+         break;
+      }
+   }
+   assert(chosen);
+   chosen->spilled = true;
 
    return chosen;
 }
@@ -710,11 +648,11 @@ static bool ppir_regalloc_prog_try(ppir_compiler *comp, bool *spilled)
          /* Ask the outer loop to call back in. */
          *spilled = true;
 
-         ppir_debug("ppir: spilled register\n");
+         ppir_debug("spilled register\n");
          goto err_out;
       }
 
-      ppir_error("ppir: regalloc fail\n");
+      ppir_error("regalloc fail\n");
       goto err_out;
    }
 
@@ -746,6 +684,10 @@ bool ppir_regalloc_prog(ppir_compiler *comp)
    comp->force_spilling = lima_ppir_force_spilling;
 
    ppir_regalloc_update_reglist_ssa(comp);
+
+   /* No registers? Probably shader consists of discard instruction */
+   if (list_empty(&comp->reg_list))
+      return true;
 
    /* this will most likely succeed in the first
     * try, except for very complicated shaders */

@@ -32,9 +32,10 @@
  * 12.5 (p356).
  */
 
-#define ACP_HASH_SIZE 16
+#define ACP_HASH_SIZE 64
 
 #include "util/bitset.h"
+#include "util/u_math.h"
 #include "brw_fs.h"
 #include "brw_fs_live_variables.h"
 #include "brw_cfg.h"
@@ -46,6 +47,7 @@ namespace { /* avoid conflict with opt_copy_propagation_elements */
 struct acp_entry : public exec_node {
    fs_reg dst;
    fs_reg src;
+   unsigned global_idx;
    uint8_t size_written;
    uint8_t size_read;
    enum opcode opcode;
@@ -142,6 +144,8 @@ fs_copy_prop_dataflow::fs_copy_prop_dataflow(void *mem_ctx, cfg_t *cfg,
          foreach_in_list(acp_entry, entry, &out_acp[block->num][i]) {
             acp[next_acp] = entry;
 
+            entry->global_idx = next_acp;
+
             /* opt_copy_propagation_local populates out_acp with copies created
              * in a block which are still live at the end of the block.  This
              * is exactly what we want in the COPY set.
@@ -167,21 +171,74 @@ void
 fs_copy_prop_dataflow::setup_initial_values()
 {
    /* Initialize the COPY and KILL sets. */
-   foreach_block (block, cfg) {
-      foreach_inst_in_block(fs_inst, inst, block) {
-         if (inst->dst.file != VGRF)
-            continue;
+   {
+      /* Create a temporary table of ACP entries which we'll use for efficient
+       * look-up.  Unfortunately, we have to do this in two steps because we
+       * have to match both sources and destinations and an ACP entry can only
+       * be in one list at a time.
+       *
+       * We choose to make the table size between num_acp/2 and num_acp/4 to
+       * try and trade off between the time it takes to initialize the table
+       * via exec_list constructors or make_empty() and the cost of
+       * collisions.  In practice, it doesn't appear to matter too much what
+       * size we make the table as long as it's roughly the same order of
+       * magnitude as num_acp.  We get most of the benefit of the table
+       * approach even if we use a table of size ACP_HASH_SIZE though a
+       * full-sized table is 1-2% faster in practice.
+       */
+      unsigned acp_table_size = util_next_power_of_two(num_acp) / 4;
+      acp_table_size = MAX2(acp_table_size, ACP_HASH_SIZE);
+      exec_list *acp_table = new exec_list[acp_table_size];
 
-         /* Mark ACP entries which are killed by this instruction. */
-         for (int i = 0; i < num_acp; i++) {
-            if (regions_overlap(inst->dst, inst->size_written,
-                                acp[i]->dst, acp[i]->size_written) ||
-                regions_overlap(inst->dst, inst->size_written,
-                                acp[i]->src, acp[i]->size_read)) {
-               BITSET_SET(bd[block->num].kill, i);
+      /* First, get all the KILLs for instructions which overwrite ACP
+       * destinations.
+       */
+      for (int i = 0; i < num_acp; i++) {
+         unsigned idx = acp[i]->dst.nr & (acp_table_size - 1);
+         acp_table[idx].push_tail(acp[i]);
+      }
+
+      foreach_block (block, cfg) {
+         foreach_inst_in_block(fs_inst, inst, block) {
+            if (inst->dst.file != VGRF)
+               continue;
+
+            unsigned idx = inst->dst.nr & (acp_table_size - 1);
+            foreach_in_list(acp_entry, entry, &acp_table[idx]) {
+               if (regions_overlap(inst->dst, inst->size_written,
+                                   entry->dst, entry->size_written))
+                  BITSET_SET(bd[block->num].kill, entry->global_idx);
             }
          }
       }
+
+      /* Clear the table for the second pass */
+      for (unsigned i = 0; i < acp_table_size; i++)
+         acp_table[i].make_empty();
+
+      /* Next, get all the KILLs for instructions which overwrite ACP
+       * sources.
+       */
+      for (int i = 0; i < num_acp; i++) {
+         unsigned idx = acp[i]->src.nr & (acp_table_size - 1);
+         acp_table[idx].push_tail(acp[i]);
+      }
+
+      foreach_block (block, cfg) {
+         foreach_inst_in_block(fs_inst, inst, block) {
+            if (inst->dst.file != VGRF)
+               continue;
+
+            unsigned idx = inst->dst.nr & (acp_table_size - 1);
+            foreach_in_list(acp_entry, entry, &acp_table[idx]) {
+               if (regions_overlap(inst->dst, inst->size_written,
+                                   entry->src, entry->size_read))
+                  BITSET_SET(bd[block->num].kill, entry->global_idx);
+            }
+         }
+      }
+
+      delete [] acp_table;
    }
 
    /* Populate the initial values for the livein and liveout sets.  For the
@@ -886,6 +943,25 @@ fs_visitor::opt_copy_propagation()
    foreach_block (block, cfg) {
       progress = opt_copy_propagation_local(copy_prop_ctx, block,
                                             out_acp[block->num]) || progress;
+
+      /* If the destination of an ACP entry exists only within this block,
+       * then there's no need to keep it for dataflow analysis.  We can delete
+       * it from the out_acp table and avoid growing the bitsets any bigger
+       * than we absolutely have to.
+       *
+       * Because nothing in opt_copy_propagation_local touches the block
+       * start/end IPs and opt_copy_propagation_local is incapable of
+       * extending the live range of an ACP destination beyond the block,
+       * it's safe to use the liveness information in this way.
+       */
+      for (unsigned a = 0; a < ACP_HASH_SIZE; a++) {
+         foreach_in_list_safe(acp_entry, entry, &out_acp[block->num][a]) {
+            assert(entry->dst.file == VGRF);
+            if (block->start_ip <= virtual_grf_start[entry->dst.nr] &&
+                virtual_grf_end[entry->dst.nr] <= block->end_ip)
+               entry->remove();
+         }
+      }
    }
 
    /* Do dataflow analysis for those available copies. */

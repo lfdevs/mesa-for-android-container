@@ -145,17 +145,21 @@ typedef void(SWR_API* PFN_CLEAR_TILE)(HANDLE                      hPrivateContex
                                       uint32_t                    renderTargetArrayIndex,
                                       const float*                pClearColor);
 
+typedef void*(SWR_API* PFN_TRANSLATE_GFXPTR_FOR_READ)(HANDLE   hPrivateContext,
+                                                      gfxptr_t xpAddr,
+                                                      bool*    pbNullTileAccessed,
+                                                      HANDLE   hPrivateWorkerData);
 
-typedef void* (SWR_API* PFN_TRANSLATE_GFXPTR_FOR_READ)(HANDLE hPrivateContext, 
-                                                    gfxptr_t xpAddr, 
-                                                    bool* pbNullTileAccessed);
+typedef void*(SWR_API* PFN_TRANSLATE_GFXPTR_FOR_WRITE)(HANDLE   hPrivateContext,
+                                                       gfxptr_t xpAddr,
+                                                       bool*    pbNullTileAccessed,
+                                                       HANDLE   hPrivateWorkerData);
 
-typedef void* (SWR_API* PFN_TRANSLATE_GFXPTR_FOR_WRITE)(HANDLE hPrivateContext, 
-                                                        gfxptr_t xpAddr, 
-                                                        bool* pbNullTileAccessed);
+typedef gfxptr_t(SWR_API* PFN_MAKE_GFXPTR)(HANDLE hPrivateContext, void* sysAddr);
 
-typedef gfxptr_t(SWR_API* PFN_MAKE_GFXPTR)(HANDLE                 hPrivateContext,
-                                           void*                  sysAddr);
+typedef HANDLE(SWR_API* PFN_CREATE_MEMORY_CONTEXT)(HANDLE hExternalMemory);
+
+typedef void(SWR_API* PFN_DESTROY_MEMORY_CONTEXT)(HANDLE hExternalMemory, HANDLE hMemoryContext);
 
 //////////////////////////////////////////////////////////////////////////
 /// @brief Callback to allow driver to update their copy of streamout write offset.
@@ -222,13 +226,21 @@ struct SWR_API_THREADING_INFO
 };
 
 //////////////////////////////////////////////////////////////////////////
+/// SWR_CONTEXT
+/// Forward Declaration (see context.h for full definition)
+/////////////////////////////////////////////////////////////////////////
+class SWR_CONTEXT;
+
+//////////////////////////////////////////////////////////////////////////
 /// SWR_WORKER_PRIVATE_STATE
 /// Data used to allocate per-worker thread private data.  A pointer
 /// to this data will be passed in to each shader function.
+/// The first field of this private data must be SWR_WORKER_DATA
+/// perWorkerPrivateStateSize must be >= sizeof SWR_WORKER_DATA 
 /////////////////////////////////////////////////////////////////////////
 struct SWR_WORKER_PRIVATE_STATE
 {
-    typedef void(SWR_API* PFN_WORKER_DATA)(HANDLE hWorkerPrivateData, uint32_t iWorkerNum);
+    typedef void(SWR_API* PFN_WORKER_DATA)(SWR_CONTEXT* pContext, HANDLE hWorkerPrivateData, uint32_t iWorkerNum);
 
     size_t          perWorkerPrivateStateSize; ///< Amount of data to allocate per-worker
     PFN_WORKER_DATA pfnInitWorkerData;         ///< Init function for worker data.  If null
@@ -250,15 +262,16 @@ struct SWR_CREATECONTEXT_INFO
     SWR_WORKER_PRIVATE_STATE* pWorkerPrivateState;
 
     // Callback functions
-    PFN_LOAD_TILE                   pfnLoadTile;
-    PFN_STORE_TILE                  pfnStoreTile;
-    PFN_CLEAR_TILE                  pfnClearTile;
-    PFN_TRANSLATE_GFXPTR_FOR_READ   pfnTranslateGfxptrForRead;
-    PFN_TRANSLATE_GFXPTR_FOR_WRITE  pfnTranslateGfxptrForWrite;
-    PFN_MAKE_GFXPTR                 pfnMakeGfxPtr;
-    PFN_UPDATE_SO_WRITE_OFFSET      pfnUpdateSoWriteOffset;
-    PFN_UPDATE_STATS                pfnUpdateStats;
-    PFN_UPDATE_STATS_FE             pfnUpdateStatsFE;
+    PFN_LOAD_TILE                  pfnLoadTile;
+    PFN_STORE_TILE                 pfnStoreTile;
+    PFN_TRANSLATE_GFXPTR_FOR_READ  pfnTranslateGfxptrForRead;
+    PFN_TRANSLATE_GFXPTR_FOR_WRITE pfnTranslateGfxptrForWrite;
+    PFN_MAKE_GFXPTR                pfnMakeGfxPtr;
+    PFN_CREATE_MEMORY_CONTEXT      pfnCreateMemoryContext;
+    PFN_DESTROY_MEMORY_CONTEXT     pfnDestroyMemoryContext;
+    PFN_UPDATE_SO_WRITE_OFFSET     pfnUpdateSoWriteOffset;
+    PFN_UPDATE_STATS               pfnUpdateStats;
+    PFN_UPDATE_STATS_FE            pfnUpdateStatsFE;
 
 
     // Pointer to rdtsc buckets mgr returned to the caller.
@@ -271,6 +284,9 @@ struct SWR_CREATECONTEXT_INFO
     // ArchRast event manager.
     HANDLE hArEventManager;
 
+    // handle to external memory for worker datas to create memory contexts
+    HANDLE hExternalMemory;
+
     // Input (optional): Threading info that overrides any set KNOB values.
     SWR_THREADING_INFO* pThreadInfo;
 
@@ -280,6 +296,8 @@ struct SWR_CREATECONTEXT_INFO
     // Input: if set to non-zero value, overrides KNOB value for maximum
     // number of draws in flight
     uint32_t MAX_DRAWS_IN_FLIGHT;
+
+    std::string contextName;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -582,6 +600,7 @@ SWR_FUNC(void,
          uint32_t threadGroupCountY,
          uint32_t threadGroupCountZ);
 
+/// @note this enum needs to be kept in sync with HOTTILE_STATE!
 enum SWR_TILE_STATE
 {
     SWR_TILE_INVALID = 0, // tile is in unitialized state and should be loaded with surface contents
@@ -687,58 +706,6 @@ SWR_FUNC(void, SwrEndFrame, HANDLE hContext);
 SWR_FUNC(void, SwrInit);
 
 
-//////////////////////////////////////////////////////////////////////////
-/// @brief Loads a full hottile from a render surface
-/// @param hPrivateContext - Handle to private DC
-/// @param dstFormat - Format for hot tile.
-/// @param renderTargetIndex - Index to src render target
-/// @param x, y - Coordinates to raster tile.
-/// @param pDstHotTile - Pointer to Hot Tile
-SWR_FUNC(void,
-         SwrLoadHotTile,
-         HANDLE                      hWorkerPrivateData,
-         const SWR_SURFACE_STATE*    pSrcSurface,
-         SWR_FORMAT                  dstFormat,
-         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-         uint32_t                    x,
-         uint32_t                    y,
-         uint32_t                    renderTargetArrayIndex,
-         uint8_t*                    pDstHotTile);
-
-//////////////////////////////////////////////////////////////////////////
-/// @brief Deswizzles and stores a full hottile to a render surface
-/// @param hPrivateContext - Handle to private DC
-/// @param srcFormat - Format for hot tile.
-/// @param renderTargetIndex - Index to destination render target
-/// @param x, y - Coordinates to raster tile.
-/// @param pSrcHotTile - Pointer to Hot Tile
-SWR_FUNC(void,
-         SwrStoreHotTileToSurface,
-         HANDLE                      hWorkerPrivateData,
-         SWR_SURFACE_STATE*          pDstSurface,
-         SWR_FORMAT                  srcFormat,
-         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-         uint32_t                    x,
-         uint32_t                    y,
-         uint32_t                    renderTargetArrayIndex,
-         uint8_t*                    pSrcHotTile);
-
-//////////////////////////////////////////////////////////////////////////
-/// @brief Writes clear color to every pixel of a render surface
-/// @param hPrivateContext - Handle to private DC
-/// @param renderTargetIndex - Index to destination render target
-/// @param x, y - Coordinates to raster tile.
-/// @param pClearColor - Pointer to clear color
-SWR_FUNC(void,
-         SwrStoreHotTileClear,
-         HANDLE                      hWorkerPrivateData,
-         SWR_SURFACE_STATE*          pDstSurface,
-         SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
-         uint32_t                    x,
-         uint32_t                    y,
-         uint32_t                    renderTargetArrayIndex,
-         const float*                pClearColor);
-
 struct SWR_INTERFACE
 {
     PFNSwrCreateContext          pfnSwrCreateContext;
@@ -788,9 +755,6 @@ struct SWR_INTERFACE
     PFNSwrEnableStatsBE          pfnSwrEnableStatsBE;
     PFNSwrEndFrame               pfnSwrEndFrame;
     PFNSwrInit                   pfnSwrInit;
-    PFNSwrLoadHotTile           pfnSwrLoadHotTile;
-    PFNSwrStoreHotTileToSurface pfnSwrStoreHotTileToSurface;
-    PFNSwrStoreHotTileClear     pfnSwrStoreHotTileClear;
 };
 
 extern "C" {

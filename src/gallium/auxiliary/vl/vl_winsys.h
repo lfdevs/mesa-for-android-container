@@ -92,12 +92,8 @@ static inline struct vl_screen *
 vl_dri3_screen_create(void *display, int screen) { return NULL; };
 #endif
 
-#ifdef HAVE_DRM_PLATFORM
+/* Always enable the DRM vl winsys */
 struct vl_screen *
 vl_drm_screen_create(int fd);
-#else
-static inline struct vl_screen *
-vl_drm_screen_create(int fd) { return NULL; };
-#endif
 
 #endif

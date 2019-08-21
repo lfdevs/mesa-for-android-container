@@ -30,24 +30,23 @@
 #include "etnaviv_tiling.h"
 
 #include <stdbool.h>
-#include <etnaviv_drmif.h>
+#include "drm/etnaviv_drmif.h"
 
 struct pipe_context;
 
 /* src/dest info for image operations */
 struct blt_imginfo
 {
-   unsigned compressed:1;
    unsigned use_ts:1;
    struct etna_reloc addr;
    struct etna_reloc ts_addr;
    uint32_t format; /* BLT_FORMAT_* */
    uint32_t stride;
-   uint32_t compress_fmt; /* COLOR_COMPRESSION_FORMAT_* */
    enum etna_surface_layout tiling; /* ETNA_LAYOUT_* */
    uint32_t ts_clear_value[2];
    uint8_t swizzle[4]; /* TEXTURE_SWIZZLE_* */
-   uint8_t cache_mode; /* TS_CACHE_MODE_* */
+   uint8_t ts_mode; /* TS_MODE_* */
+   int8_t ts_compress_fmt; /* COLOR_COMPRESSION_FORMAT_* */
    uint8_t endian_mode; /* ENDIAN_MODE_* */
    uint8_t bpp; /* # bytes per pixel 1/2/4/8 - only used for CLEAR_IMAGE */
 };
@@ -89,7 +88,7 @@ struct blt_inplace_op
    struct etna_reloc ts_addr;
    uint32_t ts_clear_value[2];
    uint32_t num_tiles;
-   uint8_t cache_mode; /* TS_CACHE_MODE_* */
+   uint8_t ts_mode; /* TS_MODE_* */
    uint8_t bpp;
 };
 

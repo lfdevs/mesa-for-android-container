@@ -3565,8 +3565,8 @@ lp_build_sample_soa_func(struct gallivm_state *gallivm,
     * Additionally lod_property has to be included too.
     */
 
-   util_snprintf(func_name, sizeof(func_name), "texfunc_res_%d_sam_%d_%x",
-                 texture_index, sampler_index, sample_key);
+   snprintf(func_name, sizeof(func_name), "texfunc_res_%d_sam_%d_%x",
+            texture_index, sampler_index, sample_key);
 
    function = LLVMGetNamedFunction(module, func_name);
 

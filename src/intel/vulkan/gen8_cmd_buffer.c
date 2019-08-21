@@ -31,11 +31,13 @@
 
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
+#include "common/gen_guardband.h"
 
 #if GEN_GEN == 8
 void
 gen8_cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
 {
+   struct anv_framebuffer *fb = cmd_buffer->state.framebuffer;
    uint32_t count = cmd_buffer->state.gfx.dynamic.viewport.count;
    const VkViewport *viewports =
       cmd_buffer->state.gfx.dynamic.viewport.viewports;
@@ -47,7 +49,7 @@ gen8_cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
 
       /* The gen7 state struct has just the matrix and guardband fields, the
        * gen8 struct adds the min/max viewport fields. */
-      struct GENX(SF_CLIP_VIEWPORT) sf_clip_viewport = {
+      struct GENX(SF_CLIP_VIEWPORT) sfv = {
          .ViewportMatrixElementm00 = vp->width / 2,
          .ViewportMatrixElementm11 = vp->height / 2,
          .ViewportMatrixElementm22 = vp->maxDepth - vp->minDepth,
@@ -64,8 +66,23 @@ gen8_cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
          .YMaxViewPort = MAX2(vp->y, vp->y + vp->height) - 1,
       };
 
-      GENX(SF_CLIP_VIEWPORT_pack)(NULL, sf_clip_state.map + i * 64,
-                                 &sf_clip_viewport);
+      if (fb) {
+         /* We can only calculate a "real" guardband clip if we know the
+          * framebuffer at the time we emit the packet.  Otherwise, we have
+          * fall back to a worst-case guardband of [-1, 1].
+          */
+         gen_calculate_guardband_size(fb->width, fb->height,
+                                      sfv.ViewportMatrixElementm00,
+                                      sfv.ViewportMatrixElementm11,
+                                      sfv.ViewportMatrixElementm30,
+                                      sfv.ViewportMatrixElementm31,
+                                      &sfv.XMinClipGuardband,
+                                      &sfv.XMaxClipGuardband,
+                                      &sfv.YMinClipGuardband,
+                                      &sfv.YMaxClipGuardband);
+      }
+
+      GENX(SF_CLIP_VIEWPORT_pack)(NULL, sf_clip_state.map + i * 64, &sfv);
    }
 
    anv_batch_emit(&cmd_buffer->batch,
@@ -525,6 +542,15 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    }
 #endif
 
+   if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_LINE_STIPPLE), ls) {
+         ls.LineStipplePattern = d->line_stipple.pattern;
+         ls.LineStippleInverseRepeatCount =
+            1.0f / MAX2(1, d->line_stipple.factor);
+         ls.LineStippleRepeatCount = d->line_stipple.factor;
+      }
+   }
+
    if (cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
                                       ANV_CMD_DIRTY_INDEX_BUFFER)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_VF), vf) {
@@ -536,6 +562,34 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.gfx.dirty = 0;
 }
 
+static uint32_t vk_to_gen_index_type(VkIndexType type)
+{
+   switch (type) {
+   case VK_INDEX_TYPE_UINT8_EXT:
+      return INDEX_BYTE;
+   case VK_INDEX_TYPE_UINT16:
+      return INDEX_WORD;
+   case VK_INDEX_TYPE_UINT32:
+      return INDEX_DWORD;
+   default:
+      unreachable("invalid index type");
+   }
+}
+
+static uint32_t restart_index_for_type(VkIndexType type)
+{
+   switch (type) {
+   case VK_INDEX_TYPE_UINT8_EXT:
+      return UINT8_MAX;
+   case VK_INDEX_TYPE_UINT16:
+      return UINT16_MAX;
+   case VK_INDEX_TYPE_UINT32:
+      return UINT32_MAX;
+   default:
+      unreachable("invalid index type");
+   }
+}
+
 void genX(CmdBindIndexBuffer)(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    _buffer,
@@ -545,20 +599,10 @@ void genX(CmdBindIndexBuffer)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
 
-   static const uint32_t vk_to_gen_index_type[] = {
-      [VK_INDEX_TYPE_UINT16]                    = INDEX_WORD,
-      [VK_INDEX_TYPE_UINT32]                    = INDEX_DWORD,
-   };
-
-   static const uint32_t restart_index_for_type[] = {
-      [VK_INDEX_TYPE_UINT16]                    = UINT16_MAX,
-      [VK_INDEX_TYPE_UINT32]                    = UINT32_MAX,
-   };
-
-   cmd_buffer->state.restart_index = restart_index_for_type[indexType];
+   cmd_buffer->state.restart_index = restart_index_for_type(indexType);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_INDEX_BUFFER), ib) {
-      ib.IndexFormat                = vk_to_gen_index_type[indexType];
+      ib.IndexFormat                = vk_to_gen_index_type(indexType);
       ib.MOCS                       = anv_mocs_for_bo(cmd_buffer->device,
                                                       buffer->address.bo);
       ib.BufferStartingAddress      = anv_address_add(buffer->address, offset);

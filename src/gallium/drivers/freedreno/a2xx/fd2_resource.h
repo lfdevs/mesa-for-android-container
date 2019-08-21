@@ -30,5 +30,6 @@
 #include "freedreno_resource.h"
 
 uint32_t fd2_setup_slices(struct fd_resource *rsc);
+unsigned fd2_tile_mode(const struct pipe_resource *tmpl);
 
 #endif /* FD2_RESOURCE_H_ */

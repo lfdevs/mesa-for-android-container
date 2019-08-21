@@ -50,8 +50,7 @@ are_all_uses_fadd(nir_ssa_def *def)
       case nir_op_fadd:
          break; /* This one's ok */
 
-      case nir_op_imov:
-      case nir_op_fmov:
+      case nir_op_mov:
       case nir_op_fneg:
       case nir_op_fabs:
          assert(use_alu->dest.dest.is_ssa);
@@ -91,8 +90,7 @@ get_mul_for_src(nir_alu_src *src, unsigned num_components,
       return NULL;
 
    switch (alu->op) {
-   case nir_op_imov:
-   case nir_op_fmov:
+   case nir_op_mov:
       alu = get_mul_for_src(&alu->src[0], alu->dest.dest.ssa.num_components,
                             swizzle, negate, abs);
       break;

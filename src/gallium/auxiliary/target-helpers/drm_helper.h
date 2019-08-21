@@ -96,7 +96,7 @@ pipe_kmsro_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 
-   screen = kmsro_drm_screen_create(fd);
+   screen = kmsro_drm_screen_create(fd, config);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
 
@@ -161,23 +161,14 @@ pipe_r600_create_screen(int fd, const struct pipe_screen_config *config)
 #endif
 
 #ifdef GALLIUM_RADEONSI
-#include "radeon/radeon_winsys.h"
-#include "radeon/drm/radeon_drm_public.h"
-#include "amdgpu/drm/amdgpu_public.h"
 #include "radeonsi/si_public.h"
 
 struct pipe_screen *
 pipe_radeonsi_create_screen(int fd, const struct pipe_screen_config *config)
 {
-   struct radeon_winsys *rw;
+   struct pipe_screen *screen = radeonsi_screen_create(fd, config);
 
-   /* First, try amdgpu. */
-   rw = amdgpu_winsys_create(fd, config, radeonsi_screen_create);
-
-   if (!rw)
-      rw = radeon_drm_winsys_create(fd, config, radeonsi_screen_create);
-
-   return rw ? debug_screen_wrap(rw->screen) : NULL;
+   return screen ? debug_screen_wrap(screen) : NULL;
 }
 
 const char *radeonsi_driconf_xml =
@@ -258,9 +249,13 @@ pipe_virgl_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 
-   screen = virgl_drm_screen_create(fd);
+   screen = virgl_drm_screen_create(fd, config);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
+
+const char *virgl_driconf_xml =
+      #include "virgl/virgl_driinfo.h"
+      ;
 
 #else
 
@@ -270,6 +265,8 @@ pipe_virgl_create_screen(int fd, const struct pipe_screen_config *config)
    fprintf(stderr, "virgl: driver missing\n");
    return NULL;
 }
+
+const char *virgl_driconf_xml = NULL;
 
 #endif
 
@@ -281,10 +278,9 @@ pipe_vc4_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 
-   screen = vc4_drm_screen_create(fd);
+   screen = vc4_drm_screen_create(fd, config);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
-
 #else
 
 struct pipe_screen *
@@ -304,9 +300,13 @@ pipe_v3d_create_screen(int fd, const struct pipe_screen_config *config)
 {
    struct pipe_screen *screen;
 
-   screen = v3d_drm_screen_create(fd);
+   screen = v3d_drm_screen_create(fd, config);
    return screen ? debug_screen_wrap(screen) : NULL;
 }
+
+const char *v3d_driconf_xml =
+      #include "v3d/v3d_driinfo.h"
+      ;
 
 #else
 
@@ -316,6 +316,8 @@ pipe_v3d_create_screen(int fd, const struct pipe_screen_config *config)
    fprintf(stderr, "v3d: driver missing\n");
    return NULL;
 }
+
+const char *v3d_driconf_xml = NULL;
 
 #endif
 

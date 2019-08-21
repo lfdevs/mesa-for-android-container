@@ -49,12 +49,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 	enum a3xx_tile_mode tile_mode;
 	unsigned i;
 
-	if (bin_w) {
-		tile_mode = TILE_32X32;
-	} else {
-		tile_mode = LINEAR;
-	}
-
 	for (i = 0; i < A3XX_MAX_RENDER_TARGETS; i++) {
 		enum pipe_format pformat = 0;
 		enum a3xx_color_fmt format = 0;
@@ -65,6 +59,12 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		uint32_t stride = 0;
 		uint32_t base = 0;
 		uint32_t offset = 0;
+
+		if (bin_w) {
+			tile_mode = TILE_32X32;
+		} else {
+			tile_mode = LINEAR;
+		}
 
 		if ((i < nr_bufs) && bufs[i]) {
 			struct pipe_surface *psurf = bufs[i];
@@ -82,7 +82,6 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 			}
 			slice = fd_resource_slice(rsc, psurf->u.tex.level);
 			format = fd3_pipe2color(pformat);
-			swap = fd3_pipe2swap(pformat);
 			if (decode_srgb)
 				srgb = util_format_is_srgb(pformat);
 			else
@@ -92,6 +91,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 
 			offset = fd_resource_offset(rsc, psurf->u.tex.level,
 					psurf->u.tex.first_layer);
+			swap = rsc->tile_mode ? WZYX : fd3_pipe2swap(pformat);
 
 			if (bin_w) {
 				stride = bin_w * rsc->cpp;
@@ -101,6 +101,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 				}
 			} else {
 				stride = slice->pitch * rsc->cpp;
+				tile_mode = rsc->tile_mode;
 			}
 		} else if (i < nr_bufs && bases) {
 			base = bases[i];
@@ -711,7 +712,7 @@ patch_draws(struct fd_batch *batch, enum pc_di_vis_cull_mode vismode)
 		struct fd_cs_patch *patch = fd_patch_element(&batch->draw_patches, i);
 		*patch->cs = patch->val | DRAW(0, 0, 0, vismode, 0);
 	}
-	util_dynarray_resize(&batch->draw_patches, 0);
+	util_dynarray_clear(&batch->draw_patches);
 }
 
 static void
@@ -722,7 +723,7 @@ patch_rbrc(struct fd_batch *batch, uint32_t val)
 		struct fd_cs_patch *patch = fd_patch_element(&batch->rbrc_patches, i);
 		*patch->cs = patch->val | val;
 	}
-	util_dynarray_resize(&batch->rbrc_patches, 0);
+	util_dynarray_clear(&batch->rbrc_patches);
 }
 
 /* for rendering directly to system memory: */
@@ -867,7 +868,7 @@ emit_binning_pass(struct fd_batch *batch)
 			A3XX_PC_VSTREAM_CONTROL_N(0));
 
 	/* emit IB to binning drawcmds: */
-	ctx->emit_ib(ring, batch->binning);
+	fd3_emit_ib(ring, batch->binning);
 	fd_reset_wfi(batch);
 
 	fd_wfi(batch, ring);
@@ -1016,7 +1017,7 @@ fd3_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	if (use_hw_binning(batch)) {
 		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
 
-		assert(pipe->w * pipe->h);
+		assert(pipe->w && pipe->h);
 
 		fd_event_write(batch, ring, HLSQ_FLUSH);
 		fd_wfi(batch, ring);

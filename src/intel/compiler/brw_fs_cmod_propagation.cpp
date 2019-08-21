@@ -53,6 +53,7 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
                           fs_inst *inst)
 {
    bool read_flag = false;
+   const unsigned flags_written = inst->flags_written();
 
    foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
       if (scan_inst->opcode == BRW_OPCODE_ADD &&
@@ -79,6 +80,17 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
             goto not_match;
          }
 
+         /* If the scan instruction writes a different flag register than the
+          * instruction we're trying to propagate from, bail.
+          *
+          * FINISHME: The second part of the condition may be too strong.
+          * Perhaps (scan_inst->flags_written() & flags_written) !=
+          * flags_written?
+          */
+         if (scan_inst->flags_written() != 0 &&
+             scan_inst->flags_written() != flags_written)
+            goto not_match;
+
          /* From the Sky Lake PRM Vol. 7 "Assigning Conditional Mods":
           *
           *    * Note that the [post condition signal] bits generated at
@@ -102,10 +114,11 @@ cmod_propagate_cmp_to_add(const gen_device_info *devinfo, bblock_t *block,
       }
 
    not_match:
-      if (scan_inst->flags_written())
+      if ((scan_inst->flags_written() & flags_written) != 0)
          break;
 
-      read_flag = read_flag || scan_inst->flags_read(devinfo);
+      read_flag = read_flag ||
+                  (scan_inst->flags_read(devinfo) & flags_written) != 0;
    }
 
    return false;
@@ -130,6 +143,7 @@ cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
 {
    const enum brw_conditional_mod cond = brw_negate_cmod(inst->conditional_mod);
    bool read_flag = false;
+   const unsigned flags_written = inst->flags_written();
 
    if (cond != BRW_CONDITIONAL_Z && cond != BRW_CONDITIONAL_NZ)
       return false;
@@ -146,6 +160,17 @@ cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
              scan_inst->exec_size != inst->exec_size)
             break;
 
+         /* If the scan instruction writes a different flag register than the
+          * instruction we're trying to propagate from, bail.
+          *
+          * FINISHME: The second part of the condition may be too strong.
+          * Perhaps (scan_inst->flags_written() & flags_written) !=
+          * flags_written?
+          */
+         if (scan_inst->flags_written() != 0 &&
+             scan_inst->flags_written() != flags_written)
+            break;
+
          if (scan_inst->can_do_cmod() &&
              ((!read_flag && scan_inst->conditional_mod == BRW_CONDITIONAL_NONE) ||
               scan_inst->conditional_mod == cond)) {
@@ -156,10 +181,11 @@ cmod_propagate_not(const gen_device_info *devinfo, bblock_t *block,
          break;
       }
 
-      if (scan_inst->flags_written())
+      if ((scan_inst->flags_written() & flags_written) != 0)
          break;
 
-      read_flag = read_flag || scan_inst->flags_read(devinfo);
+      read_flag = read_flag ||
+                  (scan_inst->flags_read(devinfo) & flags_written) != 0;
    }
 
    return false;
@@ -231,9 +257,21 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
       }
 
       bool read_flag = false;
+      const unsigned flags_written = inst->flags_written();
       foreach_inst_in_block_reverse_starting_from(fs_inst, scan_inst, inst) {
          if (regions_overlap(scan_inst->dst, scan_inst->size_written,
                              inst->src[0], inst->size_read(0))) {
+            /* If the scan instruction writes a different flag register than
+             * the instruction we're trying to propagate from, bail.
+             *
+             * FINISHME: The second part of the condition may be too strong.
+             * Perhaps (scan_inst->flags_written() & flags_written) !=
+             * flags_written?
+             */
+            if (scan_inst->flags_written() != 0 &&
+                scan_inst->flags_written() != flags_written)
+               break;
+
             if (scan_inst->is_partial_write() ||
                 scan_inst->dst.offset != inst->src[0].offset ||
                 scan_inst->exec_size != inst->exec_size)
@@ -313,14 +351,6 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
                 scan_inst->opcode == BRW_OPCODE_CMPN)
                break;
 
-            /* From the Sky Lake PRM Vol. 7 "Assigning Conditional Mods":
-             *
-             *    * Note that the [post condition signal] bits generated at
-             *      the output of a compute are before the .sat.
-             */
-            if (scan_inst->saturate)
-               break;
-
             /* From the Sky Lake PRM, Vol 2a, "Multiply":
              *
              *    "When multiplying integer data types, if one of the sources
@@ -338,25 +368,68 @@ opt_cmod_propagation_local(const gen_device_info *devinfo, bblock_t *block)
                 scan_inst->opcode == BRW_OPCODE_MUL)
                break;
 
-            /* Otherwise, try propagating the conditional. */
             enum brw_conditional_mod cond =
                inst->src[0].negate ? brw_swap_cmod(inst->conditional_mod)
                                    : inst->conditional_mod;
 
+            /* From the Sky Lake PRM Vol. 7 "Assigning Conditional Mods":
+             *
+             *    * Note that the [post condition signal] bits generated at
+             *      the output of a compute are before the .sat.
+             *
+             * This limits the cases where we can propagate the conditional
+             * modifier.  If scan_inst has a saturate modifier, then we can
+             * only propagate from inst if inst is 'scan_inst <= 0',
+             * 'scan_inst == 0', 'scan_inst != 0', or 'scan_inst > 0'.  If
+             * inst is 'scan_inst == 0', the conditional modifier must be
+             * replace with LE.  Likewise, if inst is 'scan_inst != 0', the
+             * conditional modifier must be replace with G.
+             *
+             * The only other cases are 'scan_inst < 0' (which is a
+             * contradiction) and 'scan_inst >= 0' (which is a tautology).
+             */
+            if (scan_inst->saturate) {
+               if (scan_inst->dst.type != BRW_REGISTER_TYPE_F)
+                  break;
+
+               if (cond != BRW_CONDITIONAL_Z &&
+                   cond != BRW_CONDITIONAL_NZ &&
+                   cond != BRW_CONDITIONAL_LE &&
+                   cond != BRW_CONDITIONAL_G)
+                  break;
+
+               if (inst->opcode != BRW_OPCODE_MOV &&
+                   inst->opcode != BRW_OPCODE_CMP)
+                  break;
+
+               /* inst->src[1].is_zero() was tested before, but be safe
+                * against possible future changes in this code.
+                */
+               assert(inst->opcode != BRW_OPCODE_CMP || inst->src[1].is_zero());
+
+               if (cond == BRW_CONDITIONAL_Z)
+                  cond = BRW_CONDITIONAL_LE;
+               else if (cond == BRW_CONDITIONAL_NZ)
+                  cond = BRW_CONDITIONAL_G;
+            }
+
+            /* Otherwise, try propagating the conditional. */
             if (scan_inst->can_do_cmod() &&
                 ((!read_flag && scan_inst->conditional_mod == BRW_CONDITIONAL_NONE) ||
                  scan_inst->conditional_mod == cond)) {
                scan_inst->conditional_mod = cond;
+               scan_inst->flag_subreg = inst->flag_subreg;
                inst->remove(block);
                progress = true;
             }
             break;
          }
 
-         if (scan_inst->flags_written())
+         if ((scan_inst->flags_written() & flags_written) != 0)
             break;
 
-         read_flag = read_flag || scan_inst->flags_read(devinfo);
+         read_flag = read_flag ||
+                     (scan_inst->flags_read(devinfo) & flags_written) != 0;
       }
    }
 

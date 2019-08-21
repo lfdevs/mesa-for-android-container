@@ -114,13 +114,13 @@ kms_sw_winsys( struct sw_winsys *ws )
 }
 
 
-static boolean
+static bool
 kms_sw_is_displaytarget_format_supported( struct sw_winsys *ws,
                                           unsigned tex_usage,
                                           enum pipe_format format )
 {
    /* TODO: check visuals or other sensible thing here */
-   return TRUE;
+   return true;
 }
 
 static struct kms_sw_plane *get_plane(struct kms_sw_displaytarget *kms_sw_dt,
@@ -429,7 +429,7 @@ kms_sw_displaytarget_from_handle(struct sw_winsys *ws,
    return NULL;
 }
 
-static boolean
+static bool
 kms_sw_displaytarget_get_handle(struct sw_winsys *winsys,
                                 struct sw_displaytarget *dt,
                                 struct winsys_handle *whandle)
@@ -443,20 +443,20 @@ kms_sw_displaytarget_get_handle(struct sw_winsys *winsys,
       whandle->handle = kms_sw_dt->handle;
       whandle->stride = plane->stride;
       whandle->offset = plane->offset;
-      return TRUE;
+      return true;
    case WINSYS_HANDLE_TYPE_FD:
       if (!drmPrimeHandleToFD(kms_sw->fd, kms_sw_dt->handle,
                              DRM_CLOEXEC, (int*)&whandle->handle)) {
          whandle->stride = plane->stride;
          whandle->offset = plane->offset;
-         return TRUE;
+         return true;
       }
       /* fallthrough */
    default:
       whandle->handle = 0;
       whandle->stride = 0;
       whandle->offset = 0;
-      return FALSE;
+      return false;
    }
 }
 

@@ -87,7 +87,7 @@ blit_surf_for_image_level_layer(struct radv_image *image,
 {
 	VkFormat format = radv_get_aspect_format(image, aspect_mask);
 
-	if (!radv_image_has_dcc(image) &&
+	if (!radv_dcc_enabled(image, subres->mipLevel) &&
 	    !(radv_image_is_tc_compat_htile(image)))
 		format = vk_format_for_size(vk_format_get_blocksize(format));
 
@@ -191,7 +191,7 @@ meta_copy_buffer_to_image(struct radv_cmd_buffer *cmd_buffer,
 			uint32_t queue_mask = radv_image_queue_family_mask(image,
 			                                                   cmd_buffer->queue_family_index,
 			                                                   cmd_buffer->queue_family_index);
-			MAYBE_UNUSED bool compressed = radv_layout_dcc_compressed(image, layout, queue_mask);
+			bool compressed = radv_layout_dcc_compressed(cmd_buffer->device, image, layout, false, queue_mask);
 			if (compressed) {
 				radv_decompress_dcc(cmd_buffer, image, &(VkImageSubresourceRange) {
 								.aspectMask = pRegions[r].imageSubresource.aspectMask,
@@ -335,7 +335,7 @@ meta_copy_image_to_buffer(struct radv_cmd_buffer *cmd_buffer,
 			uint32_t queue_mask = radv_image_queue_family_mask(image,
 			                                                   cmd_buffer->queue_family_index,
 			                                                   cmd_buffer->queue_family_index);
-			MAYBE_UNUSED bool compressed = radv_layout_dcc_compressed(image, layout, queue_mask);
+			bool compressed = radv_layout_dcc_compressed(cmd_buffer->device, image, layout, false, queue_mask);
 			if (compressed) {
 				radv_decompress_dcc(cmd_buffer, image, &(VkImageSubresourceRange) {
 								.aspectMask = pRegions[r].imageSubresource.aspectMask,
@@ -464,11 +464,11 @@ meta_copy_image(struct radv_cmd_buffer *cmd_buffer,
 			uint32_t dst_queue_mask = radv_image_queue_family_mask(dest_image,
 			                                                       cmd_buffer->queue_family_index,
 			                                                       cmd_buffer->queue_family_index);
-			bool dst_compressed = radv_layout_dcc_compressed(dest_image, dest_image_layout, dst_queue_mask);
+			bool dst_compressed = radv_layout_dcc_compressed(cmd_buffer->device, dest_image, dest_image_layout, false, dst_queue_mask);
 			uint32_t src_queue_mask = radv_image_queue_family_mask(src_image,
 			                                                       cmd_buffer->queue_family_index,
 			                                                       cmd_buffer->queue_family_index);
-			bool src_compressed = radv_layout_dcc_compressed(src_image, src_image_layout, src_queue_mask);
+			bool src_compressed = radv_layout_dcc_compressed(cmd_buffer->device, src_image, src_image_layout, false, src_queue_mask);
 
 			if (!src_compressed || radv_dcc_formats_compatible(b_src.format, b_dst.format)) {
 				b_src.format = b_dst.format;

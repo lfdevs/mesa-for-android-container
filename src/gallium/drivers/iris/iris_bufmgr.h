@@ -219,6 +219,7 @@ struct iris_bo *iris_bo_alloc(struct iris_bufmgr *bufmgr,
 struct iris_bo *iris_bo_alloc_tiled(struct iris_bufmgr *bufmgr,
                                     const char *name,
                                     uint64_t size,
+                                    uint32_t alignment,
                                     enum iris_memory_zone memzone,
                                     uint32_t tiling_mode,
                                     uint32_t pitch,
@@ -331,6 +332,7 @@ void iris_bufmgr_enable_reuse(struct iris_bufmgr *bufmgr);
 int iris_bo_wait(struct iris_bo *bo, int64_t timeout_ns);
 
 uint32_t iris_create_hw_context(struct iris_bufmgr *bufmgr);
+uint32_t iris_clone_hw_context(struct iris_bufmgr *bufmgr, uint32_t ctx_id);
 
 #define IRIS_CONTEXT_LOW_PRIORITY    ((I915_CONTEXT_MIN_USER_PRIORITY-1)/2)
 #define IRIS_CONTEXT_MEDIUM_PRIORITY (I915_CONTEXT_DEFAULT_PRIORITY)

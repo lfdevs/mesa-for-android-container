@@ -170,12 +170,15 @@ struct _egl_surface
    EGLBoolean PostSubBufferSupportedNV;
 
    struct _egl_hdr_metadata HdrMetadata;
+
+   void *NativeSurface;
 };
 
 
 extern EGLBoolean
 _eglInitSurface(_EGLSurface *surf, _EGLDisplay *disp, EGLint type,
-                _EGLConfig *config, const EGLint *attrib_list);
+                _EGLConfig *config, const EGLint *attrib_list,
+                void *native_surface);
 
 
 extern EGLBoolean

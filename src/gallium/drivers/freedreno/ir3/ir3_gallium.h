@@ -43,12 +43,37 @@ ir3_shader_create_compute(struct ir3_compiler *compiler,
 struct ir3_shader_variant * ir3_shader_variant(struct ir3_shader *shader,
 		struct ir3_shader_key key, bool binning_pass,
 		struct pipe_debug_callback *debug);
-struct nir_shader * ir3_tgsi_to_nir(struct ir3_compiler *compiler,
-		const struct tgsi_token *tokens,
-		struct pipe_screen *screen);
 
 struct fd_ringbuffer;
 struct fd_context;
+struct fd_screen;
+struct fd_constbuf_stateobj;
+struct fd_shaderbuf_stateobj;
+struct fd_shaderimg_stateobj;
+
+void ir3_emit_user_consts(struct fd_screen *screen, const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf);
+void ir3_emit_ubos(struct fd_screen *screen, const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf);
+void ir3_emit_ssbo_sizes(struct fd_screen *screen, const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring, struct fd_shaderbuf_stateobj *sb);
+void ir3_emit_image_dims(struct fd_screen *screen, const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring, struct fd_shaderimg_stateobj *si);
+void ir3_emit_immediates(struct fd_screen *screen, const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring);
+
+static inline bool
+ir3_needs_vs_driver_params(const struct ir3_shader_variant *v)
+{
+	const struct ir3_const_state *const_state = &v->shader->const_state;
+	uint32_t offset = const_state->offsets.driver_param;
+
+	return v->constlen > offset;
+}
+
+void ir3_emit_vs_driver_params(const struct ir3_shader_variant *v,
+		struct fd_ringbuffer *ring, struct fd_context *ctx,
+		const struct pipe_draw_info *info);
 void ir3_emit_vs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 		struct fd_context *ctx, const struct pipe_draw_info *info);
 void ir3_emit_fs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,

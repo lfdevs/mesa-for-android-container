@@ -49,7 +49,6 @@ vlVdpVideoMixerCreate(VdpDevice device,
    vlVdpVideoMixer *vmixer = NULL;
    VdpStatus ret;
    struct pipe_screen *screen;
-   uint32_t max_2d_texture_level;
    unsigned max_size, i;
 
    vlVdpDevice *dev = vlGetDataHTAB(device);
@@ -148,8 +147,7 @@ vlVdpVideoMixerCreate(VdpDevice device,
       goto no_params;
    }
 
-   max_2d_texture_level = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
-   max_size = pow(2, max_2d_texture_level-1);
+   max_size = screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
    if (vmixer->video_width < 48 || vmixer->video_width > max_size) {
       VDPAU_MSG(VDPAU_WARN, "[VDPAU] 48 < %u < %u not valid for width\n",
                 vmixer->video_width, max_size);

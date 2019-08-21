@@ -65,7 +65,7 @@ etna_assemble(uint32_t *out, const struct etna_inst *inst)
    if (inst->imm && inst->src[2].use)
       return 1;
 
-   if (!check_uniforms(inst))
+   if (!inst->halti5 && !check_uniforms(inst))
       BUG("error: generating instruction that accesses two different uniforms");
 
    assert(!(inst->opcode&~0x7f));
@@ -76,7 +76,7 @@ etna_assemble(uint32_t *out, const struct etna_inst *inst)
             COND(inst->dst.use, VIV_ISA_WORD_0_DST_USE) |
             VIV_ISA_WORD_0_DST_AMODE(inst->dst.amode) |
             VIV_ISA_WORD_0_DST_REG(inst->dst.reg) |
-            VIV_ISA_WORD_0_DST_COMPS(inst->dst.comps) |
+            VIV_ISA_WORD_0_DST_COMPS(inst->dst.write_mask) |
             VIV_ISA_WORD_0_TEX_ID(inst->tex.id);
    out[1] = VIV_ISA_WORD_1_TEX_AMODE(inst->tex.amode) |
             VIV_ISA_WORD_1_TEX_SWIZ(inst->tex.swiz) |
@@ -103,7 +103,11 @@ etna_assemble(uint32_t *out, const struct etna_inst *inst)
             COND(inst->src[2].neg, VIV_ISA_WORD_3_SRC2_NEG) |
             COND(inst->src[2].abs, VIV_ISA_WORD_3_SRC2_ABS) |
             VIV_ISA_WORD_3_SRC2_AMODE(inst->src[2].amode) |
-            VIV_ISA_WORD_3_SRC2_RGROUP(inst->src[2].rgroup);
+            VIV_ISA_WORD_3_SRC2_RGROUP(inst->src[2].rgroup) |
+            COND(inst->sel_bit0, VIV_ISA_WORD_3_SEL_BIT0) |
+            COND(inst->sel_bit1, VIV_ISA_WORD_3_SEL_BIT1) |
+            COND(inst->dst_full, VIV_ISA_WORD_3_DST_FULL);
+
    out[3] |= VIV_ISA_WORD_3_SRC2_IMM(inst->imm);
 
    return 0;

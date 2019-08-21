@@ -747,7 +747,7 @@ shift_result_type(const struct glsl_type *type_a,
      return glsl_type::error_type;
 
    }
-   if (!type_b->is_integer()) {
+   if (!type_b->is_integer_32()) {
       _mesa_glsl_error(loc, state, "RHS of operator %s must be an integer or "
                        "integer vector", ast_expression::operator_string(op));
      return glsl_type::error_type;
@@ -2289,7 +2289,7 @@ process_array_size(exec_node *node,
       return 0;
    }
 
-   if (!ir->type->is_integer()) {
+   if (!ir->type->is_integer_32()) {
       _mesa_glsl_error(& loc, state,
                        "array size must be integer type");
       return 0;
@@ -2389,7 +2389,7 @@ precision_qualifier_allowed(const glsl_type *type)
     */
    const glsl_type *const t = type->without_array();
 
-   return (t->is_float() || t->is_integer() || t->contains_opaque()) &&
+   return (t->is_float() || t->is_integer_32() || t->contains_opaque()) &&
           !t->is_struct();
 }
 
@@ -2706,7 +2706,9 @@ is_varying_var(ir_variable *var, gl_shader_stage target)
    case MESA_SHADER_VERTEX:
       return var->data.mode == ir_var_shader_out;
    case MESA_SHADER_FRAGMENT:
-      return var->data.mode == ir_var_shader_in;
+      return var->data.mode == ir_var_shader_in ||
+             (var->data.mode == ir_var_system_value &&
+              var->data.location == SYSTEM_VALUE_FRAG_COORD);
    default:
       return var->data.mode == ir_var_shader_out || var->data.mode == ir_var_shader_in;
    }
@@ -3486,7 +3488,8 @@ apply_image_qualifier_to_variable(const struct ast_type_qualifier *qual,
       }
    } else {
       if (var->data.mode == ir_var_uniform) {
-         if (state->es_shader) {
+         if (state->es_shader ||
+             !(state->is_version(420, 310) || state->ARB_shader_image_load_store_enable)) {
             _mesa_glsl_error(loc, state, "all image uniforms must have a "
                              "format layout qualifier");
          } else if (!qual->flags.q.write_only) {
@@ -4923,6 +4926,41 @@ ast_declarator_list::hir(exec_list *instructions,
    assert(!this->invariant);
    assert(!this->precise);
 
+   /* GL_EXT_shader_image_load_store base type uses GLSL_TYPE_VOID as a special value to
+    * indicate that it needs to be updated later (see glsl_parser.yy).
+    * This is done here, based on the layout qualifier and the type of the image var
+    */
+   if (this->type->qualifier.flags.q.explicit_image_format &&
+         this->type->specifier->type->is_image() &&
+         this->type->qualifier.image_base_type == GLSL_TYPE_VOID) {
+      /*     "The ARB_shader_image_load_store says:
+       *     If both extensions are enabled in the shading language, the "size*" layout
+       *     qualifiers are treated as format qualifiers, and are mapped to equivalent
+       *     format qualifiers in the table below, according to the type of image
+       *     variable.
+       *                     image*    iimage*   uimage*
+       *                     --------  --------  --------
+       *       size1x8       n/a       r8i       r8ui
+       *       size1x16      r16f      r16i      r16ui
+       *       size1x32      r32f      r32i      r32ui
+       *       size2x32      rg32f     rg32i     rg32ui
+       *       size4x32      rgba32f   rgba32i   rgba32ui"
+       */
+      if (strncmp(this->type->specifier->type_name, "image", strlen("image")) == 0) {
+         this->type->qualifier.image_format = GL_R8 +
+                                         this->type->qualifier.image_format - GL_R8I;
+         this->type->qualifier.image_base_type = GLSL_TYPE_FLOAT;
+      } else if (strncmp(this->type->specifier->type_name, "uimage", strlen("uimage")) == 0) {
+         this->type->qualifier.image_format = GL_R8UI +
+                                         this->type->qualifier.image_format - GL_R8I;
+         this->type->qualifier.image_base_type = GLSL_TYPE_UINT;
+      } else if (strncmp(this->type->specifier->type_name, "iimage", strlen("iimage")) == 0) {
+         this->type->qualifier.image_base_type = GLSL_TYPE_INT;
+      } else {
+         assert(false);
+      }
+   }
+
    /* The type specifier may contain a structure definition.  Process that
     * before any of the variable declarations.
     */
@@ -6195,6 +6233,8 @@ ast_function_definition::hir(exec_list *instructions,
    assert(state->current_function == NULL);
    state->current_function = signature;
    state->found_return = false;
+   state->found_begin_interlock = false;
+   state->found_end_interlock = false;
 
    /* Duplicate parameters declared in the prototype as concrete variables.
     * Add these to the symbol table.
@@ -6500,7 +6540,7 @@ ast_switch_statement::hir(exec_list *instructions,
     *     scalar integer."
     */
    if (!test_expression->type->is_scalar() ||
-       !test_expression->type->is_integer()) {
+       !test_expression->type->is_integer_32()) {
       YYLTYPE loc = this->test_expression->get_location();
 
       _mesa_glsl_error(& loc,
@@ -6819,7 +6859,7 @@ ast_case_label::hir(exec_list *instructions,
             glsl_type::int_type->can_implicitly_convert_to(glsl_type::uint_type,
                                                            state);
 
-         if ((!type_a->is_integer() || !type_b->is_integer()) ||
+         if ((!type_a->is_integer_32() || !type_b->is_integer_32()) ||
               !integer_conversion_supported) {
             _mesa_glsl_error(&loc, state, "type mismatch with switch "
                              "init-expression and case label (%s != %s)",
@@ -7358,7 +7398,6 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
          fields[i].centroid = qual->flags.q.centroid ? 1 : 0;
          fields[i].sample = qual->flags.q.sample ? 1 : 0;
          fields[i].patch = qual->flags.q.patch ? 1 : 0;
-         fields[i].precision = qual->precision;
          fields[i].offset = -1;
          fields[i].explicit_xfb_buffer = explicit_xfb_buffer;
          fields[i].xfb_buffer = xfb_buffer;
@@ -7554,6 +7593,16 @@ ast_process_struct_or_iface_block_members(exec_list *instructions,
                   fields[i].image_format = GL_NONE;
                }
             }
+         }
+
+         /* Precision qualifiers do not hold any meaning in Desktop GLSL */
+         if (state->es_shader) {
+            fields[i].precision = select_gles_precision(qual->precision,
+                                                        field_type,
+                                                        state,
+                                                        &loc);
+         } else {
+            fields[i].precision = qual->precision;
          }
 
          i++;

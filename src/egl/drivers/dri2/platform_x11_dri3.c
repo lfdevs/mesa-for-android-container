@@ -155,7 +155,8 @@ dri3_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       return NULL;
    }
 
-   if (!dri2_init_surface(&dri3_surf->surf.base, disp, type, conf, attrib_list, false))
+   if (!dri2_init_surface(&dri3_surf->surf.base, disp, type, conf,
+                          attrib_list, false, native_surface))
       goto cleanup_surf;
 
    if (type == EGL_PBUFFER_BIT) {
@@ -500,7 +501,6 @@ struct dri2_egl_display_vtbl dri3_x11_display_vtbl = {
    .swap_buffers = dri3_swap_buffers,
    .swap_buffers_with_damage = dri2_fallback_swap_buffers_with_damage,
    .swap_buffers_region = dri2_fallback_swap_buffers_region,
-   .set_damage_region = dri2_fallback_set_damage_region,
    .post_sub_buffer = dri2_fallback_post_sub_buffer,
    .copy_buffers = dri3_copy_buffers,
    .query_buffer_age = dri3_query_buffer_age,

@@ -48,7 +48,8 @@ files_swr_common += [
 ]
 
 foreach x : [[swr_context_files, 'gen_swr_context_llvm.h'],
-             [swr_state_files, 'gen_state_llvm.h']]
+             [swr_state_files, 'gen_state_llvm.h'],
+             [swr_surf_state_files, 'gen_surf_state_llvm.h']]
   files_swr_common += custom_target(
     x[1],
     input : ['gen_llvm_types.py', x[0]],

@@ -81,12 +81,12 @@ hgl_winsys_destroy(struct sw_winsys* winsys)
 }
 
 
-static boolean
+static bool
 hgl_winsys_is_displaytarget_format_supported(struct sw_winsys* winsys,
 	unsigned textureUsage, enum pipe_format format)
 {
 	// TODO STUB
-	return TRUE;
+	return true;
 }
 
 static color_space
@@ -164,11 +164,11 @@ hgl_winsys_displaytarget_from_handle(struct sw_winsys* winsys,
 }
 
 
-static boolean
+static bool
 hgl_winsys_displaytarget_get_handle(struct sw_winsys* winsys,
 	struct sw_displaytarget* displayTarget, struct winsys_handle* whandle)
 {
-	return FALSE;
+	return false;
 }
 
 

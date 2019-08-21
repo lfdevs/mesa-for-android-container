@@ -28,7 +28,7 @@ from anv_extensions import MAX_API_VERSION
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--out', help='Output jsono file.', required=True)
+    parser.add_argument('--out', help='Output json file.', required=True)
     parser.add_argument('--lib-path', help='Path to libvulkan_intel.so')
     args = parser.parse_args()
 

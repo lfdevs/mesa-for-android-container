@@ -61,7 +61,7 @@ void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
 		return NULL;
 
 	/* Tell the shader to load VS inputs from SGPRs: */
-	ureg_property(ureg, TGSI_PROPERTY_VS_BLIT_SGPRS, vs_blit_property);
+	ureg_property(ureg, TGSI_PROPERTY_VS_BLIT_SGPRS_AMD, vs_blit_property);
 	ureg_property(ureg, TGSI_PROPERTY_VS_WINDOW_SPACE_POSITION, true);
 
 	/* This is just a pass-through shader with 1-3 MOV instructions. */
@@ -105,9 +105,9 @@ void *si_create_fixed_func_tcs(struct si_context *sctx)
 		return NULL;
 
 	outer = ureg_DECL_system_value(ureg,
-				       TGSI_SEMANTIC_DEFAULT_TESSOUTER_SI, 0);
+				       TGSI_SEMANTIC_TESS_DEFAULT_OUTER_LEVEL, 0);
 	inner = ureg_DECL_system_value(ureg,
-				       TGSI_SEMANTIC_DEFAULT_TESSINNER_SI, 0);
+				       TGSI_SEMANTIC_TESS_DEFAULT_INNER_LEVEL, 0);
 
 	tessouter = ureg_DECL_output(ureg, TGSI_SEMANTIC_TESSOUTER, 0);
 	tessinner = ureg_DECL_output(ureg, TGSI_SEMANTIC_TESSINNER, 0);
@@ -124,6 +124,7 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 				   unsigned num_dwords_per_thread,
 				   bool dst_stream_cache_policy, bool is_copy)
 {
+	struct si_screen *sscreen = (struct si_screen *)ctx->screen;
 	assert(util_is_power_of_two_nonzero(num_dwords_per_thread));
 
 	unsigned store_qualifier = TGSI_MEMORY_COHERENT | TGSI_MEMORY_RESTRICT;
@@ -145,14 +146,14 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 	if (!ureg)
 		return NULL;
 
-	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH, 64);
+	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH, sscreen->compute_wave_size);
 	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_HEIGHT, 1);
 	ureg_property(ureg, TGSI_PROPERTY_CS_FIXED_BLOCK_DEPTH, 1);
 
 	struct ureg_src value;
 	if (!is_copy) {
-		ureg_property(ureg, TGSI_PROPERTY_CS_USER_DATA_DWORDS, inst_dwords[0]);
-		value = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_CS_USER_DATA, 0);
+		ureg_property(ureg, TGSI_PROPERTY_CS_USER_DATA_COMPONENTS_AMD, inst_dwords[0]);
+		value = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_CS_USER_DATA_AMD, 0);
 	}
 
 	struct ureg_src tid = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_THREAD_ID, 0);
@@ -168,10 +169,11 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 		values = malloc(num_mem_ops * sizeof(struct ureg_src));
 	}
 
-	/* If there are multiple stores, the first store writes into 0+tid,
-	 * the 2nd store writes into 64+tid, the 3rd store writes into 128+tid, etc.
+	/* If there are multiple stores, the first store writes into 0*wavesize+tid,
+	 * the 2nd store writes into 1*wavesize+tid, the 3rd store writes into 2*wavesize+tid, etc.
 	 */
-	ureg_UMAD(ureg, store_addr, blk, ureg_imm1u(ureg, 64 * num_mem_ops), tid);
+	ureg_UMAD(ureg, store_addr, blk,
+		  ureg_imm1u(ureg, sscreen->compute_wave_size * num_mem_ops), tid);
 	/* Convert from a "store size unit" into bytes. */
 	ureg_UMUL(ureg, store_addr, ureg_src(store_addr),
 		  ureg_imm1u(ureg, 4 * inst_dwords[0]));
@@ -186,7 +188,8 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 		if (is_copy && i < num_mem_ops) {
 			if (i) {
 				ureg_UADD(ureg, load_addr, ureg_src(load_addr),
-					  ureg_imm1u(ureg, 4 * inst_dwords[i] * 64));
+					  ureg_imm1u(ureg, 4 * inst_dwords[i] *
+						     sscreen->compute_wave_size));
 			}
 
 			values[i] = ureg_src(ureg_DECL_temporary(ureg));
@@ -201,7 +204,8 @@ void *si_create_dma_compute_shader(struct pipe_context *ctx,
 		if (d >= 0) {
 			if (d) {
 				ureg_UADD(ureg, store_addr, ureg_src(store_addr),
-					  ureg_imm1u(ureg, 4 * inst_dwords[d] * 64));
+					  ureg_imm1u(ureg, 4 * inst_dwords[d] *
+						     sscreen->compute_wave_size));
 			}
 
 			struct ureg_dst dst =
@@ -659,4 +663,229 @@ void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx)
 	state.prog = tokens;
 
 	return ctx->create_compute_state(ctx, &state);
+}
+
+/* Create the compute shader that is used to collect the results of gfx10+
+ * shader queries.
+ *
+ * One compute grid with a single thread is launched for every query result
+ * buffer. The thread (optionally) reads a previous summary buffer, then
+ * accumulates data from the query result buffer, and writes the result either
+ * to a summary buffer to be consumed by the next grid invocation or to the
+ * user-supplied buffer.
+ *
+ * Data layout:
+ *
+ * BUFFER[0] = query result buffer (layout is defined by gfx10_sh_query_buffer_mem)
+ * BUFFER[1] = previous summary buffer
+ * BUFFER[2] = next summary buffer or user-supplied buffer
+ *
+ * CONST
+ *  0.x = config; the low 3 bits indicate the mode:
+ *          0: sum up counts
+ *          1: determine result availability and write it as a boolean
+ *          2: SO_OVERFLOW
+ *          3: SO_ANY_OVERFLOW
+ *        the remaining bits form a bitfield:
+ *          8: write result as a 64-bit value
+ *  0.y = offset in bytes to counts or stream for SO_OVERFLOW mode
+ *  0.z = chain bit field:
+ *          1: have previous summary buffer
+ *          2: write next summary buffer
+ *  0.w = result_count
+ */
+void *gfx10_create_sh_query_result_cs(struct si_context *sctx)
+{
+	/* TEMP[0].x = accumulated result so far
+	 * TEMP[0].y = result missing
+	 * TEMP[0].z = whether we're in overflow mode
+	 */
+	static const char text_tmpl[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 1\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL BUFFER[0]\n"
+		"DCL BUFFER[1]\n"
+		"DCL BUFFER[2]\n"
+		"DCL CONST[0][0..0]\n"
+		"DCL TEMP[0..5]\n"
+		"IMM[0] UINT32 {0, 7, 0, 4294967295}\n"
+		"IMM[1] UINT32 {1, 2, 4, 8}\n"
+		"IMM[2] UINT32 {16, 32, 64, 128}\n"
+
+		/*
+		acc_result = 0;
+		acc_missing = 0;
+		if (chain & 1) {
+			acc_result = buffer[1][0];
+			acc_missing = buffer[1][1];
+		}
+		*/
+		"MOV TEMP[0].xy, IMM[0].xxxx\n"
+		"AND TEMP[5], CONST[0][0].zzzz, IMM[1].xxxx\n"
+		"UIF TEMP[5]\n"
+			"LOAD TEMP[0].xy, BUFFER[1], IMM[0].xxxx\n"
+		"ENDIF\n"
+
+		/*
+		is_overflow (TEMP[0].z) = (config & 7) >= 2;
+		result_remaining (TEMP[1].x) = (is_overflow && acc_result) ? 0 : result_count;
+		base_offset (TEMP[1].y) = 0;
+		for (;;) {
+			if (!result_remaining)
+				break;
+			result_remaining--;
+		*/
+		"AND TEMP[5].x, CONST[0][0].xxxx, IMM[0].yyyy\n"
+		"USGE TEMP[0].z, TEMP[5].xxxx, IMM[1].yyyy\n"
+
+		"AND TEMP[5].x, TEMP[0].zzzz, TEMP[0].xxxx\n"
+		"UCMP TEMP[1].x, TEMP[5].xxxx, IMM[0].xxxx, CONST[0][0].wwww\n"
+		"MOV TEMP[1].y, IMM[0].xxxx\n"
+
+		"BGNLOOP\n"
+			"USEQ TEMP[5], TEMP[1].xxxx, IMM[0].xxxx\n"
+			"UIF TEMP[5]\n"
+				"BRK\n"
+			"ENDIF\n"
+			"UADD TEMP[1].x, TEMP[1].xxxx, IMM[0].wwww\n"
+
+			/*
+			fence = buffer[0]@(base_offset + 32);
+			if (!fence) {
+				acc_missing = ~0u;
+				break;
+			}
+			*/
+			"UADD TEMP[5].x, TEMP[1].yyyy, IMM[2].yyyy\n"
+			"LOAD TEMP[5].x, BUFFER[0], TEMP[5].xxxx\n"
+			"USEQ TEMP[5], TEMP[5].xxxx, IMM[0].xxxx\n"
+			"UIF TEMP[5]\n"
+				"MOV TEMP[0].y, TEMP[5].xxxx\n"
+				"BRK\n"
+			"ENDIF\n"
+
+			/*
+			stream_offset (TEMP[2].x) = base_offset + offset;
+
+			if (!(config & 7)) {
+				acc_result += buffer[0]@stream_offset;
+			}
+			*/
+			"UADD TEMP[2].x, TEMP[1].yyyy, CONST[0][0].yyyy\n"
+
+			"AND TEMP[5].x, CONST[0][0].xxxx, IMM[0].yyyy\n"
+			"USEQ TEMP[5], TEMP[5].xxxx, IMM[0].xxxx\n"
+			"UIF TEMP[5]\n"
+				"LOAD TEMP[5].x, BUFFER[0], TEMP[2].xxxx\n"
+				"UADD TEMP[0].x, TEMP[0].xxxx, TEMP[5].xxxx\n"
+			"ENDIF\n"
+
+			/*
+			if ((config & 7) >= 2) {
+				count (TEMP[2].y) = (config & 1) ? 4 : 1;
+			*/
+			"AND TEMP[5].x, CONST[0][0].xxxx, IMM[0].yyyy\n"
+			"USGE TEMP[5], TEMP[5].xxxx, IMM[1].yyyy\n"
+			"UIF TEMP[5]\n"
+				"AND TEMP[5].x, CONST[0][0].xxxx, IMM[1].xxxx\n"
+				"UCMP TEMP[2].y, TEMP[5].xxxx, IMM[1].zzzz, IMM[1].xxxx\n"
+
+				/*
+				do {
+					generated = buffer[0]@stream_offset;
+					emitted = buffer[0]@(stream_offset + 16);
+					if (generated != emitted) {
+						acc_result = 1;
+						result_remaining = 0;
+						break;
+					}
+
+					stream_offset += 4;
+				} while (--count);
+				*/
+				"BGNLOOP\n"
+					"UADD TEMP[5].x, TEMP[2].xxxx, IMM[2].xxxx\n"
+					"LOAD TEMP[4].x, BUFFER[0], TEMP[2].xxxx\n"
+					"LOAD TEMP[4].y, BUFFER[0], TEMP[5].xxxx\n"
+					"USNE TEMP[5], TEMP[4].xxxx, TEMP[4].yyyy\n"
+					"UIF TEMP[5]\n"
+						"MOV TEMP[0].x, IMM[1].xxxx\n"
+						"MOV TEMP[1].y, IMM[0].xxxx\n"
+						"BRK\n"
+					"ENDIF\n"
+
+					"UADD TEMP[2].y, TEMP[2].yyyy, IMM[0].wwww\n"
+					"USEQ TEMP[5], TEMP[2].yyyy, IMM[0].xxxx\n"
+					"UIF TEMP[5]\n"
+						"BRK\n"
+					"ENDIF\n"
+					"UADD TEMP[2].x, TEMP[2].xxxx, IMM[1].zzzz\n"
+				"ENDLOOP\n"
+			"ENDIF\n"
+
+		/*
+			base_offset += 64;
+		} // end outer loop
+		*/
+			"UADD TEMP[1].y, TEMP[1].yyyy, IMM[2].zzzz\n"
+		"ENDLOOP\n"
+
+		/*
+		if (chain & 2) {
+			buffer[2][0] = acc_result;
+			buffer[2][1] = acc_missing;
+		} else {
+		*/
+		"AND TEMP[5], CONST[0][0].zzzz, IMM[1].yyyy\n"
+		"UIF TEMP[5]\n"
+			"STORE BUFFER[2].xy, IMM[0].xxxx, TEMP[0]\n"
+		"ELSE\n"
+
+			/*
+			if ((config & 7) == 1) {
+				acc_result = acc_missing ? 0 : 1;
+				acc_missing = 0;
+			}
+			*/
+			"AND TEMP[5], CONST[0][0].xxxx, IMM[0].yyyy\n"
+			"USEQ TEMP[5], TEMP[5].xxxx, IMM[1].xxxx\n"
+			"UIF TEMP[5]\n"
+				"UCMP TEMP[0].x, TEMP[0].yyyy, IMM[0].xxxx, IMM[1].xxxx\n"
+				"MOV TEMP[0].y, IMM[0].xxxx\n"
+			"ENDIF\n"
+
+			/*
+			if (!acc_missing) {
+				buffer[2][0] = acc_result;
+				if (config & 8)
+					buffer[2][1] = 0;
+			}
+			*/
+			"USEQ TEMP[5], TEMP[0].yyyy, IMM[0].xxxx\n"
+			"UIF TEMP[5]\n"
+				"STORE BUFFER[2].x, IMM[0].xxxx, TEMP[0].xxxx\n"
+
+				"AND TEMP[5], CONST[0][0].xxxx, IMM[1].wwww\n"
+				"UIF TEMP[5]\n"
+					"STORE BUFFER[2].x, IMM[1].zzzz, TEMP[0].yyyy\n"
+				"ENDIF\n"
+			"ENDIF\n"
+		"ENDIF\n"
+
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {};
+
+	if (!tgsi_text_translate(text_tmpl, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return sctx->b.create_compute_state(&sctx->b, &state);
 }

@@ -83,6 +83,8 @@ void JITCALL JitDestroyContext(HANDLE hJitContext);
 /// @param output - Output containing information about JIT shader
 ShaderInfo* JITCALL JitCompileShader(HANDLE hJitContext, const JIT_COMPILE_INPUT& input);
 
+ShaderInfo* JITCALL JitGetShader(HANDLE hJitContext, const char* name);
+
 //////////////////////////////////////////////////////////////////////////
 /// @brief JIT destroy shader.
 /// @param hJitContext - Jit Context

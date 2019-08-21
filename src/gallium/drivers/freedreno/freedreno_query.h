@@ -35,10 +35,10 @@ struct fd_query;
 struct fd_query_funcs {
 	void (*destroy_query)(struct fd_context *ctx,
 			struct fd_query *q);
-	boolean (*begin_query)(struct fd_context *ctx, struct fd_query *q);
+	bool (*begin_query)(struct fd_context *ctx, struct fd_query *q);
 	void (*end_query)(struct fd_context *ctx, struct fd_query *q);
-	boolean (*get_query_result)(struct fd_context *ctx,
-			struct fd_query *q, boolean wait,
+	bool (*get_query_result)(struct fd_context *ctx,
+			struct fd_query *q, bool wait,
 			union pipe_query_result *result);
 };
 

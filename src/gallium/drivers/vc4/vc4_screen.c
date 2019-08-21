@@ -164,6 +164,7 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
         case PIPE_CAP_TGSI_FS_COORD_ORIGIN_UPPER_LEFT:
         case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_HALF_INTEGER:
+        case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
                 return 1;
 
         case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
@@ -171,7 +172,8 @@ vc4_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 1;
 
                 /* Texturing. */
-        case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
+        case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+                return 2048;
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
                 return VC4_MAX_MIP_LEVELS;
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
@@ -306,7 +308,7 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen,
         return 0;
 }
 
-static boolean
+static bool
 vc4_screen_is_format_supported(struct pipe_screen *pscreen,
                                enum pipe_format format,
                                enum pipe_texture_target target,
@@ -320,10 +322,10 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
                 return false;
 
         if (sample_count > 1 && sample_count != VC4_MAX_SAMPLES)
-                return FALSE;
+                return false;
 
         if (target >= PIPE_MAX_TEXTURE_TYPES) {
-                return FALSE;
+                return false;
         }
 
         if (usage & PIPE_BIND_VERTEX_BUFFER) {
@@ -374,34 +376,34 @@ vc4_screen_is_format_supported(struct pipe_screen *pscreen,
                 case PIPE_FORMAT_R8_SSCALED:
                         break;
                 default:
-                        return FALSE;
+                        return false;
                 }
         }
 
         if ((usage & PIPE_BIND_RENDER_TARGET) &&
             !vc4_rt_format_supported(format)) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
             (!vc4_tex_format_supported(format) ||
              (format == PIPE_FORMAT_ETC1_RGB8 && !screen->has_etc1))) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
             format != PIPE_FORMAT_S8_UINT_Z24_UNORM &&
             format != PIPE_FORMAT_X8Z24_UNORM) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_INDEX_BUFFER) &&
             format != PIPE_FORMAT_I8_UINT &&
             format != PIPE_FORMAT_I16_UINT) {
-                return FALSE;
+                return false;
         }
 
-        return TRUE;
+        return true;
 }
 
 static void

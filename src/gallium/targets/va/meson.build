@@ -42,11 +42,12 @@ libva_gallium = shared_library(
   ],
   link_whole : [libva_st],
   link_with : [
-    libgalliumvlwinsys, libgalliumvl, libgallium, libmesa_util,
+    libgalliumvlwinsys, libgalliumvl, libgallium,
     libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
   dependencies : [
-    dep_libdrm, dep_thread, driver_r600, driver_radeonsi, driver_nouveau,
+    dep_libdrm, driver_r600, driver_radeonsi, driver_nouveau,
+    idep_mesautil,
   ],
   link_depends : va_link_depends,
   # Will be deleted during installation, see install_megadrivers.py

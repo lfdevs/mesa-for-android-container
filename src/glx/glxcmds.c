@@ -462,19 +462,6 @@ glXCreateContext(Display * dpy, XVisualInfo * vis,
        renderType = GLX_RGBA_TYPE;
    } else if (config->renderType & GLX_COLOR_INDEX_BIT) {
        renderType = GLX_COLOR_INDEX_TYPE;
-   } else if (config->rgbMode) {
-       /* If we're here, then renderType is not set correctly.  Let's use a
-        * safeguard - any TrueColor or DirectColor mode is RGB mode.  Such
-        * default value is needed by old DRI drivers, which didn't set
-        * renderType correctly as the value was just ignored.
-        */
-       renderType = GLX_RGBA_TYPE;
-   } else {
-       /* Safeguard - only one option left, all non-RGB modes are indexed
-        * modes.  Again, this allows drivers with invalid renderType to work
-        * properly.
-        */
-       renderType = GLX_COLOR_INDEX_TYPE;
    }
 #endif
 
@@ -854,7 +841,7 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
       if (pdraw != NULL) {
          Bool flush = gc != &dummyContext && drawable == gc->currentDrawable;
 
-         (*pdraw->psc->driScreen->swapBuffers)(pdraw, 0, 0, 0, flush);
+         pdraw->psc->driScreen->swapBuffers(pdraw, 0, 0, 0, flush);
          return;
       }
    }
@@ -936,7 +923,6 @@ init_fbconfig_for_chooser(struct glx_config * config,
     * glXChooseVisual.
     */
    if (fbconfig_style_tags) {
-      config->rgbMode = GL_TRUE;
       config->doubleBufferMode = GLX_DONT_CARE;
       config->renderType = GLX_RGBA_BIT;
    }

@@ -43,12 +43,12 @@
 #include "null_sw_winsys.h"
 
 
-static boolean
+static bool
 null_sw_is_displaytarget_format_supported(struct sw_winsys *ws,
                                           unsigned tex_usage,
                                           enum pipe_format format )
 {
-   return FALSE;
+   return false;
 }
 
 
@@ -102,13 +102,13 @@ null_sw_displaytarget_from_handle(struct sw_winsys *winsys,
 }
 
 
-static boolean
+static bool
 null_sw_displaytarget_get_handle(struct sw_winsys *winsys,
                                  struct sw_displaytarget *dt,
                                  struct winsys_handle *whandle)
 {
    assert(0);
-   return FALSE;
+   return false;
 }
 
 

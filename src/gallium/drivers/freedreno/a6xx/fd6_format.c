@@ -222,6 +222,9 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	_T(Z32_FLOAT_S8X24_UINT, 32_FLOAT,  R32_FLOAT,     WZYX),
 	_T(X32_S8X24_UINT,    8_UINT,      R8_UINT,        WZYX),
 
+	/* special format for blits: */
+	_T(Z24_UNORM_S8_UINT_AS_R8G8B8A8, Z24_UNORM_S8_UINT,  Z24_UNORM_S8_UINT,   WZYX),
+
 	/* 48-bit */
 	V_(R16G16B16_UNORM,   16_16_16_UNORM, NONE, WZYX),
 	V_(R16G16B16_SNORM,   16_16_16_SNORM, NONE, WZYX),

@@ -86,7 +86,7 @@ softpipe_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 softpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct softpipe_context *softpipe = softpipe_context( pipe );
@@ -213,10 +213,10 @@ softpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 softpipe_get_query_result(struct pipe_context *pipe, 
                           struct pipe_query *q,
-                          boolean wait,
+                          bool wait,
                           union pipe_query_result *vresult)
 {
    struct softpipe_query *sq = softpipe_query(q);
@@ -235,7 +235,7 @@ softpipe_get_query_result(struct pipe_context *pipe,
              sizeof(struct pipe_query_data_pipeline_statistics));
       break;
    case PIPE_QUERY_GPU_FINISHED:
-      vresult->b = TRUE;
+      vresult->b = true;
       break;
    case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
    case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
@@ -246,7 +246,7 @@ softpipe_get_query_result(struct pipe_context *pipe,
           (struct pipe_query_data_timestamp_disjoint *)vresult;
       /* os_get_time_nano return nanoseconds */
       td->frequency = UINT64_C(1000000000);
-      td->disjoint = FALSE;
+      td->disjoint = false;
    }
       break;
    case PIPE_QUERY_PRIMITIVES_EMITTED:
@@ -263,7 +263,7 @@ softpipe_get_query_result(struct pipe_context *pipe,
       *result = sq->end - sq->start;
       break;
    }
-   return TRUE;
+   return true;
 }
 
 
@@ -295,7 +295,7 @@ softpipe_check_render_cond(struct softpipe_context *sp)
 
 
 static void
-softpipe_set_active_query_state(struct pipe_context *pipe, boolean enable)
+softpipe_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

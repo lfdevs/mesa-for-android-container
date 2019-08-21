@@ -34,6 +34,7 @@
 #include "get.h"
 #include "macros.h"
 #include "mtypes.h"
+#include "spirv_extensions.h"
 #include "state.h"
 #include "texcompress.h"
 #include "texstate.h"
@@ -521,6 +522,7 @@ EXTRA_EXT(NV_conservative_raster_dilate);
 EXTRA_EXT(NV_conservative_raster_pre_snap_triangles);
 EXTRA_EXT(ARB_sample_locations);
 EXTRA_EXT(AMD_framebuffer_multisample_advanced);
+EXTRA_EXT(ARB_spirv_extensions);
 
 static const int
 extra_ARB_color_buffer_float_or_glcore[] = {
@@ -1235,6 +1237,10 @@ find_custom_value(struct gl_context *ctx, const struct value_desc *d, union valu
          v->value_int_n.ints[0] = GL_PROGRAM_BINARY_FORMAT_MESA;
       }
       break;
+   /* ARB_spirv_extensions */
+   case GL_NUM_SPIR_V_EXTENSIONS:
+      v->value_int = _mesa_get_spirv_extension_count(ctx);
+      break;
    /* GL_EXT_disjoint_timer_query */
    case GL_GPU_DISJOINT_EXT:
       {
@@ -1330,7 +1336,7 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
             api_found = GL_TRUE;
          break;
       case EXTRA_VERSION_43:
-         api_check = TRUE;
+         api_check = GL_TRUE;
          if (_mesa_is_desktop_gl(ctx) && version >= 43)
             api_found = GL_TRUE;
          break;
@@ -1448,7 +1454,7 @@ check_extra(struct gl_context *ctx, const char *func, const struct value_desc *d
             api_found = GL_TRUE;
          break;
       case EXTRA_EXT_PROVOKING_VERTEX_32:
-         api_check = TRUE;
+         api_check = GL_TRUE;
          if (ctx->API == API_OPENGL_COMPAT || version == 32)
             api_found = ctx->Extensions.EXT_provoking_vertex;
          break;
@@ -2672,8 +2678,6 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
    case GL_TEXTURE_BINDING_RECTANGLE: {
       int target;
 
-      if (ctx->API != API_OPENGL_CORE)
-         goto invalid_enum;
       target = tex_binding_to_index(ctx, pname);
       if (target < 0)
          goto invalid_enum;
@@ -2736,6 +2740,45 @@ find_value_indexed(const char *func, GLenum pname, GLuint index, union value *v)
          goto invalid_value;
       _mesa_get_device_uuid(ctx, v->value_int_4);
       return TYPE_INT_4;
+   /* GL_EXT_direct_state_access */
+   case GL_TEXTURE_1D:
+   case GL_TEXTURE_2D:
+   case GL_TEXTURE_3D:
+   case GL_TEXTURE_CUBE_MAP:
+   case GL_TEXTURE_GEN_S:
+   case GL_TEXTURE_GEN_T:
+   case GL_TEXTURE_GEN_R:
+   case GL_TEXTURE_GEN_Q:
+   case GL_TEXTURE_RECTANGLE_ARB: {
+      GLuint curTexUnitSave;
+      if (index >= _mesa_max_tex_unit(ctx))
+         goto invalid_enum;
+      curTexUnitSave = ctx->Texture.CurrentUnit;
+      _mesa_ActiveTexture_no_error(GL_TEXTURE0 + index);
+      v->value_int = _mesa_IsEnabled(pname);
+      _mesa_ActiveTexture_no_error(GL_TEXTURE0 + curTexUnitSave);
+      return TYPE_INT;
+   }
+   case GL_TEXTURE_COORD_ARRAY: {
+      GLuint curTexUnitSave;
+      if (index >= ctx->Const.MaxTextureCoordUnits)
+         goto invalid_enum;
+      curTexUnitSave = ctx->Array.ActiveTexture;
+      _mesa_ClientActiveTexture(GL_TEXTURE0 + index);
+      v->value_int = _mesa_IsEnabled(pname);
+      _mesa_ClientActiveTexture(GL_TEXTURE0 + curTexUnitSave);
+      return TYPE_INT;
+   }
+   case GL_TEXTURE_MATRIX:
+      if (index >= ARRAY_SIZE(ctx->TextureMatrixStack))
+         goto invalid_enum;
+      v->value_matrix = ctx->TextureMatrixStack[index].Top;
+      return TYPE_MATRIX;
+   case GL_TRANSPOSE_TEXTURE_MATRIX:
+      if (index >= ARRAY_SIZE(ctx->TextureMatrixStack))
+         goto invalid_enum;
+      v->value_matrix = ctx->TextureMatrixStack[index].Top;
+      return TYPE_MATRIX_T;
    }
 
  invalid_enum:

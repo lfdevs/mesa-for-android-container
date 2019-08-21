@@ -210,10 +210,6 @@ patch_fetches(struct fd_context *ctx, struct ir2_shader_info *info,
 		assert(instr->opc == TEX_FETCH);
 		instr->tex.const_idx = fd2_get_const_idx(ctx, tex, fi->tex.samp_id);
 		instr->tex.src_swiz = fi->tex.src_swiz;
-		if (fd2_texture_swap_xy(tex, fi->tex.samp_id)) {
-			unsigned x = instr->tex.src_swiz;
-			instr->tex.src_swiz = (x & 0x30) | (x & 3) << 2 | (x >> 2 & 3);
-		}
 	}
 }
 

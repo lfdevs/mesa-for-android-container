@@ -22,6 +22,12 @@
  */
 
 #include <hardware/gralloc.h>
+
+#if ANDROID_API_LEVEL >= 26
+#include <hardware/gralloc1.h>
+#include <grallocusage/GrallocUsageConversion.h>
+#endif
+
 #include <hardware/hardware.h>
 #include <hardware/hwvulkan.h>
 #include <vulkan/vk_android_native_buffer.h>
@@ -549,32 +555,14 @@ anv_image_from_gralloc(VkDevice device_h,
    return result;
 }
 
-VkResult anv_GetSwapchainGrallocUsageANDROID(
-    VkDevice            device_h,
-    VkFormat            format,
-    VkImageUsageFlags   imageUsage,
-    int*                grallocUsage)
+VkResult
+format_supported_with_usage(VkDevice device_h, VkFormat format,
+                            VkImageUsageFlags imageUsage)
 {
    ANV_FROM_HANDLE(anv_device, device, device_h);
    struct anv_physical_device *phys_dev = &device->instance->physicalDevice;
    VkPhysicalDevice phys_dev_h = anv_physical_device_to_handle(phys_dev);
    VkResult result;
-
-   *grallocUsage = 0;
-   intel_logd("%s: format=%d, usage=0x%x", __func__, format, imageUsage);
-
-   /* WARNING: Android's libvulkan.so hardcodes the VkImageUsageFlags
-    * returned to applications via VkSurfaceCapabilitiesKHR::supportedUsageFlags.
-    * The relevant code in libvulkan/swapchain.cpp contains this fun comment:
-    *
-    *     TODO(jessehall): I think these are right, but haven't thought hard
-    *     about it. Do we need to query the driver for support of any of
-    *     these?
-    *
-    * Any disagreement between this function and the hardcoded
-    * VkSurfaceCapabilitiesKHR:supportedUsageFlags causes tests
-    * dEQP-VK.wsi.android.swapchain.*.image_usage to fail.
-    */
 
    const VkPhysicalDeviceImageFormatInfo2 image_format_info = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
@@ -596,6 +584,26 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
                        "anv_GetPhysicalDeviceImageFormatProperties2 failed "
                        "inside %s", __func__);
    }
+   return VK_SUCCESS;
+}
+
+
+static VkResult
+setup_gralloc0_usage(VkFormat format, VkImageUsageFlags imageUsage,
+                     int *grallocUsage)
+{
+   /* WARNING: Android's libvulkan.so hardcodes the VkImageUsageFlags
+    * returned to applications via VkSurfaceCapabilitiesKHR::supportedUsageFlags.
+    * The relevant code in libvulkan/swapchain.cpp contains this fun comment:
+    *
+    *     TODO(jessehall): I think these are right, but haven't thought hard
+    *     about it. Do we need to query the driver for support of any of
+    *     these?
+    *
+    * Any disagreement between this function and the hardcoded
+    * VkSurfaceCapabilitiesKHR:supportedUsageFlags causes tests
+    * dEQP-VK.wsi.android.swapchain.*.image_usage to fail.
+    */
 
    if (unmask32(&imageUsage, VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
@@ -640,6 +648,60 @@ VkResult anv_GetSwapchainGrallocUsageANDROID(
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
    return VK_SUCCESS;
+}
+
+
+#if ANDROID_API_LEVEL >= 26
+VkResult anv_GetSwapchainGrallocUsage2ANDROID(
+    VkDevice            device_h,
+    VkFormat            format,
+    VkImageUsageFlags   imageUsage,
+    VkSwapchainImageUsageFlagsANDROID swapchainImageUsage,
+    uint64_t*           grallocConsumerUsage,
+    uint64_t*           grallocProducerUsage)
+{
+   ANV_FROM_HANDLE(anv_device, device, device_h);
+   VkResult result;
+
+   *grallocConsumerUsage = 0;
+   *grallocProducerUsage = 0;
+   intel_logd("%s: format=%d, usage=0x%x", __func__, format, imageUsage);
+
+   result = format_supported_with_usage(device_h, format, imageUsage);
+   if (result != VK_SUCCESS)
+      return result;
+
+   int32_t grallocUsage = 0;
+   result = setup_gralloc0_usage(format, imageUsage, &grallocUsage);
+   if (result != VK_SUCCESS)
+      return result;
+
+   android_convertGralloc0To1Usage(grallocUsage, grallocProducerUsage,
+                                   grallocConsumerUsage);
+
+   return VK_SUCCESS;
+}
+#endif
+
+VkResult anv_GetSwapchainGrallocUsageANDROID(
+    VkDevice            device_h,
+    VkFormat            format,
+    VkImageUsageFlags   imageUsage,
+    int*                grallocUsage)
+{
+   ANV_FROM_HANDLE(anv_device, device, device_h);
+   struct anv_physical_device *phys_dev = &device->instance->physicalDevice;
+   VkPhysicalDevice phys_dev_h = anv_physical_device_to_handle(phys_dev);
+   VkResult result;
+
+   *grallocUsage = 0;
+   intel_logd("%s: format=%d, usage=0x%x", __func__, format, imageUsage);
+
+   result = format_supported_with_usage(device_h, format, imageUsage);
+   if (result != VK_SUCCESS)
+      return result;
+
+   return setup_gralloc0_usage(format, imageUsage, grallocUsage);
 }
 
 VkResult

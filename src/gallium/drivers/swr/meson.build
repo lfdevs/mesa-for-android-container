@@ -82,7 +82,9 @@ files_swr_mesa = files(
   'rasterizer/jitter/streamout_jit.cpp',
   'rasterizer/jitter/streamout_jit.h',
   'rasterizer/jitter/shader_lib/DebugOutput.cpp',
+  'rasterizer/jitter/shader_lib/Scatter.cpp',
   'rasterizer/jitter/functionpasses/lower_x86.cpp',
+  'rasterizer/memory/SurfaceState.h'
 )
 
 files_swr_arch = files(
@@ -153,10 +155,12 @@ files_swr_arch = files(
   'rasterizer/memory/tilingtraits.h',
   'rasterizer/memory/InitMemory.h',
   'rasterizer/memory/InitMemory.cpp',
+  'rasterizer/memory/SurfaceState.h'
 )
 
 swr_context_files = files('swr_context.h')
 swr_state_files = files('rasterizer/core/state.h')
+swr_surf_state_files = files('rasterizer/memory/SurfaceState.h')
 swr_event_proto_files = files('rasterizer/archrast/events.proto')
 swr_event_pproto_files = files('rasterizer/archrast/events_private.proto')
 swr_gen_backend_files = files('rasterizer/codegen/templates/gen_backend.cpp')

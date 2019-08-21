@@ -68,10 +68,10 @@ blt_compute_img_config_bits(const struct blt_imginfo *img, bool for_dest)
       tiling_bits |= for_dest ? BLT_IMAGE_CONFIG_TO_SUPER_TILED : BLT_IMAGE_CONFIG_FROM_SUPER_TILED;
    }
 
-   return BLT_IMAGE_CONFIG_CACHE_MODE(img->cache_mode) |
+   return BLT_IMAGE_CONFIG_TS_MODE(img->ts_mode) |
           COND(img->use_ts, BLT_IMAGE_CONFIG_TS) |
-          COND(img->compressed, BLT_IMAGE_CONFIG_COMPRESSION) |
-          BLT_IMAGE_CONFIG_COMPRESSION_FORMAT(img->compress_fmt) |
+          COND(img->use_ts && img->ts_compress_fmt >= 0, BLT_IMAGE_CONFIG_COMPRESSION) |
+          BLT_IMAGE_CONFIG_COMPRESSION_FORMAT(img->ts_compress_fmt) |
           COND(for_dest, BLT_IMAGE_CONFIG_UNK22) |
           BLT_IMAGE_CONFIG_SWIZ_R(0) | /* not used? */
           BLT_IMAGE_CONFIG_SWIZ_G(1) |
@@ -182,7 +182,7 @@ emit_blt_inplace(struct etna_cmd_stream *stream, const struct blt_inplace_op *op
    etna_cmd_stream_reserve(stream, 64*2); /* Never allow BLT sequences to be broken up */
    etna_set_state(stream, VIVS_BLT_ENABLE, 0x00000001);
    etna_set_state(stream, VIVS_BLT_CONFIG,
-         VIVS_BLT_CONFIG_INPLACE_CACHE_MODE(op->cache_mode) |
+         VIVS_BLT_CONFIG_INPLACE_TS_MODE(op->ts_mode) |
          VIVS_BLT_CONFIG_INPLACE_BOTH |
          (util_logbase2(op->bpp) << VIVS_BLT_CONFIG_INPLACE_BPP__SHIFT));
    etna_set_state(stream, VIVS_BLT_DEST_TS_CLEAR_VALUE0, op->ts_clear_value[0]);
@@ -211,12 +211,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    clr.dest.addr.flags = ETNA_RELOC_WRITE;
    clr.dest.bpp = util_format_get_blocksize(surf->base.format);
    clr.dest.stride = surf->surf.stride;
-   /* TODO: color compression
-   clr.dest.compressed = 1;
-   clr.dest.compress_fmt = 3;
-   */
    clr.dest.tiling = res->layout;
-   clr.dest.cache_mode = TS_CACHE_MODE_128; /* TODO: cache modes */
 
    if (surf->surf.ts_size) {
       clr.dest.use_ts = 1;
@@ -225,6 +220,8 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = new_clear_value;
       clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_mode = surf->level->ts_mode;
+      clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
 
    clr.clear_value[0] = new_clear_value;
@@ -261,10 +258,10 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    /* Get the channels to clear */
    switch (surf->base.format) {
    case PIPE_FORMAT_Z16_UNORM:
+   case PIPE_FORMAT_X8Z24_UNORM:
       clear_bits_depth = 0xffffffff;
       clear_bits_stencil = 0x00000000;
       break;
-   case PIPE_FORMAT_X8Z24_UNORM:
    case PIPE_FORMAT_S8_UINT_Z24_UNORM:
       clear_bits_depth = 0xffffff00;
       clear_bits_stencil = 0x000000ff;
@@ -287,12 +284,7 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    clr.dest.addr.flags = ETNA_RELOC_WRITE;
    clr.dest.bpp = util_format_get_blocksize(surf->base.format);
    clr.dest.stride = surf->surf.stride;
-#if 0 /* TODO depth compression */
-   clr.dest.compressed = 1;
-   clr.dest.compress_fmt = COLOR_COMPRESSION_FORMAT_D24S8;
-#endif
    clr.dest.tiling = res->layout;
-   clr.dest.cache_mode = TS_CACHE_MODE_128; /* TODO: cache modes */
 
    if (surf->surf.ts_size) {
       clr.dest.use_ts = 1;
@@ -301,6 +293,8 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = new_clear_value;
       clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_mode = surf->level->ts_mode;
+      clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
 
    clr.clear_value[0] = new_clear_value;
@@ -367,7 +361,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
    assert(blit_info->dst.level <= dst->base.last_level);
 
    if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale, NULL))
-      return FALSE;
+      return false;
 
    /* The width/height are in pixels; they do not change as a result of
     * multi-sampling. So, when blitting from a 4x multisampled surface
@@ -379,47 +373,52 @@ etna_try_blt_blit(struct pipe_context *pctx,
       DBG("scaling requested: source %dx%d destination %dx%d",
           blit_info->src.box.width, blit_info->src.box.height,
           blit_info->dst.box.width, blit_info->dst.box.height);
-      return FALSE;
+      return false;
    }
 
    /* No masks - not sure if BLT can copy individual channels */
    unsigned mask = util_format_get_mask(blit_info->dst.format);
    if ((blit_info->mask & mask) != mask) {
       DBG("sub-mask requested: 0x%02x vs format mask 0x%02x", blit_info->mask, mask);
-      return FALSE;
+      return false;
    }
 
    /* TODO: 1 byte per pixel formats aren't handled by etna_compatible_rs_format nor
     * translate_rs_format.
-    * Also this should be smarter about format conversions; etna_compatible_rs_format
-    * assumes all 2-byte pixel format are laid out as 4444, all 4-byte pixel formats
-    * are 8888.
     */
-   unsigned src_format = etna_compatible_rs_format(blit_info->src.format);
-   unsigned dst_format = etna_compatible_rs_format(blit_info->dst.format);
+   unsigned src_format = blit_info->src.format;
+   unsigned dst_format = blit_info->dst.format;
+
+   /* for a copy with same dst/src format, we can use a different format */
+   if (translate_blt_format(src_format) == ETNA_NO_MATCH &&
+       src_format == dst_format) {
+      src_format = dst_format = etna_compatible_rs_format(src_format);
+   }
+
    if (translate_blt_format(src_format) == ETNA_NO_MATCH ||
        translate_blt_format(dst_format) == ETNA_NO_MATCH ||
        blit_info->scissor_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
-      return FALSE;
+      return false;
    }
-
-   /* Ensure that the Z coordinate is sane */
-   assert(dst->base.target == PIPE_TEXTURE_CUBE || blit_info->dst.box.z == 0);
-   assert(src->base.target == PIPE_TEXTURE_CUBE || blit_info->src.box.z == 0);
-   assert(blit_info->src.box.z < src->base.array_size);
-   assert(blit_info->dst.box.z < dst->base.array_size);
 
    struct etna_resource_level *src_lev = &src->levels[blit_info->src.level];
    struct etna_resource_level *dst_lev = &dst->levels[blit_info->dst.level];
 
-   /* Kick off BLT here */
+   /* if we asked for in-place resolve, return immediately if ts isn't valid
+    * do this check separately because it applies when compression is used, but
+    * we can't use inplace resolve path with compression
+    */
    if (src == dst) {
-      /* Resolve-in-place */
       assert(!memcmp(&blit_info->src, &blit_info->dst, sizeof(blit_info->src)));
       if (!src_lev->ts_size || !src_lev->ts_valid) /* No TS, no worries */
-         return TRUE;
+         return true;
+   }
+
+   /* Kick off BLT here */
+   if (src == dst && src_lev->ts_compress_fmt < 0) {
+      /* Resolve-in-place */
       struct blt_inplace_op op = {};
 
       op.addr.bo = src->bo;
@@ -430,8 +429,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.ts_addr.flags = ETNA_RELOC_READ;
       op.ts_clear_value[0] = src_lev->clear_value;
       op.ts_clear_value[1] = src_lev->clear_value;
-      op.cache_mode = TS_CACHE_MODE_128; /* TODO: cache modes */
-      op.num_tiles = src_lev->size / 128; /* TODO: cache modes */
+      op.ts_mode = src_lev->ts_mode;
+      op.num_tiles = DIV_ROUND_UP(src_lev->size, src_lev->ts_mode ? 256 : 128);
       op.bpp = util_format_get_blocksize(src->base.format);
 
       etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE, 0x00000c23);
@@ -447,9 +446,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.src.format = translate_blt_format(src_format);
       op.src.stride = src_lev->stride;
       op.src.tiling = src->layout;
-      op.src.cache_mode = TS_CACHE_MODE_128; /* TODO: cache modes */
       const struct util_format_description *src_format_desc =
-         util_format_description(blit_info->src.format);
+         util_format_description(src_format);
       for (unsigned x=0; x<4; ++x)
          op.src.swizzle[x] = src_format_desc->swizzle[x];
 
@@ -460,6 +458,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
          op.src.ts_addr.flags = ETNA_RELOC_READ;
          op.src.ts_clear_value[0] = src_lev->clear_value;
          op.src.ts_clear_value[1] = src_lev->clear_value;
+         op.src.ts_mode = src_lev->ts_mode;
+         op.src.ts_compress_fmt = src_lev->ts_compress_fmt;
       }
 
       op.dest.addr.bo = dst->bo;
@@ -467,14 +467,9 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.dest.addr.flags = ETNA_RELOC_WRITE;
       op.dest.format = translate_blt_format(dst_format);
       op.dest.stride = dst_lev->stride;
-      /* TODO color compression
-      op.dest.compressed = 1;
-      op.dest.compress_fmt = 3;
-      */
       op.dest.tiling = dst->layout;
-      op.dest.cache_mode = TS_CACHE_MODE_128; /* TODO cache modes */
       const struct util_format_description *dst_format_desc =
-         util_format_description(blit_info->dst.format);
+         util_format_description(dst_format);
       for (unsigned x=0; x<4; ++x)
          op.dest.swizzle[x] = dst_format_desc->swizzle[x];
 
@@ -516,7 +511,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
    dst->seqno++;
    dst_lev->ts_valid = false;
 
-   return TRUE;
+   return true;
 }
 
 static void

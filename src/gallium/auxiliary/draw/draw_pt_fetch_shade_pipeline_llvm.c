@@ -297,6 +297,15 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
          llvm->jit_context.vs_constants[i] = fake_const_buf;
       }
    }
+   for (i = 0; i < ARRAY_SIZE(llvm->jit_context.vs_ssbos); ++i) {
+      int num_ssbos = draw->pt.user.vs_ssbos_size[i];
+      llvm->jit_context.vs_ssbos[i] = draw->pt.user.vs_ssbos[i];
+      llvm->jit_context.num_vs_ssbos[i] = num_ssbos;
+      if (num_ssbos == 0) {
+         llvm->jit_context.vs_ssbos[i] = (const uint32_t *)fake_const_buf;
+      }
+   }
+
    for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.constants); ++i) {
       int num_consts =
          draw->pt.user.gs_constants_size[i] / (sizeof(float) * 4);
@@ -304,6 +313,14 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
       llvm->gs_jit_context.num_constants[i] = num_consts;
       if (num_consts == 0) {
          llvm->gs_jit_context.constants[i] = fake_const_buf;
+      }
+   }
+   for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.ssbos); ++i) {
+      int num_ssbos = draw->pt.user.gs_ssbos_size[i];
+      llvm->gs_jit_context.ssbos[i] = draw->pt.user.gs_ssbos[i];
+      llvm->gs_jit_context.num_ssbos[i] = num_ssbos;
+      if (num_ssbos == 0) {
+         llvm->gs_jit_context.ssbos[i] = (const uint32_t *)fake_const_buf;
       }
    }
 

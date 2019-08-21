@@ -80,8 +80,8 @@ build_binary_int_overflow(struct gallivm_state *gallivm,
 
    debug_assert(type_width == 16 || type_width == 32 || type_width == 64);
 
-   util_snprintf(intr_str, sizeof intr_str, "%s.i%u",
-                 intr_prefix, type_width);
+   snprintf(intr_str, sizeof intr_str, "%s.i%u",
+            intr_prefix, type_width);
 
    oelems[0] = type_ref;
    oelems[1] = LLVMInt1TypeInContext(gallivm->context);

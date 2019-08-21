@@ -493,6 +493,27 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
       }
    }
 
+   if (devinfo->gen == 9 && pipeline == BRW_RENDER_PIPELINE) {
+      /* We seem to have issues with geometry flickering when 3D and compute
+       * are combined in the same batch and this appears to fix it.
+       */
+      const uint32_t subslices = MAX2(brw->screen->subslice_total, 1);
+      const uint32_t maxNumberofThreads =
+         devinfo->max_cs_threads * subslices - 1;
+
+      BEGIN_BATCH(9);
+      OUT_BATCH(MEDIA_VFE_STATE << 16 | (9 - 2));
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(2 << 8 | maxNumberofThreads << 16);
+      OUT_BATCH(0);
+      OUT_BATCH(2 << 16);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      OUT_BATCH(0);
+      ADVANCE_BATCH();
+   }
+
    if (devinfo->gen >= 6) {
       /* From "BXML » GT » MI » vol1a GPU Overview » [Instruction]
        * PIPELINE_SELECT [DevBWR+]":
@@ -577,6 +598,96 @@ brw_emit_select_pipeline(struct brw_context *brw, enum brw_pipeline pipeline)
                                          : GLK_SCEC_BARRIER_MODE_GPGPU;
       brw_load_register_imm32(brw, SLICE_COMMON_ECO_CHICKEN1,
                               barrier_mode | GLK_SCEC_BARRIER_MODE_MASK);
+   }
+}
+
+/**
+ * Update the pixel hashing modes that determine the balancing of PS threads
+ * across subslices and slices.
+ *
+ * \param width Width bound of the rendering area (already scaled down if \p
+ *              scale is greater than 1).
+ * \param height Height bound of the rendering area (already scaled down if \p
+ *               scale is greater than 1).
+ * \param scale The number of framebuffer samples that could potentially be
+ *              affected by an individual channel of the PS thread.  This is
+ *              typically one for single-sampled rendering, but for operations
+ *              like CCS resolves and fast clears a single PS invocation may
+ *              update a huge number of pixels, in which case a finer
+ *              balancing is desirable in order to maximally utilize the
+ *              bandwidth available.  UINT_MAX can be used as shorthand for
+ *              "finest hashing mode available".
+ */
+void
+brw_emit_hashing_mode(struct brw_context *brw, unsigned width,
+                      unsigned height, unsigned scale)
+{
+   const struct gen_device_info *devinfo = &brw->screen->devinfo;
+
+   if (devinfo->gen == 9) {
+      const uint32_t slice_hashing[] = {
+         /* Because all Gen9 platforms with more than one slice require
+          * three-way subslice hashing, a single "normal" 16x16 slice hashing
+          * block is guaranteed to suffer from substantial imbalance, with one
+          * subslice receiving twice as much work as the other two in the
+          * slice.
+          *
+          * The performance impact of that would be particularly severe when
+          * three-way hashing is also in use for slice balancing (which is the
+          * case for all Gen9 GT4 platforms), because one of the slices
+          * receives one every three 16x16 blocks in either direction, which
+          * is roughly the periodicity of the underlying subslice imbalance
+          * pattern ("roughly" because in reality the hardware's
+          * implementation of three-way hashing doesn't do exact modulo 3
+          * arithmetic, which somewhat decreases the magnitude of this effect
+          * in practice).  This leads to a systematic subslice imbalance
+          * within that slice regardless of the size of the primitive.  The
+          * 32x32 hashing mode guarantees that the subslice imbalance within a
+          * single slice hashing block is minimal, largely eliminating this
+          * effect.
+          */
+         GEN9_SLICE_HASHING_32x32,
+         /* Finest slice hashing mode available. */
+         GEN9_SLICE_HASHING_NORMAL
+      };
+      const uint32_t subslice_hashing[] = {
+         /* The 16x16 subslice hashing mode is used on non-LLC platforms to
+          * match the performance of previous Mesa versions.  16x16 has a
+          * slight cache locality benefit especially visible in the sampler L1
+          * cache efficiency of low-bandwidth platforms, but it comes at the
+          * cost of greater subslice imbalance for primitives of dimensions
+          * approximately intermediate between 16x4 and 16x16.
+          */
+         (devinfo->has_llc ? GEN9_SUBSLICE_HASHING_16x4 :
+                             GEN9_SUBSLICE_HASHING_16x16),
+         /* Finest subslice hashing mode available. */
+         GEN9_SUBSLICE_HASHING_8x4
+      };
+      /* Dimensions of the smallest hashing block of a given hashing mode.  If
+       * the rendering area is smaller than this there can't possibly be any
+       * benefit from switching to this mode, so we optimize out the
+       * transition.
+       */
+      const unsigned min_size[][2] = {
+         { 16, 4 },
+         { 8, 4 }
+      };
+      const unsigned idx = scale > 1;
+
+      if (width > min_size[idx][0] || height > min_size[idx][1]) {
+         const uint32_t gt_mode =
+            (devinfo->num_slices == 1 ? 0 :
+             GEN9_SLICE_HASHING_MASK_BITS | slice_hashing[idx]) |
+            GEN9_SUBSLICE_HASHING_MASK_BITS | subslice_hashing[idx];
+
+         brw_emit_pipe_control_flush(brw,
+                                     PIPE_CONTROL_STALL_AT_SCOREBOARD |
+                                     PIPE_CONTROL_CS_STALL);
+
+         brw_load_register_imm32(brw, GEN7_GT_MODE, gt_mode);
+
+         brw->current_hash_scale = scale;
+      }
    }
 }
 

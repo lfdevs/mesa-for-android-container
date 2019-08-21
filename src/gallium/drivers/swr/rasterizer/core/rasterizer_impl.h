@@ -842,10 +842,10 @@ struct GenerateSVInnerCoverage<RT, AllEdgesValidT, InnerConservativeCoverageT>
         }
 
         // not trivial accept or reject, must rasterize full tile
-        RDTSC_BEGIN(BERasterizePartial, pDC->drawId);
+        RDTSC_BEGIN(pDC->pContext->pBucketMgr, BERasterizePartial, pDC->drawId);
         innerCoverageMask = rasterizePartialTile<RT::NumEdgesT::value, typename RT::ValidEdgeMaskT>(
             pDC, startQuadEdgesAdj, pRastEdges);
-        RDTSC_END(BERasterizePartial, 0);
+        RDTSC_END(pDC->pContext->pBucketMgr, BERasterizePartial, 0);
     }
 };
 
@@ -927,8 +927,8 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
         return;
     }
 #endif
-    RDTSC_BEGIN(BERasterizeTriangle, pDC->drawId);
-    RDTSC_BEGIN(BETriangleSetup, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BERasterizeTriangle, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BETriangleSetup, pDC->drawId);
 
     const API_STATE&     state        = GetApiState(pDC);
     const SWR_RASTSTATE& rastState    = state.rastState;
@@ -1103,7 +1103,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                intersect.xmin >= 0 && intersect.xmax >= 0 && intersect.ymin >= 0 &&
                intersect.ymax >= 0);
 
-    RDTSC_END(BETriangleSetup, 0);
+    RDTSC_END(pDC->pContext->pBucketMgr, BETriangleSetup, 0);
 
     // update triangle desc
     uint32_t minTileX  = intersect.xmin >> (KNOB_TILE_X_DIM_SHIFT + FIXED_POINT_SHIFT);
@@ -1115,12 +1115,12 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
 
     if (numTilesX == 0 || numTilesY == 0)
     {
-        RDTSC_EVENT(BEEmptyTriangle, 1, 0);
-        RDTSC_END(BERasterizeTriangle, 1);
+        RDTSC_EVENT(pDC->pContext->pBucketMgr, BEEmptyTriangle, 1, 0);
+        RDTSC_END(pDC->pContext->pBucketMgr, BERasterizeTriangle, 1);
         return;
     }
 
-    RDTSC_BEGIN(BEStepSetup, pDC->drawId);
+    RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEStepSetup, pDC->drawId);
 
     // Step to pixel center of top-left pixel of the triangle bbox
     // Align intersect bbox (top/left) to raster tile's (top/left).
@@ -1232,7 +1232,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
         }
     }
 
-    RDTSC_END(BEStepSetup, 0);
+    RDTSC_END(pDC->pContext->pBucketMgr, BEStepSetup, 0);
 
     uint32_t tY   = minTileY;
     uint32_t tX   = minTileX;
@@ -1297,7 +1297,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                         {
                             triDesc.innerCoverageMask = 0xffffffffffffffffULL;
                         }
-                        RDTSC_EVENT(BETrivialAccept, 1, 0);
+                        RDTSC_EVENT(pDC->pContext->pBucketMgr, BETrivialAccept, 1, 0);
                     }
                     else
                     {
@@ -1339,11 +1339,11 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                         }
 
                         // not trivial accept or reject, must rasterize full tile
-                        RDTSC_BEGIN(BERasterizePartial, pDC->drawId);
+                        RDTSC_BEGIN(pDC->pContext->pBucketMgr, BERasterizePartial, pDC->drawId);
                         triDesc.coverageMask[sampleNum] =
                             rasterizePartialTile<RT::NumEdgesT::value, typename RT::ValidEdgeMaskT>(
                                 pDC, startQuadEdges, rastEdges);
-                        RDTSC_END(BERasterizePartial, 0);
+                        RDTSC_END(pDC->pContext->pBucketMgr, BERasterizePartial, 0);
 
                         triDesc.anyCoveredSamples |= triDesc.coverageMask[sampleNum];
 
@@ -1362,7 +1362,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                     {
                         triDesc.coverageMask[sampleNum] = 0;
                     }
-                    RDTSC_EVENT(BETrivialReject, 1, 0);
+                    RDTSC_EVENT(pDC->pContext->pBucketMgr, BETrivialReject, 1, 0);
                 }
             }
 
@@ -1389,14 +1389,14 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
                 // Track rasterized subspans
                 AR_EVENT(RasterTileCount(pDC->drawId, 1));
 
-                RDTSC_BEGIN(BEPixelBackend, pDC->drawId);
+                RDTSC_BEGIN(pDC->pContext->pBucketMgr, BEPixelBackend, pDC->drawId);
                 backendFuncs.pfnBackend(pDC,
                                         workerId,
                                         tileX << KNOB_TILE_X_DIM_SHIFT,
                                         tileY << KNOB_TILE_Y_DIM_SHIFT,
                                         triDesc,
                                         renderBuffers);
-                RDTSC_END(BEPixelBackend, 0);
+                RDTSC_END(pDC->pContext->pBucketMgr, BEPixelBackend, 0);
             }
 
             // step to the next tile in X
@@ -1417,7 +1417,7 @@ void RasterizeTriangle(DRAW_CONTEXT* pDC, uint32_t workerId, uint32_t macroTile,
         StepRasterTileY<RT>(state.colorHottileEnable, renderBuffers, currentRenderBufferRow);
     }
 
-    RDTSC_END(BERasterizeTriangle, 1);
+    RDTSC_END(pDC->pContext->pBucketMgr, BERasterizeTriangle, 1);
 }
 
 // Get pointers to hot tile memory for color RT, depth, stencil
@@ -1459,8 +1459,8 @@ void GetRenderHotTiles(DRAW_CONTEXT*        pDC,
             true,
             numSamples,
             renderTargetArrayIndex);
-        pColor->state                = HOTTILE_DIRTY;
         renderBuffers.pColor[rtSlot] = pColor->pBuffer + offset;
+        renderBuffers.pColorHotTile[rtSlot] = pColor;
 
         colorHottileEnableMask &= ~(1 << rtSlot);
     }
@@ -1483,6 +1483,7 @@ void GetRenderHotTiles(DRAW_CONTEXT*        pDC,
         pDepth->state   = HOTTILE_DIRTY;
         SWR_ASSERT(pDepth->pBuffer != nullptr);
         renderBuffers.pDepth = pDepth->pBuffer + offset;
+        renderBuffers.pDepthHotTile = pDepth;
     }
     if (state.stencilHottileEnable)
     {
@@ -1503,6 +1504,7 @@ void GetRenderHotTiles(DRAW_CONTEXT*        pDC,
         pStencil->state   = HOTTILE_DIRTY;
         SWR_ASSERT(pStencil->pBuffer != nullptr);
         renderBuffers.pStencil = pStencil->pBuffer + offset;
+        renderBuffers.pStencilHotTile = pStencil;
     }
 }
 

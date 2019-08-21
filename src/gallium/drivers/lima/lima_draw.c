@@ -123,7 +123,7 @@ struct lima_render_state {
 /* plbu commands */
 #define PLBU_CMD_BEGIN(max) { \
    int i = 0, max_n = max; \
-   uint32_t *plbu_cmd = util_dynarray_grow_cap(&ctx->plbu_cmd_array, max_n * 4);
+   uint32_t *plbu_cmd = util_dynarray_ensure_cap(&ctx->plbu_cmd_array, ctx->plbu_cmd_array.size + max_n * 4);
 
 #define PLBU_CMD_END() \
    assert(i <= max_n); \
@@ -140,7 +140,7 @@ struct lima_render_state {
    PLBU_CMD(((shift_min) << 28) | ((shift_h) << 16) | (shift_w), 0x1000010C)
 #define PLBU_CMD_TILED_DIMENSIONS(tiled_w, tiled_h) \
    PLBU_CMD((((tiled_w) - 1) << 24) | (((tiled_h) - 1) << 8), 0x10000109)
-#define PLBU_CMD_BLOCK_STRIDE(block_w) PLBU_CMD(block_w, 0x30000000)
+#define PLBU_CMD_BLOCK_STRIDE(block_w) PLBU_CMD((block_w) & 0xff, 0x30000000)
 #define PLBU_CMD_ARRAY_ADDRESS(gp_stream, block_num) \
    PLBU_CMD(gp_stream, 0x28000000 | ((block_num) - 1) | 1)
 #define PLBU_CMD_VIEWPORT_X(v) PLBU_CMD(v, 0x10000107)
@@ -172,7 +172,7 @@ struct lima_render_state {
 /* vs commands */
 #define VS_CMD_BEGIN(max) { \
    int i = 0, max_n = max; \
-   uint32_t *vs_cmd = util_dynarray_grow_cap(&ctx->vs_cmd_array, max_n * 4);
+   uint32_t *vs_cmd = util_dynarray_ensure_cap(&ctx->vs_cmd_array, ctx->vs_cmd_array.size + max_n * 4);
 
 #define VS_CMD_END() \
    assert(i <= max_n); \
@@ -275,13 +275,16 @@ lima_pack_reload_plbu_cmd(struct lima_context *ctx)
           sizeof(reload_render_state));
 
    struct lima_context_framebuffer *fb = &ctx->framebuffer;
-   uint32_t *td = cpu + lima_reload_tex_desc_offset;
-   memset(td, 0, lima_tex_desc_size);
+   lima_tex_desc *td = cpu + lima_reload_tex_desc_offset;
+   memset(td, 0, lima_min_tex_desc_size);
    lima_texture_desc_set_res(ctx, td, fb->base.cbufs[0]->texture, 0, 0);
-   td[1] = 0x00000480;
-   td[2] |= 0x00093800;
-   td[4] = 0x00000000;
-   td[5] = 0x00000000;
+   td->unknown_1_1 = 0x80;
+   td->texture_2d = 1;
+   td->min_img_filter_nearest = 1;
+   td->mag_img_filter_nearest = 1;
+   td->wrap_s_clamp_to_edge = 1;
+   td->wrap_t_clamp_to_edge = 1;
+   td->unknown_2_2 = 0x1;
 
    uint32_t *ta = cpu + lima_reload_tex_array_offset;
    ta[0] = va + lima_reload_tex_desc_offset;
@@ -1009,6 +1012,7 @@ lima_calculate_alpha_blend(enum pipe_blend_func rgb_func, enum pipe_blend_func a
       0x0C000000; /* need check if this GLESv1 glAlphaFunc */
 }
 
+#if 0
 static int
 lima_stencil_op(enum pipe_stencil_op pipe)
 {
@@ -1032,6 +1036,7 @@ lima_stencil_op(enum pipe_stencil_op pipe)
    }
    return -1;
 }
+#endif
 
 static int
 lima_calculate_depth_test(struct pipe_depth_state *depth, struct pipe_rasterizer_state *rst)
@@ -1425,7 +1430,7 @@ static void
 lima_finish_plbu_cmd(struct lima_context *ctx)
 {
    int i = 0;
-   uint32_t *plbu_cmd = util_dynarray_grow_cap(&ctx->plbu_cmd_array, 2 * 4);
+   uint32_t *plbu_cmd = util_dynarray_ensure_cap(&ctx->plbu_cmd_array, ctx->plbu_cmd_array.size + 2 * 4);
 
    plbu_cmd[i++] = 0x00000000;
    plbu_cmd[i++] = 0x50000000; /* END */
@@ -1677,9 +1682,9 @@ _lima_flush(struct lima_context *ctx, bool end_of_frame)
    ctx->plb_index = (ctx->plb_index + 1) % lima_ctx_num_plb;
 
    if (ctx->framebuffer.base.nr_cbufs) {
-      /* this surface may need reload when next draw if not end of frame */
+      /* Set reload flag for next draw. It'll be unset if buffer is cleared */
       struct lima_surface *surf = lima_surface(ctx->framebuffer.base.cbufs[0]);
-      surf->reload = !end_of_frame;
+      surf->reload = true;
    }
 }
 

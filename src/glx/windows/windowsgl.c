@@ -217,7 +217,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
       read->callbacks->releasedc(read, readDc);
 
       if (!ret) {
-         printf("wglMakeContextCurrentARB error: %08x\n", GetLastError());
+         printf("wglMakeContextCurrentARB error: %08x\n", (int)GetLastError());
          return FALSE;
       }
    }
@@ -226,7 +226,7 @@ int windows_bind_context(windowsContext *context, windowsDrawable *draw, windows
       /* Otherwise, just use wglMakeCurrent */
       BOOL ret = wglMakeCurrent(drawDc, context->ctx);
       if (!ret) {
-         printf("wglMakeCurrent error: %08x\n", GetLastError());
+         printf("wglMakeCurrent error: %08x\n", (int)GetLastError());
          return FALSE;
       }
    }

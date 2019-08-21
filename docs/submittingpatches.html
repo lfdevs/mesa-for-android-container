@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
-  <title>Submitting patches</title>
+  <title>Submitting Patches</title>
   <link rel="stylesheet" type="text/css" href="mesa.css">
 </head>
 <body>
 
 <div class="header">
-  <h1>The Mesa 3D Graphics Library</h1>
+  The Mesa 3D Graphics Library
 </div>
 
 <iframe src="contents.html"></iframe>
 <div class="content">
 
-<h1>Submitting patches</h1>
+<h1>Submitting Patches</h1>
 
 
 <ul>
@@ -68,7 +68,7 @@ with a module name.  Examples:
 if needed.  For example:
 <pre>
     i965: Remove end-of-thread SEND alignment code.
-    
+
     This was present in Eric's initial implementation of the compaction code
     for Sandybridge (commit 077d01b6). There is no documentation saying this
     is necessary, and removing it causes no regressions in piglit on any
@@ -85,15 +85,18 @@ noted in the patch comment.  For example:
 <pre>
    Fixes: d7b3707c612 "util/disk_cache: use stat() to check if entry is a directory"
 </pre>
+<li>You can produce those fixes lines by running
+<pre>git config --global alias.fixes "show -s --pretty='format:Fixes: %h (\"%s\")'"</pre>
+once and then using <pre>git fixes &lt;sha1&gt;</pre>
 <li>If there have been several revisions to a patch during the review
 process, they should be noted such as in this example:
 <pre>
     st/mesa: add ARB_texture_stencil8 support (v4)
-    
+
     if we support stencil texturing, enable texture_stencil8
     there is no requirement to support native S8 for this,
     the texture can be converted to x24s8 fine.
-    
+
     v2: fold fixes from Marek in:
        a) put S8 last in the list
        b) fix renderable to always test for d/s renderable
@@ -118,9 +121,9 @@ patch has already been reviewed.
 <li>In order for your patch to reach the prospective reviewer easier/faster,
 use the script scripts/get_reviewer.pl to get a list of individuals and include
 them in the CC list.
-<br>
+<p>
 Please use common sense and do <strong>not</strong> blindly add everyone.
-<br>
+</p>
 <pre>
     $ scripts/get_reviewer.pl --help # to get the help screen
     $ scripts/get_reviewer.pl -f src/egl/drivers/dri2/platform_android.c
@@ -207,7 +210,9 @@ state of your old patches to Superseded.
 <p>
 Some companies' mail server automatically append a legal disclaimer,
 usually containing something along the lines of "The information in this
-email is confidential" and "distribution is strictly prohibited".<br/>
+email is confidential" and "distribution is strictly prohibited".
+</p>
+<p>
 These legal notices prevent us from being able to accept your patch,
 rendering the whole process pointless. Please make sure these are
 disabled before sending your patches. (Note that you may need to contact
@@ -258,6 +263,9 @@ your email administrator for this.)
 </p>
 <ul>
   <li>Make changes and update your branch based on feedback
+  <li>After an update, for the feedback you handled, close the
+    feedback discussion with the "Resolve Discussion" button. This way
+    the reviewers know which feedback got handled and which didn't.
   <li>Old, stale MR may be closed, but you can reopen it if you
     still want to pursue the changes
   <li>You should periodically check to see if your MR needs to be
@@ -363,9 +371,9 @@ you should add an appropriate note to the commit message.
 <p>
 Here are some examples of such a note:
 </p>
-<ul>
-  <li>CC: &lt;mesa-stable@lists.freedesktop.org&gt;</li>
-</ul>
+<pre>
+CC: &lt;mesa-stable@lists.freedesktop.org&gt;
+</pre>
 
 Simply adding the CC to the mesa-stable list address is adequate to nominate
 the commit for all the active stable branches. If the commit is not applicable
@@ -379,7 +387,6 @@ won't have any negative effect on the patch nomination.
 <p>
 Note: by removing the tag [as the commit is pushed] the patch is
 <strong>explicitly</strong> rejected from inclusion in the stable branch(es).
-<br>
 Thus, drop the line <strong>only</strong> if you want to cancel the nomination.
 </p>
 
@@ -445,14 +452,18 @@ be lost from the stable branch if developers push things directly. Consider
 yourself warned.
 
 <h2 id="backports">Sending backports for the stable branch</h2>
+<p>
 By default merge conflicts are resolved by the stable-release manager. In which
 case he/she should provide a comment about the changes required, alongside the
 <code>Conflicts</code> section. Summary of which will be provided in the
 <a href="releasing.html#prerelease">pre-release</a> announcement.
-<br>
+</p>
+
+<p>
 Developers are interested in sending backports are recommended to use either a
 <code>[BACKPORT #branch]</code> subject prefix or provides similar information
 within the commit summary.
+</p>
 
 <h2 id="gittips">Git tips</h2>
 

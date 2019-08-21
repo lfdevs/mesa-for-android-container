@@ -31,10 +31,9 @@
 
 void fd_fence_populate(struct pipe_fence_handle *fence,
 		uint32_t timestamp, int fence_fd);
-void fd_fence_ref(struct pipe_screen *pscreen,
-		struct pipe_fence_handle **ptr,
+void fd_fence_ref(struct pipe_fence_handle **ptr,
 		struct pipe_fence_handle *pfence);
-boolean fd_fence_finish(struct pipe_screen *screen,
+bool fd_fence_finish(struct pipe_screen *pscreen,
 		struct pipe_context *ctx,
 		struct pipe_fence_handle *pfence,
 		uint64_t timeout);

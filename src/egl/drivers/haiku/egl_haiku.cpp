@@ -89,7 +89,7 @@ haiku_create_window_surface(_EGLDriver *drv, _EGLDisplay *disp,
 	}
 
 	if (!_eglInitSurface(&surface->surf, disp, EGL_WINDOW_BIT,
-		conf, attrib_list)) {
+		conf, attrib_list, native_window)) {
 		free(surface);
 		return NULL;
 	}

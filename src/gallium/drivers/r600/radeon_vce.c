@@ -411,10 +411,7 @@ struct pipe_video_codec *rvce_create_encoder(struct pipe_context *context,
 	if (!enc)
 		return NULL;
 
-	if (rscreen->info.drm_major == 3)
-		enc->use_vm = true;
-	if ((rscreen->info.drm_major == 2 && rscreen->info.drm_minor >= 42) ||
-            rscreen->info.drm_major == 3)
+	if (rscreen->info.drm_minor >= 42)
 		enc->use_vui = true;
 
 	enc->base = *templ;

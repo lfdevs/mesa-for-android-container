@@ -155,7 +155,7 @@ void si_init_resource_fields(struct si_screen *sscreen,
 		 * persistent buffers into GTT to prevent VRAM CPU page faults.
 		 */
 		if (!sscreen->info.kernel_flushes_hdp_before_ib ||
-		    sscreen->info.drm_major == 2)
+		    !sscreen->info.is_amdgpu)
 			res->domains = RADEON_DOMAIN_GTT;
 	}
 
@@ -637,12 +637,13 @@ static void si_buffer_subdata(struct pipe_context *ctx,
 	struct pipe_box box;
 	uint8_t *map = NULL;
 
+	usage |= PIPE_TRANSFER_WRITE;
+
+	if (!(usage & PIPE_TRANSFER_MAP_DIRECTLY))
+		usage |= PIPE_TRANSFER_DISCARD_RANGE;
+
 	u_box_1d(offset, size, &box);
-	map = si_buffer_transfer_map(ctx, buffer, 0,
-				       PIPE_TRANSFER_WRITE |
-				       PIPE_TRANSFER_DISCARD_RANGE |
-				       usage,
-				       &box, &transfer);
+	map = si_buffer_transfer_map(ctx, buffer, 0, usage, &box, &transfer);
 	if (!map)
 		return;
 

@@ -310,6 +310,7 @@ struct fd_context {
 	void (*emit_tile_prep)(struct fd_batch *batch, struct fd_tile *tile);
 	void (*emit_tile_mem2gmem)(struct fd_batch *batch, struct fd_tile *tile);
 	void (*emit_tile_renderprep)(struct fd_batch *batch, struct fd_tile *tile);
+	void (*emit_tile)(struct fd_batch *batch, struct fd_tile *tile);
 	void (*emit_tile_gmem2mem)(struct fd_batch *batch, struct fd_tile *tile);
 	void (*emit_tile_fini)(struct fd_batch *batch);   /* optional */
 
@@ -326,17 +327,6 @@ struct fd_context {
 	/* compute: */
 	void (*launch_grid)(struct fd_context *ctx, const struct pipe_grid_info *info);
 
-	/* constant emit:  (note currently not used/needed for a2xx) */
-	void (*emit_const)(struct fd_ringbuffer *ring, gl_shader_stage type,
-			uint32_t regid, uint32_t offset, uint32_t sizedwords,
-			const uint32_t *dwords, struct pipe_resource *prsc);
-	/* emit bo addresses as constant: */
-	void (*emit_const_bo)(struct fd_ringbuffer *ring, gl_shader_stage type, boolean write,
-			uint32_t regid, uint32_t num, struct pipe_resource **prscs, uint32_t *offsets);
-
-	/* indirect-branch emit: */
-	void (*emit_ib)(struct fd_ringbuffer *ring, struct fd_ringbuffer *target);
-
 	/* query: */
 	struct fd_query * (*create_query)(struct fd_context *ctx, unsigned query_type);
 	void (*query_prepare)(struct fd_batch *batch, uint32_t num_tiles);
@@ -346,11 +336,6 @@ struct fd_context {
 
 	/* blitter: */
 	bool (*blit)(struct fd_context *ctx, const struct pipe_blit_info *info);
-
-	/* simple gpu "memcpy": */
-	void (*mem_to_mem)(struct fd_ringbuffer *ring, struct pipe_resource *dst,
-			unsigned dst_off, struct pipe_resource *src, unsigned src_off,
-			unsigned sizedwords);
 
 	/* handling for barriers: */
 	void (*framebuffer_barrier)(struct fd_context *ctx);

@@ -229,7 +229,7 @@ pp_jimenezmlaa_init_run(struct pp_queue_t *ppq, unsigned int n,
 
    pp_debug("mlaa: using %u max search steps\n", val);
 
-   util_sprintf(tmp_text, "%s"
+   sprintf(tmp_text, "%s"
                 "IMM FLT32 {    %.8f,     0.0000,     0.0000,     0.0000}\n"
                 "%s\n", blend2fs_1, (float) val, blend2fs_2);
 

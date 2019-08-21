@@ -104,7 +104,7 @@ lima_fence_reference(struct pipe_screen *pscreen,
    *ptr = fence;
 }
 
-static boolean
+static bool
 lima_fence_finish(struct pipe_screen *pscreen, struct pipe_context *pctx,
                   struct pipe_fence_handle *fence, uint64_t timeout)
 {

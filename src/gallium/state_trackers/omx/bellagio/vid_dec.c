@@ -180,7 +180,7 @@ static OMX_ERRORTYPE vid_dec_Constructor(OMX_COMPONENTTYPE *comp, OMX_STRING nam
       return OMX_ErrorInsufficientResources;
 
    screen = priv->screen->pscreen;
-   priv->pipe = screen->context_create(screen, NULL, 0);
+   priv->pipe = pipe_create_multimedia_context(screen);
    if (!priv->pipe)
       return OMX_ErrorInsufficientResources;
 

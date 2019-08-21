@@ -34,9 +34,7 @@
    .lower_fdiv = true,                                                        \
    .lower_scmp = true,                                                        \
    .lower_flrp16 = true,                                                      \
-   .lower_fmod16 = true,                                                      \
-   .lower_fmod32 = true,                                                      \
-   .lower_fmod64 = false,                                                     \
+   .lower_fmod = true,                                                        \
    .lower_bitfield_extract = true,                                            \
    .lower_bitfield_insert = true,                                             \
    .lower_uadd_carry = true,                                                  \
@@ -46,7 +44,7 @@
    .lower_isign = true,                                                       \
    .lower_ldexp = true,                                                       \
    .lower_device_index_to_zero = true,                                        \
-   .native_integers = true,                                                   \
+   .vectorize_io = true,                                                      \
    .use_interpolated_input_intrinsics = true,                                 \
    .vertex_id_zero_based = true,                                              \
    .lower_base_vertex = true
@@ -84,6 +82,7 @@ static const struct nir_shader_compiler_options vector_nir_options = {
    .lower_unpack_unorm_2x16 = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,
+   .intel_vec4 = true,
    .max_unroll_iterations = 32,
 };
 
@@ -99,6 +98,9 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
    brw_init_compaction_tables(devinfo);
 
    compiler->precise_trig = env_var_as_boolean("INTEL_PRECISE_TRIG", false);
+
+   compiler->use_tcs_8_patch =
+      devinfo->gen >= 9 && (INTEL_DEBUG & DEBUG_TCS_EIGHT_PATCH);
 
    if (devinfo->gen >= 10) {
       /* We don't support vec4 mode on Cannonlake. */
@@ -131,7 +133,9 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
       nir_lower_dceil |
       nir_lower_dfract |
       nir_lower_dround_even |
-      nir_lower_dmod;
+      nir_lower_dmod |
+      nir_lower_dsub |
+      nir_lower_ddiv;
 
    if (!devinfo->has_64bit_types || (INTEL_DEBUG & DEBUG_SOFT64)) {
       int64_options |= nir_lower_mov64 |
@@ -172,21 +176,17 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
          rzalloc(compiler, struct nir_shader_compiler_options);
       if (is_scalar) {
          *nir_options = scalar_nir_options;
-
-         if (devinfo->gen >= 11) {
-            nir_options->lower_flrp32 = true;
-         }
       } else {
          *nir_options = vector_nir_options;
-
-         if (devinfo->gen < 6) {
-            /* Prior to Gen6, there are no three source operations. */
-            nir_options->lower_flrp32 = true;
-         }
       }
 
-      /* Prior to Gen6, there are no three source operations. */
+      /* Prior to Gen6, there are no three source operations, and Gen11 loses
+       * LRP.
+       */
       nir_options->lower_ffma = devinfo->gen < 6;
+      nir_options->lower_flrp32 = devinfo->gen < 6 || devinfo->gen >= 11;
+
+      nir_options->lower_rotate = devinfo->gen < 11;
 
       nir_options->lower_int64_options = int64_options;
       nir_options->lower_doubles_options = fp64_options;

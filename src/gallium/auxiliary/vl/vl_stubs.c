@@ -46,7 +46,7 @@ vl_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format)
    return NULL;
 }
 
-boolean
+bool
 vl_video_buffer_is_format_supported(struct pipe_screen *screen,
                                     enum pipe_format format,
                                     enum pipe_video_profile profile,

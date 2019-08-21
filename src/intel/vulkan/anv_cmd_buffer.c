@@ -72,45 +72,52 @@ const struct anv_dynamic_state default_dynamic_state = {
       .front = 0u,
       .back = 0u,
    },
+   .line_stipple = {
+      .factor = 0u,
+      .pattern = 0u,
+   },
 };
 
 void
 anv_dynamic_state_copy(struct anv_dynamic_state *dest,
                        const struct anv_dynamic_state *src,
-                       uint32_t copy_mask)
+                       anv_cmd_dirty_mask_t copy_mask)
 {
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_VIEWPORT)) {
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_VIEWPORT) {
       dest->viewport.count = src->viewport.count;
       typed_memcpy(dest->viewport.viewports, src->viewport.viewports,
                    src->viewport.count);
    }
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_SCISSOR)) {
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_SCISSOR) {
       dest->scissor.count = src->scissor.count;
       typed_memcpy(dest->scissor.scissors, src->scissor.scissors,
                    src->scissor.count);
    }
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_LINE_WIDTH))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH)
       dest->line_width = src->line_width;
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_DEPTH_BIAS))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS)
       dest->depth_bias = src->depth_bias;
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_BLEND_CONSTANTS))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS)
       typed_memcpy(dest->blend_constants, src->blend_constants, 4);
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS)
       dest->depth_bounds = src->depth_bounds;
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK)
       dest->stencil_compare_mask = src->stencil_compare_mask;
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_STENCIL_WRITE_MASK))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK)
       dest->stencil_write_mask = src->stencil_write_mask;
 
-   if (copy_mask & (1 << VK_DYNAMIC_STATE_STENCIL_REFERENCE))
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE)
       dest->stencil_reference = src->stencil_reference;
+
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE)
+      dest->line_stipple = src->line_stipple;
 }
 
 static void
@@ -512,6 +519,19 @@ void anv_CmdSetStencilReference(
       cmd_buffer->state.gfx.dynamic.stencil_reference.back = reference;
 
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE;
+}
+
+void anv_CmdSetLineStippleEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    lineStippleFactor,
+    uint16_t                                    lineStipplePattern)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   cmd_buffer->state.gfx.dynamic.line_stipple.factor = lineStippleFactor;
+   cmd_buffer->state.gfx.dynamic.line_stipple.pattern = lineStipplePattern;
+
+   cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE;
 }
 
 static void
@@ -920,13 +940,12 @@ const struct anv_image_view *
 anv_cmd_buffer_get_depth_stencil_view(const struct anv_cmd_buffer *cmd_buffer)
 {
    const struct anv_subpass *subpass = cmd_buffer->state.subpass;
-   const struct anv_framebuffer *fb = cmd_buffer->state.framebuffer;
 
    if (subpass->depth_stencil_attachment == NULL)
       return NULL;
 
    const struct anv_image_view *iview =
-      fb->attachments[subpass->depth_stencil_attachment->attachment];
+      cmd_buffer->state.attachments[subpass->depth_stencil_attachment->attachment].image_view;
 
    assert(iview->aspect_mask & (VK_IMAGE_ASPECT_DEPTH_BIT |
                                 VK_IMAGE_ASPECT_STENCIL_BIT));
@@ -1080,19 +1099,6 @@ void anv_CmdPushDescriptorSetKHR(
                                             write->pBufferInfo[j].range);
          }
          break;
-
-      case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT: {
-         const VkWriteDescriptorSetInlineUniformBlockEXT *inline_write =
-            vk_find_struct_const(write->pNext,
-                                 WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT);
-         assert(inline_write->dataSize == write->descriptorCount);
-         anv_descriptor_set_write_inline_uniform_data(cmd_buffer->device, set,
-                                                      write->dstBinding,
-                                                      inline_write->pData,
-                                                      write->dstArrayElement,
-                                                      inline_write->dataSize);
-         break;
-      }
 
       default:
          break;

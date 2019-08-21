@@ -184,7 +184,7 @@ vc4_destroy_query(struct pipe_context *pctx, struct pipe_query *pquery)
         free(query);
 }
 
-static boolean
+static bool
 vc4_begin_query(struct pipe_context *pctx, struct pipe_query *pquery)
 {
         struct vc4_query *query = (struct vc4_query *)pquery;
@@ -246,9 +246,9 @@ vc4_end_query(struct pipe_context *pctx, struct pipe_query *pquery)
         return true;
 }
 
-static boolean
+static bool
 vc4_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
-                     boolean wait, union pipe_query_result *vresult)
+                     bool wait, union pipe_query_result *vresult)
 {
         struct vc4_context *ctx = vc4_context(pctx);
         struct vc4_query *query = (struct vc4_query *)pquery;
@@ -278,7 +278,7 @@ vc4_get_query_result(struct pipe_context *pctx, struct pipe_query *pquery,
 }
 
 static void
-vc4_set_active_query_state(struct pipe_context *pctx, boolean enable)
+vc4_set_active_query_state(struct pipe_context *pctx, bool enable)
 {
 }
 

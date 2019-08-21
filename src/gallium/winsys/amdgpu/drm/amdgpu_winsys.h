@@ -41,7 +41,6 @@ struct amdgpu_cs;
 #define NUM_SLAB_ALLOCATORS 3
 
 struct amdgpu_winsys {
-   struct radeon_winsys base;
    struct pipe_reference reference;
    struct pb_cache bo_cache;
 
@@ -94,12 +93,24 @@ struct amdgpu_winsys {
    simple_mtx_t bo_export_table_lock;
 };
 
+struct amdgpu_screen_winsys {
+   struct radeon_winsys base;
+   struct amdgpu_winsys *aws;
+   int fd;
+};
+
+static inline struct amdgpu_screen_winsys *
+amdgpu_screen_winsys(struct radeon_winsys *base)
+{
+   return (struct amdgpu_screen_winsys*)base;
+}
+
 static inline struct amdgpu_winsys *
 amdgpu_winsys(struct radeon_winsys *base)
 {
-   return (struct amdgpu_winsys*)base;
+   return amdgpu_screen_winsys(base)->aws;
 }
 
-void amdgpu_surface_init_functions(struct amdgpu_winsys *ws);
+void amdgpu_surface_init_functions(struct amdgpu_screen_winsys *ws);
 
 #endif

@@ -507,7 +507,7 @@ radv_amdgpu_winsys_bo_from_ptr(struct radeon_winsys *_ws,
 	bo->initial_domain = RADEON_DOMAIN_GTT;
 	bo->priority = priority;
 
-	MAYBE_UNUSED int r = amdgpu_bo_export(buf_handle, amdgpu_bo_handle_type_kms, &bo->bo_handle);
+	ASSERTED int r = amdgpu_bo_export(buf_handle, amdgpu_bo_handle_type_kms, &bo->bo_handle);
 	assert(!r);
 
 	p_atomic_add(&ws->allocated_gtt,

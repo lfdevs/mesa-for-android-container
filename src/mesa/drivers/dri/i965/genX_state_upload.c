@@ -26,6 +26,7 @@
 #include "dev/gen_device_info.h"
 #include "common/gen_sample_positions.h"
 #include "genxml/gen_macros.h"
+#include "common/gen_guardband.h"
 
 #include "main/bufferobj.h"
 #include "main/context.h"
@@ -73,7 +74,7 @@ KSP(UNUSED struct brw_context *brw, uint32_t offset)
 #endif
 
 #if GEN_GEN >= 7
-MAYBE_UNUSED static void
+static void
 emit_lrm(struct brw_context *brw, uint32_t reg, struct brw_address addr)
 {
    brw_batch_emit(brw, GENX(MI_LOAD_REGISTER_MEM), lrm) {
@@ -83,22 +84,13 @@ emit_lrm(struct brw_context *brw, uint32_t reg, struct brw_address addr)
 }
 #endif
 
-MAYBE_UNUSED static void
+#if GEN_GEN == 7
+static void
 emit_lri(struct brw_context *brw, uint32_t reg, uint32_t imm)
 {
    brw_batch_emit(brw, GENX(MI_LOAD_REGISTER_IMM), lri) {
       lri.RegisterOffset   = reg;
       lri.DataDWord        = imm;
-   }
-}
-
-#if GEN_IS_HASWELL || GEN_GEN >= 8
-MAYBE_UNUSED static void
-emit_lrr(struct brw_context *brw, uint32_t dst, uint32_t src)
-{
-   brw_batch_emit(brw, GENX(MI_LOAD_REGISTER_REG), lrr) {
-      lrr.SourceRegisterAddress        = src;
-      lrr.DestinationRegisterAddress   = dst;
    }
 }
 #endif
@@ -236,9 +228,9 @@ genX(emit_vertex_buffer_state)(struct brw_context *brw,
                                unsigned buffer_nr,
                                struct brw_bo *bo,
                                unsigned start_offset,
-                               MAYBE_UNUSED unsigned end_offset,
+                               UNUSED unsigned end_offset,
                                unsigned stride,
-                               MAYBE_UNUSED unsigned step_rate)
+                               UNUSED unsigned step_rate)
 {
    struct GENX(VERTEX_BUFFER_STATE) buf_state = {
       .VertexBufferIndex = buffer_nr,
@@ -1659,7 +1651,7 @@ genX(upload_sf)(struct brw_context *brw)
       if (ctx->Line.SmoothFlag) {
          sf.LineEndCapAntialiasingRegionWidth = _10pixels;
 #if GEN_GEN <= 7
-         sf.AntiAliasingEnable = true;
+         sf.AntialiasingEnable = true;
 #endif
       }
 
@@ -1942,8 +1934,7 @@ genX(upload_wm)(struct brw_context *brw)
       if (wm_prog_data->base.use_alt_mode)
          wm.FloatingPointMode = FLOATING_POINT_MODE_Alternate;
 
-      /* WA_1606682166 */
-      wm.SamplerCount = (GEN_GEN == 5 || GEN_GEN == 11) ?
+      wm.SamplerCount = GEN_GEN == 5 ?
          0 : DIV_ROUND_UP(stage_state->sampler_count, 4);
 
       wm.BindingTableEntryCount =
@@ -2422,97 +2413,6 @@ static const struct brw_tracked_state genX(scissor_state) = {
 /* ---------------------------------------------------------------------- */
 
 static void
-brw_calculate_guardband_size(uint32_t fb_width, uint32_t fb_height,
-                             float m00, float m11, float m30, float m31,
-                             float *xmin, float *xmax,
-                             float *ymin, float *ymax)
-{
-   /* According to the "Vertex X,Y Clamping and Quantization" section of the
-    * Strips and Fans documentation:
-    *
-    * "The vertex X and Y screen-space coordinates are also /clamped/ to the
-    *  fixed-point "guardband" range supported by the rasterization hardware"
-    *
-    * and
-    *
-    * "In almost all circumstances, if an object’s vertices are actually
-    *  modified by this clamping (i.e., had X or Y coordinates outside of
-    *  the guardband extent the rendered object will not match the intended
-    *  result.  Therefore software should take steps to ensure that this does
-    *  not happen - e.g., by clipping objects such that they do not exceed
-    *  these limits after the Drawing Rectangle is applied."
-    *
-    * I believe the fundamental restriction is that the rasterizer (in
-    * the SF/WM stages) have a limit on the number of pixels that can be
-    * rasterized.  We need to ensure any coordinates beyond the rasterizer
-    * limit are handled by the clipper.  So effectively that limit becomes
-    * the clipper's guardband size.
-    *
-    * It goes on to say:
-    *
-    * "In addition, in order to be correctly rendered, objects must have a
-    *  screenspace bounding box not exceeding 8K in the X or Y direction.
-    *  This additional restriction must also be comprehended by software,
-    *  i.e., enforced by use of clipping."
-    *
-    * This makes no sense.  Gen7+ hardware supports 16K render targets,
-    * and you definitely need to be able to draw polygons that fill the
-    * surface.  Our assumption is that the rasterizer was limited to 8K
-    * on Sandybridge, which only supports 8K surfaces, and it was actually
-    * increased to 16K on Ivybridge and later.
-    *
-    * So, limit the guardband to 16K on Gen7+ and 8K on Sandybridge.
-    */
-   const float gb_size = GEN_GEN >= 7 ? 16384.0f : 8192.0f;
-
-   /* Workaround: prevent gpu hangs on SandyBridge
-    * by disabling guardband clipping for odd dimensions.
-    */
-   if (GEN_GEN == 6 && (fb_width & 1 || fb_height & 1)) {
-      *xmin = -1.0f;
-      *xmax =  1.0f;
-      *ymin = -1.0f;
-      *ymax =  1.0f;
-      return;
-   }
-
-   if (m00 != 0 && m11 != 0) {
-      /* First, we compute the screen-space render area */
-      const float ss_ra_xmin = MIN3(        0, m30 + m00, m30 - m00);
-      const float ss_ra_xmax = MAX3( fb_width, m30 + m00, m30 - m00);
-      const float ss_ra_ymin = MIN3(        0, m31 + m11, m31 - m11);
-      const float ss_ra_ymax = MAX3(fb_height, m31 + m11, m31 - m11);
-
-      /* We want the guardband to be centered on that */
-      const float ss_gb_xmin = (ss_ra_xmin + ss_ra_xmax) / 2 - gb_size;
-      const float ss_gb_xmax = (ss_ra_xmin + ss_ra_xmax) / 2 + gb_size;
-      const float ss_gb_ymin = (ss_ra_ymin + ss_ra_ymax) / 2 - gb_size;
-      const float ss_gb_ymax = (ss_ra_ymin + ss_ra_ymax) / 2 + gb_size;
-
-      /* Now we need it in native device coordinates */
-      const float ndc_gb_xmin = (ss_gb_xmin - m30) / m00;
-      const float ndc_gb_xmax = (ss_gb_xmax - m30) / m00;
-      const float ndc_gb_ymin = (ss_gb_ymin - m31) / m11;
-      const float ndc_gb_ymax = (ss_gb_ymax - m31) / m11;
-
-      /* Thanks to Y-flipping and ORIGIN_UPPER_LEFT, the Y coordinates may be
-       * flipped upside-down.  X should be fine though.
-       */
-      assert(ndc_gb_xmin <= ndc_gb_xmax);
-      *xmin = ndc_gb_xmin;
-      *xmax = ndc_gb_xmax;
-      *ymin = MIN2(ndc_gb_ymin, ndc_gb_ymax);
-      *ymax = MAX2(ndc_gb_ymin, ndc_gb_ymax);
-   } else {
-      /* The viewport scales to 0, so nothing will be rendered. */
-      *xmin = 0.0f;
-      *xmax = 0.0f;
-      *ymin = 0.0f;
-      *ymax = 0.0f;
-   }
-}
-
-static void
 genX(upload_sf_clip_viewport)(struct brw_context *brw)
 {
    struct gl_context *ctx = &brw->ctx;
@@ -2565,7 +2465,7 @@ genX(upload_sf_clip_viewport)(struct brw_context *brw)
       sfv.ViewportMatrixElementm30 = translate[0],
       sfv.ViewportMatrixElementm31 = translate[1] * y_scale + y_bias,
       sfv.ViewportMatrixElementm32 = translate[2],
-      brw_calculate_guardband_size(fb_width, fb_height,
+      gen_calculate_guardband_size(fb_width, fb_height,
                                    sfv.ViewportMatrixElementm00,
                                    sfv.ViewportMatrixElementm11,
                                    sfv.ViewportMatrixElementm30,
@@ -4111,6 +4011,11 @@ genX(upload_hs_state)(struct brw_context *brw)
          hs.IncludeVertexHandles = true;
 
          hs.MaximumNumberofThreads = devinfo->max_tcs_threads - 1;
+
+#if GEN_GEN >= 9
+         hs.DispatchMode = vue_prog_data->dispatch_mode;
+         hs.IncludePrimitiveID = tcs_prog_data->include_primitive_id;
+#endif
       }
    }
 }
@@ -4452,7 +4357,9 @@ genX(upload_cs_state)(struct brw_context *brw)
    const struct GENX(INTERFACE_DESCRIPTOR_DATA) idd = {
       .KernelStartPointer = brw->cs.base.prog_offset,
       .SamplerStatePointer = stage_state->sampler_offset,
-      .SamplerCount = DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
+      /* WA_1606682166 */
+      .SamplerCount = GEN_GEN == 11 ? 0 :
+                      DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4),
       .BindingTablePointer = stage_state->bind_bo_offset,
       .ConstantURBEntryReadLength = cs_prog_data->push.per_thread.regs,
       .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,
@@ -4984,8 +4891,8 @@ genX(emit_mi_report_perf_count)(struct brw_context *brw,
  * Emit a 3DSTATE_SAMPLER_STATE_POINTERS_{VS,HS,GS,DS,PS} packet.
  */
 static void
-genX(emit_sampler_state_pointers_xs)(MAYBE_UNUSED struct brw_context *brw,
-                                     MAYBE_UNUSED struct brw_stage_state *stage_state)
+genX(emit_sampler_state_pointers_xs)(UNUSED struct brw_context *brw,
+                                     UNUSED struct brw_stage_state *stage_state)
 {
 #if GEN_GEN >= 7
    static const uint16_t packet_headers[] = {
@@ -5025,7 +4932,7 @@ has_component(mesa_format format, int i)
 static void
 genX(upload_default_color)(struct brw_context *brw,
                            const struct gl_sampler_object *sampler,
-                           MAYBE_UNUSED mesa_format format, GLenum base_format,
+                           mesa_format format, GLenum base_format,
                            bool is_integer_format, bool is_stencil_sampling,
                            uint32_t *sdc_offset)
 {
@@ -5201,7 +5108,7 @@ genX(upload_default_color)(struct brw_context *brw,
 }
 
 static uint32_t
-translate_wrap_mode(GLenum wrap, MAYBE_UNUSED bool using_nearest)
+translate_wrap_mode(GLenum wrap, UNUSED bool using_nearest)
 {
    switch (wrap) {
    case GL_REPEAT:

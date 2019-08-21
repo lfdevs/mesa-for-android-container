@@ -24,6 +24,7 @@
 
 #include <sys/sysinfo.h>
 
+#include "common/v3d_device_info.h"
 #include "util/os_misc.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_screen.h"
@@ -36,6 +37,7 @@
 #include "util/u_screen.h"
 #include "util/u_transfer_helper.h"
 #include "util/ralloc.h"
+#include "util/xmlconfig.h"
 
 #include <xf86drm.h>
 #include "v3d_screen.h"
@@ -118,7 +120,9 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
         case PIPE_CAP_START_INSTANCE:
         case PIPE_CAP_TGSI_INSTANCEID:
-        case PIPE_CAP_SM3:
+        case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
+        case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
+        case PIPE_CAP_VERTEX_SHADER_SATURATE:
         case PIPE_CAP_TEXTURE_QUERY_LOD:
         case PIPE_CAP_PRIMITIVE_RESTART:
         case PIPE_CAP_OCCLUSION_QUERY:
@@ -132,6 +136,7 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_TGSI_PACK_HALF_FLOAT:
         case PIPE_CAP_TEXTURE_HALF_FLOAT_LINEAR:
         case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+        case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
                 return 1;
 
         case PIPE_CAP_PACKED_UNIFORMS:
@@ -205,7 +210,13 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return V3D_MAX_FS_INPUTS / 4;
 
                 /* Texturing. */
-        case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
+        case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+                if (screen->devinfo.ver < 40)
+                        return 2048;
+                else if (screen->nonmsaa_texture_size_limit)
+                        return 7680;
+                else
+                        return 4096;
         case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
         case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
                 if (screen->devinfo.ver < 40)
@@ -451,7 +462,7 @@ v3d_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
         return 0;
 }
 
-static boolean
+static bool
 v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                                enum pipe_format format,
                                enum pipe_texture_target target,
@@ -465,10 +476,10 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 return false;
 
         if (sample_count > 1 && sample_count != V3D_MAX_SAMPLES)
-                return FALSE;
+                return false;
 
         if (target >= PIPE_MAX_TEXTURE_TYPES) {
-                return FALSE;
+                return false;
         }
 
         if (usage & PIPE_BIND_VERTEX_BUFFER) {
@@ -527,7 +538,7 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
                 case PIPE_FORMAT_B10G10R10A2_SSCALED:
                         break;
                 default:
-                        return FALSE;
+                        return false;
                 }
         }
 
@@ -537,12 +548,12 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
         if ((usage & PIPE_BIND_RENDER_TARGET) &&
             format != PIPE_FORMAT_NONE &&
             !v3d_rt_format_supported(&screen->devinfo, format)) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
             !v3d_tex_format_supported(&screen->devinfo, format)) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
@@ -551,17 +562,17 @@ v3d_screen_is_format_supported(struct pipe_screen *pscreen,
               format == PIPE_FORMAT_Z16_UNORM ||
               format == PIPE_FORMAT_Z32_FLOAT ||
               format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)) {
-                return FALSE;
+                return false;
         }
 
         if ((usage & PIPE_BIND_INDEX_BUFFER) &&
             !(format == PIPE_FORMAT_I8_UINT ||
               format == PIPE_FORMAT_I16_UINT ||
               format == PIPE_FORMAT_I32_UINT)) {
-                return FALSE;
+                return false;
         }
 
-        return TRUE;
+        return true;
 }
 
 #define PTR_TO_UINT(x) ((unsigned)((intptr_t)(x)))
@@ -574,56 +585,6 @@ static unsigned handle_hash(void *key)
 static int handle_compare(void *key1, void *key2)
 {
     return PTR_TO_UINT(key1) != PTR_TO_UINT(key2);
-}
-
-static bool
-v3d_get_device_info(struct v3d_screen *screen)
-{
-        struct drm_v3d_get_param ident0 = {
-                .param = DRM_V3D_PARAM_V3D_CORE0_IDENT0,
-        };
-        struct drm_v3d_get_param ident1 = {
-                .param = DRM_V3D_PARAM_V3D_CORE0_IDENT1,
-        };
-        int ret;
-
-        ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_GET_PARAM, &ident0);
-        if (ret != 0) {
-                fprintf(stderr, "Couldn't get V3D core IDENT0: %s\n",
-                        strerror(errno));
-                return false;
-        }
-        ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_GET_PARAM, &ident1);
-        if (ret != 0) {
-                fprintf(stderr, "Couldn't get V3D core IDENT1: %s\n",
-                        strerror(errno));
-                return false;
-        }
-
-        uint32_t major = (ident0.value >> 24) & 0xff;
-        uint32_t minor = (ident1.value >> 0) & 0xf;
-        screen->devinfo.ver = major * 10 + minor;
-
-        screen->devinfo.vpm_size = (ident1.value >> 28 & 0xf) * 8192;
-
-        int nslc = (ident1.value >> 4) & 0xf;
-        int qups = (ident1.value >> 8) & 0xf;
-        screen->devinfo.qpu_count = nslc * qups;
-
-        switch (screen->devinfo.ver) {
-        case 33:
-        case 41:
-        case 42:
-                break;
-        default:
-                fprintf(stderr,
-                        "V3D %d.%d not supported by this version of Mesa.\n",
-                        screen->devinfo.ver / 10,
-                        screen->devinfo.ver % 10);
-                return false;
-        }
-
-        return true;
 }
 
 static const void *
@@ -661,7 +622,8 @@ v3d_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
 }
 
 struct pipe_screen *
-v3d_screen_create(int fd, struct renderonly *ro)
+v3d_screen_create(int fd, const struct pipe_screen_config *config,
+                  struct renderonly *ro)
 {
         struct v3d_screen *screen = rzalloc(NULL, struct v3d_screen);
         struct pipe_screen *pscreen;
@@ -693,8 +655,16 @@ v3d_screen_create(int fd, struct renderonly *ro)
         v3d_simulator_init(screen);
 #endif
 
-        if (!v3d_get_device_info(screen))
+        if (!v3d_get_device_info(screen->fd, &screen->devinfo, &v3d_ioctl))
                 goto fail;
+
+        /* We have to driCheckOption for the simulator mode to not assertion
+         * fail on not having our XML config.
+         */
+        const char *nonmsaa_name = "v3d_nonmsaa_texture_size_limit";
+        screen->nonmsaa_texture_size_limit =
+                driCheckOption(config->options, nonmsaa_name, DRI_BOOL) &&
+                driQueryOptionb(config->options, nonmsaa_name);
 
         slab_create_parent(&screen->transfer_pool, sizeof(struct v3d_transfer), 16);
 

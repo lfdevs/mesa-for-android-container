@@ -35,10 +35,10 @@ struct etna_query;
 
 struct etna_query_funcs {
    void (*destroy_query)(struct etna_context *ctx, struct etna_query *q);
-   boolean (*begin_query)(struct etna_context *ctx, struct etna_query *q);
+   bool (*begin_query)(struct etna_context *ctx, struct etna_query *q);
    void (*end_query)(struct etna_context *ctx, struct etna_query *q);
-   boolean (*get_query_result)(struct etna_context *ctx, struct etna_query *q,
-                               boolean wait, union pipe_query_result *result);
+   bool (*get_query_result)(struct etna_context *ctx, struct etna_query *q,
+                            bool wait, union pipe_query_result *result);
 };
 
 struct etna_query {

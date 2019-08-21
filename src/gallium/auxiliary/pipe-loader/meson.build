@@ -46,8 +46,8 @@ libpipe_loader_static = static_library(
     inc_gallium_winsys,
   ],
   c_args : [c_vis_args, libpipe_loader_defines, '-DGALLIUM_STATIC_TARGETS=1'],
-  link_with : [libloader, libxmlconfig],
-  dependencies : [dep_libdrm],
+  link_with : libloader,
+  dependencies : [dep_libdrm, idep_xmlconfig],
   build_by_default : false,
 )
 
@@ -64,7 +64,7 @@ libpipe_loader_dynamic = static_library(
       join_paths(get_option('prefix'), get_option('libdir'), 'gallium-pipe')
     )
   ],
-  link_with : [libloader, libxmlconfig],
-  dependencies : [dep_libdrm],
+  link_with : libloader,
+  dependencies : [dep_libdrm, idep_xmlconfig],
   build_by_default : false,
 )

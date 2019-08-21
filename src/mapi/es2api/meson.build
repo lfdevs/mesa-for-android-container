@@ -55,9 +55,12 @@ pkg.generate(
 if with_tests and prog_nm.found()
   test(
     'es2-ABI-check',
-    find_program('ABI-check'),
-    env : env_test,
-    args : libgles2,
+    symbols_check,
+    args : [
+      '--lib', libgles2,
+      '--symbols-file', files('gles2-symbols.txt'),
+      '--nm', prog_nm.path(),
+    ],
     suite : ['mapi'],
   )
 endif

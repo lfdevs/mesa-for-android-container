@@ -36,10 +36,12 @@
 #define LIMA_DEBUG_GP      (1 << 0)
 #define LIMA_DEBUG_PP      (1 << 1)
 #define LIMA_DEBUG_DUMP    (1 << 2)
+#define LIMA_DEBUG_SHADERDB (1 << 3)
 
 extern uint32_t lima_debug;
 extern FILE *lima_dump_command_stream;
 extern int lima_ctx_num_plb;
+extern int lima_plb_max_blk;
 extern int lima_ppir_force_spilling;
 
 struct ra_regs;
@@ -54,6 +56,7 @@ struct lima_screen {
    int fd;
    int gpu_type;
    int num_pp;
+   uint32_t plb_max_blk;
 
    /* bo table */
    mtx_t bo_table_lock;

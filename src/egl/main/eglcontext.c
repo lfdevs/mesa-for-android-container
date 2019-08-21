@@ -250,9 +250,17 @@ _eglParseContextAttribList(_EGLContext *ctx, _EGLDisplay *disp,
           *     meaningful for OpenGL contexts, and specifying it for other
           *     types of contexts, including OpenGL ES contexts, will generate
           *     an error."
+          *
+          * EGL 1.5 defines EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY
+          * (without a suffix) which has the same value as the KHR token,
+          * and specifies that it now works with both GL and ES contexts:
+          *
+          *    "This attribute is supported only for OpenGL and OpenGL ES
+          *     contexts."
           */
-           if (!disp->Extensions.KHR_create_context
-               || api != EGL_OPENGL_API) {
+           if (!(disp->Extensions.KHR_create_context && api == EGL_OPENGL_API)
+               && !(disp->Version >= 15 && (api == EGL_OPENGL_API ||
+                                            api == EGL_OPENGL_ES_API))) {
             err = EGL_BAD_ATTRIBUTE;
             break;
          }

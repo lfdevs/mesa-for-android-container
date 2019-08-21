@@ -73,7 +73,6 @@ a2xx_SOURCES := \
 	a2xx/ir2_assemble.c \
 	a2xx/ir2_cp.c \
 	a2xx/ir2_nir.c \
-	a2xx/ir2_nir_lower_scalar.c \
 	a2xx/ir2_private.h \
 	a2xx/ir2_ra.c
 
@@ -96,6 +95,8 @@ a3xx_SOURCES := \
 	a3xx/fd3_query.h \
 	a3xx/fd3_rasterizer.c \
 	a3xx/fd3_rasterizer.h \
+	a3xx/fd3_resource.c \
+	a3xx/fd3_resource.h \
 	a3xx/fd3_screen.c \
 	a3xx/fd3_screen.h \
 	a3xx/fd3_texture.c \

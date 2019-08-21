@@ -70,12 +70,7 @@ blorp_params_get_clear_kernel(struct blorp_batch *batch,
    nir_ssa_def *color = nir_load_var(&b, v_color);
 
    if (clear_rgb_as_red) {
-      nir_variable *frag_coord =
-         nir_variable_create(b.shader, nir_var_shader_in,
-                             glsl_vec4_type(), "gl_FragCoord");
-      frag_coord->data.location = VARYING_SLOT_POS;
-
-      nir_ssa_def *pos = nir_f2i32(&b, nir_load_var(&b, frag_coord));
+      nir_ssa_def *pos = nir_f2i32(&b, nir_load_frag_coord(&b));
       nir_ssa_def *comp = nir_umod(&b, nir_channel(&b, pos, 0),
                                        nir_imm_int(&b, 3));
       nir_ssa_def *color_component =
@@ -259,16 +254,21 @@ get_fast_clear_rect(const struct isl_device *dev,
       x_scaledown = x_align / 2;
       y_scaledown = y_align / 2;
 
-      /* From BSpec: 3D-Media-GPGPU Engine > 3D Pipeline > Pixel > Pixel
-       * Backend > MCS Buffer for Render Target(s) [DevIVB+] > Table "Color
-       * Clear of Non-MultiSampled Render Target Restrictions":
-       *
-       *   Clear rectangle must be aligned to two times the number of
-       *   pixels in the table shown below due to 16x16 hashing across the
-       *   slice.
-       */
-      x_align *= 2;
-      y_align *= 2;
+      if (ISL_DEV_IS_HASWELL(dev)) {
+         /* From BSpec: 3D-Media-GPGPU Engine > 3D Pipeline > Pixel > Pixel
+          * Backend > MCS Buffer for Render Target(s) [DevIVB+] > Table "Color
+          * Clear of Non-MultiSampled Render Target Restrictions":
+          *
+          *   Clear rectangle must be aligned to two times the number of
+          *   pixels in the table shown below due to 16x16 hashing across the
+          *   slice.
+          *
+          * This restriction is only documented to exist on HSW GT3 but
+          * empirical evidence suggests that it's also needed GT2.
+          */
+         x_align *= 2;
+         y_align *= 2;
+      }
    } else {
       assert(aux_surf->usage == ISL_SURF_USAGE_MCS_BIT);
 
@@ -898,7 +898,11 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    params.x1 = ALIGN(params.x1, x_scaledown) / x_scaledown;
    params.y1 = ALIGN(params.y1, y_scaledown) / y_scaledown;
 
-   if (batch->blorp->isl_dev->info->gen >= 9) {
+   if (batch->blorp->isl_dev->info->gen >= 10) {
+      assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE ||
+             resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE ||
+             resolve_op == ISL_AUX_OP_AMBIGUATE);
+   } else if (batch->blorp->isl_dev->info->gen >= 9) {
       assert(resolve_op == ISL_AUX_OP_FULL_RESOLVE ||
              resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE);
    } else {
@@ -967,7 +971,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 
    /* Do an MCS fetch and check if it is equal to the magic clear value */
    nir_ssa_def *mcs =
-      blorp_nir_txf_ms_mcs(&b, nir_f2i32(&b, blorp_nir_frag_coord(&b)),
+      blorp_nir_txf_ms_mcs(&b, nir_f2i32(&b, nir_load_frag_coord(&b)),
                                nir_load_layer_id(&b));
    nir_ssa_def *is_clear =
       blorp_nir_mcs_is_clear_color(&b, mcs, blorp_key.num_samples);
@@ -993,8 +997,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 
    struct brw_wm_prog_key wm_key;
    brw_blorp_init_wm_prog_key(&wm_key);
-   wm_key.tex.compressed_multisample_layout_mask = 1;
-   wm_key.tex.msaa_16 = blorp_key.num_samples == 16;
+   wm_key.base.tex.compressed_multisample_layout_mask = 1;
+   wm_key.base.tex.msaa_16 = blorp_key.num_samples == 16;
    wm_key.multisample_fbo = true;
 
    struct brw_wm_prog_data prog_data;
@@ -1057,6 +1061,12 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
                     struct blorp_surf *surf,
                     uint32_t level, uint32_t layer)
 {
+   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 10) {
+      /* On gen10 and above, we have a hardware resolve op for this */
+      return blorp_ccs_resolve(batch, surf, level, layer, 1,
+                               surf->surf->format, ISL_AUX_OP_AMBIGUATE);
+   }
+
    struct blorp_params params;
    blorp_params_init(&params);
 
@@ -1169,7 +1179,7 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
    const uint32_t width_rgba_px = width_cl;
    const uint32_t height_rgba_px = height_cl * 4;
 
-   MAYBE_UNUSED bool ok =
+   ASSERTED bool ok =
       isl_surf_init(batch->blorp->isl_dev, &params.dst.surf,
                     .dim = ISL_SURF_DIM_2D,
                     .format = ISL_FORMAT_R32G32B32A32_UINT,

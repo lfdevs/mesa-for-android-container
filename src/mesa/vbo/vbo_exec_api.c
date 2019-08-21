@@ -1251,7 +1251,7 @@ vbo_exec_FlushVertices(struct gl_context *ctx, GLuint flags)
 {
    struct vbo_exec_context *exec = &vbo_context(ctx)->exec;
 
-#ifdef DEBUG
+#ifndef NDEBUG
    /* debug check: make sure we don't get called recursively */
    exec->flush_call_depth++;
    assert(exec->flush_call_depth == 1);
@@ -1259,7 +1259,7 @@ vbo_exec_FlushVertices(struct gl_context *ctx, GLuint flags)
 
    if (_mesa_inside_begin_end(ctx)) {
       /* We've had glBegin but not glEnd! */
-#ifdef DEBUG
+#ifndef NDEBUG
       exec->flush_call_depth--;
       assert(exec->flush_call_depth == 0);
 #endif
@@ -1273,7 +1273,7 @@ vbo_exec_FlushVertices(struct gl_context *ctx, GLuint flags)
     */
    ctx->Driver.NeedFlush &= ~(FLUSH_UPDATE_CURRENT | flags);
 
-#ifdef DEBUG
+#ifndef NDEBUG
    exec->flush_call_depth--;
    assert(exec->flush_call_depth == 0);
 #endif

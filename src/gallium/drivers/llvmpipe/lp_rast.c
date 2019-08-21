@@ -789,7 +789,7 @@ thread_function(void *init_data)
    char thread_name[16];
    unsigned fpstate;
 
-   util_snprintf(thread_name, sizeof thread_name, "llvmpipe-%u", task->thread_index);
+   snprintf(thread_name, sizeof thread_name, "llvmpipe-%u", task->thread_index);
    u_thread_setname(thread_name);
 
    /* Make sure that denorms are treated like zeros. This is 

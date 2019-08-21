@@ -370,24 +370,15 @@ vmw_swc_add_validate_buffer(struct vmw_svga_winsys_context *vswc,
 			    struct pb_buffer *pb_buf,
 			    unsigned flags)
 {
-   enum pipe_error ret;
+   ASSERTED enum pipe_error ret;
    unsigned translated_flags;
+   boolean already_present;
 
-   /*
-    * TODO: Update pb_validate to provide a similar functionality
-    * (Check buffer already present before adding)
-    */
-   if (util_hash_table_get(vswc->hash, pb_buf) != pb_buf) {
-      translated_flags = vmw_translate_to_pb_flags(flags);
-      ret = pb_validate_add_buffer(vswc->validate, pb_buf, translated_flags);
-      /* TODO: Update pipebuffer to reserve buffers and not fail here */
-      assert(ret == PIPE_OK);
-      (void)ret;
-      (void)util_hash_table_set(vswc->hash, pb_buf, pb_buf);
-      return TRUE;
-   }
-
-   return FALSE;
+   translated_flags = vmw_translate_to_pb_flags(flags);
+   ret = pb_validate_add_buffer(vswc->validate, pb_buf, translated_flags,
+                                vswc->hash, &already_present);
+   assert(ret == PIPE_OK);
+   return !already_present;
 }
 
 static void
@@ -566,7 +557,15 @@ vmw_swc_surface_relocation(struct svga_winsys_context *swc,
 
       mtx_lock(&vsurf->mutex);
       assert(vsurf->buf != NULL);
-      
+
+      /*
+       * An internal reloc means that the surface transfer direction
+       * is opposite to the MOB transfer direction...
+       */
+      if ((flags & SVGA_RELOC_INTERNAL) &&
+          (flags & (SVGA_RELOC_READ | SVGA_RELOC_WRITE)) !=
+          (SVGA_RELOC_READ | SVGA_RELOC_WRITE))
+         flags ^= (SVGA_RELOC_READ | SVGA_RELOC_WRITE);
       vmw_swc_mob_relocation(swc, mobid, NULL, (struct svga_winsys_buffer *)
                              vsurf->buf, 0, flags);
       mtx_unlock(&vsurf->mutex);
@@ -816,7 +815,6 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
    vswc->base.flush = vmw_swc_flush;
    vswc->base.surface_map = vmw_svga_winsys_surface_map;
    vswc->base.surface_unmap = vmw_svga_winsys_surface_unmap;
-   vswc->base.surface_invalidate = vmw_svga_winsys_surface_invalidate;
 
    vswc->base.shader_create = vmw_svga_winsys_vgpu10_shader_create;
    vswc->base.shader_destroy = vmw_svga_winsys_vgpu10_shader_destroy;
@@ -854,6 +852,7 @@ vmw_svga_winsys_context_create(struct svga_winsys_screen *sws)
    vswc->fctx = debug_flush_ctx_create(TRUE, VMW_DEBUG_FLUSH_STACK);
 #endif
 
+   vswc->base.force_coherent = vws->force_coherent;
    return &vswc->base;
 
 out_no_hash:

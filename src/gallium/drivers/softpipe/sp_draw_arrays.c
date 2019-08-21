@@ -109,18 +109,6 @@ softpipe_draw_vbo(struct pipe_context *pipe,
                        info->index_size, available_space);
    }
 
-
-   for (i = 0; i < sp->num_so_targets; i++) {
-      void *buf = 0;
-      if (sp->so_targets[i]) {
-         buf = softpipe_resource(sp->so_targets[i]->target.buffer)->data;
-         sp->so_targets[i]->mapping = buf;
-      }
-   }
-
-   draw_set_mapped_so_targets(draw, sp->num_so_targets,
-                              sp->so_targets);
-
    if (softpipe_screen(sp->pipe.screen)->use_llvm) {
       softpipe_prepare_vertex_sampling(sp,
                                        sp->num_sampler_views[PIPE_SHADER_VERTEX],
@@ -150,8 +138,6 @@ softpipe_draw_vbo(struct pipe_context *pipe,
    if (mapped_indices) {
       draw_set_indexes(draw, NULL, 0, 0);
    }
-
-   draw_set_mapped_so_targets(draw, 0, NULL);
 
    if (softpipe_screen(sp->pipe.screen)->use_llvm) {
       softpipe_cleanup_vertex_sampling(sp);

@@ -82,6 +82,10 @@
  *   Right half: {1,3,5,7,9,11,13,15}
  */
 
+/* Important note: We have to use the standard DX positions, because
+ * the primitive discard compute shader relies on them.
+ */
+
 /* 1x MSAA */
 static const uint32_t sample_locs_1x =
 	FILL_SREG( 0, 0,   0, 0,   0, 0,   0, 0); /* S1, S2, S3 fields are not used by 1x */

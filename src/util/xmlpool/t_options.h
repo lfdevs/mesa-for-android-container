@@ -35,8 +35,8 @@
  * all the translations. The result (options.h) is included by
  * xmlpool.h which in turn can be included by drivers.
  *
- * The macros used to describe otions in this file are defined in
- * ../xmlpool.h.
+ * The macros used to describe options in this file are defined in
+ * src/util/xmlpool.h.
  */
 
 /* This is needed for xgettext to extract translatable strings.
@@ -138,6 +138,11 @@ DRI_CONF_OPT_END
 #define DRI_CONF_ALLOW_GLSL_LAYOUT_QUALIFIER_ON_FUNCTION_PARAMETERS(def) \
 DRI_CONF_OPT_BEGIN_B(allow_glsl_layout_qualifier_on_function_parameters, def) \
         DRI_CONF_DESC(en,gettext("Allow layout qualifiers on function parameters.")) \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_FORCE_GL_VENDOR(def) \
+DRI_CONF_OPT_BEGIN(force_gl_vendor, string, def) \
+        DRI_CONF_DESC(en,gettext("Allow GPU vendor to be overridden.")) \
 DRI_CONF_OPT_END
 
 #define DRI_CONF_FORCE_COMPAT_PROFILE(def) \
@@ -358,3 +363,26 @@ DRI_CONF_OPT_BEGIN_B(radeonsi_zerovram, def) \
         DRI_CONF_DESC(en,"Zero all vram allocations") \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_V3D_NONMSAA_TEXTURE_SIZE_LIMIT(def) \
+DRI_CONF_OPT_BEGIN_B(v3d_nonmsaa_texture_size_limit, def) \
+        DRI_CONF_DESC(en,"Report the non-MSAA-only texture size limit") \
+DRI_CONF_OPT_END
+
+/**
+ * \brief virgl specific configuration options
+ */
+
+#define DRI_CONF_GLES_EMULATE_BGRA(def) \
+DRI_CONF_OPT_BEGIN_B(gles_emulate_bgra, def) \
+        DRI_CONF_DESC(en,gettext("On GLES emulate BGRA formats by using a swizzled RGBA format")) \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_GLES_APPLY_BGRA_DEST_SWIZZLE(def) \
+DRI_CONF_OPT_BEGIN_B(gles_apply_bgra_dest_swizzle, def) \
+        DRI_CONF_DESC(en,gettext("When the BGRA formats are emulated by using swizzled RGBA formats on GLES apply the swizzle when writing")) \
+DRI_CONF_OPT_END
+
+#define DRI_CONF_GLES_SAMPLES_PASSED_VALUE(def, minimum, maximum) \
+DRI_CONF_OPT_BEGIN_V(gles_samples_passed_value, def, minimum, maximum) \
+        DRI_CONF_DESC(en,gettext("GL_SAMPLES_PASSED value when emulated by GL_ANY_SAMPLES_PASSED")) \
+DRI_CONF_OPT_END

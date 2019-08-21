@@ -66,6 +66,8 @@
  * resolve.
  */
 
+#define BIN_DEBUG 0
+
 static uint32_t bin_width(struct fd_screen *screen)
 {
 	if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
@@ -238,10 +240,10 @@ calculate_tiles(struct fd_batch *batch)
 		tpp_y = 6;
 	} else {
 		tpp_x = tpp_y = 1;
-		while (div_round_up(nbins_y, tpp_y) > screen->num_vsc_pipes)
+		while (div_round_up(nbins_y, tpp_y) > npipes)
 			tpp_y += 2;
 		while ((div_round_up(nbins_y, tpp_y) *
-				div_round_up(nbins_x, tpp_x)) > screen->num_vsc_pipes)
+				div_round_up(nbins_x, tpp_x)) > npipes)
 			tpp_x += 1;
 	}
 
@@ -278,14 +280,14 @@ calculate_tiles(struct fd_batch *batch)
 		pipe->x = pipe->y = pipe->w = pipe->h = 0;
 	}
 
-#if 0 /* debug */
-	printf("%dx%d ... tpp=%dx%d\n", nbins_x, nbins_y, tpp_x, tpp_y);
-	for (i = 0; i < 8; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->pipe[i];
-		printf("pipe[%d]: %ux%u @ %u,%u\n", i,
-				pipe->w, pipe->h, pipe->x, pipe->y);
+	if (BIN_DEBUG) {
+		printf("%dx%d ... tpp=%dx%d\n", nbins_x, nbins_y, tpp_x, tpp_y);
+		for (i = 0; i < ARRAY_SIZE(ctx->vsc_pipe); i++) {
+			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+			printf("pipe[%d]: %ux%u @ %u,%u\n", i,
+					pipe->w, pipe->h, pipe->x, pipe->y);
+		}
 	}
-#endif
 
 	/* configure tiles: */
 	t = 0;
@@ -319,6 +321,11 @@ calculate_tiles(struct fd_batch *batch)
 			tile->xoff = xoff;
 			tile->yoff = yoff;
 
+			if (BIN_DEBUG) {
+				printf("tile[%d]: p=%u, bin=%ux%u+%u+%u\n", t,
+						p, bw, bh, xoff, yoff);
+			}
+
 			t++;
 
 			xoff += bw;
@@ -327,16 +334,16 @@ calculate_tiles(struct fd_batch *batch)
 		yoff += bh;
 	}
 
-#if 0 /* debug */
-	t = 0;
-	for (i = 0; i < nbins_y; i++) {
-		for (j = 0; j < nbins_x; j++) {
-			struct fd_tile *tile = &ctx->tile[t++];
-			printf("|p:%u n:%u|", tile->p, tile->n);
+	if (BIN_DEBUG) {
+		t = 0;
+		for (i = 0; i < nbins_y; i++) {
+			for (j = 0; j < nbins_x; j++) {
+				struct fd_tile *tile = &ctx->tile[t++];
+				printf("|p:%u n:%u|", tile->p, tile->n);
+			}
+			printf("\n");
 		}
-		printf("\n");
 	}
-#endif
 }
 
 static void
@@ -369,7 +376,11 @@ render_tiles(struct fd_batch *batch)
 			ctx->query_prepare_tile(batch, i, batch->gmem);
 
 		/* emit IB to drawcmds: */
-		ctx->emit_ib(batch->gmem, batch->draw);
+		if (ctx->emit_tile) {
+			ctx->emit_tile(batch, tile);
+		} else {
+			ctx->screen->emit_ib(batch->gmem, batch->draw);
+		}
 		fd_reset_wfi(batch);
 
 		/* emit gmem2mem to transfer tile back to system memory: */
@@ -391,7 +402,7 @@ render_sysmem(struct fd_batch *batch)
 		ctx->query_prepare_tile(batch, 0, batch->gmem);
 
 	/* emit IB to drawcmds: */
-	ctx->emit_ib(batch->gmem, batch->draw);
+	ctx->screen->emit_ib(batch->gmem, batch->draw);
 	fd_reset_wfi(batch);
 
 	if (ctx->emit_sysmem_fini)

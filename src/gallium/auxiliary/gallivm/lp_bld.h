@@ -108,5 +108,4 @@ typedef void *LLVMMCJITMemoryManagerRef;
 #  define LLVMSetAlignment LLVMSetAlignmentBackport
 #endif
 
-
 #endif /* LP_BLD_H */

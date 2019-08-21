@@ -345,7 +345,7 @@ typedef union __attribute__((__packed__)) {
       bool     cond_lt     :  1;
       unsigned unknown_1   : 22; /* = 0 0000 0000 0000 0000 0000 0 */
       signed   target      : 27;
-      unsigned unknown_2   :  5; /* = 0 0011 */
+      unsigned next_count  :  5;
    } branch;
    struct __attribute__((__packed__)) {
       unsigned word0 : 32;

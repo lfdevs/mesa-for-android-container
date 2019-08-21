@@ -46,7 +46,7 @@ stw_st_create_framebuffer(struct stw_framebuffer *fb);
 void
 stw_st_destroy_framebuffer_locked(struct st_framebuffer_iface *stfb);
 
-boolean
+bool
 stw_st_swap_framebuffer_locked(HDC hdc, struct st_framebuffer_iface *stfb);
 
 struct pipe_resource *

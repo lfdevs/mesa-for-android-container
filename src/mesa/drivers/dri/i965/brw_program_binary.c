@@ -164,7 +164,7 @@ deserialize_gen_program(struct blob_reader *reader, struct gl_context *ctx,
 
    union brw_any_prog_key prog_key;
    blob_copy_bytes(reader, &prog_key, brw_prog_key_size(stage));
-   brw_prog_key_set_id(&prog_key, stage, brw_program(prog)->id);
+   prog_key.base.program_string_id = brw_program(prog)->id;
 
    enum brw_cache_id cache_id = brw_stage_cache_id(stage);
 
@@ -206,14 +206,14 @@ brw_program_deserialize_driver_blob(struct gl_context *ctx,
          break;
       switch ((enum driver_cache_blob_part)part_type) {
       case GEN_PART: {
-         MAYBE_UNUSED uint32_t gen_size = blob_read_uint32(&reader);
+         ASSERTED uint32_t gen_size = blob_read_uint32(&reader);
          assert(!reader.overrun &&
                 (uintptr_t)(reader.end - reader.current) > gen_size);
          deserialize_gen_program(&reader, ctx, prog, stage);
          break;
       }
       case NIR_PART: {
-         MAYBE_UNUSED uint32_t nir_size = blob_read_uint32(&reader);
+         ASSERTED uint32_t nir_size = blob_read_uint32(&reader);
          assert(!reader.overrun &&
                 (uintptr_t)(reader.end - reader.current) > nir_size);
          const struct nir_shader_compiler_options *options =
@@ -251,7 +251,7 @@ serialize_gen_part(struct blob *writer, struct gl_context *ctx,
    struct brw_context *brw = brw_context(ctx);
 
    union brw_any_prog_key key;
-   brw_populate_default_key(&brw->screen->devinfo, &key, sh_prog, prog);
+   brw_populate_default_key(brw->screen->compiler, &key, sh_prog, prog);
 
    const gl_shader_stage stage = prog->info.stage;
    uint32_t offset = 0;

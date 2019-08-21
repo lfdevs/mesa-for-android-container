@@ -29,6 +29,7 @@
 #include "util/list.h"
 
 #include "virgl/virgl_winsys.h"
+#include "virgl_resource_cache.h"
 
 struct pipe_fence_handle;
 struct util_hash_table;
@@ -42,21 +43,23 @@ struct virgl_hw_res {
    void *ptr;
    uint32_t stride;
 
-   struct list_head head;
+   struct virgl_resource_cache_entry cache_entry;
    uint32_t format;
    uint32_t bind;
-   boolean cacheable;
-   int64_t start, end;
    uint32_t flink_name;
+
+   /* true when the resource is imported or exported */
+   int external;
+
+   /* false when the resource is known to be idle */
+   int maybe_busy;
 };
 
 struct virgl_drm_winsys
 {
    struct virgl_winsys base;
    int fd;
-   struct list_head delayed;
-   int num_delayed;
-   unsigned usecs;
+   struct virgl_resource_cache cache;
    mtx_t mutex;
 
    struct util_hash_table *bo_handles;

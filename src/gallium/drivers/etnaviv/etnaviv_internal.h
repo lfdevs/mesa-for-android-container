@@ -31,7 +31,7 @@
 #include "hw/state.xml.h"
 #include "hw/state_3d.xml.h"
 
-#include <etnaviv_drmif.h>
+#include "drm/etnaviv_drmif.h"
 
 #define ETNA_NUM_INPUTS (16)
 #define ETNA_NUM_VARYINGS 8
@@ -76,6 +76,8 @@ struct etna_specs {
    unsigned has_new_transcendentals : 1;
    /* has the new dp2/dpX_norm instructions, among others */
    unsigned has_halti2_instructions : 1;
+   /* has V4_COMPRESSION */
+   unsigned v4_compression : 1;
    /* supports single-buffer rendering with multiple pixel pipes */
    unsigned single_buffer : 1;
    /* has unified uniforms memory */
@@ -144,6 +146,8 @@ struct etna_specs {
 struct compiled_blend_color {
    float color[4];
    uint32_t PE_ALPHA_BLEND_COLOR;
+   uint32_t PE_ALPHA_COLOR_EXT0;
+   uint32_t PE_ALPHA_COLOR_EXT1;
 };
 
 /* Compiled pipe_stencil_ref */
@@ -193,6 +197,7 @@ struct compiled_framebuffer_state {
    struct etna_reloc PE_COLOR_ADDR;
    struct etna_reloc PE_PIPE_COLOR_ADDR[ETNA_MAX_PIXELPIPES];
    uint32_t PE_COLOR_STRIDE;
+   uint32_t PE_MEM_CONFIG;
    uint32_t SE_SCISSOR_LEFT;
    uint32_t SE_SCISSOR_TOP;
    uint32_t SE_SCISSOR_RIGHT;
@@ -257,21 +262,11 @@ struct compiled_shader_state {
    uint32_t GL_VARYING_COMPONENT_USE[2];
    uint32_t GL_HALTI5_SH_SPECIALS;
    unsigned vs_inst_mem_size;
-   unsigned vs_uniforms_size;
    unsigned ps_inst_mem_size;
-   unsigned ps_uniforms_size;
    uint32_t *VS_INST_MEM;
-   uint32_t VS_UNIFORMS[ETNA_MAX_UNIFORMS * 4];
    uint32_t *PS_INST_MEM;
-   uint32_t PS_UNIFORMS[ETNA_MAX_UNIFORMS * 4];
    struct etna_reloc PS_INST_ADDR;
    struct etna_reloc VS_INST_ADDR;
-};
-
-/* state of some 3d and common registers relevant to etna driver */
-struct etna_3d_state {
-   uint32_t /*05000*/ VS_UNIFORMS[VIVS_VS_UNIFORMS__LEN];
-   uint32_t /*07000*/ PS_UNIFORMS[VIVS_PS_UNIFORMS__LEN];
 };
 
 /* Helpers to assist creating and setting bitarrays (eg, for varyings).

@@ -67,7 +67,7 @@ struct glx_context dummyContext = {
 
 _X_HIDDEN pthread_mutex_t __glXmutex = PTHREAD_MUTEX_INITIALIZER;
 
-# if defined( GLX_USE_TLS )
+# if defined( USE_ELF_TLS )
 
 /**
  * Per-thread GLX context pointer.
@@ -132,7 +132,7 @@ __glXGetCurrentContext(void)
    return (v == NULL) ? &dummyContext : (struct glx_context *) v;
 }
 
-# endif /* defined( GLX_USE_TLS ) */
+# endif /* defined( USE_ELF_TLS ) */
 
 
 _X_HIDDEN void

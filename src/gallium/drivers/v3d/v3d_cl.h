@@ -28,6 +28,7 @@
 
 #include "util/u_math.h"
 #include "util/macros.h"
+#include "broadcom/cle/v3d_packet_helpers.h"
 
 struct v3d_bo;
 struct v3d_job;
@@ -52,6 +53,15 @@ static inline void cl_pack_emit_reloc(struct v3d_cl *cl, const struct v3d_cl_rel
 #define __gen_address_offset(reloc) (((reloc)->bo ? (reloc)->bo->offset : 0) + \
                                      (reloc)->offset)
 #define __gen_emit_reloc cl_pack_emit_reloc
+#define __gen_unpack_address(cl, s, e) __unpack_address(cl, s, e)
+
+static inline struct v3d_cl_reloc
+__unpack_address(const uint8_t *cl, uint32_t s, uint32_t e)
+{
+    struct v3d_cl_reloc reloc =
+            { NULL, __gen_unpack_uint(cl, s, e) << (31 - (e - s)) };
+    return reloc;
+}
 
 struct v3d_cl {
         void *base;

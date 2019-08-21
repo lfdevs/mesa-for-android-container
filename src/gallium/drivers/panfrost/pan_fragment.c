@@ -28,30 +28,81 @@
 
 #include "util/u_format.h"
 
+/* Mark a surface as written */
+
+static void
+panfrost_initialize_surface(
+                struct panfrost_job *batch,
+                struct pipe_surface *surf)
+{
+        if (!surf)
+                return;
+
+        unsigned level = surf->u.tex.level;
+        struct panfrost_resource *rsrc = pan_resource(surf->texture);
+
+        rsrc->slices[level].initialized = true;
+
+        assert(rsrc->bo);
+        panfrost_job_add_bo(batch, rsrc->bo);
+}
+
 /* Generate a fragment job. This should be called once per frame. (According to
  * presentations, this is supposed to correspond to eglSwapBuffers) */
 
 mali_ptr
-panfrost_fragment_job(struct panfrost_context *ctx)
+panfrost_fragment_job(struct panfrost_context *ctx, bool has_draws)
 {
-        /* TODO: Check viewport or something */
-        bool flip_y = panfrost_is_scanout(ctx);
+        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
 
-        mali_ptr framebuffer = ctx->require_sfbd ?
-                panfrost_sfbd_fragment(ctx, flip_y) :
-                panfrost_mfbd_fragment(ctx, flip_y);
+        mali_ptr framebuffer = screen->require_sfbd ?
+                               panfrost_sfbd_fragment(ctx, has_draws) :
+                               panfrost_mfbd_fragment(ctx, has_draws);
+
+        /* Mark the affected buffers as initialized, since we're writing to it.
+         * Also, add the surfaces we're writing to to the batch */
+
+        struct pipe_framebuffer_state *fb = &ctx->pipe_framebuffer;
+        struct panfrost_job *batch = panfrost_get_job_for_fbo(ctx);
+
+        for (unsigned i = 0; i < fb->nr_cbufs; ++i) {
+                panfrost_initialize_surface(batch, fb->cbufs[i]);
+        }
+
+        if (fb->zsbuf)
+                panfrost_initialize_surface(batch, fb->zsbuf);
 
         struct mali_job_descriptor_header header = {
                 .job_type = JOB_TYPE_FRAGMENT,
                 .job_index = 1,
-#ifdef __LP64__
                 .job_descriptor_size = 1
-#endif
         };
 
+        struct panfrost_job *job = panfrost_get_job_for_fbo(ctx);
+
+        /* The passed tile coords can be out of range in some cases, so we need
+         * to clamp them to the framebuffer size to avoid a TILE_RANGE_FAULT.
+         * Theoretically we also need to clamp the coordinates positive, but we
+         * avoid that edge case as all four values are unsigned. Also,
+         * theoretically we could clamp the minima, but if that has to happen
+         * the asserts would fail anyway (since the maxima would get clamped
+         * and then be smaller than the minima). An edge case of sorts occurs
+         * when no scissors are added to draw, so by default min=~0 and max=0.
+         * But that can't happen if any actual drawing occurs (beyond a
+         * wallpaper reload), so this is again irrelevant in practice. */
+
+        job->maxx = MIN2(job->maxx, fb->width);
+        job->maxy = MIN2(job->maxy, fb->height);
+
+        /* Rendering region must be at least 1x1; otherwise, there is nothing
+         * to do and the whole job chain should have been discarded. */
+
+        assert(job->maxx > job->minx);
+        assert(job->maxy > job->miny);
+
         struct mali_payload_fragment payload = {
-                .min_tile_coord = MALI_COORDINATE_TO_TILE_MIN(0, 0),
-                .max_tile_coord = MALI_COORDINATE_TO_TILE_MAX(ctx->pipe_framebuffer.width, ctx->pipe_framebuffer.height),
+                .min_tile_coord = MALI_COORDINATE_TO_TILE_MIN(job->minx, job->miny),
+                .max_tile_coord = MALI_COORDINATE_TO_TILE_MAX(job->maxx, job->maxy),
                 .framebuffer = framebuffer,
         };
 

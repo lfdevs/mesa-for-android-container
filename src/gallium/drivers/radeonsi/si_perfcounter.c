@@ -126,7 +126,7 @@ static const unsigned si_pc_shader_type_bits[] = {
 /* Max counters per HW block */
 #define SI_QUERY_MAX_COUNTERS 16
 
-#define SI_PC_SHADERS_WINDOWING (1 << 31)
+#define SI_PC_SHADERS_WINDOWING (1u << 31)
 
 struct si_query_group {
 	struct si_query_group *next;
@@ -671,7 +671,7 @@ static void si_pc_emit_start(struct si_context *sctx,
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	si_cp_copy_data(sctx,
+	si_cp_copy_data(sctx, sctx->gfx_cs,
 			COPY_DATA_DST_MEM, buffer, va - buffer->gpu_address,
 			COPY_DATA_IMM, NULL, 1);
 
@@ -690,7 +690,7 @@ static void si_pc_emit_stop(struct si_context *sctx,
 {
 	struct radeon_cmdbuf *cs = sctx->gfx_cs;
 
-	si_cp_release_mem(sctx, V_028A90_BOTTOM_OF_PIPE_TS, 0,
+	si_cp_release_mem(sctx, cs, V_028A90_BOTTOM_OF_PIPE_TS, 0,
 			  EOP_DST_SEL_MEM, EOP_INT_SEL_NONE,
 			  EOP_DATA_SEL_VALUE_32BIT,
 			  buffer, va, 0, SI_NOT_QUERY);
@@ -749,7 +749,7 @@ static void si_pc_emit_read(struct si_context *sctx,
 	}
 }
 
-static void si_pc_query_destroy(struct si_screen *sscreen,
+static void si_pc_query_destroy(struct si_context *sctx,
 				struct si_query *squery)
 {
 	struct si_query_pc *query = (struct si_query_pc *)squery;
@@ -762,7 +762,7 @@ static void si_pc_query_destroy(struct si_screen *sscreen,
 
 	FREE(query->counters);
 
-	si_query_buffer_destroy(sscreen, &query->buffer);
+	si_query_buffer_destroy(sctx->screen, &query->buffer);
 	FREE(query);
 }
 
@@ -1100,7 +1100,7 @@ struct pipe_query *si_create_batch_query(struct pipe_context *ctx,
 	return (struct pipe_query *)query;
 
 error:
-	si_pc_query_destroy(screen, &query->b);
+	si_pc_query_destroy((struct si_context *)ctx, &query->b);
 	return NULL;
 }
 
@@ -1284,11 +1284,11 @@ void si_init_perfcounters(struct si_screen *screen)
 	unsigned i;
 
 	switch (screen->info.chip_class) {
-	case CIK:
+	case GFX7:
 		blocks = groups_CIK;
 		num_blocks = ARRAY_SIZE(groups_CIK);
 		break;
-	case VI:
+	case GFX8:
 		blocks = groups_VI;
 		num_blocks = ARRAY_SIZE(groups_VI);
 		break;
@@ -1296,13 +1296,13 @@ void si_init_perfcounters(struct si_screen *screen)
 		blocks = groups_gfx9;
 		num_blocks = ARRAY_SIZE(groups_gfx9);
 		break;
-	case SI:
+	case GFX6:
 	default:
 		return; /* not implemented */
 	}
 
 	if (screen->info.max_sh_per_se != 1) {
-		/* This should not happen on non-SI chips. */
+		/* This should not happen on non-GFX6 chips. */
 		fprintf(stderr, "si_init_perfcounters: max_sh_per_se = %d not "
 			"supported (inaccurate performance counters)\n",
 			screen->info.max_sh_per_se);

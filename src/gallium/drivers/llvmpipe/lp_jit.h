@@ -135,6 +135,9 @@ struct lp_jit_context
 
    struct lp_jit_texture textures[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    struct lp_jit_sampler samplers[PIPE_MAX_SAMPLERS];
+
+   const uint32_t *ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+   int num_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
 };
 
 
@@ -153,6 +156,8 @@ enum {
    LP_JIT_CTX_VIEWPORTS,
    LP_JIT_CTX_TEXTURES,
    LP_JIT_CTX_SAMPLERS,
+   LP_JIT_CTX_SSBOS,
+   LP_JIT_CTX_NUM_SSBOS,
    LP_JIT_CTX_COUNT
 };
 
@@ -187,6 +192,11 @@ enum {
 #define lp_jit_context_samplers(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_SAMPLERS, "samplers")
 
+#define lp_jit_context_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_SSBOS, "ssbos")
+
+#define lp_jit_context_num_ssbos(_gallivm, _ptr) \
+   lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CTX_NUM_SSBOS, "num_ssbos")
 
 struct lp_jit_thread_data
 {

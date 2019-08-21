@@ -228,12 +228,6 @@ option(
   description : 'Enable GLVND support.'
 )
 option(
-  'asm',
-  type : 'boolean',
-  value : true,
-  description : 'Build assembly code if possible'
-)
-option(
    'glx-read-only-text',
    type : 'boolean',
    value : false,
@@ -316,7 +310,7 @@ option(
   'tools',
   type : 'array',
   value : [],
-  choices : ['etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui', 'nir', 'nouveau', 'xvmc', 'all'],
+  choices : ['drm-shim', 'etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui', 'nir', 'nouveau', 'xvmc', 'lima', 'all'],
   description : 'List of tools to build. (Note: `intel-ui` selects `intel`)',
 )
 option(

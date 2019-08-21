@@ -35,6 +35,7 @@
 
 #include "memory/TilingFunctions.h"
 #include "memory/Convert.h"
+#include "memory/SurfaceState.h"
 #include "core/multisample.h"
 
 #include <array>
@@ -2031,3 +2032,19 @@ void InitStoreTilesTableStencil(
 {
     table[TTileMode][R8_UINT]                       = StoreMacroTile<TilingTraits<TTileMode, 8>, R8_UINT, R8_UINT>::Store;
 }
+
+
+//////////////////////////////////////////////////////////////////////////
+/// @brief Deswizzles and stores a full hottile to a render surface
+/// @param hPrivateContext - Handle to private DC
+/// @param srcFormat - Format for hot tile.
+/// @param renderTargetIndex - Index to destination render target
+/// @param x, y - Coordinates to raster tile.
+/// @param pSrcHotTile - Pointer to Hot Tile
+void SwrStoreHotTileToSurface(
+        HANDLE hWorkerPrivateData,
+        SWR_SURFACE_STATE *pDstSurface,
+        SWR_FORMAT srcFormat,
+        SWR_RENDERTARGET_ATTACHMENT renderTargetIndex,
+        uint32_t x, uint32_t y, uint32_t renderTargetArrayIndex,
+        uint8_t *pSrcHotTile);

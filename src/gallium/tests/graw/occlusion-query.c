@@ -2,6 +2,7 @@
  */
 
 #include <stdio.h>
+#include <inttypes.h>
 
 #include "graw_util.h"
 
@@ -187,7 +188,7 @@ draw(void)
    info.ctx->get_query_result(info.ctx, q1, TRUE, &res1);
    info.ctx->get_query_result(info.ctx, q2, TRUE, &res2);
 
-   printf("result1 = %lu  result2 = %lu\n", res1.u64, res2.u64);
+   printf("result1 = %" PRIu64 "  result2 = %" PRIu64 "\n", res1.u64, res2.u64);
    if (res1.u64 < expected1_min || res1.u64 > expected1_max)
       printf("  Failure: result1 should be near %d\n", expected1);
    if (res2.u64 < expected2_min || res2.u64 > expected2_max)

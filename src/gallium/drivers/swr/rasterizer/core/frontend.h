@@ -31,6 +31,16 @@
 #include "common/simdintrin.h"
 #include <type_traits>
 
+//////////////////////////////////////////////////////////////////////////
+/// @brief Helper macro to generate a bitmask
+static INLINE uint32_t
+              GenMask(uint32_t numBits)
+{
+    SWR_ASSERT(
+        numBits <= (sizeof(uint32_t) * 8), "Too many bits (%d) for %s", numBits, __FUNCTION__);
+    return ((1U << numBits) - 1);
+}
+
 // Calculates the A and B coefficients for the 3 edges of the triangle
 //
 // maths for edge equations:

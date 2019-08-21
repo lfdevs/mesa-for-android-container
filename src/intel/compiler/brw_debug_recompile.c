@@ -86,12 +86,20 @@ debug_sampler_recompile(const struct brw_compiler *c, void *log,
    return found;
 }
 
+static bool
+debug_base_recompile(const struct brw_compiler *c, void *log,
+                     const struct brw_base_prog_key *old_key,
+                     const struct brw_base_prog_key *key)
+{
+   return debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+}
+
 static void
 debug_vs_recompile(const struct brw_compiler *c, void *log,
                    const struct brw_vs_prog_key *old_key,
                    const struct brw_vs_prog_key *key)
 {
-   bool found = debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   bool found = debug_base_recompile(c, log, &old_key->base, &key->base);
 
    for (unsigned i = 0; i < VERT_ATTRIB_MAX; i++) {
       found |= check("vertex attrib w/a flags", gl_attrib_wa_flags[i]);
@@ -112,7 +120,7 @@ debug_tcs_recompile(const struct brw_compiler *c, void *log,
                     const struct brw_tcs_prog_key *old_key,
                     const struct brw_tcs_prog_key *key)
 {
-   bool found = debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   bool found = debug_base_recompile(c, log, &old_key->base, &key->base);
 
    found |= check("input vertices", input_vertices);
    found |= check("outputs written", outputs_written);
@@ -130,7 +138,7 @@ debug_tes_recompile(const struct brw_compiler *c, void *log,
                     const struct brw_tes_prog_key *old_key,
                     const struct brw_tes_prog_key *key)
 {
-   bool found = debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   bool found = debug_base_recompile(c, log, &old_key->base, &key->base);
 
    found |= check("inputs read", inputs_read);
    found |= check("patch inputs read", patch_inputs_read);
@@ -145,7 +153,7 @@ debug_gs_recompile(const struct brw_compiler *c, void *log,
                    const struct brw_gs_prog_key *old_key,
                    const struct brw_gs_prog_key *key)
 {
-   bool found = debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   bool found = debug_base_recompile(c, log, &old_key->base, &key->base);
 
    if (!found) {
       c->shader_perf_log(log, "  something else\n");
@@ -179,7 +187,7 @@ debug_fs_recompile(const struct brw_compiler *c, void *log,
    found |= check("mrt alpha test function", alpha_test_func);
    found |= check("mrt alpha test reference value", alpha_test_ref);
 
-   found |= debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   found |= debug_base_recompile(c, log, &old_key->base, &key->base);
 
    if (!found) {
       c->shader_perf_log(log, "  something else\n");
@@ -191,7 +199,7 @@ debug_cs_recompile(const struct brw_compiler *c, void *log,
                    const struct brw_cs_prog_key *old_key,
                    const struct brw_cs_prog_key *key)
 {
-   bool found = debug_sampler_recompile(c, log, &old_key->tex, &key->tex);
+   bool found = debug_base_recompile(c, log, &old_key->base, &key->base);
 
    if (!found) {
       c->shader_perf_log(log, "  something else\n");
@@ -201,7 +209,8 @@ debug_cs_recompile(const struct brw_compiler *c, void *log,
 void
 brw_debug_key_recompile(const struct brw_compiler *c, void *log,
                         gl_shader_stage stage,
-                        const void *old_key, const void *key)
+                        const struct brw_base_prog_key *old_key,
+                        const struct brw_base_prog_key *key)
 {
    if (!old_key) {
       c->shader_perf_log(log, "  No previous compile found...\n");
@@ -210,22 +219,28 @@ brw_debug_key_recompile(const struct brw_compiler *c, void *log,
 
    switch (stage) {
    case MESA_SHADER_VERTEX:
-      debug_vs_recompile(c, log, old_key, key);
+      debug_vs_recompile(c, log, (const struct brw_vs_prog_key *)old_key,
+                                 (const struct brw_vs_prog_key *)key);
       break;
    case MESA_SHADER_TESS_CTRL:
-      debug_tcs_recompile(c, log, old_key, key);
+      debug_tcs_recompile(c, log, (const struct brw_tcs_prog_key *)old_key,
+                                  (const struct brw_tcs_prog_key *)key);
       break;
    case MESA_SHADER_TESS_EVAL:
-      debug_tes_recompile(c, log, old_key, key);
+      debug_tes_recompile(c, log, (const struct brw_tes_prog_key *)old_key,
+                                  (const struct brw_tes_prog_key *)key);
       break;
    case MESA_SHADER_GEOMETRY:
-      debug_gs_recompile(c, log, old_key, key);
+      debug_gs_recompile(c, log, (const struct brw_gs_prog_key *)old_key,
+                                 (const struct brw_gs_prog_key *)key);
       break;
    case MESA_SHADER_FRAGMENT:
-      debug_fs_recompile(c, log, old_key, key);
+      debug_fs_recompile(c, log, (const struct brw_wm_prog_key *)old_key,
+                                 (const struct brw_wm_prog_key *)key);
       break;
    case MESA_SHADER_COMPUTE:
-      debug_cs_recompile(c, log, old_key, key);
+      debug_cs_recompile(c, log, (const struct brw_cs_prog_key *)old_key,
+                                 (const struct brw_cs_prog_key *)key);
       break;
    default:
       break;

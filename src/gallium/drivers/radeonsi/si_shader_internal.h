@@ -36,7 +36,6 @@
 #include <llvm-c/TargetMachine.h>
 
 struct pipe_debug_callback;
-struct ac_shader_binary;
 
 #define RADEON_LLVM_MAX_INPUT_SLOTS 32
 #define RADEON_LLVM_MAX_INPUTS 32 * 4
@@ -44,6 +43,29 @@ struct ac_shader_binary;
 
 #define RADEON_LLVM_MAX_SYSTEM_VALUES 11
 #define RADEON_LLVM_MAX_ADDRS 16
+
+enum si_arg_regfile {
+	ARG_SGPR,
+	ARG_VGPR
+};
+
+/**
+ * Used to collect types and other info about arguments of the LLVM function
+ * before the function is created.
+ */
+struct si_function_info {
+	LLVMTypeRef types[100];
+	LLVMValueRef *assign[100];
+	unsigned num_sgpr_params;
+	unsigned num_params;
+};
+
+struct si_shader_output_values {
+	LLVMValueRef values[4];
+	unsigned semantic_name;
+	unsigned semantic_index;
+	ubyte vertex_stream[4];
+};
 
 struct si_shader_context {
 	struct lp_build_tgsi_context bld_base;
@@ -90,7 +112,8 @@ struct si_shader_context {
 	LLVMValueRef *imms;
 	unsigned imms_num;
 
-	struct lp_build_if_state merged_wrap_if_state;
+	LLVMBasicBlockRef merged_wrap_if_entry_block;
+	int merged_wrap_if_label;
 
 	struct tgsi_array_info *temp_arrays;
 	LLVMValueRef *temp_array_allocas;
@@ -164,6 +187,13 @@ struct si_shader_context {
 	int param_tes_rel_patch_id;
 	/* HW ES */
 	int param_es2gs_offset;
+	/* HW GS */
+	/* On gfx10:
+	 *  - bits 0..10: ordered_wave_id
+	 *  - bits 12..20: number of vertices in group
+	 *  - bits 22..30: number of primitives in group
+	 */
+	LLVMValueRef gs_tg_info;
 	/* API GS */
 	int param_gs2vs_offset;
 	int param_gs_wave_id; /* GFX6 */
@@ -184,6 +214,10 @@ struct si_shader_context {
 
 	LLVMValueRef invoc0_tess_factors[6]; /* outer[4], inner[2] */
 	LLVMValueRef gs_next_vertex[4];
+	LLVMValueRef gs_curprim_verts[4];
+	LLVMValueRef gs_generated_prims[4];
+	LLVMValueRef gs_ngg_emit;
+	LLVMValueRef gs_ngg_scratch;
 	LLVMValueRef postponed_kill;
 	LLVMValueRef return_value;
 
@@ -218,10 +252,19 @@ si_shader_context_from_abi(struct ac_shader_abi *abi)
 	return container_of(abi, ctx, abi);
 }
 
-unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
+void si_init_function_info(struct si_function_info *fninfo);
+unsigned add_arg_assign(struct si_function_info *fninfo,
+			enum si_arg_regfile regfile, LLVMTypeRef type,
+			LLVMValueRef *assign);
+void si_create_function(struct si_shader_context *ctx,
+			const char *name,
+			LLVMTypeRef *returns, unsigned num_returns,
+			struct si_function_info *fninfo,
+			unsigned max_workgroup_size);
+unsigned si_llvm_compile(LLVMModuleRef M, struct si_shader_binary *binary,
 			 struct ac_llvm_compiler *compiler,
 			 struct pipe_debug_callback *debug,
-			 bool less_optimized);
+			 bool less_optimized, unsigned wave_size);
 
 LLVMTypeRef tgsi2llvmtype(struct lp_build_tgsi_context *bld_base,
 			  enum tgsi_opcode_type type);
@@ -235,9 +278,11 @@ LLVMValueRef si_llvm_bound_index(struct si_shader_context *ctx,
 
 void si_llvm_context_init(struct si_shader_context *ctx,
 			  struct si_screen *sscreen,
-			  struct ac_llvm_compiler *compiler);
-void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
-			      struct si_shader *shader);
+			  struct ac_llvm_compiler *compiler,
+			  unsigned wave_size,
+			  unsigned ballot_mask_bits);
+void si_llvm_context_set_ir(struct si_shader_context *ctx,
+			    struct si_shader *shader);
 
 void si_llvm_create_func(struct si_shader_context *ctx,
 			 const char *name,
@@ -305,8 +350,9 @@ LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx,
 				  enum ac_descriptor_type type);
 LLVMValueRef si_load_image_desc(struct si_shader_context *ctx,
 				LLVMValueRef list, LLVMValueRef index,
-				enum ac_descriptor_type desc_type, bool dcc_off,
-				bool bindless);
+				enum ac_descriptor_type desc_type,
+				bool uses_store, bool bindless);
+LLVMValueRef si_nir_emit_fbfetch(struct ac_shader_abi *abi);
 
 void si_load_system_value(struct si_shader_context *ctx,
 			  unsigned index,
@@ -314,6 +360,17 @@ void si_load_system_value(struct si_shader_context *ctx,
 void si_declare_compute_memory(struct si_shader_context *ctx);
 void si_tgsi_declare_compute_memory(struct si_shader_context *ctx,
 				    const struct tgsi_full_declaration *decl);
+
+LLVMValueRef si_get_primitive_id(struct si_shader_context *ctx,
+				 unsigned swizzle);
+void si_llvm_export_vs(struct si_shader_context *ctx,
+		       struct si_shader_output_values *outputs,
+		       unsigned noutput);
+void si_emit_streamout_output(struct si_shader_context *ctx,
+			      LLVMValueRef const *so_buffers,
+			      LLVMValueRef const *so_write_offsets,
+			      struct pipe_stream_output *stream_out,
+			      struct si_shader_output_values *shader_out);
 
 void si_llvm_load_input_vs(
 	struct si_shader_context *ctx,
@@ -329,5 +386,15 @@ bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir);
 LLVMValueRef si_unpack_param(struct si_shader_context *ctx,
 			     unsigned param, unsigned rshift,
 			     unsigned bitwidth);
+
+void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
+			     unsigned max_outputs,
+			     LLVMValueRef *addrs);
+void gfx10_ngg_gs_emit_vertex(struct si_shader_context *ctx,
+			      unsigned stream,
+			      LLVMValueRef *addrs);
+void gfx10_ngg_gs_emit_prologue(struct si_shader_context *ctx);
+void gfx10_ngg_gs_emit_epilogue(struct si_shader_context *ctx);
+void gfx10_ngg_calculate_subgroup_info(struct si_shader *shader);
 
 #endif

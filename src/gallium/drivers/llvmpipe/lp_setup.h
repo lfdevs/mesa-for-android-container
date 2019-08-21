@@ -105,6 +105,11 @@ lp_setup_set_fs_constants(struct lp_setup_context *setup,
                           struct pipe_constant_buffer *buffers);
 
 void
+lp_setup_set_fs_ssbos(struct lp_setup_context *setup,
+                      unsigned num,
+                      struct pipe_shader_buffer *buffers);
+
+void
 lp_setup_set_alpha_ref_value( struct lp_setup_context *setup,
                               float alpha_ref_value );
 

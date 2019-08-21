@@ -2842,10 +2842,11 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
                struct brw_vs_prog_data *prog_data,
                nir_shader *shader,
                int shader_time_index,
+               struct brw_compile_stats *stats,
                char **error_str)
 {
    const bool is_scalar = compiler->scalar_stage[MESA_SHADER_VERTEX];
-   shader = brw_nir_apply_sampler_key(shader, compiler, &key->tex, is_scalar);
+   brw_nir_apply_key(shader, compiler, &key->base, 8, is_scalar);
 
    const unsigned *assembly = NULL;
 
@@ -2869,7 +2870,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
    brw_nir_lower_vs_inputs(shader, key->gl_attrib_wa_flags);
    brw_nir_lower_vue_outputs(shader);
-   shader = brw_postprocess_nir(shader, compiler, is_scalar);
+   brw_postprocess_nir(shader, compiler, is_scalar);
 
    prog_data->base.clip_distance_mask =
       ((1 << shader->info.clip_distance_array_size) - 1);
@@ -2961,7 +2962,8 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
    if (is_scalar) {
       prog_data->base.dispatch_mode = DISPATCH_MODE_SIMD8;
 
-      fs_visitor v(compiler, log_data, mem_ctx, key, &prog_data->base.base,
+      fs_visitor v(compiler, log_data, mem_ctx, &key->base,
+                   &prog_data->base.base,
                    NULL, /* prog; Only used for TEXTURE_RECTANGLE on gen < 8 */
                    shader, 8, shader_time_index);
       if (!v.run_vs()) {
@@ -2974,7 +2976,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       prog_data->base.base.dispatch_grf_start_reg = v.payload.num_regs;
 
       fs_generator g(compiler, log_data, mem_ctx,
-                     &prog_data->base.base, v.promoted_constants,
+                     &prog_data->base.base, v.shader_stats,
                      v.runtime_check_aads_emit, MESA_SHADER_VERTEX);
       if (INTEL_DEBUG & DEBUG_VS) {
          const char *debug_name =
@@ -2985,7 +2987,7 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
          g.enable_debug(debug_name);
       }
-      g.generate_code(v.cfg, 8);
+      g.generate_code(v.cfg, 8, stats);
       assembly = g.get_assembly();
    }
 
@@ -3002,7 +3004,8 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
       }
 
       assembly = brw_vec4_generate_assembly(compiler, log_data, mem_ctx,
-                                            shader, &prog_data->base, v.cfg);
+                                            shader, &prog_data->base,
+                                            v.cfg, stats);
    }
 
    return assembly;

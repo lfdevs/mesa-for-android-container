@@ -37,53 +37,6 @@ static bool create_new_instr(ppir_block *block, ppir_node *node)
    return true;
 }
 
-static bool insert_to_load_tex(ppir_block *block, ppir_node *load_coords, ppir_node *ldtex)
-{
-   ppir_dest *dest = ppir_node_get_dest(ldtex);
-   ppir_node *move = NULL;
-
-   ppir_load_node *load = ppir_node_to_load(load_coords);
-   load->dest.type = ppir_target_pipeline;
-   load->dest.pipeline = ppir_pipeline_reg_discard;
-
-   ppir_load_texture_node *load_texture = ppir_node_to_load_texture(ldtex);
-   load_texture->src_coords.type = ppir_target_pipeline;
-   load_texture->src_coords.pipeline = ppir_pipeline_reg_discard;
-
-   /* Insert load_coords to ldtex instruction */
-   if (!ppir_instr_insert_node(ldtex->instr, load_coords))
-      return false;
-
-   /* Create move node */
-   move = ppir_node_create(block, ppir_op_mov, -1 , 0);
-   if (unlikely(!move))
-      return false;
-
-   ppir_debug("insert_load_tex: create move %d for %d\n",
-              move->index, ldtex->index);
-
-   ppir_alu_node *alu = ppir_node_to_alu(move);
-   alu->dest = *dest;
-
-   ppir_node_replace_all_succ(move, ldtex);
-
-   dest->type = ppir_target_pipeline;
-   dest->pipeline = ppir_pipeline_reg_sampler;
-
-   alu->num_src = 1;
-   ppir_node_target_assign(&alu->src[0], dest);
-   for (int i = 0; i < 4; i++)
-      alu->src->swizzle[i] = i;
-
-   ppir_node_add_dep(move, ldtex);
-   list_addtail(&move->list, &ldtex->list);
-
-   if (!ppir_instr_insert_node(ldtex->instr, move))
-      return false;
-
-   return true;
-}
-
 static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
 {
    ppir_dest *dest = ppir_node_get_dest(node);
@@ -93,7 +46,8 @@ static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
 
    ppir_node_foreach_succ_safe(node, dep) {
       ppir_node *succ = dep->succ;
-      assert(succ->type == ppir_node_type_alu);
+      assert(succ->type == ppir_node_type_alu ||
+             succ->type == ppir_node_type_branch);
 
       if (!ppir_instr_insert_node(succ->instr, node)) {
          /* create a move node to insert for failed node */
@@ -108,7 +62,7 @@ static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
             ppir_alu_node *alu = ppir_node_to_alu(move);
             alu->dest = *dest;
             alu->num_src = 1;
-            ppir_node_target_assign(alu->src, dest);
+            ppir_node_target_assign(alu->src, node);
             for (int i = 0; i < 4; i++)
                alu->src->swizzle[i] = i;
          }
@@ -122,7 +76,7 @@ static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
       if (!create_new_instr(block, move))
          return false;
 
-      MAYBE_UNUSED bool insert_result =
+      ASSERTED bool insert_result =
          ppir_instr_insert_node(move->instr, node);
       assert(insert_result);
 
@@ -167,15 +121,6 @@ static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
       dup->instr = instr;
       dup->instr_pos = node->instr_pos;
       ppir_node_replace_pred(dep, dup);
-
-      if ((node->op == ppir_op_load_uniform) || (node->op == ppir_op_load_temp)) {
-         ppir_load_node *load = ppir_node_to_load(node);
-         ppir_load_node *dup_load = ppir_node_to_load(dup);
-         dup_load->dest = load->dest;
-         dup_load->index = load->index;
-         dup_load->num_components = load->num_components;
-         instr->slots[node->instr_pos] = dup;
-      }
    }
 
    list_splicetail(&dup_list, &node->list);
@@ -183,7 +128,31 @@ static bool insert_to_each_succ_instr(ppir_block *block, ppir_node *node)
    return true;
 }
 
-static bool ppir_do_node_to_instr(ppir_block *block, ppir_node *node)
+/*
+ * If a node has a pipeline dest, schedule it in the same instruction as its
+ * successor.
+ * Since it has a pipeline dest, it must have only one successor and since we
+ * schedule nodes backwards, its successor must have already been scheduled.
+ */
+static bool ppir_do_node_to_instr_pipeline(ppir_block *block, ppir_node *node)
+{
+   ppir_dest *dest = ppir_node_get_dest(node);
+
+   if (!dest || dest->type != ppir_target_pipeline)
+      return false;
+
+   assert(ppir_node_has_single_succ(node));
+   ppir_node *succ = ppir_node_first_succ(node);
+   assert(succ);
+   assert(succ->instr);
+
+   if (!ppir_instr_insert_node(succ->instr, node))
+      return false;
+
+   return true;
+}
+
+static bool ppir_do_one_node_to_instr(ppir_block *block, ppir_node *node, ppir_node **next)
 {
    switch (node->type) {
    case ppir_node_type_alu:
@@ -196,12 +165,6 @@ static bool ppir_do_node_to_instr(ppir_block *block, ppir_node *node)
          ppir_node *succ = ppir_node_first_succ(node);
          if (succ->instr_pos == PPIR_INSTR_SLOT_ALU_VEC_ADD) {
             node->instr_pos = PPIR_INSTR_SLOT_ALU_VEC_MUL;
-            /* select instr's condition must be inserted to fmul slot */
-            if (succ->op == ppir_op_select &&
-                ppir_node_first_pred(succ) == node) {
-               assert(alu->dest.ssa.num_components == 1);
-               node->instr_pos = PPIR_INSTR_SLOT_ALU_SCL_MUL;
-            }
             ppir_instr_insert_mul_node(succ, node);
          }
          else if (succ->instr_pos == PPIR_INSTR_SLOT_ALU_SCL_ADD &&
@@ -218,35 +181,11 @@ static bool ppir_do_node_to_instr(ppir_block *block, ppir_node *node)
       break;
    }
    case ppir_node_type_load:
-      if ((node->op == ppir_op_load_uniform) || (node->op == ppir_op_load_temp)) {
-         /* merge pred load_uniform into succ instr can save a reg
-          * by using pipeline reg */
-         if (!insert_to_each_succ_instr(block, node))
-            return false;
-
-         ppir_load_node *load = ppir_node_to_load(node);
-         load->dest.type = ppir_target_pipeline;
-         load->dest.pipeline = ppir_pipeline_reg_uniform;
-      }
-      else if (node->op == ppir_op_load_temp) {
-         /* merge pred load_temp into succ instr can save a reg
-          * by using pipeline reg */
-         if (!insert_to_each_succ_instr(block, node))
-            return false;
-
-         ppir_load_node *load = ppir_node_to_load(node);
-         load->dest.type = ppir_target_pipeline;
-         load->dest.pipeline = ppir_pipeline_reg_uniform;
-      }
-      else if (node->op == ppir_op_load_varying ||
-               node->op == ppir_op_load_fragcoord) {
-         /* delay the load varying dup to scheduler */
+      if (node->op == ppir_op_load_varying ||
+          node->op == ppir_op_load_fragcoord ||
+          node->op == ppir_op_load_pointcoord ||
+          node->op == ppir_op_load_frontface) {
          if (!create_new_instr(block, node))
-            return false;
-      }
-      else if (node->op == ppir_op_load_coords) {
-         ppir_node *ldtex = ppir_node_first_succ(node);
-         if (!insert_to_load_tex(block, node, ldtex))
             return false;
       }
       else {
@@ -320,12 +259,36 @@ static bool ppir_do_node_to_instr(ppir_block *block, ppir_node *node)
       node->instr = move->instr;
 
       /* use move for the following recursion */
-      node = move;
+      *next = move;
       break;
    }
+   case ppir_node_type_discard:
+      if (!create_new_instr(block, node))
+         return false;
+      node->instr->is_end = true;
+      break;
+   case ppir_node_type_branch:
+      if (!create_new_instr(block, node))
+         return false;
+      break;
    default:
       return false;
    }
+
+   return true;
+}
+
+static bool ppir_do_node_to_instr(ppir_block *block, ppir_node *node)
+{
+   ppir_node *next = node;
+
+   /* first try pipeline sched, if that didn't succeed try normal scheduling */
+   if (!ppir_do_node_to_instr_pipeline(block, node))
+      if (!ppir_do_one_node_to_instr(block, node, &next))
+         return false;
+
+   /* next may have been updated in ppir_do_one_node_to_instr */
+   node = next;
 
    /* we have to make sure the dep not be destroyed (due to
     * succ change) in ppir_do_node_to_instr, otherwise we can't

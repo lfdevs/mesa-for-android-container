@@ -55,7 +55,7 @@ hgl_st_framebuffer(struct st_framebuffer_iface *stfbi)
 }
 
 
-static boolean
+static bool
 hgl_st_framebuffer_flush_front(struct st_context_iface *stctxi,
 	struct st_framebuffer_iface* stfbi, enum st_attachment_type statt)
 {
@@ -73,11 +73,11 @@ hgl_st_framebuffer_flush_front(struct st_context_iface *stctxi,
 		stw_framebuffer_present_locked(...);
 	#endif
 
-	return TRUE;
+	return true;
 }
 
 
-static boolean
+static bool
 hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
 	unsigned width, unsigned height, unsigned mask)
 {
@@ -138,7 +138,7 @@ hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
 	buffer->height = height;
 	buffer->mask = mask;
 
-	return TRUE;
+	return true;
 }
 
 
@@ -146,7 +146,7 @@ hgl_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
  * Called by the st manager to validate the framebuffer (allocate
  * its resources).
  */
-static boolean
+static bool
 hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 	struct st_framebuffer_iface *stfbi, const enum st_attachment_type *statts,
 	unsigned count, struct pipe_resource **out)
@@ -155,7 +155,7 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 	struct hgl_buffer* buffer;
 	unsigned stAttachmentMask, newMask;
 	unsigned i;
-	boolean resized;
+	bool resized;
 
 	CALLED();
 
@@ -196,7 +196,7 @@ hgl_st_framebuffer_validate(struct st_context_iface *stctxi,
 	for (i = 0; i < count; i++)
 		pipe_resource_reference(&out[i], buffer->textures[statts[i]]);
 
-	return TRUE;
+	return true;
 }
 
 

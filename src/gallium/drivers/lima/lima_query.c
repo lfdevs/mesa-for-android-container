@@ -54,7 +54,7 @@ lima_destroy_query(struct pipe_context *ctx, struct pipe_query *query)
    free(query);
 }
 
-static boolean
+static bool
 lima_begin_query(struct pipe_context *ctx, struct pipe_query *query)
 {
    return true;
@@ -66,9 +66,9 @@ lima_end_query(struct pipe_context *ctx, struct pipe_query *query)
    return true;
 }
 
-static boolean
+static bool
 lima_get_query_result(struct pipe_context *ctx, struct pipe_query *query,
-                     boolean wait, union pipe_query_result *vresult)
+                     bool wait, union pipe_query_result *vresult)
 {
    uint64_t *result = &vresult->u64;
 
@@ -78,7 +78,7 @@ lima_get_query_result(struct pipe_context *ctx, struct pipe_query *query,
 }
 
 static void
-lima_set_active_query_state(struct pipe_context *pipe, boolean enable)
+lima_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 
 }

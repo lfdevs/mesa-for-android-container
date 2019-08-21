@@ -151,8 +151,7 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->vscreen)
       goto error_screen;
 
-   drv->pipe = drv->vscreen->pscreen->context_create(drv->vscreen->pscreen,
-                                                     NULL, 0);
+   drv->pipe = pipe_create_multimedia_context(drv->vscreen->pscreen);
    if (!drv->pipe)
       goto error_pipe;
 

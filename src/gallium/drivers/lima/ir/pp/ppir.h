@@ -32,6 +32,9 @@
 
 typedef enum {
    ppir_op_mov,
+   ppir_op_abs,
+   ppir_op_neg,
+   ppir_op_sat,
    ppir_op_add,
 
    ppir_op_ddx,
@@ -50,6 +53,7 @@ typedef enum {
    ppir_op_normalize3,
    ppir_op_normalize4,
 
+   ppir_op_sel_cond,
    ppir_op_select,
 
    ppir_op_sin,
@@ -80,10 +84,6 @@ typedef enum {
    ppir_op_max,
    ppir_op_trunc,
 
-   ppir_op_dot2,
-   ppir_op_dot3,
-   ppir_op_dot4,
-
    ppir_op_and,
    ppir_op_or,
    ppir_op_xor,
@@ -100,6 +100,8 @@ typedef enum {
    ppir_op_load_varying,
    ppir_op_load_coords,
    ppir_op_load_fragcoord,
+   ppir_op_load_pointcoord,
+   ppir_op_load_frontface,
    ppir_op_load_texture,
    ppir_op_load_temp,
 
@@ -107,6 +109,9 @@ typedef enum {
    ppir_op_store_color,
 
    ppir_op_const,
+
+   ppir_op_discard,
+   ppir_op_branch,
 
    ppir_op_num,
 } ppir_op;
@@ -117,6 +122,8 @@ typedef enum {
    ppir_node_type_load,
    ppir_node_type_store,
    ppir_node_type_load_texture,
+   ppir_node_type_discard,
+   ppir_node_type_branch,
 } ppir_node_type;
 
 typedef struct {
@@ -181,6 +188,7 @@ typedef enum {
 
 typedef struct ppir_src {
    ppir_target type;
+   ppir_node *node;
 
    union {
       ppir_reg *ssa;
@@ -249,10 +257,14 @@ typedef struct {
 typedef struct {
    ppir_node node;
    ppir_dest dest;
-   ppir_src src_coords;
+   ppir_src src_coords; /* not to be used after lowering */
    int sampler;
    int sampler_dim;
 } ppir_load_texture_node;
+
+typedef struct {
+   ppir_node node;
+} ppir_discard_node;
 
 enum ppir_instr_slot {
    PPIR_INSTR_SLOT_VARYING,
@@ -264,6 +276,7 @@ enum ppir_instr_slot {
    PPIR_INSTR_SLOT_ALU_SCL_ADD,
    PPIR_INSTR_SLOT_ALU_COMBINE,
    PPIR_INSTR_SLOT_STORE_TEMP,
+   PPIR_INSTR_SLOT_BRANCH,
    PPIR_INSTR_SLOT_NUM,
    PPIR_INSTR_SLOT_END,
    PPIR_INSTR_SLOT_ALU_START = PPIR_INSTR_SLOT_ALU_VEC_MUL,
@@ -287,6 +300,8 @@ typedef struct ppir_instr {
    int est; /* earliest start time */
    int parent_index;
    bool scheduled;
+   int offset;
+   int encode_size;
 } ppir_instr;
 
 typedef struct ppir_block {
@@ -299,6 +314,15 @@ typedef struct ppir_block {
    int sched_instr_index;
    int sched_instr_base;
 } ppir_block;
+
+typedef struct {
+   ppir_node node;
+   ppir_src src[2];
+   bool cond_gt;
+   bool cond_eq;
+   bool cond_lt;
+   ppir_block *target;
+} ppir_branch_node;
 
 struct ra_regs;
 struct lima_fs_shader_state;
@@ -322,6 +346,13 @@ typedef struct ppir_compiler {
 
    /* for regalloc spilling debug */
    int force_spilling;
+
+   /* shaderdb */
+   int num_loops;
+   int num_spills;
+   int num_fills;
+
+   ppir_block *discard_block;
 } ppir_compiler;
 
 void *ppir_node_create(ppir_block *block, ppir_op op, int index, unsigned mask);
@@ -377,6 +408,8 @@ static inline ppir_node *ppir_node_first_pred(ppir_node *node)
 #define ppir_node_to_load(node) ((ppir_load_node *)(node))
 #define ppir_node_to_store(node) ((ppir_store_node *)(node))
 #define ppir_node_to_load_texture(node) ((ppir_load_texture_node *)(node))
+#define ppir_node_to_discard(node) ((ppir_discard_node *)(node))
+#define ppir_node_to_branch(node) ((ppir_branch_node *)(node))
 
 static inline ppir_dest *ppir_node_get_dest(ppir_node *node)
 {
@@ -394,18 +427,66 @@ static inline ppir_dest *ppir_node_get_dest(ppir_node *node)
    }
 }
 
-static inline void ppir_node_target_assign(ppir_src *src, ppir_dest *dest)
+static inline int ppir_node_get_src_num(ppir_node *node)
 {
+   switch (node->type) {
+   case ppir_node_type_alu:
+      return ppir_node_to_alu(node)->num_src;
+   case ppir_node_type_branch:
+      return 2;
+   case ppir_node_type_load_texture:
+   case ppir_node_type_load:
+   case ppir_node_type_store:
+      return 1;
+   default:
+      return 0;
+   }
+
+   return 0;
+}
+
+static inline ppir_src *ppir_node_get_src(ppir_node *node, int idx)
+{
+   if (idx < 0 || idx >= ppir_node_get_src_num(node))
+      return NULL;
+
+   switch (node->type) {
+   case ppir_node_type_alu:
+      return &ppir_node_to_alu(node)->src[idx];
+   case ppir_node_type_branch:
+      return &ppir_node_to_branch(node)->src[idx];
+   case ppir_node_type_load_texture:
+      return &ppir_node_to_load_texture(node)->src_coords;
+   case ppir_node_type_load:
+      return &ppir_node_to_load(node)->src;
+   case ppir_node_type_store:
+      return &ppir_node_to_store(node)->src;
+   default:
+      break;
+   }
+
+   return NULL;
+}
+
+static inline void ppir_node_target_assign(ppir_src *src, ppir_node *node)
+{
+   ppir_dest *dest = ppir_node_get_dest(node);
    src->type = dest->type;
    switch (src->type) {
    case ppir_target_ssa:
       src->ssa = &dest->ssa;
+      src->node = node;
       break;
    case ppir_target_register:
       src->reg = dest->reg;
+      /* Registers can be assigned from multiple nodes, so don't keep
+       * pointer to the node here
+       */
+      src->node = NULL;
       break;
    case ppir_target_pipeline:
       src->pipeline = dest->pipeline;
+      src->node = node;
       break;
    }
 }
@@ -425,9 +506,13 @@ static inline int ppir_target_get_src_reg_index(ppir_src *src)
 {
    switch (src->type) {
    case ppir_target_ssa:
-      return src->ssa->index;
+      if (src->ssa)
+         return src->ssa->index;
+      break;
    case ppir_target_register:
-      return src->reg->index;
+      if (src->reg)
+         return src->reg->index;
+      break;
    case ppir_target_pipeline:
       if (src->pipeline == ppir_pipeline_reg_discard)
          return 15 * 4;

@@ -140,6 +140,9 @@ can_do_blit(const struct pipe_blit_info *info)
 	 *    minimum and maximum depth values in the pixel."
 	 *
 	 * so do those with CP_BLIT.
+	 *
+	 * TODO since we re-write z/s blits to RGBA, we'll fail this check in some
+	 * cases where we don't need to.
 	 */
 	fail_if((info->mask & PIPE_MASK_RGBA) &&
 			info->src.resource->nr_samples > 1);
@@ -169,21 +172,14 @@ can_do_blit(const struct pipe_blit_info *info)
 }
 
 static void
-emit_setup(struct fd_ringbuffer *ring)
+emit_setup(struct fd_batch *batch)
 {
-	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, PC_CCU_INVALIDATE_COLOR);
+	struct fd_ringbuffer *ring = batch->draw;
 
-	OUT_PKT7(ring, CP_EVENT_WRITE, 1);
-	OUT_RING(ring, LRZ_FLUSH);
-
-	OUT_PKT7(ring, CP_SKIP_IB2_ENABLE_GLOBAL, 1);
-	OUT_RING(ring, 0x0);
-
-	OUT_WFI5(ring);
-
-	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, 0x10000000);
+	fd6_event_write(batch, ring, 0x1d, true);
+	fd6_event_write(batch, ring, FACENESS_FLUSH, true);
+	fd6_event_write(batch, ring, PC_CCU_INVALIDATE_COLOR, false);
+	fd6_event_write(batch, ring, PC_CCU_INVALIDATE_DEPTH, false);
 }
 
 static uint32_t
@@ -252,7 +248,7 @@ emit_blit_buffer(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 	dshift = dbox->x & 0x3f;
 
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
-	OUT_RING(ring, A2XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
+	OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
 
 	uint32_t blit_cntl = blit_control(RB6_R8_UNORM) | 0x20000000;
 	OUT_PKT4(ring, REG_A6XX_RB_2D_BLIT_CNTL, 1);
@@ -415,7 +411,7 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 	uint32_t height = DIV_ROUND_UP(u_minify(src->base.height0, info->src.level), blockheight);
 
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
-	OUT_RING(ring, A2XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
+	OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(RM6_BLIT2DSCALE));
 
 	uint32_t blit_cntl = blit_control(dfmt);
 
@@ -475,8 +471,8 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		if (subwc_enabled) {
 			OUT_PKT4(ring, REG_A6XX_SP_PS_2D_SRC_FLAGS_LO, 6);
 			OUT_RELOC(ring, src->bo, subwcoff, 0, 0);
-			OUT_RING(ring, A6XX_RB_MRT_FLAG_BUFFER_PITCH_PITCH(src->ubwc_pitch) |
-					 A6XX_RB_MRT_FLAG_BUFFER_PITCH_ARRAY_PITCH(src->ubwc_size));
+			OUT_RING(ring, A6XX_SP_PS_2D_SRC_FLAGS_PITCH_PITCH(src->ubwc_pitch) |
+					 A6XX_SP_PS_2D_SRC_FLAGS_PITCH_ARRAY_PITCH(src->ubwc_size));
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);
@@ -501,12 +497,13 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		if (dubwc_enabled) {
 			OUT_PKT4(ring, REG_A6XX_RB_2D_DST_FLAGS_LO, 6);
 			OUT_RELOCW(ring, dst->bo, dubwcoff, 0, 0);
-			OUT_RING(ring, A6XX_RB_MRT_FLAG_BUFFER_PITCH_PITCH(dst->ubwc_pitch) |
-					 A6XX_RB_MRT_FLAG_BUFFER_PITCH_ARRAY_PITCH(dst->ubwc_size));
+			OUT_RING(ring, A6XX_RB_2D_DST_FLAGS_PITCH_PITCH(dst->ubwc_pitch) |
+					 A6XX_RB_2D_DST_FLAGS_PITCH_ARRAY_PITCH(dst->ubwc_size));
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);
 		}
+
 		/*
 		 * Blit command:
 		 */
@@ -555,85 +552,35 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 	}
 }
 
-static void
-rewrite_zs_blit(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
+static bool handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info);
+
+/**
+ * Re-written z/s blits can still fail for various reasons (for example MSAA).
+ * But we want to do the fallback blit with the re-written pipe_blit_info,
+ * in particular as u_blitter cannot blit stencil.  So handle the fallback
+ * ourself and never "fail".
+ */
+static bool
+do_rewritten_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 {
-	struct pipe_blit_info separate = *info;
-
-	if (DEBUG_BLIT_FALLBACK) {
-		fprintf(stderr, "---- rewrite_separate_zs_blit: ");
-		util_dump_blit_info(stderr, info);
-		fprintf(stderr, "\ndst resource: ");
-		util_dump_resource(stderr, info->dst.resource);
-		fprintf(stderr, "\nsrc resource: ");
-		util_dump_resource(stderr, info->src.resource);
-		fprintf(stderr, "\n\n");
-	}
-
-	switch (info->src.format) {
-	case PIPE_FORMAT_S8_UINT:
-		debug_assert(info->mask == PIPE_MASK_S);
-		separate.mask = PIPE_MASK_R;
-		separate.src.format = PIPE_FORMAT_R8_UINT;
-		separate.dst.format = PIPE_FORMAT_R8_UINT;
-		emit_blit_texture(ring, &separate);
-		break;
-
-	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
-		if (info->mask & PIPE_MASK_Z) {
-			separate.mask = PIPE_MASK_R;
-			separate.src.format = PIPE_FORMAT_R32_FLOAT;
-			separate.dst.format = PIPE_FORMAT_R32_FLOAT;
-			emit_blit_texture(ring, &separate);
-		}
-		if (info->mask & PIPE_MASK_S) {
-			separate.mask = PIPE_MASK_R;
-			separate.src.format = PIPE_FORMAT_R8_UINT;
-			separate.dst.format = PIPE_FORMAT_R8_UINT;
-			separate.src.resource = &fd_resource(info->src.resource)->stencil->base;
-			separate.dst.resource = &fd_resource(info->dst.resource)->stencil->base;
-			emit_blit_texture(ring, &separate);
-		}
-		break;
-
-	case PIPE_FORMAT_Z16_UNORM:
-		separate.mask = PIPE_MASK_R;
-		separate.src.format = PIPE_FORMAT_R16_UNORM;
-		separate.dst.format = PIPE_FORMAT_R16_UNORM;
-		emit_blit_texture(ring, &separate);
-		break;
-
-	case PIPE_FORMAT_Z32_UNORM:
-	case PIPE_FORMAT_Z32_FLOAT:
-		debug_assert(info->mask == PIPE_MASK_Z);
-		separate.mask = PIPE_MASK_R;
-		separate.src.format = PIPE_FORMAT_R32_UINT;
-		separate.dst.format = PIPE_FORMAT_R32_UINT;
-		emit_blit_texture(ring, &separate);
-		break;
-
-	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-		debug_assert(info->mask == PIPE_MASK_ZS);
-	case PIPE_FORMAT_Z24X8_UNORM:
-	case PIPE_FORMAT_X8Z24_UNORM:
-		separate.mask = PIPE_MASK_R;
-		separate.src.format = PIPE_FORMAT_R32_UINT;
-		separate.dst.format = PIPE_FORMAT_R32_UINT;
-		emit_blit_texture(ring, &separate);
-		break;
-
-	default:
-		unreachable("");
-	}
+	bool success = handle_rgba_blit(ctx, info);
+	if (!success)
+		success = fd_blitter_blit(ctx, info);
+	debug_assert(success);  /* fallback should never fail! */
+	return success;
 }
 
-static void
-rewrite_combined_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
+/**
+ * Handle depth/stencil blits either via u_blitter and/or re-writing the
+ * blit into an equivilant format that we can handle
+ */
+static bool
+handle_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 {
-	struct pipe_blit_info separate = *info;
+	struct pipe_blit_info blit = *info;
 
 	if (DEBUG_BLIT_FALLBACK) {
-		fprintf(stderr, "---- rewrite_combined_zs_blit: ");
+		fprintf(stderr, "---- handle_zs_blit: ");
 		util_dump_blit_info(stderr, info);
 		fprintf(stderr, "\ndst resource: ");
 		util_dump_resource(stderr, info->dst.resource);
@@ -642,43 +589,74 @@ rewrite_combined_zs_blit(struct fd_context *ctx, const struct pipe_blit_info *in
 		fprintf(stderr, "\n");
 	}
 
-	switch (info->mask) {
-	case PIPE_MASK_Z:
-		separate.mask = PIPE_MASK_R | PIPE_MASK_G | PIPE_MASK_B;
-		separate.src.format = PIPE_FORMAT_R8G8B8A8_UNORM;
-		separate.dst.format = PIPE_FORMAT_R8G8B8A8_UNORM;
+	switch (info->dst.format) {
+	case PIPE_FORMAT_S8_UINT:
+		debug_assert(info->mask == PIPE_MASK_S);
+		blit.mask = PIPE_MASK_R;
+		blit.src.format = PIPE_FORMAT_R8_UINT;
+		blit.dst.format = PIPE_FORMAT_R8_UINT;
+		return do_rewritten_blit(ctx, &blit);
 
-		fd_blitter_blit(ctx, &separate);
-		break;
+	case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+		if (info->mask & PIPE_MASK_Z) {
+			blit.mask = PIPE_MASK_R;
+			blit.src.format = PIPE_FORMAT_R32_FLOAT;
+			blit.dst.format = PIPE_FORMAT_R32_FLOAT;
+			do_rewritten_blit(ctx, &blit);
+		}
 
-	case PIPE_MASK_S:
-		separate.mask = PIPE_MASK_A;
-		separate.src.format = PIPE_FORMAT_R8G8B8A8_UNORM;
-		separate.dst.format = PIPE_FORMAT_R8G8B8A8_UNORM;
+		if (info->mask & PIPE_MASK_S) {
+			blit.mask = PIPE_MASK_R;
+			blit.src.format = PIPE_FORMAT_R8_UINT;
+			blit.dst.format = PIPE_FORMAT_R8_UINT;
+			blit.src.resource = &fd_resource(info->src.resource)->stencil->base;
+			blit.dst.resource = &fd_resource(info->dst.resource)->stencil->base;
+			do_rewritten_blit(ctx, &blit);
+		}
 
-		fd_blitter_blit(ctx, &separate);
-		break;
+		return true;
+
+	case PIPE_FORMAT_Z16_UNORM:
+		blit.mask = PIPE_MASK_R;
+		blit.src.format = PIPE_FORMAT_R16_UNORM;
+		blit.dst.format = PIPE_FORMAT_R16_UNORM;
+		return do_rewritten_blit(ctx, &blit);
+
+	case PIPE_FORMAT_Z32_UNORM:
+	case PIPE_FORMAT_Z32_FLOAT:
+		debug_assert(info->mask == PIPE_MASK_Z);
+		blit.mask = PIPE_MASK_R;
+		blit.src.format = PIPE_FORMAT_R32_UINT;
+		blit.dst.format = PIPE_FORMAT_R32_UINT;
+		return do_rewritten_blit(ctx, &blit);
+
+	case PIPE_FORMAT_Z24X8_UNORM:
+	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+		blit.mask = 0;
+		if (info->mask & PIPE_MASK_Z)
+			blit.mask |= PIPE_MASK_R | PIPE_MASK_G | PIPE_MASK_B;
+		if (info->mask & PIPE_MASK_S)
+			blit.mask |= PIPE_MASK_A;
+		blit.src.format = PIPE_FORMAT_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
+		blit.dst.format = PIPE_FORMAT_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
+		return fd_blitter_blit(ctx, &blit);
 
 	default:
-		unreachable("");
+		return false;
 	}
 }
 
 static bool
-fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
+handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 {
 	struct fd_batch *batch;
 
-	if (info->dst.format == PIPE_FORMAT_Z24_UNORM_S8_UINT &&
-		info->mask != PIPE_MASK_ZS)  {
-		rewrite_combined_zs_blit(ctx, info);
-		return true;
-	}
+	debug_assert(!(info->mask & PIPE_MASK_ZS));
 
 	if (!can_do_blit(info))
 		return false;
 
-	fd_fence_ref(ctx->base.screen, &ctx->last_fence, NULL);
+	fd_fence_ref(&ctx->last_fence, NULL);
 
 	batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, true);
 
@@ -692,7 +670,7 @@ fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 
 	mtx_unlock(&ctx->screen->lock);
 
-	emit_setup(batch->draw);
+	emit_setup(batch);
 
 	if ((info->src.resource->target == PIPE_BUFFER) &&
 			(info->dst.resource->target == PIPE_BUFFER)) {
@@ -703,25 +681,29 @@ fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 		/* I don't *think* we need to handle blits between buffer <-> !buffer */
 		debug_assert(info->src.resource->target != PIPE_BUFFER);
 		debug_assert(info->dst.resource->target != PIPE_BUFFER);
-
-		if (info->mask & (PIPE_MASK_ZS)) {
-			rewrite_zs_blit(batch->draw, info);
-		} else {
-			emit_blit_texture(batch->draw, info);
-		}
+		emit_blit_texture(batch->draw, info);
 	}
 
 	fd6_event_write(batch, batch->draw, 0x1d, true);
 	fd6_event_write(batch, batch->draw, FACENESS_FLUSH, true);
 	fd6_event_write(batch, batch->draw, CACHE_FLUSH_TS, true);
+	fd6_cache_inv(batch, batch->draw);
 
 	fd_resource(info->dst.resource)->valid = true;
 	batch->needs_flush = true;
 
-	fd_batch_flush(batch, false, false);
+	fd_batch_flush(batch, false);
 	fd_batch_reference(&batch, NULL);
 
 	return true;
+}
+
+static bool
+fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
+{
+	if (info->mask & PIPE_MASK_ZS)
+		return handle_zs_blit(ctx, info);
+	return handle_rgba_blit(ctx, info);
 }
 
 void

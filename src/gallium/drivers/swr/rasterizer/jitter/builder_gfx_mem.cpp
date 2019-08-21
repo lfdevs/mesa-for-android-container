@@ -32,7 +32,6 @@
 #include "common/rdtsc_buckets.h"
 #include "builder_gfx_mem.h"
 
-
 namespace SwrJit
 {
     using namespace llvm;
@@ -42,7 +41,9 @@ namespace SwrJit
         mpTranslationFuncTy             = nullptr;
         mpfnTranslateGfxAddressForRead  = nullptr;
         mpfnTranslateGfxAddressForWrite = nullptr;
+        mpfnTrackMemAccess              = nullptr;
         mpParamSimDC                    = nullptr;
+        mpWorkerData                    = nullptr;
 
     }
 
@@ -50,12 +51,11 @@ namespace SwrJit
     {
     }
 
-    void BuilderGfxMem::AssertGFXMemoryParams(Value* ptr, Builder::JIT_MEM_CLIENT usage)
+    void BuilderGfxMem::AssertGFXMemoryParams(Value* ptr, MEM_CLIENT usage)
     {
-        SWR_ASSERT(!(ptr->getType() == mInt64Ty && usage == JIT_MEM_CLIENT::MEM_CLIENT_INTERNAL),
+        SWR_ASSERT(!(ptr->getType() == mInt64Ty && usage == MEM_CLIENT::MEM_CLIENT_INTERNAL),
                    "Internal memory should not be gfxptr_t.");
     }
-
 
     //////////////////////////////////////////////////////////////////////////
     /// @brief Generate a masked gather operation in LLVM IR.  If not
@@ -70,7 +70,7 @@ namespace SwrJit
                                    Value*         vIndices,
                                    Value*         vMask,
                                    uint8_t        scale,
-                                   JIT_MEM_CLIENT usage)
+                                   MEM_CLIENT     usage)
     {
        // address may be coming in as 64bit int now so get the pointer
         if (pBase->getType() == mInt64Ty)
@@ -95,7 +95,7 @@ namespace SwrJit
                                    Value*         vIndices,
                                    Value*         vMask,
                                    uint8_t        scale,
-                                   JIT_MEM_CLIENT usage)
+                                   MEM_CLIENT     usage)
     {
 
         // address may be coming in as 64bit int now so get the pointer
@@ -109,7 +109,7 @@ namespace SwrJit
     }
 
     void BuilderGfxMem::SCATTERPS(
-        Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask, JIT_MEM_CLIENT usage)
+        Value* pDst, Value* vSrc, Value* vOffsets, Value* vMask, MEM_CLIENT usage)
     {
 
         // address may be coming in as 64bit int now so get the pointer
@@ -118,45 +118,94 @@ namespace SwrJit
             pDst = INT_TO_PTR(pDst, PointerType::get(mInt8Ty, 0));
         }
 
-        Builder::SCATTERPS(pDst, vSrc, vOffsets, vMask, usage);
+        Builder::SCATTERPS(pDst, BITCAST(vSrc, mSimdFP32Ty), vOffsets, vMask, usage);
     }
-
 
     Value* BuilderGfxMem::OFFSET_TO_NEXT_COMPONENT(Value* base, Constant* offset)
     {
         return ADD(base, offset);
     }
 
-    Value* BuilderGfxMem::GEP(Value* Ptr, Value* Idx, Type* Ty, const Twine& Name)
+    Value* BuilderGfxMem::GEP(Value* Ptr, Value* Idx, Type* Ty, bool isReadOnly, const Twine& Name)
     {
-        Ptr = TranslationHelper(Ptr, Ty);
-        return Builder::GEP(Ptr, Idx, nullptr, Name);
+        bool xlate = (Ptr->getType() == mInt64Ty);
+        if (xlate)
+        {
+            Ptr = INT_TO_PTR(Ptr, Ty);
+            Ptr = Builder::GEP(Ptr, Idx, nullptr, isReadOnly, Name);
+            Ptr = PTR_TO_INT(Ptr, mInt64Ty);
+            if (isReadOnly)
+            {
+                Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
+            }
+            else
+            {
+                Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForWrite);
+            }
+        }
+        else
+        {
+            Ptr = Builder::GEP(Ptr, Idx, nullptr, isReadOnly, Name);
+        }
+        return Ptr;
     }
 
     Value* BuilderGfxMem::GEP(Type* Ty, Value* Ptr, Value* Idx, const Twine& Name)
     {
-        Ptr = TranslationHelper(Ptr, Ty);
-        return Builder::GEP(Ty, Ptr, Idx, Name);
+        bool xlate = (Ptr->getType() == mInt64Ty);
+        if (xlate)
+        {
+            Ptr = INT_TO_PTR(Ptr, Ty);
+            Ptr = Builder::GEP(Ty, Ptr, Idx, Name);
+            Ptr = PTR_TO_INT(Ptr, mInt64Ty);
+            Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
+        }
+        else
+        {
+            Ptr = Builder::GEP(Ty, Ptr, Idx, Name);
+        }
+        return Ptr;
     }
 
     Value* BuilderGfxMem::GEP(Value* Ptr, const std::initializer_list<Value*>& indexList, Type* Ty)
     {
-        Ptr = TranslationHelper(Ptr, Ty);
-        return Builder::GEP(Ptr, indexList);
+        bool xlate = (Ptr->getType() == mInt64Ty);
+        if (xlate)
+        {
+            Ptr = INT_TO_PTR(Ptr, Ty);
+            Ptr = Builder::GEP(Ptr, indexList);
+            Ptr = PTR_TO_INT(Ptr, mInt64Ty);
+            Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
+        }
+        else
+        {
+            Ptr = Builder::GEP(Ptr, indexList);
+        }
+        return Ptr;
     }
 
     Value*
     BuilderGfxMem::GEP(Value* Ptr, const std::initializer_list<uint32_t>& indexList, Type* Ty)
     {
-        Ptr = TranslationHelper(Ptr, Ty);
-        return Builder::GEP(Ptr, indexList);
+        bool xlate = (Ptr->getType() == mInt64Ty);
+        if (xlate)
+        {
+            Ptr = INT_TO_PTR(Ptr, Ty);
+            Ptr = Builder::GEP(Ptr, indexList);
+            Ptr = PTR_TO_INT(Ptr, mInt64Ty);
+            Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
+        }
+        else
+        {
+            Ptr = Builder::GEP(Ptr, indexList);
+        }
+        return Ptr;
     }
 
-    Value* BuilderGfxMem::TranslationHelper(Value* Ptr, Type* Ty)
+    Value* BuilderGfxMem::TranslationHelper(Value* Ptr, Type* Ty, Value* pfnTranslateGfxAddress)
     {
         SWR_ASSERT(!(Ptr->getType() == mInt64Ty && Ty == nullptr),
                    "Access of GFX pointers must have non-null type specified.");
-
 
         // address may be coming in as 64bit int now so get the pointer
         if (Ptr->getType() == mInt64Ty)
@@ -167,29 +216,78 @@ namespace SwrJit
         return Ptr;
     }
 
-    LoadInst* BuilderGfxMem::LOAD(Value* Ptr, const char* Name, Type* Ty, JIT_MEM_CLIENT usage)
+    void BuilderGfxMem::TrackerHelper(Value* Ptr, Type* Ty, MEM_CLIENT usage, bool isRead)
+    {
+#if defined(KNOB_ENABLE_AR)
+        if (!KNOB_AR_ENABLE_MEMORY_EVENTS)
+        {
+            return;
+        }
+
+        Value* tmpPtr;
+        // convert actual pointers to int64.
+        uint32_t size = 0;
+
+        if (Ptr->getType() == mInt64Ty)
+        {
+            DataLayout dataLayout(JM()->mpCurrentModule);
+            size = (uint32_t)dataLayout.getTypeAllocSize(Ty);
+
+            tmpPtr = Ptr;
+        }
+        else
+        {
+            DataLayout dataLayout(JM()->mpCurrentModule);
+            size = (uint32_t)dataLayout.getTypeAllocSize(Ptr->getType());
+
+            tmpPtr = PTR_TO_INT(Ptr, mInt64Ty);
+        }
+
+        // There are some shader compile setups where there's no translation functions set up.
+        // This would be a situation where the accesses are to internal rasterizer memory and won't
+        // be logged.
+        // TODO:  we may wish to revisit this for URB reads/writes, though.
+        if (mpfnTrackMemAccess)
+        {
+            SWR_ASSERT(mpWorkerData != nullptr);
+            CALL(mpfnTrackMemAccess,
+                 {mpParamSimDC,
+                  mpWorkerData,
+                  tmpPtr,
+                  C((uint32_t)size),
+                  C((uint8_t)isRead),
+                  C((uint32_t)usage)});
+        }
+#endif
+
+        return;
+    }
+
+    LoadInst* BuilderGfxMem::LOAD(Value* Ptr, const char* Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
+        TrackerHelper(Ptr, Ty, usage, true);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::LOAD(Ptr, Name);
     }
 
-    LoadInst* BuilderGfxMem::LOAD(Value* Ptr, const Twine& Name, Type* Ty, JIT_MEM_CLIENT usage)
+    LoadInst* BuilderGfxMem::LOAD(Value* Ptr, const Twine& Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
+        TrackerHelper(Ptr, Ty, usage, true);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::LOAD(Ptr, Name);
     }
-
 
     LoadInst* BuilderGfxMem::LOAD(
-        Value* Ptr, bool isVolatile, const Twine& Name, Type* Ty, JIT_MEM_CLIENT usage)
+        Value* Ptr, bool isVolatile, const Twine& Name, Type* Ty, MEM_CLIENT usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
+        TrackerHelper(Ptr, Ty, usage, true);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::LOAD(Ptr, isVolatile, Name);
     }
 
@@ -197,7 +295,7 @@ namespace SwrJit
                                   const std::initializer_list<uint32_t>& offset,
                                   const llvm::Twine&                     name,
                                   Type*                                  Ty,
-                                  JIT_MEM_CLIENT                         usage)
+                                  MEM_CLIENT                             usage)
     {
         AssertGFXMemoryParams(BasePtr, usage);
 
@@ -222,49 +320,59 @@ namespace SwrJit
         return LOAD(BasePtr, name, Ty, usage);
     }
 
-
     CallInst* BuilderGfxMem::MASKED_LOAD(Value*         Ptr,
                                          unsigned       Align,
                                          Value*         Mask,
                                          Value*         PassThru,
                                          const Twine&   Name,
                                          Type*          Ty,
-                                         JIT_MEM_CLIENT usage)
+                                         MEM_CLIENT     usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
+        TrackerHelper(Ptr, Ty, usage, true);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::MASKED_LOAD(Ptr, Align, Mask, PassThru, Name, Ty, usage);
     }
 
-    StoreInst* BuilderGfxMem::STORE(Value *Val, Value *Ptr, bool isVolatile, Type* Ty, JIT_MEM_CLIENT usage)
+    StoreInst*
+    BuilderGfxMem::STORE(Value* Val, Value* Ptr, bool isVolatile, Type* Ty, MEM_CLIENT usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
+        TrackerHelper(Ptr, Ty, usage, false);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::STORE(Val, Ptr, isVolatile, Ty, usage);
     }
 
-    StoreInst* BuilderGfxMem::STORE(Value* Val, Value* BasePtr, const std::initializer_list<uint32_t>& offset, Type* Ty, JIT_MEM_CLIENT usage)
+    StoreInst* BuilderGfxMem::STORE(Value*                                 Val,
+                                    Value*                                 BasePtr,
+                                    const std::initializer_list<uint32_t>& offset,
+                                    Type*                                  Ty,
+                                    MEM_CLIENT                             usage)
     {
         AssertGFXMemoryParams(BasePtr, usage);
+        TrackerHelper(BasePtr, Ty, usage, false);
 
-        BasePtr = TranslationHelper(BasePtr, Ty);
+        BasePtr = TranslationHelper(BasePtr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::STORE(Val, BasePtr, offset, Ty, usage);
     }
 
-    CallInst* BuilderGfxMem::MASKED_STORE(Value *Val, Value *Ptr, unsigned Align, Value *Mask, Type* Ty, JIT_MEM_CLIENT usage)
+    CallInst* BuilderGfxMem::MASKED_STORE(
+        Value* Val, Value* Ptr, unsigned Align, Value* Mask, Type* Ty, MEM_CLIENT usage)
     {
         AssertGFXMemoryParams(Ptr, usage);
 
-        Ptr = TranslationHelper(Ptr, Ty);
+        TrackerHelper(Ptr, Ty, usage, false);
+
+        Ptr = TranslationHelper(Ptr, Ty, mpfnTranslateGfxAddressForRead);
         return Builder::MASKED_STORE(Val, Ptr, Align, Mask, Ty, usage);
     }
 
     Value* BuilderGfxMem::TranslateGfxAddressForRead(Value*       xpGfxAddress,
                                                      Type*        PtrTy,
                                                      const Twine& Name,
-                                                     JIT_MEM_CLIENT /* usage */)
+                                                     MEM_CLIENT /* usage */)
     {
         if (PtrTy == nullptr)
         {
@@ -276,7 +384,7 @@ namespace SwrJit
     Value* BuilderGfxMem::TranslateGfxAddressForWrite(Value*       xpGfxAddress,
                                                       Type*        PtrTy,
                                                       const Twine& Name,
-                                                      JIT_MEM_CLIENT /* usage */)
+                                                      MEM_CLIENT /* usage */)
     {
         if (PtrTy == nullptr)
         {

@@ -248,7 +248,7 @@ vtn_cfg_handle_prepass_instruction(struct vtn_builder *b, SpvOp opcode,
       list_inithead(&b->func->body);
       b->func->control = w[3];
 
-      MAYBE_UNUSED const struct glsl_type *result_type =
+      UNUSED const struct glsl_type *result_type =
          vtn_value(b, w[1], vtn_value_type_type)->type->type;
       struct vtn_value *val = vtn_push_value(b, w[2], vtn_value_type_function);
       val->func = b->func;
@@ -884,7 +884,12 @@ vtn_loop_control(struct vtn_builder *b, struct vtn_loop *vtn_loop)
    else if (vtn_loop->control & SpvLoopControlUnrollMask)
       return nir_loop_control_unroll;
    else if (vtn_loop->control & SpvLoopControlDependencyInfiniteMask ||
-            vtn_loop->control & SpvLoopControlDependencyLengthMask) {
+            vtn_loop->control & SpvLoopControlDependencyLengthMask ||
+            vtn_loop->control & SpvLoopControlMinIterationsMask ||
+            vtn_loop->control & SpvLoopControlMaxIterationsMask ||
+            vtn_loop->control & SpvLoopControlIterationMultipleMask ||
+            vtn_loop->control & SpvLoopControlPeelCountMask ||
+            vtn_loop->control & SpvLoopControlPartialCountMask) {
       /* We do not do anything special with these yet. */
       return nir_loop_control_none;
    } else {

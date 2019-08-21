@@ -73,7 +73,7 @@ nvfx_fp_imm(struct nvfx_fpc *fpc, float a, float b, float c, float d)
    float v[4] = {a, b, c, d};
    int idx = fpc->imm_data.size >> 4;
 
-   memcpy(util_dynarray_grow(&fpc->imm_data, sizeof(float) * 4), v, 4 * sizeof(float));
+   memcpy(util_dynarray_grow(&fpc->imm_data, float, 4), v, 4 * sizeof(float));
    return nvfx_reg(NVFXSR_IMM, idx);
 }
 

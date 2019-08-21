@@ -43,7 +43,7 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
    if (screen == NULL && strcmp(driver, "virpipe") == 0) {
       struct virgl_winsys *vws;
       vws = virgl_vtest_winsys_wrap(winsys);
-      screen = virgl_create_screen(vws);
+      screen = virgl_create_screen(vws, NULL);
    }
 #endif
 

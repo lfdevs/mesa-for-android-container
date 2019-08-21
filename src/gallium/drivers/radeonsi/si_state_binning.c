@@ -25,7 +25,7 @@
 /* This file handles register programming of primitive binning. */
 
 #include "si_build_pm4.h"
-#include "gfx9d.h"
+#include "sid.h"
 
 struct uvec2 {
 	unsigned x, y;
@@ -196,7 +196,7 @@ static struct uvec2 si_get_depth_bin_size(struct si_context *sctx)
 	unsigned stencil_coeff = tex->surface.has_stencil &&
 				 dsa->stencil_enabled ? 1 : 0;
 	unsigned sum = 4 * (depth_coeff + stencil_coeff) *
-		       tex->buffer.b.b.nr_samples;
+		       MAX2(tex->buffer.b.b.nr_samples, 1);
 
 	static const si_bin_size_subtable table[] = {
 		{
@@ -308,20 +308,170 @@ static struct uvec2 si_get_depth_bin_size(struct si_context *sctx)
 	return si_find_bin_size(sctx->screen, table, sum);
 }
 
+static void gfx10_get_bin_sizes(struct si_context *sctx,
+				unsigned cb_target_enabled_4bit,
+				struct uvec2 *color_bin_size,
+				struct uvec2 *depth_bin_size)
+{
+	unsigned num_sdp_interfaces = 0;
+
+	switch (sctx->family) {
+	case CHIP_NAVI10:
+	case CHIP_NAVI12:
+		num_sdp_interfaces = 16;
+		break;
+	case CHIP_NAVI14:
+		num_sdp_interfaces = 8;
+		break;
+	default:
+		assert(0);
+	}
+
+	const unsigned ZsTagSize  = 64;
+	const unsigned ZsNumTags  = 312;
+	const unsigned CcTagSize  = 1024;
+	const unsigned CcReadTags = 31;
+	const unsigned FcTagSize  = 256;
+	const unsigned FcReadTags = 44;
+
+	const unsigned num_rbs = sctx->screen->info.num_render_backends;
+	const unsigned num_pipes = MAX2(num_rbs, num_sdp_interfaces);
+
+	const unsigned depthBinSizeTagPart = ((ZsNumTags * num_rbs / num_pipes) * (ZsTagSize * num_pipes));
+	const unsigned colorBinSizeTagPart = ((CcReadTags * num_rbs / num_pipes) * (CcTagSize * num_pipes));
+	const unsigned fmaskBinSizeTagPart = ((FcReadTags * num_rbs / num_pipes) * (FcTagSize * num_pipes));
+
+	const unsigned minBinSizeX = 128;
+	const unsigned minBinSizeY = 64;
+
+	const unsigned num_fragments = sctx->framebuffer.nr_color_samples;
+	const unsigned num_samples = sctx->framebuffer.nr_samples;
+	const bool ps_iter_sample = si_get_ps_iter_samples(sctx) >= 2;
+
+	/* Calculate cColor and cFmask(if applicable) */
+	unsigned cColor = 0;
+	unsigned cFmask = 0;
+	bool has_fmask = false;
+
+	for (unsigned i = 0; i < sctx->framebuffer.state.nr_cbufs; i++) {
+		if (!sctx->framebuffer.state.cbufs[i])
+			continue;
+
+		struct si_texture *tex =
+			(struct si_texture*)sctx->framebuffer.state.cbufs[i]->texture;
+		const unsigned mmrt =
+			num_fragments == 1 ? 1 : (ps_iter_sample ? num_fragments : 2);
+
+		cColor += tex->surface.bpe * mmrt;
+		if (num_samples >= 2 /* if FMASK is bound */) {
+			const unsigned fragmentsLog2 = util_logbase2(num_fragments);
+			const unsigned samplesLog2 = util_logbase2(num_samples);
+
+			static const unsigned cFmaskMrt[4 /* fragments */][5 /* samples */] = {
+				{ 0, 1, 1, 1, 2 }, /* fragments = 1 */
+				{ 0, 1, 1, 2, 4 }, /* fragments = 2 */
+				{ 0, 1, 1, 4, 8 }, /* fragments = 4 */
+				{ 0, 1, 2, 4, 8 }  /* fragments = 8 */
+			};
+			cFmask += cFmaskMrt[fragmentsLog2][samplesLog2];
+			has_fmask = true;
+		}
+	}
+	cColor = MAX2(cColor, 1u);
+
+	const unsigned colorLog2Pixels = util_logbase2(colorBinSizeTagPart / cColor);
+	const unsigned colorBinSizeX   = 1 << ((colorLog2Pixels + 1) / 2); /* round up width */
+	const unsigned colorBinSizeY   = 1 << (colorLog2Pixels / 2);       /* round down height */
+
+	unsigned binSizeX = colorBinSizeX;
+	unsigned binSizeY = colorBinSizeY;
+
+	if (has_fmask) {
+		cFmask = MAX2(cFmask, 1u);
+
+		const unsigned fmaskLog2Pixels = util_logbase2(fmaskBinSizeTagPart / cFmask);
+		const unsigned fmaskBinSizeX   = 1 << ((fmaskLog2Pixels + 1) / 2); /* round up width */
+		const unsigned fmaskBinSizeY   = 1 << (fmaskLog2Pixels / 2);       /* round down height */
+
+		/* use the smaller of the Color vs. Fmask bin sizes */
+		if (fmaskLog2Pixels < colorLog2Pixels) {
+			binSizeX = fmaskBinSizeX;
+			binSizeY = fmaskBinSizeY;
+		}
+	}
+
+	/* Return size adjusted for minimum bin size */
+	color_bin_size->x = MAX2(binSizeX, minBinSizeX);
+	color_bin_size->y = MAX2(binSizeY, minBinSizeY);
+
+	if (!sctx->framebuffer.state.zsbuf) {
+		/* Set to max sizes when no depth buffer is bound. */
+		depth_bin_size->x = 512;
+		depth_bin_size->y = 512;
+	} else {
+		struct si_texture *zstex = (struct si_texture*)sctx->framebuffer.state.zsbuf->texture;
+		struct si_state_dsa *dsa = sctx->queued.named.dsa;
+
+		const unsigned cPerDepthSample   = dsa->depth_enabled ? 5 : 0;
+		const unsigned cPerStencilSample = dsa->stencil_enabled ? 1 : 0;
+		const unsigned cDepth            = (cPerDepthSample + cPerStencilSample) *
+						   MAX2(zstex->buffer.b.b.nr_samples, 1);
+
+		const unsigned depthLog2Pixels = util_logbase2(depthBinSizeTagPart / MAX2(cDepth, 1u));
+		unsigned       depthBinSizeX   = 1 << ((depthLog2Pixels + 1) / 2);
+		unsigned       depthBinSizeY   = 1 << (depthLog2Pixels / 2);
+
+		depth_bin_size->x = MAX2(depthBinSizeX, minBinSizeX);
+		depth_bin_size->y = MAX2(depthBinSizeY, minBinSizeY);
+	}
+}
+
 static void si_emit_dpbb_disable(struct si_context *sctx)
 {
 	unsigned initial_cdw = sctx->gfx_cs->current.cdw;
 
-	radeon_opt_set_context_reg(sctx, R_028C44_PA_SC_BINNER_CNTL_0,
-		SI_TRACKED_PA_SC_BINNER_CNTL_0,
-		S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_LEGACY_SC) |
-		S_028C44_DISABLE_START_OF_PRIM(1));
-	radeon_opt_set_context_reg(sctx, R_028060_DB_DFSM_CONTROL,
+	if (sctx->chip_class >= GFX10) {
+		struct uvec2 bin_size = {};
+		struct uvec2 bin_size_extend = {};
+
+		bin_size.x = 128;
+		bin_size.y = sctx->framebuffer.min_bytes_per_pixel <= 4 ? 128 : 64;
+
+		if (bin_size.x >= 32)
+			bin_size_extend.x = util_logbase2(bin_size.x) - 5;
+		if (bin_size.y >= 32)
+			bin_size_extend.y = util_logbase2(bin_size.y) - 5;
+
+		radeon_opt_set_context_reg(sctx, R_028C44_PA_SC_BINNER_CNTL_0,
+			SI_TRACKED_PA_SC_BINNER_CNTL_0,
+			S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_NEW_SC) |
+			S_028C44_BIN_SIZE_X(bin_size.x == 16) |
+			S_028C44_BIN_SIZE_Y(bin_size.y == 16) |
+			S_028C44_BIN_SIZE_X_EXTEND(bin_size_extend.x) |
+			S_028C44_BIN_SIZE_Y_EXTEND(bin_size_extend.y) |
+			S_028C44_DISABLE_START_OF_PRIM(1) |
+			S_028C44_FLUSH_ON_BINNING_TRANSITION(sctx->last_binning_enabled != 0));
+	} else {
+		radeon_opt_set_context_reg(sctx, R_028C44_PA_SC_BINNER_CNTL_0,
+			SI_TRACKED_PA_SC_BINNER_CNTL_0,
+			S_028C44_BINNING_MODE(V_028C44_DISABLE_BINNING_USE_LEGACY_SC) |
+			S_028C44_DISABLE_START_OF_PRIM(1) |
+			S_028C44_FLUSH_ON_BINNING_TRANSITION((sctx->family == CHIP_VEGA12 ||
+							      sctx->family == CHIP_VEGA20 ||
+							      sctx->family >= CHIP_RAVEN2) &&
+							     sctx->last_binning_enabled != 0));
+	}
+
+	unsigned db_dfsm_control = sctx->chip_class >= GFX10 ? R_028038_DB_DFSM_CONTROL
+							     : R_028060_DB_DFSM_CONTROL;
+	radeon_opt_set_context_reg(sctx, db_dfsm_control,
 				   SI_TRACKED_DB_DFSM_CONTROL,
 				   S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
 		sctx->context_roll = true;
+
+	sctx->last_binning_enabled = false;
 }
 
 void si_emit_dpbb_state(struct si_context *sctx)
@@ -333,7 +483,7 @@ void si_emit_dpbb_state(struct si_context *sctx)
 
 	assert(sctx->chip_class >= GFX9);
 
-	if (!sscreen->dpbb_allowed || !blend || !dsa || sctx->dpbb_force_off) {
+	if (!sscreen->dpbb_allowed || sctx->dpbb_force_off) {
 		si_emit_dpbb_disable(sctx);
 		return;
 	}
@@ -361,9 +511,15 @@ void si_emit_dpbb_state(struct si_context *sctx)
 	/* TODO: We could also look at enabled pixel shader outputs. */
 	unsigned cb_target_enabled_4bit = sctx->framebuffer.colorbuf_enabled_4bit &
 					  blend->cb_target_enabled_4bit;
-	struct uvec2 color_bin_size =
-		si_get_color_bin_size(sctx, cb_target_enabled_4bit);
-	struct uvec2 depth_bin_size = si_get_depth_bin_size(sctx);
+	struct uvec2 color_bin_size, depth_bin_size;
+
+	if (sctx->chip_class >= GFX10) {
+		gfx10_get_bin_sizes(sctx, cb_target_enabled_4bit,
+				    &color_bin_size, &depth_bin_size);
+	} else {
+		color_bin_size = si_get_color_bin_size(sctx, cb_target_enabled_4bit);
+		depth_bin_size = si_get_depth_bin_size(sctx);
+	}
 
 	unsigned color_area = color_bin_size.x * color_bin_size.y;
 	unsigned depth_area = depth_bin_size.x * depth_bin_size.y;
@@ -398,24 +554,24 @@ void si_emit_dpbb_state(struct si_context *sctx)
 	}
 
 	/* Tunable parameters. Also test with DFSM enabled/disabled. */
-	unsigned context_states_per_bin; /* allowed range: [0, 5] */
-	unsigned persistent_states_per_bin; /* allowed range: [0, 31] */
+	unsigned context_states_per_bin; /* allowed range: [1, 6] */
+	unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
 	unsigned fpovs_per_batch; /* allowed range: [0, 255], 0 = unlimited */
 
-	switch (sctx->family) {
-	case CHIP_VEGA10:
-	case CHIP_VEGA12:
-	case CHIP_VEGA20:
-	case CHIP_RAVEN:
-	case CHIP_RAVEN2:
-		/* Tuned for Raven. Vega might need different values. */
-		context_states_per_bin = 5;
-		persistent_states_per_bin = 31;
-		fpovs_per_batch = 63;
-		break;
-	default:
-		assert(0);
+	/* Tuned for Raven. Vega might need different values. */
+	if (sscreen->info.has_dedicated_vram) {
+		context_states_per_bin = 1;
+		persistent_states_per_bin = 1;
+	} else {
+		/* This is a workaround for:
+		 *    https://bugs.freedesktop.org/show_bug.cgi?id=110214
+		 * (an alternative is to insert manual BATCH_BREAK event when
+		 * a context_roll is detected). */
+		context_states_per_bin = sctx->screen->has_gfx9_scissor_bug ? 1 : 6;
+		/* Using 32 here can cause GPU hangs on RAVEN1 */
+		persistent_states_per_bin = 16;
 	}
+	fpovs_per_batch = 63;
 
 	/* Emit registers. */
 	struct uvec2 bin_size_extend = {};
@@ -433,15 +589,24 @@ void si_emit_dpbb_state(struct si_context *sctx)
 		S_028C44_BIN_SIZE_Y(bin_size.y == 16) |
 		S_028C44_BIN_SIZE_X_EXTEND(bin_size_extend.x) |
 		S_028C44_BIN_SIZE_Y_EXTEND(bin_size_extend.y) |
-		S_028C44_CONTEXT_STATES_PER_BIN(context_states_per_bin) |
-		S_028C44_PERSISTENT_STATES_PER_BIN(persistent_states_per_bin) |
+		S_028C44_CONTEXT_STATES_PER_BIN(context_states_per_bin - 1) |
+		S_028C44_PERSISTENT_STATES_PER_BIN(persistent_states_per_bin - 1) |
 		S_028C44_DISABLE_START_OF_PRIM(disable_start_of_prim) |
 		S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) |
-		S_028C44_OPTIMAL_BIN_SELECTION(1));
-	radeon_opt_set_context_reg(sctx, R_028060_DB_DFSM_CONTROL,
+		S_028C44_OPTIMAL_BIN_SELECTION(1) |
+		S_028C44_FLUSH_ON_BINNING_TRANSITION((sctx->family == CHIP_VEGA12 ||
+						      sctx->family == CHIP_VEGA20 ||
+						      sctx->family >= CHIP_RAVEN2) &&
+						     sctx->last_binning_enabled != 1));
+
+	unsigned db_dfsm_control = sctx->chip_class >= GFX10 ? R_028038_DB_DFSM_CONTROL
+							     : R_028060_DB_DFSM_CONTROL;
+	radeon_opt_set_context_reg(sctx, db_dfsm_control,
 				   SI_TRACKED_DB_DFSM_CONTROL,
 				   S_028060_PUNCHOUT_MODE(punchout_mode) |
 				   S_028060_POPS_DRAIN_PS_ON_OVERLAP(1));
 	if (initial_cdw != sctx->gfx_cs->current.cdw)
 		sctx->context_roll = true;
+
+	sctx->last_binning_enabled = true;
 }

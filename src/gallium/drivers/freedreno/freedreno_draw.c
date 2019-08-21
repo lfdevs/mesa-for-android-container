@@ -64,7 +64,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	struct fd_context *ctx = fd_context(pctx);
 	struct fd_batch *batch = fd_context_batch(ctx);
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	struct pipe_scissor_state *scissor = fd_context_get_scissor(ctx);
 	unsigned i, prims, buffers = 0, restore_buffers = 0;
 
 	/* for debugging problems with indirect draw, it is convenient
@@ -81,12 +80,6 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	    !u_trim_pipe_prim(info->mode, (unsigned*)&info->count))
 		return;
 
-	/* if we supported transform feedback, we'd have to disable this: */
-	if (((scissor->maxx - scissor->minx) *
-			(scissor->maxy - scissor->miny)) == 0) {
-		return;
-	}
-
 	/* TODO: push down the region versions into the tiles */
 	if (!fd_render_condition_check(pctx))
 		return;
@@ -100,7 +93,7 @@ fd_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		return;
 	}
 
-	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
+	fd_fence_ref(&ctx->last_fence, NULL);
 
 	/* Upload a user index buffer. */
 	struct pipe_resource *indexbuf = NULL;
@@ -318,7 +311,7 @@ fd_clear(struct pipe_context *pctx, unsigned buffers,
 	if (!fd_render_condition_check(pctx))
 		return;
 
-	fd_fence_ref(pctx->screen, &ctx->last_fence, NULL);
+	fd_fence_ref(&ctx->last_fence, NULL);
 
 	if (ctx->in_blit) {
 		fd_batch_reset(batch);
@@ -464,7 +457,7 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	batch->needs_flush = true;
 	ctx->launch_grid(ctx, info);
 
-	fd_batch_flush(batch, false, false);
+	fd_batch_flush(batch, false);
 
 	fd_batch_reference(&ctx->batch, save_batch);
 	fd_context_all_dirty(ctx);

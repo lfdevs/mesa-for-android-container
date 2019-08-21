@@ -489,14 +489,11 @@ int virgl_encoder_create_surface(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, handle);
    virgl_encoder_write_res(ctx, res);
    virgl_encoder_write_dword(ctx->cbuf, templat->format);
-   if (templat->texture->target == PIPE_BUFFER) {
-      virgl_encoder_write_dword(ctx->cbuf, templat->u.buf.first_element);
-      virgl_encoder_write_dword(ctx->cbuf, templat->u.buf.last_element);
 
-   } else {
-      virgl_encoder_write_dword(ctx->cbuf, templat->u.tex.level);
-      virgl_encoder_write_dword(ctx->cbuf, templat->u.tex.first_layer | (templat->u.tex.last_layer << 16));
-   }
+   assert(templat->texture->target != PIPE_BUFFER);
+   virgl_encoder_write_dword(ctx->cbuf, templat->u.tex.level);
+   virgl_encoder_write_dword(ctx->cbuf, templat->u.tex.first_layer | (templat->u.tex.last_layer << 16));
+
    return 0;
 }
 
@@ -514,18 +511,44 @@ int virgl_encoder_create_so_target(struct virgl_context *ctx,
    return 0;
 }
 
+enum virgl_transfer3d_encode_stride {
+   /* The stride and layer_stride are explicitly specified in the command. */
+   virgl_transfer3d_explicit_stride,
+   /* The stride and layer_stride are inferred by the host. In this case, the
+    * host will use the image stride and layer_stride for the specified level.
+    */
+   virgl_transfer3d_host_inferred_stride,
+};
+
 static void virgl_encoder_transfer3d_common(struct virgl_screen *vs,
                                             struct virgl_cmd_buf *buf,
-                                            struct virgl_transfer *xfer)
+                                            struct virgl_transfer *xfer,
+                                            enum virgl_transfer3d_encode_stride encode_stride)
+
 {
    struct pipe_transfer *transfer = &xfer->base;
-   struct virgl_resource *res = virgl_resource(transfer->resource);
+   unsigned stride;
+   unsigned layer_stride;
 
-   virgl_encoder_emit_resource(vs, buf, res);
+   if (encode_stride == virgl_transfer3d_explicit_stride) {
+      stride = transfer->stride;
+      layer_stride = transfer->layer_stride;
+   } else if (virgl_transfer3d_host_inferred_stride) {
+      stride = 0;
+      layer_stride = 0;
+   } else {
+      assert(!"Invalid virgl_transfer3d_encode_stride value");
+   }
+
+   /* We cannot use virgl_encoder_emit_resource with transfer->resource here
+    * because transfer->resource might have a different virgl_hw_res than what
+    * this transfer targets, which is saved in xfer->hw_res.
+    */
+   vs->vws->emit_res(vs->vws, buf, xfer->hw_res, TRUE);
    virgl_encoder_write_dword(buf, transfer->level);
    virgl_encoder_write_dword(buf, transfer->usage);
-   virgl_encoder_write_dword(buf, 0);
-   virgl_encoder_write_dword(buf, 0);
+   virgl_encoder_write_dword(buf, stride);
+   virgl_encoder_write_dword(buf, layer_stride);
    virgl_encoder_write_dword(buf, transfer->box.x);
    virgl_encoder_write_dword(buf, transfer->box.y);
    virgl_encoder_write_dword(buf, transfer->box.z);
@@ -547,6 +570,7 @@ int virgl_encoder_inline_write(struct virgl_context *ctx,
    struct virgl_screen *vs = virgl_screen(ctx->base.screen);
 
    transfer.base.resource = &res->u.b;
+   transfer.hw_res = res->hw_res;
    transfer.base.level = level;
    transfer.base.usage = usage;
    transfer.base.box = *box;
@@ -570,7 +594,8 @@ int virgl_encoder_inline_write(struct virgl_context *ctx,
 
       transfer.base.box.width = length;
       virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_RESOURCE_INLINE_WRITE, 0, ((length + 3) / 4) + 11));
-      virgl_encoder_transfer3d_common(vs, ctx->cbuf, &transfer);
+      virgl_encoder_transfer3d_common(vs, ctx->cbuf, &transfer,
+                                      virgl_transfer3d_host_inferred_stride);
       virgl_encoder_write_block(ctx->cbuf, data, length);
       left_bytes -= length;
       transfer.base.box.x += length;
@@ -963,11 +988,14 @@ int virgl_encode_set_shader_buffers(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, shader);
    virgl_encoder_write_dword(ctx->cbuf, start_slot);
    for (i = 0; i < count; i++) {
-      if (buffers) {
+      if (buffers && buffers[i].buffer) {
          struct virgl_resource *res = virgl_resource(buffers[i].buffer);
          virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_offset);
          virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_size);
          virgl_encoder_write_res(ctx, res);
+
+         util_range_add(&res->valid_buffer_range, buffers[i].buffer_offset,
+               buffers[i].buffer_offset + buffers[i].buffer_size);
          virgl_resource_dirty(res, 0);
       } else {
          virgl_encoder_write_dword(ctx->cbuf, 0);
@@ -987,11 +1015,14 @@ int virgl_encode_set_hw_atomic_buffers(struct virgl_context *ctx,
 
    virgl_encoder_write_dword(ctx->cbuf, start_slot);
    for (i = 0; i < count; i++) {
-      if (buffers) {
+      if (buffers && buffers[i].buffer) {
          struct virgl_resource *res = virgl_resource(buffers[i].buffer);
          virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_offset);
          virgl_encoder_write_dword(ctx->cbuf, buffers[i].buffer_size);
          virgl_encoder_write_res(ctx, res);
+
+         util_range_add(&res->valid_buffer_range, buffers[i].buffer_offset,
+               buffers[i].buffer_offset + buffers[i].buffer_size);
          virgl_resource_dirty(res, 0);
       } else {
          virgl_encoder_write_dword(ctx->cbuf, 0);
@@ -1013,13 +1044,18 @@ int virgl_encode_set_shader_images(struct virgl_context *ctx,
    virgl_encoder_write_dword(ctx->cbuf, shader);
    virgl_encoder_write_dword(ctx->cbuf, start_slot);
    for (i = 0; i < count; i++) {
-      if (images) {
+      if (images && images[i].resource) {
          struct virgl_resource *res = virgl_resource(images[i].resource);
          virgl_encoder_write_dword(ctx->cbuf, images[i].format);
          virgl_encoder_write_dword(ctx->cbuf, images[i].access);
          virgl_encoder_write_dword(ctx->cbuf, images[i].u.buf.offset);
          virgl_encoder_write_dword(ctx->cbuf, images[i].u.buf.size);
          virgl_encoder_write_res(ctx, res);
+
+         if (res->u.b.target == PIPE_BUFFER) {
+            util_range_add(&res->valid_buffer_range, images[i].u.buf.offset,
+                  images[i].u.buf.offset + images[i].u.buf.size);
+         }
          virgl_resource_dirty(res, images[i].u.tex.level);
       } else {
          virgl_encoder_write_dword(ctx->cbuf, 0);
@@ -1090,6 +1126,15 @@ int virgl_encode_host_debug_flagstring(struct virgl_context *ctx,
    return 0;
 }
 
+int virgl_encode_tweak(struct virgl_context *ctx, enum vrend_tweak_type tweak, uint32_t value)
+{
+   virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_SET_TWEAKS, 0, VIRGL_SET_TWEAKS_SIZE));
+   virgl_encoder_write_dword(ctx->cbuf, tweak);
+   virgl_encoder_write_dword(ctx->cbuf, value);
+   return 0;
+}
+
+
 int virgl_encode_get_query_result_qbo(struct virgl_context *ctx,
                                       uint32_t handle,
                                       struct virgl_resource *res, boolean wait,
@@ -1113,9 +1158,30 @@ void virgl_encode_transfer(struct virgl_screen *vs, struct virgl_cmd_buf *buf,
    uint32_t command;
    command = VIRGL_CMD0(VIRGL_CCMD_TRANSFER3D, 0, VIRGL_TRANSFER3D_SIZE);
    virgl_encoder_write_dword(buf, command);
-   virgl_encoder_transfer3d_common(vs, buf, trans);
+   virgl_encoder_transfer3d_common(vs, buf, trans,
+                                   virgl_transfer3d_host_inferred_stride);
    virgl_encoder_write_dword(buf, trans->offset);
    virgl_encoder_write_dword(buf, direction);
+}
+
+void virgl_encode_copy_transfer(struct virgl_context *ctx,
+                                struct virgl_transfer *trans)
+{
+   uint32_t command;
+   struct virgl_screen *vs = virgl_screen(ctx->base.screen);
+
+   assert(trans->copy_src_hw_res);
+
+   command = VIRGL_CMD0(VIRGL_CCMD_COPY_TRANSFER3D, 0, VIRGL_COPY_TRANSFER3D_SIZE);
+   virgl_encoder_write_cmd_dword(ctx, command);
+   /* Copy transfers need to explicitly specify the stride, since it may differ
+    * from the image stride.
+    */
+   virgl_encoder_transfer3d_common(vs, ctx->cbuf, trans, virgl_transfer3d_explicit_stride);
+   vs->vws->emit_res(vs->vws, ctx->cbuf, trans->copy_src_hw_res, TRUE);
+   virgl_encoder_write_dword(ctx->cbuf, trans->copy_src_offset);
+   /* At the moment all copy transfers are synchronized. */
+   virgl_encoder_write_dword(ctx->cbuf, 1);
 }
 
 void virgl_encode_end_transfers(struct virgl_cmd_buf *buf)

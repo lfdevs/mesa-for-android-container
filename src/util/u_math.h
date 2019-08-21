@@ -39,8 +39,6 @@
 #define U_MATH_H
 
 
-#include "pipe/p_compiler.h"
-
 #include "c99_math.h"
 #include <assert.h>
 #include <float.h>
@@ -226,7 +224,7 @@ util_iround(float f)
 /**
  * Approximate floating point comparison
  */
-static inline boolean
+static inline bool
 util_is_approx(float a, float b, float tol)
 {
    return fabsf(b - a) <= tol;
@@ -245,7 +243,7 @@ util_is_approx(float a, float b, float tol)
 /**
  * Single-float
  */
-static inline boolean
+static inline bool
 util_is_inf_or_nan(float x)
 {
    union fi tmp;
@@ -254,7 +252,7 @@ util_is_inf_or_nan(float x)
 }
 
 
-static inline boolean
+static inline bool
 util_is_nan(float x)
 {
    union fi tmp;
@@ -279,7 +277,7 @@ util_inf_sign(float x)
 /**
  * Double-float
  */
-static inline boolean
+static inline bool
 util_is_double_inf_or_nan(double x)
 {
    union di tmp;
@@ -288,7 +286,7 @@ util_is_double_inf_or_nan(double x)
 }
 
 
-static inline boolean
+static inline bool
 util_is_double_nan(double x)
 {
    union di tmp;
@@ -313,14 +311,14 @@ util_double_inf_sign(double x)
 /**
  * Half-float
  */
-static inline boolean
+static inline bool
 util_is_half_inf_or_nan(int16_t x)
 {
    return (x & 0x7c00) == 0x7c00;
 }
 
 
-static inline boolean
+static inline bool
 util_is_half_nan(int16_t x)
 {
    return (x & 0x7fff) > 0x7c00;
@@ -359,64 +357,64 @@ uif(uint32_t ui)
 
 
 /**
- * Convert ubyte to float in [0, 1].
+ * Convert uint8_t to float in [0, 1].
  */
 static inline float
-ubyte_to_float(ubyte ub)
+ubyte_to_float(uint8_t ub)
 {
    return (float) ub * (1.0f / 255.0f);
 }
 
 
 /**
- * Convert float in [0,1] to ubyte in [0,255] with clamping.
+ * Convert float in [0,1] to uint8_t in [0,255] with clamping.
  */
-static inline ubyte
+static inline uint8_t
 float_to_ubyte(float f)
 {
    /* return 0 for NaN too */
    if (!(f > 0.0f)) {
-      return (ubyte) 0;
+      return (uint8_t) 0;
    }
    else if (f >= 1.0f) {
-      return (ubyte) 255;
+      return (uint8_t) 255;
    }
    else {
       union fi tmp;
       tmp.f = f;
       tmp.f = tmp.f * (255.0f/256.0f) + 32768.0f;
-      return (ubyte) tmp.i;
+      return (uint8_t) tmp.i;
    }
 }
 
 /**
- * Convert ushort to float in [0, 1].
+ * Convert uint16_t to float in [0, 1].
  */
 static inline float
-ushort_to_float(ushort us)
+ushort_to_float(uint16_t us)
 {
    return (float) us * (1.0f / 65535.0f);
 }
 
 
 /**
- * Convert float in [0,1] to ushort in [0,65535] with clamping.
+ * Convert float in [0,1] to uint16_t in [0,65535] with clamping.
  */
-static inline ushort
+static inline uint16_t
 float_to_ushort(float f)
 {
    /* return 0 for NaN too */
    if (!(f > 0.0f)) {
-      return (ushort) 0;
+      return (uint16_t) 0;
    }
    else if (f >= 1.0f) {
-      return (ushort) 65535;
+      return (uint16_t) 65535;
    }
    else {
       union fi tmp;
       tmp.f = f;
       tmp.f = tmp.f * (65535.0f/65536.0f) + 128.0f;
-      return (ushort) tmp.i;
+      return (uint16_t) tmp.i;
    }
 }
 

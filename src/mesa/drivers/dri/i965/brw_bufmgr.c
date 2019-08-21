@@ -49,9 +49,6 @@
 #include <stdbool.h>
 
 #include "errno.h"
-#ifndef ETIME
-#define ETIME ETIMEDOUT
-#endif
 #include "common/gen_clflush.h"
 #include "dev/gen_debug.h"
 #include "common/gen_gem.h"
@@ -294,7 +291,7 @@ bucket_vma_alloc(struct brw_bufmgr *bufmgr,
        * Set the first bit used, and return the start address.
        */
       uint64_t node_size = 64ull * bucket->size;
-      node = util_dynarray_grow(vma_list, sizeof(struct vma_bucket_node));
+      node = util_dynarray_grow(vma_list, struct vma_bucket_node, 1);
 
       if (unlikely(!node))
          return 0ull;
@@ -351,7 +348,7 @@ bucket_vma_free(struct bo_cache_bucket *bucket, uint64_t address)
 
    if (!node) {
       /* No node - the whole group of 64 blocks must have been in-use. */
-      node = util_dynarray_grow(vma_list, sizeof(struct vma_bucket_node));
+      node = util_dynarray_grow(vma_list, struct vma_bucket_node, 1);
 
       if (unlikely(!node))
          return; /* bogus, leaks some GPU VMA, but nothing we can do... */

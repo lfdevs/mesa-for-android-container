@@ -126,7 +126,7 @@ pp_init_prog(struct pp_queue_t *ppq, struct pipe_context *pipe,
 
 
    {
-      const uint semantic_names[] = { TGSI_SEMANTIC_POSITION,
+      const enum tgsi_semantic semantic_names[] = { TGSI_SEMANTIC_POSITION,
          TGSI_SEMANTIC_GENERIC
       };
       const uint semantic_indexes[] = { 0, 0 };

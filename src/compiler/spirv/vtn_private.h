@@ -399,6 +399,8 @@ bool vtn_type_contains_block(struct vtn_builder *b, struct vtn_type *type);
 bool vtn_types_compatible(struct vtn_builder *b,
                           struct vtn_type *t1, struct vtn_type *t2);
 
+struct vtn_type *vtn_type_without_array(struct vtn_type *type);
+
 struct vtn_variable;
 
 enum vtn_access_mode {
@@ -442,6 +444,7 @@ enum vtn_variable_mode {
    vtn_variable_mode_cross_workgroup,
    vtn_variable_mode_input,
    vtn_variable_mode_output,
+   vtn_variable_mode_image,
 };
 
 struct vtn_pointer {
@@ -477,8 +480,15 @@ struct vtn_pointer {
    enum gl_access_qualifier access;
 };
 
-bool vtn_pointer_uses_ssa_offset(struct vtn_builder *b,
-                                 struct vtn_pointer *ptr);
+bool vtn_mode_uses_ssa_offset(struct vtn_builder *b,
+                              enum vtn_variable_mode mode);
+
+static inline bool vtn_pointer_uses_ssa_offset(struct vtn_builder *b,
+                                               struct vtn_pointer *ptr)
+{
+   return vtn_mode_uses_ssa_offset(b, ptr->mode);
+}
+
 
 struct vtn_variable {
    enum vtn_variable_mode mode;
@@ -694,10 +704,28 @@ vtn_constant_uint(struct vtn_builder *b, uint32_t value_id)
                "Expected id %u to be an integer constant", value_id);
 
    switch (glsl_get_bit_size(val->type->type)) {
-   case 8:  return val->constant->values[0][0].u8;
-   case 16: return val->constant->values[0][0].u16;
-   case 32: return val->constant->values[0][0].u32;
-   case 64: return val->constant->values[0][0].u64;
+   case 8:  return val->constant->values[0].u8;
+   case 16: return val->constant->values[0].u16;
+   case 32: return val->constant->values[0].u32;
+   case 64: return val->constant->values[0].u64;
+   default: unreachable("Invalid bit size");
+   }
+}
+
+static inline int64_t
+vtn_constant_int(struct vtn_builder *b, uint32_t value_id)
+{
+   struct vtn_value *val = vtn_value(b, value_id, vtn_value_type_constant);
+
+   vtn_fail_if(val->type->base_type != vtn_base_type_scalar ||
+               !glsl_type_is_integer(val->type->type),
+               "Expected id %u to be an integer constant", value_id);
+
+   switch (glsl_get_bit_size(val->type->type)) {
+   case 8:  return val->constant->values[0].i8;
+   case 16: return val->constant->values[0].i16;
+   case 32: return val->constant->values[0].i32;
+   case 64: return val->constant->values[0].i64;
    default: unreachable("Invalid bit size");
    }
 }
@@ -817,7 +845,7 @@ void vtn_handle_subgroup(struct vtn_builder *b, SpvOp opcode,
 bool vtn_handle_glsl450_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                     const uint32_t *words, unsigned count);
 
-bool vtn_handle_opencl_instruction(struct vtn_builder *b, uint32_t ext_opcode,
+bool vtn_handle_opencl_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                    const uint32_t *words, unsigned count);
 
 struct vtn_builder* vtn_create_builder(const uint32_t *words, size_t word_count,
@@ -829,6 +857,14 @@ void vtn_handle_entry_point(struct vtn_builder *b, const uint32_t *w,
 
 void vtn_handle_decoration(struct vtn_builder *b, SpvOp opcode,
                            const uint32_t *w, unsigned count);
+
+enum vtn_variable_mode vtn_storage_class_to_mode(struct vtn_builder *b,
+                                                 SpvStorageClass class,
+                                                 struct vtn_type *interface_type,
+                                                 nir_variable_mode *nir_mode_out);
+
+nir_address_format vtn_mode_to_address_format(struct vtn_builder *b,
+                                              enum vtn_variable_mode);
 
 static inline uint32_t
 vtn_align_u32(uint32_t v, uint32_t a)
@@ -845,6 +881,9 @@ vtn_u64_literal(const uint32_t *w)
 
 bool vtn_handle_amd_gcn_shader_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                            const uint32_t *words, unsigned count);
+
+bool vtn_handle_amd_shader_ballot_instruction(struct vtn_builder *b, SpvOp ext_opcode,
+                                              const uint32_t *w, unsigned count);
 
 bool vtn_handle_amd_shader_trinary_minmax_instruction(struct vtn_builder *b, SpvOp ext_opcode,
 						      const uint32_t *words, unsigned count);

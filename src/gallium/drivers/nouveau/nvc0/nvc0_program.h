@@ -54,7 +54,6 @@ struct nvc0_program {
    } fp;
    struct {
       uint32_t tess_mode; /* ~0 if defined by the other stage */
-      uint32_t input_patch_size;
    } tp;
    struct {
       uint32_t lmem_size; /* local memory (TGSI PRIVATE resource) size */

@@ -235,15 +235,21 @@ fs_live_variables::compute_start_end()
    foreach_block (block, cfg) {
       struct block_data *bd = &block_data[block->num];
 
-      for (int i = 0; i < num_vars; i++) {
-         if (BITSET_TEST(bd->livein, i) && BITSET_TEST(bd->defin, i)) {
-            start[i] = MIN2(start[i], block->start_ip);
-            end[i] = MAX2(end[i], block->start_ip);
-         }
-
-         if (BITSET_TEST(bd->liveout, i) && BITSET_TEST(bd->defout, i)) {
-            start[i] = MIN2(start[i], block->end_ip);
-            end[i] = MAX2(end[i], block->end_ip);
+      for (int w = 0; w < bitset_words; w++) {
+         BITSET_WORD livedefin = bd->livein[w] & bd->defin[w];
+         BITSET_WORD livedefout = bd->liveout[w] & bd->defout[w];
+         BITSET_WORD livedefinout = livedefin | livedefout;
+         while (livedefinout) {
+            unsigned b = u_bit_scan(&livedefinout);
+            unsigned i = w * BITSET_WORDBITS + b;
+            if (livedefin & (1u << b)) {
+               start[i] = MIN2(start[i], block->start_ip);
+               end[i] = MAX2(end[i], block->start_ip);
+            }
+            if (livedefout & (1u << b)) {
+               start[i] = MIN2(start[i], block->end_ip);
+               end[i] = MAX2(end[i], block->end_ip);
+            }
          }
       }
    }

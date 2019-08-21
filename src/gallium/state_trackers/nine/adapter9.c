@@ -34,6 +34,14 @@
 
 #define DBG_CHANNEL DBG_ADAPTER
 
+static bool
+has_sm3(struct pipe_screen *hal)
+{
+    return hal->get_param(hal, PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD) &&
+           hal->get_param(hal, PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES) &&
+           hal->get_param(hal, PIPE_CAP_VERTEX_SHADER_SATURATE);
+}
+
 HRESULT
 NineAdapter9_ctor( struct NineAdapter9 *This,
                    struct NineUnknownParams *pParams,
@@ -65,7 +73,7 @@ NineAdapter9_ctor( struct NineAdapter9 *This,
      * as these are very old, we choose to drop support for them */
 
     /* checks minimum requirements, most are vs3/ps3 strict requirements */
-    if (!hal->get_param(hal, PIPE_CAP_SM3) ||
+    if (!has_sm3(hal) ||
         hal->get_shader_param(hal, PIPE_SHADER_VERTEX,
                               PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE) < 256 * sizeof(float[4]) ||
         hal->get_shader_param(hal, PIPE_SHADER_FRAGMENT,
@@ -685,7 +693,7 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
         D3DNPIPECAP(NPOT_TEXTURES, D3DPTEXTURECAPS_NONPOW2CONDITIONAL) |
         D3DNPIPECAP(NPOT_TEXTURES, D3DPTEXTURECAPS_CUBEMAP_POW2) |
         D3DNPIPECAP(NPOT_TEXTURES, D3DPTEXTURECAPS_VOLUMEMAP_POW2) |
-        D3DPIPECAP(MAX_TEXTURE_2D_LEVELS, D3DPTEXTURECAPS_MIPMAP) |
+        D3DPIPECAP(MAX_TEXTURE_2D_SIZE, D3DPTEXTURECAPS_MIPMAP) |
         D3DPIPECAP(MAX_TEXTURE_3D_LEVELS, D3DPTEXTURECAPS_MIPVOLUMEMAP) |
         D3DPIPECAP(MAX_TEXTURE_CUBE_LEVELS, D3DPTEXTURECAPS_MIPCUBEMAP);
 
@@ -726,8 +734,8 @@ NineAdapter9_GetDeviceCaps( struct NineAdapter9 *This,
         pCaps->LineCaps |= D3DLINECAPS_ANTIALIAS;
     }
 
-    pCaps->MaxTextureWidth =
-        1 << (screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS) - 1);
+    pCaps->MaxTextureWidth =screen->get_param(screen,
+                                              PIPE_CAP_MAX_TEXTURE_2D_SIZE);
     pCaps->MaxTextureHeight = pCaps->MaxTextureWidth;
     pCaps->MaxVolumeExtent =
         1 << (screen->get_param(screen, PIPE_CAP_MAX_TEXTURE_3D_LEVELS) - 1);

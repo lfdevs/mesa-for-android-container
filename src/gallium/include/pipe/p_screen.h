@@ -164,29 +164,29 @@ struct pipe_screen {
     * drawing surface.
     * \param bindings  bitmask of PIPE_BIND_*
     */
-   boolean (*is_format_supported)( struct pipe_screen *,
-                                   enum pipe_format format,
-                                   enum pipe_texture_target target,
-                                   unsigned sample_count,
-                                   unsigned storage_sample_count,
-                                   unsigned bindings );
+   bool (*is_format_supported)( struct pipe_screen *,
+                                enum pipe_format format,
+                                enum pipe_texture_target target,
+                                unsigned sample_count,
+                                unsigned storage_sample_count,
+                                unsigned bindings );
 
    /**
     * Check if the given pipe_format is supported as output for this codec/profile.
     * \param profile  profile to check, may also be PIPE_VIDEO_PROFILE_UNKNOWN
     */
-   boolean (*is_video_format_supported)( struct pipe_screen *,
-                                         enum pipe_format format,
-                                         enum pipe_video_profile profile,
-                                         enum pipe_video_entrypoint entrypoint );
+   bool (*is_video_format_supported)( struct pipe_screen *,
+                                      enum pipe_format format,
+                                      enum pipe_video_profile profile,
+                                      enum pipe_video_entrypoint entrypoint );
 
    /**
     * Check if we can actually create the given resource (test the dimension,
     * overall size, etc).  Used to implement proxy textures.
     * \return TRUE if size is OK, FALSE if too large.
     */
-   boolean (*can_create_resource)(struct pipe_screen *screen,
-                                  const struct pipe_resource *templat);
+   bool (*can_create_resource)(struct pipe_screen *screen,
+                               const struct pipe_resource *templat);
 
    /**
     * Create a new texture object, using the given template info.
@@ -256,11 +256,21 @@ struct pipe_screen {
     *
     * \param usage  A combination of PIPE_HANDLE_USAGE_* flags.
     */
-   boolean (*resource_get_handle)(struct pipe_screen *,
-                                  struct pipe_context *context,
-				  struct pipe_resource *tex,
-				  struct winsys_handle *handle,
-				  unsigned usage);
+   bool (*resource_get_handle)(struct pipe_screen *,
+                               struct pipe_context *context,
+                               struct pipe_resource *tex,
+                               struct winsys_handle *handle,
+                               unsigned usage);
+
+   /**
+    * Get info for the given pipe resource without the need to get a
+    * winsys_handle.
+    */
+   bool (*resource_get_param)(struct pipe_screen *screen,
+                              struct pipe_resource *resource,
+                              unsigned int plane,
+                              enum pipe_resource_param param,
+                              uint64_t *value);
 
    /**
     * Get stride and offset for the given pipe resource without the need to get
@@ -314,10 +324,10 @@ struct pipe_screen {
     *
     * \param timeout  in nanoseconds (may be PIPE_TIMEOUT_INFINITE).
     */
-   boolean (*fence_finish)(struct pipe_screen *screen,
-                           struct pipe_context *ctx,
-                           struct pipe_fence_handle *fence,
-                           uint64_t timeout);
+   bool (*fence_finish)(struct pipe_screen *screen,
+                        struct pipe_context *ctx,
+                        struct pipe_fence_handle *fence,
+                        uint64_t timeout);
 
    /**
     * For fences created with PIPE_FLUSH_FENCE_FD (exported fd) or
@@ -464,6 +474,23 @@ struct pipe_screen {
    bool (*is_parallel_shader_compilation_finished)(struct pipe_screen *screen,
                                                    void *shader,
                                                    unsigned shader_type);
+
+   /**
+    * Set the damage region (called when KHR_partial_update() is invoked).
+    * This function is passed an array of rectangles encoding the damage area.
+    * rects are using the bottom-left origin convention.
+    * nrects = 0 means 'reset the damage region'. What 'reset' implies is HW
+    * specific. For tile-based renderers, the damage extent is typically set
+    * to cover the whole resource with no damage rect (or a 0-size damage
+    * rect). This way, the existing resource content is reloaded into the
+    * local tile buffer for every tile thus making partial tile update
+    * possible. For HW operating in immediate mode, this reset operation is
+    * likely to be a NOOP.
+    */
+   void (*set_damage_region)(struct pipe_screen *screen,
+                             struct pipe_resource *resource,
+                             unsigned int nrects,
+                             const struct pipe_box *rects);
 };
 
 

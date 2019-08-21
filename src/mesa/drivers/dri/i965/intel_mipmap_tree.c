@@ -58,195 +58,6 @@ static void *intel_miptree_map_raw(struct brw_context *brw,
 
 static void intel_miptree_unmap_raw(struct intel_mipmap_tree *mt);
 
-static bool
-intel_miptree_supports_mcs(struct brw_context *brw,
-                           const struct intel_mipmap_tree *mt)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   /* MCS compression only applies to multisampled miptrees */
-   if (mt->surf.samples <= 1)
-      return false;
-
-   /* Prior to Gen7, all MSAA surfaces used IMS layout. */
-   if (devinfo->gen < 7)
-      return false;
-
-   /* See isl_surf_get_mcs_surf for details. */
-   if (mt->surf.samples == 16 && mt->surf.logical_level0_px.width > 8192)
-      return false;
-
-   /* In Gen7, IMS layout is only used for depth and stencil buffers. */
-   switch (_mesa_get_format_base_format(mt->format)) {
-   case GL_DEPTH_COMPONENT:
-   case GL_STENCIL_INDEX:
-   case GL_DEPTH_STENCIL:
-      return false;
-   default:
-      /* From the Ivy Bridge PRM, Vol4 Part1 p77 ("MCS Enable"):
-       *
-       *   This field must be set to 0 for all SINT MSRTs when all RT channels
-       *   are not written
-       *
-       * In practice this means that we have to disable MCS for all signed
-       * integer MSAA buffers.  The alternative, to disable MCS only when one
-       * of the render target channels is disabled, is impractical because it
-       * would require converting between CMS and UMS MSAA layouts on the fly,
-       * which is expensive.
-       */
-      if (devinfo->gen == 7 && _mesa_get_format_datatype(mt->format) == GL_INT) {
-         return false;
-      } else {
-         return true;
-      }
-   }
-}
-
-static bool
-intel_tiling_supports_ccs(const struct brw_context *brw,
-                          enum isl_tiling tiling)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   /* From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render
-    * Target(s)", beneath the "Fast Color Clear" bullet (p326):
-    *
-    *     - Support is limited to tiled render targets.
-    *
-    * Gen9 changes the restriction to Y-tile only.
-    */
-   if (devinfo->gen >= 9)
-      return tiling == ISL_TILING_Y0;
-   else if (devinfo->gen >= 7)
-      return tiling != ISL_TILING_LINEAR;
-   else
-      return false;
-}
-
-/**
- * For a single-sampled render target ("non-MSRT"), determine if an MCS buffer
- * can be used. This doesn't (and should not) inspect any of the properties of
- * the miptree's BO.
- *
- * From the Ivy Bridge PRM, Vol2 Part1 11.7 "MCS Buffer for Render Target(s)",
- * beneath the "Fast Color Clear" bullet (p326):
- *
- *     - Support is for non-mip-mapped and non-array surface types only.
- *
- * And then later, on p327:
- *
- *     - MCS buffer for non-MSRT is supported only for RT formats 32bpp,
- *       64bpp, and 128bpp.
- *
- * From the Skylake documentation, it is made clear that X-tiling is no longer
- * supported:
- *
- *     - MCS and Lossless compression is supported for TiledY/TileYs/TileYf
- *     non-MSRTs only.
- */
-static bool
-intel_miptree_supports_ccs(struct brw_context *brw,
-                           const struct intel_mipmap_tree *mt)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   /* MCS support does not exist prior to Gen7 */
-   if (devinfo->gen < 7)
-      return false;
-
-   /* This function applies only to non-multisampled render targets. */
-   if (mt->surf.samples > 1)
-      return false;
-
-   /* MCS is only supported for color buffers */
-   if (!_mesa_is_format_color_format(mt->format))
-      return false;
-
-   if (mt->cpp != 4 && mt->cpp != 8 && mt->cpp != 16)
-      return false;
-
-   const bool mip_mapped = mt->first_level != 0 || mt->last_level != 0;
-   const bool arrayed = mt->surf.logical_level0_px.array_len > 1 ||
-                        mt->surf.logical_level0_px.depth > 1;
-
-   if (arrayed) {
-       /* Multisample surfaces with the CMS layout are not layered surfaces,
-        * yet still have physical_depth0 > 1. Assert that we don't
-        * accidentally reject a multisampled surface here. We should have
-        * rejected it earlier by explicitly checking the sample count.
-        */
-      assert(mt->surf.samples == 1);
-   }
-
-   /* Handle the hardware restrictions...
-    *
-    * All GENs have the following restriction: "MCS buffer for non-MSRT is
-    * supported only for RT formats 32bpp, 64bpp, and 128bpp."
-    *
-    * From the HSW PRM Volume 7: 3D-Media-GPGPU, page 652: (Color Clear of
-    * Non-MultiSampler Render Target Restrictions) Support is for
-    * non-mip-mapped and non-array surface types only.
-    *
-    * From the BDW PRM Volume 7: 3D-Media-GPGPU, page 649: (Color Clear of
-    * Non-MultiSampler Render Target Restriction). Mip-mapped and arrayed
-    * surfaces are supported with MCS buffer layout with these alignments in
-    * the RT space: Horizontal Alignment = 256 and Vertical Alignment = 128.
-    *
-    * From the SKL PRM Volume 7: 3D-Media-GPGPU, page 632: (Color Clear of
-    * Non-MultiSampler Render Target Restriction). Mip-mapped and arrayed
-    * surfaces are supported with MCS buffer layout with these alignments in
-    * the RT space: Horizontal Alignment = 128 and Vertical Alignment = 64.
-    */
-   if (devinfo->gen < 8 && (mip_mapped || arrayed))
-      return false;
-
-   /* The PRM doesn't say this explicitly, but fast-clears don't appear to
-    * work for 3D textures until gen9 where the layout of 3D textures changes
-    * to match 2D array textures.
-    */
-   if (devinfo->gen <= 8 && mt->surf.dim != ISL_SURF_DIM_2D)
-      return false;
-
-   /* There's no point in using an MCS buffer if the surface isn't in a
-    * renderable format.
-    */
-   if (!brw->mesa_format_supports_render[mt->format])
-      return false;
-
-   return true;
-}
-
-static bool
-intel_tiling_supports_hiz(const struct brw_context *brw,
-                          enum isl_tiling tiling)
-{
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   if (devinfo->gen < 6)
-      return false;
-
-   return tiling == ISL_TILING_Y0;
-}
-
-static bool
-intel_miptree_supports_hiz(const struct brw_context *brw,
-                           const struct intel_mipmap_tree *mt)
-{
-   if (!brw->has_hiz)
-      return false;
-
-   switch (mt->format) {
-   case MESA_FORMAT_Z_FLOAT32:
-   case MESA_FORMAT_Z32_FLOAT_S8X24_UINT:
-   case MESA_FORMAT_Z24_UNORM_X8_UINT:
-   case MESA_FORMAT_Z24_UNORM_S8_UINT:
-   case MESA_FORMAT_Z_UNORM16:
-      return true;
-   default:
-      return false;
-   }
-}
-
 /**
  * Return true if the format that will be used to access the miptree is
  * CCS_E-compatible with the miptree's linear/non-sRGB format.
@@ -268,15 +79,10 @@ format_ccs_e_compat_with_miptree(const struct gen_device_info *devinfo,
    return isl_formats_are_ccs_e_compatible(devinfo, isl_format, access_format);
 }
 
+/* Determine if CCS_E is supported for a given platform and mesa format. */
 static bool
-intel_miptree_supports_ccs_e(struct brw_context *brw,
-                             const struct intel_mipmap_tree *mt)
+format_supports_ccs_e(const struct brw_context *brw, mesa_format format)
 {
-   const struct gen_device_info *devinfo = &brw->screen->devinfo;
-
-   if (devinfo->gen < 9)
-      return false;
-
    /* For now compression is only enabled for integer formats even though
     * there exist supported floating point formats also. This is a heuristic
     * decision based on current public benchmarks. In none of the cases these
@@ -284,17 +90,14 @@ intel_miptree_supports_ccs_e(struct brw_context *brw,
     * Hence these are left to to be enabled in the future when they are known
     * to improve things.
     */
-   if (_mesa_get_format_datatype(mt->format) == GL_FLOAT)
-      return false;
-
-   if (!intel_miptree_supports_ccs(brw, mt))
+   if (_mesa_get_format_datatype(format) == GL_FLOAT)
       return false;
 
    /* Many window system buffers are sRGB even if they are never rendered as
     * sRGB.  For those, we want CCS_E for when sRGBEncode is false.  When the
     * surface is used as sRGB, we fall back to CCS_D.
     */
-   mesa_format linear_format = _mesa_get_srgb_format_linear(mt->format);
+   mesa_format linear_format = _mesa_get_srgb_format_linear(format);
    enum isl_format isl_format = brw_isl_format_for_mesa_format(linear_format);
    return isl_format_supports_ccs_e(&brw->screen->devinfo, isl_format);
 }
@@ -350,8 +153,7 @@ needs_separate_stencil(const struct brw_context *brw,
    if (devinfo->must_use_separate_stencil)
       return true;
 
-   return brw->has_separate_stencil &&
-          intel_miptree_supports_hiz(brw, mt);
+   return brw->has_separate_stencil && brw->has_hiz;
 }
 
 /**
@@ -364,19 +166,16 @@ intel_miptree_choose_aux_usage(struct brw_context *brw,
 {
    assert(mt->aux_usage == ISL_AUX_USAGE_NONE);
 
-   if (intel_miptree_supports_mcs(brw, mt)) {
-      assert(mt->surf.msaa_layout == ISL_MSAA_LAYOUT_ARRAY);
-      mt->aux_usage = ISL_AUX_USAGE_MCS;
-   } else if (intel_tiling_supports_ccs(brw, mt->surf.tiling) &&
-              intel_miptree_supports_ccs(brw, mt)) {
-      if (!unlikely(INTEL_DEBUG & DEBUG_NO_RBC) &&
-          intel_miptree_supports_ccs_e(brw, mt)) {
+   if (_mesa_is_format_color_format(mt->format)) {
+      if (mt->surf.samples > 1) {
+         mt->aux_usage = ISL_AUX_USAGE_MCS;
+      } else if (!unlikely(INTEL_DEBUG & DEBUG_NO_RBC) &&
+                 format_supports_ccs_e(brw, mt->format)) {
          mt->aux_usage = ISL_AUX_USAGE_CCS_E;
-      } else {
+      } else if (brw->mesa_format_supports_render[mt->format]) {
          mt->aux_usage = ISL_AUX_USAGE_CCS_D;
       }
-   } else if (intel_tiling_supports_hiz(brw, mt->surf.tiling) &&
-              intel_miptree_supports_hiz(brw, mt)) {
+   } else if (isl_surf_usage_is_depth(mt->surf.usage) && brw->has_hiz) {
       mt->aux_usage = ISL_AUX_USAGE_HIZ;
    }
 
@@ -766,8 +565,8 @@ intel_miptree_create(struct brw_context *brw,
     */
    if (mt->aux_usage != ISL_AUX_USAGE_CCS_D &&
        !intel_miptree_alloc_aux(brw, mt)) {
-      intel_miptree_release(&mt);
-      return NULL;
+      mt->aux_usage = ISL_AUX_USAGE_NONE;
+      mt->supports_fast_clear = false;
    }
 
    return mt;
@@ -854,8 +653,8 @@ intel_miptree_create_for_bo(struct brw_context *brw,
        */
       if (mt->aux_usage != ISL_AUX_USAGE_CCS_D &&
           !intel_miptree_alloc_aux(brw, mt)) {
-         intel_miptree_release(&mt);
-         return NULL;
+         mt->aux_usage = ISL_AUX_USAGE_NONE;
+         mt->supports_fast_clear = false;
       }
    }
 
@@ -1778,7 +1577,7 @@ intel_miptree_alloc_aux(struct brw_context *brw,
    enum isl_aux_state initial_state;
    uint8_t memset_value;
    struct isl_surf aux_surf;
-   MAYBE_UNUSED bool aux_surf_ok = false;
+   bool aux_surf_ok = false;
 
    switch (mt->aux_usage) {
    case ISL_AUX_USAGE_NONE:
@@ -1830,7 +1629,8 @@ intel_miptree_alloc_aux(struct brw_context *brw,
    }
 
    /* We should have a valid aux_surf. */
-   assert(aux_surf_ok);
+   if (!aux_surf_ok)
+      return false;
 
    /* No work is needed for a zero-sized auxiliary buffer. */
    if (aux_surf.size_B == 0)
@@ -3163,7 +2963,7 @@ intel_miptree_unmap_tiled_memcpy(struct brw_context *brw,
  *
  * \return true if the format and type combination are valid
  */
-MAYBE_UNUSED isl_memcpy_type
+isl_memcpy_type
 intel_miptree_get_memcpy_type(mesa_format tiledFormat, GLenum format, GLenum type,
                               uint32_t *cpp)
 {

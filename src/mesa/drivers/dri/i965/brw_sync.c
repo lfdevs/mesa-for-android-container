@@ -354,6 +354,7 @@ brw_gl_delete_sync(struct gl_context *ctx, struct gl_sync_object *_sync)
    struct brw_gl_sync *sync = (struct brw_gl_sync *) _sync;
 
    brw_fence_finish(&sync->fence);
+   free(sync->gl.Label);
    free(sync);
 }
 

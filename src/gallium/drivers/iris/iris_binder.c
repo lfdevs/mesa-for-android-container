@@ -150,11 +150,8 @@ iris_binder_reserve_3d(struct iris_context *ice)
       if (!shaders[stage])
          continue;
 
-      const struct brw_stage_prog_data *prog_data =
-         (const void *) shaders[stage]->prog_data;
-
       /* Round up the size so our next table has an aligned starting offset */
-      sizes[stage] = align(prog_data->binding_table.size_bytes, BTP_ALIGNMENT);
+      sizes[stage] = align(shaders[stage]->bt.size_bytes, BTP_ALIGNMENT);
    }
 
    /* Make space for the new binding tables...this may take two tries. */
@@ -186,6 +183,8 @@ iris_binder_reserve_3d(struct iris_context *ice)
    for (int stage = 0; stage <= MESA_SHADER_FRAGMENT; stage++) {
       if (ice->state.dirty & (IRIS_DIRTY_BINDINGS_VS << stage)) {
          binder->bt_offset[stage] = sizes[stage] > 0 ? offset : 0;
+         iris_record_state_size(ice->state.sizes,
+                                binder->bo->gtt_offset + offset, sizes[stage]);
          offset += sizes[stage];
       }
    }
@@ -198,10 +197,10 @@ iris_binder_reserve_compute(struct iris_context *ice)
       return;
 
    struct iris_binder *binder = &ice->state.binder;
-   struct brw_stage_prog_data *prog_data =
-      ice->shaders.prog[MESA_SHADER_COMPUTE]->prog_data;
+   struct iris_compiled_shader *shader =
+      ice->shaders.prog[MESA_SHADER_COMPUTE];
 
-   unsigned size = prog_data->binding_table.size_bytes;
+   unsigned size = shader->bt.size_bytes;
 
    if (size == 0)
       return;

@@ -26,10 +26,11 @@ main(int argc, char **argv)
       }
    }
 
-   if(roundtrip_fails)
+   if(roundtrip_fails) {
       printf("Failure! %u/65536 half floats failed a conversion to float and back.\n", roundtrip_fails);
-   else
+      return 1;
+   } else {
       printf("Success!\n");
-
-   return 0;
+      return 0;
+   }
 }

@@ -135,6 +135,20 @@ static bool ppir_instr_insert_const(ppir_const *dst, const ppir_const *src,
    return true;
 }
 
+static void ppir_update_src_pipeline(ppir_pipeline pipeline, ppir_src *src,
+                                     ppir_dest *dest, uint8_t *swizzle)
+{
+   if (ppir_node_target_equal(src, dest)) {
+      src->type = ppir_target_pipeline;
+      src->pipeline = pipeline;
+
+      if (swizzle) {
+         for (int k = 0; k < 4; k++)
+            src->swizzle[k] = swizzle[src->swizzle[k]];
+      }
+   }
+}
+
 /* make alu node src reflact the pipeline reg */
 static void ppir_instr_update_src_pipeline(ppir_instr *instr, ppir_pipeline pipeline,
                                            ppir_dest *dest, uint8_t *swizzle)
@@ -146,15 +160,16 @@ static void ppir_instr_update_src_pipeline(ppir_instr *instr, ppir_pipeline pipe
       ppir_alu_node *alu = ppir_node_to_alu(instr->slots[i]);
       for (int j = 0; j < alu->num_src; j++) {
          ppir_src *src = alu->src + j;
-         if (ppir_node_target_equal(src, dest)) {
-            src->type = ppir_target_pipeline;
-            src->pipeline = pipeline;
+         ppir_update_src_pipeline(pipeline, src, dest, swizzle);
+      }
+   }
 
-            if (swizzle) {
-               for (int k = 0; k < 4; k++)
-                  src->swizzle[k] = swizzle[src->swizzle[k]];
-            }
-         }
+   ppir_node *branch_node = instr->slots[PPIR_INSTR_SLOT_BRANCH];
+   if (branch_node && (branch_node->type == ppir_node_type_branch)) {
+      ppir_branch_node *branch = ppir_node_to_branch(branch_node);
+      for (int j = 0; j < 2; j++) {
+         ppir_src *src = branch->src + j;
+         ppir_update_src_pipeline(pipeline, src, dest, swizzle);
       }
    }
 }
@@ -234,6 +249,7 @@ static struct {
    [PPIR_INSTR_SLOT_ALU_SCL_ADD] = { 4, "sadd" },
    [PPIR_INSTR_SLOT_ALU_COMBINE] = { 4, "comb" },
    [PPIR_INSTR_SLOT_STORE_TEMP] = { 4, "stor" },
+   [PPIR_INSTR_SLOT_BRANCH] = { 4, "brch" },
 };
 
 void ppir_instr_print_list(ppir_compiler *comp)

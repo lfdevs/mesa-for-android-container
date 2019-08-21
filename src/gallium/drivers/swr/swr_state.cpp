@@ -24,6 +24,8 @@
 // llvm redefines DEBUG
 #pragma push_macro("DEBUG")
 #undef DEBUG
+
+#include <rasterizer/core/state.h>
 #include "JitManager.h"
 #pragma pop_macro("DEBUG")
 
@@ -45,6 +47,7 @@
 
 #include "swr_state.h"
 #include "swr_context.h"
+#include "gen_surf_state_llvm.h"
 #include "gen_swr_context_llvm.h"
 #include "swr_screen.h"
 #include "swr_resource.h"
@@ -425,9 +428,7 @@ swr_create_gs_state(struct pipe_context *pipe,
       return NULL;
 
    swr_gs->pipe.tokens = tgsi_dup_tokens(gs->tokens);
-
    lp_build_tgsi_info(gs->tokens, &swr_gs->info);
-
    return swr_gs;
 }
 
@@ -615,16 +616,21 @@ swr_set_clip_state(struct pipe_context *pipe,
 static void
 swr_set_scissor_states(struct pipe_context *pipe,
                        unsigned start_slot,
-                       unsigned num_viewports,
-                       const struct pipe_scissor_state *scissor)
+                       unsigned num_scissors,
+                       const struct pipe_scissor_state *scissors)
 {
    struct swr_context *ctx = swr_context(pipe);
 
-   ctx->scissor = *scissor;
-   ctx->swr_scissor.xmin = scissor->minx;
-   ctx->swr_scissor.xmax = scissor->maxx;
-   ctx->swr_scissor.ymin = scissor->miny;
-   ctx->swr_scissor.ymax = scissor->maxy;
+   memcpy(ctx->scissors + start_slot, scissors,
+          sizeof(struct pipe_scissor_state) * num_scissors);
+
+   for (unsigned i = 0; i < num_scissors; i++) {
+      auto idx = start_slot + i;
+      ctx->swr_scissors[idx].xmin = scissors[idx].minx;
+      ctx->swr_scissors[idx].xmax = scissors[idx].maxx;
+      ctx->swr_scissors[idx].ymin = scissors[idx].miny;
+      ctx->swr_scissors[idx].ymax = scissors[idx].maxy;
+   }
    ctx->dirty |= SWR_NEW_SCISSOR;
 }
 
@@ -636,7 +642,7 @@ swr_set_viewport_states(struct pipe_context *pipe,
 {
    struct swr_context *ctx = swr_context(pipe);
 
-   ctx->viewport = *vpt;
+   memcpy(ctx->viewports + start_slot, vpt, sizeof(struct pipe_viewport_state) * num_viewports);
    ctx->dirty |= SWR_NEW_VIEWPORT;
 }
 
@@ -647,7 +653,7 @@ swr_set_framebuffer_state(struct pipe_context *pipe,
 {
    struct swr_context *ctx = swr_context(pipe);
 
-   boolean changed = !util_framebuffer_state_equal(&ctx->framebuffer, fb);
+   bool changed = !util_framebuffer_state_equal(&ctx->framebuffer, fb);
 
    assert(fb->width <= KNOB_GUARDBAND_WIDTH);
    assert(fb->height <= KNOB_GUARDBAND_HEIGHT);
@@ -1194,6 +1200,7 @@ swr_update_derived(struct pipe_context *pipe,
          rastState->depthFormat = swr_resource(zb->texture)->swr.format;
 
       rastState->depthClipEnable = rasterizer->depth_clip_near;
+      rastState->clipEnable = rasterizer->depth_clip_near | rasterizer->depth_clip_far;
       rastState->clipHalfZ = rasterizer->clip_halfz;
 
       ctx->api.pfnSwrSetRastState(ctx->swrContext, rastState);
@@ -1202,41 +1209,46 @@ swr_update_derived(struct pipe_context *pipe,
    /* Viewport */
    if (ctx->dirty & (SWR_NEW_VIEWPORT | SWR_NEW_FRAMEBUFFER
                      | SWR_NEW_RASTERIZER)) {
-      pipe_viewport_state *state = &ctx->viewport;
+      pipe_viewport_state *state = &ctx->viewports[0];
       pipe_framebuffer_state *fb = &ctx->framebuffer;
       pipe_rasterizer_state *rasterizer = ctx->rasterizer;
 
-      SWR_VIEWPORT *vp = &ctx->derived.vp;
+      SWR_VIEWPORT *vp = &ctx->derived.vp[0];
       SWR_VIEWPORT_MATRICES *vpm = &ctx->derived.vpm;
 
-      vp->x = state->translate[0] - state->scale[0];
-      vp->width = 2 * state->scale[0];
-      vp->y = state->translate[1] - fabs(state->scale[1]);
-      vp->height = 2 * fabs(state->scale[1]);
-      util_viewport_zmin_zmax(state, rasterizer->clip_halfz,
-                              &vp->minZ, &vp->maxZ);
+      for (unsigned i = 0; i < KNOB_NUM_VIEWPORTS_SCISSORS; i++) {
+         vp->x = state->translate[0] - state->scale[0];
+         vp->width = 2 * state->scale[0];
+         vp->y = state->translate[1] - fabs(state->scale[1]);
+         vp->height = 2 * fabs(state->scale[1]);
+         util_viewport_zmin_zmax(state, rasterizer->clip_halfz,
+                                 &vp->minZ, &vp->maxZ);
 
-      vpm->m00[0] = state->scale[0];
-      vpm->m11[0] = state->scale[1];
-      vpm->m22[0] = state->scale[2];
-      vpm->m30[0] = state->translate[0];
-      vpm->m31[0] = state->translate[1];
-      vpm->m32[0] = state->translate[2];
+         vpm->m00[i] = state->scale[0];
+         vpm->m11[i] = state->scale[1];
+         vpm->m22[i] = state->scale[2];
+         vpm->m30[i] = state->translate[0];
+         vpm->m31[i] = state->translate[1];
+         vpm->m32[i] = state->translate[2];
 
-      /* Now that the matrix is calculated, clip the view coords to screen
-       * size.  OpenGL allows for -ve x,y in the viewport. */
-      if (vp->x < 0.0f) {
-         vp->width += vp->x;
-         vp->x = 0.0f;
+         /* Now that the matrix is calculated, clip the view coords to screen
+          * size.  OpenGL allows for -ve x,y in the viewport. */
+         if (vp->x < 0.0f) {
+            vp->width += vp->x;
+            vp->x = 0.0f;
+         }
+         if (vp->y < 0.0f) {
+            vp->height += vp->y;
+            vp->y = 0.0f;
+         }
+         vp->width = std::min(vp->width, (float) fb->width - vp->x);
+         vp->height = std::min(vp->height, (float) fb->height - vp->y);
+
+         vp++;
+         state++;
       }
-      if (vp->y < 0.0f) {
-         vp->height += vp->y;
-         vp->y = 0.0f;
-      }
-      vp->width = std::min(vp->width, (float)fb->width - vp->x);
-      vp->height = std::min(vp->height, (float)fb->height - vp->y);
-
-      ctx->api.pfnSwrSetViewports(ctx->swrContext, 1, vp, vpm);
+      ctx->api.pfnSwrSetViewports(ctx->swrContext, KNOB_NUM_VIEWPORTS_SCISSORS,
+                                  &ctx->derived.vp[0], &ctx->derived.vpm);
    }
 
    /* When called from swr_clear (p_draw_info = null), render targets,
@@ -1253,7 +1265,7 @@ swr_update_derived(struct pipe_context *pipe,
 
    /* Scissor */
    if (ctx->dirty & SWR_NEW_SCISSOR) {
-      ctx->api.pfnSwrSetScissorRects(ctx->swrContext, 1, &ctx->swr_scissor);
+      ctx->api.pfnSwrSetScissorRects(ctx->swrContext, KNOB_NUM_VIEWPORTS_SCISSORS, ctx->swr_scissors);
    }
 
    /* Set vertex & index buffers */
@@ -1263,8 +1275,8 @@ swr_update_derived(struct pipe_context *pipe,
       /* vertex buffers */
       SWR_VERTEX_BUFFER_STATE swrVertexBuffers[PIPE_MAX_ATTRIBS];
       for (UINT i = 0; i < ctx->num_vertex_buffers; i++) {
-         uint32_t size, pitch, elems, partial_inbounds;
-         uint32_t min_vertex_index;
+         uint32_t size = 0, pitch = 0, elems = 0, partial_inbounds = 0;
+         uint32_t min_vertex_index = 0;
          const uint8_t *p_data;
          struct pipe_vertex_buffer *vb = &ctx->vertex_buffer[i];
 

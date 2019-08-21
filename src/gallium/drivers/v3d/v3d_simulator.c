@@ -289,6 +289,9 @@ v3d_free_simulator_bo(struct v3d_simulator_bo *sim_bo)
 static struct v3d_simulator_bo *
 v3d_get_simulator_bo(struct v3d_simulator_file *file, int gem_handle)
 {
+        if (gem_handle == 0)
+                return NULL;
+
         mtx_lock(&sim_state.mutex);
         struct hash_entry *entry =
                 _mesa_hash_table_search(file->bo_map, int_to_key(gem_handle));

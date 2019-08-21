@@ -44,6 +44,7 @@
 #include "builtin_functions.h"
 #include "opt_add_neg_to_sub.h"
 #include "main/mtypes.h"
+#include "program/program.h"
 
 class dead_variable_visitor : public ir_hierarchical_visitor {
 public:
@@ -98,11 +99,12 @@ private:
 };
 
 static void
-init_gl_program(struct gl_program *prog, bool is_arb_asm)
+init_gl_program(struct gl_program *prog, bool is_arb_asm, GLenum target)
 {
    prog->RefCount = 1;
    prog->Format = GL_PROGRAM_FORMAT_ASCII_ARB;
    prog->is_arb_asm = is_arb_asm;
+   prog->info.stage = (gl_shader_stage)_mesa_program_enum_to_shader_stage(target);
 }
 
 static struct gl_program *
@@ -117,7 +119,7 @@ new_program(UNUSED struct gl_context *ctx, GLenum target,
    case GL_FRAGMENT_PROGRAM_ARB:
    case GL_COMPUTE_PROGRAM_NV: {
       struct gl_program *prog = rzalloc(NULL, struct gl_program);
-      init_gl_program(prog, is_arb_asm);
+      init_gl_program(prog, is_arb_asm, target);
       return prog;
    }
    default:

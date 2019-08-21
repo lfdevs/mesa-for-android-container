@@ -24,6 +24,7 @@
 #ifndef SWR_RESOURCE_H
 #define SWR_RESOURCE_H
 
+#include "memory/SurfaceState.h"
 #include "pipe/p_state.h"
 #include "api.h"
 
@@ -66,12 +67,12 @@ swr_resource(struct pipe_resource *resource)
    return (struct swr_resource *)resource;
 }
 
-static INLINE boolean
+static INLINE bool
 swr_resource_is_texture(const struct pipe_resource *resource)
 {
    switch (resource->target) {
    case PIPE_BUFFER:
-      return FALSE;
+      return false;
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_1D_ARRAY:
    case PIPE_TEXTURE_2D:
@@ -80,10 +81,10 @@ swr_resource_is_texture(const struct pipe_resource *resource)
    case PIPE_TEXTURE_3D:
    case PIPE_TEXTURE_CUBE:
    case PIPE_TEXTURE_CUBE_ARRAY:
-      return TRUE;
+      return true;
    default:
       assert(0);
-      return FALSE;
+      return false;
    }
 }
 

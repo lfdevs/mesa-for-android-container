@@ -32,6 +32,7 @@
 #include "etnaviv_shader.h"
 #include "pipe/p_compiler.h"
 #include "pipe/p_shader_tokens.h"
+#include "compiler/shader_enums.h"
 
 /* XXX some of these are pretty arbitrary limits, may be better to switch
  * to dynamic allocation at some point.
@@ -47,6 +48,7 @@
 struct etna_shader_inout {
    int reg; /* native register */
    struct tgsi_declaration_semantic semantic; /* tgsi semantic name and index */
+   int slot; /* nir: gl_varying_slot or gl_vert_attrib */
    int num_components;
 };
 
@@ -59,7 +61,7 @@ struct etna_shader_io_file {
 struct etna_shader_variant {
    uint32_t id; /* for debug */
 
-   uint processor; /* TGSI_PROCESSOR_... */
+   gl_shader_stage stage;
    uint32_t code_size; /* code size in uint32 words */
    uint32_t *code;
    unsigned num_loops;
@@ -77,12 +79,13 @@ struct etna_shader_variant {
    /* outputs (for linking) */
    struct etna_shader_io_file outfile;
 
-   /* index into outputs (for linking) */
+   /* index into outputs (for linking) - only for TGSI compiler */
    int output_count_per_semantic[TGSI_SEMANTIC_COUNT];
    struct etna_shader_inout * *output_per_semantic_list; /* list of pointers to outputs */
    struct etna_shader_inout **output_per_semantic[TGSI_SEMANTIC_COUNT];
 
-   /* special outputs (vs only) */
+   /* special inputs/outputs (vs only) */
+   int vs_id_in_reg; /* vertexid+instanceid input */
    int vs_pos_out_reg; /* VS position output */
    int vs_pointsize_out_reg; /* VS point size output */
    uint32_t vs_load_balancing;
@@ -133,5 +136,21 @@ etna_link_shader(struct etna_shader_link_info *info,
 
 void
 etna_destroy_shader(struct etna_shader_variant *shader);
+
+/* NIR compiler */
+
+bool
+etna_compile_shader_nir(struct etna_shader_variant *shader);
+
+void
+etna_dump_shader_nir(const struct etna_shader_variant *shader);
+
+bool
+etna_link_shader_nir(struct etna_shader_link_info *info,
+                     const struct etna_shader_variant *vs,
+                     const struct etna_shader_variant *fs);
+
+void
+etna_destroy_shader_nir(struct etna_shader_variant *shader);
 
 #endif

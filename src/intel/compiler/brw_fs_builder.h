@@ -594,6 +594,8 @@ namespace brw {
       ALU1(RNDE)
       ALU1(RNDU)
       ALU1(RNDZ)
+      ALU2(ROL)
+      ALU2(ROR)
       ALU2(SAD2)
       ALU2_ACC(SADA2)
       ALU2(SEL)
@@ -706,6 +708,17 @@ namespace brw {
                ALIGN(dispatch_width() * type_sz(src[i].type) * dst.stride,
                      REG_SIZE);
          }
+
+         return inst;
+      }
+
+      instruction *
+      UNDEF(const dst_reg &dst) const
+      {
+         assert(dst.file == VGRF);
+         instruction *inst = emit(SHADER_OPCODE_UNDEF,
+                                  retype(dst, BRW_REGISTER_TYPE_UD));
+         inst->size_written = shader->alloc.sizes[dst.nr] * REG_SIZE;
 
          return inst;
       }

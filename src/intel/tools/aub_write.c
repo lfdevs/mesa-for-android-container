@@ -172,7 +172,7 @@ aub_file_init(struct aub_file *aub, FILE *file, FILE *debug, uint16_t pci_id, co
    aub->verbose_log_file = debug;
    aub->file = file;
    aub->pci_id = pci_id;
-   fail_if(!gen_get_device_info(pci_id, &aub->devinfo),
+   fail_if(!gen_get_device_info_from_pci_id(pci_id, &aub->devinfo),
            "failed to identify chipset=0x%x\n", pci_id);
    aub->addr_bits = aub->devinfo.gen >= 8 ? 48 : 32;
 
@@ -577,7 +577,7 @@ aub_write_ggtt(struct aub_file *aub, uint64_t virt_addr, uint64_t size, const vo
 
    if (aub->verbose_log_file) {
       fprintf(aub->verbose_log_file,
-              " Writting GGTT address: 0x%" PRIx64 ", size: %" PRIu64" phys_addr=0x%lx entries=%u\n",
+              " Writting GGTT address: 0x%" PRIx64 ", size: %" PRIu64" phys_addr=0x%" PRIx64 " entries=%u\n",
               virt_addr, size, phys_addr, ggtt_ptes);
    }
 

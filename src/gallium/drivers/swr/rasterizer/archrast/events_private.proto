@@ -24,84 +24,99 @@
 # ArchRast is to not pollute the Rasty code with lots of calculations, etc. that
 # are needed to compute per draw statistics, etc.
 
-event EarlyDepthStencilInfoSingleSample
+event PipelineStats::EarlyDepthStencilInfoSingleSample
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event EarlyDepthStencilInfoSampleRate
+event PipelineStats::EarlyDepthStencilInfoSampleRate
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event EarlyDepthStencilInfoNullPS
+event PipelineStats::EarlyDepthStencilInfoNullPS
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event LateDepthStencilInfoSingleSample
+event PipelineStats::LateDepthStencilInfoSingleSample
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event LateDepthStencilInfoSampleRate
+event PipelineStats::LateDepthStencilInfoSampleRate
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event LateDepthStencilInfoNullPS
+event PipelineStats::LateDepthStencilInfoNullPS
 {
     uint64_t depthPassMask;
     uint64_t stencilPassMask;
     uint64_t coverageMask;
 };
 
-event EarlyDepthInfoPixelRate
+event PipelineStats::EarlyDepthInfoPixelRate
 {
     uint64_t depthPassCount;
     uint64_t activeLanes;
 };
 
 
-event LateDepthInfoPixelRate
+event PipelineStats::LateDepthInfoPixelRate
 {
     uint64_t depthPassCount;
     uint64_t activeLanes;
 };
 
 
-event BackendDrawEndEvent
+event PipelineStats::BackendDrawEndEvent
 {
     uint32_t drawId;
 };
 
-event FrontendDrawEndEvent
+event PipelineStats::FrontendDrawEndEvent
 {
     uint32_t drawId;
 };
 
-event TessPrimCount
+event Memory::MemoryAccessEvent
+{
+    uint32_t drawId;
+    uint64_t tsc;
+    uint64_t ptr;
+    uint32_t size;
+    uint8_t isRead;
+    uint8_t client;
+};
+
+event Memory::MemoryStatsEndEvent
+{
+    uint32_t drawId;
+};
+
+event PipelineStats::TessPrimCount
 {
     uint64_t primCount;
 };
 
-event RasterTileCount
+event PipelineStats::RasterTileCount
 {
     uint32_t drawId;
     uint64_t rasterTiles;
 };
 
-event GSPrimInfo
+event PipelineStats::GSPrimInfo
 {
     uint64_t inputPrimCount;
     uint64_t primGeneratedCount;
@@ -113,14 +128,14 @@ event GSPrimInfo
 // Trivial reject is numInvocations - pop_cnt32(validMask)
 // Trivial accept is validMask & ~clipMask
 // Must clip count is pop_cnt32(clipMask)
-event ClipInfoEvent
+event PipelineStats::ClipInfoEvent
 {
     uint32_t numInvocations;
     uint32_t validMask;
     uint32_t clipMask;
 };
 
-event CullInfoEvent
+event PipelineStats::CullInfoEvent
 {
     uint32_t drawId;
     uint64_t degeneratePrimMask;
@@ -128,14 +143,14 @@ event CullInfoEvent
     uint32_t validMask;
 };
 
-event AlphaInfoEvent
+event PipelineStats::AlphaInfoEvent
 {
     uint32_t drawId;
     uint32_t alphaTestEnable;
     uint32_t alphaBlendEnable;
 };
 
-event DrawInstancedEvent
+event PipelineStats::DrawInstancedEvent
 {
     uint32_t drawId;
     uint32_t topology;
@@ -150,7 +165,7 @@ event DrawInstancedEvent
     uint32_t splitId; // Split draw count or id.
 };
 
-event DrawIndexedInstancedEvent
+event PipelineStats::DrawIndexedInstancedEvent
 {
     uint32_t drawId;
     uint32_t topology;
@@ -166,32 +181,32 @@ event DrawIndexedInstancedEvent
     uint32_t splitId; // Split draw count or id.
 };
 
-event VSStats
+event ShaderStats::VSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };
 
-event HSStats
+event ShaderStats::HSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };
 
-event DSStats
+event ShaderStats::DSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };
 
-event GSStats
+event ShaderStats::GSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };
 
-event PSStats
+event ShaderStats::PSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };
 
-event CSStats
+event ShaderStats::CSStats
 {
     HANDLE hStats;      // SWR_SHADER_STATS
 };

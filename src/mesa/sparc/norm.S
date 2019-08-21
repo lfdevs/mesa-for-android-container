@@ -29,7 +29,7 @@ _mesa_sparc_transform_normalize_normals:
 	ld	[%sp + STACK_VAR_OFF+0x4], %f15	! f15 = scale
 	add	%sp, 16, %sp
 
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride
@@ -168,7 +168,7 @@ _mesa_sparc_transform_normalize_normals_no_rot:
 	ld	[%sp + STACK_VAR_OFF+0x4], %f15	! f15 = scale
 	add	%sp, 16, %sp
 
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride
@@ -273,7 +273,7 @@ _mesa_sparc_transform_rescale_normals_no_rot:
 	ld	[%sp + STACK_VAR_OFF+0x0], %f15	! f15 = scale
 	add	%sp, 16, %sp
 
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride
@@ -324,7 +324,7 @@ _mesa_sparc_transform_rescale_normals:
 	ld	[%sp + STACK_VAR_OFF+0x0], %f15	! f15 = scale
 	add	%sp, 16, %sp
 
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride
@@ -384,7 +384,7 @@ _mesa_sparc_transform_rescale_normals:
 	.globl	_mesa_sparc_transform_normals_no_rot
 _mesa_sparc_transform_normals_no_rot:
 	/* o0=mat o1=scale o2=in o3=lengths o4=dest */
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride
@@ -426,7 +426,7 @@ _mesa_sparc_transform_normals_no_rot:
 	.globl	_mesa_sparc_transform_normals
 _mesa_sparc_transform_normals:
 	/* o0=mat o1=scale o2=in o3=lengths o4=dest */
-	LDPTR	[%o0 + MAT_INV], %o0		! o0 = mat->inv
+	LDPTR	[%o0 + MATRIX_INV], %o0		! o0 = mat->inv
 	LDPTR	[%o2 + V4F_START], %o5		! o5 = 'from' in->start
 	ld	[%o2 + V4F_COUNT], %g1		! g1 = in->count
 	ld	[%o2 + V4F_STRIDE], %g2		! g2 = in->stride

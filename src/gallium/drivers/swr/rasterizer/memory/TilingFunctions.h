@@ -30,6 +30,7 @@
 #include "core/state.h"
 #include "core/format_traits.h"
 #include "memory/tilingtraits.h"
+#include "memory/SurfaceState.h"
 
 #include <algorithm>
 

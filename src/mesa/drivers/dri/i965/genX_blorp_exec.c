@@ -183,7 +183,9 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
        */
       .reloc_flags = RELOC_32BIT,
 
-#if GEN_GEN == 10
+#if GEN_GEN == 11
+      .mocs = ICL_MOCS_WB,
+#elif GEN_GEN == 10
       .mocs = CNL_MOCS_WB,
 #elif GEN_GEN == 9
       .mocs = SKL_MOCS_WB,
@@ -191,6 +193,8 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
       .mocs = BDW_MOCS_WB,
 #elif GEN_GEN == 7
       .mocs = GEN7_MOCS_L3,
+#elif GEN_GEN > 6
+#error "Missing MOCS setting!"
 #endif
    };
 
@@ -251,7 +255,7 @@ blorp_flush_range(UNUSED struct blorp_batch *batch, UNUSED void *start,
 static void
 blorp_emit_urb_config(struct blorp_batch *batch,
                       unsigned vs_entry_size,
-                      MAYBE_UNUSED unsigned sf_entry_size)
+                      UNUSED unsigned sf_entry_size)
 {
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
@@ -338,6 +342,12 @@ retry:
 #if GEN_GEN == 8
    gen8_write_pma_stall_bits(brw, 0);
 #endif
+
+   const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
+   if (brw->current_hash_scale != scale) {
+      brw_emit_hashing_mode(brw, params->x1 - params->x0,
+                            params->y1 - params->y0, scale);
+   }
 
    blorp_emit(batch, GENX(3DSTATE_DRAWING_RECTANGLE), rect) {
       rect.ClippedDrawingRectangleXMax = MAX2(params->x1, params->x0) - 1;

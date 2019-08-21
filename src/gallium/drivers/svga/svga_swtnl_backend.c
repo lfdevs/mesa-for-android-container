@@ -323,35 +323,28 @@ svga_vbuf_render_draw_elements(struct vbuf_render *render,
 {
    struct svga_vbuf_render *svga_render = svga_vbuf_render(render);
    struct svga_context *svga = svga_render->svga;
-   struct pipe_screen *screen = svga->pipe.screen;
    int bias = (svga_render->vbuf_offset - svga_render->vdecl_offset)
       / svga_render->vertex_size;
    boolean ret;
-   size_t size = 2 * nr_indices;
    /* instancing will already have been resolved at this point by 'draw' */
-   const unsigned start_instance = 0;
-   const unsigned instance_count = 1;
+   const struct pipe_draw_info info = {
+      .index_size = 2,
+      .mode = svga_render->prim,
+      .has_user_indices = 1,
+      .index.user = indices,
+      .start_instance = 0,
+      .instance_count = 1,
+      .index_bias = bias,
+      .min_index = svga_render->min_index,
+      .max_index = svga_render->max_index,
+      .start = 0,
+      .count = nr_indices
+   };
 
    assert((svga_render->vbuf_offset - svga_render->vdecl_offset)
           % svga_render->vertex_size == 0);
 
    SVGA_STATS_TIME_PUSH(svga_sws(svga), SVGA_STATS_TIME_VBUFDRAWELEMENTS);
-
-   if (svga_render->ibuf_size < svga_render->ibuf_offset + size)
-      pipe_resource_reference(&svga_render->ibuf, NULL);
-
-   if (!svga_render->ibuf) {
-      svga_render->ibuf_size = MAX2(size, svga_render->ibuf_alloc_size);
-      svga_render->ibuf = pipe_buffer_create(screen,
-                                             PIPE_BIND_INDEX_BUFFER,
-                                             PIPE_USAGE_STREAM,
-                                             svga_render->ibuf_size);
-      svga_render->ibuf_offset = 0;
-   }
-
-   pipe_buffer_write_nooverlap(&svga->pipe, svga_render->ibuf,
-                               svga_render->ibuf_offset, 2 * nr_indices,
-                               indices);
 
    /* off to hardware */
    svga_vbuf_submit_state(svga_render);
@@ -361,34 +354,13 @@ svga_vbuf_render_draw_elements(struct vbuf_render *render,
     * redbook/polys.c
     */
    svga_update_state_retry(svga, SVGA_STATE_HW_DRAW);
-
-   ret = svga_hwtnl_draw_range_elements(svga->hwtnl,
-                                        svga_render->ibuf,
-                                        2,
-                                        bias,
-                                        svga_render->min_index,
-                                        svga_render->max_index,
-                                        svga_render->prim,
-                                        svga_render->ibuf_offset / 2,
-                                        nr_indices,
-                                        start_instance, instance_count);
+   ret = svga_hwtnl_draw_range_elements(svga->hwtnl, &info, nr_indices);
    if (ret != PIPE_OK) {
       svga_context_flush(svga, NULL);
-      ret = svga_hwtnl_draw_range_elements(svga->hwtnl,
-                                           svga_render->ibuf,
-                                           2,
-                                           bias,
-                                           svga_render->min_index,
-                                           svga_render->max_index,
-                                           svga_render->prim,
-                                           svga_render->ibuf_offset / 2,
-                                           nr_indices,
-                                           start_instance, instance_count);
+      ret = svga_hwtnl_draw_range_elements(svga->hwtnl, &info, nr_indices);
       svga->swtnl.new_vbuf = TRUE;
       assert(ret == PIPE_OK);
    }
-   svga_render->ibuf_offset += size;
-
    SVGA_STATS_TIME_POP(svga_sws(svga));
 }
 

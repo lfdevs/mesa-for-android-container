@@ -81,10 +81,10 @@ svga_query(struct pipe_query *q)
  * VGPU9
  */
 
-static boolean
+static bool
 svga_get_query_result(struct pipe_context *pipe,
                       struct pipe_query *q,
-                      boolean wait,
+                      bool wait,
                       union pipe_query_result *result);
 
 static enum pipe_error
@@ -164,9 +164,9 @@ end_query_vgpu9(struct svga_context *svga, struct svga_query *sq)
    return ret;
 }
 
-static boolean
+static bool
 get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
-                       boolean wait, uint64_t *result)
+                       bool wait, uint64_t *result)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
    enum pipe_error ret;
@@ -190,7 +190,7 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
    state = sq->queryResult->state;
    if (state == SVGA3D_QUERYSTATE_PENDING) {
       if (!wait)
-         return FALSE;
+         return false;
       sws->fence_finish(sws, sq->fence, PIPE_TIMEOUT_INFINITE,
                         SVGA_FENCE_FLAG_QUERY);
       state = sq->queryResult->state;
@@ -200,7 +200,7 @@ get_query_result_vgpu9(struct svga_context *svga, struct svga_query *sq,
           state == SVGA3D_QUERYSTATE_FAILED);
 
    *result = (uint64_t)sq->queryResult->result32;
-   return TRUE;
+   return true;
 }
 
 
@@ -626,9 +626,9 @@ end_query_vgpu10(struct svga_context *svga, struct svga_query *sq)
    return ret;
 }
 
-static boolean
+static bool
 get_query_result_vgpu10(struct svga_context *svga, struct svga_query *sq,
-                        boolean wait, void *result, int resultLen)
+                        bool wait, void *result, int resultLen)
 {
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
    SVGA3dQueryState queryState;
@@ -651,7 +651,7 @@ get_query_result_vgpu10(struct svga_context *svga, struct svga_query *sq,
    if (queryState == SVGA3D_QUERYSTATE_PENDING ||
        queryState == SVGA3D_QUERYSTATE_NEW) {
       if (!wait)
-         return FALSE;
+         return false;
       sws->fence_finish(sws, sq->fence, PIPE_TIMEOUT_INFINITE,
                         SVGA_FENCE_FLAG_QUERY);
       sws->query_get_result(sws, sq->gb_query, sq->offset, &queryState, result, resultLen);
@@ -660,7 +660,7 @@ get_query_result_vgpu10(struct svga_context *svga, struct svga_query *sq,
    assert(queryState == SVGA3D_QUERYSTATE_SUCCEEDED ||
           queryState == SVGA3D_QUERYSTATE_FAILED);
 
-   return TRUE;
+   return true;
 }
 
 static struct pipe_query *
@@ -847,7 +847,7 @@ svga_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 svga_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct svga_context *svga = svga_context(pipe);
@@ -1073,17 +1073,17 @@ svga_end_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 svga_get_query_result(struct pipe_context *pipe,
                       struct pipe_query *q,
-                      boolean wait,
+                      bool wait,
                       union pipe_query_result *vresult)
 {
    struct svga_screen *svgascreen = svga_screen(pipe->screen);
    struct svga_context *svga = svga_context(pipe);
    struct svga_query *sq = svga_query(q);
    uint64_t *result = (uint64_t *)vresult;
-   boolean ret = TRUE;
+   bool ret = true;
 
    assert(sq);
 
@@ -1215,7 +1215,7 @@ svga_get_query_result(struct pipe_context *pipe,
 
 static void
 svga_render_condition(struct pipe_context *pipe, struct pipe_query *q,
-                      boolean condition, enum pipe_render_cond_flag mode)
+                      bool condition, enum pipe_render_cond_flag mode)
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_winsys_screen *sws = svga_screen(svga->pipe.screen)->sws;
@@ -1290,7 +1290,7 @@ svga_get_timestamp(struct pipe_context *pipe)
 
 
 static void
-svga_set_active_query_state(struct pipe_context *pipe, boolean enable)
+svga_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

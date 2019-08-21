@@ -80,14 +80,18 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
  *
  * @returns 0 for success, 1 for failure
  */
-unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
+unsigned si_llvm_compile(LLVMModuleRef M, struct si_shader_binary *binary,
 			 struct ac_llvm_compiler *compiler,
 			 struct pipe_debug_callback *debug,
-			 bool less_optimized)
+			 bool less_optimized, unsigned wave_size)
 {
-	struct ac_compiler_passes *passes =
-		less_optimized && compiler->low_opt_passes ?
-			compiler->low_opt_passes : compiler->passes;
+	struct ac_compiler_passes *passes = compiler->passes;
+
+	if (wave_size == 32)
+		passes = compiler->passes_wave32;
+	else if (less_optimized && compiler->low_opt_passes)
+		passes = compiler->low_opt_passes;
+
 	struct si_llvm_diagnostics diag;
 	LLVMContextRef llvm_ctx;
 
@@ -100,12 +104,22 @@ unsigned si_llvm_compile(LLVMModuleRef M, struct ac_shader_binary *binary,
 	LLVMContextSetDiagnosticHandler(llvm_ctx, si_diagnostic_handler, &diag);
 
 	/* Compile IR. */
-	if (!ac_compile_module_to_binary(passes, M, binary))
+	if (!ac_compile_module_to_elf(passes, M, (char **)&binary->elf_buffer,
+				      &binary->elf_size))
 		diag.retval = 1;
 
 	if (diag.retval != 0)
 		pipe_debug_message(debug, SHADER_INFO, "LLVM compile failed");
 	return diag.retval;
+}
+
+void si_shader_binary_clean(struct si_shader_binary *binary)
+{
+	free((void *)binary->elf_buffer);
+	binary->elf_buffer = NULL;
+
+	free(binary->llvm_ir_string);
+	binary->llvm_ir_string = NULL;
 }
 
 LLVMTypeRef tgsi2llvmtype(struct lp_build_tgsi_context *bld_base,
@@ -651,7 +665,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 		}
 		if (!array_alloca) {
 			for (i = 0; i < decl_size; ++i) {
-#ifdef DEBUG
+#ifndef NDEBUG
 				snprintf(name, sizeof(name), "TEMP%d.%c",
 					 first + i / 4, "xyzw"[i % 4]);
 #endif
@@ -681,7 +695,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 			for (i = 0; i < decl_size; ++i) {
 				LLVMValueRef ptr;
 				if (writemask & (1 << (i % 4))) {
-#ifdef DEBUG
+#ifndef NDEBUG
 					snprintf(name, sizeof(name), "TEMP%d.%c",
 						 first + i / 4, "xyzw"[i % 4]);
 #endif
@@ -735,7 +749,7 @@ static void emit_declaration(struct lp_build_tgsi_context *bld_base,
 			if (ctx->outputs[idx][0])
 				continue;
 			for (chan = 0; chan < TGSI_NUM_CHANNELS; chan++) {
-#ifdef DEBUG
+#ifndef NDEBUG
 				snprintf(name, sizeof(name), "OUT%d.%c",
 					 idx, "xyzw"[chan % 4]);
 #endif
@@ -939,7 +953,9 @@ static void emit_immediate(struct lp_build_tgsi_context *bld_base,
 
 void si_llvm_context_init(struct si_shader_context *ctx,
 			  struct si_screen *sscreen,
-			  struct ac_llvm_compiler *compiler)
+			  struct ac_llvm_compiler *compiler,
+			  unsigned wave_size,
+			  unsigned ballot_mask_bits)
 {
 	struct lp_type type;
 
@@ -952,14 +968,10 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	ctx->screen = sscreen;
 	ctx->compiler = compiler;
 
-	ac_llvm_context_init(&ctx->ac, sscreen->info.chip_class, sscreen->info.family);
-	ctx->ac.module = ac_create_module(compiler->tm, ctx->ac.context);
-
-	enum ac_float_mode float_mode =
-		sscreen->debug_flags & DBG(UNSAFE_MATH) ?
-			AC_FLOAT_MODE_UNSAFE_FP_MATH :
-			AC_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH;
-	ctx->ac.builder = ac_create_builder(ctx->ac.context, float_mode);
+	ac_llvm_context_init(&ctx->ac, compiler, sscreen->info.chip_class,
+			     sscreen->info.family,
+			     AC_FLOAT_MODE_NO_SIGNED_ZEROS_FP_MATH,
+			     wave_size, ballot_mask_bits);
 
 	ctx->gallivm.context = ctx->ac.context;
 	ctx->gallivm.module = ctx->ac.module;
@@ -1019,19 +1031,14 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 
 /* Set the context to a certain TGSI shader. Can be called repeatedly
  * to change the shader. */
-void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
-			      struct si_shader *shader)
+void si_llvm_context_set_ir(struct si_shader_context *ctx,
+			    struct si_shader *shader)
 {
-	const struct tgsi_shader_info *info = NULL;
-	const struct tgsi_token *tokens = NULL;
-
-	if (shader && shader->selector) {
-		info = &shader->selector->info;
-		tokens = shader->selector->tokens;
-	}
+	struct si_shader_selector *sel = shader->selector;
+	const struct tgsi_shader_info *info = &sel->info;
 
 	ctx->shader = shader;
-	ctx->type = info ? info->processor : -1;
+	ctx->type = sel->type;
 	ctx->bld_base.info = info;
 
 	/* Clean up the old contents. */
@@ -1048,16 +1055,13 @@ void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
 	ctx->temps = NULL;
 	ctx->temps_count = 0;
 
-	if (!info)
-		return;
-
 	ctx->num_const_buffers = util_last_bit(info->const_buffers_declared);
 	ctx->num_shader_buffers = util_last_bit(info->shader_buffers_declared);
 
 	ctx->num_samplers = util_last_bit(info->samplers_declared);
 	ctx->num_images = util_last_bit(info->images_declared);
 
-	if (!tokens)
+	if (sel->nir)
 		return;
 
 	if (info->array_max[TGSI_FILE_TEMPORARY] > 0) {
@@ -1066,7 +1070,7 @@ void si_llvm_context_set_tgsi(struct si_shader_context *ctx,
 		ctx->temp_arrays = CALLOC(size, sizeof(ctx->temp_arrays[0]));
 		ctx->temp_array_allocas = CALLOC(size, sizeof(ctx->temp_array_allocas[0]));
 
-		tgsi_scan_arrays(tokens, TGSI_FILE_TEMPORARY, size,
+		tgsi_scan_arrays(sel->tokens, TGSI_FILE_TEMPORARY, size,
 				 ctx->temp_arrays);
 	}
 	if (info->file_max[TGSI_FILE_IMMEDIATE] >= 0) {
@@ -1095,7 +1099,7 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 	LLVMTypeRef main_fn_type, ret_type;
 	LLVMBasicBlockRef main_fn_body;
 	enum si_llvm_calling_convention call_conv;
-	unsigned real_shader_type;
+	enum pipe_shader_type real_shader_type;
 
 	if (num_return_elems)
 		ret_type = LLVMStructTypeInContext(ctx->ac.context,
@@ -1118,7 +1122,7 @@ void si_llvm_create_func(struct si_shader_context *ctx,
 	if (ctx->screen->info.chip_class >= GFX9) {
 		if (ctx->shader->key.as_ls)
 			real_shader_type = PIPE_SHADER_TESS_CTRL;
-		else if (ctx->shader->key.as_es)
+		else if (ctx->shader->key.as_es || ctx->shader->key.as_ngg)
 			real_shader_type = PIPE_SHADER_GEOMETRY;
 	}
 

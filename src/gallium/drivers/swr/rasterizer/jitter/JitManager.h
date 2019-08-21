@@ -110,6 +110,8 @@ public:
     /// available.
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
 
+    const char* GetModuleCacheDir() { return mModuleCacheDir.c_str(); }
+
 private:
     std::string                 mCpu;
     llvm::SmallString<MAX_PATH> mCacheDir;

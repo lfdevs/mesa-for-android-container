@@ -1,0 +1,74 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html lang="en">
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <title>Mesa Release Notes</title>
+  <link rel="stylesheet" type="text/css" href="../mesa.css">
+</head>
+<body>
+
+<div class="header">
+  <h1>The Mesa 3D Graphics Library</h1>
+</div>
+
+<iframe src="../contents.html"></iframe>
+<div class="content">
+
+<h1>Mesa 19.2.0 Release Notes / TBD</h1>
+
+<p>
+Mesa 19.2.0 is a new development release. People who are concerned
+with stability and reliability should stick with a previous release or
+wait for Mesa 19.2.1.
+</p>
+<p>
+Mesa 19.2.0 implements the OpenGL 4.5 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.5.  OpenGL
+4.5 is <strong>only</strong> available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+</p>
+
+<h2>SHA256 checksums</h2>
+<pre>
+TBD.
+</pre>
+
+
+<h2>New features</h2>
+
+<ul>
+<li>GL_ARB_post_depth_coverage on radeonsi (Navi)</li>
+<li>GL_ARB_seamless_cubemap_per_texture on etnaviv (if GPU supports SEAMLESS_CUBE_MAP)</li>
+<li>GL_EXT_shader_image_load_store on radeonsi (with LLVM >= 10)</li>
+<li>GL_EXT_shader_samples_identical on iris and radeonsi (if using NIR)</li>
+<li>GL_EXT_texture_shadow_lod on i965, iris</li>
+<li>EGL_EXT_platform_device</li>
+<li>VK_AMD_buffer_marker on radv</li>
+<li>VK_EXT_index_type_uint8 on radv</li>
+<li>VK_EXT_post_depth_coverage on radv</li>
+<li>VK_EXT_queue_family_foreign on radv</li>
+<li>VK_EXT_sample_locations on radv</li>
+<li>VK_EXT_shader_demote_to_helper_invocation on Intel.</li>
+<li>VK_KHR_depth_stencil_resolve on radv</li>
+<li>VK_KHR_imageless_framebuffer on radv</li>
+<li>VK_KHR_shader_atomic_int64 on radv</li>
+<li>VK_KHR_uniform_buffer_standard_layout on radv</li>
+</ul>
+
+<h2>Bug fixes</h2>
+
+<ul>
+<li>TBD</li>
+</ul>
+
+<h2>Changes</h2>
+
+<ul>
+<li>TBD</li>
+</ul>
+
+</div>
+</body>
+</html>

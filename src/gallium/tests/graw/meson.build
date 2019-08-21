@@ -30,7 +30,7 @@ foreach t : progs
     'graw-' + t,
     t + '.c',
     include_directories : inc_common,
-    link_with : [libgraw, libgraw_util, libmesa_util, libgallium],
-    dependencies : [dep_m, dep_thread]
+    link_with : [libgraw, libgraw_util, libgallium],
+    dependencies : [dep_m, idep_mesautil],
   )
 endforeach

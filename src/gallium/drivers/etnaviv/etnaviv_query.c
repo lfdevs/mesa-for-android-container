@@ -58,11 +58,11 @@ etna_destroy_query(struct pipe_context *pctx, struct pipe_query *pq)
    q->funcs->destroy_query(etna_context(pctx), q);
 }
 
-static boolean
+static bool
 etna_begin_query(struct pipe_context *pctx, struct pipe_query *pq)
 {
    struct etna_query *q = etna_query(pq);
-   boolean ret;
+   bool ret;
 
    if (q->active)
       return false;
@@ -87,9 +87,9 @@ etna_end_query(struct pipe_context *pctx, struct pipe_query *pq)
    return true;
 }
 
-static boolean
+static bool
 etna_get_query_result(struct pipe_context *pctx, struct pipe_query *pq,
-                      boolean wait, union pipe_query_result *result)
+                      bool wait, union pipe_query_result *result)
 {
    struct etna_query *q = etna_query(pq);
 
@@ -134,8 +134,17 @@ etna_get_driver_query_group_info(struct pipe_screen *pscreen, unsigned index,
 }
 
 static void
-etna_set_active_query_state(struct pipe_context *pipe, boolean enable)
+etna_set_active_query_state(struct pipe_context *pctx, bool enable)
 {
+   struct etna_context *ctx = etna_context(pctx);
+
+   if (enable) {
+      list_for_each_entry(struct etna_hw_query, hq, &ctx->active_hw_queries, node)
+         etna_hw_query_resume(hq, ctx);
+   } else {
+      list_for_each_entry(struct etna_hw_query, hq, &ctx->active_hw_queries, node)
+         etna_hw_query_suspend(hq, ctx);
+   }
 }
 
 void

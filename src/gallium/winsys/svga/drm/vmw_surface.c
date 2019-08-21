@@ -45,21 +45,14 @@ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
    struct pb_buffer *pb_buf;
    uint32_t pb_flags;
    struct vmw_winsys_screen *vws = vsrf->screen;
-   
+
    *retry = FALSE;
    assert((flags & (PIPE_TRANSFER_READ | PIPE_TRANSFER_WRITE)) != 0);
    mtx_lock(&vsrf->mutex);
 
    if (vsrf->mapcount) {
-      /*
-       * Only allow multiple readers to map.
-       */
-      if ((flags & PIPE_TRANSFER_WRITE) ||
-          (vsrf->map_mode & PIPE_TRANSFER_WRITE))
-         goto out_unlock;
-      
-      data = vsrf->data;
-      goto out_mapped;
+      /* Other mappers will get confused if we discard. */
+      flags &= ~PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
    }
 
    vsrf->rebind = FALSE;
@@ -89,7 +82,8 @@ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
       goto out_unlock;
    }
 
-   pb_flags = flags & (PIPE_TRANSFER_READ_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED);
+   pb_flags = flags & (PIPE_TRANSFER_READ_WRITE | PIPE_TRANSFER_UNSYNCHRONIZED |
+      PIPE_TRANSFER_PERSISTENT);
 
    if (flags & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE) {
       struct pb_manager *provider;
@@ -169,24 +163,11 @@ vmw_svga_winsys_surface_unmap(struct svga_winsys_context *swc,
    if (--vsrf->mapcount == 0) {
       *rebind = vsrf->rebind;
       vsrf->rebind = FALSE;
-      vmw_svga_winsys_buffer_unmap(&vsrf->screen->base, vsrf->buf);
    } else {
       *rebind = FALSE;
    }
+   vmw_svga_winsys_buffer_unmap(&vsrf->screen->base, vsrf->buf);
    mtx_unlock(&vsrf->mutex);
-}
-
-enum pipe_error
-vmw_svga_winsys_surface_invalidate(struct svga_winsys_context *swc,
-                                   struct svga_winsys_surface *surf)
-{
-   /* this is a noop since surface invalidation is not needed for DMA path.
-    * DMA is enabled when guest-backed surface is not enabled or
-    * guest-backed dma is enabled.  Since guest-backed dma is enabled
-    * when guest-backed surface is enabled, that implies DMA is always enabled;
-    * hence, surface invalidation is not needed.
-    */
-   return PIPE_OK;
 }
 
 void

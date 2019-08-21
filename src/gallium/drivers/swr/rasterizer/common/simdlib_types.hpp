@@ -315,7 +315,7 @@ namespace SIMDImpl
 
     namespace SIMD512Impl
     {
-#if !(defined(__AVX512F__) || defined(_MM_K0_REG))
+#if !(defined(__AVX512F__) || defined(_ZMMINTRIN_H_INCLUDED))
         // Define AVX512 types if not included via immintrin.h.
         // All data members of these types are ONLY to viewed
         // in a debugger.  Do NOT access them via code!

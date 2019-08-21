@@ -122,6 +122,7 @@ struct vl_compositor
    void *cs_rgba;
 
    bool pipe_cs_composit_supported;
+   bool pipe_gfx_supported;
 
    struct {
       struct {
@@ -133,6 +134,17 @@ struct vl_compositor
          void *uv;
       } bob;
    } fs_yuv;
+
+   struct {
+      struct {
+         void *y;
+         void *uv;
+      } weave;
+      struct {
+         void *y;
+         void *uv;
+      } bob;
+   } cs_yuv;
 
    struct {
       void *rgb;

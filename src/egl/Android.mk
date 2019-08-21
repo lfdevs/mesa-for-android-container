@@ -36,6 +36,7 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
 	$(LIBEGL_C_FILES) \
 	$(dri2_backend_core_FILES) \
+	drivers/dri2/platform_device.c \
 	drivers/dri2/platform_android.c
 
 LOCAL_CFLAGS := \

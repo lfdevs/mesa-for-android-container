@@ -578,7 +578,8 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
                                            vc4->framebuffer.height,
                                            1,
                                            zsclear,
-                                           &dummy_color, depth, stencil);
+                                           &dummy_color, depth, stencil,
+                                           false);
                         buffers &= ~zsclear;
                         if (!buffers)
                                 return;

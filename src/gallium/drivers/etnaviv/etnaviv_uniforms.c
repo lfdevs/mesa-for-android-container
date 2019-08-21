@@ -29,6 +29,7 @@
 #include "etnaviv_compiler.h"
 #include "etnaviv_context.h"
 #include "etnaviv_util.h"
+#include "etnaviv_emit.h"
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
 
@@ -60,40 +61,55 @@ get_texrect_scale(const struct etna_context *ctx, bool frag,
 void
 etna_uniforms_write(const struct etna_context *ctx,
                     const struct etna_shader_variant *sobj,
-                    struct pipe_constant_buffer *cb, uint32_t *uniforms,
-                    unsigned *size)
+                    struct pipe_constant_buffer *cb)
 {
+   struct etna_cmd_stream *stream = ctx->stream;
    const struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
-   bool frag = false;
+   bool frag = (sobj == ctx->shader.fs);
+   uint32_t base = frag ? ctx->specs.ps_uniforms_offset : ctx->specs.vs_uniforms_offset;
 
-   if (cb->user_buffer) {
-      unsigned size = MIN2(cb->buffer_size, uinfo->const_count * 4);
+   if (!uinfo->imm_count)
+      return;
 
-      memcpy(uniforms, cb->user_buffer, size);
-   }
-
-   if (sobj == ctx->shader.fs)
-      frag = true;
+   etna_cmd_stream_reserve(stream, align(uinfo->imm_count + 1, 2));
+   etna_emit_load_state(stream, base >> 2, uinfo->imm_count, 0);
 
    for (uint32_t i = 0; i < uinfo->imm_count; i++) {
+      uint32_t val = uinfo->imm_data[i];
+
       switch (uinfo->imm_contents[i]) {
       case ETNA_IMMEDIATE_CONSTANT:
-         uniforms[i + uinfo->const_count] = uinfo->imm_data[i];
+         etna_cmd_stream_emit(stream, val);
+         break;
+
+      case ETNA_IMMEDIATE_UNIFORM:
+         assert(cb->user_buffer && val * 4 < cb->buffer_size);
+         etna_cmd_stream_emit(stream, ((uint32_t*) cb->user_buffer)[val]);
          break;
 
       case ETNA_IMMEDIATE_TEXRECT_SCALE_X:
       case ETNA_IMMEDIATE_TEXRECT_SCALE_Y:
-         uniforms[i + uinfo->const_count] =
-               get_texrect_scale(ctx, frag, uinfo->imm_contents[i], uinfo->imm_data[i]);
+         etna_cmd_stream_emit(stream,
+            get_texrect_scale(ctx, frag, uinfo->imm_contents[i], val));
+         break;
+
+      case ETNA_IMMEDIATE_UBO0_ADDR ... ETNA_IMMEDIATE_UBOMAX_ADDR:
+         assert(uinfo->imm_contents[i] == ETNA_IMMEDIATE_UBO0_ADDR);
+         etna_cmd_stream_reloc(stream, &(struct etna_reloc) {
+            .bo = etna_resource(cb->buffer)->bo,
+            .flags = ETNA_RELOC_READ,
+            .offset = cb->buffer_offset + val,
+         });
          break;
 
       case ETNA_IMMEDIATE_UNUSED:
-         /* nothing to do */
+         etna_cmd_stream_emit(stream, 0);
          break;
       }
    }
 
-   *size = uinfo->const_count + uinfo->imm_count;
+   if ((uinfo->imm_count % 2) == 0)
+      etna_cmd_stream_emit(stream, 0);
 }
 
 void
@@ -103,8 +119,7 @@ etna_set_shader_uniforms_dirty_flags(struct etna_shader_variant *sobj)
 
    for (uint32_t i = 0; i < sobj->uniforms.imm_count; i++) {
       switch (sobj->uniforms.imm_contents[i]) {
-      case ETNA_IMMEDIATE_UNUSED:
-      case ETNA_IMMEDIATE_CONSTANT:
+      default:
          break;
 
       case ETNA_IMMEDIATE_TEXRECT_SCALE_X:

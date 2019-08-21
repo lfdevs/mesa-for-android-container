@@ -732,7 +732,7 @@ lower_image_intrinsic(nir_intrinsic_instr *intrin,
    nir_builder *b = &state->builder;
    b->cursor = nir_before_instr(&intrin->instr);
 
-   const bool use_bindless = state->pdevice->has_bindless_images;
+   ASSERTED const bool use_bindless = state->pdevice->has_bindless_images;
 
    if (intrin->intrinsic == nir_intrinsic_image_deref_load_param_intel) {
       b->cursor = nir_instr_remove(&intrin->instr);

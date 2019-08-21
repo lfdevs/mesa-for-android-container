@@ -128,7 +128,7 @@ build_nir_copy_fragment_shader(enum glsl_sampler_dim tex_dim)
 	unsigned swz[] = { 0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2 };
 	nir_ssa_def *const tex_pos =
 		nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz,
-			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3), false);
+			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
 	const struct glsl_type *sampler_type =
 		glsl_sampler_type(tex_dim, false, tex_dim != GLSL_SAMPLER_DIM_3D,
@@ -186,7 +186,7 @@ build_nir_copy_fragment_shader_depth(enum glsl_sampler_dim tex_dim)
 	unsigned swz[] = { 0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2 };
 	nir_ssa_def *const tex_pos =
 		nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz,
-			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3), false);
+			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
 	const struct glsl_type *sampler_type =
 		glsl_sampler_type(tex_dim, false, tex_dim != GLSL_SAMPLER_DIM_3D,
@@ -244,7 +244,7 @@ build_nir_copy_fragment_shader_stencil(enum glsl_sampler_dim tex_dim)
 	unsigned swz[] = { 0, (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 1), 2 };
 	nir_ssa_def *const tex_pos =
 		nir_swizzle(&b, nir_load_var(&b, tex_pos_in), swz,
-			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3), false);
+			    (tex_dim == GLSL_SAMPLER_DIM_1D ? 2 : 3));
 
 	const struct glsl_type *sampler_type =
 		glsl_sampler_type(tex_dim, false, tex_dim != GLSL_SAMPLER_DIM_3D,
@@ -660,7 +660,7 @@ void radv_CmdBlitImage(
 							     .baseArrayLayer = dest_array_slice,
 							     .layerCount = 1
 						     },
-					     });
+					     }, NULL);
 			radv_image_view_init(&src_iview, cmd_buffer->device,
 					     &(VkImageViewCreateInfo) {
 						.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -674,7 +674,7 @@ void radv_CmdBlitImage(
 							.baseArrayLayer = src_array_slice,
 							.layerCount = 1
 						},
-					});
+					}, NULL);
 			meta_emit_blit(cmd_buffer,
 				       src_image, &src_iview, srcImageLayout,
 				       src_offset_0, src_offset_1,

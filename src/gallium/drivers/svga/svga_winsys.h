@@ -81,8 +81,9 @@ struct winsys_handle;
 #define SVGA_FENCE_FLAG_EXEC      (1 << 0)
 #define SVGA_FENCE_FLAG_QUERY     (1 << 1)
 
-#define SVGA_SURFACE_USAGE_SHARED  (1 << 0)
-#define SVGA_SURFACE_USAGE_SCANOUT (1 << 1)
+#define SVGA_SURFACE_USAGE_SHARED   (1 << 0)
+#define SVGA_SURFACE_USAGE_SCANOUT  (1 << 1)
+#define SVGA_SURFACE_USAGE_COHERENT (1 << 2)
 
 #define SVGA_QUERY_FLAG_SET        (1 << 0)
 #define SVGA_QUERY_FLAG_REF        (1 << 1)
@@ -385,6 +386,7 @@ struct svga_winsys_context
     **/
 
    boolean have_gb_objects;
+   boolean force_coherent;
 
    /**
     * Map a guest-backed surface.
@@ -410,13 +412,6 @@ struct svga_winsys_context
    (*surface_unmap)(struct svga_winsys_context *swc,
                     struct svga_winsys_surface *surface,
                     boolean *rebind);
-
-   /**
-    * Invalidate the content of this surface
-    */
-   enum pipe_error
-   (*surface_invalidate)(struct svga_winsys_context *swc,
-                         struct svga_winsys_surface *surface);
 
    /**
     * Create and define a DX GB shader that resides in the device COTable.
@@ -683,6 +678,8 @@ struct svga_winsys_screen
    /** Can we do DMA with guest-backed objects enabled? */
    bool have_gb_dma;
 
+   /** Do we support coherent surface memory? */
+   bool have_coherent;
    /**
     * Create and define a GB shader.
     */

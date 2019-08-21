@@ -681,7 +681,7 @@ i945_texture_layout(struct i915_texture * tex)
 
 
 
-static boolean
+static bool
 i915_texture_get_handle(struct pipe_screen * screen,
                         struct pipe_resource *texture,
                         struct winsys_handle *whandle)

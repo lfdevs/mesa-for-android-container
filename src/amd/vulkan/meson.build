@@ -48,6 +48,15 @@ amd_vk_format_table_c = custom_target(
   capture : true,
 )
 
+radv_gfx10_format_table_h = custom_target(
+  'radv_gfx10_format_table.h',
+  input : ['gfx10_format_table.py', 'vk_format_layout.csv', '../registers/gfx10-rsrc.json'],
+  output : 'gfx10_format_table.h',
+  command : [prog_python, '@INPUT@'],
+  capture : true,
+  depend_files : files('../registers/regdb.py')
+)
+
 libradv_files = files(
   'winsys/amdgpu/radv_amdgpu_bo.c',
   'winsys/amdgpu/radv_amdgpu_bo.h',
@@ -138,18 +147,17 @@ endif
 
 libvulkan_radeon = shared_library(
   'vulkan_radeon',
-  [libradv_files, radv_entrypoints, radv_extensions_c, amd_vk_format_table_c, sha1_h, xmlpool_options_h],
+  [libradv_files, radv_entrypoints, radv_extensions_c, amd_vk_format_table_c, sha1_h, xmlpool_options_h, radv_gfx10_format_table_h],
   include_directories : [
     inc_common, inc_amd, inc_amd_common, inc_compiler, inc_util, inc_vulkan_wsi,
   ],
   link_with : [
     libamd_common, libamdgpu_addrlib, libvulkan_wsi,
-    libmesa_util, libxmlconfig
   ],
   dependencies : [
     dep_llvm, dep_libdrm_amdgpu, dep_thread, dep_elf, dep_dl, dep_m,
     dep_valgrind, radv_deps,
-    idep_nir, idep_vulkan_util,
+    idep_mesautil, idep_nir, idep_vulkan_util, idep_amdgfxregs_h, idep_xmlconfig,
   ],
   c_args : [c_vis_args, no_override_init_args, radv_flags],
   cpp_args : [cpp_vis_args, radv_flags],
@@ -170,17 +178,4 @@ radeon_icd = custom_target(
   build_by_default : true,
   install_dir : with_vulkan_icd_dir,
   install : true,
-)
-
-radv_dev_icd = custom_target(
-  'radv_dev_icd',
-  input : 'radv_icd.py',
-  output : 'dev_icd.json',
-  command : [
-    prog_python, '@INPUT@', '--lib-path', meson.current_build_dir(),
-    '--out', '@OUTPUT@'
-  ],
-  depend_files : files('radv_extensions.py'),
-  build_by_default : true,
-  install : false,
 )

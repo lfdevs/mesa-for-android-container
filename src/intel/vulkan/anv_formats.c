@@ -523,18 +523,15 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
       if (vk_tiling == VK_IMAGE_TILING_LINEAR)
          return 0;
 
-      flags |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-      if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT || devinfo->gen >= 8)
-         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-
-      if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && devinfo->gen >= 9)
-         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
-
-      flags |= VK_FORMAT_FEATURE_BLIT_SRC_BIT |
+      flags |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+               VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+               VK_FORMAT_FEATURE_BLIT_SRC_BIT |
                VK_FORMAT_FEATURE_BLIT_DST_BIT |
                VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
+
+      if ((aspects & VK_IMAGE_ASPECT_DEPTH_BIT) && devinfo->gen >= 9)
+         flags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
 
       return flags;
    }
@@ -1032,6 +1029,9 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
       switch (s->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
          external_info = (const void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
+         /* Ignore but don't warn */
          break;
       default:
          anv_debug_ignored_stype(s->sType);

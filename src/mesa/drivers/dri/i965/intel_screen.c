@@ -88,6 +88,7 @@ DRI_CONF_BEGIN
       DRI_CONF_ALLOW_GLSL_BUILTIN_VARIABLE_REDECLARATION("false")
       DRI_CONF_ALLOW_GLSL_CROSS_STAGE_INTERPOLATION_MISMATCH("false")
       DRI_CONF_ALLOW_HIGHER_COMPAT_VERSION("false")
+      DRI_CONF_FORCE_COMPAT_PROFILE("false")
       DRI_CONF_FORCE_GLSL_ABS_SQRT("false")
 
       DRI_CONF_OPT_BEGIN_B(shader_precompile, "true")
@@ -420,7 +421,7 @@ intel_image_format_lookup(int fourcc)
    return NULL;
 }
 
-static boolean
+static bool
 intel_image_get_fourcc(__DRIimage *image, int *fourcc)
 {
    if (image->planar_format) {
@@ -2413,28 +2414,6 @@ set_max_gl_versions(struct intel_screen *screen)
    }
 }
 
-/**
- * Return the revision (generally the revid field of the PCI header) of the
- * graphics device.
- */
-static int
-intel_device_get_revision(int fd)
-{
-   struct drm_i915_getparam gp;
-   int revision;
-   int ret;
-
-   memset(&gp, 0, sizeof(gp));
-   gp.param = I915_PARAM_REVISION;
-   gp.value = &revision;
-
-   ret = drmCommandWriteRead(fd, DRM_I915_GETPARAM, &gp, sizeof(gp));
-   if (ret)
-      revision = -1;
-
-   return revision;
-}
-
 static void
 shader_debug_log_mesa(void *data, const char *fmt, ...)
 {
@@ -2513,21 +2492,15 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
    screen->driScrnPriv = dri_screen;
    dri_screen->driverPrivate = (void *) screen;
 
-   screen->deviceID = gen_get_pci_device_id_override();
-   if (screen->deviceID < 0)
-      screen->deviceID = intel_get_integer(screen, I915_PARAM_CHIPSET_ID);
-   else
-      screen->no_hw = true;
-
-   if (!gen_get_device_info(screen->deviceID, &screen->devinfo))
+   if (!gen_get_device_info_from_fd(dri_screen->fd, &screen->devinfo))
       return NULL;
 
-   screen->devinfo.revision = intel_device_get_revision(dri_screen->fd);
+   const struct gen_device_info *devinfo = &screen->devinfo;
+   screen->deviceID = devinfo->chipset_id;
+   screen->no_hw = devinfo->no_hw;
 
    if (!intel_init_bufmgr(screen))
        return NULL;
-
-   const struct gen_device_info *devinfo = &screen->devinfo;
 
    brw_process_intel_debug_variable();
 

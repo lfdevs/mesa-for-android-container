@@ -56,6 +56,7 @@
 #define LP_NEW_GS            0x10000
 #define LP_NEW_SO            0x20000
 #define LP_NEW_SO_BUFFERS    0x40000
+#define LP_NEW_FS_SSBOS      0x80000
 
 
 

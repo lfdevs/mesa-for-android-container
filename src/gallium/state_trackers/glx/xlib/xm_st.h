@@ -59,7 +59,7 @@ xmesa_get_attachment(struct st_framebuffer_iface *stfbi,
 struct pipe_context*
 xmesa_get_context(struct st_framebuffer_iface* stfbi);
 
-boolean
+bool
 xmesa_st_framebuffer_validate_textures(struct st_framebuffer_iface *stfbi,
                                        unsigned width, unsigned height,
                                        unsigned mask);

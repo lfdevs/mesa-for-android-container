@@ -35,14 +35,11 @@
  * and do the math in the shader.
  */
 
-static void
-vc4_nir_lower_txf_ms_instr(struct vc4_compile *c, nir_builder *b,
-                           nir_tex_instr *txf_ms)
+static nir_ssa_def *
+vc4_nir_lower_txf_ms_instr(nir_builder *b, nir_instr *instr, void *data)
 {
-        if (txf_ms->op != nir_texop_txf_ms)
-                return;
-
-        b->cursor = nir_before_instr(&txf_ms->instr);
+        nir_tex_instr *txf_ms = nir_instr_as_tex(instr);
+        const struct vc4_compile *c = data;
 
         nir_tex_instr *txf = nir_tex_instr_create(c->s, 1);
         txf->op = nir_texop_txf;
@@ -123,38 +120,22 @@ vc4_nir_lower_txf_ms_instr(struct vc4_compile *c, nir_builder *b,
         txf->src[0].src = nir_src_for_ssa(nir_vec2(b, addr, nir_imm_int(b, 0)));
         nir_ssa_dest_init(&txf->instr, &txf->dest, 4, 32, NULL);
         nir_builder_instr_insert(b, &txf->instr);
-        nir_ssa_def_rewrite_uses(&txf_ms->dest.ssa,
-                                 nir_src_for_ssa(&txf->dest.ssa));
-        nir_instr_remove(&txf_ms->instr);
+
+        return &txf->dest.ssa;
 }
 
 static bool
-vc4_nir_lower_txf_ms_impl(struct vc4_compile *c, nir_function_impl *impl)
+vc4_nir_lower_txf_ms_filter(const nir_instr *instr, const void *data)
 {
-        nir_builder b;
-        nir_builder_init(&b, impl);
-
-        nir_foreach_block(block, impl) {
-                nir_foreach_instr_safe(instr, block) {
-                        if (instr->type == nir_instr_type_tex) {
-                                vc4_nir_lower_txf_ms_instr(c, &b,
-                                                nir_instr_as_tex(instr));
-                        }
-                }
-        }
-
-        nir_metadata_preserve(impl,
-                              nir_metadata_block_index |
-                              nir_metadata_dominance);
-
-        return true;
+        return (instr->type == nir_instr_type_tex &&
+                nir_instr_as_tex(instr)->op == nir_texop_txf_ms);
 }
 
 void
 vc4_nir_lower_txf_ms(nir_shader *s, struct vc4_compile *c)
 {
-        nir_foreach_function(function, s) {
-                if (function->impl)
-                        vc4_nir_lower_txf_ms_impl(c, function->impl);
-        }
+        nir_shader_lower_instructions(s,
+                                      vc4_nir_lower_txf_ms_filter,
+                                      vc4_nir_lower_txf_ms_instr,
+                                      c);
 }

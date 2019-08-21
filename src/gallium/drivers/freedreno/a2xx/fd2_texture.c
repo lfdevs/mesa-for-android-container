@@ -180,7 +180,9 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.reference.count = 1;
 	so->base.context = pctx;
 
-	so->tex0 = A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch);
+	so->tex0 =
+		A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch) |
+		COND(rsc->tile_mode, A2XX_SQ_TEX_0_TILED);
 	so->tex1 =
 		A2XX_SQ_TEX_1_FORMAT(fd2_pipe2surface(cso->format)) |
 		A2XX_SQ_TEX_1_CLAMP_POLICY(SQ_TEX_CLAMP_POLICY_OGL);
@@ -236,13 +238,6 @@ fd2_get_const_idx(struct fd_context *ctx, struct fd_texture_stateobj *tex,
 	if (tex == &ctx->tex[PIPE_SHADER_FRAGMENT])
 		return samp_id;
 	return samp_id + ctx->tex[PIPE_SHADER_FRAGMENT].num_samplers;
-}
-
-/* for reasons unknown, it appears ETC1 cubemap needs swapped xy coordinates */
-bool fd2_texture_swap_xy(struct fd_texture_stateobj *tex, unsigned samp_id)
-{
-	return tex->textures[samp_id]->format == PIPE_FORMAT_ETC1_RGB8 &&
-		tex->textures[samp_id]->texture->target == PIPE_TEXTURE_CUBE;
 }
 
 void

@@ -20,7 +20,7 @@ main(int argc, char *argv[])
    for (uint32_t i = 0; i < ARRAY_SIZE(chipsets); i++) {
       struct gen_device_info devinfo = { 0, };
 
-      assert(gen_get_device_info(chipsets[i].pci_id, &devinfo));
+      assert(gen_get_device_info_from_pci_id(chipsets[i].pci_id, &devinfo));
 
       assert(devinfo.gen != 0);
       assert(devinfo.urb.size != 0);

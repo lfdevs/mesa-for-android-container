@@ -269,9 +269,9 @@ static void
 v3d_rcl_emit_stores(struct v3d_job *job, struct v3d_cl *cl)
 {
 #if V3D_VERSION < 40
-        MAYBE_UNUSED bool needs_color_clear = job->clear & PIPE_CLEAR_COLOR_BUFFERS;
-        MAYBE_UNUSED bool needs_z_clear = job->clear & PIPE_CLEAR_DEPTH;
-        MAYBE_UNUSED bool needs_s_clear = job->clear & PIPE_CLEAR_STENCIL;
+        UNUSED bool needs_color_clear = job->clear & PIPE_CLEAR_COLOR_BUFFERS;
+        UNUSED bool needs_z_clear = job->clear & PIPE_CLEAR_DEPTH;
+        UNUSED bool needs_s_clear = job->clear & PIPE_CLEAR_STENCIL;
 
         /* For clearing color in a TLB general on V3D 3.3:
          *
@@ -562,7 +562,7 @@ v3dX(emit_rcl)(struct v3d_job *job)
                 struct v3d_surface *surf = v3d_surface(psurf);
                 struct v3d_resource *rsc = v3d_resource(psurf->texture);
 
-                MAYBE_UNUSED uint32_t config_pad = 0;
+                UNUSED uint32_t config_pad = 0;
                 uint32_t clear_pad = 0;
 
                 /* XXX: Set the pad for raster. */

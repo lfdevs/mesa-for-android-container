@@ -47,7 +47,7 @@ nv50_destroy_query(struct pipe_context *pipe, struct pipe_query *pq)
    q->funcs->destroy_query(nv50_context(pipe), q);
 }
 
-static boolean
+static bool
 nv50_begin_query(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nv50_query *q = nv50_query(pq);
@@ -62,9 +62,9 @@ nv50_end_query(struct pipe_context *pipe, struct pipe_query *pq)
    return true;
 }
 
-static boolean
+static bool
 nv50_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
-                      boolean wait, union pipe_query_result *result)
+                      bool wait, union pipe_query_result *result)
 {
    struct nv50_query *q = nv50_query(pq);
    return q->funcs->get_query_result(nv50_context(pipe), q, wait, result);
@@ -73,7 +73,7 @@ nv50_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 static void
 nv50_render_condition(struct pipe_context *pipe,
                       struct pipe_query *pq,
-                      boolean condition, enum pipe_render_cond_flag mode)
+                      bool condition, enum pipe_render_cond_flag mode)
 {
    struct nv50_context *nv50 = nv50_context(pipe);
    struct nouveau_pushbuf *push = nv50->base.pushbuf;
@@ -144,7 +144,7 @@ nv50_render_condition(struct pipe_context *pipe,
 }
 
 static void
-nv50_set_active_query_state(struct pipe_context *pipe, boolean enable)
+nv50_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

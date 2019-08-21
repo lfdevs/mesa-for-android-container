@@ -28,15 +28,32 @@
 #include <stdint.h>
 #include <string.h>
 
+#if defined(MAJOR_IN_SYSMACROS)
 #include <sys/sysmacros.h>
+#elif defined(MAJOR_IN_MKDEV)
+#include <sys/mkdev.h>
+#endif
 
 #include "util/hash_table.h"
+#include "compiler/glsl/list.h"
 #include "util/ralloc.h"
 
 struct gen_device_info;
 
-struct gen_perf;
+struct gen_perf_config;
 struct gen_perf_query_info;
+
+#define GEN7_RPSTAT1                       0xA01C
+#define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
+#define  GEN7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
+#define  GEN7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
+#define  GEN7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
+
+#define GEN9_RPSTAT0                       0xA01C
+#define  GEN9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
+#define  GEN9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
+#define  GEN9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
+#define  GEN9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
 
 enum gen_perf_counter_type {
    GEN_PERF_COUNTER_TYPE_EVENT,
@@ -69,6 +86,30 @@ struct gen_pipeline_stat {
  *   1 timestamp, 1 clock, 36 A counters, 8 B counters and 8 C counters
  */
 #define MAX_OA_REPORT_COUNTERS 62
+
+#define IA_VERTICES_COUNT          0x2310
+#define IA_PRIMITIVES_COUNT        0x2318
+#define VS_INVOCATION_COUNT        0x2320
+#define HS_INVOCATION_COUNT        0x2300
+#define DS_INVOCATION_COUNT        0x2308
+#define GS_INVOCATION_COUNT        0x2328
+#define GS_PRIMITIVES_COUNT        0x2330
+#define CL_INVOCATION_COUNT        0x2338
+#define CL_PRIMITIVES_COUNT        0x2340
+#define PS_INVOCATION_COUNT        0x2348
+#define CS_INVOCATION_COUNT        0x2290
+#define PS_DEPTH_COUNT             0x2350
+
+/*
+ * When currently allocate only one page for pipeline statistics queries. Here
+ * we derived the maximum number of counters for that amount.
+ */
+#define STATS_BO_SIZE               4096
+#define STATS_BO_END_OFFSET_BYTES   (STATS_BO_SIZE / 2)
+#define MAX_STAT_COUNTERS           (STATS_BO_END_OFFSET_BYTES / 8)
+
+#define I915_PERF_OA_SAMPLE_SIZE (8 +   /* drm_i915_perf_record_header */ \
+                                  256)  /* OA counter report */
 
 struct gen_perf_query_result {
    /**
@@ -108,10 +149,10 @@ struct gen_perf_query_counter {
    size_t offset;
 
    union {
-      uint64_t (*oa_counter_read_uint64)(struct gen_perf *perf,
+      uint64_t (*oa_counter_read_uint64)(struct gen_perf_config *perf,
                                          const struct gen_perf_query_info *query,
                                          const uint64_t *accumulator);
-      float (*oa_counter_read_float)(struct gen_perf *perf,
+      float (*oa_counter_read_float)(struct gen_perf_config *perf,
                                      const struct gen_perf_query_info *query,
                                      const uint64_t *accumulator);
       struct gen_pipeline_stat pipeline_stat;
@@ -158,7 +199,7 @@ struct gen_perf_query_info {
    uint32_t n_b_counter_regs;
 };
 
-struct gen_perf {
+struct gen_perf_config {
    struct gen_perf_query_info *queries;
    int n_queries;
 
@@ -189,8 +230,49 @@ struct gen_perf {
    /* Location of the device's sysfs entry. */
    char sysfs_dev_dir[256];
 
-   int (*ioctl)(int, unsigned long, void *);
+   struct {
+      void *(*bo_alloc)(void *bufmgr, const char *name, uint64_t size);
+      void (*bo_unreference)(void *bo);
+      void *(*bo_map)(void *ctx, void *bo, unsigned flags);
+      void (*bo_unmap)(void *bo);
+      bool (*batch_references)(void *batch, void *bo);
+      void (*bo_wait_rendering)(void *bo);
+      int (*bo_busy)(void *bo);
+      void (*emit_mi_flush)(void *ctx);
+      void (*emit_mi_report_perf_count)(void *ctx,
+                                        void *bo,
+                                        uint32_t offset_in_bytes,
+                                        uint32_t report_id);
+      void (*batchbuffer_flush)(void *ctx,
+                                const char *file, int line);
+      void (*capture_frequency_stat_register)(void *ctx, void *bo,
+                                              uint32_t bo_offset);
+      void (*store_register_mem64)(void *ctx, void *bo, uint32_t reg, uint32_t offset);
+
+   } vtbl;
 };
+
+struct gen_perf_query_object;
+const struct gen_perf_query_info* gen_perf_query_info(const struct gen_perf_query_object *);
+
+struct gen_perf_context;
+struct gen_perf_context *gen_perf_new_context(void *parent);
+
+void gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
+                           const struct gen_device_info *devinfo,
+                           int drm_fd);
+void gen_perf_init_context(struct gen_perf_context *perf_ctx,
+                           struct gen_perf_config *perf_cfg,
+                           void * ctx,  /* driver context (eg, brw_context) */
+                           void * bufmgr,  /* eg brw_bufmgr */
+                           const struct gen_device_info *devinfo,
+                           uint32_t hw_ctx,
+                           int drm_fd);
+
+struct gen_perf_config *gen_perf_config(struct gen_perf_context *ctx);
+
+int gen_perf_active_queries(struct gen_perf_context *perf_ctx,
+                            const struct gen_perf_query_info *query);
 
 static inline size_t
 gen_perf_query_counter_get_size(const struct gen_perf_query_counter *counter)
@@ -211,82 +293,38 @@ gen_perf_query_counter_get_size(const struct gen_perf_query_counter *counter)
    }
 }
 
-static inline struct gen_perf_query_info *
-gen_perf_query_append_query_info(struct gen_perf *perf, int max_counters)
+static inline struct gen_perf_config *
+gen_perf_new(void *ctx)
 {
-   struct gen_perf_query_info *query;
-
-   perf->queries = reralloc(perf, perf->queries,
-                            struct gen_perf_query_info,
-                            ++perf->n_queries);
-   query = &perf->queries[perf->n_queries - 1];
-   memset(query, 0, sizeof(*query));
-
-   if (max_counters > 0) {
-      query->max_counters = max_counters;
-      query->counters =
-         rzalloc_array(perf, struct gen_perf_query_counter, max_counters);
-   }
-
-   return query;
-}
-
-static inline void
-gen_perf_query_info_add_stat_reg(struct gen_perf_query_info *query,
-                                 uint32_t reg,
-                                 uint32_t numerator,
-                                 uint32_t denominator,
-                                 const char *name,
-                                 const char *description)
-{
-   struct gen_perf_query_counter *counter;
-
-   assert(query->n_counters < query->max_counters);
-
-   counter = &query->counters[query->n_counters];
-   counter->name = name;
-   counter->desc = description;
-   counter->type = GEN_PERF_COUNTER_TYPE_RAW;
-   counter->data_type = GEN_PERF_COUNTER_DATA_TYPE_UINT64;
-   counter->offset = sizeof(uint64_t) * query->n_counters;
-   counter->pipeline_stat.reg = reg;
-   counter->pipeline_stat.numerator = numerator;
-   counter->pipeline_stat.denominator = denominator;
-
-   query->n_counters++;
-}
-
-static inline void
-gen_perf_query_info_add_basic_stat_reg(struct gen_perf_query_info *query,
-                                       uint32_t reg, const char *name)
-{
-   gen_perf_query_info_add_stat_reg(query, reg, 1, 1, name, name);
-}
-
-static inline struct gen_perf *
-gen_perf_new(void *ctx, int (*ioctl_cb)(int, unsigned long, void *))
-{
-   struct gen_perf *perf = rzalloc(ctx, struct gen_perf);
-
-   perf->ioctl = ioctl_cb;
-
+   struct gen_perf_config *perf = rzalloc(ctx, struct gen_perf_config);
    return perf;
 }
 
-bool gen_perf_load_oa_metrics(struct gen_perf *perf, int fd,
-                              const struct gen_device_info *devinfo);
-bool gen_perf_load_metric_id(struct gen_perf *perf, const char *guid,
-                             uint64_t *metric_id);
+struct gen_perf_query_object *
+gen_perf_new_query(struct gen_perf_context *, unsigned query_index);
 
-void gen_perf_query_result_read_frequencies(struct gen_perf_query_result *result,
-                                            const struct gen_device_info *devinfo,
-                                            const uint32_t *start,
-                                            const uint32_t *end);
-void gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
-                                      const struct gen_perf_query_info *query,
-                                      const uint32_t *start,
-                                      const uint32_t *end);
-void gen_perf_query_result_clear(struct gen_perf_query_result *result);
 
+bool gen_perf_begin_query(struct gen_perf_context *perf_ctx,
+                          struct gen_perf_query_object *query);
+void gen_perf_end_query(struct gen_perf_context *perf_ctx,
+                        struct gen_perf_query_object *query);
+void gen_perf_wait_query(struct gen_perf_context *perf_ctx,
+                         struct gen_perf_query_object *query,
+                         void *current_batch);
+bool gen_perf_is_query_ready(struct gen_perf_context *perf_ctx,
+                             struct gen_perf_query_object *query,
+                             void *current_batch);
+void gen_perf_delete_query(struct gen_perf_context *perf_ctx,
+                           struct gen_perf_query_object *query);
+void gen_perf_get_query_data(struct gen_perf_context *perf_ctx,
+                             struct gen_perf_query_object *query,
+                             int data_size,
+                             unsigned *data,
+                             unsigned *bytes_written);
+
+void gen_perf_dump_query_count(struct gen_perf_context *perf_ctx);
+void gen_perf_dump_query(struct gen_perf_context *perf_ctx,
+                         struct gen_perf_query_object *obj,
+                         void *current_batch);
 
 #endif /* GEN_PERF_H */

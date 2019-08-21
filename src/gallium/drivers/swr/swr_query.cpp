@@ -72,10 +72,10 @@ swr_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 swr_get_query_result(struct pipe_context *pipe,
                      struct pipe_query *q,
-                     boolean wait,
+                     bool wait,
                      union pipe_query_result *result)
 {
    struct swr_query *pq = swr_query(q);
@@ -83,7 +83,7 @@ swr_get_query_result(struct pipe_context *pipe,
 
    if (pq->fence) {
       if (!wait && !swr_is_fence_done(pq->fence))
-         return FALSE;
+         return false;
 
       swr_fence_finish(pipe->screen, NULL, pq->fence, 0);
       swr_fence_reference(pipe->screen, &pq->fence, NULL);
@@ -98,7 +98,7 @@ swr_get_query_result(struct pipe_context *pipe,
       result->b = pq->result.core.DepthPassCount != 0;
       break;
    case PIPE_QUERY_GPU_FINISHED:
-      result->b = TRUE;
+      result->b = true;
       break;
    /* Counters */
    case PIPE_QUERY_OCCLUSION_COUNTER:
@@ -155,10 +155,10 @@ swr_get_query_result(struct pipe_context *pipe,
       break;
    }
 
-   return TRUE;
+   return true;
 }
 
-static boolean
+static bool
 swr_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct swr_context *ctx = swr_context(pipe);
@@ -229,15 +229,15 @@ swr_end_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-boolean
+bool
 swr_check_render_cond(struct pipe_context *pipe)
 {
    struct swr_context *ctx = swr_context(pipe);
-   boolean b, wait;
+   bool b, wait;
    uint64_t result;
 
    if (!ctx->render_cond_query)
-      return TRUE; /* no query predicate, draw normally */
+      return true; /* no query predicate, draw normally */
 
    wait = (ctx->render_cond_mode == PIPE_RENDER_COND_WAIT
            || ctx->render_cond_mode == PIPE_RENDER_COND_BY_REGION_WAIT);
@@ -247,12 +247,12 @@ swr_check_render_cond(struct pipe_context *pipe)
    if (b)
       return ((!result) == ctx->render_cond_cond);
    else
-      return TRUE;
+      return true;
 }
 
 
 static void
-swr_set_active_query_state(struct pipe_context *pipe, boolean enable)
+swr_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

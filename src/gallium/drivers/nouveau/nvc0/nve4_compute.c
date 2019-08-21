@@ -27,7 +27,7 @@
 
 #include "codegen/nv50_ir_driver.h"
 
-#ifdef DEBUG
+#ifndef NDEBUG
 static void nve4_compute_dump_launch_desc(const struct nve4_cp_launch_desc *);
 static void gp100_compute_dump_launch_desc(const struct gp100_cp_launch_desc *);
 #endif
@@ -741,7 +741,7 @@ nve4_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
 
    nve4_compute_upload_input(nvc0, info);
 
-#ifdef DEBUG
+#ifndef NDEBUG
    if (debug_get_num_option("NV50_PROG_DEBUG", 0)) {
       if (nvc0->screen->compute->oclass >= GP100_COMPUTE_CLASS)
          gp100_compute_dump_launch_desc(desc);
@@ -878,7 +878,7 @@ nve4_compute_validate_textures(struct nvc0_context *nvc0)
 }
 
 
-#ifdef DEBUG
+#ifndef NDEBUG
 static const char *nve4_cache_split_name(unsigned value)
 {
    switch (value) {

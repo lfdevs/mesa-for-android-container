@@ -89,10 +89,10 @@ llvmpipe_destroy_query(struct pipe_context *pipe, struct pipe_query *q)
 }
 
 
-static boolean
+static bool
 llvmpipe_get_query_result(struct pipe_context *pipe, 
                           struct pipe_query *q,
-                          boolean wait,
+                          bool wait,
                           union pipe_query_result *vresult)
 {
    struct llvmpipe_screen *screen = llvmpipe_screen(pipe->screen);
@@ -108,7 +108,7 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
             llvmpipe_flush(pipe, NULL, __FUNCTION__);
 
          if (!wait)
-            return FALSE;
+            return false;
 
          lp_fence_wait(pq->fence);
       }
@@ -143,11 +143,11 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
          (struct pipe_query_data_timestamp_disjoint *)vresult;
       /* os_get_time_nano return nanoseconds */
       td->frequency = UINT64_C(1000000000);
-      td->disjoint = FALSE;
+      td->disjoint = false;
    }
       break;
    case PIPE_QUERY_GPU_FINISHED:
-      vresult->b = TRUE;
+      vresult->b = true;
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
       *result = pq->num_primitives_generated;
@@ -182,11 +182,11 @@ llvmpipe_get_query_result(struct pipe_context *pipe,
       break;
    }
 
-   return TRUE;
+   return true;
 }
 
 
-static boolean
+static bool
 llvmpipe_begin_query(struct pipe_context *pipe, struct pipe_query *q)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );
@@ -329,7 +329,7 @@ llvmpipe_check_render_cond(struct llvmpipe_context *lp)
 }
 
 static void
-llvmpipe_set_active_query_state(struct pipe_context *pipe, boolean enable)
+llvmpipe_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

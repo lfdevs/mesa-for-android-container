@@ -1309,7 +1309,7 @@ imm(FILE *file, const struct gen_device_info *devinfo, enum brw_reg_type type,
       format(file, "0x%016"PRIx64"UQ", brw_inst_imm_uq(devinfo, inst));
       break;
    case BRW_REGISTER_TYPE_Q:
-      format(file, "%"PRId64"Q", brw_inst_imm_uq(devinfo, inst));
+      format(file, "0x%016"PRIx64"Q", brw_inst_imm_uq(devinfo, inst));
       break;
    case BRW_REGISTER_TYPE_UD:
       format(file, "0x%08xUD", brw_inst_imm_ud(devinfo, inst));
@@ -1339,9 +1339,18 @@ imm(FILE *file, const struct gen_device_info *devinfo, enum brw_reg_type type,
       format(file, "0x%08xV", brw_inst_imm_ud(devinfo, inst));
       break;
    case BRW_REGISTER_TYPE_F:
-      format(file, "0x%"PRIx64"F", brw_inst_bits(inst, 127, 96));
-      pad(file, 48);
-      format(file, " /* %-gF */", brw_inst_imm_f(devinfo, inst));
+      /* The DIM instruction's src0 uses an F type but contains a
+       * 64-bit immediate
+       */
+      if (brw_inst_opcode(devinfo, inst) == BRW_OPCODE_DIM) {
+         format(file, "0x%"PRIx64"F", brw_inst_bits(inst, 127, 64));
+         pad(file, 48);
+         format(file, "/* %-gF */", brw_inst_imm_df(devinfo, inst));
+      } else {
+         format(file, "0x%"PRIx64"F", brw_inst_bits(inst, 127, 96));
+         pad(file, 48);
+         format(file, " /* %-gF */", brw_inst_imm_f(devinfo, inst));
+      }
       break;
    case BRW_REGISTER_TYPE_DF:
       format(file, "0x%016"PRIx64"DF", brw_inst_bits(inst, 127, 64));
@@ -1661,7 +1670,8 @@ brw_disassemble_inst(FILE *file, const struct gen_device_info *devinfo,
       format(file, "Pop: %"PRIu64, brw_inst_gen4_pop_count(devinfo, inst));
    } else if (devinfo->gen < 6 && (opcode == BRW_OPCODE_IF ||
                                    opcode == BRW_OPCODE_IFF ||
-                                   opcode == BRW_OPCODE_HALT)) {
+                                   opcode == BRW_OPCODE_HALT ||
+                                   opcode == BRW_OPCODE_WHILE)) {
       pad(file, 16);
       format(file, "Jump: %d", brw_inst_gen4_jump_count(devinfo, inst));
    } else if (devinfo->gen < 6 && opcode == BRW_OPCODE_ENDIF) {

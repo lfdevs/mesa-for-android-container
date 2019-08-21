@@ -36,14 +36,14 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#define ERROR(args...) debug_printf("ERROR: " args)
-#define WARN(args...) debug_printf("WARNING: " args)
-#define INFO(args...) debug_printf(args)
+#define ERROR(args...) _debug_printf("ERROR: " args)
+#define WARN(args...) _debug_printf("WARNING: " args)
+#define INFO(args...) _debug_printf(args)
 
 #define INFO_DBG(m, f, args...)          \
    do {                                  \
       if (m & NV50_IR_DEBUG_##f)         \
-         debug_printf(args);             \
+         _debug_printf(args);             \
    } while(0)
 
 #define FATAL(args...)          \

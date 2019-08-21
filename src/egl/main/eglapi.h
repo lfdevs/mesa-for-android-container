@@ -58,17 +58,6 @@ struct _egl_api
    const char *(*QueryDriverName)(_EGLDisplay *disp);
    char *(*QueryDriverConfig)(_EGLDisplay *disp);
 
-   /* config funcs */
-   EGLBoolean (*GetConfigs)(_EGLDriver *drv, _EGLDisplay *disp,
-                            EGLConfig *configs, EGLint config_size,
-                            EGLint *num_config);
-   EGLBoolean (*ChooseConfig)(_EGLDriver *drv, _EGLDisplay *disp,
-                              const EGLint *attrib_list, EGLConfig *configs,
-                              EGLint config_size, EGLint *num_config);
-   EGLBoolean (*GetConfigAttrib)(_EGLDriver *drv, _EGLDisplay *disp,
-                                 _EGLConfig *config, EGLint attribute,
-                                 EGLint *value);
-
    /* context funcs */
    _EGLContext *(*CreateContext)(_EGLDriver *drv, _EGLDisplay *disp,
                                  _EGLConfig *config, _EGLContext *share_list,
@@ -81,9 +70,6 @@ struct _egl_api
    EGLBoolean (*MakeCurrent)(_EGLDriver *drv, _EGLDisplay *disp,
                              _EGLSurface *draw, _EGLSurface *read,
                              _EGLContext *ctx);
-   EGLBoolean (*QueryContext)(_EGLDriver *drv, _EGLDisplay *disp,
-                              _EGLContext *ctx, EGLint attribute,
-                              EGLint *value);
 
    /* surface funcs */
    _EGLSurface *(*CreateWindowSurface)(_EGLDriver *drv, _EGLDisplay *disp,
@@ -100,9 +86,6 @@ struct _egl_api
    EGLBoolean (*QuerySurface)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLSurface *surface, EGLint attribute,
                               EGLint *value);
-   EGLBoolean (*SurfaceAttrib)(_EGLDriver *drv, _EGLDisplay *disp,
-                               _EGLSurface *surface, EGLint attribute,
-                               EGLint value);
    EGLBoolean (*BindTexImage)(_EGLDriver *drv, _EGLDisplay *disp,
                               _EGLSurface *surface, EGLint buffer);
    EGLBoolean (*ReleaseTexImage)(_EGLDriver *drv, _EGLDisplay *disp,
@@ -125,13 +108,6 @@ struct _egl_api
    /* this function may be called from multiple threads at the same time */
    _EGLProc (*GetProcAddress)(_EGLDriver *drv, const char *procname);
 
-   _EGLSurface *(*CreatePbufferFromClientBuffer)(_EGLDriver *drv,
-                                                 _EGLDisplay *disp,
-                                                 EGLenum buftype,
-                                                 EGLClientBuffer buffer,
-                                                 _EGLConfig *config,
-                                                 const EGLint *attrib_list);
-
    _EGLImage *(*CreateImageKHR)(_EGLDriver *drv, _EGLDisplay *disp,
                                 _EGLContext *ctx, EGLenum target,
                                 EGLClientBuffer buffer,
@@ -148,9 +124,6 @@ struct _egl_api
    EGLint (*WaitSyncKHR)(_EGLDriver *drv, _EGLDisplay *disp, _EGLSync *sync);
    EGLBoolean (*SignalSyncKHR)(_EGLDriver *drv, _EGLDisplay *disp,
                                _EGLSync *sync, EGLenum mode);
-   EGLBoolean (*GetSyncAttrib)(_EGLDriver *drv, _EGLDisplay *disp,
-                               _EGLSync *sync, EGLint attribute,
-                               EGLAttrib *value);
    EGLint (*DupNativeFenceFDANDROID)(_EGLDriver *drv, _EGLDisplay *disp,
                                      _EGLSync *sync);
 

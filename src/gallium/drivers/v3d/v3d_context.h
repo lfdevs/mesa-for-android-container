@@ -117,6 +117,23 @@ enum v3d_sampler_state_variant {
         V3D_SAMPLER_STATE_VARIANT_COUNT,
 };
 
+enum v3d_flush_cond {
+        /* Flush job unless we are flushing for transform feedback, where we
+         * handle flushing in the driver via the 'Wait for TF' packet.
+         */
+        V3D_FLUSH_DEFAULT,
+        /* Always flush the job, even for cases where we would normally not
+         * do it, such as transform feedback.
+         */
+        V3D_FLUSH_ALWAYS,
+        /* Flush job if it is not the current FBO job. This is intended to
+         * skip automatic flushes of the current job for resources that we
+         * expect to be externally synchronized by the application using
+         * glMemoryBarrier(), such as SSBOs and shader images.
+         */
+        V3D_FLUSH_NOT_CURRENT_JOB,
+};
+
 struct v3d_sampler_view {
         struct pipe_sampler_view base;
         uint32_t p0;
@@ -229,6 +246,12 @@ struct v3d_vertex_stateobj {
         uint32_t defaults_offset;
 };
 
+struct v3d_stream_output_target {
+        struct pipe_stream_output_target base;
+        /* Number of transform feedback vertices written to this target */
+        uint32_t recorded_vertex_count;
+};
+
 struct v3d_streamout_stateobj {
         struct pipe_stream_output_target *targets[PIPE_MAX_SO_BUFFERS];
         /* Number of vertices we've written into the buffer so far. */
@@ -297,6 +320,7 @@ struct v3d_job {
         uint32_t referenced_size;
 
         struct set *write_prscs;
+        struct set *tf_write_prscs;
 
         /* Size of the submit.bo_handles array. */
         uint32_t bo_handles_size;
@@ -491,6 +515,8 @@ struct v3d_context {
         struct v3d_vertexbuf_stateobj vertexbuf;
         struct v3d_streamout_stateobj streamout;
         struct v3d_bo *current_oq;
+        struct pipe_resource *prim_counts;
+        uint32_t prim_counts_offset;
         struct pipe_debug_callback debug;
         /** @} */
 };
@@ -548,6 +574,18 @@ v3d_sampler_state(struct pipe_sampler_state *psampler)
         return (struct v3d_sampler_state *)psampler;
 }
 
+static inline struct v3d_stream_output_target *
+v3d_stream_output_target(struct pipe_stream_output_target *ptarget)
+{
+        return (struct v3d_stream_output_target *)ptarget;
+}
+
+static inline uint32_t
+v3d_stream_output_target_get_vertex_count(struct pipe_stream_output_target *ptarget)
+{
+    return v3d_stream_output_target(ptarget)->recorded_vertex_count;
+}
+
 struct pipe_context *v3d_context_create(struct pipe_screen *pscreen,
                                         void *priv, unsigned flags);
 void v3d_program_init(struct pipe_context *pctx);
@@ -569,6 +607,13 @@ v3d_ioctl(int fd, unsigned long request, void *arg)
                 return drmIoctl(fd, request, arg);
 }
 
+static inline bool
+v3d_transform_feedback_enabled(struct v3d_context *v3d)
+{
+        return v3d->prog.bind_vs->num_tf_specs != 0 &&
+               v3d->active_queries;
+}
+
 void v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader);
 struct v3d_cl_reloc v3d_write_uniforms(struct v3d_context *v3d,
                                        struct v3d_compiled_shader *shader,
@@ -582,11 +627,15 @@ struct v3d_job *v3d_get_job(struct v3d_context *v3d,
 struct v3d_job *v3d_get_job_for_fbo(struct v3d_context *v3d);
 void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
 void v3d_job_add_write_resource(struct v3d_job *job, struct pipe_resource *prsc);
+void v3d_job_add_tf_write_resource(struct v3d_job *job, struct pipe_resource *prsc);
 void v3d_job_submit(struct v3d_context *v3d, struct v3d_job *job);
+void v3d_flush_jobs_using_bo(struct v3d_context *v3d, struct v3d_bo *bo);
 void v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
-                                     struct pipe_resource *prsc);
+                                     struct pipe_resource *prsc,
+                                     enum v3d_flush_cond flush_cond);
 void v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
-                                     struct pipe_resource *prsc);
+                                     struct pipe_resource *prsc,
+                                     enum v3d_flush_cond flush_cond);
 void v3d_update_compiled_shaders(struct v3d_context *v3d, uint8_t prim_mode);
 void v3d_update_compiled_cs(struct v3d_context *v3d);
 
@@ -613,15 +662,17 @@ bool v3d_tfu_supports_tex_format(const struct v3d_device_info *devinfo,
 void v3d_init_query_functions(struct v3d_context *v3d);
 void v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info);
 void v3d_blitter_save(struct v3d_context *v3d);
-boolean v3d_generate_mipmap(struct pipe_context *pctx,
-                            struct pipe_resource *prsc,
-                            enum pipe_format format,
-                            unsigned int base_level,
-                            unsigned int last_level,
-                            unsigned int first_layer,
-                            unsigned int last_layer);
+bool v3d_generate_mipmap(struct pipe_context *pctx,
+                         struct pipe_resource *prsc,
+                         enum pipe_format format,
+                         unsigned int base_level,
+                         unsigned int last_level,
+                         unsigned int first_layer,
+                         unsigned int last_layer);
 
 struct v3d_fence *v3d_fence_create(struct v3d_context *v3d);
+
+void v3d_tf_update_counters(struct v3d_context *v3d);
 
 #ifdef v3dX
 #  include "v3dx_context.h"

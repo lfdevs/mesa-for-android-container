@@ -681,6 +681,12 @@ gbm_dri_bo_get_handle_for_plane(struct gbm_bo *_bo, int plane)
    ret.s32 = -1;
 
    if (!dri->image || dri->image->base.version < 13 || !dri->image->fromPlanar) {
+      /* Preserve legacy behavior if plane is 0 */
+      if (plane == 0) {
+         /* NOTE: return _bo->handle, *NOT* bo->handle which is invalid at this point */
+         return _bo->handle;
+      }
+
       errno = ENOSYS;
       return ret;
    }

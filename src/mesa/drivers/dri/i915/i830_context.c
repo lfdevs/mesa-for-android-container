@@ -104,7 +104,7 @@ i830CreateContext(int api,
    /* Advertise the full hardware capabilities.  The new memory
     * manager should cope much better with overload situations:
     */
-   ctx->Const.MaxTextureLevels = 12;
+   ctx->Const.MaxTextureSize = 2048;
    ctx->Const.Max3DTextureLevels = 9;
    ctx->Const.MaxCubeTextureLevels = 11;
    ctx->Const.MaxTextureRectSize = (1 << 11);

@@ -397,7 +397,7 @@ driReleaseDrawables(struct glx_context *gc)
       if (pdraw->drawable == pdraw->xDrawable) {
 	 pdraw->refcount --;
 	 if (pdraw->refcount == 0) {
-	    (*pdraw->destroyDrawable)(pdraw);
+	    pdraw->destroyDrawable(pdraw);
 	    __glxHashDelete(priv->drawHash, gc->currentDrawable);
 	 }
       }
@@ -408,7 +408,7 @@ driReleaseDrawables(struct glx_context *gc)
       if (pdraw->drawable == pdraw->xDrawable) {
 	 pdraw->refcount --;
 	 if (pdraw->refcount == 0) {
-	    (*pdraw->destroyDrawable)(pdraw);
+	    pdraw->destroyDrawable(pdraw);
 	    __glxHashDelete(priv->drawHash, gc->currentReadable);
 	 }
       }

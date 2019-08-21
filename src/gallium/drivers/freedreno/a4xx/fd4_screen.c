@@ -29,11 +29,12 @@
 
 #include "fd4_screen.h"
 #include "fd4_context.h"
+#include "fd4_emit.h"
 #include "fd4_format.h"
 
 #include "ir3/ir3_compiler.h"
 
-static boolean
+static bool
 fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
@@ -47,7 +48,7 @@ fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 			(sample_count > 1)) { /* TODO add MSAA */
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -110,4 +111,5 @@ fd4_screen_init(struct pipe_screen *pscreen)
 	screen->compiler = ir3_compiler_create(screen->dev, screen->gpu_id);
 	pscreen->context_create = fd4_context_create;
 	pscreen->is_format_supported = fd4_screen_is_format_supported;
+	fd4_emit_init_screen(pscreen);
 }

@@ -236,10 +236,12 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
 
    img->format.fourcc = PipeFormatToVaFourcc(surf->buffer->buffer_format);
    img->buf = VA_INVALID_ID;
-   img->width = surf->buffer->width;
-   img->height = surf->buffer->height;
+   /* Use the visible dimensions. */
+   img->width = surf->templat.width;
+   img->height = surf->templat.height;
    img->num_palette_entries = 0;
    img->entry_bytes = 0;
+   /* Image data size is computed using internal dimensions. */
    w = align(surf->buffer->width, 2);
    h = align(surf->buffer->height, 2);
 

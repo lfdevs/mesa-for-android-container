@@ -778,6 +778,10 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       if (GEN_GEN == 11)
          ps.BindingTableEntryCount = 0;
 
+      /* SAMPLER_STATE prefetching is broken on Gen11 - WA_1606682166 */
+      if (GEN_GEN == 11)
+         ps.SamplerCount = 0;
+
       if (prog_data) {
          ps._8PixelDispatchEnable = prog_data->dispatch_8;
          ps._16PixelDispatchEnable = prog_data->dispatch_16;
@@ -827,6 +831,12 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       switch (params->fast_clear_op) {
       case ISL_AUX_OP_NONE:
          break;
+#if GEN_GEN >= 10
+      case ISL_AUX_OP_AMBIGUATE:
+         ps.RenderTargetFastClearEnable = true;
+         ps.RenderTargetResolveType = FAST_CLEAR_0;
+         break;
+#endif
 #if GEN_GEN >= 9
       case ISL_AUX_OP_PARTIAL_RESOLVE:
          ps.RenderTargetResolveType = RESOLVE_PARTIAL;
@@ -1064,7 +1074,7 @@ blorp_emit_blend_state(struct blorp_batch *batch,
 
 static uint32_t
 blorp_emit_color_calc_state(struct blorp_batch *batch,
-                            MAYBE_UNUSED const struct blorp_params *params)
+                            UNUSED const struct blorp_params *params)
 {
    uint32_t offset;
    blorp_emit_dynamic(batch, GENX(COLOR_CALC_STATE), cc, 64, &offset) {
@@ -1465,7 +1475,7 @@ blorp_emit_surface_states(struct blorp_batch *batch,
    uint32_t bind_offset = 0, surface_offsets[2];
    void *surface_maps[2];
 
-   MAYBE_UNUSED bool has_indirect_clear_color = false;
+   UNUSED bool has_indirect_clear_color = false;
    if (params->use_pre_baked_binding_table) {
       bind_offset = params->pre_baked_binding_table_offset;
    } else {

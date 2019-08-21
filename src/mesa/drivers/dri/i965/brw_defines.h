@@ -1334,6 +1334,10 @@ enum brw_pixel_shader_coverage_mask_mode {
 /* DW3: end address. */
 
 #define _3DSTATE_3D_MODE                     0x791e
+# define SLICE_HASHING_TABLE_ENABLE          (1 << 6)
+# define SLICE_HASHING_TABLE_ENABLE_MASK     REG_MASK(1 << 6)
+
+#define _3DSTATE_SLICE_TABLE_STATE_POINTERS  0x7920
 
 #define CMD_MI_FLUSH                  0x0200
 
@@ -1523,20 +1527,6 @@ enum brw_pixel_shader_coverage_mask_mode {
 #define BR13_16161616		(0x4 << 24)
 #define BR13_32323232		(0x5 << 24)
 
-/* Pipeline Statistics Counter Registers */
-#define IA_VERTICES_COUNT               0x2310
-#define IA_PRIMITIVES_COUNT             0x2318
-#define VS_INVOCATION_COUNT             0x2320
-#define HS_INVOCATION_COUNT             0x2300
-#define DS_INVOCATION_COUNT             0x2308
-#define GS_INVOCATION_COUNT             0x2328
-#define GS_PRIMITIVES_COUNT             0x2330
-#define CL_INVOCATION_COUNT             0x2338
-#define CL_PRIMITIVES_COUNT             0x2340
-#define PS_INVOCATION_COUNT             0x2348
-#define CS_INVOCATION_COUNT             0x2290
-#define PS_DEPTH_COUNT                  0x2350
-
 #define GEN6_SO_PRIM_STORAGE_NEEDED     0x2280
 #define GEN7_SO_PRIM_STORAGE_NEEDED(n)  (0x5240 + (n) * 8)
 
@@ -1576,6 +1566,7 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN9_PARTIAL_RESOLVE_DISABLE_IN_VC (1 << 1)
 # define GEN8_HIZ_PMA_MASK_BITS \
    REG_MASK(GEN8_HIZ_NP_PMA_FIX_ENABLE | GEN8_HIZ_NP_EARLY_Z_FAILS_DISABLE)
+# define GEN11_DISABLE_REPACKING_FOR_COMPRESSION (1 << 15)
 
 #define GEN7_GT_MODE                    0x7008
 # define GEN9_SUBSLICE_HASHING_8x8      (0 << 8)
@@ -1583,6 +1574,11 @@ enum brw_pixel_shader_coverage_mask_mode {
 # define GEN9_SUBSLICE_HASHING_8x4      (2 << 8)
 # define GEN9_SUBSLICE_HASHING_16x16    (3 << 8)
 # define GEN9_SUBSLICE_HASHING_MASK_BITS REG_MASK(3 << 8)
+# define GEN9_SLICE_HASHING_NORMAL      (0 << 11)
+# define GEN9_SLICE_HASHING_DISABLED    (1 << 11)
+# define GEN9_SLICE_HASHING_32x16       (2 << 11)
+# define GEN9_SLICE_HASHING_32x32       (3 << 11)
+# define GEN9_SLICE_HASHING_MASK_BITS REG_MASK(3 << 11)
 
 /* Predicate registers */
 #define MI_PREDICATE_SRC0               0x2400
@@ -1657,18 +1653,6 @@ enum brw_pixel_shader_coverage_mask_mode {
 
 #define CS_DEBUG_MODE2                     0x20d8 /* Gen9+ */
 # define CSDBG2_CONSTANT_BUFFER_ADDRESS_OFFSET_DISABLE (1 << 4)
-
-#define GEN7_RPSTAT1                       0xA01C
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
-
-#define GEN9_RPSTAT0                       0xA01C
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
 
 #define SLICE_COMMON_ECO_CHICKEN1          0x731c /* Gen9+ */
 # define GLK_SCEC_BARRIER_MODE_GPGPU       (0 << 7)

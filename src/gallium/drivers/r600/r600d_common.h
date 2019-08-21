@@ -85,7 +85,7 @@
 #define		SURFACE_BASE_UPDATE_COLOR_NUM(x) (((1 << x) - 1) << 1)
 #define		SURFACE_BASE_UPDATE_STRMOUT(x) (0x200 << (x))
 #define PKT3_SET_SH_REG                        0x76 /* SI and later */
-#define PKT3_SET_UCONFIG_REG                   0x79 /* CIK and later */
+#define PKT3_SET_UCONFIG_REG                   0x79 /* GFX7 and later */
 
 #define EVENT_TYPE_SAMPLE_STREAMOUTSTATS1      0x1 /* EG and later */
 #define EVENT_TYPE_SAMPLE_STREAMOUTSTATS2      0x2 /* EG and later */

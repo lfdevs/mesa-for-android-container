@@ -28,7 +28,8 @@ libgraw_null = shared_library(
   'graw_null',
   ['graw_null.c'],
   include_directories : inc_common,
-  link_with : [libmesa_util, libgallium],
+  link_with : libgallium,
+  dependencies : idep_mesautil,
 )
 
 libgraw = libgraw_null

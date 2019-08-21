@@ -68,19 +68,6 @@ intel_icd = custom_target(
   install : true,
 )
 
-dev_icd = custom_target(
-  'dev_icd',
-  input : 'anv_icd.py',
-  output : 'dev_icd.@0@.json'.format(host_machine.cpu()),
-  command : [
-    prog_python, '@INPUT@', '--lib-path', meson.current_build_dir(),
-    '--out', '@OUTPUT@'
-  ],
-  depend_files : files('anv_extensions.py'),
-  build_by_default : true,
-  install : false,
-)
-
 libanv_gen_libs = []
 anv_gen_files = files(
   'genX_blorp_exec.c',
@@ -126,7 +113,6 @@ libanv_files = files(
   'anv_nir.h',
   'anv_nir_add_base_work_group_id.c',
   'anv_nir_apply_pipeline_layout.c',
-  'anv_nir_lower_input_attachments.c',
   'anv_nir_lower_multiview.c',
   'anv_nir_lower_push_constants.c',
   'anv_nir_lower_ycbcr_textures.c',
@@ -178,7 +164,6 @@ if with_xlib_lease
 endif
 
 if with_platform_android
-  anv_deps += dep_android
   anv_flags += '-DVK_USE_PLATFORM_ANDROID_KHR'
   libanv_files += files('anv_android.c')
 else
@@ -207,11 +192,11 @@ libvulkan_intel = shared_library(
   ],
   link_whole : [libanv_common, libanv_gen_libs],
   link_with : [
-    libintel_compiler, libintel_common, libintel_dev, libisl, libblorp,
-    libvulkan_wsi, libmesa_util,
+    libintel_compiler, libintel_dev, libisl, libblorp, libvulkan_wsi,
   ],
   dependencies : [
-    dep_thread, dep_dl, dep_m, anv_deps, idep_nir, idep_genxml, idep_vulkan_util
+    dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
+    idep_nir, idep_genxml, idep_vulkan_util, idep_mesautil,
   ],
   c_args : anv_flags,
   link_args : ['-Wl,--build-id=sha1', ld_args_bsymbolic, ld_args_gc_sections],
@@ -228,10 +213,11 @@ if with_tests
     link_whole : libanv_common,
     link_with : [
       libanv_gen_libs, libintel_compiler, libintel_common, libintel_dev,
-      libisl, libblorp, libvulkan_wsi, libmesa_util,
+      libisl, libblorp, libvulkan_wsi,
     ],
     dependencies : [
-      dep_thread, dep_dl, dep_m, anv_deps, idep_nir, idep_vulkan_util
+      dep_thread, dep_dl, dep_m, anv_deps,
+      idep_nir, idep_vulkan_util, idep_mesautil,
     ],
     c_args : anv_flags,
   )

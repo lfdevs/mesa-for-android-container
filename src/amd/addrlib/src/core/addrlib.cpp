@@ -1,5 +1,5 @@
 /*
- * Copyright © 2007-2018 Advanced Micro Devices, Inc.
+ * Copyright © 2007-2019 Advanced Micro Devices, Inc.
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining
@@ -223,6 +223,9 @@ ADDR_E_RETURNCODE Lib::Create(
                     case FAMILY_RV:
                         pLib = Gfx9HwlInit(&client);
                         break;
+                    case FAMILY_NV:
+                        pLib = Gfx10HwlInit(&client);
+                        break;
                     default:
                         ADDR_ASSERT_ALWAYS();
                         break;
@@ -246,6 +249,7 @@ ADDR_E_RETURNCODE Lib::Create(
         pLib->m_configFlags.checkLast2DLevel    = pCreateIn->createFlags.checkLast2DLevel;
         pLib->m_configFlags.useHtileSliceAlign  = pCreateIn->createFlags.useHtileSliceAlign;
         pLib->m_configFlags.allowLargeThickTile = pCreateIn->createFlags.allowLargeThickTile;
+        pLib->m_configFlags.forceDccAndTcCompat = pCreateIn->createFlags.forceDccAndTcCompat;
         pLib->m_configFlags.disableLinearOpt    = FALSE;
 
         pLib->SetChipFamily(pCreateIn->chipFamily, pCreateIn->chipRevision);
@@ -383,14 +387,14 @@ Lib* Lib::GetLib(
 ****************************************************************************************************
 */
 ADDR_E_RETURNCODE Lib::GetMaxAlignments(
-    ADDR_GET_MAX_ALINGMENTS_OUTPUT* pOut    ///< [out] output structure
+    ADDR_GET_MAX_ALIGNMENTS_OUTPUT* pOut    ///< [out] output structure
     ) const
 {
     ADDR_E_RETURNCODE returnCode = ADDR_OK;
 
     if (GetFillSizeFieldsFlags() == TRUE)
     {
-        if (pOut->size != sizeof(ADDR_GET_MAX_ALINGMENTS_OUTPUT))
+        if (pOut->size != sizeof(ADDR_GET_MAX_ALIGNMENTS_OUTPUT))
         {
             returnCode = ADDR_PARAMSIZEMISMATCH;
         }
@@ -423,14 +427,14 @@ ADDR_E_RETURNCODE Lib::GetMaxAlignments(
 ****************************************************************************************************
 */
 ADDR_E_RETURNCODE Lib::GetMaxMetaAlignments(
-    ADDR_GET_MAX_ALINGMENTS_OUTPUT* pOut    ///< [out] output structure
+    ADDR_GET_MAX_ALIGNMENTS_OUTPUT* pOut    ///< [out] output structure
     ) const
 {
     ADDR_E_RETURNCODE returnCode = ADDR_OK;
 
     if (GetFillSizeFieldsFlags() == TRUE)
     {
-        if (pOut->size != sizeof(ADDR_GET_MAX_ALINGMENTS_OUTPUT))
+        if (pOut->size != sizeof(ADDR_GET_MAX_ALIGNMENTS_OUTPUT))
         {
             returnCode = ADDR_PARAMSIZEMISMATCH;
         }

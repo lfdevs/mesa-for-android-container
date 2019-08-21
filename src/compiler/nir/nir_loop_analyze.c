@@ -648,10 +648,10 @@ get_iteration(nir_op cond_op, nir_const_value initial, nir_const_value step,
 }
 
 static bool
-test_iterations(int32_t iter_int, nir_const_value *step,
-                nir_const_value *limit, nir_op cond_op, unsigned bit_size,
+test_iterations(int32_t iter_int, nir_const_value step,
+                nir_const_value limit, nir_op cond_op, unsigned bit_size,
                 nir_alu_type induction_base_type,
-                nir_const_value *initial, bool limit_rhs, bool invert_cond)
+                nir_const_value initial, bool limit_rhs, bool invert_cond)
 {
    assert(nir_op_infos[cond_op].num_inputs == 2);
 
@@ -677,18 +677,16 @@ test_iterations(int32_t iter_int, nir_const_value *step,
    /* Multiple the iteration count we are testing by the number of times we
     * step the induction variable each iteration.
     */
-   nir_const_value *mul_src[2] = { &iter_src, step };
-   nir_const_value mul_result;
-   nir_eval_const_opcode(mul_op, &mul_result, 1, bit_size, mul_src);
+   nir_const_value mul_result =
+      eval_const_binop(mul_op, bit_size, iter_src, step);
 
    /* Add the initial value to the accumulated induction variable total */
-   nir_const_value *add_src[2] = { &mul_result, initial };
-   nir_const_value add_result;
-   nir_eval_const_opcode(add_op, &add_result, 1, bit_size, add_src);
+   nir_const_value add_result =
+      eval_const_binop(add_op, bit_size, mul_result, initial);
 
    nir_const_value *src[2];
    src[limit_rhs ? 0 : 1] = &add_result;
-   src[limit_rhs ? 1 : 0] = limit;
+   src[limit_rhs ? 1 : 0] = &limit;
 
    /* Evaluate the loop exit condition */
    nir_const_value result;
@@ -698,13 +696,11 @@ test_iterations(int32_t iter_int, nir_const_value *step,
 }
 
 static int
-calculate_iterations(nir_const_value *initial, nir_const_value *step,
-                     nir_const_value *limit, nir_alu_instr *alu,
+calculate_iterations(nir_const_value initial, nir_const_value step,
+                     nir_const_value limit, nir_alu_instr *alu,
                      nir_ssa_scalar cond, nir_op alu_op, bool limit_rhs,
                      bool invert_cond)
 {
-   assert(initial != NULL && step != NULL && limit != NULL);
-
    /* nir_op_isub should have been lowered away by this point */
    assert(alu->op != nir_op_isub);
 
@@ -745,7 +741,7 @@ calculate_iterations(nir_const_value *initial, nir_const_value *step,
    assert(nir_src_bit_size(alu->src[0].src) ==
           nir_src_bit_size(alu->src[1].src));
    unsigned bit_size = nir_src_bit_size(alu->src[0].src);
-   int iter_int = get_iteration(alu_op, *initial, *step, *limit, bit_size);
+   int iter_int = get_iteration(alu_op, initial, step, limit, bit_size);
 
    /* If iter_int is negative the loop is ill-formed or is the conditional is
     * unsigned with a huge iteration count so don't bother going any further.
@@ -1015,8 +1011,7 @@ find_trip_count(loop_info_state *state)
       }
       assert(found_step_value);
 
-      int iterations = calculate_iterations(&initial_val, &step_val,
-                                            &limit_val,
+      int iterations = calculate_iterations(initial_val, step_val, limit_val,
                                             ind_var->alu, cond,
                                             alu_op, limit_rhs,
                                             terminator->continue_from_then);

@@ -48,6 +48,7 @@ struct fd6_program_state {
 	struct ir3_shader_variant *bs;     /* binning pass vs */
 	struct ir3_shader_variant *vs;
 	struct ir3_shader_variant *fs;
+	struct fd_ringbuffer *config_stateobj;
 	struct fd_ringbuffer *binning_stateobj;
 	struct fd_ringbuffer *stateobj;
 

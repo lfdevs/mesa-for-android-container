@@ -442,7 +442,7 @@ vmw_svga_winsys_host_log(struct svga_winsys_screen *sws, const char *log)
       return;
    }
 
-   util_sprintf(msg, "log %s", log);
+   sprintf(msg, "log %s", log);
 
    if (!(ret = vmw_open_channel(&channel, RPCI_PROTOCOL_NUM))) {
       ret = vmw_send_msg(&channel, msg);

@@ -163,6 +163,9 @@ void brw_disassemble(const struct gen_device_info *devinfo,
                      const void *assembly, int start, int end, FILE *out);
 const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
 
+bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
+                               const char *identifier);
+
 brw_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
 void brw_set_dest(struct brw_codegen *p, brw_inst *insn, struct brw_reg dest);
 void brw_set_src0(struct brw_codegen *p, brw_inst *insn, struct brw_reg reg);
@@ -204,6 +207,8 @@ ALU2(SHR)
 ALU2(SHL)
 ALU1(DIM)
 ALU2(ASR)
+ALU2(ROL)
+ALU2(ROR)
 ALU3(CSEL)
 ALU1(F32TO16)
 ALU1(F16TO32)
@@ -285,7 +290,7 @@ brw_message_desc_rlen(const struct gen_device_info *devinfo, uint32_t desc)
 }
 
 static inline bool
-brw_message_desc_header_present(MAYBE_UNUSED const struct gen_device_info *devinfo,
+brw_message_desc_header_present(ASSERTED const struct gen_device_info *devinfo,
                                 uint32_t desc)
 {
    assert(devinfo->gen >= 5);
@@ -368,7 +373,7 @@ brw_sampler_desc_simd_mode(const struct gen_device_info *devinfo, uint32_t desc)
 }
 
 static  inline unsigned
-brw_sampler_desc_return_format(MAYBE_UNUSED const struct gen_device_info *devinfo,
+brw_sampler_desc_return_format(ASSERTED const struct gen_device_info *devinfo,
                                uint32_t desc)
 {
    assert(devinfo->gen == 4 && !devinfo->is_g4x);
@@ -751,7 +756,7 @@ brw_dp_a64_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
 
 static inline uint32_t
 brw_dp_a64_untyped_atomic_desc(const struct gen_device_info *devinfo,
-                               MAYBE_UNUSED unsigned exec_size, /**< 0 for SIMD4x2 */
+                               ASSERTED unsigned exec_size, /**< 0 for SIMD4x2 */
                                unsigned bit_size,
                                unsigned atomic_op,
                                bool response_expected)
@@ -772,7 +777,7 @@ brw_dp_a64_untyped_atomic_desc(const struct gen_device_info *devinfo,
 
 static inline uint32_t
 brw_dp_a64_untyped_atomic_float_desc(const struct gen_device_info *devinfo,
-                                     MAYBE_UNUSED unsigned exec_size,
+                                     ASSERTED unsigned exec_size,
                                      unsigned atomic_op,
                                      bool response_expected)
 {
@@ -1115,7 +1120,8 @@ brw_memory_fence(struct brw_codegen *p,
                  struct brw_reg dst,
                  struct brw_reg src,
                  enum opcode send_op,
-                 bool stall);
+                 bool stall,
+                 unsigned bti);
 
 void
 brw_pixel_interpolator_query(struct brw_codegen *p,

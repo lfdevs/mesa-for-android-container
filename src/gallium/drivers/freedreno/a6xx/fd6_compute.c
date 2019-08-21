@@ -158,7 +158,7 @@ fd6_launch_grid(struct fd_context *ctx, const struct pipe_grid_info *info)
 	}
 
 	OUT_PKT7(ring, CP_SET_MARKER, 1);
-	OUT_RING(ring, A2XX_CP_SET_MARKER_0_MODE(0x8));
+	OUT_RING(ring, A6XX_CP_SET_MARKER_0_MODE(0x8));
 
 	const unsigned *local_size = info->block; // v->shader->nir->info->cs.local_size;
 	const unsigned *num_groups = info->grid;

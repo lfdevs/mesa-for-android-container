@@ -25,6 +25,7 @@
  */
 
 #include "etnaviv_disasm.h"
+#include "etnaviv_asm.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -32,6 +33,8 @@
 #include <stdlib.h>
 
 #include "hw/isa.xml.h"
+#include "util/u_math.h"
+#include "util/u_half.h"
 
 struct instr {
    /* dword0: */
@@ -72,48 +75,24 @@ struct instr {
          uint32_t src1_rgroup : 3;
          uint32_t src2_use    : 1;
          uint32_t src2_reg    : 9;
-         uint32_t unk3_13     : 1;
+         uint32_t sel_0       : 1;
          uint32_t src2_swiz   : 8;
          uint32_t src2_neg    : 1;
          uint32_t src2_abs    : 1;
-         uint32_t unk3_24     : 1;
+         uint32_t sel_1       : 1;
          uint32_t src2_amode  : 3;
          uint32_t src2_rgroup : 3;
-         uint32_t unk3_31     : 1;
+         uint32_t dst_full    : 1;
       };
       uint32_t dword3;
    };
 };
-
-struct dst_operand {
-   bool use;
-   uint8_t amode;
-   uint16_t reg;
-   uint8_t comps;
-};
-
-struct src_operand {
-   bool use;
-   bool neg;
-   bool abs;
-   uint8_t rgroup;
-   uint16_t reg;
-   uint8_t swiz;
-   uint8_t amode;
-};
-
-struct tex_operand {
-   uint8_t id;
-   uint8_t amode;
-   uint8_t swiz;
-};
-
 struct opc_operands {
-   struct dst_operand *dst;
-   struct tex_operand *tex;
-   struct src_operand *src0;
-   struct src_operand *src1;
-   struct src_operand *src2;
+   struct etna_inst_dst *dst;
+   struct etna_inst_tex *tex;
+   struct etna_inst_src *src0;
+   struct etna_inst_src *src1;
+   struct etna_inst_src *src2;
 
    int imm;
 };
@@ -249,6 +228,9 @@ print_rgroup(uint8_t rgoup)
    case INST_RGROUP_UNIFORM_1:
       printf("u");
       break;
+   case 4:
+      printf("th");
+      break;
    }
 }
 
@@ -356,12 +338,12 @@ print_amode(uint8_t amode)
 }
 
 static void
-print_dst(struct dst_operand *dst, bool sep)
+print_dst(struct etna_inst_dst *dst, bool sep)
 {
    if (dst->use) {
       printf("t%u", dst->reg);
       print_amode(dst->amode);
-      print_components(dst->comps);
+      print_components(dst->write_mask);
    } else {
       printf("void");
    }
@@ -371,7 +353,7 @@ print_dst(struct dst_operand *dst, bool sep)
 }
 
 static void
-print_tex(struct tex_operand *tex, bool sep)
+print_tex(struct etna_inst_tex *tex, bool sep)
 {
    printf("tex%u", tex->id);
    print_amode(tex->amode);
@@ -382,25 +364,42 @@ print_tex(struct tex_operand *tex, bool sep)
 }
 
 static void
-print_src(struct src_operand *src, bool sep)
+print_src(struct etna_inst_src *src, bool sep)
 {
    if (src->use) {
-      if (src->neg)
-         printf("-");
+      if (src->rgroup == INST_RGROUP_IMMEDIATE) {
+         switch (src->imm_type) {
+         case 0: /* float */
+            printf("%f", uif(src->imm_val << 12));
+            break;
+         case 1: /* signed */
+            printf("%d", ((int) src->imm_val << 12) >> 12);
+            break;
+         case 2: /* unsigned */
+            printf("%d", src->imm_val);
+            break;
+         case 3: /* 16-bit */
+            printf("%f/%.5X", util_half_to_float(src->imm_val), src->imm_val);
+            break;
+         }
+      } else {
+         if (src->neg)
+            printf("-");
 
-      if (src->abs)
-         printf("|");
+         if (src->abs)
+            printf("|");
 
-      if (src->rgroup == INST_RGROUP_UNIFORM_1)
-         src->reg += 128;
+         if (src->rgroup == INST_RGROUP_UNIFORM_1)
+            src->reg += 128;
 
-      print_rgroup(src->rgroup);
-      printf("%u", src->reg);
-      print_amode(src->amode);
-      print_swiz(src->swiz);
+         print_rgroup(src->rgroup);
+         printf("%u", src->reg);
+         print_amode(src->amode);
+         print_swiz(src->swiz);
 
-      if (src->abs)
-         printf("|");
+         if (src->abs)
+            printf("|");
+      }
    } else {
       printf("void");
    }
@@ -423,7 +422,7 @@ print_opc_mov(struct opc_operands *operands)
 {
    // dst (areg)
    printf("a%u", operands->dst->reg);
-   print_components(operands->dst->comps);
+   print_components(operands->dst->write_mask);
    printf(", ");
 
    print_src(operands->src0, true);
@@ -472,6 +471,7 @@ static const struct opc_info {
    OPC(MOV),
    OPC_MOV(MOVAR),
    OPC_MOV(MOVAF),
+   OPC_MOV(MOVAI),
    OPC(RCP),
    OPC(RSQ),
    OPC(LITP),
@@ -489,6 +489,8 @@ static const struct opc_info {
    OPC_TEX(TEXLDD),
    OPC_TEX(TEXLDL),
    OPC_TEX(TEXLDPCF),
+   OPC_TEX(TEXLDLPCF),
+   OPC_TEX(TEXLDGPCF),
    OPC(REP),
    OPC(ENDREP),
    OPC(LOOP),
@@ -500,6 +502,7 @@ static const struct opc_info {
    OPC(CEIL),
    OPC(SIGN),
    OPC(I2F),
+   OPC(F2I),
    OPC(CMP),
    OPC(LOAD),
    OPC(STORE),
@@ -514,6 +517,7 @@ static const struct opc_info {
    OPC(XOR),
    OPC(NOT),
    OPC(DP2),
+   OPC(DIV),
 };
 
 static void
@@ -530,20 +534,20 @@ print_instr(uint32_t *dwords, int n, enum debug_t debug)
 
    if (name) {
 
-      struct dst_operand dst = {
+      struct etna_inst_dst dst = {
          .use = instr->dst_use,
          .amode = instr->dst_amode,
          .reg = instr->dst_reg,
-         .comps = instr->dst_comps
+         .write_mask = instr->dst_comps
       };
 
-      struct tex_operand tex = {
+      struct etna_inst_tex tex = {
          .id = instr->tex_id,
          .amode = instr->tex_amode,
          .swiz = instr->tex_swiz,
       };
 
-      struct src_operand src0 = {
+      struct etna_inst_src src0 = {
          .use = instr->src0_use,
          .neg = instr->src0_neg,
          .abs = instr->src0_abs,
@@ -553,7 +557,7 @@ print_instr(uint32_t *dwords, int n, enum debug_t debug)
          .amode = instr->src0_amode,
       };
 
-      struct src_operand src1 = {
+      struct etna_inst_src src1 = {
          .use = instr->src1_use,
          .neg = instr->src1_neg,
          .abs = instr->src1_abs,
@@ -563,7 +567,7 @@ print_instr(uint32_t *dwords, int n, enum debug_t debug)
          .amode = instr->src1_amode,
       };
 
-      struct src_operand src2 = {
+      struct etna_inst_src src2 = {
          .use = instr->src2_use,
          .neg = instr->src2_neg,
          .abs = instr->src2_abs,
@@ -593,6 +597,12 @@ print_instr(uint32_t *dwords, int n, enum debug_t debug)
          printf(".SAT");
       print_condition(instr->cond);
       printf(" ");
+      if (instr->sel_0)
+         printf("SEL_0 ");
+      if (instr->sel_1)
+         printf("SEL_1 ");
+      if (instr->dst_full)
+         printf("DST_FULL ");
       opcs[opc].print(&operands);
    } else {
       printf("unknown (%d)", instr->opc);

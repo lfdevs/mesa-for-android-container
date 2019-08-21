@@ -53,14 +53,17 @@ struct lima_vs_shader_state;
 struct lima_fs_shader_state;
 
 /* gpir interface */
-bool gpir_compile_nir(struct lima_vs_shader_state *prog, struct nir_shader *nir);
+bool gpir_compile_nir(struct lima_vs_shader_state *prog, struct nir_shader *nir,
+                      struct pipe_debug_callback *debug);
 
 
 /* ppir interface */
 bool ppir_compile_nir(struct lima_fs_shader_state *prog, struct nir_shader *nir,
-                      struct ra_regs *ra);
+                      struct ra_regs *ra,
+                      struct pipe_debug_callback *debug);
 struct ra_regs *ppir_regalloc_init(void *mem_ctx);
 
 void lima_nir_lower_uniform_to_scalar(nir_shader *shader);
+bool lima_nir_scale_trig(nir_shader *shader);
 
 #endif

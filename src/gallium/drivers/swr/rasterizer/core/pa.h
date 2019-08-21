@@ -1282,11 +1282,12 @@ struct PA_TESS : PA_STATE
             uint32_t* (&in_ppIndices)[3],
             uint32_t           in_numPrims,
             PRIMITIVE_TOPOLOGY in_binTopology,
-            uint32_t           numVertsPerPrim) :
+            uint32_t           numVertsPerPrim,
+            bool               SOA = true) :
 
         PA_STATE(in_pDC, nullptr, 0, in_vertexStride, numVertsPerPrim),
         m_pVertexData(in_pVertData), m_attributeStrideInVectors(in_attributeStrideInVectors),
-        m_numAttributes(in_numAttributes), m_numPrims(in_numPrims)
+        m_numAttributes(in_numAttributes), m_numPrims(in_numPrims), m_SOA(SOA)
     {
 #if USE_SIMD16_FRONTEND
         m_vPrimId = _simd16_setzero_si();
@@ -1363,8 +1364,17 @@ struct PA_TESS : PA_STATE
 
         SIMDSCALARI mask = GenPrimMask(numPrimsToAssemble);
 
-        const float* pBaseAttrib =
-            (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        const float* pBaseAttrib;
+        if (m_SOA)
+        {
+            pBaseAttrib = (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        }
+        else
+        {
+            const float* pVertData = (const float*)m_pVertexData;
+            pBaseAttrib            = pVertData + slot * 4;
+        }
+
         for (uint32_t i = 0; i < m_numVertsPerPrim; ++i)
         {
 #if USE_SIMD16_FRONTEND
@@ -1393,7 +1403,14 @@ struct PA_TESS : PA_STATE
                                                         _simd_castsi_ps(mask),
                                                         4); // gcc doesn't like sizeof(float)
 #endif
-                pBase += m_attributeStrideInVectors * SIMD_WIDTH;
+                if (m_SOA)
+                {
+                    pBase += m_attributeStrideInVectors * SIMD_WIDTH;
+                }
+                else
+                {
+                    pBase += sizeof(float);
+                }
             }
         }
 
@@ -1413,12 +1430,25 @@ struct PA_TESS : PA_STATE
 
         SIMDSCALARI mask = GenPrimMask(numPrimsToAssemble);
 
-        const float* pBaseAttrib =
-            (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        const float* pBaseAttrib;
+        if (m_SOA)
+        {
+            pBaseAttrib = (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        }
+        else
+        {
+            const float* pVertData = (const float*)m_pVertexData;
+            pBaseAttrib            = pVertData + slot * 4;
+        }
+
         for (uint32_t i = 0; i < m_numVertsPerPrim; ++i)
         {
 #if USE_SIMD16_FRONTEND
             SIMDSCALARI indices = _simd16_load_si((const SIMDSCALARI*)m_ppIndices[i]);
+            if (!m_SOA)
+            {
+                indices = _simd16_mullo_epi32(indices, _simd16_set1_epi32(vertexStride / 4));
+            }
 #else
             SIMDSCALARI indices = _simd_load_si((const SIMDSCALARI*)m_ppIndices[i]);
 #endif
@@ -1440,7 +1470,14 @@ struct PA_TESS : PA_STATE
                                                           4 /* gcc doesn't like sizeof(float) */);
                 verts[i].v[c]   = _simd16_insert_ps(_simd16_setzero_ps(), temp, 0);
 #endif
-                pBase += m_attributeStrideInVectors * SIMD_WIDTH;
+                if (m_SOA)
+                {
+                    pBase += m_attributeStrideInVectors * SIMD_WIDTH;
+                }
+                else
+                {
+                    pBase++;
+                }
             }
         }
 
@@ -1455,13 +1492,25 @@ struct PA_TESS : PA_STATE
 
         SWR_ASSERT(primIndex < PA_TESS::NumPrims());
 
-        const float* pVertDataBase =
-            (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        const float* pVertDataBase;
+        if (m_SOA)
+        {
+            pVertDataBase = (const float*)&m_pVertexData[slot * m_attributeStrideInVectors * 4];
+        }
+        else
+        {
+            const float* pVertData = (const float*)m_pVertexData;
+            pVertDataBase          = pVertData + slot * 4;
+        };
         for (uint32_t i = 0; i < m_numVertsPerPrim; ++i)
         {
 #if USE_SIMD16_FRONTEND
             uint32_t index = useAlternateOffset ? m_ppIndices[i][primIndex + SIMD_WIDTH_DIV2]
                                                 : m_ppIndices[i][primIndex];
+            if (!m_SOA)
+            {
+                index *= (vertexStride / 4);
+            }
 #else
             uint32_t index = m_ppIndices[i][primIndex];
 #endif
@@ -1471,8 +1520,16 @@ struct PA_TESS : PA_STATE
             for (uint32_t c = 0; c < 4; ++c)
             {
                 pVert[c] = pVertData[index];
-                pVertData += m_attributeStrideInVectors * SIMD_WIDTH;
+                if (m_SOA)
+                {
+                    pVertData += m_attributeStrideInVectors * SIMD_WIDTH;
+                }
+                else
+                {
+                    pVertData++;
+                }
             }
+
         }
     }
 
@@ -1535,6 +1592,8 @@ private:
 #endif
     SIMDVERTEX junkVertex;  // junk SIMDVERTEX for unimplemented API
     SIMDMASK   junkIndices; // temporary index store for unused virtual function
+
+    bool m_SOA;
 };
 
 // Primitive Assembler factory class, responsible for creating and initializing the correct

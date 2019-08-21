@@ -69,7 +69,7 @@ vlVdpVideoSurfaceQueryCapabilities(VdpDevice device, VdpChromaType surface_chrom
 {
    vlVdpDevice *dev;
    struct pipe_screen *pscreen;
-   uint32_t max_2d_texture_level;
+   uint32_t max_2d_texture_size;
 
    if (!(is_supported && max_width && max_height))
       return VDP_STATUS_INVALID_POINTER;
@@ -86,13 +86,12 @@ vlVdpVideoSurfaceQueryCapabilities(VdpDevice device, VdpChromaType surface_chrom
 
    /* XXX: Current limits */
    *is_supported = true;
-   max_2d_texture_level = pscreen->get_param(pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+   max_2d_texture_size = pscreen->get_param(pscreen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
    mtx_unlock(&dev->mutex);
-   if (!max_2d_texture_level)
+   if (!max_2d_texture_size)
       return VDP_STATUS_RESOURCES;
 
-   /* I am not quite sure if it is max_2d_texture_level-1 or just max_2d_texture_level */
-   *max_width = *max_height = pow(2,max_2d_texture_level-1);
+   *max_width = *max_height = max_2d_texture_size;
 
    return VDP_STATUS_OK;
 }
@@ -251,15 +250,15 @@ vlVdpOutputSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {
-      uint32_t max_2d_texture_level = pscreen->get_param(
-         pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+      uint32_t max_2d_texture_size = pscreen->get_param(
+         pscreen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 
-      if (!max_2d_texture_level) {
+      if (!max_2d_texture_size) {
          mtx_unlock(&dev->mutex);
          return VDP_STATUS_ERROR;
       }
 
-      *max_width = *max_height = pow(2, max_2d_texture_level - 1);
+      *max_width = *max_height = max_2d_texture_size;
    } else {
       *max_width = 0;
       *max_height = 0;
@@ -451,15 +450,15 @@ vlVdpBitmapSurfaceQueryCapabilities(VdpDevice device, VdpRGBAFormat surface_rgba
       PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET
    );
    if (*is_supported) {
-      uint32_t max_2d_texture_level = pscreen->get_param(
-         pscreen, PIPE_CAP_MAX_TEXTURE_2D_LEVELS);
+      uint32_t max_2d_texture_size = pscreen->get_param(
+         pscreen, PIPE_CAP_MAX_TEXTURE_2D_SIZE);
 
-      if (!max_2d_texture_level) {
+      if (!max_2d_texture_size) {
          mtx_unlock(&dev->mutex);
          return VDP_STATUS_ERROR;
       }
 
-      *max_width = *max_height = pow(2, max_2d_texture_level - 1);
+      *max_width = *max_height = max_2d_texture_size;
    } else {
       *max_width = 0;
       *max_height = 0;

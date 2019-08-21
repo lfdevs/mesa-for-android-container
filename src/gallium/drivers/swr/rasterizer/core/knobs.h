@@ -84,6 +84,9 @@
 #define KNOB_GUARDBAND_WIDTH 32768.0f
 #define KNOB_GUARDBAND_HEIGHT 32768.0f
 
+// Scratch space requirements per worker. Currently only used for TGSM sizing for some stages
+#define KNOB_WORKER_SCRATCH_SPACE_SIZE (32 * 1024)
+
 ///////////////////////////////
 // Macro tile configuration
 ///////////////////////////////

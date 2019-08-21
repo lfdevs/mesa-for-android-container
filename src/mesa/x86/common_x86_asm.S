@@ -39,7 +39,6 @@
  * in there will break the build on some platforms.
  */
 
-#include "matypes.h"
 #include "assyntax.h"
 #include "common_x86_features.h"
 
@@ -49,7 +48,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_has_cpuid)
 HIDDEN(_mesa_x86_has_cpuid)
 GLNAME(_mesa_x86_has_cpuid):
-
+	_CET_ENDBR
 	/* Test for the CPUID command.  If the ID Flag bit in EFLAGS
 	 * (bit 21) is writable, the CPUID command is present */
 	PUSHF_L
@@ -73,7 +72,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_cpuid)
 HIDDEN(_mesa_x86_cpuid)
 GLNAME(_mesa_x86_cpuid):
-
+	_CET_ENDBR
 	MOV_L	(REGOFF(4, ESP), EAX)		/* cpuid op */
 	PUSH_L	(EDI)
 	PUSH_L	(EBX)
@@ -97,7 +96,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_cpuid_eax)
 HIDDEN(_mesa_x86_cpuid_eax)
 GLNAME(_mesa_x86_cpuid_eax):
-
+	_CET_ENDBR
 	MOV_L	(REGOFF(4, ESP), EAX)		/* cpuid op */
 	PUSH_L	(EBX)
 
@@ -110,7 +109,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_cpuid_ebx)
 HIDDEN(_mesa_x86_cpuid_ebx)
 GLNAME(_mesa_x86_cpuid_ebx):
-
+	_CET_ENDBR
 	MOV_L	(REGOFF(4, ESP), EAX)		/* cpuid op */
 	PUSH_L	(EBX)
 
@@ -124,7 +123,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_cpuid_ecx)
 HIDDEN(_mesa_x86_cpuid_ecx)
 GLNAME(_mesa_x86_cpuid_ecx):
-
+	_CET_ENDBR
 	MOV_L	(REGOFF(4, ESP), EAX)		/* cpuid op */
 	PUSH_L	(EBX)
 
@@ -138,7 +137,7 @@ ALIGNTEXT4
 GLOBL GLNAME(_mesa_x86_cpuid_edx)
 HIDDEN(_mesa_x86_cpuid_edx)
 GLNAME(_mesa_x86_cpuid_edx):
-
+	_CET_ENDBR
 	MOV_L	(REGOFF(4, ESP), EAX)		/* cpuid op */
 	PUSH_L	(EBX)
 
@@ -164,7 +163,7 @@ ALIGNTEXT4
 GLOBL GLNAME( _mesa_test_os_sse_support )
 HIDDEN(_mesa_test_os_sse_support)
 GLNAME( _mesa_test_os_sse_support ):
-
+	_CET_ENDBR
 	XORPS	( XMM0, XMM0 )
 
 	RET
@@ -179,7 +178,7 @@ ALIGNTEXT4
 GLOBL GLNAME( _mesa_test_os_sse_exception_support )
 HIDDEN(_mesa_test_os_sse_exception_support)
 GLNAME( _mesa_test_os_sse_exception_support ):
-
+	_CET_ENDBR
 	PUSH_L	( EBP )
 	MOV_L	( ESP, EBP )
 	SUB_L	( CONST( 8 ), ESP )

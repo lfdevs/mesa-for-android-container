@@ -804,3 +804,35 @@ lp_is_function(LLVMValueRef v)
 	return llvm::isa<llvm::Function>(llvm::unwrap(v));
 #endif
 }
+
+#if HAVE_LLVM < 0x309
+static llvm::AtomicOrdering mapFromLLVMOrdering(LLVMAtomicOrdering Ordering) {
+   switch (Ordering) {
+   case LLVMAtomicOrderingNotAtomic: return llvm::AtomicOrdering::NotAtomic;
+   case LLVMAtomicOrderingUnordered: return llvm::AtomicOrdering::Unordered;
+   case LLVMAtomicOrderingMonotonic: return llvm::AtomicOrdering::Monotonic;
+   case LLVMAtomicOrderingAcquire: return llvm::AtomicOrdering::Acquire;
+   case LLVMAtomicOrderingRelease: return llvm::AtomicOrdering::Release;
+   case LLVMAtomicOrderingAcquireRelease:
+      return llvm::AtomicOrdering::AcquireRelease;
+   case LLVMAtomicOrderingSequentiallyConsistent:
+      return llvm::AtomicOrdering::SequentiallyConsistent;
+   }
+
+   llvm_unreachable("Invalid LLVMAtomicOrdering value!");
+}
+
+LLVMValueRef LLVMBuildAtomicCmpXchg(LLVMBuilderRef B, LLVMValueRef Ptr,
+                                    LLVMValueRef Cmp, LLVMValueRef New,
+                                    LLVMAtomicOrdering SuccessOrdering,
+                                    LLVMAtomicOrdering FailureOrdering,
+                                    LLVMBool SingleThread)
+{
+   return llvm::wrap(llvm::unwrap(B)->CreateAtomicCmpXchg(llvm::unwrap(Ptr), llvm::unwrap(Cmp),
+                                                          llvm::unwrap(New), mapFromLLVMOrdering(SuccessOrdering),
+#if HAVE_LLVM >= 0x305
+                                                          mapFromLLVMOrdering(FailureOrdering),
+#endif
+                                                          SingleThread ? llvm::SynchronizationScope::SingleThread : llvm::SynchronizationScope::CrossThread));
+}
+#endif

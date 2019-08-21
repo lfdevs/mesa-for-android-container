@@ -85,12 +85,20 @@ llvmpipe_set_so_targets(struct pipe_context *pipe,
       if (!append && llvmpipe->so_targets[i]) {
          llvmpipe->so_targets[i]->internal_offset = offsets[i];
       }
+
+      if (targets[i]) {
+         void *buf = llvmpipe_resource(targets[i]->buffer)->data;
+         llvmpipe->so_targets[i]->mapping = buf;
+      }
    }
 
    for (; i < llvmpipe->num_so_targets; i++) {
       pipe_so_target_reference((struct pipe_stream_output_target **)&llvmpipe->so_targets[i], NULL);
    }
    llvmpipe->num_so_targets = num_targets;
+
+   draw_set_mapped_so_targets(llvmpipe->draw, llvmpipe->num_so_targets,
+                              llvmpipe->so_targets);
 }
 
 void

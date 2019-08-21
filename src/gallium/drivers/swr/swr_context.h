@@ -29,6 +29,8 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/u_blitter.h"
+#include "rasterizer/memory/SurfaceState.h"
+#include "rasterizer/memory/InitMemory.h"
 #include "jit_api.h"
 #include "swr_state.h"
 #include <unordered_map>
@@ -104,6 +106,7 @@ struct swr_draw_context {
    SWR_SURFACE_STATE renderTargets[SWR_NUM_ATTACHMENTS];
    struct swr_query_result *pStats; // @llvm_struct
    SWR_INTERFACE *pAPI; // @llvm_struct - Needed for the swr_memory callbacks
+   SWR_TILE_INTERFACE *pTileAPI; // @llvm_struct - Needed for the swr_memory callbacks
 };
 
 /* gen_llvm_types FINI */
@@ -132,12 +135,12 @@ struct swr_context {
       constants[PIPE_SHADER_TYPES][PIPE_MAX_CONSTANT_BUFFERS];
    struct pipe_framebuffer_state framebuffer;
    struct swr_poly_stipple poly_stipple;
-   struct pipe_scissor_state scissor;
-   SWR_RECT swr_scissor;
+   struct pipe_scissor_state scissors[KNOB_NUM_VIEWPORTS_SCISSORS];
+   SWR_RECT swr_scissors[KNOB_NUM_VIEWPORTS_SCISSORS];
    struct pipe_sampler_view *
       sampler_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
 
-   struct pipe_viewport_state viewport;
+   struct pipe_viewport_state viewports[KNOB_NUM_VIEWPORTS_SCISSORS];
    struct pipe_vertex_buffer vertex_buffer[PIPE_MAX_ATTRIBS];
 
    struct blitter_context *blitter;
@@ -145,7 +148,7 @@ struct swr_context {
    /** Conditional query object and mode */
    struct pipe_query *render_cond_query;
    enum pipe_render_cond_flag render_cond_mode;
-   boolean render_cond_cond;
+   bool render_cond_cond;
    unsigned active_queries;
 
    unsigned num_vertex_buffers;
@@ -173,6 +176,7 @@ struct swr_context {
    unsigned dirty; /**< Mask of SWR_NEW_x flags */
 
    SWR_INTERFACE api;
+   SWR_TILE_INTERFACE tileApi;
 
    uint32_t max_draws_in_flight;
 };

@@ -235,60 +235,30 @@ struct tgsi_sampler
 /*
  * Locations of various utility registers (_I = Index, _C = Channel)
  */
-#define TGSI_EXEC_TEMP_00000000_I   (TGSI_EXEC_NUM_TEMPS + 0)
-#define TGSI_EXEC_TEMP_00000000_C   0
-
-#define TGSI_EXEC_TEMP_7FFFFFFF_I   (TGSI_EXEC_NUM_TEMPS + 0)
-#define TGSI_EXEC_TEMP_7FFFFFFF_C   1
-
-#define TGSI_EXEC_TEMP_80000000_I   (TGSI_EXEC_NUM_TEMPS + 0)
-#define TGSI_EXEC_TEMP_80000000_C   2
-
-#define TGSI_EXEC_TEMP_FFFFFFFF_I   (TGSI_EXEC_NUM_TEMPS + 0)
-#define TGSI_EXEC_TEMP_FFFFFFFF_C   3
-
-#define TGSI_EXEC_TEMP_ONE_I        (TGSI_EXEC_NUM_TEMPS + 1)
-#define TGSI_EXEC_TEMP_ONE_C        0
-
-#define TGSI_EXEC_TEMP_TWO_I        (TGSI_EXEC_NUM_TEMPS + 1)
-#define TGSI_EXEC_TEMP_TWO_C        1
-
-#define TGSI_EXEC_TEMP_128_I        (TGSI_EXEC_NUM_TEMPS + 1)
-#define TGSI_EXEC_TEMP_128_C        2
-
-#define TGSI_EXEC_TEMP_MINUS_128_I  (TGSI_EXEC_NUM_TEMPS + 1)
-#define TGSI_EXEC_TEMP_MINUS_128_C  3
-
-#define TGSI_EXEC_TEMP_KILMASK_I    (TGSI_EXEC_NUM_TEMPS + 2)
+#define TGSI_EXEC_TEMP_KILMASK_I    (TGSI_EXEC_NUM_TEMPS + 0)
 #define TGSI_EXEC_TEMP_KILMASK_C    0
 
-#define TGSI_EXEC_TEMP_OUTPUT_I     (TGSI_EXEC_NUM_TEMPS + 2)
+#define TGSI_EXEC_TEMP_OUTPUT_I     (TGSI_EXEC_NUM_TEMPS + 0)
 #define TGSI_EXEC_TEMP_OUTPUT_C     1
 
-#define TGSI_EXEC_TEMP_PRIMITIVE_I  (TGSI_EXEC_NUM_TEMPS + 2)
+#define TGSI_EXEC_TEMP_PRIMITIVE_I  (TGSI_EXEC_NUM_TEMPS + 0)
 #define TGSI_EXEC_TEMP_PRIMITIVE_C  2
 
-#define TGSI_EXEC_TEMP_THREE_I      (TGSI_EXEC_NUM_TEMPS + 2)
-#define TGSI_EXEC_TEMP_THREE_C      3
-
-#define TGSI_EXEC_TEMP_HALF_I       (TGSI_EXEC_NUM_TEMPS + 3)
-#define TGSI_EXEC_TEMP_HALF_C       0
-
 /* 4 register buffer for various purposes */
-#define TGSI_EXEC_TEMP_R0           (TGSI_EXEC_NUM_TEMPS + 4)
+#define TGSI_EXEC_TEMP_R0           (TGSI_EXEC_NUM_TEMPS + 1)
 #define TGSI_EXEC_NUM_TEMP_R        4
 
-#define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 8)
+#define TGSI_EXEC_TEMP_ADDR         (TGSI_EXEC_NUM_TEMPS + 5)
 #define TGSI_EXEC_NUM_ADDRS         3
 
-#define TGSI_EXEC_TEMP_PRIMITIVE_S1_I  (TGSI_EXEC_NUM_TEMPS + 11)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S1_I  (TGSI_EXEC_NUM_TEMPS + 8)
 #define TGSI_EXEC_TEMP_PRIMITIVE_S1_C  0
-#define TGSI_EXEC_TEMP_PRIMITIVE_S2_I  (TGSI_EXEC_NUM_TEMPS + 12)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S2_I  (TGSI_EXEC_NUM_TEMPS + 9)
 #define TGSI_EXEC_TEMP_PRIMITIVE_S2_C  1
-#define TGSI_EXEC_TEMP_PRIMITIVE_S3_I  (TGSI_EXEC_NUM_TEMPS + 13)
+#define TGSI_EXEC_TEMP_PRIMITIVE_S3_I  (TGSI_EXEC_NUM_TEMPS + 10)
 #define TGSI_EXEC_TEMP_PRIMITIVE_S3_C  2
 
-#define TGSI_EXEC_NUM_TEMP_EXTRAS   14
+#define TGSI_EXEC_NUM_TEMP_EXTRAS   11
 
 
 
@@ -495,10 +465,6 @@ tgsi_exec_machine_run(
 
 void
 tgsi_exec_machine_free_data(struct tgsi_exec_machine *mach);
-
-
-boolean
-tgsi_check_soa_dependencies(const struct tgsi_full_instruction *inst);
 
 
 extern void

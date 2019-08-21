@@ -222,7 +222,6 @@ struct lima_context {
    #define LIMA_CTX_PLB_MAX_NUM  4
    #define LIMA_CTX_PLB_DEF_NUM  2
    #define LIMA_CTX_PLB_BLK_SIZE 512
-   unsigned plb_max_blk;
    unsigned plb_size;
    unsigned plb_gp_size;
 
@@ -243,6 +242,8 @@ struct lima_context {
    struct lima_submit *pp_submit;
 
    int id;
+
+   struct pipe_debug_callback debug;
 };
 
 static inline struct lima_context *

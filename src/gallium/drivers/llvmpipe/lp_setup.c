@@ -664,6 +664,26 @@ lp_setup_set_fs_constants(struct lp_setup_context *setup,
    setup->dirty |= LP_SETUP_NEW_CONSTANTS;
 }
 
+void
+lp_setup_set_fs_ssbos(struct lp_setup_context *setup,
+                      unsigned num,
+                      struct pipe_shader_buffer *buffers)
+{
+   unsigned i;
+
+   LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *) buffers);
+
+   assert(num <= ARRAY_SIZE(setup->ssbos));
+
+   for (i = 0; i < num; ++i) {
+      util_copy_shader_buffer(&setup->ssbos[i].current, &buffers[i]);
+   }
+   for (; i < ARRAY_SIZE(setup->ssbos); i++) {
+      util_copy_shader_buffer(&setup->ssbos[i].current, NULL);
+   }
+   setup->dirty |= LP_SETUP_NEW_SSBOS;
+}
+
 
 void
 lp_setup_set_alpha_ref_value( struct lp_setup_context *setup,
@@ -992,6 +1012,11 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
       }
    }
 
+   for (i = 0; i < ARRAY_SIZE(setup->ssbos); i++) {
+      if (setup->ssbos[i].current.buffer == texture)
+         return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
+   }
+
    return LP_UNREFERENCED;
 }
 
@@ -1135,7 +1160,27 @@ try_update_scene_state( struct lp_setup_context *setup )
       }
    }
 
+   if (setup->dirty & LP_SETUP_NEW_SSBOS) {
+      for (i = 0; i < ARRAY_SIZE(setup->ssbos); ++i) {
+         struct pipe_resource *buffer = setup->ssbos[i].current.buffer;
+         const ubyte *current_data = NULL;
 
+         if (!buffer)
+            continue;
+         /* resource buffer */
+         current_data = (ubyte *) llvmpipe_resource_data(buffer);
+         if (current_data) {
+            current_data += setup->ssbos[i].current.buffer_offset;
+
+            setup->fs.current.jit_context.ssbos[i] = (const uint32_t *)current_data;
+            setup->fs.current.jit_context.num_ssbos[i] = setup->ssbos[i].current.buffer_size;
+         } else {
+            setup->fs.current.jit_context.ssbos[i] = NULL;
+            setup->fs.current.jit_context.num_ssbos[i] = 0;
+         }
+         setup->dirty |= LP_SETUP_NEW_FS;
+      }
+   }
    if (setup->dirty & LP_SETUP_NEW_FS) {
       if (!setup->fs.stored ||
           memcmp(setup->fs.stored,
@@ -1285,6 +1330,10 @@ lp_setup_destroy( struct lp_setup_context *setup )
 
    for (i = 0; i < ARRAY_SIZE(setup->constants); i++) {
       pipe_resource_reference(&setup->constants[i].current.buffer, NULL);
+   }
+
+   for (i = 0; i < ARRAY_SIZE(setup->ssbos); i++) {
+      pipe_resource_reference(&setup->ssbos[i].current.buffer, NULL);
    }
 
    /* free the scenes in the 'empty' queue */

@@ -47,6 +47,7 @@ struct fd6_blend_stateobj {
 		uint32_t blend_control_alpha;
 	} rb_mrt[A6XX_MAX_RENDER_TARGETS];
 	uint32_t rb_blend_cntl;
+	uint32_t rb_dither_cntl;
 	uint32_t sp_blend_cntl;
 };
 

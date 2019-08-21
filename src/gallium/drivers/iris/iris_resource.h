@@ -68,6 +68,9 @@ struct iris_resource {
    /** Backing storage for the resource */
    struct iris_bo *bo;
 
+   /** offset at which data starts in the BO */
+   uint64_t offset;
+
    /**
     * A bitfield of PIPE_BIND_* indicating how this resource was bound
     * in the past.  Only meaningful for PIPE_BUFFER; used for flushing.
@@ -206,10 +209,13 @@ struct iris_image_view {
 struct iris_surface {
    struct pipe_surface base;
    struct isl_view view;
+   struct isl_view read_view;
    union isl_color_value clear_color;
 
    /** The resource (BO) holding our SURFACE_STATE. */
    struct iris_state_ref surface_state;
+   /** The resource (BO) holding our SURFACE_STATE for read. */
+   struct iris_state_ref surface_state_read;
 };
 
 /**
@@ -264,7 +270,9 @@ uint32_t iris_flush_bits_for_history(struct iris_resource *res);
 
 void iris_flush_and_dirty_for_history(struct iris_context *ice,
                                       struct iris_batch *batch,
-                                      struct iris_resource *res);
+                                      struct iris_resource *res,
+                                      uint32_t extra_flags,
+                                      const char *reason);
 
 unsigned iris_get_num_logical_layers(const struct iris_resource *res,
                                      unsigned level);
@@ -387,6 +395,13 @@ iris_resource_access_raw(struct iris_context *ice,
    }
 }
 
+enum isl_dim_layout iris_get_isl_dim_layout(const struct gen_device_info *devinfo,
+                                            enum isl_tiling tiling,
+                                            enum pipe_texture_target target);
+enum isl_surf_dim target_to_isl_surf_dim(enum pipe_texture_target target);
+uint32_t iris_resource_get_tile_offsets(const struct iris_resource *res,
+                                        uint32_t level, uint32_t z,
+                                        uint32_t *tile_x, uint32_t *tile_y);
 enum isl_aux_usage iris_resource_texture_aux_usage(struct iris_context *ice,
                                                    const struct iris_resource *res,
                                                    enum isl_format view_fmt,
@@ -401,6 +416,20 @@ void iris_resource_prepare_texture(struct iris_context *ice,
 void iris_resource_prepare_image(struct iris_context *ice,
                                  struct iris_batch *batch,
                                  struct iris_resource *res);
+
+static inline bool
+iris_resource_unfinished_aux_import(struct iris_resource *res)
+{
+   return res->base.next != NULL && res->mod_info &&
+      res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
+}
+
+void iris_resource_finish_aux_import(struct pipe_screen *pscreen,
+                                     struct iris_resource *res);
+
+bool iris_has_color_unresolved(const struct iris_resource *res,
+                               unsigned start_level, unsigned num_levels,
+                               unsigned start_layer, unsigned num_layers);
 
 void iris_resource_check_level_layer(const struct iris_resource *res,
                                      uint32_t level, uint32_t layer);

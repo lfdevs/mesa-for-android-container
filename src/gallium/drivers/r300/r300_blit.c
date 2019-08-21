@@ -366,7 +366,8 @@ static void r300_clear(struct pipe_context* pipe,
         /* Clear using the blitter. */
         r300_blitter_begin(r300, R300_CLEAR);
         util_blitter_clear(r300->blitter, width, height, 1,
-                           buffers, color, depth, stencil);
+                           buffers, color, depth, stencil,
+                           util_framebuffer_get_num_samples(fb) > 1);
         r300_blitter_end(r300);
     } else if (r300->zmask_clear.dirty ||
                r300->hiz_clear.dirty ||
@@ -382,7 +383,7 @@ static void r300_clear(struct pipe_context* pipe,
             r300_get_num_cs_end_dwords(r300);
 
         /* Reserve CS space. */
-        if (!r300->rws->cs_check_space(r300->cs, dwords)) {
+        if (!r300->rws->cs_check_space(r300->cs, dwords, false)) {
             r300_flush(&r300->context, PIPE_FLUSH_ASYNC, NULL);
         }
 

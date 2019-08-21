@@ -145,11 +145,6 @@ v3d_predraw_check_stage_inputs(struct pipe_context *pctx,
 {
         struct v3d_context *v3d = v3d_context(pctx);
 
-        /* XXX perf: If we're reading from the output of TF in this job, we
-         * should instead be using the wait for transform feedback
-         * functionality.
-         */
-
         /* Flush writes to textures we're sampling. */
         for (int i = 0; i < v3d->tex[s].num_textures; i++) {
                 struct pipe_sampler_view *pview = v3d->tex[s].textures[i];
@@ -161,21 +156,175 @@ v3d_predraw_check_stage_inputs(struct pipe_context *pctx,
                     view->base.format != PIPE_FORMAT_X32_S8X24_UINT)
                         v3d_update_shadow_texture(pctx, &view->base);
 
-                v3d_flush_jobs_writing_resource(v3d, view->texture);
+                v3d_flush_jobs_writing_resource(v3d, view->texture,
+                                                V3D_FLUSH_DEFAULT);
         }
 
         /* Flush writes to UBOs. */
         foreach_bit(i, v3d->constbuf[s].enabled_mask) {
                 struct pipe_constant_buffer *cb = &v3d->constbuf[s].cb[i];
-                if (cb->buffer)
-                        v3d_flush_jobs_writing_resource(v3d, cb->buffer);
+                if (cb->buffer) {
+                        v3d_flush_jobs_writing_resource(v3d, cb->buffer,
+                                                        V3D_FLUSH_DEFAULT);
+                }
         }
 
-        /* Flush writes to our image views */
+        /* Flush reads/writes to our SSBOs */
+        foreach_bit(i, v3d->ssbo[s].enabled_mask) {
+                struct pipe_shader_buffer *sb = &v3d->ssbo[s].sb[i];
+                if (sb->buffer) {
+                        v3d_flush_jobs_reading_resource(v3d, sb->buffer,
+                                                        V3D_FLUSH_NOT_CURRENT_JOB);
+                }
+        }
+
+        /* Flush reads/writes to our image views */
         foreach_bit(i, v3d->shaderimg[s].enabled_mask) {
                 struct v3d_image_view *view = &v3d->shaderimg[s].si[i];
 
-                v3d_flush_jobs_writing_resource(v3d, view->base.resource);
+                v3d_flush_jobs_reading_resource(v3d, view->base.resource,
+                                                V3D_FLUSH_NOT_CURRENT_JOB);
+        }
+
+        /* Flush writes to our vertex buffers (i.e. from transform feedback) */
+        if (s == PIPE_SHADER_VERTEX) {
+                foreach_bit(i, v3d->vertexbuf.enabled_mask) {
+                        struct pipe_vertex_buffer *vb = &v3d->vertexbuf.vb[i];
+
+                        v3d_flush_jobs_writing_resource(v3d, vb->buffer.resource,
+                                                        V3D_FLUSH_DEFAULT);
+                }
+        }
+}
+
+static void
+v3d_predraw_check_outputs(struct pipe_context *pctx)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+
+        /* Flush jobs reading from TF buffers that we are about to write. */
+        if (v3d_transform_feedback_enabled(v3d)) {
+                struct v3d_streamout_stateobj *so = &v3d->streamout;
+
+                for (int i = 0; i < so->num_targets; i++) {
+                        if (!so->targets[i])
+                                continue;
+
+                        const struct pipe_stream_output_target *target =
+                                so->targets[i];
+                        v3d_flush_jobs_reading_resource(v3d, target->buffer,
+                                                        V3D_FLUSH_DEFAULT);
+                }
+        }
+}
+
+/**
+ * Checks if the state for the current draw reads a particular resource in
+ * in the given shader stage.
+ */
+static bool
+v3d_state_reads_resource(struct v3d_context *v3d,
+                         struct pipe_resource *prsc,
+                         enum pipe_shader_type s)
+{
+        struct v3d_resource *rsc = v3d_resource(prsc);
+
+        /* Vertex buffers */
+        if (s == PIPE_SHADER_VERTEX) {
+                foreach_bit(i, v3d->vertexbuf.enabled_mask) {
+                        struct pipe_vertex_buffer *vb = &v3d->vertexbuf.vb[i];
+                        if (!vb->buffer.resource)
+                                continue;
+
+                        struct v3d_resource *vb_rsc =
+                                v3d_resource(vb->buffer.resource);
+                        if (rsc->bo == vb_rsc->bo)
+                                return true;
+                }
+        }
+
+        /* Constant buffers */
+        foreach_bit(i, v3d->constbuf[s].enabled_mask) {
+                struct pipe_constant_buffer *cb = &v3d->constbuf[s].cb[i];
+                if (!cb->buffer)
+                        continue;
+
+                struct v3d_resource *cb_rsc = v3d_resource(cb->buffer);
+                if (rsc->bo == cb_rsc->bo)
+                        return true;
+        }
+
+        /* Shader storage buffers */
+        foreach_bit(i, v3d->ssbo[s].enabled_mask) {
+                struct pipe_shader_buffer *sb = &v3d->ssbo[s].sb[i];
+                if (!sb->buffer)
+                        continue;
+
+                struct v3d_resource *sb_rsc = v3d_resource(sb->buffer);
+                if (rsc->bo == sb_rsc->bo)
+                        return true;
+        }
+
+        /* Textures  */
+        for (int i = 0; i < v3d->tex[s].num_textures; i++) {
+                struct pipe_sampler_view *pview = v3d->tex[s].textures[i];
+                if (!pview)
+                        continue;
+
+                struct v3d_sampler_view *view = v3d_sampler_view(pview);
+                struct v3d_resource *v_rsc = v3d_resource(view->texture);
+                if (rsc->bo == v_rsc->bo)
+                        return true;
+        }
+
+        return false;
+}
+
+static void
+v3d_emit_wait_for_tf(struct v3d_job *job)
+{
+        /* XXX: we might be able to skip this in some cases, for now we
+         * always emit it.
+         */
+        cl_emit(&job->bcl, FLUSH_TRANSFORM_FEEDBACK_DATA, flush);
+
+        cl_emit(&job->bcl, WAIT_FOR_TRANSFORM_FEEDBACK, wait) {
+                /* XXX: Wait for all outstanding writes... maybe we can do
+                 * better in some cases.
+                 */
+                wait.block_count = 255;
+        }
+
+        /* We have just flushed all our outstanding TF work in this job so make
+         * sure we don't emit TF flushes again for any of it again.
+         */
+        _mesa_set_clear(job->tf_write_prscs, NULL);
+}
+
+static void
+v3d_emit_wait_for_tf_if_needed(struct v3d_context *v3d, struct v3d_job *job)
+{
+        if (!job->tf_enabled)
+            return;
+
+        set_foreach(job->tf_write_prscs, entry) {
+                struct pipe_resource *prsc = (struct pipe_resource *)entry->key;
+                for (int s = 0; s < PIPE_SHADER_COMPUTE; s++) {
+                        /* Fragment shaders can only start executing after all
+                         * binning (and thus TF) is complete.
+                         *
+                         * XXX: For VS/GS/TES, if the binning shader does not
+                         * read the resource then we could also avoid emitting
+                         * the wait.
+                         */
+                        if (s == PIPE_SHADER_FRAGMENT)
+                            continue;
+
+                        if (v3d_state_reads_resource(v3d, prsc, s)) {
+                                v3d_emit_wait_for_tf(job);
+                                return;
+                        }
+                }
         }
 }
 
@@ -235,6 +384,13 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
 
                 shader.fragment_shader_uses_real_pixel_centre_w_in_addition_to_centroid_w2 =
                         v3d->prog.fs->prog_data.fs->uses_center_w;
+
+#if V3D_VERSION >= 40
+               shader.do_scoreboard_wait_on_first_thread_switch =
+                        v3d->prog.fs->prog_data.fs->lock_scoreboard_on_first_thrsw;
+               shader.disable_implicit_point_line_varyings =
+                        !v3d->prog.fs->prog_data.fs->uses_implicit_point_line_varyings;
+#endif
 
                 shader.number_of_varyings_in_fragment_shader =
                         v3d->prog.fs->prog_data.fs->num_inputs;
@@ -402,24 +558,20 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
 }
 
 /**
- * Computes the various transform feedback statistics, since they can't be
- * recorded by CL packets.
+ * Updates the number of primitvies generated from the number of vertices
+ * to draw. We do this here instead of using PRIMITIVE_COUNTS_FEEDBACK because
+ * using the GPU packet for this might require sync waits and this is trivial
+ * to handle in the CPU instead.
  */
 static void
-v3d_tf_statistics_record(struct v3d_context *v3d,
-                         const struct pipe_draw_info *info,
-                         bool prim_tf)
+v3d_update_primitives_generated_counter(struct v3d_context *v3d,
+                                        const struct pipe_draw_info *info)
 {
         if (!v3d->active_queries)
                 return;
 
         uint32_t prims = u_prims_for_vertices(info->mode, info->count);
         v3d->prims_generated += prims;
-
-        if (prim_tf) {
-                /* XXX: Only count if we didn't overflow. */
-                v3d->tf_prims_generated += prims;
-        }
 }
 
 static void
@@ -504,14 +656,29 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 return;
         }
 
-        /* Before setting up the draw, flush anything writing to the textures
-         * that we read from.
+        /* Before setting up the draw, flush anything writing to the resources
+         * that we read from or reading from resources we write to.
          */
         for (int s = 0; s < PIPE_SHADER_COMPUTE; s++)
                 v3d_predraw_check_stage_inputs(pctx, s);
 
-        if (info->indirect)
-                v3d_flush_jobs_writing_resource(v3d, info->indirect->buffer);
+        if (info->indirect) {
+                v3d_flush_jobs_writing_resource(v3d, info->indirect->buffer,
+                                                V3D_FLUSH_DEFAULT);
+        }
+
+        v3d_predraw_check_outputs(pctx);
+
+        /* If transform feedback is active and we are switching primitive type
+         * we need to submit the job before drawing and update the vertex count
+         * written to TF based on the primitive type since we will need to
+         * know the exact vertex count if the application decides to call
+         * glDrawTransformFeedback() later.
+         */
+        if (v3d->streamout.num_targets > 0 &&
+            u_base_prim_type(info->mode) != u_base_prim_type(v3d->prim_mode)) {
+                v3d_tf_update_counters(v3d);
+        }
 
         struct v3d_job *job = v3d_get_job_for_fbo(v3d);
 
@@ -560,6 +727,16 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         v3d_update_compiled_shaders(v3d, info->mode);
         v3d_update_job_ez(v3d, job);
 
+        /* If this job was writing to transform feedback buffers before this
+         * draw and we are reading from them here, then we need to wait for TF
+         * to complete before we emit this draw.
+         *
+         * Notice this check needs to happen before we emit state for the
+         * current draw call, where we update job->tf_enabled, so we can ensure
+         * that we only check TF writes for prior draws.
+         */
+        v3d_emit_wait_for_tf_if_needed(v3d, job);
+
 #if V3D_VERSION >= 41
         v3d41_emit_state(pctx);
 #else
@@ -600,7 +777,7 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 prim_tf_enable = (V3D_PRIM_POINTS_TF - V3D_PRIM_POINTS);
 #endif
 
-        v3d_tf_statistics_record(v3d, info, v3d->streamout.num_targets);
+        v3d_update_primitives_generated_counter(v3d, info);
 
         /* Note that the primitive type fields match with OpenGL/gallium
          * definitions, up to but not including QUADS.
@@ -690,16 +867,26 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                                                           info->indirect->offset);
                         }
                 } else if (info->instance_count > 1) {
+                        struct pipe_stream_output_target *so =
+                                info->count_from_stream_output;
+                        uint32_t vert_count = so ?
+                                v3d_stream_output_target_get_vertex_count(so) :
+                                info->count;
                         cl_emit(&job->bcl, VERTEX_ARRAY_INSTANCED_PRIMS, prim) {
                                 prim.mode = info->mode | prim_tf_enable;
                                 prim.index_of_first_vertex = info->start;
                                 prim.number_of_instances = info->instance_count;
-                                prim.instance_length = info->count;
+                                prim.instance_length = vert_count;
                         }
                 } else {
+                        struct pipe_stream_output_target *so =
+                                info->count_from_stream_output;
+                        uint32_t vert_count = so ?
+                                v3d_stream_output_target_get_vertex_count(so) :
+                                info->count;
                         cl_emit(&job->bcl, VERTEX_ARRAY_PRIMS, prim) {
                                 prim.mode = info->mode | prim_tf_enable;
-                                prim.length = info->count;
+                                prim.length = vert_count;
                                 prim.index_of_first_vertex = info->start;
                         }
                 }
@@ -790,7 +977,8 @@ v3d_draw_clear(struct v3d_context *v3d,
                            v3d->framebuffer.width,
                            v3d->framebuffer.height,
                            util_framebuffer_get_num_layers(&v3d->framebuffer),
-                           buffers, color, depth, stencil);
+                           buffers, color, depth, stencil,
+                           util_framebuffer_get_num_samples(&v3d->framebuffer) > 1);
 }
 
 /**

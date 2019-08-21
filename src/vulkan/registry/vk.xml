@@ -89,6 +89,7 @@ server.
         <tag name="KHX"         author="Khronos"                       contact="Tom Olson @tomolson"/>
         <tag name="EXT"         author="Multivendor"                   contact="Jon Leech @oddhack"/>
         <tag name="MESA"        author="Mesa open source project"      contact="Chad Versace @chadversary, Daniel Stone @fooishbar, David Airlie @airlied, Jason Ekstrand @jekstrand"/>
+        <tag name="INTEL"       author="Intel Corporation"             contact="Slawek Grajewski @sgrajewski"/>
     </tags>
 
     <types comment="Vulkan type definitions">
@@ -153,7 +154,7 @@ server.
         <type category="define">// Vulkan 1.1 version number
 #define <name>VK_API_VERSION_1_1</name> <type>VK_MAKE_VERSION</type>(1, 1, 0)// Patch version should always be set to 0</type>
         <type category="define">// Version of this file
-#define <name>VK_HEADER_VERSION</name> 106</type>
+#define <name>VK_HEADER_VERSION</name> 119</type>
 
         <type category="define">
 #define <name>VK_DEFINE_HANDLE</name>(object) typedef struct object##_T* object;</type>
@@ -189,18 +190,20 @@ typedef void <name>CAMetalLayer</name>;
         <type requires="vk_platform" name="void"/>
         <type requires="vk_platform" name="char"/>
         <type requires="vk_platform" name="float"/>
+        <type requires="vk_platform" name="double"/>
         <type requires="vk_platform" name="uint8_t"/>
         <type requires="vk_platform" name="uint16_t"/>
         <type requires="vk_platform" name="uint32_t"/>
         <type requires="vk_platform" name="uint64_t"/>
         <type requires="vk_platform" name="int32_t"/>
+        <type requires="vk_platform" name="int64_t"/>
         <type requires="vk_platform" name="size_t"/>
         <type name="int"/>
 
             <comment>Bitmask types</comment>
-        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkFramebufferCreateFlags</name>;</type>
+        <type requires="VkFramebufferCreateFlagBits"      category="bitmask">typedef <type>VkFlags</type> <name>VkFramebufferCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkQueryPoolCreateFlags</name>;</type>
-        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkRenderPassCreateFlags</name>;</type>
+        <type requires="VkRenderPassCreateFlagBits"       category="bitmask">typedef <type>VkFlags</type> <name>VkRenderPassCreateFlags</name>;</type>
         <type requires="VkSamplerCreateFlagBits"          category="bitmask">typedef <type>VkFlags</type> <name>VkSamplerCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineLayoutCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCacheCreateFlags</name>;</type>
@@ -213,7 +216,7 @@ typedef void <name>CAMetalLayer</name>;
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineTessellationStateCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineInputAssemblyStateCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineVertexInputStateCreateFlags</name>;</type>
-        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineShaderStageCreateFlags</name>;</type>
+        <type requires="VkPipelineShaderStageCreateFlagBits" category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineShaderStageCreateFlags</name>;</type>
         <type requires="VkDescriptorSetLayoutCreateFlagBits" category="bitmask">typedef <type>VkFlags</type> <name>VkDescriptorSetLayoutCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkBufferViewCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkInstanceCreateFlags</name>;</type>
@@ -236,7 +239,7 @@ typedef void <name>CAMetalLayer</name>;
         <type requires="VkFormatFeatureFlagBits"          category="bitmask">typedef <type>VkFlags</type> <name>VkFormatFeatureFlags</name>;</type>
         <type requires="VkQueryControlFlagBits"           category="bitmask">typedef <type>VkFlags</type> <name>VkQueryControlFlags</name>;</type>
         <type requires="VkQueryResultFlagBits"            category="bitmask">typedef <type>VkFlags</type> <name>VkQueryResultFlags</name>;</type>
-        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkShaderModuleCreateFlags</name>;</type>
+        <type requires="VkShaderModuleCreateFlagBits"     category="bitmask">typedef <type>VkFlags</type> <name>VkShaderModuleCreateFlags</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkEventCreateFlags</name>;</type>
         <type requires="VkCommandPoolCreateFlagBits"          category="bitmask">typedef <type>VkFlags</type> <name>VkCommandPoolCreateFlags</name>;</type>
         <type requires="VkCommandPoolResetFlagBits"           category="bitmask">typedef <type>VkFlags</type> <name>VkCommandPoolResetFlags</name>;</type>
@@ -266,6 +269,8 @@ typedef void <name>CAMetalLayer</name>;
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkDescriptorUpdateTemplateCreateFlags</name>;</type>
         <type                                             category="bitmask" name="VkDescriptorUpdateTemplateCreateFlagsKHR" alias="VkDescriptorUpdateTemplateCreateFlags"/>
         <type requires="VkPipelineCreationFeedbackFlagBitsEXT" category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCreationFeedbackFlagsEXT</name>;</type>
+        <type requires="VkPipelineCompilerControlFlagBitsAMD" category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCompilerControlFlagsAMD</name>;</type>
+        <type requires="VkShaderCorePropertiesFlagBitsAMD" category="bitmask">typedef <type>VkFlags</type> <name>VkShaderCorePropertiesFlagsAMD</name>;</type>
 
             <comment>WSI extensions</comment>
         <type requires="VkCompositeAlphaFlagBitsKHR"      category="bitmask">typedef <type>VkFlags</type> <name>VkCompositeAlphaFlagsKHR</name>;</type>
@@ -285,6 +290,7 @@ typedef void <name>CAMetalLayer</name>;
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkMetalSurfaceCreateFlagsEXT</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkImagePipeSurfaceCreateFlagsFUCHSIA</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkStreamDescriptorSurfaceCreateFlagsGGP</name>;</type>
+        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkHeadlessSurfaceCreateFlagsEXT</name>;</type>
         <type requires="VkPeerMemoryFeatureFlagBits"   category="bitmask">typedef <type>VkFlags</type> <name>VkPeerMemoryFeatureFlags</name>;</type>
         <type                                             category="bitmask" name="VkPeerMemoryFeatureFlagsKHR"               alias="VkPeerMemoryFeatureFlags"/>
         <type requires="VkMemoryAllocateFlagBits"      category="bitmask">typedef <type>VkFlags</type> <name>VkMemoryAllocateFlags</name>;</type>
@@ -317,6 +323,7 @@ typedef void <name>CAMetalLayer</name>;
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineDiscardRectangleStateCreateFlagsEXT</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCoverageToColorStateCreateFlagsNV</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCoverageModulationStateCreateFlagsNV</name>;</type>
+        <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineCoverageReductionStateCreateFlagsNV</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkValidationCacheCreateFlagsEXT</name>;</type>
         <type requires="VkDebugUtilsMessageSeverityFlagBitsEXT"  category="bitmask">typedef <type>VkFlags</type> <name>VkDebugUtilsMessageSeverityFlagsEXT</name>;</type>
         <type requires="VkDebugUtilsMessageTypeFlagBitsEXT"      category="bitmask">typedef <type>VkFlags</type> <name>VkDebugUtilsMessageTypeFlagsEXT</name>;</type>
@@ -328,6 +335,7 @@ typedef void <name>CAMetalLayer</name>;
         <type requires="VkResolveModeFlagBitsKHR"         category="bitmask">typedef <type>VkFlags</type> <name>VkResolveModeFlagsKHR</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineRasterizationStateStreamCreateFlagsEXT</name>;</type>
         <type                                             category="bitmask">typedef <type>VkFlags</type> <name>VkPipelineRasterizationDepthClipStateCreateFlagsEXT</name>;</type>
+        <type requires="VkSwapchainImageUsageFlagBitsANDROID" category="bitmask">typedef <type>VkFlags</type> <name>VkSwapchainImageUsageFlagsANDROID</name>;</type>
 
 
             <comment>Types which can be void pointers or class pointers, selected at compile time</comment>
@@ -364,6 +372,7 @@ typedef void <name>CAMetalLayer</name>;
         <type category="handle" name="VkSamplerYcbcrConversionKHR"   alias="VkSamplerYcbcrConversion"/>
         <type category="handle" parent="VkDevice"><type>VK_DEFINE_NON_DISPATCHABLE_HANDLE</type>(<name>VkValidationCacheEXT</name>)</type>
         <type category="handle" parent="VkDevice"><type>VK_DEFINE_NON_DISPATCHABLE_HANDLE</type>(<name>VkAccelerationStructureNV</name>)</type>
+        <type category="handle" parent="VkDevice"><type>VK_DEFINE_NON_DISPATCHABLE_HANDLE</type>(<name>VkPerformanceConfigurationINTEL</name>)</type>
 
             <comment>WSI extensions</comment>
         <type category="handle"><type>VK_DEFINE_NON_DISPATCHABLE_HANDLE</type>(<name>VkDisplayKHR</name>)</type>
@@ -478,6 +487,7 @@ typedef void <name>CAMetalLayer</name>;
         <type name="VkPointClippingBehavior" category="enum"/>
         <type category="enum" name="VkPointClippingBehaviorKHR"                    alias="VkPointClippingBehavior"/>
         <type name="VkCoverageModulationModeNV" category="enum"/>
+        <type name="VkCoverageReductionModeNV" category="enum"/>
         <type name="VkValidationCacheHeaderVersionEXT" category="enum"/>
         <type name="VkShaderInfoTypeAMD" category="enum"/>
         <type name="VkQueueGlobalPriorityEXT" category="enum"/>
@@ -496,6 +506,15 @@ typedef void <name>CAMetalLayer</name>;
         <type name="VkScopeNV" category="enum"/>
         <type name="VkComponentTypeNV" category="enum"/>
         <type name="VkPipelineCreationFeedbackFlagBitsEXT" category="enum"/>
+        <type name="VkPerformanceConfigurationTypeINTEL" category="enum"/>
+        <type name="VkQueryPoolSamplingModeINTEL" category="enum"/>
+        <type name="VkPerformanceOverrideTypeINTEL" category="enum"/>
+        <type name="VkPerformanceParameterTypeINTEL" category="enum"/>
+        <type name="VkPerformanceValueTypeINTEL" category="enum"/>
+        <type name="VkLineRasterizationModeEXT" category="enum"/>
+        <type name="VkShaderModuleCreateFlagBits" category="enum"/>
+        <type name="VkPipelineCompilerControlFlagBitsAMD" category="enum"/>
+        <type name="VkShaderCorePropertiesFlagBitsAMD" category="enum"/>
 
             <comment>WSI extensions</comment>
         <type name="VkColorSpaceKHR" category="enum"/>
@@ -551,12 +570,15 @@ typedef void <name>CAMetalLayer</name>;
         <type name="VkDebugUtilsMessageSeverityFlagBitsEXT" category="enum"/>
         <type name="VkDebugUtilsMessageTypeFlagBitsEXT" category="enum"/>
         <type name="VkFullScreenExclusiveEXT" category="enum"/>
+        <type name="VkShaderFloatControlsIndependenceKHR" category="enum"/>
+        <type name="VkSwapchainImageUsageFlagBitsANDROID" category="enum"/>
 
             <comment>Enumerated types in the header, but not used by the API</comment>
         <type name="VkVendorId" category="enum"/>
         <type name="VkDriverIdKHR" category="enum"/>
         <type name="VkShadingRatePaletteEntryNV" category="enum"/>
         <type name="VkCoarseSampleOrderTypeNV" category="enum"/>
+        <type name="VkPipelineExecutableStatisticFormatKHR" category="enum"/>
 
         <comment>The PFN_vk*Function types are used by VkAllocationCallbacks below</comment>
         <type category="funcpointer">typedef void (VKAPI_PTR *<name>PFN_vkInternalAllocationNotification</name>)(
@@ -1557,7 +1579,7 @@ typedef void <name>CAMetalLayer</name>;
             <member optional="true"><type>VkFramebufferCreateFlags</type>    <name>flags</name></member>
             <member><type>VkRenderPass</type>           <name>renderPass</name></member>
             <member optional="true"><type>uint32_t</type>               <name>attachmentCount</name></member>
-            <member len="attachmentCount">const <type>VkImageView</type>*     <name>pAttachments</name></member>
+            <member noautovalidity="true" len="attachmentCount">const <type>VkImageView</type>*     <name>pAttachments</name></member>
             <member><type>uint32_t</type>               <name>width</name></member>
             <member><type>uint32_t</type>               <name>height</name></member>
             <member><type>uint32_t</type>               <name>layers</name></member>
@@ -2979,17 +3001,18 @@ typedef void <name>CAMetalLayer</name>;
             <member><type>VkBool32</type>                         <name>shaderDrawParameters</name></member>
         </type>
         <type category="struct" name="VkPhysicalDeviceShaderDrawParameterFeatures"             alias="VkPhysicalDeviceShaderDrawParametersFeatures"/>
-        <type category="struct" name="VkPhysicalDeviceFloat16Int8FeaturesKHR" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
-            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
+        <type category="struct" name="VkPhysicalDeviceShaderFloat16Int8FeaturesKHR" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
             <member noautovalidity="true"><type>void</type>*      <name>pNext</name></member>                            <!-- Pointer to next structure -->
             <member><type>VkBool32</type>                         <name>shaderFloat16</name></member>                 <!-- 16-bit floats (halfs) in shaders -->
             <member><type>VkBool32</type>                         <name>shaderInt8</name></member>                    <!-- 8-bit integers in shaders -->
         </type>
+        <type category="struct" name="VkPhysicalDeviceFloat16Int8FeaturesKHR" alias="VkPhysicalDeviceShaderFloat16Int8FeaturesKHR"/>
         <type category="struct" name="VkPhysicalDeviceFloatControlsPropertiesKHR" returnedonly="true" structextends="VkPhysicalDeviceProperties2">
             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR"><type>VkStructureType</type> <name>sType</name></member>
             <member><type>void</type>*                            <name>pNext</name></member>
-            <member><type>VkBool32</type>                         <name>separateDenormSettings</name></member>
-            <member><type>VkBool32</type>                         <name>separateRoundingModeSettings</name></member>
+            <member><type>VkShaderFloatControlsIndependenceKHR</type> <name>denormBehaviorIndependence</name></member>
+            <member><type>VkShaderFloatControlsIndependenceKHR</type> <name>roundingModeIndependence</name></member>
             <member><type>VkBool32</type>                         <name>shaderSignedZeroInfNanPreserveFloat16</name></member>  <!-- An implementation can preserve signed zero, nan, inf -->
             <member><type>VkBool32</type>                         <name>shaderSignedZeroInfNanPreserveFloat32</name></member>  <!-- An implementation can preserve signed zero, nan, inf -->
             <member><type>VkBool32</type>                         <name>shaderSignedZeroInfNanPreserveFloat64</name></member>  <!-- An implementation can preserve signed zero, nan, inf -->
@@ -3011,6 +3034,10 @@ typedef void <name>CAMetalLayer</name>;
             <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
             <member><type>VkBool32</type>                           <name>hostQueryReset</name></member>
         </type>
+        <type category="struct" name="VkNativeBufferUsage2ANDROID">
+            <member><type>uint64_t</type> <name>consumer</name></member>
+            <member><type>uint64_t</type> <name>producer</name></member>
+        </type>
         <type category="struct" name="VkNativeBufferANDROID">
             <member values="VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID"><type>VkStructureType</type> <name>sType</name></member>
             <member>const <type>void</type>* <name>pNext</name></member>
@@ -3018,6 +3045,17 @@ typedef void <name>CAMetalLayer</name>;
             <member><type>int</type> <name>stride</name></member>
             <member><type>int</type> <name>format</name></member>
             <member><type>int</type> <name>usage</name></member>
+            <member><type>VkNativeBufferUsage2ANDROID</type> <name>usage2</name></member>
+        </type>
+        <type category="struct" name="VkSwapchainImageCreateInfoANDROID">
+            <member values="VK_STRUCTURE_TYPE_SWAPCHAIN_IMAGE_CREATE_INFO_ANDROID"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>* <name>pNext</name></member>
+            <member><type>VkSwapchainImageUsageFlagsANDROID</type> <name>usage</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDevicePresentationPropertiesANDROID">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENTATION_PROPERTIES_ANDROID"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>* <name>pNext</name></member>
+            <member><type>VkBool32</type> <name>sharedImage</name></member>
         </type>
         <type category="struct" name="VkShaderResourceUsageAMD" returnedonly="true">
             <member><type>uint32_t</type> <name>numUsedVgprs</name></member>
@@ -3124,10 +3162,10 @@ typedef void <name>CAMetalLayer</name>;
             <member><type>void</type>*    <name>pNext</name><comment>Pointer to next structure</comment></member>
             <member><type>uint32_t</type> <name>shaderEngineCount</name><comment>number of shader engines</comment></member>
             <member><type>uint32_t</type> <name>shaderArraysPerEngineCount</name><comment>number of shader arrays</comment></member>
-            <member><type>uint32_t</type> <name>computeUnitsPerShaderArray</name><comment>number of CUs per shader array</comment></member>
+            <member><type>uint32_t</type> <name>computeUnitsPerShaderArray</name><comment>number of physical CUs per shader array</comment></member>
             <member><type>uint32_t</type> <name>simdPerComputeUnit</name><comment>number of SIMDs per compute unit</comment></member>
             <member><type>uint32_t</type> <name>wavefrontsPerSimd</name><comment>number of wavefront slots in each SIMD</comment></member>
-            <member><type>uint32_t</type> <name>wavefrontSize</name><comment>number of threads per wavefront</comment></member>
+            <member><type>uint32_t</type> <name>wavefrontSize</name><comment>maximum number of threads per wavefront</comment></member>
             <member><type>uint32_t</type> <name>sgprsPerSimd</name><comment>number of physical SGPRs per SIMD</comment></member>
             <member><type>uint32_t</type> <name>minSgprAllocation</name><comment>minimum number of SGPRs that can be allocated by a wave</comment></member>
             <member><type>uint32_t</type> <name>maxSgprAllocation</name><comment>number of available SGPRs</comment></member>
@@ -3136,6 +3174,12 @@ typedef void <name>CAMetalLayer</name>;
             <member><type>uint32_t</type> <name>minVgprAllocation</name><comment>minimum number of VGPRs that can be allocated by a wave</comment></member>
             <member><type>uint32_t</type> <name>maxVgprAllocation</name><comment>number of available VGPRs</comment></member>
             <member><type>uint32_t</type> <name>vgprAllocationGranularity</name><comment>VGPRs are allocated in groups of this size</comment></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceShaderCoreProperties2AMD" returnedonly="true" structextends="VkPhysicalDeviceProperties2">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*    <name>pNext</name><comment>Pointer to next structure</comment></member>
+            <member><type>VkShaderCorePropertiesFlagsAMD</type> <name>shaderCoreFeatures</name><comment>features supported by the shader core</comment></member>
+            <member><type>uint32_t</type> <name>activeComputeUnitCount</name><comment>number of active compute units across all shader engines/arrays</comment></member>
         </type>
         <type category="struct" name="VkPipelineRasterizationConservativeStateCreateInfoEXT" structextends="VkPipelineRasterizationStateCreateInfo">
             <member values="VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
@@ -3737,6 +3781,11 @@ typedef void <name>CAMetalLayer</name>;
             <member>const <type>void</type>* <name>pNext</name></member>
             <member><type>VkBool32</type> <name>supportsProtected</name><comment>Represents if surface can be protected</comment></member>
         </type>
+        <type category="struct" name="VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                               <name>pNext</name></member>
+            <member><type>VkBool32</type>                            <name>uniformBufferStandardLayout</name></member>
+        </type>
         <type category="struct" name="VkPhysicalDeviceDepthClipEnableFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
             <member><type>void</type>*                  <name>pNext</name><comment>Pointer to next structure</comment></member>
@@ -3792,6 +3841,39 @@ typedef void <name>CAMetalLayer</name>;
             <member><type>void</type>*                            <name>pNext</name></member>
             <member><type>VkBool32</type>                         <name>filterCubic</name></member> <!-- The combinations of format, image type (and image view type if provided) can be filtered with VK_FILTER_CUBIC_EXT -->
             <member><type>VkBool32</type>                         <name>filterCubicMinmax</name> </member> <!-- The combination of format, image type (and image view type if provided) can be filtered with VK_FILTER_CUBIC_EXT and ReductionMode of Min or Max -->
+        </type>
+        <type category="struct" name="VkPhysicalDeviceImagelessFramebufferFeaturesKHR" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                                    <name>pNext</name></member>
+            <member><type>VkBool32</type>                                 <name>imagelessFramebuffer</name></member>
+        </type>
+        <type category="struct" name="VkFramebufferAttachmentsCreateInfoKHR" structextends="VkFramebufferCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                              <name>pNext</name></member>
+            <member optional="true"><type>uint32_t</type>                 <name>attachmentImageInfoCount</name></member>
+            <member len="attachmentImageInfoCount">const <type>VkFramebufferAttachmentImageInfoKHR</type>* <name>pAttachmentImageInfos</name></member>
+        </type>
+        <type category="struct" name="VkFramebufferAttachmentImageInfoKHR">
+            <member values="VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                              <name>pNext</name></member>
+            <member optional="true"><type>VkImageCreateFlags</type>       <name>flags</name><comment>Image creation flags</comment></member>
+            <member><type>VkImageUsageFlags</type>                        <name>usage</name><comment>Image usage flags</comment></member>
+            <member><type>uint32_t</type>                                 <name>width</name></member>
+            <member><type>uint32_t</type>                                 <name>height</name></member>
+            <member><type>uint32_t</type>                                 <name>layerCount</name></member>
+            <member optional="true"><type>uint32_t</type>                 <name>viewFormatCount</name></member>
+            <member len="viewFormatCount">const <type>VkFormat</type>*    <name>pViewFormats</name></member>
+        </type>
+        <type category="struct" name="VkRenderPassAttachmentBeginInfoKHR" structextends="VkRenderPassBeginInfo">
+            <member values="VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                              <name>pNext</name></member>             <!-- Pointer to next structure -->
+            <member optional="true"><type>uint32_t</type>                 <name>attachmentCount</name></member>
+            <member len="attachmentCount">const <type>VkImageView</type>* <name>pAttachments</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*            <name>pNext</name></member>                             <!-- Pointer to next structure -->
+            <member><type>VkBool32</type>               <name>textureCompressionASTC_HDR</name></member>        <!-- ASTC HDR texture compression formats -->
         </type>
         <type category="struct" name="VkPhysicalDeviceCooperativeMatrixFeaturesNV" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_NV"><type>VkStructureType</type> <name>sType</name></member>
@@ -3858,6 +3940,213 @@ typedef void <name>CAMetalLayer</name>;
             <member values="VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_FULL_SCREEN_EXCLUSIVE_EXT"><type>VkStructureType</type> <name>sType</name></member>
             <member><type>void</type>*            <name>pNext</name></member>
             <member><type>VkBool32</type>         <name>fullScreenExclusiveSupported</name></member>
+        </type>
+        <type category="struct" name="VkHeadlessSurfaceCreateInfoEXT">
+            <member values="VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*            <name>pNext</name></member>
+            <member optional="true"><type>VkHeadlessSurfaceCreateFlagsEXT</type>   <name>flags</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceCoverageReductionModeFeaturesNV" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV"><type>VkStructureType</type><name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*    <name>pNext</name></member>
+            <member><type>VkBool32</type>                       <name>coverageReductionMode</name></member>
+        </type>
+        <type category="struct" name="VkPipelineCoverageReductionStateCreateInfoNV" structextends="VkPipelineMultisampleStateCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                                                        <name>pNext</name></member>
+            <member optional="true"><type>VkPipelineCoverageReductionStateCreateFlagsNV</type>      <name>flags</name></member>
+            <member><type>VkCoverageReductionModeNV</type>                                          <name>coverageReductionMode</name></member>
+        </type>
+        <type category="struct" name="VkFramebufferMixedSamplesCombinationNV" returnedonly="true">
+            <member values="VK_STRUCTURE_TYPE_FRAMEBUFFER_MIXED_SAMPLES_COMBINATION_NV"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                      <name>pNext</name></member>
+            <member><type>VkCoverageReductionModeNV</type>  <name>coverageReductionMode</name></member>
+            <member><type>VkSampleCountFlagBits</type>      <name>rasterizationSamples</name></member>
+            <member><type>VkSampleCountFlags</type>         <name>depthStencilSamples</name></member>
+            <member><type>VkSampleCountFlags</type>         <name>colorSamples</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                            <name>pNext</name></member>
+            <member><type>VkBool32</type>                         <name>shaderIntegerFunctions2</name></member>
+        </type>
+        <type category="union" name="VkPerformanceValueDataINTEL">
+            <member><type>uint32_t</type>                           <name>value32</name></member>
+            <member><type>uint64_t</type>                           <name>value64</name></member>
+            <member><type>float</type>                              <name>valueFloat</name></member>
+            <member><type>VkBool32</type>                           <name>valueBool</name></member>
+            <member>const <type>char</type>*                        <name>valueString</name></member>
+        </type>
+        <type category="struct" name="VkPerformanceValueINTEL">
+            <member><type>VkPerformanceValueTypeINTEL</type>        <name>type</name></member>
+            <member><type>VkPerformanceValueDataINTEL</type>        <name>data</name></member>
+        </type>
+        <type category="struct" name="VkInitializePerformanceApiInfoINTEL" >
+            <member values="VK_STRUCTURE_TYPE_INITIALIZE_PERFORMANCE_API_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member optional="false"><type>void</type>*             <name>pUserData</name></member>
+        </type>
+        <type category="struct" name="VkQueryPoolCreateInfoINTEL">
+            <member values="VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member><type>VkQueryPoolSamplingModeINTEL</type>        <name>performanceCountersSampling</name></member>
+        </type>
+        <type category="struct" name="VkPerformanceMarkerInfoINTEL">
+            <member values="VK_STRUCTURE_TYPE_PERFORMANCE_MARKER_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member><type>uint64_t</type>                            <name>marker</name></member>
+        </type>
+        <type category="struct" name="VkPerformanceStreamMarkerInfoINTEL">
+            <member values="VK_STRUCTURE_TYPE_PERFORMANCE_STREAM_MARKER_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member><type>uint32_t</type>                            <name>marker</name></member>
+        </type>
+        <type category="struct" name="VkPerformanceOverrideInfoINTEL">
+            <member values="VK_STRUCTURE_TYPE_PERFORMANCE_OVERRIDE_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member><type>VkPerformanceOverrideTypeINTEL</type>      <name>type</name></member>
+            <member><type>VkBool32</type>                            <name>enable</name></member>
+            <member><type>uint64_t</type>                            <name>parameter</name></member>
+        </type>
+        <type category="struct" name="VkPerformanceConfigurationAcquireInfoINTEL">
+            <member values="VK_STRUCTURE_TYPE_PERFORMANCE_CONFIGURATION_ACQUIRE_INFO_INTEL"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                         <name>pNext</name></member>
+            <member><type>VkPerformanceConfigurationTypeINTEL</type> <name>type</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceIndexTypeUint8FeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
+            <member><type>VkBool32</type>                           <name>indexTypeUint8</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceShaderSMBuiltinsPropertiesNV" returnedonly="true" structextends="VkPhysicalDeviceProperties2">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                          <name>pNext</name></member>
+            <member><type>uint32_t</type>                       <name>shaderSMCount</name></member>
+            <member><type>uint32_t</type>                       <name>shaderWarpsPerSM</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceShaderSMBuiltinsFeaturesNV" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV"><type>VkStructureType</type><name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*    <name>pNext</name></member>
+            <member><type>VkBool32</type>                       <name>shaderSMBuiltins</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                  <name>pNext</name><comment>Pointer to next structure</comment></member>
+            <member><type>VkBool32</type>               <name>fragmentShaderSampleInterlock</name></member>
+            <member><type>VkBool32</type>               <name>fragmentShaderPixelInterlock</name></member>
+            <member><type>VkBool32</type>               <name>fragmentShaderShadingRateInterlock</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*              <name>pNext</name></member>
+            <member><type>VkBool32</type>           <name>pipelineExecutableInfo</name></member>
+        </type>
+        <type category="struct" name="VkPipelineInfoKHR">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*        <name>pNext</name></member>
+            <member><type>VkPipeline</type>         <name>pipeline</name></member>
+        </type>
+        <type category="struct" name="VkPipelineExecutablePropertiesKHR" returnedonly="true">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*              <name>pNext</name></member>
+            <member><type>VkShaderStageFlags</type> <name>stages</name></member>
+            <member><type>char</type>               <name>name</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>char</type>               <name>description</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>uint32_t</type>           <name>subgroupSize</name></member>
+        </type>
+        <type category="struct" name="VkPipelineExecutableInfoKHR">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*        <name>pNext</name></member>
+            <member><type>VkPipeline</type>         <name>pipeline</name></member>
+            <member><type>uint32_t</type>           <name>executableIndex</name></member>
+        </type>
+        <type category="union" name="VkPipelineExecutableStatisticValueKHR" returnedonly="true">
+            <member><type>VkBool32</type>           <name>b32</name></member>
+            <member><type>int64_t</type>            <name>i64</name></member>
+            <member><type>uint64_t</type>           <name>u64</name></member>
+            <member><type>double</type>             <name>f64</name></member>
+        </type>
+        <type category="struct" name="VkPipelineExecutableStatisticKHR" returnedonly="true">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*              <name>pNext</name></member>
+            <member><type>char</type>               <name>name</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>char</type>               <name>description</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>VkPipelineExecutableStatisticFormatKHR</type> <name>format</name></member>
+            <member><type>VkPipelineExecutableStatisticValueKHR</type>  <name>value</name></member>
+        </type>
+        <type category="struct" name="VkPipelineExecutableInternalRepresentationKHR">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INTERNAL_REPRESENTATION_KHR"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*              <name>pNext</name></member>
+            <member><type>char</type>               <name>name</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>char</type>               <name>description</name>[<enum>VK_MAX_DESCRIPTION_SIZE</enum>]</member>
+            <member><type>VkBool32</type>           <name>isText</name></member>
+            <member optional="true"><type>size_t</type>               <name>dataSize</name></member>
+            <member optional="true" len="dataSize"><type>void</type>* <name>pData</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
+            <member><type>VkBool32</type>                           <name>shaderDemoteToHelperInvocation</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
+            <member><type>VkBool32</type>                           <name>texelBufferAlignment</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT" structextends="VkPhysicalDeviceProperties2" returnedonly="true">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
+            <member><type>VkDeviceSize</type>                       <name>storageTexelBufferOffsetAlignmentBytes</name></member>
+            <member><type>VkBool32</type>                           <name>storageTexelBufferOffsetSingleTexelAlignment</name></member>
+            <member><type>VkDeviceSize</type>                       <name>uniformTexelBufferOffsetAlignmentBytes</name></member>
+            <member><type>VkBool32</type>                           <name>uniformTexelBufferOffsetSingleTexelAlignment</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceSubgroupSizeControlFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+             <member><type>void</type>*                          <name>pNext</name></member>
+             <member><type>VkBool32</type> <name>subgroupSizeControl</name></member>
+             <member><type>VkBool32</type> <name>computeFullSubgroups</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceSubgroupSizeControlPropertiesEXT" returnedonly="true" structextends="VkPhysicalDeviceProperties2">
+             <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+             <member><type>void</type>*                          <name>pNext</name></member>
+             <member noautovalidity="true"><type>uint32_t</type> <name>minSubgroupSize</name><comment>The minimum subgroup size supported by this device</comment></member>
+             <member noautovalidity="true"><type>uint32_t</type> <name>maxSubgroupSize</name><comment>The maximum subgroup size supported by this device</comment></member>
+             <member noautovalidity="true"><type>uint32_t</type> <name>maxComputeWorkgroupSubgroups</name><comment>The maximum number of subgroups supported in a workgroup</comment></member>
+             <member><type>VkShaderStageFlags</type>             <name>requiredSubgroupSizeStages</name><comment>The shader stages that support specifying a subgroup size</comment></member>
+        </type>
+        <type category="struct" name="VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT" returnedonly="true" structextends="VkPipelineShaderStageCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                  <name>pNext</name></member>
+            <member><type>uint32_t</type>               <name>requiredSubgroupSize</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceLineRasterizationFeaturesEXT" structextends="VkPhysicalDeviceFeatures2,VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member noautovalidity="true"><type>void</type>*        <name>pNext</name></member>
+            <member><type>VkBool32</type>                           <name>rectangularLines</name></member>
+            <member><type>VkBool32</type>                           <name>bresenhamLines</name></member>
+            <member><type>VkBool32</type>                           <name>smoothLines</name></member>
+            <member><type>VkBool32</type>                           <name>stippledRectangularLines</name></member>
+            <member><type>VkBool32</type>                           <name>stippledBresenhamLines</name></member>
+            <member><type>VkBool32</type>                           <name>stippledSmoothLines</name></member>
+        </type>
+        <type category="struct" name="VkPhysicalDeviceLineRasterizationPropertiesEXT" returnedonly="true" structextends="VkPhysicalDeviceProperties2">
+            <member values="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member><type>void</type>*                               <name>pNext</name></member>
+            <member><type>uint32_t</type>                            <name>lineSubPixelPrecisionBits</name></member>
+        </type>
+        <type category="struct" name="VkPipelineRasterizationLineStateCreateInfoEXT" structextends="VkPipelineRasterizationStateCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member>const <type>void</type>*                                                      <name>pNext</name></member>
+            <member><type>VkLineRasterizationModeEXT</type>                                       <name>lineRasterizationMode</name></member>
+            <member><type>VkBool32</type>                                                         <name>stippledLineEnable</name></member>
+            <member optional="true"><type>uint32_t</type>                                         <name>lineStippleFactor</name></member>
+            <member optional="true"><type>uint16_t</type>                                         <name>lineStipplePattern</name></member>
+        </type>
+        <type category="struct" name="VkPipelineCompilerControlCreateInfoAMD" structextends="VkGraphicsPipelineCreateInfo,VkComputePipelineCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD"><type>VkStructureType</type>   <name>sType</name></member>
+            <member>const <type>void</type>*                                                                            <name>pNext</name></member>
+            <member optional="true"><type>VkPipelineCompilerControlFlagsAMD</type>                                      <name>compilerControlFlags</name></member>
         </type>
     </types>
 
@@ -4524,6 +4813,8 @@ typedef void <name>CAMetalLayer</name>;
         <enum bitpos="1"    name="VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT"/>
         <enum bitpos="2"    name="VK_PIPELINE_CREATE_DERIVATIVE_BIT"/>
     </enums>
+    <enums name="VkPipelineShaderStageCreateFlagBits" type="bitmask">
+    </enums>
     <enums name="VkColorComponentFlagBits" type="bitmask">
         <enum bitpos="0"    name="VK_COLOR_COMPONENT_R_BIT"/>
         <enum bitpos="1"    name="VK_COLOR_COMPONENT_G_BIT"/>
@@ -4633,7 +4924,8 @@ typedef void <name>CAMetalLayer</name>;
     <enums name="VkStencilFaceFlagBits" type="bitmask">
         <enum bitpos="0"    name="VK_STENCIL_FACE_FRONT_BIT"                         comment="Front face"/>
         <enum bitpos="1"    name="VK_STENCIL_FACE_BACK_BIT"                          comment="Back face"/>
-        <enum value="0x00000003" name="VK_STENCIL_FRONT_AND_BACK"                    comment="Front and back faces"/>
+        <enum value="0x00000003" name="VK_STENCIL_FACE_FRONT_AND_BACK"               comment="Front and back faces"/>
+        <enum                    name="VK_STENCIL_FRONT_AND_BACK" alias="VK_STENCIL_FACE_FRONT_AND_BACK" comment="Alias for backwards compatibility"/>
     </enums>
     <enums name="VkDescriptorPoolCreateFlagBits" type="bitmask">
         <enum bitpos="0"    name="VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT" comment="Descriptor sets may be freed individually"/>
@@ -4675,6 +4967,9 @@ typedef void <name>CAMetalLayer</name>;
         <enum bitpos="6"    name="VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_180_BIT_KHR"/>
         <enum bitpos="7"    name="VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_270_BIT_KHR"/>
         <enum bitpos="8"    name="VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR"/>
+    </enums>
+    <enums name="VkSwapchainImageUsageFlagBitsANDROID" type="bitmask">
+      <enum bitpos="0"      name="VK_SWAPCHAIN_IMAGE_USAGE_SHARED_BIT_ANDROID"/>
     </enums>
     <enums name="VkTimeDomainEXT" type="enum">
         <enum value="0"     name="VK_TIME_DOMAIN_DEVICE_EXT"/>
@@ -4928,6 +5223,10 @@ typedef void <name>CAMetalLayer</name>;
         <enum value="2"     name="VK_COVERAGE_MODULATION_MODE_ALPHA_NV"/>
         <enum value="3"     name="VK_COVERAGE_MODULATION_MODE_RGBA_NV"/>
     </enums>
+    <enums name="VkCoverageReductionModeNV" type="enum">
+        <enum value="0"     name="VK_COVERAGE_REDUCTION_MODE_MERGE_NV"/>
+        <enum value="1"     name="VK_COVERAGE_REDUCTION_MODE_TRUNCATE_NV"/>
+    </enums>
     <enums name="VkValidationCacheHeaderVersionEXT" type="enum">
         <enum value="1"     name="VK_VALIDATION_CACHE_HEADER_VERSION_ONE_EXT"/>
     </enums>
@@ -4986,8 +5285,9 @@ typedef void <name>CAMetalLayer</name>;
         <enum value="7"       name="VK_DRIVER_ID_IMAGINATION_PROPRIETARY_KHR"   comment="Imagination Technologies"/>
         <enum value="8"       name="VK_DRIVER_ID_QUALCOMM_PROPRIETARY_KHR"      comment="Qualcomm Technologies, Inc."/>
         <enum value="9"       name="VK_DRIVER_ID_ARM_PROPRIETARY_KHR"           comment="Arm Limited"/>
-        <enum value="10"      name="VK_DRIVER_ID_GOOGLE_PASTEL_KHR"             comment="Google LLC"/>
+        <enum value="10"      name="VK_DRIVER_ID_GOOGLE_SWIFTSHADER_KHR"        comment="Google LLC"/>
         <enum value="11"      name="VK_DRIVER_ID_GGP_PROPRIETARY_KHR"           comment="Google LLC"/>
+        <enum value="12"      name="VK_DRIVER_ID_BROADCOM_PROPRIETARY_KHR"      comment="Broadcom Inc."/>
     </enums>
     <enums name="VkConditionalRenderingFlagBitsEXT" type="bitmask">
         <enum bitpos="0"    name="VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT"/>
@@ -5063,6 +5363,8 @@ typedef void <name>CAMetalLayer</name>;
         <enum value="1"     name="VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD"/>
         <enum value="2"     name="VK_MEMORY_OVERALLOCATION_BEHAVIOR_DISALLOWED_AMD"/>
     </enums>
+    <enums name="VkFramebufferCreateFlagBits" type="bitmask">
+    </enums>
     <enums name="VkScopeNV" type="enum">
         <enum value="1"     name="VK_SCOPE_DEVICE_NV"/>
         <enum value="2"     name="VK_SCOPE_WORKGROUP_NV"/>
@@ -5093,6 +5395,51 @@ typedef void <name>CAMetalLayer</name>;
         <enum value="2"     name="VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT"/>
         <enum value="3"     name="VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT"/>
     </enums>
+    <enums name="VkShaderCorePropertiesFlagBitsAMD" type="bitmask">
+    </enums>
+    <enums name="VkPerformanceConfigurationTypeINTEL" type="enum">
+        <enum value="0"     name="VK_PERFORMANCE_CONFIGURATION_TYPE_COMMAND_QUEUE_METRICS_DISCOVERY_ACTIVATED_INTEL"/>
+    </enums>
+    <enums name="VkQueryPoolSamplingModeINTEL" type="enum">
+        <enum value="0"     name="VK_QUERY_POOL_SAMPLING_MODE_MANUAL_INTEL"/>
+    </enums>
+    <enums name="VkPerformanceOverrideTypeINTEL" type="enum">
+        <enum value="0"     name="VK_PERFORMANCE_OVERRIDE_TYPE_NULL_HARDWARE_INTEL"/>
+        <enum value="1"     name="VK_PERFORMANCE_OVERRIDE_TYPE_FLUSH_GPU_CACHES_INTEL"/>
+    </enums>
+    <enums name="VkPerformanceParameterTypeINTEL" type="enum">
+        <enum value="0"     name="VK_PERFORMANCE_PARAMETER_TYPE_HW_COUNTERS_SUPPORTED_INTEL"/>
+        <enum value="1"     name="VK_PERFORMANCE_PARAMETER_TYPE_STREAM_MARKER_VALID_BITS_INTEL"/>
+    </enums>
+    <enums name="VkPerformanceValueTypeINTEL" type="enum">
+        <enum value="0"     name="VK_PERFORMANCE_VALUE_TYPE_UINT32_INTEL"/>
+        <enum value="1"     name="VK_PERFORMANCE_VALUE_TYPE_UINT64_INTEL"/>
+        <enum value="2"     name="VK_PERFORMANCE_VALUE_TYPE_FLOAT_INTEL"/>
+        <enum value="3"     name="VK_PERFORMANCE_VALUE_TYPE_BOOL_INTEL"/>
+        <enum value="4"     name="VK_PERFORMANCE_VALUE_TYPE_STRING_INTEL"/>
+    </enums>
+    <enums name="VkPipelineExecutableStatisticFormatKHR" type="enum">
+        <enum value="0" name="VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_BOOL32_KHR"/>
+        <enum value="1" name="VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_INT64_KHR"/>
+        <enum value="2" name="VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_UINT64_KHR"/>
+        <enum value="3" name="VK_PIPELINE_EXECUTABLE_STATISTIC_FORMAT_FLOAT64_KHR"/>
+    </enums>
+    <enums name="VkShaderFloatControlsIndependenceKHR" type="enum">
+        <enum value="0"     name="VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR"/>
+        <enum value="1"     name="VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR"/>
+        <enum value="2"     name="VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR"/>
+    </enums>
+    <enums name="VkLineRasterizationModeEXT" type="enum">
+        <enum value="0"     name="VK_LINE_RASTERIZATION_MODE_DEFAULT_EXT"/>
+        <enum value="1"     name="VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT"/>
+        <enum value="2"     name="VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT"/>
+        <enum value="3"     name="VK_LINE_RASTERIZATION_MODE_RECTANGULAR_SMOOTH_EXT"/>
+    </enums>
+    <enums name="VkShaderModuleCreateFlagBits" type="bitmask">
+    </enums>
+    <enums name="VkPipelineCompilerControlFlagBitsAMD" type="bitmask">
+    </enums>
+
     <commands comment="Vulkan command definitions">
         <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INITIALIZATION_FAILED,VK_ERROR_LAYER_NOT_PRESENT,VK_ERROR_EXTENSION_NOT_PRESENT,VK_ERROR_INCOMPATIBLE_DRIVER">
             <proto><type>VkResult</type> <name>vkCreateInstance</name></proto>
@@ -5209,7 +5556,7 @@ typedef void <name>CAMetalLayer</name>;
             <proto><type>VkResult</type> <name>vkQueueSubmit</name></proto>
             <param externsync="true"><type>VkQueue</type> <name>queue</name></param>
             <param optional="true"><type>uint32_t</type> <name>submitCount</name></param>
-            <param len="submitCount" externsync="pSubmits[].pWaitSemaphores[],pSubmits[].pSignalSemaphores[]">const <type>VkSubmitInfo</type>* <name>pSubmits</name></param>
+            <param len="submitCount">const <type>VkSubmitInfo</type>* <name>pSubmits</name></param>
             <param optional="true" externsync="true"><type>VkFence</type> <name>fence</name></param>
         </command>
         <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_DEVICE_LOST">
@@ -5316,7 +5663,7 @@ typedef void <name>CAMetalLayer</name>;
             <proto><type>VkResult</type> <name>vkQueueBindSparse</name></proto>
             <param externsync="true"><type>VkQueue</type> <name>queue</name></param>
             <param optional="true"><type>uint32_t</type> <name>bindInfoCount</name></param>
-            <param len="bindInfoCount" externsync="pBindInfo[].pWaitSemaphores[],pBindInfo[].pSignalSemaphores[],pBindInfo[].pBufferBinds[].buffer,pBindInfo[].pImageOpaqueBinds[].image,pBindInfo[].pImageBinds[].image">const <type>VkBindSparseInfo</type>* <name>pBindInfo</name></param>
+            <param len="bindInfoCount" externsync="pBindInfo[].pBufferBinds[].buffer,pBindInfo[].pImageOpaqueBinds[].image,pBindInfo[].pImageBinds[].image">const <type>VkBindSparseInfo</type>* <name>pBindInfo</name></param>
             <param optional="true" externsync="true"><type>VkFence</type> <name>fence</name></param>
         </command>
         <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
@@ -6330,26 +6677,6 @@ typedef void <name>CAMetalLayer</name>;
             <param><type>VkExternalMemoryHandleTypeFlagsNV</type> <name>handleType</name></param>
             <param><type>HANDLE</type>* <name>pHandle</name></param>
         </command>
-        <command queues="graphics" renderpass="inside" cmdbufferlevel="primary,secondary" pipeline="graphics">
-            <proto><type>void</type> <name>vkCmdDrawIndirectCountAMD</name></proto>
-            <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
-            <param><type>VkBuffer</type> <name>buffer</name></param>
-            <param><type>VkDeviceSize</type> <name>offset</name></param>
-            <param><type>VkBuffer</type> <name>countBuffer</name></param>
-            <param><type>VkDeviceSize</type> <name>countBufferOffset</name></param>
-            <param><type>uint32_t</type> <name>maxDrawCount</name></param>
-            <param><type>uint32_t</type> <name>stride</name></param>
-        </command>
-        <command queues="graphics" renderpass="inside" cmdbufferlevel="primary,secondary" pipeline="graphics">
-            <proto><type>void</type> <name>vkCmdDrawIndexedIndirectCountAMD</name></proto>
-            <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
-            <param><type>VkBuffer</type> <name>buffer</name></param>
-            <param><type>VkDeviceSize</type> <name>offset</name></param>
-            <param><type>VkBuffer</type> <name>countBuffer</name></param>
-            <param><type>VkDeviceSize</type> <name>countBufferOffset</name></param>
-            <param><type>uint32_t</type> <name>maxDrawCount</name></param>
-            <param><type>uint32_t</type> <name>stride</name></param>
-        </command>
         <command queues="graphics,compute" renderpass="inside" cmdbufferlevel="primary,secondary">
             <proto><type>void</type> <name>vkCmdProcessCommandsNVX</name></proto>
             <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
@@ -6910,6 +7237,15 @@ typedef void <name>CAMetalLayer</name>;
             <param><type>int</type>* <name>grallocUsage</name></param>
         </command>
         <command>
+            <proto><type>VkResult</type> <name>vkGetSwapchainGrallocUsage2ANDROID</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>VkFormat</type> <name>format</name></param>
+            <param><type>VkImageUsageFlags</type> <name>imageUsage</name></param>
+            <param><type>VkSwapchainImageUsageFlagsANDROID</type> <name>swapchainImageUsage</name></param>
+            <param><type>uint64_t</type>* <name>grallocConsumerUsage</name></param>
+            <param><type>uint64_t</type>* <name>grallocProducerUsage</name></param>
+        </command>
+        <command>
             <proto><type>VkResult</type> <name>vkAcquireImageANDROID</name></proto>
             <param><type>VkDevice</type> <name>device</name></param>
             <param><type>VkImage</type> <name>image</name></param>
@@ -7073,6 +7409,7 @@ typedef void <name>CAMetalLayer</name>;
             <param><type>uint32_t</type> <name>maxDrawCount</name></param>
             <param><type>uint32_t</type> <name>stride</name></param>
         </command>
+        <command name="vkCmdDrawIndirectCountAMD"                                  alias="vkCmdDrawIndirectCountKHR"/>
         <command queues="graphics" renderpass="inside" cmdbufferlevel="primary,secondary" pipeline="graphics">
             <proto><type>void</type> <name>vkCmdDrawIndexedIndirectCountKHR</name></proto>
             <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
@@ -7083,6 +7420,7 @@ typedef void <name>CAMetalLayer</name>;
             <param><type>uint32_t</type> <name>maxDrawCount</name></param>
             <param><type>uint32_t</type> <name>stride</name></param>
         </command>
+        <command name="vkCmdDrawIndexedIndirectCountAMD"                           alias="vkCmdDrawIndexedIndirectCountKHR"/>
         <command queues="graphics,compute,transfer" renderpass="both" cmdbufferlevel="primary,secondary">
             <proto><type>void</type> <name>vkCmdSetCheckpointNV</name></proto>
             <param><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
@@ -7154,7 +7492,7 @@ typedef void <name>CAMetalLayer</name>;
         <command queues="graphics" renderpass="both" cmdbufferlevel="primary,secondary">
             <proto><type>void</type> <name>vkCmdBindShadingRateImageNV</name></proto>
             <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
-            <param><type>VkImageView</type> <name>imageView</name></param>
+            <param optional="true"><type>VkImageView</type> <name>imageView</name></param>
             <param><type>VkImageLayout</type> <name>imageLayout</name></param>
         </command>
         <command queues="graphics" renderpass="both" cmdbufferlevel="primary,secondary">
@@ -7342,7 +7680,92 @@ typedef void <name>CAMetalLayer</name>;
             <param><type>VkDevice</type> <name>device</name></param>
             <param><type>VkSwapchainKHR</type> <name>swapchain</name></param>
         </command>
-
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
+            <proto><type>VkResult</type> <name>vkCreateHeadlessSurfaceEXT</name></proto>
+            <param><type>VkInstance</type> <name>instance</name></param>
+            <param>const <type>VkHeadlessSurfaceCreateInfoEXT</type>* <name>pCreateInfo</name></param>
+            <param optional="true">const <type>VkAllocationCallbacks</type>* <name>pAllocator</name></param>
+            <param><type>VkSurfaceKHR</type>* <name>pSurface</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS,VK_INCOMPLETE" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV</name></proto>
+            <param><type>VkPhysicalDevice</type> <name>physicalDevice</name></param>
+            <param optional="false,true"><type>uint32_t</type>* <name>pCombinationCount</name></param>
+            <param optional="true" len="pCombinationCount"><type>VkFramebufferMixedSamplesCombinationNV</type>* <name>pCombinations</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkInitializePerformanceApiINTEL</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param>const <type>VkInitializePerformanceApiInfoINTEL</type>* <name>pInitializeInfo</name></param>
+        </command>
+        <command>
+            <proto><type>void</type> <name>vkUninitializePerformanceApiINTEL</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+        </command>
+        <command queues="graphics,compute,transfer" renderpass="both" cmdbufferlevel="primary,secondary" successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkCmdSetPerformanceMarkerINTEL</name></proto>
+            <param><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
+            <param>const <type>VkPerformanceMarkerInfoINTEL</type>* <name>pMarkerInfo</name></param>
+        </command>
+        <command queues="graphics,compute,transfer" renderpass="both" cmdbufferlevel="primary,secondary" successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkCmdSetPerformanceStreamMarkerINTEL</name></proto>
+            <param><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
+            <param>const <type>VkPerformanceStreamMarkerInfoINTEL</type>* <name>pMarkerInfo</name></param>
+        </command>
+        <command queues="graphics,compute,transfer" renderpass="both" cmdbufferlevel="primary,secondary" successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkCmdSetPerformanceOverrideINTEL</name></proto>
+            <param><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
+            <param>const <type>VkPerformanceOverrideInfoINTEL</type>* <name>pOverrideInfo</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkAcquirePerformanceConfigurationINTEL</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param>const <type>VkPerformanceConfigurationAcquireInfoINTEL</type>* <name>pAcquireInfo</name></param>
+            <param><type>VkPerformanceConfigurationINTEL</type>* <name>pConfiguration</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkReleasePerformanceConfigurationINTEL</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>VkPerformanceConfigurationINTEL</type> <name>configuration</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkQueueSetPerformanceConfigurationINTEL</name></proto>
+            <param><type>VkQueue</type> <name>queue</name></param>
+            <param><type>VkPerformanceConfigurationINTEL</type> <name>configuration</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS" errorcodes="VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_OUT_OF_HOST_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetPerformanceParameterINTEL</name></proto>
+            <param><type>VkDevice</type> <name>device</name></param>
+            <param><type>VkPerformanceParameterTypeINTEL</type> <name>parameter</name></param>
+            <param><type>VkPerformanceValueINTEL</type>* <name>pValue</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS,VK_INCOMPLETE" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetPipelineExecutablePropertiesKHR</name></proto>
+            <param><type>VkDevice</type>                        <name>device</name></param>
+            <param>const <type>VkPipelineInfoKHR</type>*        <name>pPipelineInfo</name></param>
+            <param optional="false,true"><type>uint32_t</type>* <name>pExecutableCount</name></param>
+            <param optional="true" len="pExecutableCount"><type>VkPipelineExecutablePropertiesKHR</type>* <name>pProperties</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS,VK_INCOMPLETE" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetPipelineExecutableStatisticsKHR</name></proto>
+            <param><type>VkDevice</type>                        <name>device</name></param>
+            <param>const <type>VkPipelineExecutableInfoKHR</type>*  <name>pExecutableInfo</name></param>
+            <param optional="false,true"><type>uint32_t</type>* <name>pStatisticCount</name></param>
+            <param optional="true" len="pStatisticCount"><type>VkPipelineExecutableStatisticKHR</type>* <name>pStatistics</name></param>
+        </command>
+        <command successcodes="VK_SUCCESS,VK_INCOMPLETE" errorcodes="VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY">
+            <proto><type>VkResult</type> <name>vkGetPipelineExecutableInternalRepresentationsKHR</name></proto>
+            <param><type>VkDevice</type>                        <name>device</name></param>
+            <param>const <type>VkPipelineExecutableInfoKHR</type>*  <name>pExecutableInfo</name></param>
+            <param optional="false,true"><type>uint32_t</type>* <name>pInternalRepresentationCount</name></param>
+            <param optional="true" len="pInternalRepresentationCount"><type>VkPipelineExecutableInternalRepresentationKHR</type>* <name>pInternalRepresentations</name></param>
+        </command>
+        <command queues="graphics" renderpass="both" cmdbufferlevel="primary,secondary">
+            <proto><type>void</type> <name>vkCmdSetLineStippleEXT</name></proto>
+            <param externsync="true"><type>VkCommandBuffer</type> <name>commandBuffer</name></param>
+            <param><type>uint32_t</type> <name>lineStippleFactor</name></param>
+            <param><type>uint16_t</type> <name>lineStipplePattern</name></param>
+        </command>
     </commands>
 
     <feature api="vulkan" name="VK_VERSION_1_0" number="1.0" comment="Vulkan core API interface definitions">
@@ -8060,14 +8483,23 @@ typedef void <name>CAMetalLayer</name>;
         </extension>
         <extension name="VK_ANDROID_native_buffer" number="11" type="device" author="ANDROID" platform="android" contact="Jesse Hall @critsec" supported="disabled">
             <require>
-                <enum value="5"                                                 name="VK_ANDROID_NATIVE_BUFFER_SPEC_VERSION"/>
+                <comment>VK_ANDROID_native_buffer is used between the Android Vulkan loader and drivers to implement the WSI extensions. It isn't exposed to applications and uses types that aren't part of Android's stable public API, so it is left disabled to keep it out of the standard Vulkan headers.</comment>
+                <enum value="8"                                                 name="VK_ANDROID_NATIVE_BUFFER_SPEC_VERSION"/>
                 <enum value="11"                                                name="VK_ANDROID_NATIVE_BUFFER_NUMBER"/>
                 <enum value="&quot;VK_ANDROID_native_buffer&quot;"              name="VK_ANDROID_NATIVE_BUFFER_NAME"/>
                 <enum offset="0" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID"/>
+                <enum offset="1" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_SWAPCHAIN_IMAGE_CREATE_INFO_ANDROID"/>
+                <enum offset="2" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENTATION_PROPERTIES_ANDROID"/>
                 <type name="VkNativeBufferANDROID"/>
+                <type name="VkSwapchainImageCreateInfoANDROID"/>
+                <type name="VkPhysicalDevicePresentationPropertiesANDROID"/>
+                <type name="VkNativeBufferUsage2ANDROID"/>
+                <type name="VkSwapchainImageUsageFlagBitsANDROID"/>
+                <type name="VkSwapchainImageUsageFlagsANDROID"/>
                 <command name="vkGetSwapchainGrallocUsageANDROID"/>
                 <command name="vkAcquireImageANDROID"/>
                 <command name="vkQueueSignalReleaseImageANDROID"/>
+                <command name="vkGetSwapchainGrallocUsage2ANDROID"/>
             </require>
         </extension>
         <extension name="VK_EXT_debug_report" number="12" type="instance" author="GOOGLE" contact="Courtney Goeltzenleuchter @courtney-g" supported="vulkan" deprecatedby="VK_EXT_debug_utils">
@@ -8315,9 +8747,9 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_AMD_negative_viewport_height&quot;"       name="VK_AMD_NEGATIVE_VIEWPORT_HEIGHT_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_AMD_gpu_shader_half_float" number="37" type="device" author="AMD" contact="Dominik Witczak @dominikwitczakamd" supported="vulkan">
+        <extension name="VK_AMD_gpu_shader_half_float" number="37" type="device" author="AMD" contact="Dominik Witczak @dominikwitczakamd" supported="vulkan" deprecatedby="VK_KHR_shader_float16_int8">
             <require>
-                <enum value="1"                                                 name="VK_AMD_GPU_SHADER_HALF_FLOAT_SPEC_VERSION"/>
+                <enum value="2"                                                 name="VK_AMD_GPU_SHADER_HALF_FLOAT_SPEC_VERSION"/>
                 <enum value="&quot;VK_AMD_gpu_shader_half_float&quot;"          name="VK_AMD_GPU_SHADER_HALF_FLOAT_EXTENSION_NAME"/>
             </require>
         </extension>
@@ -8418,10 +8850,12 @@ typedef void <name>CAMetalLayer</name>;
                 <type name="VkPhysicalDeviceCornerSampledImageFeaturesNV"/>
             </require>
         </extension>
-        <extension name="VK_NVX_extension_52" number="52" author="NVX" contact="James Jones @cubanismo" supported="disabled">
+        <extension name="VK_NV_extension_52" number="52" author="NV" contact="Daniel Koch @dgkoch" supported="disabled">
             <require>
-                <enum value="0"                                                 name="VK_NVX_EXTENSION_52_SPEC_VERSION"/>
-                <enum value="&quot;VK_NVX_extension_52&quot;"                   name="VK_NVX_EXTENSION_52_EXTENSION_NAME"/>
+                <enum value="0"                                                 name="VK_NV_EXTENSION_52_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_extension_52&quot;"                    name="VK_NV_EXTENSION_52_EXTENSION_NAME"/>
+                <enum bitpos="0" extends="VkShaderModuleCreateFlagBits"         name="VK_SHADER_MODULE_CREATE_RESERVED_0_BIT_NV"/>
+                <enum bitpos="2" extends="VkPipelineShaderStageCreateFlagBits"  name="VK_PIPELINE_SHADER_STAGE_CREATE_RESERVED_2_BIT_NV"/>
             </require>
         </extension>
         <extension name="VK_NV_extension_53" number="53" author="NV" contact="Jeff Bolz @jeffbolznv" supported="disabled">
@@ -8589,9 +9023,6 @@ typedef void <name>CAMetalLayer</name>;
                 <type name="VkDeviceGroupSwapchainCreateInfoKHR"/>
                 <command name="vkAcquireNextImage2KHR"/>
             </require>
-            <require extension="VK_EXT_full_screen_exclusive">
-                <command name="vkGetDeviceGroupSurfacePresentModes2EXT"/>
-            </require>
         </extension>
         <extension name="VK_EXT_validation_flags" number="62" type="instance" author="GOOGLE" contact="Tobin Ehlis @tobine" supported="vulkan">
             <require>
@@ -8629,10 +9060,26 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_EXT_shader_subgroup_vote&quot;"           name="VK_EXT_SHADER_SUBGROUP_VOTE_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_ARM_extension_01" number="67" type="device" author="ARM" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" supported="disabled">
+        <extension name="VK_EXT_texture_compression_astc_hdr" number="67" type="device" author="ARM" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" requires="VK_KHR_get_physical_device_properties2" supported="vulkan">
             <require>
-                <enum value="0"                                                 name="VK_ARM_EXTENSION_01_SPEC_VERSION"/>
-                <enum value="&quot;VK_ARM_extension_01&quot;"                   name="VK_ARM_EXTENSION_01_EXTENSION_NAME"/>
+                <enum value="1"                                               name="VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_texture_compression_astc_hdr&quot;" name="VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                    name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXTURE_COMPRESSION_ASTC_HDR_FEATURES_EXT"/>
+                <type name="VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="0" name="VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="1" name="VK_FORMAT_ASTC_5x4_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="2" name="VK_FORMAT_ASTC_5x5_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="3" name="VK_FORMAT_ASTC_6x5_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="4" name="VK_FORMAT_ASTC_6x6_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="5" name="VK_FORMAT_ASTC_8x5_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="6" name="VK_FORMAT_ASTC_8x6_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="7" name="VK_FORMAT_ASTC_8x8_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="8" name="VK_FORMAT_ASTC_10x5_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="9" name="VK_FORMAT_ASTC_10x6_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="10" name="VK_FORMAT_ASTC_10x8_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="11" name="VK_FORMAT_ASTC_10x10_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="12" name="VK_FORMAT_ASTC_12x10_SFLOAT_BLOCK_EXT"/>
+                <enum extends="VkFormat" extnumber="67" offset="13" name="VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK_EXT"/>
             </require>
         </extension>
         <extension name="VK_EXT_astc_decode_mode" number="68" type="device" author="ARM" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" requires="VK_KHR_get_physical_device_properties2" supported="vulkan">
@@ -8861,7 +9308,9 @@ typedef void <name>CAMetalLayer</name>;
             <require>
                 <enum value="1"                                           name="VK_KHR_SHADER_FLOAT16_INT8_SPEC_VERSION"/>
                 <enum value="&quot;VK_KHR_shader_float16_int8&quot;"      name="VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME"/>
-                <enum offset="0" extends="VkStructureType"                name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR"/>
+                <enum offset="0" extends="VkStructureType"                name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR"/>
+                <enum            extends="VkStructureType"                name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR" alias="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR"/>
+                <type name="VkPhysicalDeviceShaderFloat16Int8FeaturesKHR"/>
                 <type name="VkPhysicalDeviceFloat16Int8FeaturesKHR"/>
             </require>
         </extension>
@@ -9124,11 +9573,11 @@ typedef void <name>CAMetalLayer</name>;
         </extension>
         <extension name="VK_EXT_swapchain_colorspace" number="105" type="instance" author="GOOGLE" contact="Courtney Goeltzenleuchter @courtney-g" requires="VK_KHR_surface" supported="vulkan">
             <require>
-                <enum value="3"                                             name="VK_EXT_SWAPCHAIN_COLOR_SPACE_SPEC_VERSION"/>
+                <enum value="4"                                             name="VK_EXT_SWAPCHAIN_COLOR_SPACE_SPEC_VERSION"/>
                 <enum value="&quot;VK_EXT_swapchain_colorspace&quot;"       name="VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME"/>
                 <enum offset="1" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT"/>
                 <enum offset="2" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT"/>
-                <enum offset="3" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_DCI_P3_LINEAR_EXT"/>
+                <enum offset="3" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT"/>
                 <enum offset="4" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT"/>
                 <enum offset="5" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_BT709_LINEAR_EXT"/>
                 <enum offset="6" extends="VkColorSpaceKHR"                  name="VK_COLOR_SPACE_BT709_NONLINEAR_EXT"/>
@@ -9140,6 +9589,7 @@ typedef void <name>CAMetalLayer</name>;
                 <enum offset="12" extends="VkColorSpaceKHR"                 name="VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT"/>
                 <enum offset="13" extends="VkColorSpaceKHR"                 name="VK_COLOR_SPACE_PASS_THROUGH_EXT"/>
                 <enum offset="14" extends="VkColorSpaceKHR"                 name="VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT"/>
+                <enum extends="VkColorSpaceKHR" name="VK_COLOR_SPACE_DCI_P3_LINEAR_EXT" alias="VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT" comment="Deprecated name for backwards compatibility"/>
             </require>
         </extension>
         <extension name="VK_EXT_hdr_metadata" number="106" type="device" requires="VK_KHR_swapchain" author="GOOGLE" contact="Courtney Goeltzenleuchter @courtney-g" supported="vulkan">
@@ -9164,10 +9614,18 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_IMG_extension_108&quot;"              name="VK_IMG_EXTENSION_108_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_IMG_extension_109" number="109" author="IMG" contact="Michael Worcester @michaelworcester" supported="disabled">
+        <extension name="VK_KHR_imageless_framebuffer" requires="VK_KHR_maintenance2,VK_KHR_image_format_list" number="109" author="KHR" contact="Tobias Hector @tobias" type="device" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_IMG_EXTENSION_109_SPEC_VERSION"/>
-                <enum value="&quot;VK_IMG_extension_109&quot;"              name="VK_IMG_EXTENSION_109_EXTENSION_NAME"/>
+                <enum value="1"                                             name="VK_KHR_IMAGELESS_FRAMEBUFFER_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_imageless_framebuffer&quot;"      name="VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME"/>
+                <type name="VkPhysicalDeviceImagelessFramebufferFeaturesKHR"/>
+                <type name="VkFramebufferAttachmentsCreateInfoKHR"/>
+                <type name="VkRenderPassAttachmentBeginInfoKHR"/>
+                <enum offset="0" extends="VkStructureType" name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR"/>
+                <enum offset="1" extends="VkStructureType" name="VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO_KHR"/>
+                <enum offset="2" extends="VkStructureType" name="VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR"/>
+                <enum offset="3" extends="VkStructureType" name="VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR"/>
+                <enum bitpos="0" extends="VkFramebufferCreateFlagBits" name="VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR"/>
             </require>
         </extension>
         <extension name="VK_KHR_create_renderpass2" requires="VK_KHR_multiview,VK_KHR_maintenance2" number="110" contact="Tobias Hector @tobias" type="device" supported="vulkan">
@@ -9463,9 +9921,9 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_KHR_storage_buffer_storage_class&quot;" name="VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_AMD_gpu_shader_int16" number="133" type="device" author="AMD" contact="Qun Lin @linqun" supported="vulkan">
+        <extension name="VK_AMD_gpu_shader_int16" number="133" type="device" author="AMD" contact="Qun Lin @linqun" supported="vulkan" deprecatedby="VK_KHR_shader_float16_int8">
             <require>
-                <enum value="1"                                             name="VK_AMD_GPU_SHADER_INT16_SPEC_VERSION"/>
+                <enum value="2"                                             name="VK_AMD_GPU_SHADER_INT16_SPEC_VERSION"/>
                 <enum value="&quot;VK_AMD_gpu_shader_int16&quot;"           name="VK_AMD_GPU_SHADER_INT16_EXTENSION_NAME"/>
             </require>
         </extension>
@@ -9694,10 +10152,14 @@ typedef void <name>CAMetalLayer</name>;
                 <enum offset="0" extends="VkPolygonMode"                    name="VK_POLYGON_MODE_FILL_RECTANGLE_NV"/>
             </require>
         </extension>
-        <extension name="VK_NV_extension_155" number="155" author="NV" contact="Jeff Bolz @jeffbolznv" supported="disabled">
+        <extension name="VK_NV_shader_sm_builtins" number="155" type="device" requiresCore="1.1" author="NV" contact="Daniel Koch @dgkoch" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_NV_EXTENSION_155_SPEC_VERSION"/>
-                <enum value="&quot;VK_NV_extension_155&quot;"               name="VK_NV_EXTENSION_155_EXTENSION_NAME"/>
+                <enum value="1"                                             name="VK_NV_SHADER_SM_BUILTINS_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_shader_sm_builtins&quot;"          name="VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV"/>
+                <enum offset="1" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV"/>
+                <type name="VkPhysicalDeviceShaderSMBuiltinsPropertiesNV"/>
+                <type name="VkPhysicalDeviceShaderSMBuiltinsFeaturesNV"/>
             </require>
         </extension>
         <extension name="VK_EXT_post_depth_coverage" number="156" type="device" author="NV" contact="Daniel Koch @dgkoch" supported="vulkan">
@@ -10025,7 +10487,7 @@ typedef void <name>CAMetalLayer</name>;
         </extension>
         <extension name="VK_EXT_filter_cubic" number="171" type="device" requires="VK_IMG_filter_cubic" author="QCOM" contact="Bill Licea-Kane @wwlk" supported="vulkan">
             <require>
-                <enum value="1"                                             name="VK_EXT_FILTER_CUBIC_SPEC_VERSION"/>
+                <enum value="2"                                             name="VK_EXT_FILTER_CUBIC_SPEC_VERSION"/>
                 <enum value="&quot;VK_EXT_filter_cubic&quot;"               name="VK_EXT_FILTER_CUBIC_EXTENSION_NAME"/>
                 <enum extends="VkFilter"                                    name="VK_FILTER_CUBIC_EXT" alias="VK_FILTER_CUBIC_IMG"/>
                 <enum extends="VkFormatFeatureFlagBits"                     name="VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_EXT" alias="VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_CUBIC_BIT_IMG"/>
@@ -10129,10 +10591,14 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_AMD_extension_183&quot;"              name="VK_KHR_EXTENSION_183_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_AMD_extension_184" number="184" author="AMD" contact="Daniel Rakos @drakos-amd" supported="disabled">
+        <extension name="VK_AMD_pipeline_compiler_control" number="184" type="device" author="AMD" contact="Matthaeus G. Chajdas @anteru" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_KHR_EXTENSION_184_SPEC_VERSION"/>
-                <enum value="&quot;VK_AMD_extension_184&quot;"              name="VK_KHR_EXTENSION_184_EXTENSION_NAME"/>
+                <enum value="1"                                             name="VK_AMD_PIPELINE_COMPILER_CONTROL_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_pipeline_compiler_control&quot;"  name="VK_AMD_PIPELINE_COMPILER_CONTROL_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PIPELINE_COMPILER_CONTROL_CREATE_INFO_AMD"/>
+                <type name="VkPipelineCompilerControlFlagBitsAMD"/>
+                <type name="VkPipelineCompilerControlFlagsAMD"/>
+                <type name="VkPipelineCompilerControlCreateInfoAMD"/>
             </require>
         </extension>
         <extension name="VK_EXT_calibrated_timestamps" number="185" type="device" author="EXT" contact="Daniel Rakos @drakos-amd" supported="vulkan">
@@ -10245,10 +10711,11 @@ typedef void <name>CAMetalLayer</name>;
         </extension>
         <extension name="VK_KHR_shader_float_controls" number="198" type="device" requires="VK_KHR_get_physical_device_properties2" author="KHR" contact="Alexander Galazin @alegal-arm" supported="vulkan">
             <require>
-                <enum value="1"                                           name="VK_KHR_SHADER_FLOAT_CONTROLS_SPEC_VERSION"/>
+                <enum value="4"                                           name="VK_KHR_SHADER_FLOAT_CONTROLS_SPEC_VERSION"/>
                 <enum value="&quot;VK_KHR_shader_float_controls&quot;"    name="VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME"/>
                 <enum offset="0" extends="VkStructureType"                name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR"/>
                 <type name="VkPhysicalDeviceFloatControlsPropertiesKHR"/>
+                <type name="VkShaderFloatControlsIndependenceKHR"/>
             </require>
         </extension>
         <extension name="VK_NV_shader_subgroup_partitioned" number="199" type="device" requiresCore="1.1" author="NV" contact="Jeff Bolz @jeffbolznv" supported="vulkan">
@@ -10354,19 +10821,52 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_KHR_extension_209&quot;"          name="VK_KHR_EXTENSION_209_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_INTEL_extension_210" number="210" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+        <extension name="VK_INTEL_shader_integer_functions2" number="210" type="device" requires="VK_KHR_get_physical_device_properties2" author="INTEL" contact="Ian Romanick @ianromanick" supported="vulkan">
             <require>
-                <enum value="0"                                         name="VK_KHR_EXTENSION_210_SPEC_VERSION"/>
-                <enum value="&quot;VK_KHR_extension_210&quot;"          name="VK_KHR_EXTENSION_210_EXTENSION_NAME"/>
+                <enum value="1"                                         name="VK_INTEL_SHADER_INTEGER_FUNCTIONS_2_SPEC_VERSION"/>
+                <enum value="&quot;VK_INTEL_shader_integer_functions2&quot;" name="VK_INTEL_SHADER_INTEGER_FUNCTIONS_2_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL"/>
+                <type name="VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL"/>
             </require>
         </extension>
-        <extension name="VK_INTEL_extension_211" number="211" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+        <extension name="VK_INTEL_performance_query" number="211" type="device" author="INTEL" contact="Lionel Landwerlin @llandwerlin" supported="vulkan">
             <require>
-                <enum value="0"                                         name="VK_KHR_EXTENSION_211_SPEC_VERSION"/>
-                <enum value="&quot;VK_KHR_extension_211&quot;"          name="VK_KHR_EXTENSION_211_EXTENSION_NAME"/>
+                <enum value="1"                                         name="VK_INTEL_PERFORMANCE_QUERY_SPEC_VERSION"/>
+                <enum value="&quot;VK_INTEL_performance_query&quot;"    name="VK_INTEL_PERFORMANCE_QUERY_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO_INTEL"/>
+                <enum offset="1" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_INITIALIZE_PERFORMANCE_API_INFO_INTEL"/>
+                <enum offset="2" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PERFORMANCE_MARKER_INFO_INTEL"/>
+                <enum offset="3" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PERFORMANCE_STREAM_MARKER_INFO_INTEL"/>
+                <enum offset="4" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PERFORMANCE_OVERRIDE_INFO_INTEL"/>
+                <enum offset="5" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PERFORMANCE_CONFIGURATION_ACQUIRE_INFO_INTEL"/>
+                <enum offset="0" extends="VkQueryType"                  name="VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL"/>
+                <enum offset="0" extends="VkObjectType"                 name="VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL"/>
+                <type name="VkPerformanceConfigurationTypeINTEL"/>
+                <type name="VkQueryPoolSamplingModeINTEL"/>
+                <type name="VkPerformanceOverrideTypeINTEL"/>
+                <type name="VkPerformanceParameterTypeINTEL"/>
+                <type name="VkPerformanceValueTypeINTEL"/>
+                <type name="VkPerformanceValueDataINTEL"/>
+                <type name="VkPerformanceValueINTEL"/>
+                <type name="VkInitializePerformanceApiInfoINTEL"/>
+                <type name="VkQueryPoolCreateInfoINTEL"/>
+                <type name="VkPerformanceMarkerInfoINTEL"/>
+                <type name="VkPerformanceStreamMarkerInfoINTEL"/>
+                <type name="VkPerformanceOverrideInfoINTEL"/>
+                <type name="VkPerformanceConfigurationAcquireInfoINTEL"/>
+                <type name="VkPerformanceConfigurationINTEL"/>
+                <command name="vkInitializePerformanceApiINTEL"/>
+                <command name="vkUninitializePerformanceApiINTEL"/>
+                <command name="vkCmdSetPerformanceMarkerINTEL"/>
+                <command name="vkCmdSetPerformanceStreamMarkerINTEL"/>
+                <command name="vkCmdSetPerformanceOverrideINTEL"/>
+                <command name="vkAcquirePerformanceConfigurationINTEL"/>
+                <command name="vkReleasePerformanceConfigurationINTEL"/>
+                <command name="vkQueueSetPerformanceConfigurationINTEL"/>
+                <command name="vkGetPerformanceParameterINTEL"/>
             </require>
         </extension>
-        <extension name="VK_KHR_vulkan_memory_model" number="212" type="device" author="KHR" contact="Jeff Bolz @jeffbolznv" provisional="true" supported="vulkan">
+        <extension name="VK_KHR_vulkan_memory_model" number="212" type="device" author="KHR" contact="Jeff Bolz @jeffbolznv" supported="vulkan">
             <require>
                 <enum value="3"                                         name="VK_KHR_VULKAN_MEMORY_MODEL_SPEC_VERSION"/>
                 <enum value="&quot;VK_KHR_vulkan_memory_model&quot;"    name="VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME"/>
@@ -10486,10 +10986,18 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_GOOGLE_decorate_string&quot;"         name="VK_GOOGLE_DECORATE_STRING_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_AMD_extension_226" number="226" author="AMD" contact="Martin Dinkov @mdinkov" supported="disabled">
+        <extension name="VK_EXT_subgroup_size_control" number="226" type="device" requiresCore="1.1" author="EXT" contact="Neil Henning @sheredom" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_AMD_EXTENSION_226_SPEC_VERSION"/>
-                <enum value="&quot;VK_AMD_extension_226&quot;"              name="VK_AMD_EXTENSION_226_EXTENSION_NAME"/>
+                <enum value="2"                                                name="VK_EXT_SUBGROUP_SIZE_CONTROL_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_subgroup_size_control&quot;"         name="VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME"/>
+                <type                                                          name="VkPhysicalDeviceSubgroupSizeControlFeaturesEXT"/>
+                <type                                                          name="VkPhysicalDeviceSubgroupSizeControlPropertiesEXT"/>
+                <type                                                          name="VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT"/>
+                <enum offset="0" extends="VkStructureType"                     name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT"/>
+                <enum offset="1" extends="VkStructureType"                     name="VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO_EXT"/>
+                <enum offset="2" extends="VkStructureType"                     name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT"/>
+                <enum bitpos="0" extends="VkPipelineShaderStageCreateFlagBits" name="VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT"/>
+                <enum bitpos="1" extends="VkPipelineShaderStageCreateFlagBits" name="VK_PIPELINE_SHADER_STAGE_CREATE_REQUIRE_FULL_SUBGROUPS_BIT_EXT"/>
             </require>
         </extension>
         <extension name="VK_AMD_extension_227" number="227" author="AMD" contact="Martin Dinkov @mdinkov" supported="disabled">
@@ -10498,10 +11006,14 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_AMD_extension_227&quot;"              name="VK_AMD_EXTENSION_227_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_AMD_extension_228" number="228" author="AMD" contact="Martin Dinkov @mdinkov" supported="disabled">
+        <extension name="VK_AMD_shader_core_properties2" number="228" type="device" author="AMD" contact="Matthaeus G. Chajdas @anteru" supported="vulkan" requires="VK_AMD_shader_core_properties">
             <require>
-                <enum value="0"                                             name="VK_AMD_EXTENSION_228_SPEC_VERSION"/>
-                <enum value="&quot;VK_AMD_extension_228&quot;"              name="VK_AMD_EXTENSION_228_EXTENSION_NAME"/>
+                <enum value="1"                                             name="VK_AMD_SHADER_CORE_PROPERTIES_2_SPEC_VERSION"/>
+                <enum value="&quot;VK_AMD_shader_core_properties2&quot;"    name="VK_AMD_SHADER_CORE_PROPERTIES_2_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD"/>
+                <type                                                       name="VkPhysicalDeviceShaderCoreProperties2AMD"/>
+                <type                                                       name="VkShaderCorePropertiesFlagBitsAMD"/>
+                <type                                                       name="VkShaderCorePropertiesFlagsAMD"/>
             </require>
         </extension>
         <extension name="VK_AMD_extension_229" number="229" author="AMD" contact="Martin Dinkov @mdinkov" supported="disabled">
@@ -10671,16 +11183,27 @@ typedef void <name>CAMetalLayer</name>;
                 <command name="vkGetPhysicalDeviceCooperativeMatrixPropertiesNV"/>
             </require>
         </extension>
-        <extension name="VK_NV_extension_251" number="251" author="NV" contact="Kedarnath Thangudu @kthangudu" supported="disabled">
+        <extension name="VK_NV_coverage_reduction_mode" number="251" requires="VK_NV_framebuffer_mixed_samples" type="device" author="NV" contact="Kedarnath Thangudu @kthangudu" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_NV_EXTENSION_251_SPEC_VERSION"/>
-                <enum value="&quot;VK_NV_extension_251&quot;"               name="VK_NV_EXTENSION_251_EXTENSION_NAME"/>
+                <enum value="1"                                             name="VK_NV_COVERAGE_REDUCTION_MODE_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_coverage_reduction_mode&quot;"     name="VK_NV_COVERAGE_REDUCTION_MODE_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV"/>
+                <enum offset="1" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV"/>
+                <enum offset="2" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_FRAMEBUFFER_MIXED_SAMPLES_COMBINATION_NV"/>
+                <type name="VkPhysicalDeviceCoverageReductionModeFeaturesNV"/>
+                <type name="VkPipelineCoverageReductionStateCreateInfoNV"/>
+                <type name="VkPipelineCoverageReductionStateCreateFlagsNV"/>
+                <type name="VkCoverageReductionModeNV"/>
+                <type name="VkFramebufferMixedSamplesCombinationNV"/>
+                <command name="vkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV"/>
             </require>
         </extension>
-        <extension name="VK_EXT_extension_252" number="252" author="EXT" contact="Piers Daniell @pdaniell-nv" supported="disabled">
+        <extension name="VK_EXT_fragment_shader_interlock" number="252" author="EXT" type="device" requires="VK_KHR_get_physical_device_properties2" contact="Piers Daniell @pdaniell-nv" supported="vulkan">
             <require>
-                <enum value="0"                                              name="VK_NV_EXTENSION_252_SPEC_VERSION"/>
-                <enum value="&quot;VK_NV_extension_252&quot;"                name="VK_NV_EXTENSION_252_EXTENSION_NAME"/>
+                <enum value="1"                                                 name="VK_EXT_FRAGMENT_SHADER_INTERLOCK_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_fragment_shader_interlock&quot;"      name="VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT"/>
+                <type name="VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT"/>
             </require>
         </extension>
         <extension name="VK_EXT_ycbcr_image_arrays" number="253" type="device" requires="VK_KHR_sampler_ycbcr_conversion" author="EXT" contact="Piers Daniell @pdaniell-nv" supported="vulkan">
@@ -10691,10 +11214,12 @@ typedef void <name>CAMetalLayer</name>;
                 <type name="VkPhysicalDeviceYcbcrImageArraysFeaturesEXT"/>
             </require>
         </extension>
-        <extension name="VK_EXT_extension_254" number="254" author="EXT" contact="Graeme Leese @gnl21" supported="disabled">
+        <extension name="VK_KHR_uniform_buffer_standard_layout" number="254" requires="VK_KHR_get_physical_device_properties2" type="device" author="KHR" contact="Graeme Leese @gnl21" supported="vulkan">
             <require>
-                <enum value="1"                                             name="VK_EXT_EXTENSION_254_SPEC_VERSION"/>
-                <enum value="&quot;VK_EXT_extension_254&quot;"              name="VK_EXT_EXTENSION_254_EXTENSION_NAME"/>
+                <enum value="1"                                                 name="VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_uniform_buffer_standard_layout&quot;" name="VK_KHR_UNIFORM_BUFFER_STANDARD_LAYOUT_EXTENSION_NAME"/>
+                <type                                                           name="VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR"/>
+                <enum offset="0" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR"/>
             </require>
         </extension>
         <extension name="VK_EXT_extension_255" number="255" author="EXT" contact="Jesse Hall @jessehall" supported="disabled">
@@ -10721,14 +11246,21 @@ typedef void <name>CAMetalLayer</name>;
                 <enum offset="1" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT"/>
                 <type name="VkSurfaceFullScreenExclusiveWin32InfoEXT"/>
             </require>
+            <require extension="VK_KHR_device_group">
+                <command name="vkGetDeviceGroupSurfacePresentModes2EXT"/>
+            </require>
             <require feature="VK_VERSION_1_1">
                 <command name="vkGetDeviceGroupSurfacePresentModes2EXT"/>
             </require>
         </extension>
-        <extension name="VK_EXT_extension_257" number="257" author="EXT" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" supported="disabled">
+        <extension name="VK_EXT_headless_surface" number="257" type="instance" requires="VK_KHR_surface" author="EXT" contact="Ray Smith @raysmith-arm" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_EXT_EXTENSION_257_SPEC_VERSION"/>
-                <enum value="&quot;VK_EXT_extension_257&quot;"              name="VK_EXT_EXTENSION_257_EXTENSION_NAME"/>
+                <enum value="0"                                                 name="VK_EXT_HEADLESS_SURFACE_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_headless_surface&quot;"               name="VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                      name="VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT"/>
+                <type name="VkHeadlessSurfaceCreateFlagsEXT"/>
+                <type name="VkHeadlessSurfaceCreateInfoEXT"/>
+                <command name="vkCreateHeadlessSurfaceEXT"/>
             </require>
         </extension>
         <extension name="VK_EXT_extension_258" number="258" author="EXT" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" supported="disabled">
@@ -10743,10 +11275,19 @@ typedef void <name>CAMetalLayer</name>;
                 <enum value="&quot;VK_EXT_extension_259&quot;"              name="VK_EXT_EXTENSION_259_EXTENSION_NAME"/>
             </require>
         </extension>
-        <extension name="VK_EXT_extension_260" number="260" author="EXT" contact="Allen Jensen @allenjensen" supported="disabled">
+        <extension name="VK_EXT_line_rasterization" number="260" type="device" requires="VK_KHR_get_physical_device_properties2" author="EXT" contact="Jeff Bolz @jeffbolznv" supported="vulkan">
             <require>
-                <enum value="0"                                             name="VK_EXT_EXTENSION_260_SPEC_VERSION"/>
-                <enum value="&quot;VK_EXT_extension_260&quot;"              name="VK_EXT_extension_260"/>
+                <enum value="1"                                             name="VK_EXT_LINE_RASTERIZATION_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_line_rasterization&quot;"         name="VK_EXT_LINE_RASTERIZATION_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT"/>
+                <enum offset="1" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT"/>
+                <enum offset="2" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT"/>
+                <enum offset="0" extends="VkDynamicState"                   name="VK_DYNAMIC_STATE_LINE_STIPPLE_EXT"/>
+                <type name="VkPhysicalDeviceLineRasterizationFeaturesEXT"/>
+                <type name="VkPhysicalDeviceLineRasterizationPropertiesEXT"/>
+                <type name="VkPipelineRasterizationLineStateCreateInfoEXT"/>
+                <type name="VkLineRasterizationModeEXT"/>
+                <command name="vkCmdSetLineStippleEXT"/>
             </require>
         </extension>
         <extension name="VK_NV_extension_261" number="261" author="NV" contact="Kedarnath Thangudu @kthangudu" supported="disabled">
@@ -10762,6 +11303,197 @@ typedef void <name>CAMetalLayer</name>;
                 <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT"/>
                 <type name="VkPhysicalDeviceHostQueryResetFeaturesEXT"/>
                 <command name="vkResetQueryPoolEXT"/>
+            </require>
+        </extension>
+        <extension name="VK_GGP_extension_263" number="263" author="GGP" contact="Jean-Francois Roy @jfroy" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_GOOGLE_EXTENSION_263_SPEC_VERSION"/>
+                <enum value="&quot;VK_GGP_extension_263&quot;"              name="VK_GOOGLE_EXTENSION_263_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_BRCM_extension_264" number="264" author="BRCM" contact="Graeme Leese @gnl21" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_BRCM_EXTENSION_264_SPEC_VERSION"/>
+                <enum value="&quot;VK_BRCM_extension_264&quot;"             name="VK_BRCM_EXTENSION_264_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_BRCM_extension_265" number="265" author="BRCM" contact="Graeme Leese @gnl21" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_BRCM_EXTENSION_265_SPEC_VERSION"/>
+                <enum value="&quot;VK_BRCM_extension_265&quot;"             name="VK_BRCM_EXTENSION_265_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_index_type_uint8" number="266" type="device" author="EXT" contact="Piers Daniell @pdaniell-nv" supported="vulkan">
+            <require>
+                <enum value="1"                                             name="VK_EXT_INDEX_TYPE_UINT8_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_index_type_uint8&quot;"           name="VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT"/>
+                <enum offset="0" extends="VkIndexType"                      name="VK_INDEX_TYPE_UINT8_EXT"/>
+                <type name="VkPhysicalDeviceIndexTypeUint8FeaturesEXT"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_extension_267" number="267" type="device" author="EXT" contact="Piers Daniell @pdaniell-nv" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_EXT_EXTENSION_267_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_extension_267&quot;"              name="VK_EXT_extension_267"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_extension_268" number="268" type="device" author="KHR" contact="Piers Daniell @pdaniell-nv" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_EXT_EXTENSION_268_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_268&quot;"              name="VK_EXT_extension_268"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_extension_269" number="269" type="device" author="KHR" contact="Josh Barczak @jbarczak" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_KHR_EXTENSION_269_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_269&quot;"              name="VK_KHR_extension_269"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_pipeline_executable_properties" number="270" type="device" author="KHR" contact="Jason Ekstrand @jekstrand" supported="vulkan">
+            <require>
+                <enum value="1"                                         name="VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_pipeline_executable_properties&quot;"   name="VK_KHR_PIPELINE_EXECUTABLE_PROPERTIES_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR"/>
+                <enum offset="1" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PIPELINE_INFO_KHR"/>
+                <enum offset="2" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_PROPERTIES_KHR"/>
+                <enum offset="3" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INFO_KHR"/>
+                <enum offset="4" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_STATISTIC_KHR"/>
+                <enum offset="5" extends="VkStructureType"              name="VK_STRUCTURE_TYPE_PIPELINE_EXECUTABLE_INTERNAL_REPRESENTATION_KHR"/>
+                <enum bitpos="6" extends="VkPipelineCreateFlagBits"     name="VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR"/>
+                <enum bitpos="7" extends="VkPipelineCreateFlagBits"     name="VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR"/>
+                <type name="VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR"/>
+                <type name="VkPipelineInfoKHR"/>
+                <type name="VkPipelineExecutablePropertiesKHR"/>
+                <type name="VkPipelineExecutableInfoKHR"/>
+                <type name="VkPipelineExecutableStatisticFormatKHR"/>
+                <type name="VkPipelineExecutableStatisticValueKHR"/>
+                <type name="VkPipelineExecutableStatisticKHR"/>
+                <type name="VkPipelineExecutableInternalRepresentationKHR"/>
+                <command name="vkGetPipelineExecutablePropertiesKHR"/>
+                <command name="vkGetPipelineExecutableStatisticsKHR"/>
+                <command name="vkGetPipelineExecutableInternalRepresentationsKHR"/>
+            </require>
+        </extension>
+        <extension name="VK_INTEL_extension_271" number="271" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_INTEL_EXTENSION_271_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_271&quot;"              name="VK_INTEL_extension_271"/>
+            </require>
+        </extension>
+        <extension name="VK_INTEL_extension_272" number="272" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_INTEL_EXTENSION_272_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_272&quot;"              name="VK_INTEL_extension_272"/>
+            </require>
+        </extension>
+        <extension name="VK_INTEL_extension_273" number="273" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_INTEL_EXTENSION_273_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_273&quot;"              name="VK_INTEL_extension_273"/>
+            </require>
+        </extension>
+        <extension name="VK_INTEL_extension_274" number="274" type="device" author="INTEL" contact="Jason Ekstrand @jekstrand" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_INTEL_EXTENSION_274_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_274&quot;"              name="VK_INTEL_extension_274"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_extension_275" number="275" type="instance" author="KHR" contact="Lionel Landwerlin @llandwerlin" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_KHR_EXTENSION_275_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_275&quot;"              name="VK_KHR_extension_275"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_extension_276" number="276" type="device" author="KHR" contact="James Jones @cubanismo" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_KHR_EXTENSION_276_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_276&quot;"              name="VK_KHR_extension_276"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_shader_demote_to_helper_invocation" number="277" type="device" requires="VK_KHR_get_physical_device_properties2" author="EXT" contact="Jeff Bolz @jeffbolznv" supported="vulkan">
+            <require>
+                <enum value="1"                                                     name="VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_shader_demote_to_helper_invocation&quot;" name="VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                          name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT"/>
+                <type name="VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT"/>
+            </require>
+        </extension>
+        <extension name="VK_NV_extension_278" number="278" type="device" author="NV" contact="Christoph Kubisch @pixeljetstream" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_NV_EXTENSION_278_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_extension_278&quot;"               name="VK_NV_extension_278"/>
+            </require>
+        </extension>
+        <extension name="VK_NV_extension_279" number="279" type="device" author="NV" contact="Christoph Kubisch @pixeljetstream" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_NV_EXTENSION_279_SPEC_VERSION"/>
+                <enum value="&quot;VK_NV_extension_279&quot;"               name="VK_NV_extension_279"/>
+            </require>
+        </extension>
+        <extension name="VK_KHR_extension_280" number="280" type="device" author="KHR" contact="Kevin Petit @kevinpetit" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_KHR_EXTENSION_280_SPEC_VERSION"/>
+                <enum value="&quot;VK_KHR_extension_280&quot;"              name="VK_KHR_extension_280"/>
+            </require>
+        </extension>
+        <extension name="VK_ARM_extension_281" number="281" type="device" author="ARM" contact="Kevin Petit @kevinpetit" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_ARM_EXTENSION_281_SPEC_VERSION"/>
+                <enum value="&quot;VK_ARM_extension_281&quot;"              name="VK_ARM_extension_281"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_texel_buffer_alignment" number="282" type="device" requires="VK_KHR_get_physical_device_properties2" author="EXT" contact="Jeff Bolz @jeffbolznv" supported="vulkan">
+            <require>
+                <enum value="1"                                             name="VK_EXT_TEXEL_BUFFER_ALIGNMENT_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_texel_buffer_alignment&quot;"     name="VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME"/>
+                <enum offset="0" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT"/>
+                <enum offset="1" extends="VkStructureType"                  name="VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT"/>
+                <type name="VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT"/>
+                <type name="VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT"/>
+            </require>
+        </extension>
+        <extension name="VK_QCOM_extension_283" number="283" type="device" author="QCOM" contact="Jeff Leger @jackohound" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_QCOM_EXTENSION_283_SPEC_VERSION"/>
+                <enum value="&quot;VK_QCOM_extension_283&quot;"             name="VK_QCOM_extension_283"/>
+                <enum bitpos="1" extends="VkRenderPassCreateFlagBits"       name="VK_RENDER_PASS_RESERVED_BIT_1_QCOM"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_extension_284" number="284" type="device" author="EXT" contact="Samuel Pitoiset @hakzsam" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_EXT_EXTENSION_284_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_extension_284&quot;"              name="VK_EXT_extension_284"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_extension_285" number="285" type="device" author="EXT" contact="Yiwei Zhang @zzyiwei" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_EXT_EXTENSION_285_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_extension_285&quot;"              name="VK_EXT_extension_285"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_extension_286" number="286" type="instance" author="EXT" contact="Drew DeVault sir@cmpwn.com" supported="disabled">
+            <require>
+                <enum value="0"                                             name="VK_EXT_EXTENSION_286_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_extension_286&quot;"              name="VK_EXT_extension_286"/>
+            </require>
+        </extension>
+        <extension name="VK_NVX_extension_287" number="287" author="NVX" contact="Liam Middlebrook @liam-middlebrook" supported="disabled">
+            <require>
+                <enum value="0"                                                 name="VK_NVX_EXTENSION_287_SPEC_VERSION"/>
+                <enum value="&quot;VK_NVX_extension_287&quot;"                   name="VK_NVX_EXTENSION_287_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_NVX_extension_288" number="288" author="NVX" contact="Liam Middlebrook @liam-middlebrook" supported="disabled">
+            <require>
+                <enum value="0"                                                 name="VK_NVX_EXTENSION_288_SPEC_VERSION"/>
+                <enum value="&quot;VK_NVX_extension_288&quot;"                   name="VK_NVX_EXTENSION_288_EXTENSION_NAME"/>
+            </require>
+        </extension>
+        <extension name="VK_EXT_extension_289" number="289" author="EXT" contact="Jan-Harald Fredriksen @janharaldfredriksen-arm" supported="disabled">
+            <require>
+                <enum value="0"                                                 name="VK_EXT_EXTENSION_289_SPEC_VERSION"/>
+                <enum value="&quot;VK_EXT_extension_289&quot;"                  name="VK_EXT_EXTENSION_289_EXTENSION_NAME"/>
             </require>
         </extension>
     </extensions>

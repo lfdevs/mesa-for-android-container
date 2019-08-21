@@ -22,7 +22,8 @@ libaub = static_library(
   'aub',
   files('aub_read.c', 'aub_mem.c'),
   include_directories : [inc_common, inc_intel],
-  link_with : [libintel_common, libintel_dev, libmesa_util],
+  dependencies : idep_mesautil,
+  link_with : [libintel_common, libintel_dev],
   c_args : [c_vis_args, no_override_init_args],
   install : false
 )
@@ -30,9 +31,9 @@ libaub = static_library(
 aubinator = executable(
   'aubinator',
   files('aubinator.c'),
-  dependencies : [dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
+  dependencies : [idep_mesautil, dep_expat, dep_zlib, dep_dl, dep_thread, dep_m],
   include_directories : [inc_common, inc_intel],
-  link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util, libaub],
+  link_with : [libintel_common, libintel_compiler, libintel_dev, libaub],
   c_args : [c_vis_args, no_override_init_args],
   install : true
 )
@@ -40,9 +41,9 @@ aubinator = executable(
 aubinator_error_decode = executable(
   'aubinator_error_decode',
   files('aubinator_error_decode.c'),
-  dependencies : [dep_zlib, dep_thread],
+  dependencies : [idep_mesautil, dep_zlib, dep_thread],
   include_directories : [inc_common, inc_intel],
-  link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
+  link_with : [libintel_common, libintel_compiler, libintel_dev],
   c_args : [c_vis_args, no_override_init_args],
   install : true
 )
@@ -50,9 +51,9 @@ aubinator_error_decode = executable(
 i965_disasm = executable(
   'i965_disasm',
   files('i965_disasm.c'),
-  dependencies : [dep_thread],
+  dependencies : [idep_mesautil, dep_thread],
   include_directories : [inc_common, inc_intel],
-  link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util],
+  link_with : [libintel_common, libintel_compiler, libintel_dev],
   c_args : [c_vis_args, no_override_init_args],
   install : true
 )
@@ -83,9 +84,9 @@ configure_file(
 libintel_sanitize_gpu = shared_library(
   'intel_sanitize_gpu',
   files('intel_sanitize_gpu.c'),
-  dependencies : [dep_dl, dep_thread],
+  dependencies : [idep_mesautil, dep_dl, dep_thread],
   include_directories : [inc_common, inc_intel, inc_include],
-  link_with : [libintel_common, libmesa_util],
+  link_with : libintel_common,
   c_args : [c_vis_args, no_override_init_args, c_sse2_args],
   install_dir : get_option('libexecdir'),
   install : true
@@ -119,11 +120,57 @@ if with_tools.contains('intel-ui')
   aubinator_viewer = executable(
     'aubinator_viewer',
     files('aubinator_viewer.cpp', 'aubinator_viewer_decoder.cpp'),
-    dependencies : [dep_zlib, dep_dl, dep_thread, dep_m, libintel_imgui_gtk_dep],
+    dependencies : [idep_mesautil, dep_zlib, dep_dl, dep_thread, dep_m, libintel_imgui_gtk_dep],
     include_directories : [inc_common, inc_intel],
-    link_with : [libintel_common, libintel_compiler, libintel_dev, libmesa_util, libaub],
+    link_with : [libintel_common, libintel_compiler, libintel_dev, libaub],
     c_args : [c_vis_args, no_override_init_args],
     cpp_args : ['-fpermissive', '-Wno-parentheses', '-Wno-class-memaccess'],
     install : true
   )
 endif
+
+i965_gram_tab = custom_target(
+   'i965_gram.tab.[ch]',
+   input : 'i965_gram.y',
+   output : ['i965_gram.tab.c', 'i965_gram.tab.h'],
+   command : [
+      prog_bison, '@INPUT@', '--defines=@OUTPUT1@',
+      '--output=@OUTPUT0@'
+   ]
+)
+
+i965_lex_yy_c = custom_target(
+   'i965_lex.yy.c',
+   input : 'i965_lex.l',
+   output : 'i965_lex.yy.c',
+   command : [prog_flex, '-o', '@OUTPUT@', '@INPUT@']
+)
+
+i965_asm = executable(
+   'i965_asm',
+   ['i965_asm.c', i965_gram_tab[0], i965_gram_tab[1], i965_lex_yy_c],
+   dependencies : [idep_mesautil, dep_thread],
+   include_directories : [inc_common, inc_intel],
+   link_with : [libintel_common, libintel_compiler, libintel_dev],
+   c_args : [c_vis_args, no_override_init_args],
+   install : true
+)
+
+asm_testcases = [
+   ['brw', 'tests/gen4'],
+   ['g4x', 'tests/gen4.5'],
+   ['ilk', 'tests/gen5'],
+   ['snb', 'tests/gen6'],
+   ['ivb', 'tests/gen7'],
+   ['hsw', 'tests/gen7.5'],
+   ['bdw', 'tests/gen8'],
+   ['skl', 'tests/gen9'],
+   ['icl', 'tests/gen11'],
+]
+
+test_runner = find_program('tests/run-test.sh')
+foreach testcase : asm_testcases
+   test('i965_asm : ' + testcase[1], test_runner,
+        args : [i965_asm, testcase[1], testcase[0]],
+        env : ['srcdir=' + meson.current_source_dir()])
+endforeach

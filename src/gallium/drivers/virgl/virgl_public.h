@@ -25,7 +25,8 @@
 
 struct pipe_screen;
 struct virgl_winsys;
+struct pipe_screen_config;
 
 struct pipe_screen *
-virgl_create_screen(struct virgl_winsys *vws);
+virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *config);
 #endif

@@ -52,7 +52,7 @@ vc4_bo_cache_free_all(struct vc4_bo_cache *cache);
 void
 vc4_bo_debug_describe(char* buf, const struct vc4_bo *ptr)
 {
-   util_sprintf(buf, "vc4_bo<%s,%u,%u>", ptr->name ? ptr->name : "?",
+   sprintf(buf, "vc4_bo<%s,%u,%u>", ptr->name ? ptr->name : "?",
                 ptr->handle, ptr->size);
 }
 

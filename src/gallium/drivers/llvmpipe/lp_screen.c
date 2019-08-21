@@ -97,9 +97,9 @@ static const char *
 llvmpipe_get_name(struct pipe_screen *screen)
 {
    static char buf[100];
-   util_snprintf(buf, sizeof(buf), "llvmpipe (LLVM %u.%u, %u bits)",
-		 HAVE_LLVM >> 8, HAVE_LLVM & 0xff,
-		 lp_native_vector_width );
+   snprintf(buf, sizeof(buf), "llvmpipe (LLVM %u.%u, %u bits)",
+            HAVE_LLVM >> 8, HAVE_LLVM & 0xff,
+            lp_native_vector_width );
    return buf;
 }
 
@@ -112,7 +112,9 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
       return 1;
-   case PIPE_CAP_SM3:
+   case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
+   case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
+   case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
    case PIPE_CAP_MAX_DUAL_SOURCE_RENDER_TARGETS:
       return 1;
@@ -140,8 +142,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TEXTURE_BORDER_COLOR_QUIRK:
    case PIPE_CAP_MAX_TEXTURE_UPLOAD_MEMORY_BUDGET:
       return 0;
-   case PIPE_CAP_MAX_TEXTURE_2D_LEVELS:
-      return LP_MAX_TEXTURE_2D_LEVELS;
+   case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+      return 1 << (LP_MAX_TEXTURE_2D_LEVELS - 1);
    case PIPE_CAP_MAX_TEXTURE_3D_LEVELS:
       return LP_MAX_TEXTURE_3D_LEVELS;
    case PIPE_CAP_MAX_TEXTURE_CUBE_LEVELS:
@@ -313,6 +315,8 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 1;
    case PIPE_CAP_MAX_VARYINGS:
       return 32;
+   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
+      return 1;
    case PIPE_CAP_MULTISAMPLE_Z_RESOLVE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
    case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
@@ -327,7 +331,6 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MULTI_DRAW_INDIRECT_PARAMS:
    case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
    case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
-   case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
    case PIPE_CAP_INVALIDATE_BUFFER:
    case PIPE_CAP_GENERATE_MIPMAP:
    case PIPE_CAP_STRING_MARKER:
@@ -349,7 +352,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_TGSI_CAN_READ_OUTPUTS:
    case PIPE_CAP_NATIVE_FENCE_FD:
    case PIPE_CAP_GLSL_OPTIMIZE_CONSERVATIVELY:
-   case PIPE_CAP_TGSI_FS_FBFETCH:
+   case PIPE_CAP_FBFETCH:
    case PIPE_CAP_TGSI_MUL_ZERO_WINS:
    case PIPE_CAP_TGSI_CLOCK:
    case PIPE_CAP_POLYGON_MODE_FILL_RECTANGLE:
@@ -383,8 +386,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_GS_INVOCATIONS:
       return 32;
    case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
-      return 1 << 27;
-
+      return LP_MAX_TGSI_SHADER_BUFFER_SIZE;
    default:
       return u_pipe_screen_get_param_defaults(screen, param);
    }
@@ -461,7 +463,7 @@ llvmpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
  * \param format  the format to test
  * \param type  one of PIPE_TEXTURE, PIPE_SURFACE
  */
-static boolean
+static bool
 llvmpipe_is_format_supported( struct pipe_screen *_screen,
                               enum pipe_format format,
                               enum pipe_texture_target target,
@@ -475,7 +477,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
 
    format_desc = util_format_description(format);
    if (!format_desc)
-      return FALSE;
+      return false;
 
    assert(target == PIPE_BUFFER ||
           target == PIPE_TEXTURE_1D ||
@@ -488,7 +490,7 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
           target == PIPE_TEXTURE_CUBE_ARRAY);
 
    if (sample_count > 1)
-      return FALSE;
+      return false;
 
    if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
       return false;
@@ -497,24 +499,24 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB) {
          /* this is a lie actually other formats COULD exist where we would fail */
          if (format_desc->nr_channels < 3)
-            return FALSE;
+            return false;
       }
       else if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_RGB)
-         return FALSE;
+         return false;
 
       if (format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN &&
           format != PIPE_FORMAT_R11G11B10_FLOAT)
-         return FALSE;
+         return false;
 
       assert(format_desc->block.width == 1);
       assert(format_desc->block.height == 1);
 
       if (format_desc->is_mixed)
-         return FALSE;
+         return false;
 
       if (!format_desc->is_array && !format_desc->is_bitmask &&
           format != PIPE_FORMAT_R11G11B10_FLOAT)
-         return FALSE;
+         return false;
    }
 
    if ((bind & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_SAMPLER_VIEW)) &&
@@ -528,44 +530,44 @@ llvmpipe_is_format_supported( struct pipe_screen *_screen,
       if (format_desc->is_array &&
           format_desc->nr_channels == 3 &&
           format_desc->block.bits != 96) {
-         return FALSE;
+         return false;
       }
    }
 
    if (bind & PIPE_BIND_DISPLAY_TARGET) {
       if(!winsys->is_displaytarget_format_supported(winsys, bind, format))
-         return FALSE;
+         return false;
    }
 
    if (bind & PIPE_BIND_DEPTH_STENCIL) {
       if (format_desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
-         return FALSE;
+         return false;
 
       if (format_desc->colorspace != UTIL_FORMAT_COLORSPACE_ZS)
-         return FALSE;
+         return false;
 
       /* TODO: Support stencil-only formats */
       if (format_desc->swizzle[0] == PIPE_SWIZZLE_NONE) {
-         return FALSE;
+         return false;
       }
    }
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC ||
        format_desc->layout == UTIL_FORMAT_LAYOUT_ATC) {
       /* Software decoding is not hooked up. */
-      return FALSE;
+      return false;
    }
 
    if (format_desc->layout == UTIL_FORMAT_LAYOUT_ETC &&
        format != PIPE_FORMAT_ETC1_RGB8)
-      return FALSE;
+      return false;
 
    /*
     * Everything can be supported by u_format
     * (those without fetch_rgba_float might be not but shouldn't hit that)
     */
 
-   return TRUE;
+   return true;
 }
 
 
@@ -627,7 +629,7 @@ llvmpipe_fence_reference(struct pipe_screen *screen,
 /**
  * Wait for the fence to finish.
  */
-static boolean
+static bool
 llvmpipe_fence_finish(struct pipe_screen *screen,
                       struct pipe_context *ctx,
                       struct pipe_fence_handle *fence_handle,
@@ -644,7 +646,7 @@ llvmpipe_fence_finish(struct pipe_screen *screen,
 
       lp_fence_wait(f);
    }
-   return TRUE;
+   return true;
 }
 
 static uint64_t
@@ -701,7 +703,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    llvmpipe_init_screen_resource_funcs(&screen->base);
 
    screen->num_threads = util_cpu_caps.nr_cpus > 1 ? util_cpu_caps.nr_cpus : 0;
-#ifdef PIPE_SUBSYSTEM_EMBEDDED
+#ifdef EMBEDDED_DEVICE
    screen->num_threads = 0;
 #endif
    screen->num_threads = debug_get_num_option("LP_NUM_THREADS", screen->num_threads);

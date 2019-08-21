@@ -67,6 +67,16 @@ enum radeon_bo_flag { /* bitfield */
     RADEON_FLAG_32BIT =    (1 << 6),
 };
 
+enum radeon_dependency_flag {
+    /* Add the dependency to the parallel compute IB only. */
+    RADEON_DEPENDENCY_PARALLEL_COMPUTE_ONLY = 1 << 0,
+
+    /* Instead of waiting for a job to finish execution, the dependency will
+     * be signaled when the job starts execution.
+     */
+    RADEON_DEPENDENCY_START_FENCE = 1 << 1,
+};
+
 enum radeon_bo_usage { /* bitfield */
     RADEON_USAGE_READ = 2,
     RADEON_USAGE_WRITE = 4,
@@ -123,7 +133,6 @@ enum radeon_value_id {
     RADEON_GPU_TEMPERATURE, /* DRM 2.42.0 */
     RADEON_CURRENT_SCLK,
     RADEON_CURRENT_MCLK,
-    RADEON_GPU_RESET_COUNTER, /* DRM 2.43.0 */
     RADEON_CS_THREAD_TIME,
 };
 
@@ -402,12 +411,14 @@ struct radeon_winsys {
      * Get a winsys handle from a winsys buffer. The internal structure
      * of the handle is platform-specific and only a winsys should access it.
      *
+     * \param ws        The winsys instance for which the handle is to be valid
      * \param buf       A winsys buffer object to get the handle from.
      * \param whandle   A winsys handle pointer.
      * \param stride    A stride of the buffer in bytes, for texturing.
      * \return          true on success.
      */
-    bool (*buffer_get_handle)(struct pb_buffer *buf,
+    bool (*buffer_get_handle)(struct radeon_winsys *ws,
+                              struct pb_buffer *buf,
                               unsigned stride, unsigned offset,
                               unsigned slice_size,
                               struct winsys_handle *whandle);
@@ -493,6 +504,23 @@ struct radeon_winsys {
                                        bool stop_exec_on_failure);
 
     /**
+     * Add a parallel compute IB to a gfx IB. It will share the buffer list
+     * and fence dependencies with the gfx IB. The gfx flush call will submit
+     * both IBs at the same time.
+     *
+     * The compute IB doesn't have an output fence, so the primary IB has
+     * to use a wait packet for synchronization.
+     *
+     * The returned IB is only a stream for writing packets to the new
+     * IB. Calling other winsys functions with it is not allowed, not even
+     * "cs_destroy". Use the gfx IB instead.
+     *
+     * \param cs              Gfx IB
+     */
+    struct radeon_cmdbuf *(*cs_add_parallel_compute_ib)(struct radeon_cmdbuf *cs,
+                                                        bool uses_gds_ordered_append);
+
+    /**
      * Destroy a command stream.
      *
      * \param cs        A command stream to destroy.
@@ -545,8 +573,12 @@ struct radeon_winsys {
      *
      * \param cs        A command stream.
      * \param dw        Number of CS dwords requested by the caller.
+     * \param force_chaining  Chain the IB into a new buffer now to discard
+     *                        the CP prefetch cache (to emulate PKT3_REWIND)
+     * \return true if there is enough space
      */
-    bool (*cs_check_space)(struct radeon_cmdbuf *cs, unsigned dw);
+    bool (*cs_check_space)(struct radeon_cmdbuf *cs, unsigned dw,
+                           bool force_chaining);
 
     /**
      * Return the buffer list.
@@ -614,9 +646,12 @@ struct radeon_winsys {
     /**
      * Add a fence dependency to the CS, so that the CS will wait for
      * the fence before execution.
+     *
+     * \param dependency_flags  Bitmask of RADEON_DEPENDENCY_*
      */
     void (*cs_add_fence_dependency)(struct radeon_cmdbuf *cs,
-                                    struct pipe_fence_handle *fence);
+                                    struct pipe_fence_handle *fence,
+                                    unsigned dependency_flags);
 
     /**
      * Signal a syncobj when the CS finishes execution.

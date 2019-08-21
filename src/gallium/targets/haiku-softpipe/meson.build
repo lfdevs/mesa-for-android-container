@@ -30,11 +30,11 @@ libswpipe = shared_library(
   cpp_args : [cpp_vis_args],
   link_args : [ld_args_bsymbolic, ld_args_gc_sections],
   link_with : [
-    libglapi, libswhgl, libsthgl, libmesa_util, libcompiler,
+    libglapi, libswhgl, libsthgl, libcompiler,
     libmesa_gallium, libglsl, libnir, libgallium, libgl
   ],
   dependencies : [
     driver_swrast, cpp.find_library('be'), cpp.find_library('translation'),
-    cpp.find_library('network'), dep_unwind
+    cpp.find_library('network'), dep_unwind, idep_mesautil,
   ]
 )

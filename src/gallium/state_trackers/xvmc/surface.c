@@ -227,8 +227,8 @@ Status XvMCRenderSurface(Display *dpy, XvMCContext *context, unsigned int pictur
 
    XvMCContextPrivate *context_priv;
    XvMCSurfacePrivate *target_surface_priv;
-   MAYBE_UNUSED XvMCSurfacePrivate *past_surface_priv;
-   MAYBE_UNUSED XvMCSurfacePrivate *future_surface_priv;
+   ASSERTED XvMCSurfacePrivate *past_surface_priv;
+   ASSERTED XvMCSurfacePrivate *future_surface_priv;
    XvMCMacroBlock *xvmc_mb;
 
    XVMC_MSG(XVMC_TRACE, "[XvMC] Rendering to surface %p, with past %p and future %p\n",

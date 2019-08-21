@@ -59,33 +59,41 @@
  * \return error code to indicate success failure
  */
 static enum pipe_error
-translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
-                  unsigned offset,
-                  enum pipe_prim_type orig_prim, enum pipe_prim_type gen_prim,
+translate_indices(struct svga_hwtnl *hwtnl,
+                  const struct pipe_draw_info *info,
+                  enum pipe_prim_type gen_prim,
                   unsigned orig_nr, unsigned gen_nr,
-                  unsigned index_size,
-                  u_translate_func translate, struct pipe_resource **out_buf)
+                  unsigned gen_size,
+                  u_translate_func translate,
+                  struct pipe_resource **out_buf,
+                  unsigned *out_offset)
 {
    struct pipe_context *pipe = &hwtnl->svga->pipe;
    struct svga_screen *screen = svga_screen(pipe->screen);
-   struct svga_buffer *src_sbuf = svga_buffer(src);
+   struct svga_buffer *src_sbuf = NULL;
    struct pipe_transfer *src_transfer = NULL;
    struct pipe_transfer *dst_transfer = NULL;
-   unsigned size = index_size * gen_nr;
+   const unsigned size = gen_size * gen_nr;
+   const unsigned offset = info->start * info->index_size;
    const void *src_map = NULL;
    struct pipe_resource *dst = NULL;
    void *dst_map = NULL;
 
-   assert(index_size == 2 || index_size == 4);
+   assert(gen_size == 2 || gen_size == 4);
+   if (!info->has_user_indices)
+      src_sbuf = svga_buffer(info->index.resource);
 
-   if (!screen->debug.no_cache_index_buffers) {
+   /* If the draw_info provides us with a buffer rather than a
+    * user pointer, Check to see if we've already translated that buffer
+    */
+   if (src_sbuf && !screen->debug.no_cache_index_buffers) {
       /* Check if we already have a translated index buffer */
       if (src_sbuf->translated_indices.buffer &&
-          src_sbuf->translated_indices.orig_prim == orig_prim &&
+          src_sbuf->translated_indices.orig_prim == info->mode &&
           src_sbuf->translated_indices.new_prim == gen_prim &&
           src_sbuf->translated_indices.offset == offset &&
           src_sbuf->translated_indices.count == orig_nr &&
-          src_sbuf->translated_indices.index_size == index_size) {
+          src_sbuf->translated_indices.index_size == gen_size) {
          pipe_resource_reference(out_buf, src_sbuf->translated_indices.buffer);
          return PIPE_OK;
       }
@@ -96,51 +104,75 @@ translate_indices(struct svga_hwtnl *hwtnl, struct pipe_resource *src,
     */
    u_trim_pipe_prim(gen_prim, &gen_nr);
 
-   size = index_size * gen_nr;
+   if (src_sbuf) {
+      /* If we have a source buffer, create a destination buffer in the
+       * hope that we can reuse the translated data later. If not,
+       * we'd probably be better off using the upload buffer.
+       */
+      dst = pipe_buffer_create(pipe->screen,
+                               PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_IMMUTABLE,
+                               size);
+      if (!dst)
+         goto fail;
 
-   dst = pipe_buffer_create(pipe->screen,
-                            PIPE_BIND_INDEX_BUFFER, PIPE_USAGE_DEFAULT, size);
-   if (!dst)
-      goto fail;
+      dst_map = pipe_buffer_map(pipe, dst, PIPE_TRANSFER_WRITE, &dst_transfer);
+      if (!dst_map)
+         goto fail;
 
-   src_map = pipe_buffer_map(pipe, src, PIPE_TRANSFER_READ, &src_transfer);
-   if (!src_map)
-      goto fail;
+      *out_offset = 0;
+      src_map = pipe_buffer_map(pipe, info->index.resource,
+                                PIPE_TRANSFER_READ |
+                                PIPE_TRANSFER_UNSYNCHRONIZED,
+                                &src_transfer);
+      if (!src_map)
+         goto fail;
+   } else {
+      /* Allocate upload buffer space. Align to the index size. */
+      u_upload_alloc(pipe->stream_uploader, 0, size, gen_size,
+                     out_offset, &dst, &dst_map);
+      if (!dst)
+         goto fail;
 
-   dst_map = pipe_buffer_map(pipe, dst, PIPE_TRANSFER_WRITE, &dst_transfer);
-   if (!dst_map)
-      goto fail;
+      src_map = info->index.user;
+   }
 
    translate((const char *) src_map + offset, 0, 0, gen_nr, 0, dst_map);
 
-   pipe_buffer_unmap(pipe, src_transfer);
-   pipe_buffer_unmap(pipe, dst_transfer);
+   if (src_transfer)
+      pipe_buffer_unmap(pipe, src_transfer);
+
+   if (dst_transfer)
+      pipe_buffer_unmap(pipe, dst_transfer);
+   else
+      u_upload_unmap(pipe->stream_uploader);
 
    *out_buf = dst;
 
-   if (!screen->debug.no_cache_index_buffers) {
+   if (src_sbuf && !screen->debug.no_cache_index_buffers) {
       /* Save the new, translated index buffer in the hope we can use it
        * again in the future.
        */
       pipe_resource_reference(&src_sbuf->translated_indices.buffer, dst);
-      src_sbuf->translated_indices.orig_prim = orig_prim;
+      src_sbuf->translated_indices.orig_prim = info->mode;
       src_sbuf->translated_indices.new_prim = gen_prim;
       src_sbuf->translated_indices.offset = offset;
       src_sbuf->translated_indices.count = orig_nr;
-      src_sbuf->translated_indices.index_size = index_size;
+      src_sbuf->translated_indices.index_size = gen_size;
    }
 
    return PIPE_OK;
 
  fail:
-   if (src_map)
+   if (src_transfer)
       pipe_buffer_unmap(pipe, src_transfer);
 
-   if (dst_map)
+   if (dst_transfer)
       pipe_buffer_unmap(pipe, dst_transfer);
+   else if (dst_map)
+      u_upload_unmap(pipe->stream_uploader);
 
    if (dst)
-      pipe->screen->resource_destroy(pipe->screen, dst);
+      pipe_resource_reference(&dst, NULL);
 
    return PIPE_ERROR_OUT_OF_MEMORY;
 }
@@ -180,12 +212,10 @@ svga_hwtnl_simple_draw_range_elements(struct svga_hwtnl *hwtnl,
 
 enum pipe_error
 svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
-                               struct pipe_resource *index_buffer,
-                               unsigned index_size, int index_bias,
-                               unsigned min_index, unsigned max_index,
-                               enum pipe_prim_type prim, unsigned start, unsigned count,
-                               unsigned start_instance, unsigned instance_count)
+                               const struct pipe_draw_info *info,
+                               unsigned count)
 {
+   struct pipe_context *pipe = &hwtnl->svga->pipe;
    enum pipe_prim_type gen_prim;
    unsigned gen_size, gen_nr;
    enum indices_mode gen_type;
@@ -195,9 +225,9 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
    SVGA_STATS_TIME_PUSH(svga_sws(hwtnl->svga),
                         SVGA_STATS_TIME_HWTNLDRAWELEMENTS);
 
-   if (svga_need_unfilled_fallback(hwtnl, prim)) {
-      gen_type = u_unfilled_translator(prim,
-                                       index_size,
+   if (svga_need_unfilled_fallback(hwtnl, info->mode)) {
+      gen_type = u_unfilled_translator(info->mode,
+                                       info->index_size,
                                        count,
                                        hwtnl->api_fillmode,
                                        &gen_prim,
@@ -205,8 +235,8 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
    }
    else {
       gen_type = u_index_translator(svga_hw_prims,
-                                    prim,
-                                    index_size,
+                                    info->mode,
+                                    info->index_size,
                                     count,
                                     hwtnl->api_pv,
                                     hwtnl->hw_pv,
@@ -217,17 +247,36 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
    if (gen_type == U_TRANSLATE_MEMCPY) {
       /* No need for translation, just pass through to hardware:
        */
+      unsigned start_offset = info->start * info->index_size;
+      struct pipe_resource *index_buffer = NULL;
+      unsigned index_offset;
+
+      if (info->has_user_indices) {
+         u_upload_data(pipe->stream_uploader, 0, count * info->index_size,
+                       info->index_size, (char *) info->index.user + start_offset,
+                       &index_offset, &index_buffer);
+         u_upload_unmap(pipe->stream_uploader);
+         index_offset /= info->index_size;
+      } else {
+         pipe_resource_reference(&index_buffer, info->index.resource);
+         index_offset = info->start;
+      }
+
+      assert(index_buffer != NULL);
+
       ret = svga_hwtnl_simple_draw_range_elements(hwtnl, index_buffer,
-                                                   index_size,
-                                                   index_bias,
-                                                   min_index,
-                                                   max_index,
-                                                   gen_prim, start, count,
-                                                   start_instance,
-                                                   instance_count);
+                                                  info->index_size,
+                                                  info->index_bias,
+                                                  info->min_index,
+                                                  info->max_index,
+                                                  gen_prim, index_offset, count,
+                                                  info->start_instance,
+                                                  info->instance_count);
+      pipe_resource_reference(&index_buffer, NULL);
    }
    else {
       struct pipe_resource *gen_buf = NULL;
+      unsigned gen_offset = 0;
 
       /* Need to allocate a new index buffer and run the translate
        * func to populate it.  Could potentially cache this translated
@@ -236,22 +285,21 @@ svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
        * GL though, as index buffers are typically used only once
        * there.
        */
-      ret = translate_indices(hwtnl,
-                              index_buffer,
-                              start * index_size,
-                              prim, gen_prim,
+      ret = translate_indices(hwtnl, info, gen_prim,
                               count, gen_nr, gen_size,
-                              gen_func, &gen_buf);
+                              gen_func, &gen_buf, &gen_offset);
       if (ret == PIPE_OK) {
+         gen_offset /= gen_size;
          ret = svga_hwtnl_simple_draw_range_elements(hwtnl,
                                                      gen_buf,
                                                      gen_size,
-                                                     index_bias,
-                                                     min_index,
-                                                     max_index,
-                                                     gen_prim, 0, gen_nr,
-                                                     start_instance,
-                                                     instance_count);
+                                                     info->index_bias,
+                                                     info->min_index,
+                                                     info->max_index,
+                                                     gen_prim, gen_offset,
+                                                     gen_nr,
+                                                     info->start_instance,
+                                                     info->instance_count);
       }
 
       if (gen_buf) {

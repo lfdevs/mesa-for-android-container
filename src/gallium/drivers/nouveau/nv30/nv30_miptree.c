@@ -46,7 +46,7 @@ layer_offset(struct pipe_resource *pt, unsigned level, unsigned layer)
    return lvl->offset + (layer * lvl->zslice_size);
 }
 
-static boolean
+static bool
 nv30_miptree_get_handle(struct pipe_screen *pscreen,
                         struct pipe_resource *pt,
                         struct winsys_handle *handle)

@@ -164,7 +164,10 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
                                                       PIPE_MAX_SHADER_SAMPLER_VIEWS);
       elem_types[LP_JIT_CTX_SAMPLERS] = LLVMArrayType(sampler_type,
                                                       PIPE_MAX_SAMPLERS);
-
+      elem_types[LP_JIT_CTX_SSBOS] =
+         LLVMArrayType(LLVMPointerType(LLVMInt32TypeInContext(lc), 0), LP_MAX_TGSI_SHADER_BUFFERS);
+      elem_types[LP_JIT_CTX_NUM_SSBOS] =
+            LLVMArrayType(LLVMInt32TypeInContext(lc), LP_MAX_TGSI_SHADER_BUFFERS);
       context_type = LLVMStructTypeInContext(lc, elem_types,
                                              ARRAY_SIZE(elem_types), 0);
 
@@ -198,6 +201,12 @@ lp_jit_create_types(struct lp_fragment_shader_variant *lp)
       LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, samplers,
                              gallivm->target, context_type,
                              LP_JIT_CTX_SAMPLERS);
+      LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, ssbos,
+                             gallivm->target, context_type,
+                             LP_JIT_CTX_SSBOS);
+      LP_CHECK_MEMBER_OFFSET(struct lp_jit_context, num_ssbos,
+                             gallivm->target, context_type,
+                             LP_JIT_CTX_NUM_SSBOS);
       LP_CHECK_STRUCT_SIZE(struct lp_jit_context,
                            gallivm->target, context_type);
 

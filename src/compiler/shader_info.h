@@ -35,6 +35,7 @@ extern "C" {
 struct spirv_supported_capabilities {
    bool address;
    bool atomic_storage;
+   bool demote_to_helper_invocation;
    bool derivative_group;
    bool descriptor_array_dynamic_indexing;
    bool descriptor_array_non_uniform_indexing;
@@ -42,8 +43,9 @@ struct spirv_supported_capabilities {
    bool device_group;
    bool draw_parameters;
    bool float64;
+   bool fragment_shader_sample_interlock;
+   bool fragment_shader_pixel_interlock;
    bool geometry_streams;
-   bool gcn_shader;
    bool image_ms_array;
    bool image_read_without_format;
    bool image_write_without_format;
@@ -70,9 +72,11 @@ struct spirv_supported_capabilities {
    bool subgroup_vote;
    bool tessellation;
    bool transform_feedback;
-   bool trinary_minmax;
    bool variable_pointers;
    bool float16;
+   bool amd_gcn_shader;
+   bool amd_shader_ballot;
+   bool amd_trinary_minmax;
 };
 
 typedef struct shader_info {
@@ -154,6 +158,13 @@ typedef struct shader_info {
          /* Which inputs are doubles */
          uint64_t double_inputs;
 
+         /* For AMD-specific driver-internal shaders. It replaces vertex
+          * buffer loads with code generating VS inputs from scalar registers.
+          *
+          * Valid values: SI_VS_BLIT_SGPRS_POS_*
+          */
+         unsigned blit_sgprs_amd;
+
          /* True if the shader writes position in window space coordinates pre-transform */
          bool window_space_position;
       } vs;
@@ -183,6 +194,14 @@ typedef struct shader_info {
 
       struct {
          bool uses_discard;
+
+         /**
+          * True if this fragment shader requires helper invocations.  This
+          * can be caused by the use of ALU derivative ops, texture
+          * instructions which do implicit derivatives, and the use of quad
+          * subgroup operations.
+          */
+         bool needs_helper_invocations;
 
          /**
           * Whether any inputs are declared with the "sample" qualifier.
@@ -242,6 +261,7 @@ typedef struct shader_info {
          unsigned local_size[3];
 
          bool local_size_variable;
+         char user_data_components_amd;
 
          /**
           * Size of shared variables accessed by the compute shader.

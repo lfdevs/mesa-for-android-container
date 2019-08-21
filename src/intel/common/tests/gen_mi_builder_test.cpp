@@ -62,8 +62,19 @@ __gen_address_offset(address addr, uint64_t offset)
 #define INPUT_DATA_OFFSET 0
 #define OUTPUT_DATA_OFFSET 2048
 
+#define __genxml_cmd_length(cmd) cmd ## _length
+#define __genxml_cmd_length_bias(cmd) cmd ## _length_bias
+#define __genxml_cmd_header(cmd) cmd ## _header
+#define __genxml_cmd_pack(cmd) cmd ## _pack
+
 #include "genxml/genX_pack.h"
 #include "gen_mi_builder.h"
+
+#define emit_cmd(cmd, name)                                           \
+   for (struct cmd name = { __genxml_cmd_header(cmd) },               \
+        *_dst = (struct cmd *) emit_dwords(__genxml_cmd_length(cmd)); \
+        __builtin_expect(_dst != NULL, 1);                            \
+        __genxml_cmd_pack(cmd)(this, (void *)_dst, &name), _dst = NULL)
 
 #include <vector>
 
@@ -171,7 +182,7 @@ gen_mi_builder_test::SetUp()
          ASSERT_EQ(drmIoctl(fd, DRM_IOCTL_I915_GETPARAM,
                             (void *)&getparam), 0) << strerror(errno);
 
-         ASSERT_TRUE(gen_get_device_info(device_id, &devinfo));
+         ASSERT_TRUE(gen_get_device_info_from_pci_id(device_id, &devinfo));
          if (devinfo.gen != GEN_GEN || devinfo.is_haswell != GEN_IS_HASWELL) {
             close(fd);
             fd = -1;
@@ -674,6 +685,38 @@ TEST_F(gen_mi_builder_test, udiv32_imm)
                    values[i] / values[j]);
       }
    }
+}
+
+TEST_F(gen_mi_builder_test, store_if)
+{
+   uint64_t u64 = 0xb453b411deadc0deull;
+   uint32_t u32 = 0x1337d00d;
+
+   /* Write values with the predicate enabled */
+   emit_cmd(GENX(MI_PREDICATE), mip) {
+      mip.LoadOperation    = LOAD_LOAD;
+      mip.CombineOperation = COMBINE_SET;
+      mip.CompareOperation = COMPARE_TRUE;
+   }
+
+   gen_mi_store_if(&b, out_mem64(0), gen_mi_imm(u64));
+   gen_mi_store_if(&b, out_mem32(8), gen_mi_imm(u32));
+
+   /* Set predicate to false, write garbage that shouldn't land */
+   emit_cmd(GENX(MI_PREDICATE), mip) {
+      mip.LoadOperation    = LOAD_LOAD;
+      mip.CombineOperation = COMBINE_SET;
+      mip.CompareOperation = COMPARE_FALSE;
+   }
+
+   gen_mi_store_if(&b, out_mem64(0), gen_mi_imm(0xd0d0d0d0d0d0d0d0ull));
+   gen_mi_store_if(&b, out_mem32(8), gen_mi_imm(0xc000c000));
+
+   submit_batch();
+
+   EXPECT_EQ(*(uint64_t *)(output + 0), u64);
+   EXPECT_EQ(*(uint32_t *)(output + 8), u32);
+   EXPECT_EQ(*(uint32_t *)(output + 12), (uint32_t)canary);
 }
 
 #endif /* GEN_GEN >= 8 || GEN_IS_HASWELL */

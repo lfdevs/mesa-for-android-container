@@ -51,7 +51,7 @@ nvc0_destroy_query(struct pipe_context *pipe, struct pipe_query *pq)
    q->funcs->destroy_query(nvc0_context(pipe), q);
 }
 
-static boolean
+static bool
 nvc0_begin_query(struct pipe_context *pipe, struct pipe_query *pq)
 {
    struct nvc0_query *q = nvc0_query(pq);
@@ -66,9 +66,9 @@ nvc0_end_query(struct pipe_context *pipe, struct pipe_query *pq)
    return true;
 }
 
-static boolean
+static bool
 nvc0_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
-                      boolean wait, union pipe_query_result *result)
+                      bool wait, union pipe_query_result *result)
 {
    struct nvc0_query *q = nvc0_query(pq);
    return q->funcs->get_query_result(nvc0_context(pipe), q, wait, result);
@@ -77,7 +77,7 @@ nvc0_get_query_result(struct pipe_context *pipe, struct pipe_query *pq,
 static void
 nvc0_get_query_result_resource(struct pipe_context *pipe,
                                struct pipe_query *pq,
-                               boolean wait,
+                               bool wait,
                                enum pipe_query_value_type result_type,
                                int index,
                                struct pipe_resource *resource,
@@ -95,7 +95,7 @@ nvc0_get_query_result_resource(struct pipe_context *pipe,
 static void
 nvc0_render_condition(struct pipe_context *pipe,
                       struct pipe_query *pq,
-                      boolean condition, enum pipe_render_cond_flag mode)
+                      bool condition, enum pipe_render_cond_flag mode)
 {
    struct nvc0_context *nvc0 = nvc0_context(pipe);
    struct nouveau_pushbuf *push = nvc0->base.pushbuf;
@@ -262,7 +262,7 @@ nvc0_screen_get_driver_query_group_info(struct pipe_screen *pscreen,
 }
 
 static void
-nvc0_set_active_query_state(struct pipe_context *pipe, boolean enable)
+nvc0_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 

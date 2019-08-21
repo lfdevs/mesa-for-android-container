@@ -706,6 +706,8 @@ decode_dynamic_state_pointers(struct gen_batch_decode_ctx *ctx,
       state = gen_spec_find_struct(ctx->spec, struct_type);
    }
 
+   count = update_count(ctx, state_offset, state->dw_length, count);
+
    for (int i = 0; i < count; i++) {
       fprintf(ctx->fp, "%s %d\n", struct_type, i);
       ctx_print_group(ctx, state, state_addr, state_map);
@@ -748,6 +750,13 @@ decode_3dstate_scissor_state_pointers(struct gen_batch_decode_ctx *ctx,
                                       const uint32_t *p)
 {
    decode_dynamic_state_pointers(ctx, "SCISSOR_RECT", p, 1);
+}
+
+static void
+decode_3dstate_slice_table_state_pointers(struct gen_batch_decode_ctx *ctx,
+                                          const uint32_t *p)
+{
+   decode_dynamic_state_pointers(ctx, "SLICE_HASH_TABLE", p, 1);
 }
 
 static void
@@ -799,6 +808,7 @@ struct custom_decoder {
    { "3DSTATE_BLEND_STATE_POINTERS", decode_3dstate_blend_state_pointers },
    { "3DSTATE_CC_STATE_POINTERS", decode_3dstate_cc_state_pointers },
    { "3DSTATE_SCISSOR_STATE_POINTERS", decode_3dstate_scissor_state_pointers },
+   { "3DSTATE_SLICE_TABLE_STATE_POINTERS", decode_3dstate_slice_table_state_pointers },
    { "MI_LOAD_REGISTER_IMM", decode_load_register_imm }
 };
 

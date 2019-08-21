@@ -330,7 +330,7 @@ def generate(env):
         '__STDC_CONSTANT_MACROS',
         '__STDC_FORMAT_MACROS',
         '__STDC_LIMIT_MACROS',
-        'HAVE_NO_AUTOCONF',
+        'HAVE_SCONS',
     ]
     if env['build'] in ('debug', 'checked'):
         cppdefines += ['DEBUG']
@@ -369,8 +369,14 @@ def generate(env):
         if check_functions(env, ['strtod_l', 'strtof_l']):
             cppdefines += ['HAVE_STRTOD_L']
 
+        if check_functions(env, ['random_r']):
+            cppdefines += ['HAVE_RANDOM_R']
+
         if check_functions(env, ['timespec_get']):
             cppdefines += ['HAVE_TIMESPEC_GET']
+
+        if check_header(env, 'sys/shm.h'):
+            cppdefines += ['HAVE_SYS_SHM_H']
 
     if platform == 'windows':
         cppdefines += [
@@ -397,10 +403,8 @@ def generate(env):
             ]
         if env['build'] in ('debug', 'checked'):
             cppdefines += ['_DEBUG']
-    if platform == 'windows':
-        cppdefines += ['PIPE_SUBSYSTEM_WINDOWS_USER']
     if env['embedded']:
-        cppdefines += ['PIPE_SUBSYSTEM_EMBEDDED']
+        cppdefines += ['EMBEDDED_DEVICE']
     env.Append(CPPDEFINES = cppdefines)
 
     # C compiler options

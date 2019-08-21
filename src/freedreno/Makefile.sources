@@ -12,7 +12,6 @@ drm_SOURCES := \
 	drm/msm_priv.h \
 	drm/freedreno_device.c \
 	drm/freedreno_priv.h \
-	drm/msm_drm.h \
 	drm/msm_ringbuffer.c
 
 ir3_SOURCES := \
@@ -49,13 +48,5 @@ ir3_SOURCES := \
 	ir3/ir3_sun.c
 
 ir3_GENERATED_FILES := \
-	ir3/ir3_nir_trig.c
-
-registers_FILES := \
-	registers/a2xx.xml.h \
-	registers/a3xx.xml.h \
-	registers/a4xx.xml.h \
-	registers/a5xx.xml.h \
-	registers/a6xx.xml.h \
-	registers/adreno_common.xml.h \
-	registers/adreno_pm4.xml.h
+	ir3/ir3_nir_trig.c \
+	ir3/ir3_nir_imul.c

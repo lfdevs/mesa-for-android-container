@@ -30,10 +30,12 @@
 #include "fd3_screen.h"
 #include "fd3_context.h"
 #include "fd3_format.h"
+#include "fd3_emit.h"
+#include "fd3_resource.h"
 
 #include "ir3/ir3_compiler.h"
 
-static boolean
+static bool
 fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
@@ -47,7 +49,7 @@ fd3_screen_is_format_supported(struct pipe_screen *pscreen,
 			(sample_count > 1)) { /* TODO add MSAA */
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -106,4 +108,9 @@ fd3_screen_init(struct pipe_screen *pscreen)
 	screen->compiler = ir3_compiler_create(screen->dev, screen->gpu_id);
 	pscreen->context_create = fd3_context_create;
 	pscreen->is_format_supported = fd3_screen_is_format_supported;
+	fd3_emit_init_screen(pscreen);
+
+	screen->setup_slices = fd3_setup_slices;
+	if (fd_mesa_debug & FD_DBG_TTILE)
+		screen->tile_mode = fd3_tile_mode;
 }

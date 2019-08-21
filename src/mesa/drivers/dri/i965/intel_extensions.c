@@ -201,6 +201,7 @@ intelInitExtensions(struct gl_context *ctx)
       ctx->Extensions.ARB_texture_gather = true;
       ctx->Extensions.ARB_texture_multisample = true;
       ctx->Extensions.ARB_uniform_buffer_object = true;
+      ctx->Extensions.EXT_texture_shadow_lod = true;
 
       if (ctx->API != API_OPENGL_COMPAT ||
           ctx->Const.AllowHigherCompatVersion)

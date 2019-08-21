@@ -491,7 +491,7 @@ complex_unroll_single_terminator(nir_loop *loop)
    unsigned num_times_to_clone = loop->info->max_trip_count + 1;
 
    nir_cf_list lp_body;
-   MAYBE_UNUSED nir_cf_node *unroll_loc =
+   UNUSED nir_cf_node *unroll_loc =
       complex_unroll_loop_body(loop, terminator, &lp_header, &lp_body,
                                remap_table, num_times_to_clone);
 

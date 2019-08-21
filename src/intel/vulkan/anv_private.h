@@ -729,7 +729,7 @@ struct anv_fixed_size_state_pool {
 };
 
 #define ANV_MIN_STATE_SIZE_LOG2 6
-#define ANV_MAX_STATE_SIZE_LOG2 20
+#define ANV_MAX_STATE_SIZE_LOG2 21
 
 #define ANV_STATE_BUCKETS (ANV_MAX_STATE_SIZE_LOG2 - ANV_MIN_STATE_SIZE_LOG2 + 1)
 
@@ -1054,6 +1054,8 @@ anv_pipeline_cache_upload_kernel(struct anv_pipeline_cache *cache,
                                  uint32_t constant_data_size,
                                  const struct brw_stage_prog_data *prog_data,
                                  uint32_t prog_data_size,
+                                 const struct brw_compile_stats *stats,
+                                 uint32_t num_stats,
                                  const struct nir_xfb_info *xfb_info,
                                  const struct anv_pipeline_bind_map *bind_map);
 
@@ -1072,6 +1074,8 @@ anv_device_upload_kernel(struct anv_device *device,
                          uint32_t constant_data_size,
                          const struct brw_stage_prog_data *prog_data,
                          uint32_t prog_data_size,
+                         const struct brw_compile_stats *stats,
+                         uint32_t num_stats,
                          const struct nir_xfb_info *xfb_info,
                          const struct anv_pipeline_bind_map *bind_map);
 
@@ -1134,6 +1138,8 @@ struct anv_device {
     struct blorp_context                        blorp;
 
     struct anv_state                            border_colors;
+
+    struct anv_state                            slice_hash;
 
     struct anv_queue                            queue;
 
@@ -1947,13 +1953,56 @@ enum anv_cmd_dirty_bits {
    ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK      = 1 << 6, /* VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK */
    ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK        = 1 << 7, /* VK_DYNAMIC_STATE_STENCIL_WRITE_MASK */
    ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE         = 1 << 8, /* VK_DYNAMIC_STATE_STENCIL_REFERENCE */
-   ANV_CMD_DIRTY_DYNAMIC_ALL                       = (1 << 9) - 1,
    ANV_CMD_DIRTY_PIPELINE                          = 1 << 9,
    ANV_CMD_DIRTY_INDEX_BUFFER                      = 1 << 10,
    ANV_CMD_DIRTY_RENDER_TARGETS                    = 1 << 11,
    ANV_CMD_DIRTY_XFB_ENABLE                        = 1 << 12,
+   ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE              = 1 << 13, /* VK_DYNAMIC_STATE_LINE_STIPPLE_EXT */
 };
 typedef uint32_t anv_cmd_dirty_mask_t;
+
+#define ANV_CMD_DIRTY_DYNAMIC_ALL                  \
+   (ANV_CMD_DIRTY_DYNAMIC_VIEWPORT |               \
+    ANV_CMD_DIRTY_DYNAMIC_SCISSOR |                \
+    ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH |             \
+    ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS |             \
+    ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS |        \
+    ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS |           \
+    ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK |   \
+    ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK |     \
+    ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE |      \
+    ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE)
+
+static inline enum anv_cmd_dirty_bits
+anv_cmd_dirty_bit_for_vk_dynamic_state(VkDynamicState vk_state)
+{
+   switch (vk_state) {
+   case VK_DYNAMIC_STATE_VIEWPORT:
+      return ANV_CMD_DIRTY_DYNAMIC_VIEWPORT;
+   case VK_DYNAMIC_STATE_SCISSOR:
+      return ANV_CMD_DIRTY_DYNAMIC_SCISSOR;
+   case VK_DYNAMIC_STATE_LINE_WIDTH:
+      return ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH;
+   case VK_DYNAMIC_STATE_DEPTH_BIAS:
+      return ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS;
+   case VK_DYNAMIC_STATE_BLEND_CONSTANTS:
+      return ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS;
+   case VK_DYNAMIC_STATE_DEPTH_BOUNDS:
+      return ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS;
+   case VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK:
+      return ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK;
+   case VK_DYNAMIC_STATE_STENCIL_WRITE_MASK:
+      return ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK;
+   case VK_DYNAMIC_STATE_STENCIL_REFERENCE:
+      return ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE;
+   case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
+      return ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE;
+   default:
+      assert(!"Unsupported dynamic state");
+      return 0;
+   }
+}
+
 
 enum anv_pipe_bits {
    ANV_PIPE_DEPTH_CACHE_FLUSH_BIT            = (1 << 0),
@@ -2217,6 +2266,11 @@ struct anv_dynamic_state {
       uint32_t                                  front;
       uint32_t                                  back;
    } stencil_reference;
+
+   struct {
+      uint32_t                                  factor;
+      uint16_t                                  pattern;
+   } line_stipple;
 };
 
 extern const struct anv_dynamic_state default_dynamic_state;
@@ -2273,6 +2327,7 @@ struct anv_attachment_state {
     * have not been cleared yet when multiview is active.
     */
    uint32_t                                     pending_clear_views;
+   struct anv_image_view *                      image_view;
 };
 
 /** State tracking for particular pipeline bind point
@@ -2371,6 +2426,12 @@ struct anv_cmd_state {
    bool                                         hiz_enabled;
 
    bool                                         conditional_render_enabled;
+
+   /**
+    * Last rendering scale argument provided to
+    * genX(cmd_buffer_emit_hashing_mode)().
+    */
+   unsigned                                     current_hash_scale;
 
    /**
     * Array length is anv_cmd_state::pass::attachment_count. Array content is
@@ -2698,6 +2759,9 @@ struct anv_shader_bin {
    const struct brw_stage_prog_data *prog_data;
    uint32_t prog_data_size;
 
+   struct brw_compile_stats stats[3];
+   uint32_t num_stats;
+
    struct nir_xfb_info *xfb_info;
 
    struct anv_pipeline_bind_map bind_map;
@@ -2710,6 +2774,7 @@ anv_shader_bin_create(struct anv_device *device,
                       const void *constant_data, uint32_t constant_data_size,
                       const struct brw_stage_prog_data *prog_data,
                       uint32_t prog_data_size, const void *prog_data_param,
+                      const struct brw_compile_stats *stats, uint32_t num_stats,
                       const struct nir_xfb_info *xfb_info,
                       const struct anv_pipeline_bind_map *bind_map);
 
@@ -2731,19 +2796,36 @@ anv_shader_bin_unref(struct anv_device *device, struct anv_shader_bin *shader)
       anv_shader_bin_destroy(device, shader);
 }
 
+/* 5 possible simultaneous shader stages and FS may have up to 3 binaries */
+#define MAX_PIPELINE_EXECUTABLES 7
+
+struct anv_pipeline_executable {
+   gl_shader_stage stage;
+
+   struct brw_compile_stats stats;
+
+   char *disasm;
+};
+
 struct anv_pipeline {
    struct anv_device *                          device;
    struct anv_batch                             batch;
    uint32_t                                     batch_data[512];
    struct anv_reloc_list                        batch_relocs;
-   uint32_t                                     dynamic_state_mask;
+   anv_cmd_dirty_mask_t                         dynamic_state_mask;
    struct anv_dynamic_state                     dynamic_state;
 
+   void *                                       mem_ctx;
+
+   VkPipelineCreateFlags                        flags;
    struct anv_subpass *                         subpass;
 
    bool                                         needs_data_cache;
 
    struct anv_shader_bin *                      shaders[MESA_SHADER_STAGES];
+
+   uint32_t                                     num_executables;
+   struct anv_pipeline_executable               executables[MAX_PIPELINE_EXECUTABLES];
 
    struct {
       const struct gen_l3_config *              l3_config;
@@ -2978,7 +3060,8 @@ struct anv_image {
    uint32_t array_size;
    uint32_t samples; /**< VkImageCreateInfo::samples */
    uint32_t n_planes;
-   VkImageUsageFlags usage; /**< Superset of VkImageCreateInfo::usage. */
+   VkImageUsageFlags usage; /**< VkImageCreateInfo::usage. */
+   VkImageUsageFlags stencil_usage;
    VkImageCreateFlags create_flags; /* Flags used when creating image. */
    VkImageTiling tiling; /** VkImageCreateInfo::tiling */
 
@@ -3285,6 +3368,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 void
 anv_image_copy_to_shadow(struct anv_cmd_buffer *cmd_buffer,
                          const struct anv_image *image,
+                         VkImageAspectFlagBits aspect,
                          uint32_t base_level, uint32_t level_count,
                          uint32_t base_layer, uint32_t layer_count);
 
@@ -3625,8 +3709,7 @@ enum anv_dump_action {
 void anv_dump_start(struct anv_device *device, enum anv_dump_action actions);
 void anv_dump_finish(void);
 
-void anv_dump_add_framebuffer(struct anv_cmd_buffer *cmd_buffer,
-                              struct anv_framebuffer *fb);
+void anv_dump_add_attachments(struct anv_cmd_buffer *cmd_buffer);
 
 static inline uint32_t
 anv_get_subpass_id(const struct anv_cmd_state * const cmd_state)

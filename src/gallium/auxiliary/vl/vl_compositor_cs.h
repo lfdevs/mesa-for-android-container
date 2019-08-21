@@ -32,10 +32,6 @@
 
 #include "vl_compositor.h"
 
-extern const char *compute_shader_video_buffer;
-extern const char *compute_shader_weave;
-extern const char *compute_shader_rgba;
-
 /**
  * create compute shader
  */
@@ -53,4 +49,6 @@ vl_compositor_cs_render(struct vl_compositor_state *s,
                         struct u_rect              *dirty_area,
                         bool                        clear_dirty);
 
+bool vl_compositor_cs_init_shaders(struct vl_compositor *c);
+void vl_compositor_cs_cleanup_shaders(struct vl_compositor *c);
 #endif /* vl_compositor_cs_h */

@@ -43,48 +43,18 @@ enum panfrost_memory_layout {
 struct panfrost_slice {
         unsigned offset;
         unsigned stride;
-};
 
-struct panfrost_bo {
-        struct pipe_reference reference;
+        /* If there is a header preceding each slice, how big is
+         * that header?  Used for AFBC */
+        unsigned header_size;
 
-        /* Description of the mip levels */
-        struct panfrost_slice slices[MAX_MIP_LEVELS];
+        /* If checksumming is enabled following the slice, what
+         * is its offset/stride? */
+        unsigned checksum_offset;
+        unsigned checksum_stride;
 
-        /* Mapping for the entire object (all levels) */
-        uint8_t *cpu;
-
-        /* GPU address for the object */
-        mali_ptr gpu;
-
-        /* Size of all entire trees */
-        size_t size;
-
-        /* Distance from tree to tree */
-        unsigned cubemap_stride;
-
-        /* Set if this bo was imported rather than allocated */
-        bool imported;
-
-        /* Internal layout (tiled?) */
-        enum panfrost_memory_layout layout;
-
-        /* If AFBC is enabled for this resource, we lug around an AFBC
-         * metadata buffer as well. The actual AFBC resource is also in
-         * afbc_slab (only defined for AFBC) at position afbc_main_offset
-         */
-
-        struct panfrost_memory afbc_slab;
-        int afbc_metadata_size;
-
-        /* If transaciton elimination is enabled, we have a dedicated
-         * buffer for that as well. */
-
-        bool has_checksum;
-        struct panfrost_memory checksum_slab;
-        int checksum_stride;
-
-        int gem_handle;
+        /* Has anything been written to this slice? */
+        bool initialized;
 };
 
 void
@@ -95,6 +65,10 @@ panfrost_bo_unreference(struct pipe_screen *screen, struct panfrost_bo *bo);
 
 struct panfrost_resource {
         struct pipe_resource base;
+        struct {
+                struct pipe_box biggest_rect;
+                struct pipe_scissor_state extent;
+        } damage;
 
         struct panfrost_bo *bo;
         struct renderonly_scanout *scanout;
@@ -102,12 +76,24 @@ struct panfrost_resource {
         struct panfrost_resource *separate_stencil;
 
         struct util_range valid_buffer_range;
+
+        /* Description of the mip levels */
+        struct panfrost_slice slices[MAX_MIP_LEVELS];
+
+        /* Distance from tree to tree */
+        unsigned cubemap_stride;
+
+        /* Internal layout (tiled?) */
+        enum panfrost_memory_layout layout;
+
+        /* Is transaciton elimination enabled? */
+        bool checksummed;
 };
 
 static inline struct panfrost_resource *
 pan_resource(struct pipe_resource *p)
 {
-   return (struct panfrost_resource *)p;
+        return (struct panfrost_resource *)p;
 }
 
 struct panfrost_gtransfer {
@@ -118,11 +104,47 @@ struct panfrost_gtransfer {
 static inline struct panfrost_gtransfer *
 pan_transfer(struct pipe_transfer *p)
 {
-   return (struct panfrost_gtransfer *)p;
+        return (struct panfrost_gtransfer *)p;
 }
+
+mali_ptr
+panfrost_get_texture_address(
+        struct panfrost_resource *rsrc,
+        unsigned level, unsigned face);
 
 void panfrost_resource_screen_init(struct panfrost_screen *screen);
 
 void panfrost_resource_context_init(struct pipe_context *pctx);
+
+void
+panfrost_resource_hint_layout(
+                struct panfrost_screen *screen,
+                struct panfrost_resource *rsrc,
+                enum panfrost_memory_layout layout,
+                signed weight);
+
+/* AFBC */
+
+bool
+panfrost_format_supports_afbc(enum pipe_format format);
+
+unsigned
+panfrost_afbc_header_size(unsigned width, unsigned height);
+
+/* Blitting */
+
+void
+panfrost_blit(struct pipe_context *pipe,
+              const struct pipe_blit_info *info);
+
+void
+panfrost_blit_wallpaper(struct panfrost_context *ctx,
+                        struct pipe_box *box);
+
+void
+panfrost_resource_set_damage_region(struct pipe_screen *screen,
+                                    struct pipe_resource *res,
+                                    unsigned int nrects,
+                                    const struct pipe_box *rects);
 
 #endif /* PAN_RESOURCE_H */

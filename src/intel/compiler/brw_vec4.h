@@ -45,7 +45,8 @@ brw_vec4_generate_assembly(const struct brw_compiler *compiler,
                            void *mem_ctx,
                            const nir_shader *nir,
                            struct brw_vue_prog_data *prog_data,
-                           const struct cfg_t *cfg);
+                           const struct cfg_t *cfg,
+                           struct brw_compile_stats *stats);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -109,7 +110,6 @@ public:
    int *virtual_grf_start;
    int *virtual_grf_end;
    brw::vec4_live_variables *live_intervals;
-   dst_reg userplane[MAX_CLIP_PLANES];
 
    bool need_all_constants_in_pull_buffer;
 
@@ -236,14 +236,14 @@ public:
    vec4_instruction *emit_minmax(enum brw_conditional_mod conditionalmod, dst_reg dst,
                                  src_reg src0, src_reg src1);
 
-   vec4_instruction *emit_lrp(const dst_reg &dst, const src_reg &x,
-                              const src_reg &y, const src_reg &a);
-
    /**
     * Copy any live channel from \p src to the first channel of the
     * result.
     */
    src_reg emit_uniformize(const src_reg &src);
+
+   /** Fix all float operands of a 3-source instruction. */
+   void fix_float_operands(src_reg op[3], nir_alu_instr *instr);
 
    src_reg fix_3src_operand(const src_reg &src);
    src_reg resolve_source_modifiers(const src_reg &src);

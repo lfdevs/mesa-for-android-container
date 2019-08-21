@@ -172,21 +172,6 @@ gem_mmap(int fd, uint32_t handle, uint64_t offset, uint64_t size)
    return (void *)(uintptr_t) mmap.addr_ptr;
 }
 
-static int
-gem_get_param(int fd, uint32_t param)
-{
-   int value;
-   drm_i915_getparam_t gp = {
-      .param = param,
-      .value = &value
-   };
-
-   if (gem_ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp) == -1)
-      return 0;
-
-   return value;
-}
-
 static enum drm_i915_gem_engine_class
 engine_class_from_ring_flag(uint32_t ring_flag)
 {
@@ -219,13 +204,15 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 
    /* We can't do this at open time as we're not yet authenticated. */
    if (device == 0) {
-      device = gem_get_param(fd, I915_PARAM_CHIPSET_ID);
-      fail_if(device == 0 || devinfo.gen == 0, "failed to identify chipset\n");
+      fail_if(!gen_get_device_info_from_fd(fd, &devinfo),
+              "failed to identify chipset.\n");
+      device = devinfo.chipset_id;
+   } else if (devinfo.gen == 0) {
+      fail_if(!gen_get_device_info_from_pci_id(device, &devinfo),
+              "failed to identify chipset.\n");
    }
-   if (devinfo.gen == 0) {
-      fail_if(!gen_get_device_info(device, &devinfo),
-              "failed to identify chipset=0x%x\n", device);
 
+   if (!aub_file.file) {
       aub_file_init(&aub_file, output_file,
                     verbose == 2 ? stdout : NULL,
                     device, program_invocation_short_name);
@@ -260,14 +247,14 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
       if (obj->flags & EXEC_OBJECT_PINNED) {
          bo->offset = obj->offset;
          if (verbose)
-            printf("BO #%d (%dB) pinned @ 0x%lx\n",
+            printf("BO #%d (%dB) pinned @ 0x%" PRIx64 "\n",
                    obj->handle, bo->size, bo->offset);
       } else {
          if (obj->alignment != 0)
             offset = align_u32(offset, obj->alignment);
          bo->offset = offset;
          if (verbose)
-            printf("BO #%d (%dB) @ 0x%lx\n", obj->handle,
+            printf("BO #%d (%dB) @ 0x%" PRIx64 "\n", obj->handle,
                    bo->size, bo->offset);
          offset = align_u32(offset + bo->size + 4095, 4096);
       }

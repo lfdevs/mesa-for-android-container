@@ -89,7 +89,7 @@ setup_primitive_restart(struct gl_context *ctx, struct pipe_draw_info *info)
          _mesa_primitive_restart_index(ctx, index_size);
 
       /* Enable primitive restart only when the restart index can have an
-       * effect. This is required for correctness in radeonsi VI support.
+       * effect. This is required for correctness in radeonsi GFX8 support.
        * Other hardware may also benefit from taking a faster, non-restart path
        * when possible.
        */

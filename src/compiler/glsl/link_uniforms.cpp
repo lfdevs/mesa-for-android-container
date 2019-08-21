@@ -472,7 +472,8 @@ public:
                               bool use_std430_as_default)
       : prog(prog), map(map), uniforms(uniforms),
         use_std430_as_default(use_std430_as_default), values(values),
-        bindless_targets(NULL), bindless_access(NULL)
+        bindless_targets(NULL), bindless_access(NULL),
+        shader_storage_blocks_write_access(0)
    {
    }
 

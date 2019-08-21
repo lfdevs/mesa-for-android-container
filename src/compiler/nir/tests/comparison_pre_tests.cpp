@@ -473,6 +473,56 @@ TEST_F(comparison_pre_test, a_lt_neg_imm_vs_a_plus_imm)
    EXPECT_TRUE(nir_opt_comparison_pre_impl(bld.impl));
 }
 
+TEST_F(comparison_pre_test, swizzle_of_same_immediate_vector)
+{
+   /* Before:
+    *
+    * vec4 32 ssa_0 = load_const (-2.0, -1.0,  1.0,  2.0)
+    * vec4 32 ssa_1 = load_const ( 2.0,  1.0, -1.0, -2.0)
+    * vec4 32 ssa_2 = load_const ( 3.0,  4.0,  5.0,  6.0)
+    * vec4 32 ssa_3 = fadd ssa_0, ssa_2
+    * vec1 1 ssa_4 = flt ssa_0.x, ssa_3.x
+    *
+    * if ssa_4 {
+    *    vec1 32 ssa_5 = fadd ssa_0.w, ssa_3.x
+    * } else {
+    * }
+    */
+   nir_ssa_def *a = nir_fadd(&bld, v1, v3);
+
+   nir_alu_instr *flt = nir_alu_instr_create(bld.shader, nir_op_flt);
+
+   flt->src[0].src = nir_src_for_ssa(v1);
+   flt->src[1].src = nir_src_for_ssa(a);
+
+   memcpy(&flt->src[0].swizzle, xxxx, sizeof(xxxx));
+   memcpy(&flt->src[1].swizzle, xxxx, sizeof(xxxx));
+
+   nir_builder_alu_instr_finish_and_insert(&bld, flt);
+
+   flt->dest.dest.ssa.num_components = 1;
+   flt->dest.write_mask = 1;
+
+   nir_if *nif = nir_push_if(&bld, &flt->dest.dest.ssa);
+
+   nir_alu_instr *fadd = nir_alu_instr_create(bld.shader, nir_op_fadd);
+
+   fadd->src[0].src = nir_src_for_ssa(v1);
+   fadd->src[1].src = nir_src_for_ssa(a);
+
+   memcpy(&fadd->src[0].swizzle, wwww, sizeof(wwww));
+   memcpy(&fadd->src[1].swizzle, xxxx, sizeof(xxxx));
+
+   nir_builder_alu_instr_finish_and_insert(&bld, fadd);
+
+   fadd->dest.dest.ssa.num_components = 1;
+   fadd->dest.write_mask = 1;
+
+   nir_pop_if(&bld, nif);
+
+   EXPECT_TRUE(nir_opt_comparison_pre_impl(bld.impl));
+}
+
 TEST_F(comparison_pre_test, non_scalar_add_result)
 {
    /* The optimization pass should not do anything because the result of the

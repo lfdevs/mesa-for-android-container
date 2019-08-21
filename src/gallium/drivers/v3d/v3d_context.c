@@ -31,6 +31,7 @@
 #include "util/u_memory.h"
 #include "util/u_blitter.h"
 #include "util/u_upload_mgr.h"
+#include "util/u_prim.h"
 #include "indices/u_primconvert.h"
 #include "pipe/p_screen.h"
 
@@ -71,7 +72,13 @@ v3d_memory_barrier(struct pipe_context *pctx, unsigned int flags)
 {
         struct v3d_context *v3d = v3d_context(pctx);
 
-	if (!(flags & ~PIPE_BARRIER_UPDATE))
+        /* We only need to flush for SSBOs and images, because for everything
+         * else we flush the job automatically when we needed.
+         */
+        const unsigned int flush_flags = PIPE_BARRIER_SHADER_BUFFER |
+                                         PIPE_BARRIER_IMAGE;
+
+	if (!(flags & flush_flags))
 		return;
 
         /* We only need to flush jobs writing to SSBOs/images. */
@@ -109,6 +116,39 @@ v3d_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
                 job->store &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
 }
 
+/**
+ * Flushes the current job to get up-to-date primive counts written to the
+ * primitive counts BO, then accumulates the transform feedback primitive count
+ * in the context and the corresponding vertex counts in the bound stream
+ * output targets.
+ */
+void
+v3d_tf_update_counters(struct v3d_context *v3d)
+{
+        struct v3d_job *job = v3d_get_job_for_fbo(v3d);
+        if (job->draw_calls_queued == 0)
+                return;
+
+        /* In order to get up-to-date primitive counts we need to submit
+         * the job for execution so we get the counts written to memory.
+         * Notice that this will require a sync wait for the buffer write.
+         */
+        uint32_t prims_before = v3d->tf_prims_generated;
+        v3d_job_submit(v3d, job);
+        uint32_t prims_after = v3d->tf_prims_generated;
+        if (prims_before == prims_after)
+                return;
+
+        enum pipe_prim_type prim_type = u_base_prim_type(v3d->prim_mode);
+        uint32_t num_verts = u_vertices_for_prims(prim_type,
+                                                  prims_after - prims_before);
+        for (int i = 0; i < v3d->streamout.num_targets; i++) {
+                struct v3d_stream_output_target *so =
+                        v3d_stream_output_target(v3d->streamout.targets[i]);
+                so->recorded_vertex_count += num_verts;
+        }
+}
+
 static void
 v3d_context_destroy(struct pipe_context *pctx)
 {
@@ -126,6 +166,9 @@ v3d_context_destroy(struct pipe_context *pctx)
                 u_upload_destroy(v3d->uploader);
         if (v3d->state_uploader)
                 u_upload_destroy(v3d->state_uploader);
+
+        if (v3d->prim_counts)
+                pipe_resource_reference(&v3d->prim_counts, NULL);
 
         slab_destroy_child(&v3d->transfer_pool);
 

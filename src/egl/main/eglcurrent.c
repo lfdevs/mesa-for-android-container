@@ -44,7 +44,7 @@ static EGLBoolean _egl_TSDInitialized;
 static tss_t _egl_TSD;
 static void _eglDestroyThreadInfo(_EGLThreadInfo *t);
 
-#ifdef GLX_USE_TLS
+#ifdef USE_ELF_TLS
 static __thread const _EGLThreadInfo *_egl_TLS
    __attribute__ ((tls_model("initial-exec")));
 #endif
@@ -52,14 +52,14 @@ static __thread const _EGLThreadInfo *_egl_TLS
 static inline void _eglSetTSD(const _EGLThreadInfo *t)
 {
    tss_set(_egl_TSD, (void *) t);
-#ifdef GLX_USE_TLS
+#ifdef USE_ELF_TLS
    _egl_TLS = t;
 #endif
 }
 
 static inline _EGLThreadInfo *_eglGetTSD(void)
 {
-#ifdef GLX_USE_TLS
+#ifdef USE_ELF_TLS
    return (_EGLThreadInfo *) _egl_TLS;
 #else
    return (_EGLThreadInfo *) tss_get(_egl_TSD);

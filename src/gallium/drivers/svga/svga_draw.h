@@ -64,13 +64,8 @@ svga_hwtnl_draw_arrays(struct svga_hwtnl *hwtnl,
 
 enum pipe_error
 svga_hwtnl_draw_range_elements(struct svga_hwtnl *hwtnl,
-                               struct pipe_resource *indexBuffer,
-                               unsigned index_size,
-                               int index_bias,
-                               unsigned min_index,
-                               unsigned max_index,
-                               enum pipe_prim_type prim, unsigned start, unsigned count,
-                               unsigned start_instance, unsigned instance_count);
+                               const struct pipe_draw_info *info,
+                               unsigned count);
 
 boolean
 svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
@@ -79,6 +74,5 @@ svga_hwtnl_is_buffer_referred(struct svga_hwtnl *hwtnl,
 enum pipe_error svga_hwtnl_flush(struct svga_hwtnl *hwtnl);
 
 void svga_hwtnl_set_index_bias(struct svga_hwtnl *hwtnl, int index_bias);
-
 
 #endif /* SVGA_DRAW_H_ */

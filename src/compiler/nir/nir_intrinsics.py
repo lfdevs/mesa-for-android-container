@@ -120,6 +120,10 @@ ALIGN_MUL = "NIR_INTRINSIC_ALIGN_MUL"
 ALIGN_OFFSET = "NIR_INTRINSIC_ALIGN_OFFSET"
 # The vulkan descriptor type for vulkan_resource_index
 DESC_TYPE = "NIR_INTRINSIC_DESC_TYPE"
+# The nir_alu_type of a uniform/input/output
+TYPE = "NIR_INTRINSIC_TYPE"
+# The swizzle mask for quad_swizzle_amd & masked_swizzle_amd
+SWIZZLE_MASK = "NIR_INTRINSIC_SWIZZLE_MASK"
 
 #
 # Possible flags:
@@ -186,6 +190,16 @@ def barrier(name):
 barrier("barrier")
 barrier("discard")
 
+# Demote fragment shader invocation to a helper invocation.  Any stores to
+# memory after this instruction are suppressed and the fragment does not write
+# outputs to the framebuffer.  Unlike discard, demote needs to ensure that
+# derivatives will still work for invocations that were not demoted.
+#
+# As specified by SPV_EXT_demote_to_helper_invocation.
+barrier("demote")
+intrinsic("is_helper_invocation", dest_comp=1, flags=[CAN_ELIMINATE])
+
+
 # Memory barrier with semantics analogous to the memoryBarrier() GLSL
 # intrinsic.
 barrier("memory_barrier")
@@ -227,8 +241,9 @@ barrier("memory_barrier_shared")
 barrier("begin_invocation_interlock")
 barrier("end_invocation_interlock")
 
-# A conditional discard, with a single boolean source.
+# A conditional discard/demote, with a single boolean source.
 intrinsic("discard_if", src_comp=[1])
+intrinsic("demote_if", src_comp=[1])
 
 # ARB_shader_group_vote intrinsics
 intrinsic("vote_any", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE])
@@ -266,6 +281,14 @@ intrinsic("inclusive_scan", src_comp=[0], dest_comp=0, indices=[REDUCTION_OP],
           flags=[CAN_ELIMINATE])
 intrinsic("exclusive_scan", src_comp=[0], dest_comp=0, indices=[REDUCTION_OP],
           flags=[CAN_ELIMINATE])
+
+# AMD shader ballot operations
+intrinsic("quad_swizzle_amd", src_comp=[0], dest_comp=0, indices=[SWIZZLE_MASK],
+          flags=[CAN_ELIMINATE])
+intrinsic("masked_swizzle_amd", src_comp=[0], dest_comp=0, indices=[SWIZZLE_MASK],
+          flags=[CAN_ELIMINATE])
+intrinsic("write_invocation_amd", src_comp=[0, 0, 1], dest_comp=0, flags=[CAN_ELIMINATE])
+intrinsic("mbcnt_amd", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE])
 
 # Basic Geometry Shader intrinsics.
 #
@@ -355,6 +378,8 @@ image("atomic_comp_swap", src_comp=[4, 1, 1, 1], dest_comp=1)
 image("atomic_fadd",  src_comp=[1, 4, 1, 1], dest_comp=1)
 image("size",    dest_comp=0, flags=[CAN_ELIMINATE, CAN_REORDER])
 image("samples", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
+image("atomic_inc_wrap",  src_comp=[4, 1, 1], dest_comp=1)
+image("atomic_dec_wrap",  src_comp=[4, 1, 1], dest_comp=1)
 
 # Intel-specific query for loading from the brw_image_param struct passed
 # into the shader as a uniform.  The variable is a deref to the image
@@ -513,6 +538,7 @@ def system_value(name, dest_comp, indices=[], bit_sizes=[32]):
               bit_sizes=bit_sizes)
 
 system_value("frag_coord", 4)
+system_value("point_coord", 2)
 system_value("front_face", 1, bit_sizes=[1, 32])
 system_value("vertex_id", 1)
 system_value("vertex_id_zero_base", 1)
@@ -533,6 +559,8 @@ system_value("invocation_id", 1)
 system_value("tess_coord", 3)
 system_value("tess_level_outer", 4)
 system_value("tess_level_inner", 2)
+system_value("tess_level_outer_default", 4)
+system_value("tess_level_inner_default", 2)
 system_value("patch_vertices_in", 1)
 system_value("local_invocation_id", 3)
 system_value("local_invocation_index", 1)
@@ -571,13 +599,25 @@ system_value("viewport_z_offset", 1)
 system_value("viewport_scale", 3)
 system_value("viewport_offset", 3)
 
-# Blend constant color values.  Float values are clamped.#
+# Blend constant color values.  Float values are clamped. Vectored versions are
+# provided as well for driver convenience
+
 system_value("blend_const_color_r_float", 1)
 system_value("blend_const_color_g_float", 1)
 system_value("blend_const_color_b_float", 1)
 system_value("blend_const_color_a_float", 1)
+system_value("blend_const_color_rgba", 4)
 system_value("blend_const_color_rgba8888_unorm", 1)
 system_value("blend_const_color_aaaa8888_unorm", 1)
+
+# System values for gl_Color, for radeonsi which interpolates these in the
+# shader prolog to handle two-sided color without recompiles and therefore
+# doesn't handle these in the main shader part like normal varyings.
+system_value("color0", 4)
+system_value("color1", 4)
+
+# System value for internal compute shaders in radeonsi.
+system_value("user_data_amd", 4)
 
 # Barycentric coordinate intrinsics.
 #
@@ -615,6 +655,19 @@ intrinsic("load_sample_pos_from_id", src_comp=[1], dest_comp=2,
 # Loads what I believe is the primitive size, for scaling ij to pixel size:
 intrinsic("load_size_ir3", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# Fragment shader input interpolation delta intrinsic.
+#
+# For hw where fragment shader input interpolation is handled in shader, the
+# load_fs_input_interp deltas intrinsics can be used to load the input deltas
+# used for interpolation as follows:
+#
+#    vec3 iid = load_fs_input_interp_deltas(varying_slot)
+#    vec2 bary = load_barycentric_*(...)
+#    float result = iid.x + iid.y * bary.y + iid.z * bary.x
+
+intrinsic("load_fs_input_interp_deltas", src_comp=[1], dest_comp=3,
+          indices=[BASE, COMPONENT], flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Load operations pull data from some piece of GPU memory.  All load
 # operations operate in terms of offsets into some piece of theoretical
 # memory.  Loads from externally visible memory (UBO and SSBO) simply take a
@@ -640,11 +693,11 @@ def load(name, num_srcs, indices=[], flags=[]):
               flags=flags)
 
 # src[] = { offset }.
-load("uniform", 1, [BASE, RANGE], [CAN_ELIMINATE, CAN_REORDER])
+load("uniform", 1, [BASE, RANGE, TYPE], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { buffer_index, offset }.
 load("ubo", 2, [ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE, CAN_REORDER])
 # src[] = { offset }.
-load("input", 1, [BASE, COMPONENT], [CAN_ELIMINATE, CAN_REORDER])
+load("input", 1, [BASE, COMPONENT, TYPE], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { vertex, offset }.
 load("per_vertex_input", 2, [BASE, COMPONENT], [CAN_ELIMINATE, CAN_REORDER])
 # src[] = { barycoord, offset }.
@@ -679,7 +732,7 @@ def store(name, num_srcs, indices=[], flags=[]):
     intrinsic("store_" + name, [0] + ([1] * (num_srcs - 1)), indices=indices, flags=flags)
 
 # src[] = { value, offset }.
-store("output", 2, [BASE, WRMASK, COMPONENT])
+store("output", 2, [BASE, WRMASK, COMPONENT, TYPE])
 # src[] = { value, vertex, offset }.
 store("per_vertex_output", 3, [BASE, WRMASK, COMPONENT])
 # src[] = { value, block_index, offset }
@@ -716,3 +769,37 @@ intrinsic("ssbo_atomic_or_ir3",         src_comp=[1, 1, 1, 1],    dest_comp=1)
 intrinsic("ssbo_atomic_xor_ir3",        src_comp=[1, 1, 1, 1],    dest_comp=1)
 intrinsic("ssbo_atomic_exchange_ir3",   src_comp=[1, 1, 1, 1],    dest_comp=1)
 intrinsic("ssbo_atomic_comp_swap_ir3",  src_comp=[1, 1, 1, 1, 1], dest_comp=1)
+
+# Intrinsics used by the Midgard/Bifrost blend pipeline. These are defined
+# within a blend shader to read/write the raw value from the tile buffer,
+# without applying any format conversion in the process. If the shader needs
+# usable pixel values, it must apply format conversions itself.
+#
+# These definitions are generic, but they are explicitly vendored to prevent
+# other drivers from using them, as their semantics is defined in terms of the
+# Midgard/Bifrost hardware tile buffer and may not line up with anything sane.
+# One notable divergence is sRGB, which is asymmetric: raw_input_pan requires
+# an sRGB->linear conversion, but linear values should be written to
+# raw_output_pan and the hardware handles linear->sRGB.
+
+# src[] = { value }
+store("raw_output_pan", 1, [])
+load("raw_output_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
+
+# V3D-specific instrinc for tile buffer color reads.
+#
+# The hardware requires that we read the samples and components of a pixel
+# in order, so we cannot eliminate or remove any loads in a sequence.
+#
+# src[] = { render_target }
+# BASE = sample index
+load("tlb_color_v3d", 1, [BASE, COMPONENT], [])
+
+# V3D-specific instrinc for per-sample tile buffer color writes.
+#
+# The driver backend needs to identify per-sample color writes and emit
+# specific code for them.
+#
+# src[] = { value, render_target }
+# BASE = sample index
+store("tlb_sample_color_v3d", 2, [BASE, COMPONENT, TYPE], [])

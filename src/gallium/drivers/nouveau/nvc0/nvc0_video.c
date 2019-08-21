@@ -32,7 +32,7 @@ nvc0_decoder_begin_frame(struct pipe_video_codec *decoder,
 {
    struct nouveau_vp3_decoder *dec = (struct nouveau_vp3_decoder *)decoder;
    uint32_t comm_seq = ++dec->fence_seq;
-   MAYBE_UNUSED unsigned ret = 0; /* used in debug checks */
+   ASSERTED unsigned ret = 0; /* used in debug checks */
 
    assert(dec);
    assert(target);
@@ -53,7 +53,7 @@ nvc0_decoder_decode_bitstream(struct pipe_video_codec *decoder,
 {
    struct nouveau_vp3_decoder *dec = (struct nouveau_vp3_decoder *)decoder;
    uint32_t comm_seq = dec->fence_seq;
-   MAYBE_UNUSED unsigned ret = 0; /* used in debug checks */
+   ASSERTED unsigned ret = 0; /* used in debug checks */
 
    assert(decoder);
 
@@ -73,7 +73,7 @@ nvc0_decoder_end_frame(struct pipe_video_codec *decoder,
    union pipe_desc desc;
 
    unsigned vp_caps, is_ref;
-   MAYBE_UNUSED unsigned ret; /* used in debug checks */
+   ASSERTED unsigned ret; /* used in debug checks */
    struct nouveau_vp3_video_buffer *refs[16] = {};
 
    desc.base = picture;

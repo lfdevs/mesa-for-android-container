@@ -205,7 +205,13 @@ struct draw_context
          unsigned vs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
          const void *gs_constants[PIPE_MAX_CONSTANT_BUFFERS];
          unsigned gs_constants_size[PIPE_MAX_CONSTANT_BUFFERS];
-         
+
+         /** shader buffers (for vertex/geometry shader) */
+         const void *vs_ssbos[PIPE_MAX_SHADER_BUFFERS];
+         unsigned vs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
+         const void *gs_ssbos[PIPE_MAX_SHADER_BUFFERS];
+         unsigned gs_ssbos_size[PIPE_MAX_SHADER_BUFFERS];
+
          /* pointer to planes */
          float (*planes)[DRAW_TOTAL_CLIP_PLANES][4]; 
       } user;

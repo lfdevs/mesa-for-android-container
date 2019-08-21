@@ -83,27 +83,6 @@ keybox_equals(const void *void_a, const void *void_b)
    return memcmp(a->data, b->data, a->size) == 0;
 }
 
-static unsigned
-get_program_string_id(enum iris_program_cache_id cache_id, const void *key)
-{
-   switch (cache_id) {
-   case IRIS_CACHE_VS:
-      return ((struct brw_vs_prog_key *) key)->program_string_id;
-   case IRIS_CACHE_TCS:
-      return ((struct brw_tcs_prog_key *) key)->program_string_id;
-   case IRIS_CACHE_TES:
-      return ((struct brw_tes_prog_key *) key)->program_string_id;
-   case IRIS_CACHE_GS:
-      return ((struct brw_gs_prog_key *) key)->program_string_id;
-   case IRIS_CACHE_CS:
-      return ((struct brw_cs_prog_key *) key)->program_string_id;
-   case IRIS_CACHE_FS:
-      return ((struct brw_wm_prog_key *) key)->program_string_id;
-   default:
-      unreachable("no program string id for this kind of program");
-   }
-}
-
 struct iris_compiled_shader *
 iris_find_cached_shader(struct iris_context *ice,
                         enum iris_program_cache_id cache_id,
@@ -127,8 +106,9 @@ iris_find_previous_compile(const struct iris_context *ice,
 {
    hash_table_foreach(ice->shaders.cache, entry) {
       const struct keybox *keybox = entry->key;
+      const struct brw_base_prog_key *key = (const void *)keybox->data;
       if (keybox->cache_id == cache_id &&
-          get_program_string_id(cache_id, keybox->data) == program_string_id) {
+          key->program_string_id == program_string_id) {
          return keybox->data;
       }
    }
@@ -167,7 +147,8 @@ iris_upload_shader(struct iris_context *ice,
                    uint32_t *streamout,
                    enum brw_param_builtin *system_values,
                    unsigned num_system_values,
-                   unsigned num_cbufs)
+                   unsigned num_cbufs,
+                   const struct iris_binding_table *bt)
 {
    struct hash_table *cache = ice->shaders.cache;
    struct iris_compiled_shader *shader =
@@ -199,6 +180,7 @@ iris_upload_shader(struct iris_context *ice,
    shader->system_values = system_values;
    shader->num_system_values = num_system_values;
    shader->num_cbufs = num_cbufs;
+   shader->bt = *bt;
 
    ralloc_steal(shader, shader->prog_data);
    ralloc_steal(shader->prog_data, prog_data->param);
@@ -254,9 +236,12 @@ iris_blorp_upload_shader(struct blorp_batch *blorp_batch,
    void *prog_data = ralloc_size(NULL, prog_data_size);
    memcpy(prog_data, prog_data_templ, prog_data_size);
 
+   struct iris_binding_table bt;
+   memset(&bt, 0, sizeof(bt));
+
    struct iris_compiled_shader *shader =
       iris_upload_shader(ice, IRIS_CACHE_BLORP, key_size, key, kernel,
-                         prog_data, NULL, NULL, 0, 0);
+                         prog_data, NULL, NULL, 0, 0, &bt);
 
    struct iris_bo *bo = iris_resource_bo(shader->assembly.res);
    *kernel_out =

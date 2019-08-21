@@ -69,6 +69,7 @@ struct svga_host_surface_cache_key
    uint32_t cachable:1;         /* False if this is a shared surface */
    uint32_t sampleCount:5;
    uint32_t scanout:1;
+   uint32_t coherent:1;
 };
 
 

@@ -299,10 +299,10 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
        dst_level, dst_layer, dst_x0, dst_y0, dst_x1, dst_y1,
        mirror_x, mirror_y);
 
-   if (!decode_srgb && _mesa_get_format_color_encoding(src_format) == GL_SRGB)
+   if (!decode_srgb)
       src_format = _mesa_get_srgb_format_linear(src_format);
 
-   if (!encode_srgb && _mesa_get_format_color_encoding(dst_format) == GL_SRGB)
+   if (!encode_srgb)
       dst_format = _mesa_get_srgb_format_linear(dst_format);
 
    /* When doing a multisample resolve of a GL_LUMINANCE32F or GL_INTENSITY32F
@@ -928,16 +928,6 @@ blorp_get_client_format(struct brw_context *brw,
    return _mesa_tex_format_from_format_and_type(&brw->ctx, format, type);
 }
 
-static bool
-need_signed_unsigned_int_conversion(mesa_format src_format,
-                                    mesa_format dst_format)
-{
-   const GLenum src_type = _mesa_get_format_datatype(src_format);
-   const GLenum dst_type = _mesa_get_format_datatype(dst_format);
-   return (src_type == GL_INT && dst_type == GL_UNSIGNED_INT) ||
-          (src_type == GL_UNSIGNED_INT && dst_type == GL_INT);
-}
-
 bool
 brw_blorp_upload_miptree(struct brw_context *brw,
                          struct intel_mipmap_tree *dst_mt,
@@ -958,13 +948,6 @@ brw_blorp_upload_miptree(struct brw_context *brw,
                  _mesa_get_format_name(dst_format));
       return false;
    }
-
-   /* This function relies on blorp_blit to upload the pixel data to the
-    * miptree.  But, blorp_blit doesn't support signed to unsigned or
-    * unsigned to signed integer conversions.
-    */
-   if (need_signed_unsigned_int_conversion(src_format, dst_format))
-      return false;
 
    uint32_t src_offset, src_row_stride, src_image_stride;
    struct brw_bo *src_bo =
@@ -1058,13 +1041,6 @@ brw_blorp_download_miptree(struct brw_context *brw,
                  _mesa_get_format_name(dst_format));
       return false;
    }
-
-   /* This function relies on blorp_blit to download the pixel data from the
-    * miptree. But, blorp_blit doesn't support signed to unsigned or unsigned
-    * to signed integer conversions.
-    */
-   if (need_signed_unsigned_int_conversion(src_format, dst_format))
-      return false;
 
    /* We can't fetch from LUMINANCE or intensity as that would require a
     * non-trivial swizzle.
@@ -1215,7 +1191,7 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
    uint32_t x0, x1, y0, y1;
 
    mesa_format format = irb->Base.Base.Format;
-   if (!encode_srgb && _mesa_get_format_color_encoding(format) == GL_SRGB)
+   if (!encode_srgb)
       format = _mesa_get_srgb_format_linear(format);
    enum isl_format isl_format = brw->mesa_to_isl_render_format[format];
 

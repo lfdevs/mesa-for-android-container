@@ -41,7 +41,7 @@
 
 
 
-static boolean
+static bool
 i915_buffer_get_handle(struct pipe_screen *screen,
 		       struct pipe_resource *resource,
 		       struct winsys_handle *handle)

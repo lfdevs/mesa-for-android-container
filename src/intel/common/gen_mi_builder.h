@@ -414,9 +414,11 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_REG32:
       case GEN_MI_VALUE_TYPE_REG64:
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
-         gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_REG), lrr) {
-            lrr.SourceRegisterAddress = src.reg;
-            lrr.DestinationRegisterAddress = dst.reg;
+         if (src.reg != dst.reg) {
+            gen_mi_builder_emit(b, GENX(MI_LOAD_REGISTER_REG), lrr) {
+               lrr.SourceRegisterAddress = src.reg;
+               lrr.DestinationRegisterAddress = dst.reg;
+            }
          }
 #else
          unreachable("Cannot do reg <-> reg copy on IVB and earlier");
@@ -500,6 +502,59 @@ gen_mi_memcpy(struct gen_mi_builder *b, __gen_address_type dst,
  */
 
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
+
+/**
+ * Perform a predicated store (assuming the condition is already loaded
+ * in the MI_PREDICATE_RESULT register) of the value in src to the memory
+ * location specified by dst.  Non-memory destinations are not supported.
+ *
+ * This function consumes one reference for each of src and dst.
+ */
+static inline void
+gen_mi_store_if(struct gen_mi_builder *b,
+                struct gen_mi_value dst,
+                struct gen_mi_value src)
+{
+   assert(!dst.invert && !src.invert);
+
+   gen_mi_builder_flush_math(b);
+
+   /* We can only predicate MI_STORE_REGISTER_MEM, so restrict the
+    * destination to be memory, and resolve the source to a temporary
+    * register if it isn't in one already.
+    */
+   assert(dst.type == GEN_MI_VALUE_TYPE_MEM64 ||
+          dst.type == GEN_MI_VALUE_TYPE_MEM32);
+
+   if (src.type != GEN_MI_VALUE_TYPE_REG32 &&
+       src.type != GEN_MI_VALUE_TYPE_REG64) {
+      struct gen_mi_value tmp = gen_mi_new_gpr(b);
+      _gen_mi_copy_no_unref(b, tmp, src);
+      src = tmp;
+   }
+
+   if (dst.type == GEN_MI_VALUE_TYPE_MEM64) {
+      gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+         srm.RegisterAddress = src.reg;
+         srm.MemoryAddress = dst.addr;
+         srm.PredicateEnable = true;
+      }
+      gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+         srm.RegisterAddress = src.reg + 4;
+         srm.MemoryAddress = __gen_address_offset(dst.addr, 4);
+         srm.PredicateEnable = true;
+      }
+   } else {
+      gen_mi_builder_emit(b, GENX(MI_STORE_REGISTER_MEM), srm) {
+         srm.RegisterAddress = src.reg;
+         srm.MemoryAddress = dst.addr;
+         srm.PredicateEnable = true;
+      }
+   }
+
+   gen_mi_value_unref(b, src);
+   gen_mi_value_unref(b, dst);
+}
 
 static inline void
 _gen_mi_builder_push_math(struct gen_mi_builder *b,
@@ -639,6 +694,34 @@ gen_mi_iand(struct gen_mi_builder *b,
             struct gen_mi_value src0, struct gen_mi_value src1)
 {
    return gen_mi_math_binop(b, MI_ALU_AND, src0, src1,
+                            MI_ALU_STORE, MI_ALU_ACCU);
+}
+
+/**
+ * Returns (src != 0) ? 1 : 0.
+ */
+static inline struct gen_mi_value
+gen_mi_nz(struct gen_mi_builder *b, struct gen_mi_value src)
+{
+   return gen_mi_math_binop(b, MI_ALU_ADD, src, gen_mi_imm(0),
+                            MI_ALU_STOREINV, MI_ALU_ZF);
+}
+
+/**
+ * Returns (src == 0) ? 1 : 0.
+ */
+static inline struct gen_mi_value
+gen_mi_z(struct gen_mi_builder *b, struct gen_mi_value src)
+{
+   return gen_mi_math_binop(b, MI_ALU_ADD, src, gen_mi_imm(0),
+                            MI_ALU_STORE, MI_ALU_ZF);
+}
+
+static inline struct gen_mi_value
+gen_mi_ior(struct gen_mi_builder *b,
+           struct gen_mi_value src0, struct gen_mi_value src1)
+{
+   return gen_mi_math_binop(b, MI_ALU_OR, src0, src1,
                             MI_ALU_STORE, MI_ALU_ACCU);
 }
 

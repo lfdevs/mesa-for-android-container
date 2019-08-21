@@ -61,7 +61,7 @@ v3d_fence_reference(struct pipe_screen *pscreen,
         *p = f;
 }
 
-static boolean
+static bool
 v3d_fence_finish(struct pipe_screen *pscreen,
 		 struct pipe_context *ctx,
                  struct pipe_fence_handle *pf,

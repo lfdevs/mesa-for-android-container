@@ -38,6 +38,7 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
    switch (instr->intrinsic) {
    case nir_intrinsic_load_per_vertex_input: {
+      assert(nir_dest_bit_size(instr->dest) == 32);
       /* The EmitNoIndirectInput flag guarantees our vertex index will
        * be constant.  We should handle indirects someday.
        */
@@ -46,34 +47,17 @@ vec4_gs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
 
       const unsigned input_array_stride = prog_data->urb_read_length * 2;
 
-      if (nir_dest_bit_size(instr->dest) == 64) {
-         src = src_reg(ATTR, input_array_stride * vertex +
-                       instr->const_index[0] + offset_reg,
-                       glsl_type::dvec4_type);
+      /* Make up a type...we have no way of knowing... */
+      const glsl_type *const type = glsl_type::ivec(instr->num_components);
 
-         dst_reg tmp = dst_reg(this, glsl_type::dvec4_type);
-         shuffle_64bit_data(tmp, src, false);
+      src = src_reg(ATTR, input_array_stride * vertex +
+                    instr->const_index[0] + offset_reg,
+                    type);
+      src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
 
-         src = src_reg(tmp);
-         src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr) / 2);
-
-         /* Write to dst reg taking into account original writemask */
-         dest = get_nir_dest(instr->dest, BRW_REGISTER_TYPE_DF);
-         dest.writemask = brw_writemask_for_size(instr->num_components);
-         emit(MOV(dest, src));
-      } else {
-         /* Make up a type...we have no way of knowing... */
-         const glsl_type *const type = glsl_type::ivec(instr->num_components);
-
-         src = src_reg(ATTR, input_array_stride * vertex +
-                       instr->const_index[0] + offset_reg,
-                       type);
-         src.swizzle = BRW_SWZ_COMP_INPUT(nir_intrinsic_component(instr));
-
-         dest = get_nir_dest(instr->dest, src.type);
-         dest.writemask = brw_writemask_for_size(instr->num_components);
-         emit(MOV(dest, src));
-      }
+      dest = get_nir_dest(instr->dest, src.type);
+      dest.writemask = brw_writemask_for_size(instr->num_components);
+      emit(MOV(dest, src));
       break;
    }
 

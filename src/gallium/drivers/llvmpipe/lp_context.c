@@ -48,7 +48,7 @@
 #include "lp_setup.h"
 
 /* This is only safe if there's just one concurrent context */
-#ifdef PIPE_SUBSYSTEM_EMBEDDED
+#ifdef EMBEDDED_DEVICE
 #define USE_GLOBAL_LLVM_CONTEXT
 #endif
 
@@ -121,7 +121,7 @@ do_flush( struct pipe_context *pipe,
 static void
 llvmpipe_render_condition(struct pipe_context *pipe,
                           struct pipe_query *query,
-                          boolean condition,
+                          bool condition,
                           enum pipe_render_cond_flag mode)
 {
    struct llvmpipe_context *llvmpipe = llvmpipe_context( pipe );

@@ -134,11 +134,14 @@ etna_transfer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
          struct etna_resource_level *res_level = &rsc->levels[ptrans->level];
 
          if (rsc->layout == ETNA_LAYOUT_TILED) {
-            etna_texture_tile(
-               trans->mapped + ptrans->box.z * res_level->layer_stride,
-               trans->staging, ptrans->box.x, ptrans->box.y,
-               res_level->stride, ptrans->box.width, ptrans->box.height,
-               ptrans->stride, util_format_get_blocksize(rsc->base.format));
+            for (unsigned z = 0; z < ptrans->box.depth; z++) {
+               etna_texture_tile(
+                  trans->mapped + (ptrans->box.z + z) * res_level->layer_stride,
+                  trans->staging + z * ptrans->layer_stride,
+                  ptrans->box.x, ptrans->box.y,
+                  res_level->stride, ptrans->box.width, ptrans->box.height,
+                  ptrans->stride, util_format_get_blocksize(rsc->base.format));
+            }
          } else if (rsc->layout == ETNA_LAYOUT_LINEAR) {
             util_copy_box(trans->mapped, rsc->base.format, res_level->stride,
                           res_level->layer_stride, ptrans->box.x,
@@ -240,7 +243,7 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          return NULL;
       }
 
-      if (prsc->depth0 > 1) {
+      if (prsc->depth0 > 1 && rsc->ts_bo) {
          slab_free(&ctx->transfer_pool, trans);
          BUG("resource has depth >1 with tile status");
          return NULL;
@@ -265,21 +268,19 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          unsigned w_align, h_align;
 
          if (rsc->layout & ETNA_LAYOUT_BIT_SUPER) {
-            w_align = h_align = 64;
+            w_align = 64;
+            h_align = 64 * ctx->screen->specs.pixel_pipes;
          } else {
             w_align = ETNA_RS_WIDTH_MASK + 1;
             h_align = ETNA_RS_HEIGHT_MASK + 1;
          }
-         h_align *= ctx->screen->specs.pixel_pipes;
 
          ptrans->box.width += ptrans->box.x & (w_align - 1);
          ptrans->box.x = ptrans->box.x & ~(w_align - 1);
          ptrans->box.width = align(ptrans->box.width, (ETNA_RS_WIDTH_MASK + 1));
          ptrans->box.height += ptrans->box.y & (h_align - 1);
          ptrans->box.y = ptrans->box.y & ~(h_align - 1);
-         ptrans->box.height = align(ptrans->box.height,
-                                    (ETNA_RS_HEIGHT_MASK + 1) *
-                                     ctx->screen->specs.pixel_pipes);
+         ptrans->box.height = align(ptrans->box.height, ETNA_RS_HEIGHT_MASK + 1);
       }
 
       if (!(usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
@@ -429,11 +430,13 @@ etna_transfer_map(struct pipe_context *pctx, struct pipe_resource *prsc,
 
       if (usage & PIPE_TRANSFER_READ) {
          if (rsc->layout == ETNA_LAYOUT_TILED) {
-            etna_texture_untile(trans->staging,
-                                trans->mapped + ptrans->box.z * res_level->layer_stride,
-                                ptrans->box.x, ptrans->box.y, res_level->stride,
-                                ptrans->box.width, ptrans->box.height, ptrans->stride,
-                                util_format_get_blocksize(rsc->base.format));
+            for (unsigned z = 0; z < ptrans->box.depth; z++) {
+               etna_texture_untile(trans->staging + z * ptrans->layer_stride,
+                                   trans->mapped + (ptrans->box.z + z) * res_level->layer_stride,
+                                   ptrans->box.x, ptrans->box.y, res_level->stride,
+                                   ptrans->box.width, ptrans->box.height, ptrans->stride,
+                                   util_format_get_blocksize(rsc->base.format));
+            }
          } else if (rsc->layout == ETNA_LAYOUT_LINEAR) {
             util_copy_box(trans->staging, rsc->base.format, ptrans->stride,
                           ptrans->layer_stride, 0, 0, 0, /* dst x,y,z */

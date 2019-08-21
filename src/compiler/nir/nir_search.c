@@ -30,7 +30,8 @@
 #include "nir_builder.h"
 #include "util/half_float.h"
 
-#define NIR_SEARCH_MAX_COMM_OPS 4
+/* This should be the same as nir_search_max_comm_ops in nir_algebraic.py. */
+#define NIR_SEARCH_MAX_COMM_OPS 8
 
 struct match_state {
    bool inexact_match;
@@ -326,7 +327,17 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
          return false;
 
       switch (const_val->type) {
-      case nir_type_float:
+      case nir_type_float: {
+         nir_load_const_instr *const load =
+            nir_instr_as_load_const(instr->src[src].src.ssa->parent_instr);
+
+         /* There are 8-bit and 1-bit integer types, but there are no 8-bit or
+          * 1-bit float types.  This prevents potential assertion failures in
+          * nir_src_comp_as_float.
+          */
+         if (load->def.bit_size < 16)
+            return false;
+
          for (unsigned i = 0; i < num_components; ++i) {
             double val = nir_src_comp_as_float(instr->src[src].src,
                                                new_swizzle[i]);
@@ -334,6 +345,7 @@ match_value(const nir_search_value *value, nir_alu_instr *instr, unsigned src,
                return false;
          }
          return true;
+      }
 
       case nir_type_int:
       case nir_type_uint:
@@ -408,7 +420,11 @@ match_expression(const nir_search_expression *expr, nir_alu_instr *instr,
 
    bool matched = true;
    for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
-      if (!match_value(expr->srcs[i], instr, i ^ comm_op_flip,
+      /* 2src_commutative instructions that have 3 sources are only commutative
+       * in the first two sources.  Source 2 is always source 2.
+       */
+      if (!match_value(expr->srcs[i], instr,
+                       i < 2 ? i ^ comm_op_flip : i,
                        num_components, swizzle, state)) {
          matched = false;
          break;
@@ -490,6 +506,9 @@ construct_value(nir_builder *build,
                        (void *)build->shader);
       assert(!var->is_constant);
 
+      for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++)
+         val.swizzle[i] = state->variables[var->variable].swizzle[var->swizzle[i]];
+
       return val;
    }
 
@@ -530,7 +549,7 @@ construct_value(nir_builder *build,
    }
 }
 
-MAYBE_UNUSED static void dump_value(const nir_search_value *val)
+UNUSED static void dump_value(const nir_search_value *val)
 {
    switch (val->type) {
    case nir_search_value_constant: {
@@ -544,6 +563,9 @@ MAYBE_UNUSED static void dump_value(const nir_search_value *val)
          break;
       case nir_type_uint:
          printf("0x%"PRIx64, sconst->data.u);
+         break;
+      case nir_type_bool:
+         printf("%s", sconst->data.u != 0 ? "True" : "False");
          break;
       default:
          unreachable("bad const type");
@@ -613,6 +635,8 @@ nir_replace_instr(nir_builder *build, nir_alu_instr *instr,
    state.inexact_match = false;
    state.has_exact_alu = false;
 
+   STATIC_ASSERT(sizeof(state.comm_op_direction) * 8 >= NIR_SEARCH_MAX_COMM_OPS);
+
    unsigned comm_expr_combinations =
       1 << MIN2(search->comm_exprs, NIR_SEARCH_MAX_COMM_OPS);
 
@@ -654,7 +678,7 @@ nir_replace_instr(nir_builder *build, nir_alu_instr *instr,
     * and rewrite swizzles ourselves.
     */
    nir_ssa_def *ssa_val =
-      nir_imov_alu(build, val, instr->dest.dest.ssa.num_components);
+      nir_mov_alu(build, val, instr->dest.dest.ssa.num_components);
    nir_ssa_def_rewrite_uses(&instr->dest.dest.ssa, nir_src_for_ssa(ssa_val));
 
    /* We know this one has no more uses because we just rewrote them all,

@@ -36,6 +36,7 @@ swr_initialize_screen_interface(struct swr_screen *screen, const char arch[])
 #ifdef HAVE_SWR_BUILTIN
    screen->pLibrary = NULL;
    screen->pfnSwrGetInterface = SwrGetInterface;
+   screen->pfnSwrGetInterface = SwrGetTileInterface;
    InitTilesTable();
    fprintf(stderr, "(using: builtin).\n");
 #else
@@ -50,9 +51,11 @@ swr_initialize_screen_interface(struct swr_screen *screen, const char arch[])
 
    util_dl_proc pApiProc = util_dl_get_proc_address(screen->pLibrary,
       "SwrGetInterface");
+   util_dl_proc pTileApiProc = util_dl_get_proc_address(screen->pLibrary,
+      "SwrGetTileIterface");
    util_dl_proc pInitFunc = util_dl_get_proc_address(screen->pLibrary,
       "InitTilesTable");
-   if (!pApiProc || !pInitFunc) {
+   if (!pApiProc || !pInitFunc || !pTileApiProc) {
       fprintf(stderr, "(skipping: %s).\n", util_dl_error());
       util_dl_close(screen->pLibrary);
       screen->pLibrary = NULL;
@@ -60,6 +63,12 @@ swr_initialize_screen_interface(struct swr_screen *screen, const char arch[])
    }
 
    screen->pfnSwrGetInterface = (PFNSwrGetInterface)pApiProc;
+   screen->pfnSwrGetTileInterface = (PFNSwrGetTileInterface)pTileApiProc;
+
+   SWR_ASSERT(screen->pfnSwrGetInterface != nullptr);
+   SWR_ASSERT(screen->pfnSwrGetTileInterface != nullptr);
+   SWR_ASSERT(pInitFunc != nullptr);
+
    pInitFunc();
 
    fprintf(stderr, "(using: %s).\n", filename);

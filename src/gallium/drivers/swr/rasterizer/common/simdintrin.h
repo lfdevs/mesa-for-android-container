@@ -191,57 +191,6 @@ SIMDINLINE SIMD128::Integer _simd_blend4_epi32(SIMD128::Integer const& a, SIMD12
         SIMD128::blend_ps<mask>(SIMD128::castsi_ps(a), SIMD128::castsi_ps(b)));
 }
 
-SIMDINLINE
-void _simd_mov(simdscalar& r, unsigned int rlane, simdscalar& s, unsigned int slane)
-{
-    OSALIGNSIMD(float) rArray[KNOB_SIMD_WIDTH], sArray[KNOB_SIMD_WIDTH];
-    SIMD256::store_ps(rArray, r);
-    SIMD256::store_ps(sArray, s);
-    rArray[rlane] = sArray[slane];
-    r             = SIMD256::load_ps(rArray);
-}
-
-// Populates a simdvector from a vector. So p = xyzw becomes xxxx yyyy zzzz wwww.
-#define _simdvec_load_ps SIMD::vec4_load1_ps
-
-SIMDINLINE
-void _simdvec_mov(simdvector& r, const simdscalar& s)
-{
-    SIMD::vec4_set1_vps(r, s);
-}
-
-SIMDINLINE
-void _simdvec_mov(simdvector& r, const simdvector& v)
-{
-    r = v;
-}
-
-#if 0
-// just move a lane from the source simdvector to dest simdvector
-SIMDINLINE
-void _simdvec_mov(simdvector &r, unsigned int rlane, simdvector& s, unsigned int slane)
-{
-    _simd_mov(r[0], rlane, s[0], slane);
-    _simd_mov(r[1], rlane, s[1], slane);
-    _simd_mov(r[2], rlane, s[2], slane);
-    _simd_mov(r[3], rlane, s[3], slane);
-}
-
-#endif
-
-#define _simdvec_dp3_ps SIMD::vec4_dp3_ps
-#define _simdvec_dp4_ps SIMD::vec4_dp4_ps
-#define _simdvec_rcp_length_ps SIMD::vec4_rcp_length_ps
-#define _simdvec_normalize_ps SIMD::vec4_normalize_ps
-#define _simdvec_mul_ps SIMD::vec4_mul_ps
-#define _simdvec_add_ps SIMD::vec4_add_ps
-#define _simdvec_min_ps SIMD::vec4_min_ps
-#define _simdvec_max_ps SIMD::vec4_max_ps
-#define _simd_mat4x4_vec4_multiply SIMD::mat4x4_vec4_multiply
-#define _simd_mat3x3_vec3_w0_multiply SIMD::mat3x3_vec3_w0_multiply
-#define _simd_mat4x4_vec3_w1_multiply SIMD::mat4x4_vec3_w1_multiply
-#define _simd_mat4x3_vec3_w1_multiply SIMD::mat4x3_vec3_w1_multiply
-
 //////////////////////////////////////////////////////////////////////////
 /// @brief Compute plane equation vA * vX + vB * vY + vC
 SIMDINLINE simdscalar vplaneps(simdscalar const& vA,
@@ -281,6 +230,13 @@ static SIMDINLINE simdscalar InterpolateComponent(simdscalar const& vI,
     const float* pInterpA = &pInterpBuffer[Attrib * 3 * numComponents + 0 + Comp];
     const float* pInterpB = &pInterpBuffer[Attrib * 3 * numComponents + numComponents + Comp];
     const float* pInterpC = &pInterpBuffer[Attrib * 3 * numComponents + numComponents * 2 + Comp];
+
+    if ((pInterpA[0] == pInterpB[0]) && (pInterpA[0] == pInterpC[0]))
+    {
+        // Ensure constant attribs are constant.  Required for proper
+        // 3D resource copies.
+        return _simd_broadcast_ss(pInterpA);
+    }
 
     simdscalar vA = _simd_broadcast_ss(pInterpA);
     simdscalar vB = _simd_broadcast_ss(pInterpB);
@@ -331,6 +287,13 @@ static SIMDINLINE simd4scalar InterpolateComponent(simd4scalar const& vI,
     const float* pInterpA = &pInterpBuffer[Attrib * 3 * numComponents + 0 + Comp];
     const float* pInterpB = &pInterpBuffer[Attrib * 3 * numComponents + numComponents + Comp];
     const float* pInterpC = &pInterpBuffer[Attrib * 3 * numComponents + numComponents * 2 + Comp];
+
+    if ((pInterpA[0] == pInterpB[0]) && (pInterpA[0] == pInterpC[0]))
+    {
+        // Ensure constant attribs are constant.  Required for proper
+        // 3D resource copies.
+        return SIMD128::broadcast_ss(pInterpA);
+    }
 
     simd4scalar vA = SIMD128::broadcast_ss(pInterpA);
     simd4scalar vB = SIMD128::broadcast_ss(pInterpB);

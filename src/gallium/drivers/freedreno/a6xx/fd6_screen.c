@@ -32,6 +32,7 @@
 #include "fd6_screen.h"
 #include "fd6_blitter.h"
 #include "fd6_context.h"
+#include "fd6_emit.h"
 #include "fd6_format.h"
 #include "fd6_resource.h"
 
@@ -55,7 +56,7 @@ valid_sample_count(unsigned sample_count)
 	}
 }
 
-static boolean
+static bool
 fd6_screen_is_format_supported(struct pipe_screen *pscreen,
 		enum pipe_format format,
 		enum pipe_texture_target target,
@@ -69,7 +70,7 @@ fd6_screen_is_format_supported(struct pipe_screen *pscreen,
 			!valid_sample_count(sample_count)) {
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
-		return FALSE;
+		return false;
 	}
 
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
@@ -154,4 +155,6 @@ fd6_screen_init(struct pipe_screen *pscreen)
 		screen->perfcntr_groups = a6xx_perfcntr_groups;
 		screen->num_perfcntr_groups = a6xx_num_perfcntr_groups;
 	}
+
+	fd6_emit_init_screen(pscreen);
 }

@@ -736,34 +736,6 @@ vec4_visitor::emit_minmax(enum brw_conditional_mod conditionalmod, dst_reg dst,
    return inst;
 }
 
-vec4_instruction *
-vec4_visitor::emit_lrp(const dst_reg &dst,
-                       const src_reg &x, const src_reg &y, const src_reg &a)
-{
-   if (devinfo->gen >= 6 && devinfo->gen <= 10) {
-      /* Note that the instruction's argument order is reversed from GLSL
-       * and the IR.
-       */
-     return emit(LRP(dst, fix_3src_operand(a), fix_3src_operand(y),
-                     fix_3src_operand(x)));
-   } else {
-      /* Earlier generations don't support three source operations, so we
-       * need to emit x*(1-a) + y*a.
-       */
-      dst_reg y_times_a           = dst_reg(this, glsl_type::vec4_type);
-      dst_reg one_minus_a         = dst_reg(this, glsl_type::vec4_type);
-      dst_reg x_times_one_minus_a = dst_reg(this, glsl_type::vec4_type);
-      y_times_a.writemask           = dst.writemask;
-      one_minus_a.writemask         = dst.writemask;
-      x_times_one_minus_a.writemask = dst.writemask;
-
-      emit(MUL(y_times_a, y, a));
-      emit(ADD(one_minus_a, negate(a), brw_imm_f(1.0f)));
-      emit(MUL(x_times_one_minus_a, x, src_reg(one_minus_a)));
-      return emit(ADD(dst, src_reg(x_times_one_minus_a), src_reg(y_times_a)));
-   }
-}
-
 /**
  * Emits the instructions needed to perform a pull constant load. before_block
  * and before_inst can be NULL in which case the instruction will be appended

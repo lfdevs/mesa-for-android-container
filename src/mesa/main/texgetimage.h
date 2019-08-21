@@ -61,6 +61,13 @@ _mesa_GetnTexImageARB( GLenum target, GLint level, GLenum format,
 extern void GLAPIENTRY
 _mesa_GetTextureImage(GLuint texture, GLint level, GLenum format,
                       GLenum type, GLsizei bufSize, GLvoid *pixels);
+extern void GLAPIENTRY
+_mesa_GetTextureImageEXT( GLuint texture, GLenum target, GLint level,
+                          GLenum format, GLenum type, GLvoid *pixels);
+
+extern void GLAPIENTRY
+_mesa_GetMultiTexImageEXT(GLenum texunit, GLenum target, GLint level,
+                          GLenum format, GLenum type, GLvoid *pixels);
 
 extern void GLAPIENTRY
 _mesa_GetTextureSubImage(GLuint texture, GLint level,
@@ -80,6 +87,14 @@ _mesa_GetnCompressedTexImageARB(GLenum target, GLint level, GLsizei bufSize,
 extern void GLAPIENTRY
 _mesa_GetCompressedTextureImage(GLuint texture, GLint level, GLsizei bufSize,
                                 GLvoid *pixels);
+
+extern void GLAPIENTRY
+_mesa_GetCompressedTextureImageEXT(GLuint texture, GLenum target, GLint level,
+                                   GLvoid *pixels);
+
+extern void GLAPIENTRY
+_mesa_GetCompressedMultiTexImageEXT(GLenum texunit, GLenum target, GLint level,
+                                    GLvoid *pixels);
 
 extern void APIENTRY
 _mesa_GetCompressedTextureSubImage(GLuint texture, GLint level,

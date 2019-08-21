@@ -429,14 +429,13 @@ static void compute_memory_move_item(struct compute_memory_pool *pool,
 	struct r600_context *rctx = (struct r600_context *)pipe;
 	struct pipe_box box;
 
-	MAYBE_UNUSED struct compute_memory_item *prev;
-
 	COMPUTE_DBG(pool->screen, "* compute_memory_move_item()\n"
 			"  + Moving item %"PRIi64" from %"PRIi64" (%"PRIi64" bytes) to %"PRIu64" (%"PRIu64" bytes)\n",
 			item->id, item->start_in_dw, item->start_in_dw * 4,
 			new_start_in_dw, new_start_in_dw * 4);
 
 	if (pool->item_list != item->link.prev) {
+		ASSERTED struct compute_memory_item *prev;
 		prev = container_of(item->link.prev, item, link);
 		assert(prev->start_in_dw + prev->size_in_dw <= new_start_in_dw);
 	}

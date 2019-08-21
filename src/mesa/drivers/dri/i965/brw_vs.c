@@ -149,6 +149,11 @@ brw_codegen_vs_prog(struct brw_context *brw,
                                  &prog_data.base.base);
    }
 
+   if (key->nr_userclip_plane_consts > 0) {
+      brw_nir_lower_legacy_clipping(nir, key->nr_userclip_plane_consts,
+                                    &prog_data.base.base);
+   }
+
    uint64_t outputs_written =
       brw_vs_outputs_written(brw, key, nir->info.outputs_written);
 
@@ -181,7 +186,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
     */
    char *error_str;
    program = brw_compile_vs(compiler, brw, mem_ctx, key, &prog_data,
-                            nir, st_index, &error_str);
+                            nir, st_index, NULL, &error_str);
    if (program == NULL) {
       if (!vp->program.is_arb_asm) {
          vp->program.sh.data->LinkStatus = LINKING_FAILURE;
@@ -197,7 +202,7 @@ brw_codegen_vs_prog(struct brw_context *brw,
    if (unlikely(brw->perf_debug)) {
       if (vp->compiled_once) {
          brw_debug_recompile(brw, MESA_SHADER_VERTEX, vp->program.Id,
-                             key->program_string_id, key);
+                             &key->base);
       }
       if (start_busy && !brw_bo_busy(brw->batch.last_bo)) {
          perf_debug("VS compile took %.03f ms and stalled the GPU\n",
@@ -252,7 +257,9 @@ brw_vs_populate_key(struct brw_context *brw,
    /* Just upload the program verbatim for now.  Always send it all
     * the inputs it asks for, whether they are varying or not.
     */
-   key->program_string_id = vp->id;
+
+   /* _NEW_TEXTURE */
+   brw_populate_base_prog_key(ctx, vp, &key->base);
 
    if (ctx->Transform.ClipPlanesEnabled != 0 &&
        (ctx->API == API_OPENGL_COMPAT || ctx->API == API_OPENGLES) &&
@@ -278,9 +285,6 @@ brw_vs_populate_key(struct brw_context *brw,
       /* _NEW_LIGHT | _NEW_BUFFERS */
       key->clamp_vertex_color = ctx->Light._ClampVertexColor;
    }
-
-   /* _NEW_TEXTURE */
-   brw_populate_sampler_prog_key_data(ctx, prog, &key->tex);
 
    /* BRW_NEW_VS_ATTRIB_WORKAROUNDS */
    if (devinfo->gen < 8 && !devinfo->is_haswell) {
@@ -311,23 +315,24 @@ brw_upload_vs_prog(struct brw_context *brw)
       return;
 
    vp = (struct brw_program *) brw->programs[MESA_SHADER_VERTEX];
-   vp->id = key.program_string_id;
+   vp->id = key.base.program_string_id;
 
-   MAYBE_UNUSED bool success = brw_codegen_vs_prog(brw, vp, &key);
+   ASSERTED bool success = brw_codegen_vs_prog(brw, vp, &key);
    assert(success);
 }
 
 void
-brw_vs_populate_default_key(const struct gen_device_info *devinfo,
+brw_vs_populate_default_key(const struct brw_compiler *compiler,
                             struct brw_vs_prog_key *key,
                             struct gl_program *prog)
 {
+   const struct gen_device_info *devinfo = compiler->devinfo;
    struct brw_program *bvp = brw_program(prog);
 
    memset(key, 0, sizeof(*key));
 
-   brw_setup_tex_for_precompile(devinfo, &key->tex, prog);
-   key->program_string_id = bvp->id;
+   brw_populate_default_base_prog_key(devinfo, bvp, &key->base);
+
    key->clamp_vertex_color =
       (prog->info.outputs_written &
        (VARYING_BIT_COL0 | VARYING_BIT_COL1 | VARYING_BIT_BFC0 |
@@ -345,7 +350,7 @@ brw_vs_precompile(struct gl_context *ctx, struct gl_program *prog)
 
    struct brw_program *bvp = brw_program(prog);
 
-   brw_vs_populate_default_key(&brw->screen->devinfo, &key, prog);
+   brw_vs_populate_default_key(brw->screen->compiler, &key, prog);
 
    success = brw_codegen_vs_prog(brw, bvp, &key);
 

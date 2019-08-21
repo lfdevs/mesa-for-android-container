@@ -737,9 +737,6 @@ _eglFilterConfigArray(_EGLArray *array, EGLConfig *configs,
    _EGLConfig **configList;
    EGLint i, count;
 
-   if (!num_configs)
-      return _eglError(EGL_BAD_PARAMETER, "eglChooseConfig");
-
    /* get the number of matched configs */
    count = _eglFilterArray(array, NULL, 0,
          (_EGLArrayForEach) match, priv_data);
@@ -851,9 +848,6 @@ EGLBoolean
 _eglGetConfigs(_EGLDriver *drv, _EGLDisplay *disp, EGLConfig *configs,
                EGLint config_size, EGLint *num_config)
 {
-   if (!num_config)
-      return _eglError(EGL_BAD_PARAMETER, "eglGetConfigs");
-
    *num_config = _eglFlattenArray(disp->Configs, (void *) configs,
          sizeof(configs[0]), config_size, _eglFlattenConfig);
 

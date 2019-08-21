@@ -77,9 +77,9 @@ int rvid_get_video_param(struct pipe_screen *screen,
                          enum pipe_video_cap param);
 
 /* the hardware only supports NV12 */
-boolean rvid_is_format_supported(struct pipe_screen *screen,
-                                 enum pipe_format format,
-                                 enum pipe_video_profile profile,
-                                 enum pipe_video_entrypoint entrypoint);
+bool rvid_is_format_supported(struct pipe_screen *screen,
+			      enum pipe_format format,
+			      enum pipe_video_profile profile,
+			      enum pipe_video_entrypoint entrypoint);
 
 #endif // RADEON_VIDEO_H
