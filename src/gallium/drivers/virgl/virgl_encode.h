@@ -300,4 +300,5 @@ void virgl_encode_end_transfers(struct virgl_cmd_buf *buf);
 
 int virgl_encode_tweak(struct virgl_context *ctx, enum vrend_tweak_type tweak, uint32_t value);
 
+enum virgl_formats pipe_to_virgl_format(enum pipe_format format);
 #endif

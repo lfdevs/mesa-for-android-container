@@ -1124,10 +1124,11 @@ VkResult radv_GetQueryPoolResults(
 
 		switch (pool->type) {
 		case VK_QUERY_TYPE_TIMESTAMP: {
-			available = *(uint64_t *)src != TIMESTAMP_NOT_READY;
+			volatile uint64_t const *src64 = (volatile uint64_t const *)src;
+			available = *src64 != TIMESTAMP_NOT_READY;
 
 			if (flags & VK_QUERY_RESULT_WAIT_BIT) {
-				while (*(volatile uint64_t *)src == TIMESTAMP_NOT_READY)
+				while (*src64 == TIMESTAMP_NOT_READY)
 					;
 				available = true;
 			}
@@ -1137,11 +1138,11 @@ VkResult radv_GetQueryPoolResults(
 
 			if (flags & VK_QUERY_RESULT_64_BIT) {
 				if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
-					*(uint64_t*)dest = *(uint64_t*)src;
+					*(uint64_t*)dest = *src64;
 				dest += 8;
 			} else {
 				if (available || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
-					*(uint32_t*)dest = *(uint32_t*)src;
+					*(uint32_t*)dest = *(volatile uint32_t*)src;
 				dest += 4;
 			}
 			break;
@@ -1189,13 +1190,13 @@ VkResult radv_GetQueryPoolResults(
 			if (flags & VK_QUERY_RESULT_WAIT_BIT)
 				while(!*(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query))
 					;
-			available = *(uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
+			available = *(volatile uint32_t*)(pool->ptr + pool->availability_offset + 4 * query);
 
 			if (!available && !(flags & VK_QUERY_RESULT_PARTIAL_BIT))
 				result = VK_NOT_READY;
 
-			const uint64_t *start = (uint64_t*)src;
-			const uint64_t *stop = (uint64_t*)(src + pipelinestat_block_size);
+			const volatile uint64_t *start = (uint64_t*)src;
+			const volatile uint64_t *stop = (uint64_t*)(src + pipelinestat_block_size);
 			if (flags & VK_QUERY_RESULT_64_BIT) {
 				uint64_t *dst = (uint64_t*)dest;
 				dest += util_bitcount(pool->pipeline_stats_mask) * 8;

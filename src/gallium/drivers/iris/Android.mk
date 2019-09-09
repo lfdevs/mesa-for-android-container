@@ -165,6 +165,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_blorp \
 	libmesa_intel_common \
 	libmesa_intel_compiler \
+	libmesa_intel_perf \
 	libmesa_iris_gen8 \
 	libmesa_iris_gen9 \
 	libmesa_iris_gen10 \

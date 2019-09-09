@@ -764,7 +764,7 @@ vl_compositor_init(struct vl_compositor *c, struct pipe_context *pipe)
 
    memset(c, 0, sizeof(*c));
 
-   c->pipe_cs_composit_supported = pipe->screen->get_param(pipe->screen, PIPE_CAP_COMPUTE) &&
+   c->pipe_cs_composit_supported = pipe->screen->get_param(pipe->screen, PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA) &&
             pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_TEX_TXF_LZ) &&
             pipe->screen->get_param(pipe->screen, PIPE_CAP_TGSI_DIV);
 

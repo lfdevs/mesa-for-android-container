@@ -26,7 +26,7 @@
 
 #include "u_queue.h"
 
-#include <time.h>
+#include "c11/threads.h"
 
 #include "util/os_time.h"
 #include "util/u_string.h"

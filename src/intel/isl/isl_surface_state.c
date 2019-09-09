@@ -455,7 +455,12 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if GEN_GEN >= 11
-   s.EnableUnormPathInColorPipe = true;
+   /* We've seen dEQP failures when enabling this bit with UINT formats,
+    * which particularly affects blorp_copy() operations.  It shouldn't
+    * have any effect on UINT textures anyway, so disable it for them.
+    */
+   s.EnableUnormPathInColorPipe =
+      !isl_format_has_int_channel(info->view->format);
 #endif
 
    s.CubeFaceEnablePositiveZ = 1;
@@ -762,10 +767,6 @@ isl_genX(buffer_fill_state_s)(void *state,
    s.RenderCacheReadWriteMode = WriteOnlyCache;
 #else
    s.RenderCacheReadWriteMode = 0;
-#endif
-
-#if GEN_GEN >= 11
-   s.EnableUnormPathInColorPipe = true;
 #endif
 
    s.SurfaceBaseAddress = info->address;

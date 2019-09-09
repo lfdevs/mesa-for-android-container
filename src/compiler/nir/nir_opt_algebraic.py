@@ -806,7 +806,8 @@ optimizations.extend([
    (('ffloor', 'a(is_integral)'), a),
    (('fceil', 'a(is_integral)'), a),
    (('ftrunc', 'a(is_integral)'), a),
-   (('ffract', 'a(is_integral)'), 0.0),
+   # fract(x) = x - floor(x), so fract(NaN) = NaN
+   (('~ffract', 'a(is_integral)'), 0.0),
    (('fabs', 'a(is_not_negative)'), a),
    (('iabs', 'a(is_not_negative)'), a),
    (('fsat', 'a(is_not_positive)'), 0.0),
@@ -836,15 +837,18 @@ optimizations.extend([
    (('fne', 'a(is_not_zero)', 0.0), True),
    (('feq', 'a(is_not_zero)', 0.0), False),
 
-   (('fge', 'a(is_not_negative)', 'b(is_not_positive)'), True),
-   (('fge', 'b(is_not_positive)', 'a(is_gt_zero)'),      False),
-   (('fge', 'a(is_lt_zero)',      'b(is_not_negative)'), False),
-   (('fge', 'b(is_not_negative)', 'a(is_not_positive)'), True),
+   # The results expecting true, must be marked imprecise.  The results
+   # expecting false are fine because NaN compared >= or < anything is false.
 
-   (('flt', 'a(is_not_negative)', 'b(is_not_positive)'), False),
-   (('flt', 'b(is_not_positive)', 'a(is_gt_zero)'),      True),
-   (('flt', 'a(is_lt_zero)',      'b(is_not_negative)'), True),
-   (('flt', 'b(is_not_negative)', 'a(is_not_positive)'), False),
+   (('~fge', 'a(is_not_negative)', 'b(is_not_positive)'), True),
+   (('fge',  'b(is_not_positive)', 'a(is_gt_zero)'),      False),
+   (('fge',  'a(is_lt_zero)',      'b(is_not_negative)'), False),
+   (('~fge', 'b(is_not_negative)', 'a(is_not_positive)'), True),
+
+   (('flt',  'a(is_not_negative)', 'b(is_not_positive)'), False),
+   (('~flt', 'b(is_not_positive)', 'a(is_gt_zero)'),      True),
+   (('~flt', 'a(is_lt_zero)',      'b(is_not_negative)'), True),
+   (('flt',  'b(is_not_negative)', 'a(is_not_positive)'), False),
 
    (('ine', 'a(is_not_zero)', 0), True),
    (('ieq', 'a(is_not_zero)', 0), False),
@@ -1316,7 +1320,7 @@ def bitfield_reverse(u):
 
     return step5
 
-optimizations += [(bitfield_reverse('x@32'), ('bitfield_reverse', 'x'))]
+optimizations += [(bitfield_reverse('x@32'), ('bitfield_reverse', 'x'), '!options->lower_bitfield_reverse')]
 
 # For any float comparison operation, "cmp", if you have "a == a && a cmp b"
 # then the "a == a" is redundant because it's equivalent to "a is not NaN"

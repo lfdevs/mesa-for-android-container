@@ -610,8 +610,9 @@ virgl_format_check_bitmask(enum pipe_format format,
                            uint32_t bitmask[16],
                            bool may_emulate_bgra)
 {
-   int big = format / 32;
-   int small = format % 32;
+   enum virgl_formats vformat = pipe_to_virgl_format(format);
+   int big = vformat / 32;
+   int small = vformat % 32;
    if ((bitmask[big] & (1 << small)))
       return true;
 
@@ -626,8 +627,9 @@ virgl_format_check_bitmask(enum pipe_format format,
          return false;
       }
 
-      big = format / 32;
-      small = format % 32;
+      vformat = pipe_to_virgl_format(format);
+      big = vformat / 32;
+      small = vformat % 32;
       if (bitmask[big] & (1 << small))
          return true;
    }

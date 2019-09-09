@@ -504,7 +504,7 @@ static unsigned ngg_nogs_vertex_size(struct si_shader *shader)
 	 * used for padding to reduce LDS bank conflicts. */
 	if (shader->selector->so.num_outputs)
 		lds_vertex_size = 4 * shader->selector->info.num_outputs + 1;
-	if (shader->selector->ngg_writes_edgeflag)
+	if (shader->selector->info.writes_edgeflag)
 		lds_vertex_size = MAX2(lds_vertex_size, 1);
 
 	return lds_vertex_size;
@@ -544,7 +544,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 
 	LLVMValueRef vertex_ptr = NULL;
 
-	if (sel->so.num_outputs || sel->ngg_writes_edgeflag)
+	if (sel->so.num_outputs || sel->info.writes_edgeflag)
 		vertex_ptr = ngg_nogs_vertex_ptr(ctx, get_thread_id_in_tg(ctx));
 
 	for (unsigned i = 0; i < info->num_outputs; i++) {
@@ -569,7 +569,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 
 		/* Store the edgeflag at the end (if streamout is enabled) */
 		if (info->output_semantic_name[i] == TGSI_SEMANTIC_EDGEFLAG &&
-		    sel->ngg_writes_edgeflag) {
+		    sel->info.writes_edgeflag) {
 			LLVMValueRef edgeflag = LLVMBuildLoad(builder, addrs[4 * i], "");
 			/* The output is a float, but the hw expects a 1-bit integer. */
 			edgeflag = LLVMBuildFPToUI(ctx->ac.builder, edgeflag, ctx->i32, "");
@@ -641,7 +641,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 
 	LLVMValueRef user_edgeflags[3] = {};
 
-	if (sel->ngg_writes_edgeflag) {
+	if (sel->info.writes_edgeflag) {
 		/* Streamout already inserted the barrier, so don't insert it again. */
 		if (!sel->so.num_outputs)
 			ac_build_s_barrier(&ctx->ac);
@@ -667,7 +667,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 	if (ctx->type == PIPE_SHADER_VERTEX &&
 	    ctx->shader->key.mono.u.vs_export_prim_id) {
 		/* Streamout and edge flags use LDS. Make it idle, so that we can reuse it. */
-		if (sel->so.num_outputs || sel->ngg_writes_edgeflag)
+		if (sel->so.num_outputs || sel->info.writes_edgeflag)
 			ac_build_s_barrier(&ctx->ac);
 
 		ac_build_ifcc(&ctx->ac, is_gs_thread, 5400);
@@ -756,7 +756,7 @@ void gfx10_emit_ngg_epilogue(struct ac_shader_abi *abi,
 					    LLVMConstInt(ctx->ac.i32, 8 + i, false), "");
 			prim.edgeflag[i] = LLVMBuildTrunc(builder, tmp, ctx->ac.i1, "");
 
-			if (sel->ngg_writes_edgeflag) {
+			if (sel->info.writes_edgeflag) {
 				tmp2 = LLVMBuildLoad(builder, user_edgeflags[i], "");
 				prim.edgeflag[i] = LLVMBuildAnd(builder, prim.edgeflag[i],
 								tmp2, "");

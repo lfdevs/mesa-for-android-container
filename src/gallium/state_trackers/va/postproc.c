@@ -222,7 +222,7 @@ static VAStatus vlVaPostProcBlit(vlVaDriver *drv, vlVaContext *context,
       blit.filter = PIPE_TEX_MIPFILTER_LINEAR;
 
       if (drv->pipe->screen->get_param(drv->pipe->screen,
-                                       PIPE_CAP_PREFER_COMPUTE_BLIT_FOR_MULTIMEDIA))
+                                       PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA))
          util_compute_blit(drv->pipe, &blit, &context->blit_cs);
       else
          drv->pipe->blit(drv->pipe, &blit);

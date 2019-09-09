@@ -4221,10 +4221,9 @@ ac_build_scan(struct ac_llvm_context *ctx, nir_op op, LLVMValueRef src, LLVMValu
 	if (ctx->chip_class >= GFX10) {
 		result = inclusive ? src : identity;
 	} else {
-		if (inclusive)
-			result = src;
-		else
-			result = ac_build_dpp(ctx, identity, src, dpp_wf_sr1, 0xf, 0xf, false);
+		if (!inclusive)
+			src = ac_build_dpp(ctx, identity, src, dpp_wf_sr1, 0xf, 0xf, false);
+		result = src;
 	}
 	if (maxprefix <= 1)
 		return result;

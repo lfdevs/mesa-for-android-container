@@ -297,7 +297,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			.lower_ubo_ssbo_access_to_offsets = true,
 			.caps = {
 				.amd_gcn_shader = true,
-				.amd_shader_ballot = device->instance->perftest_flags & RADV_PERFTEST_SHADER_BALLOT,
+				.amd_shader_ballot = device->physical_device->use_shader_ballot,
 				.amd_trinary_minmax = true,
 				.derivative_group = true,
 				.descriptor_array_dynamic_indexing = true,
@@ -809,10 +809,12 @@ static void radv_postprocess_config(const struct radv_physical_device *pdevice,
 			 * If PrimID is disabled. InstanceID / StepRate1 is loaded instead.
 			 * StepRate0 is set to 1. so that VGPR3 doesn't have to be loaded.
 			 */
-			if (info->vs.export_prim_id) {
+			if (info->info.vs.needs_instance_id && pdevice->rad_info.chip_class >= GFX10) {
+				vgpr_comp_cnt = 3;
+			} else if (info->vs.export_prim_id) {
 				vgpr_comp_cnt = 2;
 			} else if (info->info.vs.needs_instance_id) {
-				vgpr_comp_cnt = pdevice->rad_info.chip_class >= GFX10 ? 3 : 1;
+				vgpr_comp_cnt = 1;
 			} else {
 				vgpr_comp_cnt = 0;
 			}

@@ -147,7 +147,7 @@ static void si_create_compute_state_async(void *job, int thread_index)
 	program->num_cs_user_data_dwords =
 		sel->info.properties[TGSI_PROPERTY_CS_USER_DATA_COMPONENTS_AMD];
 
-	void *ir_binary = si_get_ir_binary(sel);
+	void *ir_binary = si_get_ir_binary(sel, false, false);
 
 	/* Try to load the shader from the shader cache. */
 	mtx_lock(&sscreen->shader_cache_mutex);
@@ -531,9 +531,13 @@ static bool si_switch_compute_shader(struct si_context *sctx,
 	COMPUTE_DBG(sctx->screen, "COMPUTE_PGM_RSRC1: 0x%08x "
 		"COMPUTE_PGM_RSRC2: 0x%08x\n", config->rsrc1, config->rsrc2);
 
+	sctx->max_seen_compute_scratch_bytes_per_wave =
+		MAX2(sctx->max_seen_compute_scratch_bytes_per_wave,
+		     config->scratch_bytes_per_wave);
+
 	radeon_set_sh_reg(cs, R_00B860_COMPUTE_TMPRING_SIZE,
 	          S_00B860_WAVES(sctx->scratch_waves)
-	             | S_00B860_WAVESIZE(config->scratch_bytes_per_wave >> 10));
+	             | S_00B860_WAVESIZE(sctx->max_seen_compute_scratch_bytes_per_wave >> 10));
 
 	sctx->cs_shader_state.emitted_program = program;
 	sctx->cs_shader_state.offset = offset;

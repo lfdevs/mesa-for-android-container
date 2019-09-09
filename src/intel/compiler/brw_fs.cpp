@@ -8433,7 +8433,7 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
       if (!v32->run_cs(min_dispatch_width)) {
          compiler->shader_perf_log(log_data,
                                    "SIMD32 shader failed to compile: %s",
-                                   v16->fail_msg);
+                                   v32->fail_msg);
          if (!v) {
             fail_msg =
                "Couldn't generate SIMD32 program and not "

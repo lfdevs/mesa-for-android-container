@@ -80,8 +80,8 @@ can_fast_clear_color(struct iris_context *ice,
 
    /* Check for partial clear */
    if (box->x > 0 || box->y > 0 ||
-       box->width < p_res->width0 ||
-       box->height < p_res->height0) {
+       box->width < minify(p_res->width0, level) ||
+       box->height < minify(p_res->height0, level)) {
       return false;
    }
 

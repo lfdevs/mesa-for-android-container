@@ -175,6 +175,7 @@ enum {
 
 	/* 3D engine options: */
 	DBG_NO_GFX,
+	DBG_NO_NGG,
 	DBG_ALWAYS_PD,
 	DBG_PD,
 	DBG_NO_PD,
@@ -1086,6 +1087,8 @@ struct si_context {
 	struct si_resource	*scratch_buffer;
 	unsigned		scratch_waves;
 	unsigned		spi_tmpring_size;
+	unsigned		max_seen_scratch_bytes_per_wave;
+	unsigned		max_seen_compute_scratch_bytes_per_wave;
 
 	struct si_resource	*compute_scratch_buffer;
 
@@ -1912,7 +1915,8 @@ static inline unsigned si_get_wave_size(struct si_screen *sscreen,
 		return sscreen->compute_wave_size;
 	else if (shader_type == PIPE_SHADER_FRAGMENT)
 		return sscreen->ps_wave_size;
-	else if ((shader_type == PIPE_SHADER_TESS_EVAL && es && !ngg) ||
+	else if ((shader_type == PIPE_SHADER_VERTEX && es && !ngg) ||
+		 (shader_type == PIPE_SHADER_TESS_EVAL && es && !ngg) ||
 		 (shader_type == PIPE_SHADER_GEOMETRY && !ngg)) /* legacy GS only supports Wave64 */
 		return 64;
 	else

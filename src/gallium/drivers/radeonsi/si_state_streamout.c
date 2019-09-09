@@ -470,6 +470,11 @@ void si_update_prims_generated_query_state(struct si_context *sctx,
 
 		if (old_strmout_en != si_get_strmout_en(sctx))
 			si_mark_atom_dirty(sctx, &sctx->atoms.s.streamout_enable);
+
+		if (si_update_ngg(sctx)) {
+			si_shader_change_notify(sctx);
+			sctx->do_update_shaders = true;
+		}
 	}
 }
 

@@ -116,6 +116,36 @@ static inline void radeon_set_uconfig_reg_idx(struct radeon_cmdbuf *cs,
 	radeon_emit(cs, value);
 }
 
+static inline void radeon_set_context_reg_rmw(struct radeon_cmdbuf *cs, unsigned reg,
+					      unsigned value, unsigned mask)
+{
+	assert(reg >= SI_CONTEXT_REG_OFFSET);
+	assert(cs->current.cdw + 4 <= cs->current.max_dw);
+	radeon_emit(cs, PKT3(PKT3_CONTEXT_REG_RMW, 2, 0));
+	radeon_emit(cs, (reg - SI_CONTEXT_REG_OFFSET) >> 2);
+	radeon_emit(cs, mask);
+	radeon_emit(cs, value);
+}
+
+/* Emit PKT3_CONTEXT_REG_RMW if the register value is different. */
+static inline void radeon_opt_set_context_reg_rmw(struct si_context *sctx, unsigned offset,
+						  enum si_tracked_reg reg, unsigned value,
+						  unsigned mask)
+{
+	struct radeon_cmdbuf *cs = sctx->gfx_cs;
+
+	assert((value & ~mask) == 0);
+	value &= mask;
+
+	if (((sctx->tracked_regs.reg_saved >> reg) & 0x1) != 0x1 ||
+	    sctx->tracked_regs.reg_value[reg] != value) {
+		radeon_set_context_reg_rmw(cs, offset, value, mask);
+
+		sctx->tracked_regs.reg_saved |= 0x1ull << reg;
+		sctx->tracked_regs.reg_value[reg] = value;
+	}
+}
+
 /* Emit PKT3_SET_CONTEXT_REG if the register value is different. */
 static inline void radeon_opt_set_context_reg(struct si_context *sctx, unsigned offset,
 					      enum si_tracked_reg reg, unsigned value)

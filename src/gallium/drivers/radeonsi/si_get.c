@@ -156,7 +156,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_FBFETCH:
 	case PIPE_CAP_COMPUTE_GRID_INFO_LAST_BLOCK:
 	case PIPE_CAP_IMAGE_LOAD_FORMATTED:
-	case PIPE_CAP_PREFER_COMPUTE_BLIT_FOR_MULTIMEDIA:
+	case PIPE_CAP_PREFER_COMPUTE_FOR_MULTIMEDIA:
 	case PIPE_CAP_TGSI_DIV:
 		return 1;
 

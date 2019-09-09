@@ -2320,6 +2320,7 @@ radv_fill_shader_keys(struct radv_device *device,
 	}
 
 	if (device->physical_device->rad_info.chip_class >= GFX10 &&
+	    device->physical_device->rad_info.family != CHIP_NAVI14 &&
 	    !(device->instance->debug_flags & RADV_DEBUG_NO_NGG)) {
 		if (nir[MESA_SHADER_TESS_CTRL]) {
 			keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg = true;
@@ -2337,6 +2338,26 @@ radv_fill_shader_keys(struct radv_device *device,
 			 * might hang.
 			 */
 			keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg = false;
+		}
+
+		/*
+		 * Disable NGG with geometry shaders. There are a bunch of
+		 * issues still:
+		 *   * GS primitives in pipeline statistic queries do not get
+		 *     updates. See dEQP-VK.query_pool.statistics_query.geometry_shader_primitives
+		 *   * dEQP-VK.clipping.user_defined.clip_cull_distance_dynamic_index.*geom* failures
+		 *   * Interactions with tessellation failing:
+		 *     dEQP-VK.tessellation.geometry_interaction.passthrough.tessellate_isolines_passthrough_geometry_no_change
+		 *   * General issues with the last primitive missing/corrupt:
+		 *     https://bugs.freedesktop.org/show_bug.cgi?id=111248
+		 *
+		 * Furthermore, XGL/AMDVLK also disables this as of 9b632ef.
+		 */
+		if (nir[MESA_SHADER_GEOMETRY]) {
+			if (nir[MESA_SHADER_TESS_CTRL])
+				keys[MESA_SHADER_TESS_EVAL].vs_common_out.as_ngg = false;
+			else
+				keys[MESA_SHADER_VERTEX].vs_common_out.as_ngg = false;
 		}
 
 		/* TODO: Implement streamout support for NGG. */
@@ -3812,6 +3833,14 @@ radv_pipeline_generate_tess_shaders(struct radeon_cmdbuf *ctx_cs,
 	else
 		radeon_set_context_reg(ctx_cs, R_028B58_VGT_LS_HS_CONFIG,
 				       tess->ls_hs_config);
+
+	if (pipeline->device->physical_device->rad_info.chip_class >= GFX10 &&
+	    !radv_pipeline_has_gs(pipeline) && !radv_pipeline_has_ngg(pipeline)) {
+		radeon_set_context_reg(ctx_cs, R_028A44_VGT_GS_ONCHIP_CNTL,
+		                       S_028A44_ES_VERTS_PER_SUBGRP(250) |
+		                       S_028A44_GS_PRIMS_PER_SUBGRP(126) |
+		                       S_028A44_GS_INST_PRIMS_IN_SUBGRP(126));
+	}
 }
 
 static void

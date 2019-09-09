@@ -202,7 +202,11 @@ namespace SwrJit
 
             FunctionType* pfnScatterTy = FunctionType::get(B->mVoidTy, args, false);
             mPfnScatter256             = cast<Function>(
+#if LLVM_VERSION_MAJOR >= 9
+                B->JM()->mpCurrentModule->getOrInsertFunction("ScatterPS_256", pfnScatterTy).getCallee());
+#else
                 B->JM()->mpCurrentModule->getOrInsertFunction("ScatterPS_256", pfnScatterTy));
+#endif
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("ScatterPS_256") == nullptr)
             {
                 sys::DynamicLibrary::AddSymbol("ScatterPS_256", (void*)&ScatterPS_256);

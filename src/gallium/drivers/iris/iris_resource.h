@@ -436,6 +436,9 @@ void iris_resource_check_level_layer(const struct iris_resource *res,
 
 bool iris_resource_level_has_hiz(const struct iris_resource *res,
                                  uint32_t level);
+bool iris_has_color_unresolved(const struct iris_resource *res,
+                               unsigned start_level, unsigned num_levels,
+                               unsigned start_layer, unsigned num_layers);
 
 enum isl_aux_usage iris_resource_render_aux_usage(struct iris_context *ice,
                                                   struct iris_resource *res,

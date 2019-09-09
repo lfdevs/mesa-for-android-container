@@ -192,7 +192,8 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 		radeon_set_context_reg(cs, R_028B98_VGT_STRMOUT_BUFFER_CONFIG, 0x0);
 	}
 
-	radeon_set_context_reg(cs, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
+	if (physical_device->rad_info.chip_class <= GFX9)
+		radeon_set_context_reg(cs, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
 	if (!physical_device->has_clear_state)
 		radeon_set_context_reg(cs, R_028AB8_VGT_VTX_CNT_EN, 0x0);
 	if (physical_device->rad_info.chip_class < GFX7)

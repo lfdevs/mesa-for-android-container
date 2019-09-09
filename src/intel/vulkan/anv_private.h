@@ -2275,9 +2275,9 @@ struct anv_dynamic_state {
 
 extern const struct anv_dynamic_state default_dynamic_state;
 
-void anv_dynamic_state_copy(struct anv_dynamic_state *dest,
-                            const struct anv_dynamic_state *src,
-                            uint32_t copy_mask);
+uint32_t anv_dynamic_state_copy(struct anv_dynamic_state *dest,
+                                const struct anv_dynamic_state *src,
+                                uint32_t copy_mask);
 
 struct anv_surface_state {
    struct anv_state state;

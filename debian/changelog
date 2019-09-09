@@ -1,3 +1,16 @@
+mesa (19.2.0~rc2-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * Migrate to llvm/clang-9. (Closes: #935768)
+  * control: Add vulkan-icd to mesa-vulkan-drivers Provides. (Closes:
+    #935869)
+  * control, rules: Drop libva-dev from build-depends, don't use
+    dh_libva and drop pkg.mesa.nolibva build profile, libva2 transition
+    is done.
+  * control: Bump llvm/clang build-dep.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 09 Sep 2019 14:36:14 +0300
+
 mesa (19.2.0~rc1-1) experimental; urgency=medium
 
   * New upstream release candidate.

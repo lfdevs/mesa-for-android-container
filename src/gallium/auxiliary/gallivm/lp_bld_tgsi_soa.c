@@ -3585,6 +3585,8 @@ atomic_emit(
    case TGSI_OPCODE_ATOMIMAX:
       op = LLVMAtomicRMWBinOpMax;
       break;
+   case TGSI_OPCODE_ATOMCAS:
+      break;
    default:
       assert(0);
       return;

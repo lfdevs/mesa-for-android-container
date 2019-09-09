@@ -89,6 +89,7 @@ static const struct debug_named_value debug_options[] = {
 
 	/* 3D engine options: */
 	{ "nogfx", DBG(NO_GFX), "Disable graphics. Only multimedia compute paths can be used." },
+	{ "nongg", DBG(NO_NGG), "Disable NGG and use the legacy pipeline." },
 	{ "alwayspd", DBG(ALWAYS_PD), "Always enable the primitive discard compute shader." },
 	{ "pd", DBG(PD), "Enable the primitive discard compute shader for large draw calls." },
 	{ "nopd", DBG(NO_PD), "Disable the primitive discard compute shader." },
@@ -868,21 +869,8 @@ static void si_disk_cache_create(struct si_screen *sscreen)
 	disk_cache_format_hex_id(cache_id, sha1, 20 * 2);
 
 	/* These flags affect shader compilation. */
-	#define ALL_FLAGS (DBG(FS_CORRECT_DERIVS_AFTER_KILL) |	\
-			   DBG(SI_SCHED) |			\
-			   DBG(GISEL) |				\
-			   DBG(W32_GE) |			\
-			   DBG(W32_PS) |			\
-			   DBG(W32_CS) |			\
-			   DBG(W64_GE) |			\
-			   DBG(W64_PS) |			\
-			   DBG(W64_CS))
+	#define ALL_FLAGS (DBG(SI_SCHED) | DBG(GISEL))
 	uint64_t shader_debug_flags = sscreen->debug_flags & ALL_FLAGS;
-
-	if (sscreen->options.enable_nir) {
-		STATIC_ASSERT((ALL_FLAGS & (1u << 31)) == 0);
-		shader_debug_flags |= 1u << 31;
-	}
 
 	/* Add the high bits of 32-bit addresses, which affects
 	 * how 32-bit addresses are expanded to 64 bits.
@@ -1149,8 +1137,10 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 	sscreen->has_dcc_constant_encode = sscreen->info.family == CHIP_RAVEN2 ||
 					   sscreen->info.family == CHIP_RENOIR ||
 					   sscreen->info.chip_class >= GFX10;
-	sscreen->use_ngg = sscreen->info.chip_class >= GFX10;
-	sscreen->use_ngg_streamout = sscreen->info.chip_class >= GFX10;
+	sscreen->use_ngg = sscreen->info.chip_class >= GFX10 &&
+			   sscreen->info.family != CHIP_NAVI14 &&
+			   !(sscreen->debug_flags & DBG(NO_NGG));
+	sscreen->use_ngg_streamout = false;
 
 	/* Only enable primitive binning on APUs by default. */
 	if (sscreen->info.chip_class >= GFX10) {

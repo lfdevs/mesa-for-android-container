@@ -173,12 +173,11 @@ radv_physical_device_init_mem_types(struct radv_physical_device *device)
 			.heapIndex = vram_index,
 		};
 	}
-	if (gart_index >= 0) {
+	if (gart_index >= 0 && device->rad_info.has_dedicated_vram) {
 		device->mem_type_indices[type_count] = RADV_MEM_TYPE_GTT_WRITE_COMBINE;
 		device->memory_properties.memoryTypes[type_count++] = (VkMemoryType) {
 			.propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-			(device->rad_info.has_dedicated_vram ? 0 : VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			.heapIndex = gart_index,
 		};
 	}
@@ -189,6 +188,19 @@ radv_physical_device_init_mem_types(struct radv_physical_device *device)
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
 			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			.heapIndex = visible_vram_index,
+		};
+	}
+	if (gart_index >= 0 && !device->rad_info.has_dedicated_vram) {
+		/* Put GTT after visible VRAM for GPUs without dedicated VRAM
+		 * as they have identical property flags, and according to the
+		 * spec, for types with identical flags, the one with greater
+		 * performance must be given a lower index. */
+		device->mem_type_indices[type_count] = RADV_MEM_TYPE_GTT_WRITE_COMBINE;
+		device->memory_properties.memoryTypes[type_count++] = (VkMemoryType) {
+			.propertyFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			.heapIndex = gart_index,
 		};
 	}
 	if (gart_index >= 0) {
@@ -383,7 +395,8 @@ radv_physical_device_init(struct radv_physical_device *device,
 					  device->rad_info.family == CHIP_RENOIR ||
 					  device->rad_info.chip_class >= GFX10;
 
-	device->use_shader_ballot = device->instance->perftest_flags & RADV_PERFTEST_SHADER_BALLOT;
+	device->use_shader_ballot = device->rad_info.chip_class >= GFX8 &&
+				    device->instance->perftest_flags & RADV_PERFTEST_SHADER_BALLOT;
 
 	/* Determine the number of threads per wave for all stages. */
 	device->cs_wave_size = 64;
@@ -495,6 +508,7 @@ static const struct debug_control radv_debug_options[] = {
 	{"nobinning", RADV_DEBUG_NOBINNING},
 	{"noloadstoreopt", RADV_DEBUG_NO_LOAD_STORE_OPT},
 	{"nongg", RADV_DEBUG_NO_NGG},
+	{"noshaderballot", RADV_DEBUG_NO_SHADER_BALLOT},
 	{NULL, 0}
 };
 
@@ -553,6 +567,14 @@ radv_handle_per_app_options(struct radv_instance *instance,
 		 */
 		if (HAVE_LLVM < 0x900)
 			instance->debug_flags |= RADV_DEBUG_NO_LOAD_STORE_OPT;
+	} else if (!strcmp(name, "Wolfenstein: Youngblood")) {
+		if (!(instance->debug_flags & RADV_DEBUG_NO_SHADER_BALLOT)) {
+			/* Force enable VK_AMD_shader_ballot because it looks
+			 * safe and it gives a nice boost (+20% on Vega 56 at
+			 * this time).
+			 */
+			instance->perftest_flags |= RADV_PERFTEST_SHADER_BALLOT;
+		}
 	}
 }
 

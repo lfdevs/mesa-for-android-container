@@ -39,6 +39,225 @@
 
 #define VIRGL_ENCODE_MAX_DWORDS MIN2(VIRGL_MAX_CMDBUF_DWORDS, VIRGL_CMD0_MAX_DWORDS)
 
+#define CONV_FORMAT(f) [PIPE_FORMAT_##f] = VIRGL_FORMAT_##f,
+
+static const enum virgl_formats virgl_formats_conv_table[PIPE_FORMAT_COUNT] = {
+   CONV_FORMAT(B8G8R8A8_UNORM)
+   CONV_FORMAT(B8G8R8X8_UNORM)
+   CONV_FORMAT(A8R8G8B8_UNORM)
+   CONV_FORMAT(X8R8G8B8_UNORM)
+   CONV_FORMAT(B5G5R5A1_UNORM)
+   CONV_FORMAT(B4G4R4A4_UNORM)
+   CONV_FORMAT(B5G6R5_UNORM)
+   CONV_FORMAT(R10G10B10A2_UNORM)
+   CONV_FORMAT(L8_UNORM)
+   CONV_FORMAT(A8_UNORM)
+   CONV_FORMAT(L8A8_UNORM)
+   CONV_FORMAT(L16_UNORM)
+   CONV_FORMAT(Z16_UNORM)
+   CONV_FORMAT(Z32_UNORM)
+   CONV_FORMAT(Z32_FLOAT)
+   CONV_FORMAT(Z24_UNORM_S8_UINT)
+   CONV_FORMAT(S8_UINT_Z24_UNORM)
+   CONV_FORMAT(Z24X8_UNORM)
+   CONV_FORMAT(X8Z24_UNORM)
+   CONV_FORMAT(S8_UINT)
+   CONV_FORMAT(R64_FLOAT)
+   CONV_FORMAT(R64G64_FLOAT)
+   CONV_FORMAT(R64G64B64_FLOAT)
+   CONV_FORMAT(R64G64B64A64_FLOAT)
+   CONV_FORMAT(R32_FLOAT)
+   CONV_FORMAT(R32G32_FLOAT)
+   CONV_FORMAT(R32G32B32_FLOAT)
+   CONV_FORMAT(R32G32B32A32_FLOAT)
+   CONV_FORMAT(R32_UNORM)
+   CONV_FORMAT(R32G32_UNORM)
+   CONV_FORMAT(R32G32B32_UNORM)
+   CONV_FORMAT(R32G32B32A32_UNORM)
+   CONV_FORMAT(R32_USCALED)
+   CONV_FORMAT(R32G32_USCALED)
+   CONV_FORMAT(R32G32B32_USCALED)
+   CONV_FORMAT(R32G32B32A32_USCALED)
+   CONV_FORMAT(R32_SNORM)
+   CONV_FORMAT(R32G32_SNORM)
+   CONV_FORMAT(R32G32B32_SNORM)
+   CONV_FORMAT(R32G32B32A32_SNORM)
+   CONV_FORMAT(R32_SSCALED)
+   CONV_FORMAT(R32G32_SSCALED)
+   CONV_FORMAT(R32G32B32_SSCALED)
+   CONV_FORMAT(R32G32B32A32_SSCALED)
+   CONV_FORMAT(R16_UNORM)
+   CONV_FORMAT(R16G16_UNORM)
+   CONV_FORMAT(R16G16B16_UNORM)
+   CONV_FORMAT(R16G16B16A16_UNORM)
+   CONV_FORMAT(R16_USCALED)
+   CONV_FORMAT(R16G16_USCALED)
+   CONV_FORMAT(R16G16B16_USCALED)
+   CONV_FORMAT(R16G16B16A16_USCALED)
+   CONV_FORMAT(R16_SNORM)
+   CONV_FORMAT(R16G16_SNORM)
+   CONV_FORMAT(R16G16B16_SNORM)
+   CONV_FORMAT(R16G16B16A16_SNORM)
+   CONV_FORMAT(R16_SSCALED)
+   CONV_FORMAT(R16G16_SSCALED)
+   CONV_FORMAT(R16G16B16_SSCALED)
+   CONV_FORMAT(R16G16B16A16_SSCALED)
+   CONV_FORMAT(R8_UNORM)
+   CONV_FORMAT(R8G8_UNORM)
+   CONV_FORMAT(R8G8B8_UNORM)
+   CONV_FORMAT(R8G8B8A8_UNORM)
+   CONV_FORMAT(R8_USCALED)
+   CONV_FORMAT(R8G8_USCALED)
+   CONV_FORMAT(R8G8B8_USCALED)
+   CONV_FORMAT(R8G8B8A8_USCALED)
+   CONV_FORMAT(R8_SNORM)
+   CONV_FORMAT(R8G8_SNORM)
+   CONV_FORMAT(R8G8B8_SNORM)
+   CONV_FORMAT(R8G8B8A8_SNORM)
+   CONV_FORMAT(R8_SSCALED)
+   CONV_FORMAT(R8G8_SSCALED)
+   CONV_FORMAT(R8G8B8_SSCALED)
+   CONV_FORMAT(R8G8B8A8_SSCALED)
+   CONV_FORMAT(R16_FLOAT)
+   CONV_FORMAT(R16G16_FLOAT)
+   CONV_FORMAT(R16G16B16_FLOAT)
+   CONV_FORMAT(R16G16B16A16_FLOAT)
+   CONV_FORMAT(L8_SRGB)
+   CONV_FORMAT(L8A8_SRGB)
+   CONV_FORMAT(R8G8B8_SRGB)
+   CONV_FORMAT(A8B8G8R8_SRGB)
+   CONV_FORMAT(X8B8G8R8_SRGB)
+   CONV_FORMAT(B8G8R8A8_SRGB)
+   CONV_FORMAT(B8G8R8X8_SRGB)
+   CONV_FORMAT(A8R8G8B8_SRGB)
+   CONV_FORMAT(X8R8G8B8_SRGB)
+   CONV_FORMAT(R8G8B8A8_SRGB)
+   CONV_FORMAT(DXT1_RGB)
+   CONV_FORMAT(DXT1_RGBA)
+   CONV_FORMAT(DXT3_RGBA)
+   CONV_FORMAT(DXT5_RGBA)
+   CONV_FORMAT(DXT1_SRGB)
+   CONV_FORMAT(DXT1_SRGBA)
+   CONV_FORMAT(DXT3_SRGBA)
+   CONV_FORMAT(DXT5_SRGBA)
+   CONV_FORMAT(RGTC1_UNORM)
+   CONV_FORMAT(RGTC1_SNORM)
+   CONV_FORMAT(RGTC2_UNORM)
+   CONV_FORMAT(RGTC2_SNORM)
+   CONV_FORMAT(A8B8G8R8_UNORM)
+   CONV_FORMAT(B5G5R5X1_UNORM)
+   CONV_FORMAT(R10G10B10A2_USCALED)
+   CONV_FORMAT(R11G11B10_FLOAT)
+   CONV_FORMAT(R9G9B9E5_FLOAT)
+   CONV_FORMAT(Z32_FLOAT_S8X24_UINT)
+   CONV_FORMAT(B10G10R10A2_UNORM)
+   CONV_FORMAT(R8G8B8X8_UNORM)
+   CONV_FORMAT(B4G4R4X4_UNORM)
+   CONV_FORMAT(X24S8_UINT)
+   CONV_FORMAT(S8X24_UINT)
+   CONV_FORMAT(X32_S8X24_UINT)
+   CONV_FORMAT(B2G3R3_UNORM)
+   CONV_FORMAT(L16A16_UNORM)
+   CONV_FORMAT(A16_UNORM)
+   CONV_FORMAT(I16_UNORM)
+   CONV_FORMAT(LATC1_UNORM)
+   CONV_FORMAT(LATC1_SNORM)
+   CONV_FORMAT(LATC2_UNORM)
+   CONV_FORMAT(LATC2_SNORM)
+   CONV_FORMAT(A8_SNORM)
+   CONV_FORMAT(L8_SNORM)
+   CONV_FORMAT(L8A8_SNORM)
+   CONV_FORMAT(A16_SNORM)
+   CONV_FORMAT(L16_SNORM)
+   CONV_FORMAT(L16A16_SNORM)
+   CONV_FORMAT(A16_FLOAT)
+   CONV_FORMAT(L16_FLOAT)
+   CONV_FORMAT(L16A16_FLOAT)
+   CONV_FORMAT(A32_FLOAT)
+   CONV_FORMAT(L32_FLOAT)
+   CONV_FORMAT(L32A32_FLOAT)
+   CONV_FORMAT(YV12)
+   CONV_FORMAT(YV16)
+   CONV_FORMAT(IYUV)
+   CONV_FORMAT(NV12)
+   CONV_FORMAT(NV21)
+   CONV_FORMAT(R8_UINT)
+   CONV_FORMAT(R8G8_UINT)
+   CONV_FORMAT(R8G8B8_UINT)
+   CONV_FORMAT(R8G8B8A8_UINT)
+   CONV_FORMAT(R8_SINT)
+   CONV_FORMAT(R8G8_SINT)
+   CONV_FORMAT(R8G8B8_SINT)
+   CONV_FORMAT(R8G8B8A8_SINT)
+   CONV_FORMAT(R16_UINT)
+   CONV_FORMAT(R16G16_UINT)
+   CONV_FORMAT(R16G16B16_UINT)
+   CONV_FORMAT(R16G16B16A16_UINT)
+   CONV_FORMAT(R16_SINT)
+   CONV_FORMAT(R16G16_SINT)
+   CONV_FORMAT(R16G16B16_SINT)
+   CONV_FORMAT(R16G16B16A16_SINT)
+   CONV_FORMAT(R32_UINT)
+   CONV_FORMAT(R32G32_UINT)
+   CONV_FORMAT(R32G32B32_UINT)
+   CONV_FORMAT(R32G32B32A32_UINT)
+   CONV_FORMAT(R32_SINT)
+   CONV_FORMAT(R32G32_SINT)
+   CONV_FORMAT(R32G32B32_SINT)
+   CONV_FORMAT(R32G32B32A32_SINT)
+   CONV_FORMAT(A8_UINT)
+   CONV_FORMAT(L8_UINT)
+   CONV_FORMAT(L8A8_UINT)
+   CONV_FORMAT(A8_SINT)
+   CONV_FORMAT(L8_SINT)
+   CONV_FORMAT(L8A8_SINT)
+   CONV_FORMAT(A16_UINT)
+   CONV_FORMAT(L16_UINT)
+   CONV_FORMAT(L16A16_UINT)
+   CONV_FORMAT(A16_SINT)
+   CONV_FORMAT(L16_SINT)
+   CONV_FORMAT(L16A16_SINT)
+   CONV_FORMAT(A32_UINT)
+   CONV_FORMAT(L32_UINT)
+   CONV_FORMAT(L32A32_UINT)
+   CONV_FORMAT(A32_SINT)
+   CONV_FORMAT(L32_SINT)
+   CONV_FORMAT(L32A32_SINT)
+   CONV_FORMAT(R10G10B10A2_SSCALED)
+   CONV_FORMAT(R10G10B10A2_SNORM)
+   CONV_FORMAT(B10G10R10A2_SNORM)
+   CONV_FORMAT(B10G10R10A2_UINT)
+   CONV_FORMAT(R8G8B8X8_SNORM)
+   CONV_FORMAT(R8G8B8X8_SRGB)
+   CONV_FORMAT(R8G8B8X8_UINT)
+   CONV_FORMAT(R8G8B8X8_SINT)
+   CONV_FORMAT(B10G10R10X2_UNORM)
+   CONV_FORMAT(R16G16B16X16_UNORM)
+   CONV_FORMAT(R16G16B16X16_SNORM)
+   CONV_FORMAT(R16G16B16X16_FLOAT)
+   CONV_FORMAT(R16G16B16X16_UINT)
+   CONV_FORMAT(R16G16B16X16_SINT)
+   CONV_FORMAT(R32G32B32X32_FLOAT)
+   CONV_FORMAT(R32G32B32X32_UINT)
+   CONV_FORMAT(R32G32B32X32_SINT)
+   CONV_FORMAT(R10G10B10A2_UINT)
+   CONV_FORMAT(BPTC_RGBA_UNORM)
+   CONV_FORMAT(BPTC_SRGBA)
+   CONV_FORMAT(BPTC_RGB_FLOAT)
+   CONV_FORMAT(BPTC_RGB_UFLOAT)
+   CONV_FORMAT(R10G10B10X2_UNORM)
+   CONV_FORMAT(A4B4G4R4_UNORM)
+   CONV_FORMAT(R8_SRGB)
+};
+
+enum virgl_formats pipe_to_virgl_format(enum pipe_format format)
+{
+   enum virgl_formats vformat = virgl_formats_conv_table[format];
+   if (format != PIPE_FORMAT_NONE && !vformat)
+      debug_printf("VIRGL: pipe format %s not in the format table\n", util_format_name(format));
+   return vformat;
+}
+
 static int virgl_encoder_write_cmd_dword(struct virgl_context *ctx,
                                         uint32_t dword)
 {
@@ -401,7 +620,7 @@ int virgl_encoder_create_vertex_elements(struct virgl_context *ctx,
       virgl_encoder_write_dword(ctx->cbuf, element[i].src_offset);
       virgl_encoder_write_dword(ctx->cbuf, element[i].instance_divisor);
       virgl_encoder_write_dword(ctx->cbuf, element[i].vertex_buffer_index);
-      virgl_encoder_write_dword(ctx->cbuf, element[i].src_format);
+      virgl_encoder_write_dword(ctx->cbuf, pipe_to_virgl_format(element[i].src_format));
    }
    return 0;
 }
@@ -488,7 +707,7 @@ int virgl_encoder_create_surface(struct virgl_context *ctx,
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_CREATE_OBJECT, VIRGL_OBJECT_SURFACE, VIRGL_OBJ_SURFACE_SIZE));
    virgl_encoder_write_dword(ctx->cbuf, handle);
    virgl_encoder_write_res(ctx, res);
-   virgl_encoder_write_dword(ctx->cbuf, templat->format);
+   virgl_encoder_write_dword(ctx->cbuf, pipe_to_virgl_format(templat->format));
 
    assert(templat->texture->target != PIPE_BUFFER);
    virgl_encoder_write_dword(ctx->cbuf, templat->u.tex.level);
@@ -649,7 +868,7 @@ int virgl_encode_sampler_view(struct virgl_context *ctx,
    unsigned elem_size = util_format_get_blocksize(state->format);
    struct virgl_screen *rs = virgl_screen(ctx->base.screen);
    uint32_t tmp;
-   uint32_t dword_fmt_target = state->format;
+   uint32_t dword_fmt_target = pipe_to_virgl_format(state->format);
    virgl_encoder_write_cmd_dword(ctx, VIRGL_CMD0(VIRGL_CCMD_CREATE_OBJECT, VIRGL_OBJECT_SAMPLER_VIEW, VIRGL_OBJ_SAMPLER_VIEW_SIZE));
    virgl_encoder_write_dword(ctx->cbuf, handle);
    virgl_encoder_write_res(ctx, res);
@@ -846,7 +1065,7 @@ int virgl_encode_blit(struct virgl_context *ctx,
 
    virgl_encoder_write_res(ctx, dst_res);
    virgl_encoder_write_dword(ctx->cbuf, blit->dst.level);
-   virgl_encoder_write_dword(ctx->cbuf, blit->dst.format);
+   virgl_encoder_write_dword(ctx->cbuf, pipe_to_virgl_format(blit->dst.format));
    virgl_encoder_write_dword(ctx->cbuf, blit->dst.box.x);
    virgl_encoder_write_dword(ctx->cbuf, blit->dst.box.y);
    virgl_encoder_write_dword(ctx->cbuf, blit->dst.box.z);
@@ -856,7 +1075,7 @@ int virgl_encode_blit(struct virgl_context *ctx,
 
    virgl_encoder_write_res(ctx, src_res);
    virgl_encoder_write_dword(ctx->cbuf, blit->src.level);
-   virgl_encoder_write_dword(ctx->cbuf, blit->src.format);
+   virgl_encoder_write_dword(ctx->cbuf, pipe_to_virgl_format(blit->src.format));
    virgl_encoder_write_dword(ctx->cbuf, blit->src.box.x);
    virgl_encoder_write_dword(ctx->cbuf, blit->src.box.y);
    virgl_encoder_write_dword(ctx->cbuf, blit->src.box.z);
@@ -1046,7 +1265,7 @@ int virgl_encode_set_shader_images(struct virgl_context *ctx,
    for (i = 0; i < count; i++) {
       if (images && images[i].resource) {
          struct virgl_resource *res = virgl_resource(images[i].resource);
-         virgl_encoder_write_dword(ctx->cbuf, images[i].format);
+         virgl_encoder_write_dword(ctx->cbuf, pipe_to_virgl_format(images[i].format));
          virgl_encoder_write_dword(ctx->cbuf, images[i].access);
          virgl_encoder_write_dword(ctx->cbuf, images[i].u.buf.offset);
          virgl_encoder_write_dword(ctx->cbuf, images[i].u.buf.size);

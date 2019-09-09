@@ -64,10 +64,13 @@ is_single_component_mask(unsigned mask)
 static bool
 can_run_concurrent_ssa(midgard_instruction *first, midgard_instruction *second)
 {
+        /* Writeout has its own rules anyway */
+        if (first->compact_branch || second->compact_branch)
+                return true;
+
         /* Each instruction reads some registers and writes to a register. See
          * where the first writes */
 
-        /* Figure out where exactly we wrote to */
         int source = first->ssa_args.dest;
         int source_mask = first->mask;
 

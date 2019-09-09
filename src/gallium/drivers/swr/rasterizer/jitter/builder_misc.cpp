@@ -455,7 +455,11 @@ namespace SwrJit
         args.push_back(PointerType::get(mInt8Ty, 0));
         FunctionType* callPrintTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, true);
         Function*     callPrintFn =
+#if LLVM_VERSION_MAJOR >= 9
+            cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("CallPrint", callPrintTy).getCallee());
+#else
             cast<Function>(JM()->mpCurrentModule->getOrInsertFunction("CallPrint", callPrintTy));
+#endif
 
         // if we haven't yet added the symbol to the symbol table
         if ((sys::DynamicLibrary::SearchForAddressOfSymbol("CallPrint")) == nullptr)
@@ -624,7 +628,11 @@ namespace SwrJit
         {
             FunctionType* pFuncTy   = FunctionType::get(mFP32Ty, mInt16Ty);
             Function*     pCvtPh2Ps = cast<Function>(
+#if LLVM_VERSION_MAJOR >= 9
+                JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat16ToFloat32", pFuncTy).getCallee());
+#else
                 JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat16ToFloat32", pFuncTy));
+#endif
 
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("ConvertFloat16ToFloat32") == nullptr)
             {
@@ -660,7 +668,11 @@ namespace SwrJit
             // call scalar C function for now
             FunctionType* pFuncTy   = FunctionType::get(mInt16Ty, mFP32Ty);
             Function*     pCvtPs2Ph = cast<Function>(
+#if LLVM_VERSION_MAJOR >= 9
+                JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat32ToFloat16", pFuncTy).getCallee());
+#else
                 JM()->mpCurrentModule->getOrInsertFunction("ConvertFloat32ToFloat16", pFuncTy));
+#endif
 
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("ConvertFloat32ToFloat16") == nullptr)
             {
@@ -969,7 +981,11 @@ namespace SwrJit
 
             FunctionType* pFuncTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, false);
             Function*     pFunc   = cast<Function>(
+#if LLVM_VERSION_MAJOR >= 9
+                JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StartBucket", pFuncTy).getCallee());
+#else
                 JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StartBucket", pFuncTy));
+#endif
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StartBucket") ==
                 nullptr)
             {
@@ -994,7 +1010,11 @@ namespace SwrJit
 
             FunctionType* pFuncTy = FunctionType::get(Type::getVoidTy(JM()->mContext), args, false);
             Function*     pFunc   = cast<Function>(
+#if LLVM_VERSION_MAJOR >= 9
+                JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StopBucket", pFuncTy).getCallee());
+#else
                 JM()->mpCurrentModule->getOrInsertFunction("BucketManager_StopBucket", pFuncTy));
+#endif
             if (sys::DynamicLibrary::SearchForAddressOfSymbol("BucketManager_StopBucket") ==
                 nullptr)
             {

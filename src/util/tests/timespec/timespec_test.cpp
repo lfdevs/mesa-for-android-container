@@ -136,27 +136,6 @@ TEST(timespec_test, timespec_add_nsec)
    EXPECT_EQ(r.tv_sec, 3);
    EXPECT_EQ(r.tv_nsec, 1);
 
-   a.tv_sec = 1;
-   a.tv_nsec = 1;
-   timespec_add_nsec(&r, &a, -2);
-   EXPECT_EQ(r.tv_sec, 0);
-   EXPECT_EQ(r.tv_nsec, NSEC_PER_SEC - 1);
-
-   a.tv_nsec = 0;
-   timespec_add_nsec(&r, &a, -NSEC_PER_SEC);
-   EXPECT_EQ(0, r.tv_sec);
-   EXPECT_EQ(0, r.tv_nsec);
-
-   a.tv_nsec = 0;
-   timespec_add_nsec(&r, &a, -NSEC_PER_SEC + 1);
-   EXPECT_EQ(0, r.tv_sec);
-   EXPECT_EQ(1, r.tv_nsec);
-
-   a.tv_nsec = 50;
-   timespec_add_nsec(&r, &a, (-NSEC_PER_SEC * 10ULL));
-   EXPECT_EQ(-9, r.tv_sec);
-   EXPECT_EQ(50, r.tv_nsec);
-
    r.tv_sec = 4;
    r.tv_nsec = 0;
    timespec_add_nsec(&r, &r, NSEC_PER_SEC + 10ULL);
@@ -224,6 +203,10 @@ TEST(timespec_test, timespec_from_nsec)
    timespec_from_nsec(&a, (5LL * NSEC_PER_SEC) + 1);
    EXPECT_EQ(5, a.tv_sec);
    EXPECT_EQ(1, a.tv_nsec);
+
+   timespec_from_nsec(&a, UINT64_MAX);
+   EXPECT_EQ(a.tv_nsec, UINT64_MAX % NSEC_PER_SEC);
+   EXPECT_EQ(a.tv_sec, UINT64_MAX / NSEC_PER_SEC);
 }
 
 TEST(timespec_test, timespec_from_usec)

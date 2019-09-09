@@ -41,7 +41,6 @@ ifeq ($(DEB_HOST_ARCH_OS), hurd)
 	confflags_GBM = -Dgbm=false
 	confflags_OSMESA = -Dosmesa=classic
 	DRI_DRIVERS = swrast,
-	with_libva = 
 else
 	EGL_PLATFORMS = x11,surfaceless
 
@@ -112,13 +111,9 @@ else
 	confflags_DIRECT_RENDERING = -Dglx-direct=true
 	confflags_GBM = -Dgbm=true
 	confflags_GALLIUM += -Dgallium-extra-hud=true
+	confflags_GALLIUM += -Dgallium-va=true
 	confflags_GALLIUM += -Dgallium-vdpau=true
 	confflags_GALLIUM += -Dlmsensors=true
-
-  ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
-	confflags_GALLIUM += -Dgallium-va=true
-	with_libva = ,libva
-  endif
 endif
 
 # Disable assembly usage on x32 otherwise Mesa defaults to x86_64 assembly
@@ -217,12 +212,10 @@ override_dh_install:
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/libvdpau*.so* \
 	   debian/mesa-vdpau-drivers/usr/lib/${DEB_HOST_MULTIARCH}/vdpau/
 
-    ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
 	# Copy the hardlinked va drivers correctly.
 	install -m755 -d debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
 	mv debian/tmp/usr/lib/${DEB_HOST_MULTIARCH}/dri/*_drv_video.so \
 	   debian/mesa-va-drivers/usr/lib/${DEB_HOST_MULTIARCH}/dri/
-    endif
   endif
 
 	dh_install -a
@@ -241,7 +234,7 @@ override_dh_makeshlibs:
 	dh_makeshlibs -a -- -c4
 
 %:
-	dh $@ --with quilt$(with_libva) \
+	dh $@ --with quilt \
 		--builddirectory=build/ \
 		--buildsystem=meson
 

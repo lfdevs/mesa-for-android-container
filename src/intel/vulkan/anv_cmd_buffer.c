@@ -78,46 +78,72 @@ const struct anv_dynamic_state default_dynamic_state = {
    },
 };
 
-void
+/**
+ * Copy the dynamic state from src to dest based on the copy_mask.
+ *
+ * Avoid copying states that have not changed, except for VIEWPORT, SCISSOR and
+ * BLEND_CONSTANTS (always copy them if they are in the copy_mask).
+ *
+ * Returns a mask of the states which changed.
+ */
+anv_cmd_dirty_mask_t
 anv_dynamic_state_copy(struct anv_dynamic_state *dest,
                        const struct anv_dynamic_state *src,
                        anv_cmd_dirty_mask_t copy_mask)
 {
+   anv_cmd_dirty_mask_t changed = 0;
+
    if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_VIEWPORT) {
       dest->viewport.count = src->viewport.count;
       typed_memcpy(dest->viewport.viewports, src->viewport.viewports,
                    src->viewport.count);
+      changed |= ANV_CMD_DIRTY_DYNAMIC_VIEWPORT;
    }
 
    if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_SCISSOR) {
       dest->scissor.count = src->scissor.count;
       typed_memcpy(dest->scissor.scissors, src->scissor.scissors,
                    src->scissor.count);
+      changed |= ANV_CMD_DIRTY_DYNAMIC_SCISSOR;
    }
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH)
-      dest->line_width = src->line_width;
-
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS)
-      dest->depth_bias = src->depth_bias;
-
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS)
+   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS) {
       typed_memcpy(dest->blend_constants, src->blend_constants, 4);
+      changed |= ANV_CMD_DIRTY_DYNAMIC_BLEND_CONSTANTS;
+   }
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS)
-      dest->depth_bounds = src->depth_bounds;
+#define ANV_CMP_COPY(field, flag)                                 \
+   if (copy_mask & flag) {                                        \
+      if (dest->field != src->field) {                            \
+         dest->field = src->field;                                \
+         changed |= flag;                                         \
+      }                                                           \
+   }
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK)
-      dest->stencil_compare_mask = src->stencil_compare_mask;
+   ANV_CMP_COPY(line_width, ANV_CMD_DIRTY_DYNAMIC_LINE_WIDTH);
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK)
-      dest->stencil_write_mask = src->stencil_write_mask;
+   ANV_CMP_COPY(depth_bias.bias, ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS);
+   ANV_CMP_COPY(depth_bias.clamp, ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS);
+   ANV_CMP_COPY(depth_bias.slope, ANV_CMD_DIRTY_DYNAMIC_DEPTH_BIAS);
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE)
-      dest->stencil_reference = src->stencil_reference;
+   ANV_CMP_COPY(depth_bounds.min, ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS);
+   ANV_CMP_COPY(depth_bounds.max, ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS);
 
-   if (copy_mask & ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE)
-      dest->line_stipple = src->line_stipple;
+   ANV_CMP_COPY(stencil_compare_mask.front, ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK);
+   ANV_CMP_COPY(stencil_compare_mask.back, ANV_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK);
+
+   ANV_CMP_COPY(stencil_write_mask.front, ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK);
+   ANV_CMP_COPY(stencil_write_mask.back, ANV_CMD_DIRTY_DYNAMIC_STENCIL_WRITE_MASK);
+
+   ANV_CMP_COPY(stencil_reference.front, ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE);
+   ANV_CMP_COPY(stencil_reference.back, ANV_CMD_DIRTY_DYNAMIC_STENCIL_REFERENCE);
+
+   ANV_CMP_COPY(line_stipple.factor, ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE);
+   ANV_CMP_COPY(line_stipple.pattern, ANV_CMD_DIRTY_DYNAMIC_LINE_STIPPLE);
+
+#undef ANV_CMP_COPY
+
+   return changed;
 }
 
 static void
@@ -378,10 +404,10 @@ void anv_CmdBindPipeline(
       cmd_buffer->state.descriptors_dirty |= pipeline->active_stages;
 
       /* Apply the dynamic state from the pipeline */
-      cmd_buffer->state.gfx.dirty |= pipeline->dynamic_state_mask;
-      anv_dynamic_state_copy(&cmd_buffer->state.gfx.dynamic,
-                             &pipeline->dynamic_state,
-                             pipeline->dynamic_state_mask);
+      cmd_buffer->state.gfx.dirty |=
+         anv_dynamic_state_copy(&cmd_buffer->state.gfx.dynamic,
+                                &pipeline->dynamic_state,
+                                pipeline->dynamic_state_mask);
       break;
 
    default:

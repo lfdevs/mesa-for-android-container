@@ -715,6 +715,10 @@ static void si_bind_blend_state(struct pipe_context *ctx, void *state)
 static void si_delete_blend_state(struct pipe_context *ctx, void *state)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
+
+	if (sctx->queued.named.blend == state)
+		si_bind_blend_state(ctx, sctx->noop_blend);
+
 	si_pm4_delete_state(sctx, blend, (struct si_state_blend *)state);
 }
 
@@ -801,12 +805,20 @@ static void si_emit_clip_regs(struct si_context *sctx)
 	culldist_mask |= clipdist_mask;
 
 	unsigned initial_cdw = sctx->gfx_cs->current.cdw;
-	radeon_opt_set_context_reg(sctx, R_02881C_PA_CL_VS_OUT_CNTL,
-		SI_TRACKED_PA_CL_VS_OUT_CNTL,
-		vs_sel->pa_cl_vs_out_cntl |
-		S_02881C_VS_OUT_CCDIST0_VEC_ENA((total_mask & 0x0F) != 0) |
-		S_02881C_VS_OUT_CCDIST1_VEC_ENA((total_mask & 0xF0) != 0) |
-		clipdist_mask | (culldist_mask << 8));
+	unsigned pa_cl_cntl = S_02881C_VS_OUT_CCDIST0_VEC_ENA((total_mask & 0x0F) != 0) |
+			      S_02881C_VS_OUT_CCDIST1_VEC_ENA((total_mask & 0xF0) != 0) |
+			      clipdist_mask | (culldist_mask << 8);
+
+	if (sctx->chip_class >= GFX10) {
+		radeon_opt_set_context_reg_rmw(sctx, R_02881C_PA_CL_VS_OUT_CNTL,
+					       SI_TRACKED_PA_CL_VS_OUT_CNTL__CL,
+					       pa_cl_cntl,
+					       ~SI_TRACKED_PA_CL_VS_OUT_CNTL__VS_MASK);
+	} else {
+		radeon_opt_set_context_reg(sctx, R_02881C_PA_CL_VS_OUT_CNTL,
+					   SI_TRACKED_PA_CL_VS_OUT_CNTL__CL,
+					   vs_sel->pa_cl_vs_out_cntl | pa_cl_cntl);
+	}
 	radeon_opt_set_context_reg(sctx, R_028810_PA_CL_CLIP_CNTL,
 		SI_TRACKED_PA_CL_CLIP_CNTL,
 		rs->pa_cl_clip_cntl |
@@ -1083,7 +1095,7 @@ static void si_delete_rs_state(struct pipe_context *ctx, void *state)
 	struct si_state_rasterizer *rs = (struct si_state_rasterizer *)state;
 
 	if (sctx->queued.named.rasterizer == state)
-		si_pm4_bind_state(sctx, poly_offset, NULL);
+		si_bind_rs_state(ctx, sctx->discard_rasterizer_state);
 
 	FREE(rs->pm4_poly_offset);
 	si_pm4_delete_state(sctx, rasterizer, rs);
@@ -1327,6 +1339,10 @@ static void si_bind_dsa_state(struct pipe_context *ctx, void *state)
 static void si_delete_dsa_state(struct pipe_context *ctx, void *state)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
+
+	if (sctx->queued.named.dsa == state)
+		si_bind_dsa_state(ctx, sctx->noop_dsa);
+
 	si_pm4_delete_state(sctx, dsa, (struct si_state_dsa *)state);
 }
 
@@ -5403,13 +5419,10 @@ static void si_init_config(struct si_context *sctx)
 	if (!pm4)
 		return;
 
-	/* Since amdgpu version 3.6.0, CONTEXT_CONTROL is emitted by the kernel */
-	if (!sscreen->info.is_amdgpu || sscreen->info.drm_minor < 6) {
-		si_pm4_cmd_begin(pm4, PKT3_CONTEXT_CONTROL);
-		si_pm4_cmd_add(pm4, CONTEXT_CONTROL_LOAD_ENABLE(1));
-		si_pm4_cmd_add(pm4, CONTEXT_CONTROL_SHADOW_ENABLE(1));
-		si_pm4_cmd_end(pm4, false);
-	}
+	si_pm4_cmd_begin(pm4, PKT3_CONTEXT_CONTROL);
+	si_pm4_cmd_add(pm4, CONTEXT_CONTROL_LOAD_ENABLE(1));
+	si_pm4_cmd_add(pm4, CONTEXT_CONTROL_SHADOW_ENABLE(1));
+	si_pm4_cmd_end(pm4, false);
 
 	if (has_clear_state) {
 		si_pm4_cmd_begin(pm4, PKT3_CLEAR_STATE);
@@ -5436,7 +5449,8 @@ static void si_init_config(struct si_context *sctx)
 		si_pm4_set_reg(pm4, R_028B98_VGT_STRMOUT_BUFFER_CONFIG, 0x0);
 	}
 
-	si_pm4_set_reg(pm4, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
+	if (sscreen->info.chip_class <= GFX9)
+		si_pm4_set_reg(pm4, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
 	if (!has_clear_state)
 		si_pm4_set_reg(pm4, R_028AB8_VGT_VTX_CNT_EN, 0x0);
 	if (sctx->chip_class < GFX7)

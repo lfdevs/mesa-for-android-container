@@ -560,31 +560,7 @@ wrapper_unroll(nir_loop *loop)
            nir_after_block(nir_if_last_else_block(terminator->nif));
       }
    } else {
-      nir_block *blk_after_loop =
-         nir_cursor_current_block(nir_after_cf_node(&loop->cf_node));
-
-      /* There may still be some single src phis following the loop that
-       * have not yet been cleaned up by another pass. Tidy those up
-       * before unrolling the loop.
-       */
-      nir_foreach_instr_safe(instr, blk_after_loop) {
-         if (instr->type != nir_instr_type_phi)
-            break;
-
-         nir_phi_instr *phi = nir_instr_as_phi(instr);
-         assert(exec_list_length(&phi->srcs) == 1);
-
-         nir_phi_src *phi_src =
-            exec_node_data(nir_phi_src, exec_list_get_head(&phi->srcs), node);
-
-         nir_ssa_def_rewrite_uses(&phi->dest.ssa, phi_src->src);
-         nir_instr_remove(instr);
-      }
-
-      /* Remove break at end of the loop */
-      nir_block *last_loop_blk = nir_loop_last_block(loop);
-      nir_instr *break_instr = nir_block_last_instr(last_loop_blk);
-      nir_instr_remove(break_instr);
+      loop_prepare_for_unroll(loop);
    }
 
    /* Pluck out the loop body. */

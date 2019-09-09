@@ -36,15 +36,16 @@
 
 #ifdef __FreeBSD__
 #include <sys/mman.h>
-#elif defined(HAVE_MEMFD_CREATE)
+#elif defined(HAVE_MEMFD_CREATE) || defined(ANDROID)
 #include <sys/syscall.h>
 #include <linux/memfd.h>
+#include <stdlib.h>
 #else
 #include <stdio.h>
 #include <stdlib.h>
 #endif
 
-#if !(defined(__FreeBSD__) || defined(HAVE_MEMFD_CREATE) || defined(HAVE_MKOSTEMP))
+#if !(defined(__FreeBSD__) || defined(HAVE_MEMFD_CREATE) || defined(HAVE_MKOSTEMP) || defined(ANDROID))
 static int
 set_cloexec_or_close(int fd)
 {
@@ -68,7 +69,7 @@ err:
 }
 #endif
 
-#if !(defined(__FreeBSD__) || defined(HAVE_MEMFD_CREATE))
+#if !(defined(__FreeBSD__) || defined(HAVE_MEMFD_CREATE) || defined(ANDROID))
 static int
 create_tmpfile_cloexec(char *tmpname)
 {
@@ -118,7 +119,7 @@ os_create_anonymous_file(off_t size, const char *debug_name)
 #ifdef __FreeBSD__
    (void*)debug_name;
    fd = shm_open(SHM_ANON, O_CREAT | O_RDWR | O_CLOEXEC, 0600);
-#elif defined(HAVE_MEMFD_CREATE)
+#elif defined(HAVE_MEMFD_CREATE) || defined(ANDROID)
    if (!debug_name)
       debug_name = "mesa-shared";
    fd = syscall(SYS_memfd_create, debug_name, MFD_CLOEXEC);

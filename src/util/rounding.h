@@ -129,4 +129,20 @@ _mesa_lroundeven(double x)
 #endif
 }
 
+/**
+ * \brief Rounds \c x to the nearest integer, with ties to the even integer,
+ * and returns the value as an int64_t.
+ */
+static inline int64_t
+_mesa_i64roundevenf(float x)
+{
+#if LONG_MAX == INT64_MAX
+   return _mesa_lroundevenf(x);
+#elif LONG_MAX == INT32_MAX
+   return llrintf(x);
+#else
+#error "Unsupported long size"
+#endif
+}
+
 #endif

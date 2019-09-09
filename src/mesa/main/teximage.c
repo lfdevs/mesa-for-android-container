@@ -5588,7 +5588,7 @@ compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
                          const GLvoid *data, enum tex_mode mode,
                          const char *caller)
 {
-   struct gl_texture_object *texObj;
+   struct gl_texture_object *texObj = NULL;
    struct gl_texture_image *texImage;
    bool no_error = false;
    GET_CURRENT_CONTEXT(ctx);
@@ -5622,13 +5622,8 @@ compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
       case TEX_MODE_CURRENT_ERROR:
       default:
          assert(textureOrIndex == 0);
-         texObj = _mesa_get_current_tex_object(ctx, target);
          break;
    }
-
-   if (!texObj)
-      return;
-
 
    if (!no_error &&
        compressed_subtexture_target_check(ctx, target, dim, format,
@@ -5637,7 +5632,12 @@ compressed_tex_sub_image(unsigned dim, GLenum target, GLuint textureOrIndex,
       return;
    }
 
-   if (!no_error && !texObj)
+   if (mode == TEX_MODE_CURRENT_NO_ERROR ||
+       mode == TEX_MODE_CURRENT_ERROR) {
+      texObj = _mesa_get_current_tex_object(ctx, target);
+   }
+
+   if (!texObj)
       return;
 
    if (!no_error &&

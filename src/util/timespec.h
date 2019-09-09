@@ -85,7 +85,7 @@ timespec_sub(struct timespec *r,
  * \param b[in] operand in nanoseconds
  */
 static inline void
-timespec_add_nsec(struct timespec *r, const struct timespec *a, int64_t b)
+timespec_add_nsec(struct timespec *r, const struct timespec *a, uint64_t b)
 {
    r->tv_sec = a->tv_sec + (b / NSEC_PER_SEC);
    r->tv_nsec = a->tv_nsec + (b % NSEC_PER_SEC);
@@ -107,7 +107,7 @@ timespec_add_nsec(struct timespec *r, const struct timespec *a, int64_t b)
  * \param b[in] operand in milliseconds
  */
 static inline void
-timespec_add_msec(struct timespec *r, const struct timespec *a, int64_t b)
+timespec_add_msec(struct timespec *r, const struct timespec *a, uint64_t b)
 {
    timespec_add_nsec(r, a, b * 1000000);
 }
@@ -118,10 +118,10 @@ timespec_add_msec(struct timespec *r, const struct timespec *a, int64_t b)
  * \param a timespec
  * \return nanoseconds
  */
-static inline int64_t
+static inline uint64_t
 timespec_to_nsec(const struct timespec *a)
 {
-   return (int64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
+   return (uint64_t)a->tv_sec * NSEC_PER_SEC + a->tv_nsec;
 }
 
 /**
@@ -131,7 +131,7 @@ timespec_to_nsec(const struct timespec *a)
  * \param b[in] operand
  * \return to_nanoseconds(a - b)
  */
-static inline int64_t
+static inline uint64_t
 timespec_sub_to_nsec(const struct timespec *a, const struct timespec *b)
 {
    struct timespec r;
@@ -147,10 +147,10 @@ timespec_sub_to_nsec(const struct timespec *a, const struct timespec *b)
  *
  * Rounding to integer milliseconds happens always down (floor()).
  */
-static inline int64_t
+static inline uint64_t
 timespec_to_msec(const struct timespec *a)
 {
-   return (int64_t)a->tv_sec * 1000 + a->tv_nsec / 1000000;
+   return (uint64_t)a->tv_sec * 1000 + a->tv_nsec / 1000000;
 }
 
 /**
@@ -160,7 +160,7 @@ timespec_to_msec(const struct timespec *a)
  * \param b[in] operand
  * \return to_milliseconds(a - b)
  */
-static inline int64_t
+static inline uint64_t
 timespec_sub_to_msec(const struct timespec *a, const struct timespec *b)
 {
    return timespec_sub_to_nsec(a, b) / 1000000;
@@ -174,10 +174,10 @@ timespec_sub_to_msec(const struct timespec *a, const struct timespec *b)
  *
  * Rounding to integer microseconds happens always down (floor()).
  */
-static inline int64_t
+static inline uint64_t
 timespec_to_usec(const struct timespec *a)
 {
-   return (int64_t)a->tv_sec * 1000000 + a->tv_nsec / 1000;
+   return (uint64_t)a->tv_sec * 1000000 + a->tv_nsec / 1000;
 }
 
 /**
@@ -212,7 +212,7 @@ timespec_to_proto(const struct timespec *a, uint32_t *tv_sec_hi,
  * \param b nanoseconds
  */
 static inline void
-timespec_from_nsec(struct timespec *a, int64_t b)
+timespec_from_nsec(struct timespec *a, uint64_t b)
 {
    a->tv_sec = b / NSEC_PER_SEC;
    a->tv_nsec = b % NSEC_PER_SEC;
@@ -225,7 +225,7 @@ timespec_from_nsec(struct timespec *a, int64_t b)
  * \param b microseconds
  */
 static inline void
-timespec_from_usec(struct timespec *a, int64_t b)
+timespec_from_usec(struct timespec *a, uint64_t b)
 {
    timespec_from_nsec(a, b * 1000);
 }
@@ -237,7 +237,7 @@ timespec_from_usec(struct timespec *a, int64_t b)
  * \param b milliseconds
  */
 static inline void
-timespec_from_msec(struct timespec *a, int64_t b)
+timespec_from_msec(struct timespec *a, uint64_t b)
 {
    timespec_from_nsec(a, b * 1000000);
 }
@@ -290,7 +290,7 @@ timespec_eq(const struct timespec *a, const struct timespec *b)
  * \param mhz frequency in mHz, not zero
  * \return period in nanoseconds
  */
-static inline int64_t
+static inline uint64_t
 millihz_to_nsec(uint32_t mhz)
 {
    assert(mhz > 0);

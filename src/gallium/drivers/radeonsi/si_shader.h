@@ -336,8 +336,6 @@ struct si_shader_selector {
 	bool		vs_needs_prolog;
 	bool		force_correct_derivs_after_kill;
 	bool		prim_discard_cs_allowed;
-	bool		ngg_writes_edgeflag;
-	bool		pos_writes_edgeflag;
 	unsigned	pa_cl_vs_out_cntl;
 	ubyte		clipdist_mask;
 	ubyte		culldist_mask;
@@ -711,6 +709,7 @@ struct si_shader {
 	/*For save precompute registers value */
 	unsigned vgt_tf_param; /* VGT_TF_PARAM */
 	unsigned vgt_vertex_reuse_block_cntl; /* VGT_VERTEX_REUSE_BLOCK_CNTL */
+	unsigned pa_cl_vs_out_cntl;
 	unsigned ge_cntl;
 };
 
