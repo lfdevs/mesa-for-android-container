@@ -178,7 +178,7 @@ libanv_common = static_library(
   ],
   include_directories : [
     inc_common, inc_intel, inc_compiler, inc_include,
-    inc_vulkan_wsi,
+    inc_vulkan_wsi, inc_util,
   ],
   c_args : anv_flags,
   dependencies : anv_deps,
@@ -196,7 +196,7 @@ libvulkan_intel = shared_library(
   ],
   dependencies : [
     dep_thread, dep_dl, dep_m, anv_deps, idep_libintel_common,
-    idep_nir, idep_genxml, idep_vulkan_util, idep_mesautil,
+    idep_nir, idep_genxml, idep_vulkan_util, idep_mesautil, idep_xmlconfig,
   ],
   c_args : anv_flags,
   link_args : ['-Wl,--build-id=sha1', ld_args_bsymbolic, ld_args_gc_sections],

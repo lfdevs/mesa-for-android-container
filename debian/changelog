@@ -1,3 +1,11 @@
+mesa (19.2.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control,rules: Restore libva-dev build-dep and nolibva build
+    profile.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 12 Sep 2019 15:34:19 +0300
+
 mesa (19.2.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

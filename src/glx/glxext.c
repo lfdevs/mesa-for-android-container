@@ -214,6 +214,8 @@ FreeScreenConfigs(struct glx_display * priv)
    screens = ScreenCount(priv->dpy);
    for (i = 0; i < screens; i++) {
       psc = priv->screens[i];
+      if (!psc)
+         continue;
       glx_screen_cleanup(psc);
 
 #if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
@@ -792,7 +794,7 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv)
     ** First allocate memory for the array of per screen configs.
     */
    screens = ScreenCount(dpy);
-   priv->screens = malloc(screens * sizeof *priv->screens);
+   priv->screens = calloc(screens, sizeof *priv->screens);
    if (!priv->screens)
       return GL_FALSE;
 

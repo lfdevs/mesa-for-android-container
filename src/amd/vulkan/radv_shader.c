@@ -389,6 +389,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 		NIR_PASS_V(nir, nir_remove_dead_variables,
 		           nir_var_shader_in | nir_var_shader_out | nir_var_system_value);
 
+		NIR_PASS_V(nir, nir_propagate_invariant);
+
 		NIR_PASS_V(nir, nir_lower_system_values);
 		NIR_PASS_V(nir, nir_lower_clip_cull_distance_arrays);
 		NIR_PASS_V(nir, radv_nir_lower_ycbcr_textures, layout);
@@ -1341,7 +1343,7 @@ radv_get_max_waves(struct radv_device *device,
 	unsigned max_simd_waves;
 	unsigned lds_per_wave = 0;
 
-	max_simd_waves = ac_get_max_simd_waves(device->physical_device->rad_info.family);
+	max_simd_waves = ac_get_max_wave64_per_simd(device->physical_device->rad_info.family);
 
 	if (stage == MESA_SHADER_FRAGMENT) {
 		lds_per_wave = conf->lds_size * lds_increment +
@@ -1357,7 +1359,8 @@ radv_get_max_waves(struct radv_device *device,
 	if (conf->num_sgprs)
 		max_simd_waves =
 			MIN2(max_simd_waves,
-			     ac_get_num_physical_sgprs(chip_class) / conf->num_sgprs);
+			     ac_get_num_physical_sgprs(&device->physical_device->rad_info) /
+			     conf->num_sgprs);
 
 	if (conf->num_vgprs)
 		max_simd_waves =
@@ -1454,7 +1457,7 @@ radv_GetShaderInfoAMD(VkDevice _device,
 			VkShaderStatisticsInfoAMD statistics = {};
 			statistics.shaderStageMask = shaderStage;
 			statistics.numPhysicalVgprs = RADV_NUM_PHYSICAL_VGPRS;
-			statistics.numPhysicalSgprs = ac_get_num_physical_sgprs(device->physical_device->rad_info.chip_class);
+			statistics.numPhysicalSgprs = ac_get_num_physical_sgprs(&device->physical_device->rad_info);
 			statistics.numAvailableSgprs = statistics.numPhysicalSgprs;
 
 			if (stage == MESA_SHADER_COMPUTE) {

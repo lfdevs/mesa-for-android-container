@@ -89,7 +89,7 @@ VkResult anv_CreateDmaBufImageINTEL(
       result = vk_errorf(device->instance, device,
                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
                          "dma-buf too small for image in "
-                         "vkCreateDmaBufImageINTEL: %"PRIu64"B < "PRIu64"B",
+                         "vkCreateDmaBufImageINTEL: %"PRIu64"B < %"PRIu64"B",
                          mem->bo->size, aligned_image_size);
       anv_bo_cache_release(device, &device->bo_cache, mem->bo);
       goto fail_import;

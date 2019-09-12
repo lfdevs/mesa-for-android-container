@@ -40,12 +40,20 @@
 #include "util/os_file.h"
 #include "util/u_atomic.h"
 #include "util/u_string.h"
+#include "util/xmlpool.h"
 #include "git_sha1.h"
 #include "vk_util.h"
 #include "common/gen_defines.h"
 #include "compiler/glsl_types.h"
 
 #include "genxml/gen7_pack.h"
+
+static const char anv_dri_options_xml[] =
+DRI_CONF_BEGIN
+   DRI_CONF_SECTION_PERFORMANCE
+      DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
+   DRI_CONF_SECTION_END
+DRI_CONF_END;
 
 /* This is probably far to big but it reflects the max size used for messages
  * in OpenGLs KHR_debug.
@@ -768,6 +776,10 @@ VkResult anv_CreateInstance(
 
    VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
+   driParseOptionInfo(&instance->available_dri_options, anv_dri_options_xml);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       0, "anv", NULL);
+
    *pInstance = anv_instance_to_handle(instance);
 
    return VK_SUCCESS;
@@ -797,6 +809,9 @@ void anv_DestroyInstance(
 
    glsl_type_singleton_decref();
    _mesa_locale_fini();
+
+   driDestroyOptionCache(&instance->dri_options);
+   driDestroyOptionInfo(&instance->available_dri_options);
 
    vk_free(&instance->alloc, instance);
 }
@@ -1262,6 +1277,8 @@ void anv_GetPhysicalDeviceProperties(
       pdevice->has_a64_buffer_access ? UINT32_MAX :
                                        MAX_BINDING_TABLE_SIZE - MAX_RTS;
 
+   const uint32_t max_workgroup_size = 32 * devinfo->max_cs_threads;
+
    VkSampleCountFlags sample_counts =
       isl_device_get_sample_counts(&pdevice->isl_dev);
 
@@ -1320,11 +1337,11 @@ void anv_GetPhysicalDeviceProperties(
       .maxFragmentCombinedOutputResources       = 8,
       .maxComputeSharedMemorySize               = 64 * 1024,
       .maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
-      .maxComputeWorkGroupInvocations           = 32 * devinfo->max_cs_threads,
+      .maxComputeWorkGroupInvocations           = max_workgroup_size,
       .maxComputeWorkGroupSize = {
-         16 * devinfo->max_cs_threads,
-         16 * devinfo->max_cs_threads,
-         16 * devinfo->max_cs_threads,
+         max_workgroup_size,
+         max_workgroup_size,
+         max_workgroup_size,
       },
       .subPixelPrecisionBits                    = 8,
       .subTexelPrecisionBits                    = 8,

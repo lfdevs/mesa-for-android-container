@@ -38,6 +38,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include "c11/threads.h"
+#include "util/macros.h"
 #include "util/u_atomic.h"
 
 #include "eglcontext.h"
@@ -66,13 +67,14 @@
 static const struct {
    _EGLPlatformType platform;
    const char *name;
-} egl_platforms[_EGL_NUM_PLATFORMS] = {
+} egl_platforms[] = {
    { _EGL_PLATFORM_X11, "x11" },
    { _EGL_PLATFORM_WAYLAND, "wayland" },
    { _EGL_PLATFORM_DRM, "drm" },
    { _EGL_PLATFORM_ANDROID, "android" },
    { _EGL_PLATFORM_HAIKU, "haiku" },
    { _EGL_PLATFORM_SURFACELESS, "surfaceless" },
+   { _EGL_PLATFORM_DEVICE, "device" },
 };
 
 
@@ -86,6 +88,9 @@ _eglGetNativePlatformFromEnv(void)
    const char *plat_name;
    EGLint i;
 
+   static_assert(ARRAY_SIZE(egl_platforms) == _EGL_NUM_PLATFORMS,
+                 "Missing platform");
+
    plat_name = getenv("EGL_PLATFORM");
    /* try deprecated env variable */
    if (!plat_name || !plat_name[0])
@@ -93,7 +98,7 @@ _eglGetNativePlatformFromEnv(void)
    if (!plat_name || !plat_name[0])
       return _EGL_INVALID_PLATFORM;
 
-   for (i = 0; i < _EGL_NUM_PLATFORMS; i++) {
+   for (i = 0; i < ARRAY_SIZE(egl_platforms); i++) {
       if (strcmp(egl_platforms[i].name, plat_name) == 0) {
          plat = egl_platforms[i].platform;
          break;

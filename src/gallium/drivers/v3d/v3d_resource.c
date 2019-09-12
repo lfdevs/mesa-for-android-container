@@ -842,13 +842,6 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                 goto fail;
         }
 
-        if (whandle->offset != 0) {
-                fprintf(stderr,
-                        "Attempt to import unsupported winsys offset %u\n",
-                        whandle->offset);
-                goto fail;
-        }
-
         switch (whandle->type) {
         case WINSYS_HANDLE_TYPE_SHARED:
                 rsc->bo = v3d_bo_open_name(screen, whandle->handle);
@@ -871,6 +864,26 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
         v3d_setup_slices(rsc, whandle->stride, true);
         v3d_debug_resource_layout(rsc, "import");
 
+        if (whandle->offset != 0) {
+                if (rsc->tiled) {
+                        fprintf(stderr,
+                                "Attempt to import unsupported winsys offset %u\n",
+                                whandle->offset);
+                        goto fail;
+                }
+                rsc->slices[0].offset += whandle->offset;
+
+                if (rsc->slices[0].offset + rsc->slices[0].size >
+                    rsc->bo->size) {
+                        fprintf(stderr, "Attempt to import "
+                                "with overflowing offset (%d + %d > %d)\n",
+                                whandle->offset,
+                                rsc->slices[0].size,
+                                rsc->bo->size);
+                         goto fail;
+                 }
+        }
+
         if (screen->ro) {
                 /* Make sure that renderonly has a handle to our buffer in the
                  * display's fd, so that a later renderonly_get_handle()
@@ -886,7 +899,7 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                 }
         }
 
-        if (whandle->stride != slice->stride) {
+        if (rsc->tiled && whandle->stride != slice->stride) {
                 static bool warned = false;
                 if (!warned) {
                         warned = true;
@@ -899,6 +912,8 @@ v3d_resource_from_handle(struct pipe_screen *pscreen,
                                 slice->stride);
                 }
                 goto fail;
+        } else if (!rsc->tiled) {
+                slice->stride = whandle->stride;
         }
 
         return prsc;

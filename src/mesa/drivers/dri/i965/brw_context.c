@@ -1245,7 +1245,7 @@ intelDestroyContext(__DRIcontext * driContextPriv)
 GLboolean
 intelUnbindContext(__DRIcontext * driContextPriv)
 {
-   GET_CURRENT_CONTEXT(ctx);
+   struct gl_context *ctx = driContextPriv->driverPrivate;
    _mesa_glthread_finish(ctx);
 
    /* Unset current context and dispath table */

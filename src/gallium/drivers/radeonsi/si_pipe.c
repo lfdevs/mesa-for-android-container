@@ -174,7 +174,7 @@ static void si_destroy_context(struct pipe_context *context)
 
 	si_release_all_descriptors(sctx);
 
-	if (sctx->chip_class >= GFX10)
+	if (sctx->chip_class >= GFX10 && sctx->has_graphics)
 		gfx10_destroy_query(sctx);
 
 	pipe_resource_reference(&sctx->esgs_ring, NULL);

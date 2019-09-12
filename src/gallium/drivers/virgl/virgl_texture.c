@@ -169,6 +169,9 @@ static void *texture_transfer_map_resolve(struct pipe_context *ctx,
    if (!ptr)
       goto fail;
 
+   /* trans->resolve_transfer owns resolve_tmp now */
+   pipe_resource_reference(&resolve_tmp, NULL);
+
    *transfer = &trans->base;
    if (fmt == resource->format) {
       trans->base.stride = trans->resolve_transfer->stride;
@@ -283,7 +286,6 @@ static void virgl_texture_transfer_unmap(struct pipe_context *ctx,
    }
 
    if (trans->resolve_transfer) {
-      pipe_resource_reference(&trans->resolve_transfer->resource, NULL);
       virgl_resource_destroy_transfer(vctx,
                                       virgl_transfer(trans->resolve_transfer));
    }

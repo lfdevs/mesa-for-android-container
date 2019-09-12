@@ -5430,7 +5430,7 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 	unsigned lds_per_wave = 0;
 	unsigned max_simd_waves;
 
-	max_simd_waves = ac_get_max_simd_waves(sscreen->info.family);
+	max_simd_waves = ac_get_max_wave64_per_simd(sscreen->info.family);
 
 	/* Compute LDS usage for PS. */
 	switch (shader->selector->type) {
@@ -5464,16 +5464,25 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 	if (conf->num_sgprs) {
 		max_simd_waves =
 			MIN2(max_simd_waves,
-			     ac_get_num_physical_sgprs(sscreen->info.chip_class) / conf->num_sgprs);
+			     ac_get_num_physical_sgprs(&sscreen->info) / conf->num_sgprs);
 	}
 
-	if (conf->num_vgprs)
-		max_simd_waves = MIN2(max_simd_waves, 256 / conf->num_vgprs);
+	if (conf->num_vgprs) {
+		/* Always print wave limits as Wave64, so that we can compare
+		 * Wave32 and Wave64 with shader-db fairly. */
+		unsigned max_vgprs = ac_get_num_physical_vgprs(sscreen->info.chip_class, 64);
+		max_simd_waves = MIN2(max_simd_waves, max_vgprs / conf->num_vgprs);
+	}
 
-	/* LDS is 64KB per CU (4 SIMDs), which is 16KB per SIMD (usage above
-	 * 16KB makes some SIMDs unoccupied). */
+	/* LDS is 64KB per CU (4 SIMDs) on GFX6-9, which is 16KB per SIMD (usage above
+	 * 16KB makes some SIMDs unoccupied).
+	 *
+	 * LDS is 128KB in WGP mode and 64KB in CU mode. Assume the WGP mode is used.
+	 */
+	unsigned max_lds_size = sscreen->info.chip_class >= GFX10 ? 128*1024 : 64*1024;
+	unsigned max_lds_per_simd = max_lds_size / 4;
 	if (lds_per_wave)
-		max_simd_waves = MIN2(max_simd_waves, 16384 / lds_per_wave);
+		max_simd_waves = MIN2(max_simd_waves, max_lds_per_simd / lds_per_wave);
 
 	shader->info.max_simd_waves = max_simd_waves;
 }
@@ -7178,15 +7187,17 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 	 */
 	if (sel->type == PIPE_SHADER_COMPUTE) {
 		unsigned wave_size = sscreen->compute_wave_size;
-		unsigned max_vgprs = 256;
-		unsigned max_sgprs = sscreen->info.chip_class >= GFX8 ? 800 : 512;
+		unsigned max_vgprs = ac_get_num_physical_vgprs(sscreen->info.chip_class,
+							       wave_size);
+		unsigned max_sgprs = ac_get_num_physical_sgprs(&sscreen->info);
 		unsigned max_sgprs_per_wave = 128;
-		unsigned max_block_threads = si_get_max_workgroup_size(shader);
-		unsigned min_waves_per_cu = DIV_ROUND_UP(max_block_threads, wave_size);
-		unsigned min_waves_per_simd = DIV_ROUND_UP(min_waves_per_cu, 4);
+		unsigned simds_per_tg = 4; /* assuming WGP mode on gfx10 */
+		unsigned threads_per_tg = si_get_max_workgroup_size(shader);
+		unsigned waves_per_tg = DIV_ROUND_UP(threads_per_tg, wave_size);
+		unsigned waves_per_simd = DIV_ROUND_UP(waves_per_tg, simds_per_tg);
 
-		max_vgprs = max_vgprs / min_waves_per_simd;
-		max_sgprs = MIN2(max_sgprs / min_waves_per_simd, max_sgprs_per_wave);
+		max_vgprs = max_vgprs / waves_per_simd;
+		max_sgprs = MIN2(max_sgprs / waves_per_simd, max_sgprs_per_wave);
 
 		if (shader->config.num_sgprs > max_sgprs ||
 		    shader->config.num_vgprs > max_vgprs) {

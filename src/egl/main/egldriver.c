@@ -56,8 +56,10 @@ _eglGetDriver(void)
 
    if (!_eglDriver) {
       _eglDriver = calloc(1, sizeof(*_eglDriver));
-      if (!_eglDriver)
+      if (!_eglDriver) {
+         mtx_unlock(&_eglModuleMutex);
          return NULL;
+      }
       _eglInitDriver(_eglDriver);
    }
 

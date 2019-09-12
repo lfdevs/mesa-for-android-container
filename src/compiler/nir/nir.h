@@ -3378,6 +3378,7 @@ void nir_calc_dominance(nir_shader *shader);
 
 nir_block *nir_dominance_lca(nir_block *b1, nir_block *b2);
 bool nir_block_dominates(nir_block *parent, nir_block *child);
+bool nir_block_is_unreachable(nir_block *block);
 
 void nir_dump_dom_tree_impl(nir_function_impl *impl, FILE *fp);
 void nir_dump_dom_tree(nir_shader *shader, FILE *fp);

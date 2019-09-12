@@ -51,6 +51,7 @@
 #include "util/u_surface.h"
 #include "util/u_upload_mgr.h"
 #include "hud/hud_context.h"
+#include "compiler/glsl_types.h"
 
 #include "cso_cache/cso_context.h"
 
@@ -143,6 +144,9 @@ NineDevice9_ctor( struct NineDevice9 *This,
         pPresentationGroup, pCTX, (int) ex, pFullscreenDisplayMode);
 
     if (FAILED(hr)) { return hr; }
+
+    /* NIR shaders need to use GLSL types so let's initialize them here */
+    glsl_type_singleton_init_or_ref();
 
     list_inithead(&This->update_buffers);
     list_inithead(&This->update_textures);
@@ -583,6 +587,7 @@ NineDevice9_dtor( struct NineDevice9 *This )
     if (This->d3d9) { IDirect3D9_Release(This->d3d9); }
 
     NineUnknown_dtor(&This->base);
+    glsl_type_singleton_decref();
 }
 
 struct pipe_screen *

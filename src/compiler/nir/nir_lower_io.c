@@ -879,39 +879,49 @@ build_explicit_io_load(nir_builder *b, nir_intrinsic_instr *intrin,
    if (mode != nir_var_mem_ubo && mode != nir_var_shader_in && mode != nir_var_mem_shared)
       nir_intrinsic_set_access(load, nir_intrinsic_access(intrin));
 
+   unsigned bit_size = intrin->dest.ssa.bit_size;
+   if (bit_size == 1) {
+      /* TODO: Make the native bool bit_size an option. */
+      bit_size = 32;
+   }
+
    /* TODO: We should try and provide a better alignment.  For OpenCL, we need
     * to plumb the alignment through from SPIR-V when we have one.
     */
-   nir_intrinsic_set_align(load, intrin->dest.ssa.bit_size / 8, 0);
+   nir_intrinsic_set_align(load, bit_size / 8, 0);
 
    assert(intrin->dest.is_ssa);
    load->num_components = num_components;
    nir_ssa_dest_init(&load->instr, &load->dest, num_components,
-                     intrin->dest.ssa.bit_size, intrin->dest.ssa.name);
+                     bit_size, intrin->dest.ssa.name);
 
-   assert(load->dest.ssa.bit_size % 8 == 0);
+   assert(bit_size % 8 == 0);
 
+   nir_ssa_def *result;
    if (addr_format_needs_bounds_check(addr_format)) {
       /* The Vulkan spec for robustBufferAccess gives us quite a few options
        * as to what we can do with an OOB read.  Unfortunately, returning
        * undefined values isn't one of them so we return an actual zero.
        */
-      nir_ssa_def *zero = nir_imm_zero(b, load->num_components,
-                                          load->dest.ssa.bit_size);
+      nir_ssa_def *zero = nir_imm_zero(b, load->num_components, bit_size);
 
-      const unsigned load_size =
-         (load->dest.ssa.bit_size / 8) * load->num_components;
+      const unsigned load_size = (bit_size / 8) * load->num_components;
       nir_push_if(b, addr_is_in_bounds(b, addr, addr_format, load_size));
 
       nir_builder_instr_insert(b, &load->instr);
 
       nir_pop_if(b, NULL);
 
-      return nir_if_phi(b, &load->dest.ssa, zero);
+      result = nir_if_phi(b, &load->dest.ssa, zero);
    } else {
       nir_builder_instr_insert(b, &load->instr);
-      return &load->dest.ssa;
+      result = &load->dest.ssa;
    }
+
+   if (intrin->dest.ssa.bit_size == 1)
+      result = nir_i2b(b, result);
+
+   return result;
 }
 
 static void
@@ -942,6 +952,11 @@ build_explicit_io_store(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    nir_intrinsic_instr *store = nir_intrinsic_instr_create(b->shader, op);
+
+   if (value->bit_size == 1) {
+      /* TODO: Make the native bool bit_size an option. */
+      value = nir_b2i(b, value, 32);
+   }
 
    store->src[0] = nir_src_for_ssa(value);
    if (addr_format_is_global(addr_format)) {

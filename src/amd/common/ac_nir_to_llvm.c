@@ -42,8 +42,6 @@ struct ac_nir_context {
 
 	LLVMValueRef *ssa_defs;
 
-	LLVMValueRef scratch;
-
 	struct hash_table *defs;
 	struct hash_table *phis;
 	struct hash_table *vars;
@@ -3618,50 +3616,6 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 	case nir_intrinsic_mbcnt_amd:
 		result = ac_build_mbcnt(&ctx->ac, get_src(ctx, instr->src[0]));
 		break;
-	case nir_intrinsic_load_scratch: {
-		LLVMValueRef offset = get_src(ctx, instr->src[0]);
-		LLVMValueRef ptr = ac_build_gep0(&ctx->ac, ctx->scratch,
-						 offset);
-		LLVMTypeRef comp_type =
-			LLVMIntTypeInContext(ctx->ac.context, instr->dest.ssa.bit_size);
-		LLVMTypeRef vec_type =
-			instr->dest.ssa.num_components == 1 ? comp_type :
-			LLVMVectorType(comp_type, instr->dest.ssa.num_components);
-		unsigned addr_space = LLVMGetPointerAddressSpace(LLVMTypeOf(ptr));
-		ptr = LLVMBuildBitCast(ctx->ac.builder, ptr,
-				       LLVMPointerType(vec_type, addr_space), "");
-		result = LLVMBuildLoad(ctx->ac.builder, ptr, "");
-		break;
-	}
-	case nir_intrinsic_store_scratch: {
-		LLVMValueRef offset = get_src(ctx, instr->src[1]);
-		LLVMValueRef ptr = ac_build_gep0(&ctx->ac, ctx->scratch,
-						 offset);
-		LLVMTypeRef comp_type =
-			LLVMIntTypeInContext(ctx->ac.context, instr->src[0].ssa->bit_size);
-		unsigned addr_space = LLVMGetPointerAddressSpace(LLVMTypeOf(ptr));
-		ptr = LLVMBuildBitCast(ctx->ac.builder, ptr,
-				       LLVMPointerType(comp_type, addr_space), "");
-		LLVMValueRef src = get_src(ctx, instr->src[0]);
-		unsigned wrmask = nir_intrinsic_write_mask(instr);
-		while (wrmask) {
-			int start, count;
-			u_bit_scan_consecutive_range(&wrmask, &start, &count);
-			
-			LLVMValueRef offset = LLVMConstInt(ctx->ac.i32, start, false);
-			LLVMValueRef offset_ptr = LLVMBuildGEP(ctx->ac.builder, ptr, &offset, 1, "");
-			LLVMTypeRef vec_type =
-				count == 1 ? comp_type : LLVMVectorType(comp_type, count);
-			offset_ptr = LLVMBuildBitCast(ctx->ac.builder,
-						      offset_ptr,
-						      LLVMPointerType(vec_type, addr_space),
-						      "");
-			LLVMValueRef offset_src =
-				ac_extract_components(&ctx->ac, src, start, count);
-			LLVMBuildStore(ctx->ac.builder, offset_src, offset_ptr);
-		}
-		break;
-	}
 	default:
 		fprintf(stderr, "Unknown intrinsic: ");
 		nir_print_instr(&instr->instr, stderr);
@@ -4563,18 +4517,6 @@ setup_locals(struct ac_nir_context *ctx,
 }
 
 static void
-setup_scratch(struct ac_nir_context *ctx,
-	      struct nir_shader *shader)
-{
-	if (shader->scratch_size == 0)
-		return;
-
-	ctx->scratch = ac_build_alloca_undef(&ctx->ac,
-					     LLVMArrayType(ctx->ac.i8, shader->scratch_size),
-					     "scratch");
-}
-
-static void
 setup_shared(struct ac_nir_context *ctx,
 	     struct nir_shader *nir)
 {
@@ -4619,7 +4561,6 @@ void ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
 	ctx.ssa_defs = calloc(func->impl->ssa_alloc, sizeof(LLVMValueRef));
 
 	setup_locals(&ctx, func);
-	setup_scratch(&ctx, nir);
 
 	if (gl_shader_stage_is_compute(nir->info.stage))
 		setup_shared(&ctx, nir);
@@ -4641,15 +4582,6 @@ void ac_nir_translate(struct ac_llvm_context *ac, struct ac_shader_abi *abi,
 void
 ac_lower_indirect_derefs(struct nir_shader *nir, enum chip_class chip_class)
 {
-	/* Lower large variables to scratch first so that we won't bloat the
-	 * shader by generating large if ladders for them. We later lower
-	 * scratch to alloca's, assuming LLVM won't generate VGPR indexing.
-	 */
-	NIR_PASS_V(nir, nir_lower_vars_to_scratch,
-		   nir_var_function_temp,
-		   256,
-		   glsl_get_natural_size_align_bytes);
-
 	/* While it would be nice not to have this flag, we are constrained
 	 * by the reality that LLVM 9.0 has buggy VGPR indexing on GFX9.
 	 */

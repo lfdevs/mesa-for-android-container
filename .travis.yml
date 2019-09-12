@@ -53,10 +53,10 @@ install:
 script:
   - if test "x$BUILD" = xmeson; then
       meson _build -Dbuild-tests=true;
-      ninja -C _build;
-      ninja -C _build test;
+      ninja -C _build || travis_terminate 1;
+      ninja -C _build test || travis_terminate 1;
     fi
   - if test "x$BUILD" = xscons; then
-      scons;
-      scons check;
+      scons || travis_terminate 1;
+      scons check || travis_terminate 1;
     fi

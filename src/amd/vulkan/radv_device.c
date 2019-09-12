@@ -589,8 +589,9 @@ static int radv_get_instance_extension_index(const char *name)
 
 static const char radv_dri_options_xml[] =
 DRI_CONF_BEGIN
-	DRI_CONF_SECTION_QUALITY
+	DRI_CONF_SECTION_PERFORMANCE
 		DRI_CONF_ADAPTIVE_SYNC("true")
+		DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
 	DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -1306,7 +1307,7 @@ void radv_GetPhysicalDeviceProperties2(
 
 			/* SGPR. */
 			properties->sgprsPerSimd =
-				ac_get_num_physical_sgprs(pdevice->rad_info.chip_class);
+				ac_get_num_physical_sgprs(&pdevice->rad_info);
 			properties->minSgprAllocation =
 				pdevice->rad_info.chip_class >= GFX8 ? 16 : 8;
 			properties->maxSgprAllocation =

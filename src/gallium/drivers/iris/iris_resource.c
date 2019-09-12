@@ -1040,7 +1040,14 @@ iris_resource_get_param(struct pipe_screen *screen,
 
    switch (param) {
    case PIPE_RESOURCE_PARAM_NPLANES:
-      *value = mod_with_aux ? 2 : 1;
+      if (mod_with_aux) {
+         *value = 2;
+      } else {
+         unsigned count = 0;
+         for (struct pipe_resource *cur = resource; cur; cur = cur->next)
+            count++;
+         *value = count;
+      }
       return true;
    case PIPE_RESOURCE_PARAM_STRIDE:
       *value = wants_aux ? res->aux.surf.row_pitch_B : res->surf.row_pitch_B;

@@ -211,15 +211,15 @@ def postamble():
 
 def points(intype, outtype, inpv, outpv, pr):
     preamble(intype, outtype, inpv, outpv, pr, prim='points')
-    print('  for (i = start; i < (out_nr+start); i++) { ')
-    do_point( intype, outtype, 'out+i',  'i' );
+    print('  for (i = start, j = 0; j < out_nr; j++, i++) { ')
+    do_point( intype, outtype, 'out+j',  'i' );
     print('   }')
     postamble()
 
 def lines(intype, outtype, inpv, outpv, pr):
     preamble(intype, outtype, inpv, outpv, pr, prim='lines')
-    print('  for (i = start; i < (out_nr+start); i+=2) { ')
-    do_line( intype, outtype, 'out+i',  'i', 'i+1', inpv, outpv );
+    print('  for (i = start, j = 0; j < out_nr; j+=2, i+=2) { ')
+    do_line( intype, outtype, 'out+j',  'i', 'i+1', inpv, outpv );
     print('   }')
     postamble()
 
@@ -240,8 +240,8 @@ def lineloop(intype, outtype, inpv, outpv, pr):
 
 def tris(intype, outtype, inpv, outpv, pr):
     preamble(intype, outtype, inpv, outpv, pr, prim='tris')
-    print('  for (i = start; i < (out_nr+start); i+=3) { ')
-    do_tri( intype, outtype, 'out+i',  'i', 'i+1', 'i+2', inpv, outpv );
+    print('  for (i = start, j = 0; j < out_nr; j+=3, i+=3) { ')
+    do_tri( intype, outtype, 'out+j',  'i', 'i+1', 'i+2', inpv, outpv );
     print('   }')
     postamble()
 
@@ -377,8 +377,8 @@ def quadstrip(intype, outtype, inpv, outpv, pr):
 
 def linesadj(intype, outtype, inpv, outpv, pr):
     preamble(intype, outtype, inpv, outpv, pr, prim='linesadj')
-    print('  for (i = start; i < (out_nr+start); i+=4) { ')
-    do_lineadj( intype, outtype, 'out+i',  'i+0', 'i+1', 'i+2', 'i+3', inpv, outpv )
+    print('  for (i = start, j = 0; j < out_nr; j+=4, i+=4) { ')
+    do_lineadj( intype, outtype, 'out+j',  'i+0', 'i+1', 'i+2', 'i+3', inpv, outpv )
     print('  }')
     postamble()
 
@@ -393,8 +393,8 @@ def linestripadj(intype, outtype, inpv, outpv, pr):
 
 def trisadj(intype, outtype, inpv, outpv, pr):
     preamble(intype, outtype, inpv, outpv, pr, prim='trisadj')
-    print('  for (i = start; i < (out_nr+start); i+=6) { ')
-    do_triadj( intype, outtype, 'out+i',  'i+0', 'i+1', 'i+2', 'i+3',
+    print('  for (i = start, j = 0; j < out_nr; j+=6, i+=6) { ')
+    do_triadj( intype, outtype, 'out+j',  'i+0', 'i+1', 'i+2', 'i+3',
                'i+4', 'i+5', inpv, outpv )
     print('  }')
     postamble()

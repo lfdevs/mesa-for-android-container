@@ -57,6 +57,7 @@
 #include "util/u_vector.h"
 #include "util/u_math.h"
 #include "util/vma.h"
+#include "util/xmlconfig.h"
 #include "vk_alloc.h"
 #include "vk_debug_report.h"
 
@@ -1009,6 +1010,9 @@ struct anv_instance {
     bool                                        pipeline_cache_enabled;
 
     struct vk_debug_report_instance             debug_report_callbacks;
+
+    struct driOptionCache                       dri_options;
+    struct driOptionCache                       available_dri_options;
 };
 
 VkResult anv_init_wsi(struct anv_physical_device *physical_device);

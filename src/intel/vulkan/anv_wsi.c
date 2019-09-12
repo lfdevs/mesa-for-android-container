@@ -50,7 +50,7 @@ anv_init_wsi(struct anv_physical_device *physical_device)
                             anv_wsi_proc_addr,
                             &physical_device->instance->alloc,
                             physical_device->master_fd,
-                            NULL);
+                            &physical_device->instance->dri_options);
    if (result != VK_SUCCESS)
       return result;
 

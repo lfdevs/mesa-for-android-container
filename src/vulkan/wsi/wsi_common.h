@@ -109,6 +109,12 @@ struct wsi_device {
     * available. Not all window systems might support this. */
    bool enable_adaptive_sync;
 
+   struct {
+      /* Override the minimum number of images on the swapchain.
+       * 0 = no override */
+      uint32_t override_minImageCount;
+   } x11;
+
    uint64_t (*image_get_modifier)(VkImage image);
 
 #define WSI_CB(cb) PFN_vk##cb cb
