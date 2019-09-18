@@ -754,7 +754,7 @@ static void allocate_user_sgprs(struct radv_shader_context *ctx,
 	if (ctx->shader_info->info.loads_push_constants)
 		user_sgpr_count++;
 
-	if (ctx->streamout_buffers)
+	if (ctx->shader_info->info.so.num_outputs)
 		user_sgpr_count++;
 
 	uint32_t available_sgprs = ctx->options->chip_class >= GFX9 && stage != MESA_SHADER_COMPUTE ? 32 : 16;
@@ -4754,7 +4754,7 @@ ac_gs_copy_shader_emit(struct radv_shader_context *ctx)
 		LLVMBasicBlockRef bb;
 		unsigned offset;
 
-		if (!num_components)
+		if (stream > 0 && !num_components)
 			continue;
 
 		if (stream > 0 && !ctx->shader_info->info.so.num_outputs)

@@ -1,0 +1,6 @@
+# warnings that are not useful
+da5ebe30105f70e3520ce3ae145793b755552569
+6b8cb087568699ca9a6e9e8b7bf49179e622b59f
+
+# Jason doesn't want this applied to 19.2 (it's a revert)
+d15fe8ca8262d502435c4f83985ac414f950bc5f

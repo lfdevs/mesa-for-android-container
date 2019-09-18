@@ -52,6 +52,7 @@ static const char anv_dri_options_xml[] =
 DRI_CONF_BEGIN
    DRI_CONF_SECTION_PERFORMANCE
       DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
+      DRI_CONF_VK_X11_STRICT_IMAGE_COUNT("false")
    DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -778,7 +779,9 @@ VkResult anv_CreateInstance(
 
    driParseOptionInfo(&instance->available_dri_options, anv_dri_options_xml);
    driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
-                       0, "anv", NULL);
+                       0, "anv", NULL,
+                       instance->app_info.engine_name,
+                       instance->app_info.engine_version);
 
    *pInstance = anv_instance_to_handle(instance);
 

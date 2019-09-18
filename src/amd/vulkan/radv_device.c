@@ -592,6 +592,7 @@ DRI_CONF_BEGIN
 	DRI_CONF_SECTION_PERFORMANCE
 		DRI_CONF_ADAPTIVE_SYNC("true")
 		DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
+		DRI_CONF_VK_X11_STRICT_IMAGE_COUNT("false")
 	DRI_CONF_SECTION_END
 DRI_CONF_END;
 
@@ -600,7 +601,9 @@ static void  radv_init_dri_options(struct radv_instance *instance)
 	driParseOptionInfo(&instance->available_dri_options, radv_dri_options_xml);
 	driParseConfigFiles(&instance->dri_options,
 	                    &instance->available_dri_options,
-	                    0, "radv", NULL);
+	                    0, "radv", NULL,
+	                    instance->engineName,
+	                    instance->engineVersion);
 }
 
 VkResult radv_CreateInstance(
@@ -619,6 +622,13 @@ VkResult radv_CreateInstance(
 		client_version = pCreateInfo->pApplicationInfo->apiVersion;
 	} else {
 		client_version = VK_API_VERSION_1_0;
+	}
+
+	const char *engine_name = NULL;
+	uint32_t engine_version = 0;
+	if (pCreateInfo->pApplicationInfo) {
+		engine_name = pCreateInfo->pApplicationInfo->pEngineName;
+		engine_version = pCreateInfo->pApplicationInfo->engineVersion;
 	}
 
 	instance = vk_zalloc2(&default_alloc, pAllocator, sizeof(*instance), 8,
@@ -664,6 +674,10 @@ VkResult radv_CreateInstance(
 		return vk_error(instance, result);
 	}
 
+	instance->engineName = vk_strdup(&instance->alloc, engine_name,
+					 VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+	instance->engineVersion = engine_version;
+
 	_mesa_locale_init();
 	glsl_type_singleton_init_or_ref();
 
@@ -689,6 +703,8 @@ void radv_DestroyInstance(
 	for (int i = 0; i < instance->physicalDeviceCount; ++i) {
 		radv_physical_device_finish(instance->physicalDevices + i);
 	}
+
+	vk_free(&instance->alloc, instance->engineName);
 
 	VG(VALGRIND_DESTROY_MEMPOOL(instance));
 

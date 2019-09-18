@@ -603,7 +603,8 @@ nir_link_uniform(struct gl_context *ctx,
       state->num_shader_uniform_components += values;
       state->num_values += values;
 
-      if (state->max_uniform_location < uniform->remap_location + entries)
+      if (uniform->remap_location != UNMAPPED_UNIFORM_LOC &&
+          state->max_uniform_location < uniform->remap_location + entries)
          state->max_uniform_location = uniform->remap_location + entries;
 
       return MAX2(uniform->array_elements, 1);

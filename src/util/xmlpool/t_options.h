@@ -225,6 +225,11 @@ DRI_CONF_OPT_BEGIN_V(vk_x11_override_min_image_count, int, def, "0:999") \
         DRI_CONF_DESC(en,gettext("Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(def) \
+DRI_CONF_OPT_BEGIN_B(vk_x11_strict_image_count, def) \
+        DRI_CONF_DESC(en,gettext("Force the X11 WSI to create exactly the number of image specified by the application in VkSwapchainCreateInfoKHR::minImageCount")) \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_MESA_GLTHREAD(def) \
 DRI_CONF_OPT_BEGIN_B(mesa_glthread, def) \
         DRI_CONF_DESC(en,gettext("Enable offloading GL driver work to a separate thread")) \

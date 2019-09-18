@@ -220,7 +220,7 @@ ttn_translate_interp_mode(unsigned tgsi_interp)
    case TGSI_INTERPOLATE_PERSPECTIVE:
       return INTERP_MODE_SMOOTH;
    case TGSI_INTERPOLATE_COLOR:
-      return INTERP_MODE_SMOOTH;
+      return INTERP_MODE_NONE;
    default:
       unreachable("bad TGSI interpolation mode");
    }

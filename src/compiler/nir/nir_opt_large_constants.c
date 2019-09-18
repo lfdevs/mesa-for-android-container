@@ -318,7 +318,7 @@ nir_opt_large_constants(nir_shader *shader,
    shader->constant_data = rzalloc_size(shader, shader->constant_data_size);
    for (int i = 0; i < num_locals; i++) {
       struct var_info *info = &var_infos[i];
-      if (!info->duplicate) {
+      if (!info->duplicate && info->is_constant) {
          memcpy((char *)shader->constant_data + info->var->data.location,
                 info->constant_data, info->constant_data_size);
       }

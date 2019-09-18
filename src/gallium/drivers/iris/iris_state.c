@@ -2676,10 +2676,11 @@ iris_set_constant_buffer(struct pipe_context *ctx,
          pipe_resource_reference(&cbuf->buffer, input->buffer);
 
          cbuf->buffer_offset = input->buffer_offset;
-         cbuf->buffer_size =
-            MIN2(input->buffer_size,
-                 iris_resource_bo(cbuf->buffer)->size - cbuf->buffer_offset);
       }
+
+      cbuf->buffer_size =
+         MIN2(input->buffer_size,
+              iris_resource_bo(cbuf->buffer)->size - cbuf->buffer_offset);
 
       struct iris_resource *res = (void *) cbuf->buffer;
       res->bind_history |= PIPE_BIND_CONSTANT_BUFFER;
@@ -6885,6 +6886,7 @@ genX(init_state)(struct iris_context *ice)
 
    ice->state.sample_mask = 0xffff;
    ice->state.num_viewports = 1;
+   ice->state.prim_mode = PIPE_PRIM_MAX;
    ice->state.genx = calloc(1, sizeof(struct iris_genx_state));
 
    /* Make a 1x1x1 null surface for unbound textures */

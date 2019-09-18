@@ -71,7 +71,7 @@ files_lima = files(
 )
 
 lima_nir_algebraic_c = custom_target(
-  'ir/lima_nir_algebraic.c',
+  'lima_nir_algebraic.c',
   input : 'ir/lima_nir_algebraic.py',
   output : 'lima_nir_algebraic.c',
   command : [

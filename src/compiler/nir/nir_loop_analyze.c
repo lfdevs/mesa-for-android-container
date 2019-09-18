@@ -648,6 +648,43 @@ get_iteration(nir_op cond_op, nir_const_value initial, nir_const_value step,
 }
 
 static bool
+will_break_on_first_iteration(nir_const_value step,
+                              nir_alu_type induction_base_type,
+                              unsigned trip_offset,
+                              nir_op cond_op, unsigned bit_size,
+                              nir_const_value initial,
+                              nir_const_value limit,
+                              bool limit_rhs, bool invert_cond)
+{
+   if (trip_offset == 1) {
+      nir_op add_op;
+      switch (induction_base_type) {
+      case nir_type_float:
+         add_op = nir_op_fadd;
+         break;
+      case nir_type_int:
+      case nir_type_uint:
+         add_op = nir_op_iadd;
+         break;
+      default:
+         unreachable("Unhandled induction variable base type!");
+      }
+
+      initial = eval_const_binop(add_op, bit_size, initial, step);
+   }
+
+   nir_const_value *src[2];
+   src[limit_rhs ? 0 : 1] = &initial;
+   src[limit_rhs ? 1 : 0] = &limit;
+
+   /* Evaluate the loop exit condition */
+   nir_const_value result;
+   nir_eval_const_opcode(cond_op, &result, 1, bit_size, src);
+
+   return invert_cond ? !result.b : result.b;
+}
+
+static bool
 test_iterations(int32_t iter_int, nir_const_value step,
                 nir_const_value limit, nir_op cond_op, unsigned bit_size,
                 nir_alu_type induction_base_type,
@@ -741,6 +778,18 @@ calculate_iterations(nir_const_value initial, nir_const_value step,
    assert(nir_src_bit_size(alu->src[0].src) ==
           nir_src_bit_size(alu->src[1].src));
    unsigned bit_size = nir_src_bit_size(alu->src[0].src);
+
+   /* get_iteration works under assumption that iterator will be
+    * incremented or decremented until it hits the limit,
+    * however if the loop condition is false on the first iteration
+    * get_iteration's assumption is broken. Handle such loops first.
+    */
+   if (will_break_on_first_iteration(step, induction_base_type, trip_offset,
+                                     alu_op, bit_size, initial,
+                                     limit, limit_rhs, invert_cond)) {
+      return 0;
+   }
+
    int iter_int = get_iteration(alu_op, initial, step, limit, bit_size);
 
    /* If iter_int is negative the loop is ill-formed or is the conditional is

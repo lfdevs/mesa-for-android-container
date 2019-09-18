@@ -570,7 +570,7 @@ util_format_is_depth_and_stencil(enum pipe_format format)
 /**
  * For depth-stencil formats, return the equivalent depth-only format.
  */
-static inline boolean
+static inline enum pipe_format
 util_format_get_depth_only(enum pipe_format format)
 {
    switch (format) {

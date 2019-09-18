@@ -1413,7 +1413,9 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR);
 
    unsigned num_images = pCreateInfo->minImageCount;
-   if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
+   if (wsi_device->x11.strict_imageCount)
+      num_images = pCreateInfo->minImageCount;
+   else if (present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
       num_images = MAX2(num_images, 5);
 
    xcb_connection_t *conn = x11_surface_get_connection(icd_surface);
@@ -1629,6 +1631,10 @@ wsi_x11_init_wsi(struct wsi_device *wsi_device,
       if (driCheckOption(dri_options, "vk_x11_override_min_image_count", DRI_INT)) {
          wsi_device->x11.override_minImageCount =
             driQueryOptioni(dri_options, "vk_x11_override_min_image_count");
+      }
+      if (driCheckOption(dri_options, "vk_x11_strict_image_count", DRI_BOOL)) {
+         wsi_device->x11.strict_imageCount =
+            driQueryOptionb(dri_options, "vk_x11_strict_image_count");
       }
    }
 

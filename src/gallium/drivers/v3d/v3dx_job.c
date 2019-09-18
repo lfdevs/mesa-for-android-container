@@ -33,6 +33,7 @@
 void v3dX(bcl_epilogue)(struct v3d_context *v3d, struct v3d_job *job)
 {
                 v3d_cl_ensure_space_with_branch(&job->bcl,
+                                                cl_packet_length(PRIMITIVE_COUNTS_FEEDBACK) +
 #if V3D_VERSION >= 41
                                                 cl_packet_length(TRANSFORM_FEEDBACK_SPECS) +
 #endif
