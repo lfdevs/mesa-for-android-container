@@ -116,7 +116,7 @@ _mesa_lroundevenf(float x)
 static inline long
 _mesa_lroundeven(double x)
 {
-#if defined(__SSE__) || defined(_MSC_VER)
+#if defined(__SSE2__) || defined(_MSC_VER)
 #if LONG_MAX == INT64_MAX
    return _mm_cvtsd_si64(_mm_load_sd(&x));
 #elif LONG_MAX == INT32_MAX

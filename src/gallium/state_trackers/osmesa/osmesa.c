@@ -760,6 +760,11 @@ OSMesaMakeCurrent(OSMesaContext osmesa, void *buffer, GLenum type,
    struct osmesa_buffer *osbuffer;
    enum pipe_format color_format;
 
+   if (!osmesa && !buffer) {
+      stapi->make_current(stapi, NULL, NULL, NULL);
+      return GL_TRUE;
+   }
+
    if (!osmesa || !buffer || width < 1 || height < 1) {
       return GL_FALSE;
    }

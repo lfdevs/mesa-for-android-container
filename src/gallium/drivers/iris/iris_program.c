@@ -1876,6 +1876,21 @@ iris_get_scratch_space(struct iris_context *ice,
 
    if (!*bop) {
       unsigned scratch_ids_per_subslice = devinfo->max_cs_threads;
+
+      if (devinfo->gen >= 11) {
+         /* The MEDIA_VFE_STATE docs say:
+          *
+          *    "Starting with this configuration, the Maximum Number of
+          *     Threads must be set to (#EU * 8) for GPGPU dispatches.
+          *
+          *     Although there are only 7 threads per EU in the configuration,
+          *     the FFTID is calculated as if there are 8 threads per EU,
+          *     which in turn requires a larger amount of Scratch Space to be
+          *     allocated by the driver."
+          */
+         scratch_ids_per_subslice = 8 * 8;
+      }
+
       uint32_t max_threads[] = {
          [MESA_SHADER_VERTEX]    = devinfo->max_vs_threads,
          [MESA_SHADER_TESS_CTRL] = devinfo->max_tcs_threads,

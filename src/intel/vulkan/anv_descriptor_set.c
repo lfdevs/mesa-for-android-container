@@ -306,7 +306,7 @@ void anv_GetDescriptorSetLayoutSupport(
       /* Our maximum binding table size is 240 and we need to reserve 8 for
        * render targets.
        */
-      if (surface_count[s] >= MAX_BINDING_TABLE_SIZE - MAX_RTS)
+      if (surface_count[s] > MAX_BINDING_TABLE_SIZE - MAX_RTS)
          supported = false;
    }
 

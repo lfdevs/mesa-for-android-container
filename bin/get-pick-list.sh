@@ -32,7 +32,7 @@ is_sha_nomination()
 {
 	fixes=`git show --pretty=medium -s $1 | tr -d "\n" | \
 		sed -e 's/'"$2"'/\nfixes:/Ig' | \
-		grep -Eo 'fixes:[a-f0-9]{8,40}'`
+		grep -Eo 'fixes:[a-f0-9]{4,40}'`
 
 	fixes_count=`echo "$fixes" | grep "fixes:" | wc -l`
 	if test $fixes_count -eq 0; then
@@ -92,7 +92,7 @@ is_revert_nomination()
 }
 
 # Use the last branchpoint as our limit for the search
-latest_branchpoint=`git merge-base origin/master HEAD`
+latest_branchpoint=`git merge-base upstream/master HEAD`
 
 # List all the commits between day 1 and the branch point...
 git log --reverse --pretty=%H $latest_branchpoint > already_landed
@@ -103,7 +103,7 @@ git log --reverse --pretty=medium --grep="cherry picked from commit" $latest_bra
 	sed -e 's/^[[:space:]]*(cherry picked from commit[[:space:]]*//' -e 's/)//' > already_picked
 
 # Grep for potential candidates
-git log --reverse --pretty=%H -i --grep='^CC:.*mesa-stable\|^CC:.*mesa-dev\|\<fixes\>\|\<broken by\>\|This reverts commit' $latest_branchpoint..origin/master |\
+git log --reverse --pretty=%H -i --grep='^CC:.*mesa-stable\|^CC:.*mesa-dev\|\<fixes\>\|\<broken by\>\|This reverts commit' $latest_branchpoint..upstream/master |\
 while read sha
 do
 	# Check to see whether the patch is on the ignore list.
@@ -143,7 +143,7 @@ do
 	esac
 
 	printf "[ %8s ] " "$tag"
-	git --no-pager show --no-patch --oneline $sha
+	git --no-pager show --no-patch --pretty=oneline $sha
 done
 
 rm -f already_picked

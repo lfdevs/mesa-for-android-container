@@ -1520,7 +1520,19 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    const unsigned subslices = MAX2(physical_device->subslice_total, 1);
 
    unsigned scratch_ids_per_subslice;
-   if (devinfo->is_haswell) {
+   if (devinfo->gen >= 11) {
+      /* The MEDIA_VFE_STATE docs say:
+       *
+       *    "Starting with this configuration, the Maximum Number of
+       *     Threads must be set to (#EU * 8) for GPGPU dispatches.
+       *
+       *     Although there are only 7 threads per EU in the configuration,
+       *     the FFTID is calculated as if there are 8 threads per EU,
+       *     which in turn requires a larger amount of Scratch Space to be
+       *     allocated by the driver."
+       */
+      scratch_ids_per_subslice = 8 * 8;
+   } else if (devinfo->is_haswell) {
       /* WaCSScratchSize:hsw
        *
        * Haswell's scratch space address calculation appears to be sparse

@@ -1704,6 +1704,18 @@ load_tes_input(struct ac_shader_abi *abi,
 }
 
 static LLVMValueRef
+radv_emit_fetch_64bit(struct radv_shader_context *ctx,
+		      LLVMTypeRef type, LLVMValueRef a, LLVMValueRef b)
+{
+	LLVMValueRef values[2] = {
+		ac_to_integer(&ctx->ac, a),
+		ac_to_integer(&ctx->ac, b),
+	};
+	LLVMValueRef result = ac_build_gather_values(&ctx->ac, values, 2);
+	return LLVMBuildBitCast(ctx->ac.builder, result, type, "");
+}
+
+static LLVMValueRef
 load_gs_input(struct ac_shader_abi *abi,
 	      unsigned location,
 	      unsigned driver_location,
@@ -1731,6 +1743,14 @@ load_gs_input(struct ac_shader_abi *abi,
 			dw_addr = LLVMBuildAdd(ctx->ac.builder, dw_addr,
 			                       LLVMConstInt(ctx->ac.i32, param * 4 + i + const_index, 0), "");
 			value[i] = ac_lds_load(&ctx->ac, dw_addr);
+
+			if (ac_get_type_size(type) == 8) {
+				dw_addr = LLVMBuildAdd(ctx->ac.builder, dw_addr,
+					               LLVMConstInt(ctx->ac.i32, param * 4 + i + const_index + 1, 0), "");
+				LLVMValueRef tmp = ac_lds_load(&ctx->ac, dw_addr);
+
+				value[i] = radv_emit_fetch_64bit(ctx, type, value[i], tmp);
+			}
 		} else {
 			LLVMValueRef soffset =
 				LLVMConstInt(ctx->ac.i32,
@@ -1742,6 +1762,21 @@ load_gs_input(struct ac_shader_abi *abi,
 							ctx->ac.i32_0,
 							vtx_offset, soffset,
 							0, ac_glc, true, false);
+
+			if (ac_get_type_size(type) == 8) {
+				soffset = LLVMConstInt(ctx->ac.i32,
+						       (param * 4 + i + const_index + 1) * 256,
+						       false);
+
+				LLVMValueRef tmp =
+					ac_build_buffer_load(&ctx->ac,
+							     ctx->esgs_ring, 1,
+							     ctx->ac.i32_0,
+							     vtx_offset, soffset,
+							     0, ac_glc, true, false);
+
+				value[i] = radv_emit_fetch_64bit(ctx, type, value[i], tmp);
+			}
 		}
 
 		if (ac_get_type_size(type) == 2) {

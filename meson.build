@@ -42,7 +42,7 @@ pre_args = [
   '-D__STDC_FORMAT_MACROS',
   '-D__STDC_LIMIT_MACROS',
   '-DPACKAGE_VERSION="@0@"'.format(meson.project_version()),
-  '-DPACKAGE_BUGREPORT="https://bugs.freedesktop.org/enter_bug.cgi?product=Mesa"',
+  '-DPACKAGE_BUGREPORT="https://gitlab.freedesktop.org/mesa/mesa/issues"',
 ]
 
 with_vulkan_icd_dir = get_option('vulkan-icd-dir')
@@ -1309,6 +1309,10 @@ endif
 dep_glvnd = null_dep
 if with_glvnd
   dep_glvnd = dependency('libglvnd', version : '>= 0.2.0')
+  # GLVND until commit 0dfaea2bcb7cdcc785f9 ("Add pkg-config files for EGL, GL,
+  # GLES, and GLX.") was missing its pkg-config files, forcing every vendor to
+  # provide them and the distro maintainers to resolve the conflict.
+  glvnd_missing_pc_files = dep_glvnd.version().version_compare('< 1.2.0')
   pre_args += '-DUSE_LIBGLVND=1'
 endif
 

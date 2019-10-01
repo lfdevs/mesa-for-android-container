@@ -4817,8 +4817,15 @@ static uint32_t radv_get_executable_count(const struct radv_pipeline *pipeline)
 {
 	uint32_t ret = 0;
 	for (int i = 0; i < MESA_SHADER_STAGES; ++i) {
-		if (pipeline->shaders[i])
-			ret += i == MESA_SHADER_GEOMETRY ? 2u : 1u;
+		if (!pipeline->shaders[i])
+			continue;
+
+		if (i == MESA_SHADER_GEOMETRY &&
+		    !radv_pipeline_has_ngg(pipeline)) {
+			ret += 2u;
+		} else {
+			ret += 1u;
+		}
 		
 	}
 	return ret;
@@ -4837,7 +4844,8 @@ radv_get_shader_from_executable_index(const struct radv_pipeline *pipeline, int 
 
 		--index;
 
-		if (i == MESA_SHADER_GEOMETRY) {
+		if (i == MESA_SHADER_GEOMETRY &&
+		    !radv_pipeline_has_ngg(pipeline)) {
 			if (!index) {
 				*stage = i;
 				return pipeline->gs_copy_shader;
@@ -4928,7 +4936,8 @@ VkResult radv_GetPipelineExecutablePropertiesKHR(
 		desc_copy(pProperties[executable_idx].description, description);
 
 		++executable_idx;
-		if (i == MESA_SHADER_GEOMETRY) {
+		if (i == MESA_SHADER_GEOMETRY &&
+		    !radv_pipeline_has_ngg(pipeline)) {
 			assert(pipeline->gs_copy_shader);
 			if (executable_idx >= count)
 				break;

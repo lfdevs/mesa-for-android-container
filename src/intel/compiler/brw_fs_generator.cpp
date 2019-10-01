@@ -2164,8 +2164,17 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(src[2].type == BRW_REGISTER_TYPE_UD);
          const unsigned component = src[1].ud;
          const unsigned cluster_size = src[2].ud;
+         unsigned vstride = cluster_size;
+         unsigned width = cluster_size;
+
+         /* The maximum exec_size is 32, but the maximum width is only 16. */
+         if (inst->exec_size == width) {
+            vstride = 0;
+            width = 1;
+         }
+
          struct brw_reg strided = stride(suboffset(src[0], component),
-                                         cluster_size, cluster_size, 0);
+                                         vstride, width, 0);
          if (type_sz(src[0].type) > 4 &&
              (devinfo->is_cherryview || gen_device_info_is_9lp(devinfo))) {
             /* IVB has an issue (which we found empirically) where it reads

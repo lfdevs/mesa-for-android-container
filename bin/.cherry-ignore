@@ -4,3 +4,15 @@ da5ebe30105f70e3520ce3ae145793b755552569
 
 # Jason doesn't want this applied to 19.2 (it's a revert)
 d15fe8ca8262d502435c4f83985ac414f950bc5f
+
+# This doesn't apply to 19.2
+f833b4cada07b746a10ffa4d93fcd821920c3cb1
+d2db43fcad6a2ea2070ff5f7884411f4b7d3925c
+66f2aa6ccd0b226eebe2c1a46281160b0a54d522
+
+# The author requested that this not be applied to 19.2
+dcc0e23438f3e5929c2ef74d57e8207be25ecb41
+
+# This doesn't apply cleanly, and no one really cares about this file on stable
+# branches anyway.
+bcd9224728dcb8d8fe4bcddc4bd9b2c36fcfe9dd

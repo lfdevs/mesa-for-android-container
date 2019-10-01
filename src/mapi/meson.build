@@ -35,7 +35,7 @@ if with_shared_glapi
 else
   libglapi = []
 endif
-if not with_glvnd
+if not with_glvnd or glvnd_missing_pc_files
   if with_gles1
     subdir('es1api')
   endif

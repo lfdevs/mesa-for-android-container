@@ -575,6 +575,14 @@ radv_handle_per_app_options(struct radv_instance *instance,
 			 */
 			instance->perftest_flags |= RADV_PERFTEST_SHADER_BALLOT;
 		}
+	} else if (!strcmp(name, "Fledge")) {
+		/*
+		 * Zero VRAM for "The Surge 2"
+		 *
+		 * This avoid a hang when when rendering any level. Likely
+		 * uninitialized data in an indirect draw.
+		 */
+		instance->debug_flags |= RADV_DEBUG_ZERO_VRAM;
 	}
 }
 

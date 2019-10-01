@@ -111,7 +111,7 @@ if with_glx != 'disabled'
   # point to GL. glvnd is only available on unix like platforms so adding -l
   # should be safe here
   # TODO: in the glvnd case glvnd itself should really be providing this.
-  if with_glvnd
+  if with_glvnd and glvnd_missing_pc_files
     _gl = '-L${libdir} -lGL'
   else
     _gl = libgl

@@ -211,7 +211,8 @@ LOCAL_STATIC_LIBRARIES := \
 	libmesa_nir \
 	libmesa_genxml \
 	libmesa_git_sha1 \
-	libmesa_vulkan_util
+	libmesa_vulkan_util \
+	libmesa_util
 
 # The rule generates both C and H files, but due to some strange
 # reason generating the files once leads to link-time issues.

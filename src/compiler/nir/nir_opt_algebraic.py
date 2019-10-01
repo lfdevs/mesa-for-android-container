@@ -1524,10 +1524,19 @@ late_optimizations = [
    #    fadd(ffma(v1.z, v2.z, ffma(v1.y, v2.y, fmul(v1.x, v2.x))), v1.w)
    #
    # Reassociate the last addition into the first multiplication.
+   #
+   # Some shaders do not use 'invariant' in vertex and (possibly) geometry
+   # shader stages on some outputs that are intended to be invariant.  For
+   # various reasons, this optimization may not be fully applied in all
+   # shaders used for different rendering passes of the same geometry.  This
+   # can result in Z-fighting artifacts (at best).  For now, disable this
+   # optimization in these stages.  See bugzilla #111490.  In tessellation
+   # stages applications seem to use 'precise' when necessary, so allow the
+   # optimization in those stages.
    (('~fadd', ('ffma(is_used_once)', a, b, ('ffma', c, d, ('fmul', 'e(is_not_const_and_not_fsign)', 'f(is_not_const_and_not_fsign)'))), 'g(is_not_const)'),
-    ('ffma', a, b, ('ffma', c, d, ('ffma', e, 'f', 'g'))), '!options->intel_vec4'),
-   (('~fadd', ('ffma(is_used_once)', a, b,                ('fmul', 'e(is_not_const_and_not_fsign)', 'f(is_not_const_and_not_fsign)') ), 'g(is_not_const)'),
-    ('ffma', a, b,                ('ffma', e, 'f', 'g') ), '!options->intel_vec4'),
+    ('ffma', a, b, ('ffma', c, d, ('ffma', e, 'f', 'g'))), '(info->stage != MESA_SHADER_VERTEX && info->stage != MESA_SHADER_GEOMETRY) && !options->intel_vec4'),
+   (('~fadd', ('ffma(is_used_once)', a, b, ('fmul', 'c(is_not_const_and_not_fsign)', 'd(is_not_const_and_not_fsign)') ), 'e(is_not_const)'),
+    ('ffma', a, b, ('ffma', c, d, e)), '(info->stage != MESA_SHADER_VERTEX && info->stage != MESA_SHADER_GEOMETRY) && !options->intel_vec4'),
 ]
 
 print(nir_algebraic.AlgebraicPass("nir_opt_algebraic", optimizations).render())
