@@ -628,6 +628,28 @@ supports_ccs(const struct gen_device_info *devinfo,
    return true;
 }
 
+static bool
+want_ccs_e_for_format(const struct gen_device_info *devinfo,
+                      enum isl_format format)
+{
+   if (!isl_format_supports_ccs_e(devinfo, format))
+      return false;
+
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+
+   /* CCS_E seems to significantly hurt performance with 32-bit floating
+    * point formats.  For example, Paraview's "Wavelet Volume" case uses
+    * both R32_FLOAT and R32G32B32A32_FLOAT, and enabling CCS_E for those
+    * formats causes a 62% FPS drop.
+    *
+    * However, many benchmarks seem to use 16-bit float with no issues.
+    */
+   if (fmtl->channels.r.bits == 32 && fmtl->channels.r.type == ISL_SFLOAT)
+      return false;
+
+   return true;
+}
+
 static struct pipe_resource *
 iris_resource_create_for_buffer(struct pipe_screen *pscreen,
                                 const struct pipe_resource *templ)
@@ -765,7 +787,7 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_HIZ;
    } else if (likely(!(INTEL_DEBUG & DEBUG_NO_RBC)) &&
               supports_ccs(devinfo, &res->surf)) {
-      if (isl_format_supports_ccs_e(devinfo, res->surf.format))
+      if (want_ccs_e_for_format(devinfo, res->surf.format))
          res->aux.possible_usages |= 1 << ISL_AUX_USAGE_CCS_E;
 
       if (isl_format_supports_ccs_d(devinfo, res->surf.format))
@@ -1023,11 +1045,33 @@ iris_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
                                 mod ? mod->supports_clear_color : false);
 }
 
+static void
+iris_resource_disable_aux_on_first_query(struct pipe_resource *resource,
+                                         unsigned usage)
+{
+   struct iris_resource *res = (struct iris_resource *)resource;
+   bool mod_with_aux =
+      res->mod_info && res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
+
+   /* Disable aux usage if explicit flush not set and this is the first time
+    * we are dealing with this resource and the resource was not created with
+    * a modifier with aux.
+    */
+   if (!mod_with_aux &&
+      (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH) && res->aux.usage != 0) &&
+       p_atomic_read(&resource->reference.count) == 1) {
+         iris_resource_disable_aux(res);
+   }
+}
+
 static bool
 iris_resource_get_param(struct pipe_screen *screen,
+                        struct pipe_context *context,
                         struct pipe_resource *resource,
-                        unsigned int plane,
+                        unsigned plane,
+                        unsigned layer,
                         enum pipe_resource_param param,
+                        unsigned handle_usage,
                         uint64_t *value)
 {
    struct iris_resource *res = (struct iris_resource *)resource;
@@ -1037,6 +1081,8 @@ iris_resource_get_param(struct pipe_screen *screen,
    struct iris_bo *bo = wants_aux ? res->aux.bo : res->bo;
    bool result;
    unsigned handle;
+
+   iris_resource_disable_aux_on_first_query(resource, handle_usage);
 
    switch (param) {
    case PIPE_RESOURCE_PARAM_NPLANES:
@@ -1088,15 +1134,7 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
    bool mod_with_aux =
       res->mod_info && res->mod_info->aux_usage != ISL_AUX_USAGE_NONE;
 
-   /* Disable aux usage if explicit flush not set and this is the first time
-    * we are dealing with this resource and the resource was not created with
-    * a modifier with aux.
-    */
-   if (!mod_with_aux &&
-       (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH) && res->aux.usage != 0) &&
-       p_atomic_read(&resource->reference.count) == 1) {
-         iris_resource_disable_aux(res);
-   }
+   iris_resource_disable_aux_on_first_query(resource, usage);
 
    struct iris_bo *bo;
    if (mod_with_aux && whandle->plane > 0) {

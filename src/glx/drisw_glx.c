@@ -86,6 +86,8 @@ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
    if (pdp->ximage) {
       XDestroyImage(pdp->ximage);
       pdp->ximage = NULL;
+      if ((pdp->shminfo.shmid > 0) && (shmid != pdp->shminfo.shmid))
+         XShmDetach(dpy, &pdp->shminfo);
    }
 
    if (!xshm_error && shmid >= 0) {

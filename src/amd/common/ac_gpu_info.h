@@ -58,6 +58,7 @@ struct radeon_info {
 	uint32_t                    num_sdma_rings;
 	uint32_t                    clock_crystal_freq;
 	uint32_t                    tcc_cache_line_size;
+	bool			    tcc_harvested;
 
 	/* There are 2 display DCC codepaths, because display expects unaligned DCC. */
 	/* Disable RB and pipe alignment to skip the retile blit. (1 RB chips only) */

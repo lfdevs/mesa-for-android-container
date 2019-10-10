@@ -96,6 +96,7 @@ struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 		/* reset the address */
 		resources[i]->buffer.gpu_address = ctx->ws->buffer_get_virtual_address(
 			resources[i]->buffer.buf);
+		resources[i]->buffer.bo_size = resources[i]->buffer.buf->size;
 	}
 
 	vidtemplate.height *= array_size;

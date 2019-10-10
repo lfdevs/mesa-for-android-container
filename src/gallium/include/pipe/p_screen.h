@@ -265,11 +265,20 @@ struct pipe_screen {
    /**
     * Get info for the given pipe resource without the need to get a
     * winsys_handle.
+    *
+    * The context parameter can optionally be used to flush the resource and
+    * the context to make sure the resource is coherent with whatever user
+    * will use it. Some drivers may also use the context to convert
+    * the resource into a format compatible for sharing. The context parameter
+    * is allowed to be NULL.
     */
    bool (*resource_get_param)(struct pipe_screen *screen,
+                              struct pipe_context *context,
                               struct pipe_resource *resource,
-                              unsigned int plane,
+                              unsigned plane,
+                              unsigned layer,
                               enum pipe_resource_param param,
+                              unsigned handle_usage,
                               uint64_t *value);
 
    /**

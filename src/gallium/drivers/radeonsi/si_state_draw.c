@@ -1130,16 +1130,28 @@ void gfx10_emit_cache_flush(struct si_context *ctx)
 	}
 	if (flags & SI_CONTEXT_INV_VCACHE)
 		gcr_cntl |= S_586_GL1_INV(1) | S_586_GLV_INV(1);
+
+	/* The L2 cache ops are:
+	 * - INV: - invalidate lines that reflect memory (were loaded from memory)
+	 *        - don't touch lines that were overwritten (were stored by gfx clients)
+	 * - WB: - don't touch lines that reflect memory
+	 *       - write back lines that were overwritten
+	 * - WB | INV: - invalidate lines that reflect memory
+	 *             - write back lines that were overwritten
+	 *
+	 * GLM doesn't support WB alone. If WB is set, INV must be set too.
+	 */
 	if (flags & SI_CONTEXT_INV_L2) {
 		/* Writeback and invalidate everything in L2. */
-		gcr_cntl |= S_586_GL2_INV(1) | S_586_GLM_INV(1);
+		gcr_cntl |= S_586_GL2_INV(1) | S_586_GL2_WB(1) |
+			    S_586_GLM_INV(1) | S_586_GLM_WB(1);
 		ctx->num_L2_invalidates++;
 	} else if (flags & SI_CONTEXT_WB_L2) {
-		/* Writeback but do not invalidate. */
-		gcr_cntl |= S_586_GL2_WB(1);
+		gcr_cntl |= S_586_GL2_WB(1) |
+			    S_586_GLM_WB(1) | S_586_GLM_INV(1);
+	} else if (flags & SI_CONTEXT_INV_L2_METADATA) {
+		gcr_cntl |= S_586_GLM_INV(1) | S_586_GLM_WB(1);
 	}
-	if (flags & SI_CONTEXT_INV_L2_METADATA)
-		gcr_cntl |= S_586_GLM_INV(1);
 
 	if (flags & (SI_CONTEXT_FLUSH_AND_INV_CB | SI_CONTEXT_FLUSH_AND_INV_DB)) {
 		if (flags & SI_CONTEXT_FLUSH_AND_INV_CB) {

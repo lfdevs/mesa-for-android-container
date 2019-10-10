@@ -92,6 +92,14 @@ static bool has_syncobj(int fd)
 	return value ? true : false;
 }
 
+static uint64_t fix_vram_size(uint64_t size)
+{
+	/* The VRAM size is underreported, so we need to fix it, because
+	 * it's used to compute the number of memory modules for harvesting.
+	 */
+	return align64(size, 256*1024*1024);
+}
+
 bool ac_query_gpu_info(int fd, void *dev_p,
 		       struct radeon_info *info,
 		       struct amdgpu_gpu_info *amdinfo)
@@ -265,7 +273,7 @@ bool ac_query_gpu_info(int fd, void *dev_p,
 
 		/* Note: usable_heap_size values can be random and can't be relied on. */
 		info->gart_size = meminfo.gtt.total_heap_size;
-		info->vram_size = meminfo.vram.total_heap_size;
+		info->vram_size = fix_vram_size(meminfo.vram.total_heap_size);
 		info->vram_vis_size = meminfo.cpu_accessible_vram.total_heap_size;
 	} else {
 		/* This is a deprecated interface, which reports usable sizes
@@ -296,7 +304,7 @@ bool ac_query_gpu_info(int fd, void *dev_p,
 		}
 
 		info->gart_size = gtt.heap_size;
-		info->vram_size = vram.heap_size;
+		info->vram_size = fix_vram_size(vram.heap_size);
 		info->vram_vis_size = vram_vis.heap_size;
 	}
 
@@ -419,6 +427,9 @@ bool ac_query_gpu_info(int fd, void *dev_p,
 	}
 	if (info->chip_class >= GFX10) {
 		info->tcc_cache_line_size = 128;
+		/* This is a hack, but it's all we can do without a kernel upgrade. */
+		info->tcc_harvested =
+			(info->vram_size / info->num_tcc_blocks) != 512*1024*1024;
 	} else {
 		info->tcc_cache_line_size = 64;
 	}
@@ -449,6 +460,12 @@ bool ac_query_gpu_info(int fd, void *dev_p,
 				util_bitcount(amdinfo->cu_bitmap[i][j]);
 	info->num_good_cu_per_sh = info->num_good_compute_units /
 				   (info->max_se * info->max_sh_per_se);
+
+	/* Round down to the nearest multiple of 2, because the hw can't
+	 * disable CUs. It can only disable whole WGPs (dual-CUs).
+	 */
+	if (info->chip_class >= GFX10)
+		info->num_good_cu_per_sh -= info->num_good_cu_per_sh % 2;
 
 	memcpy(info->si_tile_mode_array, amdinfo->gb_tile_mode,
 		sizeof(amdinfo->gb_tile_mode));
@@ -534,6 +551,7 @@ void ac_print_gpu_info(struct radeon_info *info)
 	printf("    num_sdma_rings = %i\n", info->num_sdma_rings);
 	printf("    clock_crystal_freq = %i\n", info->clock_crystal_freq);
 	printf("    tcc_cache_line_size = %u\n", info->tcc_cache_line_size);
+	printf("    tcc_harvested = %u\n", info->tcc_harvested);
 
 	printf("    use_display_dcc_unaligned = %u\n", info->use_display_dcc_unaligned);
 	printf("    use_display_dcc_with_retile_blit = %u\n", info->use_display_dcc_with_retile_blit);

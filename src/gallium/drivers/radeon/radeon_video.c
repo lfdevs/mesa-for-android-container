@@ -178,6 +178,7 @@ void si_vid_join_surfaces(struct si_context *sctx,
 				surfaces[i]->u.gfx9.offset[j] += off;
 		}
 
+		surfaces[i]->flags |= RADEON_SURF_IMPORTED;
 		off += surfaces[i]->surf_size;
 	}
 

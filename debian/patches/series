@@ -1,1 +1,2 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
+Revert-meson-fix-logic-for-generating-.pc-files-with.patch

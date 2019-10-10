@@ -217,6 +217,7 @@ NIR_FILES = \
 	nir/nir_control_flow_private.h \
 	nir/nir_deref.c \
 	nir/nir_deref.h \
+	nir/nir_divergence_analysis.c \
 	nir/nir_dominance.c \
 	nir/nir_format_convert.h \
 	nir/nir_from_ssa.c \

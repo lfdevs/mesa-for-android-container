@@ -221,7 +221,6 @@ dri3_alloc_back_buffer(struct vl_dri3_screen *scrn)
    int buffer_fd, fence_fd;
    struct pipe_resource templ, *pixmap_buffer_texture;
    struct winsys_handle whandle;
-   unsigned usage;
 
    buffer = CALLOC_STRUCT(vl_dri3_buffer);
    if (!buffer)
@@ -271,10 +270,8 @@ dri3_alloc_back_buffer(struct vl_dri3_screen *scrn)
    }
    memset(&whandle, 0, sizeof(whandle));
    whandle.type= WINSYS_HANDLE_TYPE_FD;
-   usage = PIPE_HANDLE_USAGE_EXPLICIT_FLUSH;
    scrn->base.pscreen->resource_get_handle(scrn->base.pscreen, NULL,
-                                           pixmap_buffer_texture, &whandle,
-                                           usage);
+                                           pixmap_buffer_texture, &whandle, 0);
    buffer_fd = whandle.handle;
    buffer->pitch = whandle.stride;
    buffer->width = templ.width0;

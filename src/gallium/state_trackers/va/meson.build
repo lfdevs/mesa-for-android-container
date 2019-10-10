@@ -1,4 +1,4 @@
-# Copyright © 2017-2018 Intel Corporation
+# Copyright © 2017-2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -35,5 +35,8 @@ libva_st = static_library(
     ),
   ],
   include_directories : [inc_common],
-  dependencies : [dep_va_headers, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3],
+  dependencies : [
+    dep_va_headers, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3,
+    dep_libdrm,
+  ],
 )

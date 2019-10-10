@@ -210,13 +210,13 @@ files_libnouveau = files(
 
 libnouveau = static_library(
   'nouveau',
-  [files_libnouveau, nir_opcodes_h],
+  files_libnouveau,
   include_directories : [
     inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_common,
   ],
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],
-  dependencies : [dep_libdrm, dep_libdrm_nouveau],
+  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_nir_headers],
 )
 
 nouveau_compiler = executable(

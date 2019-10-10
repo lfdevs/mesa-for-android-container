@@ -1700,7 +1700,9 @@ si_make_CB_shader_coherent(struct si_context *sctx, unsigned num_samples,
 		       SI_CONTEXT_INV_VCACHE;
 
 	if (sctx->chip_class >= GFX10) {
-		if (shaders_read_metadata)
+		if (sctx->screen->info.tcc_harvested)
+			sctx->flags |= SI_CONTEXT_INV_L2;
+		else if (shaders_read_metadata)
 			sctx->flags |= SI_CONTEXT_INV_L2_METADATA;
 	} else if (sctx->chip_class == GFX9) {
 		/* Single-sample color is coherent with shaders on GFX9, but
@@ -1726,7 +1728,9 @@ si_make_DB_shader_coherent(struct si_context *sctx, unsigned num_samples,
 		       SI_CONTEXT_INV_VCACHE;
 
 	if (sctx->chip_class >= GFX10) {
-		if (shaders_read_metadata)
+		if (sctx->screen->info.tcc_harvested)
+			sctx->flags |= SI_CONTEXT_INV_L2;
+		else if (shaders_read_metadata)
 			sctx->flags |= SI_CONTEXT_INV_L2_METADATA;
 	} else if (sctx->chip_class == GFX9) {
 		/* Single-sample depth (not stencil) is coherent with shaders

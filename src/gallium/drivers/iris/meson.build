@@ -66,12 +66,12 @@ foreach v : ['80', '90', '100', '110']
   iris_gen_libs += static_library(
     'libiris_gen@0@'.format(v),
     ['iris_blorp.c', 'iris_query.c', 'iris_state.c', gen_xml_pack],
-    include_directories : [inc_common, inc_intel, inc_nir],
+    include_directories : [inc_common, inc_intel],
     c_args : [
       c_vis_args, no_override_init_args, c_sse2_args,
       '-DGEN_VERSIONx10=@0@'.format(v),
     ],
-    dependencies : [dep_libdrm, dep_valgrind],
+    dependencies : [dep_libdrm, dep_valgrind, idep_nir_headers],
   )
 endforeach
 

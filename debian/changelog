@@ -1,3 +1,18 @@
+mesa (19.2.1-1) unstable; urgency=medium
+
+  [ Timo Aaltonen ]
+  * New upstream release.
+  * rules: Build Vulkan overlay on x32. (Closes: #932733)
+  * Revert-meson-fix-logic-for-generating-.pc-files-with.patch: Revert a
+    commit which attempted to fix the .pc generating logic, but
+    regressed GLES2.
+
+  [ Sven Joachim ]
+  * rules: Re-enable asm on x32, should be fixed since mesa 17.0.0
+    (Closes: #758094).
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 10 Oct 2019 07:31:08 +0300
+
 mesa (19.2.0-1) unstable; urgency=medium
 
   * New upstream release.

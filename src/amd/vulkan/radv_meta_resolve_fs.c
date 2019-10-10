@@ -535,7 +535,7 @@ create_depth_stencil_resolve_pipeline(struct radv_device *device,
 							.pAttachments = &(VkAttachmentDescription) {
 								.format = src_format,
 								.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-								.storeOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+								.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 								.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 								.stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
 								.initialLayout = VK_IMAGE_LAYOUT_GENERAL,

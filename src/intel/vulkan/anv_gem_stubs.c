@@ -68,7 +68,13 @@ anv_gem_munmap(void *p, uint64_t size)
 uint32_t
 anv_gem_userptr(struct anv_device *device, void *mem, size_t size)
 {
-   return -1;
+   int fd = os_create_anonymous_file(size, "fake bo");
+   if (fd == -1)
+      return 0;
+
+   assert(fd != 0);
+
+   return fd;
 }
 
 int

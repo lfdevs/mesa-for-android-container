@@ -593,11 +593,11 @@ set_image_binding(struct gl_image_unit *u, struct gl_texture_object *texObj,
    if (texObj && _mesa_tex_target_is_layered(texObj->Target)) {
       u->Layered = layered;
       u->Layer = layer;
-      u->_Layer = (u->Layered ? 0 : u->Layer);
    } else {
       u->Layered = GL_FALSE;
       u->Layer = 0;
    }
+   u->_Layer = (u->Layered ? 0 : u->Layer);
 
    _mesa_reference_texobj(&u->TexObj, texObj);
 }

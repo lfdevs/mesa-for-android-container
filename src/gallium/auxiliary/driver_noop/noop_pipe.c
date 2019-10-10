@@ -157,9 +157,12 @@ static bool noop_resource_get_handle(struct pipe_screen *pscreen,
 }
 
 static bool noop_resource_get_param(struct pipe_screen *pscreen,
+                                    struct pipe_context *ctx,
                                     struct pipe_resource *resource,
-                                    unsigned int plane,
+                                    unsigned plane,
+                                    unsigned layer,
                                     enum pipe_resource_param param,
+                                    unsigned handle_usage,
                                     uint64_t *value)
 {
    struct noop_pipe_screen *noop_screen = (struct noop_pipe_screen*)pscreen;
@@ -172,7 +175,8 @@ static bool noop_resource_get_param(struct pipe_screen *pscreen,
    if (!tex)
       return false;
 
-   result = screen->resource_get_param(screen, tex, 0, param, value);
+   result = screen->resource_get_param(screen, NULL, tex, 0, 0, param,
+                                       handle_usage, value);
    pipe_resource_reference(&tex, NULL);
    return result;
 }

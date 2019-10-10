@@ -313,14 +313,19 @@ dd_screen_resource_get_handle(struct pipe_screen *_screen,
 
 static bool
 dd_screen_resource_get_param(struct pipe_screen *_screen,
+                             struct pipe_context *_pipe,
                              struct pipe_resource *resource,
-                             unsigned int plane,
+                             unsigned plane,
+                             unsigned layer,
                              enum pipe_resource_param param,
+                             unsigned handle_usage,
                              uint64_t *value)
 {
    struct pipe_screen *screen = dd_screen(_screen)->screen;
+   struct pipe_context *pipe = _pipe ? dd_context(_pipe)->pipe : NULL;
 
-   return screen->resource_get_param(screen, resource, plane, param, value);
+   return screen->resource_get_param(screen, pipe, resource, plane, layer,
+                                     param, handle_usage, value);
 }
 
 static void

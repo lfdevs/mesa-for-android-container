@@ -1913,6 +1913,7 @@ static bool si_can_invalidate_texture(struct si_screen *sscreen,
 				      const struct pipe_box *box)
 {
 	return !tex->buffer.b.is_shared &&
+		!(tex->surface.flags & RADEON_SURF_IMPORTED) &&
 		!(transfer_usage & PIPE_TRANSFER_READ) &&
 		tex->buffer.b.b.last_level == 0 &&
 		util_texrange_covers_whole_level(&tex->buffer.b.b, 0,

@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corproration
+# Copyright © 2017, 2019 Intel Corproration
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -35,5 +35,5 @@ libvdpau_st = static_library(
   include_directories : [
     inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux,
   ],
-  dependencies : [dep_vdpau, dep_xcb, dep_x11_xcb, dep_xcb_dri2],
+  dependencies : [dep_vdpau, dep_xcb, dep_x11_xcb, dep_xcb_dri2, dep_libdrm],
 )

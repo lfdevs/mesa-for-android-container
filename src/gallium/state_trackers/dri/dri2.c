@@ -1128,14 +1128,15 @@ dri2_query_image_by_resource_handle(__DRIimage *image, int attrib, int *value)
 
 static bool
 dri2_resource_get_param(__DRIimage *image, enum pipe_resource_param param,
-                        uint64_t *value)
+                        unsigned handle_usage, uint64_t *value)
 {
    struct pipe_screen *pscreen = image->texture->screen;
    if (!pscreen->resource_get_param)
       return false;
 
-   return pscreen->resource_get_param(pscreen, image->texture, image->plane,
-                                      param, value);
+   return pscreen->resource_get_param(pscreen, NULL, image->texture,
+                                      image->plane, 0, param, handle_usage,
+                                      value);
 }
 
 static bool
@@ -1143,6 +1144,7 @@ dri2_query_image_by_resource_param(__DRIimage *image, int attrib, int *value)
 {
    enum pipe_resource_param param;
    uint64_t res_param;
+   unsigned handle_usage;
 
    if (!image->texture->screen->resource_get_param)
       return false;
@@ -1174,7 +1176,12 @@ dri2_query_image_by_resource_param(__DRIimage *image, int attrib, int *value)
       return false;
    }
 
-   if (!dri2_resource_get_param(image, param, &res_param))
+   if (image->use & __DRI_IMAGE_USE_BACKBUFFER)
+      handle_usage = PIPE_HANDLE_USAGE_EXPLICIT_FLUSH;
+   else
+      handle_usage = PIPE_HANDLE_USAGE_FRAMEBUFFER_WRITE;
+
+   if (!dri2_resource_get_param(image, param, handle_usage, &res_param))
       return false;
 
    switch (attrib) {
@@ -1312,7 +1319,7 @@ dri2_from_planar(__DRIimage *image, int plane, void *loaderPrivate)
       return NULL;
    } else if (plane > 0) {
       uint64_t planes;
-      if (!dri2_resource_get_param(image, PIPE_RESOURCE_PARAM_NPLANES,
+      if (!dri2_resource_get_param(image, PIPE_RESOURCE_PARAM_NPLANES, 0,
                                    &planes) ||
           plane >= planes) {
          return NULL;
@@ -1321,7 +1328,7 @@ dri2_from_planar(__DRIimage *image, int plane, void *loaderPrivate)
 
    if (image->dri_components == 0) {
       uint64_t modifier;
-      if (!dri2_resource_get_param(image, PIPE_RESOURCE_PARAM_MODIFIER,
+      if (!dri2_resource_get_param(image, PIPE_RESOURCE_PARAM_MODIFIER, 0,
                                    &modifier) ||
           modifier == DRM_FORMAT_MOD_INVALID) {
          return NULL;

@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017, 2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -19,7 +19,9 @@
 # SOFTWARE.
 
 inc_st_omx = [inc_common]
-dep_st_omx = [dep_omx, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3]
+dep_st_omx = [
+  dep_omx, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_libdrm,
+]
 
 files_omx = files(
   'vid_dec_common.c',
@@ -57,7 +59,7 @@ elif with_gallium_omx == 'tizonia'
     inc_egl,
     inc_egl_dri2,
   ]
-  dep_st_omx = [dep_st_omx, dep_omx_other, dep_libdrm]
+  dep_st_omx = [dep_st_omx, dep_omx_other]
 endif
 
 libomx_st = static_library(

@@ -44,7 +44,8 @@ hgl_st_context(struct st_context_iface *stctxi)
 
 
 // Perform a safe void to hgl_buffer cast
-static inline struct hgl_buffer*
+//static inline struct hgl_buffer*
+struct hgl_buffer*
 hgl_st_framebuffer(struct st_framebuffer_iface *stfbi)
 {
 	struct hgl_buffer* buffer;
@@ -62,7 +63,9 @@ hgl_st_framebuffer_flush_front(struct st_context_iface *stctxi,
 	CALLED();
 
 	//struct hgl_context* context = hgl_st_context(stctxi);
-	//struct hgl_buffer* buffer = hgl_st_context(stfbi);
+	// struct hgl_buffer* buffer = hgl_st_context(stfbi);
+	struct hgl_buffer* buffer = hgl_st_framebuffer(stfbi);
+	//buffer->surface
 
 	#if 0
 	struct stw_st_framebuffer *stwfb = stw_st_framebuffer(stfb);
@@ -281,7 +284,8 @@ hgl_create_st_manager(struct hgl_context* context)
 	//manager->display = dpy;
 	manager->screen = context->screen;
 	manager->get_param = hgl_st_manager_get_param;
-
+	manager->st_manager_private = (void *)context;
+	
 	return manager;
 }
 

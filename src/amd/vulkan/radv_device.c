@@ -2673,7 +2673,8 @@ radv_get_preamble_cs(struct radv_queue *queue,
 		*initial_full_flush_preamble_cs = queue->initial_full_flush_preamble_cs;
 		*initial_preamble_cs = queue->initial_preamble_cs;
 		*continue_preamble_cs = queue->continue_preamble_cs;
-		if (!scratch_size && !compute_scratch_size && !esgs_ring_size && !gsvs_ring_size)
+		if (!scratch_size && !compute_scratch_size && !esgs_ring_size && !gsvs_ring_size &&
+		    !needs_tess_rings && !needs_sample_positions)
 			*continue_preamble_cs = NULL;
 		return VK_SUCCESS;
 	}

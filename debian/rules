@@ -105,6 +105,10 @@ else
   # arches where we have LLVM enabled and where the Vulkan loader is built.
   ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64))
 	VULKAN_DRIVERS += amd,
+  endif
+
+  # build vulkan overlay where Vulkan loader is available
+  ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32))
 	confflags_VULKAN += -Dvulkan-overlay-layer=true
   endif
 
@@ -117,12 +121,6 @@ else
   ifeq (,$(filter pkg.mesa.nolibva,$(DEB_BUILD_PROFILES)))
         confflags_GALLIUM += -Dgallium-va=true
   endif
-endif
-
-# Disable assembly usage on x32 otherwise Mesa defaults to x86_64 assembly
-# which doesn't work on x32 (see #758094)
-ifneq (,$(filter $(DEB_HOST_ARCH), x32))
-	confflags += -Dasm=false
 endif
 
 confflags_EGL = -Dplatforms="$(EGL_PLATFORMS)"

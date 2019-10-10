@@ -214,7 +214,7 @@ env.Prepend(CPPPATH = [
 envavx = env.Clone()
 
 envavx.Append(CPPDEFINES = ['KNOB_ARCH=KNOB_ARCH_AVX'])
-if env['platform'] == 'windows':
+if env['msvc']:
     envavx.Append(CCFLAGS = ['/arch:AVX'])
 else:
     envavx.Append(CCFLAGS = ['-mavx'])
@@ -230,7 +230,7 @@ env.Alias('swrAVX', swrAVX)
 envavx2 = env.Clone()
 
 envavx2.Append(CPPDEFINES = ['KNOB_ARCH=KNOB_ARCH_AVX2'])
-if env['platform'] == 'windows':
+if env['msvc']:
     envavx2.Append(CCFLAGS = ['/arch:AVX2'])
 else:
     envavx2.Append(CCFLAGS = ['-mavx2', '-mfma', '-mbmi2', '-mf16c'])

@@ -229,6 +229,26 @@ analyze_expression(const nir_alu_instr *instr, unsigned src,
    const struct nir_alu_instr *const alu =
        nir_instr_as_alu(instr->src[src].src.ssa->parent_instr);
 
+   const nir_alu_type use_type = nir_op_infos[instr->op].input_types[src];
+
+   /* Bail if the type of the instruction generating the value does not match
+    * the type the value will be interpreted as.  int/uint/bool can be
+    * reinterpreted trivially.  The most important cases are between float and
+    * non-float.
+    */
+   if (alu->op != nir_op_mov && alu->op != nir_op_bcsel) {
+      const nir_alu_type use_base_type =
+         nir_alu_type_get_base_type(use_type);
+      const nir_alu_type src_base_type =
+         nir_alu_type_get_base_type(nir_op_infos[alu->op].output_type);
+
+      if (use_base_type != src_base_type &&
+          (use_base_type == nir_type_float ||
+           src_base_type == nir_type_float)) {
+         return (struct ssa_result_range){unknown, false};
+      }
+   }
+
    struct hash_entry *he = _mesa_hash_table_search(ht, alu);
    if (he != NULL)
       return unpack_data(he->data);

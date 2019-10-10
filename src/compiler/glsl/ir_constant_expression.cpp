@@ -106,7 +106,7 @@ bitcast_i642d(int64_t i)
    return d;
 }
 
-static double
+static uint64_t
 bitcast_d2u64(double d)
 {
    assert(sizeof(double) == sizeof(uint64_t));
@@ -115,7 +115,7 @@ bitcast_d2u64(double d)
    return u;
 }
 
-static double
+static int64_t
 bitcast_d2i64(double d)
 {
    assert(sizeof(double) == sizeof(int64_t));

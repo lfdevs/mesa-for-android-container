@@ -1349,9 +1349,7 @@ glsl_type::get_function_instance(const glsl_type *return_type,
 const glsl_type *
 glsl_type::get_mul_type(const glsl_type *type_a, const glsl_type *type_b)
 {
-   if (type_a == type_b) {
-      return type_a;
-   } else if (type_a->is_matrix() && type_b->is_matrix()) {
+   if (type_a->is_matrix() && type_b->is_matrix()) {
       /* Matrix multiply.  The columns of A must match the rows of B.  Given
        * the other previously tested constraints, this means the vector type
        * of a row from A must be the same as the vector type of a column from
@@ -1371,6 +1369,8 @@ glsl_type::get_mul_type(const glsl_type *type_a, const glsl_type *type_b)
 
          return type;
       }
+   } else if (type_a == type_b) {
+      return type_a;
    } else if (type_a->is_matrix()) {
       /* A is a matrix and B is a column vector.  Columns of A must match
        * rows of B.  Given the other previously tested constraints, this

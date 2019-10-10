@@ -1,4 +1,4 @@
-# Copyright © 2017 Intel Corporation
+# Copyright © 2017, 2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -23,20 +23,29 @@ libxvmc_st = static_library(
   files('attributes.c', 'block.c', 'context.c', 'surface.c', 'subpicture.c'),
   c_args : [c_vis_args],
   include_directories : [inc_common],
-  dependencies : [dep_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3],
+  dependencies : [
+    dep_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_xv,
+    dep_libdrm,
+  ],
 )
 
-# These tests will not work without a working xvmc configuration. 
+# These tests will not work without a working xvmc configuration.
 if with_tools.contains('xvmc')
-  dep_xvmcw = cc.find_library('XvMCW')
+  # pkg-config was added in 1.0.12, so allow fallback
+  dep_xvmcw = dependency('xvmc-wrapper', required : false)
+  if not dep_xvmcw.found()
+    dep_xvmcw = cc.find_library('XvMCW')
+  endif
   dep_real_xvmc = dependency('xvmc')
+
   foreach x : ['context', 'surface', 'subpicture', 'blocks', 'rendering']
     _name = 'xvmc_@0@'.format(x)
     executable(
       _name,
       files('tests/test_@0@.c'.format(x), 'tests/testlib.c'),
       dependencies : [
-        dep_real_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_xvmcw,
+        dep_real_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3,
+        dep_xvmcw, dep_xv,
       ],
       install: true,
     )
@@ -46,7 +55,8 @@ if with_tools.contains('xvmc')
     'xvmc_bench',
     files('tests/xvmc_bench.c', 'tests/testlib.c'),
     dependencies : [
-      dep_real_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3, dep_xvmcw,
+      dep_real_xvmc, dep_x11_xcb, dep_xcb, dep_xcb_dri2, dep_xcb_dri3,
+      dep_xvmcw, dep_xv,
     ],
     install: true,
   )

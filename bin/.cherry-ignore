@@ -16,3 +16,9 @@ dcc0e23438f3e5929c2ef74d57e8207be25ecb41
 # This doesn't apply cleanly, and no one really cares about this file on stable
 # branches anyway.
 bcd9224728dcb8d8fe4bcddc4bd9b2c36fcfe9dd
+
+# De-nominated by its author due to alternate fix not being backported
+43041627445540afda1a05d11861935963660344
+
+# This is immediately reverted, so just don't apply
+19546108d3dd5541a189e36df4ea83b3f519e48f
