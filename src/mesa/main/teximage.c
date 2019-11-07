@@ -2979,17 +2979,18 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
 
    internalFormat = override_internal_format(internalFormat, width, height);
 
+   if (!no_error &&
+       /* target error checking */
+       !legal_teximage_target(ctx, dims, target)) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s%uD(target=%s)",
+                  func, dims, _mesa_enum_to_string(target));
+      return;
+   }
+
    if (!texObj)
       texObj = _mesa_get_current_tex_object(ctx, target);
 
    if (!no_error) {
-      /* target error checking */
-      if (!legal_teximage_target(ctx, dims, target)) {
-         _mesa_error(ctx, GL_INVALID_ENUM, "%s%uD(target=%s)",
-                     func, dims, _mesa_enum_to_string(target));
-         return;
-      }
-
       /* general error checking */
       if (compressed) {
          if (compressed_texture_error_check(ctx, dims, target, texObj,

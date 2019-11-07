@@ -118,11 +118,7 @@ extern void (*linker_foo(const unsigned char *procName))()
 #include "glapi/glapi.h"
 #include "glapi/glapitable.h"
 
-#if defined(USE_MGL_NAMESPACE)
-#define NAME(func)  mgl##func
-#else
 #define NAME(func)  gl##func
-#endif
 
 #define DISPATCH(FUNC, ARGS, MESSAGE)		\
    GET_DISPATCH()->FUNC ARGS

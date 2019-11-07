@@ -606,7 +606,7 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
          params.dst.surf.samples = params.stencil.surf.samples;
          params.dst.surf.logical_level0_px =
             params.stencil.surf.logical_level0_px;
-         params.dst.view = params.depth.view;
+         params.dst.view = params.stencil.view;
 
          params.num_samples = params.stencil.surf.samples;
 

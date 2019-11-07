@@ -111,7 +111,7 @@ static void validate_monotonic(int32_t **blocks)
 
 static void run_test()
 {
-   struct anv_instance instance;
+   struct anv_instance instance = { };
    struct anv_device device = {
       .instance = &instance,
    };

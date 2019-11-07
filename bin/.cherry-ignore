@@ -22,3 +22,8 @@ bcd9224728dcb8d8fe4bcddc4bd9b2c36fcfe9dd
 
 # This is immediately reverted, so just don't apply
 19546108d3dd5541a189e36df4ea83b3f519e48f
+
+# The authors requested these not be applied to 19.2
+869e32593a9096b845dd6106f8f86e1c41fac968
+a2c3c65a31de90fdb55f76f2894860dfbafe2043
+bb0c5c487e63e88acbb792f092dd8f392bad8540

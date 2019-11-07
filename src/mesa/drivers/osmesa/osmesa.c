@@ -1289,11 +1289,7 @@ OSMesaPostprocess(OSMesaContext osmesa, const char *filter,
 #include "glapi/glapi.h"
 #include "glapitable.h"
 
-#if defined(USE_MGL_NAMESPACE)
-#define NAME(func)  mgl##func
-#else
 #define NAME(func)  gl##func
-#endif
 
 #define DISPATCH(FUNC, ARGS, MESSAGE)		\
    GET_DISPATCH()->FUNC ARGS

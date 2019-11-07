@@ -35,7 +35,7 @@
 
 int main(int argc, char **argv)
 {
-   struct anv_instance instance;
+   struct anv_instance instance = { };
    struct anv_device device = {
       .instance = &instance,
    };

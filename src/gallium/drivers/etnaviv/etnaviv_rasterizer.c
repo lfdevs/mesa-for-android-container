@@ -56,7 +56,7 @@ etna_rasterizer_state_create(struct pipe_context *pctx,
    cs->PA_LINE_WIDTH = fui(so->line_width / 2.0f);
    cs->PA_POINT_SIZE = fui(so->point_size / 2.0f);
    cs->SE_DEPTH_SCALE = fui(so->offset_scale);
-   cs->SE_DEPTH_BIAS = fui(so->offset_units);
+   cs->SE_DEPTH_BIAS = fui((so->offset_units / 65535.0f) * 2.0f);
    cs->SE_CONFIG = COND(so->line_last_pixel, VIVS_SE_CONFIG_LAST_PIXEL_ENABLE);
    /* XXX anything else? */
    /* XXX bottom_edge_rule */

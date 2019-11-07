@@ -21,6 +21,7 @@
 
 """Update the main page, release notes, and calendar."""
 
+import argparse
 import calendar
 import datetime
 import pathlib
@@ -51,18 +52,8 @@ def calculate_previous_version(version: str, is_point: bool) -> str:
     return '.'.join(base)
 
 
-def get_version() -> str:
-    v = pathlib.Path(__file__).parent.parent / 'VERSION'
-    with v.open('rt') as f:
-        raw_version = f.read().strip()
-    return raw_version.split('-')[0]
-
-
-def is_point_release() -> bool:
-    v = pathlib.Path(__file__).parent.parent / 'VERSION'
-    with v.open('rt') as f:
-        raw_version = f.read().strip()
-    return '-rc' not in raw_version
+def is_point_release(version: str) -> bool:
+    return not version.endswith('.0')
 
 
 def update_index(is_point: bool, version: str, previous_version: str) -> None:
@@ -75,10 +66,11 @@ def update_index(is_point: bool, version: str, previous_version: str) -> None:
     date = datetime.date.today()
     month = calendar.month_name[date.month]
     header = etree.Element('h2')
-    header.text=f"{month} {date.day}, {date.year}"
+    header.text = f"{month} {date.day}, {date.year}"
 
     body = etree.Element('p')
-    a = etree.SubElement(body, 'a', attrib={'href': f'relnotes/{previous_version}'})
+    a = etree.SubElement(
+        body, 'a', attrib={'href': f'relnotes/{previous_version}.html'})
     a.text = f"Mesa {previous_version}"
     if is_point:
         a.tail = " is released. This is a bug fix release."
@@ -100,7 +92,7 @@ def update_release_notes(previous_version: str) -> None:
         tree = html.parse(f)
 
     li = etree.Element('li')
-    a = etree.SubElement(li, 'a', href=f'relnotes/{previous_version}')
+    a = etree.SubElement(li, 'a', href=f'relnotes/{previous_version}.html')
     a.text = f'{previous_version} release notes'
 
     ul = tree.xpath('.//ul')[0]
@@ -110,11 +102,14 @@ def update_release_notes(previous_version: str) -> None:
 
 
 def main() -> None:
-    is_point = is_point_release()
-    version = get_version()
-    previous_version = calculate_previous_version(version, is_point)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('version', help="The released version.")
+    args = parser.parse_args()
 
-    update_index(is_point, version, previous_version)
+    is_point = is_point_release(args.version)
+    previous_version = calculate_previous_version(args.version, is_point)
+
+    update_index(is_point, args.version, previous_version)
     update_release_notes(previous_version)
 
 

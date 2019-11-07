@@ -1978,7 +1978,7 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
       break;
 
    case nir_op_fdph_replicated:
-      try_immediate_source(instr, op, true, devinfo);
+      try_immediate_source(instr, op, false, devinfo);
       inst = emit(BRW_OPCODE_DPH, dst, op[0], op[1]);
       inst->saturate = instr->dest.saturate;
       break;

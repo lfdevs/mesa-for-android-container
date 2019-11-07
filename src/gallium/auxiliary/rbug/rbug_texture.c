@@ -34,6 +34,8 @@
  * Functions ending with _reply are replies to requests.
  */
 
+#include "c99_alloca.h"
+
 #include "rbug_internal.h"
 #include "rbug_texture.h"
 
@@ -283,9 +285,9 @@ int rbug_send_texture_info_reply(struct rbug_connection *__con,
                                  uint32_t format,
                                  uint32_t *width,
                                  uint32_t width_len,
-                                 uint16_t *height,
+                                 uint16_t *h16,
                                  uint32_t height_len,
-                                 uint16_t *depth,
+                                 uint16_t *d16,
                                  uint32_t depth_len,
                                  uint32_t blockw,
                                  uint32_t blockh,
@@ -299,6 +301,8 @@ int rbug_send_texture_info_reply(struct rbug_connection *__con,
 	uint32_t __pos = 0;
 	uint8_t *__data = NULL;
 	int __ret = 0;
+	uint32_t *height = alloca(sizeof(uint32_t) * height_len);
+	uint32_t *depth = alloca(sizeof(uint32_t) * height_len);
 
 	LEN(8); /* header */
 	LEN(4); /* serial */
@@ -320,6 +324,11 @@ int rbug_send_texture_info_reply(struct rbug_connection *__con,
 	__data = (uint8_t*)MALLOC(__len);
 	if (!__data)
 		return -ENOMEM;
+
+	for (int i = 0; i < height_len; i++)
+		height[i] = h16[i];
+	for (int i = 0; i < depth_len; i++)
+		depth[i] = d16[i];
 
 	WRITE(4, int32_t, ((int32_t)RBUG_OP_TEXTURE_INFO_REPLY));
 	WRITE(4, uint32_t, ((uint32_t)(__len / 4)));

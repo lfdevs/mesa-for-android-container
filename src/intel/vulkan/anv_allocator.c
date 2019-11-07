@@ -532,9 +532,11 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
    if (use_softpin) {
       gem_handle = anv_gem_create(pool->device, newbo_size);
       map = anv_gem_mmap(pool->device, gem_handle, 0, newbo_size, 0);
-      if (map == MAP_FAILED)
+      if (map == MAP_FAILED) {
+         anv_gem_close(pool->device, gem_handle);
          return vk_errorf(pool->device->instance, pool->device,
                           VK_ERROR_MEMORY_MAP_FAILED, "gem mmap failed: %m");
+      }
       assert(center_bo_offset == 0);
    } else {
       /* Just leak the old map until we destroy the pool.  We can't munmap it

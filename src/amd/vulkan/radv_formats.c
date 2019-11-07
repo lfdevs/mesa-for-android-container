@@ -1305,6 +1305,10 @@ get_external_image_format_properties(const VkPhysicalDeviceImageFormatInfo2 *pIm
 	VkExternalMemoryFeatureFlagBits flags = 0;
 	VkExternalMemoryHandleTypeFlags export_flags = 0;
 	VkExternalMemoryHandleTypeFlags compat_flags = 0;
+
+	if (pImageFormatInfo->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
+		return;
+
 	switch (handleType) {
 	case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT:
 	case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
@@ -1381,14 +1385,9 @@ VkResult radv_GetPhysicalDeviceImageFormatProperties2(
 	 *    present and VkExternalImageFormatProperties will be ignored.
 	 */
 	if (external_info && external_info->handleType != 0) {
-		switch (external_info->handleType) {
-		case VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT:
-		case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
-		case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
-			get_external_image_format_properties(base_info, external_info->handleType,
-			                                     &external_props->externalMemoryProperties);
-			break;
-		default:
+		get_external_image_format_properties(base_info, external_info->handleType,
+		                                     &external_props->externalMemoryProperties);
+		if (!external_props->externalMemoryProperties.externalMemoryFeatures) {
 			/* From the Vulkan 1.0.97 spec:
 			 *
 			 *    If handleType is not compatible with the [parameters] specified

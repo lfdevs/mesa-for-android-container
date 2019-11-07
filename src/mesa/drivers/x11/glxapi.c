@@ -59,11 +59,7 @@ struct display_dispatch {
 
 #define KEYWORD1 PUBLIC
 
-#if defined(USE_MGL_NAMESPACE)
-#define NAME(func)  mgl##func
-#else
 #define NAME(func)  gl##func
-#endif
 
 #define DISPATCH(FUNC, ARGS, MESSAGE)		\
    GET_DISPATCH()->FUNC ARGS

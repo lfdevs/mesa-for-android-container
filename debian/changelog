@@ -1,3 +1,14 @@
+mesa (19.2.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * create-gles-pc-files-with-old-glvnd.diff: Drop the revert with a
+    proposed patch to fix creating gles pc files with old glvnd.
+  * rules: GLESv2 libs aren't built anymore, drop removing the libs.
+  * mesa-common-dev: Drop mangled GL/GLX headers, they're not generated
+    anymore.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 07 Nov 2019 14:01:26 +0200
+
 mesa (19.2.1-1) unstable; urgency=medium
 
   [ Timo Aaltonen ]

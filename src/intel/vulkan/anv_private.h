@@ -3276,6 +3276,8 @@ anv_image_get_compression_state_addr(const struct anv_device *device,
    }
    addr.offset += array_layer * 4;
 
+   assert(addr.offset <
+          image->planes[plane].address.offset + image->planes[plane].size);
    return addr;
 }
 

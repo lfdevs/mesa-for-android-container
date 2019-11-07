@@ -161,12 +161,9 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 {
 	int i;
 
-	/* Since amdgpu version 3.6.0, CONTEXT_CONTROL is emitted by the kernel */
-	if (physical_device->rad_info.drm_minor < 6) {
-		radeon_emit(cs, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-		radeon_emit(cs, CONTEXT_CONTROL_LOAD_ENABLE(1));
-		radeon_emit(cs, CONTEXT_CONTROL_SHADOW_ENABLE(1));
-	}
+	radeon_emit(cs, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
+	radeon_emit(cs, CONTEXT_CONTROL_LOAD_ENABLE(1));
+	radeon_emit(cs, CONTEXT_CONTROL_SHADOW_ENABLE(1));
 
 	if (physical_device->has_clear_state) {
 		radeon_emit(cs, PKT3(PKT3_CLEAR_STATE, 0, 0));

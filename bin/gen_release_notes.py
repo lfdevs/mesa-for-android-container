@@ -25,6 +25,7 @@ import asyncio
 import datetime
 import os
 import pathlib
+import sys
 import textwrap
 import typing
 import urllib.parse
@@ -38,6 +39,9 @@ CURRENT_GL_VERSION = '4.5'
 CURRENT_VK_VERSION = '1.1'
 
 TEMPLATE = Template(textwrap.dedent("""\
+    <%!
+        import html
+    %>
     <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
     <html lang="en">
     <head>
@@ -57,7 +61,7 @@ TEMPLATE = Template(textwrap.dedent("""\
     <h1>Mesa ${next_version} Release Notes / ${today}</h1>
 
     <p>
-    %if bugfix:
+    %if not bugfix:
         Mesa ${next_version} is a new development release. People who are concerned
         with stability and reliability should stick with a previous release or
         wait for Mesa ${version[:-1]}1.
@@ -89,7 +93,7 @@ TEMPLATE = Template(textwrap.dedent("""\
 
     <ul>
     %for f in features:
-        <li>${f}</li>
+        <li>${html.escape(f)}</li>
     %endfor
     </ul>
 
@@ -97,7 +101,7 @@ TEMPLATE = Template(textwrap.dedent("""\
 
     <ul>
     %for b in bugs:
-        <li>${b}</li>
+        <li>${html.escape(b)}</li>
     %endfor
     </ul>
 
@@ -106,9 +110,9 @@ TEMPLATE = Template(textwrap.dedent("""\
     <ul>
     %for c, author in changes:
       %if author:
-        <p>${c}</p>
+        <p>${html.escape(c)}</p>
       %else:
-        <li>${c}</li>
+        <li>${html.escape(c)}</li>
       %endif
     %endfor
     </ul>
@@ -149,7 +153,7 @@ async def gather_bugs(version: str) -> typing.List[str]:
             # This means we have a bug in the form "Closes: https://..."
             issues.append(os.path.basename(urllib.parse.urlparse(bug).path))
         else:
-            issues.append(bug)
+            issues.append(bug.lstrip('#'))
 
     loop = asyncio.get_event_loop()
     async with aiohttp.ClientSession(loop=loop) as session:
@@ -218,12 +222,16 @@ def calculate_previous_version(version: str, is_point: bool) -> str:
     return '.'.join(base)
 
 
-def get_features() -> typing.Generator[str, None, None]:
+def get_features(is_point_release: bool) -> typing.Generator[str, None, None]:
     p = pathlib.Path(__file__).parent.parent / 'docs' / 'relnotes' / 'new_features.txt'
     if p.exists():
+        if is_point_release:
+            print("WARNING: new features being introduced in a point release", file=sys.stderr)
         with p.open('rt') as f:
             for line in f:
                 yield line
+    else:
+        yield "None"
 
 
 async def main() -> None:
@@ -248,7 +256,7 @@ async def main() -> None:
                 bugfix=is_point_release,
                 bugs=bugs,
                 changes=walk_shortlog(shortlog),
-                features=get_features(),
+                features=get_features(is_point_release),
                 gl_version=CURRENT_GL_VERSION,
                 next_version=next_version,
                 today=datetime.date.today(),

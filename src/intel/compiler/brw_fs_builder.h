@@ -731,8 +731,7 @@ namespace brw {
       src_reg
       fix_byte_src(const src_reg &src) const
       {
-         if ((shader->devinfo->gen < 11 && !shader->devinfo->is_geminilake) ||
-             type_sz(src.type) != 1)
+         if (shader->devinfo->gen < 11 || type_sz(src.type) != 1)
             return src;
 
          dst_reg temp = vgrf(src.type == BRW_REGISTER_TYPE_UB ?

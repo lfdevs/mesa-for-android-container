@@ -457,7 +457,7 @@ v3d_read_and_accumulate_primitive_counters(struct v3d_context *v3d)
         perf_debug("stalling on TF counts readback");
         struct v3d_resource *rsc = v3d_resource(v3d->prim_counts);
         if (v3d_bo_wait(rsc->bo, PIPE_TIMEOUT_INFINITE, "prim-counts")) {
-                uint32_t *map = v3d_bo_map(rsc->bo);
+                uint32_t *map = v3d_bo_map(rsc->bo) + v3d->prim_counts_offset;
                 v3d->tf_prims_generated += map[V3D_PRIM_COUNTS_TF_WRITTEN];
         }
 }

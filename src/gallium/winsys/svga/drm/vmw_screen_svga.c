@@ -80,8 +80,11 @@ vmw_svga_winsys_buffer_create(struct svga_winsys_screen *sws,
       provider = vws->pools.query_fenced;
    } else if (usage == SVGA_BUFFER_USAGE_SHADER) {
       provider = vws->pools.mob_shader_slab_fenced;
-   } else
+   } else {
+      if (size > VMW_GMR_POOL_SIZE)
+         return NULL;
       provider = vws->pools.gmr_fenced;
+   }
 
    assert(provider);
    buffer = provider->create_buffer(provider, size, &desc.pb_desc);

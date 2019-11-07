@@ -1587,6 +1587,12 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
       if (insn.getOpcode() == TGSI_OPCODE_STORE &&
           dst.getFile() != TGSI_FILE_MEMORY) {
          info->io.globalAccess |= 0x2;
+
+         if (dst.getFile() == TGSI_FILE_INPUT) {
+            // TODO: Handle indirect somehow?
+            const int i = dst.getIndex(0);
+            info->in[i].mask |= 1;
+         }
       }
 
       if (dst.getFile() == TGSI_FILE_OUTPUT) {

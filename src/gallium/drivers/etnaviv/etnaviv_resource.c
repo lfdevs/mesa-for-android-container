@@ -402,7 +402,7 @@ enum modifier_priority {
    MODIFIER_PRIORITY_SUPER_TILED,
 };
 
-const uint64_t priority_to_modifier[] = {
+static const uint64_t priority_to_modifier[] = {
    [MODIFIER_PRIORITY_INVALID] = DRM_FORMAT_MOD_INVALID,
    [MODIFIER_PRIORITY_LINEAR] = DRM_FORMAT_MOD_LINEAR,
    [MODIFIER_PRIORITY_SPLIT_TILED] = DRM_FORMAT_MOD_VIVANTE_SPLIT_TILED,

@@ -32,7 +32,6 @@
 #include "drm-uapi/drm_fourcc.h"
 
 #include "anv_private.h"
-#include "util/strtod.h"
 #include "util/debug.h"
 #include "util/build_id.h"
 #include "util/disk_cache.h"
@@ -772,7 +771,6 @@ VkResult anv_CreateInstance(
    instance->pipeline_cache_enabled =
       env_var_as_boolean("ANV_ENABLE_PIPELINE_CACHE", true);
 
-   _mesa_locale_init();
    glsl_type_singleton_init_or_ref();
 
    VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
@@ -811,7 +809,6 @@ void anv_DestroyInstance(
    vk_debug_report_instance_destroy(&instance->debug_report_callbacks);
 
    glsl_type_singleton_decref();
-   _mesa_locale_fini();
 
    driDestroyOptionCache(&instance->dri_options);
    driDestroyOptionInfo(&instance->available_dri_options);
@@ -2392,7 +2389,7 @@ VkResult anv_CreateDevice(
    if (physical_device->use_softpin) {
       if (pthread_mutex_init(&device->vma_mutex, NULL) != 0) {
          result = vk_error(VK_ERROR_INITIALIZATION_FAILED);
-         goto fail_fd;
+         goto fail_context_id;
       }
 
       /* keep the page with address zero out of the allocator */
@@ -2421,7 +2418,7 @@ VkResult anv_CreateDevice(
                                           vk_priority_to_gen(priority));
       if (err != 0 && priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT) {
          result = vk_error(VK_ERROR_NOT_PERMITTED_EXT);
-         goto fail_fd;
+         goto fail_vmas;
       }
    }
 
@@ -2585,6 +2582,11 @@ VkResult anv_CreateDevice(
    pthread_cond_destroy(&device->queue_submit);
  fail_mutex:
    pthread_mutex_destroy(&device->mutex);
+ fail_vmas:
+   if (physical_device->use_softpin) {
+      util_vma_heap_finish(&device->vma_hi);
+      util_vma_heap_finish(&device->vma_lo);
+   }
  fail_context_id:
    anv_gem_destroy_context(device, device->context_id);
  fail_fd:
@@ -2641,6 +2643,11 @@ void anv_DestroyDevice(
    anv_bo_cache_finish(&device->bo_cache);
 
    anv_bo_pool_finish(&device->batch_bo_pool);
+
+   if (physical_device->use_softpin) {
+      util_vma_heap_finish(&device->vma_hi);
+      util_vma_heap_finish(&device->vma_lo);
+   }
 
    pthread_cond_destroy(&device->queue_submit);
    pthread_mutex_destroy(&device->mutex);

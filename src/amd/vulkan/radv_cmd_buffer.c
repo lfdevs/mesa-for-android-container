@@ -998,6 +998,9 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 	unsigned sx_blend_opt_epsilon = 0;
 	unsigned sx_blend_opt_control = 0;
 
+	if (!cmd_buffer->state.attachments || !subpass)
+		return;
+
 	for (unsigned i = 0; i < subpass->color_count; ++i) {
 		if (subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED) {
 			sx_blend_opt_control |= S_02875C_MRT0_COLOR_OPT_DISABLE(1) << (i * 4);
@@ -1546,9 +1549,19 @@ radv_update_bound_fast_clear_ds(struct radv_cmd_buffer *cmd_buffer,
 	if (cmd_buffer->state.attachments[att_idx].iview->image != image)
 		return;
 
-	radeon_set_context_reg_seq(cs, R_028028_DB_STENCIL_CLEAR, 2);
-	radeon_emit(cs, ds_clear_value.stencil);
-	radeon_emit(cs, fui(ds_clear_value.depth));
+	if (aspects == (VK_IMAGE_ASPECT_DEPTH_BIT |
+			VK_IMAGE_ASPECT_STENCIL_BIT)) {
+		radeon_set_context_reg_seq(cs, R_028028_DB_STENCIL_CLEAR, 2);
+		radeon_emit(cs, ds_clear_value.stencil);
+		radeon_emit(cs, fui(ds_clear_value.depth));
+	} else if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT) {
+		radeon_set_context_reg_seq(cs, R_02802C_DB_DEPTH_CLEAR, 1);
+		radeon_emit(cs, fui(ds_clear_value.depth));
+	} else {
+		assert(aspects == VK_IMAGE_ASPECT_STENCIL_BIT);
+		radeon_set_context_reg_seq(cs, R_028028_DB_STENCIL_CLEAR, 1);
+		radeon_emit(cs, ds_clear_value.stencil);
+	}
 
 	/* Update the ZRANGE_PRECISION value for the TC-compat bug. This is
 	 * only needed when clearing Z to 0.0.
@@ -2268,14 +2281,15 @@ radv_flush_constants(struct radv_cmd_buffer *cmd_buffer,
 		return;
 
 	radv_foreach_stage(stage, stages) {
-		if (!pipeline->shaders[stage])
+		shader = radv_get_shader(pipeline, stage);
+		if (!shader)
 			continue;
 
-		need_push_constants |= pipeline->shaders[stage]->info.info.loads_push_constants;
-		need_push_constants |= pipeline->shaders[stage]->info.info.loads_dynamic_offsets;
+		need_push_constants |= shader->info.info.loads_push_constants;
+		need_push_constants |= shader->info.info.loads_dynamic_offsets;
 
-		uint8_t base = pipeline->shaders[stage]->info.info.base_inline_push_consts;
-		uint8_t count = pipeline->shaders[stage]->info.info.num_inline_push_consts;
+		uint8_t base = shader->info.info.base_inline_push_consts;
+		uint8_t count = shader->info.info.num_inline_push_consts;
 
 		radv_emit_inline_push_consts(cmd_buffer, pipeline, stage,
 					     AC_UD_INLINE_PUSH_CONSTANTS,

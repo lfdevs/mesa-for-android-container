@@ -620,7 +620,7 @@ static unsigned gfx9_border_color_swizzle(const enum vk_swizzle swizzle[4])
 	return bc_swizzle;
 }
 
-static bool vi_alpha_is_on_msb(struct radv_device *device, VkFormat format)
+bool vi_alpha_is_on_msb(struct radv_device *device, VkFormat format)
 {
 	const struct vk_format_description *desc = vk_format_description(format);
 
@@ -694,7 +694,7 @@ gfx10_make_texture_descriptor(struct radv_device *device,
 	 */
 	state[4] = S_00A010_DEPTH(type == V_008F1C_SQ_RSRC_IMG_3D ? depth - 1 : last_layer) |
 		   S_00A010_BASE_ARRAY(first_layer);
-	state[5] = S_00A014_ARRAY_PITCH(!!(type == V_008F1C_SQ_RSRC_IMG_3D)) |
+	state[5] = S_00A014_ARRAY_PITCH(0) |
 		   S_00A014_MAX_MIP(image->info.samples > 1 ?
 				    util_logbase2(image->info.samples) :
 				    image->info.levels - 1) |

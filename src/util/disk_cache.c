@@ -903,7 +903,17 @@ cache_put(void *job, int thread_index)
     * open with the flock held. So just let that file be responsible
     * for writing the file.
     */
+#ifdef HAVE_FLOCK
    err = flock(fd, LOCK_EX | LOCK_NB);
+#else
+   struct flock lock = {
+      .l_start = 0,
+      .l_len = 0, /* entire file */
+      .l_type = F_WRLCK,
+      .l_whence = SEEK_SET
+   };
+   err = fcntl(fd, F_SETLK, &lock);
+#endif
    if (err == -1)
       goto done;
 

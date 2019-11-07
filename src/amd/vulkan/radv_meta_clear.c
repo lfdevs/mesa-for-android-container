@@ -1444,7 +1444,9 @@ enum {
 	RADV_DCC_CLEAR_SECONDARY_1 = 0x40404040U
 };
 
-static void vi_get_fast_clear_parameters(VkFormat format,
+static void vi_get_fast_clear_parameters(struct radv_device *device,
+					 VkFormat image_format,
+					 VkFormat view_format,
 					 const VkClearColorValue *clear_value,
 					 uint32_t* reset_value,
 					 bool *can_avoid_fast_clear_elim)
@@ -1453,18 +1455,20 @@ static void vi_get_fast_clear_parameters(VkFormat format,
 	int extra_channel;
 	bool main_value = false;
 	bool extra_value = false;
+	bool has_color = false;
+	bool has_alpha = false;
 	int i;
 	*can_avoid_fast_clear_elim = false;
 
 	*reset_value = RADV_DCC_CLEAR_REG;
 
-	const struct vk_format_description *desc = vk_format_description(format);
-	if (format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
-	    format == VK_FORMAT_R5G6B5_UNORM_PACK16 ||
-	    format == VK_FORMAT_B5G6R5_UNORM_PACK16)
+	const struct vk_format_description *desc = vk_format_description(view_format);
+	if (view_format == VK_FORMAT_B10G11R11_UFLOAT_PACK32 ||
+	    view_format == VK_FORMAT_R5G6B5_UNORM_PACK16 ||
+	    view_format == VK_FORMAT_B5G6R5_UNORM_PACK16)
 		extra_channel = -1;
 	else if (desc->layout == VK_FORMAT_LAYOUT_PLAIN) {
-		if (radv_translate_colorswap(format, false) <= 1)
+		if (vi_alpha_is_on_msb(device, view_format))
 			extra_channel = desc->nr_channels - 1;
 		else
 			extra_channel = 0;
@@ -1499,11 +1503,20 @@ static void vi_get_fast_clear_parameters(VkFormat format,
 				return;
 		}
 
-		if (index == extra_channel)
+		if (index == extra_channel) {
 			extra_value = values[i];
-		else
+			has_alpha = true;
+		} else {
 			main_value = values[i];
+			has_color = true;
+		}
 	}
+
+	/* If alpha isn't present, make it the same as color, and vice versa. */
+	if (!has_alpha)
+		extra_value = main_value;
+	else if (!has_color)
+		main_value = extra_value;
 
 	for (int i = 0; i < 4; ++i)
 		if (values[i] != main_value &&
@@ -1564,7 +1577,9 @@ radv_can_fast_clear_color(struct radv_cmd_buffer *cmd_buffer,
 		bool can_avoid_fast_clear_elim;
 		uint32_t reset_value;
 
-		vi_get_fast_clear_parameters(iview->vk_format,
+		vi_get_fast_clear_parameters(cmd_buffer->device,
+					     iview->image->vk_format,
+					     iview->vk_format,
 					     &clear_value, &reset_value,
 					     &can_avoid_fast_clear_elim);
 
@@ -1636,7 +1651,9 @@ radv_fast_clear_color(struct radv_cmd_buffer *cmd_buffer,
 		bool can_avoid_fast_clear_elim;
 		bool need_decompress_pass = false;
 
-		vi_get_fast_clear_parameters(iview->vk_format,
+		vi_get_fast_clear_parameters(cmd_buffer->device,
+					     iview->image->vk_format,
+					     iview->vk_format,
 					     &clear_value, &reset_value,
 					     &can_avoid_fast_clear_elim);
 

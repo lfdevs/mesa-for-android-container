@@ -206,7 +206,7 @@ TEST(timespec_test, timespec_from_nsec)
 
    timespec_from_nsec(&a, UINT64_MAX);
    EXPECT_EQ(a.tv_nsec, UINT64_MAX % NSEC_PER_SEC);
-   EXPECT_EQ(a.tv_sec, UINT64_MAX / NSEC_PER_SEC);
+   EXPECT_EQ(a.tv_sec, (time_t)(UINT64_MAX / NSEC_PER_SEC));
 }
 
 TEST(timespec_test, timespec_from_usec)

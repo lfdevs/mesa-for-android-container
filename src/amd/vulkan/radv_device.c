@@ -34,7 +34,6 @@
 #include "radv_shader.h"
 #include "radv_cs.h"
 #include "util/disk_cache.h"
-#include "util/strtod.h"
 #include "vk_util.h"
 #include <xf86drm.h>
 #include <amdgpu.h>
@@ -686,7 +685,6 @@ VkResult radv_CreateInstance(
 					 VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 	instance->engineVersion = engine_version;
 
-	_mesa_locale_init();
 	glsl_type_singleton_init_or_ref();
 
 	VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
@@ -717,7 +715,6 @@ void radv_DestroyInstance(
 	VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
 	glsl_type_singleton_decref();
-	_mesa_locale_fini();
 
 	driDestroyOptionCache(&instance->dri_options);
 	driDestroyOptionInfo(&instance->available_dri_options);
@@ -1170,7 +1167,7 @@ void radv_GetPhysicalDeviceProperties(
 		.viewportBoundsRange                      = { INT16_MIN, INT16_MAX },
 		.viewportSubPixelBits                     = 8,
 		.minMemoryMapAlignment                    = 4096, /* A page */
-		.minTexelBufferOffsetAlignment            = 1,
+		.minTexelBufferOffsetAlignment            = 4,
 		.minUniformBufferOffsetAlignment          = 4,
 		.minStorageBufferOffsetAlignment          = 4,
 		.minTexelOffset                           = -32,
@@ -2057,12 +2054,9 @@ VkResult radv_CreateDevice(
 		device->empty_cs[family] = device->ws->cs_create(device->ws, family);
 		switch (family) {
 		case RADV_QUEUE_GENERAL:
-		      /* Since amdgpu version 3.6.0, CONTEXT_CONTROL is emitted by the kernel */
-			if (device->physical_device->rad_info.drm_minor < 6) {
-				radeon_emit(device->empty_cs[family], PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-				radeon_emit(device->empty_cs[family], CONTEXT_CONTROL_LOAD_ENABLE(1));
-				radeon_emit(device->empty_cs[family], CONTEXT_CONTROL_SHADOW_ENABLE(1));
-			}
+			radeon_emit(device->empty_cs[family], PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
+			radeon_emit(device->empty_cs[family], CONTEXT_CONTROL_LOAD_ENABLE(1));
+			radeon_emit(device->empty_cs[family], CONTEXT_CONTROL_SHADOW_ENABLE(1));
 			break;
 		case RADV_QUEUE_COMPUTE:
 			radeon_emit(device->empty_cs[family], PKT3(PKT3_NOP, 0, 0));

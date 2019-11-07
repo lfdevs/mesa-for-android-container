@@ -231,8 +231,6 @@ droid_window_dequeue_buffer(struct dri2_egl_surface *dri2_surf)
         close(fence_fd);
    }
 
-   dri2_surf->buffer->common.incRef(&dri2_surf->buffer->common);
-
    /* Record all the buffers created by ANativeWindow and update back buffer
     * for updating buffer's age in swap_buffers.
     */
@@ -289,7 +287,6 @@ droid_window_enqueue_buffer(_EGLDisplay *disp, struct dri2_egl_surface *dri2_sur
    dri2_surf->window->queueBuffer(dri2_surf->window, dri2_surf->buffer,
                                   fence_fd);
 
-   dri2_surf->buffer->common.decRef(&dri2_surf->buffer->common);
    dri2_surf->buffer = NULL;
    dri2_surf->back = NULL;
 
@@ -312,6 +309,7 @@ droid_window_cancel_buffer(struct dri2_egl_surface *dri2_surf)
    dri2_surf->out_fence_fd = -1;
    ret = dri2_surf->window->cancelBuffer(dri2_surf->window,
                                          dri2_surf->buffer, fence_fd);
+   dri2_surf->buffer = NULL;
    if (ret < 0) {
       _eglLog(_EGL_WARNING, "ANativeWindow::cancelBuffer failed");
       dri2_surf->base.Lost = EGL_TRUE;

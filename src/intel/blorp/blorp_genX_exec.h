@@ -1111,11 +1111,6 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
       ds.DepthBufferWriteEnable = true;
 
       switch (params->hiz_op) {
-      case ISL_AUX_OP_NONE:
-         ds.DepthTestEnable = true;
-         ds.DepthTestFunction = COMPAREFUNCTION_ALWAYS;
-         break;
-
       /* See the following sections of the Sandy Bridge PRM, Volume 2, Part1:
        *   - 7.5.3.1 Depth Buffer Clear
        *   - 7.5.3.2 Depth Buffer Resolve
@@ -1126,6 +1121,7 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
          ds.DepthTestFunction = COMPAREFUNCTION_NEVER;
          break;
 
+      case ISL_AUX_OP_NONE:
       case ISL_AUX_OP_FAST_CLEAR:
       case ISL_AUX_OP_AMBIGUATE:
          ds.DepthTestEnable = false;

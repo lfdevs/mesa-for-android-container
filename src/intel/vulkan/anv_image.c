@@ -468,9 +468,6 @@ make_surface(const struct anv_device *dev,
                return VK_SUCCESS;
             }
 
-            add_surface(image, &image->planes[plane].aux_surface, plane);
-            add_aux_state_tracking_buffer(image, plane, dev);
-
             /* For images created without MUTABLE_FORMAT_BIT set, we know that
              * they will always be used with the original format.  In
              * particular, they will always be used with a format that
@@ -483,6 +480,9 @@ make_surface(const struct anv_device *dev,
                 image->ccs_e_compatible) {
                image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_E;
             }
+
+            add_surface(image, &image->planes[plane].aux_surface, plane);
+            add_aux_state_tracking_buffer(image, plane, dev);
          }
       }
    } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && image->samples > 1) {

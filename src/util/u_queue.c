@@ -637,6 +637,13 @@ util_queue_finish(struct util_queue *queue)
     * wait for it exclusively.
     */
    mtx_lock(&queue->finish_lock);
+
+   /* The number of threads can be changed to 0, e.g. by the atexit handler. */
+   if (!queue->num_threads) {
+      mtx_unlock(&queue->finish_lock);
+      return;
+   }
+
    fences = malloc(queue->num_threads * sizeof(*fences));
    util_barrier_init(&barrier, queue->num_threads);
 

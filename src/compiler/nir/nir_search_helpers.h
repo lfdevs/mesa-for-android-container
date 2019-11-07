@@ -203,7 +203,7 @@ is_fsign(nir_alu_instr *instr, unsigned src,
    if (src_alu->op == nir_op_fneg)
       src_alu = nir_src_as_alu_instr(src_alu->src[0].src);
 
-   return src_alu->op == nir_op_fsign;
+   return src_alu != NULL && src_alu->op == nir_op_fsign;
 }
 
 static inline bool

@@ -117,7 +117,7 @@ with_any_opengl = with_opengl or with_gles1 or with_gles2
 # Only build shared_glapi if at least one OpenGL API is enabled
 with_shared_glapi = get_option('shared-glapi') and with_any_opengl
 
-system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'gnu/kfreebsd', 'dragonfly', 'linux'].contains(host_machine.system())
+system_has_kms_drm = ['openbsd', 'netbsd', 'freebsd', 'gnu/kfreebsd', 'dragonfly', 'linux', 'sunos'].contains(host_machine.system())
 
 dri_drivers = get_option('dri-drivers')
 if dri_drivers.contains('auto')
@@ -858,6 +858,8 @@ endif
 # TODO: this is very incomplete
 if ['linux', 'cygwin', 'gnu', 'gnu/kfreebsd'].contains(host_machine.system())
   pre_args += '-D_GNU_SOURCE'
+elif host_machine.system() == 'sunos'
+  pre_args += '-D__EXTENSIONS__'
 endif
 
 # Check for generic C arguments
@@ -1034,7 +1036,7 @@ foreach h : ['xlocale.h', 'sys/sysctl.h', 'linux/futex.h', 'endian.h', 'dlfcn.h'
   endif
 endforeach
 
-foreach f : ['strtof', 'mkostemp', 'posix_memalign', 'timespec_get', 'memfd_create', 'random_r']
+foreach f : ['strtof', 'mkostemp', 'posix_memalign', 'timespec_get', 'memfd_create', 'random_r', 'flock']
   if cc.has_function(f)
     pre_args += '-DHAVE_@0@'.format(f.to_upper())
   endif
@@ -1300,13 +1302,12 @@ else
 endif
 
 dep_glvnd = null_dep
-glvnd_missing_pc_files = false
+glvnd_has_headers_and_pc_files = false
 if with_glvnd
   dep_glvnd = dependency('libglvnd', version : '>= 0.2.0')
-  # GLVND until commit 0dfaea2bcb7cdcc785f9 ("Add pkg-config files for EGL, GL,
-  # GLES, and GLX.") was missing its pkg-config files, forcing every vendor to
-  # provide them and the distro maintainers to resolve the conflict.
-  glvnd_missing_pc_files = dep_glvnd.version().version_compare('< 1.2.0')
+  # GLVND before 1.2 was missing its pkg-config and header files, forcing every
+  # vendor to provide them and the distro maintainers to resolve the conflict.
+  glvnd_has_headers_and_pc_files = dep_glvnd.version().version_compare('>= 1.2.0')
   pre_args += '-DUSE_LIBGLVND=1'
 endif
 
