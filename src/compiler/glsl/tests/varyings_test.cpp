@@ -51,8 +51,6 @@ get_matching_input(void *mem_ctx,
 
 class link_varyings : public ::testing::Test {
 public:
-   link_varyings();
-
    virtual void SetUp();
    virtual void TearDown();
 
@@ -73,8 +71,23 @@ public:
    ir_variable *junk[VARYING_SLOT_TESS_MAX];
 };
 
-link_varyings::link_varyings()
+void
+link_varyings::SetUp()
 {
+   glsl_type_singleton_init_or_ref();
+
+   this->mem_ctx = ralloc_context(NULL);
+   this->ir.make_empty();
+
+   this->consumer_inputs =
+         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                 _mesa_key_string_equal);
+
+   this->consumer_interface_inputs =
+         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+                                 _mesa_key_string_equal);
+
+   /* Needs to happen after glsl type initialization */
    static const glsl_struct_field f[] = {
       glsl_struct_field(glsl_type::vec(4), "v")
    };
@@ -88,21 +101,6 @@ link_varyings::link_varyings()
 }
 
 void
-link_varyings::SetUp()
-{
-   this->mem_ctx = ralloc_context(NULL);
-   this->ir.make_empty();
-
-   this->consumer_inputs =
-         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
-                                 _mesa_key_string_equal);
-
-   this->consumer_interface_inputs =
-         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
-                                 _mesa_key_string_equal);
-}
-
-void
 link_varyings::TearDown()
 {
    ralloc_free(this->mem_ctx);
@@ -112,6 +110,8 @@ link_varyings::TearDown()
    this->consumer_inputs = NULL;
    _mesa_hash_table_destroy(this->consumer_interface_inputs, NULL);
    this->consumer_interface_inputs = NULL;
+
+   glsl_type_singleton_decref();
 }
 
 TEST_F(link_varyings, single_simple_input)

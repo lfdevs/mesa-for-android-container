@@ -109,6 +109,11 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
       db.SurfaceQPitch =
          isl_surf_get_array_pitch_el_rows(info->depth_surf) >> 2;
 #endif
+
+#if GEN_GEN >= 12
+      db.ControlSurfaceEnable = db.DepthBufferCompressionEnable =
+         info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS;
+#endif
    }
 
 #if GEN_GEN == 5 || GEN_GEN == 6
@@ -130,10 +135,21 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #endif
 
    if (info->stencil_surf) {
-#if GEN_GEN >= 7
+#if GEN_GEN >= 7 && GEN_GEN < 12
       db.StencilWriteEnable = true;
 #endif
-#if GEN_GEN >= 8 || GEN_IS_HASWELL
+#if GEN_GEN >= 12
+      sb.StencilWriteEnable = true;
+      sb.SurfaceType = SURFTYPE_2D;
+      sb.Width = info->stencil_surf->logical_level0_px.width - 1;
+      sb.Height = info->stencil_surf->logical_level0_px.height - 1;
+      sb.Depth = sb.RenderTargetViewExtent = info->view->array_len - 1;
+      sb.SurfLOD = info->view->base_level;
+      sb.MinimumArrayElement = info->view->base_array_layer;
+      sb.StencilCompressionEnable =
+         info->stencil_aux_usage == ISL_AUX_USAGE_CCS_E;
+      sb.ControlSurfaceEnable = sb.StencilCompressionEnable;
+#elif GEN_GEN >= 8 || GEN_IS_HASWELL
       sb.StencilBufferEnable = true;
 #endif
       sb.SurfaceBaseAddress = info->stencil_address;
@@ -144,6 +160,19 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
 #if GEN_GEN >= 8
       sb.SurfaceQPitch =
          isl_surf_get_array_pitch_el_rows(info->stencil_surf) >> 2;
+#endif
+   } else {
+#if GEN_GEN >= 12
+      sb.SurfaceType = SURFTYPE_NULL;
+
+      /* The docs seem to indicate that if surf-type is null, then we may need
+       * to match the depth-buffer value for `Depth`. It may be a
+       * documentation bug, since the other fields don't require this.
+       *
+       * TODO: Confirm documentation and remove seeting of `Depth` if not
+       * required.
+       */
+      sb.Depth = db.Depth;
 #endif
    }
 
@@ -156,13 +185,22 @@ isl_genX(emit_depth_stencil_hiz_s)(const struct isl_device *dev, void *batch,
    };
 
    assert(info->hiz_usage == ISL_AUX_USAGE_NONE ||
-          info->hiz_usage == ISL_AUX_USAGE_HIZ);
-   if (info->hiz_usage == ISL_AUX_USAGE_HIZ) {
+          info->hiz_usage == ISL_AUX_USAGE_HIZ ||
+          info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS);
+   if (info->hiz_usage == ISL_AUX_USAGE_HIZ ||
+       info->hiz_usage == ISL_AUX_USAGE_HIZ_CCS) {
+      assert(GEN_GEN >= 12 || info->hiz_usage == ISL_AUX_USAGE_HIZ);
       db.HierarchicalDepthBufferEnable = true;
 
       hiz.SurfaceBaseAddress = info->hiz_address;
       hiz.MOCS = info->mocs;
       hiz.SurfacePitch = info->hiz_surf->row_pitch_B - 1;
+#if GEN_GEN >= 12
+      hiz.HierarchicalDepthBufferWriteThruEnable =
+         isl_surf_supports_hiz_ccs_wt(dev->info, info->depth_surf,
+                                      info->hiz_usage);
+#endif
+
 #if GEN_GEN >= 8
       /* From the SKL PRM Vol2a:
        *

@@ -679,9 +679,8 @@ v3d_update_compiled_cs(struct v3d_context *v3d)
         struct v3d_key local_key;
         struct v3d_key *key = &local_key;
 
-        if (!(v3d->dirty & (~0 | /* XXX */
-                            VC5_DIRTY_VERTTEX |
-                            VC5_DIRTY_UNCOMPILED_FS))) {
+        if (!(v3d->dirty & (VC5_DIRTY_UNCOMPILED_CS |
+                            VC5_DIRTY_COMPTEX))) {
                 return;
         }
 
@@ -786,6 +785,7 @@ v3d_compute_state_bind(struct pipe_context *pctx, void *state)
         struct v3d_context *v3d = v3d_context(pctx);
 
         v3d->prog.bind_compute = state;
+        v3d->dirty |= VC5_DIRTY_UNCOMPILED_CS;
 }
 
 static void *

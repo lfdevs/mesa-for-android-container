@@ -34,6 +34,8 @@
  */
 
 
+#include <llvm/Config/llvm-config.h>
+
 #include "util/u_format.h"
 #include "util/u_math.h"
 #include "util/u_string.h"
@@ -465,7 +467,7 @@ lp_build_pavgb(struct lp_build_context *bld8,
    LLVMBuilderRef builder = gallivm->builder;
    assert(bld8->type.width == 8);
    assert(bld8->type.length == 16 || bld8->type.length == 32);
-   if (HAVE_LLVM < 0x0600) {
+   if (LLVM_VERSION_MAJOR < 6) {
       LLVMValueRef intrargs[2];
       char *intr_name = bld8->type.length == 32 ? "llvm.x86.avx2.pavg.b" :
                                                   "llvm.x86.sse2.pavg.b";

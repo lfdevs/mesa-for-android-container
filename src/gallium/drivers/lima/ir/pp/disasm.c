@@ -118,6 +118,32 @@ print_source_scalar(unsigned reg, const char *special, bool abs, bool neg)
 }
 
 static void
+print_varying_source(ppir_codegen_field_varying *varying)
+{
+   switch (varying->imm.alignment) {
+   case 0:
+      printf("%u.%c", varying->imm.index >> 2,
+             "xyzw"[varying->imm.index & 3]);
+      break;
+   case 1: {
+      const char *c[2] = {"xy", "zw"};
+      printf("%u.%s", varying->imm.index >> 1, c[varying->imm.index & 1]);
+      break;
+   }
+   default:
+      printf("%u", varying->imm.index);
+      break;
+   }
+
+   if (varying->imm.offset_vector != 15) {
+      unsigned reg = (varying->imm.offset_vector << 2) +
+         varying->imm.offset_scalar;
+      printf("+");
+      print_source_scalar(reg, NULL, false, false);
+   }
+}
+
+static void
 print_outmod(ppir_codegen_outmod modifier)
 {
    switch (modifier)
@@ -213,7 +239,28 @@ print_varying(void *code, unsigned offset)
                           varying->reg.absolute, varying->reg.negate);
       break;
    case 2:
-      printf("gl_FragCoord");
+      switch (varying->imm.perspective) {
+      case 0:
+         printf("cube(");
+         print_varying_source(varying);
+         printf(")");
+         break;
+      case 1:
+         printf("cube(");
+         print_vector_source(varying->reg.source, NULL, varying->reg.swizzle,
+                             varying->reg.absolute, varying->reg.negate);
+         printf(")");
+         break;
+      case 2:
+         printf("normalize(");
+         print_vector_source(varying->reg.source, NULL, varying->reg.swizzle,
+                             varying->reg.absolute, varying->reg.negate);
+         printf(")");
+         break;
+      default:
+         printf("gl_FragCoord");
+         break;
+      }
       break;
    case 3:
       if (varying->imm.perspective)
@@ -222,27 +269,7 @@ print_varying(void *code, unsigned offset)
          printf("gl_PointCoord");
       break;
    default:
-      switch (varying->imm.alignment) {
-      case 0: 
-         printf("%u.%c", varying->imm.index >> 2,
-                "xyzw"[varying->imm.index & 3]);
-         break;
-      case 1: {
-         const char *c[2] = {"xy", "zw"};
-         printf("%u.%s", varying->imm.index >> 1, c[varying->imm.index & 1]);
-         break;
-      }
-      default:
-         printf("%u", varying->imm.index);
-         break;
-      } 
-
-      if (varying->imm.offset_vector != 15) {
-         unsigned reg = (varying->imm.offset_vector << 2) +
-            varying->imm.offset_scalar;
-         printf("+");
-         print_source_scalar(reg, NULL, false, false);
-      }
+      print_varying_source(varying);
       break;
    }
 }
@@ -318,7 +345,7 @@ print_uniform(void *code, unsigned offset)
    }
 
    if (uniform->offset_en) {
-      printf(" ");
+      printf("+");
       print_source_scalar(uniform->offset_reg, NULL, false, false);
    }
 }
@@ -620,7 +647,7 @@ print_combine(void *code, unsigned offset)
       print_dest_scalar(combine->scalar.dest);
    }
    printf(" ");
-   
+
    print_source_scalar(combine->scalar.arg0_src, NULL,
                        combine->scalar.arg0_absolute,
                        combine->scalar.arg0_negate);

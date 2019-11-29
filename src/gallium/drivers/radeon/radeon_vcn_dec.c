@@ -840,7 +840,7 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 	decode->sc_coeff_size = 0;
 
 	decode->sw_ctxt_size = RDECODE_SESSION_CONTEXT_SIZE;
-	decode->db_pitch = (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS &&
+	decode->db_pitch = (((struct si_screen*)dec->screen)->info.family >= CHIP_RENOIR &&
 			dec->base.width > 32 && dec->stream_type == RDECODE_CODEC_VP9) ?
 			align(dec->base.width, 64) :
 			align(dec->base.width, 32) ;
@@ -938,13 +938,13 @@ static struct pb_buffer *rvcn_dec_message_decode(struct radeon_decoder *dec,
 			/* default probability + probability data */
 			ctx_size = 2304 * 5;
 
-			if (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS) {
+			if (((struct si_screen*)dec->screen)->info.family >= CHIP_RENOIR) {
 				/* SRE collocated context data */
 				ctx_size += 32 * 2 * 128 * 68;
 				/* SMP collocated context data */
 				ctx_size += 9 * 64 * 2 * 128 * 68;
 				/* SDB left tile pixel */
-				ctx_size += 8 * 2 * 8192;
+				ctx_size += 8 * 2 * 2 * 8192;
 			} else {
 				ctx_size += 32 * 2 * 64 * 64;
 				ctx_size += 9 * 64 * 2 * 64 * 64;
@@ -1263,7 +1263,7 @@ static unsigned calc_dpb_size(struct radeon_decoder *dec)
 	case PIPE_VIDEO_FORMAT_VP9:
 		max_references = MAX2(max_references, 9);
 
-		dpb_size = (((struct si_screen*)dec->screen)->info.family >= CHIP_ARCTURUS) ?
+		dpb_size = (((struct si_screen*)dec->screen)->info.family >= CHIP_RENOIR) ?
 			(8192 * 4320 * 3 / 2) * max_references :
 			(4096 * 3000 * 3 / 2) * max_references;
 
@@ -1607,7 +1607,8 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
 		dec->reg.data1 = RDECODE_VCN2_5_GPCOM_VCPU_DATA1;
 		dec->reg.cmd = RDECODE_VCN2_5_GPCOM_VCPU_CMD;
 		dec->reg.cntl = RDECODE_VCN2_5_ENGINE_CNTL;
-	} else if (sctx->family >= CHIP_NAVI10) {
+		dec->jpg.direct_reg = true;
+	} else if (sctx->family >= CHIP_NAVI10 || sctx->family == CHIP_RENOIR) {
 		dec->reg.data0 = RDECODE_VCN2_GPCOM_VCPU_DATA0;
 		dec->reg.data1 = RDECODE_VCN2_GPCOM_VCPU_DATA1;
 		dec->reg.cmd = RDECODE_VCN2_GPCOM_VCPU_CMD;

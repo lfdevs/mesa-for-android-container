@@ -43,18 +43,6 @@ struct gen_device_info;
 struct gen_perf_config;
 struct gen_perf_query_info;
 
-#define GEN7_RPSTAT1                       0xA01C
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_SHIFT   7
-#define  GEN7_RPSTAT1_CURR_GT_FREQ_MASK    INTEL_MASK(13, 7)
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_SHIFT   0
-#define  GEN7_RPSTAT1_PREV_GT_FREQ_MASK    INTEL_MASK(6, 0)
-
-#define GEN9_RPSTAT0                       0xA01C
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_SHIFT   23
-#define  GEN9_RPSTAT0_CURR_GT_FREQ_MASK    INTEL_MASK(31, 23)
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_SHIFT   0
-#define  GEN9_RPSTAT0_PREV_GT_FREQ_MASK    INTEL_MASK(8, 0)
-
 enum gen_perf_counter_type {
    GEN_PERF_COUNTER_TYPE_EVENT,
    GEN_PERF_COUNTER_TYPE_DURATION_NORM,
@@ -86,19 +74,6 @@ struct gen_pipeline_stat {
  *   1 timestamp, 1 clock, 36 A counters, 8 B counters and 8 C counters
  */
 #define MAX_OA_REPORT_COUNTERS 62
-
-#define IA_VERTICES_COUNT          0x2310
-#define IA_PRIMITIVES_COUNT        0x2318
-#define VS_INVOCATION_COUNT        0x2320
-#define HS_INVOCATION_COUNT        0x2300
-#define DS_INVOCATION_COUNT        0x2308
-#define GS_INVOCATION_COUNT        0x2328
-#define GS_PRIMITIVES_COUNT        0x2330
-#define CL_INVOCATION_COUNT        0x2338
-#define CL_PRIMITIVES_COUNT        0x2340
-#define PS_INVOCATION_COUNT        0x2348
-#define CS_INVOCATION_COUNT        0x2290
-#define PS_DEPTH_COUNT             0x2350
 
 /*
  * When currently allocate only one page for pipeline statistics queries. Here
@@ -164,6 +139,18 @@ struct gen_perf_query_register_prog {
    uint32_t val;
 };
 
+/* Register programming for a given query */
+struct gen_perf_registers {
+   struct gen_perf_query_register_prog *flex_regs;
+   uint32_t n_flex_regs;
+
+   struct gen_perf_query_register_prog *mux_regs;
+   uint32_t n_mux_regs;
+
+   struct gen_perf_query_register_prog *b_counter_regs;
+   uint32_t n_b_counter_regs;
+};
+
 struct gen_perf_query_info {
    enum gen_perf_query_type {
       GEN_PERF_QUERY_TYPE_OA,
@@ -188,18 +175,12 @@ struct gen_perf_query_info {
    int b_offset;
    int c_offset;
 
-   /* Register programming for a given query */
-   struct gen_perf_query_register_prog *flex_regs;
-   uint32_t n_flex_regs;
-
-   struct gen_perf_query_register_prog *mux_regs;
-   uint32_t n_mux_regs;
-
-   struct gen_perf_query_register_prog *b_counter_regs;
-   uint32_t n_b_counter_regs;
+   struct gen_perf_registers config;
 };
 
 struct gen_perf_config {
+   bool i915_query_supported;
+
    struct gen_perf_query_info *queries;
    int n_queries;
 
@@ -255,12 +236,48 @@ struct gen_perf_config {
 struct gen_perf_query_object;
 const struct gen_perf_query_info* gen_perf_query_info(const struct gen_perf_query_object *);
 
-struct gen_perf_context;
-struct gen_perf_context *gen_perf_new_context(void *parent);
-
 void gen_perf_init_metrics(struct gen_perf_config *perf_cfg,
                            const struct gen_device_info *devinfo,
                            int drm_fd);
+
+/** Query i915 for a metric id using guid.
+ */
+bool gen_perf_load_metric_id(struct gen_perf_config *perf_cfg,
+                             const char *guid,
+                             uint64_t *metric_id);
+
+/** Load a configuation's content from i915 using a guid.
+ */
+struct gen_perf_registers *gen_perf_load_configuration(struct gen_perf_config *perf_cfg,
+                                                      int fd, const char *guid);
+
+/** Store a configuration into i915 using guid and return a new metric id.
+ *
+ * If guid is NULL, then a generated one will be provided by hashing the
+ * content of the configuration.
+ */
+uint64_t gen_perf_store_configuration(struct gen_perf_config *perf_cfg, int fd,
+                                      const struct gen_perf_registers *config,
+                                      const char *guid);
+
+/** Read the slice/unslice frequency from 2 OA reports and store then into
+ *  result.
+ */
+void gen_perf_query_result_read_frequencies(struct gen_perf_query_result *result,
+                                            const struct gen_device_info *devinfo,
+                                            const uint32_t *start,
+                                            const uint32_t *end);
+/** Accumulate the delta between 2 OA reports into result for a given query.
+ */
+void gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
+                                      const struct gen_perf_query_info *query,
+                                      const uint32_t *start,
+                                      const uint32_t *end);
+void gen_perf_query_result_clear(struct gen_perf_query_result *result);
+
+struct gen_perf_context;
+struct gen_perf_context *gen_perf_new_context(void *parent);
+
 void gen_perf_init_context(struct gen_perf_context *perf_ctx,
                            struct gen_perf_config *perf_cfg,
                            void * ctx,  /* driver context (eg, brw_context) */

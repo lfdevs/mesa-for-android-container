@@ -846,15 +846,6 @@ brw_process_driconf_options(struct brw_context *brw)
                        brw->driContext->driScreenPriv->myNum,
                        "i965", NULL, NULL, 0);
 
-   int bo_reuse_mode = driQueryOptioni(options, "bo_reuse");
-   switch (bo_reuse_mode) {
-   case DRI_CONF_BO_REUSE_DISABLED:
-      break;
-   case DRI_CONF_BO_REUSE_ALL:
-      brw_bufmgr_enable_reuse(brw->bufmgr);
-      break;
-   }
-
    if (INTEL_DEBUG & DEBUG_NO_HIZ) {
        brw->has_hiz = false;
        /* On gen6, you can only do separate stencil with HIZ. */

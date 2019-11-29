@@ -738,7 +738,7 @@ void
 qir_compile_destroy(struct vc4_compile *c)
 {
         qir_for_each_block(block, c) {
-                while (!list_empty(&block->instructions)) {
+                while (!list_is_empty(&block->instructions)) {
                         struct qinst *qinst =
                                 list_first_entry(&block->instructions,
                                                  struct qinst, link);
@@ -798,7 +798,7 @@ qir_SF(struct vc4_compile *c, struct qreg src)
 {
         struct qinst *last_inst = NULL;
 
-        if (!list_empty(&c->cur_block->instructions))
+        if (!list_is_empty(&c->cur_block->instructions))
                 last_inst = (struct qinst *)c->cur_block->instructions.prev;
 
         /* We don't have any way to guess which kind of MOV is implied. */

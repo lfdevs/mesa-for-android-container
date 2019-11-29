@@ -26,6 +26,7 @@ inc_src = include_directories('.')
 inc_gallium = include_directories('gallium/include')
 inc_gallium_aux = include_directories('gallium/auxiliary')
 inc_amd_common = include_directories('amd/common')
+inc_amd_common_llvm = include_directories('amd/llvm')
 
 libglsl_util = static_library(
   'glsl_util',
@@ -47,6 +48,11 @@ sha1_h = custom_target(
 )
 
 subdir('gtest')
+if cc.get_id() == 'msvc'
+  subdir('getopt')
+else
+  idep_getopt = null_dep
+endif
 subdir('util')
 subdir('mapi')
 # TODO: opengl

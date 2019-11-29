@@ -195,7 +195,8 @@ blit_control(enum a6xx_color_fmt fmt)
  * supported by hw.. if necessary decompose into (potentially) two 2D blits
  */
 static void
-emit_blit_buffer(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
+emit_blit_buffer(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		const struct pipe_blit_info *info)
 {
 	const struct pipe_box *sbox = &info->src.box;
 	const struct pipe_box *dbox = &info->dst.box;
@@ -327,7 +328,7 @@ emit_blit_buffer(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		OUT_RING(ring, 0xf180);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, 0x01000000);
+		OUT_RING(ring, fd6_context(ctx)->magic.RB_UNKNOWN_8E04_blit);
 
 		OUT_PKT7(ring, CP_BLIT, 1);
 		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -335,12 +336,13 @@ emit_blit_buffer(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		OUT_WFI5(ring);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, 0);
+		OUT_RING(ring, 0);             /* RB_UNKNOWN_8E04 */
 	}
 }
 
 static void
-emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
+emit_blit_texture(struct fd_context *ctx, struct fd_ringbuffer *ring,
+		const struct pipe_blit_info *info)
 {
 	const struct pipe_box *sbox = &info->src.box;
 	const struct pipe_box *dbox = &info->dst.box;
@@ -540,7 +542,7 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 				0xf000);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, 0x01000000);
+		OUT_RING(ring, fd6_context(ctx)->magic.RB_UNKNOWN_8E04_blit);
 
 		OUT_PKT7(ring, CP_BLIT, 1);
 		OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -548,7 +550,7 @@ emit_blit_texture(struct fd_ringbuffer *ring, const struct pipe_blit_info *info)
 		OUT_WFI5(ring);
 
 		OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-		OUT_RING(ring, 0);
+		OUT_RING(ring, 0);             /* RB_UNKNOWN_8E04 */
 	}
 }
 
@@ -676,12 +678,12 @@ handle_rgba_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 			(info->dst.resource->target == PIPE_BUFFER)) {
 		assert(fd_resource(info->src.resource)->tile_mode == TILE6_LINEAR);
 		assert(fd_resource(info->dst.resource)->tile_mode == TILE6_LINEAR);
-		emit_blit_buffer(batch->draw, info);
+		emit_blit_buffer(ctx, batch->draw, info);
 	} else {
 		/* I don't *think* we need to handle blits between buffer <-> !buffer */
 		debug_assert(info->src.resource->target != PIPE_BUFFER);
 		debug_assert(info->dst.resource->target != PIPE_BUFFER);
-		emit_blit_texture(batch->draw, info);
+		emit_blit_texture(ctx, batch->draw, info);
 	}
 
 	fd6_event_write(batch, batch->draw, 0x1d, true);
@@ -718,6 +720,12 @@ fd6_blitter_init(struct pipe_context *pctx)
 unsigned
 fd6_tile_mode(const struct pipe_resource *tmpl)
 {
+	/* if the mipmap level 0 is still too small to be tiled, then don't
+	 * bother pretending:
+	 */
+	if (fd_resource_level_linear(tmpl, 0))
+		return TILE6_LINEAR;
+
 	/* basically just has to be a format we can blit, so uploads/downloads
 	 * via linear staging buffer works:
 	 */

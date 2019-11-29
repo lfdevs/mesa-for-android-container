@@ -49,7 +49,7 @@ void vid_dec_h264_Init(vid_dec_PrivateType *priv)
    priv->EndFrame = vid_dec_h264_EndFrame;
    priv->Flush = vid_dec_h264_Flush;
 
-   LIST_INITHEAD(&priv->codec_data.h264.dpb_list);
+   list_inithead(&priv->codec_data.h264.dpb_list);
    priv->picture.h264.field_order_cnt[0] = priv->picture.h264.field_order_cnt[1] = INT_MAX;
    priv->first_buf_in_frame = true;
 }

@@ -48,6 +48,6 @@ fd_sw_query(struct fd_query *q)
 }
 
 struct fd_query * fd_sw_create_query(struct fd_context *ctx,
-		unsigned query_type);
+		unsigned query_type, unsigned index);
 
 #endif /* FREEDRENO_QUERY_SW_H_ */

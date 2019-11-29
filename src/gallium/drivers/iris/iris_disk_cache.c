@@ -31,8 +31,8 @@
 #include <assert.h>
 #include <string.h>
 
-#include "compiler/blob.h"
 #include "compiler/nir/nir.h"
+#include "util/blob.h"
 #include "util/build_id.h"
 #include "util/disk_cache.h"
 #include "util/mesa-sha1.h"

@@ -45,7 +45,7 @@ static void
 virgl_resource_cache_entry_release(struct virgl_resource_cache *cache,
                                    struct virgl_resource_cache_entry *entry)
 {
-      LIST_DEL(&entry->head);
+      list_del(&entry->head);
       cache->entry_release_func(entry, cache->user_data);
 }
 
@@ -70,7 +70,7 @@ virgl_resource_cache_init(struct virgl_resource_cache *cache,
                           virgl_resource_cache_entry_release_func destroy_func,
                           void *user_data)
 {
-   LIST_INITHEAD(&cache->resources);
+   list_inithead(&cache->resources);
    cache->timeout_usecs = timeout_usecs;
    cache->entry_is_busy_func = is_busy_func;
    cache->entry_release_func = destroy_func;
@@ -91,7 +91,7 @@ virgl_resource_cache_add(struct virgl_resource_cache *cache,
 
    entry->timeout_start = now;
    entry->timeout_end = entry->timeout_start + cache->timeout_usecs;
-   LIST_ADDTAIL(&entry->head, &cache->resources);
+   list_addtail(&entry->head, &cache->resources);
 }
 
 struct virgl_resource_cache_entry *
@@ -135,7 +135,7 @@ virgl_resource_cache_remove_compatible(struct virgl_resource_cache *cache,
    }
 
    if (compat_entry)
-      LIST_DEL(&compat_entry->head);
+      list_del(&compat_entry->head);
 
    return compat_entry;
 }

@@ -69,8 +69,7 @@ static const char *
 swr_get_name(struct pipe_screen *screen)
 {
    static char buf[100];
-   snprintf(buf, sizeof(buf), "SWR (LLVM %u.%u, %u bits)",
-            HAVE_LLVM >> 8, HAVE_LLVM & 0xff,
+   snprintf(buf, sizeof(buf), "SWR (LLVM " MESA_LLVM_VERSION_STRING ", %u bits)",
             lp_native_vector_width);
    return buf;
 }
@@ -192,7 +191,7 @@ swr_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
       return 1024;
    case PIPE_CAP_MAX_VERTEX_STREAMS:
-      return 1;
+      return 4;
    case PIPE_CAP_MAX_VERTEX_ATTRIB_STRIDE:
       return 2048;
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:

@@ -112,6 +112,7 @@ def AddOptions(opts):
     opts.Add(BoolOption('asan', 'enable Address Sanitizer', 'no'))
     opts.Add('toolchain', 'compiler toolchain', default_toolchain)
     opts.Add(BoolOption('llvm', 'use LLVM', default_llvm))
+    opts.Add(BoolOption('force_scons', 'Force enable scons on deprecated platforms', 'false'))
     opts.Add(BoolOption('openmp', 'EXPERIMENTAL: compile with openmp (swrast)',
                         'no'))
     opts.Add(BoolOption('debug', 'DEPRECATED: debug build', 'yes'))

@@ -38,7 +38,7 @@ nouveau_fence_new(struct nouveau_screen *screen, struct nouveau_fence **fence)
 
    (*fence)->screen = screen;
    (*fence)->ref = 1;
-   LIST_INITHEAD(&(*fence)->work);
+   list_inithead(&(*fence)->work);
 
    return true;
 }
@@ -50,7 +50,7 @@ nouveau_fence_trigger_work(struct nouveau_fence *fence)
 
    LIST_FOR_EACH_ENTRY_SAFE(work, tmp, &fence->work, list) {
       work->func(work->data);
-      LIST_DEL(&work->list);
+      list_del(&work->list);
       FREE(work);
    }
 }
@@ -100,7 +100,7 @@ nouveau_fence_del(struct nouveau_fence *fence)
       }
    }
 
-   if (!LIST_IS_EMPTY(&fence->work)) {
+   if (!list_is_empty(&fence->work)) {
       debug_printf("WARNING: deleting fence with work still pending !\n");
       nouveau_fence_trigger_work(fence);
    }
@@ -265,7 +265,7 @@ nouveau_fence_work(struct nouveau_fence *fence,
       return false;
    work->func = func;
    work->data = data;
-   LIST_ADD(&work->list, &fence->work);
+   list_add(&work->list, &fence->work);
    p_atomic_inc(&fence->work_count);
    if (fence->work_count > 64)
       nouveau_fence_kick(fence);

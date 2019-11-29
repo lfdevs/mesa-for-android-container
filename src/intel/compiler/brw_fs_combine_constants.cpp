@@ -232,7 +232,7 @@ get_constant_value(const struct gen_device_info *devinfo,
       break;
    }
    case BRW_REGISTER_TYPE_Q: {
-      int64_t val = !can_do_source_mods ? src->d64 : abs(src->d64);
+      int64_t val = !can_do_source_mods ? src->d64 : llabs(src->d64);
       memcpy(out, &val, 8);
       break;
    }
@@ -313,6 +313,36 @@ needs_negate(const fs_reg *reg, const struct imm *imm)
    };
 }
 
+static bool
+representable_as_hf(float f, uint16_t *hf)
+{
+   union fi u;
+   uint16_t h = _mesa_float_to_half(f);
+   u.f = _mesa_half_to_float(h);
+
+   if (u.f == f) {
+      *hf = h;
+      return true;
+   }
+
+   return false;
+}
+
+static bool
+represent_src_as_imm(const struct gen_device_info *devinfo,
+                     fs_reg *src)
+{
+   /* TODO : consider specific platforms also */
+   if (devinfo->gen == 12) {
+      uint16_t hf;
+      if (representable_as_hf(src->f, &hf)) {
+         *src = retype(brw_imm_uw(hf), BRW_REGISTER_TYPE_HF);
+         return true;
+      }
+   }
+   return false;
+}
+
 bool
 fs_visitor::opt_combine_constants()
 {
@@ -336,9 +366,17 @@ fs_visitor::opt_combine_constants()
       if (!could_coissue(devinfo, inst) && !must_promote_imm(devinfo, inst))
          continue;
 
+      bool represented_as_imm = false;
       for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file != IMM)
             continue;
+
+         if (!represented_as_imm && i == 0 &&
+             inst->opcode == BRW_OPCODE_MAD &&
+             represent_src_as_imm(devinfo, &inst->src[i])) {
+            represented_as_imm = true;
+            continue;
+         }
 
          char data[8];
          brw_reg_type type;

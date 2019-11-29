@@ -72,7 +72,7 @@
  * Unreachable macro. Useful for suppressing "control reaches end of non-void
  * function" warnings.
  */
-#ifdef HAVE___BUILTIN_UNREACHABLE
+#if defined(HAVE___BUILTIN_UNREACHABLE) || __has_builtin(__builtin_unreachable)
 #define unreachable(str)    \
 do {                        \
    assert(!str);            \

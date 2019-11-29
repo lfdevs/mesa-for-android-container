@@ -53,7 +53,7 @@ using namespace brw;
  */
 
 void
-fs_live_variables::setup_one_read(struct block_data *bd, fs_inst *inst,
+fs_live_variables::setup_one_read(struct fs_block_data *bd, fs_inst *inst,
                                   int ip, const fs_reg &reg)
 {
    int var = var_from_reg(reg);
@@ -71,7 +71,7 @@ fs_live_variables::setup_one_read(struct block_data *bd, fs_inst *inst,
 }
 
 void
-fs_live_variables::setup_one_write(struct block_data *bd, fs_inst *inst,
+fs_live_variables::setup_one_write(struct fs_block_data *bd, fs_inst *inst,
                                    int ip, const fs_reg &reg)
 {
    int var = var_from_reg(reg);
@@ -110,7 +110,7 @@ fs_live_variables::setup_def_use()
       if (block->num > 0)
 	 assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
 
-      struct block_data *bd = &block_data[block->num];
+      struct fs_block_data *bd = &block_data[block->num];
 
       foreach_inst_in_block(fs_inst, inst, block) {
 	 /* Set use[] for this instruction */
@@ -160,11 +160,11 @@ fs_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block_reverse (block, cfg) {
-         struct block_data *bd = &block_data[block->num];
+         struct fs_block_data *bd = &block_data[block->num];
 
 	 /* Update liveout */
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-            struct block_data *child_bd = &block_data[child_link->block->num];
+       struct fs_block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
                BITSET_WORD new_liveout = (child_bd->livein[i] &
@@ -209,10 +209,10 @@ fs_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block (block, cfg) {
-         const struct block_data *bd = &block_data[block->num];
+         const struct fs_block_data *bd = &block_data[block->num];
 
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-            struct block_data *child_bd = &block_data[child_link->block->num];
+       struct fs_block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
                const BITSET_WORD new_def = bd->defout[i] & ~child_bd->defin[i];
@@ -233,7 +233,7 @@ void
 fs_live_variables::compute_start_end()
 {
    foreach_block (block, cfg) {
-      struct block_data *bd = &block_data[block->num];
+      struct fs_block_data *bd = &block_data[block->num];
 
       for (int w = 0; w < bitset_words; w++) {
          BITSET_WORD livedefin = bd->livein[w] & bd->defin[w];
@@ -282,7 +282,7 @@ fs_live_variables::fs_live_variables(fs_visitor *v, const cfg_t *cfg)
       end[i] = -1;
    }
 
-   block_data= rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
+   block_data = rzalloc_array(mem_ctx, struct fs_block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {

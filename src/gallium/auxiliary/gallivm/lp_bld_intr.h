@@ -36,6 +36,7 @@
 #ifndef LP_BLD_INTR_H
 #define LP_BLD_INTR_H
 
+#include <llvm/Config/llvm-config.h>
 
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_init.h"
@@ -53,9 +54,9 @@ enum lp_func_attr {
    LP_FUNC_ATTR_NOUNWIND     = (1 << 4),
    LP_FUNC_ATTR_READNONE     = (1 << 5),
    LP_FUNC_ATTR_READONLY     = (1 << 6),
-   LP_FUNC_ATTR_WRITEONLY    = HAVE_LLVM >= 0x0400 ? (1 << 7) : 0,
-   LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY = HAVE_LLVM >= 0x0400 ? (1 << 8) : 0,
-   LP_FUNC_ATTR_CONVERGENT   = HAVE_LLVM >= 0x0400 ? (1 << 9) : 0,
+   LP_FUNC_ATTR_WRITEONLY    = LLVM_VERSION_MAJOR >= 4 ? (1 << 7) : 0,
+   LP_FUNC_ATTR_INACCESSIBLE_MEM_ONLY = LLVM_VERSION_MAJOR >= 4 ? (1 << 8) : 0,
+   LP_FUNC_ATTR_CONVERGENT   = LLVM_VERSION_MAJOR >= 4 ? (1 << 9) : 0,
 
    /* Legacy intrinsic that needs attributes on function declarations
     * and they must match the internal LLVM definition exactly, otherwise

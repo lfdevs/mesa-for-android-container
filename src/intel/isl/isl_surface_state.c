@@ -72,7 +72,9 @@ static const uint8_t isl_to_gen_tiling[] = {
    [ISL_TILING_Y0]      = YMAJOR,
    [ISL_TILING_Yf]      = YMAJOR,
    [ISL_TILING_Ys]      = YMAJOR,
+#if GEN_GEN <= 11
    [ISL_TILING_W]       = WMAJOR,
+#endif
 };
 #endif
 
@@ -84,7 +86,14 @@ static const uint32_t isl_to_gen_multisample_layout[] = {
 };
 #endif
 
-#if GEN_GEN >= 9
+#if GEN_GEN >= 12
+static const uint32_t isl_to_gen_aux_mode[] = {
+   [ISL_AUX_USAGE_NONE] = AUX_NONE,
+   [ISL_AUX_USAGE_MCS] = AUX_CCS_E,
+   [ISL_AUX_USAGE_CCS_E] = AUX_CCS_E,
+   [ISL_AUX_USAGE_MCS_CCS] = AUX_MCS_LCE,
+};
+#elif GEN_GEN >= 9
 static const uint32_t isl_to_gen_aux_mode[] = {
    [ISL_AUX_USAGE_NONE] = AUX_NONE,
    [ISL_AUX_USAGE_HIZ] = AUX_HIZ,
@@ -272,6 +281,11 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 
    s.SurfaceFormat = info->view->format;
 
+#if GEN_GEN >= 12
+   s.DepthStencilResource =
+      isl_surf_usage_is_depth_or_stencil(info->surf->usage);
+#endif
+
 #if GEN_GEN <= 5
    s.ColorBufferComponentWriteDisables = info->write_disables;
 #else
@@ -441,6 +455,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if GEN_GEN >= 8
+   assert(GEN_GEN < 12 || info->surf->tiling != ISL_TILING_W);
    s.TileMode = isl_to_gen_tiling[info->surf->tiling];
 #else
    s.TiledSurface = info->surf->tiling != ISL_TILING_LINEAR,
@@ -535,29 +550,40 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
 #endif
 
 #if GEN_GEN >= 7
-   if (info->aux_surf && info->aux_usage != ISL_AUX_USAGE_NONE) {
+   if (info->aux_usage != ISL_AUX_USAGE_NONE) {
+      /* Check valid aux usages per-gen */
+      if (GEN_GEN >= 12) {
+         assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_E ||
+                info->aux_usage == ISL_AUX_USAGE_MCS_CCS);
+      } else if (GEN_GEN >= 9) {
+         assert(info->aux_usage == ISL_AUX_USAGE_HIZ ||
+                info->aux_usage == ISL_AUX_USAGE_MCS ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_D ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_E);
+      } else if (GEN_GEN >= 8) {
+         assert(info->aux_usage == ISL_AUX_USAGE_HIZ ||
+                info->aux_usage == ISL_AUX_USAGE_MCS ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_D);
+      } else if (GEN_GEN >= 7) {
+         assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
+                info->aux_usage == ISL_AUX_USAGE_CCS_D);
+      }
+
+      if (GEN_GEN >= 12) {
+         /* We don't need an auxiliary surface for CCS on gen12+ */
+         assert (info->aux_usage == ISL_AUX_USAGE_CCS_E ||
+                 info->aux_usage == ISL_AUX_USAGE_MC || info->aux_surf);
+      } else {
+         /* We must have an auxiliary surface */
+         assert(info->aux_surf);
+      }
+
       /* The docs don't appear to say anything whatsoever about compression
        * and the data port.  Testing seems to indicate that the data port
        * completely ignores the AuxiliarySurfaceMode field.
        */
       assert(!(info->view->usage & ISL_SURF_USAGE_STORAGE_BIT));
-
-      struct isl_tile_info tile_info;
-      isl_surf_get_tile_info(info->aux_surf, &tile_info);
-      uint32_t pitch_in_tiles =
-         info->aux_surf->row_pitch_B / tile_info.phys_extent_B.width;
-
-      s.AuxiliarySurfaceBaseAddress = info->aux_address;
-      s.AuxiliarySurfacePitch = pitch_in_tiles - 1;
-
-#if GEN_GEN >= 8
-      assert(GEN_GEN >= 9 || info->aux_usage != ISL_AUX_USAGE_CCS_E);
-      /* Auxiliary surfaces in ISL have compressed formats but the hardware
-       * doesn't expect our definition of the compression, it expects qpitch
-       * in units of samples on the main surface.
-       */
-      s.AuxiliarySurfaceQPitch =
-         isl_surf_get_array_pitch_sa_rows(info->aux_surf) >> 2;
 
       if (info->aux_usage == ISL_AUX_USAGE_HIZ) {
          /* The number of samples must be 1 */
@@ -578,16 +604,43 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
          }
       }
 
+#if GEN_GEN >= 8
       s.AuxiliarySurfaceMode = isl_to_gen_aux_mode[info->aux_usage];
 #else
-      assert(info->aux_usage == ISL_AUX_USAGE_MCS ||
-             info->aux_usage == ISL_AUX_USAGE_CCS_D);
       s.MCSEnable = true;
+#endif
+   }
+
+   /* The auxiliary buffer info is filled when it's useable by the HW. On
+    * gen12 and above, CCS is controlled by the aux table and not the
+    * auxiliary surface information in SURFACE_STATE.
+    */
+   if (info->aux_usage != ISL_AUX_USAGE_NONE &&
+       ((info->aux_usage != ISL_AUX_USAGE_MC &&
+         info->aux_usage != ISL_AUX_USAGE_CCS_E) || GEN_GEN <= 11)) {
+
+      assert(info->aux_surf != NULL);
+
+      struct isl_tile_info tile_info;
+      isl_surf_get_tile_info(info->aux_surf, &tile_info);
+      uint32_t pitch_in_tiles =
+         info->aux_surf->row_pitch_B / tile_info.phys_extent_B.width;
+
+      s.AuxiliarySurfaceBaseAddress = info->aux_address;
+      s.AuxiliarySurfacePitch = pitch_in_tiles - 1;
+
+#if GEN_GEN >= 8
+      /* Auxiliary surfaces in ISL have compressed formats but the hardware
+       * doesn't expect our definition of the compression, it expects qpitch
+       * in units of samples on the main surface.
+       */
+      s.AuxiliarySurfaceQPitch =
+         isl_surf_get_array_pitch_sa_rows(info->aux_surf) >> 2;
 #endif
    }
 #endif
 
-#if GEN_GEN >= 8
+#if GEN_GEN >= 8 && GEN_GEN < 11
    /* From the CHV PRM, Volume 2d, page 321 (RENDER_SURFACE_STATE dword 0
     * bit 9 "Sampler L2 Bypass Mode Disable" Programming Notes):
     *
@@ -648,7 +701,9 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
       }
 #endif
 
-#if GEN_GEN >= 9
+#if GEN_GEN >= 12
+      assert(info->use_clear_address);
+#elif GEN_GEN >= 9
       if (!info->use_clear_address) {
          s.RedClearColor = info->clear_color.u32[0];
          s.GreenClearColor = info->clear_color.u32[1];
@@ -796,13 +851,26 @@ isl_genX(null_fill_state)(void *state, struct isl_extent3d size)
        */
       .SurfaceFormat = ISL_FORMAT_R32_UINT,
 #if GEN_GEN >= 7
-      .SurfaceArray = size.depth > 0,
+      .SurfaceArray = size.depth > 1,
 #endif
 #if GEN_GEN >= 8
       .TileMode = YMAJOR,
 #else
       .TiledSurface = true,
       .TileWalk = TILEWALK_YMAJOR,
+#endif
+#if GEN_GEN == 7
+      /* According to PRMs: "Volume 4 Part 1: Subsystem and Cores – Shared
+       * Functions"
+       *
+       * RENDER_SURFACE_STATE::Surface Vertical Alignment
+       *
+       *    "This field must be set to VALIGN_4 for all tiled Y Render Target
+       *     surfaces."
+       *
+       * Affect IVB, HSW.
+       */
+      .SurfaceVerticalAlignment = VALIGN_4,
 #endif
       .Width = size.width - 1,
       .Height = size.height - 1,

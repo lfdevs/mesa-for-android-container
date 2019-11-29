@@ -51,6 +51,13 @@
 #include "wayland-drm-client-protocol.h"
 #include "linux-dmabuf-unstable-v1-client-protocol.h"
 
+/* cheesy workaround until wayland 1.18 is released */
+#if WAYLAND_VERSION_MAJOR > 1 || \
+   (WAYLAND_VERSION_MAJOR == 1 && WAYLAND_VERSION_MINOR < 18)
+#define WL_SHM_FORMAT_ABGR16161616F 0x48344241
+#define WL_SHM_FORMAT_XBGR16161616F 0x48344258
+#endif
+
 /*
  * The index of entries in this table is used as a bitmask in
  * dri2_dpy->formats, which tracks the formats supported by our server.
@@ -69,49 +76,71 @@ static const struct dri2_wl_visual {
     */
    int alt_dri_image_format;
    int bpp;
-   unsigned int rgba_masks[4];
+   int rgba_shifts[4];
+   unsigned int rgba_sizes[4];
 } dri2_wl_visuals[] = {
    {
-     "XRGB2101010",
-     WL_DRM_FORMAT_XRGB2101010, WL_SHM_FORMAT_XRGB2101010,
-     __DRI_IMAGE_FORMAT_XRGB2101010, __DRI_IMAGE_FORMAT_XBGR2101010, 32,
-     { 0x3ff00000, 0x000ffc00, 0x000003ff, 0x00000000 }
+      "ABGR16F",
+      WL_DRM_FORMAT_ABGR16F, WL_SHM_FORMAT_ABGR16161616F,
+      __DRI_IMAGE_FORMAT_ABGR16161616F, 0, 64,
+      { 0, 16, 32, 48 },
+      { 16, 16, 16, 16 },
    },
    {
-     "ARGB2101010",
-     WL_DRM_FORMAT_ARGB2101010, WL_SHM_FORMAT_ARGB2101010,
-     __DRI_IMAGE_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ABGR2101010, 32,
-     { 0x3ff00000, 0x000ffc00, 0x000003ff, 0xc0000000 }
+      "XBGR16F",
+      WL_DRM_FORMAT_XBGR16F, WL_SHM_FORMAT_XBGR16161616F,
+      __DRI_IMAGE_FORMAT_XBGR16161616F, 0, 64,
+      { 0, 16, 32, -1 },
+      { 16, 16, 16, 0 },
    },
    {
-     "XBGR2101010",
-     WL_DRM_FORMAT_XBGR2101010, WL_SHM_FORMAT_XBGR2101010,
-     __DRI_IMAGE_FORMAT_XBGR2101010, __DRI_IMAGE_FORMAT_XRGB2101010, 32,
-     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0x00000000 }
+      "XRGB2101010",
+      WL_DRM_FORMAT_XRGB2101010, WL_SHM_FORMAT_XRGB2101010,
+      __DRI_IMAGE_FORMAT_XRGB2101010, __DRI_IMAGE_FORMAT_XBGR2101010, 32,
+      { 20, 10, 0, -1 },
+      { 10, 10, 10, 0 },
    },
    {
-     "ABGR2101010",
-     WL_DRM_FORMAT_ABGR2101010, WL_SHM_FORMAT_ABGR2101010,
-     __DRI_IMAGE_FORMAT_ABGR2101010, __DRI_IMAGE_FORMAT_ARGB2101010, 32,
-     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0xc0000000 }
+      "ARGB2101010",
+      WL_DRM_FORMAT_ARGB2101010, WL_SHM_FORMAT_ARGB2101010,
+      __DRI_IMAGE_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ABGR2101010, 32,
+      { 20, 10, 0, 30 },
+      { 10, 10, 10, 2 },
    },
    {
-     "XRGB8888",
-     WL_DRM_FORMAT_XRGB8888, WL_SHM_FORMAT_XRGB8888,
-     __DRI_IMAGE_FORMAT_XRGB8888, __DRI_IMAGE_FORMAT_NONE, 32,
-     { 0x00ff0000, 0x0000ff00, 0x000000ff, 0x00000000 }
+      "XBGR2101010",
+      WL_DRM_FORMAT_XBGR2101010, WL_SHM_FORMAT_XBGR2101010,
+      __DRI_IMAGE_FORMAT_XBGR2101010, __DRI_IMAGE_FORMAT_XRGB2101010, 32,
+      { 0, 10, 20, -1 },
+      { 10, 10, 10, 0 },
    },
    {
-     "ARGB8888",
-     WL_DRM_FORMAT_ARGB8888, WL_SHM_FORMAT_ARGB8888,
-     __DRI_IMAGE_FORMAT_ARGB8888, __DRI_IMAGE_FORMAT_NONE, 32,
-     { 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000 }
+      "ABGR2101010",
+      WL_DRM_FORMAT_ABGR2101010, WL_SHM_FORMAT_ABGR2101010,
+      __DRI_IMAGE_FORMAT_ABGR2101010, __DRI_IMAGE_FORMAT_ARGB2101010, 32,
+      { 0, 10, 20, 30 },
+      { 10, 10, 10, 2 },
    },
    {
-     "RGB565",
-     WL_DRM_FORMAT_RGB565, WL_SHM_FORMAT_RGB565,
-     __DRI_IMAGE_FORMAT_RGB565, __DRI_IMAGE_FORMAT_NONE, 16,
-     { 0xf800, 0x07e0, 0x001f, 0x0000 }
+      "XRGB8888",
+      WL_DRM_FORMAT_XRGB8888, WL_SHM_FORMAT_XRGB8888,
+      __DRI_IMAGE_FORMAT_XRGB8888, __DRI_IMAGE_FORMAT_NONE, 32,
+      { 16, 8, 0, -1 },
+      { 8, 8, 8, 0 },
+   },
+   {
+      "ARGB8888",
+      WL_DRM_FORMAT_ARGB8888, WL_SHM_FORMAT_ARGB8888,
+      __DRI_IMAGE_FORMAT_ARGB8888, __DRI_IMAGE_FORMAT_NONE, 32,
+      { 16, 8, 0, 24 },
+      { 8, 8, 8, 8 },
+   },
+   {
+      "RGB565",
+      WL_DRM_FORMAT_RGB565, WL_SHM_FORMAT_RGB565,
+      __DRI_IMAGE_FORMAT_RGB565, __DRI_IMAGE_FORMAT_NONE, 16,
+      { 11, 5, 0, -1 },
+      { 5, 6, 5, 0 },
    },
 };
 
@@ -123,20 +152,22 @@ static int
 dri2_wl_visual_idx_from_config(struct dri2_egl_display *dri2_dpy,
                                const __DRIconfig *config)
 {
-   unsigned int red, green, blue, alpha;
+   int shifts[4];
+   unsigned int sizes[4];
 
-   dri2_dpy->core->getConfigAttrib(config, __DRI_ATTRIB_RED_MASK, &red);
-   dri2_dpy->core->getConfigAttrib(config, __DRI_ATTRIB_GREEN_MASK, &green);
-   dri2_dpy->core->getConfigAttrib(config, __DRI_ATTRIB_BLUE_MASK, &blue);
-   dri2_dpy->core->getConfigAttrib(config, __DRI_ATTRIB_ALPHA_MASK, &alpha);
+   dri2_get_shifts_and_sizes(dri2_dpy->core, config, shifts, sizes);
 
    for (unsigned int i = 0; i < ARRAY_SIZE(dri2_wl_visuals); i++) {
       const struct dri2_wl_visual *wl_visual = &dri2_wl_visuals[i];
 
-      if (red == wl_visual->rgba_masks[0] &&
-          green == wl_visual->rgba_masks[1] &&
-          blue == wl_visual->rgba_masks[2] &&
-          alpha == wl_visual->rgba_masks[3]) {
+      if (shifts[0] == wl_visual->rgba_shifts[0] &&
+          shifts[1] == wl_visual->rgba_shifts[1] &&
+          shifts[2] == wl_visual->rgba_shifts[2] &&
+          shifts[3] == wl_visual->rgba_shifts[3] &&
+          sizes[0] == wl_visual->rgba_sizes[0] &&
+          sizes[1] == wl_visual->rgba_sizes[1] &&
+          sizes[2] == wl_visual->rgba_sizes[2] &&
+          sizes[3] == wl_visual->rgba_sizes[3]) {
          return i;
       }
    }
@@ -781,19 +812,32 @@ dri2_wl_flush_front_buffer(__DRIdrawable * driDrawable, void *loaderPrivate)
    (void) loaderPrivate;
 }
 
+static unsigned
+dri2_wl_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
+{
+   switch (cap) {
+   case DRI_LOADER_CAP_FP16:
+      return 1;
+   default:
+      return 0;
+   }
+}
+
 static const __DRIdri2LoaderExtension dri2_loader_extension = {
-   .base = { __DRI_DRI2_LOADER, 3 },
+   .base = { __DRI_DRI2_LOADER, 4 },
 
    .getBuffers           = dri2_wl_get_buffers,
    .flushFrontBuffer     = dri2_wl_flush_front_buffer,
    .getBuffersWithFormat = dri2_wl_get_buffers_with_format,
+   .getCapability        = dri2_wl_get_capability,
 };
 
 static const __DRIimageLoaderExtension image_loader_extension = {
-   .base = { __DRI_IMAGE_LOADER, 1 },
+   .base = { __DRI_IMAGE_LOADER, 2 },
 
    .getBuffers          = image_get_buffers,
    .flushFrontBuffer    = dri2_wl_flush_front_buffer,
+   .getCapability       = dri2_wl_get_capability,
 };
 
 static void
@@ -1354,7 +1398,7 @@ dri2_wl_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
             continue;
 
          dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
-               count + 1, EGL_WINDOW_BIT, NULL, dri2_wl_visuals[j].rgba_masks);
+               count + 1, EGL_WINDOW_BIT, NULL, dri2_wl_visuals[j].rgba_shifts, dri2_wl_visuals[j].rgba_sizes);
          if (dri2_conf) {
             if (dri2_conf->base.ConfigID == count + 1)
                count++;
@@ -1387,7 +1431,8 @@ dri2_wl_add_configs_for_visuals(_EGLDriver *drv, _EGLDisplay *disp)
           */
          dri2_conf = dri2_add_config(disp, dri2_dpy->driver_configs[i],
                                      count + 1, EGL_WINDOW_BIT, NULL,
-                                     dri2_wl_visuals[c].rgba_masks);
+                                     dri2_wl_visuals[c].rgba_shifts,
+                                     dri2_wl_visuals[c].rgba_sizes);
          if (dri2_conf) {
             if (dri2_conf->base.ConfigID == count + 1)
                count++;

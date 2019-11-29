@@ -48,6 +48,8 @@
 #  include "genxml/gen10_pack.h"
 #elif (GEN_VERSIONx10 == 110)
 #  include "genxml/gen11_pack.h"
+#elif (GEN_VERSIONx10 == 120)
+#  include "genxml/gen12_pack.h"
 #else
 #  error "Need to add a pack header include for this gen"
 #endif

@@ -47,15 +47,17 @@
 #endif
 #endif
 
-#if defined(PIPE_OS_NETBSD) || defined(PIPE_OS_OPENBSD)
+#if defined(PIPE_OS_BSD)
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <machine/cpu.h>
 #endif
 
-#if defined(PIPE_OS_FREEBSD) || defined(PIPE_OS_DRAGONFLY)
-#include <sys/types.h>
-#include <sys/sysctl.h>
+#if defined(PIPE_OS_FREEBSD)
+#if __has_include(<sys/auxv.h>)
+#include <sys/auxv.h>
+#define HAVE_ELF_AUX_INFO
+#endif
 #endif
 
 #if defined(PIPE_OS_LINUX)
@@ -92,7 +94,7 @@ static int has_cpuid(void);
 #endif
 
 
-#if defined(PIPE_ARCH_PPC) && !defined(PIPE_OS_APPLE)
+#if defined(PIPE_ARCH_PPC) && !defined(PIPE_OS_APPLE) && !defined(PIPE_OS_BSD) && !defined(PIPE_OS_LINUX)
 static jmp_buf  __lv_powerpc_jmpbuf;
 static volatile sig_atomic_t __lv_powerpc_canjump = 0;
 
@@ -113,8 +115,20 @@ sigill_handler(int sig)
 static void
 check_os_altivec_support(void)
 {
-#if defined(PIPE_OS_APPLE)
+#if defined(__ALTIVEC__)
+   util_cpu_caps.has_altivec = 1;
+#endif
+#if defined(__VSX__)
+   util_cpu_caps.has_vsx = 1;
+#endif
+#if defined(__ALTIVEC__) && defined(__VSX__)
+/* Do nothing */
+#elif defined(PIPE_OS_APPLE) || defined(PIPE_OS_NETBSD) || defined(PIPE_OS_OPENBSD)
+#ifdef HW_VECTORUNIT
    int sels[2] = {CTL_HW, HW_VECTORUNIT};
+#else
+   int sels[2] = {CTL_MACHDEP, CPU_ALTIVEC};
+#endif
    int has_vu = 0;
    int len = sizeof (has_vu);
    int err;
@@ -126,8 +140,41 @@ check_os_altivec_support(void)
          util_cpu_caps.has_altivec = 1;
       }
    }
-#else /* !PIPE_OS_APPLE */
-   /* not on Apple/Darwin, do it the brute-force way */
+#elif defined(PIPE_OS_FREEBSD) /* !PIPE_OS_APPLE && !PIPE_OS_NETBSD && !PIPE_OS_OPENBSD */
+   unsigned long hwcap = 0;
+#ifdef HAVE_ELF_AUX_INFO
+   elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+#else
+   size_t len = sizeof(hwcap);
+   sysctlbyname("hw.cpu_features", &hwcap, &len, NULL, 0);
+#endif
+   if (hwcap & PPC_FEATURE_HAS_ALTIVEC)
+      util_cpu_caps.has_altivec = 1;
+   if (hwcap & PPC_FEATURE_HAS_VSX)
+      util_cpu_caps.has_vsx = 1;
+#elif defined(PIPE_OS_LINUX) /* !PIPE_OS_FREEBSD */
+#if defined(PIPE_ARCH_PPC_64)
+    Elf64_auxv_t aux;
+#else
+    Elf32_auxv_t aux;
+#endif
+    int fd = open("/proc/self/auxv", O_RDONLY | O_CLOEXEC);
+    if (fd >= 0) {
+       while (read(fd, &aux, sizeof(aux)) == sizeof(aux)) {
+          if (aux.a_type == AT_HWCAP) {
+             char *env_vsx = getenv("GALLIVM_VSX");
+             uint64_t hwcap = aux.a_un.a_val;
+             util_cpu_caps.has_altivec = (hwcap >> 28) & 1;
+             if (!env_vsx || env_vsx[0] != '0') {
+                util_cpu_caps.has_vsx  = (hwcap >>  7) & 1;
+             }
+             break;
+          }
+       }
+       close(fd);
+    }
+#else /* !PIPE_OS_APPLE && !PIPE_OS_BSD && !PIPE_OS_LINUX */
+   /* not on Apple/Darwin or Linux, do it the brute-force way */
    /* this is borrowed from the libmpeg2 library */
    signal(SIGILL, sigill_handler);
    if (setjmp(__lv_powerpc_jmpbuf)) {
@@ -171,7 +218,7 @@ check_os_altivec_support(void)
          util_cpu_caps.has_altivec = 0;
       }
    }
-#endif /* !PIPE_OS_APPLE */
+#endif /* !PIPE_OS_APPLE && !PIPE_OS_LINUX */
 }
 #endif /* PIPE_ARCH_PPC */
 
@@ -339,7 +386,14 @@ check_os_arm_support(void)
     * used. Because of this we cannot use PIPE_OS_ANDROID here, but rather
     * have a separate macro that only gets enabled from respective Android.mk.
     */
-#if defined(HAS_ANDROID_CPUFEATURES)
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+   util_cpu_caps.has_neon = 1;
+#elif defined(PIPE_OS_FREEBSD) && defined(HAVE_ELF_AUX_INFO)
+   unsigned long hwcap = 0;
+   elf_aux_info(AT_HWCAP, &hwcap, sizeof(hwcap));
+   if (hwcap & HWCAP_NEON)
+      util_cpu_caps.has_neon = 1;
+#elif defined(HAS_ANDROID_CPUFEATURES)
    AndroidCpuFamily cpu_family = android_getCpuFamily();
    uint64_t cpu_features = android_getCpuFeatures();
 

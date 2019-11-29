@@ -713,6 +713,7 @@ static const _mesa_glsl_extension _mesa_glsl_supported_extensions[] = {
    EXT(AMD_vertex_shader_viewport_index),
    EXT(ANDROID_extension_pack_es31a),
    EXT(EXT_blend_func_extended),
+   EXT(EXT_demote_to_helper_invocation),
    EXT(EXT_frag_depth),
    EXT(EXT_draw_buffers),
    EXT(EXT_clip_cull_distance),
@@ -1508,6 +1509,13 @@ ast_jump_statement::ast_jump_statement(int mode, ast_expression *return_value)
 
    if (mode == ast_return)
       opt_return_value = return_value;
+}
+
+
+void
+ast_demote_statement::print(void) const
+{
+   printf("demote; ");
 }
 
 
@@ -2325,50 +2333,4 @@ do_common_optimization(exec_list *ir, bool linked,
 #undef OPT
 
    return progress;
-}
-
-extern "C" {
-
-/**
- * To be called at GL context ctor.
- */
-void
-_mesa_init_shader_compiler_types(void)
-{
-   glsl_type_singleton_init_or_ref();
-}
-
-/**
- * To be called at GL context dtor.
- */
-void
-_mesa_destroy_shader_compiler_types(void)
-{
-   glsl_type_singleton_decref();
-}
-
-/**
- * To be called at GL teardown time, this frees compiler datastructures.
- *
- * After calling this, any previously compiled shaders and shader
- * programs would be invalid.  So this should happen at approximately
- * program exit.
- */
-void
-_mesa_destroy_shader_compiler(void)
-{
-   _mesa_destroy_shader_compiler_caches();
-}
-
-/**
- * Releases compiler caches to trade off performance for memory.
- *
- * Intended to be used with glReleaseShaderCompiler().
- */
-void
-_mesa_destroy_shader_compiler_caches(void)
-{
-   _mesa_glsl_release_builtin_functions();
-}
-
 }

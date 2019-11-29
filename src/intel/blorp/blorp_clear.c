@@ -232,10 +232,12 @@ get_fast_clear_rect(const struct isl_device *dev,
 
       x_align *= 16;
 
-      /* SKL+ line alignment requirement for Y-tiled are half those of the prior
-       * generations.
+      /* The line alignment requirement for Y-tiled is halved at SKL and again
+       * at TGL.
        */
-      if (dev->info->gen >= 9)
+      if (dev->info->gen >= 12)
+         y_align *= 8;
+      else if (dev->info->gen >= 9)
          y_align *= 16;
       else
          y_align *= 32;
@@ -331,11 +333,6 @@ blorp_fast_clear(struct blorp_batch *batch,
                  uint32_t level, uint32_t start_layer, uint32_t num_layers,
                  uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
 {
-   /* Ensure that all layers undergoing the clear have an auxiliary buffer. */
-   assert(start_layer + num_layers <=
-          MAX2(surf->aux_surf->logical_level0_px.depth >> level,
-               surf->aux_surf->logical_level0_px.array_len));
-
    struct blorp_params params;
    blorp_params_init(&params);
    params.num_layers = num_layers;
@@ -565,6 +562,107 @@ blorp_clear(struct blorp_batch *batch,
    }
 }
 
+static bool
+blorp_clear_stencil_as_rgba(struct blorp_batch *batch,
+                            const struct blorp_surf *surf,
+                            uint32_t level, uint32_t start_layer,
+                            uint32_t num_layers,
+                            uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1,
+                            uint8_t stencil_mask, uint8_t stencil_value)
+{
+   /* We only support separate W-tiled stencil for now */
+   if (surf->surf->format != ISL_FORMAT_R8_UINT ||
+       surf->surf->tiling != ISL_TILING_W)
+      return false;
+
+   /* Stencil mask support would require piles of shader magic */
+   if (stencil_mask != 0xff)
+      return false;
+
+   if (surf->surf->samples > 1) {
+      /* Adjust x0, y0, x1, and y1 to be in units of samples */
+      assert(surf->surf->msaa_layout == ISL_MSAA_LAYOUT_INTERLEAVED);
+      struct isl_extent2d msaa_px_size_sa =
+         isl_get_interleaved_msaa_px_size_sa(surf->surf->samples);
+
+      x0 *= msaa_px_size_sa.w;
+      y0 *= msaa_px_size_sa.h;
+      x1 *= msaa_px_size_sa.w;
+      y1 *= msaa_px_size_sa.h;
+   }
+
+   /* W-tiles and Y-tiles have the same layout as far as cache lines are
+    * concerned: both are 8x8 cache lines laid out Y-major.  The difference is
+    * entirely in how the data is arranged withing the cache line.  W-tiling
+    * is 8x8 pixels in a swizzled pattern while Y-tiling is 16B by 4 rows
+    * regardless of image format size.  As long as everything is aligned to 8,
+    * we can just treat the W-tiled image as Y-tiled, ignore the layout
+    * difference within a cache line, and blast out data.
+    */
+   if (x0 % 8 != 0 || y0 % 8 != 0 || x1 % 8 != 0 || y1 % 8 != 0)
+      return false;
+
+   struct blorp_params params;
+   blorp_params_init(&params);
+
+   if (!blorp_params_get_clear_kernel(batch, &params, true, false))
+      return false;
+
+   memset(&params.wm_inputs.clear_color, stencil_value,
+          sizeof(params.wm_inputs.clear_color));
+
+   /* The Sandy Bridge PRM Vol. 4 Pt. 2, section 2.11.2.1.1 has the
+    * following footnote to the format table:
+    *
+    *    128 BPE Formats cannot be Tiled Y when used as render targets
+    *
+    * We have to use RGBA16_UINT on SNB.
+    */
+   enum isl_format wide_format;
+   if (ISL_DEV_GEN(batch->blorp->isl_dev) <= 6) {
+      wide_format = ISL_FORMAT_R16G16B16A16_UINT;
+
+      /* For RGBA16_UINT, we need to mask the stencil value otherwise, we risk
+       * clamping giving us the wrong values
+       */
+      for (unsigned i = 0; i < 4; i++)
+         params.wm_inputs.clear_color[i] &= 0xffff;
+   } else {
+      wide_format = ISL_FORMAT_R32G32B32A32_UINT;
+   }
+
+   for (uint32_t a = 0; a < num_layers; a++) {
+      uint32_t layer = start_layer + a;
+
+      brw_blorp_surface_info_init(batch->blorp, &params.dst, surf, level,
+                                  layer, ISL_FORMAT_UNSUPPORTED, true);
+
+      if (surf->surf->samples > 1)
+         blorp_surf_fake_interleaved_msaa(batch->blorp->isl_dev, &params.dst);
+
+      /* Make it Y-tiled */
+      blorp_surf_retile_w_to_y(batch->blorp->isl_dev, &params.dst);
+
+      unsigned wide_Bpp =
+         isl_format_get_layout(wide_format)->bpb / 8;
+
+      params.dst.view.format = params.dst.surf.format = wide_format;
+      assert(params.dst.surf.logical_level0_px.width % wide_Bpp == 0);
+      params.dst.surf.logical_level0_px.width /= wide_Bpp;
+      assert(params.dst.tile_x_sa % wide_Bpp == 0);
+      params.dst.tile_x_sa /= wide_Bpp;
+
+      params.x0 = params.dst.tile_x_sa + x0 / (wide_Bpp / 2);
+      params.y0 = params.dst.tile_y_sa + y0 / 2;
+      params.x1 = params.dst.tile_x_sa + x1 / (wide_Bpp / 2);
+      params.y1 = params.dst.tile_y_sa + y1 / 2;
+
+      batch->blorp->exec(batch, &params);
+   }
+
+   return true;
+}
+
 void
 blorp_clear_depth_stencil(struct blorp_batch *batch,
                           const struct blorp_surf *depth,
@@ -575,6 +673,13 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
                           bool clear_depth, float depth_value,
                           uint8_t stencil_mask, uint8_t stencil_value)
 {
+   if (!clear_depth && blorp_clear_stencil_as_rgba(batch, stencil, level,
+                                                   start_layer, num_layers,
+                                                   x0, y0, x1, y1,
+                                                   stencil_mask,
+                                                   stencil_value))
+      return;
+
    struct blorp_params params;
    blorp_params_init(&params);
 
@@ -649,14 +754,16 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
 }
 
 bool
-blorp_can_hiz_clear_depth(uint8_t gen, enum isl_format format,
-                          uint32_t num_samples,
+blorp_can_hiz_clear_depth(const struct gen_device_info *devinfo,
+                          const struct isl_surf *surf,
+                          enum isl_aux_usage aux_usage,
+                          uint32_t level, uint32_t layer,
                           uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1)
 {
    /* This function currently doesn't support any gen prior to gen8 */
-   assert(gen >= 8);
+   assert(devinfo->gen >= 8);
 
-   if (gen == 8 && format == ISL_FORMAT_R16_UNORM) {
+   if (devinfo->gen == 8 && surf->format == ISL_FORMAT_R16_UNORM) {
       /* Apply the D16 alignment restrictions. On BDW, HiZ has an 8x4 sample
        * block with the following property: as the number of samples increases,
        * the number of pixels representable by this block decreases by a factor
@@ -675,7 +782,7 @@ blorp_can_hiz_clear_depth(uint8_t gen, enum isl_format format,
        * Table: Pixel Dimensions in a HiZ Sample Block Pre-SKL
        */
       const struct isl_extent2d sa_block_dim =
-         isl_get_interleaved_msaa_px_size_sa(num_samples);
+         isl_get_interleaved_msaa_px_size_sa(surf->samples);
       const uint8_t align_px_w = 8 / sa_block_dim.w;
       const uint8_t align_px_h = 4 / sa_block_dim.h;
 
@@ -695,8 +802,56 @@ blorp_can_hiz_clear_depth(uint8_t gen, enum isl_format format,
       if (x0 % align_px_w || y0 % align_px_h ||
           x1 % align_px_w || y1 % align_px_h)
          return false;
+   } else if (isl_surf_supports_hiz_ccs_wt(devinfo, surf, aux_usage)) {
+      /* We have to set the WM_HZ_OP::FullSurfaceDepthandStencilClear bit
+       * whenever we clear an uninitialized HIZ buffer (as some drivers
+       * currently do). However, this bit seems liable to clear 16x8 pixels in
+       * the ZCS on Gen12 - greater than the slice alignments for depth
+       * buffers.
+       */
+      assert(surf->image_alignment_el.w % 16 != 0 ||
+             surf->image_alignment_el.h % 8 != 0);
+
+      /* This is the hypothesis behind some corruption that was seen with the
+       * amd_vertex_shader_layer-layered-depth-texture-render piglit test.
+       *
+       * From the Compressed Depth Buffers section of the Bspec, under the
+       * Gen12 texture performant and ZCS columns:
+       *
+       *    Update with clear at either 16x8 or 8x4 granularity, based on
+       *    fs_clr or otherwise.
+       *
+       * There are a number of ways to avoid full surface CCS clears that
+       * overlap other slices, but for now we choose to disable fast-clears
+       * when an initializing clear could hit another miplevel.
+       *
+       * NOTE: Because the CCS compresses the depth buffer and not a version
+       * of it that has been rearranged with different alignments (like Gen8+
+       * HIZ), we have to make sure that the x0 and y0 are at least 16x8
+       * aligned in the context of the entire surface.
+       */
+      uint32_t slice_x0, slice_y0;
+      isl_surf_get_image_offset_el(surf, level,
+                                   surf->dim == ISL_SURF_DIM_3D ? 0 : layer,
+                                   surf->dim == ISL_SURF_DIM_3D ? layer: 0,
+                                   &slice_x0, &slice_y0);
+      const bool max_x1_y1 =
+         x1 == minify(surf->logical_level0_px.width, level) && 
+         y1 == minify(surf->logical_level0_px.height, level);
+      const uint32_t haligned_x1 = ALIGN(x1, surf->image_alignment_el.w);
+      const uint32_t valigned_y1 = ALIGN(y1, surf->image_alignment_el.h);
+      const bool unaligned = (slice_x0 + x0) % 16 || (slice_y0 + y0) % 8 ||
+                             max_x1_y1 ? haligned_x1 % 16 || valigned_y1 % 8 :
+                             x1 % 16 || y1 % 8;
+      const bool alignment_used = surf->levels > 1 ||
+                                  surf->logical_level0_px.depth > 1 ||
+                                  surf->logical_level0_px.array_len > 1;
+
+      if (unaligned && alignment_used)
+         return false;
    }
-   return true;
+
+   return isl_aux_usage_has_hiz(aux_usage);
 }
 
 void
@@ -882,7 +1037,10 @@ blorp_ccs_resolve(struct blorp_batch *batch,
    assert(aux_fmtl->txc == ISL_TXC_CCS);
 
    unsigned x_scaledown, y_scaledown;
-   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 9) {
+   if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 12) {
+      x_scaledown = aux_fmtl->bw * 8;
+      y_scaledown = aux_fmtl->bh * 4;
+   } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 9) {
       x_scaledown = aux_fmtl->bw * 8;
       y_scaledown = aux_fmtl->bh * 8;
    } else if (ISL_DEV_GEN(batch->blorp->isl_dev) >= 8) {
@@ -893,8 +1051,8 @@ blorp_ccs_resolve(struct blorp_batch *batch,
       y_scaledown = aux_fmtl->bh / 2;
    }
    params.x0 = params.y0 = 0;
-   params.x1 = minify(params.dst.aux_surf.logical_level0_px.width, level);
-   params.y1 = minify(params.dst.aux_surf.logical_level0_px.height, level);
+   params.x1 = minify(params.dst.surf.logical_level0_px.width, level);
+   params.y1 = minify(params.dst.surf.logical_level0_px.height, level);
    params.x1 = ALIGN(params.x1, x_scaledown) / x_scaledown;
    params.y1 = ALIGN(params.y1, y_scaledown) / y_scaledown;
 

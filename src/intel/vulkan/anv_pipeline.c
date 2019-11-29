@@ -168,6 +168,7 @@ anv_shader_compile_to_nir(struct anv_device *device,
    };
    struct spirv_to_nir_options spirv_options = {
       .frag_coord_is_sysval = true,
+      .use_scoped_memory_barrier = true,
       .caps = {
          .demote_to_helper_invocation = true,
          .derivative_group = true,
@@ -191,6 +192,8 @@ anv_shader_compile_to_nir(struct anv_device *device,
          .physical_storage_buffer_address = pdevice->has_a64_buffer_access,
          .post_depth_coverage = pdevice->info.gen >= 9,
          .runtime_descriptor_array = true,
+         .float_controls = pdevice->info.gen >= 8,
+         .shader_clock = true,
          .shader_viewport_index_layer = true,
          .stencil_export = pdevice->info.gen >= 9,
          .storage_8bit = pdevice->info.gen >= 8,
@@ -204,6 +207,8 @@ anv_shader_compile_to_nir(struct anv_device *device,
          .tessellation = true,
          .transform_feedback = pdevice->info.gen >= 8,
          .variable_pointers = true,
+         .vk_memory_model = true,
+         .vk_memory_model_device_scope = true,
       },
       .ubo_addr_format = nir_address_format_32bit_index_offset,
       .ssbo_addr_format =
@@ -878,7 +883,7 @@ anv_pipeline_compile_tes(const struct brw_compiler *compiler,
                                      &tes_stage->key.tes,
                                      &tcs_stage->prog_data.tcs.base.vue_map,
                                      &tes_stage->prog_data.tes,
-                                     tes_stage->nir, NULL, -1,
+                                     tes_stage->nir, -1,
                                      tes_stage->stats, NULL);
 }
 
@@ -1043,7 +1048,7 @@ anv_pipeline_compile_fs(const struct brw_compiler *compiler,
    fs_stage->code = brw_compile_fs(compiler, device, mem_ctx,
                                    &fs_stage->key.wm,
                                    &fs_stage->prog_data.wm,
-                                   fs_stage->nir, NULL, -1, -1, -1,
+                                   fs_stage->nir, -1, -1, -1,
                                    true, false, NULL,
                                    fs_stage->stats, NULL);
 
@@ -1071,6 +1076,26 @@ anv_pipeline_add_executable(struct anv_pipeline *pipeline,
                             struct brw_compile_stats *stats,
                             uint32_t code_offset)
 {
+   char *nir = NULL;
+   if (stage->nir &&
+       (pipeline->flags &
+        VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR)) {
+      char *stream_data = NULL;
+      size_t stream_size = 0;
+      FILE *stream = open_memstream(&stream_data, &stream_size);
+
+      nir_print_shader(stage->nir, stream);
+
+      fclose(stream);
+
+      /* Copy it to a ralloc'd thing */
+      nir = ralloc_size(pipeline->mem_ctx, stream_size + 1);
+      memcpy(nir, stream_data, stream_size);
+      nir[stream_size] = 0;
+
+      free(stream_data);
+   }
+
    char *disasm = NULL;
    if (stage->code &&
        (pipeline->flags &
@@ -1100,6 +1125,7 @@ anv_pipeline_add_executable(struct anv_pipeline *pipeline,
       (struct anv_pipeline_executable) {
          .stage = stage->stage,
          .stats = *stats,
+         .nir = nir,
          .disasm = disasm,
       };
 }
@@ -2163,6 +2189,17 @@ VkResult anv_GetPipelineExecutableInternalRepresentationsKHR(
    assert(pExecutableInfo->executableIndex < pipeline->num_executables);
    const struct anv_pipeline_executable *exe =
       &pipeline->executables[pExecutableInfo->executableIndex];
+
+   if (exe->nir) {
+      vk_outarray_append(&out, ir) {
+         WRITE_STR(ir->name, "Final NIR");
+         WRITE_STR(ir->description,
+                   "Final NIR before going into the back-end compiler");
+
+         if (!write_ir_text(ir, exe->nir))
+            incomplete_text = true;
+      }
+   }
 
    if (exe->disasm) {
       vk_outarray_append(&out, ir) {

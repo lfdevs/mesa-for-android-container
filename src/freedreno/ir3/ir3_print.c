@@ -53,6 +53,7 @@ static void print_instr_name(struct ir3_instruction *instr)
 		case OPC_META_INPUT:  printf("_meta:in");   break;
 		case OPC_META_FO:     printf("_meta:fo");   break;
 		case OPC_META_FI:     printf("_meta:fi");   break;
+		case OPC_META_TEX_PREFETCH: printf("_meta:tex_prefetch"); break;
 
 		/* shouldn't hit here.. just for debugging: */
 		default: printf("_meta:%d", instr->opc);    break;
@@ -115,6 +116,8 @@ static void print_reg_name(struct ir3_register *reg)
 		}
 		printf("]");
 	} else if (reg->flags & IR3_REG_SSA) {
+		if (reg->flags & IR3_REG_HIGH)
+			printf("H");
 		printf("_[");
 		print_instr_name(reg->instr);
 		printf("]");
@@ -181,6 +184,9 @@ print_instr(struct ir3_instruction *instr, int lvl)
 
 	if (instr->opc == OPC_META_FO) {
 		printf(", off=%d", instr->fo.off);
+	} else if (instr->opc == OPC_META_TEX_PREFETCH) {
+		printf(", tex=%d, samp=%d, input_offset=%d", instr->prefetch.tex,
+				instr->prefetch.samp, instr->prefetch.input_offset);
 	}
 
 	if (is_flow(instr) && instr->cat0.target) {
@@ -215,13 +221,15 @@ print_block(struct ir3_block *block, int lvl)
 {
 	tab(lvl); printf("block%u {\n", block_id(block));
 
-	if (block->predecessors_count > 0) {
+	if (block->predecessors->entries > 0) {
+		unsigned i = 0;
 		tab(lvl+1);
 		printf("pred: ");
-		for (unsigned i = 0; i < block->predecessors_count; i++) {
-			if (i)
+		set_foreach(block->predecessors, entry) {
+			struct ir3_block *pred = (struct ir3_block *)entry->key;
+			if (i++)
 				printf(", ");
-			printf("block%u", block_id(block->predecessors[i]));
+			printf("block%u", block_id(pred));
 		}
 		printf("\n");
 	}

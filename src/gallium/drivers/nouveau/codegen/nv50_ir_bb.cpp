@@ -536,9 +536,6 @@ Function::printCFGraph(const char *filePath)
          case Graph::Edge::BACK:
             fprintf(out, "\t%i -> %i;\n", idA, idB);
             break;
-         case Graph::Edge::DUMMY:
-            fprintf(out, "\t%i -> %i [style=dotted];\n", idA, idB);
-            break;
          default:
             assert(0);
             break;

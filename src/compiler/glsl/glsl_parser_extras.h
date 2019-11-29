@@ -816,6 +816,8 @@ struct _mesa_glsl_parse_state {
    bool EXT_blend_func_extended_warn;
    bool EXT_clip_cull_distance_enable;
    bool EXT_clip_cull_distance_warn;
+   bool EXT_demote_to_helper_invocation_enable;
+   bool EXT_demote_to_helper_invocation_warn;
    bool EXT_draw_buffers_enable;
    bool EXT_draw_buffers_warn;
    bool EXT_frag_depth_enable;
@@ -1023,11 +1025,6 @@ extern int glcpp_preprocess(void *ctx, const char **shader, char **info_log,
                             glcpp_extension_iterator extensions,
                             struct _mesa_glsl_parse_state *state,
                             struct gl_context *gl_ctx);
-
-extern void _mesa_init_shader_compiler_types(void);
-extern void _mesa_destroy_shader_compiler_types(void);
-extern void _mesa_destroy_shader_compiler(void);
-extern void _mesa_destroy_shader_compiler_caches(void);
 
 extern void
 _mesa_glsl_copy_symbols_from_table(struct exec_list *shader_ir,

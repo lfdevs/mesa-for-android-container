@@ -1147,7 +1147,7 @@ bool si_query_hw_begin(struct si_context *sctx,
 	if (!query->buffer.buf)
 		return false;
 
-	LIST_ADDTAIL(&query->b.active_list, &sctx->active_queries);
+	list_addtail(&query->b.active_list, &sctx->active_queries);
 	sctx->num_cs_dw_queries_suspend += query->b.num_cs_dw_suspend;
 	return true;
 }
@@ -1171,7 +1171,7 @@ bool si_query_hw_end(struct si_context *sctx,
 	si_query_hw_emit_stop(sctx, query);
 
 	if (!(query->flags & SI_QUERY_HW_FLAG_NO_START)) {
-		LIST_DELINIT(&query->b.active_list);
+		list_delinit(&query->b.active_list);
 		sctx->num_cs_dw_queries_suspend -= query->b.num_cs_dw_suspend;
 	}
 
@@ -1923,7 +1923,7 @@ void si_init_query_functions(struct si_context *sctx)
 		sctx->b.render_condition = si_render_condition;
 	}
 
-	LIST_INITHEAD(&sctx->active_queries);
+	list_inithead(&sctx->active_queries);
 }
 
 void si_init_screen_query_functions(struct si_screen *sscreen)

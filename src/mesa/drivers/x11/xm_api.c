@@ -338,9 +338,9 @@ create_xmesa_buffer(XMesaDrawable d, BufferType type,
     */
    _swrast_add_soft_renderbuffers(&b->mesa_buffer,
                                   GL_FALSE,  /* color */
-                                  vis->mesa_visual.haveDepthBuffer,
-                                  vis->mesa_visual.haveStencilBuffer,
-                                  vis->mesa_visual.haveAccumBuffer,
+                                  vis->mesa_visual.depthBits > 0,
+                                  vis->mesa_visual.stencilBits > 0,
+                                  vis->mesa_visual.accumRedBits > 0,
                                   GL_FALSE,  /* software alpha buffer */
                                   vis->mesa_visual.numAuxBuffers > 0 );
 
@@ -582,7 +582,6 @@ initialize_visual_and_buffer(XMesaVisual v, XMesaBuffer b,
       _mesa_warning(NULL, "XMesa: RGB mode rendering not supported in given visual.\n");
       return GL_FALSE;
    }
-   v->mesa_visual.indexBits = 0;
 
    if (getenv("MESA_NO_DITHER")) {
       v->dithered_pf = v->undithered_pf;

@@ -654,6 +654,9 @@ struct brw_stage_prog_data {
 
    unsigned program_size;
 
+   /** Does this program pull from any UBO or other constant buffers? */
+   bool has_ubo_pull;
+
    /**
     * Register where the thread expects to find input data from the URB
     * (typically uniforms, followed by vertex or fragment attributes).
@@ -1319,7 +1322,6 @@ brw_compile_tes(const struct brw_compiler *compiler, void *log_data,
                 const struct brw_vue_map *input_vue_map,
                 struct brw_tes_prog_data *prog_data,
                 struct nir_shader *shader,
-                struct gl_program *prog,
                 int shader_time_index,
                 struct brw_compile_stats *stats,
                 char **error_str);
@@ -1383,7 +1385,6 @@ brw_compile_fs(const struct brw_compiler *compiler, void *log_data,
                const struct brw_wm_prog_key *key,
                struct brw_wm_prog_data *prog_data,
                struct nir_shader *shader,
-               struct gl_program *prog,
                int shader_time_index8,
                int shader_time_index16,
                int shader_time_index32,
@@ -1460,7 +1461,7 @@ brw_stage_has_packed_dispatch(ASSERTED const struct gen_device_info *devinfo,
     * to do a full test run with brw_fs_test_dispatch_packing() hooked up to
     * the NIR front-end before changing this assertion.
     */
-   assert(devinfo->gen <= 11);
+   assert(devinfo->gen <= 12);
 
    switch (stage) {
    case MESA_SHADER_FRAGMENT: {

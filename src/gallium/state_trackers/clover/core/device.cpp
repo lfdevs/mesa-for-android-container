@@ -46,12 +46,17 @@ namespace {
 device::device(clover::platform &platform, pipe_loader_device *ldev) :
    platform(platform), ldev(ldev) {
    pipe = pipe_loader_create_screen(ldev);
-   if (!pipe || !pipe->get_param(pipe, PIPE_CAP_COMPUTE) ||
-       !supports_ir(PIPE_SHADER_IR_NATIVE)) {
-      if (pipe)
-         pipe->destroy(pipe);
-      throw error(CL_INVALID_DEVICE);
+   if (pipe && pipe->get_param(pipe, PIPE_CAP_COMPUTE)) {
+      if (supports_ir(PIPE_SHADER_IR_NATIVE))
+         return;
+#ifdef HAVE_CLOVER_SPIRV
+      if (supports_ir(PIPE_SHADER_IR_NIR_SERIALIZED))
+         return;
+#endif
    }
+   if (pipe)
+      pipe->destroy(pipe);
+   throw error(CL_INVALID_DEVICE);
 }
 
 device::~device() {
@@ -246,7 +251,11 @@ device::vendor_name() const {
 
 enum pipe_shader_ir
 device::ir_format() const {
-   return PIPE_SHADER_IR_NATIVE;
+   if (supports_ir(PIPE_SHADER_IR_NATIVE))
+      return PIPE_SHADER_IR_NATIVE;
+
+   assert(supports_ir(PIPE_SHADER_IR_NIR_SERIALIZED));
+   return PIPE_SHADER_IR_NIR_SERIALIZED;
 }
 
 std::string
@@ -293,4 +302,9 @@ device::supported_extensions() const {
       + std::string(has_int64_atomics() ? " cl_khr_int64_extended_atomics" : "")
       + std::string(has_doubles() ? " cl_khr_fp64" : "")
       + std::string(has_halves() ? " cl_khr_fp16" : "");
+}
+
+const void *
+device::get_compiler_options(enum pipe_shader_ir ir) const {
+   return pipe->get_compiler_options(pipe, ir, PIPE_SHADER_COMPUTE);
 }

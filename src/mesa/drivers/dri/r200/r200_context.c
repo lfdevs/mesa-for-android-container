@@ -149,7 +149,7 @@ static void r200_emit_query_finish(radeonContextPtr radeon)
 
    BEGIN_BATCH(4);
    OUT_BATCH(CP_PACKET0(RADEON_RB3D_ZPASS_ADDR, 0));
-   OUT_BATCH_RELOC(0, query->bo, query->curr_offset, 0, RADEON_GEM_DOMAIN_GTT, 0);
+   OUT_BATCH_RELOC(query->bo, query->curr_offset, 0, RADEON_GEM_DOMAIN_GTT, 0);
    END_BATCH();
    query->curr_offset += sizeof(uint32_t);
    assert(query->curr_offset < RADEON_QUERY_PAGE_SIZE);

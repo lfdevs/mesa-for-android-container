@@ -498,7 +498,7 @@ static void r600_buffer_do_flush_region(struct pipe_context *ctx,
 		ctx->resource_copy_region(ctx, dst, 0, box->x, 0, 0, src, 0, &dma_box);
 	}
 
-	util_range_add(&rbuffer->valid_buffer_range, box->x,
+	util_range_add(&rbuffer->b.b, &rbuffer->valid_buffer_range, box->x,
 		       box->x + box->width);
 }
 
@@ -643,8 +643,8 @@ r600_buffer_from_user_memory(struct pipe_screen *screen,
 	rbuffer->domains = RADEON_DOMAIN_GTT;
 	rbuffer->flags = 0;
 	rbuffer->b.is_user_ptr = true;
-	util_range_add(&rbuffer->valid_buffer_range, 0, templ->width0);
-	util_range_add(&rbuffer->b.valid_buffer_range, 0, templ->width0);
+	util_range_add(&rbuffer->b.b, &rbuffer->valid_buffer_range, 0, templ->width0);
+	util_range_add(&rbuffer->b.b, &rbuffer->b.valid_buffer_range, 0, templ->width0);
 
 	/* Convert a user pointer to a buffer. */
 	rbuffer->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);

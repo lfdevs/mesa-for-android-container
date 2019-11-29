@@ -122,6 +122,8 @@ private:
    void emitSAM();
    void emitRAM();
 
+   void emitPSETP();
+
    void emitMOV();
    void emitS2R();
    void emitCS2R();
@@ -689,6 +691,31 @@ CodeEmitterGM107::emitRAM()
 /*******************************************************************************
  * predicate/cc
  ******************************************************************************/
+
+void
+CodeEmitterGM107::emitPSETP()
+{
+
+   emitInsn(0x50900000);
+
+   switch (insn->op) {
+   case OP_AND: emitField(0x18, 3, 0); break;
+   case OP_OR:  emitField(0x18, 3, 1); break;
+   case OP_XOR: emitField(0x18, 3, 2); break;
+   default:
+      assert(!"unexpected operation");
+      break;
+   }
+
+   // emitINV (0x2a);
+   emitPRED(0x27); // TODO: support 3-arg
+   emitINV (0x20, insn->src(1));
+   emitPRED(0x1d, insn->src(1));
+   emitINV (0x0f, insn->src(0));
+   emitPRED(0x0c, insn->src(0));
+   emitPRED(0x03, insn->def(0));
+   emitPRED(0x00);
+}
 
 /*******************************************************************************
  * movement / conversion
@@ -3557,7 +3584,12 @@ CodeEmitterGM107::emitInstruction(Instruction *i)
    case OP_AND:
    case OP_OR:
    case OP_XOR:
-      emitLOP();
+      switch (insn->def(0).getFile()) {
+      case FILE_GPR: emitLOP(); break;
+      case FILE_PREDICATE: emitPSETP(); break;
+      default:
+         assert(!"invalid bool op");
+      }
       break;
    case OP_NOT:
       emitNOT();

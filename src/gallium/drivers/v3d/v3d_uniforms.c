@@ -206,13 +206,13 @@ write_tmu_p1(struct v3d_job *job,
 }
 
 struct v3d_cl_reloc
-v3d_write_uniforms(struct v3d_context *v3d, struct v3d_compiled_shader *shader,
+v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
+                   struct v3d_compiled_shader *shader,
                    enum pipe_shader_type stage)
 {
         struct v3d_constbuf_stateobj *cb = &v3d->constbuf[stage];
         struct v3d_texture_stateobj *texstate = &v3d->tex[stage];
         struct v3d_uniform_list *uinfo = &shader->prog_data.base->uniforms;
-        struct v3d_job *job = v3d->job;
         const uint32_t *gallium_uniforms = cb->cb[0].user_buffer;
 
         /* We always need to return some space for uniforms, because the HW
@@ -434,7 +434,8 @@ v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
                         /* We could flag this on just the stage we're
                          * compiling for, but it's not passed in.
                          */
-                        dirty |= VC5_DIRTY_FRAGTEX | VC5_DIRTY_VERTTEX;
+                        dirty |= VC5_DIRTY_FRAGTEX | VC5_DIRTY_VERTTEX |
+                           VC5_DIRTY_COMPTEX;
                         break;
 
                 case QUNIFORM_SSBO_OFFSET:
@@ -461,7 +462,8 @@ v3d_set_shader_uniform_dirty_flags(struct v3d_compiled_shader *shader)
 
                 default:
                         assert(quniform_contents_is_texture_p0(shader->prog_data.base->uniforms.contents[i]));
-                        dirty |= VC5_DIRTY_FRAGTEX | VC5_DIRTY_VERTTEX;
+                        dirty |= VC5_DIRTY_FRAGTEX | VC5_DIRTY_VERTTEX |
+                           VC5_DIRTY_COMPTEX;
                         break;
                 }
         }

@@ -291,7 +291,8 @@ llvmpipe_end_query(struct pipe_context *pipe, struct pipe_query *q)
          llvmpipe->pipeline_statistics.c_primitives - pq->stats.c_primitives;
       pq->stats.ps_invocations =
          llvmpipe->pipeline_statistics.ps_invocations - pq->stats.ps_invocations;
-
+      pq->stats.cs_invocations =
+         llvmpipe->pipeline_statistics.cs_invocations - pq->stats.cs_invocations;
       llvmpipe->active_statistics_queries--;
       break;
    case PIPE_QUERY_OCCLUSION_COUNTER:

@@ -80,7 +80,11 @@ struct virgl_winsys {
                                struct virgl_hw_res *res);
 
    struct virgl_hw_res *(*resource_create_from_handle)(struct virgl_winsys *vws,
-                                                       struct winsys_handle *whandle);
+                                                       struct winsys_handle *whandle,
+                                                       uint32_t *plane,
+                                                       uint32_t *stride,
+                                                       uint32_t *plane_offset,
+                                                       uint64_t *modifier);
    boolean (*resource_get_handle)(struct virgl_winsys *vws,
                                   struct virgl_hw_res *res,
                                   uint32_t stride,

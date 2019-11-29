@@ -295,7 +295,7 @@ static void radeon_bomgr_free_va(const struct radeon_info *info,
     if ((va + size) == heap->start) {
         heap->start = va;
         /* Delete uppermost hole if it reaches the new top */
-        if (!LIST_IS_EMPTY(&heap->holes)) {
+        if (!list_is_empty(&heap->holes)) {
             hole = container_of(heap->holes.next, hole, list);
             if ((hole->offset + hole->size) == va) {
                 heap->start = hole->offset;
@@ -796,7 +796,7 @@ struct pb_slab *radeon_bo_slab_alloc(void *priv, unsigned heap,
     if (!slab->entries)
         goto fail_buffer;
 
-    LIST_INITHEAD(&slab->base.free);
+    list_inithead(&slab->base.free);
 
     base_hash = __sync_fetch_and_add(&ws->next_bo_hash, slab->base.num_entries);
 
@@ -815,7 +815,7 @@ struct pb_slab *radeon_bo_slab_alloc(void *priv, unsigned heap,
         bo->u.slab.entry.group_index = group_index;
         bo->u.slab.real = slab->buffer;
 
-        LIST_ADDTAIL(&bo->u.slab.entry.head, &slab->base.free);
+        list_addtail(&bo->u.slab.entry.head, &slab->base.free);
     }
 
     return &slab->base;
@@ -1134,21 +1134,13 @@ static struct pb_buffer *radeon_winsys_bo_from_ptr(struct radeon_winsys *rws,
 
 static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
                                                       struct winsys_handle *whandle,
-                                                      unsigned vm_alignment,
-                                                      unsigned *stride,
-                                                      unsigned *offset)
+                                                      unsigned vm_alignment)
 {
     struct radeon_drm_winsys *ws = radeon_drm_winsys(rws);
     struct radeon_bo *bo;
     int r;
     unsigned handle;
     uint64_t size = 0;
-
-    if (!offset && whandle->offset != 0) {
-        fprintf(stderr, "attempt to import unsupported winsys offset %u\n",
-                whandle->offset);
-        return NULL;
-    }
 
     /* We must maintain a list of pairs <handle, bo>, so that we always return
      * the same BO for one particular handle. If we didn't do that and created
@@ -1232,11 +1224,6 @@ static struct pb_buffer *radeon_winsys_bo_from_handle(struct radeon_winsys *rws,
 done:
     mtx_unlock(&ws->bo_handles_mutex);
 
-    if (stride)
-        *stride = whandle->stride;
-    if (offset)
-        *offset = whandle->offset;
-
     if (ws->info.r600_has_virtual_memory && !bo->va) {
         struct drm_radeon_gem_va va;
 
@@ -1287,8 +1274,6 @@ fail:
 
 static bool radeon_winsys_bo_get_handle(struct radeon_winsys *rws,
                                         struct pb_buffer *buffer,
-                                        unsigned stride, unsigned offset,
-                                        unsigned slice_size,
                                         struct winsys_handle *whandle)
 {
     struct drm_gem_flink flink;
@@ -1324,10 +1309,6 @@ static bool radeon_winsys_bo_get_handle(struct radeon_winsys *rws,
         if (drmPrimeHandleToFD(ws->fd, bo->handle, DRM_CLOEXEC, (int*)&whandle->handle))
             return false;
     }
-
-    whandle->stride = stride;
-    whandle->offset = offset;
-    whandle->offset += slice_size * whandle->layer;
 
     return true;
 }

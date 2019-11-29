@@ -281,6 +281,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_DEST_SURFACE_SRGB_CONTROL:
    case PIPE_CAP_TGSI_DIV:
    case PIPE_CAP_TGSI_ATOMINC_WRAP:
+   case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
       return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
@@ -390,7 +391,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    /* caps where we want the default value */
    case PIPE_CAP_DMABUF:
    case PIPE_CAP_ESSL_FEATURE_LEVEL:
-   case PIPE_CAP_MAX_FRAMES_IN_FLIGHT:
+   case PIPE_CAP_THROTTLE:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }
 }
@@ -418,9 +419,13 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen,
    switch (param) {
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return screen->prefer_nir ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
-   case PIPE_SHADER_CAP_SUPPORTED_IRS:
-      return 1 << PIPE_SHADER_IR_TGSI |
-             1 << PIPE_SHADER_IR_NIR;
+   case PIPE_SHADER_CAP_SUPPORTED_IRS: {
+      uint32_t irs = 1 << PIPE_SHADER_IR_TGSI |
+                     1 << PIPE_SHADER_IR_NIR;
+      if (screen->force_enable_cl)
+         irs |= 1 << PIPE_SHADER_IR_NIR_SERIALIZED;
+      return irs;
+   }
    case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
    case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
    case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
@@ -467,8 +472,6 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
-   case PIPE_SHADER_CAP_SCALAR_ISA:
-      return 1;
    case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
       return NVC0_MAX_BUFFERS;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
@@ -935,7 +938,7 @@ static const nir_shader_compiler_options nir_options = {
    .lower_usub_borrow = true, // TODO
    .lower_mul_high = false,
    .lower_negate = false,
-   .lower_sub = false, // TODO
+   .lower_sub = true,
    .lower_scmp = true, // TODO: not implemented yet
    .lower_idiv = true,
    .lower_isign = false, // TODO
@@ -971,6 +974,7 @@ static const nir_shader_compiler_options nir_options = {
    .max_unroll_iterations = 32,
    .lower_int64_options = nir_lower_divmod64, // TODO
    .lower_doubles_options = nir_lower_dmod, // TODO
+   .lower_to_scalar = true,
 };
 
 static const void *

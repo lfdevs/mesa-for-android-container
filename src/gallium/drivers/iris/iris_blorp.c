@@ -307,13 +307,25 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
 
    iris_require_command_space(batch, 1400);
 
+#if GEN_GEN == 8
+   genX(update_pma_fix)(ice, batch, false);
+#endif
+
    const unsigned scale = params->fast_clear_op ? UINT_MAX : 1;
    if (ice->state.current_hash_scale != scale) {
       genX(emit_hashing_mode)(ice, batch, params->x1 - params->x0,
                               params->y1 - params->y0, scale);
    }
 
+#if GEN_GEN >= 12
+   genX(emit_aux_map_state)(batch);
+#endif
+
+   iris_handle_always_flush_cache(batch);
+
    blorp_exec(blorp_batch, params);
+
+   iris_handle_always_flush_cache(batch);
 
    /* We've smashed all state compared to what the normal 3D pipeline
     * rendering tracks for GL.
@@ -337,6 +349,23 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
                          IRIS_DIRTY_SAMPLER_STATES_TCS |
                          IRIS_DIRTY_SAMPLER_STATES_TES |
                          IRIS_DIRTY_SAMPLER_STATES_GS);
+
+   if (!ice->shaders.uncompiled[MESA_SHADER_TESS_EVAL]) {
+      /* BLORP disabled tessellation, that's fine for the next draw */
+      skip_bits |= IRIS_DIRTY_TCS |
+                   IRIS_DIRTY_TES |
+                   IRIS_DIRTY_CONSTANTS_TCS |
+                   IRIS_DIRTY_CONSTANTS_TES |
+                   IRIS_DIRTY_BINDINGS_TCS |
+                   IRIS_DIRTY_BINDINGS_TES;
+   }
+
+   if (!ice->shaders.uncompiled[MESA_SHADER_GEOMETRY]) {
+      /* BLORP disabled geometry shaders, that's fine for the next draw */
+      skip_bits |= IRIS_DIRTY_GS |
+                   IRIS_DIRTY_CONSTANTS_GS |
+                   IRIS_DIRTY_BINDINGS_GS;
+   }
 
    /* we can skip flagging IRIS_DIRTY_DEPTH_BUFFER, if
     * BLORP_BATCH_NO_EMIT_DEPTH_STENCIL is set.

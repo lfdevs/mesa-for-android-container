@@ -121,14 +121,15 @@ static void si_create_compute_state_async(void *job, int thread_index)
 	assert(thread_index < ARRAY_SIZE(sscreen->compiler));
 	compiler = &sscreen->compiler[thread_index];
 
+	if (!compiler->passes)
+		si_init_compiler(sscreen, compiler);
+
 	if (program->ir_type == PIPE_SHADER_IR_TGSI) {
 		tgsi_scan_shader(sel->tokens, &sel->info);
 	} else {
 		assert(program->ir_type == PIPE_SHADER_IR_NIR);
 
-		si_nir_opts(sel->nir);
 		si_nir_scan_shader(sel->nir, &sel->info);
-		si_lower_nir(sel);
 	}
 
 	/* Store the declared LDS size into tgsi_shader_info for the shader
@@ -150,11 +151,11 @@ static void si_create_compute_state_async(void *job, int thread_index)
 	void *ir_binary = si_get_ir_binary(sel, false, false);
 
 	/* Try to load the shader from the shader cache. */
-	mtx_lock(&sscreen->shader_cache_mutex);
+	simple_mtx_lock(&sscreen->shader_cache_mutex);
 
 	if (ir_binary &&
 	    si_shader_cache_load_shader(sscreen, ir_binary, shader)) {
-		mtx_unlock(&sscreen->shader_cache_mutex);
+		simple_mtx_unlock(&sscreen->shader_cache_mutex);
 
 		si_shader_dump_stats_for_shader_db(sscreen, shader, debug);
 		si_shader_dump(sscreen, shader, debug, stderr, true);
@@ -162,7 +163,7 @@ static void si_create_compute_state_async(void *job, int thread_index)
 		if (!si_shader_binary_upload(sscreen, shader, 0))
 			program->shader.compilation_failed = true;
 	} else {
-		mtx_unlock(&sscreen->shader_cache_mutex);
+		simple_mtx_unlock(&sscreen->shader_cache_mutex);
 
 		if (!si_shader_create(sscreen, compiler, &program->shader, debug)) {
 			program->shader.compilation_failed = true;
@@ -202,10 +203,10 @@ static void si_create_compute_state_async(void *job, int thread_index)
 			S_00B84C_LDS_SIZE(shader->config.lds_size);
 
 		if (ir_binary) {
-			mtx_lock(&sscreen->shader_cache_mutex);
+			simple_mtx_lock(&sscreen->shader_cache_mutex);
 			if (!si_shader_cache_insert_shader(sscreen, ir_binary, shader, true))
 				FREE(ir_binary);
-			mtx_unlock(&sscreen->shader_cache_mutex);
+			simple_mtx_unlock(&sscreen->shader_cache_mutex);
 		}
 	}
 
@@ -256,10 +257,8 @@ static void *si_create_compute_state(
 					    &sel->compiler_ctx_state,
 					    program, si_create_compute_state_async);
 	} else {
-		const struct pipe_llvm_program_header *header;
-		const char *code;
+		const struct pipe_binary_program_header *header;
 		header = cso->prog;
-		code = cso->prog + sizeof(struct pipe_llvm_program_header);
 
 		program->shader.binary.elf_size = header->num_bytes;
 		program->shader.binary.elf_buffer = malloc(header->num_bytes);
@@ -267,7 +266,7 @@ static void *si_create_compute_state(
 			FREE(program);
 			return NULL;
 		}
-		memcpy((void *)program->shader.binary.elf_buffer, code, header->num_bytes);
+		memcpy((void *)program->shader.binary.elf_buffer, header->blob, header->num_bytes);
 
 		const amd_kernel_code_t *code_object =
 			si_compute_get_code_object(program, 0);
@@ -422,7 +421,8 @@ static bool si_setup_compute_scratch_buffer(struct si_context *sctx,
 			si_aligned_buffer_create(&sctx->screen->b,
 						 SI_RESOURCE_FLAG_UNMAPPABLE,
 						 PIPE_USAGE_DEFAULT,
-						 scratch_needed, 256);
+						 scratch_needed,
+						 sctx->screen->info.pte_fragment_size);
 
 		if (!sctx->compute_scratch_buffer)
 			return false;

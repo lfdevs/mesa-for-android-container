@@ -412,6 +412,11 @@ schedule_node::set_latency_gen7(bool is_haswell)
             latency = 14000;
             break;
 
+         case GEN6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE:
+            /* completely fabricated number */
+            latency = 600;
+            break;
+
          default:
             unreachable("Unknown render cache message");
          }

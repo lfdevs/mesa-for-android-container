@@ -72,6 +72,19 @@ struct draw_llvm_sampler_soa
    struct draw_llvm_sampler_dynamic_state dynamic_state;
 };
 
+struct draw_llvm_image_dynamic_state
+{
+   struct lp_sampler_dynamic_state base;
+
+   const struct draw_image_static_state *static_state;
+};
+
+struct draw_llvm_image_soa
+{
+   struct lp_build_image_soa base;
+
+   struct draw_llvm_image_dynamic_state dynamic_state;
+};
 
 /**
  * Fetch the specified member of the lp_jit_texture structure.
@@ -164,6 +177,50 @@ draw_llvm_sampler_member(const struct lp_sampler_dynamic_state *base,
    return res;
 }
 
+/**
+ * Fetch the specified member of the lp_jit_texture structure.
+ * \param emit_load  if TRUE, emit the LLVM load instruction to actually
+ *                   fetch the field's value.  Otherwise, just emit the
+ *                   GEP code to address the field.
+ *
+ * @sa http://llvm.org/docs/GetElementPtr.html
+ */
+static LLVMValueRef
+draw_llvm_image_member(const struct lp_sampler_dynamic_state *base,
+                       struct gallivm_state *gallivm,
+                       LLVMValueRef context_ptr,
+                       unsigned image_unit,
+                       unsigned member_index,
+                       const char *member_name,
+                       boolean emit_load)
+{
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMValueRef indices[4];
+   LLVMValueRef ptr;
+   LLVMValueRef res;
+
+   debug_assert(image_unit < PIPE_MAX_SHADER_IMAGES);
+
+   /* context[0] */
+   indices[0] = lp_build_const_int32(gallivm, 0);
+   /* context[0].textures */
+   indices[1] = lp_build_const_int32(gallivm, DRAW_JIT_CTX_IMAGES);
+   /* context[0].textures[unit] */
+   indices[2] = lp_build_const_int32(gallivm, image_unit);
+   /* context[0].textures[unit].member */
+   indices[3] = lp_build_const_int32(gallivm, member_index);
+
+   ptr = LLVMBuildGEP(builder, context_ptr, indices, ARRAY_SIZE(indices), "");
+
+   if (emit_load)
+      res = LLVMBuildLoad(builder, ptr, "");
+   else
+      res = ptr;
+
+   lp_build_name(res, "context.image%u.%s", image_unit, member_name);
+
+   return res;
+}
 
 /**
  * Helper macro to instantiate the functions that generate the code to
@@ -214,6 +271,24 @@ DRAW_LLVM_SAMPLER_MEMBER(max_lod,    DRAW_JIT_SAMPLER_MAX_LOD, TRUE)
 DRAW_LLVM_SAMPLER_MEMBER(lod_bias,   DRAW_JIT_SAMPLER_LOD_BIAS, TRUE)
 DRAW_LLVM_SAMPLER_MEMBER(border_color, DRAW_JIT_SAMPLER_BORDER_COLOR, FALSE)
 
+#define DRAW_LLVM_IMAGE_MEMBER(_name, _index, _emit_load)  \
+   static LLVMValueRef \
+   draw_llvm_image_##_name( const struct lp_sampler_dynamic_state *base, \
+                              struct gallivm_state *gallivm,               \
+                              LLVMValueRef context_ptr,                    \
+                              unsigned image_unit)                       \
+   { \
+      return draw_llvm_image_member(base, gallivm, context_ptr, \
+                                      image_unit, _index, #_name, _emit_load ); \
+   }
+
+
+DRAW_LLVM_IMAGE_MEMBER(width,      DRAW_JIT_IMAGE_WIDTH, TRUE)
+DRAW_LLVM_IMAGE_MEMBER(height,     DRAW_JIT_IMAGE_HEIGHT, TRUE)
+DRAW_LLVM_IMAGE_MEMBER(depth,      DRAW_JIT_IMAGE_DEPTH, TRUE)
+DRAW_LLVM_IMAGE_MEMBER(base_ptr,   DRAW_JIT_IMAGE_BASE, TRUE)
+DRAW_LLVM_IMAGE_MEMBER(row_stride, DRAW_JIT_IMAGE_ROW_STRIDE, TRUE)
+DRAW_LLVM_IMAGE_MEMBER(img_stride, DRAW_JIT_IMAGE_IMG_STRIDE, TRUE)
 
 static void
 draw_llvm_sampler_soa_destroy(struct lp_build_sampler_soa *sampler)
@@ -293,3 +368,64 @@ draw_llvm_sampler_soa_create(const struct draw_sampler_static_state *static_stat
    return &sampler->base;
 }
 
+static void
+draw_llvm_image_soa_emit_op(const struct lp_build_image_soa *base,
+                            struct gallivm_state *gallivm,
+                            const struct lp_img_params *params)
+{
+   struct draw_llvm_image_soa *image = (struct draw_llvm_image_soa *)base;
+   unsigned image_index = params->image_index;
+   assert(image_index < PIPE_MAX_SHADER_IMAGES);
+
+   lp_build_img_op_soa(&image->dynamic_state.static_state[image_index].image_state,
+                       &image->dynamic_state.base,
+                       gallivm, params);
+}
+/**
+ * Fetch the texture size.
+ */
+static void
+draw_llvm_image_soa_emit_size_query(const struct lp_build_image_soa *base,
+                                    struct gallivm_state *gallivm,
+                                    const struct lp_sampler_size_query_params *params)
+{
+   struct draw_llvm_image_soa *image = (struct draw_llvm_image_soa *)base;
+
+   assert(params->texture_unit < PIPE_MAX_SHADER_IMAGES);
+
+   lp_build_size_query_soa(gallivm,
+                           &image->dynamic_state.static_state[params->texture_unit].image_state,
+                           &image->dynamic_state.base,
+                           params);
+}
+static void
+draw_llvm_image_soa_destroy(struct lp_build_image_soa *image)
+{
+   FREE(image);
+}
+
+struct lp_build_image_soa *
+draw_llvm_image_soa_create(const struct draw_image_static_state *static_state)
+{
+   struct draw_llvm_image_soa *image;
+
+   image = CALLOC_STRUCT(draw_llvm_image_soa);
+   if (!image)
+      return NULL;
+
+   image->base.destroy = draw_llvm_image_soa_destroy;
+   image->base.emit_op = draw_llvm_image_soa_emit_op;
+   image->base.emit_size_query = draw_llvm_image_soa_emit_size_query;
+
+   image->dynamic_state.base.width = draw_llvm_image_width;
+   image->dynamic_state.base.height = draw_llvm_image_height;
+
+   image->dynamic_state.base.depth = draw_llvm_image_depth;
+   image->dynamic_state.base.base_ptr = draw_llvm_image_base_ptr;
+   image->dynamic_state.base.row_stride = draw_llvm_image_row_stride;
+   image->dynamic_state.base.img_stride = draw_llvm_image_img_stride;
+
+   image->dynamic_state.static_state = static_state;
+
+   return &image->base;
+}

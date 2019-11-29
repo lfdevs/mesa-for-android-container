@@ -392,6 +392,7 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers,
            const union pipe_color_union *color, double depth, unsigned stencil)
 {
    struct etna_context *ctx = etna_context(pctx);
+   mtx_lock(&ctx->lock);
 
    /* Flush color and depth cache before clearing anything.
     * This is especially important when coming from another surface, as
@@ -437,6 +438,7 @@ etna_clear_rs(struct pipe_context *pctx, unsigned buffers,
       etna_blit_clear_zs_rs(pctx, ctx->framebuffer_s.zsbuf, buffers, depth, stencil);
 
    etna_stall(ctx->stream, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_PE);
+   mtx_unlock(&ctx->lock);
 }
 
 static bool
@@ -647,6 +649,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
        width & (w_align - 1) || height & (h_align - 1))
       goto manual;
 
+   mtx_lock(&ctx->lock);
+
    /* Always flush color and depth cache together before resolving. This works
     * around artifacts that appear in some cases when scanning out a texture
     * directly after it has been rendered to, such as rendering an animated web
@@ -736,6 +740,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
    dst->seqno++;
    dst_lev->ts_valid = false;
    ctx->dirty |= ETNA_DIRTY_DERIVE_TS;
+   mtx_unlock(&ctx->lock);
 
    return true;
 

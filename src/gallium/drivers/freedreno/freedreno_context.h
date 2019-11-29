@@ -55,7 +55,7 @@ struct fd_texture_stateobj {
 };
 
 struct fd_program_stateobj {
-	void *vp, *fp;
+	void *vs, *hs, *ds, *gs, *fs;
 };
 
 struct fd_constbuf_stateobj {
@@ -86,6 +86,9 @@ struct fd_vertex_stateobj {
 
 struct fd_streamout_stateobj {
 	struct pipe_stream_output_target *targets[PIPE_MAX_SO_BUFFERS];
+	/* Bitmask of stream that should be reset. */
+	unsigned reset;
+
 	unsigned num_targets;
 	/* Track offset from vtxcnt for streamout data.  This counter
 	 * is just incremented by # of vertices on each draw until
@@ -212,7 +215,7 @@ struct fd_context {
 		uint64_t draw_calls;
 		uint64_t batch_total, batch_sysmem, batch_gmem, batch_nondraw, batch_restore;
 		uint64_t staging_uploads, shadow_uploads;
-		uint64_t vs_regs, fs_regs;
+		uint64_t vs_regs, hs_regs, ds_regs, gs_regs, fs_regs;
 	} stats;
 
 	/* Current batch.. the rule here is that you can deref ctx->batch
@@ -328,7 +331,7 @@ struct fd_context {
 	void (*launch_grid)(struct fd_context *ctx, const struct pipe_grid_info *info);
 
 	/* query: */
-	struct fd_query * (*create_query)(struct fd_context *ctx, unsigned query_type);
+	struct fd_query * (*create_query)(struct fd_context *ctx, unsigned query_type, unsigned index);
 	void (*query_prepare)(struct fd_batch *batch, uint32_t num_tiles);
 	void (*query_prepare_tile)(struct fd_batch *batch, uint32_t n,
 			struct fd_ringbuffer *ring);

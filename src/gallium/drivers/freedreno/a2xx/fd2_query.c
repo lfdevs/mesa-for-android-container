@@ -218,7 +218,7 @@ fd2_create_batch_query(struct pipe_context *pctx,
 		counters_per_group[entry->gid]++;
 	}
 
-	q = fd_acc_create_query2(ctx, 0, &perfcntr);
+	q = fd_acc_create_query2(ctx, 0, 0, &perfcntr);
 	aq = fd_acc_query(q);
 
 	/* sample buffer size is based on # of queries: */

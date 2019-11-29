@@ -97,7 +97,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	    (!wait_flags || !ctx->gfx_last_ib_is_busy))
 		return;
 
-	if (si_check_device_reset(ctx))
+	if (ctx->b.get_device_reset_status(&ctx->b) != PIPE_NO_RESET)
 		return;
 
 	if (ctx->screen->debug_flags & DBG(CHECK_VM))
@@ -154,7 +154,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	}
 
 	if (ctx->has_graphics) {
-		if (!LIST_IS_EMPTY(&ctx->active_queries))
+		if (!list_is_empty(&ctx->active_queries))
 			si_suspend_queries(ctx);
 
 		ctx->streamout.suspended = false;
@@ -372,7 +372,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 		ctx->prefetch_L2_mask |= SI_PREFETCH_VBO_DESCRIPTORS;
 
 	/* CLEAR_STATE disables all colorbuffers, so only enable bound ones. */
-	bool has_clear_state = ctx->screen->has_clear_state;
+	bool has_clear_state = ctx->screen->info.has_clear_state;
 	if (has_clear_state) {
 		ctx->framebuffer.dirty_cbufs =
 			 u_bit_consecutive(0, ctx->framebuffer.state.nr_cbufs);
@@ -426,7 +426,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 		si_streamout_buffers_dirty(ctx);
 	}
 
-	if (!LIST_IS_EMPTY(&ctx->active_queries))
+	if (!list_is_empty(&ctx->active_queries))
 		si_resume_queries(ctx);
 
 	assert(!ctx->gfx_cs->prev_dw);

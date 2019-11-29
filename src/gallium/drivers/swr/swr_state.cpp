@@ -21,13 +21,20 @@
  * IN THE SOFTWARE.
  ***************************************************************************/
 
+#include <llvm/Config/llvm-config.h>
+
+#if LLVM_VERSION_MAJOR < 7
 // llvm redefines DEBUG
 #pragma push_macro("DEBUG")
 #undef DEBUG
+#endif
 
 #include <rasterizer/core/state.h>
 #include "JitManager.h"
+
+#if LLVM_VERSION_MAJOR < 7
 #pragma pop_macro("DEBUG")
+#endif
 
 #include "common/os.h"
 #include "jit_api.h"
@@ -1223,6 +1230,14 @@ swr_update_derived(struct pipe_context *pipe,
          vp->height = 2 * fabs(state->scale[1]);
          util_viewport_zmin_zmax(state, rasterizer->clip_halfz,
                                  &vp->minZ, &vp->maxZ);
+
+         if (rasterizer->depth_clip_near) {
+            vp->minZ = 0.0f;
+         }
+
+         if (rasterizer->depth_clip_far) {
+            vp->maxZ = 1.0f;
+         }
 
          vpm->m00[i] = state->scale[0];
          vpm->m11[i] = state->scale[1];

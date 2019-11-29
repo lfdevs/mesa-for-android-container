@@ -515,6 +515,28 @@ v3d_simulator_submit_tfu_ioctl(int fd, struct drm_v3d_submit_tfu *args)
         return ret;
 }
 
+static int
+v3d_simulator_submit_csd_ioctl(int fd, struct drm_v3d_submit_csd *args)
+{
+        struct v3d_simulator_file *file = v3d_get_simulator_file_for_fd(fd);
+        uint32_t *bo_handles = (uint32_t *)(uintptr_t)args->bo_handles;
+        int ret;
+
+        for (int i = 0; i < args->bo_handle_count; i++)
+                v3d_simulator_copy_in_handle(file, bo_handles[i]);
+
+        if (sim_state.ver >= 41)
+                ret = v3d41_simulator_submit_csd_ioctl(sim_state.v3d, args,
+                                                       file->gmp->ofs);
+        else
+                ret = -1;
+
+        for (int i = 0; i < args->bo_handle_count; i++)
+                v3d_simulator_copy_out_handle(file, bo_handles[i]);
+
+        return ret;
+}
+
 int
 v3d_simulator_ioctl(int fd, unsigned long request, void *args)
 {
@@ -544,6 +566,9 @@ v3d_simulator_ioctl(int fd, unsigned long request, void *args)
 
         case DRM_IOCTL_V3D_SUBMIT_TFU:
                 return v3d_simulator_submit_tfu_ioctl(fd, args);
+
+        case DRM_IOCTL_V3D_SUBMIT_CSD:
+                return v3d_simulator_submit_csd_ioctl(fd, args);
 
         case DRM_IOCTL_GEM_OPEN:
         case DRM_IOCTL_GEM_FLINK:

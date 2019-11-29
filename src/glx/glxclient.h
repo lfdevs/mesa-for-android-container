@@ -328,13 +328,6 @@ struct glx_context
    /*@} */
 
     /**
-     * Fill newImage with the unpacked form of \c oldImage getting it
-     * ready for transport to the server.
-     */
-   void (*fillImage) (struct glx_context *, GLint, GLint, GLint, GLint, GLenum,
-                      GLenum, const GLvoid *, GLubyte *, GLubyte *);
-
-    /**
      * Client side attribs.
      */
    __GLXattributeMachine attributes;

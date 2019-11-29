@@ -223,13 +223,14 @@ nouveau_compiler = executable(
   'nouveau_compiler',
   'nouveau_compiler.c',
   include_directories : [inc_src, inc_include, inc_gallium, inc_gallium_aux],
-  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_mesautil],
-  link_with : [libnouveau, libgallium, libnir],
+  dependencies : [dep_libdrm, dep_libdrm_nouveau, idep_mesautil, idep_nir],
+  link_with : [libnouveau, libgallium],
   build_by_default : with_tools.contains('nouveau'),
   install : with_tools.contains('nouveau'),
 )
 
 driver_nouveau = declare_dependency(
   compile_args : '-DGALLIUM_NOUVEAU',
-  link_with : [libnouveauwinsys, libnouveau, libnir],
+  dependencies : idep_nir,
+  link_with : [libnouveauwinsys, libnouveau],
 )

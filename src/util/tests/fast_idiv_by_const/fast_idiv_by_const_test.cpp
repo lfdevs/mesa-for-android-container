@@ -48,7 +48,7 @@ strunc(int64_t x, unsigned num_bits)
    if (num_bits == 64)
       return x;
 
-   return (x << (64 - num_bits)) >> (64 - num_bits);
+   return (int64_t)((uint64_t)x << (64 - num_bits)) >> (64 - num_bits);
 }
 
 static inline bool
@@ -230,7 +230,7 @@ rand_sint(unsigned bits, unsigned min_abs)
 {
    /* Make sure we hit MIN_INT every once in a while */
    if (rand() % 64 == 37)
-      return -(1 << (bits - 1));
+      return INT64_MIN >> (64 - bits);
 
    int64_t s = rand_uint(bits - 1, min_abs);
    return rand() & 1 ? s : -s;
@@ -306,7 +306,7 @@ random_sdiv_test(unsigned bits)
       int64_t d;
       do {
          d = rand_sint(bits, 2);
-      } while (util_is_power_of_two_or_zero64(llabs(d)));
+      } while (d == INT64_MIN || util_is_power_of_two_or_zero64(llabs(d)));
 
       assert(sint_is_in_range(n, bits));
       assert(sint_is_in_range(d, bits) && llabs(d) >= 2);

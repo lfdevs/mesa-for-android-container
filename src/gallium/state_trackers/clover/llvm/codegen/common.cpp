@@ -177,7 +177,7 @@ namespace {
 
    module::section
    make_text_section(const std::vector<char> &code) {
-      const pipe_llvm_program_header header { uint32_t(code.size()) };
+      const pipe_binary_program_header header { uint32_t(code.size()) };
       module::section text { 0, module::section::text_executable,
                              header.num_bytes, {} };
 

@@ -140,6 +140,9 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
       pc.DepthCacheFlushEnable = true;
       pc.CommandStreamerStallEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
 #if GEN_GEN == 9
@@ -179,6 +182,9 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
       pc.DepthStallEnable = true;
       pc.DepthCacheFlushEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 }
 
@@ -539,6 +545,19 @@ genX(cmd_buffer_flush_dynamic_state)(struct anv_cmd_buffer *cmd_buffer)
 
       genX(cmd_buffer_enable_pma_fix)(cmd_buffer,
                                       want_stencil_pma_fix(cmd_buffer));
+   }
+#endif
+
+#if GEN_GEN >= 12
+   if(cmd_buffer->state.gfx.dirty & (ANV_CMD_DIRTY_PIPELINE |
+                                     ANV_CMD_DIRTY_DYNAMIC_DEPTH_BOUNDS)) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_DEPTH_BOUNDS), db) {
+         db.DepthBoundsTestValueModifyDisable = false;
+         db.DepthBoundsTestEnableModifyDisable = false;
+         db.DepthBoundsTestEnable = pipeline->depth_bounds_test_enable;
+         db.DepthBoundsTestMinValue = d->depth_bounds.min;
+         db.DepthBoundsTestMaxValue = d->depth_bounds.max;
+      }
    }
 #endif
 

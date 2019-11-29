@@ -80,6 +80,7 @@ static inline uint32_t ATTRIBUTE_PURE
 ${item.token_name}_${prop}(const struct gen_device_info *devinfo)
 {
    switch (devinfo->gen) {
+   case 12: return ${item.get_prop(prop, 12)};
    case 11: return ${item.get_prop(prop, 11)};
    case 10: return ${item.get_prop(prop, 10)};
    case 9: return ${item.get_prop(prop, 9)};
@@ -134,7 +135,7 @@ ${emit_per_gen_prop_func(field, 'start')}
 alphanum_nono = re.compile(r'[ /\[\]()\-:.,=>#&*"+\\]+')
 def to_alphanum(name):
     global alphanum_nono
-    return alphanum_nono.sub('', name).replace('α', 'alpha')
+    return alphanum_nono.sub('', name)
 
 def safe_name(name):
     name = to_alphanum(name)
@@ -182,12 +183,13 @@ class Container(object):
             self.length_by_gen[gen] = xml_attrs['length']
 
     def get_field(self, field_name, create=False):
-        if field_name not in self.fields:
+        key = to_alphanum(field_name)
+        if key not in self.fields:
             if create:
-                self.fields[field_name] = Field(self, field_name)
+                self.fields[key] = Field(self, field_name)
             else:
                 return None
-        return self.fields[field_name]
+        return self.fields[key]
 
     def has_prop(self, prop):
         if prop == 'length':

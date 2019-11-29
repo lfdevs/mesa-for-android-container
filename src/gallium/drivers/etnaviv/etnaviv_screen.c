@@ -84,9 +84,6 @@ etna_screen_destroy(struct pipe_screen *pscreen)
 {
    struct etna_screen *screen = etna_screen(pscreen);
 
-   _mesa_set_destroy(screen->used_resources, NULL);
-   mtx_destroy(&screen->lock);
-
    if (screen->perfmon)
       etna_perfmon_del(screen->perfmon);
 
@@ -152,6 +149,7 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_TEXCOORD:
    case PIPE_CAP_VERTEX_COLOR_UNCLAMPED:
    case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
+   case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
       return 1;
    case PIPE_CAP_NATIVE_FENCE_FD:
       return screen->drm_version >= ETNA_DRM_VERSION_FENCE_FD;
@@ -192,6 +190,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 255;
 
    /* Texturing. */
+   case PIPE_CAP_TEXTURE_SHADOW_MAP:
+      return DBG_ENABLED(ETNA_DBG_NIR) && screen->specs.halti >= 2;
    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
    case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS: /* TODO: verify */
       return screen->specs.max_texture_size;
@@ -319,10 +319,11 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
       return 0;
    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
       return VIV_FEATURE(screen, chipMinorFeatures0, HAS_SQRT_TRIG);
-   case PIPE_SHADER_CAP_INTEGERS:
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
       return 0;
+   case PIPE_SHADER_CAP_INTEGERS:
+      return DBG_ENABLED(ETNA_DBG_NIR) && screen->specs.halti >= 2;
    case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
    case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
       return shader == PIPE_SHADER_FRAGMENT
@@ -350,7 +351,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_TGSI_SKIP_MERGE_REGISTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
-   case PIPE_SHADER_CAP_SCALAR_ISA:
       return 0;
    }
 
@@ -752,7 +752,8 @@ etna_get_specs(struct etna_screen *screen)
    if (screen->specs.single_buffer)
       DBG("etnaviv: Single buffer mode enabled with %d pixel pipes", screen->specs.pixel_pipes);
 
-   screen->specs.tex_astc = VIV_FEATURE(screen, chipMinorFeatures4, TEXTURE_ASTC);
+   screen->specs.tex_astc = VIV_FEATURE(screen, chipMinorFeatures4, TEXTURE_ASTC) &&
+                            !VIV_FEATURE(screen, chipMinorFeatures6, NO_ASTC);
 
    screen->specs.use_blt = VIV_FEATURE(screen, chipMinorFeatures5, BLT_ENGINE);
 
@@ -897,6 +898,11 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    if (!etna_get_specs(screen))
       goto fail;
 
+   if (screen->specs.halti >= 5 && !etnaviv_device_softpin_capable(dev)) {
+      DBG("halti5 requires softpin");
+      goto fail;
+   }
+
    screen->options = (nir_shader_compiler_options) {
       .lower_fpow = true,
       .lower_sub = true,
@@ -954,16 +960,8 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
    if (screen->drm_version >= ETNA_DRM_VERSION_PERFMON)
       etna_pm_query_setup(screen);
 
-   mtx_init(&screen->lock, mtx_recursive);
-   screen->used_resources = _mesa_set_create(NULL, _mesa_hash_pointer,
-                                             _mesa_key_pointer_equal);
-   if (!screen->used_resources)
-      goto fail2;
-
    return pscreen;
 
-fail2:
-   mtx_destroy(&screen->lock);
 fail:
    etna_screen_destroy(pscreen);
    return NULL;

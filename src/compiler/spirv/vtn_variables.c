@@ -2533,6 +2533,22 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
          return;
       }
 
+      if (count > 4) {
+         unsigned idx = 5;
+         SpvMemoryAccessMask access = w[4];
+         if (access & SpvMemoryAccessAlignedMask)
+            idx++;
+
+         if (access & SpvMemoryAccessMakePointerVisibleMask) {
+            SpvMemorySemanticsMask semantics =
+               SpvMemorySemanticsMakeVisibleMask |
+               vtn_storage_class_to_memory_semantics(src->ptr_type->storage_class);
+
+            SpvScope scope = vtn_constant_uint(b, w[idx]);
+            vtn_emit_memory_barrier(b, scope, semantics);
+         }
+      }
+
       vtn_push_ssa(b, w[2], res_type, vtn_variable_load(b, src));
       break;
    }
@@ -2582,6 +2598,22 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
 
       struct vtn_ssa_value *src = vtn_ssa_value(b, w[2]);
       vtn_variable_store(b, src, dest);
+
+      if (count > 3) {
+         unsigned idx = 4;
+         SpvMemoryAccessMask access = w[3];
+
+         if (access & SpvMemoryAccessAlignedMask)
+            idx++;
+
+         if (access & SpvMemoryAccessMakePointerAvailableMask) {
+            SpvMemorySemanticsMask semantics =
+               SpvMemorySemanticsMakeAvailableMask |
+               vtn_storage_class_to_memory_semantics(dest->ptr_type->storage_class);
+            SpvScope scope = vtn_constant_uint(b, w[idx]);
+            vtn_emit_memory_barrier(b, scope, semantics);
+         }
+      }
       break;
    }
 

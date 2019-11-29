@@ -40,43 +40,6 @@
 
 #include "ir3_cache.h"
 
-static struct ir3_shader *
-create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
-		gl_shader_stage type)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	struct ir3_compiler *compiler = ctx->screen->compiler;
-	return ir3_shader_create(compiler, cso, type, &ctx->debug, pctx->screen);
-}
-
-static void *
-fd5_fp_state_create(struct pipe_context *pctx,
-		const struct pipe_shader_state *cso)
-{
-	return create_shader_stateobj(pctx, cso, MESA_SHADER_FRAGMENT);
-}
-
-static void
-fd5_fp_state_delete(struct pipe_context *pctx, void *hwcso)
-{
-	struct ir3_shader *so = hwcso;
-	ir3_shader_destroy(so);
-}
-
-static void *
-fd5_vp_state_create(struct pipe_context *pctx,
-		const struct pipe_shader_state *cso)
-{
-	return create_shader_stateobj(pctx, cso, MESA_SHADER_VERTEX);
-}
-
-static void
-fd5_vp_state_delete(struct pipe_context *pctx, void *hwcso)
-{
-	struct ir3_shader *so = hwcso;
-	ir3_shader_destroy(so);
-}
-
 void
 fd5_emit_shader(struct fd_ringbuffer *ring, const struct ir3_shader_variant *so)
 {
@@ -722,11 +685,6 @@ fd5_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 void
 fd5_prog_init(struct pipe_context *pctx)
 {
-	pctx->create_fs_state = fd5_fp_state_create;
-	pctx->delete_fs_state = fd5_fp_state_delete;
-
-	pctx->create_vs_state = fd5_vp_state_create;
-	pctx->delete_vs_state = fd5_vp_state_delete;
-
+	ir3_prog_init(pctx);
 	fd_prog_init(pctx);
 }

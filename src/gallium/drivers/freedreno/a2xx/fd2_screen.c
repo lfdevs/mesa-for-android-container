@@ -53,27 +53,20 @@ fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 	if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
 		return false;
 
-	/* TODO figure out how to render to other formats.. */
 	if ((usage & PIPE_BIND_RENDER_TARGET) &&
-			((format != PIPE_FORMAT_B5G6R5_UNORM) &&
-			 (format != PIPE_FORMAT_B5G5R5A1_UNORM) &&
-			 (format != PIPE_FORMAT_B5G5R5X1_UNORM) &&
-			 (format != PIPE_FORMAT_B4G4R4A4_UNORM) &&
-			 (format != PIPE_FORMAT_B4G4R4X4_UNORM) &&
-			 (format != PIPE_FORMAT_B8G8R8A8_UNORM) &&
-			 (format != PIPE_FORMAT_B8G8R8X8_UNORM) &&
-			 (format != PIPE_FORMAT_R8G8B8A8_UNORM) &&
-			 (format != PIPE_FORMAT_R8G8B8X8_UNORM))) {
-		DBG("not supported render target: format=%s, target=%d, sample_count=%d, usage=%x",
-				util_format_name(format), target, sample_count, usage);
-		return false;
+	    fd2_pipe2color(format) != (enum a2xx_colorformatx)~0) {
+		retval |= PIPE_BIND_RENDER_TARGET;
 	}
 
-	if ((usage & (PIPE_BIND_SAMPLER_VIEW |
-				PIPE_BIND_VERTEX_BUFFER)) &&
-			(fd2_pipe2surface(format) != (enum a2xx_sq_surfaceformat)~0)) {
-		retval |= usage & (PIPE_BIND_SAMPLER_VIEW |
-				PIPE_BIND_VERTEX_BUFFER);
+	if ((usage & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_VERTEX_BUFFER)) &&
+			!util_format_is_srgb(format) &&
+			!util_format_is_pure_integer(format) &&
+			fd2_pipe2surface(format).format != FMT_INVALID) {
+		retval |= usage & PIPE_BIND_VERTEX_BUFFER;
+		/* the only npot blocksize supported texture format is R32G32B32_FLOAT */
+		if (util_is_power_of_two_or_zero(util_format_get_blocksize(format)) ||
+				format == PIPE_FORMAT_R32G32B32_FLOAT)
+			retval |= usage & PIPE_BIND_SAMPLER_VIEW;
 	}
 
 	if ((usage & (PIPE_BIND_RENDER_TARGET |

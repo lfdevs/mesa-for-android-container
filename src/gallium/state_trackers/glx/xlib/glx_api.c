@@ -191,6 +191,9 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
    GLint i;
    GLboolean comparePointers;
 
+   if (!rgbFlag)
+      return NULL;
+
    if (dbFlag) {
       /* Check if the MESA_BACK_BUFFER env var is set */
       char *backbuffer = getenv("MESA_BACK_BUFFER");
@@ -234,7 +237,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
           && v->mesa_visual.numAuxBuffers == numAuxBuffers
           && v->mesa_visual.samples == num_samples
           && v->ximage_flag == ximageFlag
-          && v->mesa_visual.rgbMode == rgbFlag
           && v->mesa_visual.doubleBufferMode == dbFlag
           && v->mesa_visual.stereoMode == stereoFlag
           && (v->mesa_visual.alphaBits > 0) == alphaFlag
@@ -1172,20 +1174,13 @@ glXCreateContext( Display *dpy, XVisualInfo *visinfo,
 }
 
 
-/* XXX these may have to be removed due to thread-safety issues. */
-static GLXContext MakeCurrent_PrevContext = 0;
-static GLXDrawable MakeCurrent_PrevDrawable = 0;
-static GLXDrawable MakeCurrent_PrevReadable = 0;
-static XMesaBuffer MakeCurrent_PrevDrawBuffer = 0;
-static XMesaBuffer MakeCurrent_PrevReadBuffer = 0;
-
-
 /* GLX 1.3 and later */
 PUBLIC Bool
 glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
                        GLXDrawable read, GLXContext ctx )
 {
    GLXContext glxCtx = ctx;
+   GLXContext current = GetCurrentContext();
    static boolean firsttime = 1, no_rast = 0;
 
    if (firsttime) {
@@ -1193,58 +1188,43 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
       firsttime = 0;
    }
 
-   if (ctx && draw && read) {
-      XMesaBuffer drawBuffer, readBuffer;
+   if (ctx) {
+      XMesaBuffer drawBuffer = NULL, readBuffer = NULL;
       XMesaContext xmctx = glxCtx->xmesaContext;
 
-      /* Find the XMesaBuffer which corresponds to the GLXDrawable 'draw' */
-      if (ctx == MakeCurrent_PrevContext
-          && draw == MakeCurrent_PrevDrawable) {
-         drawBuffer = MakeCurrent_PrevDrawBuffer;
-      }
-      else {
+      /* either both must be null, or both must be non-null */
+      if (!draw != !read)
+         return False;
+
+      if (draw) {
+         /* Find the XMesaBuffer which corresponds to 'draw' */
          drawBuffer = XMesaFindBuffer( dpy, draw );
-      }
-      if (!drawBuffer) {
-         /* drawable must be a new window! */
-         drawBuffer = XMesaCreateWindowBuffer( xmctx->xm_visual, draw );
          if (!drawBuffer) {
-            /* Out of memory, or context/drawable depth mismatch */
-            return False;
+            /* drawable must be a new window! */
+            drawBuffer = XMesaCreateWindowBuffer( xmctx->xm_visual, draw );
+            if (!drawBuffer) {
+               /* Out of memory, or context/drawable depth mismatch */
+               return False;
+            }
          }
       }
 
-      /* Find the XMesaBuffer which corresponds to the GLXDrawable 'read' */
-      if (ctx == MakeCurrent_PrevContext
-          && read == MakeCurrent_PrevReadable) {
-         readBuffer = MakeCurrent_PrevReadBuffer;
-      }
-      else {
+      if (read) {
+         /* Find the XMesaBuffer which corresponds to 'read' */
          readBuffer = XMesaFindBuffer( dpy, read );
-      }
-      if (!readBuffer) {
-         /* drawable must be a new window! */
-         readBuffer = XMesaCreateWindowBuffer( xmctx->xm_visual, read );
          if (!readBuffer) {
-            /* Out of memory, or context/drawable depth mismatch */
-            return False;
+            /* drawable must be a new window! */
+            readBuffer = XMesaCreateWindowBuffer( xmctx->xm_visual, read );
+            if (!readBuffer) {
+               /* Out of memory, or context/drawable depth mismatch */
+               return False;
+            }
          }
       }
 
-      if (no_rast &&
-          MakeCurrent_PrevContext == ctx &&
-          MakeCurrent_PrevDrawable == draw &&
-          MakeCurrent_PrevReadable == read &&
-          MakeCurrent_PrevDrawBuffer == drawBuffer &&
-          MakeCurrent_PrevReadBuffer == readBuffer)
+      if (no_rast && current == ctx)
          return True;
           
-      MakeCurrent_PrevContext = ctx;
-      MakeCurrent_PrevDrawable = draw;
-      MakeCurrent_PrevReadable = read;
-      MakeCurrent_PrevDrawBuffer = drawBuffer;
-      MakeCurrent_PrevReadBuffer = readBuffer;
-
       /* Now make current! */
       if (XMesaMakeCurrent2(xmctx, drawBuffer, readBuffer)) {
          ctx->currentDpy = dpy;
@@ -1260,18 +1240,11 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
    else if (!ctx && !draw && !read) {
       /* release current context w/out assigning new one. */
       XMesaMakeCurrent2( NULL, NULL, NULL );
-      MakeCurrent_PrevContext = 0;
-      MakeCurrent_PrevDrawable = 0;
-      MakeCurrent_PrevReadable = 0;
-      MakeCurrent_PrevDrawBuffer = 0;
-      MakeCurrent_PrevReadBuffer = 0;
       SetCurrentContext(NULL);
       return True;
    }
    else {
-      /* The args must either all be non-zero or all zero.
-       * This is an error.
-       */
+      /* We were given an invalid set of arguments */
       return False;
    }
 }
@@ -1399,7 +1372,7 @@ glXCopyContext( Display *dpy, GLXContext src, GLXContext dst,
    XMesaContext xm_src = src->xmesaContext;
    XMesaContext xm_dst = dst->xmesaContext;
    (void) dpy;
-   if (MakeCurrent_PrevContext == src) {
+   if (GetCurrentContext() == src) {
       glFlush();
    }
    XMesaCopyContext(xm_src, xm_dst, mask);
@@ -1427,11 +1400,6 @@ glXDestroyContext( Display *dpy, GLXContext ctx )
    if (ctx) {
       GLXContext glxCtx = ctx;
       (void) dpy;
-      MakeCurrent_PrevContext = 0;
-      MakeCurrent_PrevDrawable = 0;
-      MakeCurrent_PrevReadable = 0;
-      MakeCurrent_PrevDrawBuffer = 0;
-      MakeCurrent_PrevReadBuffer = 0;
       XMesaDestroyContext( glxCtx->xmesaContext );
       XMesaGarbageCollect();
       free(glxCtx);
@@ -1522,12 +1490,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_RGBA:
          if (fbconfig)
             return GLX_BAD_ATTRIBUTE;
-	 if (xmvis->mesa_visual.rgbMode) {
-	    *value = True;
-	 }
-	 else {
-	    *value = False;
-	 }
+         *value = True;
 	 return 0;
       case GLX_DOUBLEBUFFER:
 	 *value = (int) xmvis->mesa_visual.doubleBufferMode;
@@ -1639,10 +1602,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_RENDER_TYPE_SGIX:
          if (!fbconfig)
             return GLX_BAD_ATTRIBUTE;
-         if (xmvis->mesa_visual.rgbMode)
-            *value = GLX_RGBA_BIT;
-         else
-            *value = GLX_COLOR_INDEX_BIT;
+         *value = GLX_RGBA_BIT;
          break;
       case GLX_X_RENDERABLE_SGIX:
          if (!fbconfig)
@@ -2222,10 +2182,7 @@ glXQueryContext( Display *dpy, GLXContext ctx, int attribute, int *value )
       *value = xmctx->xm_visual->visinfo->visualid;
       break;
    case GLX_RENDER_TYPE:
-      if (xmctx->xm_visual->mesa_visual.rgbMode)
-         *value = GLX_RGBA_TYPE;
-      else
-         *value = GLX_COLOR_INDEX_TYPE;
+      *value = GLX_RGBA_TYPE;
       break;
    case GLX_SCREEN:
       *value = 0;
@@ -2495,7 +2452,7 @@ glXDestroyGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf)
 }
 
 
-PUBLIC int
+PUBLIC void
 glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute,
                        unsigned int *value)
 {
@@ -2503,7 +2460,7 @@ glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute,
 
    if (!xmbuf) {
       /* Generate GLXBadPbufferSGIX for bad pbuffer */
-      return 0;
+      return;
    }
 
    switch (attribute) {
@@ -2525,7 +2482,6 @@ glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute,
       default:
          *value = 0;
    }
-   return 0;
 }
 
 
@@ -2654,7 +2610,7 @@ glXAssociateDMPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuffer,
 
 PUBLIC Status
 glXGetTransparentIndexSUN(Display *dpy, Window overlay, Window underlay,
-                          long *pTransparent)
+                          unsigned long *pTransparent)
 {
    (void) dpy;
    (void) overlay;

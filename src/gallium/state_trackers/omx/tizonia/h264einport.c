@@ -112,7 +112,7 @@ static OMX_ERRORTYPE h264e_inport_AllocateBuffer(const void * ap_obj, OMX_HANDLE
      return OMX_ErrorInsufficientResources;
    }
 
-   LIST_INITHEAD(&inp->tasks);
+   list_inithead(&inp->tasks);
 
    r = enc_AllocateBackTexture(ap_hdl, idx, &inp->resource, &inp->transfer, &(*buf)->pBuffer);
 
@@ -143,7 +143,7 @@ static OMX_ERRORTYPE h264e_inport_UseBuffer(const void * ap_obj, OMX_HANDLETYPE 
      return OMX_ErrorInsufficientResources;
    }
 
-   LIST_INITHEAD(&inp->tasks);
+   list_inithead(&inp->tasks);
 
    return OMX_ErrorNone;
 }

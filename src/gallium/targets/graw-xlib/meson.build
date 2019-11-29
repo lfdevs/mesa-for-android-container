@@ -21,6 +21,7 @@
 libgraw_xlib = shared_library(
   'graw_xlib',
   ['graw_xlib.c'],
+  c_args : [c_vis_args],
   include_directories : [inc_common, inc_gallium_drivers, inc_gallium_winsys],
   link_with : [
     libgraw_util, libgallium, libws_xlib

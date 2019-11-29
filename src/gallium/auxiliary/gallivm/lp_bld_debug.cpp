@@ -30,6 +30,7 @@
 #include <sstream>
 #include <iomanip>
 
+#include <llvm/Config/llvm-config.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Disassembler.h>
 #include <llvm/Support/raw_ostream.h>
@@ -71,20 +72,11 @@ lp_check_alignment(const void *ptr, unsigned alignment)
 extern "C" void
 lp_debug_dump_value(LLVMValueRef value)
 {
-#if HAVE_LLVM >= 0x0304
    char *str = LLVMPrintValueToString(value);
    if (str) {
       os_log_message(str);
       LLVMDisposeMessage(str);
    }
-#elif defined(PIPE_OS_WINDOWS) || defined(PIPE_OS_EMBEDDED)
-   std::string str;
-   llvm::raw_string_ostream os(str);
-   llvm::unwrap(value)->print(os);
-   os_log_message(str.c_str());
-#else
-   LLVMDumpValue(value);
-#endif
 }
 
 

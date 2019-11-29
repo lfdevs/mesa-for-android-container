@@ -451,9 +451,6 @@ Converter::getOperation(nir_op op)
       return OP_SIN;
    case nir_op_fsqrt:
       return OP_SQRT;
-   case nir_op_fsub:
-   case nir_op_isub:
-      return OP_SUB;
    case nir_op_ftrunc:
       return OP_TRUNC;
    case nir_op_ixor:
@@ -515,12 +512,18 @@ Converter::getOperation(nir_intrinsic_op op)
    case nir_intrinsic_bindless_image_atomic_exchange:
    case nir_intrinsic_image_atomic_exchange:
    case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_max:
-   case nir_intrinsic_image_atomic_max:
-   case nir_intrinsic_image_deref_atomic_max:
-   case nir_intrinsic_bindless_image_atomic_min:
-   case nir_intrinsic_image_atomic_min:
-   case nir_intrinsic_image_deref_atomic_min:
+   case nir_intrinsic_bindless_image_atomic_imax:
+   case nir_intrinsic_image_atomic_imax:
+   case nir_intrinsic_image_deref_atomic_imax:
+   case nir_intrinsic_bindless_image_atomic_umax:
+   case nir_intrinsic_image_atomic_umax:
+   case nir_intrinsic_image_deref_atomic_umax:
+   case nir_intrinsic_bindless_image_atomic_imin:
+   case nir_intrinsic_image_atomic_imin:
+   case nir_intrinsic_image_deref_atomic_imin:
+   case nir_intrinsic_bindless_image_atomic_umin:
+   case nir_intrinsic_image_atomic_umin:
+   case nir_intrinsic_image_deref_atomic_umin:
    case nir_intrinsic_bindless_image_atomic_or:
    case nir_intrinsic_image_atomic_or:
    case nir_intrinsic_image_deref_atomic_or:
@@ -608,17 +611,23 @@ Converter::getSubOp(nir_intrinsic_op op)
    case nir_intrinsic_shared_atomic_or:
    case nir_intrinsic_ssbo_atomic_or:
       return  NV50_IR_SUBOP_ATOM_OR;
-   case nir_intrinsic_bindless_image_atomic_max:
-   case nir_intrinsic_image_atomic_max:
-   case nir_intrinsic_image_deref_atomic_max:
+   case nir_intrinsic_bindless_image_atomic_imax:
+   case nir_intrinsic_image_atomic_imax:
+   case nir_intrinsic_image_deref_atomic_imax:
+   case nir_intrinsic_bindless_image_atomic_umax:
+   case nir_intrinsic_image_atomic_umax:
+   case nir_intrinsic_image_deref_atomic_umax:
    case nir_intrinsic_shared_atomic_imax:
    case nir_intrinsic_shared_atomic_umax:
    case nir_intrinsic_ssbo_atomic_imax:
    case nir_intrinsic_ssbo_atomic_umax:
       return  NV50_IR_SUBOP_ATOM_MAX;
-   case nir_intrinsic_bindless_image_atomic_min:
-   case nir_intrinsic_image_atomic_min:
-   case nir_intrinsic_image_deref_atomic_min:
+   case nir_intrinsic_bindless_image_atomic_imin:
+   case nir_intrinsic_image_atomic_imin:
+   case nir_intrinsic_image_deref_atomic_imin:
+   case nir_intrinsic_bindless_image_atomic_umin:
+   case nir_intrinsic_image_atomic_umin:
+   case nir_intrinsic_image_deref_atomic_umin:
    case nir_intrinsic_shared_atomic_imin:
    case nir_intrinsic_shared_atomic_umin:
    case nir_intrinsic_ssbo_atomic_imin:
@@ -1945,7 +1954,7 @@ Converter::visit(nir_intrinsic_instr *insn)
          }
          case Program::TYPE_GEOMETRY:
          case Program::TYPE_VERTEX: {
-            if (info->io.genUserClip > 0 && idx == clipVertexOutput) {
+            if (info->io.genUserClip > 0 && idx == (uint32_t)clipVertexOutput) {
                mkMov(clipVtx[i], src);
                src = clipVtx[i];
             }
@@ -2374,8 +2383,10 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_bindless_image_atomic_and:
    case nir_intrinsic_bindless_image_atomic_comp_swap:
    case nir_intrinsic_bindless_image_atomic_exchange:
-   case nir_intrinsic_bindless_image_atomic_max:
-   case nir_intrinsic_bindless_image_atomic_min:
+   case nir_intrinsic_bindless_image_atomic_imax:
+   case nir_intrinsic_bindless_image_atomic_umax:
+   case nir_intrinsic_bindless_image_atomic_imin:
+   case nir_intrinsic_bindless_image_atomic_umin:
    case nir_intrinsic_bindless_image_atomic_or:
    case nir_intrinsic_bindless_image_atomic_xor:
    case nir_intrinsic_bindless_image_load:
@@ -2405,8 +2416,10 @@ Converter::visit(nir_intrinsic_instr *insn)
       case nir_intrinsic_bindless_image_atomic_and:
       case nir_intrinsic_bindless_image_atomic_comp_swap:
       case nir_intrinsic_bindless_image_atomic_exchange:
-      case nir_intrinsic_bindless_image_atomic_max:
-      case nir_intrinsic_bindless_image_atomic_min:
+      case nir_intrinsic_bindless_image_atomic_imax:
+      case nir_intrinsic_bindless_image_atomic_umax:
+      case nir_intrinsic_bindless_image_atomic_imin:
+      case nir_intrinsic_bindless_image_atomic_umin:
       case nir_intrinsic_bindless_image_atomic_or:
       case nir_intrinsic_bindless_image_atomic_xor:
          ty = getDType(insn);
@@ -2472,8 +2485,10 @@ Converter::visit(nir_intrinsic_instr *insn)
    case nir_intrinsic_image_deref_atomic_and:
    case nir_intrinsic_image_deref_atomic_comp_swap:
    case nir_intrinsic_image_deref_atomic_exchange:
-   case nir_intrinsic_image_deref_atomic_max:
-   case nir_intrinsic_image_deref_atomic_min:
+   case nir_intrinsic_image_deref_atomic_imax:
+   case nir_intrinsic_image_deref_atomic_umax:
+   case nir_intrinsic_image_deref_atomic_imin:
+   case nir_intrinsic_image_deref_atomic_umin:
    case nir_intrinsic_image_deref_atomic_or:
    case nir_intrinsic_image_deref_atomic_xor:
    case nir_intrinsic_image_deref_load:
@@ -2507,8 +2522,10 @@ Converter::visit(nir_intrinsic_instr *insn)
       case nir_intrinsic_image_deref_atomic_and:
       case nir_intrinsic_image_deref_atomic_comp_swap:
       case nir_intrinsic_image_deref_atomic_exchange:
-      case nir_intrinsic_image_deref_atomic_max:
-      case nir_intrinsic_image_deref_atomic_min:
+      case nir_intrinsic_image_deref_atomic_imax:
+      case nir_intrinsic_image_deref_atomic_umax:
+      case nir_intrinsic_image_deref_atomic_imin:
+      case nir_intrinsic_image_deref_atomic_umin:
       case nir_intrinsic_image_deref_atomic_or:
       case nir_intrinsic_image_deref_atomic_xor:
          ty = getDType(insn);
@@ -2797,8 +2814,6 @@ Converter::visit(nir_alu_instr *insn)
    case nir_op_ushr:
    case nir_op_fsin:
    case nir_op_fsqrt:
-   case nir_op_fsub:
-   case nir_op_isub:
    case nir_op_ftrunc:
    case nir_op_ishl:
    case nir_op_ixor: {
@@ -3480,7 +3495,7 @@ Converter::run()
    NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
-   NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL);
+   NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
    NIR_PASS_V(nir, nir_lower_phis_to_scalar);
 
    do {

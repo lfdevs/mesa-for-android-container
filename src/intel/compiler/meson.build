@@ -37,7 +37,7 @@ libintel_compiler_files = files(
   'brw_disasm.c',
   'brw_disasm_info.c',
   'brw_disasm_info.h',
-  'brw_eu.c',
+  'brw_eu.cpp',
   'brw_eu_compact.c',
   'brw_eu_defines.h',
   'brw_eu_emit.c',
@@ -62,6 +62,7 @@ libintel_compiler_files = files(
   'brw_fs_reg_allocate.cpp',
   'brw_fs_register_coalesce.cpp',
   'brw_fs_saturate_propagation.cpp',
+  'brw_fs_scoreboard.cpp',
   'brw_fs_sel_peephole.cpp',
   'brw_fs_validate.cpp',
   'brw_fs_visitor.cpp',
@@ -77,6 +78,7 @@ libintel_compiler_files = files(
   'brw_nir_attribute_workarounds.c',
   'brw_nir_lower_conversions.c',
   'brw_nir_lower_cs_intrinsics.c',
+  'brw_nir_lower_alpha_to_coverage.c',
   'brw_nir_lower_image_load_store.c',
   'brw_nir_lower_mem_access_bit_sizes.c',
   'brw_nir_opt_peephole_ffma.c',
@@ -147,7 +149,7 @@ if with_tests
                'fs_saturate_propagation', 'vf_float_conversions',
                'vec4_register_coalesce', 'vec4_copy_propagation',
                'vec4_cmod_propagation', 'vec4_dead_code_eliminate',
-               'eu_compact', 'eu_validate']
+               'eu_compact', 'eu_validate', 'fs_scoreboard']
     test(
       t,
       executable(

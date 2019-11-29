@@ -91,7 +91,7 @@ fd_acc_begin_query(struct fd_context *ctx, struct fd_query *q)
 		p->resume(aq, batch);
 
 	/* add to active list: */
-	assert(list_empty(&aq->node));
+	assert(list_is_empty(&aq->node));
 	list_addtail(&aq->node, &ctx->acc_active_queries);
 
 	return true;
@@ -123,7 +123,7 @@ fd_acc_get_query_result(struct fd_context *ctx, struct fd_query *q,
 
 	DBG("%p: wait=%d, active=%d", q, wait, q->active);
 
-	assert(LIST_IS_EMPTY(&aq->node));
+	assert(list_is_empty(&aq->node));
 
 	/* if !wait, then check the last sample (the one most likely to
 	 * not be ready yet) and bail if it is not ready:
@@ -173,7 +173,7 @@ static const struct fd_query_funcs acc_query_funcs = {
 
 struct fd_query *
 fd_acc_create_query2(struct fd_context *ctx, unsigned query_type,
-		const struct fd_acc_sample_provider *provider)
+		unsigned index, const struct fd_acc_sample_provider *provider)
 {
 	struct fd_acc_query *aq;
 	struct fd_query *q;
@@ -192,19 +192,21 @@ fd_acc_create_query2(struct fd_context *ctx, unsigned query_type,
 	q = &aq->base;
 	q->funcs = &acc_query_funcs;
 	q->type = query_type;
+	q->index = index;
 
 	return q;
 }
 
 struct fd_query *
-fd_acc_create_query(struct fd_context *ctx, unsigned query_type)
+fd_acc_create_query(struct fd_context *ctx, unsigned query_type,
+		unsigned index)
 {
 	int idx = pidx(query_type);
 
 	if ((idx < 0) || !ctx->acc_sample_providers[idx])
 		return NULL;
 
-	return fd_acc_create_query2(ctx, query_type,
+	return fd_acc_create_query2(ctx, query_type, index,
 			ctx->acc_sample_providers[idx]);
 }
 

@@ -2601,7 +2601,7 @@ DECL_SPECIAL(TEXREG2AR)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     struct ureg_src sample;
     const int m = tx->insn.dst[0].idx;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     sample = ureg_DECL_sampler(ureg, m);
@@ -2618,7 +2618,7 @@ DECL_SPECIAL(TEXREG2GB)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     struct ureg_src sample;
     const int m = tx->insn.dst[0].idx;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     sample = ureg_DECL_sampler(ureg, m);
@@ -2640,7 +2640,7 @@ DECL_SPECIAL(TEXM3x2TEX)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     struct ureg_src sample;
     const int m = tx->insn.dst[0].idx - 1;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);
@@ -2671,7 +2671,7 @@ DECL_SPECIAL(TEXM3x3SPEC)
     struct ureg_src sample;
     struct ureg_dst tmp;
     const int m = tx->insn.dst[0].idx - 2;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);
@@ -2712,7 +2712,7 @@ DECL_SPECIAL(TEXREG2RGB)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     struct ureg_src sample;
     const int m = tx->insn.dst[0].idx;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     sample = ureg_DECL_sampler(ureg, m);
@@ -2730,7 +2730,7 @@ DECL_SPECIAL(TEXDP3TEX)
     struct ureg_dst tmp;
     struct ureg_src sample;
     const int m = tx->insn.dst[0].idx;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);
@@ -2752,7 +2752,7 @@ DECL_SPECIAL(TEXM3x2DEPTH)
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     struct ureg_dst tmp;
     const int m = tx->insn.dst[0].idx - 1;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);
@@ -2784,7 +2784,7 @@ DECL_SPECIAL(TEXDP3)
     struct ureg_dst dst = tx_dst_param(tx, &tx->insn.dst[0]);
     struct ureg_src src = tx_src_param(tx, &tx->insn.src[0]); /* t[n] */
     const int m = tx->insn.dst[0].idx;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);
@@ -2802,7 +2802,7 @@ DECL_SPECIAL(TEXM3x3)
     struct ureg_src sample;
     struct ureg_dst E, tmp;
     const int m = tx->insn.dst[0].idx - 2;
-    const int n = tx->insn.src[0].idx;
+    ASSERTED const int n = tx->insn.src[0].idx;
     assert(m >= 0 && m > n);
 
     tx_texcoord_alloc(tx, m);

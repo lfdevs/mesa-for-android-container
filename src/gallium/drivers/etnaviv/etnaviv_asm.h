@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "util/u_math.h"
 #include "hw/isa.xml.h"
 
 /* Size of an instruction in 32-bit words */
@@ -143,6 +144,21 @@ etna_immediate_src(unsigned type, uint32_t bits)
       .imm_val = bits,
       .imm_type = type
    };
+}
+
+static inline struct etna_inst_src
+etna_immediate_float(float x)
+{
+	uint32_t bits = fui(x);
+	assert((bits & 0xfff) == 0); /* 12 lsb cut off */
+	return etna_immediate_src(0, bits >> 12);
+}
+
+static inline struct etna_inst_src
+etna_immediate_int(int x)
+{
+    assert(x >= -0x80000 && x < 0x80000); /* 20-bit signed int */
+	return etna_immediate_src(1, x);
 }
 
 /**

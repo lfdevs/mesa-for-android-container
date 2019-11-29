@@ -22,6 +22,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <llvm/Config/llvm-config.h>
+
 #include "util/u_memory.h"
 #include "util/u_string.h"
 #include "tgsi/tgsi_build.h"
@@ -1149,11 +1151,7 @@ static LLVMValueRef si_nir_load_tcs_varyings(struct ac_shader_abi *abi,
 		}
 	}
 
-	if (param_index) {
-		/* Add the constant index to the indirect index */
-		param_index = LLVMBuildAdd(ctx->ac.builder, param_index,
-					   LLVMConstInt(ctx->i32, const_index, 0), "");
-	} else {
+	if (!param_index) {
 		param_index = LLVMConstInt(ctx->i32, const_index, 0);
 	}
 
@@ -1244,11 +1242,7 @@ LLVMValueRef si_nir_load_input_tes(struct ac_shader_abi *abi,
 
 	base = LLVMGetParam(ctx->main_fn, ctx->param_tcs_offchip_offset);
 
-	if (param_index) {
-		/* Add the constant index to the indirect index */
-		param_index = LLVMBuildAdd(ctx->ac.builder, param_index,
-					   LLVMConstInt(ctx->i32, const_index, 0), "");
-	} else {
+	if (!param_index) {
 		param_index = LLVMConstInt(ctx->i32, const_index, 0);
 	}
 
@@ -1407,14 +1401,9 @@ static void si_nir_store_output_tcs(struct ac_shader_abi *abi,
 
 	driver_location = driver_location / 4;
 
-	if (param_index) {
-		/* Add the constant index to the indirect index */
-		param_index = LLVMBuildAdd(ctx->ac.builder, param_index,
-					   LLVMConstInt(ctx->i32, const_index, 0), "");
-	} else {
-		if (const_index != 0)
-			param_index = LLVMConstInt(ctx->i32, const_index, 0);
-	}
+	bool is_const = !param_index;
+	if (!param_index)
+		param_index = LLVMConstInt(ctx->i32, const_index, 0);
 
 	if (!is_patch) {
 		stride = get_tcs_out_vertex_dw_stride(ctx);
@@ -1438,7 +1427,7 @@ static void si_nir_store_output_tcs(struct ac_shader_abi *abi,
 
 		skip_lds_store = !info->reads_perpatch_outputs;
 
-		if (!param_index) {
+		if (is_const && const_index == 0) {
 			int name = info->output_semantic_name[driver_location];
 
 			/* Always write tess factors into LDS for the TCS epilog. */
@@ -1624,7 +1613,7 @@ static LLVMValueRef si_nir_load_input_gs(struct ac_shader_abi *abi,
 			offset *= 2;
 
 		offset += component;
-		value[i + component] = si_llvm_load_input_gs(&ctx->abi, driver_location  / 4,
+		value[i + component] = si_llvm_load_input_gs(&ctx->abi, driver_location  / 4 + const_index,
 							     vertex_index, type, offset);
 	}
 
@@ -4917,13 +4906,19 @@ static void create_function(struct si_shader_context *ctx)
 		add_arg_assign_checked(&fninfo, ARG_SGPR, ctx->i32,
 				       &ctx->abi.prim_mask, SI_PARAM_PRIM_MASK);
 
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_PERSP_SAMPLE);
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_PERSP_CENTER);
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_PERSP_CENTROID);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.persp_sample, SI_PARAM_PERSP_SAMPLE);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.persp_center, SI_PARAM_PERSP_CENTER);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.persp_centroid, SI_PARAM_PERSP_CENTROID);
 		add_arg_checked(&fninfo, ARG_VGPR, v3i32, SI_PARAM_PERSP_PULL_MODEL);
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_LINEAR_SAMPLE);
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_LINEAR_CENTER);
-		add_arg_checked(&fninfo, ARG_VGPR, ctx->v2i32, SI_PARAM_LINEAR_CENTROID);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.linear_sample, SI_PARAM_LINEAR_SAMPLE);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.linear_center, SI_PARAM_LINEAR_CENTER);
+		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->v2i32,
+				       &ctx->abi.linear_centroid, SI_PARAM_LINEAR_CENTROID);
 		add_arg_checked(&fninfo, ARG_VGPR, ctx->f32, SI_PARAM_LINE_STIPPLE_TEX);
 		add_arg_assign_checked(&fninfo, ARG_VGPR, ctx->f32,
 				       &ctx->abi.frag_pos[0], SI_PARAM_POS_X_FLOAT);
@@ -5035,7 +5030,7 @@ static void create_function(struct si_shader_context *ctx)
 	shader->info.num_input_vgprs -= num_prolog_vgprs;
 
 	if (shader->key.as_ls || ctx->type == PIPE_SHADER_TESS_CTRL) {
-		if (USE_LDS_SYMBOLS && HAVE_LLVM >= 0x0900) {
+		if (USE_LDS_SYMBOLS && LLVM_VERSION_MAJOR >= 9) {
 			/* The LSHS size is not known until draw time, so we append it
 			 * at the end of whatever LDS use there may be in the rest of
 			 * the shader (currently none, unless LLVM decides to do its
@@ -5092,7 +5087,7 @@ static void preload_ring_buffers(struct si_shader_context *ctx)
 			ctx->esgs_ring =
 				ac_build_load_to_sgpr(&ctx->ac, buf_ptr, offset);
 		} else {
-			if (USE_LDS_SYMBOLS && HAVE_LLVM >= 0x0900) {
+			if (USE_LDS_SYMBOLS && LLVM_VERSION_MAJOR >= 9) {
 				/* Declare the ESGS ring as an explicit LDS symbol. */
 				declare_esgs_ring(ctx);
 			} else {
@@ -5293,7 +5288,7 @@ static unsigned si_get_shader_binary_size(struct si_screen *screen, struct si_sh
 {
 	struct ac_rtld_binary rtld;
 	si_shader_binary_open(screen, shader, &rtld);
-	return rtld.rx_size;
+	return rtld.exec_size;
 }
 
 static bool si_get_external_symbol(void *data, const char *name, uint64_t *value)
@@ -5308,11 +5303,6 @@ static bool si_get_external_symbol(void *data, const char *name, uint64_t *value
 		/* Enable scratch coalescing. */
 		*value = S_008F04_BASE_ADDRESS_HI(*scratch_va >> 32) |
 			 S_008F04_SWIZZLE_ENABLE(1);
-		if (HAVE_LLVM < 0x0800) {
-			/* Old LLVM created an R_ABS32_HI relocation for
-			 * this symbol. */
-			*value <<= 32;
-		}
 		return true;
 	}
 
@@ -5328,7 +5318,7 @@ bool si_shader_binary_upload(struct si_screen *sscreen, struct si_shader *shader
 
 	si_resource_reference(&shader->bo, NULL);
 	shader->bo = si_aligned_buffer_create(&sscreen->b,
-					      sscreen->cpdma_prefetch_writes_memory ?
+					      sscreen->info.cpdma_prefetch_writes_memory ?
 						0 : SI_RESOURCE_FLAG_READ_ONLY,
                                               PIPE_USAGE_IMMUTABLE,
                                               align(binary.rx_size, SI_CPDMA_ALIGNMENT),
@@ -5430,7 +5420,7 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 	unsigned lds_per_wave = 0;
 	unsigned max_simd_waves;
 
-	max_simd_waves = ac_get_max_wave64_per_simd(sscreen->info.family);
+	max_simd_waves = sscreen->info.max_wave64_per_simd;
 
 	/* Compute LDS usage for PS. */
 	switch (shader->selector->type) {
@@ -5464,13 +5454,13 @@ static void si_calculate_max_simd_waves(struct si_shader *shader)
 	if (conf->num_sgprs) {
 		max_simd_waves =
 			MIN2(max_simd_waves,
-			     ac_get_num_physical_sgprs(&sscreen->info) / conf->num_sgprs);
+			     sscreen->info.num_physical_sgprs_per_simd / conf->num_sgprs);
 	}
 
 	if (conf->num_vgprs) {
 		/* Always print wave limits as Wave64, so that we can compare
 		 * Wave32 and Wave64 with shader-db fairly. */
-		unsigned max_vgprs = ac_get_num_physical_vgprs(sscreen->info.chip_class, 64);
+		unsigned max_vgprs = sscreen->info.num_physical_wave64_vgprs_per_simd;
 		max_simd_waves = MIN2(max_simd_waves, max_vgprs / conf->num_vgprs);
 	}
 
@@ -6139,7 +6129,6 @@ static bool si_compile_tgsi_main(struct si_shader_context *ctx)
 		ctx->load_input = declare_input_fs;
 		ctx->abi.emit_outputs = si_llvm_return_fs_outputs;
 		bld_base->emit_epilogue = si_tgsi_emit_epilogue;
-		ctx->abi.lookup_interp_param = si_nir_lookup_interp_param;
 		ctx->abi.load_sample_position = load_sample_position;
 		ctx->abi.load_sample_mask_in = load_sample_mask_in;
 		ctx->abi.emit_fbfetch = si_nir_emit_fbfetch;
@@ -7187,9 +7176,9 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 	 */
 	if (sel->type == PIPE_SHADER_COMPUTE) {
 		unsigned wave_size = sscreen->compute_wave_size;
-		unsigned max_vgprs = ac_get_num_physical_vgprs(sscreen->info.chip_class,
-							       wave_size);
-		unsigned max_sgprs = ac_get_num_physical_sgprs(&sscreen->info);
+		unsigned max_vgprs = sscreen->info.num_physical_wave64_vgprs_per_simd *
+				     (wave_size == 32 ? 2 : 1);
+		unsigned max_sgprs = sscreen->info.num_physical_sgprs_per_simd;
 		unsigned max_sgprs_per_wave = 128;
 		unsigned simds_per_tg = 4; /* assuming WGP mode on gfx10 */
 		unsigned threads_per_tg = si_get_max_workgroup_size(shader);
@@ -7221,46 +7210,9 @@ int si_compile_tgsi_shader(struct si_screen *sscreen,
 
 	/* Calculate the number of fragment input VGPRs. */
 	if (ctx.type == PIPE_SHADER_FRAGMENT) {
-		shader->info.num_input_vgprs = 0;
-		shader->info.face_vgpr_index = -1;
-		shader->info.ancillary_vgpr_index = -1;
-
-		if (G_0286CC_PERSP_SAMPLE_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_PERSP_CENTER_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_PERSP_CENTROID_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_PERSP_PULL_MODEL_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 3;
-		if (G_0286CC_LINEAR_SAMPLE_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_LINEAR_CENTROID_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 2;
-		if (G_0286CC_LINE_STIPPLE_TEX_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_POS_X_FLOAT_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_POS_Y_FLOAT_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_POS_Z_FLOAT_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_POS_W_FLOAT_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_FRONT_FACE_ENA(shader->config.spi_ps_input_addr)) {
-			shader->info.face_vgpr_index = shader->info.num_input_vgprs;
-			shader->info.num_input_vgprs += 1;
-		}
-		if (G_0286CC_ANCILLARY_ENA(shader->config.spi_ps_input_addr)) {
-			shader->info.ancillary_vgpr_index = shader->info.num_input_vgprs;
-			shader->info.num_input_vgprs += 1;
-		}
-		if (G_0286CC_SAMPLE_COVERAGE_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
-		if (G_0286CC_POS_FIXED_PT_ENA(shader->config.spi_ps_input_addr))
-			shader->info.num_input_vgprs += 1;
+		shader->info.num_input_vgprs = ac_get_fs_input_vgpr_cnt(&shader->config,
+						&shader->info.face_vgpr_index,
+						&shader->info.ancillary_vgpr_index);
 	}
 
 	si_calculate_max_simd_waves(shader);
@@ -7295,12 +7247,12 @@ si_get_shader_part(struct si_screen *sscreen,
 {
 	struct si_shader_part *result;
 
-	mtx_lock(&sscreen->shader_parts_mutex);
+	simple_mtx_lock(&sscreen->shader_parts_mutex);
 
 	/* Find existing. */
 	for (result = *list; result; result = result->next) {
 		if (memcmp(&result->key, key, sizeof(*key)) == 0) {
-			mtx_unlock(&sscreen->shader_parts_mutex);
+			simple_mtx_unlock(&sscreen->shader_parts_mutex);
 			return result;
 		}
 	}
@@ -7361,7 +7313,7 @@ si_get_shader_part(struct si_screen *sscreen,
 
 out:
 	si_llvm_dispose(&ctx);
-	mtx_unlock(&sscreen->shader_parts_mutex);
+	simple_mtx_unlock(&sscreen->shader_parts_mutex);
 	return result;
 }
 
@@ -7438,7 +7390,7 @@ static void si_build_vs_prolog_function(struct si_shader_context *ctx,
 			si_init_exec_from_input(ctx, 3, 0);
 
 		if (key->vs_prolog.as_ls &&
-		    ctx->screen->has_ls_vgpr_init_bug) {
+		    ctx->screen->info.has_ls_vgpr_init_bug) {
 			/* If there are no HS threads, SPI loads the LS VGPRs
 			 * starting at VGPR 0. Shift them back to where they
 			 * belong.

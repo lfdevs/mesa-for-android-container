@@ -590,7 +590,7 @@ static void si_buffer_do_flush_region(struct pipe_context *ctx,
 			       box->x, src_offset, box->width);
 	}
 
-	util_range_add(&buf->valid_buffer_range, box->x,
+	util_range_add(&buf->b.b, &buf->valid_buffer_range, box->x,
 		       box->x + box->width);
 }
 
@@ -744,8 +744,8 @@ si_buffer_from_user_memory(struct pipe_screen *screen,
 	buf->domains = RADEON_DOMAIN_GTT;
 	buf->flags = 0;
 	buf->b.is_user_ptr = true;
-	util_range_add(&buf->valid_buffer_range, 0, templ->width0);
-	util_range_add(&buf->b.valid_buffer_range, 0, templ->width0);
+	util_range_add(&buf->b.b, &buf->valid_buffer_range, 0, templ->width0);
+	util_range_add(&buf->b.b, &buf->b.valid_buffer_range, 0, templ->width0);
 
 	/* Convert a user pointer to a buffer. */
 	buf->buf = ws->buffer_from_ptr(ws, user_memory, templ->width0);

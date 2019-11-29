@@ -132,7 +132,7 @@ serialize_nir_part(struct blob *writer, struct gl_program *prog)
    blob_write_uint32(writer, NIR_PART);
    intptr_t size_offset = blob_reserve_uint32(writer);
    size_t nir_start = writer->size;
-   nir_serialize(writer, prog->nir);
+   nir_serialize(writer, prog->nir, false);
    blob_overwrite_uint32(writer, size_offset, writer->size - nir_start);
 }
 

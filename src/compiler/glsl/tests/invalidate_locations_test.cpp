@@ -46,6 +46,8 @@ public:
 void
 invalidate_locations::SetUp()
 {
+   glsl_type_singleton_init_or_ref();
+
    this->mem_ctx = ralloc_context(NULL);
    this->ir.make_empty();
 }
@@ -55,6 +57,8 @@ invalidate_locations::TearDown()
 {
    ralloc_free(this->mem_ctx);
    this->mem_ctx = NULL;
+
+   glsl_type_singleton_decref();
 }
 
 TEST_F(invalidate_locations, simple_vertex_in_generic)

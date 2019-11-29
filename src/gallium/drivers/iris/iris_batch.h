@@ -126,6 +126,8 @@ struct iris_batch {
 
    /** Have we emitted any draw calls to this batch? */
    bool contains_draw;
+
+   uint32_t last_aux_map_state;
 };
 
 void iris_init_batch(struct iris_batch *batch,

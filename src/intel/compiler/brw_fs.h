@@ -69,7 +69,6 @@ public:
               void *mem_ctx,
               const brw_base_prog_key *key,
               struct brw_stage_prog_data *prog_data,
-              struct gl_program *prog,
               const nir_shader *shader,
               unsigned dispatch_width,
               int shader_time_index,
@@ -168,6 +167,7 @@ public:
    bool lower_integer_multiplication();
    bool lower_minmax();
    bool lower_simd_width();
+   bool lower_scoreboard();
    bool opt_combine_constants();
 
    void emit_dummy_fs();
@@ -188,6 +188,7 @@ public:
    void emit_discard_jump();
    void emit_fsign(const class brw::fs_builder &, const nir_alu_instr *instr,
                    fs_reg result, fs_reg *op, unsigned fsign_src);
+   void emit_shader_float_controls_execution_mode();
    bool opt_peephole_sel();
    bool opt_peephole_csel();
    bool opt_peephole_predicated_break();
@@ -299,7 +300,7 @@ public:
 
    fs_reg interp_reg(int location, int channel);
 
-   int implied_mrf_writes(fs_inst *inst) const;
+   int implied_mrf_writes(const fs_inst *inst) const;
 
    virtual void dump_instructions();
    virtual void dump_instructions(const char *name);
@@ -312,7 +313,6 @@ public:
    struct brw_gs_compile *gs_compile;
 
    struct brw_stage_prog_data *prog_data;
-   struct gl_program *prog;
 
    const struct brw_vue_map *input_vue_map;
 
@@ -587,5 +587,9 @@ fs_reg setup_imm_ub(const brw::fs_builder &bld,
 
 enum brw_barycentric_mode brw_barycentric_mode(enum glsl_interp_mode mode,
                                                nir_intrinsic_op op);
+
+uint32_t brw_fb_write_msg_control(const fs_inst *inst,
+                                  const struct brw_wm_prog_data *prog_data);
+
 
 #endif /* BRW_FS_H */

@@ -271,6 +271,9 @@ gbm_bo_get_bpp(struct gbm_bo *bo)
       case GBM_FORMAT_RGBA1010102:
       case GBM_FORMAT_BGRA1010102:
          return 32;
+      case GBM_FORMAT_XBGR16161616F:
+      case GBM_FORMAT_ABGR16161616F:
+         return 64;
    }
 }
 

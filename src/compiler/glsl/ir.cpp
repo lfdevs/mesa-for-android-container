@@ -258,6 +258,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0)
    case ir_unop_bitfield_reverse:
    case ir_unop_interpolate_at_centroid:
    case ir_unop_saturate:
+   case ir_unop_atan:
       this->type = op0->type;
       break;
 
@@ -452,6 +453,7 @@ ir_expression::ir_expression(int op, ir_rvalue *op0, ir_rvalue *op1)
    case ir_binop_mul:
    case ir_binop_div:
    case ir_binop_mod:
+   case ir_binop_atan2:
       if (op0->type->is_scalar()) {
 	 this->type = op1->type;
       } else if (op1->type->is_scalar()) {
@@ -1827,6 +1829,7 @@ ir_function_signature::ir_function_signature(const glsl_type *return_type,
                                              builtin_available_predicate b)
    : ir_instruction(ir_type_function_signature),
      return_type(return_type), is_defined(false),
+     return_precision(GLSL_PRECISION_NONE),
      intrinsic_id(ir_intrinsic_invalid), builtin_avail(b), _function(NULL)
 {
    this->origin = NULL;

@@ -698,7 +698,7 @@ texture_buffer_sampler_view(struct r600_context *rctx,
 	view->tex_resource = &tmp->resource;
 
 	if (tmp->resource.gpu_address)
-		LIST_ADDTAIL(&view->list, &rctx->texture_buffers);
+		list_addtail(&view->list, &rctx->texture_buffers);
 	return &view->base;
 }
 
@@ -1308,7 +1308,7 @@ void evergreen_init_color_surface_rat(struct r600_context *rctx,
 	surf->cb_color_view = 0;
 
 	/* Set the buffer range the GPU will have access to: */
-	util_range_add(&r600_resource(pipe_buffer)->valid_buffer_range,
+	util_range_add(pipe_buffer, &r600_resource(pipe_buffer)->valid_buffer_range,
 		       0, pipe_buffer->width0);
 }
 
@@ -3364,6 +3364,12 @@ void evergreen_update_ps_state(struct pipe_context *ctx, struct r600_pipe_shader
 				spi_baryc_cntl |= spi_baryc_enable_bit[k];
 				have_perspective |= k < 3;
 				have_linear |= !(k < 3);
+				if (rshader->input[i].uses_interpolate_at_centroid) {
+					k = eg_get_interpolator_index(
+						rshader->input[i].interpolate,
+						TGSI_INTERPOLATE_LOC_CENTROID);
+					spi_baryc_cntl |= spi_baryc_enable_bit[k];
+				}
 			}
 		}
 

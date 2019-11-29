@@ -32,7 +32,7 @@
 #include "ir3/ir3_shader.h"
 
 struct ir3_shader * ir3_shader_create(struct ir3_compiler *compiler,
-		const struct pipe_shader_state *cso, gl_shader_stage type,
+		const struct pipe_shader_state *cso,
 		struct pipe_debug_callback *debug,
 		struct pipe_screen *screen);
 struct ir3_shader *
@@ -51,6 +51,8 @@ struct fd_constbuf_stateobj;
 struct fd_shaderbuf_stateobj;
 struct fd_shaderimg_stateobj;
 
+void ir3_user_consts_size(struct ir3_ubo_analysis_state *state,
+		unsigned *packets, unsigned *size);
 void ir3_emit_user_consts(struct fd_screen *screen, const struct ir3_shader_variant *v,
 		struct fd_ringbuffer *ring, struct fd_constbuf_stateobj *constbuf);
 void ir3_emit_ubos(struct fd_screen *screen, const struct ir3_shader_variant *v,
@@ -61,6 +63,9 @@ void ir3_emit_image_dims(struct fd_screen *screen, const struct ir3_shader_varia
 		struct fd_ringbuffer *ring, struct fd_shaderimg_stateobj *si);
 void ir3_emit_immediates(struct fd_screen *screen, const struct ir3_shader_variant *v,
 		struct fd_ringbuffer *ring);
+void ir3_emit_link_map(struct fd_screen *screen,
+		const struct ir3_shader_variant *producer,
+		const struct ir3_shader_variant *v, struct fd_ringbuffer *ring);
 
 static inline bool
 ir3_needs_vs_driver_params(const struct ir3_shader_variant *v)
@@ -80,5 +85,7 @@ void ir3_emit_fs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer
 		struct fd_context *ctx);
 void ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *ring,
 		struct fd_context *ctx, const struct pipe_grid_info *info);
+
+void ir3_prog_init(struct pipe_context *pctx);
 
 #endif /* IR3_GALLIUM_H_ */

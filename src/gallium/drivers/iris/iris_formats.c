@@ -479,15 +479,17 @@ iris_is_format_supported(struct pipe_screen *pscreen,
       if (!is_integer)
          supported &= isl_format_supports_filtering(devinfo, format);
 
-      /* Don't advertise 3-component RGB formats.  This ensures that they
-       * are renderable from an API perspective since the state tracker will
-       * fall back to RGBA or RGBX, which are renderable.  We want to render
-       * internally for copies and blits, even if the application doesn't.
+      /* Don't advertise 3-component RGB formats for non-buffer textures.
+       * This ensures that they are renderable from an API perspective since
+       * the state tracker will fall back to RGBA or RGBX, which are
+       * renderable.  We want to render internally for copies and blits,
+       * even if the application doesn't.
        *
-       * We do need to advertise 32-bit RGB for texture buffers though.
+       * Buffer textures don't need to be renderable, so we support real RGB.
+       * This is useful for PBO upload, and 32-bit RGB support is mandatory.
        */
-      supported &= fmtl->bpb != 24 && fmtl->bpb != 48 &&
-                   (fmtl->bpb != 96 || target == PIPE_BUFFER);
+      if (target != PIPE_BUFFER)
+         supported &= fmtl->bpb != 24 && fmtl->bpb != 48 && fmtl->bpb != 96;
    }
 
    if (usage & PIPE_BIND_VERTEX_BUFFER)

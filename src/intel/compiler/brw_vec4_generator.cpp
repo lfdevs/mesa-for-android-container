@@ -1208,7 +1208,7 @@ generate_scratch_write(struct brw_codegen *p,
    /* If the instruction is predicated, we'll predicate the send, not
     * the header setup.
     */
-   brw_set_default_predicate_control(p, false);
+   brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
 
    gen6_resolve_implied_move(p, &header, inst->base_mrf);
 
@@ -1505,8 +1505,15 @@ generate_code(struct brw_codegen *p,
    bool debug_flag = INTEL_DEBUG &
       intel_debug_flag_for_shader_stage(nir->info.stage);
    struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
+
+   /* `send_count` explicitly does not include spills or fills, as we'd
+    * like to use it as a metric for intentional memory access or other
+    * shared function use.  Otherwise, subtle changes to scheduling or
+    * register allocation could cause it to fluctuate wildly - and that
+    * effect is already counted in spill/fill counts.
+    */
    int spill_count = 0, fill_count = 0;
-   int loop_count = 0;
+   int loop_count = 0, send_count = 0;
 
    foreach_block_and_inst (block, vec4_instruction, inst, cfg) {
       struct brw_reg src[3], dst;
@@ -1746,6 +1753,7 @@ generate_code(struct brw_codegen *p,
             generate_math_gen6(p, inst, dst, src[0], brw_null_reg());
          } else {
             generate_math1_gen4(p, inst, dst, src[0]);
+            send_count++;
          }
          break;
 
@@ -1759,6 +1767,7 @@ generate_code(struct brw_codegen *p,
             generate_math_gen6(p, inst, dst, src[0], src[1]);
          } else {
             generate_math2_gen4(p, inst, dst, src[0], src[1]);
+            send_count++;
          }
          break;
 
@@ -1775,14 +1784,17 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_SAMPLEINFO:
          generate_tex(p, prog_data, nir->info.stage,
                       inst, dst, src[0], src[1], src[2]);
+         send_count++;
          break;
 
       case SHADER_OPCODE_GET_BUFFER_SIZE:
          generate_get_buffer_size(p, prog_data, inst, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case VS_OPCODE_URB_WRITE:
          generate_vs_urb_write(p, inst);
+         send_count++;
          break;
 
       case SHADER_OPCODE_GEN4_SCRATCH_READ:
@@ -1797,10 +1809,12 @@ generate_code(struct brw_codegen *p,
 
       case VS_OPCODE_PULL_CONSTANT_LOAD:
          generate_pull_constant_load(p, prog_data, inst, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case VS_OPCODE_PULL_CONSTANT_LOAD_GEN7:
          generate_pull_constant_load_gen7(p, prog_data, inst, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case VS_OPCODE_SET_SIMD4X2_HEADER_GEN9:
@@ -1809,14 +1823,17 @@ generate_code(struct brw_codegen *p,
 
       case GS_OPCODE_URB_WRITE:
          generate_gs_urb_write(p, inst);
+         send_count++;
          break;
 
       case GS_OPCODE_URB_WRITE_ALLOCATE:
          generate_gs_urb_write_allocate(p, inst);
+         send_count++;
          break;
 
       case GS_OPCODE_SVB_WRITE:
          generate_gs_svb_write(p, prog_data, inst, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case GS_OPCODE_SVB_SET_DST_INDEX:
@@ -1825,6 +1842,7 @@ generate_code(struct brw_codegen *p,
 
       case GS_OPCODE_THREAD_END:
          generate_gs_thread_end(p, inst);
+         send_count++;
          break;
 
       case GS_OPCODE_SET_WRITE_OFFSET:
@@ -1837,6 +1855,7 @@ generate_code(struct brw_codegen *p,
 
       case GS_OPCODE_FF_SYNC:
          generate_gs_ff_sync(p, inst, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case GS_OPCODE_FF_SYNC_SET_PRIMITIVES:
@@ -1866,12 +1885,14 @@ generate_code(struct brw_codegen *p,
       case SHADER_OPCODE_SHADER_TIME_ADD:
          brw_shader_time_add(p, src[0],
                              prog_data->base.binding_table.shader_time_start);
+         send_count++;
          break;
 
       case VEC4_OPCODE_UNTYPED_ATOMIC:
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_untyped_atomic(p, dst, src[0], src[1], src[2].ud, inst->mlen,
                             !inst->dst.is_null(), inst->header_size);
+         send_count++;
          break;
 
       case VEC4_OPCODE_UNTYPED_SURFACE_READ:
@@ -1879,16 +1900,19 @@ generate_code(struct brw_codegen *p,
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_untyped_surface_read(p, dst, src[0], src[1], inst->mlen,
                                   src[2].ud);
+         send_count++;
          break;
 
       case VEC4_OPCODE_UNTYPED_SURFACE_WRITE:
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_untyped_surface_write(p, src[0], src[1], inst->mlen,
                                    src[2].ud, inst->header_size);
+         send_count++;
          break;
 
       case SHADER_OPCODE_MEMORY_FENCE:
          brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND, false, /* bti */ 0);
+         send_count++;
          break;
 
       case SHADER_OPCODE_FIND_LIVE_CHANNEL: {
@@ -2068,10 +2092,12 @@ generate_code(struct brw_codegen *p,
 
       case TCS_OPCODE_URB_WRITE:
          generate_tcs_urb_write(p, inst, src[0]);
+         send_count++;
          break;
 
       case VEC4_OPCODE_URB_READ:
          generate_vec4_urb_read(p, inst, dst, src[0]);
+         send_count++;
          break;
 
       case TCS_OPCODE_SET_INPUT_URB_OFFSETS:
@@ -2113,15 +2139,18 @@ generate_code(struct brw_codegen *p,
 
       case TCS_OPCODE_RELEASE_INPUT:
          generate_tcs_release_input(p, dst, src[0], src[1]);
+         send_count++;
          break;
 
       case TCS_OPCODE_THREAD_END:
          generate_tcs_thread_end(p, inst);
+         send_count++;
          break;
 
       case SHADER_OPCODE_BARRIER:
          brw_barrier(p, src[0]);
          brw_WAIT(p);
+         send_count++;
          break;
 
       case SHADER_OPCODE_MOV_INDIRECT:
@@ -2188,9 +2217,9 @@ generate_code(struct brw_codegen *p,
             sha1buf);
 
       fprintf(stderr, "%s vec4 shader: %d instructions. %d loops. %u cycles. %d:%d "
-                     "spills:fills. Compacted %d to %d bytes (%.0f%%)\n",
+                     "spills:fills, %u sends. Compacted %d to %d bytes (%.0f%%)\n",
             stage_abbrev, before_size / 16, loop_count, cfg->cycle_count,
-            spill_count, fill_count, before_size, after_size,
+            spill_count, fill_count, send_count, before_size, after_size,
             100.0f * (before_size - after_size) / before_size);
 
       /* overriding the shader makes disasm_info invalid */
@@ -2205,10 +2234,11 @@ generate_code(struct brw_codegen *p,
 
    compiler->shader_debug_log(log_data,
                               "%s vec4 shader: %d inst, %d loops, %u cycles, "
-                              "%d:%d spills:fills, compacted %d to %d bytes.",
+                              "%d:%d spills:fills, %u sends, "
+                              "compacted %d to %d bytes.",
                               stage_abbrev, before_size / 16,
                               loop_count, cfg->cycle_count, spill_count,
-                              fill_count, before_size, after_size);
+                              fill_count, send_count, before_size, after_size);
    if (stats) {
       stats->dispatch_width = 0;
       stats->instructions = before_size / 16;

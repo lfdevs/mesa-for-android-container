@@ -175,12 +175,12 @@ static uint64_t si_read_mmio_counter(struct si_screen *sscreen,
 {
 	/* Start the thread if needed. */
 	if (!sscreen->gpu_load_thread) {
-		mtx_lock(&sscreen->gpu_load_mutex);
+		simple_mtx_lock(&sscreen->gpu_load_mutex);
 		/* Check again inside the mutex. */
 		if (!sscreen->gpu_load_thread)
 			sscreen->gpu_load_thread =
 				u_thread_create(si_gpu_load_thread, sscreen);
-		mtx_unlock(&sscreen->gpu_load_mutex);
+		simple_mtx_unlock(&sscreen->gpu_load_mutex);
 	}
 
 	unsigned busy = p_atomic_read(&sscreen->mmio_counters.array[busy_index]);

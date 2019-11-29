@@ -409,7 +409,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
                          result_type >= PIPE_QUERY_TYPE_I64 ? 2 : 1,
                          ready);
 
-      util_range_add(&buf->valid_buffer_range, offset,
+      util_range_add(&buf->base, &buf->valid_buffer_range, offset,
                      offset + (result_type >= PIPE_QUERY_TYPE_I64 ? 8 : 4));
 
       nvc0_resource_validate(buf, NOUVEAU_BO_WR);
@@ -508,7 +508,7 @@ nvc0_hw_get_query_result_resource(struct nvc0_context *nvc0,
    PUSH_DATAh(push, buf->address + offset);
    PUSH_DATA (push, buf->address + offset);
 
-   util_range_add(&buf->valid_buffer_range, offset,
+   util_range_add(&buf->base, &buf->valid_buffer_range, offset,
                   offset + (result_type >= PIPE_QUERY_TYPE_I64 ? 8 : 4));
 
    nvc0_resource_validate(buf, NOUVEAU_BO_WR);

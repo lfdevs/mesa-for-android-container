@@ -170,8 +170,8 @@ fd4_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	/* and now binning pass: */
 	emit.binning_pass = true;
 	emit.dirty = dirty & ~(FD_DIRTY_BLEND);
-	emit.vp = NULL;   /* we changed key so need to refetch vp */
-	emit.fp = NULL;
+	emit.vs = NULL;   /* we changed key so need to refetch vs */
+	emit.fs = NULL;
 	draw_impl(ctx, ctx->batch->binning, &emit, index_offset);
 
 	fd_context_all_clean(ctx);

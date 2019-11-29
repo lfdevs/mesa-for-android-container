@@ -78,6 +78,7 @@ struct v3d_screen {
         uint32_t bo_count;
 
         bool has_csd;
+        bool has_cache_flush;
         bool nonmsaa_texture_size_limit;
 
         struct v3d_simulator_file *sim_file;

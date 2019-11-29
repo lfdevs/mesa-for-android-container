@@ -87,9 +87,9 @@ static inline int
 cmp_uint64(uint64_t a, uint64_t b)
 {
    if (a < b)
-      return -1;
-   if (a > b)
       return 1;
+   if (a > b)
+      return -1;
    return 0;
 }
 
@@ -109,7 +109,7 @@ ensure_ggtt_entry(struct aub_mem *mem, uint64_t virt_addr)
    if (!node || (cmp = cmp_ggtt_entry(node, &virt_addr))) {
       struct ggtt_entry *new_entry = calloc(1, sizeof(*new_entry));
       new_entry->virt_addr = virt_addr;
-      rb_tree_insert_at(&mem->ggtt, node, &new_entry->node, cmp > 0);
+      rb_tree_insert_at(&mem->ggtt, node, &new_entry->node, cmp < 0);
       node = &new_entry->node;
    }
 
@@ -153,7 +153,7 @@ ensure_phys_mem(struct aub_mem *mem, uint64_t phys_addr)
                            mem->mem_fd, new_mem->fd_offset);
       assert(new_mem->data != MAP_FAILED);
 
-      rb_tree_insert_at(&mem->mem, node, &new_mem->node, cmp > 0);
+      rb_tree_insert_at(&mem->mem, node, &new_mem->node, cmp < 0);
       node = &new_mem->node;
    }
 

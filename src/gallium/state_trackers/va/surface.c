@@ -565,7 +565,7 @@ surface_from_external_memory(VADriverContextP ctx, vlVaSurface *surface,
    struct pipe_resource res_templ;
    struct winsys_handle whandle;
    struct pipe_resource *resources[VL_NUM_COMPONENTS];
-   const enum pipe_format *resource_formats = NULL;
+   enum pipe_format resource_formats[VL_NUM_COMPONENTS];
    VAStatus result;
    int i;
 
@@ -584,9 +584,7 @@ surface_from_external_memory(VADriverContextP ctx, vlVaSurface *surface,
    if (memory_attribute->num_planes > VL_NUM_COMPONENTS)
       return VA_STATUS_ERROR_INVALID_PARAMETER;
 
-   resource_formats = vl_video_buffer_formats(pscreen, templat->buffer_format);
-   if (!resource_formats)
-      return VA_STATUS_ERROR_INVALID_PARAMETER;
+   vl_get_video_buffer_formats(pscreen, templat->buffer_format, resource_formats);
 
    memset(&res_templ, 0, sizeof(res_templ));
    res_templ.target = PIPE_TEXTURE_2D;

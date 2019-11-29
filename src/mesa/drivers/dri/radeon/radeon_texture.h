@@ -38,7 +38,6 @@ extern mesa_format _radeon_texformat_argb8888;
 extern mesa_format _radeon_texformat_rgb565;
 extern mesa_format _radeon_texformat_argb4444;
 extern mesa_format _radeon_texformat_argb1555;
-extern mesa_format _radeon_texformat_al88;
 
 extern 
 void copy_rows(void* dst, GLuint dststride, const void* src, GLuint srcstride,

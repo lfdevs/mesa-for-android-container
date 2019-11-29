@@ -47,7 +47,7 @@ translate_texture_format(GLuint mesa_format)
       return MAPSURF_8BIT | MT_8BIT_L8;
    case MESA_FORMAT_I_UNORM8:
       return MAPSURF_8BIT | MT_8BIT_I8;
-   case MESA_FORMAT_L8A8_UNORM:
+   case MESA_FORMAT_LA_UNORM8:
       return MAPSURF_16BIT | MT_16BIT_AY88;
    case MESA_FORMAT_B5G6R5_UNORM:
       return MAPSURF_16BIT | MT_16BIT_RGB565;

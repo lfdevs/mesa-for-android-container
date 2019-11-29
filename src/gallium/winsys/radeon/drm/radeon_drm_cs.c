@@ -697,7 +697,7 @@ static int radeon_drm_cs_flush(struct radeon_cmdbuf *rcs,
 
         if (util_queue_is_initialized(&cs->ws->cs_queue)) {
             util_queue_add_job(&cs->ws->cs_queue, cs, &cs->flush_completed,
-                               radeon_drm_cs_emit_ioctl_oneshot, NULL);
+                               radeon_drm_cs_emit_ioctl_oneshot, NULL, 0);
             if (!(flags & PIPE_FLUSH_ASYNC))
                 radeon_drm_cs_sync_flush(rcs);
         } else {

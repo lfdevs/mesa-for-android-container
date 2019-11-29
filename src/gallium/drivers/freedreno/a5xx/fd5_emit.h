@@ -60,7 +60,7 @@ struct fd5_emit {
 	bool no_lrz_write;
 
 	/* cached to avoid repeated lookups of same variants: */
-	const struct ir3_shader_variant *vp, *fp;
+	const struct ir3_shader_variant *vs, *fs;
 	/* TODO: other shader stages.. */
 
 	unsigned streamout_mask;
@@ -76,29 +76,29 @@ static inline enum a5xx_color_fmt fd5_emit_format(struct pipe_surface *surf)
 static inline const struct ir3_shader_variant *
 fd5_emit_get_vp(struct fd5_emit *emit)
 {
-	if (!emit->vp) {
-		struct ir3_shader *shader = emit->prog->vp;
-		emit->vp = ir3_shader_variant(shader, emit->key,
+	if (!emit->vs) {
+		struct ir3_shader *shader = emit->prog->vs;
+		emit->vs = ir3_shader_variant(shader, emit->key,
 				emit->binning_pass, emit->debug);
 	}
-	return emit->vp;
+	return emit->vs;
 }
 
 static inline const struct ir3_shader_variant *
 fd5_emit_get_fp(struct fd5_emit *emit)
 {
-	if (!emit->fp) {
+	if (!emit->fs) {
 		if (emit->binning_pass) {
 			/* use dummy stateobj to simplify binning vs non-binning: */
-			static const struct ir3_shader_variant binning_fp = {};
-			emit->fp = &binning_fp;
+			static const struct ir3_shader_variant binning_fs = {};
+			emit->fs = &binning_fs;
 		} else {
-			struct ir3_shader *shader = emit->prog->fp;
-			emit->fp = ir3_shader_variant(shader, emit->key,
+			struct ir3_shader *shader = emit->prog->fs;
+			emit->fs = ir3_shader_variant(shader, emit->key,
 					false, emit->debug);
 		}
 	}
-	return emit->fp;
+	return emit->fs;
 }
 
 static inline void

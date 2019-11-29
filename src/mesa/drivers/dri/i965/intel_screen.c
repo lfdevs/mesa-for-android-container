@@ -100,6 +100,7 @@ DRI_CONF_BEGIN
       DRI_CONF_GLSL_ZERO_INIT("false")
       DRI_CONF_ALLOW_RGB10_CONFIGS("false")
       DRI_CONF_ALLOW_RGB565_CONFIGS("true")
+      DRI_CONF_ALLOW_FP16_CONFIGS("false")
    DRI_CONF_SECTION_END
 DRI_CONF_END
 };
@@ -189,125 +190,131 @@ static const struct __DRI2flushExtensionRec intelFlushExtension = {
 };
 
 static const struct intel_image_format intel_image_formats[] = {
-   { __DRI_IMAGE_FOURCC_ARGB2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ABGR16161616F, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR16161616F, 8 } } },
+
+   { DRM_FORMAT_XBGR16161616F, __DRI_IMAGE_COMPONENTS_RGB, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR16161616F, 8 } } },
+
+   { DRM_FORMAT_ARGB2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB2101010, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_XRGB2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_XRGB2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB2101010, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_ABGR2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ABGR2101010, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR2101010, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_XBGR2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_XBGR2101010, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR2101010, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_ABGR8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ABGR8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } },
 
    { __DRI_IMAGE_FOURCC_SARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
 
-   { __DRI_IMAGE_FOURCC_XBGR8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_XBGR8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR8888, 4 }, } },
 
-   { __DRI_IMAGE_FOURCC_ARGB1555, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ARGB1555, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB1555, 2 } } },
 
-   { __DRI_IMAGE_FOURCC_RGB565, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_RGB565, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_RGB565, 2 } } },
 
-   { __DRI_IMAGE_FOURCC_R8, __DRI_IMAGE_COMPONENTS_R, 1,
+   { DRM_FORMAT_R8, __DRI_IMAGE_COMPONENTS_R, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 }, } },
 
-   { __DRI_IMAGE_FOURCC_R16, __DRI_IMAGE_COMPONENTS_R, 1,
+   { DRM_FORMAT_R16, __DRI_IMAGE_COMPONENTS_R, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 1 }, } },
 
-   { __DRI_IMAGE_FOURCC_GR88, __DRI_IMAGE_COMPONENTS_RG, 1,
+   { DRM_FORMAT_GR88, __DRI_IMAGE_COMPONENTS_RG, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 }, } },
 
-   { __DRI_IMAGE_FOURCC_GR1616, __DRI_IMAGE_COMPONENTS_RG, 1,
+   { DRM_FORMAT_GR1616, __DRI_IMAGE_COMPONENTS_RG, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR1616, 2 }, } },
 
-   { __DRI_IMAGE_FOURCC_YUV410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YVU410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YVU410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YVU411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YVU411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YVU420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YVU420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YVU422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YVU422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YVU444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YVU444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_NV12, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_NV12, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
-   { __DRI_IMAGE_FOURCC_P010, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_P010, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_P012, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_P012, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_P016, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_P016, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R16, 2 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_GR1616, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_NV16, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_NV16, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
-   { __DRI_IMAGE_FOURCC_AYUV, __DRI_IMAGE_COMPONENTS_AYUV, 1,
+   { DRM_FORMAT_AYUV, __DRI_IMAGE_COMPONENTS_AYUV, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_XYUV8888, __DRI_IMAGE_COMPONENTS_XYUV, 1,
+   { DRM_FORMAT_XYUV8888, __DRI_IMAGE_COMPONENTS_XYUV, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XBGR8888, 4 } } },
 
    /* For YUYV and UYVY buffers, we set up two overlapping DRI images
@@ -318,10 +325,10 @@ static const struct intel_image_format intel_image_formats[] = {
     * V into A.  This lets the texture sampler interpolate the Y
     * components correctly when sampling from plane 0, and interpolate
     * U and V correctly when sampling from plane 1. */
-   { __DRI_IMAGE_FOURCC_YUYV, __DRI_IMAGE_COMPONENTS_Y_XUXV, 2,
+   { DRM_FORMAT_YUYV, __DRI_IMAGE_COMPONENTS_Y_XUXV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
-   { __DRI_IMAGE_FOURCC_UYVY, __DRI_IMAGE_COMPONENTS_Y_UXVX, 2,
+   { DRM_FORMAT_UYVY, __DRI_IMAGE_COMPONENTS_Y_UXVX, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
 };
@@ -747,7 +754,9 @@ intel_create_image_common(__DRIscreen *dri_screen,
                       .samples = 1,
                       .usage = ISL_SURF_USAGE_RENDER_TARGET_BIT |
                                ISL_SURF_USAGE_TEXTURE_BIT |
-                               ISL_SURF_USAGE_STORAGE_BIT,
+                               ISL_SURF_USAGE_STORAGE_BIT |
+                               ((use & __DRI_IMAGE_USE_SCANOUT) ?
+                                ISL_SURF_USAGE_DISPLAY_BIT : 0),
                       .tiling_flags = (1 << mod_info->tiling));
    assert(ok);
    if (!ok) {
@@ -755,9 +764,9 @@ intel_create_image_common(__DRIscreen *dri_screen,
       return NULL;
    }
 
-   struct isl_surf aux_surf;
+   struct isl_surf aux_surf = {0,};
    if (mod_info->aux_usage == ISL_AUX_USAGE_CCS_E) {
-      ok = isl_surf_get_ccs_surf(&screen->isl_dev, &surf, &aux_surf, 0);
+      ok = isl_surf_get_ccs_surf(&screen->isl_dev, &surf, &aux_surf, NULL, 0);
       if (!ok) {
          free(image);
          return NULL;
@@ -1176,8 +1185,8 @@ intel_create_image_from_fds_common(__DRIscreen *dri_screen,
          return NULL;
       }
 
-      struct isl_surf aux_surf;
-      ok = isl_surf_get_ccs_surf(&screen->isl_dev, &surf, &aux_surf,
+      struct isl_surf aux_surf = {0,};
+      ok = isl_surf_get_ccs_surf(&screen->isl_dev, &surf, &aux_surf, NULL,
                                  image->aux_pitch);
       if (!ok) {
          brw_bo_unreference(image->bo);
@@ -1736,7 +1745,11 @@ intelCreateBuffer(__DRIscreen *dri_screen,
       fb->Visual.samples = num_samples;
    }
 
-   if (mesaVis->redBits == 10 && mesaVis->alphaBits > 0) {
+   if (mesaVis->redBits == 16 && mesaVis->alphaBits > 0 && mesaVis->floatMode) {
+      rgbFormat = MESA_FORMAT_RGBA_FLOAT16;
+   } else if (mesaVis->redBits == 16 && mesaVis->floatMode) {
+      rgbFormat = MESA_FORMAT_RGBX_FLOAT16;
+   } else if (mesaVis->redBits == 10 && mesaVis->alphaBits > 0) {
       rgbFormat = mesaVis->redMask == 0x3ff00000 ? MESA_FORMAT_B10G10R10A2_UNORM
                                                  : MESA_FORMAT_R10G10B10A2_UNORM;
    } else if (mesaVis->redBits == 10) {
@@ -1895,7 +1908,17 @@ intel_init_bufmgr(struct intel_screen *screen)
    if (getenv("INTEL_NO_HW") != NULL)
       screen->no_hw = true;
 
-   screen->bufmgr = brw_bufmgr_init(&screen->devinfo, dri_screen->fd);
+   bool bo_reuse = false;
+   int bo_reuse_mode = driQueryOptioni(&screen->optionCache, "bo_reuse");
+   switch (bo_reuse_mode) {
+   case DRI_CONF_BO_REUSE_DISABLED:
+      break;
+   case DRI_CONF_BO_REUSE_ALL:
+      bo_reuse = true;
+      break;
+   }
+
+   screen->bufmgr = brw_bufmgr_init(&screen->devinfo, dri_screen->fd, bo_reuse);
    if (screen->bufmgr == NULL) {
       fprintf(stderr, "[%s:%u] Error initializing buffer manager.\n",
 	      __func__, __LINE__);
@@ -2150,6 +2173,45 @@ intel_loader_get_cap(const __DRIscreen *dri_screen, enum dri_loader_cap cap)
    return 0;
 }
 
+static bool
+intel_allowed_format(__DRIscreen *dri_screen, mesa_format format)
+{
+   struct intel_screen *screen = dri_screen->driverPrivate;
+
+   /* Expose only BGRA ordering if the loader doesn't support RGBA ordering. */
+   bool allow_rgba_ordering = intel_loader_get_cap(dri_screen, DRI_LOADER_CAP_RGBA_ORDERING);
+   if (!allow_rgba_ordering &&
+       (format == MESA_FORMAT_R8G8B8A8_UNORM ||
+        format == MESA_FORMAT_R8G8B8X8_UNORM ||
+        format == MESA_FORMAT_R8G8B8A8_SRGB))
+      return false;
+
+    /* Shall we expose 10 bpc formats? */
+   bool allow_rgb10_configs = driQueryOptionb(&screen->optionCache,
+                                              "allow_rgb10_configs");
+   if (!allow_rgb10_configs &&
+       (format == MESA_FORMAT_B10G10R10A2_UNORM ||
+        format == MESA_FORMAT_B10G10R10X2_UNORM))
+      return false;
+
+   /* Shall we expose 565 formats? */
+   bool allow_rgb565_configs = driQueryOptionb(&screen->optionCache,
+                                               "allow_rgb565_configs");
+   if (!allow_rgb565_configs && format == MESA_FORMAT_B5G6R5_UNORM)
+      return false;
+
+   /* Shall we expose fp16 formats? */
+   bool allow_fp16_configs = driQueryOptionb(&screen->optionCache,
+                                             "allow_fp16_configs");
+   allow_fp16_configs &= intel_loader_get_cap(dri_screen, DRI_LOADER_CAP_FP16);
+   if (!allow_fp16_configs &&
+       (format == MESA_FORMAT_RGBA_FLOAT16 ||
+        format == MESA_FORMAT_RGBX_FLOAT16))
+      return false;
+
+   return true;
+}
+
 static __DRIconfig**
 intel_screen_make_configs(__DRIscreen *dri_screen)
 {
@@ -2163,6 +2225,9 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       /* For 10 bpc, 30 bit depth framebuffers. */
       MESA_FORMAT_B10G10R10A2_UNORM,
       MESA_FORMAT_B10G10R10X2_UNORM,
+
+      MESA_FORMAT_RGBA_FLOAT16,
+      MESA_FORMAT_RGBX_FLOAT16,
 
       /* The 32-bit RGBA format must not precede the 32-bit BGRA format.
        * Likewise for RGBX and BGRX.  Otherwise, the GLX client and the GLX
@@ -2200,19 +2265,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    uint8_t depth_bits[4], stencil_bits[4];
    __DRIconfig **configs = NULL;
 
-   /* Expose only BGRA ordering if the loader doesn't support RGBA ordering. */
-   unsigned num_formats;
-   if (intel_loader_get_cap(dri_screen, DRI_LOADER_CAP_RGBA_ORDERING))
-      num_formats = ARRAY_SIZE(formats);
-   else
-      num_formats = ARRAY_SIZE(formats) - 3; /* all - RGBA_ORDERING formats */
-
-   /* Shall we expose 10 bpc formats? */
-   bool allow_rgb10_configs = driQueryOptionb(&screen->optionCache,
-                                              "allow_rgb10_configs");
-   /* Shall we expose 565 formats? */
-   bool allow_rgb565_configs = driQueryOptionb(&screen->optionCache,
-                                               "allow_rgb565_configs");
+   unsigned num_formats = ARRAY_SIZE(formats);
 
    /* Generate singlesample configs, each without accumulation buffer
     * and with EGL_MUTABLE_RENDER_BUFFER_BIT_KHR.
@@ -2221,12 +2274,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       __DRIconfig **new_configs;
       int num_depth_stencil_bits = 2;
 
-      if (!allow_rgb10_configs &&
-          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
-           formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
-         continue;
-
-      if (!allow_rgb565_configs && formats[i] == MESA_FORMAT_B5G6R5_UNORM)
+      if (!intel_allowed_format(dri_screen, formats[i]))
          continue;
 
       /* Starting with DRI2 protocol version 1.1 we can request a depth/stencil
@@ -2266,12 +2314,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
    for (unsigned i = 0; i < num_formats; i++) {
       __DRIconfig **new_configs;
 
-      if (!allow_rgb10_configs &&
-          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
-          formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
-         continue;
-
-      if (!allow_rgb565_configs && formats[i] == MESA_FORMAT_B5G6R5_UNORM)
+      if (!intel_allowed_format(dri_screen, formats[i]))
          continue;
 
       if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
@@ -2307,12 +2350,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       if (devinfo->gen < 6)
          break;
 
-      if (!allow_rgb10_configs &&
-          (formats[i] == MESA_FORMAT_B10G10R10A2_UNORM ||
-          formats[i] == MESA_FORMAT_B10G10R10X2_UNORM))
-         continue;
-
-      if (!allow_rgb565_configs && formats[i] == MESA_FORMAT_B5G6R5_UNORM)
+      if (!intel_allowed_format(dri_screen, formats[i]))
          continue;
 
       __DRIconfig **new_configs;
@@ -2380,7 +2418,7 @@ set_max_gl_versions(struct intel_screen *screen)
    case 10:
    case 9:
    case 8:
-      dri_screen->max_gl_core_version = 45;
+      dri_screen->max_gl_core_version = 46;
       dri_screen->max_gl_compat_version = 30;
       dri_screen->max_gl_es1_version = 11;
       dri_screen->max_gl_es2_version = has_astc ? 32 : 31;
@@ -2500,6 +2538,11 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
    const struct gen_device_info *devinfo = &screen->devinfo;
    screen->deviceID = devinfo->chipset_id;
    screen->no_hw = devinfo->no_hw;
+
+   if (devinfo->gen >= 12) {
+      fprintf(stderr, "gen12 and newer are not supported on i965\n");
+      return NULL;
+   }
 
    if (!intel_init_bufmgr(screen))
        return NULL;

@@ -442,7 +442,7 @@ svga_buffer_create(struct pipe_screen *screen,
    sbuf->b.b.screen = screen;
    bind_flags = template->bind & ~PIPE_BIND_CUSTOM;
 
-   LIST_INITHEAD(&sbuf->surfaces);
+   list_inithead(&sbuf->surfaces);
 
    if (bind_flags & PIPE_BIND_CONSTANT_BUFFER) {
       /* Constant buffers can only have the PIPE_BIND_CONSTANT_BUFFER

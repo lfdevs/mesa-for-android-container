@@ -33,6 +33,7 @@
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"
 #include "util/os_time.h"
+#include "state_tracker/winsys_handle.h"
 #include <errno.h>
 #include <inttypes.h>
 
@@ -569,8 +570,10 @@ static bool r600_texture_get_handle(struct pipe_screen* screen,
 		res->external_usage = usage;
 	}
 
-	return rscreen->ws->buffer_get_handle(rscreen->ws, res->buf, stride,
-					      offset, slice_size, whandle);
+	whandle->stride = stride;
+	whandle->offset = offset + slice_size * whandle->layer;
+
+	return rscreen->ws->buffer_get_handle(rscreen->ws, res->buf, whandle);
 }
 
 static void r600_texture_destroy(struct pipe_screen *screen,
@@ -1115,7 +1118,6 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 {
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct pb_buffer *buf = NULL;
-	unsigned stride = 0, offset = 0;
 	enum radeon_surf_mode array_mode;
 	struct radeon_surf surface = {};
 	int r;
@@ -1129,8 +1131,7 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 		return NULL;
 
 	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle,
-					      rscreen->info.max_alignment,
-					      &stride, &offset);
+					      rscreen->info.max_alignment);
 	if (!buf)
 		return NULL;
 
@@ -1138,8 +1139,9 @@ static struct pipe_resource *r600_texture_from_handle(struct pipe_screen *screen
 	r600_surface_import_metadata(rscreen, &surface, &metadata,
 				     &array_mode, &is_scanout);
 
-	r = r600_init_surface(rscreen, &surface, templ, array_mode, stride,
-			      offset, true, is_scanout, false);
+	r = r600_init_surface(rscreen, &surface, templ, array_mode,
+			      whandle->stride, whandle->offset,
+			      true, is_scanout, false);
 	if (r) {
 		return NULL;
 	}
@@ -1865,14 +1867,12 @@ r600_memobj_from_handle(struct pipe_screen *screen,
 	struct r600_common_screen *rscreen = (struct r600_common_screen*)screen;
 	struct r600_memory_object *memobj = CALLOC_STRUCT(r600_memory_object);
 	struct pb_buffer *buf = NULL;
-	uint32_t stride, offset;
 
 	if (!memobj)
 		return NULL;
 
 	buf = rscreen->ws->buffer_from_handle(rscreen->ws, whandle,
-					      rscreen->info.max_alignment,
-					      &stride, &offset);
+					      rscreen->info.max_alignment);
 	if (!buf) {
 		free(memobj);
 		return NULL;
@@ -1880,8 +1880,8 @@ r600_memobj_from_handle(struct pipe_screen *screen,
 
 	memobj->b.dedicated = dedicated;
 	memobj->buf = buf;
-	memobj->stride = stride;
-	memobj->offset = offset;
+	memobj->stride = whandle->stride;
+	memobj->offset = whandle->offset;
 
 	return (struct pipe_memory_object *)memobj;
 

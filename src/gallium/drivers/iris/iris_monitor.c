@@ -28,6 +28,7 @@
 #include "iris_context.h"
 
 #include "perf/gen_perf.h"
+#include "perf/gen_perf_regs.h"
 
 struct iris_monitor_object {
    int num_active_counters;

@@ -166,30 +166,15 @@ static void
 patch_vtx_fetch(struct fd_context *ctx, struct pipe_vertex_element *elem,
 	instr_fetch_vtx_t *instr, uint16_t dst_swiz)
 {
-	struct pipe_vertex_buffer *vb =
-				&ctx->vtx.vertexbuf.vb[elem->vertex_buffer_index];
-	enum pipe_format format = elem->src_format;
-	const struct util_format_description *desc =
-			util_format_description(format);
-	unsigned j;
+	struct surface_format fmt = fd2_pipe2surface(elem->src_format);
 
-	/* Find the first non-VOID channel. */
-	for (j = 0; j < 4; j++)
-		if (desc->channel[j].type != UTIL_FORMAT_TYPE_VOID)
-			break;
-
-	instr->format = fd2_pipe2surface(format);
-	instr->num_format_all = !desc->channel[j].normalized;
-	instr->format_comp_all = desc->channel[j].type == UTIL_FORMAT_TYPE_SIGNED;
-	instr->stride = vb->stride;
+	instr->dst_swiz = fd2_vtx_swiz(elem->src_format, dst_swiz);
+	instr->format_comp_all = fmt.sign == SQ_TEX_SIGN_SIGNED;
+	instr->num_format_all = fmt.num_format;
+	instr->format = fmt.format;
+	instr->exp_adjust_all = fmt.exp_adjust;
+	instr->stride = ctx->vtx.vertexbuf.vb[elem->vertex_buffer_index].stride;
 	instr->offset = elem->src_offset;
-
-	unsigned swiz = 0;
-	for (int i = 0; i < 4; i++) {
-		unsigned s = dst_swiz >> i*3 & 7;
-		swiz |= (s >= 4 ? s : desc->swizzle[s]) << i*3;
-	}
-	instr->dst_swiz = swiz;
 }
 
 static void
@@ -225,11 +210,11 @@ fd2_program_emit(struct fd_context *ctx, struct fd_ringbuffer *ring,
 	bool binning = (ctx->batch && ring == ctx->batch->binning);
 	unsigned variant = 0;
 
-	vp = prog->vp;
+	vp = prog->vs;
 
 	/* find variant matching the linked fragment shader */
 	if (!binning) {
-		fp = prog->fp;
+		fp = prog->fs;
 		for (variant = 1; variant < ARRAY_SIZE(vp->variant); variant++) {
 			/* if checked all variants, compile a new variant */
 			if (!vp->variant[variant].info.sizedwords) {
@@ -311,8 +296,8 @@ fd2_prog_init(struct pipe_context *pctx)
 	/* XXX maybe its possible to reuse patch_vtx_fetch somehow? */
 
 	prog = &ctx->solid_prog;
-	so = prog->vp;
-	ir2_compile(prog->vp, 1, prog->fp);
+	so = prog->vs;
+	ir2_compile(prog->vs, 1, prog->fs);
 
 #define IR2_FETCH_SWIZ_XY01 0xb08
 #define IR2_FETCH_SWIZ_XYZ1 0xa88
@@ -329,8 +314,8 @@ fd2_prog_init(struct pipe_context *pctx)
 	instr->dst_swiz = IR2_FETCH_SWIZ_XYZ1;
 
 	prog = &ctx->blit_prog[0];
-	so = prog->vp;
-	ir2_compile(prog->vp, 1, prog->fp);
+	so = prog->vs;
+	ir2_compile(prog->vs, 1, prog->fs);
 
 	info = &so->variant[1].info;
 

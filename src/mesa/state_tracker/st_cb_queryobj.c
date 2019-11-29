@@ -221,6 +221,9 @@ st_BeginQuery(struct gl_context *ctx, struct gl_query_object *q)
       return;
    }
 
+   if (stq->type != PIPE_QUERY_TIMESTAMP)
+      st->active_queries++;
+
    assert(stq->type == type);
 }
 
@@ -228,7 +231,8 @@ st_BeginQuery(struct gl_context *ctx, struct gl_query_object *q)
 static void
 st_EndQuery(struct gl_context *ctx, struct gl_query_object *q)
 {
-   struct pipe_context *pipe = st_context(ctx)->pipe;
+   struct st_context *st = st_context(ctx);
+   struct pipe_context *pipe = st->pipe;
    struct st_query_object *stq = st_query_object(q);
    bool ret = false;
 
@@ -248,6 +252,9 @@ st_EndQuery(struct gl_context *ctx, struct gl_query_object *q)
       _mesa_error(ctx, GL_OUT_OF_MEMORY, "glEndQuery");
       return;
    }
+
+   if (stq->type != PIPE_QUERY_TIMESTAMP)
+      st->active_queries--;
 }
 
 

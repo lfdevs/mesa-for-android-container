@@ -74,7 +74,7 @@ clear_pad_bits(const struct gen_device_info *devinfo, brw_inst *inst)
    }
 
    if (devinfo->gen == 8 && !devinfo->is_cherryview &&
-       is_3src(devinfo, (opcode)brw_inst_opcode(devinfo, inst))) {
+       is_3src(devinfo, brw_inst_opcode(devinfo, inst))) {
       brw_inst_set_bits(inst, 105, 105, 0);
       brw_inst_set_bits(inst, 84, 84, 0);
       brw_inst_set_bits(inst, 36, 35, 0);
@@ -92,7 +92,7 @@ skip_bit(const struct gen_device_info *devinfo, brw_inst *src, int bit)
    if (bit == 29)
       return true;
 
-   if (is_3src(devinfo, (opcode)brw_inst_opcode(devinfo, src))) {
+   if (is_3src(devinfo, brw_inst_opcode(devinfo, src))) {
       if (devinfo->gen >= 9 || devinfo->is_cherryview) {
          if (bit == 127)
             return true;
@@ -243,7 +243,7 @@ gen_f0_0_MOV_GRF_GRF(struct brw_codegen *p)
    struct brw_reg g2 = brw_vec8_grf(2, 0);
 
    brw_push_insn_state(p);
-   brw_set_default_predicate_control(p, true);
+   brw_set_default_predicate_control(p, BRW_PREDICATE_NORMAL);
    brw_MOV(p, g0, g2);
    brw_pop_insn_state(p);
 }
@@ -259,7 +259,7 @@ gen_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
    struct brw_reg g2 = brw_vec8_grf(2, 0);
 
    brw_push_insn_state(p);
-   brw_set_default_predicate_control(p, true);
+   brw_set_default_predicate_control(p, BRW_PREDICATE_NORMAL);
    brw_inst *mov = brw_MOV(p, g0, g2);
    brw_inst_set_flag_subreg_nr(p->devinfo, mov, 1);
    brw_pop_insn_state(p);

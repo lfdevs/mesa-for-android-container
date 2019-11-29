@@ -624,8 +624,6 @@ RegAlloc::BuildIntervalsPass::collectLiveValues(BasicBlock *bb)
       // trickery to save a loop of OR'ing liveSets
       // aliasing works fine with BitSet::setOr
       for (Graph::EdgeIterator ei = bb->cfg.outgoing(); !ei.end(); ei.next()) {
-         if (ei.getType() == Graph::Edge::DUMMY)
-            continue;
          if (bbA) {
             bb->liveSet.setOr(&bbA->liveSet, &bbB->liveSet);
             bbA = bb;

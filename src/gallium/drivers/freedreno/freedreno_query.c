@@ -41,11 +41,12 @@ static struct pipe_query *
 fd_create_query(struct pipe_context *pctx, unsigned query_type, unsigned index)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	struct fd_query *q;
+	struct fd_query *q = NULL;
 
-	q = fd_sw_create_query(ctx, query_type);
-	if (!q && ctx->create_query)
-		q = ctx->create_query(ctx, query_type);
+	if (ctx->create_query)
+		q = ctx->create_query(ctx, query_type, index);
+	if (!q)
+		q = fd_sw_create_query(ctx, query_type, index);
 
 	return (struct pipe_query *) q;
 }

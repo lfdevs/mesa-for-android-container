@@ -419,7 +419,7 @@ def generate_register_configs(set):
             c_indent(3)
 
         for register in register_config.findall('register'):
-            c("query->%s[query->n_%s++] = (struct gen_perf_query_register_prog) { .reg = %s, .val = %s };" %
+            c("query->config.%s[query->config.n_%s++] = (struct gen_perf_query_register_prog) { .reg = %s, .val = %s };" %
               (t, t, register.get('address'), register.get('value')))
 
         if availability:
@@ -692,9 +692,13 @@ def main():
                     .c_offset = 46,
                 """))
 
+            c(".config = {")
+            c_indent(3)
             for reg_type, reg_length in register_lengths.items():
                 c(".{0} = {1}_{2}_{3},".format(reg_type, gen.chipset, set.underscore_name, reg_type))
                 c(".n_{0} = 0, /* Determined at runtime */".format(reg_type))
+            c_outdent(3)
+            c("},")
 
             c_outdent(3)
             c("};\n")

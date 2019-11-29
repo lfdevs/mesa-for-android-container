@@ -104,21 +104,27 @@ etna_zsa_state_create(struct pipe_context *pctx,
       COND(so->alpha.enabled, VIVS_PE_ALPHA_OP_ALPHA_TEST) |
       VIVS_PE_ALPHA_OP_ALPHA_FUNC(so->alpha.func) |
       VIVS_PE_ALPHA_OP_ALPHA_REF(etna_cfloat_to_uint8(so->alpha.ref_value));
-   cs->PE_STENCIL_OP =
-      VIVS_PE_STENCIL_OP_FUNC_FRONT(so->stencil[0].func) |
-      VIVS_PE_STENCIL_OP_FUNC_BACK(so->stencil[1].func) |
-      VIVS_PE_STENCIL_OP_FAIL_FRONT(translate_stencil_op(so->stencil[0].fail_op)) |
-      VIVS_PE_STENCIL_OP_FAIL_BACK(translate_stencil_op(so->stencil[1].fail_op)) |
-      VIVS_PE_STENCIL_OP_DEPTH_FAIL_FRONT(translate_stencil_op(so->stencil[0].zfail_op)) |
-      VIVS_PE_STENCIL_OP_DEPTH_FAIL_BACK(translate_stencil_op(so->stencil[1].zfail_op)) |
-      VIVS_PE_STENCIL_OP_PASS_FRONT(translate_stencil_op(so->stencil[0].zpass_op)) |
-      VIVS_PE_STENCIL_OP_PASS_BACK(translate_stencil_op(so->stencil[1].zpass_op));
-   cs->PE_STENCIL_CONFIG =
-      translate_stencil_mode(so->stencil[0].enabled, so->stencil[1].enabled) |
-      VIVS_PE_STENCIL_CONFIG_MASK_FRONT(so->stencil[0].valuemask) |
-      VIVS_PE_STENCIL_CONFIG_WRITE_MASK_FRONT(so->stencil[0].writemask);
-   /* XXX back masks in VIVS_PE_DEPTH_CONFIG_EXT? */
-   /* XXX VIVS_PE_STENCIL_CONFIG_REF_FRONT comes from pipe_stencil_ref */
+
+   for (unsigned i = 0; i < 2; i++) {
+      const struct pipe_stencil_state *stencil_front = so->stencil[1].enabled ? &so->stencil[i] : &so->stencil[0];
+      const struct pipe_stencil_state *stencil_back = so->stencil[1].enabled ? &so->stencil[!i] : &so->stencil[0];
+      cs->PE_STENCIL_OP[i] =
+         VIVS_PE_STENCIL_OP_FUNC_FRONT(stencil_front->func) |
+         VIVS_PE_STENCIL_OP_FUNC_BACK(stencil_back->func) |
+         VIVS_PE_STENCIL_OP_FAIL_FRONT(translate_stencil_op(stencil_front->fail_op)) |
+         VIVS_PE_STENCIL_OP_FAIL_BACK(translate_stencil_op(stencil_back->fail_op)) |
+         VIVS_PE_STENCIL_OP_DEPTH_FAIL_FRONT(translate_stencil_op(stencil_front->zfail_op)) |
+         VIVS_PE_STENCIL_OP_DEPTH_FAIL_BACK(translate_stencil_op(stencil_back->zfail_op)) |
+         VIVS_PE_STENCIL_OP_PASS_FRONT(translate_stencil_op(stencil_front->zpass_op)) |
+         VIVS_PE_STENCIL_OP_PASS_BACK(translate_stencil_op(stencil_back->zpass_op));
+      cs->PE_STENCIL_CONFIG[i] =
+         translate_stencil_mode(so->stencil[0].enabled, so->stencil[0].enabled) |
+         VIVS_PE_STENCIL_CONFIG_MASK_FRONT(stencil_front->valuemask) |
+         VIVS_PE_STENCIL_CONFIG_WRITE_MASK_FRONT(stencil_front->writemask);
+      cs->PE_STENCIL_CONFIG_EXT2[i] =
+         VIVS_PE_STENCIL_CONFIG_EXT2_MASK_BACK(stencil_back->valuemask) |
+         VIVS_PE_STENCIL_CONFIG_EXT2_WRITE_MASK_BACK(stencil_back->writemask);
+   }
 
    /* XXX does alpha/stencil test affect PE_COLOR_FORMAT_OVERWRITE? */
    return cs;

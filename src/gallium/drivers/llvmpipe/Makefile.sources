@@ -13,6 +13,8 @@ C_SOURCES := \
 	lp_clear.h \
 	lp_context.c \
 	lp_context.h \
+	lp_cs_tpool.c \
+	lp_cs_tpool.h \
 	lp_debug.h \
 	lp_draw_arrays.c \
 	lp_fence.c \
@@ -51,6 +53,8 @@ C_SOURCES := \
 	lp_state_blend.c \
 	lp_state_clip.c \
 	lp_state_derived.c \
+	lp_state_cs.c \
+	lp_state_cs.h \
 	lp_state_fs.c \
 	lp_state_fs.h \
 	lp_state_gs.c \

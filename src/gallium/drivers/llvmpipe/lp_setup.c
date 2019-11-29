@@ -684,6 +684,77 @@ lp_setup_set_fs_ssbos(struct lp_setup_context *setup,
    setup->dirty |= LP_SETUP_NEW_SSBOS;
 }
 
+void
+lp_setup_set_fs_images(struct lp_setup_context *setup,
+                       unsigned num,
+                       struct pipe_image_view *images)
+{
+   unsigned i;
+
+   LP_DBG(DEBUG_SETUP, "%s %p\n", __FUNCTION__, (void *) images);
+
+   assert(num <= ARRAY_SIZE(setup->images));
+
+   for (i = 0; i < num; ++i) {
+      struct pipe_image_view *image = &images[i];
+      util_copy_image_view(&setup->images[i].current, &images[i]);
+
+      struct pipe_resource *res = image->resource;
+      struct llvmpipe_resource *lp_res = llvmpipe_resource(res);
+      struct lp_jit_image *jit_image;
+
+      jit_image = &setup->fs.current.jit_context.images[i];
+      if (!lp_res)
+         continue;
+      if (!lp_res->dt) {
+         /* regular texture - setup array of mipmap level offsets */
+         if (llvmpipe_resource_is_texture(res)) {
+            jit_image->base = lp_res->tex_data;
+         } else
+            jit_image->base = lp_res->data;
+
+         jit_image->width = res->width0;
+         jit_image->height = res->height0;
+         jit_image->depth = res->depth0;
+
+         if (llvmpipe_resource_is_texture(res)) {
+            uint32_t mip_offset = lp_res->mip_offsets[image->u.tex.level];
+
+            jit_image->width = u_minify(jit_image->width, image->u.tex.level);
+            jit_image->height = u_minify(jit_image->height, image->u.tex.level);
+
+            if (res->target == PIPE_TEXTURE_1D_ARRAY ||
+                res->target == PIPE_TEXTURE_2D_ARRAY ||
+                res->target == PIPE_TEXTURE_3D ||
+                res->target == PIPE_TEXTURE_CUBE ||
+                res->target == PIPE_TEXTURE_CUBE_ARRAY) {
+               /*
+                * For array textures, we don't have first_layer, instead
+                * adjust last_layer (stored as depth) plus the mip level offsets
+                * (as we have mip-first layout can't just adjust base ptr).
+                * XXX For mip levels, could do something similar.
+                */
+               jit_image->depth = image->u.tex.last_layer - image->u.tex.first_layer + 1;
+               mip_offset += image->u.tex.first_layer * lp_res->img_stride[image->u.tex.level];
+            } else
+               jit_image->depth = u_minify(jit_image->depth, image->u.tex.level);
+
+            jit_image->row_stride = lp_res->row_stride[image->u.tex.level];
+            jit_image->img_stride = lp_res->img_stride[image->u.tex.level];
+            jit_image->base = (uint8_t *)jit_image->base + mip_offset;
+         }
+         else {
+            unsigned view_blocksize = util_format_get_blocksize(image->format);
+            jit_image->width = image->u.buf.size / view_blocksize;
+            jit_image->base = (uint8_t *)jit_image->base + image->u.buf.offset;
+         }
+      }
+   }
+   for (; i < ARRAY_SIZE(setup->images); i++) {
+      util_copy_image_view(&setup->images[i].current, NULL);
+   }
+   setup->dirty |= LP_SETUP_NEW_IMAGES;
+}
 
 void
 lp_setup_set_alpha_ref_value( struct lp_setup_context *setup,
@@ -1017,6 +1088,11 @@ lp_setup_is_resource_referenced( const struct lp_setup_context *setup,
          return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
    }
 
+   for (i = 0; i < ARRAY_SIZE(setup->images); i++) {
+      if (setup->images[i].current.resource == texture)
+         return LP_REFERENCED_FOR_READ | LP_REFERENCED_FOR_WRITE;
+   }
+
    return LP_UNREFERENCED;
 }
 
@@ -1154,7 +1230,7 @@ try_update_scene_state( struct lp_setup_context *setup )
          }
 
          num_constants =
-            setup->constants[i].stored_size / (sizeof(float) * 4);
+            DIV_ROUND_UP(setup->constants[i].stored_size, (sizeof(float) * 4));
          setup->fs.current.jit_context.num_constants[i] = num_constants;
          setup->dirty |= LP_SETUP_NEW_FS;
       }

@@ -2,6 +2,7 @@ _glapi_Context
 _glapi_Dispatch
 _glapi_add_dispatch
 _glapi_check_multithread
+_glapi_destroy_multithread
 _glapi_get_context
 _glapi_get_dispatch
 _glapi_get_dispatch_table_size

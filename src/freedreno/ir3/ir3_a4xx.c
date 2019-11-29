@@ -225,7 +225,7 @@ get_image_offset(struct ir3_context *ctx, const nir_variable *var,
 			(1 << var->data.driver_location));
 
 	/* offset = coords.x * bytes_per_pixel: */
-	offset = ir3_MUL_S(b, coords[0], 0, create_uniform(b, cb + 0), 0);
+	offset = ir3_MUL_S24(b, coords[0], 0, create_uniform(b, cb + 0), 0);
 	if (ncoords > 1) {
 		/* offset += coords.y * y_pitch: */
 		offset = ir3_MAD_S24(b, create_uniform(b, cb + 1), 0,
@@ -317,10 +317,12 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 	case nir_intrinsic_image_deref_atomic_add:
 		atomic = ir3_ATOMIC_ADD_G(b, image, 0, src0, 0, src1, 0, src2, 0);
 		break;
-	case nir_intrinsic_image_deref_atomic_min:
+	case nir_intrinsic_image_deref_atomic_imin:
+	case nir_intrinsic_image_deref_atomic_umin:
 		atomic = ir3_ATOMIC_MIN_G(b, image, 0, src0, 0, src1, 0, src2, 0);
 		break;
-	case nir_intrinsic_image_deref_atomic_max:
+	case nir_intrinsic_image_deref_atomic_imax:
+	case nir_intrinsic_image_deref_atomic_umax:
 		atomic = ir3_ATOMIC_MAX_G(b, image, 0, src0, 0, src1, 0, src2, 0);
 		break;
 	case nir_intrinsic_image_deref_atomic_and:

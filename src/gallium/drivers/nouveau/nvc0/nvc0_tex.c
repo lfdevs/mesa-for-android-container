@@ -948,7 +948,7 @@ nvc0_mark_image_range_valid(const struct pipe_image_view *view)
 
    assert(view->resource->target == PIPE_BUFFER);
 
-   util_range_add(&res->valid_buffer_range,
+   util_range_add(&res->base, &res->valid_buffer_range,
                   view->u.buf.offset,
                   view->u.buf.offset + view->u.buf.size);
 }
@@ -1433,7 +1433,15 @@ gm107_create_image_handle(struct pipe_context *pipe,
 
    nvc0->screen->tic.lock[tic->id / 32] |= 1 << (tic->id % 32);
 
-   return 0x100000000ULL | tic->id;
+   // Compute handle. This will include the TIC as well as some additional
+   // info regarding the bound 3d surface layer, if applicable.
+   uint64_t handle = 0x100000000ULL | tic->id;
+   struct nv04_resource *res = nv04_resource(view->resource);
+   if (res->base.target == PIPE_TEXTURE_3D) {
+      handle |= 1 << 11;
+      handle |= view->u.tex.first_layer << (11 + 16);
+   }
+   return handle;
 
 fail:
    FREE(tic);
@@ -1472,7 +1480,7 @@ gm107_make_image_handle_resident(struct pipe_context *pipe, uint64_t handle,
       res->flags = (access & 3) << 8;
       if (res->buf->base.target == PIPE_BUFFER &&
           access & PIPE_IMAGE_ACCESS_WRITE)
-         util_range_add(&res->buf->valid_buffer_range,
+         util_range_add(&res->buf->base, &res->buf->valid_buffer_range,
                         tic->pipe.u.buf.offset,
                         tic->pipe.u.buf.offset + tic->pipe.u.buf.size);
       list_add(&res->list, &nvc0->img_head);

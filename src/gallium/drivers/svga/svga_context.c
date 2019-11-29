@@ -136,7 +136,7 @@ svga_context_create(struct pipe_screen *screen, void *priv, unsigned flags)
    if (!svga)
       goto done;
 
-   LIST_INITHEAD(&svga->dirty_buffers);
+   list_inithead(&svga->dirty_buffers);
 
    svga->pipe.screen = screen;
    svga->pipe.priv = priv;

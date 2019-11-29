@@ -35,6 +35,7 @@
 #include "util/u_debug.h"
 
 union pipe_color_union;
+struct pipe_screen;
 
 
 #ifdef __cplusplus
@@ -53,7 +54,7 @@ enum util_format_layout {
     * Formats with util_format_block::width == util_format_block::height == 1
     * that can be described as an ordinary data structure.
     */
-   UTIL_FORMAT_LAYOUT_PLAIN = 0,
+   UTIL_FORMAT_LAYOUT_PLAIN,
 
    /**
     * Formats with sub-sampled channels.
@@ -61,36 +62,40 @@ enum util_format_layout {
     * This is for formats like YVYU where there is less than one sample per
     * pixel.
     */
-   UTIL_FORMAT_LAYOUT_SUBSAMPLED = 3,
+   UTIL_FORMAT_LAYOUT_SUBSAMPLED,
 
    /**
     * S3 Texture Compression formats.
     */
-   UTIL_FORMAT_LAYOUT_S3TC = 4,
+   UTIL_FORMAT_LAYOUT_S3TC,
 
    /**
     * Red-Green Texture Compression formats.
     */
-   UTIL_FORMAT_LAYOUT_RGTC = 5,
+   UTIL_FORMAT_LAYOUT_RGTC,
 
    /**
     * Ericsson Texture Compression
     */
-   UTIL_FORMAT_LAYOUT_ETC = 6,
+   UTIL_FORMAT_LAYOUT_ETC,
 
    /**
     * BC6/7 Texture Compression
     */
-   UTIL_FORMAT_LAYOUT_BPTC = 7,
+   UTIL_FORMAT_LAYOUT_BPTC,
 
-   UTIL_FORMAT_LAYOUT_ASTC = 8,
+   UTIL_FORMAT_LAYOUT_ASTC,
 
-   UTIL_FORMAT_LAYOUT_ATC = 9,
+   UTIL_FORMAT_LAYOUT_ATC,
+
+   /** Formats with 2 or more planes. */
+   UTIL_FORMAT_LAYOUT_PLANAR2,
+   UTIL_FORMAT_LAYOUT_PLANAR3,
 
    /**
     * Everything else that doesn't fit in any of the above layouts.
     */
-   UTIL_FORMAT_LAYOUT_OTHER = 10
+   UTIL_FORMAT_LAYOUT_OTHER,
 };
 
 
@@ -101,6 +106,9 @@ struct util_format_block
    
    /** Block height in pixels */
    unsigned height;
+
+   /** Block depth in pixels */
+   unsigned depth;
 
    /** Block size in bits */
    unsigned bits;
@@ -842,6 +850,19 @@ util_format_get_blockheight(enum pipe_format format)
    return desc->block.height;
 }
 
+static inline uint
+util_format_get_blockdepth(enum pipe_format format)
+{
+   const struct util_format_description *desc = util_format_description(format);
+
+   assert(desc);
+   if (!desc) {
+      return 1;
+   }
+
+   return desc->block.depth;
+}
+
 static inline unsigned
 util_format_get_nblocksx(enum pipe_format format,
                          unsigned x)
@@ -859,10 +880,19 @@ util_format_get_nblocksy(enum pipe_format format,
 }
 
 static inline unsigned
+util_format_get_nblocksz(enum pipe_format format,
+                         unsigned z)
+{
+   unsigned blockdepth = util_format_get_blockdepth(format);
+   return (z + blockdepth - 1) / blockdepth;
+}
+
+static inline unsigned
 util_format_get_nblocks(enum pipe_format format,
                         unsigned width,
                         unsigned height)
 {
+   assert(util_format_get_blockdepth(format) == 1);
    return util_format_get_nblocksx(format, width) * util_format_get_nblocksy(format, height);
 }
 
@@ -971,6 +1001,12 @@ util_format_srgb(enum pipe_format format)
       return PIPE_FORMAT_B5G6R5_SRGB;
    case PIPE_FORMAT_BPTC_RGBA_UNORM:
       return PIPE_FORMAT_BPTC_SRGBA;
+   case PIPE_FORMAT_ETC2_RGB8:
+      return PIPE_FORMAT_ETC2_SRGB8;
+   case PIPE_FORMAT_ETC2_RGB8A1:
+      return PIPE_FORMAT_ETC2_SRGB8A1;
+   case PIPE_FORMAT_ETC2_RGBA8:
+      return PIPE_FORMAT_ETC2_SRGBA8;
    case PIPE_FORMAT_ASTC_4x4:
       return PIPE_FORMAT_ASTC_4x4_SRGB;
    case PIPE_FORMAT_ASTC_5x4:
@@ -1049,6 +1085,12 @@ util_format_linear(enum pipe_format format)
       return PIPE_FORMAT_B5G6R5_UNORM;
    case PIPE_FORMAT_BPTC_SRGBA:
       return PIPE_FORMAT_BPTC_RGBA_UNORM;
+   case PIPE_FORMAT_ETC2_SRGB8:
+      return PIPE_FORMAT_ETC2_RGB8;
+   case PIPE_FORMAT_ETC2_SRGB8A1:
+      return PIPE_FORMAT_ETC2_RGB8A1;
+   case PIPE_FORMAT_ETC2_SRGBA8:
+      return PIPE_FORMAT_ETC2_RGBA8;
    case PIPE_FORMAT_ASTC_4x4_SRGB:
       return PIPE_FORMAT_ASTC_4x4;
    case PIPE_FORMAT_ASTC_5x4_SRGB:
@@ -1226,6 +1268,79 @@ util_format_luminance_to_red(enum pipe_format format)
       return format;
    }
 }
+
+static inline unsigned
+util_format_get_num_planes(enum pipe_format format)
+{
+   switch (util_format_description(format)->layout) {
+   case UTIL_FORMAT_LAYOUT_PLANAR3:
+      return 3;
+   case UTIL_FORMAT_LAYOUT_PLANAR2:
+      return 2;
+   default:
+      return 1;
+   }
+}
+
+static inline enum pipe_format
+util_format_get_plane_format(enum pipe_format format, unsigned plane)
+{
+   switch (format) {
+   case PIPE_FORMAT_YV12:
+   case PIPE_FORMAT_YV16:
+   case PIPE_FORMAT_IYUV:
+      return PIPE_FORMAT_R8_UNORM;
+   case PIPE_FORMAT_NV12:
+      return !plane ? PIPE_FORMAT_R8_UNORM : PIPE_FORMAT_RG88_UNORM;
+   case PIPE_FORMAT_NV21:
+      return !plane ? PIPE_FORMAT_R8_UNORM : PIPE_FORMAT_GR88_UNORM;
+   case PIPE_FORMAT_P016:
+      return !plane ? PIPE_FORMAT_R16_UNORM : PIPE_FORMAT_R16G16_UNORM;
+   default:
+      return format;
+   }
+}
+
+static inline unsigned
+util_format_get_plane_width(enum pipe_format format, unsigned plane,
+                            unsigned width)
+{
+   switch (format) {
+   case PIPE_FORMAT_YV12:
+   case PIPE_FORMAT_YV16:
+   case PIPE_FORMAT_IYUV:
+   case PIPE_FORMAT_NV12:
+   case PIPE_FORMAT_NV21:
+   case PIPE_FORMAT_P016:
+      return !plane ? width : (width + 1) / 2;
+   default:
+      return width;
+   }
+}
+
+static inline unsigned
+util_format_get_plane_height(enum pipe_format format, unsigned plane,
+                             unsigned height)
+{
+   switch (format) {
+   case PIPE_FORMAT_YV12:
+   case PIPE_FORMAT_IYUV:
+   case PIPE_FORMAT_NV12:
+   case PIPE_FORMAT_NV21:
+   case PIPE_FORMAT_P016:
+      return !plane ? height : (height + 1) / 2;
+   case PIPE_FORMAT_YV16:
+   default:
+      return height;
+   }
+}
+
+bool util_format_planar_is_supported(struct pipe_screen *screen,
+                                     enum pipe_format format,
+                                     enum pipe_texture_target target,
+                                     unsigned sample_count,
+                                     unsigned storage_sample_count,
+                                     unsigned bind);
 
 /**
  * Return the number of components stored.

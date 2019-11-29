@@ -105,6 +105,9 @@ _eglGetNativePlatformFromEnv(void)
       }
    }
 
+   if (plat == _EGL_INVALID_PLATFORM)
+      _eglLog(_EGL_WARNING, "invalid EGL_PLATFORM given");
+
    return plat;
 }
 
@@ -147,33 +150,23 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
 _EGLPlatformType
 _eglGetNativePlatform(void *nativeDisplay)
 {
-   static _EGLPlatformType native_platform = _EGL_INVALID_PLATFORM;
-   _EGLPlatformType detected_platform = native_platform;
+   _EGLPlatformType detected_platform = _eglGetNativePlatformFromEnv();
+   const char *detection_method = "environment";
 
    if (detected_platform == _EGL_INVALID_PLATFORM) {
-      const char *detection_method;
-
-      detected_platform = _eglGetNativePlatformFromEnv();
-      detection_method = "environment overwrite";
-
-      if (detected_platform == _EGL_INVALID_PLATFORM) {
-         detected_platform = _eglNativePlatformDetectNativeDisplay(nativeDisplay);
-         detection_method = "autodetected";
-      }
-
-      if (detected_platform == _EGL_INVALID_PLATFORM) {
-         detected_platform = _EGL_NATIVE_PLATFORM;
-         detection_method = "build-time configuration";
-      }
-
-      _eglLog(_EGL_DEBUG, "Native platform type: %s (%s)",
-              egl_platforms[detected_platform].name, detection_method);
-
-      p_atomic_cmpxchg(&native_platform, _EGL_INVALID_PLATFORM,
-                       detected_platform);
+      detected_platform = _eglNativePlatformDetectNativeDisplay(nativeDisplay);
+      detection_method = "autodetected";
    }
 
-   return native_platform;
+   if (detected_platform == _EGL_INVALID_PLATFORM) {
+      detected_platform = _EGL_NATIVE_PLATFORM;
+      detection_method = "build-time configuration";
+   }
+
+   _eglLog(_EGL_DEBUG, "Native platform type: %s (%s)",
+           egl_platforms[detected_platform].name, detection_method);
+
+   return detected_platform;
 }
 
 

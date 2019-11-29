@@ -348,6 +348,7 @@ public:
    void resize_sources(uint8_t num_sources);
 
    bool is_send_from_grf() const;
+   bool is_payload(unsigned arg) const;
    bool is_partial_write() const;
    bool is_copy_payload(const brw::simple_allocator &grf_alloc) const;
    unsigned components_read(unsigned i) const;
@@ -383,6 +384,8 @@ public:
 
    bool last_rt:1;
    bool pi_noperspective:1;   /**< Pixel interpolator noperspective flag */
+
+   tgl_swsb sched; /**< Scheduling info. */
 };
 
 /**
@@ -514,6 +517,12 @@ get_exec_type_size(const fs_inst *inst)
    return type_sz(get_exec_type(inst));
 }
 
+static inline bool
+is_send(const fs_inst *inst)
+{
+   return inst->mlen || inst->is_send_from_grf();
+}
+
 /**
  * Return whether the instruction isn't an ALU instruction and cannot be
  * assumed to complete in-order.
@@ -521,7 +530,7 @@ get_exec_type_size(const fs_inst *inst)
 static inline bool
 is_unordered(const fs_inst *inst)
 {
-   return inst->mlen || inst->is_send_from_grf() || inst->is_math();
+   return is_send(inst) || inst->is_math();
 }
 
 /**

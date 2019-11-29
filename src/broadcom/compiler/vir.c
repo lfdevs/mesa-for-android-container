@@ -710,6 +710,7 @@ v3d_set_prog_data(struct v3d_compile *c,
         prog_data->threads = c->threads;
         prog_data->single_seg = !c->last_thrsw;
         prog_data->spill_size = c->spill_size;
+        prog_data->tmu_dirty_rcl = c->tmu_dirty_rcl;
 
         v3d_set_prog_data_uniforms(c, prog_data);
 
@@ -812,8 +813,7 @@ v3d_nir_lower_fs_early(struct v3d_compile *c)
          * enabling early_fragment_tests even if the user didn't.
          */
         if (!(c->s->info.num_images ||
-              c->s->info.num_ssbos ||
-              c->s->info.num_abos)) {
+              c->s->info.num_ssbos)) {
                 c->s->info.fs.early_fragment_tests = true;
         }
 }
@@ -826,7 +826,7 @@ v3d_nir_lower_vs_late(struct v3d_compile *c)
 
         if (c->key->ucp_enables) {
                 NIR_PASS_V(c->s, nir_lower_clip_vs, c->key->ucp_enables,
-                           false);
+                           false, false, NULL);
                 NIR_PASS_V(c->s, nir_lower_io_to_scalar,
                            nir_var_shader_out);
         }
@@ -847,11 +847,12 @@ v3d_nir_lower_fs_late(struct v3d_compile *c)
         if (c->fs_key->alpha_test) {
                 NIR_PASS_V(c->s, nir_lower_alpha_test,
                            c->fs_key->alpha_test_func,
-                           false);
+                           false, NULL);
         }
 
         if (c->key->ucp_enables)
-                NIR_PASS_V(c->s, nir_lower_clip_fs, c->key->ucp_enables);
+                NIR_PASS_V(c->s, nir_lower_clip_fs, c->key->ucp_enables,
+                           false);
 
         /* Note: FS input scalarizing must happen after
          * nir_lower_two_sided_color, which only handles a vec4 at a time.
@@ -937,9 +938,25 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
         NIR_PASS_V(c->s, v3d_nir_lower_io, c);
         NIR_PASS_V(c->s, v3d_nir_lower_txf_ms, c);
         NIR_PASS_V(c->s, v3d_nir_lower_image_load_store);
-        NIR_PASS_V(c->s, nir_lower_idiv);
+        NIR_PASS_V(c->s, nir_lower_idiv, nir_lower_idiv_fast);
 
         v3d_optimize_nir(c->s);
+
+        /* Do late algebraic optimization to turn add(a, neg(b)) back into
+         * subs, then the mandatory cleanup after algebraic.  Note that it may
+         * produce fnegs, and if so then we need to keep running to squash
+         * fneg(fneg(a)).
+         */
+        bool more_late_algebraic = true;
+        while (more_late_algebraic) {
+                more_late_algebraic = false;
+                NIR_PASS(more_late_algebraic, c->s, nir_opt_algebraic_late);
+                NIR_PASS_V(c->s, nir_opt_constant_folding);
+                NIR_PASS_V(c->s, nir_copy_prop);
+                NIR_PASS_V(c->s, nir_opt_dce);
+                NIR_PASS_V(c->s, nir_opt_cse);
+        }
+
         NIR_PASS_V(c->s, nir_lower_bool_to_int32);
         NIR_PASS_V(c->s, nir_convert_from_ssa, true);
 
@@ -1017,7 +1034,7 @@ vir_compile_destroy(struct v3d_compile *c)
         c->cursor.link = NULL;
 
         vir_for_each_block(block, c) {
-                while (!list_empty(&block->instructions)) {
+                while (!list_is_empty(&block->instructions)) {
                         struct qinst *qinst =
                                 list_first_entry(&block->instructions,
                                                  struct qinst, link);

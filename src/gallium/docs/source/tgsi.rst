@@ -681,6 +681,27 @@ This instruction replicates its result.
   Unconditional discard.  Allowed in fragment shaders only.
 
 
+.. opcode:: DEMOTE - Demote Invocation to a Helper
+
+  This demotes the current invocation to a helper, but continues
+  execution (while KILL may or may not terminate the
+  invocation). After this runs, all the usual helper invocation rules
+  apply about discarding buffer and render target writes. This is
+  useful for having accurate derivatives in the other invocations
+  which have not been demoted.
+
+  Allowed in fragment shaders only.
+
+
+.. opcode:: READ_HELPER - Reads Invocation Helper Status
+
+  This is identical to ``TGSI_SEMANTIC_HELPER_INVOCATION``, except
+  this will read the current value, which might change as a result of
+  a ``DEMOTE`` instruction.
+
+  Allowed in fragment shaders only.
+
+
 .. opcode:: TXB - Texture Lookup With Bias
 
   for cube map array textures and shadow cube maps, the bias value
@@ -941,13 +962,21 @@ XXX doesn't look like most of the opcodes really belong here.
   require another CAP is hw can do it natively. For now we lower that before
   TGSI.
 
+  PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE changes the encoding so that component
+  is stored in the sampler source swizzle x.
+
 .. math::
 
    coord = src0
 
+   (without TGSI_TG4_COMPONENT_IN_SWIZZLE)
    component = src1
 
    dst = texture\_gather4 (unit, coord, component)
+
+   (with TGSI_TG4_COMPONENT_IN_SWIZZLE)
+   dst = texture\_gather4 (unit, coord)
+   component is encoded in sampler swizzle.
 
 (with SM5 - cube array shadow)
 

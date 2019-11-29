@@ -170,6 +170,7 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 {
 	struct fd2_pipe_sampler_view *so = CALLOC_STRUCT(fd2_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
+	struct surface_format fmt = fd2_pipe2surface(cso->format);
 
 	if (!so)
 		return NULL;
@@ -181,16 +182,23 @@ fd2_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.context = pctx;
 
 	so->tex0 =
+		A2XX_SQ_TEX_0_SIGN_X(fmt.sign) |
+		A2XX_SQ_TEX_0_SIGN_Y(fmt.sign) |
+		A2XX_SQ_TEX_0_SIGN_Z(fmt.sign) |
+		A2XX_SQ_TEX_0_SIGN_W(fmt.sign) |
 		A2XX_SQ_TEX_0_PITCH(rsc->slices[0].pitch) |
 		COND(rsc->tile_mode, A2XX_SQ_TEX_0_TILED);
 	so->tex1 =
-		A2XX_SQ_TEX_1_FORMAT(fd2_pipe2surface(cso->format)) |
+		A2XX_SQ_TEX_1_FORMAT(fmt.format) |
 		A2XX_SQ_TEX_1_CLAMP_POLICY(SQ_TEX_CLAMP_POLICY_OGL);
 	so->tex2 =
 		A2XX_SQ_TEX_2_HEIGHT(prsc->height0 - 1) |
 		A2XX_SQ_TEX_2_WIDTH(prsc->width0 - 1);
-	so->tex3 = fd2_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
-			cso->swizzle_b, cso->swizzle_a);
+	so->tex3 =
+		A2XX_SQ_TEX_3_NUM_FORMAT(fmt.num_format) |
+		fd2_tex_swiz(cso->format, cso->swizzle_r, cso->swizzle_g,
+		             cso->swizzle_b, cso->swizzle_a) |
+		A2XX_SQ_TEX_3_EXP_ADJUST(fmt.exp_adjust);
 
 	so->tex4 =
 		A2XX_SQ_TEX_4_MIP_MIN_LEVEL(fd_sampler_first_level(cso)) |

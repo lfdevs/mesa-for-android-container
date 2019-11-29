@@ -42,6 +42,7 @@
 #include <stdbool.h>
 #include "dri_util.h"
 #include "utils.h"
+#include "util/u_endian.h"
 #include "util/xmlpool.h"
 #include "main/mtypes.h"
 #include "main/framebuffer.h"
@@ -888,6 +889,14 @@ static const struct {
       .mesa_format  =        MESA_FORMAT_B8G8R8X8_UNORM,
    },
    {
+      .image_format = __DRI_IMAGE_FORMAT_ABGR16161616F,
+      .mesa_format  =        MESA_FORMAT_RGBA_FLOAT16,
+   },
+   {
+      .image_format = __DRI_IMAGE_FORMAT_XBGR16161616F,
+      .mesa_format  =        MESA_FORMAT_RGBX_FLOAT16,
+   },
+   {
       .image_format = __DRI_IMAGE_FORMAT_ARGB2101010,
       .mesa_format  =        MESA_FORMAT_B10G10R10A2_UNORM,
    },
@@ -923,14 +932,16 @@ static const struct {
       .image_format = __DRI_IMAGE_FORMAT_R8,
       .mesa_format  =        MESA_FORMAT_L_UNORM8,
    },
+#ifdef PIPE_ARCH_LITTLE_ENDIAN
    {
       .image_format = __DRI_IMAGE_FORMAT_GR88,
-      .mesa_format  =        MESA_FORMAT_R8G8_UNORM,
+      .mesa_format  =        MESA_FORMAT_RG_UNORM8,
    },
    {
       .image_format = __DRI_IMAGE_FORMAT_GR88,
-      .mesa_format  =        MESA_FORMAT_L8A8_UNORM,
+      .mesa_format  =        MESA_FORMAT_LA_UNORM8,
    },
+#endif
    {
       .image_format = __DRI_IMAGE_FORMAT_SABGR8,
       .mesa_format  =        MESA_FORMAT_R8G8B8A8_SRGB,
@@ -947,14 +958,16 @@ static const struct {
       .image_format = __DRI_IMAGE_FORMAT_R16,
       .mesa_format  =        MESA_FORMAT_L_UNORM16,
    },
+#ifdef PIPE_ARCH_LITTLE_ENDIAN
    {
       .image_format = __DRI_IMAGE_FORMAT_GR1616,
-      .mesa_format  =        MESA_FORMAT_R16G16_UNORM,
+      .mesa_format  =        MESA_FORMAT_RG_UNORM16,
    },
    {
       .image_format = __DRI_IMAGE_FORMAT_GR1616,
-      .mesa_format  =        MESA_FORMAT_L16A16_UNORM,
+      .mesa_format  =        MESA_FORMAT_LA_UNORM16,
    },
+#endif
 };
 
 uint32_t

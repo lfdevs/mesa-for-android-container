@@ -1362,9 +1362,6 @@ EGLAPI EGLuint64NV EGLAPIENTRY eglGetSystemTimeNV (void);
 #define EGL_NATIVE_SURFACE_TIZEN          0x32A1
 #endif /* EGL_TIZEN_image_native_surface */
 
-#include <EGL/eglmesaext.h>
-#include <EGL/eglextchromium.h>
-
 #ifdef __cplusplus
 }
 #endif

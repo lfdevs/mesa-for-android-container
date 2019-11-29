@@ -101,7 +101,8 @@ namespace clover {
          enum flag {
             clc = 1 << 0,
             llvm = 1 << 1,
-            native = 1 << 2
+            native = 1 << 2,
+            spirv = 1 << 3,
          };
 
          inline bool
@@ -111,6 +112,7 @@ namespace clover {
                { "llvm", llvm, "Dump the generated LLVM IR for all kernels." },
                { "native", native, "Dump kernel assembly code for targets "
                  "specifying PIPE_SHADER_IR_NATIVE" },
+               { "spirv", spirv, "Dump the generated SPIR-V for all kernels." },
                DEBUG_NAMED_VALUE_END
             };
             static const unsigned flags =

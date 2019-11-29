@@ -43,7 +43,7 @@ void evergreen_dma_copy_buffer(struct r600_context *rctx,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&rdst->valid_buffer_range, dst_offset,
+	util_range_add(&rdst->b.b, &rdst->valid_buffer_range, dst_offset,
 		       dst_offset + size);
 
 	dst_offset += rdst->gpu_address;
@@ -93,7 +93,7 @@ void evergreen_cp_dma_clear_buffer(struct r600_context *rctx,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&r600_resource(dst)->valid_buffer_range, offset,
+	util_range_add(dst, &r600_resource(dst)->valid_buffer_range, offset,
 		       offset + size);
 
 	offset += r600_resource(dst)->gpu_address;

@@ -42,7 +42,8 @@ struct virgl_resource_metadata
    unsigned long level_offset[VR_MAX_TEXTURE_2D_LEVELS];
    unsigned stride[VR_MAX_TEXTURE_2D_LEVELS];
    unsigned layer_stride[VR_MAX_TEXTURE_2D_LEVELS];
-   uint32_t total_size;
+   uint32_t plane, plane_offset, total_size;
+   uint64_t modifier;
 };
 
 struct virgl_resource {
@@ -154,9 +155,6 @@ virgl_resource_transfer_map(struct pipe_context *ctx,
                             unsigned usage,
                             const struct pipe_box *box,
                             struct pipe_transfer **transfer);
-
-void virgl_resource_layout(struct pipe_resource *pt,
-                           struct virgl_resource_metadata *metadata);
 
 struct virgl_transfer *
 virgl_resource_create_transfer(struct virgl_context *vctx,

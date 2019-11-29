@@ -1271,7 +1271,6 @@ struct tgsi_exec_machine *
 tgsi_exec_machine_create(enum pipe_shader_type shader_type)
 {
    struct tgsi_exec_machine *mach;
-   uint i;
 
    mach = align_malloc( sizeof *mach, 16 );
    if (!mach)

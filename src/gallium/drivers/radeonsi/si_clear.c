@@ -245,7 +245,7 @@ bool vi_dcc_clear_level(struct si_context *sctx,
 		dcc_offset = 0;
 	} else {
 		dcc_buffer = &tex->buffer.b.b;
-		dcc_offset = tex->dcc_offset;
+		dcc_offset = tex->surface.dcc_offset;
 	}
 
 	if (sctx->chip_class >= GFX9) {
@@ -515,7 +515,7 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 			if (tex->buffer.b.b.nr_samples >= 2 && tex->cmask_buffer) {
 				uint32_t clear_value = 0xCCCCCCCC;
 				si_clear_buffer(sctx, &tex->cmask_buffer->b.b,
-						tex->cmask_offset, tex->surface.cmask_size,
+						tex->surface.cmask_offset, tex->surface.cmask_size,
 						&clear_value, 4, SI_COHERENCY_CB_META, false);
 				fmask_decompress_needed = true;
 			}
@@ -540,7 +540,7 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 			/* Do the fast clear. */
 			uint32_t clear_value = 0;
 			si_clear_buffer(sctx, &tex->cmask_buffer->b.b,
-					tex->cmask_offset, tex->surface.cmask_size,
+					tex->surface.cmask_offset, tex->surface.cmask_size,
 					&clear_value, 4, SI_COHERENCY_CB_META, false);
 			eliminate_needed = true;
 		}
@@ -559,7 +559,7 @@ static void si_do_fast_color_clear(struct si_context *sctx,
 		/* Chips with DCC constant encoding don't need to set the clear
 		 * color registers for DCC clear values 0 and 1.
 		 */
-		if (sctx->screen->has_dcc_constant_encode && !eliminate_needed)
+		if (sctx->screen->info.has_dcc_constant_encode && !eliminate_needed)
 			continue;
 
 		if (si_set_clear_color(tex, fb->cbufs[i]->format, color)) {
@@ -692,7 +692,7 @@ static void si_clear_render_target(struct pipe_context *ctx,
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_texture *sdst = (struct si_texture*)dst->texture;
 
-	if (dst->texture->nr_samples <= 1 && !sdst->dcc_offset) {
+	if (dst->texture->nr_samples <= 1 && !sdst->surface.dcc_offset) {
 		si_compute_clear_render_target(ctx, dst, color, dstx, dsty, width,
 					       height, render_condition_enabled);
 		return;

@@ -199,6 +199,25 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 # ---------------------------------------
+# Build libmesa_isl_gen12
+# ---------------------------------------
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := libmesa_isl_gen12
+
+LOCAL_SRC_FILES := $(ISL_GEN12_FILES)
+
+LOCAL_CFLAGS := -DGEN_VERSIONx10=120
+
+LOCAL_C_INCLUDES := $(LIBISL_GENX_COMMON_INCLUDES)
+
+LOCAL_WHOLE_STATIC_LIBRARIES := libmesa_genxml
+
+include $(MESA_COMMON_MK)
+include $(BUILD_STATIC_LIBRARY)
+
+# ---------------------------------------
 # Build libmesa_isl_tiled_memcpy
 # ---------------------------------------
 
@@ -268,6 +287,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_isl_gen9 \
 	libmesa_isl_gen10 \
 	libmesa_isl_gen11 \
+	libmesa_isl_gen12 \
 	libmesa_genxml \
 	libmesa_isl_tiled_memcpy
 

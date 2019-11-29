@@ -724,7 +724,7 @@ nv50_clear_buffer(struct pipe_context *pipe,
       return;
    }
 
-   util_range_add(&buf->valid_buffer_range, offset, offset + size);
+   util_range_add(&buf->base, &buf->valid_buffer_range, offset, offset + size);
 
    assert(size % data_size == 0);
 

@@ -61,8 +61,8 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                 if (src2.swizzle != SWIZZLE_XXXX) continue;
 
                 /* Awesome, we're the right form. Now check where src2 is from */
-                unsigned frcp = ins->ssa_args.src[1];
-                unsigned to = ins->ssa_args.dest;
+                unsigned frcp = ins->src[1];
+                unsigned to = ins->dest;
 
                 if (frcp & IS_REG) continue;
                 if (to & IS_REG) continue;
@@ -72,13 +72,13 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                 unsigned frcp_from = 0;
 
                 mir_foreach_instr_in_block_safe(block, sub) {
-                        if (sub->ssa_args.dest != frcp) continue;
+                        if (sub->dest != frcp) continue;
 
                         midgard_vector_alu_src s =
                                 vector_alu_from_unsigned(sub->alu.src1);
 
                         frcp_component = s.swizzle & 3;
-                        frcp_from = sub->ssa_args.src[0];
+                        frcp_from = sub->src[0];
 
                         frcp_found =
                                 (sub->type == TAG_ALU_4) &&
@@ -98,7 +98,7 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                 if (mir_use_count(ctx, frcp_from) > 2) continue;
 
                 mir_foreach_instr_in_block_safe(block, v) {
-                        if (v->ssa_args.dest != frcp_from) continue;
+                        if (v->dest != frcp_from) continue;
                         if (v->type != TAG_LOAD_STORE_4) break;
                         if (!OP_IS_LOAD_VARY_F(v->load_store.op)) break;
 
@@ -114,10 +114,8 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                 midgard_instruction accel = {
                         .type = TAG_LOAD_STORE_4,
                         .mask = ins->mask,
-                        .ssa_args = {
-                                .dest = to,
-                                .src = { frcp_from, -1, -1 },
-                        },
+                        .dest = to,
+                        .src = { frcp_from, ~0, ~0 },
                         .load_store = {
                                 .op = frcp_component == COMPONENT_W ?
                                         midgard_op_ldst_perspective_division_w : 
@@ -127,7 +125,7 @@ midgard_opt_combine_projection(compiler_context *ctx, midgard_block *block)
                         }
                 };
 
-                mir_insert_instruction_before(ins, accel);
+                mir_insert_instruction_before(ctx, ins, accel);
                 mir_remove_instruction(ins);
 
                 progress |= true;
@@ -146,8 +144,8 @@ midgard_opt_varying_projection(compiler_context *ctx, midgard_block *block)
                 if (ins->type != TAG_LOAD_STORE_4) continue;
                 if (!OP_IS_PROJECTION(ins->load_store.op)) continue;
 
-                unsigned vary = ins->ssa_args.src[0];
-                unsigned to = ins->ssa_args.dest;
+                unsigned vary = ins->src[0];
+                unsigned to = ins->dest;
 
                 if (vary & IS_REG) continue;
                 if (to & IS_REG) continue;
@@ -158,7 +156,7 @@ midgard_opt_varying_projection(compiler_context *ctx, midgard_block *block)
                 bool rewritten = false;
 
                 mir_foreach_instr_in_block_safe(block, v) {
-                        if (v->ssa_args.dest != vary) continue;
+                        if (v->dest != vary) continue;
                         if (v->type != TAG_LOAD_STORE_4) break;
                         if (!OP_IS_LOAD_VARY_F(v->load_store.op)) break;
 
@@ -184,7 +182,7 @@ midgard_opt_varying_projection(compiler_context *ctx, midgard_block *block)
                         v->load_store.varying_parameters = param;
 
                         /* Use the new destination */
-                        v->ssa_args.dest = to;
+                        v->dest = to;
 
                         rewritten = true;
                         break;

@@ -446,11 +446,56 @@ virgl_resource_transfer_map(struct pipe_context *ctx,
       }
 
       if (usage & PIPE_TRANSFER_WRITE)
-          util_range_add(&vres->valid_buffer_range, box->x, box->x + box->width);
+          util_range_add(&vres->u.b, &vres->valid_buffer_range, box->x, box->x + box->width);
    }
 
    *transfer = &trans->base;
    return map_addr;
+}
+
+static void virgl_resource_layout(struct pipe_resource *pt,
+                                  struct virgl_resource_metadata *metadata,
+                                  uint32_t plane,
+                                  uint32_t winsys_stride,
+                                  uint32_t plane_offset,
+                                  uint32_t modifier)
+{
+   unsigned level, nblocksy;
+   unsigned width = pt->width0;
+   unsigned height = pt->height0;
+   unsigned depth = pt->depth0;
+   unsigned buffer_size = 0;
+
+   for (level = 0; level <= pt->last_level; level++) {
+      unsigned slices;
+
+      if (pt->target == PIPE_TEXTURE_CUBE)
+         slices = 6;
+      else if (pt->target == PIPE_TEXTURE_3D)
+         slices = depth;
+      else
+         slices = pt->array_size;
+
+      nblocksy = util_format_get_nblocksy(pt->format, height);
+      metadata->stride[level] = winsys_stride ? winsys_stride :
+                                util_format_get_stride(pt->format, width);
+      metadata->layer_stride[level] = nblocksy * metadata->stride[level];
+      metadata->level_offset[level] = buffer_size;
+
+      buffer_size += slices * metadata->layer_stride[level];
+
+      width = u_minify(width, 1);
+      height = u_minify(height, 1);
+      depth = u_minify(depth, 1);
+   }
+
+   metadata->plane = plane;
+   metadata->plane_offset = plane_offset;
+   metadata->modifier = modifier;
+   if (pt->nr_samples <= 1)
+      metadata->total_size = buffer_size;
+   else /* don't create guest backing store for MSAA */
+      metadata->total_size = 0;
 }
 
 static struct pipe_resource *virgl_resource_create(struct pipe_screen *screen,
@@ -464,7 +509,7 @@ static struct pipe_resource *virgl_resource_create(struct pipe_screen *screen,
    res->u.b.screen = &vs->base;
    pipe_reference_init(&res->u.b.reference, 1);
    vbind = pipe_to_virgl_bind(vs, templ->bind, templ->flags);
-   virgl_resource_layout(&res->u.b, &res->metadata);
+   virgl_resource_layout(&res->u.b, &res->metadata, 0, 0, 0, 0);
 
    if ((vs->caps.caps.v2.capability_bits & VIRGL_CAP_APP_TWEAK_SUPPORT) &&
        vs->tweak_gles_emulate_bgra &&
@@ -507,6 +552,8 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
                                                         struct winsys_handle *whandle,
                                                         unsigned usage)
 {
+   uint32_t winsys_stride, plane_offset, plane;
+   uint64_t modifier;
    struct virgl_screen *vs = virgl_screen(screen);
    if (templ->target == PIPE_BUFFER)
       return NULL;
@@ -515,9 +562,16 @@ static struct pipe_resource *virgl_resource_from_handle(struct pipe_screen *scre
    res->u.b = *templ;
    res->u.b.screen = &vs->base;
    pipe_reference_init(&res->u.b.reference, 1);
-   virgl_resource_layout(&res->u.b, &res->metadata);
 
-   res->hw_res = vs->vws->resource_create_from_handle(vs->vws, whandle);
+   plane = winsys_stride = plane_offset = modifier = 0;
+   res->hw_res = vs->vws->resource_create_from_handle(vs->vws, whandle,
+                                                      &plane,
+                                                      &winsys_stride,
+                                                      &plane_offset,
+                                                      &modifier);
+
+   virgl_resource_layout(&res->u.b, &res->metadata, plane, winsys_stride,
+                         plane_offset, modifier);
    if (!res->hw_res) {
       FREE(res);
       return NULL;
@@ -554,7 +608,7 @@ static void virgl_buffer_subdata(struct pipe_context *pipe,
        likely(!(virgl_debug & VIRGL_DEBUG_XFER)) &&
        virgl_transfer_queue_extend_buffer(&vctx->queue,
                                           vbuf->hw_res, offset, size, data)) {
-      util_range_add(&vbuf->valid_buffer_range, offset, offset + size);
+      util_range_add(&vbuf->u.b, &vbuf->valid_buffer_range, offset, offset + size);
       return;
    }
 
@@ -570,42 +624,6 @@ void virgl_init_context_resource_functions(struct pipe_context *ctx)
     ctx->texture_subdata = u_default_texture_subdata;
 }
 
-void virgl_resource_layout(struct pipe_resource *pt,
-                           struct virgl_resource_metadata *metadata)
-{
-   unsigned level, nblocksy;
-   unsigned width = pt->width0;
-   unsigned height = pt->height0;
-   unsigned depth = pt->depth0;
-   unsigned buffer_size = 0;
-
-   for (level = 0; level <= pt->last_level; level++) {
-      unsigned slices;
-
-      if (pt->target == PIPE_TEXTURE_CUBE)
-         slices = 6;
-      else if (pt->target == PIPE_TEXTURE_3D)
-         slices = depth;
-      else
-         slices = pt->array_size;
-
-      nblocksy = util_format_get_nblocksy(pt->format, height);
-      metadata->stride[level] = util_format_get_stride(pt->format, width);
-      metadata->layer_stride[level] = nblocksy * metadata->stride[level];
-      metadata->level_offset[level] = buffer_size;
-
-      buffer_size += slices * metadata->layer_stride[level];
-
-      width = u_minify(width, 1);
-      height = u_minify(height, 1);
-      depth = u_minify(depth, 1);
-   }
-
-   if (pt->nr_samples <= 1)
-      metadata->total_size = buffer_size;
-   else /* don't create guest backing store for MSAA */
-      metadata->total_size = 0;
-}
 
 struct virgl_transfer *
 virgl_resource_create_transfer(struct virgl_context *vctx,
@@ -620,7 +638,7 @@ virgl_resource_create_transfer(struct virgl_context *vctx,
    const unsigned blocksy = box->y / util_format_get_blockheight(format);
    const unsigned blocksx = box->x / util_format_get_blockwidth(format);
 
-   unsigned offset = metadata->level_offset[level];
+   unsigned offset = metadata->plane_offset + metadata->level_offset[level];
    if (pres->target == PIPE_TEXTURE_CUBE ||
        pres->target == PIPE_TEXTURE_CUBE_ARRAY ||
        pres->target == PIPE_TEXTURE_3D ||

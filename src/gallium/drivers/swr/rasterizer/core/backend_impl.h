@@ -29,6 +29,9 @@
 #pragma once
 
 #include "tilemgr.h"
+#include "state.h"
+#include "context.h"
+
 
 void InitBackendSingleFuncTable(PFN_BACKEND_FUNC (&table)[SWR_INPUT_COVERAGE_COUNT][2][2]);
 void InitBackendSampleFuncTable(
@@ -648,6 +651,7 @@ void SetupPixelShaderContext(SWR_PS_CONTEXT*            psContext,
     psContext->pPerspAttribs          = work.pPerspAttribs;
     psContext->frontFace              = work.triFlags.frontFacing;
     psContext->renderTargetArrayIndex = work.triFlags.renderTargetArrayIndex;
+    psContext->viewportIndex          = work.triFlags.viewportIndex;
 
     // save Ia/Ib/Ic and Ja/Jb/Jc if we need to reevaluate i/j/k in the shader because of pull
     // attribs

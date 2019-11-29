@@ -58,7 +58,7 @@ nv30_query_object_del(struct nv30_screen *screen, struct nv30_query_object **po)
       while (ntfy[3] & 0xff000000) {
       }
       nouveau_heap_free(&qo->hw);
-      LIST_DEL(&qo->list);
+      list_del(&qo->list);
       FREE(qo);
    }
 }
@@ -80,7 +80,7 @@ nv30_query_object_new(struct nv30_screen *screen)
       nv30_query_object_del(screen, &oq);
    }
 
-   LIST_ADDTAIL(&qo->list, &screen->queries);
+   list_addtail(&qo->list, &screen->queries);
 
    ntfy = nv30_ntfy(screen, qo);
    ntfy[0] = 0x00000000;

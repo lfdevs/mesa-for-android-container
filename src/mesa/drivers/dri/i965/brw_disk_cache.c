@@ -21,10 +21,10 @@
  * IN THE SOFTWARE.
  */
 
-#include "compiler/blob.h"
 #include "compiler/glsl/ir_uniform.h"
 #include "compiler/glsl/shader_cache.h"
 #include "main/mtypes.h"
+#include "util/blob.h"
 #include "util/build_id.h"
 #include "util/debug.h"
 #include "util/disk_cache.h"

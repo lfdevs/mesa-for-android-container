@@ -381,6 +381,14 @@ def generate(env):
         if check_header(env, 'sys/shm.h'):
             cppdefines += ['HAVE_SYS_SHM_H']
 
+        #FIXME: we should really be checking for the major()/minor()
+        # functions/macros in these headers, but check_functions()'s
+        # SConf.CheckFunc() doesn't seem to support macros.
+        if check_header(env, 'sys/mkdev.h'):
+            cppdefines += ['MAJOR_IN_MKDEV']
+        if check_header(env, 'sys/sysmacros.h'):
+            cppdefines += ['MAJOR_IN_SYSMACROS']
+
     if platform == 'windows':
         cppdefines += [
             'WIN32',
@@ -476,7 +484,10 @@ def generate(env):
             '-fmessage-length=0', # be nice to Eclipse
         ]
         cflags += [
-            '-Wmissing-prototypes',
+            '-Werror=implicit-function-declaration',
+            '-Werror=missing-prototypes',
+            '-Werror=return-type',
+            '-Werror=incompatible-pointer-types',
             '-std=gnu99',
         ]
     if icc:

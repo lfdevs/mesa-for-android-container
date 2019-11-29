@@ -35,7 +35,7 @@ struct cfg_t;
 
 namespace brw {
 
-struct block_data {
+struct fs_block_data {
    /**
     * Which variables are defined before being used in the block.
     *
@@ -110,13 +110,13 @@ public:
    /** @} */
 
    /** Per-basic-block information on live variables */
-   struct block_data *block_data;
+   struct fs_block_data *block_data;
 
 protected:
    void setup_def_use();
-   void setup_one_read(struct block_data *bd, fs_inst *inst, int ip,
+   void setup_one_read(struct fs_block_data *bd, fs_inst *inst, int ip,
                        const fs_reg &reg);
-   void setup_one_write(struct block_data *bd, fs_inst *inst, int ip,
+   void setup_one_write(struct fs_block_data *bd, fs_inst *inst, int ip,
                         const fs_reg &reg);
    void compute_live_variables();
    void compute_start_end();

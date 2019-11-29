@@ -154,7 +154,7 @@ static bool
 fd2_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *pinfo,
 			 unsigned index_offset)
 {
-	if (!ctx->prog.fp || !ctx->prog.vp)
+	if (!ctx->prog.fs || !ctx->prog.vs)
 		return false;
 
 	if (ctx->dirty & FD_DIRTY_VTXBUF)

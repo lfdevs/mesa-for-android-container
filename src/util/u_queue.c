@@ -33,6 +33,9 @@
 #include "util/u_thread.h"
 #include "u_process.h"
 
+/* Define 256MB */
+#define S_256MB (256 * 1024 * 1024)
+
 static void
 util_queue_kill_threads(struct util_queue *queue, unsigned keep_num_threads,
                         bool finish_locked);
@@ -64,7 +67,7 @@ atexit_handler(void)
 static void
 global_init(void)
 {
-   LIST_INITHEAD(&queue_list);
+   list_inithead(&queue_list);
    atexit(atexit_handler);
 }
 
@@ -74,7 +77,7 @@ add_to_atexit_list(struct util_queue *queue)
    call_once(&atexit_once_flag, global_init);
 
    mtx_lock(&exit_mutex);
-   LIST_ADD(&queue->head, &queue_list);
+   list_add(&queue->head, &queue_list);
    mtx_unlock(&exit_mutex);
 }
 
@@ -86,7 +89,7 @@ remove_from_atexit_list(struct util_queue *queue)
    mtx_lock(&exit_mutex);
    LIST_FOR_EACH_ENTRY_SAFE(iter, tmp, &queue_list, head) {
       if (iter == queue) {
-         LIST_DEL(&iter->head);
+         list_del(&iter->head);
          break;
       }
    }
@@ -290,6 +293,8 @@ util_queue_thread_func(void *input)
          util_queue_fence_signal(job.fence);
          if (job.cleanup)
             job.cleanup(job.job, thread_index);
+
+         queue->total_jobs_size -= job.job_size;
       }
    }
 
@@ -513,7 +518,8 @@ util_queue_add_job(struct util_queue *queue,
                    void *job,
                    struct util_queue_fence *fence,
                    util_queue_execute_func execute,
-                   util_queue_execute_func cleanup)
+                   util_queue_execute_func cleanup,
+                   const size_t job_size)
 {
    struct util_queue_job *ptr;
 
@@ -531,7 +537,8 @@ util_queue_add_job(struct util_queue *queue,
    assert(queue->num_queued >= 0 && queue->num_queued <= queue->max_jobs);
 
    if (queue->num_queued == queue->max_jobs) {
-      if (queue->flags & UTIL_QUEUE_INIT_RESIZE_IF_FULL) {
+      if (queue->flags & UTIL_QUEUE_INIT_RESIZE_IF_FULL &&
+          queue->total_jobs_size + job_size < S_256MB) {
          /* If the queue is full, make it larger to avoid waiting for a free
           * slot.
           */
@@ -570,7 +577,10 @@ util_queue_add_job(struct util_queue *queue,
    ptr->fence = fence;
    ptr->execute = execute;
    ptr->cleanup = cleanup;
+   ptr->job_size = job_size;
+
    queue->write_idx = (queue->write_idx + 1) % queue->max_jobs;
+   queue->total_jobs_size += ptr->job_size;
 
    queue->num_queued++;
    cnd_signal(&queue->has_queued_cond);
@@ -649,7 +659,8 @@ util_queue_finish(struct util_queue *queue)
 
    for (unsigned i = 0; i < queue->num_threads; ++i) {
       util_queue_fence_init(&fences[i]);
-      util_queue_add_job(queue, &barrier, &fences[i], util_queue_finish_execute, NULL);
+      util_queue_add_job(queue, &barrier, &fences[i],
+                         util_queue_finish_execute, NULL, 0);
    }
 
    for (unsigned i = 0; i < queue->num_threads; ++i) {

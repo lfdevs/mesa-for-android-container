@@ -387,6 +387,7 @@ struct SWR_PS_CONTEXT
     uint32_t frontFace;              // IN: front- 1, back- 0
     uint32_t sampleIndex;            // IN: sampleIndex
     uint32_t renderTargetArrayIndex; // IN: render target array index from GS
+    uint32_t viewportIndex;          // IN: viewport index from GS
     uint32_t rasterizerSampleCount;  // IN: sample count used by the rasterizer
 
     uint8_t* pColorBuffer[SWR_NUM_RENDERTARGETS]; // IN: Pointers to render target hottiles
@@ -746,12 +747,10 @@ struct SWR_GS_STATE
     // Total amount of memory to allocate for one instance of the shader output in bytes
     uint32_t allocationSize;
 
-    // Offset to the start of the attributes of the input vertices, in simdvector units, as read by
-    // the GS
+    // Offset to start reading data per input vertex in simdvector units. This can be used to
+    // skip over any vertex data output from the previous stage that is unused in the GS, removing
+    // unnecessary vertex processing.
     uint32_t vertexAttribOffset;
-
-    // Offset to the attributes as stored by the preceding shader stage.
-    uint32_t srcVertexAttribOffset;
 
     // Size of the control data section which contains cut or streamID data, in simdscalar units.
     // Should be sized to handle the maximum number of verts output by the GS. Can be 0 if there are
@@ -771,10 +770,7 @@ struct SWR_GS_STATE
     // shader is expected to store the final vertex count in the first dword of the gs output
     // stream.
     uint32_t staticVertexCount;
-
-    uint32_t pad;
 };
-static_assert(sizeof(SWR_GS_STATE) == 64, "Adjust padding to keep size (or remove this assert)");
 
 //////////////////////////////////////////////////////////////////////////
 /// SWR_TS_OUTPUT_TOPOLOGY - Defines data output by the tessellator / DS

@@ -6973,6 +6973,7 @@ static int tgsi_interp_egcm(struct r600_shader_ctx *ctx)
 	}
 	else {
 		location = TGSI_INTERPOLATE_LOC_CENTROID;
+		ctx->shader->input[input].uses_interpolate_at_centroid = 1;
 	}
 
 	k = eg_get_interpolator_index(ctx->shader->input[input].interpolate, location);

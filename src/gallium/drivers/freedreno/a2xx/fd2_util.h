@@ -31,10 +31,19 @@
 
 #include "a2xx.xml.h"
 
-enum a2xx_sq_surfaceformat fd2_pipe2surface(enum pipe_format format);
+struct surface_format {
+#define FMT_INVALID 0x7f
+	enum a2xx_sq_surfaceformat format : 7;
+	enum sq_tex_sign sign : 2;
+	enum sq_tex_num_format num_format : 1;
+	int exp_adjust : 6;
+};
+
+struct surface_format fd2_pipe2surface(enum pipe_format format);
 enum a2xx_colorformatx fd2_pipe2color(enum pipe_format format);
 uint32_t fd2_tex_swiz(enum pipe_format format, unsigned swizzle_r,
 		unsigned swizzle_g, unsigned swizzle_b, unsigned swizzle_a);
+uint32_t fd2_vtx_swiz(enum pipe_format format, unsigned swizzle);
 
 /* convert x,y to dword */
 static inline uint32_t xy2d(uint16_t x, uint16_t y)

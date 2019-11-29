@@ -57,12 +57,6 @@ struct panfrost_slice {
         bool initialized;
 };
 
-void
-panfrost_bo_reference(struct panfrost_bo *bo);
-
-void
-panfrost_bo_unreference(struct pipe_screen *screen, struct panfrost_bo *bo);
-
 struct panfrost_resource {
         struct pipe_resource base;
         struct {

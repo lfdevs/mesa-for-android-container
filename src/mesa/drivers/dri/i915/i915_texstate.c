@@ -48,7 +48,7 @@ translate_texture_format(mesa_format mesa_format, GLenum DepthMode)
       return MAPSURF_8BIT | MT_8BIT_I8;
    case MESA_FORMAT_A_UNORM8:
       return MAPSURF_8BIT | MT_8BIT_A8;
-   case MESA_FORMAT_L8A8_UNORM:
+   case MESA_FORMAT_LA_UNORM8:
       return MAPSURF_16BIT | MT_16BIT_AY88;
    case MESA_FORMAT_B5G6R5_UNORM:
       return MAPSURF_16BIT | MT_16BIT_RGB565;

@@ -50,6 +50,7 @@
    .lower_base_vertex = true
 
 #define COMMON_SCALAR_OPTIONS                                                 \
+   .lower_to_scalar = true,                                                   \
    .lower_pack_half_2x16 = true,                                              \
    .lower_pack_snorm_2x16 = true,                                             \
    .lower_pack_snorm_4x8 = true,                                              \
@@ -100,7 +101,8 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
    compiler->precise_trig = env_var_as_boolean("INTEL_PRECISE_TRIG", false);
 
    compiler->use_tcs_8_patch =
-      devinfo->gen >= 9 && (INTEL_DEBUG & DEBUG_TCS_EIGHT_PATCH);
+      devinfo->gen >= 12 ||
+      (devinfo->gen >= 9 && (INTEL_DEBUG & DEBUG_TCS_EIGHT_PATCH));
 
    if (devinfo->gen >= 10) {
       /* We don't support vec4 mode on Cannonlake. */
@@ -185,6 +187,7 @@ brw_compiler_create(void *mem_ctx, const struct gen_device_info *devinfo)
        */
       nir_options->lower_ffma = devinfo->gen < 6;
       nir_options->lower_flrp32 = devinfo->gen < 6 || devinfo->gen >= 11;
+      nir_options->lower_fpow = devinfo->gen >= 12;
 
       nir_options->lower_rotate = devinfo->gen < 11;
       nir_options->lower_bitfield_reverse = devinfo->gen < 7;

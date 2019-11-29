@@ -44,6 +44,7 @@ struct etna_sampler_state {
    uint32_t TE_SAMPLER_CONFIG1;
    uint32_t TE_SAMPLER_LOD_CONFIG;
    uint32_t TE_SAMPLER_3D_CONFIG;
+   uint32_t NTE_SAMPLER_BASELOD;
    unsigned min_lod, max_lod, max_lod_min;
 };
 

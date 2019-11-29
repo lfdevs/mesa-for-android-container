@@ -236,7 +236,7 @@ pb_debug_buffer_destroy(struct pb_buffer *_buf)
    pb_debug_buffer_check(buf);
 
    mtx_lock(&mgr->mutex);
-   LIST_DEL(&buf->head);
+   list_del(&buf->head);
    mtx_unlock(&mgr->mutex);
 
    mtx_destroy(&buf->mutex);
@@ -391,7 +391,7 @@ pb_debug_manager_create_buffer(struct pb_manager *_mgr,
 #if 0
       mtx_lock(&mgr->mutex);
       debug_printf("%s: failed to create buffer\n", __FUNCTION__);
-      if(!LIST_IS_EMPTY(&mgr->list))
+      if(!list_is_empty(&mgr->list))
          pb_debug_manager_dump_locked(mgr);
       mtx_unlock(&mgr->mutex);
 #endif
@@ -421,7 +421,7 @@ pb_debug_manager_create_buffer(struct pb_manager *_mgr,
    (void) mtx_init(&buf->mutex, mtx_plain);
    
    mtx_lock(&mgr->mutex);
-   LIST_ADDTAIL(&buf->head, &mgr->list);
+   list_addtail(&buf->head, &mgr->list);
    mtx_unlock(&mgr->mutex);
 
    return &buf->base;
@@ -444,7 +444,7 @@ pb_debug_manager_destroy(struct pb_manager *_mgr)
    struct pb_debug_manager *mgr = pb_debug_manager(_mgr);
    
    mtx_lock(&mgr->mutex);
-   if(!LIST_IS_EMPTY(&mgr->list)) {
+   if(!list_is_empty(&mgr->list)) {
       debug_printf("%s: unfreed buffers\n", __FUNCTION__);
       pb_debug_manager_dump_locked(mgr);
    }
@@ -477,7 +477,7 @@ pb_debug_manager_create(struct pb_manager *provider,
    mgr->overflow_size = overflow_size;
     
    (void) mtx_init(&mgr->mutex, mtx_plain);
-   LIST_INITHEAD(&mgr->list);
+   list_inithead(&mgr->list);
 
    return &mgr->base;
 }

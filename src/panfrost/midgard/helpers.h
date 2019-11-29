@@ -37,19 +37,6 @@
 		op == midgard_op_st_vary_32i \
 	)
 
-#define OP_IS_STORE_R26(op) (\
-                OP_IS_STORE_VARY(op) || \
-                op == midgard_op_st_char || \
-                op == midgard_op_st_char2 || \
-                op == midgard_op_st_char4 || \
-                op == midgard_op_st_short4 || \
-                op == midgard_op_st_int4 \
-        )
-
-#define OP_IS_STORE(op) (\
-                OP_IS_STORE_R26(op) \
-	)
-
 #define OP_IS_PROJECTION(op) ( \
                 op == midgard_op_ldst_perspective_division_z || \
                 op == midgard_op_ldst_perspective_division_w \
@@ -73,10 +60,14 @@
                 op == midgard_op_ld_ubo_int4 \
         )
 
-#define OP_IS_CSEL(op) ( \
-                op == midgard_alu_op_icsel || \
+#define OP_IS_CSEL_V(op) ( \
                 op == midgard_alu_op_icsel_v || \
-                op == midgard_alu_op_fcsel_v || \
+                op == midgard_alu_op_fcsel_v \
+        )
+
+#define OP_IS_CSEL(op) ( \
+                OP_IS_CSEL_V(op) || \
+                op == midgard_alu_op_icsel || \
                 op == midgard_alu_op_fcsel \
         )
 
@@ -175,12 +166,9 @@ quadword_size(int tag)
 #define REGISTER_TEXTURE_BASE 28
 #define REGISTER_SELECT 31
 
-/* SSA helper aliases to mimic the registers. UNUSED_0 encoded as an inline
- * constant. UNUSED_1 encoded as REGISTER_UNUSED */
+/* SSA helper aliases to mimic the registers. */
 
-#define SSA_UNUSED_0 0
-#define SSA_UNUSED_1 -2
-
+#define SSA_UNUSED ~0
 #define SSA_FIXED_SHIFT 24
 #define SSA_FIXED_REGISTER(reg) (((1 + (reg)) << SSA_FIXED_SHIFT) | 1)
 #define SSA_REG_FROM_FIXED(reg) ((((reg) & ~1) >> SSA_FIXED_SHIFT) - 1)
@@ -188,7 +176,7 @@ quadword_size(int tag)
 
 /* Swizzle support */
 
-#define SWIZZLE(A, B, C, D) ((D << 6) | (C << 4) | (B << 2) | (A << 0))
+#define SWIZZLE(A, B, C, D) (((D) << 6) | ((C) << 4) | ((B) << 2) | ((A) << 0))
 #define SWIZZLE_FROM_ARRAY(r) SWIZZLE(r[0], r[1], r[2], r[3])
 #define COMPONENT_X 0x0
 #define COMPONENT_Y 0x1
@@ -260,6 +248,26 @@ struct mir_op_props {
         const char *name;
         unsigned props;
 };
+
+/* For load/store */
+
+struct mir_ldst_op_props {
+        const char *name;
+        unsigned props;
+};
+
+/* Lower 2-bits are a midgard_reg_mode */
+#define GET_LDST_SIZE(c) (c & 3)
+
+/* Store (so the primary register is a source, not a destination */
+#define LDST_STORE (1 << 2)
+
+/* Mask has special meaning and should not be manipulated directly */
+#define LDST_SPECIAL_MASK (1 << 3)
+
+/* Non-store operation has side effects and should not be eliminated even if
+ * its mask is 0 */
+#define LDST_SIDE_FX (1 << 4)
 
 /* This file is common, so don't define the tables themselves. #include
  * midgard_op.h if you need that, or edit midgard_ops.c directly */
@@ -391,9 +399,20 @@ swizzle_to_component(unsigned swizzle)
 
 
 static inline unsigned
-component_to_swizzle(unsigned c)
+component_to_swizzle(unsigned c, unsigned count)
 {
-        return SWIZZLE(c, c, c, c);
+        switch (count) {
+        case 1:
+                return SWIZZLE(c, c, c, c);
+        case 2:
+                return SWIZZLE(c, c + 1, c + 1, c + 1);
+        case 3:
+                return SWIZZLE(c, c + 1, c + 2, c + 2);
+        case 4:
+                return SWIZZLE(c, c + 1, c + 2, c + 3);
+        default:
+                unreachable("Invalid component count");
+        }
 }
 
 #endif

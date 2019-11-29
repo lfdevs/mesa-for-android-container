@@ -42,6 +42,7 @@ static const nir_shader_compiler_options options = {
 	.lower_bitops = true,
 	.lower_rotate = true,
 	.lower_vector_cmp = true,
+	.lower_fdph = true,
 };
 
 const nir_shader_compiler_options *
@@ -503,14 +504,6 @@ load_input(struct ir2_context *ctx, nir_dest *dst, unsigned idx)
 	assert(slot >= 0);
 
 	switch (slot) {
-	case VARYING_SLOT_PNTC:
-		/* need to extract with abs and invert y */
-		instr = instr_create_alu_dest(ctx, nir_op_ffma, dst);
-		instr->src[0] = ir2_src(ctx->f->inputs_count, IR2_SWIZZLE_ZW, IR2_SRC_INPUT);
-		instr->src[0].abs = true;
-		instr->src[1] = load_const(ctx, (float[]) {1.0f, -1.0f}, 2);
-		instr->src[2] = load_const(ctx, (float[]) {0.0f, 1.0f}, 2);
-		break;
 	case VARYING_SLOT_POS:
 		/* need to extract xy with abs and add tile offset on a20x
 		 * zw from fragcoord input (w inverted in fragment shader)
@@ -639,6 +632,13 @@ emit_intrinsic(struct ir2_context *ctx, nir_intrinsic_instr *intr)
 		instr->src[0] = ir2_src(tmp->idx, 0, IR2_SRC_SSA);
 		instr->src[1] = ir2_zero(ctx);
 		break;
+	case nir_intrinsic_load_point_coord:
+		/* param.zw (note: abs might be needed like fragcoord in param.xy?) */
+		ctx->so->need_param = true;
+
+		instr = instr_create_alu_dest(ctx, nir_op_mov, &intr->dest);
+		instr->src[0] = ir2_src(ctx->f->inputs_count, IR2_SWIZZLE_ZW, IR2_SRC_INPUT);
+		break;
 	default:
 		compile_error(ctx, "unimplemented intr %d\n", intr->intrinsic);
 		break;
@@ -759,11 +759,6 @@ setup_input(struct ir2_context *ctx, nir_variable * in)
 
 	if (ctx->so->type != MESA_SHADER_FRAGMENT)
 		compile_error(ctx, "unknown shader type: %d\n", ctx->so->type);
-
-	if (slot == VARYING_SLOT_PNTC) {
-		so->need_param = true;
-		return;
-	}
 
 	n = ctx->f->inputs_count++;
 
@@ -1062,6 +1057,29 @@ static void cleanup_binning(struct ir2_context *ctx)
 	ir2_optimize_nir(ctx->nir, false);
 }
 
+static bool
+ir2_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)
+{
+	if (instr->type != nir_instr_type_alu)
+		return false;
+
+	nir_alu_instr *alu = nir_instr_as_alu(instr);
+	switch (alu->op) {
+	case nir_op_frsq:
+	case nir_op_frcp:
+	case nir_op_flog2:
+	case nir_op_fexp2:
+	case nir_op_fsqrt:
+	case nir_op_fcos:
+	case nir_op_fsin:
+		return true;
+	default:
+		break;
+	}
+
+	return false;
+}
+
 void
 ir2_nir_compile(struct ir2_context *ctx, bool binning)
 {
@@ -1084,17 +1102,7 @@ ir2_nir_compile(struct ir2_context *ctx, bool binning)
 	OPT_V(ctx->nir, nir_opt_algebraic_late);
 	OPT_V(ctx->nir, nir_lower_to_source_mods, nir_lower_all_source_mods);
 
-	/* TODO: static bitset ? */
-	BITSET_DECLARE(scalar_ops, nir_num_opcodes);
-	BITSET_ZERO(scalar_ops);
-	BITSET_SET(scalar_ops, nir_op_frsq);
-	BITSET_SET(scalar_ops, nir_op_frcp);
-	BITSET_SET(scalar_ops, nir_op_flog2);
-	BITSET_SET(scalar_ops, nir_op_fexp2);
-	BITSET_SET(scalar_ops, nir_op_fsqrt);
-	BITSET_SET(scalar_ops, nir_op_fcos);
-	BITSET_SET(scalar_ops, nir_op_fsin);
-	OPT_V(ctx->nir, nir_lower_alu_to_scalar, scalar_ops);
+	OPT_V(ctx->nir, nir_lower_alu_to_scalar, ir2_alu_to_scalar_filter_cb, NULL);
 
 	OPT_V(ctx->nir, nir_lower_locals_to_regs);
 

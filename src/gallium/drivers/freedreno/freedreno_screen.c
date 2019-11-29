@@ -354,6 +354,14 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 			return 1;
 		return 0;
 
+	/* Geometry shaders.. */
+	case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+		return 512;
+	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+		return 2048;
+	case PIPE_CAP_MAX_GS_INVOCATIONS:
+		return 32;
+
 	/* Stream output. */
 	case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
 		if (is_ir3(screen))
@@ -367,6 +375,8 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 0;
 	case PIPE_CAP_TGSI_FS_FACE_IS_INTEGER_SYSVAL:
 		return 1;
+	case PIPE_CAP_TGSI_FS_POINT_IS_SYSVAL:
+		return is_a2xx(screen);
 	case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
 		if (is_ir3(screen))
@@ -464,9 +474,6 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
 		if (has_compute(screen))
 			break;
 		return 0;
-	case PIPE_SHADER_GEOMETRY:
-		/* maye we could emulate.. */
-		return 0;
 	default:
 		DBG("unknown shader type %d", shader);
 		return 0;
@@ -538,8 +545,6 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
 		return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_TGSI);
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		return 32;
-	case PIPE_SHADER_CAP_SCALAR_ISA:
-		return is_ir3(screen) ? 1 : 0;
 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
 		if (is_a5xx(screen) || is_a6xx(screen)) {
@@ -890,10 +895,12 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
 	case 430:
 		fd4_screen_init(pscreen);
 		break;
+	case 510:
 	case 530:
 	case 540:
 		fd5_screen_init(pscreen);
 		break;
+	case 618:
 	case 630:
 		fd6_screen_init(pscreen);
 		break;

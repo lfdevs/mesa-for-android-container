@@ -2205,6 +2205,15 @@ texsubimage_error_check(struct gl_context *ctx, GLuint dimensions,
       return GL_TRUE;
    }
 
+   if (!texture_formats_agree(texImage->InternalFormat, format)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION,
+                  "%s(incompatible internalFormat = %s, format = %s)",
+                  callerName,
+                  _mesa_enum_to_string(texImage->InternalFormat),
+                  _mesa_enum_to_string(format));
+      return GL_TRUE;
+   }
+
    GLenum internalFormat = _mesa_is_gles(ctx) ?
       oes_float_internal_format(ctx, texImage->InternalFormat, type) :
       texImage->InternalFormat;
@@ -5997,9 +6006,9 @@ _mesa_get_texbuffer_format(const struct gl_context *ctx, GLenum internalFormat)
       case GL_LUMINANCE32UI_EXT:
          return MESA_FORMAT_L_UINT32;
       case GL_LUMINANCE8_ALPHA8:
-         return MESA_FORMAT_L8A8_UNORM;
+         return MESA_FORMAT_LA_UNORM8;
       case GL_LUMINANCE16_ALPHA16:
-         return MESA_FORMAT_L16A16_UNORM;
+         return MESA_FORMAT_LA_UNORM16;
       case GL_LUMINANCE_ALPHA16F_ARB:
          return MESA_FORMAT_LA_FLOAT16;
       case GL_LUMINANCE_ALPHA32F_ARB:
@@ -6080,11 +6089,11 @@ _mesa_get_texbuffer_format(const struct gl_context *ctx, GLenum internalFormat)
       return MESA_FORMAT_RGBA_UINT32;
 
    case GL_RG8:
-      return MESA_FORMAT_R8G8_UNORM;
+      return MESA_FORMAT_RG_UNORM8;
    case GL_RG16:
       if (_mesa_is_gles(ctx) && !_mesa_has_EXT_texture_norm16(ctx))
          return MESA_FORMAT_NONE;
-      return MESA_FORMAT_R16G16_UNORM;
+      return MESA_FORMAT_RG_UNORM16;
    case GL_RG16F:
       return MESA_FORMAT_RG_FLOAT16;
    case GL_RG32F:
@@ -6417,6 +6426,65 @@ _mesa_TextureBuffer(GLuint texture, GLenum internalFormat, GLuint buffer)
 
    texture_buffer_range(ctx, texObj, internalFormat,
                         bufObj, 0, buffer ? -1 : 0, "glTextureBuffer");
+}
+
+void GLAPIENTRY
+_mesa_TextureBufferEXT(GLuint texture, GLenum target,
+                       GLenum internalFormat, GLuint buffer)
+{
+   struct gl_texture_object *texObj;
+   struct gl_buffer_object *bufObj;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (buffer) {
+      bufObj = _mesa_lookup_bufferobj_err(ctx, buffer, "glTextureBuffer");
+      if (!bufObj)
+         return;
+   } else
+      bufObj = NULL;
+
+   /* Get the texture object by Name. */
+   texObj = _mesa_lookup_or_create_texture(ctx, target, texture,
+                                           false, true,
+                                           "glTextureBufferEXT");
+
+   if (!texObj ||
+       !check_texture_buffer_target(ctx, texObj->Target, "glTextureBufferEXT"))
+      return;
+
+   texture_buffer_range(ctx, texObj, internalFormat,
+                        bufObj, 0, buffer ? -1 : 0, "glTextureBufferEXT");
+}
+
+void GLAPIENTRY
+_mesa_MultiTexBufferEXT(GLenum texunit, GLenum target,
+                        GLenum internalFormat, GLuint buffer)
+{
+   struct gl_texture_object *texObj;
+   struct gl_buffer_object *bufObj;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (buffer) {
+      bufObj = _mesa_lookup_bufferobj_err(ctx, buffer, "glMultiTexBufferEXT");
+      if (!bufObj)
+         return;
+   } else
+      bufObj = NULL;
+
+   /* Get the texture object */
+   texObj = _mesa_get_texobj_by_target_and_texunit(ctx, target,
+                                                   texunit - GL_TEXTURE0,
+                                                   true,
+                                                   "glMultiTexBufferEXT");
+
+   if (!texObj ||
+       !check_texture_buffer_target(ctx, texObj->Target, "glMultiTexBufferEXT"))
+      return;
+
+   texture_buffer_range(ctx, texObj, internalFormat,
+                        bufObj, 0, buffer ? -1 : 0, "glMultiTexBufferEXT");
 }
 
 void GLAPIENTRY

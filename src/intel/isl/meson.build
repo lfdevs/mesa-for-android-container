@@ -48,10 +48,16 @@ isl_gen9_files = files(
   'isl_gen9.h',
 )
 
+isl_gen12_files = files(
+  'isl_gen12.c',
+  'isl_gen12.h',
+)
+
 isl_gen_libs = []
 foreach g : [['40', isl_gen4_files], ['50', []], ['60', isl_gen6_files],
              ['70', isl_gen7_files], ['75', []], ['80', isl_gen8_files],
-             ['90', isl_gen9_files], ['100', []], ['110', []]]
+             ['90', isl_gen9_files], ['100', []], ['110', []],
+             ['120', isl_gen12_files]]
   _gen = g[0]
   isl_gen_libs += static_library(
     'isl_gen@0@'.format(_gen),

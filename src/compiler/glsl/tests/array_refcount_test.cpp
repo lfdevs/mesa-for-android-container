@@ -93,6 +93,8 @@ public:
 void
 array_refcount_test::SetUp()
 {
+   glsl_type_singleton_init_or_ref();
+
    mem_ctx = ralloc_context(NULL);
 
    instructions.make_empty();
@@ -117,6 +119,8 @@ array_refcount_test::TearDown()
 
    ralloc_free(mem_ctx);
    mem_ctx = NULL;
+
+   glsl_type_singleton_decref();
 }
 
 static operand

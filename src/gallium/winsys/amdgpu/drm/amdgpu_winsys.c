@@ -39,8 +39,8 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "amd/common/ac_llvm_util.h"
-#include "amd/common/sid.h"
+#include "ac_llvm_util.h"
+#include "sid.h"
 
 #ifndef AMDGPU_INFO_NUM_VRAM_CPU_PAGE_FAULTS
 #define AMDGPU_INFO_NUM_VRAM_CPU_PAGE_FAULTS	0x1E
@@ -383,7 +383,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
       /* init reference */
       pipe_reference_init(&aws->reference, 1);
 
-      LIST_INITHEAD(&aws->global_bo_list);
+      list_inithead(&aws->global_bo_list);
       aws->bo_export_table = util_hash_table_create(hash_pointer, compare_pointers);
 
       (void) simple_mtx_init(&aws->global_bo_list_lock, mtx_plain);

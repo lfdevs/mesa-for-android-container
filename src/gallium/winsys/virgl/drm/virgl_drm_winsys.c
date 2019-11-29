@@ -186,12 +186,10 @@ virgl_drm_winsys_resource_create(struct virgl_winsys *qws,
    }
 
    res->bind = bind;
-   res->format = format;
 
    res->res_handle = createcmd.res_handle;
    res->bo_handle = createcmd.bo_handle;
    res->size = size;
-   res->stride = stride;
    pipe_reference_init(&res->reference, 1);
    p_atomic_set(&res->external, false);
    p_atomic_set(&res->num_cs_references, 0);
@@ -303,7 +301,11 @@ alloc:
 
 static struct virgl_hw_res *
 virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
-                                        struct winsys_handle *whandle)
+                                        struct winsys_handle *whandle,
+                                        uint32_t *plane,
+                                        uint32_t *stride,
+                                        uint32_t *plane_offset,
+                                        uint64_t *modifier)
 {
    struct virgl_drm_winsys *qdws = virgl_drm_winsys(qws);
    struct drm_gem_open open_arg = {};
@@ -311,10 +313,15 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    struct virgl_hw_res *res = NULL;
    uint32_t handle = whandle->handle;
 
-   if (whandle->offset != 0) {
-      fprintf(stderr, "attempt to import unsupported winsys offset %u\n",
-              whandle->offset);
+   if (whandle->offset != 0 && whandle->type == WINSYS_HANDLE_TYPE_SHARED) {
+      _debug_printf("attempt to import unsupported winsys offset %u\n",
+                    whandle->offset);
       return NULL;
+   } else if (whandle->type == WINSYS_HANDLE_TYPE_FD) {
+      *plane = whandle->plane;
+      *stride = whandle->stride;
+      *plane_offset = whandle->offset;
+      *modifier = whandle->modifier;
    }
 
    mtx_lock(&qdws->bo_handles_mutex);
@@ -375,7 +382,6 @@ virgl_drm_winsys_resource_create_handle(struct virgl_winsys *qws,
    res->res_handle = info_arg.res_handle;
 
    res->size = info_arg.size;
-   res->stride = info_arg.stride;
    pipe_reference_init(&res->reference, 1);
    p_atomic_set(&res->external, true);
    res->num_cs_references = 0;
@@ -468,10 +474,10 @@ static void virgl_drm_resource_wait(struct virgl_winsys *qws,
 
    memset(&waitcmd, 0, sizeof(waitcmd));
    waitcmd.handle = res->bo_handle;
- again:
+
    ret = drmIoctl(qdws->fd, DRM_IOCTL_VIRTGPU_WAIT, &waitcmd);
-   if (ret == -EAGAIN)
-      goto again;
+   if (ret)
+      _debug_printf("waiting got error - %d, slow gpu or hang?\n", errno);
 
    p_atomic_set(&res->maybe_busy, false);
 }
@@ -540,7 +546,7 @@ static void virgl_drm_add_res(struct virgl_drm_winsys *qdws,
                               cbuf->nres * sizeof(struct virgl_hw_buf*),
                               new_nres * sizeof(struct virgl_hw_buf*));
       if (!new_ptr) {
-          fprintf(stderr,"failure to add relocation %d, %d\n", cbuf->cres, new_nres);
+          _debug_printf("failure to add relocation %d, %d\n", cbuf->cres, new_nres);
           return;
       }
       cbuf->res_bo = new_ptr;
@@ -549,7 +555,7 @@ static void virgl_drm_add_res(struct virgl_drm_winsys *qdws,
                         cbuf->nres * sizeof(uint32_t),
                         new_nres * sizeof(uint32_t));
       if (!new_ptr) {
-          fprintf(stderr,"failure to add hlist relocation %d, %d\n", cbuf->cres, cbuf->nres);
+          _debug_printf("failure to add hlist relocation %d, %d\n", cbuf->cres, cbuf->nres);
           return;
       }
       cbuf->res_hlist = new_ptr;
@@ -735,7 +741,7 @@ static int virgl_drm_winsys_submit_cmd(struct virgl_winsys *qws,
 
    ret = drmIoctl(qdws->fd, DRM_IOCTL_VIRTGPU_EXECBUFFER, &eb);
    if (ret == -1)
-      fprintf(stderr,"got error from kernel - expect bad rendering %d\n", errno);
+      _debug_printf("got error from kernel - expect bad rendering %d\n", errno);
    cbuf->base.cdw = 0;
 
    if (qws->supports_fences) {

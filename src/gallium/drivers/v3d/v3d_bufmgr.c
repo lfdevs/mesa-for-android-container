@@ -65,7 +65,7 @@ v3d_bo_dump_stats(struct v3d_screen *screen)
         fprintf(stderr, "  BOs cached:      %d\n", cache_count);
         fprintf(stderr, "  BOs cached size: %dkb\n", cache_size / 1024);
 
-        if (!list_empty(&cache->time_list)) {
+        if (!list_is_empty(&cache->time_list)) {
                 struct v3d_bo *first = list_first_entry(&cache->time_list,
                                                         struct v3d_bo,
                                                         time_list);
@@ -103,7 +103,7 @@ v3d_bo_from_cache(struct v3d_screen *screen, uint32_t size, const char *name)
 
         struct v3d_bo *bo = NULL;
         mtx_lock(&cache->lock);
-        if (!list_empty(&cache->size_list[page_index])) {
+        if (!list_is_empty(&cache->size_list[page_index])) {
                 bo = list_first_entry(&cache->size_list[page_index],
                                       struct v3d_bo, size_list);
 
@@ -170,7 +170,7 @@ v3d_bo_alloc(struct v3d_screen *screen, uint32_t size, const char *name)
         bo->offset = create.offset;
 
         if (ret != 0) {
-                if (!list_empty(&screen->bo_cache.time_list) &&
+                if (!list_is_empty(&screen->bo_cache.time_list) &&
                     !cleared_and_retried) {
                         cleared_and_retried = true;
                         v3d_bo_cache_free_all(&screen->bo_cache);
@@ -300,7 +300,7 @@ v3d_bo_last_unreference_locked_timed(struct v3d_bo *bo, time_t time)
                  */
                 for (int i = 0; i < cache->size_list_size; i++) {
                         struct list_head *old_head = &cache->size_list[i];
-                        if (list_empty(old_head))
+                        if (list_is_empty(old_head))
                                 list_inithead(&new_list[i]);
                         else {
                                 new_list[i].next = old_head->next;

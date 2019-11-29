@@ -118,7 +118,7 @@ intel_init_texture_formats(struct gl_context *ctx)
    if (intel->gen == 3)
       ctx->TextureFormatSupported[MESA_FORMAT_A_UNORM8] = true;
    ctx->TextureFormatSupported[MESA_FORMAT_I_UNORM8] = true;
-   ctx->TextureFormatSupported[MESA_FORMAT_L8A8_UNORM] = true;
+   ctx->TextureFormatSupported[MESA_FORMAT_LA_UNORM8] = true;
 
    /* Depth and stencil */
    if (intel->gen == 3) {

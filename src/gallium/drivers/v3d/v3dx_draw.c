@@ -340,14 +340,19 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
 
         /* Upload the uniforms to the indirect CL first */
         struct v3d_cl_reloc fs_uniforms =
-                v3d_write_uniforms(v3d, v3d->prog.fs,
+                v3d_write_uniforms(v3d, job, v3d->prog.fs,
                                    PIPE_SHADER_FRAGMENT);
         struct v3d_cl_reloc vs_uniforms =
-                v3d_write_uniforms(v3d, v3d->prog.vs,
+                v3d_write_uniforms(v3d, job, v3d->prog.vs,
                                    PIPE_SHADER_VERTEX);
         struct v3d_cl_reloc cs_uniforms =
-                v3d_write_uniforms(v3d, v3d->prog.cs,
+                v3d_write_uniforms(v3d, job, v3d->prog.cs,
                                    PIPE_SHADER_VERTEX);
+
+        /* Update the cache dirty flag based on the shader progs data */
+        job->tmu_dirty_rcl |= v3d->prog.cs->prog_data.vs->base.tmu_dirty_rcl;
+        job->tmu_dirty_rcl |= v3d->prog.vs->prog_data.vs->base.tmu_dirty_rcl;
+        job->tmu_dirty_rcl |= v3d->prog.fs->prog_data.fs->base.tmu_dirty_rcl;
 
         /* See GFXH-930 workaround below */
         uint32_t num_elements_to_emit = MAX2(vtx->num_elements, 1);
@@ -553,8 +558,6 @@ v3d_emit_gl_shader_state(struct v3d_context *v3d,
         v3d_bo_unreference(&cs_uniforms.bo);
         v3d_bo_unreference(&vs_uniforms.bo);
         v3d_bo_unreference(&fs_uniforms.bo);
-
-        job->shader_rec_count++;
 }
 
 /**
@@ -696,8 +699,8 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 job->submit.in_sync_bcl = v3d->out_sync;
         }
 
-        /* Mark SSBOs as being written.  We don't actually know which ones are
-         * read vs written, so just assume the worst
+        /* Mark SSBOs and images as being written.  We don't actually know
+         * which ones are read vs written, so just assume the worst.
          */
         for (int s = 0; s < PIPE_SHADER_COMPUTE; s++) {
                 foreach_bit(i, v3d->ssbo[s].enabled_mask) {
@@ -852,8 +855,6 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                         }
                 }
 
-                job->draw_calls_queued++;
-
                 if (info->has_user_indices)
                         pipe_resource_reference(&prsc, NULL);
         } else {
@@ -899,6 +900,8 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
                 cl_emit(&job->bcl, TRANSFORM_FEEDBACK_FLUSH_AND_COUNT, flush);
 
         job->draw_calls_queued++;
+        if (v3d->streamout.num_targets)
+           job->tf_draw_calls_queued++;
 
         /* Increment the TF offsets by how many verts we wrote.  XXX: This
          * needs some clamping to the buffer size.
@@ -954,6 +957,176 @@ v3d_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
         if (V3D_DEBUG & V3D_DEBUG_ALWAYS_FLUSH)
                 v3d_flush(pctx);
 }
+
+#if V3D_VERSION >= 41
+#define V3D_CSD_CFG012_WG_COUNT_SHIFT 16
+#define V3D_CSD_CFG012_WG_OFFSET_SHIFT 0
+/* Allow this dispatch to start while the last one is still running. */
+#define V3D_CSD_CFG3_OVERLAP_WITH_PREV (1 << 26)
+/* Maximum supergroup ID.  6 bits. */
+#define V3D_CSD_CFG3_MAX_SG_ID_SHIFT 20
+/* Batches per supergroup minus 1.  8 bits. */
+#define V3D_CSD_CFG3_BATCHES_PER_SG_M1_SHIFT 12
+/* Workgroups per supergroup, 0 means 16 */
+#define V3D_CSD_CFG3_WGS_PER_SG_SHIFT 8
+#define V3D_CSD_CFG3_WG_SIZE_SHIFT 0
+
+#define V3D_CSD_CFG5_PROPAGATE_NANS (1 << 2)
+#define V3D_CSD_CFG5_SINGLE_SEG (1 << 1)
+#define V3D_CSD_CFG5_THREADING (1 << 0)
+
+static void
+v3d_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+        struct v3d_screen *screen = v3d->screen;
+
+        v3d_predraw_check_stage_inputs(pctx, PIPE_SHADER_COMPUTE);
+
+        v3d_update_compiled_cs(v3d);
+
+        if (!v3d->prog.compute->resource) {
+                static bool warned = false;
+                if (!warned) {
+                        fprintf(stderr,
+                                "Compute shader failed to compile.  "
+                                "Expect corruption.\n");
+                        warned = true;
+                }
+                return;
+        }
+
+        /* Some of the units of scale:
+         *
+         * - Batches of 16 work items (shader invocations) that will be queued
+         *   to the run on a QPU at once.
+         *
+         * - Workgroups composed of work items based on the shader's layout
+         *   declaration.
+         *
+         * - Supergroups of 1-16 workgroups.  There can only be 16 supergroups
+         *   running at a time on the core, so we want to keep them large to
+         *   keep the QPUs busy, but a whole supergroup will sync at a barrier
+         *   so we want to keep them small if one is present.
+         */
+        struct drm_v3d_submit_csd submit = { 0 };
+        struct v3d_job *job = v3d_job_create(v3d);
+
+        /* Set up the actual number of workgroups, synchronously mapping the
+         * indirect buffer if necessary to get the dimensions.
+         */
+        if (info->indirect) {
+                struct pipe_transfer *transfer;
+                uint32_t *map = pipe_buffer_map_range(pctx, info->indirect,
+                                                      info->indirect_offset,
+                                                      3 * sizeof(uint32_t),
+                                                      PIPE_TRANSFER_READ,
+                                                      &transfer);
+                memcpy(v3d->compute_num_workgroups, map, 3 * sizeof(uint32_t));
+                pipe_buffer_unmap(pctx, transfer);
+
+                if (v3d->compute_num_workgroups[0] == 0 ||
+                    v3d->compute_num_workgroups[1] == 0 ||
+                    v3d->compute_num_workgroups[2] == 0) {
+                        /* Nothing to dispatch, so skip the draw (CSD can't
+                         * handle 0 workgroups).
+                         */
+                        return;
+                }
+        } else {
+                v3d->compute_num_workgroups[0] = info->grid[0];
+                v3d->compute_num_workgroups[1] = info->grid[1];
+                v3d->compute_num_workgroups[2] = info->grid[2];
+        }
+
+        for (int i = 0; i < 3; i++) {
+                submit.cfg[i] |= (v3d->compute_num_workgroups[i] <<
+                                  V3D_CSD_CFG012_WG_COUNT_SHIFT);
+        }
+
+        perf_debug("CSD only using single WG per SG currently, "
+                   "should increase that when possible.");
+        int wgs_per_sg = 1;
+        int wg_size = info->block[0] * info->block[1] * info->block[2];
+        submit.cfg[3] |= wgs_per_sg << V3D_CSD_CFG3_WGS_PER_SG_SHIFT;
+        submit.cfg[3] |= ((DIV_ROUND_UP(wgs_per_sg * wg_size, 16) - 1) <<
+                          V3D_CSD_CFG3_BATCHES_PER_SG_M1_SHIFT);
+        submit.cfg[3] |= (wg_size & 0xff) << V3D_CSD_CFG3_WG_SIZE_SHIFT;
+
+        int batches_per_wg = DIV_ROUND_UP(wg_size, 16);
+        /* Number of batches the dispatch will invoke (minus 1). */
+        submit.cfg[4] = batches_per_wg * (v3d->compute_num_workgroups[0] *
+                                          v3d->compute_num_workgroups[1] *
+                                          v3d->compute_num_workgroups[2]) - 1;
+
+        /* Make sure we didn't accidentally underflow. */
+        assert(submit.cfg[4] != ~0);
+
+        v3d_job_add_bo(job, v3d_resource(v3d->prog.compute->resource)->bo);
+        submit.cfg[5] = (v3d_resource(v3d->prog.compute->resource)->bo->offset +
+                         v3d->prog.compute->offset);
+        submit.cfg[5] |= V3D_CSD_CFG5_PROPAGATE_NANS;
+        if (v3d->prog.compute->prog_data.base->single_seg)
+                submit.cfg[5] |= V3D_CSD_CFG5_SINGLE_SEG;
+        if (v3d->prog.compute->prog_data.base->threads == 4)
+                submit.cfg[5] |= V3D_CSD_CFG5_THREADING;
+
+        if (v3d->prog.compute->prog_data.compute->shared_size) {
+                v3d->compute_shared_memory =
+                        v3d_bo_alloc(v3d->screen,
+                                     v3d->prog.compute->prog_data.compute->shared_size *
+                                     wgs_per_sg,
+                                     "shared_vars");
+        }
+
+        struct v3d_cl_reloc uniforms = v3d_write_uniforms(v3d, job,
+                                                          v3d->prog.compute,
+                                                          PIPE_SHADER_COMPUTE);
+        v3d_job_add_bo(job, uniforms.bo);
+        submit.cfg[6] = uniforms.bo->offset + uniforms.offset;
+
+        /* Pull some job state that was stored in a SUBMIT_CL struct out to
+         * our SUBMIT_CSD struct
+         */
+        submit.bo_handles = job->submit.bo_handles;
+        submit.bo_handle_count = job->submit.bo_handle_count;
+
+        /* Serialize this in the rest of our command stream. */
+        submit.in_sync = v3d->out_sync;
+        submit.out_sync = v3d->out_sync;
+
+        if (!(V3D_DEBUG & V3D_DEBUG_NORAST)) {
+                int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_SUBMIT_CSD,
+                                    &submit);
+                static bool warned = false;
+                if (ret && !warned) {
+                        fprintf(stderr, "CSD submit call returned %s.  "
+                                "Expect corruption.\n", strerror(errno));
+                        warned = true;
+                }
+        }
+
+        v3d_job_free(v3d, job);
+
+        /* Mark SSBOs as being written.. we don't actually know which ones are
+         * read vs written, so just assume the worst
+         */
+        foreach_bit(i, v3d->ssbo[PIPE_SHADER_COMPUTE].enabled_mask) {
+                struct v3d_resource *rsc = v3d_resource(
+                        v3d->ssbo[PIPE_SHADER_COMPUTE].sb[i].buffer);
+                rsc->writes++; /* XXX */
+        }
+
+        foreach_bit(i, v3d->shaderimg[PIPE_SHADER_COMPUTE].enabled_mask) {
+                struct v3d_resource *rsc = v3d_resource(
+                        v3d->shaderimg[PIPE_SHADER_COMPUTE].si[i].base.resource);
+                rsc->writes++;
+        }
+
+        v3d_bo_unreference(&uniforms.bo);
+        v3d_bo_unreference(&v3d->compute_shared_memory);
+}
+#endif
 
 /**
  * Implements gallium's clear() hook (glClear()) by drawing a pair of triangles.
@@ -1131,4 +1304,8 @@ v3dX(draw_init)(struct pipe_context *pctx)
         pctx->clear = v3d_clear;
         pctx->clear_render_target = v3d_clear_render_target;
         pctx->clear_depth_stencil = v3d_clear_depth_stencil;
+#if V3D_VERSION >= 41
+        if (v3d_context(pctx)->screen->has_csd)
+                pctx->launch_grid = v3d_launch_grid;
+#endif
 }

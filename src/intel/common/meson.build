@@ -21,6 +21,9 @@
 # TODO: android?
 
 files_libintel_common = files(
+  'gen_aux_map.c',
+  'gen_aux_map.h',
+  'gen_buffer_alloc.h',
   'gen_clflush.h',
   'gen_batch_decoder.c',
   'gen_decoder.c',

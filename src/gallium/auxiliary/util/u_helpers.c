@@ -52,6 +52,8 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
 
    dst += start_slot;
 
+   *enabled_buffers &= ~u_bit_consecutive(start_slot, count);
+
    if (src) {
       for (i = 0; i < count; i++) {
          if (src[i].buffer.resource)
@@ -66,15 +68,12 @@ void util_set_vertex_buffers_mask(struct pipe_vertex_buffer *dst,
       /* Copy over the other members of pipe_vertex_buffer. */
       memcpy(dst, src, count * sizeof(struct pipe_vertex_buffer));
 
-      *enabled_buffers &= ~(((1ull << count) - 1) << start_slot);
       *enabled_buffers |= bitmask << start_slot;
    }
    else {
       /* Unreference the buffers. */
       for (i = 0; i < count; i++)
          pipe_vertex_buffer_unreference(&dst[i]);
-
-      *enabled_buffers &= ~(((1ull << count) - 1) << start_slot);
    }
 }
 

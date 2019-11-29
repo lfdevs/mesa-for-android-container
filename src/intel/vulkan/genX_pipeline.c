@@ -1005,6 +1005,7 @@ emit_ds_state(struct anv_pipeline *pipeline,
       pipeline->stencil_test_enable = false;
       pipeline->writes_depth = false;
       pipeline->depth_test_enable = false;
+      pipeline->depth_bounds_test_enable = false;
       memset(depth_stencil_dw, 0, sizeof(depth_stencil_dw));
       return;
    }
@@ -1021,8 +1022,7 @@ emit_ds_state(struct anv_pipeline *pipeline,
    pipeline->stencil_test_enable = info.stencilTestEnable;
    pipeline->writes_depth = info.depthWriteEnable;
    pipeline->depth_test_enable = info.depthTestEnable;
-
-   /* VkBool32 depthBoundsTestEnable; // optional (depth_bounds_test) */
+   pipeline->depth_bounds_test_enable = info.depthBoundsTestEnable;
 
 #if GEN_GEN <= 7
    struct GENX(DEPTH_STENCIL_STATE) depth_stencil = {
@@ -2215,12 +2215,15 @@ compute_pipeline_create(
 
    pipeline->blend_state.map = NULL;
 
-   result = anv_reloc_list_init(&pipeline->batch_relocs,
-                                pAllocator ? pAllocator : &device->alloc);
+   const VkAllocationCallbacks *alloc =
+      pAllocator ? pAllocator : &device->alloc;
+
+   result = anv_reloc_list_init(&pipeline->batch_relocs, alloc);
    if (result != VK_SUCCESS) {
       vk_free2(&device->alloc, pAllocator, pipeline);
       return result;
    }
+   pipeline->batch.alloc = alloc;
    pipeline->batch.next = pipeline->batch.start = pipeline->batch_data;
    pipeline->batch.end = pipeline->batch.start + sizeof(pipeline->batch_data);
    pipeline->batch.relocs = &pipeline->batch_relocs;

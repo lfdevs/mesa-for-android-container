@@ -289,8 +289,13 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
    unsigned i;
 
    for (i = 0; i < ARRAY_SIZE(llvm->jit_context.vs_constants); ++i) {
+      /*
+       * There could be a potential issue with rounding this up, as the
+       * shader expects 16-byte allocations, the fix is likely to move
+       * to LOAD intrinsic in the future and remove the vec4 constraint.
+       */
       int num_consts =
-         draw->pt.user.vs_constants_size[i] / (sizeof(float) * 4);
+         DIV_ROUND_UP(draw->pt.user.vs_constants_size[i], (sizeof(float) * 4));
       llvm->jit_context.vs_constants[i] = draw->pt.user.vs_constants[i];
       llvm->jit_context.num_vs_constants[i] = num_consts;
       if (num_consts == 0) {
@@ -308,7 +313,7 @@ llvm_middle_end_bind_parameters(struct draw_pt_middle_end *middle)
 
    for (i = 0; i < ARRAY_SIZE(llvm->gs_jit_context.constants); ++i) {
       int num_consts =
-         draw->pt.user.gs_constants_size[i] / (sizeof(float) * 4);
+         DIV_ROUND_UP(draw->pt.user.gs_constants_size[i], (sizeof(float) * 4));
       llvm->gs_jit_context.constants[i] = draw->pt.user.gs_constants[i];
       llvm->gs_jit_context.num_constants[i] = num_consts;
       if (num_consts == 0) {

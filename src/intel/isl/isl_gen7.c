@@ -213,11 +213,14 @@ isl_gen6_filter_tiling(const struct isl_device *dev,
       *flags &= ISL_TILING_ANY_Y_MASK;
    }
 
-   /* Separate stencil requires W tiling, and W tiling requires separate
-    * stencil.
-    */
    if (isl_surf_usage_is_stencil(info->usage)) {
-      *flags &= ISL_TILING_W_BIT;
+      if (ISL_DEV_GEN(dev) >= 12) {
+         /* Stencil requires Y. */
+         *flags &= ISL_TILING_ANY_Y_MASK;
+      } else {
+         /* Stencil requires W. */
+         *flags &= ISL_TILING_W_BIT;
+      }
    } else {
       *flags &= ~ISL_TILING_W_BIT;
    }

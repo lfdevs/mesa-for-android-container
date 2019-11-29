@@ -333,8 +333,10 @@ brw_nir_lower_gl_images(nir_shader *shader,
          case nir_intrinsic_image_deref_load:
          case nir_intrinsic_image_deref_store:
          case nir_intrinsic_image_deref_atomic_add:
-         case nir_intrinsic_image_deref_atomic_min:
-         case nir_intrinsic_image_deref_atomic_max:
+         case nir_intrinsic_image_deref_atomic_imin:
+         case nir_intrinsic_image_deref_atomic_umin:
+         case nir_intrinsic_image_deref_atomic_imax:
+         case nir_intrinsic_image_deref_atomic_umax:
          case nir_intrinsic_image_deref_atomic_and:
          case nir_intrinsic_image_deref_atomic_or:
          case nir_intrinsic_image_deref_atomic_xor:
@@ -405,7 +407,8 @@ brw_nir_lower_legacy_clipping(nir_shader *nir, int nr_userclip_plane_consts,
 
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-   nir_lower_clip_vs(nir, (1 << nr_userclip_plane_consts) - 1, true);
+   nir_lower_clip_vs(nir, (1 << nr_userclip_plane_consts) - 1, true, false,
+                     NULL);
    nir_lower_io_to_temporaries(nir, impl, true, false);
    nir_lower_global_vars_to_local(nir);
    nir_lower_vars_to_ssa(nir);

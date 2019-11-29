@@ -26,6 +26,8 @@
 
 #include <stdint.h>
 
+#include "dev/gen_device_info.h"
+
 struct gen_device_info;
 struct gen_perf_query_result;
 
@@ -131,5 +133,67 @@ int gen_perf_query_result_write_mdapi(void *data, uint32_t data_size,
                                       const struct gen_device_info *devinfo,
                                       const struct gen_perf_query_result *result,
                                       uint64_t freq_start, uint64_t freq_end);
+
+static inline void gen_perf_query_mdapi_write_perfcntr(void *data, uint32_t data_size,
+                                                       const struct gen_device_info *devinfo,
+                                                       const uint64_t *begin_perf_cntrs,
+                                                       const uint64_t *end_perf_cntrs)
+{
+   /* Only bits 0:43 of the 64bit registers contains the value. */
+   const uint64_t mask = (1ull << 44) - 1;
+
+   switch (devinfo->gen) {
+   case 8: {
+      if (data_size < sizeof(struct gen8_mdapi_metrics))
+         return;
+      struct gen8_mdapi_metrics *mdapi_data = data;
+      mdapi_data->PerfCounter1 =
+         (end_perf_cntrs[0] & mask) - (begin_perf_cntrs[0] & mask);
+      mdapi_data->PerfCounter2 =
+         (end_perf_cntrs[1] & mask) - (begin_perf_cntrs[1] & mask);
+      break;
+   }
+   case 9:
+   case 10:
+   case 11: {
+      if (data_size < sizeof(struct gen9_mdapi_metrics))
+         return;
+      struct gen9_mdapi_metrics *mdapi_data = data;
+      mdapi_data->PerfCounter1 =
+         (end_perf_cntrs[0] & mask) - (begin_perf_cntrs[0] & mask);
+      mdapi_data->PerfCounter2 =
+         (end_perf_cntrs[1] & mask) - (begin_perf_cntrs[1] & mask);
+      break;
+   }
+   default:
+      break;
+   }
+}
+
+static inline void gen_perf_query_mdapi_write_marker(void *data, uint32_t data_size,
+                                                     const struct gen_device_info *devinfo,
+                                                     uint64_t value)
+{
+   switch (devinfo->gen) {
+   case 8: {
+      if (data_size < sizeof(struct gen8_mdapi_metrics))
+         return;
+      struct gen8_mdapi_metrics *mdapi_data = data;
+      mdapi_data->MarkerUser = value;
+      break;
+   }
+   case 9:
+   case 10:
+   case 11: {
+      if (data_size < sizeof(struct gen9_mdapi_metrics))
+         return;
+      struct gen9_mdapi_metrics *mdapi_data = data;
+      mdapi_data->MarkerUser = value;
+      break;
+   }
+   default:
+      break;
+   }
+}
 
 #endif /* GEN_PERF_MDAPI_H */

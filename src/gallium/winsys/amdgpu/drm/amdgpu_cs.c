@@ -349,32 +349,49 @@ static enum pipe_reset_status
 amdgpu_ctx_query_reset_status(struct radeon_winsys_ctx *rwctx)
 {
    struct amdgpu_ctx *ctx = (struct amdgpu_ctx*)rwctx;
-   uint32_t result, hangs;
    int r;
 
    /* Return a failure due to a GPU hang. */
-   r = amdgpu_cs_query_reset_state(ctx->ctx, &result, &hangs);
-   if (r) {
-      fprintf(stderr, "amdgpu: amdgpu_cs_query_reset_state failed. (%i)\n", r);
-      return PIPE_NO_RESET;
+   if (ctx->ws->info.drm_minor >= 24) {
+      uint64_t flags;
+
+      r = amdgpu_cs_query_reset_state2(ctx->ctx, &flags);
+      if (r) {
+         fprintf(stderr, "amdgpu: amdgpu_cs_query_reset_state failed. (%i)\n", r);
+         return PIPE_NO_RESET;
+      }
+
+      if (flags & AMDGPU_CTX_QUERY2_FLAGS_RESET) {
+         if (flags & AMDGPU_CTX_QUERY2_FLAGS_GUILTY)
+            return PIPE_GUILTY_CONTEXT_RESET;
+         else
+            return PIPE_INNOCENT_CONTEXT_RESET;
+      }
+   } else {
+      uint32_t result, hangs;
+
+      r = amdgpu_cs_query_reset_state(ctx->ctx, &result, &hangs);
+      if (r) {
+         fprintf(stderr, "amdgpu: amdgpu_cs_query_reset_state failed. (%i)\n", r);
+         return PIPE_NO_RESET;
+      }
+
+      switch (result) {
+      case AMDGPU_CTX_GUILTY_RESET:
+         return PIPE_GUILTY_CONTEXT_RESET;
+      case AMDGPU_CTX_INNOCENT_RESET:
+         return PIPE_INNOCENT_CONTEXT_RESET;
+      case AMDGPU_CTX_UNKNOWN_RESET:
+         return PIPE_UNKNOWN_CONTEXT_RESET;
+      }
    }
 
-   switch (result) {
-   case AMDGPU_CTX_GUILTY_RESET:
-      return PIPE_GUILTY_CONTEXT_RESET;
-   case AMDGPU_CTX_INNOCENT_RESET:
-      return PIPE_INNOCENT_CONTEXT_RESET;
-   case AMDGPU_CTX_UNKNOWN_RESET:
-      return PIPE_UNKNOWN_CONTEXT_RESET;
-   case AMDGPU_CTX_NO_RESET:
-   default:
-      /* Return a failure due to a rejected command submission. */
-      if (ctx->ws->num_total_rejected_cs > ctx->initial_num_total_rejected_cs) {
-         return ctx->num_rejected_cs ? PIPE_GUILTY_CONTEXT_RESET :
-                                       PIPE_INNOCENT_CONTEXT_RESET;
-      }
-      return PIPE_NO_RESET;
+   /* Return a failure due to a rejected command submission. */
+   if (ctx->ws->num_total_rejected_cs > ctx->initial_num_total_rejected_cs) {
+      return ctx->num_rejected_cs ? PIPE_GUILTY_CONTEXT_RESET :
+                                    PIPE_INNOCENT_CONTEXT_RESET;
    }
+   return PIPE_NO_RESET;
 }
 
 /* COMMAND SUBMISSION */
@@ -1663,9 +1680,6 @@ static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
       if (ws->info.chip_class <= GFX6) {
          while (rcs->current.cdw & 7)
             radeon_emit(rcs, 0xf0000000); /* NOP packet */
-      } else {
-         while (rcs->current.cdw & 7)
-            radeon_emit(rcs, 0x00000000); /* NOP packet */
       }
       break;
    case RING_GFX:
@@ -1756,7 +1770,7 @@ static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
 
       /* Submit. */
       util_queue_add_job(&ws->cs_queue, cs, &cs->flush_completed,
-                         amdgpu_cs_submit_ib, NULL);
+                         amdgpu_cs_submit_ib, NULL, 0);
       /* The submission has been queued, unlock the fence now. */
       simple_mtx_unlock(&ws->bo_fence_lock);
 

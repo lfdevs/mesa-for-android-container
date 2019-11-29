@@ -451,9 +451,9 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
 	unsigned num_elements = tex->surface.u.gfx9.dcc_retile_num_elements;
 	struct pipe_image_view img[3];
 
-	assert(tex->dcc_retile_map_offset && tex->dcc_retile_map_offset <= UINT_MAX);
-	assert(tex->dcc_offset && tex->dcc_offset <= UINT_MAX);
-	assert(tex->display_dcc_offset && tex->display_dcc_offset <= UINT_MAX);
+	assert(tex->surface.dcc_retile_map_offset && tex->surface.dcc_retile_map_offset <= UINT_MAX);
+	assert(tex->surface.dcc_offset && tex->surface.dcc_offset <= UINT_MAX);
+	assert(tex->surface.display_dcc_offset && tex->surface.display_dcc_offset <= UINT_MAX);
 
 	for (unsigned i = 0; i < 3; i++) {
 		img[i].resource = &tex->buffer.b.b;
@@ -463,15 +463,15 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
 
 	img[0].format = use_uint16 ? PIPE_FORMAT_R16G16B16A16_UINT :
 				     PIPE_FORMAT_R32G32B32A32_UINT;
-	img[0].u.buf.offset = tex->dcc_retile_map_offset;
+	img[0].u.buf.offset = tex->surface.dcc_retile_map_offset;
 	img[0].u.buf.size = num_elements * (use_uint16 ? 2 : 4);
 
 	img[1].format = PIPE_FORMAT_R8_UINT;
-	img[1].u.buf.offset = tex->dcc_offset;
+	img[1].u.buf.offset = tex->surface.dcc_offset;
 	img[1].u.buf.size = tex->surface.dcc_size;
 
 	img[2].format = PIPE_FORMAT_R8_UINT;
-	img[2].u.buf.offset = tex->display_dcc_offset;
+	img[2].u.buf.offset = tex->surface.display_dcc_offset;
 	img[2].u.buf.size = tex->surface.u.gfx9.display_dcc_size;
 
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 3, img);
@@ -503,6 +503,91 @@ void si_retile_dcc(struct si_context *sctx, struct si_texture *tex)
 	/* Restore states. */
 	ctx->bind_compute_state(ctx, saved_cs);
 	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 3, saved_img);
+}
+
+/* Expand FMASK to make it identity, so that image stores can ignore it. */
+void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex)
+{
+	struct si_context *sctx = (struct si_context *)ctx;
+	bool is_array = tex->target == PIPE_TEXTURE_2D_ARRAY;
+	unsigned log_fragments = util_logbase2(tex->nr_storage_samples);
+	unsigned log_samples = util_logbase2(tex->nr_samples);
+	assert(tex->nr_samples >= 2);
+
+	/* EQAA FMASK expansion is unimplemented. */
+	if (tex->nr_samples != tex->nr_storage_samples)
+		return;
+
+	si_compute_internal_begin(sctx);
+
+	/* Flush caches and sync engines. */
+	sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH |
+		       si_get_flush_flags(sctx, SI_COHERENCY_SHADER, L2_STREAM);
+	si_make_CB_shader_coherent(sctx, tex->nr_samples, true,
+				   true /* DCC is not possible with image stores */);
+
+	/* Save states. */
+	void *saved_cs = sctx->cs_shader_state.program;
+	struct pipe_image_view saved_image = {0};
+	util_copy_image_view(&saved_image, &sctx->images[PIPE_SHADER_COMPUTE].views[0]);
+
+	/* Bind the image. */
+	struct pipe_image_view image = {0};
+	image.resource = tex;
+	/* Don't set WRITE so as not to trigger FMASK expansion, causing
+	 * an infinite loop. */
+	image.shader_access = image.access = PIPE_IMAGE_ACCESS_READ;
+	image.format = util_format_linear(tex->format);
+	if (is_array)
+		image.u.tex.last_layer = tex->array_size - 1;
+
+	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &image);
+
+	/* Bind the shader. */
+	void **shader = &sctx->cs_fmask_expand[log_samples - 1][is_array];
+	if (!*shader)
+		*shader = si_create_fmask_expand_cs(ctx, tex->nr_samples, is_array);
+	ctx->bind_compute_state(ctx, *shader);
+
+	/* Dispatch compute. */
+	struct pipe_grid_info info = {0};
+	info.block[0] = 8;
+	info.last_block[0] = tex->width0 % 8;
+	info.block[1] = 8;
+	info.last_block[1] = tex->height0 % 8;
+	info.block[2] = 1;
+	info.grid[0] = DIV_ROUND_UP(tex->width0, 8);
+	info.grid[1] = DIV_ROUND_UP(tex->height0, 8);
+	info.grid[2] = is_array ? tex->array_size : 1;
+
+	ctx->launch_grid(ctx, &info);
+
+	/* Flush caches and sync engines. */
+	sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH |
+		       (sctx->chip_class <= GFX8 ? SI_CONTEXT_WB_L2 : 0) |
+		       si_get_flush_flags(sctx, SI_COHERENCY_SHADER, L2_STREAM);
+
+	/* Restore previous states. */
+	ctx->bind_compute_state(ctx, saved_cs);
+	ctx->set_shader_images(ctx, PIPE_SHADER_COMPUTE, 0, 1, &saved_image);
+	si_compute_internal_end(sctx);
+
+	/* Array of fully expanded FMASK values, arranged by [log2(fragments)][log2(samples)-1]. */
+#define INVALID 0 /* never used */
+	static const uint64_t fmask_expand_values[][4] = {
+		/* samples */
+		/* 2 (8 bpp) 4 (8 bpp)   8 (8-32bpp) 16 (16-64bpp)      fragments */
+		{0x02020202, 0x0E0E0E0E, 0xFEFEFEFE, 0xFFFEFFFE},         /* 1 */
+		{0x02020202, 0xA4A4A4A4, 0xAAA4AAA4, 0xAAAAAAA4},         /* 2 */
+		{INVALID,    0xE4E4E4E4, 0x44443210, 0x4444444444443210}, /* 4 */
+		{INVALID,    INVALID,    0x76543210, 0x8888888876543210}, /* 8 */
+	};
+
+	/* Clear FMASK to identity. */
+	struct si_texture *stex = (struct si_texture*)tex;
+	si_clear_buffer(sctx, tex, stex->surface.fmask_offset, stex->surface.fmask_size,
+			(uint32_t*)&fmask_expand_values[log_fragments][log_samples - 1],
+			4, SI_COHERENCY_SHADER, false);
 }
 
 void si_init_compute_blit_functions(struct si_context *sctx)

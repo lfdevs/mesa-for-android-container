@@ -8,6 +8,9 @@ BLORP_FILES = \
 	blorp/blorp_priv.h
 
 COMMON_FILES = \
+	common/gen_aux_map.c \
+	common/gen_aux_map.h \
+	common/gen_buffer_alloc.h \
 	common/gen_clflush.h \
 	common/gen_batch_decoder.c \
 	common/gen_decoder.c \
@@ -43,7 +46,7 @@ COMPILER_FILES = \
 	compiler/brw_disasm.c \
 	compiler/brw_disasm_info.c \
 	compiler/brw_disasm_info.h \
-	compiler/brw_eu.c \
+	compiler/brw_eu.cpp \
 	compiler/brw_eu_compact.c \
 	compiler/brw_eu_defines.h \
 	compiler/brw_eu_emit.c \
@@ -68,6 +71,7 @@ COMPILER_FILES = \
 	compiler/brw_fs_reg_allocate.cpp \
 	compiler/brw_fs_register_coalesce.cpp \
 	compiler/brw_fs_saturate_propagation.cpp \
+	compiler/brw_fs_scoreboard.cpp \
 	compiler/brw_fs_sel_peephole.cpp \
 	compiler/brw_fs_validate.cpp \
 	compiler/brw_fs_visitor.cpp \
@@ -81,6 +85,7 @@ COMPILER_FILES = \
 	compiler/brw_nir_analyze_boolean_resolves.c \
 	compiler/brw_nir_analyze_ubo_ranges.c \
 	compiler/brw_nir_attribute_workarounds.c \
+	compiler/brw_nir_lower_alpha_to_coverage.c \
 	compiler/brw_nir_lower_conversions.c \
 	compiler/brw_nir_lower_cs_intrinsics.c \
 	compiler/brw_nir_lower_image_load_store.c \
@@ -143,7 +148,8 @@ GENXML_XML_FILES = \
 	genxml/gen8.xml \
 	genxml/gen9.xml \
 	genxml/gen10.xml \
-	genxml/gen11.xml
+	genxml/gen11.xml \
+	genxml/gen12.xml
 
 GENXML_GENERATED_PACK_FILES = \
 	genxml/gen4_pack.h \
@@ -155,7 +161,8 @@ GENXML_GENERATED_PACK_FILES = \
 	genxml/gen8_pack.h \
 	genxml/gen9_pack.h \
 	genxml/gen10_pack.h \
-	genxml/gen11_pack.h
+	genxml/gen11_pack.h \
+	genxml/gen12_pack.h
 
 GENXML_GENERATED_FILES = \
 	$(GENXML_GENERATED_PACK_FILES) \
@@ -217,6 +224,12 @@ ISL_GEN11_FILES = \
 	isl/isl_emit_depth_stencil.c \
 	isl/isl_surface_state.c
 
+ISL_GEN12_FILES = \
+	isl/isl_gen12.c \
+	isl/isl_gen12.h \
+	isl/isl_emit_depth_stencil.c \
+	isl/isl_surface_state.c
+
 ISL_GENERATED_FILES = \
 	isl/isl_format_layout.c
 
@@ -249,6 +262,7 @@ VULKAN_FILES := \
 	vulkan/anv_nir_lower_push_constants.c \
 	vulkan/anv_nir_lower_ycbcr_textures.c \
 	vulkan/anv_pass.c \
+	vulkan/anv_perf.c \
 	vulkan/anv_pipeline.c \
 	vulkan/anv_pipeline_cache.c \
 	vulkan/anv_private.h \
@@ -313,6 +327,10 @@ VULKAN_GEN10_FILES := \
 	$(VULKAN_GENX_FILES)
 
 VULKAN_GEN11_FILES := \
+	vulkan/gen8_cmd_buffer.c \
+	$(VULKAN_GENX_FILES)
+
+VULKAN_GEN12_FILES := \
 	vulkan/gen8_cmd_buffer.c \
 	$(VULKAN_GENX_FILES)
 

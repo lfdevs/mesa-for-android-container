@@ -76,6 +76,7 @@ struct gen_device_info
    bool supports_simd16_3src;
    bool has_resource_streamer;
    bool disable_ccs_repack;
+   bool has_aux_map;
 
    /**
     * \name Intel hardware quirks

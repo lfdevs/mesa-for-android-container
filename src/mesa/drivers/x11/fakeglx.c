@@ -1551,12 +1551,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
       case GLX_RGBA:
          if (fbconfig)
             return GLX_BAD_ATTRIBUTE;
-	 if (xmvis->mesa_visual.rgbMode) {
-	    *value = True;
-	 }
-	 else {
-	    *value = False;
-	 }
+         *value = True;
 	 return 0;
       case GLX_DOUBLEBUFFER:
 	 *value = (int) xmvis->mesa_visual.doubleBufferMode;
@@ -1618,12 +1613,7 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
          }
          else if (xmvis->mesa_visual.level>0) {
             /* overlay */
-            if (xmvis->mesa_visual.rgbMode) {
-               *value = GLX_TRANSPARENT_RGB_EXT;
-            }
-            else {
-               *value = GLX_TRANSPARENT_INDEX_EXT;
-            }
+            *value = GLX_TRANSPARENT_RGB_EXT;
          }
          else if (xmvis->mesa_visual.level<0) {
             /* underlay */
@@ -1691,10 +1681,8 @@ get_config( XMesaVisual xmvis, int attrib, int *value, GLboolean fbconfig )
             return GLX_BAD_ATTRIBUTE;
          if (xmvis->mesa_visual.floatMode)
             *value = GLX_RGBA_FLOAT_BIT_ARB;
-         else if (xmvis->mesa_visual.rgbMode)
-            *value = GLX_RGBA_BIT;
          else
-            *value = GLX_COLOR_INDEX_BIT;
+            *value = GLX_RGBA_BIT;
          break;
       case GLX_X_RENDERABLE_SGIX:
          if (!fbconfig)
@@ -2536,14 +2524,14 @@ Fake_glXDestroyGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf)
 }
 
 
-static int
+static void
 Fake_glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute, unsigned int *value)
 {
    const XMesaBuffer xmbuf = XMesaFindBuffer(dpy, pbuf);
 
    if (!xmbuf) {
       /* Generate GLXBadPbufferSGIX for bad pbuffer */
-      return 0;
+      return;
    }
 
    switch (attribute) {
@@ -2565,7 +2553,6 @@ Fake_glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute, un
       default:
          *value = 0;
    }
-   return 0;
 }
 
 
@@ -2687,7 +2674,7 @@ Fake_glXAssociateDMPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuffer, DMparams *p
 /*** GLX_SUN_get_transparent_index ***/
 
 static Status
-Fake_glXGetTransparentIndexSUN(Display *dpy, Window overlay, Window underlay, long *pTransparent)
+Fake_glXGetTransparentIndexSUN(Display *dpy, Window overlay, Window underlay, unsigned long *pTransparent)
 {
    (void) dpy;
    (void) overlay;

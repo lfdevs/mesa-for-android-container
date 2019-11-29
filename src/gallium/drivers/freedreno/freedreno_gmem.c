@@ -446,6 +446,15 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		}
 	}
 
+	/* Layered rendering always needs bypass. */
+	for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
+		struct pipe_surface *psurf = pfb->cbufs[i];
+		if (!psurf)
+			continue;
+		if (psurf->u.tex.first_layer < psurf->u.tex.last_layer)
+			sysmem = true;
+	}
+
 	fd_reset_wfi(batch);
 
 	ctx->stats.batch_total++;

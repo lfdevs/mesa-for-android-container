@@ -167,6 +167,7 @@ enum isl_format {
    ISL_FORMAT_B10G10R10A2_UNORM =                              209,
    ISL_FORMAT_B10G10R10A2_UNORM_SRGB =                         210,
    ISL_FORMAT_R11G11B10_FLOAT =                                211,
+   ISL_FORMAT_R10G10B10_FLOAT_A2_UNORM =                       213,
    ISL_FORMAT_R32_SINT =                                       214,
    ISL_FORMAT_R32_UINT =                                       215,
    ISL_FORMAT_R32_FLOAT =                                      216,
@@ -388,6 +389,11 @@ enum isl_format {
    ISL_FORMAT_GEN9_CCS_32BPP,
    ISL_FORMAT_GEN9_CCS_64BPP,
    ISL_FORMAT_GEN9_CCS_128BPP,
+   ISL_FORMAT_GEN12_CCS_8BPP_Y0,
+   ISL_FORMAT_GEN12_CCS_16BPP_Y0,
+   ISL_FORMAT_GEN12_CCS_32BPP_Y0,
+   ISL_FORMAT_GEN12_CCS_64BPP_Y0,
+   ISL_FORMAT_GEN12_CCS_128BPP_Y0,
 
    /* An upper bound on the supported format enumerations */
    ISL_NUM_FORMATS,
@@ -464,6 +470,7 @@ enum isl_tiling {
    ISL_TILING_Ys, /**< Standard 64K tiling. The 's' means "sixty-four". */
    ISL_TILING_HIZ, /**< Tiling format for HiZ surfaces */
    ISL_TILING_CCS, /**< Tiling format for CCS surfaces */
+   ISL_TILING_GEN12_CCS, /**< Tiling format for Gen12 CCS surfaces */
 };
 
 /**
@@ -479,6 +486,7 @@ typedef uint32_t isl_tiling_flags_t;
 #define ISL_TILING_Ys_BIT                 (1u << ISL_TILING_Ys)
 #define ISL_TILING_HIZ_BIT                (1u << ISL_TILING_HIZ)
 #define ISL_TILING_CCS_BIT                (1u << ISL_TILING_CCS)
+#define ISL_TILING_GEN12_CCS_BIT          (1u << ISL_TILING_GEN12_CCS)
 #define ISL_TILING_ANY_MASK               (~0u)
 #define ISL_TILING_NON_LINEAR_MASK        (~ISL_TILING_LINEAR_BIT)
 
@@ -601,6 +609,21 @@ enum isl_aux_usage {
     * @invariant isl_surf::samples == 1
     */
    ISL_AUX_USAGE_CCS_E,
+
+   /** The auxiliary surface provides full lossless media color compression
+    *
+    * @invariant isl_surf::samples == 1
+    */
+   ISL_AUX_USAGE_MC,
+
+   /** The auxiliary surface is a HiZ surface and CCS is also enabled */
+   ISL_AUX_USAGE_HIZ_CCS,
+
+   /** The auxiliary surface is an MCS and CCS is also enabled
+    *
+    * @invariant isl_surf::samples > 1
+    */
+   ISL_AUX_USAGE_MCS_CCS,
 };
 
 /**
@@ -1422,6 +1445,11 @@ struct isl_depth_stencil_hiz_emit_info {
     * The depth clear value
     */
    float depth_clear_value;
+
+   /**
+    * Track stencil aux usage for Gen >= 12
+    */
+   enum isl_aux_usage stencil_aux_usage;
 };
 
 extern const struct isl_format_layout isl_format_layouts[];
@@ -1620,6 +1648,13 @@ bool
 isl_has_matching_typed_storage_image_format(const struct gen_device_info *devinfo,
                                             enum isl_format fmt);
 
+static inline enum isl_tiling
+isl_tiling_flag_to_enum(isl_tiling_flags_t flag)
+{
+   assert(__builtin_popcount(flag) == 1);
+   return (enum isl_tiling) (__builtin_ffs(flag) - 1);
+}
+
 static inline bool
 isl_tiling_is_any_y(enum isl_tiling tiling)
 {
@@ -1637,6 +1672,30 @@ isl_tiling_to_i915_tiling(enum isl_tiling tiling);
 
 enum isl_tiling 
 isl_tiling_from_i915_tiling(uint32_t tiling);
+
+static inline bool
+isl_aux_usage_has_hiz(enum isl_aux_usage usage)
+{
+   return usage == ISL_AUX_USAGE_HIZ ||
+          usage == ISL_AUX_USAGE_HIZ_CCS;
+}
+
+static inline bool
+isl_aux_usage_has_mcs(enum isl_aux_usage usage)
+{
+   return usage == ISL_AUX_USAGE_MCS ||
+          usage == ISL_AUX_USAGE_MCS_CCS;
+}
+
+static inline bool
+isl_aux_usage_has_ccs(enum isl_aux_usage usage)
+{
+   return usage == ISL_AUX_USAGE_CCS_D ||
+          usage == ISL_AUX_USAGE_CCS_E ||
+          usage == ISL_AUX_USAGE_MC ||
+          usage == ISL_AUX_USAGE_HIZ_CCS ||
+          usage == ISL_AUX_USAGE_MCS_CCS;
+}
 
 const struct isl_drm_modifier_info * ATTRIBUTE_CONST
 isl_drm_modifier_get_info(uint64_t modifier);
@@ -1818,7 +1877,8 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
 bool
 isl_surf_get_ccs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
-                      struct isl_surf *ccs_surf,
+                      struct isl_surf *aux_surf,
+                      struct isl_surf *extra_aux_surf,
                       uint32_t row_pitch_B /**< Ignored if 0 */);
 
 #define isl_surf_fill_state(dev, state, ...) \
@@ -2106,6 +2166,14 @@ isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
 uint32_t
 isl_surf_get_depth_format(const struct isl_device *dev,
                           const struct isl_surf *surf);
+
+/**
+ * @brief determines if a surface supports writing through HIZ to the CCS.
+ */
+bool
+isl_surf_supports_hiz_ccs_wt(const struct gen_device_info *dev,
+                             const struct isl_surf *surf,
+                             enum isl_aux_usage aux_usage);
 
 /**
  * @brief performs a copy from linear to tiled surface

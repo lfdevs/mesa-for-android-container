@@ -171,8 +171,13 @@ int bc_parser::parse_decls() {
 		sh->add_input(in.gpr, preloaded, /*in.write_mask*/ 0x0F);
 		if (ps_interp && in.spi_sid) {
 			int k = eg_get_interpolator_index(in.interpolate, in.interpolate_location);
-			if (k >= 0)
+			if (k >= 0) {
 				ij_interpolators[k] |= true;
+				if (in.uses_interpolate_at_centroid) {
+					k = eg_get_interpolator_index(in.interpolate, TGSI_INTERPOLATE_LOC_CENTROID);
+					ij_interpolators[k] |= true;
+				}
+			}
 		}
 	}
 

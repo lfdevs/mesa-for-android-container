@@ -127,13 +127,20 @@ fd3_sampler_state_create(struct pipe_context *pctx,
 	if (cso->compare_mode)
 		so->texsamp0 |= A3XX_TEX_SAMP_0_COMPARE_FUNC(cso->compare_func); /* maps 1:1 */
 
+	so->texsamp1 = A3XX_TEX_SAMP_1_LOD_BIAS(cso->lod_bias);
+
 	if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
-		so->texsamp1 =
-				A3XX_TEX_SAMP_1_LOD_BIAS(cso->lod_bias) |
-				A3XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
-				A3XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
+		so->texsamp1 |=
+			A3XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
+			A3XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
 	} else {
-		so->texsamp1 = 0x00000000;
+		/* If we're not doing mipmap filtering, we still need a slightly > 0
+		 * LOD clamp so the HW can decide between min and mag filtering of
+		 * level 0.
+		 */
+		so->texsamp1 |=
+			A3XX_TEX_SAMP_1_MIN_LOD(MIN2(cso->min_lod, 0.125)) |
+			A3XX_TEX_SAMP_1_MAX_LOD(MIN2(cso->max_lod, 0.125));
 	}
 
 	return so;

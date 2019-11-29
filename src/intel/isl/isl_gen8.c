@@ -151,7 +151,13 @@ isl_gen8_choose_image_alignment_el(const struct isl_device *dev,
     */
    const uint32_t valign = 4;
 
-   bool needs_halign16 = false;
+   /* XXX(chadv): I believe the hardware requires each image to be
+    * cache-aligned. If that's true, then defaulting to halign=4 is wrong for
+    * many formats. Depending on the format's block size, we may need to
+    * increase halign to 8.
+    */
+   uint32_t halign = 4;
+
    if (!(info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)) {
       /* From the Broadwell PRM, Volume 2d "Command Reference: Structures",
        * RENDER_SURFACE_STATE Surface Horizontal Alignment, p326:
@@ -163,15 +169,22 @@ isl_gen8_choose_image_alignment_el(const struct isl_device *dev,
        * or CCS_E. Depth buffers, including those that own an auxiliary HiZ
        * surface, are handled above and do not require HALIGN_16.
        */
-      needs_halign16 = true;
+      assert(halign <= 16);
+      halign = 16;
    }
 
-   /* XXX(chadv): I believe the hardware requires each image to be
-    * cache-aligned. If that's true, then defaulting to halign=4 is wrong for
-    * many formats. Depending on the format's block size, we may need to
-    * increase halign to 8.
-    */
-   const uint32_t halign = needs_halign16 ? 16 : 4;
+   if (ISL_DEV_GEN(dev) >= 11 && isl_tiling_is_any_y(tiling) &&
+       fmtl->bpb == 32 && info->samples == 1) {
+      /* GEN_BUG_1406667188: Pixel Corruption in subspan combining (8x4
+       * combining) scenarios if halign=4.
+       *
+       * See RENDER_SURFACE_STATE in Ice Lake h/w spec:
+       *
+       *    "For surface format = 32 bpp, num_multisamples = 1 , MIpcount > 0
+       *     and surface walk = TiledY, HALIGN must be programmed to 8"
+       */
+      halign = MAX(halign, 8);
+   }
 
    *image_align_el = isl_extent3d(halign, valign, 1);
 }

@@ -23,6 +23,7 @@
  */
 
 #include "si_shader_internal.h"
+#include "si_pipe.h"
 #include "ac_llvm_util.h"
 
 void si_llvm_emit_kill(struct ac_shader_abi *abi, LLVMValueRef visible)
@@ -677,8 +678,10 @@ static void dfracexp_emit(const struct lp_build_tgsi_action *action,
 				   ctx->ac.i32, &in, 1, 0);
 }
 
-void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base)
+void si_shader_context_init_alu(struct si_shader_context *ctx)
 {
+	struct lp_build_tgsi_context *bld_base = &ctx->bld_base;
+
 	lp_set_default_actions(bld_base);
 
 	bld_base->op_actions[TGSI_OPCODE_AND].emit = emit_and;
@@ -722,8 +725,16 @@ void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base)
 	bld_base->op_actions[TGSI_OPCODE_EX2].intr_name = "llvm.exp2.f32";
 	bld_base->op_actions[TGSI_OPCODE_FLR].emit = build_tgsi_intrinsic_nomem;
 	bld_base->op_actions[TGSI_OPCODE_FLR].intr_name = "llvm.floor.f32";
-	bld_base->op_actions[TGSI_OPCODE_FMA].emit =
-		bld_base->op_actions[TGSI_OPCODE_MAD].emit;
+
+	/* FMA is better on GFX10, because it has FMA units instead of MUL-ADD units. */
+	if (ctx->screen->info.chip_class >= GFX10) {
+		bld_base->op_actions[TGSI_OPCODE_FMA].emit = build_tgsi_intrinsic_nomem;
+		bld_base->op_actions[TGSI_OPCODE_FMA].intr_name = "llvm.fma.f32";
+	} else {
+		bld_base->op_actions[TGSI_OPCODE_FMA].emit =
+			bld_base->op_actions[TGSI_OPCODE_MAD].emit;
+	}
+
 	bld_base->op_actions[TGSI_OPCODE_FRC].emit = emit_frac;
 	bld_base->op_actions[TGSI_OPCODE_F2I].emit = emit_f2i;
 	bld_base->op_actions[TGSI_OPCODE_F2U].emit = emit_f2u;

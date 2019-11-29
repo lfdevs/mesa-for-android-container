@@ -32,6 +32,7 @@
 #include "compiler/nir/nir.h"
 #include "compiler/nir_types.h"
 #include "compiler/nir/nir_builder.h"
+#include "compiler/nir/nir_deref.h"
 
 static nir_variable* tex_get_texture_var(nir_tex_instr *instr)
 {
@@ -52,39 +53,87 @@ static nir_variable* intrinsic_get_var(nir_intrinsic_instr *instr)
 	return nir_deref_instr_get_variable(nir_src_as_deref(instr->src[0]));
 }
 
+static void gather_usage_helper(const nir_deref_instr **deref_ptr,
+				unsigned location,
+				uint8_t mask,
+				uint8_t *usage_mask)
+{
+	for (; *deref_ptr; deref_ptr++) {
+		const nir_deref_instr *deref = *deref_ptr;
+		switch (deref->deref_type) {
+		case nir_deref_type_array: {
+			unsigned elem_size =
+				glsl_count_attribute_slots(deref->type, false);
+			if (nir_src_is_const(deref->arr.index)) {
+				location += elem_size * nir_src_as_uint(deref->arr.index);
+			} else {
+				unsigned array_elems =
+					glsl_get_length(deref_ptr[-1]->type);
+				for (unsigned i = 0; i < array_elems; i++) {
+					gather_usage_helper(deref_ptr + 1,
+							    location + elem_size * i,
+							    mask, usage_mask);
+				}
+				return;
+			}
+			break;
+		}
+		case nir_deref_type_struct: {
+			const struct glsl_type *parent_type =
+				deref_ptr[-1]->type;
+			unsigned index = deref->strct.index;
+			for (unsigned i = 0; i < index; i++) {
+				const struct glsl_type *ft = glsl_get_struct_field(parent_type, i);
+				location += glsl_count_attribute_slots(ft, false);
+			}
+			break;
+		}
+		default:
+			unreachable("Unhandled deref type in gather_components_used_helper");
+		}
+	}
+
+	usage_mask[location] |= mask & 0xf;
+	if (mask & 0xf0)
+		usage_mask[location + 1] |= (mask >> 4) & 0xf;
+}
+
+static void gather_usage(const nir_deref_instr *deref,
+			 uint8_t mask,
+			 uint8_t *usage_mask)
+{
+	nir_deref_path path;
+	nir_deref_path_init(&path, (nir_deref_instr *)deref, NULL);
+
+	unsigned location_frac = path.path[0]->var->data.location_frac;
+	if (glsl_type_is_64bit(deref->type)) {
+		uint8_t new_mask = 0;
+		for (unsigned i = 0; i < 4; i++) {
+			if (mask & (1 << i))
+				new_mask |= 0x3 << (2 * i);
+		}
+		mask = new_mask << location_frac;
+	} else {
+		mask <<= location_frac;
+		mask &= 0xf;
+	}
+
+	gather_usage_helper((const nir_deref_instr **)&path.path[1],
+			    path.path[0]->var->data.driver_location,
+			    mask, usage_mask);
+
+	nir_deref_path_finish(&path);
+}
+
 static void gather_intrinsic_load_deref_input_info(const nir_shader *nir,
 						   const nir_intrinsic_instr *instr,
-						   nir_variable *var,
+						   const nir_deref_instr *deref,
 						   struct tgsi_shader_info *info)
 {
-	assert(var && var->data.mode == nir_var_shader_in);
-
 	switch (nir->info.stage) {
-	case MESA_SHADER_VERTEX: {
-		unsigned i = var->data.driver_location;
-		unsigned attrib_count = glsl_count_attribute_slots(var->type, false);
-		uint8_t mask = nir_ssa_def_components_read(&instr->dest.ssa);
-
-		for (unsigned j = 0; j < attrib_count; j++, i++) {
-			if (glsl_type_is_64bit(glsl_without_array(var->type))) {
-				unsigned dmask = mask;
-
-				if (glsl_type_is_dual_slot(glsl_without_array(var->type)) && j % 2)
-					dmask >>= 2;
-
-				dmask <<= var->data.location_frac / 2;
-
-				if (dmask & 0x1)
-					info->input_usage_mask[i] |= TGSI_WRITEMASK_XY;
-				if (dmask & 0x2)
-					info->input_usage_mask[i] |= TGSI_WRITEMASK_ZW;
-			} else {
-				info->input_usage_mask[i] |=
-					(mask << var->data.location_frac) & 0xf;
-			}
-		}
-		break;
-	}
+	case MESA_SHADER_VERTEX:
+		gather_usage(deref, nir_ssa_def_components_read(&instr->dest.ssa),
+			     info->input_usage_mask);
 	default:;
 	}
 }
@@ -117,42 +166,16 @@ static void gather_intrinsic_load_deref_output_info(const nir_shader *nir,
 
 static void gather_intrinsic_store_deref_output_info(const nir_shader *nir,
 						     const nir_intrinsic_instr *instr,
-						     nir_variable *var,
+						     const nir_deref_instr *deref,
 						     struct tgsi_shader_info *info)
 {
-	assert(var && var->data.mode == nir_var_shader_out);
-
 	switch (nir->info.stage) {
 	case MESA_SHADER_VERTEX: /* needed by LS, ES */
 	case MESA_SHADER_TESS_EVAL: /* needed by ES */
-	case MESA_SHADER_GEOMETRY: {
-		unsigned i = var->data.driver_location;
-		unsigned attrib_count = glsl_count_attribute_slots(var->type, false);
-		unsigned mask = nir_intrinsic_write_mask(instr);
-
-		assert(!var->data.compact);
-
-		for (unsigned j = 0; j < attrib_count; j++, i++) {
-			if (glsl_type_is_64bit(glsl_without_array(var->type))) {
-				unsigned dmask = mask;
-
-				if (glsl_type_is_dual_slot(glsl_without_array(var->type)) && j % 2)
-					dmask >>= 2;
-
-				dmask <<= var->data.location_frac / 2;
-
-				if (dmask & 0x1)
-					info->output_usagemask[i] |= TGSI_WRITEMASK_XY;
-				if (dmask & 0x2)
-					info->output_usagemask[i] |= TGSI_WRITEMASK_ZW;
-			} else {
-				info->output_usagemask[i] |=
-					(mask << var->data.location_frac) & 0xf;
-			}
-
-		}
+	case MESA_SHADER_GEOMETRY:
+		gather_usage(deref, nir_intrinsic_write_mask(instr),
+			     info->output_usagemask);
 		break;
-	}
 	default:;
 	}
 }
@@ -281,8 +304,10 @@ static void scan_instruction(const struct nir_shader *nir,
 			info->num_memory_instructions++; /* we only care about stores */
 			break;
 		case nir_intrinsic_bindless_image_atomic_add:
-		case nir_intrinsic_bindless_image_atomic_min:
-		case nir_intrinsic_bindless_image_atomic_max:
+		case nir_intrinsic_bindless_image_atomic_imin:
+		case nir_intrinsic_bindless_image_atomic_umin:
+		case nir_intrinsic_bindless_image_atomic_imax:
+		case nir_intrinsic_bindless_image_atomic_umax:
 		case nir_intrinsic_bindless_image_atomic_and:
 		case nir_intrinsic_bindless_image_atomic_or:
 		case nir_intrinsic_bindless_image_atomic_xor:
@@ -299,8 +324,10 @@ static void scan_instruction(const struct nir_shader *nir,
 			info->num_memory_instructions++; /* we only care about stores */
 			break;
 		case nir_intrinsic_image_deref_atomic_add:
-		case nir_intrinsic_image_deref_atomic_min:
-		case nir_intrinsic_image_deref_atomic_max:
+		case nir_intrinsic_image_deref_atomic_imin:
+		case nir_intrinsic_image_deref_atomic_umin:
+		case nir_intrinsic_image_deref_atomic_imax:
+		case nir_intrinsic_image_deref_atomic_umax:
 		case nir_intrinsic_image_deref_atomic_and:
 		case nir_intrinsic_image_deref_atomic_or:
 		case nir_intrinsic_image_deref_atomic_xor:
@@ -372,7 +399,8 @@ static void scan_instruction(const struct nir_shader *nir,
 			if (mode == nir_var_shader_in) {
 				/* PS inputs use the interpolated load intrinsics. */
 				assert(nir->info.stage != MESA_SHADER_FRAGMENT);
-				gather_intrinsic_load_deref_input_info(nir, intr, var, info);
+				gather_intrinsic_load_deref_input_info(nir, intr,
+								       nir_src_as_deref(intr->src[0]), info);
 			} else if (mode == nir_var_shader_out) {
 				gather_intrinsic_load_deref_output_info(nir, intr, var, info);
 			}
@@ -382,7 +410,8 @@ static void scan_instruction(const struct nir_shader *nir,
 			nir_variable *var = intrinsic_get_var(intr);
 
 			if (var->data.mode == nir_var_shader_out)
-				gather_intrinsic_store_deref_output_info(nir, intr, var, info);
+				gather_intrinsic_store_deref_output_info(nir, intr,
+									 nir_src_as_deref(intr->src[0]), info);
 			break;
 		}
 		case nir_intrinsic_interp_deref_at_centroid:
@@ -406,6 +435,154 @@ void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
 
 	out->tessfactors_are_def_in_all_invocs =
 		ac_are_tessfactors_def_in_all_invocs(nir);
+}
+
+static void scan_output_slot(const nir_variable *var,
+			     unsigned var_idx,
+			     unsigned component, unsigned num_components,
+			     struct tgsi_shader_info *info)
+{
+	assert(component + num_components <= 4);
+	assert(component < 4);
+
+	unsigned semantic_name, semantic_index;
+
+	unsigned location = var->data.location + var_idx;
+	unsigned drv_location = var->data.driver_location + var_idx;
+
+	if (info->processor == PIPE_SHADER_FRAGMENT) {
+		tgsi_get_gl_frag_result_semantic(location,
+			&semantic_name, &semantic_index);
+
+		/* Adjust for dual source blending */
+		if (var->data.index > 0) {
+			semantic_index++;
+		}
+	} else {
+		tgsi_get_gl_varying_semantic(location, true,
+					     &semantic_name, &semantic_index);
+	}
+
+	ubyte usagemask = ((1 << num_components) - 1) << component;
+
+	unsigned gs_out_streams;
+	if (var->data.stream & (1u << 31)) {
+		gs_out_streams = var->data.stream & ~(1u << 31);
+	} else {
+		assert(var->data.stream < 4);
+		gs_out_streams = 0;
+		for (unsigned j = 0; j < num_components; ++j)
+			gs_out_streams |= var->data.stream << (2 * (component + j));
+	}
+
+	unsigned streamx = gs_out_streams & 3;
+	unsigned streamy = (gs_out_streams >> 2) & 3;
+	unsigned streamz = (gs_out_streams >> 4) & 3;
+	unsigned streamw = (gs_out_streams >> 6) & 3;
+
+	if (usagemask & TGSI_WRITEMASK_X) {
+		info->output_streams[drv_location] |= streamx;
+		info->num_stream_output_components[streamx]++;
+	}
+	if (usagemask & TGSI_WRITEMASK_Y) {
+		info->output_streams[drv_location] |= streamy << 2;
+		info->num_stream_output_components[streamy]++;
+	}
+	if (usagemask & TGSI_WRITEMASK_Z) {
+		info->output_streams[drv_location] |= streamz << 4;
+		info->num_stream_output_components[streamz]++;
+	}
+	if (usagemask & TGSI_WRITEMASK_W) {
+		info->output_streams[drv_location] |= streamw << 6;
+		info->num_stream_output_components[streamw]++;
+	}
+
+	info->output_semantic_name[drv_location] = semantic_name;
+	info->output_semantic_index[drv_location] = semantic_index;
+
+	switch (semantic_name) {
+	case TGSI_SEMANTIC_PRIMID:
+		info->writes_primid = true;
+		break;
+	case TGSI_SEMANTIC_VIEWPORT_INDEX:
+		info->writes_viewport_index = true;
+		break;
+	case TGSI_SEMANTIC_LAYER:
+		info->writes_layer = true;
+		break;
+	case TGSI_SEMANTIC_PSIZE:
+		info->writes_psize = true;
+		break;
+	case TGSI_SEMANTIC_CLIPVERTEX:
+		info->writes_clipvertex = true;
+		break;
+	case TGSI_SEMANTIC_COLOR:
+		info->colors_written |= 1 << semantic_index;
+		break;
+	case TGSI_SEMANTIC_STENCIL:
+		info->writes_stencil = true;
+		break;
+	case TGSI_SEMANTIC_SAMPLEMASK:
+		info->writes_samplemask = true;
+		break;
+	case TGSI_SEMANTIC_EDGEFLAG:
+		info->writes_edgeflag = true;
+		break;
+	case TGSI_SEMANTIC_POSITION:
+		if (info->processor == PIPE_SHADER_FRAGMENT)
+			info->writes_z = true;
+		else
+			info->writes_position = true;
+		break;
+	}
+}
+
+static void scan_output_helper(const nir_variable *var,
+			       unsigned location,
+			       const struct glsl_type *type,
+			       struct tgsi_shader_info *info)
+{
+	if (glsl_type_is_struct(type)) {
+		for (unsigned i = 0; i < glsl_get_length(type); i++) {
+			const struct glsl_type *ft = glsl_get_struct_field(type, i);
+			scan_output_helper(var, location, ft, info);
+			location += glsl_count_attribute_slots(ft, false);
+		}
+	} else if (glsl_type_is_array_or_matrix(type)) {
+		const struct glsl_type *elem_type =
+			glsl_get_array_element(type);
+		unsigned num_elems = glsl_get_length(type);
+		if (var->data.compact) {
+			assert(glsl_type_is_scalar(elem_type));
+			assert(glsl_get_bit_size(elem_type) == 32);
+			unsigned component = var->data.location_frac;
+			scan_output_slot(var, location, component,
+					 MIN2(num_elems, 4 - component), info);
+			if (component + num_elems > 4) {
+				scan_output_slot(var, location + 1, 0,
+						 component + num_elems - 4, info);
+			}
+
+		} else {
+			unsigned elem_count = glsl_count_attribute_slots(elem_type, false);
+			for (unsigned i = 0; i < num_elems; i++) {
+				scan_output_helper(var, location, elem_type, info);
+				location += elem_count;
+			}
+		}
+	} else if (glsl_type_is_dual_slot(type)) {
+		unsigned component = var->data.location_frac;
+		scan_output_slot(var, location, component, 4 - component, info);
+		scan_output_slot(var, location + 1, 0, component + 2 * glsl_get_components(type) - 4,
+				 info);
+	} else {
+		unsigned component = var->data.location_frac;
+		assert(glsl_type_is_vector_or_scalar(type));
+		unsigned num_components = glsl_get_components(type);
+		if (glsl_type_is_64bit(type))
+			num_components *= 2;
+		scan_output_slot(var, location, component, num_components, info);
+	}
 }
 
 void si_nir_scan_shader(const struct nir_shader *nir,
@@ -514,13 +691,8 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 		 * tracker has already mapped them to attributes via
 		 * variable->data.driver_location.
 		 */
-		if (nir->info.stage == MESA_SHADER_VERTEX) {
-			processed_inputs |= 1ull << i;
-
-			if (glsl_type_is_dual_slot(glsl_without_array(variable->type)))
-				processed_inputs |= 2ull << i;
+		if (nir->info.stage == MESA_SHADER_VERTEX)
 			continue;
-		}
 
 		for (unsigned j = 0; j < attrib_count; j++, i++) {
 
@@ -583,149 +755,15 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 		}
 	}
 
-	i = 0;
-	uint64_t processed_outputs = 0;
 	nir_foreach_variable(variable, &nir->outputs) {
-		unsigned semantic_name, semantic_index;
-
-		i = variable->data.driver_location;
-
 		const struct glsl_type *type = variable->type;
 		if (nir_is_per_vertex_io(variable, nir->info.stage)) {
 			assert(glsl_type_is_array(type));
 			type = glsl_get_array_element(type);
 		}
 
-		unsigned attrib_count = glsl_count_attribute_slots(type, false);
-		for (unsigned k = 0; k < attrib_count; k++, i++) {
-
-			if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-				tgsi_get_gl_frag_result_semantic(variable->data.location + k,
-					&semantic_name, &semantic_index);
-
-				/* Adjust for dual source blending */
-				if (variable->data.index > 0) {
-					semantic_index++;
-				}
-			} else {
-				tgsi_get_gl_varying_semantic(variable->data.location + k, true,
-							     &semantic_name, &semantic_index);
-			}
-
-			unsigned num_components = 4;
-			unsigned vector_elements = glsl_get_vector_elements(glsl_without_array(variable->type));
-			if (vector_elements)
-				num_components = vector_elements;
-
-			unsigned component = variable->data.location_frac;
-			if (glsl_type_is_64bit(glsl_without_array(variable->type))) {
-				if (glsl_type_is_dual_slot(glsl_without_array(variable->type)) && k % 2) {
-					num_components = (num_components * 2) - 4;
-					component = 0;
-				} else {
-					num_components = MIN2(num_components * 2, 4);
-				}
-			}
-
-			ubyte usagemask = 0;
-			for (unsigned j = component; j < num_components + component; j++) {
-				switch (j) {
-				case 0:
-					usagemask |= TGSI_WRITEMASK_X;
-					break;
-				case 1:
-					usagemask |= TGSI_WRITEMASK_Y;
-					break;
-				case 2:
-					usagemask |= TGSI_WRITEMASK_Z;
-					break;
-				case 3:
-					usagemask |= TGSI_WRITEMASK_W;
-					break;
-				default:
-					unreachable("error calculating component index");
-				}
-			}
-
-			unsigned gs_out_streams;
-			if (variable->data.stream & (1u << 31)) {
-				gs_out_streams = variable->data.stream & ~(1u << 31);
-			} else {
-				assert(variable->data.stream < 4);
-				gs_out_streams = 0;
-				for (unsigned j = 0; j < num_components; ++j)
-					gs_out_streams |= variable->data.stream << (2 * (component + j));
-			}
-
-			unsigned streamx = gs_out_streams & 3;
-			unsigned streamy = (gs_out_streams >> 2) & 3;
-			unsigned streamz = (gs_out_streams >> 4) & 3;
-			unsigned streamw = (gs_out_streams >> 6) & 3;
-
-			if (usagemask & TGSI_WRITEMASK_X) {
-				info->output_streams[i] |= streamx;
-				info->num_stream_output_components[streamx]++;
-			}
-			if (usagemask & TGSI_WRITEMASK_Y) {
-				info->output_streams[i] |= streamy << 2;
-				info->num_stream_output_components[streamy]++;
-			}
-			if (usagemask & TGSI_WRITEMASK_Z) {
-				info->output_streams[i] |= streamz << 4;
-				info->num_stream_output_components[streamz]++;
-			}
-			if (usagemask & TGSI_WRITEMASK_W) {
-				info->output_streams[i] |= streamw << 6;
-				info->num_stream_output_components[streamw]++;
-			}
-
-			/* make sure we only count this location once against
-			 * the num_outputs counter.
-			 */
-			if (processed_outputs & ((uint64_t)1 << i))
-				continue;
-
-			processed_outputs |= ((uint64_t)1 << i);
-
-			info->output_semantic_name[i] = semantic_name;
-			info->output_semantic_index[i] = semantic_index;
-
-			switch (semantic_name) {
-			case TGSI_SEMANTIC_PRIMID:
-				info->writes_primid = true;
-				break;
-			case TGSI_SEMANTIC_VIEWPORT_INDEX:
-				info->writes_viewport_index = true;
-				break;
-			case TGSI_SEMANTIC_LAYER:
-				info->writes_layer = true;
-				break;
-			case TGSI_SEMANTIC_PSIZE:
-				info->writes_psize = true;
-				break;
-			case TGSI_SEMANTIC_CLIPVERTEX:
-				info->writes_clipvertex = true;
-				break;
-			case TGSI_SEMANTIC_COLOR:
-				info->colors_written |= 1 << semantic_index;
-				break;
-			case TGSI_SEMANTIC_STENCIL:
-				info->writes_stencil = true;
-				break;
-			case TGSI_SEMANTIC_SAMPLEMASK:
-				info->writes_samplemask = true;
-				break;
-			case TGSI_SEMANTIC_EDGEFLAG:
-				info->writes_edgeflag = true;
-				break;
-			case TGSI_SEMANTIC_POSITION:
-				if (info->processor == PIPE_SHADER_FRAGMENT)
-					info->writes_z = true;
-				else
-					info->writes_position = true;
-				break;
-			}
-		}
+		ASSERTED unsigned attrib_count = glsl_count_attribute_slots(type, false);
+		scan_output_helper(variable, 0, type, info);
 
 		unsigned loc = variable->data.location;
 		if (nir->info.stage == MESA_SHADER_FRAGMENT &&
@@ -736,99 +774,17 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 		}
 	}
 
-	info->num_inputs = util_last_bit64(processed_inputs);
-	info->num_outputs = util_last_bit64(processed_outputs);
+	info->num_inputs = nir->num_inputs;
+	info->num_outputs = nir->num_outputs;
 
-	/* Inputs and outputs can't have holes. If this fails, use
-	 * nir_assign_io_var_locations to re-assign driver_location.
-	 */
-	assert(processed_inputs == u_bit_consecutive64(0, info->num_inputs));
-	assert(processed_outputs == u_bit_consecutive64(0, info->num_outputs));
-
-	struct set *ubo_set = _mesa_set_create(NULL, _mesa_hash_pointer,
-					       _mesa_key_pointer_equal);
-	struct set *ssbo_set = _mesa_set_create(NULL, _mesa_hash_pointer,
-						_mesa_key_pointer_equal);
-
-	/* Intialise const_file_max[0] */
-	info->const_file_max[0] = -1;
-
-	/* The first 8 are reserved for atomic counters using ssbo */
-	unsigned ssbo_idx = 8;
-
-	unsigned ubo_idx = 1;
-	nir_foreach_variable(variable, &nir->uniforms) {
-		const struct glsl_type *type = variable->type;
-		enum glsl_base_type base_type =
-			glsl_get_base_type(glsl_without_array(type));
-		unsigned aoa_size = MAX2(1, glsl_get_aoa_size(type));
-		unsigned loc = variable->data.driver_location / 4;
-		int slot_count = glsl_count_attribute_slots(type, false);
-		int max_slot = MAX2(info->const_file_max[0], (int) loc) + slot_count;
-
-		/* Gather buffers declared bitmasks. Note: radeonsi doesn't
-		 * really use the mask (other than ubo_idx == 1 for regular
-		 * uniforms) its really only used for getting the buffer count
-		 * so we don't need to worry about the ordering.
-		 */
-		if (variable->interface_type != NULL) {
-			if (variable->data.mode == nir_var_uniform ||
-			    variable->data.mode == nir_var_mem_ubo ||
-			    variable->data.mode == nir_var_mem_ssbo) {
-
-				struct set *buf_set = variable->data.mode == nir_var_mem_ssbo ?
-					ssbo_set : ubo_set;
-
-				unsigned block_count;
-				if (base_type != GLSL_TYPE_INTERFACE) {
-					struct set_entry *entry =
-						_mesa_set_search(buf_set, variable->interface_type);
-
-					/* Check if we have already processed
-					 * a member from this ubo.
-					 */
-					if (entry)
-						continue;
-
-					block_count = 1;
-				} else {
-					block_count = aoa_size;
-				}
-
-				if (variable->data.mode == nir_var_uniform ||
-				    variable->data.mode == nir_var_mem_ubo) {
-					info->const_buffers_declared |= u_bit_consecutive(ubo_idx, block_count);
-					ubo_idx += block_count;
-				} else {
-					assert(variable->data.mode == nir_var_mem_ssbo);
-
-					info->shader_buffers_declared |= u_bit_consecutive(ssbo_idx, block_count);
-					ssbo_idx += block_count;
-				}
-
-				_mesa_set_add(buf_set, variable->interface_type);
-			}
-
-			continue;
-		}
-
-		/* We rely on the fact that nir_lower_samplers_as_deref has
-		 * eliminated struct dereferences.
-		 */
-		if (base_type == GLSL_TYPE_SAMPLER && !variable->data.bindless) {
-			info->samplers_declared |=
-				u_bit_consecutive(variable->data.binding, aoa_size);
-		} else if (base_type == GLSL_TYPE_IMAGE && !variable->data.bindless) {
-			info->images_declared |=
-				u_bit_consecutive(variable->data.binding, aoa_size);
-		} else if (base_type != GLSL_TYPE_ATOMIC_UINT) {
-			info->const_buffers_declared |= 1;
-			info->const_file_max[0] = max_slot;
-		}
-	}
-
-	_mesa_set_destroy(ubo_set, NULL);
-	_mesa_set_destroy(ssbo_set, NULL);
+	info->const_file_max[0] = nir->num_uniforms - 1;
+	info->shader_buffers_declared = u_bit_consecutive(0, nir->info.num_ssbos);
+	info->const_buffers_declared = u_bit_consecutive(1, nir->info.num_ubos);
+	if (nir->num_uniforms > 0)
+		info->const_buffers_declared |= 1;
+	info->images_declared = u_bit_consecutive(0, nir->info.num_images);
+	info->msaa_images_declared = u_bit_consecutive(0, nir->info.last_msaa_image + 1);
+	info->samplers_declared = nir->info.textures_used;
 
 	info->num_written_clipdistance = nir->info.clip_distance_array_size;
 	info->num_written_culldistance = nir->info.cull_distance_array_size;
@@ -845,7 +801,7 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 	}
 }
 
-void
+static void
 si_nir_opts(struct nir_shader *nir)
 {
 	bool progress;
@@ -862,7 +818,7 @@ si_nir_opts(struct nir_shader *nir)
 		NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
 		NIR_PASS(progress, nir, nir_opt_dead_write_vars);
 
-		NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL);
+		NIR_PASS_V(nir, nir_lower_alu_to_scalar, NULL, NULL);
 		NIR_PASS_V(nir, nir_lower_phis_to_scalar);
 
 		/* (Constant) copy propagation is needed for txf with offsets. */
@@ -957,7 +913,7 @@ si_nir_lower_color(nir_shader *nir)
         }
 }
 
-void si_nir_lower_ps_inputs(struct nir_shader *nir)
+static void si_nir_lower_ps_inputs(struct nir_shader *nir)
 {
 	if (nir->info.stage != MESA_SHADER_FRAGMENT)
 		return;
@@ -982,32 +938,35 @@ void si_nir_lower_ps_inputs(struct nir_shader *nir)
 		   nir_var_shader_in);
 }
 
-/**
- * Perform "lowering" operations on the NIR that are run once when the shader
- * selector is created.
- */
-void si_lower_nir(struct si_shader_selector *sel)
+void si_nir_adjust_driver_locations(struct nir_shader *nir)
 {
 	/* Adjust the driver location of inputs and outputs. The state tracker
 	 * interprets them as slots, while the ac/nir backend interprets them
 	 * as individual components.
 	 */
-	if (sel->nir->info.stage != MESA_SHADER_FRAGMENT) {
-		nir_foreach_variable(variable, &sel->nir->inputs)
+	if (nir->info.stage != MESA_SHADER_FRAGMENT) {
+		nir_foreach_variable(variable, &nir->inputs)
 			variable->data.driver_location *= 4;
 	}
 
-	nir_foreach_variable(variable, &sel->nir->outputs) {
+	nir_foreach_variable(variable, &nir->outputs) {
 		variable->data.driver_location *= 4;
 
-		if (sel->nir->info.stage == MESA_SHADER_FRAGMENT) {
+		if (nir->info.stage == MESA_SHADER_FRAGMENT) {
 			if (variable->data.location == FRAG_RESULT_DEPTH)
 				variable->data.driver_location += 2;
 			else if (variable->data.location == FRAG_RESULT_STENCIL)
 				variable->data.driver_location += 1;
 		}
 	}
+}
 
+/**
+ * Perform "lowering" operations on the NIR that are run once when the shader
+ * selector is created.
+ */
+static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
+{
 	/* Perform lowerings (and optimizations) of code.
 	 *
 	 * Performance considerations aside, we must:
@@ -1019,7 +978,7 @@ void si_lower_nir(struct si_shader_selector *sel)
 	static const struct nir_lower_tex_options lower_tex_options = {
 		.lower_txp = ~0u,
 	};
-	NIR_PASS_V(sel->nir, nir_lower_tex, &lower_tex_options);
+	NIR_PASS_V(nir, nir_lower_tex, &lower_tex_options);
 
 	const nir_lower_subgroups_options subgroups_options = {
 		.subgroup_size = 64,
@@ -1029,18 +988,41 @@ void si_lower_nir(struct si_shader_selector *sel)
 		.lower_vote_trivial = false,
 		.lower_vote_eq_to_ballot = true,
 	};
-	NIR_PASS_V(sel->nir, nir_lower_subgroups, &subgroups_options);
+	NIR_PASS_V(nir, nir_lower_subgroups, &subgroups_options);
 
-	ac_lower_indirect_derefs(sel->nir, sel->screen->info.chip_class);
+	/* Lower load constants to scalar and then clean up the mess */
+	NIR_PASS_V(nir, nir_lower_load_const_to_scalar);
+	NIR_PASS_V(nir, nir_lower_var_copies);
+	NIR_PASS_V(nir, nir_lower_pack);
+	NIR_PASS_V(nir, nir_opt_access);
+	si_nir_opts(nir);
 
-	si_nir_opts(sel->nir);
-
-	NIR_PASS_V(sel->nir, nir_lower_bool_to_int32);
-
-	/* Strip the resulting shader so that the shader cache is more likely
-	 * to hit from other similar shaders.
+	/* Lower large variables that are always constant with load_constant
+	 * intrinsics, which get turned into PC-relative loads from a data
+	 * section next to the shader.
+	 *
+	 * st/mesa calls finalize_nir twice, but we can't call this pass twice.
 	 */
-	nir_strip(sel->nir);
+	if (!nir->constant_data) {
+		NIR_PASS_V(nir, nir_opt_large_constants,
+			   glsl_get_natural_size_align_bytes, 16);
+	}
+
+	ac_lower_indirect_derefs(nir, sscreen->info.chip_class);
+
+	si_nir_opts(nir);
+
+	NIR_PASS_V(nir, nir_lower_bool_to_int32);
+}
+
+void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)
+{
+	struct si_screen *sscreen = (struct si_screen *)screen;
+	struct nir_shader *nir = (struct nir_shader *)nirptr;
+
+	nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+	si_nir_lower_ps_inputs(nir);
+	si_lower_nir(sscreen, nir);
 }
 
 static void declare_nir_input_vs(struct si_shader_context *ctx,
@@ -1056,7 +1038,6 @@ si_nir_lookup_interp_param(struct ac_shader_abi *abi,
 			   enum glsl_interp_mode interp, unsigned location)
 {
 	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-	int interp_param_idx = -1;
 
 	switch (interp) {
 	case INTERP_MODE_FLAT:
@@ -1064,27 +1045,24 @@ si_nir_lookup_interp_param(struct ac_shader_abi *abi,
 	case INTERP_MODE_SMOOTH:
 	case INTERP_MODE_NONE:
 		if (location == INTERP_CENTER)
-			interp_param_idx = SI_PARAM_PERSP_CENTER;
+			return ctx->abi.persp_center;
 		else if (location == INTERP_CENTROID)
-			interp_param_idx = SI_PARAM_PERSP_CENTROID;
+			return ctx->abi.persp_centroid;
 		else if (location == INTERP_SAMPLE)
-			interp_param_idx = SI_PARAM_PERSP_SAMPLE;
+			return ctx->abi.persp_sample;
 		break;
 	case INTERP_MODE_NOPERSPECTIVE:
 		if (location == INTERP_CENTER)
-			interp_param_idx = SI_PARAM_LINEAR_CENTER;
+			return ctx->abi.linear_center;
 		else if (location == INTERP_CENTROID)
-			interp_param_idx = SI_PARAM_LINEAR_CENTROID;
+			return ctx->abi.linear_centroid;
 		else if (location == INTERP_SAMPLE)
-			interp_param_idx = SI_PARAM_LINEAR_SAMPLE;
+			return ctx->abi.linear_sample;
 		break;
 	default:
 		assert(!"Unhandled interpolation mode.");
-		return NULL;
 	}
-
-	return interp_param_idx != -1 ?
-		LLVMGetParam(ctx->main_fn, interp_param_idx) : NULL;
+	return NULL;
 }
 
 static LLVMValueRef
@@ -1099,7 +1077,7 @@ si_nir_load_sampler_desc(struct ac_shader_abi *abi,
 	unsigned const_index = base_index + constant_index;
 
 	assert(!descriptor_set);
-	assert(!image || desc_type == AC_DESC_IMAGE || desc_type == AC_DESC_BUFFER);
+	assert(desc_type <= AC_DESC_BUFFER);
 
 	if (bindless) {
 		LLVMValueRef list =
@@ -1107,11 +1085,14 @@ si_nir_load_sampler_desc(struct ac_shader_abi *abi,
 
 		/* dynamic_index is the bindless handle */
 		if (image) {
-			/* For simplicity, bindless image descriptors use fixed
-			 * 16-dword slots for now.
-			 */
+			/* Bindless image descriptors use 16-dword slots. */
 			dynamic_index = LLVMBuildMul(ctx->ac.builder, dynamic_index,
 					     LLVMConstInt(ctx->i64, 2, 0), "");
+			/* FMASK is right after the image. */
+			if (desc_type == AC_DESC_FMASK) {
+				dynamic_index = LLVMBuildAdd(ctx->ac.builder, dynamic_index,
+							     ctx->i32_1, "");
+			}
 
 			return si_load_image_desc(ctx, list, dynamic_index, desc_type,
 						  write, true);
@@ -1150,14 +1131,19 @@ si_nir_load_sampler_desc(struct ac_shader_abi *abi,
 	}
 
 	if (image) {
+		/* FMASKs are separate from images. */
+		if (desc_type == AC_DESC_FMASK) {
+			index = LLVMBuildAdd(ctx->ac.builder, index,
+					     LLVMConstInt(ctx->i32, SI_NUM_IMAGES, 0), "");
+		}
 		index = LLVMBuildSub(ctx->ac.builder,
-				     LLVMConstInt(ctx->i32, SI_NUM_IMAGES - 1, 0),
+				     LLVMConstInt(ctx->i32, SI_NUM_IMAGE_SLOTS - 1, 0),
 				     index, "");
 		return si_load_image_desc(ctx, list, index, desc_type, write, false);
 	}
 
 	index = LLVMBuildAdd(ctx->ac.builder, index,
-			     LLVMConstInt(ctx->i32, SI_NUM_IMAGES / 2, 0), "");
+			     LLVMConstInt(ctx->i32, SI_NUM_IMAGE_SLOTS / 2, 0), "");
 	return si_load_sampler_desc(ctx, list, index, desc_type);
 }
 

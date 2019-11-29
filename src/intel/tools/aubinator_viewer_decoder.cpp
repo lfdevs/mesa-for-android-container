@@ -955,9 +955,9 @@ aub_viewer_render_batch(struct aub_viewer_decode_ctx *ctx,
       }
 
       if (strcmp(inst_name, "MI_BATCH_BUFFER_START") == 0) {
-         uint64_t next_batch_addr;
+         uint64_t next_batch_addr = 0xd0d0d0d0;
          bool ppgtt = false;
-         bool second_level;
+         bool second_level = false;
          struct gen_field_iterator iter;
          gen_field_iterator_init(&iter, inst, p, 0, false);
          while (gen_field_iterator_next(&iter)) {

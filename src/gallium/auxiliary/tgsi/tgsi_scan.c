@@ -293,6 +293,15 @@ scan_src_operand(struct tgsi_shader_info *info,
        !is_mem_query_inst(fullinst->Instruction.Opcode)) {
       *is_mem_inst = true;
 
+      if (src->Register.File == TGSI_FILE_IMAGE &&
+          (fullinst->Memory.Texture == TGSI_TEXTURE_2D_MSAA ||
+           fullinst->Memory.Texture == TGSI_TEXTURE_2D_ARRAY_MSAA)) {
+         if (src->Register.Indirect)
+            info->msaa_images_declared = info->images_declared;
+         else
+            info->msaa_images_declared |= 1 << src->Register.Index;
+      }
+
       if (tgsi_get_opcode_info(fullinst->Instruction.Opcode)->is_store) {
          info->writes_memory = TRUE;
 
@@ -560,6 +569,14 @@ scan_instruction(struct tgsi_shader_info *info,
          info->writes_memory = TRUE;
 
          if (dst->Register.File == TGSI_FILE_IMAGE) {
+            if (fullinst->Memory.Texture == TGSI_TEXTURE_2D_MSAA ||
+                fullinst->Memory.Texture == TGSI_TEXTURE_2D_ARRAY_MSAA) {
+               if (dst->Register.Indirect)
+                  info->msaa_images_declared = info->images_declared;
+               else
+                  info->msaa_images_declared |= 1 << dst->Register.Index;
+            }
+
             if (dst->Register.Indirect)
                info->images_store = info->images_declared;
             else

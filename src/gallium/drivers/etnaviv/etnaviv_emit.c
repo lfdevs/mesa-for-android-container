@@ -214,6 +214,8 @@ void
 etna_emit_state(struct etna_context *ctx)
 {
    struct etna_cmd_stream *stream = ctx->stream;
+   unsigned ccw = ctx->rasterizer->front_ccw;
+
 
    /* Pre-reserve the command buffer space which we are likely to need.
     * This must cover all the state emitted below, and the following
@@ -449,9 +451,10 @@ etna_emit_state(struct etna_context *ctx)
                               : ctx->shader_state.PS_TEMP_REGISTER_CONTROL);
       /*01010*/ EMIT_STATE(PS_CONTROL, ctx->shader_state.PS_CONTROL);
    }
-   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_FRAMEBUFFER))) {
-      uint32_t val = etna_zsa_state(ctx->zsa)->PE_DEPTH_CONFIG;
-      /*01400*/ EMIT_STATE(PE_DEPTH_CONFIG, val | ctx->framebuffer.PE_DEPTH_CONFIG);
+   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_SHADER))) {
+      /*01400*/ EMIT_STATE(PE_DEPTH_CONFIG, (etna_zsa_state(ctx->zsa)->PE_DEPTH_CONFIG |
+                                             ctx->framebuffer.PE_DEPTH_CONFIG) &
+                                            ctx->shader_state.PE_DEPTH_CONFIG);
    }
    if (unlikely(dirty & (ETNA_DIRTY_VIEWPORT))) {
       /*01404*/ EMIT_STATE(PE_DEPTH_NEAR, ctx->viewport.PE_DEPTH_NEAR);
@@ -466,13 +469,14 @@ etna_emit_state(struct etna_context *ctx)
 
       /*01414*/ EMIT_STATE(PE_DEPTH_STRIDE, ctx->framebuffer.PE_DEPTH_STRIDE);
    }
-   if (unlikely(dirty & (ETNA_DIRTY_ZSA))) {
-      uint32_t val = etna_zsa_state(ctx->zsa)->PE_STENCIL_OP;
+
+   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_RASTERIZER))) {
+      uint32_t val = etna_zsa_state(ctx->zsa)->PE_STENCIL_OP[ccw];
       /*01418*/ EMIT_STATE(PE_STENCIL_OP, val);
    }
-   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_STENCIL_REF))) {
-      uint32_t val = etna_zsa_state(ctx->zsa)->PE_STENCIL_CONFIG;
-      /*0141C*/ EMIT_STATE(PE_STENCIL_CONFIG, val | ctx->stencil_ref.PE_STENCIL_CONFIG);
+   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_STENCIL_REF | ETNA_DIRTY_RASTERIZER))) {
+      uint32_t val = etna_zsa_state(ctx->zsa)->PE_STENCIL_CONFIG[ccw];
+      /*0141C*/ EMIT_STATE(PE_STENCIL_CONFIG, val | ctx->stencil_ref.PE_STENCIL_CONFIG[ccw]);
    }
    if (unlikely(dirty & (ETNA_DIRTY_ZSA))) {
       uint32_t val = etna_zsa_state(ctx->zsa)->PE_ALPHA_OP;
@@ -511,8 +515,8 @@ etna_emit_state(struct etna_context *ctx)
          abort();
       }
    }
-   if (unlikely(dirty & (ETNA_DIRTY_STENCIL_REF))) {
-      /*014A0*/ EMIT_STATE(PE_STENCIL_CONFIG_EXT, ctx->stencil_ref.PE_STENCIL_CONFIG_EXT);
+   if (unlikely(dirty & (ETNA_DIRTY_STENCIL_REF | ETNA_DIRTY_RASTERIZER))) {
+      /*014A0*/ EMIT_STATE(PE_STENCIL_CONFIG_EXT, ctx->stencil_ref.PE_STENCIL_CONFIG_EXT[ccw]);
    }
    if (unlikely(dirty & (ETNA_DIRTY_BLEND | ETNA_DIRTY_FRAMEBUFFER))) {
       struct etna_blend_state *blend = etna_blend_state(ctx->blend);
@@ -527,6 +531,9 @@ etna_emit_state(struct etna_context *ctx)
    if (unlikely(dirty & (ETNA_DIRTY_BLEND_COLOR))) {
          /*014B0*/ EMIT_STATE(PE_ALPHA_COLOR_EXT0, ctx->blend_color.PE_ALPHA_COLOR_EXT0);
          /*014B4*/ EMIT_STATE(PE_ALPHA_COLOR_EXT1, ctx->blend_color.PE_ALPHA_COLOR_EXT1);
+   }
+   if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_RASTERIZER))) {
+      /*014B8*/ EMIT_STATE(PE_STENCIL_CONFIG_EXT2, etna_zsa_state(ctx->zsa)->PE_STENCIL_CONFIG_EXT2[ccw]);
    }
    if (unlikely(dirty & (ETNA_DIRTY_FRAMEBUFFER)) && ctx->specs.halti >= 3)
       /*014BC*/ EMIT_STATE(PE_MEM_CONFIG, ctx->framebuffer.PE_MEM_CONFIG);

@@ -44,7 +44,6 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 {
 	struct si_llvm_diagnostics *diag = (struct si_llvm_diagnostics *)context;
 	LLVMDiagnosticSeverity severity = LLVMGetDiagInfoSeverity(di);
-	char *description = LLVMGetDiagInfoDescription(di);
 	const char *severity_str = NULL;
 
 	switch (severity) {
@@ -55,14 +54,12 @@ static void si_diagnostic_handler(LLVMDiagnosticInfoRef di, void *context)
 		severity_str = "warning";
 		break;
 	case LLVMDSRemark:
-		severity_str = "remark";
-		break;
 	case LLVMDSNote:
-		severity_str = "note";
-		break;
 	default:
-		severity_str = "unknown";
+		return;
 	}
+
+	char *description = LLVMGetDiagInfoDescription(di);
 
 	pipe_debug_message(diag->debug, SHADER_INFO,
 			   "LLVM diagnostic (%s): %s", severity_str, description);
@@ -1008,7 +1005,7 @@ void si_llvm_context_init(struct si_shader_context *ctx,
 	bld_base->op_actions[TGSI_OPCODE_ENDIF].emit = endif_emit;
 	bld_base->op_actions[TGSI_OPCODE_ENDLOOP].emit = endloop_emit;
 
-	si_shader_context_init_alu(&ctx->bld_base);
+	si_shader_context_init_alu(ctx);
 	si_shader_context_init_mem(ctx);
 
 	ctx->voidt = LLVMVoidTypeInContext(ctx->ac.context);

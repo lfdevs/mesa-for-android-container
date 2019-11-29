@@ -33,8 +33,8 @@
 #include "compiler/glsl/gl_nir.h"
 #include "compiler/nir_types.h"
 
-#include "lima_program.h"
 #include "lima_context.h"
+#include "lima_program.h"
 #include "ir/lima_ir.h"
 #include "standalone/glsl.h"
 

@@ -290,7 +290,7 @@ void radeonEmitVertexAOS( r100ContextPtr rmesa,
    OUT_BATCH_PACKET3(RADEON_CP_PACKET3_3D_LOAD_VBPNTR, 2);
    OUT_BATCH(1);
    OUT_BATCH(vertex_size | (vertex_size << 8));
-   OUT_BATCH_RELOC(offset, bo, offset, RADEON_GEM_DOMAIN_GTT, 0, 0);
+   OUT_BATCH_RELOC(bo, offset, RADEON_GEM_DOMAIN_GTT, 0, 0);
    END_BATCH();
 
 #endif

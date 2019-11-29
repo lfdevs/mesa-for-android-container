@@ -419,7 +419,7 @@ static void fd_resource_transfer_flush_region(struct pipe_context *pctx,
 	struct fd_resource *rsc = fd_resource(ptrans->resource);
 
 	if (ptrans->resource->target == PIPE_BUFFER)
-		util_range_add(&rsc->valid_buffer_range,
+		util_range_add(&rsc->base, &rsc->valid_buffer_range,
 					   ptrans->box.x + box->x,
 					   ptrans->box.x + box->x + box->width);
 }
@@ -489,7 +489,7 @@ fd_resource_transfer_unmap(struct pipe_context *pctx,
 		fd_bo_cpu_fini(rsc->bo);
 	}
 
-	util_range_add(&rsc->valid_buffer_range,
+	util_range_add(&rsc->base, &rsc->valid_buffer_range,
 				   ptrans->box.x,
 				   ptrans->box.x + ptrans->box.width);
 
@@ -977,15 +977,15 @@ fd_resource_create_with_modifiers(struct pipe_screen *pscreen,
 
 	allow_ubwc &= !(fd_mesa_debug & FD_DBG_NOUBWC);
 
-	if (screen->tile_mode &&
-			(tmpl->target != PIPE_BUFFER) &&
-			!linear) {
-		rsc->tile_mode = screen->tile_mode(tmpl);
-	}
-
 	pipe_reference_init(&prsc->reference, 1);
 
 	prsc->screen = pscreen;
+
+	if (screen->tile_mode &&
+			(tmpl->target != PIPE_BUFFER) &&
+			!linear) {
+		rsc->tile_mode = screen->tile_mode(prsc);
+	}
 
 	util_range_init(&rsc->valid_buffer_range);
 

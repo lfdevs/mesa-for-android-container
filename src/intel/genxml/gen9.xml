@@ -6477,23 +6477,6 @@
     <field name="Color Compression Disable Mask" start="31" end="31" type="bool"/>
   </register>
 
-  <register name="GT_MODE" length="1" num="0x7008">
-    <field name="Subslice Hashing" start="8" end="9" type="uint">
-      <value name="8x8" value="0"/>
-      <value name="16x4" value="1"/>
-      <value name="8x4" value="2"/>
-      <value name="16x16" value="3"/>
-    </field>
-    <field name="Subslice Hashing Mask" start="24" end="25" type="int"/>
-    <field name="Slice Hashing" start="11" end="12" type="uint">
-      <value name="NORMAL" value="0"/>
-      <value name="DISABLED" value="1"/>
-      <value name="32x16" value="2"/>
-      <value name="32x32" value="3"/>
-    </field>
-    <field name="Slice Hashing Mask" start="27" end="28" type="int"/>
-  </register>
-
   <register name="CL_INVOCATION_COUNT" length="2" num="0x2338">
     <field name="CL Invocation Count Report" start="0" end="63" type="uint"/>
   </register>
@@ -6576,6 +6559,23 @@
     <field name="GS Primitives Count Report" start="0" end="63" type="uint"/>
   </register>
 
+  <register name="GT_MODE" length="1" num="0x7008">
+    <field name="Subslice Hashing" start="8" end="9" type="uint">
+      <value name="8x8" value="0"/>
+      <value name="16x4" value="1"/>
+      <value name="8x4" value="2"/>
+      <value name="16x16" value="3"/>
+    </field>
+    <field name="Slice Hashing" start="11" end="12" type="uint">
+      <value name="NORMAL" value="0"/>
+      <value name="DISABLED" value="1"/>
+      <value name="32x16" value="2"/>
+      <value name="32x32" value="3"/>
+    </field>
+    <field name="Subslice Hashing Mask" start="24" end="25" type="int"/>
+    <field name="Slice Hashing Mask" start="27" end="28" type="int"/>
+  </register>
+
   <register name="HS_INVOCATION_COUNT" length="2" num="0x2300">
     <field name="HS Invocation Count Report" start="0" end="63" type="uint"/>
   </register>
@@ -6621,6 +6621,24 @@
     <field name="All Allocation" start="25" end="31" type="uint"/>
   </register>
 
+  <register name="PERFCNT1" length="2" num="0x91b8">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
+  <register name="PERFCNT2" length="2" num="0x91c0">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
   <register name="PS_INVOCATION_COUNT" length="2" num="0x2348">
     <field name="PS Invocation Count Report" start="0" end="63" type="uint"/>
   </register>
@@ -6654,6 +6672,11 @@
     <field name="EU12 Done SS0" start="23" end="23" type="bool"/>
     <field name="EU13 Done SS0" start="24" end="24" type="bool"/>
     <field name="MA1 Done SS0" start="26" end="26" type="bool"/>
+  </register>
+
+  <register name="RPSTAT0" length="1" num="0xa01c">
+    <field name="Previous GT Frequency" start="0" end="8" type="uint"/>
+    <field name="Current GT Frequency" start="23" end="31" type="uint"/>
   </register>
 
   <register name="SAMPLER_INSTDONE" length="1" num="0xe160">

@@ -252,9 +252,13 @@ v3d40_image_load_store_tmu_op(nir_intrinsic_instr *instr)
                 return V3D_TMU_OP_REGULAR;
         case nir_intrinsic_image_deref_atomic_add:
                 return v3d_get_op_for_atomic_add(instr, 3);
-        case nir_intrinsic_image_deref_atomic_min:
+        case nir_intrinsic_image_deref_atomic_imin:
+                return V3D_TMU_OP_WRITE_SMIN;
+        case nir_intrinsic_image_deref_atomic_umin:
                 return V3D_TMU_OP_WRITE_UMIN_FULL_L1_CLEAR;
-        case nir_intrinsic_image_deref_atomic_max:
+        case nir_intrinsic_image_deref_atomic_imax:
+                return V3D_TMU_OP_WRITE_SMAX;
+        case nir_intrinsic_image_deref_atomic_umax:
                 return V3D_TMU_OP_WRITE_UMAX;
         case nir_intrinsic_image_deref_atomic_and:
                 return V3D_TMU_OP_WRITE_AND_READ_INC;
@@ -418,4 +422,7 @@ v3d40_vir_emit_image_load_store(struct v3d_compile *c,
 
         if (nir_intrinsic_dest_components(instr) == 0)
                 vir_TMUWT(c);
+
+        if (instr->intrinsic != nir_intrinsic_image_deref_load)
+                c->tmu_dirty_rcl = true;
 }

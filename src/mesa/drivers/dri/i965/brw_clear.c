@@ -108,6 +108,9 @@ brw_fast_clear_depth(struct gl_context *ctx)
    struct gl_renderbuffer_attachment *depth_att = &fb->Attachment[BUFFER_DEPTH];
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
 
+   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+      return false;
+
    if (devinfo->gen < 6)
       return false;
 

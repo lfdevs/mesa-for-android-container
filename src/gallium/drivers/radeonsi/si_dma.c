@@ -43,7 +43,7 @@ static void si_dma_copy_buffer(struct si_context *ctx,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&sdst->valid_buffer_range, dst_offset,
+	util_range_add(dst, &sdst->valid_buffer_range, dst_offset,
 		       dst_offset + size);
 
 	dst_offset += sdst->gpu_address;

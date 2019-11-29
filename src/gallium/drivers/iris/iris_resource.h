@@ -78,6 +78,12 @@ struct iris_resource {
    unsigned bind_history;
 
    /**
+    * A bitfield of MESA_SHADER_* stages indicating where this resource
+    * was bound.
+    */
+   unsigned bind_stages;
+
+   /**
     * For PIPE_BUFFER resources, a range which may contain valid data.
     *
     * This is a conservative estimate of what part of the buffer contains
@@ -99,6 +105,13 @@ struct iris_resource {
 
       /** Offset into 'bo' where the auxiliary surface starts. */
       uint32_t offset;
+
+      struct {
+         struct isl_surf surf;
+
+         /** Offset into 'bo' where the auxiliary surface starts. */
+         uint32_t offset;
+      } extra_aux;
 
       /**
        * Fast clear color for this surface.  For depth surfaces, the clear
@@ -231,6 +244,8 @@ struct iris_transfer {
    struct pipe_resource *staging;
    struct blorp_context *blorp;
    struct iris_batch *batch;
+
+   bool dest_had_defined_contents;
 
    void (*unmap)(struct iris_transfer *);
 };
@@ -413,9 +428,6 @@ void iris_resource_prepare_texture(struct iris_context *ice,
                                    uint32_t start_level, uint32_t num_levels,
                                    uint32_t start_layer, uint32_t num_layers,
                                    enum gen9_astc5x5_wa_tex_type);
-void iris_resource_prepare_image(struct iris_context *ice,
-                                 struct iris_batch *batch,
-                                 struct iris_resource *res);
 
 static inline bool
 iris_resource_unfinished_aux_import(struct iris_resource *res)

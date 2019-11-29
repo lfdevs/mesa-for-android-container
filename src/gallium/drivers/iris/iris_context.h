@@ -53,6 +53,11 @@ enum iris_param_domain {
    BRW_PARAM_DOMAIN_IMAGE,
 };
 
+enum {
+   DRI_CONF_BO_REUSE_DISABLED,
+   DRI_CONF_BO_REUSE_ALL
+};
+
 #define BRW_PARAM(domain, val)   (BRW_PARAM_DOMAIN_##domain << 24 | (val))
 #define BRW_PARAM_DOMAIN(param)  ((uint32_t)(param) >> 24)
 #define BRW_PARAM_VALUE(param)   ((uint32_t)(param) & 0x00ffffff)
@@ -105,6 +110,7 @@ enum iris_param_domain {
 #define IRIS_DIRTY_FS                       (1ull << 32)
 #define IRIS_DIRTY_CS                       (1ull << 33)
 #define IRIS_DIRTY_URB                      (1ull << 34)
+#define IRIS_SHIFT_FOR_DIRTY_CONSTANTS      35
 #define IRIS_DIRTY_CONSTANTS_VS             (1ull << 35)
 #define IRIS_DIRTY_CONSTANTS_TCS            (1ull << 36)
 #define IRIS_DIRTY_CONSTANTS_TES            (1ull << 37)
@@ -128,6 +134,9 @@ enum iris_param_domain {
 #define IRIS_DIRTY_RENDER_RESOLVES_AND_FLUSHES  (1ull << 55)
 #define IRIS_DIRTY_COMPUTE_RESOLVES_AND_FLUSHES (1ull << 56)
 #define IRIS_DIRTY_VF_STATISTICS            (1ull << 57)
+#define IRIS_DIRTY_PMA_FIX                  (1ull << 58)
+#define IRIS_DIRTY_DEPTH_BOUNDS             (1ull << 59)
+#define IRIS_DIRTY_RENDER_BUFFER            (1ull << 60)
 
 #define IRIS_ALL_DIRTY_FOR_COMPUTE (IRIS_DIRTY_CS | \
                                     IRIS_DIRTY_SAMPLER_STATES_CS | \
@@ -143,7 +152,8 @@ enum iris_param_domain {
                                  IRIS_DIRTY_BINDINGS_TES | \
                                  IRIS_DIRTY_BINDINGS_GS  | \
                                  IRIS_DIRTY_BINDINGS_FS  | \
-                                 IRIS_DIRTY_BINDINGS_CS)
+                                 IRIS_DIRTY_BINDINGS_CS  | \
+                                 IRIS_DIRTY_RENDER_BUFFER)
 
 /**
  * Non-orthogonal state (NOS) dependency flags.
@@ -214,6 +224,7 @@ enum pipe_control_flags
    PIPE_CONTROL_STATE_CACHE_INVALIDATE          = (1 << 22),
    PIPE_CONTROL_STALL_AT_SCOREBOARD             = (1 << 23),
    PIPE_CONTROL_DEPTH_CACHE_FLUSH               = (1 << 24),
+   PIPE_CONTROL_TILE_CACHE_FLUSH                = (1 << 25),
 };
 
 #define PIPE_CONTROL_CACHE_FLUSH_BITS \
@@ -273,6 +284,8 @@ struct iris_uncompiled_shader {
 
    /** Should we use ALT mode for math?  Useful for ARB programs. */
    bool use_alt_mode;
+
+   bool needs_edge_flag;
 
    /** Constant data scraped from the shader by nir_opt_large_constants */
    struct pipe_resource *const_data;
@@ -408,14 +421,8 @@ struct iris_stream_output_target {
  */
 struct iris_vtable {
    void (*destroy_state)(struct iris_context *ice);
-   void (*init_render_context)(struct iris_screen *screen,
-                               struct iris_batch *batch,
-                               struct iris_vtable *vtbl,
-                               struct pipe_debug_callback *dbg);
-   void (*init_compute_context)(struct iris_screen *screen,
-                                struct iris_batch *batch,
-                                struct iris_vtable *vtbl,
-                                struct pipe_debug_callback *dbg);
+   void (*init_render_context)(struct iris_batch *batch);
+   void (*init_compute_context)(struct iris_batch *batch);
    void (*upload_render_state)(struct iris_context *ice,
                                struct iris_batch *batch,
                                const struct pipe_draw_info *draw);
@@ -545,12 +552,18 @@ struct iris_context {
       } params;
 
       /**
+       * Are the above values the ones stored in the draw_params buffer?
+       * If so, we can compare them against new values to see if anything
+       * changed.  If not, we need to assume they changed.
+       */
+      bool params_valid;
+
+      /**
        * Resource and offset that stores draw_parameters from the indirect
        * buffer or to the buffer that stures the previous values for non
        * indirect draws.
        */
-      struct pipe_resource *draw_params_res;
-      uint32_t draw_params_offset;
+      struct iris_state_ref draw_params;
 
       struct {
          /**
@@ -571,10 +584,7 @@ struct iris_context {
        * contains parameters that are not present in the indirect buffer as
        * drawid and is_indexed_draw. They will go in their own vertex element.
        */
-      struct pipe_resource *derived_draw_params_res;
-      uint32_t derived_draw_params_offset;
-
-      bool is_indirect;
+      struct iris_state_ref derived_draw_params;
    } draw;
 
    struct {
@@ -795,6 +805,11 @@ void iris_emit_pipe_control_write(struct iris_batch *batch,
                                   uint64_t imm);
 void iris_emit_end_of_pipe_sync(struct iris_batch *batch,
                                 const char *reason, uint32_t flags);
+void iris_flush_all_caches(struct iris_batch *batch);
+
+#define iris_handle_always_flush_cache(batch) \
+   if (unlikely(batch->screen->driconf.always_flush_cache)) \
+      iris_flush_all_caches(batch);
 
 void iris_init_flush_functions(struct pipe_context *ctx);
 
@@ -936,6 +951,9 @@ void gen9_toggle_preemption(struct iris_context *ice,
 #  include "iris_genx_protos.h"
 #  undef genX
 #  define genX(x) gen11_##x
+#  include "iris_genx_protos.h"
+#  undef genX
+#  define genX(x) gen12_##x
 #  include "iris_genx_protos.h"
 #  undef genX
 #endif

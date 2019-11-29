@@ -150,7 +150,7 @@ etna_hw_begin_query(struct etna_context *ctx, struct etna_query *q)
    p->start(hq, ctx);
 
    /* add to active list */
-   assert(list_empty(&hq->node));
+   assert(list_is_empty(&hq->node));
    list_addtail(&hq->node, &ctx->active_hw_queries);
 
    return true;
@@ -176,7 +176,7 @@ etna_hw_get_query_result(struct etna_context *ctx, struct etna_query *q,
    struct etna_resource *rsc = etna_resource(hq->prsc);
    const struct etna_hw_sample_provider *p = hq->provider;
 
-   assert(LIST_IS_EMPTY(&hq->node));
+   assert(list_is_empty(&hq->node));
 
    if (!wait) {
       int ret;

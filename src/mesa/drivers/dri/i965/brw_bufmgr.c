@@ -531,7 +531,7 @@ bo_alloc_internal(struct brw_bufmgr *bufmgr,
    /* Get a buffer out of the cache if available */
 retry:
    alloc_from_cache = false;
-   if (bucket != NULL && !list_empty(&bucket->head)) {
+   if (bucket != NULL && !list_is_empty(&bucket->head)) {
       if (busy && !zeroed) {
          /* Allocate new render-target BOs from the tail (MRU)
           * of the list, as it will likely be hot in the GPU
@@ -1528,19 +1528,6 @@ brw_bo_flink(struct brw_bo *bo, uint32_t *name)
    return 0;
 }
 
-/**
- * Enables unlimited caching of buffer objects for reuse.
- *
- * This is potentially very memory expensive, as the cache at each bucket
- * size is only bounded by how many buffers of that size we've managed to have
- * in flight at once.
- */
-void
-brw_bufmgr_enable_reuse(struct brw_bufmgr *bufmgr)
-{
-   bufmgr->bo_reuse = true;
-}
-
 static void
 add_bucket(struct brw_bufmgr *bufmgr, int size)
 {
@@ -1683,7 +1670,7 @@ brw_using_softpin(struct brw_bufmgr *bufmgr)
  * \param fd File descriptor of the opened DRM device.
  */
 struct brw_bufmgr *
-brw_bufmgr_init(struct gen_device_info *devinfo, int fd)
+brw_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
 {
    struct brw_bufmgr *bufmgr;
 
@@ -1713,6 +1700,7 @@ brw_bufmgr_init(struct gen_device_info *devinfo, int fd)
 
    bufmgr->has_llc = devinfo->has_llc;
    bufmgr->has_mmap_wc = gem_param(fd, I915_PARAM_MMAP_VERSION) > 0;
+   bufmgr->bo_reuse = bo_reuse;
 
    const uint64_t _4GB = 4ull << 30;
 

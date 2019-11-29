@@ -79,20 +79,17 @@ iris_lost_context_state(struct iris_batch *batch)
     * batch is one of our context's, so hackily claw our way back.
     */
    struct iris_context *ice = NULL;
-   struct iris_screen *screen;
 
    if (batch->name == IRIS_BATCH_RENDER) {
       ice = container_of(batch, ice, batches[IRIS_BATCH_RENDER]);
       assert(&ice->batches[IRIS_BATCH_RENDER] == batch);
-      screen = (void *) ice->ctx.screen;
 
-      ice->vtbl.init_render_context(screen, batch, &ice->vtbl, &ice->dbg);
+      ice->vtbl.init_render_context(batch);
    } else if (batch->name == IRIS_BATCH_COMPUTE) {
       ice = container_of(batch, ice, batches[IRIS_BATCH_COMPUTE]);
       assert(&ice->batches[IRIS_BATCH_COMPUTE] == batch);
-      screen = (void *) ice->ctx.screen;
 
-      ice->vtbl.init_compute_context(screen, batch, &ice->vtbl, &ice->dbg);
+      ice->vtbl.init_compute_context(batch);
    } else {
       unreachable("unhandled batch reset");
    }
@@ -101,6 +98,7 @@ iris_lost_context_state(struct iris_batch *batch)
    ice->state.current_hash_scale = 0;
    memset(ice->state.last_grid, 0, sizeof(ice->state.last_grid));
    batch->last_surface_base_address = ~0ull;
+   batch->last_aux_map_state = 0;
    ice->vtbl.lost_genx_state(ice, batch);
 }
 
@@ -214,6 +212,9 @@ iris_destroy_context(struct pipe_context *ctx)
 
 #define genX_call(devinfo, func, ...)             \
    switch (devinfo->gen) {                        \
+   case 12:                                       \
+      gen12_##func(__VA_ARGS__);                  \
+      break;                                      \
    case 11:                                       \
       gen11_##func(__VA_ARGS__);                  \
       break;                                      \
@@ -309,10 +310,8 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
                       I915_EXEC_RENDER, priority);
    }
 
-   ice->vtbl.init_render_context(screen, &ice->batches[IRIS_BATCH_RENDER],
-                                 &ice->vtbl, &ice->dbg);
-   ice->vtbl.init_compute_context(screen, &ice->batches[IRIS_BATCH_COMPUTE],
-                                  &ice->vtbl, &ice->dbg);
+   ice->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);
+   ice->vtbl.init_compute_context(&ice->batches[IRIS_BATCH_COMPUTE]);
 
    return ctx;
 }

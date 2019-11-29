@@ -44,6 +44,7 @@
 
 #include "drm-uapi/i915_drm.h"
 
+#include "common/gen_aux_map.h"
 #include "intel/common/gen_gem.h"
 #include "util/hash_table.h"
 #include "util/set.h"
@@ -264,6 +265,20 @@ find_validation_entry(struct iris_batch *batch, struct iris_bo *bo)
    return NULL;
 }
 
+static void
+ensure_exec_obj_space(struct iris_batch *batch, uint32_t count)
+{
+   while (batch->exec_count + count > batch->exec_array_size) {
+      batch->exec_array_size *= 2;
+      batch->exec_bos =
+         realloc(batch->exec_bos,
+                 batch->exec_array_size * sizeof(batch->exec_bos[0]));
+      batch->validation_list =
+         realloc(batch->validation_list,
+                 batch->exec_array_size * sizeof(batch->validation_list[0]));
+   }
+}
+
 /**
  * Add a buffer to the current batch's validation list.
  *
@@ -330,15 +345,7 @@ iris_use_pinned_bo(struct iris_batch *batch,
    /* Now, take a reference and add it to the validation list. */
    iris_bo_reference(bo);
 
-   if (batch->exec_count == batch->exec_array_size) {
-      batch->exec_array_size *= 2;
-      batch->exec_bos =
-         realloc(batch->exec_bos,
-                 batch->exec_array_size * sizeof(batch->exec_bos[0]));
-      batch->validation_list =
-         realloc(batch->validation_list,
-                 batch->exec_array_size * sizeof(batch->validation_list[0]));
-   }
+   ensure_exec_obj_space(batch, 1);
 
    batch->validation_list[batch->exec_count] =
       (struct drm_i915_gem_exec_object2) {
@@ -459,12 +466,40 @@ iris_chain_to_new_batch(struct iris_batch *batch)
    VG(VALGRIND_CHECK_MEM_IS_DEFINED(map, batch->primary_batch_size));
 }
 
+
+static void
+add_aux_map_bos_to_batch(struct iris_batch *batch)
+{
+   void *aux_map_ctx = iris_bufmgr_get_aux_map_context(batch->screen->bufmgr);
+   if (!aux_map_ctx)
+      return;
+
+   uint32_t count = gen_aux_map_get_num_buffers(aux_map_ctx);
+   ensure_exec_obj_space(batch, count);
+   gen_aux_map_fill_bos(aux_map_ctx,
+                        (void**)&batch->exec_bos[batch->exec_count], count);
+   for (uint32_t i = 0; i < count; i++) {
+      struct iris_bo *bo = batch->exec_bos[batch->exec_count];
+      iris_bo_reference(bo);
+      batch->validation_list[batch->exec_count] =
+         (struct drm_i915_gem_exec_object2) {
+            .handle = bo->gem_handle,
+            .offset = bo->gtt_offset,
+            .flags = bo->kflags,
+         };
+      batch->aperture_space += bo->size;
+      batch->exec_count++;
+   }
+}
+
 /**
  * Terminate a batch with MI_BATCH_BUFFER_END.
  */
 static void
 iris_finish_batch(struct iris_batch *batch)
 {
+   add_aux_map_bos_to_batch(batch);
+
    /* Emit MI_BATCH_BUFFER_END to finish our batch. */
    uint32_t *map = batch->map_next;
 

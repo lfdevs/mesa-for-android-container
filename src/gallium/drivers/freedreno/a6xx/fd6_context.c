@@ -66,14 +66,18 @@ fd6_context_destroy(struct pipe_context *pctx)
 }
 
 static const uint8_t primtypes[] = {
-		[PIPE_PRIM_POINTS]         = DI_PT_POINTLIST,
-		[PIPE_PRIM_LINES]          = DI_PT_LINELIST,
-		[PIPE_PRIM_LINE_STRIP]     = DI_PT_LINESTRIP,
-		[PIPE_PRIM_LINE_LOOP]      = DI_PT_LINELOOP,
-		[PIPE_PRIM_TRIANGLES]      = DI_PT_TRILIST,
-		[PIPE_PRIM_TRIANGLE_STRIP] = DI_PT_TRISTRIP,
-		[PIPE_PRIM_TRIANGLE_FAN]   = DI_PT_TRIFAN,
-		[PIPE_PRIM_MAX]            = DI_PT_RECTLIST,  /* internal clear blits */
+		[PIPE_PRIM_POINTS]                      = DI_PT_POINTLIST,
+		[PIPE_PRIM_LINES]                       = DI_PT_LINELIST,
+		[PIPE_PRIM_LINE_STRIP]                  = DI_PT_LINESTRIP,
+		[PIPE_PRIM_LINE_LOOP]                   = DI_PT_LINELOOP,
+		[PIPE_PRIM_TRIANGLES]                   = DI_PT_TRILIST,
+		[PIPE_PRIM_TRIANGLE_STRIP]              = DI_PT_TRISTRIP,
+		[PIPE_PRIM_TRIANGLE_FAN]                = DI_PT_TRIFAN,
+		[PIPE_PRIM_LINES_ADJACENCY]             = DI_PT_LINE_ADJ,
+		[PIPE_PRIM_LINE_STRIP_ADJACENCY]        = DI_PT_LINESTRIP_ADJ,
+		[PIPE_PRIM_TRIANGLES_ADJACENCY]         = DI_PT_TRI_ADJ,
+		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]    = DI_PT_TRISTRIP_ADJ,
+		[PIPE_PRIM_MAX]                         = DI_PT_RECTLIST,  /* internal clear blits */
 };
 
 struct pipe_context *
@@ -85,6 +89,41 @@ fd6_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
 
 	if (!fd6_ctx)
 		return NULL;
+
+
+	switch (screen->gpu_id) {
+	case 618:
+/*
+GRAS_BIN_CONTROL:
+RB_BIN_CONTROL:
+  - a618 doesn't appear to set .USE_VIZ; also bin size diffs
+
+RB_CCU_CNTL:
+  - 0x3c400004 -> 0x3e400004
+  - 0x10000000 -> 0x08000000
+
+RB_UNKNOWN_8E04:               <-- see stencil-0000.rd.gz
+  - 0x01000000 -> 0x00100000
+
+SP_UNKNOWN_A0F8:
+PC_UNKNOWN_9805:
+  - 0x1 -> 0
+ */
+		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
+		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x3e400004;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x08000000;
+		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x0;
+		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x0;
+		break;
+	case 630:
+		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x01000000;
+		// NOTE: newer blob using 0x3c400004, need to revisit:
+		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x7c400004;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x10000000;
+		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
+		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
+		break;
+	}
 
 	pctx = &fd6_ctx->base.base;
 	pctx->screen = pscreen;

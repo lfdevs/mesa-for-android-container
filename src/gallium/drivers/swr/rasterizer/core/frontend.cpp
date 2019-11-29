@@ -702,8 +702,8 @@ void ProcessStreamIdBuffer(uint32_t stream,
 {
     SWR_ASSERT(stream < MAX_SO_STREAMS);
 
-    uint32_t numInputBytes  = (numEmittedVerts * 2 + 7) / 8;
-    uint32_t numOutputBytes = std::max(numInputBytes / 2, 1U);
+    uint32_t numInputBytes  = AlignUp(numEmittedVerts * 2, 8) / 8;
+    uint32_t numOutputBytes = AlignUp(numEmittedVerts, 8) / 8;
 
     for (uint32_t b = 0; b < numOutputBytes; ++b)
     {
@@ -851,21 +851,13 @@ static void GeometryShaderStage(DRAW_CONTEXT* pDC,
     gsContext.inputVertStride = pState->inputVertStride;
     for (uint32_t slot = 0; slot < pState->numInputAttribs; ++slot)
     {
-        uint32_t srcAttribSlot = pState->srcVertexAttribOffset + slot;
-        uint32_t attribSlot    = pState->vertexAttribOffset + slot;
-        pa.Assemble(srcAttribSlot, attrib);
+        uint32_t attribOffset = slot + pState->vertexAttribOffset;
+        pa.Assemble(attribOffset, attrib);
 
         for (uint32_t i = 0; i < numVertsPerPrim; ++i)
         {
-            gsContext.pVerts[attribSlot + pState->inputVertStride * i] = attrib[i];
+            gsContext.pVerts[attribOffset + pState->inputVertStride * i] = attrib[i];
         }
-    }
-
-    // assemble position
-    pa.Assemble(VERTEX_POSITION_SLOT, attrib);
-    for (uint32_t i = 0; i < numVertsPerPrim; ++i)
-    {
-        gsContext.pVerts[VERTEX_POSITION_SLOT + pState->inputVertStride * i] = attrib[i];
     }
 
     // record valid prims from the frontend to avoid over binning the newly generated
@@ -873,7 +865,7 @@ static void GeometryShaderStage(DRAW_CONTEXT* pDC,
 #if USE_SIMD16_FRONTEND
     uint32_t numInputPrims = numPrims_simd8;
 #else
-    uint32_t          numInputPrims = pa.NumPrims();
+    uint32_t numInputPrims = pa.NumPrims();
 #endif
 
     for (uint32_t instance = 0; instance < pState->instanceCount; ++instance)

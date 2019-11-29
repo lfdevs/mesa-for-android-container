@@ -34,6 +34,8 @@ protected:
 
 nir_cf_test::nir_cf_test()
 {
+   glsl_type_singleton_init_or_ref();
+
    static const nir_shader_compiler_options options = { };
    nir_builder_init_simple_shader(&b, NULL, MESA_SHADER_VERTEX, &options);
 }
@@ -41,6 +43,7 @@ nir_cf_test::nir_cf_test()
 nir_cf_test::~nir_cf_test()
 {
    ralloc_free(b.shader);
+   glsl_type_singleton_decref();
 }
 
 TEST_F(nir_cf_test, delete_break_in_loop)

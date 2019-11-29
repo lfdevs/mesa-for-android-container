@@ -100,6 +100,8 @@
       <entry name="yvu422" value="0x36315659"/>
       <entry name="yuv444" value="0x34325559"/>
       <entry name="yvu444" value="0x34325659"/>
+      <entry name="abgr16f" value="0x48344241"/>
+      <entry name="xbgr16f" value="0x48344258"/>
     </enum>
 
     <!-- Call this request with the magic received from drmGetMagic().

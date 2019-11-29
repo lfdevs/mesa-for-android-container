@@ -162,7 +162,7 @@ static const struct fd_query_funcs sw_query_funcs = {
 };
 
 struct fd_query *
-fd_sw_create_query(struct fd_context *ctx, unsigned query_type)
+fd_sw_create_query(struct fd_context *ctx, unsigned query_type, unsigned index)
 {
 	struct fd_sw_query *sq;
 	struct fd_query *q;

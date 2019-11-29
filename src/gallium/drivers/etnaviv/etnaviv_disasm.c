@@ -508,6 +508,8 @@ static const struct opc_info {
    OPC(STORE),
    OPC(IMULLO0),
    OPC(IMULHI0),
+   OPC(IMADLO0),
+   OPC(IMADHI0),
    OPC(LEADZERO),
    OPC(LSHIFT),
    OPC(RSHIFT),
@@ -518,6 +520,7 @@ static const struct opc_info {
    OPC(NOT),
    OPC(DP2),
    OPC(DIV),
+   OPC(IABS),
 };
 
 static void

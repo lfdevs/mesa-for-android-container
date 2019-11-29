@@ -40,73 +40,11 @@
 struct pipe_video_buffer *si_video_buffer_create(struct pipe_context *pipe,
 						 const struct pipe_video_buffer *tmpl)
 {
-	struct si_context *ctx = (struct si_context *)pipe;
-	struct si_texture *resources[VL_NUM_COMPONENTS] = {};
-	struct radeon_surf *surfaces[VL_NUM_COMPONENTS] = {};
-	struct pb_buffer **pbs[VL_NUM_COMPONENTS] = {};
-	const enum pipe_format *resource_formats;
-	struct pipe_video_buffer vidtemplate;
-	struct pipe_resource templ;
-	unsigned i, array_size;
+	struct pipe_video_buffer vidbuf = *tmpl;
+	/* TODO: get tiling working */
+	vidbuf.bind |= PIPE_BIND_LINEAR;
 
-	assert(pipe);
-
-	/* first create the needed resources as "normal" textures */
-	resource_formats = vl_video_buffer_formats(pipe->screen, tmpl->buffer_format);
-	if (!resource_formats)
-		return NULL;
-
-	array_size = tmpl->interlaced ? 2 : 1;
-	vidtemplate = *tmpl;
-	vidtemplate.width = align(tmpl->width, VL_MACROBLOCK_WIDTH);
-	vidtemplate.height = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
-
-	assert(resource_formats[0] != PIPE_FORMAT_NONE);
-
-	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-		if (resource_formats[i] != PIPE_FORMAT_NONE) {
-			vl_video_buffer_template(&templ, &vidtemplate,
-			                         resource_formats[i], 1,
-			                         array_size, PIPE_USAGE_DEFAULT, i);
-			/* Set PIPE_BIND_SHARED to avoid reallocation in si_texture_get_handle,
-			 * which can't handle joined surfaces. */
-			/* TODO: get tiling working */
-			templ.bind = PIPE_BIND_LINEAR | PIPE_BIND_SHARED;
-			resources[i] = (struct si_texture *)
-			                pipe->screen->resource_create(pipe->screen, &templ);
-			if (!resources[i])
-				goto error;
-		}
-	}
-
-	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-		if (!resources[i])
-			continue;
-
-		surfaces[i] = & resources[i]->surface;
-		pbs[i] = &resources[i]->buffer.buf;
-	}
-
-	si_vid_join_surfaces(ctx, pbs, surfaces);
-
-	for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-		if (!resources[i])
-			continue;
-
-		/* reset the address */
-		resources[i]->buffer.gpu_address = ctx->ws->buffer_get_virtual_address(
-			resources[i]->buffer.buf);
-		resources[i]->buffer.bo_size = resources[i]->buffer.buf->size;
-	}
-
-	vidtemplate.height *= array_size;
-	return vl_video_buffer_create_ex2(pipe, &vidtemplate, (struct pipe_resource **)resources);
-
-error:
-	for (i = 0; i < VL_NUM_COMPONENTS; ++i)
-		si_texture_reference(&resources[i], NULL);
-
-	return NULL;
+	return vl_video_buffer_create_as_resource(pipe, &vidbuf);
 }
 
 /* set the decoding target buffer offsets */

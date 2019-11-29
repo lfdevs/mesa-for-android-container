@@ -73,14 +73,14 @@ per_version_libs = []
 foreach ver : v3d_versions
   per_version_libs += static_library(
     'v3d-v' + ver,
-    [files_per_version, v3d_xml_pack, nir_opcodes_h, nir_builder_opcodes_h],
+    [files_per_version, v3d_xml_pack],
     include_directories : [
       inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_broadcom,
       inc_gallium_drivers,
     ],
     c_args : [c_vis_args, v3d_args, '-DV3D_VERSION=' + ver],
     cpp_args : [cpp_vis_args],
-    dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind],
+    dependencies : [dep_v3dv3, dep_libdrm, dep_valgrind, idep_nir_headers],
 )
 
 endforeach

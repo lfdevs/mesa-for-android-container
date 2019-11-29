@@ -37,12 +37,47 @@
 
 #include "hw/common.xml.h"
 
+#include "drm-uapi/drm_fourcc.h"
+
+static struct etna_resource *
+etna_render_handle_incompatible(struct pipe_context *pctx, struct pipe_resource *prsc)
+{
+   struct etna_context *ctx = etna_context(pctx);
+   struct etna_resource *res = etna_resource(prsc);
+   bool need_multitiled = ctx->specs.pixel_pipes > 1 && !ctx->specs.single_buffer;
+   bool want_supertiled = ctx->specs.can_supertile;
+
+   /* Resource is compatible if it is tiled and has multi tiling when required
+    * TODO: LINEAR_PE feature means render to linear is possible ?
+    */
+   if (res->layout != ETNA_LAYOUT_LINEAR &&
+       (!need_multitiled || (res->layout & ETNA_LAYOUT_BIT_MULTI)))
+      return res;
+
+   if (!res->render) {
+      struct pipe_resource templat = *prsc;
+      unsigned layout = ETNA_LAYOUT_TILED;
+      if (need_multitiled)
+         layout |= ETNA_LAYOUT_BIT_MULTI;
+      if (want_supertiled)
+         layout |= ETNA_LAYOUT_BIT_SUPER;
+
+      templat.bind &= (PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_RENDER_TARGET |
+                        PIPE_BIND_BLENDABLE);
+      res->render =
+         etna_resource_alloc(pctx->screen, layout,
+                             DRM_FORMAT_MOD_LINEAR, &templat);
+      assert(res->render);
+   }
+   return etna_resource(res->render);
+}
+
 static struct pipe_surface *
 etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
                     const struct pipe_surface *templat)
 {
    struct etna_context *ctx = etna_context(pctx);
-   struct etna_resource *rsc = etna_resource(prsc);
+   struct etna_resource *rsc = etna_render_handle_incompatible(pctx, prsc);
    struct etna_surface *surf = CALLOC_STRUCT(etna_surface);
 
    if (!surf)
@@ -57,6 +92,7 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
 
    pipe_reference_init(&surf->base.reference, 1);
    pipe_resource_reference(&surf->base.texture, &rsc->base);
+   pipe_resource_reference(&surf->prsc, prsc);
 
    /* Allocate a TS for the resource if there isn't one yet,
     * and it is allowed by the hw (width is a multiple of 16).
@@ -148,6 +184,7 @@ static void
 etna_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf)
 {
    pipe_resource_reference(&psurf->texture, NULL);
+   pipe_resource_reference(&etna_surface(psurf)->prsc, NULL);
    FREE(psurf);
 }
 

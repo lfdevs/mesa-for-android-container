@@ -55,6 +55,11 @@ sw_screen_create_named(struct sw_winsys *winsys, const char *driver)
       screen = swr_create_screen(winsys);
 #endif
 
+#if defined(GALLIUM_ZINK)
+   if (screen == NULL && strcmp(driver, "zink") == 0)
+      screen = zink_create_screen(winsys);
+#endif
+
    return screen;
 }
 
@@ -71,6 +76,8 @@ sw_screen_create(struct sw_winsys *winsys)
    default_driver = "softpipe";
 #elif defined(GALLIUM_SWR)
    default_driver = "swr";
+#elif defined(GALLIUM_ZINK)
+   default_driver = "zink";
 #else
    default_driver = "";
 #endif

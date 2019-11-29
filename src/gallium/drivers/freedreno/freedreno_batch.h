@@ -55,7 +55,7 @@ enum fd_render_stage {
 	FD_STAGE_ALL      = 0xff,
 };
 
-#define MAX_HW_SAMPLE_PROVIDERS 5
+#define MAX_HW_SAMPLE_PROVIDERS 7
 struct fd_hw_sample_provider;
 struct fd_hw_sample;
 

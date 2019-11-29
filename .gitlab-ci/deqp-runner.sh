@@ -7,8 +7,14 @@ DEQP_OPTIONS+=(--deqp-surface-type=pbuffer)
 DEQP_OPTIONS+=(--deqp-gl-config-name=rgba8888d24s8ms0)
 DEQP_OPTIONS+=(--deqp-visibility=hidden)
 DEQP_OPTIONS+=(--deqp-log-images=disable)
-DEQP_OPTIONS+=(--deqp-watchdog=enable)
 DEQP_OPTIONS+=(--deqp-crashhandler=enable)
+
+# It would be nice to be able to enable the watchdog, so that hangs in a test
+# don't need to wait the full hour for the run to time out.  However, some
+# shaders end up taking long enough to compile
+# (dEQP-GLES31.functional.ubo.random.all_per_block_buffers.20 for example)
+# that they'll sporadically trigger the watchdog.
+#DEQP_OPTIONS+=(--deqp-watchdog=enable)
 
 if [ -z "$DEQP_VER" ]; then
    echo 'DEQP_VER must be set to something like "gles2" or "gles31" for the test run'
@@ -96,6 +102,13 @@ if grep -q "dEQP-.*.info.renderer" /tmp/case-list.txt; then
     fi
 fi
 
+if grep -q "dEQP-.*.info.version" /tmp/case-list.txt; then
+    # This is an ugly dependency on the .qpa format: Print 3 lines after the
+    # match, which happens to contain the result.
+    VERSION=`sed -n '/#beginTestCaseResult dEQP-.*.info.version/{n;n;n;p}' $RESULTS/results.qpa | sed -n -E "s|<Text>(.*)</Text>|\1|p"`
+    echo "Driver version tested: $VERSION"
+fi
+
 if [ $DEQP_EXITCODE -ne 0 ]; then
    exit $DEQP_EXITCODE
 fi
@@ -109,4 +122,15 @@ if [ -s /tmp/new-fails.txt ]; then
     exit 1
 else
     echo "No new failures"
+fi
+
+sort /tmp/case-list.txt > /tmp/sorted-case-list.txt
+comm -12 /tmp/sorted-case-list.txt /tmp/expected-fails.txt > /tmp/expected-fails-in-caselist.txt
+comm -13 $RESULTS/fails.txt /tmp/expected-fails-in-caselist.txt > /tmp/new-passes.txt
+if [ -s /tmp/new-passes.txt ]; then
+    echo "Unexpected passes, please update $DEQP_EXPECTED_FAILS (or add flaky tests to $DEQP_SKIPS):"
+    cat /tmp/new-passes.txt
+    exit 1
+else
+    echo "No new passes"
 fi

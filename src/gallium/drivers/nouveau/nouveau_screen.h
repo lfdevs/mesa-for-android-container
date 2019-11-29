@@ -69,6 +69,7 @@ struct nouveau_screen {
    struct disk_cache *disk_shader_cache;
 
    bool prefer_nir;
+   bool force_enable_cl;
 
 #ifdef NOUVEAU_ENABLE_DRIVER_STATISTICS
    union {

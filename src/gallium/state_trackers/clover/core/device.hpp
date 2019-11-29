@@ -90,6 +90,7 @@ namespace clover {
       friend class hard_event;
       friend std::set<cl_image_format>
       supported_formats(const context &, cl_mem_object_type);
+      const void *get_compiler_options(enum pipe_shader_ir ir) const;
 
       clover::platform &platform;
 

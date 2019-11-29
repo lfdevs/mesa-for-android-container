@@ -65,7 +65,7 @@ r600_create_so_target(struct pipe_context *ctx,
 	t->b.buffer_offset = buffer_offset;
 	t->b.buffer_size = buffer_size;
 
-	util_range_add(&rbuffer->valid_buffer_range, buffer_offset,
+	util_range_add(buffer, &rbuffer->valid_buffer_range, buffer_offset,
 		       buffer_offset + buffer_size);
 	return &t->b;
 }

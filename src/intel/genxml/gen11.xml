@@ -706,7 +706,7 @@
     <field name="Surface QPitch" start="32" end="46" type="uint"/>
     <field name="Base Mip Level" start="51" end="55" type="u4.1"/>
     <field name="MOCS" start="56" end="62" type="uint"/>
-    <field name="EnableUnormPathInColorPipe" start="63" end="63" type="bool"/>
+    <field name="Enable Unorm Path In Color Pipe" start="63" end="63" type="bool"/>
     <field name="Width" start="64" end="77" type="uint"/>
     <field name="Height" start="80" end="93" type="uint"/>
     <field name="Surface Pitch" start="96" end="113" type="uint"/>
@@ -1131,6 +1131,14 @@
     <field name="Component Override W" start="15" end="15" type="bool"/>
   </struct>
 
+  <struct name="SLICE_HASH_TABLE" length="32">
+    <group count="16" start="0" size="64">
+      <group count="16" start="0" size="4">
+        <field name="Entry" start="0" end="3" type="uint"/>
+      </group>
+    </group>
+  </struct>
+
   <struct name="SO_DECL" length="1">
     <field name="Component Mask" start="0" end="3" type="uint" default="0"/>
     <field name="Register Index" start="4" end="9" type="uint"/>
@@ -1250,21 +1258,19 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
-    <!-- "On 3DSTATE_3D_MODE, driver must always program bits 31:16 of DW1
-    a value of 0xFFFF" -->
-    <field name="Mask" start="48" end="63" type="mbo"/>
-    <field name="Slice Hashing Table Enable" start="38" end="38" type="bool"/>
-    <field name="Subslice Hashing Mode" start="34" end="35" type="uint">
-       <value name="hashing 8x8"   value="0"/>
-       <value name="hashing 16x4"  value="1"/>
-       <value name="hashing 8x4"   value="2"/>
-       <value name="hashing 16x16" value="3"/>
-    </field>
     <field name="Cross Slice Hashing Mode" start="32" end="33" type="uint">
-       <value name="Normal Mode"    value="0"/>
-       <value name="Disable"        value="1"/>
-       <value name="hashing 32x32"  value="3"/>
+      <value name="Normal Mode" value="0"/>
+      <value name="Disable" value="1"/>
+      <value name="hashing 32x32" value="3"/>
     </field>
+    <field name="Subslice Hashing Mode" start="34" end="35" type="uint">
+      <value name="hashing 8x8" value="0"/>
+      <value name="hashing 16x4" value="1"/>
+      <value name="hashing 8x4" value="2"/>
+      <value name="hashing 16x16" value="3"/>
+    </field>
+    <field name="Slice Hashing Table Enable" start="38" end="38" type="bool"/>
+    <field name="Mask" start="48" end="63" type="mbo"/>
   </instruction>
 
   <instruction name="3DSTATE_AA_LINE_PARAMETERS" bias="2" length="3" engine="render">
@@ -2498,14 +2504,6 @@
     <field name="Slice Hash State Pointer Valid" start="32" end="32" type="bool"/>
     <field name="Slice Hash Table State Pointer" start="38" end="63" type="offset"/>
   </instruction>
-
-  <struct name="SLICE_HASH_TABLE" length="32">
-     <group count="16" start="0" size="64">
-        <group count="16" start="0" size="4">
-           <field name="Entry" start="0" end="3" type="uint"/>
-        </group>
-     </group>
-  </struct>
 
   <instruction name="3DSTATE_SO_BUFFER" bias="2" length="8" engine="render">
     <field name="DWord Length" start="0" end="7" type="uint" default="6"/>
@@ -6916,6 +6914,11 @@
     <field name="PS Thread Panic Dispatch Mask" start="22" end="23" type="uint"/>
   </register>
 
+  <register name="COMMON_SLICE_CHICKEN4" length="1" num="0x7300">
+    <field name="Enable Hardware Filtering in WM" start="5" end="5" type="bool"/>
+    <field name="Enable Hardware Filtering in WM Mask" start="21" end="21" type="bool"/>
+  </register>
+
   <register name="CS_CHICKEN1" length="1" num="0x2580">
     <field name="Replay Mode" start="0" end="0" type="uint">
       <value name="Mid-cmdbuffer Preemption" value="0"/>
@@ -7003,6 +7006,24 @@
     <field name="All Allocation" start="25" end="31" type="uint"/>
   </register>
 
+  <register name="PERFCNT1" length="2" num="0x91b8">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
+  <register name="PERFCNT2" length="2" num="0x91c0">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
   <register name="PS_INVOCATION_COUNT" length="2" num="0x2348">
     <field name="PS Invocation Count Report" start="0" end="63" type="uint"/>
   </register>
@@ -7023,6 +7044,11 @@
     <field name="EU12 Done SS0" start="23" end="23" type="bool"/>
     <field name="EU13 Done SS0" start="24" end="24" type="bool"/>
     <field name="MA1 Done SS0" start="26" end="26" type="bool"/>
+  </register>
+
+  <register name="RPSTAT0" length="1" num="0xa01c">
+    <field name="Previous GT Frequency" start="0" end="8" type="uint"/>
+    <field name="Current GT Frequency" start="23" end="31" type="uint"/>
   </register>
 
   <register name="SAMPLER_INSTDONE" length="1" num="0xe160">

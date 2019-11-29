@@ -159,13 +159,14 @@ void
 si_emit_graphics(struct radv_physical_device *physical_device,
 		 struct radeon_cmdbuf *cs)
 {
+	bool has_clear_state = physical_device->rad_info.has_clear_state;
 	int i;
 
 	radeon_emit(cs, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
 	radeon_emit(cs, CONTEXT_CONTROL_LOAD_ENABLE(1));
 	radeon_emit(cs, CONTEXT_CONTROL_SHADOW_ENABLE(1));
 
-	if (physical_device->has_clear_state) {
+	if (has_clear_state) {
 		radeon_emit(cs, PKT3(PKT3_CLEAR_STATE, 0, 0));
 		radeon_emit(cs, 0);
 	}
@@ -174,7 +175,7 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 		si_set_raster_config(physical_device, cs);
 
 	radeon_set_context_reg(cs, R_028A18_VGT_HOS_MAX_TESS_LEVEL, fui(64));
-	if (!physical_device->has_clear_state)
+	if (!has_clear_state)
 		radeon_set_context_reg(cs, R_028A1C_VGT_HOS_MIN_TESS_LEVEL, fui(0));
 
 	/* FIXME calculate these values somehow ??? */
@@ -183,7 +184,7 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 		radeon_set_context_reg(cs, R_028A58_VGT_ES_PER_GS, 0x40);
 	}
 
-	if (!physical_device->has_clear_state) {
+	if (!has_clear_state) {
 		radeon_set_context_reg(cs, R_028A5C_VGT_GS_PER_VS, 0x2);
 		radeon_set_context_reg(cs, R_028A8C_VGT_PRIMITIVEID_RESET, 0x0);
 		radeon_set_context_reg(cs, R_028B98_VGT_STRMOUT_BUFFER_CONFIG, 0x0);
@@ -191,19 +192,19 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 
 	if (physical_device->rad_info.chip_class <= GFX9)
 		radeon_set_context_reg(cs, R_028AA0_VGT_INSTANCE_STEP_RATE_0, 1);
-	if (!physical_device->has_clear_state)
+	if (!has_clear_state)
 		radeon_set_context_reg(cs, R_028AB8_VGT_VTX_CNT_EN, 0x0);
 	if (physical_device->rad_info.chip_class < GFX7)
 		radeon_set_config_reg(cs, R_008A14_PA_CL_ENHANCE, S_008A14_NUM_CLIP_SEQ(3) |
 				      S_008A14_CLIP_VTX_REORDER_ENA(1));
 
-	if (!physical_device->has_clear_state)
+	if (!has_clear_state)
 		radeon_set_context_reg(cs, R_02882C_PA_SU_PRIM_FILTER_CNTL, 0);
 
 	/* CLEAR_STATE doesn't clear these correctly on certain generations.
 	 * I don't know why. Deduced by trial and error.
 	 */
-	if (physical_device->rad_info.chip_class <= GFX7 || !physical_device->has_clear_state) {
+	if (physical_device->rad_info.chip_class <= GFX7 || !has_clear_state) {
 		radeon_set_context_reg(cs, R_028B28_VGT_STRMOUT_DRAW_OPAQUE_OFFSET, 0);
 		radeon_set_context_reg(cs, R_028204_PA_SC_WINDOW_SCISSOR_TL,
 				       S_028204_WINDOW_OFFSET_DISABLE(1));
@@ -216,14 +217,14 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 				       S_028034_BR_X(16384) | S_028034_BR_Y(16384));
 	}
 
-	if (!physical_device->has_clear_state) {
+	if (!has_clear_state) {
 		for (i = 0; i < 16; i++) {
 			radeon_set_context_reg(cs, R_0282D0_PA_SC_VPORT_ZMIN_0 + i*8, 0);
 			radeon_set_context_reg(cs, R_0282D4_PA_SC_VPORT_ZMAX_0 + i*8, fui(1.0));
 		}
 	}
 
-	if (!physical_device->has_clear_state) {
+	if (!has_clear_state) {
 		radeon_set_context_reg(cs, R_02820C_PA_SC_CLIPRECT_RULE, 0xFFFF);
 		radeon_set_context_reg(cs, R_028230_PA_SC_EDGERULE, 0xAAAAAAAA);
 		/* PA_SU_HARDWARE_SCREEN_OFFSET must be 0 due to hw bug on GFX6 */
@@ -417,44 +418,14 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 
 		radeon_set_context_reg(cs, R_028B50_VGT_TESS_DISTRIBUTION,
 				       vgt_tess_distribution);
-	} else if (!physical_device->has_clear_state) {
+	} else if (!has_clear_state) {
 		radeon_set_context_reg(cs, R_028C58_VGT_VERTEX_REUSE_BLOCK_CNTL, 14);
 		radeon_set_context_reg(cs, R_028C5C_VGT_OUT_DEALLOC_CNTL, 16);
 	}
 
 	if (physical_device->rad_info.chip_class >= GFX9) {
-		unsigned num_se = physical_device->rad_info.max_se;
-		unsigned pc_lines = 0;
-		unsigned max_alloc_count = 0;
-
-		switch (physical_device->rad_info.family) {
-		case CHIP_VEGA10:
-		case CHIP_VEGA12:
-		case CHIP_VEGA20:
-			pc_lines = 4096;
-			break;
-		case CHIP_RAVEN:
-		case CHIP_RAVEN2:
-		case CHIP_RENOIR:
-		case CHIP_NAVI10:
-		case CHIP_NAVI12:
-			pc_lines = 1024;
-			break;
-		case CHIP_NAVI14:
-			pc_lines = 512;
-			break;
-		default:
-			assert(0);
-		}
-
-		if (physical_device->rad_info.chip_class >= GFX10) {
-			max_alloc_count = pc_lines / 3;
-		} else {
-			max_alloc_count = MIN2(128, pc_lines / (4 * num_se));
-		}
-
 		radeon_set_context_reg(cs, R_028C48_PA_SC_BINNER_CNTL_1,
-				       S_028C48_MAX_ALLOC_COUNT(max_alloc_count - 1) |
+				       S_028C48_MAX_ALLOC_COUNT(physical_device->rad_info.pbb_max_alloc_count - 1) |
 				       S_028C48_MAX_PRIM_PER_BATCH(1023));
 		radeon_set_context_reg(cs, R_028C4C_PA_SC_CONSERVATIVE_RASTERIZATION_CNTL,
 				       S_028C4C_NULL_SQUAD_AA_MASK_ENABLE(1));
@@ -468,7 +439,7 @@ si_emit_graphics(struct radv_physical_device *physical_device,
 	radeon_emit(cs, S_028A04_MIN_SIZE(radv_pack_float_12p4(0)) |
 		    S_028A04_MAX_SIZE(radv_pack_float_12p4(8192/2)));
 
-	if (!physical_device->has_clear_state) {
+	if (!has_clear_state) {
 		radeon_set_context_reg(cs, R_028004_DB_COUNT_CONTROL,
 				       S_028004_ZPASS_INCREMENT_DISABLE(1));
 	}
@@ -912,15 +883,19 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs,
 		gcr_cntl |= S_586_GL1_INV(1) | S_586_GLV_INV(1);
 	if (flush_bits & RADV_CMD_FLAG_INV_L2) {
 		/* Writeback and invalidate everything in L2. */
-		gcr_cntl |= S_586_GL2_INV(1) | S_586_GLM_INV(1);
+		gcr_cntl |= S_586_GL2_INV(1) | S_586_GL2_WB(1) |
+		            S_586_GLM_INV(1) | S_586_GLM_WB(1);
 	} else if (flush_bits & RADV_CMD_FLAG_WB_L2) {
-		/* Writeback but do not invalidate. */
-		gcr_cntl |= S_586_GL2_WB(1);
+		/* Writeback but do not invalidate.
+		 * GLM doesn't support WB alone. If WB is set, INV must be set too.
+		 */
+		gcr_cntl |= S_586_GL2_WB(1) |
+		            S_586_GLM_WB(1) | S_586_GLM_INV(1);
 	}
 
 	/* TODO: Implement this new flag for GFX9+.
-	if (flush_bits & RADV_CMD_FLAG_INV_L2_METADATA)
-		gcr_cntl |= S_586_GLM_INV(1);
+	else if (flush_bits & RADV_CMD_FLAG_INV_L2_METADATA)
+		gcr_cntl |= S_586_GLM_INV(1) | S_586_GLM_WB(1);
 	*/
 
 	if (flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {

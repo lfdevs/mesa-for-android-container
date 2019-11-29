@@ -977,7 +977,7 @@ static bool si_initialize_prim_discard_cmdbuf(struct si_context *sctx)
 						 SI_RESOURCE_FLAG_UNMAPPABLE,
 						 PIPE_USAGE_DEFAULT,
 						 sctx->index_ring_size_per_ib * 2,
-						 2 * 1024 * 1024);
+						 sctx->screen->info.pte_fragment_size);
 		if (!sctx->index_ring)
 			return false;
 	}

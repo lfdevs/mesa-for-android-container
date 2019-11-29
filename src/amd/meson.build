@@ -22,6 +22,8 @@ inc_amd = include_directories('.')
 
 subdir('addrlib')
 subdir('common')
+subdir('llvm')
 if with_amd_vk
+  subdir('compiler')
   subdir('vulkan')
 endif

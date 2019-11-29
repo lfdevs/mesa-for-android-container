@@ -821,6 +821,7 @@ static nv50_ir::operation translateOpcode(uint opcode)
    NV50_IR_OPCODE_CASE(DDY, DFDY);
    NV50_IR_OPCODE_CASE(DDY_FINE, DFDY);
    NV50_IR_OPCODE_CASE(KILL, DISCARD);
+   NV50_IR_OPCODE_CASE(DEMOTE, DISCARD);
 
    NV50_IR_OPCODE_CASE(SEQ, SET);
    NV50_IR_OPCODE_CASE(SGT, SET);
@@ -1580,6 +1581,9 @@ bool Source::scanInstruction(const struct tgsi_full_instruction *inst)
 
    if (insn.getOpcode() == TGSI_OPCODE_INTERP_SAMPLE)
       info->prop.fp.readsSampleLocations = true;
+
+   if (insn.getOpcode() == TGSI_OPCODE_DEMOTE)
+      info->prop.fp.usesDiscard = true;
 
    if (insn.dstCount()) {
       Instruction::DstRegister dst = insn.getDst(0);
@@ -3469,6 +3473,11 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       if (!tgsi.getDst(0).isMasked(1))
          mkOp1(OP_RDSV, TYPE_U32, dst0[1], mkSysVal(SV_CLOCK, 0))->fixed = 1;
       break;
+   case TGSI_OPCODE_READ_HELPER:
+      if (!tgsi.getDst(0).isMasked(0))
+         mkOp1(OP_RDSV, TYPE_U32, dst0[0], mkSysVal(SV_THREAD_KILL, 0))
+            ->fixed = 1;
+      break;
    case TGSI_OPCODE_KILL_IF:
       val0 = new_LValue(func, FILE_PREDICATE);
       mask = 0;
@@ -3482,6 +3491,9 @@ Converter::handleInstruction(const struct tgsi_full_instruction *insn)
       }
       break;
    case TGSI_OPCODE_KILL:
+   case TGSI_OPCODE_DEMOTE:
+      // TODO: Should we make KILL exit that invocation? Some old shaders
+      // don't like that.
       mkOp(OP_DISCARD, TYPE_NONE, NULL);
       break;
    case TGSI_OPCODE_TEX:

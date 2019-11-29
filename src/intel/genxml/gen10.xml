@@ -6793,6 +6793,24 @@
     <field name="All Allocation" start="25" end="31" type="uint"/>
   </register>
 
+  <register name="PERFCNT1" length="2" num="0x91b8">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
+  <register name="PERFCNT2" length="2" num="0x91c0">
+    <field name="Value" start="0" end="43" type="uint"/>
+    <field name="Event Selection" start="52" end="59" type="uint"/>
+    <field name="Counter Clear" start="60" end="60" type="bool"/>
+    <field name="Edge Detect" start="61" end="61" type="bool"/>
+    <field name="Overflow Enable" start="62" end="62" type="bool"/>
+    <field name="Counter Enable" start="63" end="63" type="bool"/>
+  </register>
+
   <register name="PS_INVOCATION_COUNT" length="2" num="0x2348">
     <field name="PS Invocation Count Report" start="0" end="63" type="uint"/>
   </register>
@@ -6813,6 +6831,11 @@
     <field name="EU12 Done SS0" start="23" end="23" type="bool"/>
     <field name="EU13 Done SS0" start="24" end="24" type="bool"/>
     <field name="MA1 Done SS0" start="26" end="26" type="bool"/>
+  </register>
+
+  <register name="RPSTAT0" length="1" num="0xa01c">
+    <field name="Previous GT Frequency" start="0" end="8" type="uint"/>
+    <field name="Current GT Frequency" start="23" end="31" type="uint"/>
   </register>
 
   <register name="SAMPLER_INSTDONE" length="1" num="0xe160">

@@ -184,6 +184,8 @@ iris_fence_flush(struct pipe_context *ctx,
       iris_syncpt_reference(screen, &fence->syncpt[fence->count++],
                             ice->batches[b].last_syncpt);
    }
+
+   iris_fence_reference(ctx->screen, out_fence, NULL);
    *out_fence = fence;
 }
 

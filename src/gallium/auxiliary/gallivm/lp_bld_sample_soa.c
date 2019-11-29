@@ -61,6 +61,7 @@
 #include "lp_bld_quad.h"
 #include "lp_bld_pack.h"
 #include "lp_bld_intr.h"
+#include "lp_bld_misc.h"
 
 
 /**
@@ -1032,11 +1033,27 @@ lp_build_sample_image_linear(struct lp_build_sample_context *bld,
    boolean seamless_cube_filter, accurate_cube_corners;
    unsigned chan_swiz = bld->static_texture_state->swizzle_r;
 
+   if (is_gather) {
+      switch (bld->gather_comp) {
+      case 0: chan_swiz = bld->static_texture_state->swizzle_r; break;
+      case 1: chan_swiz = bld->static_texture_state->swizzle_g; break;
+      case 2: chan_swiz = bld->static_texture_state->swizzle_b; break;
+      case 3: chan_swiz = bld->static_texture_state->swizzle_a; break;
+      default:
+	 break;
+      }
+   }
+
    seamless_cube_filter = (bld->static_texture_state->target == PIPE_TEXTURE_CUBE ||
                            bld->static_texture_state->target == PIPE_TEXTURE_CUBE_ARRAY) &&
                           bld->static_sampler_state->seamless_cube_map;
 
-   accurate_cube_corners = ACCURATE_CUBE_CORNERS && seamless_cube_filter;
+   /*
+    * Disable accurate cube corners for integer textures, which should only
+    * get here in the gather path.
+    */
+   accurate_cube_corners = ACCURATE_CUBE_CORNERS && seamless_cube_filter &&
+     !util_format_is_pure_integer(bld->static_texture_state->format);
 
    lp_build_extract_image_sizes(bld,
                                 &bld->int_size_bld,
@@ -2972,7 +2989,8 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
       bld.num_lods = num_quads;
    }
 
-
+   if (op_is_gather)
+      bld.gather_comp = (sample_key & LP_SAMPLER_GATHER_COMP_MASK) >> LP_SAMPLER_GATHER_COMP_SHIFT;
    bld.lodf_type = type;
    /* we want native vector size to be able to use our intrinsics */
    if (bld.num_lods != type.length) {
@@ -3945,5 +3963,187 @@ lp_build_size_query_soa(struct gallivm_state *gallivm,
       }
       params->sizes_out[3] = lp_build_broadcast(gallivm, lp_build_vec_type(gallivm, params->int_type),
                                         num_levels);
+   }
+}
+
+static void
+lp_build_do_atomic_soa(struct gallivm_state *gallivm,
+                       const struct util_format_description *format_desc,
+                       struct lp_type type,
+                       LLVMValueRef exec_mask,
+                       LLVMValueRef base_ptr,
+                       LLVMValueRef offset,
+                       LLVMValueRef out_of_bounds,
+                       unsigned img_op,
+                       LLVMAtomicRMWBinOp op,
+                       const LLVMValueRef rgba_in[4],
+                       const LLVMValueRef rgba2_in[4],
+                       LLVMValueRef atomic_result[4])
+{
+   enum pipe_format format = format_desc->format;
+
+   if (format != PIPE_FORMAT_R32_UINT && format != PIPE_FORMAT_R32_SINT && format != PIPE_FORMAT_R32_FLOAT)
+      return;
+
+   LLVMValueRef atom_res = lp_build_alloca(gallivm,
+                                           LLVMVectorType(LLVMInt32TypeInContext(gallivm->context), type.length), "");
+
+   offset = LLVMBuildGEP(gallivm->builder, base_ptr, &offset, 1, "");
+   struct lp_build_loop_state loop_state;
+   lp_build_loop_begin(&loop_state, gallivm, lp_build_const_int32(gallivm, 0));
+   struct lp_build_if_state ifthen;
+   LLVMValueRef cond;
+   LLVMValueRef packed = rgba_in[0], packed2 = rgba2_in[0];
+
+   LLVMValueRef should_store_mask = LLVMBuildAnd(gallivm->builder, exec_mask, LLVMBuildNot(gallivm->builder, out_of_bounds, ""), "store_mask");
+   assert(exec_mask);
+
+   cond = LLVMBuildICmp(gallivm->builder, LLVMIntNE, should_store_mask, lp_build_const_int_vec(gallivm, type, 0), "");
+   cond = LLVMBuildExtractElement(gallivm->builder, cond, loop_state.counter, "");
+   lp_build_if(&ifthen, gallivm, cond);
+
+   LLVMValueRef data = LLVMBuildExtractElement(gallivm->builder, packed, loop_state.counter, "");
+   LLVMValueRef cast_base_ptr = LLVMBuildExtractElement(gallivm->builder, offset, loop_state.counter, "");
+   cast_base_ptr = LLVMBuildBitCast(gallivm->builder, cast_base_ptr, LLVMPointerType(LLVMInt32TypeInContext(gallivm->context), 0), "");
+   data = LLVMBuildBitCast(gallivm->builder, data, LLVMInt32TypeInContext(gallivm->context), "");
+
+   if (img_op == LP_IMG_ATOMIC_CAS) {
+      LLVMValueRef cas_src_ptr = LLVMBuildExtractElement(gallivm->builder, packed2, loop_state.counter, "");
+      LLVMValueRef cas_src = LLVMBuildBitCast(gallivm->builder, cas_src_ptr, LLVMInt32TypeInContext(gallivm->context), "");
+      data = LLVMBuildAtomicCmpXchg(gallivm->builder, cast_base_ptr, data,
+                                    cas_src,
+                                    LLVMAtomicOrderingSequentiallyConsistent,
+                                    LLVMAtomicOrderingSequentiallyConsistent,
+                                    false);
+      data = LLVMBuildExtractValue(gallivm->builder, data, 0, "");
+   } else {
+      data = LLVMBuildAtomicRMW(gallivm->builder, op,
+                                cast_base_ptr, data,
+                                LLVMAtomicOrderingSequentiallyConsistent,
+                                false);
+   }
+
+   LLVMValueRef temp_res = LLVMBuildLoad(gallivm->builder, atom_res, "");
+   temp_res = LLVMBuildInsertElement(gallivm->builder, temp_res, data, loop_state.counter, "");
+   LLVMBuildStore(gallivm->builder, temp_res, atom_res);
+
+   lp_build_endif(&ifthen);
+   lp_build_loop_end_cond(&loop_state, lp_build_const_int32(gallivm, type.length),
+                          NULL, LLVMIntUGE);
+   atomic_result[0] = LLVMBuildLoad(gallivm->builder, atom_res, "");
+}
+
+void
+lp_build_img_op_soa(const struct lp_static_texture_state *static_texture_state,
+                    struct lp_sampler_dynamic_state *dynamic_state,
+                    struct gallivm_state *gallivm,
+                    const struct lp_img_params *params)
+{
+   unsigned target = params->target;
+   unsigned dims = texture_dims(target);
+   /** regular scalar int type */
+   struct lp_type int_type, int_coord_type;
+   struct lp_build_context int_bld, int_coord_bld;
+   const struct util_format_description *format_desc = util_format_description(static_texture_state->format);
+   LLVMValueRef x = params->coords[0], y = params->coords[1], z = params->coords[2];
+   LLVMValueRef row_stride_vec = NULL, img_stride_vec = NULL;
+   int_type = lp_type_int(32);
+   int_coord_type = lp_int_type(params->type);
+   lp_build_context_init(&int_bld, gallivm, int_type);
+   lp_build_context_init(&int_coord_bld, gallivm, int_coord_type);
+
+   LLVMValueRef offset, i, j;
+
+   LLVMValueRef row_stride = dynamic_state->row_stride(dynamic_state, gallivm,
+                                                       params->context_ptr, params->image_index);
+   LLVMValueRef img_stride = dynamic_state->img_stride(dynamic_state, gallivm,
+                                                       params->context_ptr, params->image_index);
+   LLVMValueRef base_ptr = dynamic_state->base_ptr(dynamic_state, gallivm,
+                                                   params->context_ptr, params->image_index);
+   LLVMValueRef width = dynamic_state->width(dynamic_state, gallivm,
+                                                params->context_ptr, params->image_index);
+   LLVMValueRef height = dynamic_state->height(dynamic_state, gallivm,
+                                               params->context_ptr, params->image_index);
+   LLVMValueRef depth = dynamic_state->depth(dynamic_state, gallivm,
+                                              params->context_ptr, params->image_index);
+   boolean layer_coord = has_layer_coord(target);
+
+   width = lp_build_broadcast_scalar(&int_coord_bld, width);
+   if (dims >= 2) {
+      height = lp_build_broadcast_scalar(&int_coord_bld, height);
+      row_stride_vec = lp_build_broadcast_scalar(&int_coord_bld, row_stride);
+   }
+   if (dims >= 3 || layer_coord) {
+      depth = lp_build_broadcast_scalar(&int_coord_bld, depth);
+      img_stride_vec = lp_build_broadcast_scalar(&int_coord_bld, img_stride);
+   }
+
+   LLVMValueRef out_of_bounds = int_coord_bld.zero;
+   LLVMValueRef out1;
+   out1 = lp_build_cmp(&int_coord_bld, PIPE_FUNC_GEQUAL, x, width);
+   out_of_bounds = lp_build_or(&int_coord_bld, out_of_bounds, out1);
+
+   if (dims >= 2) {
+      out1 = lp_build_cmp(&int_coord_bld, PIPE_FUNC_GEQUAL, y, height);
+      out_of_bounds = lp_build_or(&int_coord_bld, out_of_bounds, out1);
+   }
+   if (dims >= 3) {
+      out1 = lp_build_cmp(&int_coord_bld, PIPE_FUNC_GEQUAL, z, depth);
+      out_of_bounds = lp_build_or(&int_coord_bld, out_of_bounds, out1);
+   }
+   lp_build_sample_offset(&int_coord_bld,
+                          format_desc,
+                          x, y, z, row_stride_vec, img_stride_vec,
+                          &offset, &i, &j);
+
+   if (params->img_op == LP_IMG_LOAD) {
+      struct lp_type texel_type = params->type;
+      if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB &&
+          format_desc->channel[0].pure_integer) {
+         if (format_desc->channel[0].type == UTIL_FORMAT_TYPE_SIGNED) {
+            texel_type = lp_type_int_vec(params->type.width, params->type.width * params->type.length);
+         } else if (format_desc->channel[0].type == UTIL_FORMAT_TYPE_UNSIGNED) {
+            texel_type = lp_type_uint_vec(params->type.width, params->type.width * params->type.length);
+         }
+      }
+
+      if (static_texture_state->format == PIPE_FORMAT_NONE) {
+         /*
+          * If there's nothing bound, format is NONE, and we must return
+          * all zero as mandated by d3d10 in this case.
+          */
+         unsigned chan;
+         LLVMValueRef zero = lp_build_zero(gallivm, params->type);
+         for (chan = 0; chan < 4; chan++) {
+            params->outdata[chan] = zero;
+         }
+         return;
+      }
+
+      offset = lp_build_andnot(&int_coord_bld, offset, out_of_bounds);
+      struct lp_build_context texel_bld;
+      lp_build_context_init(&texel_bld, gallivm, texel_type);
+      lp_build_fetch_rgba_soa(gallivm,
+                              format_desc,
+                              texel_type, TRUE,
+                              base_ptr, offset,
+                              i, j,
+                              NULL,
+                              params->outdata);
+
+      for (unsigned chan = 0; chan < 4; chan++) {
+         params->outdata[chan] = lp_build_select(&texel_bld, out_of_bounds,
+                                                 texel_bld.zero, params->outdata[chan]);
+      }
+   } else if (params->img_op == LP_IMG_STORE) {
+      if (static_texture_state->format == PIPE_FORMAT_NONE)
+         return;
+      lp_build_store_rgba_soa(gallivm, format_desc, params->type, params->exec_mask, base_ptr, offset, out_of_bounds,
+                              params->indata);
+   } else {
+      if (static_texture_state->format == PIPE_FORMAT_NONE)
+         return;
+      lp_build_do_atomic_soa(gallivm, format_desc, params->type, params->exec_mask, base_ptr, offset, out_of_bounds,
+                             params->img_op, params->op, params->indata, params->indata2, params->outdata);
    }
 }

@@ -252,6 +252,7 @@ public:
    virtual void visit(ir_call *);
    virtual void visit(ir_return *);
    virtual void visit(ir_discard *);
+   virtual void visit(ir_demote *);
    virtual void visit(ir_texture *);
    virtual void visit(ir_if *);
    virtual void visit(ir_emit_vertex *);
@@ -1411,6 +1412,8 @@ ir_to_mesa_visitor::visit(ir_expression *ir)
    case ir_unop_unpack_sampler_2x32:
    case ir_unop_pack_image_2x32:
    case ir_unop_unpack_image_2x32:
+   case ir_unop_atan:
+   case ir_binop_atan2:
       assert(!"not supported");
       break;
 
@@ -2202,6 +2205,12 @@ ir_to_mesa_visitor::visit(ir_discard *ir)
 }
 
 void
+ir_to_mesa_visitor::visit(ir_demote *ir)
+{
+   assert(!"demote statement unsupported");
+}
+
+void
 ir_to_mesa_visitor::visit(ir_if *ir)
 {
    ir_to_mesa_instruction *if_inst;
@@ -2390,7 +2399,7 @@ public:
    add_uniform_to_shader(struct gl_context *ctx,
                          struct gl_shader_program *shader_program,
 			 struct gl_program_parameter_list *params)
-      : ctx(ctx), params(params), idx(-1)
+      : ctx(ctx), shader_program(shader_program), params(params), idx(-1)
    {
       /* empty */
    }
@@ -2411,6 +2420,7 @@ private:
                             bool last_field);
 
    struct gl_context *ctx;
+   struct gl_shader_program *shader_program;
    struct gl_program_parameter_list *params;
    int idx;
    ir_variable *var;
@@ -2472,6 +2482,21 @@ add_uniform_to_shader::visit_field(const glsl_type *type, const char *name,
     */
    if (this->idx < 0)
       this->idx = index;
+
+   /* Each Parameter will hold the index to the backing uniform storage.
+    * This avoids relying on names to match parameters and uniform
+    * storages later when associating uniform storage.
+    */
+   unsigned location;
+   const bool found =
+      shader_program->UniformHash->get(location, params->Parameters[index].Name);
+   assert(found);
+
+   for (unsigned i = 0; i < num_params; i++) {
+      struct gl_program_parameter *param = &params->Parameters[index + i];
+      param->UniformStorageIndex = location;
+      param->MainUniformStorageIndex = params->Parameters[this->idx].UniformStorageIndex;
+   }
 }
 
 /**
@@ -2520,13 +2545,7 @@ _mesa_associate_uniform_storage(struct gl_context *ctx,
       if (params->Parameters[i].Type != PROGRAM_UNIFORM)
          continue;
 
-      unsigned location;
-      const bool found =
-         shader_program->UniformHash->get(location, params->Parameters[i].Name);
-      assert(found);
-
-      if (!found)
-         continue;
+      unsigned location = params->Parameters[i].UniformStorageIndex;
 
       struct gl_uniform_storage *storage =
          &shader_program->data->UniformStorage[location];

@@ -580,7 +580,9 @@ decode_ps_kernels(struct gen_batch_decode_ctx *ctx, const uint32_t *p)
       ctx_disassemble_program(ctx, ksp[1], "SIMD16 fragment shader");
    if (enabled[2])
       ctx_disassemble_program(ctx, ksp[2], "SIMD32 fragment shader");
-   fprintf(ctx->fp, "\n");
+
+   if (enabled[0] || enabled[1] || enabled[2])
+      fprintf(ctx->fp, "\n");
 }
 
 static void
@@ -628,6 +630,20 @@ decode_3dstate_constant(struct gen_batch_decode_ctx *ctx, const uint32_t *p)
          ctx_print_buffer(ctx, buffer, size, 0, -1);
       }
    }
+}
+
+static void
+decode_gen6_3dstate_binding_table_pointers(struct gen_batch_decode_ctx *ctx,
+                                           const uint32_t *p)
+{
+   fprintf(ctx->fp, "VS Binding Table:\n");
+   dump_binding_table(ctx, p[1], -1);
+
+   fprintf(ctx->fp, "GS Binding Table:\n");
+   dump_binding_table(ctx, p[2], -1);
+
+   fprintf(ctx->fp, "PS Binding Table:\n");
+   dump_binding_table(ctx, p[3], -1);
 }
 
 static void
@@ -784,12 +800,14 @@ struct custom_decoder {
    { "3DSTATE_DS", decode_single_ksp },
    { "3DSTATE_HS", decode_single_ksp },
    { "3DSTATE_PS", decode_ps_kernels },
+   { "3DSTATE_WM", decode_ps_kernels },
    { "3DSTATE_CONSTANT_VS", decode_3dstate_constant },
    { "3DSTATE_CONSTANT_GS", decode_3dstate_constant },
    { "3DSTATE_CONSTANT_PS", decode_3dstate_constant },
    { "3DSTATE_CONSTANT_HS", decode_3dstate_constant },
    { "3DSTATE_CONSTANT_DS", decode_3dstate_constant },
 
+   { "3DSTATE_BINDING_TABLE_POINTERS", decode_gen6_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_VS", decode_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_HS", decode_3dstate_binding_table_pointers },
    { "3DSTATE_BINDING_TABLE_POINTERS_DS", decode_3dstate_binding_table_pointers },

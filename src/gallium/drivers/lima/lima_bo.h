@@ -28,12 +28,18 @@
 #include <stdint.h>
 
 #include "util/u_atomic.h"
+#include "util/list.h"
 
 struct lima_bo {
    struct lima_screen *screen;
+   struct list_head time_list;
+   struct list_head size_list;
    int refcnt;
+   bool cacheable;
+   time_t free_time;
 
    uint32_t size;
+   uint32_t flags;
    uint32_t handle;
    uint64_t offset;
    uint32_t flink_name;
@@ -44,10 +50,12 @@ struct lima_bo {
 
 bool lima_bo_table_init(struct lima_screen *screen);
 void lima_bo_table_fini(struct lima_screen *screen);
+bool lima_bo_cache_init(struct lima_screen *screen);
+void lima_bo_cache_fini(struct lima_screen *screen);
 
 struct lima_bo *lima_bo_create(struct lima_screen *screen, uint32_t size,
                                uint32_t flags);
-void lima_bo_free(struct lima_bo *bo);
+void lima_bo_unreference(struct lima_bo *bo);
 
 static inline void lima_bo_reference(struct lima_bo *bo)
 {

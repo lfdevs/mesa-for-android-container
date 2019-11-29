@@ -83,7 +83,7 @@ struct zwp_linux_dmabuf_v1;
 #include "util/u_vector.h"
 #include "util/bitset.h"
 
-#define EGL_DRI2_MAX_FORMATS 8
+#define EGL_DRI2_MAX_FORMATS 10
 
 struct wl_buffer;
 
@@ -404,10 +404,20 @@ dri2_surface_get_dri_drawable(_EGLSurface *surf);
 __DRIimage *
 dri2_lookup_egl_image(__DRIscreen *screen, void *image, void *data);
 
+void
+dri2_get_shifts_and_sizes(const __DRIcoreExtension *core,
+		          const __DRIconfig *config, int *shifts,
+			  unsigned int *sizes);
+
+void
+dri2_get_render_type_float(const __DRIcoreExtension *core,
+                           const __DRIconfig *config,
+                           bool *is_float);
+
 struct dri2_egl_config *
 dri2_add_config(_EGLDisplay *disp, const __DRIconfig *dri_config, int id,
                 EGLint surface_type, const EGLint *attr_list,
-                const unsigned int *rgba_masks);
+                const int *rgba_shifts, const unsigned int *rgba_sizes);
 
 _EGLImage *
 dri2_create_image_khr(_EGLDriver *drv, _EGLDisplay *disp,

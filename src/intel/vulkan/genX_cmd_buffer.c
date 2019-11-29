@@ -29,6 +29,7 @@
 #include "vk_util.h"
 #include "util/fast_idiv_by_const.h"
 
+#include "common/gen_aux_map.h"
 #include "common/gen_l3_config.h"
 #include "genxml/gen_macros.h"
 #include "genxml/genX_pack.h"
@@ -69,6 +70,9 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
       pc.DCFlushEnable = true;
       pc.RenderTargetCacheFlushEnable = true;
       pc.CommandStreamerStallEnable = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(STATE_BASE_ADDRESS), sba) {
@@ -287,7 +291,8 @@ color_attachment_compute_aux_usage(struct anv_device * device,
        * In other words, we can only sample from a fast-cleared image if it
        * also supports color compression.
        */
-      if (isl_format_supports_ccs_e(&device->info, iview->planes[0].isl.format)) {
+      if (isl_format_supports_ccs_e(&device->info, iview->planes[0].isl.format) &&
+          isl_format_supports_ccs_d(&device->info, iview->planes[0].isl.format)) {
          att_state->input_aux_usage = ISL_AUX_USAGE_CCS_D;
 
          /* While fast-clear resolves and partial resolves are fairly cheap in the
@@ -417,12 +422,11 @@ depth_stencil_attachment_compute_aux_usage(struct anv_device *device,
       anv_layout_to_aux_usage(&device->info, iview->image,
                               VK_IMAGE_ASPECT_DEPTH_BIT,
                               pass_att->first_subpass_layout);
-   if (first_subpass_aux_usage != ISL_AUX_USAGE_HIZ)
-      return;
-
-   if (!blorp_can_hiz_clear_depth(GEN_GEN,
-                                  iview->planes[0].isl.format,
-                                  iview->image->samples,
+   if (!blorp_can_hiz_clear_depth(&device->info,
+                                  &iview->image->planes[0].surface.isl,
+                                  first_subpass_aux_usage,
+                                  iview->planes[0].isl.base_level,
+                                  iview->planes[0].isl.base_array_layer,
                                   render_area.offset.x,
                                   render_area.offset.y,
                                   render_area.offset.x +
@@ -1627,7 +1631,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
       gen_dump_l3_config(cfg, stderr);
    }
 
-   const bool has_slm = cfg->n[GEN_L3P_SLM];
+   UNUSED const bool has_slm = cfg->n[GEN_L3P_SLM];
 
    /* According to the hardware docs, the L3 partitioning can only be changed
     * while the pipeline is completely drained and the caches are flushed,
@@ -1674,9 +1678,19 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
 
    assert(!cfg->n[GEN_L3P_IS] && !cfg->n[GEN_L3P_C] && !cfg->n[GEN_L3P_T]);
 
+#if GEN_GEN >= 12
+#define L3_ALLOCATION_REG GENX(L3ALLOC)
+#define L3_ALLOCATION_REG_num GENX(L3ALLOC_num)
+#else
+#define L3_ALLOCATION_REG GENX(L3CNTLREG)
+#define L3_ALLOCATION_REG_num GENX(L3CNTLREG_num)
+#endif
+
    uint32_t l3cr;
-   anv_pack_struct(&l3cr, GENX(L3CNTLREG),
+   anv_pack_struct(&l3cr, L3_ALLOCATION_REG,
+#if GEN_GEN < 12
                    .SLMEnable = has_slm,
+#endif
 #if GEN_GEN == 11
    /* WA_1406697149: Bit 9 "Error Detection Behavior Control" must be set
     * in L3CNTLREG register. The default setting of the bit is not the
@@ -1691,7 +1705,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
                    .AllAllocation = cfg->n[GEN_L3P_ALL]);
 
    /* Set up the L3 partitioning. */
-   emit_lri(&cmd_buffer->batch, GENX(L3CNTLREG_num), l3cr);
+   emit_lri(&cmd_buffer->batch, L3_ALLOCATION_REG_num, l3cr);
 
 #else
 
@@ -1794,8 +1808,29 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       bits &= ~ANV_PIPE_NEEDS_CS_STALL_BIT;
    }
 
+   if (GEN_GEN >= 12 &&
+       ((bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT) ||
+        (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT))) {
+      /* From the PIPE_CONTROL instruction table, bit 28 (Tile Cache Flush
+       * Enable):
+       *
+       *    Unified Cache (Tile Cache Disabled):
+       *
+       *    When the Color and Depth (Z) streams are enabled to be cached in
+       *    the DC space of L2, Software must use "Render Target Cache Flush
+       *    Enable" and "Depth Cache Flush Enable" along with "Tile Cache
+       *    Flush" for getting the color and depth (Z) write data to be
+       *    globally observable.  In this mode of operation it is not required
+       *    to set "CS Stall" upon setting "Tile Cache Flush" bit.
+       */
+      bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
+   }
+
    if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
+#if GEN_GEN >= 12
+         pipe.TileCacheFlushEnable = bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT;
+#endif
          pipe.DepthCacheFlushEnable = bits & ANV_PIPE_DEPTH_CACHE_FLUSH_BIT;
          pipe.DCFlushEnable = bits & ANV_PIPE_DATA_CACHE_FLUSH_BIT;
          pipe.RenderTargetCacheFlushEnable =
@@ -2107,7 +2142,8 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
       return VK_SUCCESS;
    }
 
-   struct anv_pipeline_bind_map *map = &pipeline->shaders[stage]->bind_map;
+   struct anv_shader_bin *bin = pipeline->shaders[stage];
+   struct anv_pipeline_bind_map *map = &bin->bind_map;
    if (map->surface_count == 0) {
       *bt_state = (struct anv_state) { 0, };
       return VK_SUCCESS;
@@ -2281,6 +2317,16 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          break;
 
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+         /* If the shader never does any UBO pulls (this is a fairly common
+          * case) then we don't need to fill out those binding table entries.
+          * The real cost savings here is that we don't have to build the
+          * surface state for them which is surprisingly expensive when it's
+          * on the hot-path.
+          */
+         if (!bin->prog_data->has_ubo_pull)
+            continue;
+         /* Fall through */
+
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
          /* Compute the offset within the buffer */
          uint32_t dynamic_offset =
@@ -2342,6 +2388,9 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       pc.RenderTargetCacheFlushEnable  = true;
       pc.StallAtPixelScoreboard        = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 #endif
 
@@ -2624,6 +2673,34 @@ cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
    cmd_buffer->state.push_constants_dirty &= ~flushed;
 }
 
+#if GEN_GEN >= 12
+void
+genX(cmd_buffer_aux_map_state)(struct anv_cmd_buffer *cmd_buffer)
+{
+   void *aux_map_ctx = cmd_buffer->device->aux_map_ctx;
+   if (!aux_map_ctx)
+      return;
+   uint32_t aux_map_state_num = gen_aux_map_get_state_num(aux_map_ctx);
+   if (cmd_buffer->state.last_aux_map_state != aux_map_state_num) {
+      /* If the aux-map state number increased, then we need to rewrite the
+       * register. Rewriting the register is used to both set the aux-map
+       * translation table address, and also to invalidate any previously
+       * cached translations.
+       */
+      uint64_t base_addr = gen_aux_map_get_base(aux_map_ctx);
+      anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+         lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num);
+         lri.DataDWord = base_addr & 0xffffffff;
+      }
+      anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+         lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num) + 4;
+         lri.DataDWord = base_addr >> 32;
+      }
+      cmd_buffer->state.last_aux_map_state = aux_map_state_num;
+   }
+}
+#endif
+
 void
 genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 {
@@ -2641,6 +2718,10 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
    genX(cmd_buffer_emit_hashing_mode)(cmd_buffer, UINT_MAX, UINT_MAX, 1);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
+
+#if GEN_GEN >= 12
+   genX(cmd_buffer_aux_map_state)(cmd_buffer);
+#endif
 
    if (vb_emit) {
       const uint32_t num_buffers = __builtin_popcount(vb_emit);
@@ -2688,7 +2769,12 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
       for (unsigned idx = 0; idx < MAX_XFB_BUFFERS; idx++) {
          struct anv_xfb_binding *xfb = &cmd_buffer->state.xfb_bindings[idx];
          anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
+#if GEN_GEN < 12
             sob.SOBufferIndex = idx;
+#else
+            sob._3DCommandOpcode = 0;
+            sob._3DCommandSubOpcode = SO_BUFFER_INDEX_0_CMD + idx;
+#endif
 
             if (cmd_buffer->state.xfb_enabled && xfb->buffer && xfb->size != 0) {
                sob.SOBufferEnable = true;
@@ -3508,6 +3594,10 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
 
    genX(flush_pipeline_select_gpgpu)(cmd_buffer);
 
+#if GEN_GEN >= 12
+   genX(cmd_buffer_aux_map_state)(cmd_buffer);
+#endif
+
    if (cmd_buffer->state.compute.pipeline_dirty) {
       /* From the Sky Lake PRM Vol 2a, MEDIA_VFE_STATE:
        *
@@ -3822,6 +3912,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       pc.DCFlushEnable                 = true;
       pc.PostSyncOperation             = NoWrite;
       pc.CommandStreamerStallEnable    = true;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
@@ -3830,6 +3923,9 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       pc.StateCacheInvalidationEnable     = true;
       pc.InstructionCacheInvalidateEnable = true;
       pc.PostSyncOperation                = NoWrite;
+#if GEN_GEN >= 12
+      pc.TileCacheFlushEnable = true;
+#endif
    }
 
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPELINE_SELECT), ps) {
@@ -3896,6 +3992,9 @@ genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer)
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
       pipe.DepthCacheFlushEnable = true;
+#if GEN_GEN >= 12
+      pipe.TileCacheFlushEnable = true;
+#endif
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
       pipe.DepthStallEnable = true;
@@ -5054,4 +5153,58 @@ void genX(CmdWaitEvents)(
                             memoryBarrierCount, pMemoryBarriers,
                             bufferMemoryBarrierCount, pBufferMemoryBarriers,
                             imageMemoryBarrierCount, pImageMemoryBarriers);
+}
+
+VkResult genX(CmdSetPerformanceOverrideINTEL)(
+    VkCommandBuffer                             commandBuffer,
+    const VkPerformanceOverrideInfoINTEL*       pOverrideInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   switch (pOverrideInfo->type) {
+   case VK_PERFORMANCE_OVERRIDE_TYPE_NULL_HARDWARE_INTEL: {
+      uint32_t dw;
+
+#if GEN_GEN >= 9
+      anv_pack_struct(&dw, GENX(CS_DEBUG_MODE2),
+                      ._3DRenderingInstructionDisable = pOverrideInfo->enable,
+                      .MediaInstructionDisable = pOverrideInfo->enable,
+                      ._3DRenderingInstructionDisableMask = true,
+                      .MediaInstructionDisableMask = true);
+      emit_lri(&cmd_buffer->batch, GENX(CS_DEBUG_MODE2_num), dw);
+#else
+      anv_pack_struct(&dw, GENX(INSTPM),
+                      ._3DRenderingInstructionDisable = pOverrideInfo->enable,
+                      .MediaInstructionDisable = pOverrideInfo->enable,
+                      ._3DRenderingInstructionDisableMask = true,
+                      .MediaInstructionDisableMask = true);
+      emit_lri(&cmd_buffer->batch, GENX(INSTPM_num), dw);
+#endif
+      break;
+   }
+
+   case VK_PERFORMANCE_OVERRIDE_TYPE_FLUSH_GPU_CACHES_INTEL:
+      if (pOverrideInfo->enable) {
+         /* FLUSH ALL THE THINGS! As requested by the MDAPI team. */
+         cmd_buffer->state.pending_pipe_bits |=
+            ANV_PIPE_FLUSH_BITS |
+            ANV_PIPE_INVALIDATE_BITS;
+         genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+      }
+      break;
+
+   default:
+      unreachable("Invalid override");
+   }
+
+   return VK_SUCCESS;
+}
+
+VkResult genX(CmdSetPerformanceStreamMarkerINTEL)(
+    VkCommandBuffer                             commandBuffer,
+    const VkPerformanceStreamMarkerInfoINTEL*   pMarkerInfo)
+{
+   /* TODO: Waiting on the register to write, might depend on generation. */
+
+   return VK_SUCCESS;
 }

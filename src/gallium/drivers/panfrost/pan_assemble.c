@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "pan_bo.h"
 #include "pan_context.h"
 
 #include "compiler/nir/nir.h"
@@ -58,14 +59,6 @@ panfrost_shader_compile(
 
         s->info.stage = stage;
 
-        if (stage == MESA_SHADER_FRAGMENT) {
-                /* Inject the alpha test now if we need to */
-
-                if (state->alpha_state.enabled) {
-                        NIR_PASS_V(s, nir_lower_alpha_test, state->alpha_state.func, false);
-                }
-        }
-
         /* Call out to Midgard compiler given the above NIR */
 
         midgard_program program = {
@@ -82,7 +75,7 @@ panfrost_shader_compile(
          * I bet someone just thought that would be a cute pun. At least,
          * that's how I'd do it. */
 
-        state->bo = panfrost_drm_create_bo(screen, size, PAN_ALLOCATE_EXECUTE);
+        state->bo = panfrost_bo_create(screen, size, PAN_BO_EXECUTE);
         memcpy(state->bo->cpu, dst, size);
         meta->shader = state->bo->gpu | program.first_tag;
 
@@ -145,7 +138,10 @@ panfrost_shader_compile(
                 /* Check for special cases, otherwise assume general varying */
 
                 if (location == VARYING_SLOT_POS) {
-                        v.format = MALI_VARYING_POS;
+                        if (stage == MESA_SHADER_FRAGMENT)
+                                state->reads_frag_coord = true;
+                        else
+                                v.format = MALI_VARYING_POS;
                 } else if (location == VARYING_SLOT_PSIZ) {
                         v.format = MALI_R16F;
                         v.swizzle = default_vec1_swizzle;

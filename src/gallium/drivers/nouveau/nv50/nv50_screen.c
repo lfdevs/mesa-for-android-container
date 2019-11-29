@@ -330,6 +330,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_FBFETCH_COHERENT:
    case PIPE_CAP_TGSI_SKIP_SHRINK_IO_ARRAYS:
    case PIPE_CAP_TGSI_ATOMINC_WRAP:
+   case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
       return 0;
 
    case PIPE_CAP_VENDOR_ID:
@@ -355,7 +356,7 @@ nv50_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    /* caps where we want the default value */
    case PIPE_CAP_DMABUF:
    case PIPE_CAP_ESSL_FEATURE_LEVEL:
-   case PIPE_CAP_MAX_FRAMES_IN_FLIGHT:
+   case PIPE_CAP_THROTTLE:
       return u_pipe_screen_get_param_defaults(pscreen, param);
    }
 }
@@ -435,8 +436,6 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
-   case PIPE_SHADER_CAP_SCALAR_ISA:
-      return 1;
    default:
       NOUVEAU_ERR("unknown PIPE_SHADER_CAP %d\n", param);
       return 0;
@@ -901,6 +900,7 @@ static const nir_shader_compiler_options nir_options = {
    .lower_fpow = false,
    .lower_uadd_carry = true,
    .lower_usub_borrow = true,
+   .lower_sub = true,
    .lower_ffract = true,
    .lower_pack_half_2x16 = true,
    .lower_pack_unorm_2x16 = true,
@@ -917,6 +917,7 @@ static const nir_shader_compiler_options nir_options = {
    .lower_all_io_to_temps = false,
    .lower_cs_local_index_from_id = true,
    .lower_rotate = true,
+   .lower_to_scalar = true,
    .use_interpolated_input_intrinsics = true,
    .max_unroll_iterations = 32,
 };

@@ -2964,7 +2964,6 @@ brw_compile_vs(const struct brw_compiler *compiler, void *log_data,
 
       fs_visitor v(compiler, log_data, mem_ctx, &key->base,
                    &prog_data->base.base,
-                   NULL, /* prog; Only used for TEXTURE_RECTANGLE on gen < 8 */
                    shader, 8, shader_time_index);
       if (!v.run_vs()) {
          if (error_str)

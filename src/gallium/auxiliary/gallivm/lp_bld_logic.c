@@ -32,6 +32,7 @@
  * @author Jose Fonseca <jfonseca@vmware.com>
  */
 
+#include <llvm/Config/llvm-config.h>
 
 #include "util/u_cpu_detect.h"
 #include "util/u_memory.h"
@@ -317,16 +318,14 @@ lp_build_select(struct lp_build_context *bld,
       mask = LLVMBuildTrunc(builder, mask, LLVMInt1TypeInContext(lc), "");
       res = LLVMBuildSelect(builder, mask, a, b, "");
    }
-   else if (!(HAVE_LLVM == 0x0307) &&
-            (LLVMIsConstant(mask) ||
-             LLVMGetInstructionOpcode(mask) == LLVMSExt)) {
+   else if (LLVMIsConstant(mask) ||
+            LLVMGetInstructionOpcode(mask) == LLVMSExt) {
       /* Generate a vector select.
        *
        * Using vector selects should avoid emitting intrinsics hence avoid
        * hindering optimization passes, but vector selects weren't properly
        * supported yet for a long time, and LLVM will generate poor code when
        * the mask is not the result of a comparison.
-       * Also, llvm 3.7 may miscompile them (bug 94972).
        * XXX: Even if the instruction was an SExt, this may still produce
        * terrible code. Try piglit stencil-twoside.
        */

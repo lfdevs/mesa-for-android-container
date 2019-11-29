@@ -83,8 +83,13 @@ fd2_blend_state_create(struct pipe_context *pctx,
 		A2XX_RB_BLEND_CONTROL_COLOR_COMB_FCN(blend_func(rt->rgb_func)) |
 		A2XX_RB_BLEND_CONTROL_COLOR_DESTBLEND(fd_blend_factor(rt->rgb_dst_factor));
 
+	/* hardware doesn't support SRC_ALPHA_SATURATE for alpha, but it is equivalent to ONE */
+	unsigned alpha_src_factor = rt->alpha_src_factor;
+	if (alpha_src_factor == PIPE_BLENDFACTOR_SRC_ALPHA_SATURATE)
+		alpha_src_factor = PIPE_BLENDFACTOR_ONE;
+
 	so->rb_blendcontrol_alpha =
-		A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(fd_blend_factor(rt->alpha_src_factor)) |
+		A2XX_RB_BLEND_CONTROL_ALPHA_SRCBLEND(fd_blend_factor(alpha_src_factor)) |
 		A2XX_RB_BLEND_CONTROL_ALPHA_COMB_FCN(blend_func(rt->alpha_func)) |
 		A2XX_RB_BLEND_CONTROL_ALPHA_DESTBLEND(fd_blend_factor(rt->alpha_dst_factor));
 

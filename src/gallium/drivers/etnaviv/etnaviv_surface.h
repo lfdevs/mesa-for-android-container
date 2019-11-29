@@ -41,6 +41,8 @@ struct etna_surface {
    struct etna_resource_level *level;
    struct etna_reloc reloc[ETNA_MAX_PIXELPIPES];
    struct etna_reloc ts_reloc;
+   /* keep pointer to original resource (for when a render compatible resource is used) */
+   struct pipe_resource *prsc;
 };
 
 static inline struct etna_surface *

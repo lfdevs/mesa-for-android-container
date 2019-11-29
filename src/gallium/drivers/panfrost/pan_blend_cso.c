@@ -29,6 +29,7 @@
 #include "util/u_memory.h"
 #include "pan_blend_shaders.h"
 #include "pan_blending.h"
+#include "pan_bo.h"
 
 /* A given Gallium blend state can be encoded to the hardware in numerous,
  * dramatically divergent ways due to the interactions of blending with
@@ -226,8 +227,7 @@ panfrost_blend_constant(float *out, float *in, unsigned mask)
 struct panfrost_blend_final
 panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rti)
 {
-        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
-        struct panfrost_job *job = panfrost_get_job_for_fbo(ctx);
+        struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
 
         /* Grab the format, falling back gracefully if called invalidly (which
          * has to happen for no-color-attachment FBOs, for instance)  */
@@ -272,12 +272,13 @@ panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rti)
         final.shader.first_tag = shader->first_tag;
 
         /* Upload the shader */
-        final.shader.bo = panfrost_drm_create_bo(screen, shader->size, PAN_ALLOCATE_EXECUTE);
+        final.shader.bo = panfrost_batch_create_bo(batch, shader->size,
+                                                   PAN_BO_EXECUTE,
+                                                   PAN_BO_ACCESS_PRIVATE |
+                                                   PAN_BO_ACCESS_READ |
+                                                   PAN_BO_ACCESS_VERTEX_TILER |
+                                                   PAN_BO_ACCESS_FRAGMENT);
         memcpy(final.shader.bo->cpu, shader->buffer, shader->size);
-
-        /* Pass BO ownership to job */
-        panfrost_job_add_bo(job, final.shader.bo);
-        panfrost_bo_unreference(ctx->base.screen, final.shader.bo);
 
         if (shader->patch_index) {
                 /* We have to specialize the blend shader to use constants, so

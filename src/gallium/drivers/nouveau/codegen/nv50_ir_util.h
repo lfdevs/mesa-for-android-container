@@ -145,7 +145,7 @@ public:
 #define DLLIST_EMPTY(__list) ((__list)->next == (__list))
 
 #define DLLIST_FOR_EACH(list, it) \
-   for (DLList::Iterator (it) = (list)->iterator(); !(it).end(); (it).next())
+   for (DLList::Iterator it = (list)->iterator(); !(it).end(); (it).next())
 
 class DLList
 {

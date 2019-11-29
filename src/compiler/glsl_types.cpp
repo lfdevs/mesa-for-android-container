@@ -486,7 +486,6 @@ void
 glsl_type_singleton_decref()
 {
    mtx_lock(&glsl_type::hash_mutex);
-
    assert(glsl_type_users > 0);
 
    /* Do not release glsl_types if they are still used. */
@@ -639,6 +638,7 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns,
                explicit_stride, row_major ? "RM" : "");
 
       mtx_lock(&glsl_type::hash_mutex);
+      assert(glsl_type_users > 0);
 
       if (explicit_matrix_types == NULL) {
          explicit_matrix_types =
@@ -1004,6 +1004,7 @@ glsl_type::get_array_instance(const glsl_type *base,
             explicit_stride);
 
    mtx_lock(&glsl_type::hash_mutex);
+   assert(glsl_type_users > 0);
 
    if (array_types == NULL) {
       array_types = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
@@ -1204,6 +1205,7 @@ glsl_type::get_struct_instance(const glsl_struct_field *fields,
    const glsl_type key(fields, num_fields, name, packed);
 
    mtx_lock(&glsl_type::hash_mutex);
+   assert(glsl_type_users > 0);
 
    if (struct_types == NULL) {
       struct_types = _mesa_hash_table_create(NULL, record_key_hash,
@@ -1239,6 +1241,7 @@ glsl_type::get_interface_instance(const glsl_struct_field *fields,
    const glsl_type key(fields, num_fields, packing, row_major, block_name);
 
    mtx_lock(&glsl_type::hash_mutex);
+   assert(glsl_type_users > 0);
 
    if (interface_types == NULL) {
       interface_types = _mesa_hash_table_create(NULL, record_key_hash,
@@ -1269,6 +1272,7 @@ glsl_type::get_subroutine_instance(const char *subroutine_name)
    const glsl_type key(subroutine_name);
 
    mtx_lock(&glsl_type::hash_mutex);
+   assert(glsl_type_users > 0);
 
    if (subroutine_types == NULL) {
       subroutine_types = _mesa_hash_table_create(NULL, record_key_hash,
@@ -1322,6 +1326,7 @@ glsl_type::get_function_instance(const glsl_type *return_type,
    const glsl_type key(return_type, params, num_params);
 
    mtx_lock(&glsl_type::hash_mutex);
+   assert(glsl_type_users > 0);
 
    if (function_types == NULL) {
       function_types = _mesa_hash_table_create(NULL, function_key_hash,

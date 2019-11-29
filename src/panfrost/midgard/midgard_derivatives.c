@@ -94,10 +94,8 @@ midgard_emit_derivatives(compiler_context *ctx, nir_alu_instr *instr)
         midgard_instruction ins = {
                 .type = TAG_TEXTURE_4,
                 .mask = mask_of(nr_components),
-                .ssa_args = {
-                        .dest = nir_dest_index(ctx, &instr->dest.dest),
-                        .src = { nir_alu_src_index(ctx, &instr->src[0]), -1, -1 },
-                },
+                .dest = nir_dest_index(ctx, &instr->dest.dest),
+                .src = { nir_alu_src_index(ctx, &instr->src[0]), ~0, ~0 },
                 .texture = {
                         .op = mir_derivative_op(instr->op),
                         .format = MALI_TEX_2D,
@@ -150,7 +148,7 @@ midgard_lower_derivatives(compiler_context *ctx, midgard_block *block)
                 dup.texture.in_reg_swizzle = SWIZZLE_ZWWW;
 
                 /* Insert the new instruction */
-                mir_insert_instruction_before(mir_next_op(ins), dup);
+                mir_insert_instruction_before(ctx, mir_next_op(ins), dup);
 
                 /* TODO: Set .cont/.last automatically via dataflow analysis */
                 ctx->texture_op_count++;
@@ -159,6 +157,6 @@ midgard_lower_derivatives(compiler_context *ctx, midgard_block *block)
                  * rewrite to use a register */
 
                 unsigned new = make_compiler_temp_reg(ctx);
-                mir_rewrite_index(ctx, ins->ssa_args.dest, new);
+                mir_rewrite_index(ctx, ins->dest, new);
         }
 }

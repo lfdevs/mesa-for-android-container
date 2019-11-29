@@ -37,8 +37,8 @@
 
 /* key into program state cache */
 struct ir3_cache_key {
-	struct ir3_shader *vs, *fs;  // 4 dwords
-	struct ir3_shader_key key;   // 7 dwords
+	struct ir3_shader *vs, *hs, *ds, *gs, *fs;  // 5 pointers
+	struct ir3_shader_key key;             // 7 dwords
 };
 
 /* per-gen backend program state object should subclass this for it's
@@ -53,6 +53,9 @@ struct ir3_cache_funcs {
 	struct ir3_program_state *(*create_state)(void *data,
 			struct ir3_shader_variant *bs,  /* binning pass vs */
 			struct ir3_shader_variant *vs,
+			struct ir3_shader_variant *hs,
+			struct ir3_shader_variant *ds,
+			struct ir3_shader_variant *gs,
 			struct ir3_shader_variant *fs,
 			const struct ir3_shader_key *key);
 	void (*destroy_state)(void *data, struct ir3_program_state *state);

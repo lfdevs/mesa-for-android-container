@@ -32,23 +32,12 @@
 #include "compiler/nir/nir_worklist.h"
 #include "util/register_allocate.h"
 
-struct emit_options {
-   unsigned max_temps; /* max # of vec4 registers */
-   unsigned max_consts; /* max # of vec4 consts */
-   unsigned id_reg; /* register with vertex/instance id */
-   bool single_const_src : 1; /* limited to 1 vec4 const src */
-   bool etna_new_transcendentals : 1;
-   void *user;
-   uint64_t *consts;
-};
-
 #define ALU_SWIZ(s) INST_SWIZ((s)->swizzle[0], (s)->swizzle[1], (s)->swizzle[2], (s)->swizzle[3])
 #define SRC_DISABLE ((hw_src){})
 #define SRC_CONST(idx, s) ((hw_src){.use=1, .rgroup = INST_RGROUP_UNIFORM_0, .reg=idx, .swiz=s})
 #define SRC_REG(idx, s) ((hw_src){.use=1, .rgroup = INST_RGROUP_TEMP, .reg=idx, .swiz=s})
 
-#define option(name) (state->options->name)
-#define emit(type, args...) etna_emit_##type(state->options->user, args)
+#define emit(type, args...) etna_emit_##type(state->c, args)
 
 typedef struct etna_inst_dst hw_dst;
 typedef struct etna_inst_src hw_src;
@@ -59,7 +48,8 @@ enum {
 };
 
 struct state {
-   const struct emit_options *options;
+   struct etna_compile *c;
+
    unsigned const_count;
 
    nir_shader *shader;
@@ -72,10 +62,18 @@ struct state {
    unsigned num_nodes;
 };
 
+#define compile_error(ctx, args...) ({ \
+   printf(args); \
+   ctx->error = true; \
+   assert(0); \
+})
+
 static inline hw_src
 src_swizzle(hw_src src, unsigned swizzle)
 {
-   src.swiz = inst_swiz_compose(src.swiz, swizzle);
+   if (src.rgroup != INST_RGROUP_IMMEDIATE)
+      src.swiz = inst_swiz_compose(src.swiz, swizzle);
+
    return src;
 }
 
@@ -114,10 +112,28 @@ const_add(uint64_t *c, uint64_t value)
 static hw_src
 const_src(struct state *state, nir_const_value *value, unsigned num_components)
 {
+   /* use inline immediates if possible */
+   if (state->c->specs->halti >= 2 && num_components == 1 &&
+       value[0].u64 >> 32 == ETNA_IMMEDIATE_CONSTANT) {
+      uint32_t bits = value[0].u32;
+
+      /* "float" - shifted by 12 */
+      if ((bits & 0xfff) == 0)
+         return etna_immediate_src(0, bits >> 12);
+
+      /* "unsigned" - raw 20 bit value */
+      if (bits < (1 << 20))
+         return etna_immediate_src(2, bits);
+
+      /* "signed" - sign extended 20-bit (sign included) value */
+      if (bits >= 0xfff80000)
+         return etna_immediate_src(1, bits);
+   }
+
    unsigned i;
    int swiz = -1;
    for (i = 0; swiz < 0; i++) {
-      uint64_t *a = &option(consts)[i*4];
+      uint64_t *a = &state->c->consts[i*4];
       uint64_t save[4];
       memcpy(save, a, sizeof(save));
       swiz = 0;
@@ -132,7 +148,7 @@ const_src(struct state *state, nir_const_value *value, unsigned num_components)
       }
    }
 
-   assert(i <= option(max_consts));
+   assert(i <= ETNA_MAX_IMM / 4);
    state->const_count = MAX2(state->const_count, i);
 
    return SRC_CONST(i - 1, swiz);
@@ -157,6 +173,9 @@ enum {
    REG_CLASS_VEC4,
    /* special vec2 class for fast transcendentals, limited to XY or ZW */
    REG_CLASS_VIRT_VEC2T,
+   /* special classes for LOAD - contiguous components */
+   REG_CLASS_VIRT_VEC2C,
+   REG_CLASS_VIRT_VEC3C,
    NUM_REG_CLASSES,
 } reg_class;
 
@@ -178,6 +197,11 @@ enum {
    REG_TYPE_VIRT_SCALAR_W,
    REG_TYPE_VIRT_VEC2T_XY,
    REG_TYPE_VIRT_VEC2T_ZW,
+   REG_TYPE_VIRT_VEC2C_XY,
+   REG_TYPE_VIRT_VEC2C_YZ,
+   REG_TYPE_VIRT_VEC2C_ZW,
+   REG_TYPE_VIRT_VEC3C_XYZ,
+   REG_TYPE_VIRT_VEC3C_YZW,
    NUM_REG_TYPES,
 } reg_type;
 
@@ -189,18 +213,23 @@ reg_writemask[NUM_REG_TYPES] = {
    [REG_TYPE_VIRT_SCALAR_Y] = 0x2,
    [REG_TYPE_VIRT_VEC2_XY] = 0x3,
    [REG_TYPE_VIRT_VEC2T_XY] = 0x3,
+   [REG_TYPE_VIRT_VEC2C_XY] = 0x3,
    [REG_TYPE_VIRT_SCALAR_Z] = 0x4,
    [REG_TYPE_VIRT_VEC2_XZ] = 0x5,
    [REG_TYPE_VIRT_VEC2_YZ] = 0x6,
+   [REG_TYPE_VIRT_VEC2C_YZ] = 0x6,
    [REG_TYPE_VIRT_VEC3_XYZ] = 0x7,
+   [REG_TYPE_VIRT_VEC3C_XYZ] = 0x7,
    [REG_TYPE_VIRT_SCALAR_W] = 0x8,
    [REG_TYPE_VIRT_VEC2_XW] = 0x9,
    [REG_TYPE_VIRT_VEC2_YW] = 0xa,
    [REG_TYPE_VIRT_VEC3_XYW] = 0xb,
    [REG_TYPE_VIRT_VEC2_ZW] = 0xc,
    [REG_TYPE_VIRT_VEC2T_ZW] = 0xc,
+   [REG_TYPE_VIRT_VEC2C_ZW] = 0xc,
    [REG_TYPE_VIRT_VEC3_XZW] = 0xd,
    [REG_TYPE_VIRT_VEC3_YZW] = 0xe,
+   [REG_TYPE_VIRT_VEC3C_YZW] = 0xe,
 };
 
 /* how to swizzle when used as a src */
@@ -211,18 +240,23 @@ reg_swiz[NUM_REG_TYPES] = {
    [REG_TYPE_VIRT_SCALAR_Y] = SWIZZLE(Y, Y, Y, Y),
    [REG_TYPE_VIRT_VEC2_XY] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_VEC2T_XY] = INST_SWIZ_IDENTITY,
+   [REG_TYPE_VIRT_VEC2C_XY] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_SCALAR_Z] = SWIZZLE(Z, Z, Z, Z),
    [REG_TYPE_VIRT_VEC2_XZ] = SWIZZLE(X, Z, X, Z),
    [REG_TYPE_VIRT_VEC2_YZ] = SWIZZLE(Y, Z, Y, Z),
+   [REG_TYPE_VIRT_VEC2C_YZ] = SWIZZLE(Y, Z, Y, Z),
    [REG_TYPE_VIRT_VEC3_XYZ] = INST_SWIZ_IDENTITY,
+   [REG_TYPE_VIRT_VEC3C_XYZ] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_SCALAR_W] = SWIZZLE(W, W, W, W),
    [REG_TYPE_VIRT_VEC2_XW] = SWIZZLE(X, W, X, W),
    [REG_TYPE_VIRT_VEC2_YW] = SWIZZLE(Y, W, Y, W),
    [REG_TYPE_VIRT_VEC3_XYW] = SWIZZLE(X, Y, W, X),
    [REG_TYPE_VIRT_VEC2_ZW] = SWIZZLE(Z, W, Z, W),
    [REG_TYPE_VIRT_VEC2T_ZW] = SWIZZLE(Z, W, Z, W),
+   [REG_TYPE_VIRT_VEC2C_ZW] = SWIZZLE(Z, W, Z, W),
    [REG_TYPE_VIRT_VEC3_XZW] = SWIZZLE(X, Z, W, X),
    [REG_TYPE_VIRT_VEC3_YZW] = SWIZZLE(Y, Z, W, X),
+   [REG_TYPE_VIRT_VEC3C_YZW] = SWIZZLE(Y, Z, W, X),
 };
 
 /* how to swizzle when used as a dest */
@@ -233,18 +267,23 @@ reg_dst_swiz[NUM_REG_TYPES] = {
    [REG_TYPE_VIRT_SCALAR_Y] = SWIZZLE(X, X, X, X),
    [REG_TYPE_VIRT_VEC2_XY] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_VEC2T_XY] = INST_SWIZ_IDENTITY,
+   [REG_TYPE_VIRT_VEC2C_XY] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_SCALAR_Z] = SWIZZLE(X, X, X, X),
    [REG_TYPE_VIRT_VEC2_XZ] = SWIZZLE(X, X, Y, Y),
    [REG_TYPE_VIRT_VEC2_YZ] = SWIZZLE(X, X, Y, Y),
+   [REG_TYPE_VIRT_VEC2C_YZ] = SWIZZLE(X, X, Y, Y),
    [REG_TYPE_VIRT_VEC3_XYZ] = INST_SWIZ_IDENTITY,
+   [REG_TYPE_VIRT_VEC3C_XYZ] = INST_SWIZ_IDENTITY,
    [REG_TYPE_VIRT_SCALAR_W] = SWIZZLE(X, X, X, X),
    [REG_TYPE_VIRT_VEC2_XW] = SWIZZLE(X, X, Y, Y),
    [REG_TYPE_VIRT_VEC2_YW] = SWIZZLE(X, X, Y, Y),
    [REG_TYPE_VIRT_VEC3_XYW] = SWIZZLE(X, Y, Z, Z),
    [REG_TYPE_VIRT_VEC2_ZW] = SWIZZLE(X, X, X, Y),
    [REG_TYPE_VIRT_VEC2T_ZW] = SWIZZLE(X, X, X, Y),
+   [REG_TYPE_VIRT_VEC2C_ZW] = SWIZZLE(X, X, X, Y),
    [REG_TYPE_VIRT_VEC3_XZW] = SWIZZLE(X, Y, Y, Z),
    [REG_TYPE_VIRT_VEC3_YZW] = SWIZZLE(X, X, Y, Z),
+   [REG_TYPE_VIRT_VEC3C_YZW] = SWIZZLE(X, X, Y, Z),
 };
 
 static inline int reg_get_type(int virt_reg)
@@ -256,9 +295,14 @@ static inline int reg_get_base(struct state *state, int virt_reg)
 {
    /* offset by 1 to avoid reserved position register */
    if (state->shader->info.stage == MESA_SHADER_FRAGMENT)
-      return virt_reg / NUM_REG_TYPES + 1;
+      return (virt_reg / NUM_REG_TYPES + 1) % ETNA_MAX_TEMPS;
    return virt_reg / NUM_REG_TYPES;
 }
+
+/* use "r63.z" for depth reg, it will wrap around to r0.z by reg_get_base
+ * (fs registers are offset by 1 to avoid reserving r0)
+ */
+#define REG_FRAG_DEPTH ((ETNA_MAX_TEMPS - 1) * NUM_REG_TYPES + REG_TYPE_VIRT_SCALAR_Z)
 
 static inline int reg_get_class(int virt_reg)
 {
@@ -285,6 +329,13 @@ static inline int reg_get_class(int virt_reg)
    case REG_TYPE_VIRT_VEC2T_XY:
    case REG_TYPE_VIRT_VEC2T_ZW:
       return REG_CLASS_VIRT_VEC2T;
+   case REG_TYPE_VIRT_VEC2C_XY:
+   case REG_TYPE_VIRT_VEC2C_YZ:
+   case REG_TYPE_VIRT_VEC2C_ZW:
+      return REG_CLASS_VIRT_VEC2C;
+   case REG_TYPE_VIRT_VEC3C_XYZ:
+   case REG_TYPE_VIRT_VEC3C_YZW:
+      return REG_CLASS_VIRT_VEC3C;
    }
 
    assert(false);
@@ -343,7 +394,8 @@ get_src(struct state *state, nir_src *src)
       case nir_intrinsic_load_frag_coord:
          return SRC_REG(0, INST_SWIZ_IDENTITY);
       default:
-         assert(0);
+         compile_error(state->c, "Unhandled NIR intrinsic type: %s\n",
+                       nir_intrinsic_infos[intr->intrinsic].name);
          break;
       }
    } break;
@@ -356,7 +408,7 @@ get_src(struct state *state, nir_src *src)
       return src_swizzle(const_src(state, &value, 1), SWIZZLE(X,X,X,X));
    }
    default:
-      assert(0);
+      compile_error(state->c, "Unhandled NIR instruction type: %d\n", instr->type);
       break;
    }
 
@@ -529,7 +581,7 @@ dest_for_instr(nir_instr *instr)
       dest = &nir_instr_as_alu(instr)->dest.dest;
       break;
    case nir_instr_type_tex:
-      dest =&nir_instr_as_tex(instr)->dest;
+      dest = &nir_instr_as_tex(instr)->dest;
       break;
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
@@ -537,7 +589,9 @@ dest_for_instr(nir_instr *instr)
           intr->intrinsic == nir_intrinsic_load_input ||
           intr->intrinsic == nir_intrinsic_load_instance_id)
          dest = &intr->dest;
-   }
+   } break;
+   case nir_instr_type_deref:
+      return NULL;
    default:
       break;
    }
@@ -598,7 +652,7 @@ set_src_live(nir_src *src, void *void_state)
    if (src->is_ssa) {
       nir_instr *instr = src->ssa->parent_instr;
 
-      if (is_sysval(instr))
+      if (is_sysval(instr) || instr->type == nir_instr_type_deref)
          return true;
 
       switch (instr->type) {
@@ -733,7 +787,7 @@ live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_map)
          /* output live till the end */
          if (instr->type == nir_instr_type_intrinsic) {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic == nir_intrinsic_store_output)
+            if (intr->intrinsic == nir_intrinsic_store_deref)
                state.index = ~0u;
          }
 
@@ -775,17 +829,19 @@ live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_map)
 
 /* precomputed by register_allocate  */
 static unsigned int *q_values[] = {
-   (unsigned int[]) { 1, 2, 3, 4, 2 },
-   (unsigned int[]) { 3, 5, 6, 6, 5 },
-   (unsigned int[]) { 3, 4, 4, 4, 4 },
-   (unsigned int[]) { 1, 1, 1, 1, 1 },
-   (unsigned int[]) { 1, 2, 2, 2, 1 },
+   (unsigned int[]) {1, 2, 3, 4, 2, 2, 3, },
+   (unsigned int[]) {3, 5, 6, 6, 5, 5, 6, },
+   (unsigned int[]) {3, 4, 4, 4, 4, 4, 4, },
+   (unsigned int[]) {1, 1, 1, 1, 1, 1, 1, },
+   (unsigned int[]) {1, 2, 2, 2, 1, 2, 2, },
+   (unsigned int[]) {2, 3, 3, 3, 2, 3, 3, },
+   (unsigned int[]) {2, 2, 2, 2, 2, 2, 2, },
 };
 
 static void
 ra_assign(struct state *state, nir_shader *shader)
 {
-   struct ra_regs *regs = ra_alloc_reg_set(NULL, option(max_temps) *
+   struct ra_regs *regs = ra_alloc_reg_set(NULL, ETNA_MAX_TEMPS *
                   NUM_REG_TYPES, false);
 
    /* classes always be created from index 0, so equal to the class enum
@@ -794,10 +850,10 @@ ra_assign(struct state *state, nir_shader *shader)
    for (int c = 0; c < NUM_REG_CLASSES; c++)
       ra_alloc_reg_class(regs);
    /* add each register of each class */
-   for (int r = 0; r < NUM_REG_TYPES * option(max_temps); r++)
+   for (int r = 0; r < NUM_REG_TYPES * ETNA_MAX_TEMPS; r++)
       ra_class_add_reg(regs, reg_get_class(r), r);
    /* set conflicts */
-   for (int r = 0; r < option(max_temps); r++) {
+   for (int r = 0; r < ETNA_MAX_TEMPS; r++) {
       for (int i = 0; i < NUM_REG_TYPES; i++) {
          for (int j = 0; j < i; j++) {
             if (reg_writemask[i] & reg_writemask[j]) {
@@ -835,21 +891,35 @@ ra_assign(struct state *state, nir_shader *shader)
    for (unsigned i = 0; i < num_nodes; i++) {
       nir_instr *instr = defs[i].instr;
       nir_dest *dest = defs[i].dest;
+      unsigned c = nir_dest_num_components(*dest) - 1;
 
-      ra_set_node_class(g, i, nir_dest_num_components(*dest) - 1);
-
-      if (instr->type == nir_instr_type_alu && option(etna_new_transcendentals)) {
+      if (instr->type == nir_instr_type_alu &&
+          state->c->specs->has_new_transcendentals) {
          switch (nir_instr_as_alu(instr)->op) {
          case nir_op_fdiv:
          case nir_op_flog2:
          case nir_op_fsin:
          case nir_op_fcos:
             assert(dest->is_ssa);
-            ra_set_node_class(g, i, REG_CLASS_VIRT_VEC2T);
+            c = REG_CLASS_VIRT_VEC2T;
          default:
             break;
          }
       }
+
+      if (instr->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         if (intr->intrinsic == nir_intrinsic_load_uniform) {
+            /* make sure there isn't any reswizzling */
+            assert(dest == &intr->dest);
+            if (dest->ssa.num_components == 2)
+               c = REG_CLASS_VIRT_VEC2C;
+            if (dest->ssa.num_components == 3)
+               c = REG_CLASS_VIRT_VEC3C;
+         }
+      }
+
+      ra_set_node_class(g, i, c);
    }
 
    nir_foreach_block(block, impl) {
@@ -862,11 +932,20 @@ ra_assign(struct state *state, nir_shader *shader)
          unsigned reg;
 
          switch (intr->intrinsic) {
-         case nir_intrinsic_store_output: {
-            /* don't want output to be swizzled
+         case nir_intrinsic_store_deref: {
+            /* don't want outputs to be swizzled
              * TODO: better would be to set the type to X/XY/XYZ/XYZW
+             * TODO: what if fragcoord.z is read after writing fragdepth?
              */
-            ra_set_node_class(g, live_map[src_index(impl, &intr->src[0])], REG_CLASS_VEC4);
+            nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+            unsigned index = live_map[src_index(impl, &intr->src[1])];
+
+            if (shader->info.stage == MESA_SHADER_FRAGMENT &&
+                deref->var->data.location == FRAG_RESULT_DEPTH) {
+               ra_set_node_reg(g, index, REG_FRAG_DEPTH);
+            } else {
+               ra_set_node_class(g, index, REG_CLASS_VEC4);
+            }
          } continue;
          case nir_intrinsic_load_input:
             reg = nir_intrinsic_base(intr) * NUM_REG_TYPES + (unsigned[]) {
@@ -877,7 +956,7 @@ ra_assign(struct state *state, nir_shader *shader)
             }[nir_dest_num_components(*dest) - 1];
             break;
          case nir_intrinsic_load_instance_id:
-            reg = option(id_reg) * NUM_REG_TYPES + REG_TYPE_VIRT_SCALAR_Y;
+            reg = state->c->variant->infile.num_reg * NUM_REG_TYPES + REG_TYPE_VIRT_SCALAR_Y;
             break;
          default:
             continue;
@@ -982,8 +1061,7 @@ emit_tex(struct state *state, nir_tex_instr * tex)
 {
    unsigned dst_swiz;
    hw_dst dst = ra_dest(state, &tex->dest, &dst_swiz);
-   nir_src *coord = NULL;
-   nir_src *lod_bias = NULL;
+   nir_src *coord = NULL, *lod_bias = NULL, *compare = NULL;
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {
       switch (tex->src[i].src_type) {
@@ -995,26 +1073,31 @@ emit_tex(struct state *state, nir_tex_instr * tex)
          assert(!lod_bias);
          lod_bias = &tex->src[i].src;
          break;
+      case nir_tex_src_comparator:
+         compare = &tex->src[i].src;
+         break;
       default:
-         assert(0);
+         compile_error(state->c, "Unhandled NIR tex src type: %d\n",
+                       tex->src[i].src_type);
          break;
       }
    }
 
    emit(tex, tex->op, tex->sampler_index, dst_swiz, dst, get_src(state, coord),
-        lod_bias ? get_src(state, lod_bias) : SRC_DISABLE);
+        lod_bias ? get_src(state, lod_bias) : SRC_DISABLE,
+        compare ? get_src(state, compare) : SRC_DISABLE);
 }
 
 static void
 emit_intrinsic(struct state *state, nir_intrinsic_instr * intr)
 {
    switch (intr->intrinsic) {
-   case nir_intrinsic_store_output:
-      emit(output, nir_intrinsic_base(intr), get_src(state, &intr->src[0]));
+   case nir_intrinsic_store_deref:
+      emit(output, nir_src_as_deref(intr->src[0])->var, get_src(state, &intr->src[1]));
       break;
    case nir_intrinsic_discard_if:
       emit(discard, get_src(state, &intr->src[0]));
-   break;
+      break;
    case nir_intrinsic_discard:
       emit(discard, SRC_DISABLE);
       break;
@@ -1032,7 +1115,8 @@ emit_intrinsic(struct state *state, nir_intrinsic_instr * intr)
    case nir_intrinsic_load_instance_id:
       break;
    default:
-      assert(0);
+      compile_error(state->c, "Unhandled NIR intrinsic type: %s\n",
+                    nir_intrinsic_infos[intr->intrinsic].name);
    }
 }
 
@@ -1053,9 +1137,10 @@ emit_instr(struct state *state, nir_instr * instr)
       assert(nir_instr_is_last(instr));
    case nir_instr_type_load_const:
    case nir_instr_type_ssa_undef:
+   case nir_instr_type_deref:
       break;
    default:
-      assert(0);
+      compile_error(state->c, "Unhandled NIR instruction type: %d\n", instr->type);
       break;
    }
 }
@@ -1108,7 +1193,7 @@ emit_cf_list(struct state *state, struct exec_list *list)
          emit_cf_list(state, &nir_cf_node_as_loop(node)->body);
          break;
       default:
-         assert(0);
+         compile_error(state->c, "Unknown NIR node type\n");
          break;
       }
    }
@@ -1180,41 +1265,13 @@ lower_alu(struct state *state, nir_alu_instr *alu)
    switch (alu->op) {
    case nir_op_vec2:
    case nir_op_vec3:
-   case nir_op_vec4: {
-      nir_const_value value[4];
-      unsigned num_components = 0;
-
-      for (unsigned i = 0; i < info->num_inputs; i++) {
-         nir_const_value *cv = nir_src_as_const_value(alu->src[i].src);
-         if (cv)
-            value[num_components++] = cv[alu->src[i].swizzle[0]];
-      }
-
-      if (num_components <= 1) /* nothing to do */
-         break;
-
-      nir_ssa_def *def = nir_build_imm(&b, num_components, 32, value);
-
-      if (num_components == info->num_inputs) {
-         nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, nir_src_for_ssa(def));
-         nir_instr_remove(&alu->instr);
-         return;
-      }
-
-      for (unsigned i = 0, j = 0; i < info->num_inputs; i++) {
-         nir_const_value *cv = nir_src_as_const_value(alu->src[i].src);
-         if (!cv)
-            continue;
-
-         nir_instr_rewrite_src(&alu->instr, &alu->src[i].src, nir_src_for_ssa(def));
-         alu->src[i].swizzle[0] = j++;
-      }
-   } break;
-   default: {
-      if (!option(single_const_src))
-         return;
-
+   case nir_op_vec4:
+      break;
+   default:
       /* pre-GC7000L can only have 1 uniform src per instruction */
+      if (state->c->specs->halti >= 5)
+         return;
+
       nir_const_value value[4] = {};
       uint8_t swizzle[4][4] = {};
       unsigned swiz_max = 0, num_const = 0;
@@ -1268,7 +1325,39 @@ lower_alu(struct state *state, nir_alu_instr *alu)
          nir_ssa_def *mov = nir_mov(&b, alu->src[i].src.ssa);
          nir_instr_rewrite_src(&alu->instr, &alu->src[i].src, nir_src_for_ssa(mov));
       }
-   } return;
+      return;
+   }
+
+   nir_const_value value[4];
+   unsigned num_components = 0;
+
+   for (unsigned i = 0; i < info->num_inputs; i++) {
+      nir_const_value *cv = nir_src_as_const_value(alu->src[i].src);
+      if (cv)
+         value[num_components++] = cv[alu->src[i].swizzle[0]];
+   }
+
+   /* if there is more than one constant source to the vecN, combine them
+    * into a single load_const (removing the vecN completely if all components
+    * are constant)
+    */
+   if (num_components > 1) {
+      nir_ssa_def *def = nir_build_imm(&b, num_components, 32, value);
+
+      if (num_components == info->num_inputs) {
+         nir_ssa_def_rewrite_uses(&alu->dest.dest.ssa, nir_src_for_ssa(def));
+         nir_instr_remove(&alu->instr);
+         return;
+      }
+
+      for (unsigned i = 0, j = 0; i < info->num_inputs; i++) {
+         nir_const_value *cv = nir_src_as_const_value(alu->src[i].src);
+         if (!cv)
+            continue;
+
+         nir_instr_rewrite_src(&alu->instr, &alu->src[i].src, nir_src_for_ssa(def));
+         alu->src[i].swizzle[0] = j++;
+      }
    }
 
    unsigned finished_write_mask = 0;
@@ -1305,11 +1394,12 @@ lower_alu(struct state *state, nir_alu_instr *alu)
 }
 
 static bool
-emit_shader(nir_shader *shader, const struct emit_options *options,
-            unsigned *num_temps, unsigned *num_consts)
+emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
 {
+   nir_shader *shader = c->nir;
+
    struct state state = {
-      .options = options,
+      .c = c,
       .shader = shader,
       .impl = nir_shader_get_entrypoint(shader),
    };
@@ -1338,7 +1428,13 @@ emit_shader(nir_shader *shader, const struct emit_options *options,
             if (!off || off[0].u64 >> 32 != ETNA_IMMEDIATE_CONSTANT)
                break;
 
-            unsigned base = nir_intrinsic_base(intr) + off[0].u32 / 16;
+            unsigned base = nir_intrinsic_base(intr);
+            /* pre halti2 uniform offset will be float */
+            if (c->specs->halti < 2)
+               base += (unsigned) off[0].f32 / 16;
+            else
+               base += off[0].u32 / 16;
+
             nir_const_value value[4];
 
             for (unsigned i = 0; i < intr->dest.ssa.num_components; i++) {
@@ -1369,8 +1465,8 @@ emit_shader(nir_shader *shader, const struct emit_options *options,
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
          switch (intr->intrinsic) {
-         case nir_intrinsic_store_output: {
-            nir_src *src = &intr->src[0];
+         case nir_intrinsic_store_deref: {
+            nir_src *src = &intr->src[1];
             if (nir_src_is_const(*src) || is_sysval(src->ssa->parent_instr)) {
                b.cursor = nir_before_instr(instr);
                nir_instr_rewrite_src(instr, src, nir_src_for_ssa(nir_mov(&b, src->ssa)));

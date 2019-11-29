@@ -691,28 +691,22 @@ void r200SetTexBuffer2(__DRIcontext *pDRICtx, GLint target, GLint texture_format
 	pitch_val = rb->pitch;
 	switch (rb->cpp) {
 	case 4:
-		if (texture_format == __DRI_TEXTURE_FORMAT_RGB) {
+		if (texture_format == __DRI_TEXTURE_FORMAT_RGB)
 			texFormat = MESA_FORMAT_BGR_UNORM8;
-			t->pp_txformat = tx_table_le[MESA_FORMAT_BGR_UNORM8].format;
-		}
-		else {
+		else
 			texFormat = MESA_FORMAT_B8G8R8A8_UNORM;
-			t->pp_txformat = tx_table_le[MESA_FORMAT_B8G8R8A8_UNORM].format;
-		}
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_B8G8R8A8_UNORM].filter;
 		break;
 	case 3:
 	default:
 		texFormat = MESA_FORMAT_BGR_UNORM8;
-		t->pp_txformat = tx_table_le[MESA_FORMAT_BGR_UNORM8].format;
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_BGR_UNORM8].filter;
 		break;
 	case 2:
 		texFormat = MESA_FORMAT_B5G6R5_UNORM;
-		t->pp_txformat = tx_table_le[MESA_FORMAT_B5G6R5_UNORM].format;
-		t->pp_txfilter |= tx_table_le[MESA_FORMAT_B5G6R5_UNORM].filter;
 		break;
 	}
+
+        t->pp_txformat = tx_table_le[texFormat].format;
+        t->pp_txfilter |= tx_table_le[texFormat].filter;
 
 	_mesa_init_teximage_fields(&radeon->glCtx, texImage,
 				   rb->base.Base.Width, rb->base.Base.Height,

@@ -639,6 +639,8 @@ struct v3d_compile {
         bool lock_scoreboard_on_first_thrsw;
 
         bool failed;
+
+        bool tmu_dirty_rcl;
 };
 
 struct v3d_uniform_list {
@@ -658,6 +660,8 @@ struct v3d_prog_data {
          * after-final-THRSW state.
          */
         bool single_seg;
+
+        bool tmu_dirty_rcl;
 };
 
 struct v3d_vs_prog_data {

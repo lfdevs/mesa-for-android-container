@@ -32,18 +32,42 @@
 
 struct bblock_t;
 
+/**
+ * CFG edge types.
+ *
+ * A logical edge represents a potential control flow path of the original
+ * scalar program, while a physical edge represents a control flow path that
+ * may not have existed in the original program but was introduced during
+ * vectorization in order to implement divergent control flow of different
+ * shader invocations within the same SIMD thread.
+ *
+ * All logical edges in the CFG are considered to be physical edges but not
+ * the other way around -- I.e. the logical CFG is a subset of the physical
+ * one.
+ */
+enum bblock_link_kind {
+   bblock_link_logical = 0,
+   bblock_link_physical
+};
+
 struct bblock_link {
 #ifdef __cplusplus
    DECLARE_RALLOC_CXX_OPERATORS(bblock_link)
 
-   bblock_link(bblock_t *block)
-      : block(block)
+   bblock_link(bblock_t *block, enum bblock_link_kind kind)
+      : block(block), kind(kind)
    {
    }
 #endif
 
    struct exec_node link;
    struct bblock_t *block;
+
+   /* Type of this CFG edge.  Because bblock_link_logical also implies
+    * bblock_link_physical, the proper way to test for membership of edge 'l'
+    * in CFG kind 'k' is 'l.kind <= k'.
+    */
+   enum bblock_link_kind kind;
 };
 
 struct backend_instruction;
@@ -54,9 +78,12 @@ struct bblock_t {
 
    explicit bblock_t(cfg_t *cfg);
 
-   void add_successor(void *mem_ctx, bblock_t *successor);
-   bool is_predecessor_of(const bblock_t *block) const;
-   bool is_successor_of(const bblock_t *block) const;
+   void add_successor(void *mem_ctx, bblock_t *successor,
+                      enum bblock_link_kind kind);
+   bool is_predecessor_of(const bblock_t *block,
+                          enum bblock_link_kind kind) const;
+   bool is_successor_of(const bblock_t *block,
+                        enum bblock_link_kind kind) const;
    bool can_combine_with(const bblock_t *that) const;
    void combine_with(bblock_t *that);
    void dump(backend_shader *s) const;

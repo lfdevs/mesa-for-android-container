@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>
+#include "drm-uapi/drm_fourcc.h"
 #include "main/glheader.h"
 #include "main/context.h"
 #include "main/framebuffer.h"
@@ -178,45 +179,45 @@ static const struct __DRI2flushExtensionRec intelFlushExtension = {
 };
 
 static struct intel_image_format intel_image_formats[] = {
-   { __DRI_IMAGE_FOURCC_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
+   { DRM_FORMAT_ARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
 
    { __DRI_IMAGE_FOURCC_SARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
 
-   { __DRI_IMAGE_FOURCC_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
+   { DRM_FORMAT_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
 
-   { __DRI_IMAGE_FOURCC_YUV410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV410, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 2, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV411, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 2, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV420, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 1, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV422, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 1, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_YUV444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
+   { DRM_FORMAT_YUV444, __DRI_IMAGE_COMPONENTS_Y_U_V, 3,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 2, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 } } },
 
-   { __DRI_IMAGE_FOURCC_NV12, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_NV12, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 1, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
-   { __DRI_IMAGE_FOURCC_NV16, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
+   { DRM_FORMAT_NV16, __DRI_IMAGE_COMPONENTS_Y_UV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_R8, 1 },
        { 1, 1, 0, __DRI_IMAGE_FORMAT_GR88, 2 } } },
 
@@ -228,10 +229,10 @@ static struct intel_image_format intel_image_formats[] = {
     * V into A.  This lets the texture sampler interpolate the Y
     * components correctly when sampling from plane 0, and interpolate
     * U and V correctly when sampling from plane 1. */
-   { __DRI_IMAGE_FOURCC_YUYV, __DRI_IMAGE_COMPONENTS_Y_XUXV, 2,
+   { DRM_FORMAT_YUYV, __DRI_IMAGE_COMPONENTS_Y_XUXV, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ARGB8888, 4 } } },
-   { __DRI_IMAGE_FOURCC_UYVY, __DRI_IMAGE_COMPONENTS_Y_UXVX, 2,
+   { DRM_FORMAT_UYVY, __DRI_IMAGE_COMPONENTS_Y_UXVX, 2,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_GR88, 2 },
        { 0, 1, 0, __DRI_IMAGE_FORMAT_ABGR8888, 4 } } }
 };

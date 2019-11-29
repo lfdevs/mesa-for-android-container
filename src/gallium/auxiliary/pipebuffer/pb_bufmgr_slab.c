@@ -204,17 +204,17 @@ pb_slab_buffer_destroy(struct pb_buffer *_buf)
    
    buf->mapCount = 0;
 
-   LIST_DEL(list);
-   LIST_ADDTAIL(list, &slab->freeBuffers);
+   list_del(list);
+   list_addtail(list, &slab->freeBuffers);
    slab->numFree++;
 
    if (slab->head.next == &slab->head)
-      LIST_ADDTAIL(&slab->head, &mgr->slabs);
+      list_addtail(&slab->head, &mgr->slabs);
 
    /* If the slab becomes totally empty, free it */
    if (slab->numFree == slab->numBuffers) {
       list = &slab->head;
-      LIST_DELINIT(list);
+      list_delinit(list);
       pb_reference(&slab->bo, NULL);
       FREE(slab->buffers);
       FREE(slab);
@@ -333,8 +333,8 @@ pb_slab_create(struct pb_slab_manager *mgr)
       goto out_err1;
    }
 
-   LIST_INITHEAD(&slab->head);
-   LIST_INITHEAD(&slab->freeBuffers);
+   list_inithead(&slab->head);
+   list_inithead(&slab->freeBuffers);
    slab->numBuffers = numBuffers;
    slab->numFree = 0;
    slab->mgr = mgr;
@@ -350,13 +350,13 @@ pb_slab_create(struct pb_slab_manager *mgr)
       buf->start = i* mgr->bufSize;
       buf->mapCount = 0;
       cnd_init(&buf->event);
-      LIST_ADDTAIL(&buf->head, &slab->freeBuffers);
+      list_addtail(&buf->head, &slab->freeBuffers);
       slab->numFree++;
       buf++;
    }
 
    /* Add this slab to the list of partial slabs */
-   LIST_ADDTAIL(&slab->head, &mgr->slabs);
+   list_addtail(&slab->head, &mgr->slabs);
 
    return PIPE_OK;
 
@@ -412,10 +412,10 @@ pb_slab_manager_create_buffer(struct pb_manager *_mgr,
    
    /* If totally full remove from the partial slab list */
    if (--slab->numFree == 0)
-      LIST_DELINIT(list);
+      list_delinit(list);
 
    list = slab->freeBuffers.next;
-   LIST_DELINIT(list);
+   list_delinit(list);
 
    mtx_unlock(&mgr->mutex);
    buf = LIST_ENTRY(struct pb_slab_buffer, list, head);
@@ -470,7 +470,7 @@ pb_slab_manager_create(struct pb_manager *provider,
    mgr->slabSize = slabSize;
    mgr->desc = *desc;
 
-   LIST_INITHEAD(&mgr->slabs);
+   list_inithead(&mgr->slabs);
    
    (void) mtx_init(&mgr->mutex, mtx_plain);
 

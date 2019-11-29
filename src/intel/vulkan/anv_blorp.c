@@ -117,6 +117,9 @@ anv_device_init_blorp(struct anv_device *device)
    case 11:
       device->blorp.exec = gen11_blorp_exec;
       break;
+   case 12:
+      device->blorp.exec = gen12_blorp_exec;
+      break;
    default:
       unreachable("Unknown hardware generation");
    }
@@ -1524,6 +1527,13 @@ anv_image_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
                                    ISL_AUX_USAGE_NONE, &stencil);
    }
 
+   /* Blorp may choose to clear stencil using RGBA32_UINT for better
+    * performance.  If it does this, we need to flush it out of the depth
+    * cache before rendering to it.
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+
    blorp_clear_depth_stencil(&batch, &depth, &stencil,
                              level, base_layer, layer_count,
                              area.offset.x, area.offset.y,
@@ -1533,6 +1543,13 @@ anv_image_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
                              depth_value,
                              (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) ? 0xff : 0,
                              stencil_value);
+
+   /* Blorp may choose to clear stencil using RGBA32_UINT for better
+    * performance.  If it does this, we need to flush it out of the render
+    * cache before someone starts trying to do stencil on it.
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
 
    struct blorp_surf stencil_shadow;
    if ((aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
@@ -1682,7 +1699,8 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
 
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer,
-                    predicate ? BLORP_BATCH_PREDICATE_ENABLE : 0);
+                    BLORP_BATCH_PREDICATE_ENABLE * predicate +
+                    BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
 
    struct blorp_surf surf;
    get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
@@ -1691,17 +1709,10 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
 
    /* Blorp will store the clear color for us if we provide the clear color
     * address and we are doing a fast clear. So we save the clear value into
-    * the blorp surface. However, in some situations we want to do a fast clear
-    * without changing the clear value stored in the state buffer. For those
-    * cases, we set the clear color address pointer to NULL, so blorp will not
-    * try to store a garbage color.
+    * the blorp surface.
     */
-   if (mcs_op == ISL_AUX_OP_FAST_CLEAR) {
-      if (clear_value)
-         surf.clear_color = *clear_value;
-      else
-         surf.clear_color_addr.buffer = NULL;
-   }
+   if (clear_value)
+      surf.clear_color = *clear_value;
 
    /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
     *
@@ -1768,7 +1779,8 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 
    struct blorp_batch batch;
    blorp_batch_init(&cmd_buffer->device->blorp, &batch, cmd_buffer,
-                    predicate ? BLORP_BATCH_PREDICATE_ENABLE : 0);
+                    BLORP_BATCH_PREDICATE_ENABLE * predicate +
+                    BLORP_BATCH_NO_UPDATE_CLEAR_COLOR * !clear_value);
 
    struct blorp_surf surf;
    get_blorp_surf_for_anv_image(cmd_buffer->device, image, aspect,
@@ -1778,17 +1790,10 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 
    /* Blorp will store the clear color for us if we provide the clear color
     * address and we are doing a fast clear. So we save the clear value into
-    * the blorp surface. However, in some situations we want to do a fast clear
-    * without changing the clear value stored in the state buffer. For those
-    * cases, we set the clear color address pointer to NULL, so blorp will not
-    * try to store a garbage color.
+    * the blorp surface.
     */
-   if (ccs_op == ISL_AUX_OP_FAST_CLEAR) {
-      if (clear_value)
-         surf.clear_color = *clear_value;
-      else
-         surf.clear_color_addr.buffer = NULL;
-   }
+   if (clear_value)
+      surf.clear_color = *clear_value;
 
    /* From the Sky Lake PRM Vol. 7, "Render Target Fast Clear":
     *

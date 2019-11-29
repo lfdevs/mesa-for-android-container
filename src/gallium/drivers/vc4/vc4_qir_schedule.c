@@ -622,7 +622,7 @@ schedule_instructions(struct vc4_compile *c,
         }
 
         state->time = 0;
-        while (!list_empty(&state->dag->heads)) {
+        while (!list_is_empty(&state->dag->heads)) {
                 struct schedule_node *chosen = choose_instruction(state);
                 struct qinst *inst = chosen->inst;
 

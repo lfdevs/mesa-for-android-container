@@ -118,7 +118,7 @@ static void ppir_insert_ready_list(struct list_head *ready_list,
 static void ppir_schedule_ready_list(ppir_block *block,
                                      struct list_head *ready_list)
 {
-   if (list_empty(ready_list))
+   if (list_is_empty(ready_list))
       return;
 
    ppir_instr *instr = list_first_entry(ready_list, ppir_instr, list);

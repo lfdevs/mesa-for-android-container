@@ -186,7 +186,7 @@ fd_resource_ubwc_offset(struct fd_resource *rsc, unsigned level, unsigned layer)
 
 /* This might be a5xx specific, but higher mipmap levels are always linear: */
 static inline bool
-fd_resource_level_linear(struct pipe_resource *prsc, int level)
+fd_resource_level_linear(const struct pipe_resource *prsc, int level)
 {
 	struct fd_screen *screen = fd_screen(prsc->screen);
 	debug_assert(!is_a3xx(screen));

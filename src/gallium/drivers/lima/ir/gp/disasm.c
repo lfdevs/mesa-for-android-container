@@ -238,7 +238,7 @@ print_src(gpir_codegen_src src, gp_unit unit, unsigned unit_src_num,
    case gpir_codegen_src_p1_attrib_w:
       printf("%c%d.%c", prev_instr->register0_attribute ? 'a' : '$',
              prev_instr->register0_addr,
-             "xyzw"[src - gpir_codegen_src_attrib_x]);
+             "xyzw"[src - gpir_codegen_src_p1_attrib_x]);
       break;
    }
 }

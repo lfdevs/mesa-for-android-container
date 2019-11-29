@@ -46,6 +46,7 @@ static const struct gen_info {
    { "whl", },
    { "cnl", },
    { "icl", },
+   { "tgl", },
 };
 
 class validation_test: public ::testing::TestWithParam<struct gen_info> {
@@ -178,7 +179,7 @@ TEST_P(validation_test, opcode46)
     *              reserved on Gen 7
     *              "goto" on Gen8+
     */
-   brw_next_insn(p, 46);
+   brw_next_insn(p, brw_opcode_decode(&devinfo, 46));
 
    if (devinfo.gen == 7) {
       EXPECT_FALSE(validate(p));
@@ -1869,6 +1870,10 @@ TEST_P(validation_test, qword_low_power_align1_regioning_restrictions)
    if (devinfo.gen < 8)
       return;
 
+   /* NoDDChk/NoDDClr does not exist on Gen12+ */
+   if (devinfo.gen >= 12)
+      return;
+
    for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
       if (!devinfo.has_64bit_types &&
           (type_sz(inst[i].dst_type) == 8 || type_sz(inst[i].src_type) == 8))
@@ -2336,6 +2341,10 @@ TEST_P(validation_test, qword_low_power_no_depctrl)
 
    /* These restrictions only apply to Gen8+ */
    if (devinfo.gen < 8)
+      return;
+
+   /* NoDDChk/NoDDClr does not exist on Gen12+ */
+   if (devinfo.gen >= 12)
       return;
 
    for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {

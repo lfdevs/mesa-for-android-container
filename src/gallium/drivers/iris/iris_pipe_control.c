@@ -151,6 +151,24 @@ iris_emit_end_of_pipe_sync(struct iris_batch *batch,
                                 batch->screen->workaround_bo, 0, 0);
 }
 
+/**
+ * Flush and invalidate all caches (for debugging purposes).
+ */
+void
+iris_flush_all_caches(struct iris_batch *batch)
+{
+   iris_emit_pipe_control_flush(batch, "debug: flush all caches",
+                                PIPE_CONTROL_CS_STALL |
+                                PIPE_CONTROL_DATA_CACHE_FLUSH |
+                                PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+                                PIPE_CONTROL_RENDER_TARGET_FLUSH |
+                                PIPE_CONTROL_VF_CACHE_INVALIDATE |
+                                PIPE_CONTROL_INSTRUCTION_INVALIDATE |
+                                PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
+                                PIPE_CONTROL_CONST_CACHE_INVALIDATE |
+                                PIPE_CONTROL_STATE_CACHE_INVALIDATE);
+}
+
 static void
 iris_texture_barrier(struct pipe_context *ctx, unsigned flags)
 {

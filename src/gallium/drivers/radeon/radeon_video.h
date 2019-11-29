@@ -60,10 +60,4 @@ bool si_vid_resize_buffer(struct pipe_screen *screen, struct radeon_cmdbuf *cs,
 /* clear the buffer with zeros */
 void si_vid_clear_buffer(struct pipe_context *context, struct rvid_buffer* buffer);
 
-/* join surfaces into the same buffer with identical tiling params
-   sumup their sizes and replace the backend buffers with a single bo */
-void si_vid_join_surfaces(struct si_context *sctx,
-			  struct pb_buffer** buffers[VL_NUM_COMPONENTS],
-			  struct radeon_surf *surfaces[VL_NUM_COMPONENTS]);
-
 #endif // RADEON_VIDEO_H

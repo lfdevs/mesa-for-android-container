@@ -105,16 +105,17 @@ panfrost_blit(struct pipe_context *pipe,
 void
 panfrost_blit_wallpaper(struct panfrost_context *ctx, struct pipe_box *box)
 {
+        struct panfrost_batch *batch = ctx->wallpaper_batch;
         struct pipe_blit_info binfo = { };
 
         panfrost_blitter_save(ctx, ctx->blitter_wallpaper);
 
-        struct pipe_surface *surf = ctx->pipe_framebuffer.cbufs[0];
+        struct pipe_surface *surf = batch->key.cbufs[0];
         unsigned level = surf->u.tex.level;
         unsigned layer = surf->u.tex.first_layer;
         assert(surf->u.tex.last_layer == layer);
 
-        binfo.src.resource = binfo.dst.resource = ctx->pipe_framebuffer.cbufs[0]->texture;
+        binfo.src.resource = binfo.dst.resource = batch->key.cbufs[0]->texture;
         binfo.src.level = binfo.dst.level = level;
         binfo.src.box.x = binfo.dst.box.x = box->x;
         binfo.src.box.y = binfo.dst.box.y = box->y;
@@ -123,9 +124,9 @@ panfrost_blit_wallpaper(struct panfrost_context *ctx, struct pipe_box *box)
         binfo.src.box.height = binfo.dst.box.height = box->height;
         binfo.src.box.depth = binfo.dst.box.depth = 1;
 
-        binfo.src.format = binfo.dst.format = ctx->pipe_framebuffer.cbufs[0]->format;
+        binfo.src.format = binfo.dst.format = batch->key.cbufs[0]->format;
 
-        assert(ctx->pipe_framebuffer.nr_cbufs == 1);
+        assert(batch->key.nr_cbufs == 1);
         binfo.mask = PIPE_MASK_RGBA;
         binfo.filter = PIPE_TEX_FILTER_LINEAR;
         binfo.scissor_enable = FALSE;

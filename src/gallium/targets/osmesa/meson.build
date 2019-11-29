@@ -32,12 +32,19 @@ if with_ld_version_script
   osmesa_link_deps += files('osmesa.sym')
 endif
 
+if cc.get_id() == 'gcc' and host_machine.cpu_family() != 'x86_64'
+  osmesa_def = 'osmesa.mingw.def'
+else
+  osmesa_def = 'osmesa.def'
+endif
+
 libosmesa = shared_library(
   osmesa_lib_name,
   'target.c',
   c_args : [c_vis_args],
   cpp_args : cpp_vis_args,
   link_args : [ld_args_gc_sections, osmesa_link_args],
+  vs_module_defs : osmesa_def,
   include_directories : [
     inc_include, inc_src, inc_gallium, inc_gallium_aux, inc_gallium_winsys,
     inc_gallium_drivers,
@@ -48,9 +55,11 @@ libosmesa = shared_library(
     libmesa_gallium, libgallium, libws_null, osmesa_link_with,
   ],
   dependencies : [
-    dep_selinux, dep_thread, dep_clock, dep_unwind,
+    dep_ws2_32, dep_selinux, dep_thread, dep_clock, dep_unwind,
     driver_swrast, driver_swr,
   ],
+  name_prefix : host_machine.system() == 'windows' ? '' : 'lib',  # otherwise mingw will create libosmesa.dll
+  soversion : host_machine.system() == 'windows' ? '' : '8',
   version : '8.0.0',
   install : true,
 )
@@ -62,3 +71,12 @@ pkg.generate(
   libraries : libosmesa,
   libraries_private : gl_priv_libs,
 )
+
+if with_tests
+  test('osmesa-render',
+       executable('osmesa-render',
+                  'test-render.c',
+                  include_directories : inc_common,
+                  link_with: libosmesa),
+       suite: 'gallium')
+endif

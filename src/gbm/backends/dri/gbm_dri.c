@@ -110,6 +110,18 @@ dri_get_buffers_with_format(__DRIdrawable * driDrawable,
                                    count, out_count, surf->dri_private);
 }
 
+static unsigned
+dri_get_capability(void *loaderPrivate, enum dri_loader_cap cap)
+{
+   /* Note: loaderPrivate is _EGLDisplay* */
+   switch (cap) {
+   case DRI_LOADER_CAP_FP16:
+      return 1;
+   default:
+      return 0;
+   }
+}
+
 static int
 image_get_buffers(__DRIdrawable *driDrawable,
                   unsigned int format,
@@ -207,18 +219,20 @@ static const __DRIimageLookupExtension image_lookup_extension = {
 };
 
 static const __DRIdri2LoaderExtension dri2_loader_extension = {
-   .base = { __DRI_DRI2_LOADER, 3 },
+   .base = { __DRI_DRI2_LOADER, 4 },
 
    .getBuffers              = dri_get_buffers,
    .flushFrontBuffer        = dri_flush_front_buffer,
    .getBuffersWithFormat    = dri_get_buffers_with_format,
+   .getCapability           = dri_get_capability,
 };
 
 static const __DRIimageLoaderExtension image_loader_extension = {
-   .base = { __DRI_IMAGE_LOADER, 1 },
+   .base = { __DRI_IMAGE_LOADER, 2 },
 
    .getBuffers          = image_get_buffers,
    .flushFrontBuffer    = dri_flush_front_buffer,
+   .getCapability       = dri_get_capability,
 };
 
 static const __DRIswrastLoaderExtension swrast_loader_extension = {
@@ -243,38 +257,35 @@ struct dri_extension_match {
    const char *name;
    int version;
    int offset;
-   int optional;
+   bool optional;
 };
 
 static struct dri_extension_match dri_core_extensions[] = {
-   { __DRI2_FLUSH, 1, offsetof(struct gbm_dri_device, flush) },
-   { __DRI_IMAGE, 1, offsetof(struct gbm_dri_device, image) },
-   { __DRI2_FENCE, 1, offsetof(struct gbm_dri_device, fence), 1 },
-   { NULL, 0, 0 }
+   { __DRI2_FLUSH, 1, offsetof(struct gbm_dri_device, flush), false },
+   { __DRI_IMAGE, 1, offsetof(struct gbm_dri_device, image), false },
+   { __DRI2_FENCE, 1, offsetof(struct gbm_dri_device, fence), true },
 };
 
 static struct dri_extension_match gbm_dri_device_extensions[] = {
-   { __DRI_CORE, 1, offsetof(struct gbm_dri_device, core) },
-   { __DRI_DRI2, 1, offsetof(struct gbm_dri_device, dri2) },
-   { NULL, 0, 0 }
+   { __DRI_CORE, 1, offsetof(struct gbm_dri_device, core), false },
+   { __DRI_DRI2, 1, offsetof(struct gbm_dri_device, dri2), false },
 };
 
 static struct dri_extension_match gbm_swrast_device_extensions[] = {
-   { __DRI_CORE, 1, offsetof(struct gbm_dri_device, core), },
-   { __DRI_SWRAST, 1, offsetof(struct gbm_dri_device, swrast) },
-   { NULL, 0, 0 }
+   { __DRI_CORE, 1, offsetof(struct gbm_dri_device, core), false },
+   { __DRI_SWRAST, 1, offsetof(struct gbm_dri_device, swrast), false },
 };
 
-static int
+static bool
 dri_bind_extensions(struct gbm_dri_device *dri,
-                    struct dri_extension_match *matches,
+                    struct dri_extension_match *matches, size_t num_matches,
                     const __DRIextension **extensions)
 {
-   int i, j, ret = 0;
+   bool ret = true;
    void *field;
 
-   for (i = 0; extensions[i]; i++) {
-      for (j = 0; matches[j].name; j++) {
+   for (size_t i = 0; extensions[i]; i++) {
+      for (size_t j = 0; j < num_matches; j++) {
          if (strcmp(extensions[i]->name, matches[j].name) == 0 &&
              extensions[i]->version >= matches[j].version) {
             field = ((char *) dri + matches[j].offset);
@@ -283,10 +294,10 @@ dri_bind_extensions(struct gbm_dri_device *dri,
       }
    }
 
-   for (j = 0; matches[j].name; j++) {
+   for (size_t j = 0; j < num_matches; j++) {
       field = ((char *) dri + matches[j].offset);
       if ((*(const __DRIextension **) field == NULL) && !matches[j].optional) {
-         ret = -1;
+         ret = false;
       }
    }
 
@@ -327,7 +338,9 @@ dri_load_driver(struct gbm_dri_device *dri)
    if (!extensions)
       return -1;
 
-   if (dri_bind_extensions(dri, gbm_dri_device_extensions, extensions) < 0) {
+   if (!dri_bind_extensions(dri, gbm_dri_device_extensions,
+                            ARRAY_SIZE(gbm_dri_device_extensions),
+                            extensions)) {
       dlclose(dri->driver);
       fprintf(stderr, "failed to bind extensions\n");
       return -1;
@@ -347,7 +360,9 @@ dri_load_driver_swrast(struct gbm_dri_device *dri)
    if (!extensions)
       return -1;
 
-   if (dri_bind_extensions(dri, gbm_swrast_device_extensions, extensions) < 0) {
+   if (!dri_bind_extensions(dri, gbm_swrast_device_extensions,
+                            ARRAY_SIZE(gbm_swrast_device_extensions),
+                            extensions)) {
       dlclose(dri->driver);
       fprintf(stderr, "failed to bind extensions\n");
       return -1;
@@ -393,7 +408,9 @@ dri_screen_create_dri2(struct gbm_dri_device *dri, char *driver_name)
       return -1;
 
    extensions = dri->core->getExtensions(dri->screen);
-   if (dri_bind_extensions(dri, dri_core_extensions, extensions) < 0) {
+   if (!dri_bind_extensions(dri, dri_core_extensions,
+                            ARRAY_SIZE(dri_core_extensions),
+                            extensions)) {
       ret = -1;
       goto free_screen;
    }
@@ -478,61 +495,83 @@ dri_screen_create_sw(struct gbm_dri_device *dri)
 static const struct gbm_dri_visual gbm_dri_visuals_table[] = {
    {
      GBM_FORMAT_R8, __DRI_IMAGE_FORMAT_R8,
-     { 0x000000ff, 0x00000000, 0x00000000, 0x00000000 },
+     { 0, -1, -1, -1 },
+     { 8, 0, 0, 0 },
    },
    {
      GBM_FORMAT_GR88, __DRI_IMAGE_FORMAT_GR88,
-     { 0x000000ff, 0x0000ff00, 0x00000000, 0x00000000 },
+     { 0, 8, -1, -1 },
+     { 8, 8, 0, 0 },
    },
    {
      GBM_FORMAT_ARGB1555, __DRI_IMAGE_FORMAT_ARGB1555,
-     { 0x00007c00, 0x000003e0, 0x0000001f, 0x00008000 },
+     { 10, 5, 0, 11 },
+     { 5, 5, 5, 1 },
    },
    {
      GBM_FORMAT_RGB565, __DRI_IMAGE_FORMAT_RGB565,
-     { 0x0000f800, 0x000007e0, 0x0000001f, 0x00000000 },
+     { 11, 5, 0, -1 },
+     { 5, 6, 5, 0 },
    },
    {
      GBM_FORMAT_XRGB8888, __DRI_IMAGE_FORMAT_XRGB8888,
-     { 0x00ff0000, 0x0000ff00, 0x000000ff, 0x00000000 },
+     { 16, 8, 0, -1 },
+     { 8, 8, 8, 0 },
    },
    {
      GBM_FORMAT_ARGB8888, __DRI_IMAGE_FORMAT_ARGB8888,
-     { 0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000 },
+     { 16, 8, 0, 24 },
+     { 8, 8, 8, 8 },
    },
    {
      GBM_FORMAT_XBGR8888, __DRI_IMAGE_FORMAT_XBGR8888,
-     { 0x000000ff, 0x0000ff00, 0x00ff0000, 0x00000000 },
+     { 0, 8, 16, -1 },
+     { 8, 8, 8, 0 },
    },
    {
      GBM_FORMAT_ABGR8888, __DRI_IMAGE_FORMAT_ABGR8888,
-     { 0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000 },
+     { 0, 8, 16, 24 },
+     { 8, 8, 8, 8 },
    },
    {
      GBM_FORMAT_XRGB2101010, __DRI_IMAGE_FORMAT_XRGB2101010,
-     { 0x3ff00000, 0x000ffc00, 0x000003ff, 0x00000000 },
+     { 20, 10, 0, -1 },
+     { 10, 10, 10, 0 },
    },
    {
      GBM_FORMAT_ARGB2101010, __DRI_IMAGE_FORMAT_ARGB2101010,
-     { 0x3ff00000, 0x000ffc00, 0x000003ff, 0xc0000000 },
+     { 20, 10, 0, 30 },
+     { 10, 10, 10, 2 },
    },
    {
      GBM_FORMAT_XBGR2101010, __DRI_IMAGE_FORMAT_XBGR2101010,
-     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0x00000000 },
+     { 0, 10, 20, -1 },
+     { 10, 10, 10, 0 },
    },
    {
      GBM_FORMAT_ABGR2101010, __DRI_IMAGE_FORMAT_ABGR2101010,
-     { 0x000003ff, 0x000ffc00, 0x3ff00000, 0xc0000000 },
+     { 0, 10, 20, 30 },
+     { 10, 10, 10, 2 },
+   },
+   {
+     GBM_FORMAT_XBGR16161616F, __DRI_IMAGE_FORMAT_XBGR16161616F,
+     { 0, 16, 32, -1 },
+     { 16, 16, 16, 0 },
+     true,
+   },
+   {
+     GBM_FORMAT_ABGR16161616F, __DRI_IMAGE_FORMAT_ABGR16161616F,
+     { 0, 16, 32, 48 },
+     { 16, 16, 16, 16 },
+     true,
    },
 };
 
 static int
 gbm_format_to_dri_format(uint32_t gbm_format)
 {
-   int i;
-
    gbm_format = gbm_format_canonicalize(gbm_format);
-   for (i = 0; i < ARRAY_SIZE(gbm_dri_visuals_table); i++) {
+   for (size_t i = 0; i < ARRAY_SIZE(gbm_dri_visuals_table); i++) {
       if (gbm_dri_visuals_table[i].gbm_format == gbm_format)
          return gbm_dri_visuals_table[i].dri_image_format;
    }
@@ -543,9 +582,7 @@ gbm_format_to_dri_format(uint32_t gbm_format)
 static uint32_t
 gbm_dri_to_gbm_format(int dri_format)
 {
-   int i;
-
-   for (i = 0; i < ARRAY_SIZE(gbm_dri_visuals_table); i++) {
+   for (size_t i = 0; i < ARRAY_SIZE(gbm_dri_visuals_table); i++) {
       if (gbm_dri_visuals_table[i].dri_image_format == dri_format)
          return gbm_dri_visuals_table[i].gbm_format;
    }

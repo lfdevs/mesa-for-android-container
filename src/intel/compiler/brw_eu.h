@@ -59,6 +59,9 @@ struct brw_insn_state {
    /* One of BRW_MASK_* */
    unsigned mask_control:1;
 
+   /* Scheduling info for Gen12+ */
+   struct tgl_swsb swsb;
+
    bool saturate:1;
 
    /* One of BRW_ALIGN_* */
@@ -139,6 +142,7 @@ void brw_push_insn_state( struct brw_codegen *p );
 unsigned brw_get_default_exec_size(struct brw_codegen *p);
 unsigned brw_get_default_group(struct brw_codegen *p);
 unsigned brw_get_default_access_mode(struct brw_codegen *p);
+struct tgl_swsb brw_get_default_swsb(struct brw_codegen *p);
 void brw_set_default_exec_size(struct brw_codegen *p, unsigned value);
 void brw_set_default_mask_control( struct brw_codegen *p, unsigned value );
 void brw_set_default_saturate( struct brw_codegen *p, bool enable );
@@ -150,10 +154,11 @@ void brw_inst_set_group(const struct gen_device_info *devinfo,
                         brw_inst *inst, unsigned group);
 void brw_set_default_group(struct brw_codegen *p, unsigned group);
 void brw_set_default_compression_control(struct brw_codegen *p, enum brw_compression c);
-void brw_set_default_predicate_control( struct brw_codegen *p, unsigned pc );
+void brw_set_default_predicate_control(struct brw_codegen *p, enum brw_predicate pc);
 void brw_set_default_predicate_inverse(struct brw_codegen *p, bool predicate_inverse);
 void brw_set_default_flag_reg(struct brw_codegen *p, int reg, int subreg);
 void brw_set_default_acc_write_control(struct brw_codegen *p, unsigned value);
+void brw_set_default_swsb(struct brw_codegen *p, struct tgl_swsb value);
 
 void brw_init_codegen(const struct gen_device_info *, struct brw_codegen *p,
 		      void *mem_ctx);
@@ -1080,6 +1085,8 @@ void brw_NOP(struct brw_codegen *p);
 
 void brw_WAIT(struct brw_codegen *p);
 
+void brw_SYNC(struct brw_codegen *p, enum tgl_sync_function func);
+
 /* Special case: there is never a destination, execution size will be
  * taken from src0:
  */
@@ -1145,8 +1152,8 @@ brw_broadcast(struct brw_codegen *p,
               struct brw_reg idx);
 
 void
-brw_rounding_mode(struct brw_codegen *p,
-                  enum brw_rnd_mode mode);
+brw_float_controls_mode(struct brw_codegen *p,
+                        unsigned mode, unsigned mask);
 
 /***********************************************************************
  * brw_eu_util.c:
@@ -1189,8 +1196,8 @@ brw_set_desc(struct brw_codegen *p, brw_inst *insn, unsigned desc)
 
 void brw_set_uip_jip(struct brw_codegen *p, int start_offset);
 
-enum brw_conditional_mod brw_negate_cmod(uint32_t cmod);
-enum brw_conditional_mod brw_swap_cmod(uint32_t cmod);
+enum brw_conditional_mod brw_negate_cmod(enum brw_conditional_mod cmod);
+enum brw_conditional_mod brw_swap_cmod(enum brw_conditional_mod cmod);
 
 /* brw_eu_compact.c */
 void brw_init_compaction_tables(const struct gen_device_info *devinfo);
@@ -1221,31 +1228,45 @@ next_offset(const struct gen_device_info *devinfo, void *store, int offset)
 }
 
 struct opcode_desc {
-   /* The union is an implementation detail used by brw_opcode_desc() to handle
-    * opcodes that have been reused for different instructions across hardware
-    * generations.
-    *
-    * The gens field acts as a tag. If it is non-zero, name points to a string
-    * containing the instruction mnemonic. If it is zero, the table field is
-    * valid and either points to a secondary opcode_desc table with 'size'
-    * elements or is NULL and no such instruction exists for the opcode.
-    */
-   union {
-      struct {
-         char    *name;
-         int      nsrc;
-      };
-      struct {
-         const struct opcode_desc *table;
-         unsigned size;
-      };
-   };
-   int      ndst;
-   int      gens;
+   unsigned ir;
+   unsigned hw;
+   const char *name;
+   int nsrc;
+   int ndst;
+   int gens;
 };
 
 const struct opcode_desc *
 brw_opcode_desc(const struct gen_device_info *devinfo, enum opcode opcode);
+
+const struct opcode_desc *
+brw_opcode_desc_from_hw(const struct gen_device_info *devinfo, unsigned hw);
+
+static inline unsigned
+brw_opcode_encode(const struct gen_device_info *devinfo, enum opcode opcode)
+{
+   return brw_opcode_desc(devinfo, opcode)->hw;
+}
+
+static inline enum opcode
+brw_opcode_decode(const struct gen_device_info *devinfo, unsigned hw)
+{
+   const struct opcode_desc *desc = brw_opcode_desc_from_hw(devinfo, hw);
+   return desc ? (enum opcode)desc->ir : BRW_OPCODE_ILLEGAL;
+}
+
+static inline void
+brw_inst_set_opcode(const struct gen_device_info *devinfo,
+                    brw_inst *inst, enum opcode opcode)
+{
+   brw_inst_set_hw_opcode(devinfo, inst, brw_opcode_encode(devinfo, opcode));
+}
+
+static inline enum opcode
+brw_inst_opcode(const struct gen_device_info *devinfo, const brw_inst *inst)
+{
+   return brw_opcode_decode(devinfo, brw_inst_hw_opcode(devinfo, inst));
+}
 
 static inline bool
 is_3src(const struct gen_device_info *devinfo, enum opcode opcode)

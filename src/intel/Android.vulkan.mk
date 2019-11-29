@@ -190,6 +190,28 @@ include $(MESA_COMMON_MK)
 include $(BUILD_STATIC_LIBRARY)
 
 #
+# libanv for gen12
+#
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libmesa_anv_gen12
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+
+LOCAL_SRC_FILES := $(VULKAN_GEN12_FILES)
+LOCAL_CFLAGS := -DGEN_VERSIONx10=120
+
+LOCAL_C_INCLUDES := $(VULKAN_COMMON_INCLUDES)
+
+LOCAL_STATIC_LIBRARIES := $(ANV_STATIC_LIBRARIES)
+
+LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES)
+LOCAL_HEADER_LIBRARIES += $(VULKAN_COMMON_HEADER_LIBRARIES)
+
+include $(MESA_COMMON_MK)
+include $(BUILD_STATIC_LIBRARY)
+
+
+#
 # libmesa_vulkan_common
 #
 
@@ -283,6 +305,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_compiler \
 	libmesa_intel_common \
 	libmesa_intel_dev \
+	libmesa_intel_perf \
 	libmesa_vulkan_common \
 	libmesa_vulkan_util \
 	libmesa_anv_gen7 \
@@ -291,6 +314,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_anv_gen9 \
 	libmesa_anv_gen10 \
 	libmesa_anv_gen11 \
+	libmesa_anv_gen12 \
 	libmesa_intel_compiler
 
 LOCAL_SHARED_LIBRARIES := $(ANV_SHARED_LIBRARIES) libz libsync liblog

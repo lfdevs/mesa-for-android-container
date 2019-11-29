@@ -809,7 +809,11 @@ struct __DRIuseInvalidateExtensionRec {
 #define __DRI_ATTRIB_YINVERTED			47
 #define __DRI_ATTRIB_FRAMEBUFFER_SRGB_CAPABLE	48
 #define __DRI_ATTRIB_MUTABLE_RENDER_BUFFER	49 /* EGL_MUTABLE_RENDER_BUFFER_BIT_KHR */
-#define __DRI_ATTRIB_MAX			50
+#define __DRI_ATTRIB_RED_SHIFT			50
+#define __DRI_ATTRIB_GREEN_SHIFT		51
+#define __DRI_ATTRIB_BLUE_SHIFT			52
+#define __DRI_ATTRIB_ALPHA_SHIFT		53
+#define __DRI_ATTRIB_MAX			54
 
 /* __DRI_ATTRIB_RENDER_TYPE */
 #define __DRI_ATTRIB_RGBA_BIT			0x01	
@@ -1096,6 +1100,7 @@ enum dri_loader_cap {
     * only BGRA ordering can be exposed.
     */
    DRI_LOADER_CAP_RGBA_ORDERING,
+   DRI_LOADER_CAP_FP16,
 };
 
 struct __DRIdri2LoaderExtensionRec {
@@ -1336,6 +1341,8 @@ struct __DRIdri2ExtensionRec {
 #define __DRI_IMAGE_FORMAT_ABGR2101010  0x1011
 #define __DRI_IMAGE_FORMAT_SABGR8       0x1012
 #define __DRI_IMAGE_FORMAT_UYVY         0x1013
+#define __DRI_IMAGE_FORMAT_XBGR16161616F 0x1014
+#define __DRI_IMAGE_FORMAT_ABGR16161616F 0x1015
 
 #define __DRI_IMAGE_USE_SHARE		0x0001
 #define __DRI_IMAGE_USE_SCANOUT		0x0002
@@ -1354,54 +1361,15 @@ struct __DRIdri2ExtensionRec {
         (__DRI_IMAGE_TRANSFER_READ | __DRI_IMAGE_TRANSFER_WRITE)
 
 /**
- * Four CC formats that matches with WL_DRM_FORMAT_* from wayland_drm.h,
- * GBM_FORMAT_* from gbm.h, and DRM_FORMAT_* from drm_fourcc.h. Used with
- * createImageFromNames.
+ * Extra fourcc formats used internally to Mesa with createImageFromNames.
+ * The externally-available fourccs are defined by drm_fourcc.h (DRM_FORMAT_*)
+ * and WL_DRM_FORMAT_* from wayland_drm.h.
  *
  * \since 5
  */
 
-#define __DRI_IMAGE_FOURCC_R8		0x20203852
-#define __DRI_IMAGE_FOURCC_GR88		0x38385247
-#define __DRI_IMAGE_FOURCC_ARGB1555	0x35315241
-#define __DRI_IMAGE_FOURCC_R16		0x20363152
-#define __DRI_IMAGE_FOURCC_GR1616	0x32335247
-#define __DRI_IMAGE_FOURCC_RGB565	0x36314752
-#define __DRI_IMAGE_FOURCC_ARGB8888	0x34325241
-#define __DRI_IMAGE_FOURCC_XRGB8888	0x34325258
-#define __DRI_IMAGE_FOURCC_ABGR8888	0x34324241
-#define __DRI_IMAGE_FOURCC_XBGR8888	0x34324258
 #define __DRI_IMAGE_FOURCC_SARGB8888	0x83324258
 #define __DRI_IMAGE_FOURCC_SABGR8888	0x84324258
-#define __DRI_IMAGE_FOURCC_ARGB2101010	0x30335241
-#define __DRI_IMAGE_FOURCC_XRGB2101010	0x30335258
-#define __DRI_IMAGE_FOURCC_ABGR2101010	0x30334241
-#define __DRI_IMAGE_FOURCC_XBGR2101010	0x30334258
-#define __DRI_IMAGE_FOURCC_RGBA1010102	0x30334152
-#define __DRI_IMAGE_FOURCC_RGBX1010102	0x30335852
-#define __DRI_IMAGE_FOURCC_BGRA1010102	0x30334142
-#define __DRI_IMAGE_FOURCC_BGRX1010102	0x30335842
-#define __DRI_IMAGE_FOURCC_YUV410	0x39565559
-#define __DRI_IMAGE_FOURCC_YUV411	0x31315559
-#define __DRI_IMAGE_FOURCC_YUV420	0x32315559
-#define __DRI_IMAGE_FOURCC_YUV422	0x36315559
-#define __DRI_IMAGE_FOURCC_YUV444	0x34325559
-#define __DRI_IMAGE_FOURCC_NV12		0x3231564e
-#define __DRI_IMAGE_FOURCC_NV16		0x3631564e
-#define __DRI_IMAGE_FOURCC_YUYV		0x56595559
-#define __DRI_IMAGE_FOURCC_UYVY		0x59565955
-#define __DRI_IMAGE_FOURCC_AYUV		0x56555941
-#define __DRI_IMAGE_FOURCC_XYUV8888	0x56555958
-
-#define __DRI_IMAGE_FOURCC_YVU410	0x39555659
-#define __DRI_IMAGE_FOURCC_YVU411	0x31315659
-#define __DRI_IMAGE_FOURCC_YVU420	0x32315659
-#define __DRI_IMAGE_FOURCC_YVU422	0x36315659
-#define __DRI_IMAGE_FOURCC_YVU444	0x34325659
-
-#define __DRI_IMAGE_FOURCC_P010		0x30313050
-#define __DRI_IMAGE_FOURCC_P012		0x32313050
-#define __DRI_IMAGE_FOURCC_P016		0x36313050
 
 /**
  * Queryable on images created by createImageFromNames.
@@ -1547,8 +1515,8 @@ struct __DRIimageExtensionRec {
    GLboolean (*validateUsage)(__DRIimage *image, unsigned int use);
 
    /**
-    * Unlike createImageFromName __DRI_IMAGE_FORMAT is not but instead
-    * __DRI_IMAGE_FOURCC and strides are in bytes not pixels. Stride is
+    * Unlike createImageFromName __DRI_IMAGE_FORMAT is not used but instead
+    * DRM_FORMAT_*, and strides are in bytes not pixels. Stride is
     * also per block and not per pixel (for non-RGB, see gallium blocks).
     *
     * \since 5

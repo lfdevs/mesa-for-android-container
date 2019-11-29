@@ -42,7 +42,7 @@
  * to keep track of and update phis along the way which gets tricky and
  * doesn't add much value over converting to regs.
  *
- * The loop may have a continue instruction at the end of the loop which does
+ * The loop may have a jump instruction at the end of the loop which does
  * nothing.  Once we're out of SSA, we can safely delete it so we don't have
  * to deal with it later.
  */
@@ -67,7 +67,7 @@ loop_prepare_for_unroll(nir_loop *loop)
 
    nir_lower_phis_to_regs_block(block_after_loop);
 
-   /* Remove continue if its the last instruction in the loop */
+   /* Remove jump if it's the last instruction in the loop */
    nir_instr *last_instr = nir_block_last_instr(nir_loop_last_block(loop));
    if (last_instr && last_instr->type == nir_instr_type_jump) {
       nir_instr_remove(last_instr);
@@ -514,7 +514,7 @@ complex_unroll_single_terminator(nir_loop *loop)
 static bool
 wrapper_unroll(nir_loop *loop)
 {
-   if (!list_empty(&loop->info->loop_terminator_list)) {
+   if (!list_is_empty(&loop->info->loop_terminator_list)) {
 
       /* Unrolling a loop with a large number of exits can result in a
        * large inrease in register pressure. For now we just skip

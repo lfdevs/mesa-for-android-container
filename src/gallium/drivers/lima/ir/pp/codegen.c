@@ -65,7 +65,13 @@ static void ppir_codegen_encode_varying(ppir_node *node, void *code)
 
       int alignment = num_components == 3 ? 3 : num_components - 1;
       f->imm.alignment = alignment;
-      f->imm.offset_vector = 0xf;
+
+      if (load->num_src) {
+         index = ppir_target_get_src_reg_index(&load->src);
+         f->imm.offset_vector = index >> 2;
+         f->imm.offset_scalar = index & 0x3;
+      } else
+         f->imm.offset_vector = 0xf;
 
       if (alignment == 3)
          f->imm.index = load->index >> 2;
@@ -94,14 +100,15 @@ static void ppir_codegen_encode_varying(ppir_node *node, void *code)
       f->reg.dest = index >> 2;
       f->reg.mask = dest->write_mask << (index & 0x3);
 
-      f->reg.source_type = 1;
-
-      ppir_src *src = &load->src;
-      index = ppir_target_get_src_reg_index(src);
-      f->reg.source = index >> 2;
-      f->reg.negate = src->negate;
-      f->reg.absolute = src->absolute;
-      f->reg.swizzle = encode_swizzle(src->swizzle, index & 0x3, 0);
+      if (load->num_src) {
+         f->reg.source_type = 1;
+         ppir_src *src = &load->src;
+         index = ppir_target_get_src_reg_index(src);
+         f->reg.source = index >> 2;
+         f->reg.negate = src->negate;
+         f->reg.absolute = src->absolute;
+         f->reg.swizzle = encode_swizzle(src->swizzle, index & 0x3, 0);
+      }
    }
 }
 
@@ -133,13 +140,14 @@ static void ppir_codegen_encode_uniform(ppir_node *node, void *code)
          assert(0);
    }
 
-   int num_components = load->num_components;
-   int alignment = num_components == 4 ? 2 : num_components - 1;
+   /* Uniforms are always aligned to vec4 boundary */
+   f->alignment = 2;
+   f->index = load->index;
 
-   f->alignment = alignment;
-
-   /* TODO: uniform can be also combined like varying */
-   f->index = load->index << (2 - alignment);
+   if (load->num_src) {
+      f->offset_en = 1;
+      f->offset_reg = ppir_target_get_src_reg_index(&load->src);
+   }
 }
 
 static unsigned shift_to_op(int shift)
@@ -168,6 +176,7 @@ static void ppir_codegen_encode_vec_mul(ppir_node *node, void *code)
       f->op = shift_to_op(alu->shift);
       break;
    case ppir_op_mov:
+   case ppir_op_store_color:
       f->op = ppir_codegen_vec4_mul_op_mov;
       break;
    case ppir_op_max:
@@ -310,6 +319,7 @@ static void ppir_codegen_encode_vec_add(ppir_node *node, void *code)
       f->op = ppir_codegen_vec4_acc_op_add;
       break;
    case ppir_op_mov:
+   case ppir_op_store_color:
       f->op = ppir_codegen_vec4_acc_op_mov;
       break;
    case ppir_op_sum3:
@@ -556,6 +566,7 @@ static void ppir_codegen_encode_branch(ppir_node *node, void *code)
    ppir_codegen_field_branch *b = code;
    ppir_branch_node *branch;
    ppir_instr *target_instr;
+   ppir_block *target;
    if (node->op == ppir_op_discard) {
       ppir_codegen_encode_discard(node, code);
       return;
@@ -565,14 +576,35 @@ static void ppir_codegen_encode_branch(ppir_node *node, void *code)
    branch = ppir_node_to_branch(node);
 
    b->branch.unknown_0 = 0x0;
-   b->branch.arg0_source = get_scl_reg_index(&branch->src[0], 0);
-   b->branch.arg1_source = get_scl_reg_index(&branch->src[1], 0);
-   b->branch.cond_gt = branch->cond_gt;
-   b->branch.cond_eq = branch->cond_eq;
-   b->branch.cond_lt = branch->cond_lt;
    b->branch.unknown_1 = 0x0;
 
-   target_instr = list_first_entry(&branch->target->instr_list, ppir_instr, list);
+   if (branch->num_src == 2) {
+      b->branch.arg0_source = get_scl_reg_index(&branch->src[0], 0);
+      b->branch.arg1_source = get_scl_reg_index(&branch->src[1], 0);
+      b->branch.cond_gt = branch->cond_gt;
+      b->branch.cond_eq = branch->cond_eq;
+      b->branch.cond_lt = branch->cond_lt;
+   } else if (branch->num_src == 0) {
+      /* Unconditional branch */
+      b->branch.arg0_source = 0;
+      b->branch.arg1_source = 0;
+      b->branch.cond_gt = true;
+      b->branch.cond_eq = true;
+      b->branch.cond_lt = true;
+   } else {
+      assert(false);
+   }
+
+   target = branch->target;
+   while (list_is_empty(&target->instr_list)) {
+      if (!target->list.next)
+         break;
+      target = LIST_ENTRY(ppir_block, target->list.next, list);
+   }
+
+   assert(!list_is_empty(&target->instr_list));
+
+   target_instr = list_first_entry(&target->instr_list, ppir_instr, list);
    b->branch.target = target_instr->offset - node->instr->offset;
    b->branch.next_count = target_instr->encode_size;
 }

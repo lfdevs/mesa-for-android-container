@@ -54,6 +54,8 @@ public:
 void
 copy_constant_to_storage::SetUp()
 {
+   glsl_type_singleton_init_or_ref();
+
    this->mem_ctx = ralloc_context(NULL);
 }
 
@@ -62,6 +64,8 @@ copy_constant_to_storage::TearDown()
 {
    ralloc_free(this->mem_ctx);
    this->mem_ctx = NULL;
+
+   glsl_type_singleton_decref();
 }
 
 void

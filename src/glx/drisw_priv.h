@@ -62,10 +62,8 @@ struct drisw_drawable
    __GLXDRIdrawable base;
 
    GC gc;
-   GC swapgc;
-
    __DRIdrawable *driDrawable;
-   XVisualInfo *visinfo;
+   struct glx_config *config;
    XImage *ximage;
    XShmSegmentInfo shminfo;
 };

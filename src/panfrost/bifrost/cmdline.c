@@ -59,7 +59,7 @@ compile_shader(char **argv)
                 NIR_PASS_V(nir[i], nir_split_var_copies);
                 NIR_PASS_V(nir[i], nir_lower_var_copies);
 
-                NIR_PASS_V(nir[i], nir_lower_alu_to_scalar, NULL);
+                NIR_PASS_V(nir[i], nir_lower_alu_to_scalar, NULL, NULL);
 
                 /* before buffers and vars_to_ssa */
                 NIR_PASS_V(nir[i], gl_nir_lower_bindless_images);
@@ -77,11 +77,11 @@ disassemble(const char *filename)
         assert(fp);
 
         fseek(fp, 0, SEEK_END);
-        int filesize = ftell(fp);
+        unsigned filesize = ftell(fp);
         rewind(fp);
 
         unsigned char *code = malloc(filesize);
-        int res = fread(code, 1, filesize, fp);
+        unsigned res = fread(code, 1, filesize, fp);
         if (res != filesize) {
                 printf("Couldn't read full file\n");
         }

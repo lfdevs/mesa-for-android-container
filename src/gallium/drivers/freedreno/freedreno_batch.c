@@ -336,7 +336,7 @@ batch_flush(struct fd_batch *batch)
 
 		util_queue_add_job(&batch->ctx->flush_queue,
 				batch, &batch->flush_fence,
-				batch_flush_func, batch_cleanup_func);
+				batch_flush_func, batch_cleanup_func, 0);
 	} else {
 		fd_gmem_render_tiles(batch);
 		batch_reset_resources(batch);

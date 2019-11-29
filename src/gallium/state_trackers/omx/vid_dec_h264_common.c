@@ -98,7 +98,7 @@ struct pipe_video_buffer *vid_dec_h264_Flush(vid_dec_PrivateType *priv,
       *timestamp = result->timestamp;
 
    --priv->codec_data.h264.dpb_num;
-   LIST_DEL(&result->list);
+   list_del(&result->list);
    FREE(result);
 
    return buf;
@@ -136,7 +136,7 @@ void vid_dec_h264_EndFrame(vid_dec_PrivateType *priv)
    entry->buffer = priv->target;
    entry->timestamp = priv->timestamp;
    entry->poc = MIN2(priv->picture.h264.field_order_cnt[0], priv->picture.h264.field_order_cnt[1]);
-   LIST_ADDTAIL(&entry->list, &priv->codec_data.h264.dpb_list);
+   list_addtail(&entry->list, &priv->codec_data.h264.dpb_list);
    ++priv->codec_data.h264.dpb_num;
    priv->target = NULL;
    priv->picture.h264.field_order_cnt[0] = priv->picture.h264.field_order_cnt[1] = INT_MAX;

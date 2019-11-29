@@ -133,7 +133,7 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		 * range gets into range, we stop reducing it.
 		 */
 		if (prsc->target == PIPE_TEXTURE_3D) {
-			if (level <= 1 || (rsc->slices[level - 1].size0 > 0xf000)) {
+			if (level < 1 || (rsc->slices[level - 1].size0 > 0xf000)) {
 				slice->size0 = align(blocks * rsc->cpp, alignment);
 			} else {
 				slice->size0 = rsc->slices[level - 1].size0;
@@ -145,11 +145,12 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		size += slice->size0 * depth * layers_in_level;
 
 #if 0
-		debug_printf("%s: %ux%ux%u@%u:\t%2u: stride=%4u, size=%6u,%7u, aligned_height=%3u, blocks=%u\n",
+		debug_printf("%s: %ux%ux%u@%u:\t%2u: stride=%4u, size=%6u,%7u, aligned_height=%3u, blocks=%u, offset=0x%x\n",
 				util_format_name(prsc->format),
 				width, height, depth, rsc->cpp,
 				level, slice->pitch * rsc->cpp,
-				slice->size0, size, aligned_height, blocks);
+				slice->size0, size, aligned_height, blocks,
+				slice->offset);
 #endif
 
 		depth = u_minify(depth, 1);

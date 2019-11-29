@@ -137,6 +137,7 @@ bool glsl_type_contains_64bit(const struct glsl_type *type);
 bool glsl_sampler_type_is_shadow(const struct glsl_type *type);
 bool glsl_sampler_type_is_array(const struct glsl_type *type);
 bool glsl_contains_atomic(const struct glsl_type *type);
+bool glsl_contains_opaque(const struct glsl_type *type);
 
 const struct glsl_type *glsl_void_type(void);
 const struct glsl_type *glsl_float_type(void);

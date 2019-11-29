@@ -94,7 +94,7 @@ svga_get_name( struct pipe_screen *pscreen )
 #else
    build = "build: RELEASE;";
 #endif
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    llvm = "LLVM;";
 #endif
 
@@ -572,8 +572,6 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
          return 0;
-      case PIPE_SHADER_CAP_SCALAR_ISA:
-         return 1;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
       }
@@ -641,8 +639,6 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
       case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
          return 0;
-      case PIPE_SHADER_CAP_SCALAR_ISA:
-         return 1;
       case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
          return 32;
       }
@@ -744,8 +740,6 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
       return 0;
-   case PIPE_SHADER_CAP_SCALAR_ISA:
-      return 1;
    case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
       return 32;
    default:

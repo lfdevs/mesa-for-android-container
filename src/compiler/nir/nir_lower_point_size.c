@@ -41,12 +41,9 @@ lower_point_size_instr(nir_builder *b, nir_instr *psiz_instr,
 
    nir_intrinsic_instr *instr = nir_instr_as_intrinsic(psiz_instr);
 
-   /* Some fixed function vertex programs generate PSIZ as a vec4
-    * instead of a scalar, where the actual point size is stored in the
-    * first component.
-    */
    assert(instr->src[1].is_ssa);
-   nir_ssa_def *psiz = nir_channel(b, instr->src[1].ssa, 0);
+   assert(instr->src[1].ssa->num_components == 1);
+   nir_ssa_def *psiz = instr->src[1].ssa;
 
    if (min > 0.0f)
       psiz = nir_fmax(b, psiz, nir_imm_float(b, min));
@@ -54,15 +51,7 @@ lower_point_size_instr(nir_builder *b, nir_instr *psiz_instr,
    if (max > 0.0f)
       psiz = nir_fmin(b, psiz, nir_imm_float(b, max));
 
-   nir_ssa_def *src_chans[4];
-   src_chans[0] = psiz;
-   for (int i = 1; i < instr->src[1].ssa->num_components; i++)
-      src_chans[i] = nir_channel(b, instr->src[1].ssa, i);
-   nir_ssa_def *lowered_src =
-      nir_vec(b, src_chans, instr->src[1].ssa->num_components);
-
-   nir_instr_rewrite_src(&instr->instr, &instr->src[1],
-                         nir_src_for_ssa(lowered_src));
+   nir_instr_rewrite_src(&instr->instr, &instr->src[1], nir_src_for_ssa(psiz));
 }
 
 static bool

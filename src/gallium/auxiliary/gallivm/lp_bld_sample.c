@@ -125,6 +125,41 @@ lp_sampler_static_texture_state(struct lp_static_texture_state *state,
     */
 }
 
+/**
+ * Initialize lp_sampler_static_texture_state object with the gallium
+ * texture/sampler_view state (this contains the parts which are
+ * considered static).
+ */
+void
+lp_sampler_static_texture_state_image(struct lp_static_texture_state *state,
+                                      const struct pipe_image_view *view)
+{
+   const struct pipe_resource *resource;
+
+   memset(state, 0, sizeof *state);
+
+   if (!view || !view->resource)
+      return;
+
+   resource = view->resource;
+
+   state->format            = view->format;
+   state->swizzle_r         = PIPE_SWIZZLE_X;
+   state->swizzle_g         = PIPE_SWIZZLE_Y;
+   state->swizzle_b         = PIPE_SWIZZLE_Z;
+   state->swizzle_a         = PIPE_SWIZZLE_W;
+
+   state->target            = view->resource->target;
+   state->pot_width         = util_is_power_of_two_or_zero(resource->width0);
+   state->pot_height        = util_is_power_of_two_or_zero(resource->height0);
+   state->pot_depth         = util_is_power_of_two_or_zero(resource->depth0);
+   state->level_zero_only   = 0;
+
+   /*
+    * the layer / element / level parameters are all either dynamic
+    * state or handled transparently wrt execution.
+    */
+}
 
 /**
  * Initialize lp_sampler_static_sampler_state object with the gallium sampler

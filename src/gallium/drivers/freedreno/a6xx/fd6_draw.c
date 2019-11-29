@@ -128,8 +128,11 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.vtx  = &ctx->vtx,
 		.info = info,
 		.key = {
-			.vs = ctx->prog.vp,
-			.fs = ctx->prog.fp,
+			.vs = ctx->prog.vs,
+			.hs = ctx->prog.hs,
+			.ds = ctx->prog.ds,
+			.gs = ctx->prog.gs,
+			.fs = ctx->prog.fs,
 			.key = {
 				.color_two_side = ctx->rasterizer->light_twoside,
 				.vclamp_color = ctx->rasterizer->clamp_vertex_color,
@@ -154,6 +157,9 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
 	};
 
+	if (emit.key.gs)
+		emit.key.key.has_gs = true;
+
 	fixup_shader_state(ctx, &emit.key.key);
 
 	if (!(ctx->dirty & FD_DIRTY_PROG)) {
@@ -169,18 +175,21 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	emit.dirty = ctx->dirty;      /* *after* fixup_shader_state() */
 	emit.bs = fd6_emit_get_prog(&emit)->bs;
 	emit.vs = fd6_emit_get_prog(&emit)->vs;
+	emit.hs = fd6_emit_get_prog(&emit)->hs;
+	emit.ds = fd6_emit_get_prog(&emit)->ds;
+	emit.gs = fd6_emit_get_prog(&emit)->gs;
 	emit.fs = fd6_emit_get_prog(&emit)->fs;
 
-	const struct ir3_shader_variant *vp = emit.vs;
-	const struct ir3_shader_variant *fp = emit.fs;
-
-	ctx->stats.vs_regs += ir3_shader_halfregs(vp);
-	ctx->stats.fs_regs += ir3_shader_halfregs(fp);
+	ctx->stats.vs_regs += ir3_shader_halfregs(emit.vs);
+	ctx->stats.hs_regs += COND(emit.hs, ir3_shader_halfregs(emit.hs));
+	ctx->stats.ds_regs += COND(emit.ds, ir3_shader_halfregs(emit.ds));
+	ctx->stats.gs_regs += COND(emit.gs, ir3_shader_halfregs(emit.gs));
+	ctx->stats.fs_regs += ir3_shader_halfregs(emit.fs);
 
 	/* figure out whether we need to disable LRZ write for binning
-	 * pass using draw pass's fp:
+	 * pass using draw pass's fs:
 	 */
-	emit.no_lrz_write = fp->writes_pos || fp->no_earlyz;
+	emit.no_lrz_write = emit.fs->writes_pos || emit.fs->no_earlyz;
 
 	struct fd_ringbuffer *ring = ctx->batch->draw;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
@@ -203,13 +212,12 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	 */
 	emit_marker6(ring, 7);
 
-	/* leave vis mode blank for now, it will be patched up when
-	 * we know if we are binning or not
-	 */
 	uint32_t draw0 =
 		CP_DRAW_INDX_OFFSET_0_PRIM_TYPE(primtype) |
-		CP_DRAW_INDX_OFFSET_0_VIS_CULL(USE_VISIBILITY) |
-		0x2000;
+		CP_DRAW_INDX_OFFSET_0_VIS_CULL(USE_VISIBILITY);
+
+	if (emit.key.gs)
+		draw0 |= CP_DRAW_INDX_OFFSET_0_GS_ENABLE;
 
 	if (info->index_size) {
 		draw0 |=
@@ -248,6 +256,7 @@ static void
 fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 {
 	struct fd_ringbuffer *ring;
+	struct fd6_context *fd6_ctx = fd6_context(batch->ctx);
 
 	// TODO mid-frame clears (ie. app doing crazy stuff)??  Maybe worth
 	// splitting both clear and lrz clear out into their own rb's.  And
@@ -269,7 +278,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_WFI5(ring);
 
 	OUT_PKT4(ring, REG_A6XX_RB_CCU_CNTL, 1);
-	OUT_RING(ring, 0x10000000);
+	OUT_RING(ring, fd6_ctx->magic.RB_CCU_CNTL_bypass);
 
 	OUT_PKT4(ring, REG_A6XX_HLSQ_UPDATE_CNTL, 1);
 	OUT_RING(ring, 0x7ffff);
@@ -346,7 +355,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_WFI5(ring);
 
 	OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-	OUT_RING(ring, 0x1000000);
+	OUT_RING(ring, fd6_ctx->magic.RB_UNKNOWN_8E04_blit);
 
 	OUT_PKT7(ring, CP_BLIT, 1);
 	OUT_RING(ring, CP_BLIT_0_OP(BLIT_OP_SCALE));
@@ -354,7 +363,7 @@ fd6_clear_lrz(struct fd_batch *batch, struct fd_resource *zsbuf, double depth)
 	OUT_WFI5(ring);
 
 	OUT_PKT4(ring, REG_A6XX_RB_UNKNOWN_8E04, 1);
-	OUT_RING(ring, 0x0);
+	OUT_RING(ring, 0x0);               /* RB_UNKNOWN_8E04 */
 
 	fd6_event_write(batch, ring, UNK_1D, true);
 	fd6_event_write(batch, ring, FACENESS_FLUSH, true);

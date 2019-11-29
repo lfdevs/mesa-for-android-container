@@ -151,6 +151,10 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
       cs->VS_OUTPUT_COUNT_PSIZE = cs->VS_OUTPUT_COUNT;
    }
 
+   /* if fragment shader doesn't read pointcoord, disable it */
+   if (link.pcoord_varying_comp_ofs == -1)
+      cs->PA_CONFIG &= ~VIVS_PA_CONFIG_POINT_SPRITE_ENABLE;
+
    cs->VS_LOAD_BALANCING = vs->vs_load_balancing;
    cs->VS_START_PC = 0;
 
@@ -198,6 +202,9 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
                                               cs->VS_OUTPUT_COUNT * 4 : 0x00) |
       VIVS_GL_HALTI5_SH_SPECIALS_PS_PCOORD_IN((link.pcoord_varying_comp_ofs != -1) ?
                                               link.pcoord_varying_comp_ofs : 0x7f);
+
+   /* mask out early Z bit when frag depth is written */
+   cs->PE_DEPTH_CONFIG = ~COND(fs->ps_depth_out_reg >= 0, VIVS_PE_DEPTH_CONFIG_EARLY_Z);
 
    /* reference instruction memory */
    cs->vs_inst_mem_size = vs->code_size;
@@ -303,15 +310,12 @@ dump_shader_info(struct etna_shader_variant *v, struct pipe_debug_callback *debu
    if (!unlikely(etna_mesa_debug & ETNA_DBG_SHADERDB))
       return;
 
-   pipe_debug_message(debug, SHADER_INFO, "\n"
-         "SHADER-DB: %s prog %d/%d: %u instructions %u temps\n"
-         "SHADER-DB: %s prog %d/%d: %u immediates %u loops\n",
+   pipe_debug_message(debug, SHADER_INFO,
+         "%s shader: %u instructions, %u temps, "
+         "%u immediates, %u loops",
          etna_shader_stage(v),
-         v->shader->id, v->id,
          v->code_size,
          v->num_temps,
-         etna_shader_stage(v),
-         v->shader->id, v->id,
          v->uniforms.imm_count,
          v->num_loops);
 }

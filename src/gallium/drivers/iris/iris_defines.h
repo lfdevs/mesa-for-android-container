@@ -55,4 +55,14 @@
 /* The number of bits in our TIMESTAMP queries. */
 #define TIMESTAMP_BITS 36
 
+/* For gen12 we set the streamout buffers using 4 separate commands
+ * (3DSTATE_SO_BUFFER_INDEX_*) instead of 3DSTATE_SO_BUFFER. However the layout
+ * of the 3DSTATE_SO_BUFFER_INDEX_* commands is identical to that of
+ * 3DSTATE_SO_BUFFER apart from the SOBufferIndex field, so for now we use the
+ * 3DSTATE_SO_BUFFER command, but change the 3DCommandSubOpcode.
+ * SO_BUFFER_INDEX_0_CMD is actually the 3DCommandSubOpcode for
+ * 3DSTATE_SO_BUFFER_INDEX_0.
+ */
+#define SO_BUFFER_INDEX_0_CMD 0x60
+
 #endif

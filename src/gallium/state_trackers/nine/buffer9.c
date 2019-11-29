@@ -246,7 +246,7 @@ NineBuffer9_Lock( struct NineBuffer9 *This,
         /* Tests on Win: READONLY doesn't wait for the upload */
         if (!(Flags & D3DLOCK_READONLY)) {
             if (!This->managed.dirty) {
-                assert(LIST_IS_EMPTY(&This->managed.list));
+                assert(list_is_empty(&This->managed.list));
                 This->managed.dirty = TRUE;
                 This->managed.dirty_box = box;
                 if (p_atomic_read(&This->managed.pending_upload))

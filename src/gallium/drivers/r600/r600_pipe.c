@@ -155,7 +155,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 		goto fail;
 
 	rctx->screen = rscreen;
-	LIST_INITHEAD(&rctx->texture_buffers);
+	list_inithead(&rctx->texture_buffers);
 
 	r600_init_blit_functions(rctx);
 
@@ -697,8 +697,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
 		if (rscreen->b.family >= CHIP_CEDAR && rscreen->has_atomics) {
 			return EG_MAX_ATOMIC_BUFFERS;
 		}
-		return 0;
-	case PIPE_SHADER_CAP_SCALAR_ISA:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
 		/* due to a bug in the shader compiler, some loops hang

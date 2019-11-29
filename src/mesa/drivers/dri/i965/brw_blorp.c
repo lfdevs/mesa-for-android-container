@@ -1211,6 +1211,9 @@ do_single_blorp_clear(struct brw_context *brw, struct gl_framebuffer *fb,
 
    bool can_fast_clear = !partial_clear;
 
+   if (INTEL_DEBUG & DEBUG_NO_FAST_CLEAR)
+      can_fast_clear = false;
+
    bool color_write_disable[4] = { false, false, false, false };
    if (set_write_disables(irb, GET_COLORMASK(ctx->Color.ColorMask, buf),
                           color_write_disable))
@@ -1405,7 +1408,7 @@ brw_blorp_clear_depth_stencil(struct brw_context *brw,
    if (x0 == x1 || y0 == y1)
       return;
 
-   uint32_t level, start_layer, num_layers;
+   uint32_t level = 0, start_layer = 0, num_layers;
    struct blorp_surf depth_surf, stencil_surf;
 
    struct intel_mipmap_tree *depth_mt = NULL;

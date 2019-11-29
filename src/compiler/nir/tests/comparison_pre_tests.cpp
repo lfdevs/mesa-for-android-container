@@ -28,6 +28,8 @@ class comparison_pre_test : public ::testing::Test {
 protected:
    comparison_pre_test()
    {
+      glsl_type_singleton_init_or_ref();
+
       static const nir_shader_compiler_options options = { };
       nir_builder_init_simple_shader(&bld, NULL, MESA_SHADER_VERTEX, &options);
 
@@ -39,6 +41,7 @@ protected:
    ~comparison_pre_test()
    {
       ralloc_free(bld.shader);
+      glsl_type_singleton_decref();
    }
 
    struct nir_builder bld;

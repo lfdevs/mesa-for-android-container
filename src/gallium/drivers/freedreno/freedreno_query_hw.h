@@ -136,7 +136,7 @@ fd_hw_query(struct fd_query *q)
 	return (struct fd_hw_query *)q;
 }
 
-struct fd_query * fd_hw_create_query(struct fd_context *ctx, unsigned query_type);
+struct fd_query * fd_hw_create_query(struct fd_context *ctx, unsigned query_type, unsigned index);
 /* helper for sample providers: */
 struct fd_hw_sample * fd_hw_sample_init(struct fd_batch *batch, uint32_t size);
 /* don't call directly, use fd_hw_sample_reference() */

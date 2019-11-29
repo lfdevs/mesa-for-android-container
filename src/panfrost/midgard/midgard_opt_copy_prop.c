@@ -34,8 +34,8 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
                 if (ins->type != TAG_ALU_4) continue;
                 if (!OP_IS_MOVE(ins->alu.op)) continue;
 
-                unsigned from = ins->ssa_args.src[1];
-                unsigned to = ins->ssa_args.dest;
+                unsigned from = ins->src[1];
+                unsigned to = ins->dest;
 
                 /* We only work on pure SSA */
 
@@ -45,7 +45,7 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
                 if (from & IS_REG) continue;
 
                 /* Constant propagation is not handled here, either */
-                if (ins->ssa_args.inline_constant) continue;
+                if (ins->has_inline_constant) continue;
                 if (ins->has_constants) continue;
 
                 /* Modifier propagation is not handled here */
@@ -53,16 +53,18 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
                 if (mir_nontrivial_outmod(ins)) continue;
 
                 /* Shortened arguments (bias for textures, extra load/store
-                 * arguments, etc.) do not get a swizzlw, only a start
-                 * component and even that is restricted. */
+                 * arguments, etc.) do not get a swizzle, only a start
+                 * component and even that is restricted. Fragment writeout
+                 * doesn't even get that much */
 
                 bool skip = false;
 
                 mir_foreach_instr_global(ctx, q) {
                         bool is_tex = q->type == TAG_TEXTURE_4;
                         bool is_ldst = q->type == TAG_LOAD_STORE_4;
+                        bool is_branch = q->compact_branch;
 
-                        if (!(is_tex || is_ldst)) continue;
+                        if (!(is_tex || is_ldst || is_branch)) continue;
 
                         /* For textures, we get one real swizzle. For stores,
                          * we also get one. For loads, we get none. */
@@ -72,7 +74,7 @@ midgard_opt_copy_prop(compiler_context *ctx, midgard_block *block)
                                 OP_IS_STORE(q->load_store.op) ? 1 : 0;
 
                         mir_foreach_src(q, s) {
-                                if ((s >= start) && q->ssa_args.src[s] == to) {
+                                if ((s >= start) && q->src[s] == to) {
                                         skip = true;
                                         break;
                                 }

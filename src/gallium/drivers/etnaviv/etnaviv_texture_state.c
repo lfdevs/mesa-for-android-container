@@ -86,6 +86,10 @@ etna_create_sampler_state_state(struct pipe_context *pipe,
     */
    cs->max_lod_min = (ss->min_img_filter != ss->mag_img_filter) ? 1 : 0;
 
+   cs->NTE_SAMPLER_BASELOD =
+      COND(ss->compare_mode, VIVS_NTE_SAMPLER_BASELOD_COMPARE_ENABLE) |
+      VIVS_NTE_SAMPLER_BASELOD_COMPARE_FUNC(translate_texture_compare(ss->compare_func));
+
    return cs;
 }
 
@@ -157,7 +161,7 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
       break;
    }
 
-   if (res->addressing_mode == ETNA_ADDRESSING_MODE_LINEAR) {
+   if (res->layout == ETNA_LAYOUT_LINEAR && !util_format_is_compressed(so->format)) {
       sv->TE_SAMPLER_CONFIG0 |= VIVS_TE_SAMPLER_CONFIG0_ADDRESSING_MODE(TEXTURE_ADDRESSING_MODE_LINEAR);
 
       for (int lod = 0; lod <= res->base.last_level; ++lod)
@@ -183,7 +187,8 @@ etna_create_sampler_view_state(struct pipe_context *pctx, struct pipe_resource *
       VIVS_TE_SAMPLER_LOG_SIZE_WIDTH(etna_log2_fixp55(res->base.width0)) |
       VIVS_TE_SAMPLER_LOG_SIZE_HEIGHT(etna_log2_fixp55(base_height)) |
       COND(util_format_is_srgb(so->format) && !astc, VIVS_TE_SAMPLER_LOG_SIZE_SRGB) |
-      COND(astc, VIVS_TE_SAMPLER_LOG_SIZE_ASTC);
+      COND(astc, VIVS_TE_SAMPLER_LOG_SIZE_ASTC) |
+      COND(!util_format_is_float(so->format) && so->target != PIPE_TEXTURE_3D, VIVS_TE_SAMPLER_LOG_SIZE_INT_FILTER);
    sv->TE_SAMPLER_3D_CONFIG =
       VIVS_TE_SAMPLER_3D_CONFIG_DEPTH(base_depth) |
       VIVS_TE_SAMPLER_3D_CONFIG_LOG_DEPTH(etna_log2_fixp55(base_depth));
@@ -362,6 +367,14 @@ etna_emit_texture_state(struct etna_context *ctx)
          if ((1 << x) & active_samplers) {
             struct etna_sampler_view *sv = etna_sampler_view(ctx->sampler_view[x]);
             /*10500*/ EMIT_STATE(NTE_SAMPLER_ASTC0(x), sv->TE_SAMPLER_ASTC0);
+         }
+      }
+   }
+   if (unlikely(ctx->specs.halti >= 1 && (dirty & (ETNA_DIRTY_SAMPLER_VIEWS)))) {
+      for (int x = 0; x < VIVS_TE_SAMPLER__LEN; ++x) {
+         if ((1 << x) & active_samplers) {
+            struct etna_sampler_state *ss = etna_sampler_state(ctx->sampler[x]);
+            /*10700*/ EMIT_STATE(NTE_SAMPLER_BASELOD(x), ss->NTE_SAMPLER_BASELOD);
          }
       }
    }

@@ -69,7 +69,7 @@ struct display_dispatch {
 
 /* skip normal ones */
 #define _GLAPI_SKIP_NORMAL_ENTRY_POINTS
-#include "glapi/glapitemp.h"
+#include "glapitemp.h"
 
 #endif /* GLX_INDIRECT_RENDERING */
 
@@ -791,14 +791,14 @@ glXDestroyGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf)
    t->DestroyGLXPbufferSGIX(dpy, pbuf);
 }
 
-int PUBLIC
+void PUBLIC
 glXQueryGLXPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuf, int attribute, unsigned int *value)
 {
    struct _glxapi_table *t;
    GET_DISPATCH(dpy, t);
    if (!t)
-      return 0;
-   return t->QueryGLXPbufferSGIX(dpy, pbuf, attribute, value);
+      return;
+   t->QueryGLXPbufferSGIX(dpy, pbuf, attribute, value);
 }
 
 void PUBLIC
@@ -909,7 +909,7 @@ glXAssociateDMPbufferSGIX(Display *dpy, GLXPbufferSGIX pbuffer, DMparams *params
 /*** GLX_SUN_get_transparent_index ***/
 
 Status PUBLIC
-glXGetTransparentIndexSUN(Display *dpy, Window overlay, Window underlay, long *pTransparent)
+glXGetTransparentIndexSUN(Display *dpy, Window overlay, Window underlay, unsigned long *pTransparent)
 {
    struct _glxapi_table *t;
    GET_DISPATCH(dpy, t);

@@ -144,6 +144,8 @@ struct tgsi_shader_info
    unsigned num_written_clipdistance;
 
    unsigned images_declared; /**< bitmask of declared images */
+   unsigned msaa_images_declared; /**< bitmask of declared MSAA images */
+
    /**
     * Bitmask indicating which declared image is a buffer.
     */

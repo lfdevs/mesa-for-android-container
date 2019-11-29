@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2019-01-07 09:52:31)
-- copyright.xml  (   1597 bytes, from 2019-01-07 09:52:31)
-- common.xml     (  35468 bytes, from 2019-01-07 09:52:31)
-- common_3d.xml  (  14322 bytes, from 2019-08-19 14:35:07)
+- texdesc_3d.xml (   3183 bytes, from 2019-08-09 17:33:50)
+- copyright.xml  (   1597 bytes, from 2019-08-09 17:34:08)
+- common.xml     (  35468 bytes, from 2019-08-09 17:16:20)
+- common_3d.xml  (  14991 bytes, from 2019-09-12 20:32:47)
 
 Copyright (C) 2012-2019 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -129,6 +129,14 @@ DEALINGS IN THE SOFTWARE.
 #define TS_MODE_256B						0x00000001
 #define TEXTURE_ADDRESSING_MODE_TILED				0x00000000
 #define TEXTURE_ADDRESSING_MODE_LINEAR				0x00000003
+#define TEXTURE_COMPARE_FUNC_LEQUAL				0x00000000
+#define TEXTURE_COMPARE_FUNC_GEQUAL				0x00000001
+#define TEXTURE_COMPARE_FUNC_LESS				0x00000002
+#define TEXTURE_COMPARE_FUNC_GREATER				0x00000003
+#define TEXTURE_COMPARE_FUNC_EQUAL				0x00000004
+#define TEXTURE_COMPARE_FUNC_NOTEQUAL				0x00000005
+#define TEXTURE_COMPARE_FUNC_ALWAYS				0x00000006
+#define TEXTURE_COMPARE_FUNC_NEVER				0x00000007
 #define COMPRESSION_FORMAT_A4R4G4B4				0x00000000
 #define COMPRESSION_FORMAT_A1R5G5B5				0x00000001
 #define COMPRESSION_FORMAT_R5G6B5				0x00000002

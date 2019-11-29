@@ -51,11 +51,10 @@ dump_shader_info(struct ir3_shader_variant *v, bool binning_pass,
 		return;
 
 	pipe_debug_message(debug, SHADER_INFO,
-			"%s%s shader: %u inst, %u dwords, "
+			"%s shader: %u inst, %u dwords, "
 			"%u half, %u full, %u constlen, "
 			"%u (ss), %u (sy), %d max_sun, %d loops\n",
-			binning_pass ? "B" : "",
-			ir3_shader_stage(v->shader),
+			ir3_shader_stage(v),
 			v->info.instrs_count,
 			v->info.sizedwords,
 			v->info.max_half_reg + 1,
@@ -110,7 +109,7 @@ copy_stream_out(struct ir3_stream_output_info *i,
 
 struct ir3_shader *
 ir3_shader_create(struct ir3_compiler *compiler,
-		const struct pipe_shader_state *cso, gl_shader_stage type,
+		const struct pipe_shader_state *cso,
 		struct pipe_debug_callback *debug,
 		struct pipe_screen *screen)
 {
@@ -209,6 +208,29 @@ emit_const(struct fd_screen *screen, struct fd_ringbuffer *ring,
 
 	screen->emit_const(ring, v->type, dst_offset,
 			offset, size, user_buffer, buffer);
+}
+
+/**
+ * Indirectly calculates size of cmdstream needed for ir3_emit_user_consts().
+ * Returns number of packets, and total size of all the payload.
+ *
+ * The value can be a worst-case, ie. some shader variants may not read all
+ * consts, etc.
+ *
+ * Returns size in dwords.
+ */
+void
+ir3_user_consts_size(struct ir3_ubo_analysis_state *state,
+		unsigned *packets, unsigned *size)
+{
+	*packets = *size = 0;
+
+	for (uint32_t i = 0; i < ARRAY_SIZE(state->range); i++) {
+		if (state->range[i].start < state->range[i].end) {
+			*size += state->range[i].end - state->range[i].start;
+			(*packets)++;
+		}
+	}
 }
 
 void
@@ -371,6 +393,54 @@ ir3_emit_immediates(struct fd_screen *screen, const struct ir3_shader_variant *v
 		emit_const(screen, ring, v, base,
 			0, size, const_state->immediates[0].val, NULL);
 	}
+}
+
+static uint32_t
+link_geometry_stages(const struct ir3_shader_variant *producer,
+		const struct ir3_shader_variant *consumer,
+		uint32_t *locs)
+{
+	uint32_t num_loc = 0;
+
+	nir_foreach_variable(in_var, &consumer->shader->nir->inputs) {
+		nir_foreach_variable(out_var, &producer->shader->nir->outputs) {
+			if (in_var->data.location == out_var->data.location) {
+				locs[in_var->data.driver_location] =
+					producer->shader->output_loc[out_var->data.driver_location] * 4;
+
+				debug_assert(num_loc <= in_var->data.driver_location + 1);
+				num_loc = in_var->data.driver_location + 1;
+			}
+		}
+	}
+
+	return num_loc;
+}
+
+void
+ir3_emit_link_map(struct fd_screen *screen,
+		const struct ir3_shader_variant *producer,
+		const struct ir3_shader_variant *v, struct fd_ringbuffer *ring)
+{
+	const struct ir3_const_state *const_state = &v->shader->const_state;
+	uint32_t base = const_state->offsets.primitive_map;
+	uint32_t patch_locs[MAX_VARYING] = { }, num_loc;
+
+	num_loc = link_geometry_stages(producer, v, patch_locs);
+
+	int size = DIV_ROUND_UP(num_loc, 4);
+
+	/* truncate size to avoid writing constants that shader
+	 * does not use:
+	 */
+	size = MIN2(size + base, v->constlen) - base;
+
+	/* convert out of vec4: */
+	base *= 4;
+	size *= 4;
+
+	if (size > 0)
+		emit_const(screen, ring, v, base, 0, size, patch_locs, NULL);
 }
 
 /* emit stream-out buffers: */
@@ -665,4 +735,38 @@ ir3_emit_cs_consts(const struct ir3_shader_variant *v, struct fd_ringbuffer *rin
 					compute_params, NULL);
 		}
 	}
+}
+
+static void *
+ir3_shader_state_create(struct pipe_context *pctx, const struct pipe_shader_state *cso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	struct ir3_compiler *compiler = ctx->screen->compiler;
+	return ir3_shader_create(compiler, cso, &ctx->debug, pctx->screen);
+}
+
+static void
+ir3_shader_state_delete(struct pipe_context *pctx, void *hwcso)
+{
+	struct ir3_shader *so = hwcso;
+	ir3_shader_destroy(so);
+}
+
+void
+ir3_prog_init(struct pipe_context *pctx)
+{
+	pctx->create_vs_state = ir3_shader_state_create;
+	pctx->delete_vs_state = ir3_shader_state_delete;
+
+	pctx->create_tcs_state = ir3_shader_state_create;
+	pctx->delete_tcs_state = ir3_shader_state_delete;
+
+	pctx->create_tes_state = ir3_shader_state_create;
+	pctx->delete_tes_state = ir3_shader_state_delete;
+
+	pctx->create_gs_state = ir3_shader_state_create;
+	pctx->delete_gs_state = ir3_shader_state_delete;
+
+	pctx->create_fs_state = ir3_shader_state_create;
+	pctx->delete_fs_state = ir3_shader_state_delete;
 }

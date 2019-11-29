@@ -92,7 +92,7 @@ vc4_bo_dump_stats(struct vc4_screen *screen)
         fprintf(stderr, "  BOs cached:      %d\n", cache->bo_count);
         fprintf(stderr, "  BOs cached size: %dkb\n", cache->bo_size / 1024);
 
-        if (!list_empty(&cache->time_list)) {
+        if (!list_is_empty(&cache->time_list)) {
                 struct vc4_bo *first = LIST_ENTRY(struct vc4_bo,
                                                   cache->time_list.next,
                                                   time_list);
@@ -263,7 +263,7 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
         bo->handle = create.handle;
 
         if (ret != 0) {
-                if (!list_empty(&screen->bo_cache.time_list) &&
+                if (!list_is_empty(&screen->bo_cache.time_list) &&
                     !cleared_and_retried) {
                         cleared_and_retried = true;
                         vc4_bo_cache_free_all(&screen->bo_cache);

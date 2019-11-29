@@ -175,7 +175,7 @@ static void si_emit_derived_tess_state(struct si_context *sctx,
 	/* When distributed tessellation is unsupported, switch between SEs
 	 * at a higher frequency to compensate for it.
 	 */
-	if (!sctx->screen->has_distributed_tess && sctx->screen->info.max_se > 1)
+	if (!sctx->screen->info.has_distributed_tess && sctx->screen->info.max_se > 1)
 		*num_patches = MIN2(*num_patches, 16); /* recommended */
 
 	/* Make sure that vector lanes are reasonably occupied. It probably
@@ -363,7 +363,7 @@ si_get_init_multi_vgt_param(struct si_screen *sscreen,
 			partial_vs_wave = true;
 
 		/* Needed for 028B6C_DISTRIBUTION_MODE != 0. (implies >= GFX8) */
-		if (sscreen->has_distributed_tess) {
+		if (sscreen->info.has_distributed_tess) {
 			if (key->u.uses_gs) {
 				if (sscreen->info.chip_class == GFX8)
 					partial_es_wave = true;
@@ -1845,7 +1845,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 	}
 
 	if (sctx->tes_shader.cso &&
-	    sctx->screen->has_ls_vgpr_init_bug) {
+	    sctx->screen->info.has_ls_vgpr_init_bug) {
 		/* Determine whether the LS VGPR fix should be applied.
 		 *
 		 * It is only required when num input CPs > num output CPs,
@@ -2055,10 +2055,9 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 	 * written (i.e. the GPU rolls the context), PA_SC_VPORT_SCISSOR
 	 * registers must be written too.
 	 */
-	bool has_gfx9_scissor_bug = sctx->screen->has_gfx9_scissor_bug;
 	unsigned masked_atoms = 0;
 
-	if (has_gfx9_scissor_bug) {
+	if (sctx->screen->info.has_gfx9_scissor_bug) {
 		masked_atoms |= si_get_atom_bit(sctx, &sctx->atoms.s.scissors);
 
 		if (info->count_from_stream_output ||
@@ -2092,7 +2091,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		if (si_is_atom_dirty(sctx, &sctx->atoms.s.render_cond))
 			sctx->atoms.s.render_cond.emit(sctx);
 
-		if (has_gfx9_scissor_bug &&
+		if (sctx->screen->info.has_gfx9_scissor_bug &&
 		    (sctx->context_roll ||
 		     si_is_atom_dirty(sctx, &sctx->atoms.s.scissors)))
 			sctx->atoms.s.scissors.emit(sctx);
@@ -2126,7 +2125,7 @@ static void si_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info *i
 		si_emit_all_states(sctx, info, prim, instance_count,
 				   primitive_restart, masked_atoms);
 
-		if (has_gfx9_scissor_bug &&
+		if (sctx->screen->info.has_gfx9_scissor_bug &&
 		    (sctx->context_roll ||
 		     si_is_atom_dirty(sctx, &sctx->atoms.s.scissors)))
 			sctx->atoms.s.scissors.emit(sctx);

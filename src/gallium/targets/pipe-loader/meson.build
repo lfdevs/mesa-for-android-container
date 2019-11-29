@@ -20,7 +20,7 @@
 
 pipe_loader_link_args = [ld_args_gc_sections]
 pipe_loader_link_deps = []
-pipe_loader_link_with = [libgallium, libnir]
+pipe_loader_link_with = [libgallium]
 pipe_loader_comp_args = []
 pipe_loader_incs = [
   inc_include, inc_src, inc_util, inc_gallium, inc_gallium_drivers,
@@ -47,6 +47,15 @@ endif
 
 pipe_loader_install_dir = join_paths(get_option('libdir'), 'gallium-pipe')
 
+_kmsro_targets = [
+   driver_kmsro, driver_v3d, driver_vc4, driver_freedreno, driver_etnaviv,
+   driver_panfrost, driver_lima,
+]
+
+if with_gallium_v3d
+   _kmsro_targets += [idep_xmlconfig, dep_expat]
+endif
+
 pipe_loaders = [
   [with_gallium_i915, 'i915', driver_i915, []],
   [with_gallium_nouveau, 'nouveau', driver_nouveau, []],
@@ -54,6 +63,7 @@ pipe_loaders = [
   [with_gallium_r600, 'r600', driver_r600, []],
   [with_gallium_radeonsi, 'radeonsi', [driver_radeonsi, idep_xmlconfig], []],
   [with_gallium_freedreno, 'msm', driver_freedreno, []],
+  [with_gallium_kmsro, 'kmsro', _kmsro_targets, []],
   [with_gallium_svga, 'vmwgfx', driver_svga, []],
   [with_gallium_softpipe, 'swrast', [driver_swrast, driver_swr], [libwsw, libws_null]],
 ]
@@ -69,7 +79,7 @@ foreach x : pipe_loaders
       link_depends : pipe_loader_link_deps,
       include_directories : pipe_loader_incs,
       link_with : [pipe_loader_link_with, x[3]],
-      dependencies : [idep_mesautil, dep_thread, x[2]],
+      dependencies : [idep_mesautil, idep_nir, dep_thread, x[2]],
       name_prefix : '',
       install : true,
       install_dir : pipe_loader_install_dir,

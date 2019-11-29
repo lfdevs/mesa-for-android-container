@@ -841,7 +841,7 @@ static bool si_pc_query_begin(struct si_context *ctx, struct si_query *squery)
 
 	si_query_buffer_reset(ctx, &query->buffer);
 
-	LIST_ADDTAIL(&query->b.active_list, &ctx->active_queries);
+	list_addtail(&query->b.active_list, &ctx->active_queries);
 	ctx->num_cs_dw_queries_suspend += query->b.num_cs_dw_suspend;
 
 	si_pc_query_resume(ctx, squery);
@@ -855,7 +855,7 @@ static bool si_pc_query_end(struct si_context *ctx, struct si_query *squery)
 
 	si_pc_query_suspend(ctx, squery);
 
-	LIST_DEL(&squery->active_list);
+	list_del(&squery->active_list);
 	ctx->num_cs_dw_queries_suspend -= squery->num_cs_dw_suspend;
 
 	return query->buffer.buf != NULL;

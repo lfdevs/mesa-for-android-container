@@ -63,7 +63,7 @@ brw_vf_to_float(unsigned char vf)
 
    /* ±0.0f is special cased. */
    if (vf == 0x00 || vf == 0x80) {
-      fu.u = vf << 24;
+      fu.u = (unsigned)vf << 24;
       return fu.f;
    }
 

@@ -26,7 +26,25 @@
 #include "main/macros.h"
 #include "ir.h"
 
-TEST(ir_variable_constructor, interface)
+class ir_variable_constructor : public ::testing::Test {
+public:
+   virtual void SetUp();
+   virtual void TearDown();
+};
+
+void
+ir_variable_constructor::SetUp()
+{
+   glsl_type_singleton_init_or_ref();
+}
+
+void
+ir_variable_constructor::TearDown()
+{
+   glsl_type_singleton_decref();
+}
+
+TEST_F(ir_variable_constructor, interface)
 {
    void *mem_ctx = ralloc_context(NULL);
 
@@ -52,7 +70,7 @@ TEST(ir_variable_constructor, interface)
    EXPECT_EQ(iface, v->get_interface_type());
 }
 
-TEST(ir_variable_constructor, interface_array)
+TEST_F(ir_variable_constructor, interface_array)
 {
    void *mem_ctx = ralloc_context(NULL);
 

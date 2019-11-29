@@ -23,6 +23,7 @@
  *
  */
 
+#include "pan_bo.h"
 #include "pan_context.h"
 #include "util/u_prim.h"
 
@@ -38,8 +39,9 @@ panfrost_emit_varyings(
         slot->size = stride * count;
         slot->shift = slot->extra_flags = 0;
 
+        struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
         struct panfrost_transfer transfer =
-                panfrost_allocate_transient(ctx, slot->size);
+                panfrost_allocate_transient(batch, slot->size);
 
         slot->elements = transfer.gpu | MALI_ATTR_LINEAR;
 
@@ -65,25 +67,20 @@ panfrost_emit_streamout(
         slot->size = MIN2(max_size, expected_size);
 
         /* Grab the BO and bind it to the batch */
-        struct panfrost_job *batch = panfrost_get_job_for_fbo(ctx);
+        struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
         struct panfrost_bo *bo = pan_resource(target->buffer)->bo;
-        panfrost_job_add_bo(batch, bo);
+
+        /* Varyings are WRITE from the perspective of the VERTEX but READ from
+         * the perspective of the TILER and FRAGMENT.
+         */
+        panfrost_batch_add_bo(batch, bo,
+                              PAN_BO_ACCESS_SHARED |
+                              PAN_BO_ACCESS_RW |
+                              PAN_BO_ACCESS_VERTEX_TILER |
+                              PAN_BO_ACCESS_FRAGMENT);
 
         mali_ptr addr = bo->gpu + target->buffer_offset + (offset * slot->stride);
         slot->elements = addr;
-}
-
-static void
-panfrost_emit_point_coord(union mali_attr *slot)
-{
-        slot->elements = MALI_VARYING_POINT_COORD | MALI_ATTR_LINEAR;
-        slot->stride = slot->size = slot->shift = slot->extra_flags = 0;
-}
-
-static void
-panfrost_emit_front_face(union mali_attr *slot)
-{
-        slot->elements = MALI_VARYING_FRONT_FACING | MALI_ATTR_INTERNAL;
 }
 
 /* Given a shader and buffer indices, link varying metadata together */
@@ -153,11 +150,11 @@ has_point_coord(unsigned mask, gl_varying_slot loc)
  * accordingly. Compute the src_offset for a given captured varying */
 
 static struct pipe_stream_output
-pan_get_so(struct pipe_stream_output_info info, gl_varying_slot loc)
+pan_get_so(struct pipe_stream_output_info *info, gl_varying_slot loc)
 {
-        for (unsigned i = 0; i < info.num_outputs; ++i) {
-                if (info.output[i].register_index == loc)
-                        return  info.output[i];
+        for (unsigned i = 0; i < info->num_outputs; ++i) {
+                if (info->output[i].register_index == loc)
+                        return  info->output[i];
         }
 
         unreachable("Varying not captured");
@@ -192,7 +189,8 @@ panfrost_emit_varying_descriptor(
         size_t vs_size = sizeof(struct mali_attr_meta) * vs->tripipe->varying_count;
         size_t fs_size = sizeof(struct mali_attr_meta) * fs->tripipe->varying_count;
 
-        struct panfrost_transfer trans = panfrost_allocate_transient(ctx,
+        struct panfrost_batch *batch = panfrost_get_batch_for_fbo(ctx);
+        struct panfrost_transfer trans = panfrost_allocate_transient(batch,
                                          vs_size + fs_size);
 
         struct pipe_stream_output_info so = vs->stream_output;
@@ -209,7 +207,7 @@ panfrost_emit_varying_descriptor(
                 bool captured = ((vs->so_mask & (1ll << loc)) ? true : false);
 
                 if (captured) {
-                        struct pipe_stream_output o = pan_get_so(so, loc);
+                        struct pipe_stream_output o = pan_get_so(&so, loc);
 
                         unsigned dst_offset = o.dst_offset * 4; /* dwords */
                         vs->varyings[i].src_offset = dst_offset;
@@ -243,13 +241,14 @@ panfrost_emit_varying_descriptor(
                         fs->varyings[i].src_offset = 16 * (num_gen_varyings++);
 
                 if (has_point_coord(fs->point_sprite_mask, loc))
-                        reads_point_coord |= true;
+                        reads_point_coord = true;
         }
 
         memcpy(trans.cpu, vs->varyings, vs_size);
         memcpy(trans.cpu + vs_size, fs->varyings, fs_size);
 
         union mali_attr varyings[PIPE_MAX_ATTRIBS];
+        memset(varyings, 0, sizeof(varyings));
 
         /* Figure out how many streamout buffers could be bound */
         unsigned so_count = ctx->streamout.num_targets;
@@ -259,7 +258,7 @@ panfrost_emit_varying_descriptor(
                 bool captured = ((vs->so_mask & (1ll << loc)) ? true : false);
                 if (!captured) continue;
 
-                struct pipe_stream_output o = pan_get_so(so, loc);
+                struct pipe_stream_output o = pan_get_so(&so, loc);
                 so_count = MAX2(so_count, o.output_buffer + 1);
         }
 
@@ -269,6 +268,7 @@ panfrost_emit_varying_descriptor(
         signed gl_PointSize = vs->writes_point_size ? (idx++) : -1;
         signed gl_PointCoord = reads_point_coord ? (idx++) : -1;
         signed gl_FrontFacing = fs->reads_face ? (idx++) : -1;
+        signed gl_FragCoord = fs->reads_frag_coord ? (idx++) : -1;
 
         /* Emit the stream out buffers */
 
@@ -305,20 +305,25 @@ panfrost_emit_varying_descriptor(
                                                2, vertex_count);
 
         if (reads_point_coord)
-                panfrost_emit_point_coord(&varyings[gl_PointCoord]);
+                varyings[gl_PointCoord].elements = MALI_VARYING_POINT_COORD;
 
         if (fs->reads_face)
-                panfrost_emit_front_face(&varyings[gl_FrontFacing]);
+                varyings[gl_FrontFacing].elements = MALI_VARYING_FRONT_FACING;
+
+        if (fs->reads_frag_coord)
+                varyings[gl_FragCoord].elements = MALI_VARYING_FRAG_COORD;
 
         /* Let's go ahead and link varying meta to the buffer in question, now
-         * that that information is available */
+         * that that information is available. VARYING_SLOT_POS is mapped to
+         * gl_FragCoord for fragment shaders but gl_Positionf or vertex shaders
+         * */
 
         panfrost_emit_varying_meta(trans.cpu, vs,
                 general, gl_Position, gl_PointSize,
                 gl_PointCoord, gl_FrontFacing);
 
         panfrost_emit_varying_meta(trans.cpu + vs_size, fs,
-                general, gl_Position, gl_PointSize,
+                general, gl_FragCoord, gl_PointSize,
                 gl_PointCoord, gl_FrontFacing);
 
         /* Replace streamout */
@@ -332,7 +337,7 @@ panfrost_emit_varying_descriptor(
                 bool captured = ((vs->so_mask & (1ll << loc)) ? true : false);
                 if (!captured) continue;
 
-                struct pipe_stream_output o = pan_get_so(so, loc);
+                struct pipe_stream_output o = pan_get_so(&so, loc);
                 ovs[i].index = o.output_buffer;
 
                 /* Set the type appropriately. TODO: Integer varyings XXX */
@@ -376,6 +381,9 @@ panfrost_emit_varying_descriptor(
 
         /* Fix up unaligned addresses */
         for (unsigned i = 0; i < so_count; ++i) {
+                if (varyings[i].elements < MALI_VARYING_SPECIAL)
+                        continue;
+
                 unsigned align = (varyings[i].elements & 63);
 
                 /* While we're at it, the SO buffers are linear */
@@ -401,7 +409,7 @@ panfrost_emit_varying_descriptor(
                 }
         }
 
-        mali_ptr varyings_p = panfrost_upload_transient(ctx, &varyings, idx * sizeof(union mali_attr));
+        mali_ptr varyings_p = panfrost_upload_transient(batch, &varyings, idx * sizeof(union mali_attr));
         ctx->payloads[PIPE_SHADER_VERTEX].postfix.varyings = varyings_p;
         ctx->payloads[PIPE_SHADER_FRAGMENT].postfix.varyings = varyings_p;
 

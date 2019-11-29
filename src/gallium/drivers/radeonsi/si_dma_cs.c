@@ -50,7 +50,7 @@ void si_dma_emit_timestamp(struct si_context *sctx, struct si_resource *dst,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&dst->valid_buffer_range, offset, offset + 8);
+	util_range_add(&dst->b.b, &dst->valid_buffer_range, offset, offset + 8);
 
 	assert(va % 8 == 0);
 
@@ -83,7 +83,7 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&sdst->valid_buffer_range, offset, offset + size);
+	util_range_add(dst, &sdst->valid_buffer_range, offset, offset + size);
 
 	offset += sdst->gpu_address;
 
@@ -117,7 +117,8 @@ void si_sdma_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
 		radeon_emit(cs, offset);
 		radeon_emit(cs, offset >> 32);
 		radeon_emit(cs, clear_value);
-		radeon_emit(cs, sctx->chip_class >= GFX9 ? csize - 1 : csize);
+		/* dw count */
+		radeon_emit(cs, (sctx->chip_class >= GFX9 ? csize - 1 : csize) & 0xfffffffc);
 		offset += csize;
 		size -= csize;
 	}
@@ -232,8 +233,8 @@ void si_screen_clear_buffer(struct si_screen *sscreen, struct pipe_resource *dst
 {
 	struct si_context *ctx = (struct si_context*)sscreen->aux_context;
 
-	mtx_lock(&sscreen->aux_context_lock);
+	simple_mtx_lock(&sscreen->aux_context_lock);
 	si_sdma_clear_buffer(ctx, dst, offset, size, value);
 	sscreen->aux_context->flush(sscreen->aux_context, NULL, 0);
-	mtx_unlock(&sscreen->aux_context_lock);
+	simple_mtx_unlock(&sscreen->aux_context_lock);
 }

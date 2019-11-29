@@ -1,0 +1,7 @@
+CHIPSET(0x9A40, tgl_1x6x16, "Intel(R) Graphics (TGL GT2)")
+CHIPSET(0x9A49, tgl_1x6x16, "Intel(R) Graphics (TGL GT2)")
+CHIPSET(0x9A59, tgl_1x6x16, "Intel(R) Graphics (TGL GT2)")
+CHIPSET(0x9A60, tgl_1x2x16, "Intel(R) Graphics (TGL GT1)")
+CHIPSET(0x9A68, tgl_1x2x16, "Intel(R) Graphics (TGL GT1)")
+CHIPSET(0x9A70, tgl_1x2x16, "Intel(R) Graphics (TGL GT1)")
+CHIPSET(0x9A78, tgl_1x2x16, "Intel(R) Graphics (TGL GT1)")

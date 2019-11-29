@@ -20,8 +20,8 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#include "core/compiler.hpp"
 #include "core/program.hpp"
-#include "llvm/invocation.hpp"
 
 using namespace clover;
 
@@ -51,9 +51,8 @@ program::compile(const ref_vector<device> &devs, const std::string &opts,
          std::string log;
 
          try {
-            assert(dev.ir_format() == PIPE_SHADER_IR_NATIVE);
-            const module m = llvm::compile_program(_source, headers, dev, opts,
-                                                   log);
+            const module m =
+               compiler::compile_program(_source, headers, dev, opts, log);
             _builds[&dev] = { m, opts, log };
          } catch (...) {
             _builds[&dev] = { module(), opts, log };
@@ -75,8 +74,7 @@ program::link(const ref_vector<device> &devs, const std::string &opts,
       std::string log = _builds[&dev].log;
 
       try {
-         assert(dev.ir_format() == PIPE_SHADER_IR_NATIVE);
-         const module m = llvm::link_program(ms, dev, opts, log);
+         const module m = compiler::link_program(ms, dev, opts, log);
          _builds[&dev] = { m, opts, log };
       } catch (...) {
          _builds[&dev] = { module(), opts, log };

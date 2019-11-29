@@ -23,6 +23,7 @@ test(
   executable(
     'string_buffer_test',
     'string_buffer_test.cpp',
+    cpp_args : [cpp_msvc_compat_args],
     dependencies : [idep_gtest, idep_mesautil],
     include_directories : inc_common,
   ),

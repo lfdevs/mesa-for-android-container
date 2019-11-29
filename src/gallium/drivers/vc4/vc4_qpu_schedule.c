@@ -874,7 +874,7 @@ schedule_instructions(struct vc4_compile *c,
 {
         uint32_t time = 0;
 
-        while (!list_empty(&scoreboard->dag->heads)) {
+        while (!list_is_empty(&scoreboard->dag->heads)) {
                 struct schedule_node *chosen =
                         choose_instruction_to_schedule(scoreboard,
                                                        schedule_list,
@@ -995,7 +995,7 @@ qpu_schedule_instructions_block(struct vc4_compile *c,
 
         /* Wrap each instruction in a scheduler structure. */
         uint32_t next_sched_uniform = *next_uniform;
-        while (!list_empty(&block->qpu_inst_list)) {
+        while (!list_is_empty(&block->qpu_inst_list)) {
                 struct queued_qpu_inst *inst =
                         (struct queued_qpu_inst *)block->qpu_inst_list.next;
                 struct schedule_node *n = rzalloc(scoreboard->dag,

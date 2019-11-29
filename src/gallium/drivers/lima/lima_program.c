@@ -54,6 +54,7 @@ static const nir_shader_compiler_options vs_nir_options = {
    .lower_bitops = true,
    .lower_rotate = true,
    .lower_sincos = true,
+   .lower_fceil = true,
 };
 
 static const nir_shader_compiler_options fs_nir_options = {
@@ -110,7 +111,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
       progress = false;
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
-      NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL);
+      NIR_PASS(progress, s, nir_lower_alu_to_scalar, NULL, NULL);
       NIR_PASS(progress, s, nir_lower_phis_to_scalar);
       NIR_PASS(progress, s, nir_copy_prop);
       NIR_PASS(progress, s, nir_opt_remove_phis);
@@ -128,14 +129,15 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
    } while (progress);
 
    NIR_PASS_V(s, nir_lower_int_to_float);
-   NIR_PASS_V(s, nir_lower_bool_to_float);
-
-   /* Some ops must be lowered after being converted from int ops,
-    * so re-run nir_opt_algebraic after int lowering. */
+   /* Run opt_algebraic between int_to_float and bool_to_float because
+    * int_to_float emits ftrunc, and ftrunc lowering generates bool ops
+    */
    do {
       progress = false;
       NIR_PASS(progress, s, nir_opt_algebraic);
    } while (progress);
+
+   NIR_PASS_V(s, nir_lower_bool_to_float);
 
    NIR_PASS_V(s, nir_copy_prop);
    NIR_PASS_V(s, nir_opt_dce);
@@ -145,19 +147,54 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
    nir_sweep(s);
 }
 
+static bool
+lima_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)
+{
+   if (instr->type != nir_instr_type_alu)
+      return false;
+
+   nir_alu_instr *alu = nir_instr_as_alu(instr);
+   switch (alu->op) {
+   case nir_op_frcp:
+   case nir_op_frsq:
+   case nir_op_flog2:
+   case nir_op_fexp2:
+   case nir_op_fsqrt:
+   case nir_op_fsin:
+   case nir_op_fcos:
+      return true;
+   default:
+      break;
+   }
+
+   /* nir vec4 fcsel assumes that each component of the condition will be
+    * used to select the same component from the two options, but Utgard PP
+    * has only 1 component condition. If all condition components are not the
+    * same we need to lower it to scalar.
+    */
+   switch (alu->op) {
+   case nir_op_bcsel:
+   case nir_op_fcsel:
+      break;
+   default:
+      return false;
+   }
+
+   int num_components = nir_dest_num_components(alu->dest.dest);
+
+   uint8_t swizzle = alu->src[0].swizzle[0];
+
+   for (int i = 1; i < num_components; i++)
+      if (alu->src[0].swizzle[i] != swizzle)
+         return true;
+
+   return false;
+}
+
 void
 lima_program_optimize_fs_nir(struct nir_shader *s)
 {
-   BITSET_DECLARE(alu_lower, nir_num_opcodes) = {0};
    bool progress;
-
-   BITSET_SET(alu_lower, nir_op_frcp);
-   BITSET_SET(alu_lower, nir_op_frsq);
-   BITSET_SET(alu_lower, nir_op_flog2);
-   BITSET_SET(alu_lower, nir_op_fexp2);
-   BITSET_SET(alu_lower, nir_op_fsqrt);
-   BITSET_SET(alu_lower, nir_op_fsin);
-   BITSET_SET(alu_lower, nir_op_fcos);
 
    NIR_PASS_V(s, nir_lower_fragcoord_wtrans);
    NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size, 0);
@@ -166,10 +203,14 @@ lima_program_optimize_fs_nir(struct nir_shader *s)
 
    do {
       progress = false;
+      NIR_PASS(progress, s, nir_opt_vectorize);
+   } while (progress);
+
+   do {
+      progress = false;
 
       NIR_PASS_V(s, nir_lower_vars_to_ssa);
-      NIR_PASS(progress, s, nir_lower_alu_to_scalar, alu_lower);
-      NIR_PASS(progress, s, nir_lower_phis_to_scalar);
+      NIR_PASS(progress, s, nir_lower_alu_to_scalar, lima_alu_to_scalar_filter_cb, NULL);
       NIR_PASS(progress, s, nir_copy_prop);
       NIR_PASS(progress, s, nir_opt_remove_phis);
       NIR_PASS(progress, s, nir_opt_dce);
@@ -183,6 +224,7 @@ lima_program_optimize_fs_nir(struct nir_shader *s)
                nir_var_shader_in |
                nir_var_shader_out |
                nir_var_function_temp);
+      NIR_PASS(progress, s, lima_nir_split_load_input);
    } while (progress);
 
    NIR_PASS_V(s, nir_lower_int_to_float);
@@ -261,7 +303,7 @@ lima_delete_fs_state(struct pipe_context *pctx, void *hwcso)
    struct lima_fs_shader_state *so = hwcso;
 
    if (so->bo)
-      lima_bo_free(so->bo);
+      lima_bo_unreference(so->bo);
 
    ralloc_free(so);
 }
@@ -302,6 +344,8 @@ lima_update_fs_state(struct lima_context *ctx)
       ralloc_free(fs->shader);
       fs->shader = NULL;
    }
+
+   ctx->pp_max_stack_size = MAX2(ctx->pp_max_stack_size, ctx->fs->stack_size);
 
    return true;
 }
@@ -353,7 +397,7 @@ lima_delete_vs_state(struct pipe_context *pctx, void *hwcso)
    struct lima_vs_shader_state *so = hwcso;
 
    if (so->bo)
-      lima_bo_free(so->bo);
+      lima_bo_unreference(so->bo);
 
    ralloc_free(so);
 }

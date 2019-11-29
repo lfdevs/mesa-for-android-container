@@ -62,3 +62,7 @@ LLVM_SOURCES := \
 	llvm/invocation.hpp \
 	llvm/metadata.hpp \
 	llvm/util.hpp
+
+SPIRV_SOURCES := \
+	spirv/invocation.cpp \
+	spirv/invocation.hpp

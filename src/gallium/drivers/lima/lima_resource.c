@@ -259,10 +259,13 @@ lima_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *pres)
    struct lima_resource *res = lima_resource(pres);
 
    if (res->bo)
-      lima_bo_free(res->bo);
+      lima_bo_unreference(res->bo);
 
    if (res->scanout)
       renderonly_scanout_destroy(res->scanout, screen->ro);
+
+   if (res->damage.region)
+      FREE(res->damage.region);
 
    FREE(res);
 }
@@ -343,6 +346,93 @@ lima_resource_get_handle(struct pipe_screen *pscreen,
    return true;
 }
 
+static void
+get_scissor_from_box(struct pipe_scissor_state *s,
+                     const struct pipe_box *b, int h)
+{
+   int y = h - (b->y + b->height);
+   /* region in tile unit */
+   s->minx = b->x >> 4;
+   s->miny = y >> 4;
+   s->maxx = (b->x + b->width + 0xf) >> 4;
+   s->maxy = (y + b->height + 0xf) >> 4;
+}
+
+static void
+get_damage_bound_box(struct pipe_resource *pres,
+                     const struct pipe_box *rects,
+                     unsigned int nrects,
+                     struct pipe_scissor_state *bound)
+{
+   struct pipe_box b = rects[0];
+
+   for (int i = 1; i < nrects; i++)
+      u_box_union_2d(&b, &b, rects + i);
+
+   int ret = u_box_clip_2d(&b, &b, pres->width0, pres->height0);
+   if (ret < 0)
+      memset(bound, 0, sizeof(*bound));
+   else
+      get_scissor_from_box(bound, &b, pres->height0);
+}
+
+static void
+lima_resource_set_damage_region(struct pipe_screen *pscreen,
+                                struct pipe_resource *pres,
+                                unsigned int nrects,
+                                const struct pipe_box *rects)
+{
+   struct lima_resource *res = lima_resource(pres);
+   struct lima_damage_region *damage = &res->damage;
+   int i;
+
+   if (damage->region) {
+      FREE(damage->region);
+      damage->region = NULL;
+      damage->num_region = 0;
+   }
+
+   if (!nrects)
+      return;
+
+   /* check full damage
+    *
+    * TODO: currently only check if there is any single damage
+    * region that can cover the full render target; there may
+    * be some accurate way, but a single window size damage
+    * region is most of the case from weston
+    */
+   for (i = 0; i < nrects; i++) {
+      if (rects[i].x <= 0 && rects[i].y <= 0 &&
+          rects[i].x + rects[i].width >= pres->width0 &&
+          rects[i].y + rects[i].height >= pres->height0)
+         return;
+   }
+
+   struct pipe_scissor_state *bound = &damage->bound;
+   get_damage_bound_box(pres, rects, nrects, bound);
+
+   damage->region = CALLOC(nrects, sizeof(*damage->region));
+   if (!damage->region)
+      return;
+
+   for (i = 0; i < nrects; i++)
+      get_scissor_from_box(damage->region + i, rects + i,
+                           pres->height0);
+
+   /* is region aligned to tiles? */
+   damage->aligned = true;
+   for (i = 0; i < nrects; i++) {
+      if (rects[i].x & 0xf || rects[i].y & 0xf ||
+          rects[i].width & 0xf || rects[i].height & 0xf) {
+         damage->aligned = false;
+         break;
+      }
+   }
+
+   damage->num_region = nrects;
+}
+
 void
 lima_resource_screen_init(struct lima_screen *screen)
 {
@@ -351,6 +441,7 @@ lima_resource_screen_init(struct lima_screen *screen)
    screen->base.resource_from_handle = lima_resource_from_handle;
    screen->base.resource_destroy = lima_resource_destroy;
    screen->base.resource_get_handle = lima_resource_get_handle;
+   screen->base.set_damage_region = lima_resource_set_damage_region;
 }
 
 static struct pipe_surface *
@@ -437,7 +528,7 @@ lima_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf)
          struct lima_ctx_plb_pp_stream *s = entry->data;
          if (--s->refcnt == 0) {
             if (s->bo)
-               lima_bo_free(s->bo);
+               lima_bo_unreference(s->bo);
             _mesa_hash_table_remove(ctx->plb_pp_stream, entry);
             ralloc_free(s);
          }

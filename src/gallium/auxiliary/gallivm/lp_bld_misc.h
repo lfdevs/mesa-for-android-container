@@ -31,6 +31,7 @@
 
 
 #include "lp_bld.h"
+#include <llvm/Config/llvm-config.h>
 #include <llvm-c/ExecutionEngine.h>
 #include <llvm-c/Target.h>
 
@@ -58,7 +59,6 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
                                         LLVMModuleRef M,
                                         LLVMMCJITMemoryManagerRef MM,
                                         unsigned OptLevel,
-                                        int useMCJIT,
                                         char **OutError);
 
 extern void
@@ -75,15 +75,6 @@ lp_get_called_value(LLVMValueRef call);
 
 extern bool
 lp_is_function(LLVMValueRef v);
-
-/* LLVM 3.9 introduces this, provide our own for earlier */
-#if HAVE_LLVM < 0x309
-LLVMValueRef LLVMBuildAtomicCmpXchg(LLVMBuilderRef B, LLVMValueRef Ptr,
-                                    LLVMValueRef Cmp, LLVMValueRef New,
-                                    LLVMAtomicOrdering SuccessOrdering,
-                                    LLVMAtomicOrdering FailureOrdering,
-                                    LLVMBool SingleThread);
-#endif
 
 #ifdef __cplusplus
 }

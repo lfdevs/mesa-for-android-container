@@ -33,7 +33,7 @@
 
 namespace brw {
 
-struct block_data {
+struct vec4_block_data {
    /**
     * Which variables are defined before being used in the block.
     *
@@ -70,7 +70,7 @@ public:
    int bitset_words;
 
    /** Per-basic-block information on live variables */
-   struct block_data *block_data;
+   struct vec4_block_data *block_data;
 
 protected:
    void setup_def_use();

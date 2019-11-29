@@ -146,6 +146,15 @@ static const struct gen_l3_config icl_l3_configs[] = {
    {{  0 }}
 };
 
+/**
+ * TGL validated L3 configurations.  \sa tgl_l3_configs.
+ */
+static const struct gen_l3_config tgl_l3_configs[] = {
+   /* SLM URB ALL DC  RO  IS   C   T */
+   {{  0, 32,  88,  0,  0,  0,  0,  0 }},
+   {{  0, 16, 104,  0,  0,  0,  0,  0 }},
+   {{  0 }}
+};
 
 /**
  * Return a zero-terminated array of validated L3 configurations for the
@@ -171,6 +180,9 @@ get_l3_configs(const struct gen_device_info *devinfo)
 
    case 11:
       return icl_l3_configs;
+
+   case 12:
+      return tgl_l3_configs;
 
    default:
       unreachable("Not implemented");

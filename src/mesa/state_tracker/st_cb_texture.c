@@ -157,6 +157,9 @@ st_NewTextureObject(struct gl_context * ctx, GLuint name, GLenum target)
    if (!obj)
       return NULL;
 
+   obj->level_override = -1;
+   obj->layer_override = -1;
+
    /* Pre-allocate a sampler views container to save a branch in the
     * fast path.
     */
@@ -754,8 +757,8 @@ prep_teximage(struct gl_context *ctx, struct gl_texture_image *texImage,
 
       assert(!st_texture_image(texImage)->pt);
       _mesa_clear_texture_object(ctx, texObj, texImage);
-      stObj->layer_override = 0;
-      stObj->level_override = 0;
+      stObj->layer_override = -1;
+      stObj->level_override = -1;
       pipe_resource_reference(&stObj->pt, NULL);
 
       /* oops, need to init this image again */
@@ -1230,7 +1233,7 @@ try_pbo_upload_common(struct gl_context *ctx,
                         CSO_BIT_DEPTH_STENCIL_ALPHA |
                         CSO_BIT_RASTERIZER |
                         CSO_BIT_STREAM_OUTPUTS |
-                        CSO_BIT_PAUSE_QUERIES |
+                        (st->active_queries ? CSO_BIT_PAUSE_QUERIES : 0) |
                         CSO_BIT_SAMPLE_MASK |
                         CSO_BIT_MIN_SAMPLES |
                         CSO_BIT_RENDER_CONDITION |

@@ -29,7 +29,7 @@
 
 #include "draw_private.h"
 #include "draw_context.h"
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
 #include "draw_llvm.h"
 #endif
 
@@ -239,7 +239,7 @@ static void tgsi_gs_run(struct draw_geometry_shader *shader,
    }
 }
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
 
 static void
 llvm_fetch_gs_input(struct draw_geometry_shader *shader,
@@ -632,7 +632,7 @@ int draw_geometry_shader_run(struct draw_geometry_shader *shader,
    shader->input = input;
    shader->input_info = input_info;
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    if (shader->draw->llvm) {
       shader->gs_output = output_verts[0].verts;
       if (max_out_prims > shader->max_out_prims) {
@@ -765,14 +765,14 @@ struct draw_geometry_shader *
 draw_create_geometry_shader(struct draw_context *draw,
                             const struct pipe_shader_state *state)
 {
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    boolean use_llvm = draw->llvm != NULL;
    struct llvm_geometry_shader *llvm_gs = NULL;
 #endif
    struct draw_geometry_shader *gs;
    unsigned i;
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    if (use_llvm) {
       llvm_gs = CALLOC_STRUCT(llvm_geometry_shader);
 
@@ -804,7 +804,7 @@ draw_create_geometry_shader(struct draw_context *draw,
    /* setup the defaults */
    gs->max_out_prims = 0;
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    if (use_llvm) {
       /* TODO: change the input array to handle the following
          vector length, instead of the currently hardcoded
@@ -861,7 +861,7 @@ draw_create_geometry_shader(struct draw_context *draw,
          gs->num_vertex_streams = gs->state.stream_output.output[i].stream + 1;
    }
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    if (use_llvm) {
       int vector_size = gs->vector_length * sizeof(float);
       gs->gs_input = align_malloc(sizeof(struct draw_gs_inputs), 16);
@@ -883,7 +883,8 @@ draw_create_geometry_shader(struct draw_context *draw,
       llvm_gs->variant_key_size =
          draw_gs_llvm_variant_key_size(
             MAX2(gs->info.file_max[TGSI_FILE_SAMPLER]+1,
-                 gs->info.file_max[TGSI_FILE_SAMPLER_VIEW]+1));
+                 gs->info.file_max[TGSI_FILE_SAMPLER_VIEW]+1),
+            gs->info.file_max[TGSI_FILE_IMAGE]+1);
    } else
 #endif
    {
@@ -920,7 +921,7 @@ void draw_delete_geometry_shader(struct draw_context *draw,
    if (!dgs) {
       return;
    }
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
    if (draw->llvm) {
       struct llvm_geometry_shader *shader = llvm_geometry_shader(dgs);
       struct draw_gs_llvm_variant_list_item *li;
@@ -956,7 +957,7 @@ void draw_delete_geometry_shader(struct draw_context *draw,
 }
 
 
-#ifdef HAVE_LLVM
+#ifdef LLVM_AVAILABLE
 void draw_gs_set_current_variant(struct draw_geometry_shader *shader,
                                  struct draw_gs_llvm_variant *variant)
 {

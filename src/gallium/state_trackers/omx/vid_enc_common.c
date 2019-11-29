@@ -50,7 +50,7 @@ void enc_MoveTasks(struct list_head *from, struct list_head *to)
    from->next->prev = to->prev;
    from->prev->next = to;
    to->prev = from->prev;
-   LIST_INITHEAD(from);
+   list_inithead(from);
 }
 
 static void enc_GetPictureParamPreset(struct pipe_h264_enc_picture_desc *picture)
@@ -130,7 +130,7 @@ void vid_enc_BufferEncoded_common(vid_enc_PrivateType * priv, OMX_BUFFERHEADERTY
    unsigned size;
 
 #if ENABLE_ST_OMX_BELLAGIO
-   if (!inp || LIST_IS_EMPTY(&inp->tasks)) {
+   if (!inp || list_is_empty(&inp->tasks)) {
       input->nFilledLen = 0; /* mark buffer as empty */
       enc_MoveTasks(&priv->used_tasks, &inp->tasks);
       return;
@@ -138,8 +138,8 @@ void vid_enc_BufferEncoded_common(vid_enc_PrivateType * priv, OMX_BUFFERHEADERTY
 #endif
 
    task = LIST_ENTRY(struct encode_task, inp->tasks.next, list);
-   LIST_DEL(&task->list);
-   LIST_ADDTAIL(&task->list, &priv->used_tasks);
+   list_del(&task->list);
+   list_addtail(&task->list, &priv->used_tasks);
 
    if (!task->bitstream)
       return;
@@ -182,9 +182,9 @@ struct encode_task *enc_NeedTask_common(vid_enc_PrivateType * priv, OMX_VIDEO_PO
    struct pipe_video_buffer templat = {};
    struct encode_task *task;
 
-   if (!LIST_IS_EMPTY(&priv->free_tasks)) {
+   if (!list_is_empty(&priv->free_tasks)) {
       task = LIST_ENTRY(struct encode_task, priv->free_tasks.next, list);
-      LIST_DEL(&task->list);
+      list_del(&task->list);
       return task;
    }
 

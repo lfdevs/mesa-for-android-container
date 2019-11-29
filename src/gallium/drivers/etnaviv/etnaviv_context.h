@@ -190,6 +190,16 @@ struct etna_context {
 
    struct etna_bo *dummy_rt;
    struct etna_reloc dummy_rt_reloc;
+
+   /* Dummy texture descriptor (if needed) */
+   struct etna_bo *dummy_desc_bo;
+   struct etna_reloc DUMMY_DESC_ADDR;
+
+   /* set of resources used by currently-unsubmitted renders */
+   struct set *used_resources_read;
+   struct set *used_resources_write;
+
+   mtx_t lock;
 };
 
 static inline struct etna_context *

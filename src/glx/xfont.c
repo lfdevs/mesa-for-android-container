@@ -129,7 +129,7 @@ dump_bitmap(unsigned int width, unsigned int height, GLubyte * bitmap)
  * Generate OpenGL-compatible bitmap.
  */
 static void
-fill_bitmap(Display * dpy, Window win, GC gc,
+fill_bitmap(Display * dpy, int screen, GC gc,
             unsigned int width, unsigned int height,
             int x0, int y0, unsigned int c, GLubyte * bitmap)
 {
@@ -138,7 +138,7 @@ fill_bitmap(Display * dpy, Window win, GC gc,
    Pixmap pixmap;
    XChar2b char2b;
 
-   pixmap = XCreatePixmap(dpy, win, 8 * width, height, 1);
+   pixmap = XCreatePixmap(dpy, RootWindow(dpy, screen), 8 * width, height, 1);
    XSetForeground(dpy, gc, 0);
    XFillRectangle(dpy, pixmap, gc, 0, 0, 8 * width, height);
    XSetForeground(dpy, gc, 1);
@@ -215,16 +215,12 @@ _X_HIDDEN void
 DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int listbase)
 {
    Display *dpy;
-   Window win;
+   int screen;
    Pixmap pixmap;
    GC gc;
    XGCValues values;
    unsigned long valuemask;
    XFontStruct *fs;
-
-#if !defined(GLX_USE_APPLEGL)
-   __GLXDRIdrawable *glxdraw;
-#endif
 
    GLint swapbytes, lsbfirst, rowlength;
    GLint skiprows, skippixels, alignment;
@@ -235,13 +231,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
    int i;
 
    dpy = CC->currentDpy;
-   win = CC->currentDrawable;
-
-#if !defined(GLX_USE_APPLEGL)
-   glxdraw = GetGLXDRIDrawable(CC->currentDpy, CC->currentDrawable);
-   if (glxdraw)
-      win = glxdraw->xDrawable;
-#endif
+   screen = CC->screen;
 
    fs = XQueryFont(dpy, font);
    if (!fs) {
@@ -289,7 +279,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-   pixmap = XCreatePixmap(dpy, win, 10, 10, 1);
+   pixmap = XCreatePixmap(dpy, RootWindow(dpy, screen), 10, 10, 1);
    values.foreground = BlackPixel(dpy, DefaultScreen(dpy));
    values.background = WhitePixel(dpy, DefaultScreen(dpy));
    values.font = fs->fid;
@@ -352,7 +342,7 @@ DRI_glXUseXFont(struct glx_context *CC, Font font, int first, int count, int lis
       if (valid && (bm_width > 0) && (bm_height > 0)) {
 
          memset(bm, '\0', bm_width * bm_height);
-         fill_bitmap(dpy, win, gc, bm_width, bm_height, x, y, c, bm);
+         fill_bitmap(dpy, screen, gc, bm_width, bm_height, x, y, c, bm);
 
          glBitmap(width, height, x0, y0, dx, dy, bm);
 #ifdef DEBUG

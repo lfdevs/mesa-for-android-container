@@ -33,6 +33,7 @@
 #include "isl_gen7.h"
 #include "isl_gen8.h"
 #include "isl_gen9.h"
+#include "isl_gen12.h"
 #include "isl_priv.h"
 
 void
@@ -310,6 +311,29 @@ isl_tiling_get_info(enum isl_tiling tiling,
       phys_B = isl_extent2d(128, 32);
       break;
 
+   case ISL_TILING_GEN12_CCS:
+      /* From the Bspec, Gen Graphics > Gen12 > Memory Data Formats > Memory
+       * Compression > Memory Compression - Gen12:
+       *
+       *    4 bits of auxiliary plane data are required for 2 cachelines of
+       *    main surface data. This results in a single cacheline of auxiliary
+       *    plane data mapping to 4 4K pages of main surface data for the 4K
+       *    pages (tile Y ) and 1 64K Tile Ys page.
+       *
+       * The Y-tiled pairing bit of 9 shown in the table below that Bspec
+       * section expresses that the 2 cachelines of main surface data are
+       * horizontally adjacent.
+       *
+       * TODO: Handle Ys, Yf and their pairing bits.
+       *
+       * Therefore, each CCS cacheline represents a 512Bx32 row area and each
+       * element represents a 32Bx4 row area.
+       */
+      assert(format_bpb == 4);
+      logical_el = isl_extent2d(16, 8);
+      phys_B = isl_extent2d(64, 1);
+      break;
+
    default:
       unreachable("not reached");
    } /* end switch */
@@ -383,15 +407,19 @@ isl_surf_choose_tiling(const struct isl_device *dev,
    if (info->usage & ISL_SURF_USAGE_HIZ_BIT) {
       assert(info->format == ISL_FORMAT_HIZ);
       assert(tiling_flags == ISL_TILING_HIZ_BIT);
-      *tiling = ISL_TILING_HIZ;
+      *tiling = isl_tiling_flag_to_enum(tiling_flags);
       return true;
    }
 
    /* CCS surfaces always use the CCS tiling */
    if (info->usage & ISL_SURF_USAGE_CCS_BIT) {
       assert(isl_format_get_layout(info->format)->txc == ISL_TXC_CCS);
-      assert(tiling_flags == ISL_TILING_CCS_BIT);
-      *tiling = ISL_TILING_CCS;
+      UNUSED bool ivb_ccs = ISL_DEV_GEN(dev) < 12 &&
+                            tiling_flags == ISL_TILING_CCS_BIT;
+      UNUSED bool tgl_ccs = ISL_DEV_GEN(dev) >= 12 &&
+                            tiling_flags == ISL_TILING_GEN12_CCS_BIT;
+      assert(ivb_ccs != tgl_ccs);
+      *tiling = isl_tiling_flag_to_enum(tiling_flags);
       return true;
    }
 
@@ -628,16 +656,25 @@ isl_choose_image_alignment_el(const struct isl_device *dev,
       if (ISL_DEV_GEN(dev) == 6) {
          /* HiZ surfaces on Sandy Bridge are packed tightly. */
          *image_align_el = isl_extent3d(1, 1, 1);
-      } else {
+      } else if (ISL_DEV_GEN(dev) < 12) {
          /* On gen7+, HiZ surfaces are always aligned to 16x8 pixels in the
           * primary surface which works out to 2x2 HiZ elments.
           */
          *image_align_el = isl_extent3d(2, 2, 1);
+      } else {
+         /* On gen12+, HiZ surfaces are always aligned to 16x16 pixels in the
+          * primary surface which works out to 2x4 HiZ elments.
+          * TODO: Verify
+          */
+         *image_align_el = isl_extent3d(2, 4, 1);
       }
       return;
    }
 
-   if (ISL_DEV_GEN(dev) >= 9) {
+   if (ISL_DEV_GEN(dev) >= 12) {
+      isl_gen12_choose_image_alignment_el(dev, info, tiling, dim_layout,
+                                          msaa_layout, image_align_el);
+   } else if (ISL_DEV_GEN(dev) >= 9) {
       isl_gen9_choose_image_alignment_el(dev, info, tiling, dim_layout,
                                          msaa_layout, image_align_el);
    } else if (ISL_DEV_GEN(dev) >= 8) {
@@ -915,7 +952,8 @@ isl_calc_array_pitch_el_rows_gen4_2d(
    assert(pitch_sa_rows % fmtl->bh == 0);
    uint32_t pitch_el_rows = pitch_sa_rows / fmtl->bh;
 
-   if (ISL_DEV_GEN(dev) >= 9 && fmtl->txc == ISL_TXC_CCS) {
+   if (ISL_DEV_GEN(dev) >= 9 && ISL_DEV_GEN(dev) <= 11 &&
+       fmtl->txc == ISL_TXC_CCS) {
       /*
        * From the Sky Lake PRM Vol 7, "MCS Buffer for Render Target(s)" (p. 632):
        *
@@ -933,6 +971,8 @@ isl_calc_array_pitch_el_rows_gen4_2d(
        * The first restriction is already handled by isl_choose_image_alignment_el
        * but the second restriction, which is an extension of the first, only
        * applies to qpitch and must be applied here.
+       *
+       * The second restriction disappears on Gen12.
        */
       assert(fmtl->bh == 4);
       pitch_el_rows = isl_align(pitch_el_rows, 256 / 4);
@@ -1382,17 +1422,25 @@ isl_calc_row_pitch(const struct isl_device *dev,
       isl_calc_min_row_pitch(dev, surf_info, tile_info, phys_total_el,
                              alignment_B);
 
-   uint32_t row_pitch_B = min_row_pitch_B;
-
    if (surf_info->row_pitch_B != 0) {
-      row_pitch_B = surf_info->row_pitch_B;
-
-      if (row_pitch_B < min_row_pitch_B)
+      if (surf_info->row_pitch_B < min_row_pitch_B)
          return false;
 
-      if (row_pitch_B % alignment_B != 0)
+      if (surf_info->row_pitch_B % alignment_B != 0)
          return false;
    }
+
+   const uint32_t row_pitch_B =
+      surf_info->row_pitch_B != 0 ?
+         surf_info->row_pitch_B :
+      /* According to BSpec: 44930, Gen12's CCS-compressed surface pitches
+       * must be 512B-aligned.
+       */
+      ISL_DEV_GEN(dev) >= 12 &&
+      isl_format_supports_ccs_e(dev->info, surf_info->format) ?
+         isl_align(min_row_pitch_B, 512) :
+      /* Else */
+         min_row_pitch_B;
 
    const uint32_t row_pitch_tl = row_pitch_B / tile_info->phys_extent_B.width;
 
@@ -1532,6 +1580,19 @@ isl_surf_init_s(const struct isl_device *dev,
                                    tile_info.phys_extent_B.height;
       assert(isl_is_pow2(info->min_alignment_B) && isl_is_pow2(tile_size_B));
       base_alignment_B = MAX(info->min_alignment_B, tile_size_B);
+
+      /* The diagram in the Bspec section Memory Compression - Gen12, shows
+       * that the CCS is indexed in 256B chunks. However, the
+       * PLANE_AUX_DIST::Auxiliary Surface Distance field is in units of 4K
+       * pages. We currently don't assign the usage field like we do for main
+       * surfaces, so just use 4K for now.
+       */
+      if (tiling == ISL_TILING_GEN12_CCS)
+         base_alignment_B = MAX(base_alignment_B, 4096);
+   }
+
+   if (ISL_DEV_GEN(dev) >= 12) {
+      base_alignment_B = MAX(base_alignment_B, 64 * 1024);
    }
 
    if (ISL_DEV_GEN(dev) < 9) {
@@ -1600,6 +1661,9 @@ isl_surf_get_hiz_surf(const struct isl_device *dev,
                       struct isl_surf *hiz_surf)
 {
    assert(ISL_DEV_GEN(dev) >= 5 && ISL_DEV_USE_SEPARATE_STENCIL(dev));
+
+   if (!isl_surf_usage_is_depth(surf->usage))
+      return false;
 
    /* HiZ only works with Y-tiled depth buffers */
    if (!isl_tiling_is_any_y(surf->tiling))
@@ -1705,15 +1769,18 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
                       struct isl_surf *mcs_surf)
 {
+   /* It must be multisampled with an array layout */
+   if (surf->msaa_layout != ISL_MSAA_LAYOUT_ARRAY)
+      return false;
+
+   if (mcs_surf->size_B > 0)
+      return false;
+
    /* The following are true of all multisampled surfaces */
    assert(surf->samples > 1);
    assert(surf->dim == ISL_SURF_DIM_2D);
    assert(surf->levels == 1);
    assert(surf->logical_level0_px.depth == 1);
-
-   /* It must be multisampled with an array layout */
-   if (surf->msaa_layout != ISL_MSAA_LAYOUT_ARRAY)
-      return false;
 
    /* From the Ivy Bridge PRM, Vol4 Part1 p77 ("MCS Enable"):
     *
@@ -1765,10 +1832,24 @@ isl_surf_get_mcs_surf(const struct isl_device *dev,
 bool
 isl_surf_get_ccs_surf(const struct isl_device *dev,
                       const struct isl_surf *surf,
-                      struct isl_surf *ccs_surf,
+                      struct isl_surf *aux_surf,
+                      struct isl_surf *extra_aux_surf,
                       uint32_t row_pitch_B)
 {
-   assert(surf->samples == 1 && surf->msaa_layout == ISL_MSAA_LAYOUT_NONE);
+   assert(aux_surf);
+
+   /* An uninitialized surface is needed to get a CCS surface. */
+   if (aux_surf->size_B > 0 &&
+       (extra_aux_surf == NULL || extra_aux_surf->size_B > 0)) {
+      return false;
+   }
+
+   /* A surface can't have two CCS surfaces. */
+   if (aux_surf->usage & ISL_SURF_USAGE_CCS_BIT)
+      return false;
+
+   if (ISL_DEV_GEN(dev) < 12 && surf->samples > 1)
+      return false;
 
    /* CCS support does not exist prior to Gen7 */
    if (ISL_DEV_GEN(dev) <= 6)
@@ -1776,6 +1857,23 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
 
    if (surf->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)
       return false;
+
+   /* Allow CCS for single-sampled stencil buffers Gen12+. */
+   if (isl_surf_usage_is_stencil(surf->usage) &&
+       (ISL_DEV_GEN(dev) < 12 || surf->samples > 1))
+      return false;
+
+   /* [TGL+] CCS can only be added to a non-D16-formatted depth buffer if it
+    * has HiZ. If not for GEN:BUG:1406512483 "deprecate compression enable
+    * states", D16 would be supported. Supporting D16 requires being able to
+    * specify that the control surface is present and simultaneously disabling
+    * compression. The above bug makes it so that it's not possible to specify
+    * this configuration.
+    */
+   if (isl_surf_usage_is_depth(surf->usage) && (aux_surf->size_B == 0 ||
+       ISL_DEV_GEN(dev) < 12 || surf->format == ISL_FORMAT_R16_UNORM)) {
+      return false;
+   }
 
    /* The PRM doesn't say this explicitly, but fast-clears don't appear to
     * work for 3D textures until gen9 where the layout of 3D textures changes
@@ -1801,8 +1899,34 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
        (surf->levels > 1 || surf->logical_level0_px.array_len > 1))
       return false;
 
+   /* On Gen12, 8BPP surfaces cannot be compressed if any level is not
+    * 32Bx4row-aligned. For now, just reject the cases where alignment
+    * matters.
+    */
+   if (ISL_DEV_GEN(dev) >= 12 &&
+       isl_format_get_layout(surf->format)->bpb == 8 && surf->levels >= 3) {
+      isl_finishme("%s:%s: CCS for 8BPP textures with 3+ miplevels is "
+                   "disabled, but support for more levels is possible.",
+                   __FILE__, __func__);
+      return false;
+   }
+
+   /* On Gen12, all CCS-compressed surface pitches must be multiples of 512B.
+    */
+   if (ISL_DEV_GEN(dev) >= 12 && surf->row_pitch_B % 512 != 0)
+      return false;
+
    if (isl_format_is_compressed(surf->format))
       return false;
+
+   /* According to GEN:BUG:1406738321, 3D textures need a blit to a new
+    * surface in order to perform a resolve. For now, just disable CCS.
+    */
+   if (ISL_DEV_GEN(dev) >= 12 && surf->dim == ISL_SURF_DIM_3D) {
+      isl_finishme("%s:%s: CCS for 3D textures is disabled, but a workaround"
+                   " is available.", __FILE__, __func__);
+      return false;
+   }
 
    /* TODO: More conditions where it can fail. */
 
@@ -1820,7 +1944,21 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
     *     TiledY/TileYs/TileYf non-MSRTs only.
     */
    enum isl_format ccs_format;
-   if (ISL_DEV_GEN(dev) >= 9) {
+   if (ISL_DEV_GEN(dev) >= 12) {
+      /* TODO: Handle the other tiling formats */
+      if (surf->tiling != ISL_TILING_Y0)
+         return false;
+
+      switch (isl_format_get_layout(surf->format)->bpb) {
+      case 8:     ccs_format = ISL_FORMAT_GEN12_CCS_8BPP_Y0;    break;
+      case 16:    ccs_format = ISL_FORMAT_GEN12_CCS_16BPP_Y0;   break;
+      case 32:    ccs_format = ISL_FORMAT_GEN12_CCS_32BPP_Y0;   break;
+      case 64:    ccs_format = ISL_FORMAT_GEN12_CCS_64BPP_Y0;   break;
+      case 128:   ccs_format = ISL_FORMAT_GEN12_CCS_128BPP_Y0;  break;
+      default:
+         return false;
+      }
+   } else if (ISL_DEV_GEN(dev) >= 9) {
       if (!isl_tiling_is_any_y(surf->tiling))
          return false;
 
@@ -1851,18 +1989,41 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
       return false;
    }
 
-   return isl_surf_init(dev, ccs_surf,
-                        .dim = surf->dim,
-                        .format = ccs_format,
-                        .width = surf->logical_level0_px.width,
-                        .height = surf->logical_level0_px.height,
-                        .depth = surf->logical_level0_px.depth,
-                        .levels = surf->levels,
-                        .array_len = surf->logical_level0_px.array_len,
-                        .samples = 1,
-                        .row_pitch_B = row_pitch_B,
-                        .usage = ISL_SURF_USAGE_CCS_BIT,
-                        .tiling_flags = ISL_TILING_CCS_BIT);
+   if (ISL_DEV_GEN(dev) >= 12) {
+      /* On Gen12, the CCS is a scaled-down version of the main surface. We
+       * model this as the CCS compressing a 2D-view of the entire surface.
+       */
+      struct isl_surf *ccs_surf =
+         aux_surf->size_B > 0 ? extra_aux_surf : aux_surf;
+      const bool ok =
+         isl_surf_init(dev, ccs_surf,
+                       .dim = ISL_SURF_DIM_2D,
+                       .format = ccs_format,
+                       .width = isl_surf_get_row_pitch_el(surf),
+                       .height = surf->size_B / surf->row_pitch_B,
+                       .depth = 1,
+                       .levels = 1,
+                       .array_len = 1,
+                       .samples = 1,
+                       .row_pitch_B = row_pitch_B,
+                       .usage = ISL_SURF_USAGE_CCS_BIT,
+                       .tiling_flags = ISL_TILING_GEN12_CCS_BIT);
+      assert(!ok || ccs_surf->size_B == surf->size_B / 256);
+      return ok;
+   } else {
+      return isl_surf_init(dev, aux_surf,
+                           .dim = surf->dim,
+                           .format = ccs_format,
+                           .width = surf->logical_level0_px.width,
+                           .height = surf->logical_level0_px.height,
+                           .depth = surf->logical_level0_px.depth,
+                           .levels = surf->levels,
+                           .array_len = surf->logical_level0_px.array_len,
+                           .samples = 1,
+                           .row_pitch_B = row_pitch_B,
+                           .usage = ISL_SURF_USAGE_CCS_BIT,
+                           .tiling_flags = ISL_TILING_CCS_BIT);
+   }
 }
 
 #define isl_genX_call(dev, func, ...)              \
@@ -1899,6 +2060,9 @@ isl_surf_get_ccs_surf(const struct isl_device *dev,
       break;                                       \
    case 11:                                        \
       isl_gen11_##func(__VA_ARGS__);               \
+      break;                                       \
+   case 12:                                        \
+      isl_gen12_##func(__VA_ARGS__);               \
       break;                                       \
    default:                                        \
       assert(!"Unknown hardware generation");      \
@@ -2416,6 +2580,16 @@ isl_surf_get_depth_format(const struct isl_device *dev,
       assert(!has_stencil);
       return 5; /* D16_UNORM */
    }
+}
+
+bool
+isl_surf_supports_hiz_ccs_wt(const struct gen_device_info *dev,
+                             const struct isl_surf *surf,
+                             enum isl_aux_usage aux_usage)
+{
+   return aux_usage == ISL_AUX_USAGE_HIZ_CCS &&
+          surf->samples == 1 &&
+          surf->usage & ISL_SURF_USAGE_TEXTURE_BIT;
 }
 
 bool

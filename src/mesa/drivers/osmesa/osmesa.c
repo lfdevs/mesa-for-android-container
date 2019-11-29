@@ -864,9 +864,9 @@ OSMesaCreateContextAttribs(const int *attribList, OSMesaContext sharelist)
        */
       _swrast_add_soft_renderbuffers(osmesa->gl_buffer,
                                      GL_FALSE, /* color */
-                                     osmesa->gl_visual->haveDepthBuffer,
-                                     osmesa->gl_visual->haveStencilBuffer,
-                                     osmesa->gl_visual->haveAccumBuffer,
+                                     osmesa->gl_visual->depthBits > 0,
+                                     osmesa->gl_visual->stencilBits > 0,
+                                     osmesa->gl_visual->accumRedBits > 0,
                                      GL_FALSE, /* alpha */
                                      GL_FALSE /* aux */ );
 

@@ -313,20 +313,6 @@ static void gfx10_get_bin_sizes(struct si_context *sctx,
 				struct uvec2 *color_bin_size,
 				struct uvec2 *depth_bin_size)
 {
-	unsigned num_sdp_interfaces = 0;
-
-	switch (sctx->family) {
-	case CHIP_NAVI10:
-	case CHIP_NAVI12:
-		num_sdp_interfaces = 16;
-		break;
-	case CHIP_NAVI14:
-		num_sdp_interfaces = 8;
-		break;
-	default:
-		assert(0);
-	}
-
 	const unsigned ZsTagSize  = 64;
 	const unsigned ZsNumTags  = 312;
 	const unsigned CcTagSize  = 1024;
@@ -335,7 +321,7 @@ static void gfx10_get_bin_sizes(struct si_context *sctx,
 	const unsigned FcReadTags = 44;
 
 	const unsigned num_rbs = sctx->screen->info.num_render_backends;
-	const unsigned num_pipes = MAX2(num_rbs, num_sdp_interfaces);
+	const unsigned num_pipes = MAX2(num_rbs, sctx->screen->info.num_sdp_interfaces);
 
 	const unsigned depthBinSizeTagPart = ((ZsNumTags * num_rbs / num_pipes) * (ZsTagSize * num_pipes));
 	const unsigned colorBinSizeTagPart = ((CcReadTags * num_rbs / num_pipes) * (CcTagSize * num_pipes));
@@ -567,7 +553,7 @@ void si_emit_dpbb_state(struct si_context *sctx)
 		 *    https://bugs.freedesktop.org/show_bug.cgi?id=110214
 		 * (an alternative is to insert manual BATCH_BREAK event when
 		 * a context_roll is detected). */
-		context_states_per_bin = sctx->screen->has_gfx9_scissor_bug ? 1 : 6;
+		context_states_per_bin = sctx->screen->info.has_gfx9_scissor_bug ? 1 : 6;
 		/* Using 32 here can cause GPU hangs on RAVEN1 */
 		persistent_states_per_bin = 16;
 	}

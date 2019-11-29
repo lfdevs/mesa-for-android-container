@@ -29,8 +29,8 @@
 #include <assert.h>
 
 #include "shader_enums.h"
-#include "blob.h"
 #include "c11/threads.h"
+#include "util/blob.h"
 #include "util/macros.h"
 
 #ifdef __cplusplus

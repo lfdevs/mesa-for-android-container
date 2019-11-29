@@ -411,7 +411,7 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
 		goto error;
 	}
 
-	if (sscreen->info.family <= CHIP_RAVEN)
+	if (sscreen->info.family <= CHIP_RAVEN2)
 		radeon_enc_1_2_init(enc);
 	else
 		radeon_enc_2_0_init(enc);

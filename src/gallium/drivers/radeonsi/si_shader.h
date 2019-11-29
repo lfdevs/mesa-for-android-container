@@ -136,6 +136,7 @@
 #include "tgsi/tgsi_scan.h"
 #include "util/u_inlines.h"
 #include "util/u_queue.h"
+#include "util/simple_mtx.h"
 
 #include "ac_binary.h"
 #include "ac_llvm_build.h"
@@ -310,7 +311,7 @@ struct si_shader_selector {
 	struct util_queue_fence ready;
 	struct si_compiler_ctx_state compiler_ctx_state;
 
-	mtx_t		mutex;
+	simple_mtx_t		mutex;
 	struct si_shader	*first_variant; /* immutable after the first variant */
 	struct si_shader	*last_variant; /* mutable */
 
@@ -755,9 +756,8 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 			struct tgsi_shader_info *info);
 void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
 			   struct tgsi_tessctrl_info *out);
-void si_nir_lower_ps_inputs(struct nir_shader *nir);
-void si_lower_nir(struct si_shader_selector *sel);
-void si_nir_opts(struct nir_shader *nir);
+void si_nir_adjust_driver_locations(struct nir_shader *nir);
+void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize);
 
 /* si_state_shaders.c */
 void gfx9_get_gs_info(struct si_shader_selector *es,

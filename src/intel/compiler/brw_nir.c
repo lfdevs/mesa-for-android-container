@@ -518,7 +518,7 @@ brw_nir_optimize(nir_shader *nir, const struct brw_compiler *compiler,
       OPT(nir_opt_combine_stores, nir_var_all);
 
       if (is_scalar) {
-         OPT(nir_lower_alu_to_scalar, NULL);
+         OPT(nir_lower_alu_to_scalar, NULL, NULL);
       }
 
       OPT(nir_copy_prop);
@@ -654,7 +654,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    const bool is_scalar = compiler->scalar_stage[nir->info.stage];
 
    if (is_scalar) {
-      OPT(nir_lower_alu_to_scalar, NULL);
+      OPT(nir_lower_alu_to_scalar, NULL, NULL);
    }
 
    if (nir->info.stage == MESA_SHADER_GEOMETRY)
@@ -690,13 +690,6 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    OPT(nir_lower_doubles, softfp64, nir->options->lower_doubles_options);
    OPT(nir_lower_int64, nir->options->lower_int64_options);
 
-   /* This needs to be run after the first optimization pass but before we
-    * lower indirect derefs away
-    */
-   if (compiler->supports_shader_constants) {
-      OPT(nir_opt_large_constants, NULL, 32);
-   }
-
    OPT(nir_lower_bit_size, lower_bit_size_callback, (void *)compiler);
 
    if (is_scalar) {
@@ -705,6 +698,13 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
 
    /* Lower a bunch of stuff */
    OPT(nir_lower_var_copies);
+
+   /* This needs to be run after the first optimization pass but before we
+    * lower indirect derefs away
+    */
+   if (compiler->supports_shader_constants) {
+      OPT(nir_opt_large_constants, NULL, 32);
+   }
 
    OPT(nir_lower_system_values);
 
@@ -871,7 +871,7 @@ brw_postprocess_nir(nir_shader *nir, const struct brw_compiler *compiler,
    OPT(brw_nir_lower_conversions);
 
    if (is_scalar)
-      OPT(nir_lower_alu_to_scalar, NULL);
+      OPT(nir_lower_alu_to_scalar, NULL, NULL);
    OPT(nir_lower_to_source_mods, nir_lower_all_source_mods);
    OPT(nir_copy_prop);
    OPT(nir_opt_dce);
@@ -1087,6 +1087,72 @@ brw_cmod_for_nir_comparison(nir_op op)
 
    default:
       unreachable("Unsupported NIR comparison op");
+   }
+}
+
+uint32_t
+brw_aop_for_nir_intrinsic(const nir_intrinsic_instr *atomic)
+{
+   switch (atomic->intrinsic) {
+#define AOP_CASE(atom) \
+   case nir_intrinsic_image_atomic_##atom:            \
+   case nir_intrinsic_bindless_image_atomic_##atom:   \
+   case nir_intrinsic_ssbo_atomic_##atom:             \
+   case nir_intrinsic_shared_atomic_##atom:           \
+   case nir_intrinsic_global_atomic_##atom
+
+   AOP_CASE(add): {
+      unsigned src_idx;
+      switch (atomic->intrinsic) {
+      case nir_intrinsic_image_atomic_add:
+      case nir_intrinsic_bindless_image_atomic_add:
+         src_idx = 3;
+         break;
+      case nir_intrinsic_ssbo_atomic_add:
+         src_idx = 2;
+         break;
+      case nir_intrinsic_shared_atomic_add:
+      case nir_intrinsic_global_atomic_add:
+         src_idx = 1;
+         break;
+      default:
+         unreachable("Invalid add atomic opcode");
+      }
+
+      if (nir_src_is_const(atomic->src[src_idx])) {
+         int64_t add_val = nir_src_as_int(atomic->src[src_idx]);
+         if (add_val == 1)
+            return BRW_AOP_INC;
+         else if (add_val == -1)
+            return BRW_AOP_DEC;
+      }
+      return BRW_AOP_ADD;
+   }
+
+   AOP_CASE(imin):         return BRW_AOP_IMIN;
+   AOP_CASE(umin):         return BRW_AOP_UMIN;
+   AOP_CASE(imax):         return BRW_AOP_IMAX;
+   AOP_CASE(umax):         return BRW_AOP_UMAX;
+   AOP_CASE(and):          return BRW_AOP_AND;
+   AOP_CASE(or):           return BRW_AOP_OR;
+   AOP_CASE(xor):          return BRW_AOP_XOR;
+   AOP_CASE(exchange):     return BRW_AOP_MOV;
+   AOP_CASE(comp_swap):    return BRW_AOP_CMPWR;
+
+#undef AOP_CASE
+#define AOP_CASE(atom) \
+   case nir_intrinsic_ssbo_atomic_##atom:          \
+   case nir_intrinsic_shared_atomic_##atom:        \
+   case nir_intrinsic_global_atomic_##atom
+
+   AOP_CASE(fmin):         return BRW_AOP_FMIN;
+   AOP_CASE(fmax):         return BRW_AOP_FMAX;
+   AOP_CASE(fcomp_swap):   return BRW_AOP_FCMPWR;
+
+#undef AOP_CASE
+
+   default:
+      unreachable("Unsupported NIR atomic intrinsic");
    }
 }
 

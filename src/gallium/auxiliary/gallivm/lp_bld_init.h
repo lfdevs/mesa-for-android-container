@@ -46,6 +46,7 @@ struct gallivm_state
    LLVMExecutionEngineRef engine;
    LLVMTargetDataRef target;
    LLVMPassManagerRef passmgr;
+   LLVMPassManagerRef cgpassmgr;
    LLVMContextRef context;
    LLVMBuilderRef builder;
    LLVMMCJITMemoryManagerRef memorymgr;

@@ -23,6 +23,8 @@
 #include "nouveau_mm.h"
 #include "nouveau_buffer.h"
 
+#include <compiler/glsl_types.h>
+
 /* XXX this should go away */
 #include "state_tracker/drm_driver.h"
 
@@ -187,6 +189,9 @@ nouveau_screen_init(struct nouveau_screen *screen, struct nouveau_device *dev)
       nouveau_mesa_debug = atoi(nv_dbg);
 
    screen->prefer_nir = debug_get_bool_option("NV50_PROG_USE_NIR", false);
+   screen->force_enable_cl = debug_get_bool_option("NOUVEAU_ENABLE_CL", false);
+   if (screen->force_enable_cl)
+      glsl_type_singleton_init_or_ref();
 
    /* These must be set before any failure is possible, as the cleanup
     * paths assume they're responsible for deleting them.
@@ -278,6 +283,9 @@ void
 nouveau_screen_fini(struct nouveau_screen *screen)
 {
    int fd = screen->drm->fd;
+
+   if (screen->force_enable_cl)
+      glsl_type_singleton_decref();
 
    nouveau_mm_destroy(screen->mm_GART);
    nouveau_mm_destroy(screen->mm_VRAM);

@@ -79,7 +79,7 @@ struct gfx10_sh_query {
 
 static void emit_shader_query(struct si_context *sctx)
 {
-	assert(!LIST_IS_EMPTY(&sctx->shader_query_buffers));
+	assert(!list_is_empty(&sctx->shader_query_buffers));
 
 	struct gfx10_sh_query_buffer *qbuf = list_last_entry(&sctx->shader_query_buffers,
 							     struct gfx10_sh_query_buffer, list);
@@ -106,7 +106,7 @@ static void gfx10_release_query_buffers(struct si_context *sctx,
 		if (qbuf->list.prev == &sctx->shader_query_buffers)
 			continue; /* keep the oldest buffer for recycling */
 
-		LIST_DEL(&qbuf->list);
+		list_del(&qbuf->list);
 		si_resource_reference(&qbuf->buf, NULL);
 		FREE(qbuf);
 	}
@@ -119,7 +119,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
 
 	struct gfx10_sh_query_buffer *qbuf = NULL;
 
-	if (!LIST_IS_EMPTY(&sctx->shader_query_buffers)) {
+	if (!list_is_empty(&sctx->shader_query_buffers)) {
 		qbuf = list_last_entry(&sctx->shader_query_buffers,
 				       struct gfx10_sh_query_buffer, list);
 		if (qbuf->head + sizeof(struct gfx10_sh_query_buffer_mem) <= qbuf->buf->b.b.width0)
@@ -131,7 +131,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
 		    !si_rings_is_buffer_referenced(sctx, qbuf->buf->buf, RADEON_USAGE_READWRITE) &&
 		    sctx->ws->buffer_wait(qbuf->buf->buf, 0, RADEON_USAGE_READWRITE)) {
 			/* Can immediately re-use the oldest buffer */
-			LIST_DEL(&qbuf->list);
+			list_del(&qbuf->list);
 		} else {
 			qbuf = NULL;
 		}
@@ -170,7 +170,7 @@ static bool gfx10_alloc_query_buffer(struct si_context *sctx)
 		results[32 * i + 16] = 0;
 	}
 
-	LIST_ADDTAIL(&qbuf->list, &sctx->shader_query_buffers);
+	list_addtail(&qbuf->list, &sctx->shader_query_buffers);
 	qbuf->head = 0;
 	qbuf->refcount = sctx->num_active_shader_queries;
 
@@ -504,17 +504,17 @@ struct pipe_query *gfx10_sh_query_create(struct si_screen *screen,
 
 void gfx10_init_query(struct si_context *sctx)
 {
-	LIST_INITHEAD(&sctx->shader_query_buffers);
+	list_inithead(&sctx->shader_query_buffers);
 	sctx->atoms.s.shader_query.emit = emit_shader_query;
 }
 
 void gfx10_destroy_query(struct si_context *sctx)
 {
-	while (!LIST_IS_EMPTY(&sctx->shader_query_buffers)) {
+	while (!list_is_empty(&sctx->shader_query_buffers)) {
 		struct gfx10_sh_query_buffer *qbuf =
 			list_first_entry(&sctx->shader_query_buffers,
 					 struct gfx10_sh_query_buffer, list);
-		LIST_DEL(&qbuf->list);
+		list_del(&qbuf->list);
 
 		assert(!qbuf->refcount);
 		si_resource_reference(&qbuf->buf, NULL);

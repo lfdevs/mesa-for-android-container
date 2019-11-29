@@ -128,6 +128,6 @@ extern void (*linker_foo(const unsigned char *procName))()
 
 /* skip normal ones */
 #define _GLAPI_SKIP_NORMAL_ENTRY_POINTS
-#include "glapi/glapitemp.h"
+#include "glapitemp.h"
 
 #endif /* GLX_INDIRECT_RENDERING */

@@ -962,7 +962,7 @@ sendinstruction:
 		if (brw_inst_send_sel_reg32_ex_desc(p->devinfo, brw_last_inst)) {
 			brw_inst_set_send_ex_desc_ia_subreg_nr(p->devinfo, brw_last_inst, $5.subnr);
 		} else {
-			brw_inst_set_send_ex_desc(p->devinfo, brw_last_inst, $8);
+			brw_inst_set_sends_ex_desc(p->devinfo, brw_last_inst, $8);
 		}
 
 		brw_inst_set_bits(brw_last_inst, 127, 96, $7);
@@ -988,7 +988,7 @@ sendinstruction:
 		brw_set_src1(p, brw_last_inst, $6);
 
 		brw_inst_set_send_sel_reg32_desc(p->devinfo, brw_last_inst, 1);
-		brw_inst_set_send_ex_desc(p->devinfo, brw_last_inst, $8);
+		brw_inst_set_sends_ex_desc(p->devinfo, brw_last_inst, $8);
 
 		brw_inst_set_sfid(p->devinfo, brw_last_inst, $9);
 		brw_inst_set_eot(p->devinfo, brw_last_inst, $10.end_of_thread);

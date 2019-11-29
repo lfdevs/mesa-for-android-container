@@ -111,8 +111,6 @@ fd6_rasterizer_state_create(struct pipe_context *pctx,
 	OUT_RING(ring, 0x80);
 	OUT_PKT4(ring, REG_A6XX_GRAS_UNKNOWN_8001, 1);
 	OUT_RING(ring, 0x0);
-	OUT_PKT4(ring, REG_A6XX_GRAS_UNKNOWN_8004, 1);
-	OUT_RING(ring, 0x0);
 
 	OUT_PKT4(ring, REG_A6XX_GRAS_SU_CNTL, 1);
 	OUT_RING(ring, so->gras_su_cntl);

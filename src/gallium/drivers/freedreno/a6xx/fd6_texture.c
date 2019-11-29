@@ -130,15 +130,15 @@ fd6_sampler_state_create(struct pipe_context *pctx,
 		A6XX_TEX_SAMP_0_WRAP_R(tex_clamp(cso->wrap_r, clamp_to_edge, &so->needs_border));
 
 	so->texsamp1 =
+		COND(cso->min_mip_filter == PIPE_TEX_MIPFILTER_NONE,
+				A6XX_TEX_SAMP_1_MIPFILTER_LINEAR_FAR) |
 		COND(!cso->seamless_cube_map, A6XX_TEX_SAMP_1_CUBEMAPSEAMLESSFILTOFF) |
 		COND(!cso->normalized_coords, A6XX_TEX_SAMP_1_UNNORM_COORDS);
 
-	if (cso->min_mip_filter != PIPE_TEX_MIPFILTER_NONE) {
-		so->texsamp0 |= A6XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
-		so->texsamp1 |=
-			A6XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
-			A6XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
-	}
+	so->texsamp0 |= A6XX_TEX_SAMP_0_LOD_BIAS(cso->lod_bias);
+	so->texsamp1 |=
+		A6XX_TEX_SAMP_1_MIN_LOD(cso->min_lod) |
+		A6XX_TEX_SAMP_1_MAX_LOD(cso->max_lod);
 
 	if (cso->compare_mode)
 		so->texsamp1 |= A6XX_TEX_SAMP_1_COMPARE_FUNC(cso->compare_func); /* maps 1:1 */

@@ -143,7 +143,7 @@ struct _glxapi_table {
    /*** GLX_SGIX_pbuffer ***/
    GLXPbufferSGIX (*CreateGLXPbufferSGIX)(Display *, GLXFBConfigSGIX, unsigned int, unsigned int, int *);
    void (*DestroyGLXPbufferSGIX)(Display *, GLXPbufferSGIX);
-   int (*QueryGLXPbufferSGIX)(Display *, GLXPbufferSGIX, int, unsigned int *);
+   void (*QueryGLXPbufferSGIX)(Display *, GLXPbufferSGIX, int, unsigned int *);
    void (*SelectEventSGIX)(Display *, GLXDrawable, unsigned long);
    void (*GetSelectedEventSGIX)(Display *, GLXDrawable, unsigned long *);
 
@@ -165,7 +165,7 @@ struct _glxapi_table {
 #endif
 
    /*** GLX_SUN_get_transparent_index ***/
-   Status (*GetTransparentIndexSUN)(Display *, Window, Window, long *);
+   Status (*GetTransparentIndexSUN)(Display *, Window, Window, unsigned long *);
 
    /*** GLX_MESA_copy_sub_buffer ***/
    void (*CopySubBufferMESA)(Display *dpy, GLXDrawable drawable, int x, int y, int width, int height);

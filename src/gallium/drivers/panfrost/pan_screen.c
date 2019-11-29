@@ -41,7 +41,9 @@
 #include <fcntl.h>
 
 #include "drm-uapi/drm_fourcc.h"
+#include "drm-uapi/panfrost_drm.h"
 
+#include "pan_bo.h"
 #include "pan_screen.h"
 #include "pan_resource.h"
 #include "pan_public.h"
@@ -99,6 +101,9 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_MAX_RENDER_TARGETS:
                 return is_deqp ? 4 : 1;
 
+        /* Throttling frames breaks pipelining */
+        case PIPE_CAP_THROTTLE:
+                return 0;
 
         case PIPE_CAP_OCCLUSION_QUERY:
                 return 1;
@@ -108,7 +113,6 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_QUERY_SO_OVERFLOW:
                 return 0;
 
-        case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
         case PIPE_CAP_TEXTURE_SWIZZLE:
                 return 1;
 
@@ -240,6 +244,9 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
         case PIPE_CAP_MAX_VARYINGS:
                 return 16;
 
+        case PIPE_CAP_ALPHA_TEST:
+                return 0;
+
         default:
                 return u_pipe_screen_get_param_defaults(screen, param);
         }
@@ -259,9 +266,6 @@ panfrost_get_shader_param(struct pipe_screen *screen,
 
         /* this is probably not totally correct.. but it's a start: */
         switch (param) {
-        case PIPE_SHADER_CAP_SCALAR_ISA:
-                return 0;
-
         case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
         case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
@@ -326,7 +330,7 @@ panfrost_get_shader_param(struct pipe_screen *screen,
                 return PIPE_SHADER_IR_NIR;
 
         case PIPE_SHADER_CAP_SUPPORTED_IRS:
-                return (1 << PIPE_SHADER_IR_NIR);
+                return (1 << PIPE_SHADER_IR_NIR) | (1 << PIPE_SHADER_IR_NIR_SERIALIZED);
 
         case PIPE_SHADER_CAP_MAX_UNROLL_ITERATIONS_HINT:
                 return 32;
@@ -543,6 +547,8 @@ panfrost_destroy_screen(struct pipe_screen *pscreen)
 {
         struct panfrost_screen *screen = pan_screen(pscreen);
         panfrost_bo_cache_evict_all(screen);
+        pthread_mutex_destroy(&screen->bo_cache_lock);
+        pthread_mutex_destroy(&screen->active_bos_lock);
         drmFreeVersion(screen->kernel_version);
         ralloc_free(screen);
 }
@@ -568,7 +574,17 @@ panfrost_fence_reference(struct pipe_screen *pscreen,
                          struct pipe_fence_handle **ptr,
                          struct pipe_fence_handle *fence)
 {
-        panfrost_drm_fence_reference(pscreen, ptr, fence);
+        struct panfrost_fence **p = (struct panfrost_fence **)ptr;
+        struct panfrost_fence *f = (struct panfrost_fence *)fence;
+        struct panfrost_fence *old = *p;
+
+        if (pipe_reference(&(*p)->reference, &f->reference)) {
+                util_dynarray_foreach(&old->syncfds, int, fd)
+                        close(*fd);
+                util_dynarray_fini(&old->syncfds);
+                free(old);
+        }
+        *p = f;
 }
 
 static bool
@@ -577,7 +593,72 @@ panfrost_fence_finish(struct pipe_screen *pscreen,
                       struct pipe_fence_handle *fence,
                       uint64_t timeout)
 {
-        return panfrost_drm_fence_finish(pscreen, ctx, fence, timeout);
+        struct panfrost_screen *screen = pan_screen(pscreen);
+        struct panfrost_fence *f = (struct panfrost_fence *)fence;
+        struct util_dynarray syncobjs;
+        int ret;
+
+        /* All fences were already signaled */
+        if (!util_dynarray_num_elements(&f->syncfds, int))
+                return true;
+
+        util_dynarray_init(&syncobjs, NULL);
+        util_dynarray_foreach(&f->syncfds, int, fd) {
+                uint32_t syncobj;
+
+                ret = drmSyncobjCreate(screen->fd, 0, &syncobj);
+                assert(!ret);
+
+                ret = drmSyncobjImportSyncFile(screen->fd, syncobj, *fd);
+                assert(!ret);
+                util_dynarray_append(&syncobjs, uint32_t, syncobj);
+        }
+
+        uint64_t abs_timeout = os_time_get_absolute_timeout(timeout);
+        if (abs_timeout == OS_TIMEOUT_INFINITE)
+                abs_timeout = INT64_MAX;
+
+        ret = drmSyncobjWait(screen->fd, util_dynarray_begin(&syncobjs),
+                             util_dynarray_num_elements(&syncobjs, uint32_t),
+                             abs_timeout, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL,
+                             NULL);
+
+        util_dynarray_foreach(&syncobjs, uint32_t, syncobj)
+                drmSyncobjDestroy(screen->fd, *syncobj);
+
+        return ret >= 0;
+}
+
+struct panfrost_fence *
+panfrost_fence_create(struct panfrost_context *ctx,
+                      struct util_dynarray *fences)
+{
+        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
+        struct panfrost_fence *f = calloc(1, sizeof(*f));
+        if (!f)
+                return NULL;
+
+        util_dynarray_init(&f->syncfds, NULL);
+
+        /* Export fences from all pending batches. */
+        util_dynarray_foreach(fences, struct panfrost_batch_fence *, fence) {
+                int fd = -1;
+
+                /* The fence is already signaled, no need to export it. */
+                if ((*fence)->signaled)
+                        continue;
+
+                drmSyncobjExportSyncFile(screen->fd, (*fence)->syncobj, &fd);
+                if (fd == -1)
+                        fprintf(stderr, "export failed: %m\n");
+
+                assert(fd != -1);
+                util_dynarray_append(&f->syncfds, int, fd);
+        }
+
+        pipe_reference_init(&f->reference, 1);
+
+        return f;
 }
 
 static const void *
@@ -586,6 +667,35 @@ panfrost_screen_get_compiler_options(struct pipe_screen *pscreen,
                                      enum pipe_shader_type shader)
 {
         return &midgard_nir_options;
+}
+
+static unsigned
+panfrost_query_gpu_version(struct panfrost_screen *screen)
+{
+        struct drm_panfrost_get_param get_param = {0,};
+        ASSERTED int ret;
+
+        get_param.param = DRM_PANFROST_PARAM_GPU_PROD_ID;
+        ret = drmIoctl(screen->fd, DRM_IOCTL_PANFROST_GET_PARAM, &get_param);
+        assert(!ret);
+
+        return get_param.value;
+}
+
+static uint32_t
+panfrost_active_bos_hash(const void *key)
+{
+        const struct panfrost_bo *bo = key;
+
+        return _mesa_hash_data(&bo->gem_handle, sizeof(bo->gem_handle));
+}
+
+static bool
+panfrost_active_bos_cmp(const void *keya, const void *keyb)
+{
+        const struct panfrost_bo *a = keya, *b = keyb;
+
+        return a->gem_handle == b->gem_handle;
 }
 
 struct pipe_screen *
@@ -622,7 +732,7 @@ panfrost_create_screen(int fd, struct renderonly *ro)
 
         screen->fd = fd;
 
-        screen->gpu_id = panfrost_drm_query_gpu_version(screen);
+        screen->gpu_id = panfrost_query_gpu_version(screen);
         screen->require_sfbd = screen->gpu_id < 0x0750; /* T760 is the first to support MFBD */
         screen->kernel_version = drmGetVersion(fd);
 
@@ -640,8 +750,11 @@ panfrost_create_screen(int fd, struct renderonly *ro)
                 return NULL;
         }
 
-        util_dynarray_init(&screen->transient_bo, screen);
+        pthread_mutex_init(&screen->active_bos_lock, NULL);
+        screen->active_bos = _mesa_set_create(screen, panfrost_active_bos_hash,
+                                              panfrost_active_bos_cmp);
 
+        pthread_mutex_init(&screen->bo_cache_lock, NULL);
         for (unsigned i = 0; i < ARRAY_SIZE(screen->bo_cache); ++i)
                 list_inithead(&screen->bo_cache[i]);
 
@@ -665,9 +778,6 @@ panfrost_create_screen(int fd, struct renderonly *ro)
         screen->base.fence_reference = panfrost_fence_reference;
         screen->base.fence_finish = panfrost_fence_finish;
         screen->base.set_damage_region = panfrost_resource_set_damage_region;
-
-        screen->last_fragment_flushed = true;
-        screen->last_job = NULL;
 
         panfrost_resource_screen_init(screen);
 

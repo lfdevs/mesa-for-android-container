@@ -265,6 +265,20 @@ lp_build_loop_end_cond(struct lp_build_loop_state *state,
    state->counter = LLVMBuildLoad(builder, state->counter_var, "");
 }
 
+void
+lp_build_loop_force_set_counter(struct lp_build_loop_state *state,
+                          LLVMValueRef end)
+{
+   LLVMBuilderRef builder = state->gallivm->builder;
+   LLVMBuildStore(builder, end, state->counter_var);
+}
+
+void
+lp_build_loop_force_reload_counter(struct lp_build_loop_state *state)
+{
+   LLVMBuilderRef builder = state->gallivm->builder;
+   state->counter = LLVMBuildLoad(builder, state->counter_var, "");
+}
 
 void
 lp_build_loop_end(struct lp_build_loop_state *state,

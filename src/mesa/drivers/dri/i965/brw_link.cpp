@@ -269,15 +269,11 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
    /* SPIR-V programs use a NIR linker */
    if (shProg->data->spirv) {
-      if (!gl_nir_link_uniform_blocks(ctx, shProg)) {
+      static const gl_nir_linker_options opts = {
+         .fill_parameters = false,
+      };
+      if (!gl_nir_link(ctx, shProg, &opts))
          return GL_FALSE;
-      }
-
-      if (!gl_nir_link_uniforms(ctx, shProg))
-         return GL_FALSE;
-
-      gl_nir_link_assign_atomic_counter_resources(ctx, shProg);
-      gl_nir_link_assign_xfb_resources(ctx, shProg);
    }
 
    for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {

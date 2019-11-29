@@ -128,6 +128,12 @@ lp_build_loop_end(struct lp_build_loop_state *state,
                   LLVMValueRef step);
 
 void
+lp_build_loop_force_set_counter(struct lp_build_loop_state *state,
+                                LLVMValueRef end);
+
+void
+lp_build_loop_force_reload_counter(struct lp_build_loop_state *state);
+void
 lp_build_loop_end_cond(struct lp_build_loop_state *state,
                        LLVMValueRef end,
                        LLVMValueRef step,

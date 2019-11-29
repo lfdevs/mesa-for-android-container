@@ -33,6 +33,7 @@
 #include "util/u_video.h"
 #include "compiler/nir/nir.h"
 
+#include <llvm/Config/llvm-config.h>
 #include <sys/utsname.h>
 
 static const char *si_get_vendor(struct pipe_screen *pscreen)
@@ -207,7 +208,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
-		return HAVE_LLVM < 0x0900 && !sscreen->info.has_unaligned_shader_loads;
+		return LLVM_VERSION_MAJOR < 9 && !sscreen->info.has_unaligned_shader_loads;
 
 	case PIPE_CAP_SPARSE_BUFFER_PAGE_SIZE:
 		return sscreen->info.has_sparse_vm_mappings ?
@@ -218,6 +219,11 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		if (sscreen->options.enable_nir)
 			return 1;
 		return 0;
+
+	case PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF:
+		if (sscreen->options.enable_nir)
+			return 0;
+		return 1;
 
 	/* Unsupported features. */
 	case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
@@ -340,7 +346,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_PCI_FUNCTION:
 		return sscreen->info.pci_func;
 	case PIPE_CAP_TGSI_ATOMINC_WRAP:
-		return HAVE_LLVM >= 0x1000;
+		return LLVM_VERSION_MAJOR >= 10;
 
 	default:
 		return u_pipe_screen_get_param_defaults(pscreen, param);
@@ -492,8 +498,6 @@ static int si_get_shader_param(struct pipe_screen* pscreen,
 	case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
 	case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
 		return 0;
-	case PIPE_SHADER_CAP_SCALAR_ISA:
-		return 1;
 	}
 	return 0;
 }
@@ -518,6 +522,7 @@ static const struct nir_shader_compiler_options nir_options = {
 	.lower_extract_byte = true,
 	.lower_extract_word = true,
 	.lower_rotate = true,
+	.lower_to_scalar = true,
 	.optimize_sample_mask_in = true,
 	.max_unroll_iterations = 32,
 	.use_interpolated_input_intrinsics = true,
@@ -643,9 +648,7 @@ static int si_get_video_param(struct pipe_screen *screen,
 				return profile == PIPE_VIDEO_PROFILE_HEVC_MAIN;
 			return false;
 		case PIPE_VIDEO_FORMAT_JPEG:
-			if (sscreen->info.family == CHIP_RAVEN ||
-			    sscreen->info.family == CHIP_RAVEN2 ||
-			    sscreen->info.family == CHIP_NAVI10)
+			if (sscreen->info.family >= CHIP_RAVEN)
 				return true;
 			if (sscreen->info.family < CHIP_CARRIZO || sscreen->info.family >= CHIP_VEGA10)
 				return false;
@@ -664,9 +667,25 @@ static int si_get_video_param(struct pipe_screen *screen,
 	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
 		return 1;
 	case PIPE_VIDEO_CAP_MAX_WIDTH:
-		return (sscreen->info.family < CHIP_TONGA) ? 2048 : 4096;
+		switch (codec) {
+		case PIPE_VIDEO_FORMAT_HEVC:
+		case PIPE_VIDEO_FORMAT_VP9:
+			return (sscreen->info.family < CHIP_RENOIR) ?
+			       ((sscreen->info.family < CHIP_TONGA) ? 2048 : 4096) :
+			       8192;
+		default:
+			return (sscreen->info.family < CHIP_TONGA) ? 2048 : 4096;
+		}
 	case PIPE_VIDEO_CAP_MAX_HEIGHT:
-		return (sscreen->info.family < CHIP_TONGA) ? 1152 : 4096;
+		switch (codec) {
+		case PIPE_VIDEO_FORMAT_HEVC:
+		case PIPE_VIDEO_FORMAT_VP9:
+			return (sscreen->info.family < CHIP_RENOIR) ?
+			       ((sscreen->info.family < CHIP_TONGA) ? 1152 : 4096) :
+			       4352;
+		default:
+			return (sscreen->info.family < CHIP_TONGA) ? 1152 : 4096;
+		}
 	case PIPE_VIDEO_CAP_PREFERED_FORMAT:
 		if (profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10 ||
 		    profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2)
@@ -748,14 +767,8 @@ static unsigned get_max_threads_per_block(struct si_screen *screen,
 	if (ir_type == PIPE_SHADER_IR_NATIVE)
 		return 256;
 
-	/* Only 16 waves per thread-group on gfx9. */
-	if (screen->info.chip_class >= GFX9)
-		return 1024;
-
-	/* Up to 40 waves per thread-group on GCN < gfx9. Expose a nice
-	 * round number.
-	 */
-	return 2048;
+        /* LLVM 10 only supports 1024 threads per block. */
+	return 1024;
 }
 
 static int si_get_compute_param(struct pipe_screen *screen,

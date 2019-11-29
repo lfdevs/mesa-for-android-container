@@ -421,25 +421,19 @@ msm_ringbuffer_sp_emit_reloc(struct fd_ringbuffer *ring,
 	}
 
 	uint64_t iova = fd_bo_get_iova(reloc->bo) + reloc->offset;
-	uint32_t dword = iova;
 	int shift = reloc->shift;
 
 	if (shift < 0)
-		dword >>= -shift;
+		iova >>= -shift;
 	else
-		dword <<= shift;
+		iova <<= shift;
+
+	uint32_t dword = iova;
 
 	(*ring->cur++) = dword | reloc->or;
 
 	if (pipe->gpu_id >= 500) {
 		dword = iova >> 32;
-		shift -= 32;
-
-		if (shift < 0)
-			dword >>= -shift;
-		else
-			dword <<= shift;
-
 		(*ring->cur++) = dword | reloc->orhi;
 	}
 }

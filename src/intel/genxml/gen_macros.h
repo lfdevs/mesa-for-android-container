@@ -91,6 +91,9 @@
 #elif (GEN_VERSIONx10 == 110)
 #  define GENX(X) GEN11_##X
 #  define genX(x) gen11_##x
+#elif (GEN_VERSIONx10 == 120)
+#  define GENX(X) GEN12_##X
+#  define genX(x) gen12_##x
 #else
 #  error "Need to add prefixing macros for this gen"
 #endif

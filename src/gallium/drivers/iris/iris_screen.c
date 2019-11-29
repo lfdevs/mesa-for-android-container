@@ -86,6 +86,7 @@ iris_get_name(struct pipe_screen *pscreen)
 #undef CHIPSET
 #define CHIPSET(id, symbol, str) case id: chipset = str; break;
 #include "pci_ids/i965_pci_ids.h"
+#include "pci_ids/iris_pci_ids.h"
    default:
       chipset = "Unknown Intel Chipset";
       break;
@@ -200,6 +201,9 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_CS_DERIVED_SYSTEM_VALUES_SUPPORTED:
    case PIPE_CAP_TEXTURE_SHADOW_LOD:
    case PIPE_CAP_SHADER_SAMPLES_IDENTICAL:
+   case PIPE_CAP_GL_SPIRV:
+   case PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS:
+   case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
       return true;
    case PIPE_CAP_FBFETCH:
       return BRW_MAX_DRAW_BUFFERS;
@@ -308,6 +312,8 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
        * illegal snoop <-> snoop transfers.
        */
       return devinfo->has_llc;
+   case PIPE_CAP_THROTTLE:
+      return screen->driconf.disable_throttling ? 0 : 1;
 
    case PIPE_CAP_CONTEXT_PRIORITY_MASK:
       return PIPE_CONTEXT_PRIORITY_LOW |
@@ -398,7 +404,6 @@ iris_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_SUBROUTINES:
       return 0;
    case PIPE_SHADER_CAP_INTEGERS:
-   case PIPE_SHADER_CAP_SCALAR_ISA:
       return 1;
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
@@ -631,7 +636,17 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    if (getenv("INTEL_NO_HW") != NULL)
       screen->no_hw = true;
 
-   screen->bufmgr = iris_bufmgr_init(&screen->devinfo, fd);
+   bool bo_reuse = false;
+   int bo_reuse_mode = driQueryOptioni(config->options, "bo_reuse");
+   switch (bo_reuse_mode) {
+   case DRI_CONF_BO_REUSE_DISABLED:
+      break;
+   case DRI_CONF_BO_REUSE_ALL:
+      bo_reuse = true;
+      break;
+   }
+
+   screen->bufmgr = iris_bufmgr_init(&screen->devinfo, fd, bo_reuse);
    if (!screen->bufmgr)
       return NULL;
 
@@ -644,6 +659,10 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
 
    screen->driconf.dual_color_blend_by_location =
       driQueryOptionb(config->options, "dual_color_blend_by_location");
+   screen->driconf.disable_throttling =
+      driQueryOptionb(config->options, "disable_throttling");
+   screen->driconf.always_flush_cache =
+      driQueryOptionb(config->options, "always_flush_cache");
 
    screen->precompile = env_var_as_boolean("shader_precompile", true);
 

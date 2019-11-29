@@ -372,8 +372,8 @@ typedef struct PACKED {
 	uint8_t             signed_rf_mode_all       : 1;
 	uint8_t             reserved1                : 1;
 	instr_surf_fmt_t    format                   : 6;
-	uint8_t             reserved2                : 1;
-	uint8_t             exp_adjust_all           : 7;
+	uint8_t             reserved2                : 2;
+	uint8_t             exp_adjust_all           : 6;
 	uint8_t             reserved3                : 1;
 	uint8_t             pred_select              : 1;
 	/* dword2: */

@@ -189,11 +189,6 @@ brw_upload_initial_gpu_state(struct brw_context *brw)
        */
       brw_load_register_imm32(brw, GEN8_L3CNTLREG,
                               GEN8_L3CNTLREG_EDBC_NO_HANG);
-
-       /* WaEnableStateCacheRedirectToCS:icl */
-       brw_load_register_imm32(brw, SLICE_COMMON_ECO_CHICKEN1,
-                               GEN11_STATE_CACHE_REDIRECT_TO_CS_SECTION_ENABLE |
-                               REG_MASK(GEN11_STATE_CACHE_REDIRECT_TO_CS_SECTION_ENABLE));
    }
 
    /* hardware specification recommends disabling repacking for

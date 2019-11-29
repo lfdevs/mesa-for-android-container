@@ -40,6 +40,14 @@ namespace clover {
                           const device &device,
                           const std::string &opts,
                           std::string &r_log);
+
+#ifdef HAVE_CLOVER_SPIRV
+      module compile_to_spirv(const std::string &source,
+                              const header_map &headers,
+                              const device &dev,
+                              const std::string &opts,
+                              std::string &r_log);
+#endif
    }
 }
 

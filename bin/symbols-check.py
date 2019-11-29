@@ -109,6 +109,10 @@ def main():
             continue
         if symbol in optional_symbols:
             continue
+        if symbol[:2] == '_Z':
+            # Ignore random C++ symbols
+            #TODO: figure out if there's any way to avoid exporting them in the first place
+            continue
         unknown_symbols.append(symbol)
 
     missing_symbols = [

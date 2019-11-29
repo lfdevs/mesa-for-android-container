@@ -35,13 +35,15 @@ class const_value_negative_equal_test : public ::testing::Test {
 protected:
    const_value_negative_equal_test()
    {
+      glsl_type_singleton_init_or_ref();
+
       memset(c1, 0, sizeof(c1));
       memset(c2, 0, sizeof(c2));
    }
 
    ~const_value_negative_equal_test()
    {
-      /* empty */
+      glsl_type_singleton_decref();
    }
 
    nir_const_value c1[NIR_MAX_VEC_COMPONENTS];
@@ -52,6 +54,8 @@ class alu_srcs_negative_equal_test : public ::testing::Test {
 protected:
    alu_srcs_negative_equal_test()
    {
+      glsl_type_singleton_init_or_ref();
+
       static const nir_shader_compiler_options options = { };
       nir_builder_init_simple_shader(&bld, NULL, MESA_SHADER_VERTEX, &options);
       memset(c1, 0, sizeof(c1));
@@ -61,6 +65,7 @@ protected:
    ~alu_srcs_negative_equal_test()
    {
       ralloc_free(bld.shader);
+      glsl_type_singleton_decref();
    }
 
    struct nir_builder bld;

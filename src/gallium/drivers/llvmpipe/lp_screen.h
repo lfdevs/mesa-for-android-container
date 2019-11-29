@@ -41,7 +41,7 @@
 
 
 struct sw_winsys;
-
+struct lp_cs_tpool;
 
 struct llvmpipe_screen
 {
@@ -57,6 +57,9 @@ struct llvmpipe_screen
 
    struct lp_rasterizer *rast;
    mtx_t rast_mutex;
+
+   struct lp_cs_tpool *cs_tpool;
+   mtx_t cs_mutex;
 };
 
 

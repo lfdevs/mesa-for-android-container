@@ -52,7 +52,7 @@ def parse_sexp(sexp):
     into a sexp represented as nested lists containing strings.
     """
     sexp_token_regexp = re.compile(
-        '[a-zA-Z_]+(@[0-9]+)?|[0-9]+(\\.[0-9]+)?|[^ \n]')
+        '[a-zA-Z_]+(@[0-9]+)?|[0-9]+(\\.[0-9]+)?|[^ \r?\n]')
     stack = [[]]
     for match in sexp_token_regexp.finditer(sexp):
         token = match.group(0)

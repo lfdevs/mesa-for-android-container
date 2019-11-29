@@ -114,9 +114,6 @@ etna_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *dst,
 {
    struct etna_context *ctx = etna_context(pctx);
 
-   /* The resource must be of the same format. */
-   assert(src->format == dst->format);
-
    /* XXX we can use the RS as a literal copy engine here
     * the only complexity is tiling; the size of the boxes needs to be aligned
     * to the tile size
@@ -141,10 +138,10 @@ etna_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
    struct etna_resource *rsc = etna_resource(prsc);
 
-   if (rsc->external) {
-      if (etna_resource_older(etna_resource(rsc->external), rsc)) {
-         etna_copy_resource(pctx, rsc->external, prsc, 0, 0);
-         etna_resource(rsc->external)->seqno = rsc->seqno;
+   if (rsc->render) {
+      if (etna_resource_older(rsc, etna_resource(rsc->render))) {
+         etna_copy_resource(pctx, prsc, rsc->render, 0, 0);
+         rsc->seqno = etna_resource(rsc->render)->seqno;
       }
    } else if (etna_resource_needs_flush(rsc)) {
       etna_copy_resource(pctx, prsc, prsc, 0, 0);

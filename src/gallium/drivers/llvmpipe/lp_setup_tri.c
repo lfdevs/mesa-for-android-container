@@ -687,7 +687,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       struct lp_rast_plane *plane_s = &plane[3];
 
       if (s_planes[0]) {
-         plane_s->dcdx = -1 << 8;
+         plane_s->dcdx = ~0U << 8;
          plane_s->dcdy = 0;
          plane_s->c = (1-scissor->x0) << 8;
          plane_s->eo = 1 << 8;
@@ -709,7 +709,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       }
       if (s_planes[3]) {
          plane_s->dcdx = 0;
-         plane_s->dcdy = -1 << 8;
+         plane_s->dcdy = ~0U << 8;
          plane_s->c = (scissor->y1+1) << 8;
          plane_s->eo = 0;
          plane_s++;

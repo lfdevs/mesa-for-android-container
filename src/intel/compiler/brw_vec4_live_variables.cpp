@@ -71,7 +71,7 @@ vec4_live_variables::setup_def_use()
 	 assert(cfg->blocks[block->num - 1]->end_ip == ip - 1);
 
       foreach_inst_in_block(vec4_instruction, inst, block) {
-         struct block_data *bd = &block_data[block->num];
+         struct vec4_block_data *bd = &block_data[block->num];
 
 	 /* Set use[] for this instruction */
 	 for (unsigned int i = 0; i < 3; i++) {
@@ -137,11 +137,11 @@ vec4_live_variables::compute_live_variables()
       cont = false;
 
       foreach_block_reverse (block, cfg) {
-         struct block_data *bd = &block_data[block->num];
+         struct vec4_block_data *bd = &block_data[block->num];
 
 	 /* Update liveout */
 	 foreach_list_typed(bblock_link, child_link, link, &block->children) {
-            struct block_data *child_bd = &block_data[child_link->block->num];
+       struct vec4_block_data *child_bd = &block_data[child_link->block->num];
 
 	    for (int i = 0; i < bitset_words; i++) {
                BITSET_WORD new_liveout = (child_bd->livein[i] &
@@ -187,7 +187,7 @@ vec4_live_variables::vec4_live_variables(const simple_allocator &alloc,
    mem_ctx = ralloc_context(NULL);
 
    num_vars = alloc.total_size * 8;
-   block_data = rzalloc_array(mem_ctx, struct block_data, cfg->num_blocks);
+   block_data = rzalloc_array(mem_ctx, struct vec4_block_data, cfg->num_blocks);
 
    bitset_words = BITSET_WORDS(num_vars);
    for (int i = 0; i < cfg->num_blocks; i++) {
@@ -288,7 +288,7 @@ vec4_visitor::calculate_live_intervals()
    this->live_intervals = new(mem_ctx) vec4_live_variables(alloc, cfg);
 
    foreach_block (block, cfg) {
-      struct block_data *bd = &live_intervals->block_data[block->num];
+      struct vec4_block_data *bd = &live_intervals->block_data[block->num];
 
       for (int i = 0; i < live_intervals->num_vars; i++) {
          if (BITSET_TEST(bd->livein, i)) {

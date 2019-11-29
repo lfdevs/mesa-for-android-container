@@ -1,0 +1,20 @@
+GL_ARB_gl_spirv on i965, iris.
+GL_ARB_spirv_extensions on i965, iris.
+GL_EXT_demote_to_helper_invocation on iris, i965.
+OpenGL 4.6 on i965, iris.
+EGL_EXT_image_flush_external
+VK_ANDROID_external_memory_android_hardware_buffer on RADV.
+VK_KHR_shader_clock on Intel, RADV.
+VK_KHR_shader_float_controls on Intel, RADV.
+VK_KHR_spirv_1_4 on Intel, RADV.
+VK_KHR_timeline_semaphore on RADV.
+VK_KHR_vulkan_memory_model on Intel.
+VK_EXT_shader_subgroup_ballot on Intel.
+VK_EXT_shader_subgroup_vote on Intel.
+VK_EXT_texel_buffer_alignment on RADV.
+VK_INTEL_performance_query on Intel.
+Meson support for windows using MSVC and MinGW
+scons has been deprecated for non windows
+Initial Intel gen12 (Tigerlake) support on anvil and iris
+New compiler backend "ACO" for RADV (RADV_PERFTEST=aco)
+VK_EXT_shader_demote_to_helper_invocation on RADV/ACO.

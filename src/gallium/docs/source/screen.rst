@@ -34,6 +34,9 @@ The integer capabilities:
   bound.
 * ``PIPE_CAP_OCCLUSION_QUERY``: Whether occlusion queries are available.
 * ``PIPE_CAP_QUERY_TIME_ELAPSED``: Whether PIPE_QUERY_TIME_ELAPSED queries are available.
+* ``PIPE_CAP_TEXTURE_SHADOW_MAP``: indicates whether the fragment shader hardware
+  can do the depth texture / Z comparison operation in TEX instructions
+  for shadow testing.
 * ``PIPE_CAP_TEXTURE_SWIZZLE``: Whether swizzling through sampler views is
   supported.
 * ``PIPE_CAP_MAX_TEXTURE_2D_SIZE``: The maximum size of 2D (and 1D) textures.
@@ -523,8 +526,7 @@ The integer capabilities:
   A driver might rely on the input mapping that was defined with the original
   GLSL code.
 * ``PIPE_CAP_IMAGE_LOAD_FORMATTED``: True if a format for image loads does not need to be specified in the shader IR
-* ``PIPE_CAP_MAX_FRAMES_IN_FLIGHT``: Maximum number of frames that state
-  trackers should allow to be in flight before throttling pipe_context
+* ``PIPE_CAP_THROTTLE``: Whether or not state trackers should throttle pipe_context
   execution. 0 = throttling is disabled.
 * ``PIPE_CAP_DMABUF``: Whether Linux DMABUF handles are supported by
   resource_from_handle and resource_get_handle.
@@ -548,6 +550,20 @@ The integer capabilities:
   types with texture functions having interaction with LOD of texture lookup.
 * ``PIPE_CAP_SHADER_SAMPLES_IDENTICAL``: True if the driver supports a shader query to tell whether all samples of a multisampled surface are definitely identical.
 * ``PIPE_CAP_TGSI_ATOMINC_WRAP``: Atomic increment/decrement + wrap around are supported.
+* ``PIPE_CAP_PREFER_IMM_ARRAYS_AS_CONSTBUF``: True if the state tracker should
+  turn arrays whose contents can be deduced at compile time into constant
+  buffer loads, or false if the driver can handle such arrays itself in a more
+  efficient manner.
+* ``PIPE_CAP_GL_SPIRV``: True if the driver supports ARB_gl_spirv extension.
+* ``PIPE_CAP_GL_SPIRV_VARIABLE_POINTERS``: True if the driver supports Variable Pointers in SPIR-V shaders.
+* ``PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION``: True if driver supports demote keyword in GLSL programs.
+* ``PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE``: True if driver wants the TG4 component encoded in sampler swizzle rather than as a separate source.
+* ``PIPE_CAP_FLATSHADE``: Driver supports pipe_rasterizer_state::flatshade.
+* ``PIPE_CAP_ALPHA_TEST``: Driver supports alpha-testing.
+* ``PIPE_CAP_POINT_SIZE_FIXED``: Driver supports point-sizes that are fixed,
+  as opposed to writing gl_PointSize for every point.
+* ``PIPE_CAP_TWO_SIDED_COLOR``: Driver supports two-sided coloring.
+* ``PIPE_CAP_CLIP_PLANES``: Driver supports user-defined clip-planes.
 
 .. _pipe_capf:
 
@@ -655,7 +671,6 @@ MOV OUT[0], CONST[0][3]  # copy vector 3 of constbuf 0
   how many HW counters are available for this stage. (0 uses SSBO atomics).
 * ``PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS``: If atomic counters are
   separate, how many atomic counter buffers are available for this stage.
-* ``PIPE_SHADER_CAP_SCALAR_ISA``: Whether the ISA is a scalar one.
 
 .. _pipe_compute_cap:
 

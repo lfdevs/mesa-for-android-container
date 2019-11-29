@@ -43,6 +43,8 @@ struct etna_shader_key
 
          /* do we need to swap rb in frag color? */
          unsigned frag_rb_swap : 1;
+         /* do we need to invert front facing value? */
+         unsigned front_ccw : 1;
       };
       uint32_t global;
    };

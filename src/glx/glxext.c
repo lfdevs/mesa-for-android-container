@@ -69,7 +69,7 @@ _X_HIDDEN int __glXDebug = 0;
 /* Extension required boiler plate */
 
 static const char __glXExtensionName[] = GLX_EXTENSION_NAME;
-  static struct glx_display *glx_displays;
+static struct glx_display *glx_displays;
 
 static /* const */ char *error_list[] = {
    "GLXBadContext",
@@ -714,7 +714,8 @@ static GLboolean
    LockDisplay(dpy);
 
    psc->configs = NULL;
-   if (atof(priv->serverGLXversion) >= 1.3) {
+   if (priv->majorVersion > 1 ||
+       (priv->majorVersion == 1 && priv->minorVersion >= 3)) {
       GetReq(GLXGetFBConfigs, fb_req);
       fb_req->reqType = priv->majorOpcode;
       fb_req->glxCode = X_GLXGetFBConfigs;
@@ -896,7 +897,7 @@ __glXInitialize(Display * dpy)
    }
 
    XESetCloseDisplay(dpy, dpyPriv->codes->extension, __glXCloseDisplay);
-   XESetErrorString (dpy, dpyPriv->codes->extension,__glXErrorString);
+   XESetErrorString (dpy, dpyPriv->codes->extension, __glXErrorString);
 
    dpyPriv->glXDrawHash = __glxHashCreate();
 

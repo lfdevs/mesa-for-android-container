@@ -65,5 +65,6 @@ struct ra_regs *ppir_regalloc_init(void *mem_ctx);
 
 void lima_nir_lower_uniform_to_scalar(nir_shader *shader);
 bool lima_nir_scale_trig(nir_shader *shader);
+bool lima_nir_split_load_input(nir_shader *shader);
 
 #endif

@@ -280,6 +280,72 @@ static void si_compute_cmask(const struct radeon_info *info,
 	surf->cmask_size = align(slice_bytes, base_align) * num_layers;
 }
 
+static void si_compute_htile(const struct radeon_info *info,
+                             struct radeon_surf *surf, unsigned num_layers)
+{
+    unsigned cl_width, cl_height, width, height;
+    unsigned slice_elements, slice_bytes, pipe_interleave_bytes, base_align;
+    unsigned num_pipes = info->num_tile_pipes;
+
+    surf->htile_size = 0;
+
+    if (!(surf->flags & RADEON_SURF_Z_OR_SBUFFER) ||
+        surf->flags & RADEON_SURF_NO_HTILE)
+        return;
+
+    if (surf->u.legacy.level[0].mode == RADEON_SURF_MODE_1D &&
+        !info->htile_cmask_support_1d_tiling)
+        return;
+
+    /* Overalign HTILE on P2 configs to work around GPU hangs in
+     * piglit/depthstencil-render-miplevels 585.
+     *
+     * This has been confirmed to help Kabini & Stoney, where the hangs
+     * are always reproducible. I think I have seen the test hang
+     * on Carrizo too, though it was very rare there.
+     */
+    if (info->chip_class >= GFX7 && num_pipes < 4)
+        num_pipes = 4;
+
+    switch (num_pipes) {
+    case 1:
+        cl_width = 32;
+        cl_height = 16;
+        break;
+    case 2:
+        cl_width = 32;
+        cl_height = 32;
+        break;
+    case 4:
+        cl_width = 64;
+        cl_height = 32;
+        break;
+    case 8:
+        cl_width = 64;
+        cl_height = 64;
+        break;
+    case 16:
+        cl_width = 128;
+        cl_height = 64;
+        break;
+    default:
+        assert(0);
+        return;
+    }
+
+    width = align(surf->u.legacy.level[0].nblk_x, cl_width * 8);
+    height = align(surf->u.legacy.level[0].nblk_y, cl_height * 8);
+
+    slice_elements = (width * height) / (8 * 8);
+    slice_bytes = slice_elements * 4;
+
+    pipe_interleave_bytes = info->pipe_interleave_bytes;
+    base_align = num_pipes * pipe_interleave_bytes;
+
+    surf->htile_alignment = base_align;
+    surf->htile_size = num_layers * align(slice_bytes, base_align);
+}
+
 static int radeon_winsys_surface_init(struct radeon_winsys *rws,
                                       const struct pipe_resource *tex,
                                       unsigned flags, unsigned bpe,
@@ -307,7 +373,7 @@ static int radeon_winsys_surface_init(struct radeon_winsys *rws,
     /* Compute FMASK. */
     if (ws->gen == DRV_SI &&
         tex->nr_samples >= 2 &&
-        !(flags & (RADEON_SURF_Z_OR_SBUFFER | RADEON_SURF_FMASK))) {
+        !(flags & (RADEON_SURF_Z_OR_SBUFFER | RADEON_SURF_FMASK | RADEON_SURF_NO_FMASK))) {
         /* FMASK is allocated like an ordinary texture. */
         struct pipe_resource templ = *tex;
         struct radeon_surf fmask = {};
@@ -351,7 +417,8 @@ static int radeon_winsys_surface_init(struct radeon_winsys *rws,
         surf_ws->u.legacy.fmask.pitch_in_pixels = fmask.u.legacy.level[0].nblk_x;
     }
 
-    if (ws->gen == DRV_SI) {
+    if (ws->gen == DRV_SI &&
+        (tex->nr_samples <= 1 || surf_ws->fmask_size)) {
 	    struct ac_surf_config config;
 
 	    /* Only these fields need to be set for the CMASK computation. */
@@ -364,6 +431,31 @@ static int radeon_winsys_surface_init(struct radeon_winsys *rws,
 
 	    si_compute_cmask(&ws->info, &config, surf_ws);
     }
+
+    if (ws->gen == DRV_SI) {
+        si_compute_htile(&ws->info, surf_ws, util_num_layers(tex, 0));
+
+	/* Determine the memory layout of multiple allocations in one buffer. */
+	surf_ws->total_size = surf_ws->surf_size;
+
+	if (surf_ws->htile_size) {
+		surf_ws->htile_offset = align64(surf_ws->total_size, surf_ws->htile_alignment);
+		surf_ws->total_size = surf_ws->htile_offset + surf_ws->htile_size;
+	}
+
+	if (surf_ws->fmask_size) {
+		assert(tex->nr_samples >= 2);
+		surf_ws->fmask_offset = align64(surf_ws->total_size, surf_ws->fmask_alignment);
+		surf_ws->total_size = surf_ws->fmask_offset + surf_ws->fmask_size;
+	}
+
+	/* Single-sample CMASK is in a separate buffer. */
+	if (surf_ws->cmask_size && tex->nr_samples >= 2) {
+		surf_ws->cmask_offset = align64(surf_ws->total_size, surf_ws->cmask_alignment);
+		surf_ws->total_size = surf_ws->cmask_offset + surf_ws->cmask_size;
+	}
+    }
+
     return 0;
 }
 

@@ -36,18 +36,17 @@ typedef struct __attribute__((__packed__)) {
    uint32_t stride: 13;
    uint32_t unknown_0_2: 1;
 
-   /* Word 1*/
-   uint32_t unknown_1_1: 10;
+   /* Word 1-3 */
+   uint32_t unknown_1_1: 7;
+   uint32_t unnorm_coords: 1;
+   uint32_t unknown_1_2: 2;
    uint32_t texture_2d: 1;
-   uint32_t unknown_1_2: 13;
+   uint32_t unknown_1_3: 13;
    uint32_t miplevels: 4;
-   uint32_t unknown_1_3: 3;
-   uint32_t disable_mipmap: 1;
-
-   /* Word 2-3 */
-   uint32_t unknown_2_1: 8;
+   uint32_t min_mipfilter_1: 9; /* 0x0 for linear, 0x1ff for nearest */
+   uint32_t unknown_2_1: 3;
    uint32_t has_stride: 1;
-   uint32_t min_mipfilter: 2; /* 0x3 for linear, 0x0 for neares */
+   uint32_t min_mipfilter_2: 2; /* 0x3 for linear, 0x0 for nearest */
    uint32_t min_img_filter_nearest: 1;
    uint32_t mag_img_filter_nearest: 1;
    uint32_t wrap_s_clamp_to_edge: 1;
@@ -75,9 +74,9 @@ typedef struct __attribute__((__packed__)) {
    union {
       uint32_t va[0];
       struct __attribute__((__packed__)) {
-         uint32_t unknown_6_1: 12;
+         uint32_t unknown_6_1: 13;
          uint32_t layout: 2;
-         uint32_t unknown_6_2: 10;
+         uint32_t unknown_6_2: 9;
          uint32_t unknown_6_3: 6;
 #define VA_BIT_OFFSET 30
 #define VA_BIT_SIZE 26
@@ -92,6 +91,5 @@ void lima_texture_desc_set_res(struct lima_context *ctx, lima_tex_desc *desc,
                                struct pipe_resource *prsc,
                                unsigned first_level, unsigned last_level);
 void lima_update_textures(struct lima_context *ctx);
-bool lima_texel_format_supported(enum pipe_format pformat);
 
 #endif

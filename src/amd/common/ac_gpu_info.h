@@ -53,13 +53,26 @@ struct radeon_info {
 	enum chip_class             chip_class;
 	uint32_t                    family_id;
 	uint32_t                    chip_external_rev;
+	uint32_t                    clock_crystal_freq;
+
+	/* Features. */
 	bool                        has_graphics; /* false if the chip is compute-only */
 	uint32_t                    num_compute_rings;
 	uint32_t                    num_sdma_rings;
-	uint32_t                    clock_crystal_freq;
-	uint32_t                    tcc_cache_line_size;
-	bool			    tcc_harvested;
+	bool                        has_clear_state;
+	bool                        has_distributed_tess;
+	bool                        has_dcc_constant_encode;
+	bool                        has_rbplus; /* if RB+ registers exist */
+	bool                        rbplus_allowed; /* if RB+ is allowed */
+	bool                        has_load_ctx_reg_pkt;
+	bool                        has_out_of_order_rast;
+	bool                        cpdma_prefetch_writes_memory;
+	bool                        has_gfx9_scissor_bug;
+	bool                        has_tc_compat_zrange_bug;
+	bool                        has_msaa_sample_loc_bug;
+	bool                        has_ls_vgpr_init_bug;
 
+	/* Display features. */
 	/* There are 2 display DCC codepaths, because display expects unaligned DCC. */
 	/* Disable RB and pipe alignment to skip the retile blit. (1 RB chips only) */
 	bool                        use_display_dcc_unaligned;
@@ -79,6 +92,10 @@ struct radeon_info {
 	uint32_t                    address32_hi;
 	bool                        has_dedicated_vram;
 	bool                        r600_has_virtual_memory;
+	uint32_t                    num_sdp_interfaces;
+	uint32_t                    num_tcc_blocks;
+	uint32_t                    tcc_cache_line_size;
+	bool			    tcc_harvested;
 
 	/* CP info. */
 	bool                        gfx_ib_pad_with_type2;
@@ -129,9 +146,11 @@ struct radeon_info {
 	uint32_t                    max_shader_clock;
 	uint32_t                    num_good_compute_units;
 	uint32_t                    num_good_cu_per_sh;
-	uint32_t                    num_tcc_blocks;
 	uint32_t                    max_se; /* shader engines */
 	uint32_t                    max_sh_per_se; /* shader arrays per shader engine */
+	uint32_t                    max_wave64_per_simd;
+	uint32_t                    num_physical_sgprs_per_simd;
+	uint32_t                    num_physical_wave64_vgprs_per_simd;
 
 	/* Render backends (color + depth blocks). */
 	uint32_t                    r300_num_gb_pipes;
@@ -146,6 +165,7 @@ struct radeon_info {
 	uint32_t                    pipe_interleave_bytes;
 	uint32_t                    enabled_rb_mask; /* GCN harvest config */
 	uint64_t                    max_alignment; /* from addrlib */
+	uint32_t                    pbb_max_alloc_count;
 
 	/* Tile modes. */
 	uint32_t                    si_tile_mode_array[32];
@@ -173,43 +193,6 @@ unsigned ac_get_compute_resource_limits(struct radeon_info *info,
 					unsigned waves_per_threadgroup,
 					unsigned max_waves_per_sh,
 					unsigned threadgroups_per_cu);
-
-static inline unsigned ac_get_max_wave64_per_simd(enum radeon_family family)
-{
-
-	switch (family) {
-	/* These always have 8 waves: */
-	case CHIP_POLARIS10:
-	case CHIP_POLARIS11:
-	case CHIP_POLARIS12:
-	case CHIP_VEGAM:
-		return 8;
-	default:
-		return 10;
-	}
-}
-
-static inline unsigned ac_get_num_physical_vgprs(enum chip_class chip_class,
-						 unsigned wave_size)
-{
-	/* The number is per SIMD. */
-	if (chip_class >= GFX10)
-		return wave_size == 32 ? 1024 : 512;
-	else
-		return 256;
-}
-
-static inline uint32_t
-ac_get_num_physical_sgprs(const struct radeon_info *info)
-{
-	/* The number is per SIMD. There is enough SGPRs for the maximum number
-	 * of Wave32, which is double the number for Wave64.
-	 */
-	if (info->chip_class >= GFX10)
-		return 128 * ac_get_max_wave64_per_simd(info->family) * 2;
-
-	return info->chip_class >= GFX8 ? 800 : 512;
-}
 
 #ifdef __cplusplus
 }

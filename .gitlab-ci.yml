@@ -1,5 +1,5 @@
 # This is the tag of the docker image used for the build jobs. If the
-# image doesn't exist yet, the containers-build stage generates it.
+# image doesn't exist yet, the containers stage generates it.
 #
 # In order to generate a new image, one should generally change the tag.
 # While removing the image from the registry would also work, that's not
@@ -14,33 +14,59 @@
 # repository's registry will be used there as well.
 variables:
   UPSTREAM_REPO: mesa/mesa
-  DEBIAN_TAG: "2019-08-09"
-  DEBIAN_VERSION: stretch-slim
+  DEBIAN_TAG: "2019-10-29"
+  DEBIAN_ARM64_TAG: "arm64v8-2019-10-23"
+  STRETCH_TAG: "2019-09-18"
+  DEBIAN_VERSION: buster-slim
+  STRETCH_VERSION: stretch-slim
   DEBIAN_IMAGE: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_TAG"
+  DEBIAN_ARM64_IMAGE: "$CI_REGISTRY_IMAGE/debian/$DEBIAN_VERSION:$DEBIAN_ARM64_TAG"
+  STRETCH_IMAGE: "$CI_REGISTRY_IMAGE/debian/$STRETCH_VERSION:$STRETCH_TAG"
 
 include:
   - project: 'wayland/ci-templates'
-    ref: c73dae8b84697ef18e2dbbf4fed7386d9652b0cd
+    ref: 1f7f57c64ff4ebbf7292e3b7a13600518b8cb24c
     file: '/templates/debian.yml'
 
+include:
+  - local: '.gitlab-ci/lava-gitlab-ci.yml'
+
 stages:
-  - containers-build
-  - build+test
+  - container
+  - build
   - test
 
 
 # When to automatically run the CI
-.ci-run-policy: &ci-run-policy
+.ci-run-policy:
   only:
-    - branches@mesa/mesa
-    - merge_requests
-    - /^ci([-/].*)?$/
+    refs:
+      - branches@mesa/mesa
+      - merge_requests
+      - /^ci([-/].*)?$/
+    changes:
+      - VERSION
+      - bin/**/*
+      # GitLab CI
+      - .gitlab-ci.yml
+      - .gitlab-ci/**/*
+      # Meson
+      - meson*
+      - build-support/**/*
+      - subprojects/**/*
+      # SCons
+      - SConstruct
+      - scons/**/*
+      - common.py
+      # Source code
+      - include/**/*
+      - src/**/*
   retry:
     max: 2
     when:
       - runner_system_failure
 
-.ci-deqp-artifacts: &ci-deqp-artifacts
+.ci-deqp-artifacts:
   artifacts:
     when: always
     untracked: false
@@ -49,26 +75,56 @@ stages:
       # https://gitlab.com/gitlab-org/gitlab-ce/commit/8788fb925706cad594adf6917a6c5f6587dd1521
       - artifacts
 
-# CONTAINERS
+# Build the normal CI native and cross-build docker images.
 
-debian:
-  extends: .debian@container-ifnot-exists
-  stage: containers-build
-  <<: *ci-run-policy
+.container:
+  stage: container
+  extends:
+    - .ci-run-policy
   variables:
-    GIT_STRATEGY: none # no need to pull the whole tree for rebuilding the image
+    # no need to pull the whole repo to build the container image
+    GIT_STRATEGY: none
+
+debian-10:amd64:
+  extends:
+    - .debian@container-ifnot-exists
+    - .container
+  variables:
     DEBIAN_EXEC: 'bash .gitlab-ci/debian-install.sh'
+
+.use-debian-10:amd64:
+  image: $DEBIAN_IMAGE
+  needs:
+    - debian-10:amd64
+
+debian-9:amd64:
+  extends: debian-10:amd64
+  variables:
+    DEBIAN_TAG: $STRETCH_TAG
+    DEBIAN_VERSION: $STRETCH_VERSION
+    DEBIAN_IMAGE: $STRETCH_IMAGE
+    DEBIAN_EXEC: 'bash .gitlab-ci/debian-stretch-install.sh'
+
+.use-debian-9:amd64:
+  image: $STRETCH_IMAGE
+  needs:
+    - debian-9:amd64
+
+debian-10:arm64:
+  extends:
+    - .debian@container-ifnot-exists@arm64v8
+    - .container
+  variables:
+    DEBIAN_TAG: "$DEBIAN_ARM64_TAG"
+    DEBIAN_EXEC: 'bash .gitlab-ci/debian-arm64-install.sh'
 
 
 # BUILD
 
-.build:
-  <<: *ci-run-policy
-  image: $DEBIAN_IMAGE
-  stage: build+test
-  cache:
-    paths:
-      - ccache
+# Shared between windows and Linux
+.build-common:
+  extends: .ci-run-policy
+  stage: build
   artifacts:
     when: always
     paths:
@@ -76,6 +132,14 @@ debian:
       # scons:
       - build/*/config.log
       - shader-db
+
+# Just Linux
+.build-linux:
+  extends: .build-common
+  cache:
+    key: ${CI_JOB_NAME}
+    paths:
+      - ccache
   variables:
     CCACHE_COMPILERCHECK: "content"
   # Use ccache transparently, and print stats before/after
@@ -83,6 +147,7 @@ debian:
     - export PATH="/usr/lib/ccache:$PATH"
     - export CCACHE_BASEDIR="$PWD"
     - export CCACHE_DIR="$PWD/ccache"
+    - ccache --max-size=1500M
     - ccache --zero-stats || true
     - ccache --show-stats || true
   after_script:
@@ -95,21 +160,106 @@ debian:
     - export CCACHE_DIR="$PWD/ccache"
     - ccache --show-stats
 
+.build-windows:
+  extends: .build-common
+  tags:
+    - mesa-windows
+  cache:
+    key: ${CI_JOB_NAME}
+    paths:
+      - subprojects/packagecache
+
 .meson-build:
-  extends: .build
+  extends:
+    - .build-linux
+    - .use-debian-10:amd64
   script:
     - .gitlab-ci/meson-build.sh
 
 .scons-build:
-  extends: .build
+  extends:
+    - .build-linux
+    - .use-debian-10:amd64
   variables:
     SCONSFLAGS: "-j4"
   script:
-    - if test -n "$LLVM_VERSION"; then
-        export LLVM_CONFIG="llvm-config-${LLVM_VERSION}";
-      fi
-    - scons $SCONS_TARGET
-    - eval $SCONS_CHECK_COMMAND
+    - .gitlab-ci/scons-build.sh
+
+meson-main:
+  extends:
+    - .meson-build
+    - .ci-deqp-artifacts
+  variables:
+    UNWIND: "true"
+    DRI_LOADERS: >
+      -D glx=dri
+      -D gbm=true
+      -D egl=true
+      -D platforms=x11,wayland,drm,surfaceless
+    DRI_DRIVERS: "i915,i965,r100,r200,nouveau"
+    GALLIUM_ST: >
+      -D dri3=true
+      -D gallium-extra-hud=true
+      -D gallium-vdpau=true
+      -D gallium-xvmc=true
+      -D gallium-omx=bellagio
+      -D gallium-va=true
+      -D gallium-xa=true
+      -D gallium-nine=true
+      -D gallium-opencl=disabled
+    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima,zink"
+    LLVM_VERSION: "7"
+    EXTRA_OPTION: >
+      -D osmesa=gallium
+      -D tools=all
+    MESON_SHADERDB: "true"
+    BUILDTYPE: "debugoptimized"
+
+.meson-cross:
+  extends:
+    - .meson-build
+  variables:
+    UNWIND: "false"
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D gbm=false
+      -D egl=true
+      -D platforms=surfaceless
+      -D osmesa=none
+    GALLIUM_ST: >
+      -D dri3=false
+      -D gallium-vdpau=false
+      -D gallium-xvmc=false
+      -D gallium-omx=disabled
+      -D gallium-va=false
+      -D gallium-xa=false
+      -D gallium-nine=false
+
+.meson-arm:
+  extends: .meson-cross
+  image: $DEBIAN_ARM64_IMAGE
+  variables:
+    VULKAN_DRIVERS: freedreno
+    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,swrast,tegra,v3d,vc4"
+    EXTRA_OPTION: >
+      -D I-love-half-baked-turnips=true
+  needs:
+    - debian-10:arm64
+  tags:
+    - aarch64
+
+meson-armhf:
+  extends: .meson-arm
+  variables:
+    CROSS: armhf
+    LLVM_VERSION: "7"
+
+meson-arm64:
+  extends:
+    - .meson-arm
+    - .ci-deqp-artifacts
+  variables:
+    BUILDTYPE: "debugoptimized"
 
 # NOTE: Building SWR is 2x (yes two) times slower than all the other
 # gallium drivers combined.
@@ -145,11 +295,15 @@ meson-clang:
     VULKAN_DRIVERS: intel,amd,freedreno
     CC: "ccache clang-8"
     CXX: "ccache clang++-8"
+
+.meson-windows:
+  extends:
+    - .build-windows
   before_script:
-    - export CCACHE_BASEDIR="$PWD" CCACHE_DIR="$PWD/ccache"
-    - ccache --zero-stats --show-stats || true
-     # clang++ breaks if it picks up the GCC 8 directory without libstdc++.so
-    - apt-get remove -y libgcc-8-dev
+    - $ENV:ARCH = "x86"
+    - $ENV:VERSION = "2019\Community"
+  script:
+    - cmd /C .gitlab-ci\meson-build.bat
 
 scons-swr:
   extends: .scons-build
@@ -163,35 +317,6 @@ scons-win64:
   variables:
     SCONS_TARGET: platform=windows machine=x86_64
     SCONS_CHECK_COMMAND: "true"
-
-meson-main:
-  extends: .meson-build
-  variables:
-    UNWIND: "true"
-    DRI_LOADERS: >
-      -D glx=dri
-      -D gbm=true
-      -D egl=true
-      -D platforms=x11,wayland,drm,surfaceless
-    DRI_DRIVERS: "i915,i965,r100,r200,nouveau"
-    GALLIUM_ST: >
-      -D dri3=true
-      -D gallium-extra-hud=true
-      -D gallium-vdpau=true
-      -D gallium-xvmc=true
-      -D gallium-omx=bellagio
-      -D gallium-va=true
-      -D gallium-xa=true
-      -D gallium-nine=true
-      -D gallium-opencl=disabled
-    GALLIUM_DRIVERS: "iris,nouveau,kmsro,r300,r600,freedreno,swrast,svga,v3d,vc4,virgl,etnaviv,panfrost,lima"
-    LLVM_VERSION: "7"
-    EXTRA_OPTION: >
-      -D osmesa=gallium
-      -D tools=all
-    MESON_SHADERDB: "true"
-    BUILDTYPE: "debugoptimized"
-  <<: *ci-deqp-artifacts
 
 meson-clover:
   extends: .meson-build
@@ -213,12 +338,27 @@ meson-clover:
   script:
     - export GALLIUM_DRIVERS="r600,radeonsi"
     - .gitlab-ci/meson-build.sh
-    - LLVM_VERSION=7 .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=8 .gitlab-ci/meson-build.sh
     - export GALLIUM_DRIVERS="i915,r600"
+    - LLVM_VERSION=6.0 .gitlab-ci/meson-build.sh
+    - LLVM_VERSION=7 .gitlab-ci/meson-build.sh
+
+meson-clover-old-llvm:
+  extends:
+    - meson-clover
+    - .use-debian-9:amd64
+  variables:
+    UNWIND: "false"
+    DRI_LOADERS: >
+      -D glx=disabled
+      -D egl=false
+      -D gbm=false
+      -D platforms=drm,surfaceless
+    GALLIUM_DRIVERS: "i915,r600"
+  script:
     - LLVM_VERSION=3.9 .gitlab-ci/meson-build.sh
     - LLVM_VERSION=4.0 .gitlab-ci/meson-build.sh
     - LLVM_VERSION=5.0 .gitlab-ci/meson-build.sh
-    - LLVM_VERSION=6.0 .gitlab-ci/meson-build.sh
 
 meson-vulkan:
   extends: .meson-build
@@ -239,56 +379,13 @@ meson-vulkan:
       -D gallium-xa=false
       -D gallium-nine=false
       -D gallium-opencl=disabled
+      -D b_sanitize=undefined
+      -D c_args=-fno-sanitize-recover=all
+      -D cpp_args=-fno-sanitize-recover=all
+    UBSAN_OPTIONS: "print_stacktrace=1"
     VULKAN_DRIVERS: intel,amd,freedreno
-    LLVM_VERSION: "7"
+    LLVM_VERSION: "8"
     EXTRA_OPTION: >
-      -D vulkan-overlay-layer=true
-
-.meson-cross:
-  extends: .meson-build
-  variables:
-    UNWIND: "false"
-    DRI_LOADERS: >
-      -D glx=disabled
-      -D gbm=false
-      -D egl=false
-      -D platforms=surfaceless
-      -D osmesa=none
-    GALLIUM_ST: >
-      -D dri3=false
-      -D gallium-vdpau=false
-      -D gallium-xvmc=false
-      -D gallium-omx=disabled
-      -D gallium-va=false
-      -D gallium-xa=false
-      -D gallium-nine=false
-      -D llvm=false
-  <<: *ci-deqp-artifacts
-  script:
-    - .gitlab-ci/meson-build.sh
-
-meson-armhf:
-  extends: .meson-cross
-  variables:
-    CROSS: armhf
-    VULKAN_DRIVERS: freedreno
-    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,tegra,v3d,vc4"
-    # Disable the tests since we're cross compiling.
-    EXTRA_OPTION: >
-      -D build-tests=false
-      -D I-love-half-baked-turnips=true
-      -D vulkan-overlay-layer=true
-
-meson-arm64:
-  extends: .meson-cross
-  variables:
-    CROSS: arm64
-    VULKAN_DRIVERS: freedreno
-    GALLIUM_DRIVERS: "etnaviv,freedreno,kmsro,lima,nouveau,panfrost,tegra,v3d,vc4"
-    # Disable the tests since we're cross compiling.
-    EXTRA_OPTION: >
-      -D build-tests=false
-      -D I-love-half-baked-turnips=true
       -D vulkan-overlay-layer=true
 
 # While the main point of this build is testing the i386 cross build,
@@ -301,35 +398,53 @@ meson-i386:
     VULKAN_DRIVERS: intel
     DRI_DRIVERS: "swrast"
     GALLIUM_DRIVERS: "iris"
-    # Disable i386 tests, because u_format_tests gets precision
-    # failures in dxtn unpacking
     EXTRA_OPTION: >
-      -D build-tests=false
       -D vulkan-overlay-layer=true
       -D llvm=false
       -D osmesa=classic
 
-scons-nollvm:
-  extends: .scons-build
+meson-mingw32-x86_64:
+  extends: .meson-build
   variables:
-    SCONS_TARGET: "llvm=0"
-    SCONS_CHECK_COMMAND: "scons llvm=0 check"
+    UNWIND: "false"
+    DRI_DRIVERS: ""
+    GALLIUM_DRIVERS: "swrast"
+    EXTRA_OPTION: >
+      -Dllvm=false
+      -Dosmesa=gallium
+      --cross-file=.gitlab-ci/x86_64-w64-mingw32
 
-scons-llvm:
+scons:
   extends: .scons-build
   variables:
     SCONS_TARGET: "llvm=1"
-    SCONS_CHECK_COMMAND: "scons llvm=1 check"
-    LLVM_VERSION: "3.4"
-    # LLVM 3.4 packages were built with an old libstdc++ ABI
-    CXX: "g++ -D_GLIBCXX_USE_CXX11_ABI=0"
+    SCONS_CHECK_COMMAND: "scons llvm=1 force_scons=1 check"
+  script:
+    - SCONS_TARGET="" SCONS_CHECK_COMMAND="scons check force_scons=1" .gitlab-ci/scons-build.sh
+    - LLVM_VERSION=6.0 .gitlab-ci/scons-build.sh
+    - LLVM_VERSION=7 .gitlab-ci/scons-build.sh
+    - LLVM_VERSION=8 .gitlab-ci/scons-build.sh
 
-.deqp-test:
-  <<: *ci-run-policy
+scons-old-llvm:
+  extends:
+    - scons
+    - .use-debian-9:amd64
+  script:
+    - LLVM_VERSION=3.9 .gitlab-ci/scons-build.sh
+    - LLVM_VERSION=4.0 .gitlab-ci/scons-build.sh
+    - LLVM_VERSION=5.0 .gitlab-ci/scons-build.sh
+
+.test:
+  extends: .ci-run-policy
   stage: test
-  image: $DEBIAN_IMAGE
   variables:
     GIT_STRATEGY: none # testing doesn't build anything from source
+
+.deqp-test:
+  extends:
+    - .test
+    - .use-debian-10:amd64
+  variables:
     DEQP_SKIPS: deqp-default-skips.txt
   script:
     # Note: Build dir (and thus install) may be dirty due to GIT_STRATEGY
@@ -341,6 +456,11 @@ scons-llvm:
     name: "$CI_JOB_NAME-$CI_COMMIT_REF_NAME"
     paths:
       - results/
+  dependencies:
+    - meson-main
+  needs:
+    - meson-main
+    - debian-10:amd64
 
 test-llvmpipe-gles2:
   parallel: 4
@@ -350,20 +470,13 @@ test-llvmpipe-gles2:
     LIBGL_ALWAYS_SOFTWARE: "true"
     DEQP_RENDERER_MATCH: "llvmpipe"
   extends: .deqp-test
-  dependencies:
-    - meson-main
 
 test-softpipe-gles2:
-  parallel: 4
+  extends: test-llvmpipe-gles2
   variables:
-    DEQP_VER: gles2
     DEQP_EXPECTED_FAILS: deqp-softpipe-fails.txt
-    LIBGL_ALWAYS_SOFTWARE: "true"
     DEQP_RENDERER_MATCH: "softpipe"
     GALLIUM_DRIVER: "softpipe"
-  extends: .deqp-test
-  dependencies:
-    - meson-main
 
 # The GLES2 CTS run takes about 8 minutes of CPU time, while GLES3 is
 # 25 minutes.  Until we can get its runtime down, just do a partial
@@ -378,5 +491,42 @@ test-softpipe-gles3-limited:
     CI_NODE_INDEX: 1
     CI_NODE_TOTAL: 10
   extends: .deqp-test
+
+arm64_a630_gles2:
+  extends: .deqp-test
+  image: $DEBIAN_ARM64_IMAGE
+  variables:
+    DEQP_VER: gles2
+    DEQP_RENDERER_MATCH: "FD630"
+    DEQP_EXPECTED_FAILS: deqp-freedreno-a630-fails.txt
+    DEQP_SKIPS: deqp-freedreno-a630-skips.txt
+    NIR_VALIDATE: 0
+  tags:
+    - mesa-cheza
   dependencies:
-    - meson-main
+    - meson-arm64
+  needs:
+    - meson-arm64
+    - debian-10:arm64
+
+arm64_a630_gles31:
+  extends: arm64_a630_gles2
+  parallel: 4
+  variables:
+    DEQP_VER: gles31
+
+arm64_a630_gles3:
+  parallel: 6
+  extends: arm64_a630_gles2
+  variables:
+    DEQP_VER: gles3
+
+arm64_a306_gles2:
+  parallel: 4
+  extends: arm64_a630_gles2
+  variables:
+    DEQP_EXPECTED_FAILS: deqp-freedreno-a307-fails.txt
+    DEQP_SKIPS: deqp-default-skips.txt
+    DEQP_RENDERER_MATCH: "FD307"
+  tags:
+    - db410c

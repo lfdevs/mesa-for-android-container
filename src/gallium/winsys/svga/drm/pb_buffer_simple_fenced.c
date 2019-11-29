@@ -214,7 +214,7 @@ fenced_buffer_destroy_locked(struct fenced_manager *fenced_mgr,
    assert(!fenced_buf->fence);
    assert(fenced_buf->head.prev);
    assert(fenced_buf->head.next);
-   LIST_DEL(&fenced_buf->head);
+   list_del(&fenced_buf->head);
    assert(fenced_mgr->num_unfenced);
    --fenced_mgr->num_unfenced;
 
@@ -239,10 +239,10 @@ fenced_buffer_add_locked(struct fenced_manager *fenced_mgr,
 
    p_atomic_inc(&fenced_buf->base.reference.count);
 
-   LIST_DEL(&fenced_buf->head);
+   list_del(&fenced_buf->head);
    assert(fenced_mgr->num_unfenced);
    --fenced_mgr->num_unfenced;
-   LIST_ADDTAIL(&fenced_buf->head, &fenced_mgr->fenced);
+   list_addtail(&fenced_buf->head, &fenced_mgr->fenced);
    ++fenced_mgr->num_fenced;
 }
 
@@ -268,11 +268,11 @@ fenced_buffer_remove_locked(struct fenced_manager *fenced_mgr,
    assert(fenced_buf->head.prev);
    assert(fenced_buf->head.next);
 
-   LIST_DEL(&fenced_buf->head);
+   list_del(&fenced_buf->head);
    assert(fenced_mgr->num_fenced);
    --fenced_mgr->num_fenced;
 
-   LIST_ADDTAIL(&fenced_buf->head, &fenced_mgr->unfenced);
+   list_addtail(&fenced_buf->head, &fenced_mgr->unfenced);
    ++fenced_mgr->num_unfenced;
 
    if (p_atomic_dec_zero(&fenced_buf->base.reference.count)) {
@@ -756,7 +756,7 @@ fenced_bufmgr_create_buffer(struct pb_manager *mgr,
 
    assert(fenced_buf->buffer);
 
-   LIST_ADDTAIL(&fenced_buf->head, &fenced_mgr->unfenced);
+   list_addtail(&fenced_buf->head, &fenced_mgr->unfenced);
    ++fenced_mgr->num_unfenced;
    mtx_unlock(&fenced_mgr->mutex);
 
@@ -835,10 +835,10 @@ simple_fenced_bufmgr_create(struct pb_manager *provider,
    fenced_mgr->provider = provider;
    fenced_mgr->ops = ops;
 
-   LIST_INITHEAD(&fenced_mgr->fenced);
+   list_inithead(&fenced_mgr->fenced);
    fenced_mgr->num_fenced = 0;
 
-   LIST_INITHEAD(&fenced_mgr->unfenced);
+   list_inithead(&fenced_mgr->unfenced);
    fenced_mgr->num_unfenced = 0;
 
    (void) mtx_init(&fenced_mgr->mutex, mtx_plain);

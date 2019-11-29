@@ -378,7 +378,7 @@ static void ctx_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
 
    if (drb) {
      OUT_BATCH(CP_PACKET0(RADEON_RB3D_DEPTHOFFSET, 0));
-     OUT_BATCH_RELOC(0, drb->bo, 0, 0, RADEON_GEM_DOMAIN_VRAM, 0);
+     OUT_BATCH_RELOC(drb->bo, 0, 0, RADEON_GEM_DOMAIN_VRAM, 0);
 
      OUT_BATCH(CP_PACKET0(RADEON_RB3D_DEPTHPITCH, 0));
      OUT_BATCH(zbpitch);
@@ -392,10 +392,10 @@ static void ctx_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
 
    if (rrb) {
      OUT_BATCH(CP_PACKET0(RADEON_RB3D_COLOROFFSET, 0));
-     OUT_BATCH_RELOC(rrb->draw_offset, rrb->bo, rrb->draw_offset, 0, RADEON_GEM_DOMAIN_VRAM, 0);
+     OUT_BATCH_RELOC(rrb->bo, rrb->draw_offset, 0, RADEON_GEM_DOMAIN_VRAM, 0);
 
      OUT_BATCH(CP_PACKET0(RADEON_RB3D_COLORPITCH, 0));
-     OUT_BATCH_RELOC(cbpitch, rrb->bo, cbpitch, 0, RADEON_GEM_DOMAIN_VRAM, 0);
+     OUT_BATCH_RELOC(rrb->bo, cbpitch, 0, RADEON_GEM_DOMAIN_VRAM, 0);
    }
 
    // if (atom->cmd_size == CTX_STATE_SIZE_NEWDRM) {
@@ -447,7 +447,7 @@ static void cube_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
    lvl = &t->mt->levels[0];
    for (j = 0; j < 5; j++) {
 	OUT_BATCH(CP_PACKET0(base_reg + (4 * j), 0));
-	OUT_BATCH_RELOC(lvl->faces[j].offset, t->mt->bo, lvl->faces[j].offset,
+	OUT_BATCH_RELOC(t->mt->bo, lvl->faces[j].offset,
 			RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
    }
    END_BATCH();
@@ -485,15 +485,16 @@ static void tex_emit_cs(struct gl_context *ctx, struct radeon_state_atom *atom)
         if (ctx->Texture.Unit[i]._Current &&
             ctx->Texture.Unit[i]._Current->Target == GL_TEXTURE_CUBE_MAP) {
             lvl = &t->mt->levels[t->minLod];
-	    OUT_BATCH_RELOC(lvl->faces[5].offset, t->mt->bo, lvl->faces[5].offset,
+	    OUT_BATCH_RELOC(t->mt->bo, lvl->faces[5].offset,
 			RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
         } else {
-           OUT_BATCH_RELOC(t->tile_bits, t->mt->bo, get_base_teximage_offset(t),
+           OUT_BATCH_RELOC(t->mt->bo,
+                           get_base_teximage_offset(t) | t->tile_bits,
 		     RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
         }
       } else {
 	if (t->bo)
-            OUT_BATCH_RELOC(t->tile_bits, t->bo, 0,
+            OUT_BATCH_RELOC(t->bo, t->tile_bits,
                             RADEON_GEM_DOMAIN_GTT|RADEON_GEM_DOMAIN_VRAM, 0, 0);
       }
    }

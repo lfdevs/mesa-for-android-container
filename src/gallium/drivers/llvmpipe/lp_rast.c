@@ -628,7 +628,7 @@ rasterize_bin(struct lp_rasterizer_task *task,
 
    lp_rast_tile_end(task);
 
-
+#ifdef DEBUG
    /* Debug/Perf flags:
     */
    if (bin->head->count == 1) {
@@ -637,6 +637,7 @@ rasterize_bin(struct lp_rasterizer_task *task,
       else if (bin->head->cmd[0] == LP_RAST_OP_SHADE_TILE)
          LP_COUNT(nr_pure_shade_64);
    }
+#endif
 }
 
 

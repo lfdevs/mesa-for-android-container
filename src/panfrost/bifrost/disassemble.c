@@ -2177,7 +2177,7 @@ bool dump_clause(uint32_t *words, unsigned *size, unsigned offset, bool verbose)
                                 // share a buffer in the decoder, but we only care about
                                 // the position in the constant stream; the total number of
                                 // instructions is redundant.
-                                unsigned const_idx = 7;
+                                unsigned const_idx = 0;
                                 switch (pos) {
                                 case 0:
                                 case 1:
@@ -2205,9 +2205,12 @@ bool dump_clause(uint32_t *words, unsigned *size, unsigned offset, bool verbose)
                                         break;
                                 default:
                                         printf("# unknown pos 0x%x\n", pos);
+                                        break;
                                 }
+
                                 if (num_consts < const_idx + 2)
                                         num_consts = const_idx + 2;
+
                                 consts[const_idx] = const0;
                                 consts[const_idx + 1] = const1;
                                 done = stop;

@@ -36,7 +36,7 @@
 static inline bool
 are_all_uses_fadd(nir_ssa_def *def)
 {
-   if (!list_empty(&def->if_uses))
+   if (!list_is_empty(&def->if_uses))
       return false;
 
    nir_foreach_use(use_src, def) {
@@ -153,7 +153,7 @@ any_alu_src_is_a_constant(nir_alu_src srcs[])
             nir_instr_as_load_const (srcs[i].src.ssa->parent_instr);
 
          if (list_is_singular(&load_const->def.uses) &&
-             list_empty(&load_const->def.if_uses)) {
+             list_is_empty(&load_const->def.if_uses)) {
             return true;
          }
       }
@@ -256,7 +256,7 @@ brw_nir_opt_peephole_ffma_block(nir_builder *b, nir_block *block)
                                nir_src_for_ssa(&ffma->dest.dest.ssa));
 
       nir_builder_instr_insert(b, &ffma->instr);
-      assert(list_empty(&add->dest.dest.ssa.uses));
+      assert(list_is_empty(&add->dest.dest.ssa.uses));
       nir_instr_remove(&add->instr);
 
       progress = true;

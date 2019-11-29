@@ -5,36 +5,31 @@ set -o xtrace
 
 export DEBIAN_FRONTEND=noninteractive
 
-CROSS_ARCHITECTURES="armhf arm64 i386"
+CROSS_ARCHITECTURES="i386"
 for arch in $CROSS_ARCHITECTURES; do
     dpkg --add-architecture $arch
 done
 
 apt-get install -y \
-      apt-transport-https \
       ca-certificates \
-      curl \
       wget \
-      unzip \
-      gnupg
-
-curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-echo "deb [trusted=yes] https://apt.llvm.org/stretch/ llvm-toolchain-stretch-7 main" >/etc/apt/sources.list.d/llvm7.list
-echo "deb [trusted=yes] https://apt.llvm.org/stretch/ llvm-toolchain-stretch-8 main" >/etc/apt/sources.list.d/llvm8.list
+      unzip
 
 sed -i -e 's/http:\/\/deb/https:\/\/deb/g' /etc/apt/sources.list
-echo 'deb https://deb.debian.org/debian stretch-backports main' >/etc/apt/sources.list.d/backports.list
-echo 'deb https://deb.debian.org/debian jessie main' >/etc/apt/sources.list.d/jessie.list
+echo 'deb https://deb.debian.org/debian buster-backports main' >/etc/apt/sources.list.d/backports.list
 
 apt-get update
-apt-get install -y -t stretch-backports \
-      llvm-3.4-dev \
-      llvm-3.9-dev \
-      libclang-3.9-dev \
-      llvm-4.0-dev \
-      libclang-4.0-dev \
-      llvm-5.0-dev \
-      libclang-5.0-dev \
+
+# Use newer packages from backports by default
+cat >/etc/apt/preferences <<EOF
+Package: *
+Pin: release a=buster-backports
+Pin-Priority: 500
+EOF
+
+apt-get dist-upgrade -y
+
+apt-get install -y --no-remove \
       llvm-6.0-dev \
       libclang-6.0-dev \
       llvm-7-dev \
@@ -42,13 +37,7 @@ apt-get install -y -t stretch-backports \
       llvm-8-dev \
       libclang-8-dev \
       g++ \
-      clang-8
-
-# Install remaining packages from Debian buster to get newer versions
-echo "deb https://deb.debian.org/debian/ buster main" >/etc/apt/sources.list.d/buster.list
-echo "deb https://deb.debian.org/debian/ buster-updates main" >/etc/apt/sources.list.d/buster-updates.list
-apt-get update
-apt-get install -y \
+      clang-8 \
       git \
       bzip2 \
       zlib1g-dev \
@@ -74,6 +63,7 @@ apt-get install -y \
       libpng-dev \
       libgbm-dev \
       libgles2-mesa-dev \
+      libvulkan-dev \
       python-mako \
       python3-mako \
       bison \
@@ -85,22 +75,30 @@ apt-get install -y \
 
 # Cross-build Mesa deps
 for arch in $CROSS_ARCHITECTURES; do
-    apt-get install -y \
+    apt-get install -y --no-remove \
             libdrm-dev:${arch} \
             libexpat1-dev:${arch} \
-            libelf-dev:${arch}
+            libelf-dev:${arch} \
+            crossbuild-essential-${arch}
 done
-apt-get install -y \
-        dpkg-dev \
-        gcc-aarch64-linux-gnu \
-        g++-aarch64-linux-gnu \
-        gcc-arm-linux-gnueabihf \
-        g++-arm-linux-gnueabihf \
-        gcc-i686-linux-gnu \
-        g++-i686-linux-gnu
 
 # for 64bit windows cross-builds
-apt-get install -y mingw-w64
+apt-get install -y --no-remove \
+    mingw-w64 \
+    libz-mingw-w64-dev \
+    wine \
+    wine32 \
+    wine64
+
+# Debian's pkg-config wrapers for mingw are broken, and there's no sign that
+# they're going to be fixed, so we'll just have to fix it ourselves
+# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=930492
+cat >/usr/local/bin/x86_64-w64-mingw32-pkg-config <<EOF
+#!/bin/sh
+
+PKG_CONFIG_LIBDIR=/usr/x86_64-w64-mingw32/lib/pkgconfig pkg-config \$@
+EOF
+chmod +x /usr/local/bin/x86_64-w64-mingw32-pkg-config
 
 # for the vulkan overlay layer
 wget https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-linux-Release.zip
@@ -118,7 +116,7 @@ export         XORGMACROS_VERSION=util-macros-1.19.0
 export            GLPROTO_VERSION=glproto-1.4.17
 export          DRI2PROTO_VERSION=dri2proto-2.8
 export       LIBPCIACCESS_VERSION=libpciaccess-0.13.4
-export             LIBDRM_VERSION=libdrm-2.4.99
+export             LIBDRM_VERSION=libdrm-2.4.100
 export           XCBPROTO_VERSION=xcb-proto-1.13
 export         RANDRPROTO_VERSION=randrproto-1.5.0
 export          LIBXRANDR_VERSION=libXrandr-1.5.0
@@ -207,19 +205,23 @@ make
 popd
 
 # Use ccache to speed up builds
-apt-get install -y ccache
+apt-get install -y --no-remove ccache
 
 # We need xmllint to validate the XML files in Mesa
-apt-get install -y libxml2-utils
+apt-get install -y --no-remove libxml2-utils
 
 
 # Generate cross build files for Meson
 for arch in $CROSS_ARCHITECTURES; do
   cross_file="/cross_file-$arch.txt"
   /usr/share/meson/debcrossgen --arch "$arch" -o "$cross_file"
-  # Work around a bug in debcrossgen that should be fixed in the next release
+  # Explicitly set ccache path for cross compilers
+  sed -i "s|/usr/bin/\([^-]*\)-linux-gnu\([^-]*\)-g|/usr/lib/ccache/\\1-linux-gnu\\2-g|g" "$cross_file"
   if [ "$arch" = "i386" ]; then
+    # Work around a bug in debcrossgen that should be fixed in the next release
     sed -i "s|cpu_family = 'i686'|cpu_family = 'x86'|g" "$cross_file"
+    # Don't need wrapper for i386 executables
+    sed -i -e '/\[properties\]/a\' -e "needs_exe_wrapper = False" "$cross_file"
   fi
 done
 
@@ -273,10 +275,8 @@ rm -rf /VK-GL-CTS
 ############### Uninstall the build software
 
 apt-get purge -y \
-      git \
-      curl \
+      wget \
       unzip \
-      gnupg \
       cmake \
       git \
       libgles2-mesa-dev \

@@ -3846,6 +3846,11 @@
     <field name="MA1 Done" start="25" end="25" type="bool"/>
   </register>
 
+  <register name="RPSTAT1" length="1" num="0xa01c">
+    <field name="Previous GT Frequency" start="0" end="6" type="uint"/>
+    <field name="Current GT Frequency" start="7" end="14" type="uint"/>
+  </register>
+
   <register name="SAMPLER_INSTDONE" length="1" num="0xe160">
     <field name="VME Done" start="0" end="0" type="bool"/>
     <field name="PL0 Done" start="1" end="1" type="bool"/>

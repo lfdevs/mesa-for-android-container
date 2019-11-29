@@ -73,6 +73,7 @@
 #include "intel_batchbuffer.h"
 
 #include "perf/gen_perf.h"
+#include "perf/gen_perf_regs.h"
 #include "perf/gen_perf_mdapi.h"
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON

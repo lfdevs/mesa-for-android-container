@@ -31,24 +31,51 @@
 #include "freedreno_context.h"
 
 static void
-fd_fp_state_bind(struct pipe_context *pctx, void *hwcso)
+fd_vs_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct fd_context *ctx = fd_context(pctx);
-	ctx->prog.fp = hwcso;
-	ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |= FD_DIRTY_SHADER_PROG;
-	ctx->dirty |= FD_DIRTY_PROG;
-}
-
-static void
-fd_vp_state_bind(struct pipe_context *pctx, void *hwcso)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	ctx->prog.vp = hwcso;
+	ctx->prog.vs = hwcso;
 	ctx->dirty_shader[PIPE_SHADER_VERTEX] |= FD_DIRTY_SHADER_PROG;
 	ctx->dirty |= FD_DIRTY_PROG;
 }
 
-static const char *solid_fp =
+static void
+fd_tcs_state_bind(struct pipe_context *pctx, void *hwcso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->prog.hs = hwcso;
+	ctx->dirty_shader[PIPE_SHADER_TESS_CTRL] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
+}
+
+static void
+fd_tes_state_bind(struct pipe_context *pctx, void *hwcso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->prog.ds = hwcso;
+	ctx->dirty_shader[PIPE_SHADER_TESS_EVAL] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
+}
+
+static void
+fd_gs_state_bind(struct pipe_context *pctx, void *hwcso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->prog.gs = hwcso;
+	ctx->dirty_shader[PIPE_SHADER_GEOMETRY] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
+}
+
+static void
+fd_fs_state_bind(struct pipe_context *pctx, void *hwcso)
+{
+	struct fd_context *ctx = fd_context(pctx);
+	ctx->prog.fs = hwcso;
+	ctx->dirty_shader[PIPE_SHADER_FRAGMENT] |= FD_DIRTY_SHADER_PROG;
+	ctx->dirty |= FD_DIRTY_PROG;
+}
+
+static const char *solid_fs =
 	"FRAG                                        \n"
 	"PROPERTY FS_COLOR0_WRITES_ALL_CBUFS 1       \n"
 	"DCL CONST[0]                                \n"
@@ -56,14 +83,14 @@ static const char *solid_fp =
 	"  0: MOV OUT[0], CONST[0]                   \n"
 	"  1: END                                    \n";
 
-static const char *solid_vp =
+static const char *solid_vs =
 	"VERT                                        \n"
 	"DCL IN[0]                                   \n"
 	"DCL OUT[0], POSITION                        \n"
 	"  0: MOV OUT[0], IN[0]                      \n"
 	"  1: END                                    \n";
 
-static const char *blit_vp =
+static const char *blit_vs =
 	"VERT                                        \n"
 	"DCL IN[0]                                   \n"
 	"DCL IN[1]                                   \n"
@@ -126,26 +153,29 @@ void fd_prog_init(struct pipe_context *pctx)
 	struct fd_context *ctx = fd_context(pctx);
 	int i;
 
-	pctx->bind_fs_state = fd_fp_state_bind;
-	pctx->bind_vs_state = fd_vp_state_bind;
+	pctx->bind_vs_state = fd_vs_state_bind;
+	pctx->bind_tcs_state = fd_tcs_state_bind;
+	pctx->bind_tes_state = fd_tes_state_bind;
+	pctx->bind_gs_state = fd_gs_state_bind;
+	pctx->bind_fs_state = fd_fs_state_bind;
 
-	ctx->solid_prog.fp = assemble_tgsi(pctx, solid_fp, true);
-	ctx->solid_prog.vp = assemble_tgsi(pctx, solid_vp, false);
-	ctx->blit_prog[0].vp = assemble_tgsi(pctx, blit_vp, false);
-	ctx->blit_prog[0].fp = fd_prog_blit(pctx, 1, false);
+	ctx->solid_prog.fs = assemble_tgsi(pctx, solid_fs, true);
+	ctx->solid_prog.vs = assemble_tgsi(pctx, solid_vs, false);
+	ctx->blit_prog[0].vs = assemble_tgsi(pctx, blit_vs, false);
+	ctx->blit_prog[0].fs = fd_prog_blit(pctx, 1, false);
 
 	if (ctx->screen->gpu_id < 300)
 		return;
 
 	for (i = 1; i < ctx->screen->max_rts; i++) {
-		ctx->blit_prog[i].vp = ctx->blit_prog[0].vp;
-		ctx->blit_prog[i].fp = fd_prog_blit(pctx, i + 1, false);
+		ctx->blit_prog[i].vs = ctx->blit_prog[0].vs;
+		ctx->blit_prog[i].fs = fd_prog_blit(pctx, i + 1, false);
 	}
 
-	ctx->blit_z.vp = ctx->blit_prog[0].vp;
-	ctx->blit_z.fp = fd_prog_blit(pctx, 0, true);
-	ctx->blit_zs.vp = ctx->blit_prog[0].vp;
-	ctx->blit_zs.fp = fd_prog_blit(pctx, 1, true);
+	ctx->blit_z.vs = ctx->blit_prog[0].vs;
+	ctx->blit_z.fs = fd_prog_blit(pctx, 0, true);
+	ctx->blit_zs.vs = ctx->blit_prog[0].vs;
+	ctx->blit_zs.fs = fd_prog_blit(pctx, 1, true);
 }
 
 void fd_prog_fini(struct pipe_context *pctx)
@@ -153,11 +183,11 @@ void fd_prog_fini(struct pipe_context *pctx)
 	struct fd_context *ctx = fd_context(pctx);
 	int i;
 
-	pctx->delete_vs_state(pctx, ctx->solid_prog.vp);
-	pctx->delete_fs_state(pctx, ctx->solid_prog.fp);
-	pctx->delete_vs_state(pctx, ctx->blit_prog[0].vp);
+	pctx->delete_vs_state(pctx, ctx->solid_prog.vs);
+	pctx->delete_fs_state(pctx, ctx->solid_prog.fs);
+	pctx->delete_vs_state(pctx, ctx->blit_prog[0].vs);
 	for (i = 0; i < ctx->screen->max_rts; i++)
-		pctx->delete_fs_state(pctx, ctx->blit_prog[i].fp);
-	pctx->delete_fs_state(pctx, ctx->blit_z.fp);
-	pctx->delete_fs_state(pctx, ctx->blit_zs.fp);
+		pctx->delete_fs_state(pctx, ctx->blit_prog[i].fs);
+	pctx->delete_fs_state(pctx, ctx->blit_z.fs);
+	pctx->delete_fs_state(pctx, ctx->blit_zs.fs);
 }

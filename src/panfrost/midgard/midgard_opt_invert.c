@@ -40,11 +40,9 @@ midgard_lower_invert(compiler_context *ctx, midgard_block *block)
                 midgard_instruction not = {
                         .type = TAG_ALU_4,
                         .mask = ins->mask,
-                        .ssa_args = {
-                                .src = { temp, -1, -1 },
-                                .dest = ins->ssa_args.dest,
-                                .inline_constant = true
-                        },
+                        .src = { temp, ~0, ~0 },
+                        .dest = ins->dest,
+                        .has_inline_constant = true,
                         .alu = {
                                 .op = midgard_alu_op_inor,
                                 /* TODO: i16 */
@@ -56,9 +54,9 @@ midgard_lower_invert(compiler_context *ctx, midgard_block *block)
                         },
                 };
 
-                ins->ssa_args.dest = temp;
+                ins->dest = temp;
                 ins->invert = false;
-                mir_insert_instruction_before(mir_next_op(ins), not);
+                mir_insert_instruction_before(ctx, mir_next_op(ins), not);
         }
 }
 
@@ -74,15 +72,15 @@ midgard_opt_not_propagate(compiler_context *ctx, midgard_block *block)
                 if (ins->alu.op != midgard_alu_op_imov) continue;
                 if (!ins->invert) continue;
                 if (mir_nontrivial_source2_mod_simple(ins)) continue;
-                if (ins->ssa_args.src[1] & IS_REG) continue;
+                if (ins->src[1] & IS_REG) continue;
 
                 /* Is it beneficial to propagate? */
-                if (!mir_single_use(ctx, ins->ssa_args.src[1])) continue;
+                if (!mir_single_use(ctx, ins->src[1])) continue;
 
                 /* We found an imov.not, propagate the invert back */
 
                 mir_foreach_instr_in_block_from_rev(block, v, mir_prev_op(ins)) {
-                        if (v->ssa_args.dest != ins->ssa_args.src[1]) continue;
+                        if (v->dest != ins->src[1]) continue;
                         if (v->type != TAG_ALU_4) break;
 
                         v->invert = !v->invert;
@@ -195,10 +193,13 @@ midgard_opt_fuse_dest_invert(compiler_context *ctx, midgard_block *block)
 static bool
 mir_strip_inverted(compiler_context *ctx, unsigned node)
 {
+        if (node >= SSA_FIXED_MINIMUM)
+                return false;
+
        /* Strips and returns the invert off a node */
        mir_foreach_instr_global(ctx, ins) {
                if (ins->compact_branch) continue;
-               if (ins->ssa_args.dest != node) continue;
+               if (ins->dest != node) continue;
 
                bool status = ins->invert;
                ins->invert = false;
@@ -206,6 +207,12 @@ mir_strip_inverted(compiler_context *ctx, unsigned node)
        }
 
        unreachable("Invalid node stripped");
+}
+
+static bool
+is_ssa_or_constant(unsigned node)
+{
+        return !(node & IS_REG) || (node == SSA_FIXED_REGISTER(26));
 }
 
 bool
@@ -219,18 +226,18 @@ midgard_opt_fuse_src_invert(compiler_context *ctx, midgard_block *block)
                 if (!mir_is_bitwise(ins)) continue;
                 if (ins->invert) continue;
 
-                if (ins->ssa_args.src[0] & IS_REG) continue;
-                if (ins->ssa_args.src[1] & IS_REG) continue;
-                if (!mir_single_use(ctx, ins->ssa_args.src[0])) continue;
-                if (!ins->ssa_args.inline_constant && !mir_single_use(ctx, ins->ssa_args.src[1])) continue;
+                if (!is_ssa_or_constant(ins->src[0])) continue;
+                if (!is_ssa_or_constant(ins->src[1])) continue;
+                if (!mir_single_use(ctx, ins->src[0])) continue;
+                if (!ins->has_inline_constant && !mir_single_use(ctx, ins->src[1])) continue;
 
-                bool not_a = mir_strip_inverted(ctx, ins->ssa_args.src[0]);
+                bool not_a = mir_strip_inverted(ctx, ins->src[0]);
                 bool not_b =
-                        ins->ssa_args.inline_constant ? false :
-                        mir_strip_inverted(ctx, ins->ssa_args.src[1]);
+                        ins->has_inline_constant ? false :
+                        mir_strip_inverted(ctx, ins->src[1]);
 
                 /* Edge case: if src0 == src1, it'll've been stripped */
-                if ((ins->ssa_args.src[0] == ins->ssa_args.src[1]) && !ins->ssa_args.inline_constant)
+                if ((ins->src[0] == ins->src[1]) && !ins->has_inline_constant)
                         not_b = not_a;
 
                 progress |= (not_a || not_b);
@@ -248,16 +255,13 @@ midgard_opt_fuse_src_invert(compiler_context *ctx, midgard_block *block)
 
                 if (both) {
                         ins->alu.op = mir_demorgan_op(ins->alu.op);
-                } else if (right || (left && !ins->ssa_args.inline_constant)) {
-                        if (left) {
-                                /* Commute */
-                                unsigned temp = ins->ssa_args.src[0];
-                                ins->ssa_args.src[0] = ins->ssa_args.src[1];
-                                ins->ssa_args.src[1] = temp;
-                        }
+                } else if (right || (left && !ins->has_inline_constant)) {
+                        /* Commute arguments */
+                        if (left)
+                                mir_flip(ins);
 
                         ins->alu.op = mir_notright_op(ins->alu.op);
-                } else if (left && ins->ssa_args.inline_constant) {
+                } else if (left && ins->has_inline_constant) {
                         /* Some special transformations:
                          *
                          * ~A & c = ~(~(~A) | (~c)) = ~(A | ~c) = inor(A, ~c)
@@ -267,6 +271,31 @@ midgard_opt_fuse_src_invert(compiler_context *ctx, midgard_block *block)
                         ins->alu.op = mir_demorgan_op(ins->alu.op);
                         ins->inline_constant = ~ins->inline_constant;
                 }
+        }
+
+        return progress;
+}
+
+/* Optimizes a .not away when used as the source of a conditional select:
+ *
+ * csel(a, b, c)  = { b if a, c if !a }
+ * csel(!a, b, c) = { b if !a, c if !(!a) } = { c if a, b if !a } = csel(a, c, b)
+ * csel(!a, b, c) = csel(a, c, b)
+ */
+
+bool
+midgard_opt_csel_invert(compiler_context *ctx, midgard_block *block)
+{
+        bool progress = false;
+
+        mir_foreach_instr_in_block_safe(block, ins) {
+                if (ins->type != TAG_ALU_4) continue;
+                if (!OP_IS_CSEL(ins->alu.op)) continue;
+                if (!mir_single_use(ctx, ins->src[2])) continue;
+                if (!mir_strip_inverted(ctx, ins->src[2])) continue;
+
+                mir_flip(ins);
+                progress |= true;
         }
 
         return progress;

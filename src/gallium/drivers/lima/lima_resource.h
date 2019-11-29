@@ -38,9 +38,17 @@ struct lima_resource_level {
    uint32_t offset;
 };
 
+struct lima_damage_region {
+   struct pipe_scissor_state *region;
+   struct pipe_scissor_state bound;
+   unsigned num_region;
+   bool aligned;
+};
+
 struct lima_resource {
    struct pipe_resource base;
 
+   struct lima_damage_region damage;
    struct renderonly_scanout *scanout;
    struct lima_bo *bo;
    bool tiled;

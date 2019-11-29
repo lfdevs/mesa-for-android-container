@@ -1047,7 +1047,7 @@ bool r600_query_hw_begin(struct r600_common_context *rctx,
 	if (!query->buffer.buf)
 		return false;
 
-	LIST_ADDTAIL(&query->list, &rctx->active_queries);
+	list_addtail(&query->list, &rctx->active_queries);
 	return true;
 }
 
@@ -1070,7 +1070,7 @@ bool r600_query_hw_end(struct r600_common_context *rctx,
 	r600_query_hw_emit_stop(rctx, query);
 
 	if (!(query->flags & R600_QUERY_HW_FLAG_NO_START))
-		LIST_DELINIT(&query->list);
+		list_delinit(&query->list);
 
 	if (!query->buffer.buf)
 		return false;
@@ -2125,7 +2125,7 @@ void r600_query_init(struct r600_common_context *rctx)
 	if (((struct r600_common_screen*)rctx->b.screen)->info.num_render_backends > 0)
 	    rctx->b.render_condition = r600_render_condition;
 
-	LIST_INITHEAD(&rctx->active_queries);
+	list_inithead(&rctx->active_queries);
 }
 
 void r600_init_screen_query_functions(struct r600_common_screen *rscreen)

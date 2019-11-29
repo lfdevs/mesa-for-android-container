@@ -414,4 +414,26 @@ pipe_lima_create_screen(int fd, const struct pipe_screen_config *config)
 
 #endif
 
+#ifdef GALLIUM_ZINK
+#include "zink/zink_public.h"
+
+struct pipe_screen *
+pipe_zink_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   struct pipe_screen *screen;
+   screen = zink_drm_create_screen(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+
+#else
+
+struct pipe_screen *
+pipe_zink_create_screen(int fd, const struct pipe_screen_config *config)
+{
+   fprintf(stderr, "zink: driver missing\n");
+   return NULL;
+}
+
+#endif
+
 #endif /* DRM_HELPER_H */

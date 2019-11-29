@@ -41,16 +41,30 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		uint32_t blocks;
 
 		if (rsc->tile_mode) {
-			width = util_next_power_of_two(width);
-			height = util_next_power_of_two(height);
-			uint32_t tpitch = width * rsc->cpp;
-			slice->pitch = (tpitch > 32) ? tpitch : 32;
+			if (prsc->target != PIPE_TEXTURE_CUBE) {
+				if (level == 0) {
+					width = util_next_power_of_two(width);
+					height = util_next_power_of_two(height);
+				}
+				width = MAX2(width, 8);
+				height = MAX2(height, 4);
+				// Multiplying by 4 is the result of the 4x4 tiling pattern.
+				slice->pitch = width * 4;
+				blocks = util_format_get_nblocks(format, width, height);
+			} else {
+				uint32_t twidth, theight;
+				twidth = align(width, 8);
+				theight = align(height, 4);
+				// Multiplying by 4 is the result of the 4x4 tiling pattern.
+				slice->pitch = twidth * 4;
+				blocks = util_format_get_nblocks(format, twidth, theight);
+			}
 		} else {
 			slice->pitch = width = align(width, pitchalign);
+			blocks = util_format_get_nblocks(format, slice->pitch, height);
 		}
 
 		slice->offset = size;
-		blocks = util_format_get_nblocks(format, slice->pitch, height);
 		/* 1d array and 2d array textures must all have the same layer size
 		 * for each miplevel on a3xx. 3d textures can have different layer
 		 * sizes for high levels, but the hw auto-sizer is buggy (or at least
@@ -96,14 +110,11 @@ fd3_setup_slices(struct fd_resource *rsc)
 }
 
 static bool
-ok_format(enum pipe_format pfmt, const struct pipe_resource * tmpl)
+ok_format(enum pipe_format pfmt)
 {
 	enum a3xx_color_fmt fmt = fd3_pipe2color(pfmt);
 
 	if (fmt == ~0)
-		return false;
-
-	if (tmpl->target == PIPE_TEXTURE_CUBE)
 		return false;
 
 	switch (pfmt) {
@@ -121,7 +132,7 @@ ok_format(enum pipe_format pfmt, const struct pipe_resource * tmpl)
 unsigned
 fd3_tile_mode(const struct pipe_resource *tmpl)
 {
-	if (ok_format(tmpl->format, tmpl))
+	if (ok_format(tmpl->format))
 		return TILE_4X4;
 	return LINEAR;
 }

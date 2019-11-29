@@ -45,6 +45,11 @@
 #include "gallium/winsys/amdgpu/drm/amdgpu_public.h"
 #include <xf86drm.h>
 
+#include <llvm/Config/llvm-config.h>
+
+static struct pipe_context *si_create_context(struct pipe_screen *screen,
+                                              unsigned flags);
+
 static const struct debug_named_value debug_options[] = {
 	/* Shader logging options: */
 	{ "vs", DBG(VS), "Print vertex shaders" },
@@ -122,8 +127,7 @@ static const struct debug_named_value debug_options[] = {
 	DEBUG_NAMED_VALUE_END /* must be last */
 };
 
-static void si_init_compiler(struct si_screen *sscreen,
-			     struct ac_llvm_compiler *compiler)
+void si_init_compiler(struct si_screen *sscreen, struct ac_llvm_compiler *compiler)
 {
 	/* Only create the less-optimizing version of the compiler on APUs
 	 * predating Ryzen (Raven). */
@@ -231,6 +235,15 @@ static void si_destroy_context(struct pipe_context *context)
 	if (sctx->cs_dcc_retile)
 		sctx->b.delete_compute_state(&sctx->b, sctx->cs_dcc_retile);
 
+	for (unsigned i = 0; i < ARRAY_SIZE(sctx->cs_fmask_expand); i++) {
+		for (unsigned j = 0; j < ARRAY_SIZE(sctx->cs_fmask_expand[i]); j++) {
+			if (sctx->cs_fmask_expand[i][j]) {
+				sctx->b.delete_compute_state(&sctx->b,
+							     sctx->cs_fmask_expand[i][j]);
+			}
+		}
+	}
+
 	if (sctx->blitter)
 		util_blitter_destroy(sctx->blitter);
 
@@ -294,14 +307,39 @@ static void si_destroy_context(struct pipe_context *context)
 	util_dynarray_fini(&sctx->resident_img_needs_color_decompress);
 	util_dynarray_fini(&sctx->resident_tex_needs_depth_decompress);
 	si_unref_sdma_uploads(sctx);
+	free(sctx->sdma_uploads);
 	FREE(sctx);
 }
 
 static enum pipe_reset_status si_get_reset_status(struct pipe_context *ctx)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
+	struct si_screen *sscreen = sctx->screen;
+	enum pipe_reset_status status = sctx->ws->ctx_query_reset_status(sctx->ctx);
 
-	return sctx->ws->ctx_query_reset_status(sctx->ctx);
+	if (status != PIPE_NO_RESET) {
+		/* Call the state tracker to set a no-op API dispatch. */
+		if (sctx->device_reset_callback.reset) {
+			sctx->device_reset_callback.reset(sctx->device_reset_callback.data,
+							  status);
+		}
+
+		/* Re-create the auxiliary context, because it won't submit
+		 * any new IBs due to a GPU reset.
+		 */
+		simple_mtx_lock(&sscreen->aux_context_lock);
+
+		struct u_log_context *aux_log = ((struct si_context *)sscreen->aux_context)->log;
+		sscreen->aux_context->set_log_context(sscreen->aux_context, NULL);
+		sscreen->aux_context->destroy(sscreen->aux_context);
+
+		sscreen->aux_context = si_create_context(&sscreen->b,
+			(sscreen->options.aux_debug ? PIPE_CONTEXT_DEBUG : 0) |
+			(sscreen->info.has_graphics ? 0 : PIPE_CONTEXT_COMPUTE_ONLY));
+		sscreen->aux_context->set_log_context(sscreen->aux_context, aux_log);
+		simple_mtx_unlock(&sscreen->aux_context_lock);
+	}
+	return status;
 }
 
 static void si_set_device_reset_callback(struct pipe_context *ctx,
@@ -314,21 +352,6 @@ static void si_set_device_reset_callback(struct pipe_context *ctx,
 	else
 		memset(&sctx->device_reset_callback, 0,
 		       sizeof(sctx->device_reset_callback));
-}
-
-bool si_check_device_reset(struct si_context *sctx)
-{
-	enum pipe_reset_status status;
-
-	if (!sctx->device_reset_callback.reset)
-		return false;
-
-	status = sctx->ws->ctx_query_reset_status(sctx->ctx);
-	if (status == PIPE_NO_RESET)
-		return false;
-
-	sctx->device_reset_callback.reset(sctx->device_reset_callback.data, status);
-	return true;
 }
 
 /* Apitrace profiling:
@@ -736,7 +759,7 @@ static void si_destroy_screen(struct pipe_screen* pscreen)
 	if (!sscreen->ws->unref(sscreen->ws))
 		return;
 
-	mtx_destroy(&sscreen->aux_context_lock);
+	simple_mtx_destroy(&sscreen->aux_context_lock);
 
 	struct u_log_context *aux_log = ((struct si_context *)sscreen->aux_context)->log;
 	if (aux_log) {
@@ -749,6 +772,9 @@ static void si_destroy_screen(struct pipe_screen* pscreen)
 
 	util_queue_destroy(&sscreen->shader_compiler_queue);
 	util_queue_destroy(&sscreen->shader_compiler_queue_low_priority);
+
+	/* Release the reference on glsl types of the compiler threads. */
+	glsl_type_singleton_decref();
 
 	for (i = 0; i < ARRAY_SIZE(sscreen->compiler); i++)
 		si_destroy_compiler(&sscreen->compiler[i]);
@@ -766,13 +792,13 @@ static void si_destroy_screen(struct pipe_screen* pscreen)
 			FREE(part);
 		}
 	}
-	mtx_destroy(&sscreen->shader_parts_mutex);
+	simple_mtx_destroy(&sscreen->shader_parts_mutex);
 	si_destroy_shader_cache(sscreen);
 
 	si_destroy_perfcounters(sscreen);
 	si_gpu_load_kill_thread(sscreen);
 
-	mtx_destroy(&sscreen->gpu_load_mutex);
+	simple_mtx_destroy(&sscreen->gpu_load_mutex);
 
 	slab_destroy_parent(&sscreen->pool_transfers);
 
@@ -921,7 +947,7 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 			    const struct pipe_screen_config *config)
 {
 	struct si_screen *sscreen = CALLOC_STRUCT(si_screen);
-	unsigned hw_threads, num_comp_hi_threads, num_comp_lo_threads, i;
+	unsigned hw_threads, num_comp_hi_threads, num_comp_lo_threads;
 
 	if (!sscreen) {
 		return NULL;
@@ -930,7 +956,7 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 	sscreen->ws = ws;
 	ws->query_info(ws, &sscreen->info);
 
-	if (sscreen->info.chip_class == GFX10 && HAVE_LLVM < 0x0900) {
+	if (sscreen->info.chip_class == GFX10 && LLVM_VERSION_MAJOR < 9) {
 		fprintf(stderr, "radeonsi: Navi family support requires LLVM 9 or higher\n");
 		FREE(sscreen);
 		return NULL;
@@ -960,6 +986,7 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 		si_set_max_shader_compiler_threads;
 	sscreen->b.is_parallel_shader_compilation_finished =
 		si_is_parallel_shader_compilation_finished;
+	sscreen->b.finalize_nir = si_finalize_nir;
 
 	si_init_screen_get_functions(sscreen);
 	si_init_screen_buffer_functions(sscreen);
@@ -994,8 +1021,8 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 		       1 << util_logbase2(sscreen->force_aniso));
 	}
 
-	(void) mtx_init(&sscreen->aux_context_lock, mtx_plain);
-	(void) mtx_init(&sscreen->gpu_load_mutex, mtx_plain);
+	(void) simple_mtx_init(&sscreen->aux_context_lock, mtx_plain);
+	(void) simple_mtx_init(&sscreen->gpu_load_mutex, mtx_plain);
 
 	si_init_gs_info(sscreen);
 	if (!si_init_shader_cache(sscreen)) {
@@ -1034,12 +1061,16 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 	num_comp_lo_threads = MIN2(num_comp_lo_threads,
 				   ARRAY_SIZE(sscreen->compiler_lowp));
 
+	/* Take a reference on the glsl types for the compiler threads. */
+	glsl_type_singleton_init_or_ref();
+
 	if (!util_queue_init(&sscreen->shader_compiler_queue, "sh",
 			     64, num_comp_hi_threads,
 			     UTIL_QUEUE_INIT_RESIZE_IF_FULL |
 			     UTIL_QUEUE_INIT_SET_FULL_THREAD_AFFINITY)) {
 		si_destroy_shader_cache(sscreen);
 		FREE(sscreen);
+		glsl_type_singleton_decref();
 		return NULL;
 	}
 
@@ -1051,6 +1082,7 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 			     UTIL_QUEUE_INIT_USE_MINIMUM_PRIORITY)) {
 	       si_destroy_shader_cache(sscreen);
 	       FREE(sscreen);
+	       glsl_type_singleton_decref();
 	       return NULL;
 	}
 
@@ -1106,16 +1138,6 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 			S_0089B0_OFFCHIP_BUFFERING(max_offchip_buffers);
 	}
 
-	/* The mere presense of CLEAR_STATE in the IB causes random GPU hangs
-	 * on GFX6. Some CLEAR_STATE cause asic hang on radeon kernel, etc.
-	 * SPI_VS_OUT_CONFIG. So only enable GFX7 CLEAR_STATE on amdgpu kernel. */
-	sscreen->has_clear_state = sscreen->info.chip_class >= GFX7 &&
-				   sscreen->info.is_amdgpu;
-
-	sscreen->has_distributed_tess =
-		sscreen->info.chip_class >= GFX8 &&
-		sscreen->info.max_se >= 2;
-
 	sscreen->has_draw_indirect_multi =
 		(sscreen->info.family >= CHIP_POLARIS10) ||
 		(sscreen->info.chip_class == GFX8 &&
@@ -1128,25 +1150,13 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 		 sscreen->info.pfp_fw_version >= 79 &&
 		 sscreen->info.me_fw_version >= 142);
 
-	sscreen->has_out_of_order_rast = sscreen->info.chip_class >= GFX8 &&
-					 sscreen->info.max_se >= 2 &&
+	sscreen->has_out_of_order_rast = sscreen->info.has_out_of_order_rast &&
 					 !(sscreen->debug_flags & DBG(NO_OUT_OF_ORDER));
 	sscreen->assume_no_z_fights =
 		driQueryOptionb(config->options, "radeonsi_assume_no_z_fights");
 	sscreen->commutative_blend_add =
 		driQueryOptionb(config->options, "radeonsi_commutative_blend_add");
 
-	sscreen->has_gfx9_scissor_bug = sscreen->info.family == CHIP_VEGA10 ||
-					sscreen->info.family == CHIP_RAVEN;
-	sscreen->has_msaa_sample_loc_bug = (sscreen->info.family >= CHIP_POLARIS10 &&
-					    sscreen->info.family <= CHIP_POLARIS12) ||
-					   sscreen->info.family == CHIP_VEGA10 ||
-					   sscreen->info.family == CHIP_RAVEN;
-	sscreen->has_ls_vgpr_init_bug = sscreen->info.family == CHIP_VEGA10 ||
-					sscreen->info.family == CHIP_RAVEN;
-	sscreen->has_dcc_constant_encode = sscreen->info.family == CHIP_RAVEN2 ||
-					   sscreen->info.family == CHIP_RENOIR ||
-					   sscreen->info.chip_class >= GFX10;
 	sscreen->use_ngg = sscreen->info.chip_class >= GFX10 &&
 			   sscreen->info.family != CHIP_NAVI14 &&
 			   !(sscreen->debug_flags & DBG(NO_NGG));
@@ -1181,28 +1191,10 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 	 */
 	sscreen->llvm_has_working_vgpr_indexing = sscreen->info.chip_class != GFX9;
 
-	/* Some chips have RB+ registers, but don't support RB+. Those must
-	 * always disable it.
-	 */
-	if (sscreen->info.family == CHIP_STONEY ||
-	    sscreen->info.chip_class >= GFX9) {
-		sscreen->has_rbplus = true;
-
-		sscreen->rbplus_allowed =
-			!(sscreen->debug_flags & DBG(NO_RB_PLUS)) &&
-			(sscreen->info.family == CHIP_STONEY ||
-			 sscreen->info.family == CHIP_VEGA12 ||
-			 sscreen->info.family == CHIP_RAVEN ||
-			 sscreen->info.family == CHIP_RAVEN2 ||
-			 sscreen->info.family == CHIP_RENOIR);
-	}
-
 	sscreen->dcc_msaa_allowed =
 		!(sscreen->debug_flags & DBG(NO_DCC_MSAA));
 
-	sscreen->cpdma_prefetch_writes_memory = sscreen->info.chip_class <= GFX8;
-
-	(void) mtx_init(&sscreen->shader_parts_mutex, mtx_plain);
+	(void) simple_mtx_init(&sscreen->shader_parts_mutex, mtx_plain);
 	sscreen->use_monolithic_shaders =
 		(sscreen->debug_flags & DBG(MONOLITHIC_SHADERS)) != 0;
 
@@ -1240,11 +1232,6 @@ radeonsi_screen_create_impl(struct radeon_winsys *ws,
 			sscreen->eqaa_force_color_samples = f;
 		}
 	}
-
-	for (i = 0; i < num_comp_hi_threads; i++)
-		si_init_compiler(sscreen, &sscreen->compiler[i]);
-	for (i = 0; i < num_comp_lo_threads; i++)
-		si_init_compiler(sscreen, &sscreen->compiler_lowp[i]);
 
 	sscreen->ge_wave_size = 64;
 	sscreen->ps_wave_size = 64;

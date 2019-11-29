@@ -38,7 +38,7 @@
 #include "lima_program.h"
 #include "lima_bo.h"
 #include "lima_fence.h"
-#include "lima_texture.h"
+#include "lima_format.h"
 #include "ir/lima_ir.h"
 
 #include "xf86drm.h"
@@ -61,8 +61,9 @@ lima_screen_destroy(struct pipe_screen *pscreen)
       free(screen->ro);
 
    if (screen->pp_buffer)
-      lima_bo_free(screen->pp_buffer);
+      lima_bo_unreference(screen->pp_buffer);
 
+   lima_bo_cache_fini(screen);
    lima_bo_table_fini(screen);
    ralloc_free(screen);
 }
@@ -228,6 +229,14 @@ get_fragment_shader_param(struct lima_screen *screen,
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return 256; /* need investigate */
 
+   case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
+   case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
+      return 1;
+
+   case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
+   case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
+      return 0;
+
    default:
       return 0;
    }
@@ -263,6 +272,7 @@ lima_screen_is_format_supported(struct pipe_screen *pscreen,
    case PIPE_BUFFER:
    case PIPE_TEXTURE_1D:
    case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
       break;
    default:
       return false;
@@ -275,20 +285,9 @@ lima_screen_is_format_supported(struct pipe_screen *pscreen,
    if (sample_count > 1 && sample_count != 4)
       return false;
 
-   if (usage & PIPE_BIND_RENDER_TARGET) {
-      switch (format) {
-      case PIPE_FORMAT_B8G8R8A8_UNORM:
-      case PIPE_FORMAT_B8G8R8X8_UNORM:
-      case PIPE_FORMAT_R8G8B8A8_UNORM:
-      case PIPE_FORMAT_R8G8B8X8_UNORM:
-      case PIPE_FORMAT_Z16_UNORM:
-      case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      case PIPE_FORMAT_Z24X8_UNORM:
-         break;
-      default:
-         return false;
-      }
-   }
+   if (usage & PIPE_BIND_RENDER_TARGET &&
+       !lima_format_pixel_supported(format))
+      return false;
 
    if (usage & PIPE_BIND_DEPTH_STENCIL) {
       switch (format) {
@@ -322,7 +321,7 @@ lima_screen_is_format_supported(struct pipe_screen *pscreen,
    }
 
    if (usage & PIPE_BIND_SAMPLER_VIEW)
-      return lima_texel_format_supported(format);
+      return lima_format_texel_supported(format);
 
    return true;
 }
@@ -429,6 +428,8 @@ static const struct debug_named_value debug_options[] = {
           "dump GPU command stream to $PWD/lima.dump" },
         { "shaderdb", LIMA_DEBUG_SHADERDB,
           "print shader information for shaderdb" },
+        { "nobocache", LIMA_DEBUG_NO_BO_CACHE,
+          "disable BO cache" },
         { NULL }
 };
 
@@ -489,16 +490,20 @@ lima_screen_create(int fd, struct renderonly *ro)
    if (!lima_screen_query_info(screen))
       goto err_out0;
 
-   if (!lima_bo_table_init(screen))
+   if (!lima_bo_cache_init(screen))
       goto err_out0;
+
+   if (!lima_bo_table_init(screen))
+      goto err_out1;
 
    screen->pp_ra = ppir_regalloc_init(screen);
    if (!screen->pp_ra)
-      goto err_out1;
+      goto err_out2;
 
    screen->pp_buffer = lima_bo_create(screen, pp_buffer_size, 0);
    if (!screen->pp_buffer)
-      goto err_out1;
+      goto err_out2;
+   screen->pp_buffer->cacheable = false;
 
    /* fs program for clear buffer?
     * const0 1 0 0 -1.67773, mov.v0 $0 ^const0.xxxx, stop
@@ -545,7 +550,7 @@ lima_screen_create(int fd, struct renderonly *ro)
       screen->ro = renderonly_dup(ro);
       if (!screen->ro) {
          fprintf(stderr, "Failed to dup renderonly object\n");
-         goto err_out2;
+         goto err_out3;
       }
    }
 
@@ -570,10 +575,12 @@ lima_screen_create(int fd, struct renderonly *ro)
 
    return &screen->base;
 
+err_out3:
+   lima_bo_unreference(screen->pp_buffer);
 err_out2:
-   lima_bo_free(screen->pp_buffer);
-err_out1:
    lima_bo_table_fini(screen);
+err_out1:
+   lima_bo_cache_fini(screen);
 err_out0:
    ralloc_free(screen);
    return NULL;

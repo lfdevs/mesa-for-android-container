@@ -733,6 +733,11 @@ get_wsi_format_modifier_properties_list(const struct anv_physical_device *physic
                                      anv_format->planes[0].isl_format))
          continue;
 
+      /* Gen12's CCS layout changes compared to Gen9-11. */
+      if (mod_info->modifier == I915_FORMAT_MOD_Y_TILED_CCS &&
+          physical_device->info.gen >= 12)
+         continue;
+
       vk_outarray_append(&out, mod_props) {
          mod_props->modifier = modifiers[i];
          if (isl_drm_modifier_has_aux(modifiers[i]))

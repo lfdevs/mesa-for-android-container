@@ -11,6 +11,7 @@ env.Append(CPPPATH = [
     '#/src/mesa/main',
     '#src/gallium/state_trackers/glx/xlib',
     Dir('../../../mapi'), # src/mapi build path for python-generated GL API files/headers
+    Dir('../../../mapi/glapi/gen'), # src/mapi build path for python-generated GL API files/headers
 ])
 
 env.Append(CPPDEFINES = ['USE_XSHM'])

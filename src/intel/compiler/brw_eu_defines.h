@@ -32,6 +32,7 @@
 #ifndef BRW_EU_DEFINES_H
 #define BRW_EU_DEFINES_H
 
+#include <stdint.h>
 #include "util/macros.h"
 
 /* The following hunk, up-to "Execution Unit" is used by both the
@@ -195,103 +196,96 @@ enum PACKED gen10_align1_3src_dst_horizontal_stride {
 /** @} */
 
 enum opcode {
-   /* These are the actual hardware opcodes. */
-   BRW_OPCODE_ILLEGAL = 0,
-   BRW_OPCODE_MOV =	1,
-   BRW_OPCODE_SEL =	2,
-   BRW_OPCODE_MOVI =	3,   /**< G45+ */
-   BRW_OPCODE_NOT =	4,
-   BRW_OPCODE_AND =	5,
-   BRW_OPCODE_OR =	6,
-   BRW_OPCODE_XOR =	7,
-   BRW_OPCODE_SHR =	8,
-   BRW_OPCODE_SHL =	9,
-   BRW_OPCODE_DIM =	10,  /**< Gen7.5 only */ /* Reused */
-   BRW_OPCODE_SMOV =	10,  /**< Gen8+       */ /* Reused */
-   /* Reserved - 11 */
-   BRW_OPCODE_ASR =	12,
-   /* Reserved - 13 */
-   BRW_OPCODE_ROR =	14,  /**< Gen11+ */
-   BRW_OPCODE_ROL =	15,  /**< Gen11+ */
-   BRW_OPCODE_CMP =	16,
-   BRW_OPCODE_CMPN =	17,
-   BRW_OPCODE_CSEL =	18,  /**< Gen8+ */
-   BRW_OPCODE_F32TO16 = 19,  /**< Gen7 only */
-   BRW_OPCODE_F16TO32 = 20,  /**< Gen7 only */
-   /* Reserved - 21-22 */
-   BRW_OPCODE_BFREV =	23,  /**< Gen7+ */
-   BRW_OPCODE_BFE =	24,  /**< Gen7+ */
-   BRW_OPCODE_BFI1 =	25,  /**< Gen7+ */
-   BRW_OPCODE_BFI2 =	26,  /**< Gen7+ */
-   /* Reserved - 27-31 */
-   BRW_OPCODE_JMPI =	32,
-   BRW_OPCODE_BRD =	33,  /**< Gen7+ */
-   BRW_OPCODE_IF =	34,
-   BRW_OPCODE_IFF =	35,  /**< Pre-Gen6    */ /* Reused */
-   BRW_OPCODE_BRC =	35,  /**< Gen7+       */ /* Reused */
-   BRW_OPCODE_ELSE =	36,
-   BRW_OPCODE_ENDIF =	37,
-   BRW_OPCODE_DO =	38,  /**< Pre-Gen6    */ /* Reused */
-   BRW_OPCODE_CASE =	38,  /**< Gen6 only   */ /* Reused */
-   BRW_OPCODE_WHILE =	39,
-   BRW_OPCODE_BREAK =	40,
-   BRW_OPCODE_CONTINUE = 41,
-   BRW_OPCODE_HALT =	42,
-   BRW_OPCODE_CALLA =	43,  /**< Gen7.5+     */
-   BRW_OPCODE_MSAVE =	44,  /**< Pre-Gen6    */ /* Reused */
-   BRW_OPCODE_CALL =	44,  /**< Gen6+       */ /* Reused */
-   BRW_OPCODE_MREST =	45,  /**< Pre-Gen6    */ /* Reused */
-   BRW_OPCODE_RET =	45,  /**< Gen6+       */ /* Reused */
-   BRW_OPCODE_PUSH =	46,  /**< Pre-Gen6    */ /* Reused */
-   BRW_OPCODE_FORK =	46,  /**< Gen6 only   */ /* Reused */
-   BRW_OPCODE_GOTO =	46,  /**< Gen8+       */ /* Reused */
-   BRW_OPCODE_POP =	47,  /**< Pre-Gen6    */
-   BRW_OPCODE_WAIT =	48,
-   BRW_OPCODE_SEND =	49,
-   BRW_OPCODE_SENDC =	50,
-   BRW_OPCODE_SENDS =	51,  /**< Gen9+ */
-   BRW_OPCODE_SENDSC =	52,  /**< Gen9+ */
-   /* Reserved 53-55 */
-   BRW_OPCODE_MATH =	56,  /**< Gen6+ */
-   /* Reserved 57-63 */
-   BRW_OPCODE_ADD =	64,
-   BRW_OPCODE_MUL =	65,
-   BRW_OPCODE_AVG =	66,
-   BRW_OPCODE_FRC =	67,
-   BRW_OPCODE_RNDU =	68,
-   BRW_OPCODE_RNDD =	69,
-   BRW_OPCODE_RNDE =	70,
-   BRW_OPCODE_RNDZ =	71,
-   BRW_OPCODE_MAC =	72,
-   BRW_OPCODE_MACH =	73,
-   BRW_OPCODE_LZD =	74,
-   BRW_OPCODE_FBH =	75,  /**< Gen7+ */
-   BRW_OPCODE_FBL =	76,  /**< Gen7+ */
-   BRW_OPCODE_CBIT =	77,  /**< Gen7+ */
-   BRW_OPCODE_ADDC =	78,  /**< Gen7+ */
-   BRW_OPCODE_SUBB =	79,  /**< Gen7+ */
-   BRW_OPCODE_SAD2 =	80,
-   BRW_OPCODE_SADA2 =	81,
-   /* Reserved 82-83 */
-   BRW_OPCODE_DP4 =	84,
-   BRW_OPCODE_DPH =	85,
-   BRW_OPCODE_DP3 =	86,
-   BRW_OPCODE_DP2 =	87,
-   /* Reserved 88 */
-   BRW_OPCODE_LINE =	89,
-   BRW_OPCODE_PLN =	90,  /**< G45+ */
-   BRW_OPCODE_MAD =	91,  /**< Gen6+ */
-   BRW_OPCODE_LRP =	92,  /**< Gen6+ */
-   BRW_OPCODE_MADM =	93,  /**< Gen8+ */
-   /* Reserved 94-124 */
-   BRW_OPCODE_NENOP =	125, /**< G45 only */
-   BRW_OPCODE_NOP =	126,
-   /* Reserved 127 */
+   /* These are the actual hardware instructions. */
+   BRW_OPCODE_ILLEGAL,
+   BRW_OPCODE_SYNC,
+   BRW_OPCODE_MOV,
+   BRW_OPCODE_SEL,
+   BRW_OPCODE_MOVI, /**< G45+ */
+   BRW_OPCODE_NOT,
+   BRW_OPCODE_AND,
+   BRW_OPCODE_OR,
+   BRW_OPCODE_XOR,
+   BRW_OPCODE_SHR,
+   BRW_OPCODE_SHL,
+   BRW_OPCODE_DIM, /**< Gen7.5 only */
+   BRW_OPCODE_SMOV, /**< Gen8+ */
+   BRW_OPCODE_ASR,
+   BRW_OPCODE_ROR,  /**< Gen11+ */
+   BRW_OPCODE_ROL,  /**< Gen11+ */
+   BRW_OPCODE_CMP,
+   BRW_OPCODE_CMPN,
+   BRW_OPCODE_CSEL, /**< Gen8+ */
+   BRW_OPCODE_F32TO16, /**< Gen7 only */
+   BRW_OPCODE_F16TO32, /**< Gen7 only */
+   BRW_OPCODE_BFREV, /**< Gen7+ */
+   BRW_OPCODE_BFE, /**< Gen7+ */
+   BRW_OPCODE_BFI1, /**< Gen7+ */
+   BRW_OPCODE_BFI2, /**< Gen7+ */
+   BRW_OPCODE_JMPI,
+   BRW_OPCODE_BRD, /**< Gen7+ */
+   BRW_OPCODE_IF,
+   BRW_OPCODE_IFF, /**< Pre-Gen6 */
+   BRW_OPCODE_BRC, /**< Gen7+ */
+   BRW_OPCODE_ELSE,
+   BRW_OPCODE_ENDIF,
+   BRW_OPCODE_DO, /**< Pre-Gen6 */
+   BRW_OPCODE_CASE, /**< Gen6 only */
+   BRW_OPCODE_WHILE,
+   BRW_OPCODE_BREAK,
+   BRW_OPCODE_CONTINUE,
+   BRW_OPCODE_HALT,
+   BRW_OPCODE_CALLA, /**< Gen7.5+ */
+   BRW_OPCODE_MSAVE, /**< Pre-Gen6 */
+   BRW_OPCODE_CALL, /**< Gen6+ */
+   BRW_OPCODE_MREST, /**< Pre-Gen6 */
+   BRW_OPCODE_RET, /**< Gen6+ */
+   BRW_OPCODE_PUSH, /**< Pre-Gen6 */
+   BRW_OPCODE_FORK, /**< Gen6 only */
+   BRW_OPCODE_GOTO, /**< Gen8+ */
+   BRW_OPCODE_POP, /**< Pre-Gen6 */
+   BRW_OPCODE_WAIT,
+   BRW_OPCODE_SEND,
+   BRW_OPCODE_SENDC,
+   BRW_OPCODE_SENDS, /**< Gen9+ */
+   BRW_OPCODE_SENDSC, /**< Gen9+ */
+   BRW_OPCODE_MATH, /**< Gen6+ */
+   BRW_OPCODE_ADD,
+   BRW_OPCODE_MUL,
+   BRW_OPCODE_AVG,
+   BRW_OPCODE_FRC,
+   BRW_OPCODE_RNDU,
+   BRW_OPCODE_RNDD,
+   BRW_OPCODE_RNDE,
+   BRW_OPCODE_RNDZ,
+   BRW_OPCODE_MAC,
+   BRW_OPCODE_MACH,
+   BRW_OPCODE_LZD,
+   BRW_OPCODE_FBH, /**< Gen7+ */
+   BRW_OPCODE_FBL, /**< Gen7+ */
+   BRW_OPCODE_CBIT, /**< Gen7+ */
+   BRW_OPCODE_ADDC, /**< Gen7+ */
+   BRW_OPCODE_SUBB, /**< Gen7+ */
+   BRW_OPCODE_SAD2,
+   BRW_OPCODE_SADA2,
+   BRW_OPCODE_DP4,
+   BRW_OPCODE_DPH,
+   BRW_OPCODE_DP3,
+   BRW_OPCODE_DP2,
+   BRW_OPCODE_LINE,
+   BRW_OPCODE_PLN, /**< G45+ */
+   BRW_OPCODE_MAD, /**< Gen6+ */
+   BRW_OPCODE_LRP, /**< Gen6+ */
+   BRW_OPCODE_MADM, /**< Gen8+ */
+   BRW_OPCODE_NENOP, /**< G45 only */
+   BRW_OPCODE_NOP,
+
+   NUM_BRW_OPCODES,
 
    /* These are compiler backend opcodes that get translated into other
     * instructions.
     */
-   FS_OPCODE_FB_WRITE = 128,
+   FS_OPCODE_FB_WRITE = NUM_BRW_OPCODES,
 
    /**
     * Same as FS_OPCODE_FB_WRITE but expects its arguments separately as
@@ -441,6 +435,7 @@ enum opcode {
    SHADER_OPCODE_TYPED_SURFACE_WRITE_LOGICAL,
 
    SHADER_OPCODE_RND_MODE,
+   SHADER_OPCODE_FLOAT_CONTROL_MODE,
 
    /**
     * Byte scattered write/read opcodes.
@@ -996,6 +991,7 @@ enum PACKED brw_vertical_stride {
 
 enum PACKED gen10_align1_3src_vertical_stride {
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_0 = 0,
+   BRW_ALIGN1_3SRC_VERTICAL_STRIDE_1 = 1,
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_2 = 1,
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_4 = 2,
    BRW_ALIGN1_3SRC_VERTICAL_STRIDE_8 = 3,
@@ -1007,6 +1003,161 @@ enum PACKED brw_width {
    BRW_WIDTH_4  = 2,
    BRW_WIDTH_8  = 3,
    BRW_WIDTH_16 = 4,
+};
+
+/**
+ * Gen12+ SWSB SBID synchronization mode.
+ *
+ * This is represented as a bitmask including any required SBID token
+ * synchronization modes, used to synchronize out-of-order instructions.  Only
+ * the strongest mode of the mask will be provided to the hardware in the SWSB
+ * field of an actual hardware instruction, but virtual instructions may be
+ * able to take into account multiple of them.
+ */
+enum tgl_sbid_mode {
+   TGL_SBID_NULL = 0,
+   TGL_SBID_SRC = 1,
+   TGL_SBID_DST = 2,
+   TGL_SBID_SET = 4
+};
+
+#ifdef __cplusplus
+/**
+ * Allow bitwise arithmetic of tgl_sbid_mode enums.
+ */
+inline tgl_sbid_mode
+operator|(tgl_sbid_mode x, tgl_sbid_mode y)
+{
+   return tgl_sbid_mode(unsigned(x) | unsigned(y));
+}
+
+inline tgl_sbid_mode
+operator&(tgl_sbid_mode x, tgl_sbid_mode y)
+{
+   return tgl_sbid_mode(unsigned(x) & unsigned(y));
+}
+
+inline tgl_sbid_mode &
+operator|=(tgl_sbid_mode &x, tgl_sbid_mode y)
+{
+   return x = x | y;
+}
+
+#endif
+
+/**
+ * Logical representation of the SWSB scheduling information of a hardware
+ * instruction.  The binary representation is slightly more compact.
+ */
+struct tgl_swsb {
+   unsigned regdist : 3;
+   unsigned sbid : 4;
+   enum tgl_sbid_mode mode : 3;
+};
+
+/**
+ * Construct a scheduling annotation with a single RegDist dependency.  This
+ * synchronizes with the completion of the d-th previous in-order instruction.
+ * The index is one-based, zero causes a no-op tgl_swsb to be constructed.
+ */
+static inline struct tgl_swsb
+tgl_swsb_regdist(unsigned d)
+{
+   const struct tgl_swsb swsb = { d };
+   assert(swsb.regdist == d);
+   return swsb;
+}
+
+/**
+ * Construct a scheduling annotation that synchronizes with the specified SBID
+ * token.
+ */
+static inline struct tgl_swsb
+tgl_swsb_sbid(enum tgl_sbid_mode mode, unsigned sbid)
+{
+   const struct tgl_swsb swsb = { 0, sbid, mode };
+   assert(swsb.sbid == sbid);
+   return swsb;
+}
+
+/**
+ * Construct a no-op scheduling annotation.
+ */
+static inline struct tgl_swsb
+tgl_swsb_null(void)
+{
+   return tgl_swsb_regdist(0);
+}
+
+/**
+ * Return a scheduling annotation that allocates the same SBID synchronization
+ * token as \p swsb.  In addition it will synchronize against a previous
+ * in-order instruction if \p regdist is non-zero.
+ */
+static inline struct tgl_swsb
+tgl_swsb_dst_dep(struct tgl_swsb swsb, unsigned regdist)
+{
+   swsb.regdist = regdist;
+   swsb.mode = swsb.mode & TGL_SBID_SET;
+   return swsb;
+}
+
+/**
+ * Return a scheduling annotation that synchronizes against the same SBID and
+ * RegDist dependencies as \p swsb, but doesn't allocate any SBID token.
+ */
+static inline struct tgl_swsb
+tgl_swsb_src_dep(struct tgl_swsb swsb)
+{
+   swsb.mode = swsb.mode & (TGL_SBID_SRC | TGL_SBID_DST);
+   return swsb;
+}
+
+/**
+ * Convert the provided tgl_swsb to the hardware's binary representation of an
+ * SWSB annotation.
+ */
+static inline uint8_t
+tgl_swsb_encode(struct tgl_swsb swsb)
+{
+   if (!swsb.mode) {
+      return swsb.regdist;
+   } else if (swsb.regdist) {
+      return 0x80 | swsb.regdist << 4 | swsb.sbid;
+   } else {
+      return swsb.sbid | (swsb.mode & TGL_SBID_SET ? 0x40 :
+                          swsb.mode & TGL_SBID_DST ? 0x20 : 0x30);
+   }
+}
+
+/**
+ * Convert the provided binary representation of an SWSB annotation to a
+ * tgl_swsb.
+ */
+static inline struct tgl_swsb
+tgl_swsb_decode(uint8_t x)
+{
+   if (x & 0x80) {
+      const struct tgl_swsb swsb = { (x & 0x70u) >> 4, x & 0xfu,
+                                     TGL_SBID_DST | TGL_SBID_SET };
+      return swsb;
+   } else if ((x & 0x70) == 0x20) {
+      return tgl_swsb_sbid(TGL_SBID_DST, x & 0xfu);
+   } else if ((x & 0x70) == 0x30) {
+      return tgl_swsb_sbid(TGL_SBID_SRC, x & 0xfu);
+   } else if ((x & 0x70) == 0x40) {
+      return tgl_swsb_sbid(TGL_SBID_SET, x & 0xfu);
+   } else {
+      return tgl_swsb_regdist(x & 0x7u);
+   }
+}
+
+enum tgl_sync_function {
+   TGL_SYNC_NOP = 0x0,
+   TGL_SYNC_ALLRD = 0x2,
+   TGL_SYNC_ALLWR = 0x3,
+   TGL_SYNC_BAR = 0xe,
+   TGL_SYNC_HOST = 0xf
 };
 
 /**
@@ -1382,6 +1533,15 @@ enum PACKED brw_rnd_mode {
    BRW_RND_MODE_RTZ = 3,   /* Round Toward Zero */
    BRW_RND_MODE_UNSPECIFIED,  /* Unspecified rounding mode */
 };
+
+#define BRW_CR0_FP64_DENORM_PRESERVE (1 << 6)
+#define BRW_CR0_FP32_DENORM_PRESERVE (1 << 7)
+#define BRW_CR0_FP16_DENORM_PRESERVE (1 << 10)
+
+#define BRW_CR0_FP_MODE_MASK (BRW_CR0_FP64_DENORM_PRESERVE | \
+                              BRW_CR0_FP32_DENORM_PRESERVE | \
+                              BRW_CR0_FP16_DENORM_PRESERVE | \
+                              BRW_CR0_RND_MODE_MASK)
 
 /* MDC_DS - Data Size Message Descriptor Control Field
  * Skylake PRM, Volume 2d, page 129

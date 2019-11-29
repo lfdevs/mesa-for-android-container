@@ -535,7 +535,6 @@ void gpir_instr_print_prog(gpir_compiler *comp)
       [GPIR_INSTR_SLOT_REG0_LOAD3] = { 15, "load0" },
       [GPIR_INSTR_SLOT_REG1_LOAD3] = { 15, "load1" },
       [GPIR_INSTR_SLOT_MEM_LOAD3] = { 15, "load2" },
-      [GPIR_INSTR_SLOT_BRANCH] = { 4, "bnch" },
       [GPIR_INSTR_SLOT_STORE3] = { 15, "store" },
       [GPIR_INSTR_SLOT_COMPLEX] = { 4, "cmpl" },
       [GPIR_INSTR_SLOT_PASS] = { 4, "pass" },

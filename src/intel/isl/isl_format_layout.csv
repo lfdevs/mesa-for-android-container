@@ -128,6 +128,7 @@ R16G16_FLOAT                ,  32,  1,  1,  1, sf16, sf16,     ,     ,     ,    
 B10G10R10A2_UNORM           ,  32,  1,  1,  1, un10, un10, un10,  un2,     ,     ,    ,  bgra, linear,
 B10G10R10A2_UNORM_SRGB      ,  32,  1,  1,  1, un10, un10, un10,  un2,     ,     ,    ,  bgra,   srgb,
 R11G11B10_FLOAT             ,  32,  1,  1,  1, uf11, uf11, uf10,     ,     ,     ,    ,   rgb, linear,
+R10G10B10_FLOAT_A2_UNORM    ,  32,  1,  1,  1, uf10, uf10, uf10,  un2,     ,     ,    ,  rgba, linear,
 R32_SINT                    ,  32,  1,  1,  1, si32,     ,     ,     ,     ,     ,    ,     r, linear,
 R32_UINT                    ,  32,  1,  1,  1, ui32,     ,     ,     ,     ,     ,    ,     r, linear,
 R32_FLOAT                   ,  32,  1,  1,  1, sf32,     ,     ,     ,     ,     ,    ,     r, linear,
@@ -342,3 +343,8 @@ GEN7_CCS_128BPP_Y           ,   1,  2,  4,  1,     ,     ,     ,     ,     ,    
 GEN9_CCS_32BPP              ,   2,  8,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
 GEN9_CCS_64BPP              ,   2,  4,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
 GEN9_CCS_128BPP             ,   2,  2,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
+GEN12_CCS_8BPP_Y0           ,   4, 32,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
+GEN12_CCS_16BPP_Y0          ,   4, 16,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
+GEN12_CCS_32BPP_Y0          ,   4,  8,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
+GEN12_CCS_64BPP_Y0          ,   4,  4,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs
+GEN12_CCS_128BPP_Y0         ,   4,  2,  4,  1,     ,     ,     ,     ,     ,     ,    ,      ,       ,   ccs

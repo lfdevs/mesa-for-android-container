@@ -27,6 +27,7 @@ libamdgpuwinsys = static_library(
   ),
   include_directories : [
     inc_amd, inc_gallium, inc_gallium_aux, inc_include, inc_src,
+    inc_amd_common, inc_amd_common_llvm,
   ],
   c_args : [c_vis_args],
   cpp_args : [cpp_vis_args],

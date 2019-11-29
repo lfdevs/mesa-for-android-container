@@ -515,7 +515,7 @@ nouveau_buffer_transfer_flush_region(struct pipe_context *pipe,
    if (tx->map)
       nouveau_transfer_write(nouveau_context(pipe), tx, box->x, box->width);
 
-   util_range_add(&buf->valid_buffer_range,
+   util_range_add(&buf->base, &buf->valid_buffer_range,
                   tx->base.box.x + box->x,
                   tx->base.box.x + box->x + box->width);
 }
@@ -539,7 +539,7 @@ nouveau_buffer_transfer_unmap(struct pipe_context *pipe,
          if (tx->map)
             nouveau_transfer_write(nv, tx, 0, tx->base.box.width);
 
-         util_range_add(&buf->valid_buffer_range,
+         util_range_add(&buf->base, &buf->valid_buffer_range,
                         tx->base.box.x, tx->base.box.x + tx->base.box.width);
       }
 
@@ -590,7 +590,7 @@ nouveau_copy_buffer(struct nouveau_context *nv,
                                 &src->base, 0, &src_box);
    }
 
-   util_range_add(&dst->valid_buffer_range, dstx, dstx + size);
+   util_range_add(&dst->base, &dst->valid_buffer_range, dstx, dstx + size);
 }
 
 
@@ -725,7 +725,7 @@ nouveau_user_buffer_create(struct pipe_screen *pscreen, void *ptr,
    buffer->status = NOUVEAU_BUFFER_STATUS_USER_MEMORY;
 
    util_range_init(&buffer->valid_buffer_range);
-   util_range_add(&buffer->valid_buffer_range, 0, bytes);
+   util_range_add(&buffer->base, &buffer->valid_buffer_range, 0, bytes);
 
    return &buffer->base;
 }

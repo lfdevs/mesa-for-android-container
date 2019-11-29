@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
-<metrics version="1553959724" merge_md5="">
+<metrics version="1572342629" merge_md5="">
   <set name="Render Metrics Basic Gen11"
        mdapi_supported_apis="OGL OCL IO BB"
        underscore_name="render_basic"
-       hw_config_guid="621e248e-29c3-404d-a1b1-bb69610c4a99"
+       hw_config_guid="193093b2-da24-49bf-b407-442c213b71b4"
        chipset="ICL"
        symbol_name="RenderBasic"
        >
@@ -518,7 +518,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -651,7 +651,7 @@
   <set name="Compute Metrics Basic Gen11"
        mdapi_supported_apis="OGL OCL IO BB"
        underscore_name="compute_basic"
-       hw_config_guid="233a477b-f8f0-40f4-bf57-01440c3701d9"
+       hw_config_guid="5c99b520-174d-4e94-a95e-5392e9b2a944"
        chipset="ICL"
        symbol_name="ComputeBasic"
        >
@@ -861,7 +861,7 @@
              description="The total number of typed atomic accesses via Data Port."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSlicesTotalCount UMUL"
-             equation="B 4 READ B 5 READ FADD 2 FDIV $EuSubslicesTotalCount FMUL"
+             equation="B 4 READ B 5 READ UADD 2 UDIV $EuSubslicesTotalCount UMUL"
              underscore_name="typed_atomics"
              units="events"
              symbol_name="TypedAtomics"
@@ -942,7 +942,7 @@
              description="The total number of GPU memory bytes read from GTI."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL"
-             equation="64  B 1 READ B 3 READ UADD B 7 READ UADD B 6 READ UADD UMUL"
+             equation="64  B 1 READ B 3 READ UADD B 6 READ UADD B 7 READ UADD UMUL"
              underscore_name="gti_read_throughput"
              units="bytes"
              symbol_name="GtiReadThroughput"
@@ -1118,7 +1118,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -1284,17 +1284,17 @@
         <register type="NOA" address="0x00009888" value="0x1C5C000A" />
         <register type="NOA" address="0x00009888" value="0x001C0097" />
         <register type="NOA" address="0x00009888" value="0x061C9400" />
-        <register type="NOA" address="0x00009888" value="0x0C1CA700" />
+        <register type="NOA" address="0x00009888" value="0x0C1C00A7" />
         <register type="NOA" address="0x00009888" value="0x101C0000" />
         <register type="NOA" address="0x00009888" value="0x081D8100" />
-        <register type="NOA" address="0x00009888" value="0x0A1D0020" />
+        <register type="NOA" address="0x00009888" value="0x0A1D0010" />
         <register type="NOA" address="0x00009888" value="0x085C9497" />
-        <register type="NOA" address="0x00009888" value="0x0C5C00A7" />
+        <register type="NOA" address="0x00009888" value="0x0C5CA700" />
         <register type="NOA" address="0x00009888" value="0x105C0000" />
-        <register type="NOA" address="0x00009888" value="0x0A5D0013" />
+        <register type="NOA" address="0x00009888" value="0x0A5D0023" />
         <register type="NOA" address="0x00009888" value="0x181E8000" />
         <register type="NOA" address="0x00009888" value="0x1E1E0F80" />
-        <register type="NOA" address="0x00009888" value="0x201E000B" />
+        <register type="NOA" address="0x00009888" value="0x201E000E" />
         <register type="NOA" address="0x00009888" value="0x301F4000" />
         <register type="NOA" address="0x00009888" value="0x501F2524" />
         <register type="NOA" address="0x00009888" value="0x521F2522" />
@@ -1765,7 +1765,7 @@
   <set name="Compute Metrics L3 Cache Gen11"
        mdapi_supported_apis="OGL OCL IO BB"
        underscore_name="compute_l3_cache"
-       hw_config_guid="022b8913-ae9f-4559-abcd-583e586170d0"
+       hw_config_guid="05d5e01f-0800-4975-b36b-7b169cad3fab"
        chipset="ICL"
        symbol_name="ComputeL3Cache"
        >
@@ -2084,19 +2084,6 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="EU Array/Barrier"
              />
-    <counter name="L3 Misses"
-             description="The total number of L3 misses."
-             data_type="uint64"
-             equation="2 B 5 READ B 4 READ UADD UMUL"
-             underscore_name="l3_misses"
-             units="messages"
-             symbol_name="L3Misses"
-             semantic_type="event"
-             mdapi_supported_apis=""
-             mdapi_usage_flags="Tier3 Frame Batch Draw"
-             mdapi_hw_unit_type="gpu"
-             mdapi_group="L3/TAG"
-             />
     <counter name="EU FPU0 Move Instruction"
              description="The percentage of time in which execution units were actively processing move instructions on FPU0."
              data_type="float"
@@ -2312,20 +2299,6 @@
              mdapi_hw_unit_type="gpu"
              mdapi_group="3D Pipe/Rasterizer"
              />
-    <counter name="GTI L3 Throughput"
-             description="The total number of GPU memory bytes transferred between L3 caches and GTI."
-             data_type="uint64"
-             max_equation="$GpuCoreClocks 64 UMUL"
-             equation="$L3Misses 64 UMUL"
-             underscore_name="gti_l3_throughput"
-             units="bytes"
-             symbol_name="GtiL3Throughput"
-             semantic_type="throughput"
-             mdapi_supported_apis=""
-             mdapi_usage_flags="Tier2 Frame Batch Draw"
-             mdapi_group="GTI/L3"
-             mdapi_hw_unit_type="gpu"
-             />
     <counter name="DS Threads Dispatched"
              description="The total number of domain shader hardware threads dispatched."
              data_type="uint64"
@@ -2464,7 +2437,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -2583,23 +2556,19 @@
         <register type="NOA" address="0x00009888" value="0x08150000" />
         <register type="NOA" address="0x00009888" value="0x0A150000" />
         <register type="NOA" address="0x00009884" value="0x00000003" />
-        <register type="NOA" address="0x00009888" value="0x0A1473A0" />
         <register type="NOA" address="0x00009888" value="0x1217241C" />
-        <register type="NOA" address="0x00009888" value="0x22000550" />
-        <register type="NOA" address="0x00009888" value="0x18137C00" />
-        <register type="NOA" address="0x00009888" value="0x1A130001" />
-        <register type="NOA" address="0x00009888" value="0x061434A0" />
-        <register type="NOA" address="0x00009888" value="0x00140000" />
+        <register type="NOA" address="0x00009888" value="0x22000050" />
+        <register type="NOA" address="0x00009888" value="0x18133C00" />
         <register type="NOA" address="0x00009888" value="0x081710B0" />
         <register type="NOA" address="0x00009888" value="0x10170000" />
         <register type="NOA" address="0x00009888" value="0x501F1124" />
-        <register type="NOA" address="0x00009888" value="0x521F4849" />
+        <register type="NOA" address="0x00009888" value="0x521F4801" />
         <register type="NOA" address="0x00009888" value="0x541F0024" />
         <register type="NOA" address="0x00009888" value="0x3A1F8000" />
         <register type="NOA" address="0x00009888" value="0x4E1F2400" />
         <register type="NOA" address="0x00009888" value="0x461F3100" />
-        <register type="NOA" address="0x00009888" value="0x481F3131" />
-        <register type="NOA" address="0x00009888" value="0x4A1F0031" />
+        <register type="NOA" address="0x00009888" value="0x481F0031" />
+        <register type="NOA" address="0x00009888" value="0x4A1F0000" />
         <register type="NOA" address="0x00009888" value="0x4C1F0030" />
         <register type="NOA" address="0x00009888" value="0x181F0000" />
         <register type="NOA" address="0x00009888" value="0x301F0000" />
@@ -3172,7 +3141,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -3834,7 +3803,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -4566,7 +4535,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -5285,7 +5254,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -7839,7 +7808,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -8652,7 +8621,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -9497,7 +9466,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -10330,7 +10299,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"
@@ -11162,7 +11131,7 @@
              description="The total number of GPU memory bytes transferred between shaders and L3 caches w/o URB."
              data_type="uint64"
              max_equation="$GpuCoreClocks 64 UMUL $EuSubslicesTotalCount UMUL"
-             equation="A 30 READ A 31 READ UADD A 32 READ UADD 64 UMUL"
+             equation="$ShaderMemoryAccesses 64 UMUL"
              underscore_name="l3_shader_throughput"
              units="bytes"
              symbol_name="L3ShaderThroughput"

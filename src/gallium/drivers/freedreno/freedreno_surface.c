@@ -59,7 +59,6 @@ fd_create_surface(struct pipe_context *pctx,
 		psurf->u.buf.first_element = surf_tmpl->u.buf.first_element;
 		psurf->u.buf.last_element = surf_tmpl->u.buf.last_element;
 	} else {
-		debug_assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 		psurf->u.tex.level = level;
 		psurf->u.tex.first_layer = surf_tmpl->u.tex.first_layer;
 		psurf->u.tex.last_layer = surf_tmpl->u.tex.last_layer;

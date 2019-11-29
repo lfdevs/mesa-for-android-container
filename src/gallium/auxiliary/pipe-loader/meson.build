@@ -27,15 +27,20 @@ files_pipe_loader = files(
 )
 
 libpipe_loader_defines = []
+libpipe_loader_links = []
 
 if dep_libdrm.found()
   files_pipe_loader += files('pipe_loader_drm.c')
+  libpipe_loader_links += libloader
 endif
 if with_dri
   libpipe_loader_defines += '-DHAVE_PIPE_LOADER_DRI'
 endif
 if with_gallium_drisw_kms
   libpipe_loader_defines += '-DHAVE_PIPE_LOADER_KMS'
+endif
+if not (with_gallium_st_nine or with_gallium_opencl)
+  libpipe_loader_defines += '-DDROP_PIPE_LOADER_MISC'
 endif
 
 libpipe_loader_static = static_library(
@@ -64,7 +69,7 @@ libpipe_loader_dynamic = static_library(
       join_paths(get_option('prefix'), get_option('libdir'), 'gallium-pipe')
     )
   ],
-  link_with : libloader,
+  link_with : [libpipe_loader_links],
   dependencies : [dep_libdrm, idep_xmlconfig],
   build_by_default : false,
 )

@@ -1851,9 +1851,10 @@ _eglCreateSync(_EGLDisplay *disp, EGLenum type, const EGLAttrib *attrib_list,
        (type == EGL_SYNC_FENCE_KHR || type == EGL_SYNC_NATIVE_FENCE_ANDROID))
       RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_NO_SYNC_KHR);
 
-   /* return an error if the client API doesn't support GL_OES_EGL_sync */
+   /* return an error if the client API doesn't support GL_[OES|MESA]_EGL_sync. */
    if (ctx && (ctx->Resource.Display != disp ||
-               ctx->ClientAPI != EGL_OPENGL_ES_API))
+               (ctx->ClientAPI != EGL_OPENGL_ES_API &&
+                ctx->ClientAPI != EGL_OPENGL_API)))
       RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_NO_SYNC_KHR);
 
    switch (type) {
@@ -2035,8 +2036,10 @@ _eglWaitSyncCommon(_EGLDisplay *disp, _EGLSync *s, EGLint flags)
    _EGL_CHECK_SYNC(disp, s, EGL_FALSE, drv);
    assert(disp->Extensions.KHR_wait_sync);
 
-   /* return an error if the client API doesn't support GL_OES_EGL_sync */
-   if (ctx == EGL_NO_CONTEXT || ctx->ClientAPI != EGL_OPENGL_ES_API)
+   /* return an error if the client API doesn't support GL_[OES|MESA]_EGL_sync. */
+   if (ctx == EGL_NO_CONTEXT ||
+         (ctx->ClientAPI != EGL_OPENGL_ES_API &&
+          ctx->ClientAPI != EGL_OPENGL_API))
       RETURN_EGL_ERROR(disp, EGL_BAD_MATCH, EGL_FALSE);
 
    /* the API doesn't allow any flags yet */

@@ -128,6 +128,7 @@ bool lima_submit_start(struct lima_submit *submit, void *frame, uint32_t size)
       .bos = VOID2U64(util_dynarray_begin(&submit->gem_bos)),
       .frame = VOID2U64(frame),
       .frame_size = size,
+      .out_sync = submit->out_sync,
    };
 
    if (submit->in_sync_fd >= 0) {
@@ -144,7 +145,7 @@ bool lima_submit_start(struct lima_submit *submit, void *frame, uint32_t size)
    bool ret = drmIoctl(submit->screen->fd, DRM_IOCTL_LIMA_GEM_SUBMIT, &req) == 0;
 
    util_dynarray_foreach(&submit->bos, struct lima_bo *, bo) {
-      lima_bo_free(*bo);
+      lima_bo_unreference(*bo);
    }
 
    util_dynarray_clear(&submit->gem_bos);

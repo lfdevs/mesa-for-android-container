@@ -44,7 +44,7 @@ void rcommonBeginBatch(radeonContextPtr rmesa,
 /**
  * Write a relocated dword to the command buffer.
  */
-#define OUT_BATCH_RELOC(data, bo, offset, rd, wd, flags) 	\
+#define OUT_BATCH_RELOC(bo, offset, rd, wd, flags) 	\
 	do { 							\
 	int  __offset = (offset);				\
         if (0 && __offset) {					\

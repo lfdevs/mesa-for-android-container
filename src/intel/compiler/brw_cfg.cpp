@@ -44,10 +44,19 @@ pop_stack(exec_list *list)
 }
 
 static exec_node *
-link(void *mem_ctx, bblock_t *block)
+link(void *mem_ctx, bblock_t *block, enum bblock_link_kind kind)
 {
-   bblock_link *l = new(mem_ctx) bblock_link(block);
+   bblock_link *l = new(mem_ctx) bblock_link(block, kind);
    return &l->link;
+}
+
+void
+push_stack(exec_list *list, void *mem_ctx, bblock_t *block)
+{
+   /* The kind of the link is immaterial, but we need to provide one since
+    * this is (ab)using the edge data structure in order to implement a stack.
+    */
+   list->push_tail(link(mem_ctx, block, bblock_link_logical));
 }
 
 bblock_t::bblock_t(cfg_t *cfg) :
@@ -59,17 +68,19 @@ bblock_t::bblock_t(cfg_t *cfg) :
 }
 
 void
-bblock_t::add_successor(void *mem_ctx, bblock_t *successor)
+bblock_t::add_successor(void *mem_ctx, bblock_t *successor,
+                        enum bblock_link_kind kind)
 {
-   successor->parents.push_tail(::link(mem_ctx, this));
-   children.push_tail(::link(mem_ctx, successor));
+   successor->parents.push_tail(::link(mem_ctx, this, kind));
+   children.push_tail(::link(mem_ctx, successor, kind));
 }
 
 bool
-bblock_t::is_predecessor_of(const bblock_t *block) const
+bblock_t::is_predecessor_of(const bblock_t *block,
+                            enum bblock_link_kind kind) const
 {
    foreach_list_typed_safe (bblock_link, parent, link, &block->parents) {
-      if (parent->block == this) {
+      if (parent->block == this && parent->kind <= kind) {
          return true;
       }
    }
@@ -78,10 +89,11 @@ bblock_t::is_predecessor_of(const bblock_t *block) const
 }
 
 bool
-bblock_t::is_successor_of(const bblock_t *block) const
+bblock_t::is_successor_of(const bblock_t *block,
+                          enum bblock_link_kind kind) const
 {
    foreach_list_typed_safe (bblock_link, child, link, &block->children) {
-      if (child->block == this) {
+      if (child->block == this && child->kind <= kind) {
          return true;
       }
    }
@@ -185,8 +197,8 @@ cfg_t::cfg_t(exec_list *instructions)
 	 /* Push our information onto a stack so we can recover from
 	  * nested ifs.
 	  */
-	 if_stack.push_tail(link(mem_ctx, cur_if));
-	 else_stack.push_tail(link(mem_ctx, cur_else));
+         push_stack(&if_stack, mem_ctx, cur_if);
+         push_stack(&else_stack, mem_ctx, cur_else);
 
 	 cur_if = cur;
 	 cur_else = NULL;
@@ -196,7 +208,7 @@ cfg_t::cfg_t(exec_list *instructions)
 	  * instructions.
 	  */
 	 next = new_block();
-	 cur_if->add_successor(mem_ctx, next);
+         cur_if->add_successor(mem_ctx, next, bblock_link_logical);
 
 	 set_next_block(&cur, next, ip);
 	 break;
@@ -208,7 +220,8 @@ cfg_t::cfg_t(exec_list *instructions)
 
 	 next = new_block();
          assert(cur_if != NULL);
-	 cur_if->add_successor(mem_ctx, next);
+         cur_if->add_successor(mem_ctx, next, bblock_link_logical);
+         cur_else->add_successor(mem_ctx, next, bblock_link_physical);
 
 	 set_next_block(&cur, next, ip);
 	 break;
@@ -220,7 +233,7 @@ cfg_t::cfg_t(exec_list *instructions)
          } else {
             cur_endif = new_block();
 
-            cur->add_successor(mem_ctx, cur_endif);
+            cur->add_successor(mem_ctx, cur_endif, bblock_link_logical);
 
             set_next_block(&cur, cur_endif, ip - 1);
          }
@@ -228,10 +241,10 @@ cfg_t::cfg_t(exec_list *instructions)
          cur->instructions.push_tail(inst);
 
          if (cur_else) {
-            cur_else->add_successor(mem_ctx, cur_endif);
+            cur_else->add_successor(mem_ctx, cur_endif, bblock_link_logical);
          } else {
             assert(cur_if != NULL);
-            cur_if->add_successor(mem_ctx, cur_endif);
+            cur_if->add_successor(mem_ctx, cur_endif, bblock_link_logical);
          }
 
          assert(cur_if->end()->opcode == BRW_OPCODE_IF);
@@ -246,8 +259,8 @@ cfg_t::cfg_t(exec_list *instructions)
 	 /* Push our information onto a stack so we can recover from
 	  * nested loops.
 	  */
-	 do_stack.push_tail(link(mem_ctx, cur_do));
-	 while_stack.push_tail(link(mem_ctx, cur_while));
+         push_stack(&do_stack, mem_ctx, cur_do);
+         push_stack(&while_stack, mem_ctx, cur_while);
 
 	 /* Set up the block just after the while.  Don't know when exactly
 	  * it will start, yet.
@@ -260,7 +273,7 @@ cfg_t::cfg_t(exec_list *instructions)
          } else {
             cur_do = new_block();
 
-            cur->add_successor(mem_ctx, cur_do);
+            cur->add_successor(mem_ctx, cur_do, bblock_link_logical);
 
             set_next_block(&cur, cur_do, ip - 1);
          }
@@ -294,8 +307,8 @@ cfg_t::cfg_t(exec_list *instructions)
           * corruption.
           */
          next = new_block();
-         cur->add_successor(mem_ctx, next);
-         cur->add_successor(mem_ctx, cur_while);
+         cur->add_successor(mem_ctx, next, bblock_link_logical);
+         cur->add_successor(mem_ctx, cur_while, bblock_link_physical);
          set_next_block(&cur, next, ip);
 	 break;
 
@@ -316,11 +329,13 @@ cfg_t::cfg_t(exec_list *instructions)
           * loop, the top of the loop again, into a use of the variable).
           */
          assert(cur_do != NULL);
-         cur->add_successor(mem_ctx, cur_do->next());
+         cur->add_successor(mem_ctx, cur_do->next(), bblock_link_logical);
 
 	 next = new_block();
 	 if (inst->predicate)
-	    cur->add_successor(mem_ctx, next);
+            cur->add_successor(mem_ctx, next, bblock_link_logical);
+         else
+            cur->add_successor(mem_ctx, next, bblock_link_physical);
 
 	 set_next_block(&cur, next, ip);
 	 break;
@@ -339,11 +354,12 @@ cfg_t::cfg_t(exec_list *instructions)
           * See the DO case for additional explanation.
           */
          assert(cur_do != NULL);
-         cur->add_successor(mem_ctx, cur_do);
+         cur->add_successor(mem_ctx, cur_do, bblock_link_physical);
+         cur->add_successor(mem_ctx, cur_while, bblock_link_logical);
 
 	 next = new_block();
 	 if (inst->predicate)
-	    cur->add_successor(mem_ctx, next);
+            cur->add_successor(mem_ctx, next, bblock_link_logical);
 
 	 set_next_block(&cur, next, ip);
 	 break;
@@ -362,8 +378,11 @@ cfg_t::cfg_t(exec_list *instructions)
           * channels, so we may skip over the divergence point at the top of
           * the loop to keep the CFG as unambiguous as possible.
           */
-         cur->add_successor(mem_ctx, inst->predicate ? cur_do :
-                                     cur_do->next());
+         if (inst->predicate) {
+            cur->add_successor(mem_ctx, cur_do, bblock_link_logical);
+         } else {
+            cur->add_successor(mem_ctx, cur_do->next(), bblock_link_logical);
+         }
 
 	 set_next_block(&cur, cur_while, ip);
 
@@ -403,9 +422,11 @@ cfg_t::remove_block(bblock_t *block)
 
       /* Add removed-block's successors to its predecessors' successor lists. */
       foreach_list_typed (bblock_link, successor, link, &block->children) {
-         if (!successor->block->is_successor_of(predecessor->block)) {
+         if (!successor->block->is_successor_of(predecessor->block,
+                                                successor->kind)) {
             predecessor->block->children.push_tail(link(mem_ctx,
-                                                        successor->block));
+                                                        successor->block,
+                                                        successor->kind));
          }
       }
    }
@@ -422,9 +443,11 @@ cfg_t::remove_block(bblock_t *block)
 
       /* Add removed-block's predecessors to its successors' predecessor lists. */
       foreach_list_typed (bblock_link, predecessor, link, &block->parents) {
-         if (!predecessor->block->is_predecessor_of(successor->block)) {
+         if (!predecessor->block->is_predecessor_of(successor->block,
+                                                    predecessor->kind)) {
             successor->block->parents.push_tail(link(mem_ctx,
-                                                     predecessor->block));
+                                                     predecessor->block,
+                                                     predecessor->kind));
          }
       }
    }
@@ -487,7 +510,8 @@ cfg_t::dump(backend_shader *s)
          fprintf(stderr, "START B%d IDOM(none)", block->num);
 
       foreach_list_typed(bblock_link, link, link, &block->parents) {
-         fprintf(stderr, " <-B%d",
+         fprintf(stderr, " <%cB%d",
+                 link->kind == bblock_link_logical ? '-' : '~',
                  link->block->num);
       }
       fprintf(stderr, "\n");
@@ -495,7 +519,8 @@ cfg_t::dump(backend_shader *s)
          block->dump(s);
       fprintf(stderr, "END B%d", block->num);
       foreach_list_typed(bblock_link, link, link, &block->children) {
-         fprintf(stderr, " ->B%d",
+         fprintf(stderr, " %c>B%d",
+                 link->kind == bblock_link_logical ? '-' : '~',
                  link->block->num);
       }
       fprintf(stderr, "\n");

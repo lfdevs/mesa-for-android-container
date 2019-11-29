@@ -110,6 +110,11 @@ lp_setup_set_fs_ssbos(struct lp_setup_context *setup,
                       struct pipe_shader_buffer *buffers);
 
 void
+lp_setup_set_fs_images(struct lp_setup_context *setup,
+                       unsigned num,
+                       struct pipe_image_view *images);
+
+void
 lp_setup_set_alpha_ref_value( struct lp_setup_context *setup,
                               float alpha_ref_value );
 

@@ -152,8 +152,8 @@ struct compiled_blend_color {
 
 /* Compiled pipe_stencil_ref */
 struct compiled_stencil_ref {
-   uint32_t PE_STENCIL_CONFIG;
-   uint32_t PE_STENCIL_CONFIG_EXT;
+   uint32_t PE_STENCIL_CONFIG[2];
+   uint32_t PE_STENCIL_CONFIG_EXT[2];
 };
 
 /* Compiled pipe_scissor_state */
@@ -257,6 +257,7 @@ struct compiled_shader_state {
    uint32_t PS_TEMP_REGISTER_CONTROL_MSAA; /* Adds a temporary if needed to make space for extra input */
    uint32_t PS_CONTROL;
    uint32_t PS_START_PC;
+   uint32_t PE_DEPTH_CONFIG;
    uint32_t GL_VARYING_TOTAL_COMPONENTS;
    uint32_t GL_VARYING_NUM_COMPONENTS;
    uint32_t GL_VARYING_COMPONENT_USE[2];

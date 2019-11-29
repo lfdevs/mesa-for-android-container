@@ -29,16 +29,20 @@
 #include "format_unpack.h"
 
 const mesa_array_format RGBA32_FLOAT =
-   MESA_ARRAY_FORMAT(4, 1, 1, 1, 4, 0, 1, 2, 3);
+   MESA_ARRAY_FORMAT(MESA_ARRAY_FORMAT_BASE_FORMAT_RGBA_VARIANTS,
+                     4, 1, 1, 1, 4, 0, 1, 2, 3);
 
 const mesa_array_format RGBA8_UBYTE =
-   MESA_ARRAY_FORMAT(1, 0, 0, 1, 4, 0, 1, 2, 3);
+   MESA_ARRAY_FORMAT(MESA_ARRAY_FORMAT_BASE_FORMAT_RGBA_VARIANTS,
+                     1, 0, 0, 1, 4, 0, 1, 2, 3);
 
 const mesa_array_format RGBA32_UINT =
-   MESA_ARRAY_FORMAT(4, 0, 0, 0, 4, 0, 1, 2, 3);
+   MESA_ARRAY_FORMAT(MESA_ARRAY_FORMAT_BASE_FORMAT_RGBA_VARIANTS,
+                     4, 0, 0, 0, 4, 0, 1, 2, 3);
 
 const mesa_array_format RGBA32_INT =
-   MESA_ARRAY_FORMAT(4, 1, 0, 0, 4, 0, 1, 2, 3);
+   MESA_ARRAY_FORMAT(MESA_ARRAY_FORMAT_BASE_FORMAT_RGBA_VARIANTS,
+                     4, 1, 0, 0, 4, 0, 1, 2, 3);
 
 static void
 invert_swizzle(uint8_t dst[4], const uint8_t src[4])

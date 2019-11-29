@@ -32,7 +32,7 @@
 
 static void
 panfrost_initialize_surface(
-                struct panfrost_job *batch,
+                struct panfrost_batch *batch,
                 struct pipe_surface *surf)
 {
         if (!surf)
@@ -42,28 +42,24 @@ panfrost_initialize_surface(
         struct panfrost_resource *rsrc = pan_resource(surf->texture);
 
         rsrc->slices[level].initialized = true;
-
-        assert(rsrc->bo);
-        panfrost_job_add_bo(batch, rsrc->bo);
 }
 
 /* Generate a fragment job. This should be called once per frame. (According to
  * presentations, this is supposed to correspond to eglSwapBuffers) */
 
 mali_ptr
-panfrost_fragment_job(struct panfrost_context *ctx, bool has_draws)
+panfrost_fragment_job(struct panfrost_batch *batch, bool has_draws)
 {
-        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
+        struct panfrost_screen *screen = pan_screen(batch->ctx->base.screen);
 
         mali_ptr framebuffer = screen->require_sfbd ?
-                               panfrost_sfbd_fragment(ctx, has_draws) :
-                               panfrost_mfbd_fragment(ctx, has_draws);
+                               panfrost_sfbd_fragment(batch, has_draws) :
+                               panfrost_mfbd_fragment(batch, has_draws);
 
         /* Mark the affected buffers as initialized, since we're writing to it.
          * Also, add the surfaces we're writing to to the batch */
 
-        struct pipe_framebuffer_state *fb = &ctx->pipe_framebuffer;
-        struct panfrost_job *batch = panfrost_get_job_for_fbo(ctx);
+        struct pipe_framebuffer_state *fb = &batch->key;
 
         for (unsigned i = 0; i < fb->nr_cbufs; ++i) {
                 panfrost_initialize_surface(batch, fb->cbufs[i]);
@@ -78,8 +74,6 @@ panfrost_fragment_job(struct panfrost_context *ctx, bool has_draws)
                 .job_descriptor_size = 1
         };
 
-        struct panfrost_job *job = panfrost_get_job_for_fbo(ctx);
-
         /* The passed tile coords can be out of range in some cases, so we need
          * to clamp them to the framebuffer size to avoid a TILE_RANGE_FAULT.
          * Theoretically we also need to clamp the coordinates positive, but we
@@ -91,18 +85,18 @@ panfrost_fragment_job(struct panfrost_context *ctx, bool has_draws)
          * But that can't happen if any actual drawing occurs (beyond a
          * wallpaper reload), so this is again irrelevant in practice. */
 
-        job->maxx = MIN2(job->maxx, fb->width);
-        job->maxy = MIN2(job->maxy, fb->height);
+        batch->maxx = MIN2(batch->maxx, fb->width);
+        batch->maxy = MIN2(batch->maxy, fb->height);
 
         /* Rendering region must be at least 1x1; otherwise, there is nothing
          * to do and the whole job chain should have been discarded. */
 
-        assert(job->maxx > job->minx);
-        assert(job->maxy > job->miny);
+        assert(batch->maxx > batch->minx);
+        assert(batch->maxy > batch->miny);
 
         struct mali_payload_fragment payload = {
-                .min_tile_coord = MALI_COORDINATE_TO_TILE_MIN(job->minx, job->miny),
-                .max_tile_coord = MALI_COORDINATE_TO_TILE_MAX(job->maxx, job->maxy),
+                .min_tile_coord = MALI_COORDINATE_TO_TILE_MIN(batch->minx, batch->miny),
+                .max_tile_coord = MALI_COORDINATE_TO_TILE_MAX(batch->maxx, batch->maxy),
                 .framebuffer = framebuffer,
         };
 
@@ -110,7 +104,7 @@ panfrost_fragment_job(struct panfrost_context *ctx, bool has_draws)
          * shared with 64-bit Bifrost systems, and accordingly there is 4-bytes
          * of zero padding in between. */
 
-        struct panfrost_transfer transfer = panfrost_allocate_transient(ctx, sizeof(header) + sizeof(payload));
+        struct panfrost_transfer transfer = panfrost_allocate_transient(batch, sizeof(header) + sizeof(payload));
         memcpy(transfer.cpu, &header, sizeof(header));
         memcpy(transfer.cpu + sizeof(header), &payload, sizeof(payload));
         return transfer.gpu;

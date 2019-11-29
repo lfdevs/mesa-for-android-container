@@ -50,18 +50,11 @@ TEST(MesaFormatsTest, FormatTypeAndComps)
        */
       if (!_mesa_is_format_compressed(f)) {
          GLenum datatype = 0;
-         GLenum error = 0;
          GLuint comps = 0;
 
          /* If the datatype is zero, the format was not handled */
          _mesa_uncompressed_format_to_type_and_comps(f, &datatype, &comps);
          EXPECT_NE(datatype, (GLenum)0);
-
-         /* If the error isn't NO_ERROR, the format was not handled.
-          * Use an arbitrary GLenum format. */
-         _mesa_format_matches_format_and_type(f, GL_RG, datatype,
-                                              GL_FALSE, &error);
-         EXPECT_EQ((GLenum)GL_NO_ERROR, error);
       }
 
    }
@@ -136,4 +129,52 @@ TEST(MesaFormatsTest, FormatSanity)
       #undef HAS_PROP
 
    }
+}
+
+TEST(MesaFormatsTest, IntensityToRed)
+{
+   EXPECT_EQ(_mesa_get_intensity_format_red(MESA_FORMAT_I_UNORM8),
+             MESA_FORMAT_R_UNORM8);
+   EXPECT_EQ(_mesa_get_intensity_format_red(MESA_FORMAT_I_SINT32),
+             MESA_FORMAT_R_SINT32);
+   EXPECT_EQ(_mesa_get_intensity_format_red(MESA_FORMAT_R8G8B8A8_UNORM),
+             MESA_FORMAT_R8G8B8A8_UNORM);
+}
+
+static mesa_format fffat_wrap(GLenum format, GLenum type)
+{
+   uint32_t f = _mesa_format_from_format_and_type(format, type);
+   if (_mesa_format_is_mesa_array_format(f))
+      f = _mesa_format_from_array_format((mesa_array_format)f);
+   return (mesa_format)f;
+}
+
+TEST(MesaFormatsTest, FormatFromFormatAndType)
+{
+   EXPECT_EQ(fffat_wrap(GL_RGBA, GL_SHORT),
+             MESA_FORMAT_RGBA_SNORM16);
+   EXPECT_EQ(fffat_wrap(GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT),
+             MESA_FORMAT_Z_UNORM16);
+   EXPECT_EQ(fffat_wrap(GL_STENCIL_INDEX, GL_UNSIGNED_BYTE),
+             MESA_FORMAT_S_UINT8);
+
+   /* Should return an array format, but not a proper MESA_FORMAT. */
+   EXPECT_TRUE(_mesa_format_is_mesa_array_format(_mesa_format_from_format_and_type(GL_DEPTH_COMPONENT,
+                                                                                   GL_BYTE)));
+}
+
+TEST(MesaFormatsTest, FormatMatchesFormatAndType)
+{
+   EXPECT_TRUE(_mesa_format_matches_format_and_type(MESA_FORMAT_RGBA_UNORM16,
+                                                    GL_RGBA,
+                                                    GL_UNSIGNED_SHORT, false,
+                                                    NULL));
+   EXPECT_TRUE(_mesa_format_matches_format_and_type(MESA_FORMAT_S_UINT8,
+                                                    GL_STENCIL_INDEX,
+                                                    GL_UNSIGNED_BYTE, false,
+                                                    NULL));
+   EXPECT_TRUE(_mesa_format_matches_format_and_type(MESA_FORMAT_Z_UNORM16,
+                                                    GL_DEPTH_COMPONENT,
+                                                    GL_UNSIGNED_SHORT, false,
+                                                    NULL));
 }

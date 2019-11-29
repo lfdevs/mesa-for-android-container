@@ -153,6 +153,12 @@ dri2_drawable_get_buffers(struct dri_drawable *drawable,
        * may occur as the stvis->color_format.
        */
       switch(format) {
+      case PIPE_FORMAT_R16G16B16A16_FLOAT:
+         depth = 64;
+         break;
+      case PIPE_FORMAT_R16G16B16X16_FLOAT:
+         depth = 48;
+         break;
       case PIPE_FORMAT_B10G10R10A2_UNORM:
       case PIPE_FORMAT_R10G10B10A2_UNORM:
       case PIPE_FORMAT_BGRA8888_UNORM:
@@ -231,6 +237,12 @@ dri_image_drawable_get_buffers(struct dri_drawable *drawable,
       }
 
       switch (pf) {
+      case PIPE_FORMAT_R16G16B16A16_FLOAT:
+         image_format = __DRI_IMAGE_FORMAT_ABGR16161616F;
+         break;
+      case PIPE_FORMAT_R16G16B16X16_FLOAT:
+         image_format = __DRI_IMAGE_FORMAT_XBGR16161616F;
+         break;
       case PIPE_FORMAT_B5G5R5A1_UNORM:
          image_format = __DRI_IMAGE_FORMAT_ARGB1555;
          break;
@@ -304,6 +316,12 @@ dri2_allocate_buffer(__DRIscreen *sPriv,
    bind |= PIPE_BIND_SHARED;
 
    switch (format) {
+      case 64:
+         pf = PIPE_FORMAT_R16G16B16A16_FLOAT;
+         break;
+      case 48:
+         pf = PIPE_FORMAT_R16G16B16X16_FLOAT;
+         break;
       case 32:
          pf = PIPE_FORMAT_BGRA8888_UNORM;
          break;
@@ -878,8 +896,8 @@ dri2_create_image_from_fd(__DRIscreen *_screen,
    int num_handles = mod_planes > 0 ? mod_planes : map->nplanes;
 
    switch (fourcc) {
-   case __DRI_IMAGE_FOURCC_YUYV:
-   case __DRI_IMAGE_FOURCC_UYVY:
+   case DRM_FORMAT_YUYV:
+   case DRM_FORMAT_UYVY:
       expected_num_fds = 1;
       break;
    default:
@@ -2039,8 +2057,7 @@ dri2_init_screen(__DRIscreen * sPriv)
    if (!pscreen)
        goto release_pipe;
 
-   screen->default_throttle_frames =
-      pscreen->get_param(pscreen, PIPE_CAP_MAX_FRAMES_IN_FLIGHT);
+   screen->throttle = pscreen->get_param(pscreen, PIPE_CAP_THROTTLE);
 
    if (pscreen->resource_create_with_modifiers)
       dri2ImageExtension.createImageWithModifiers =

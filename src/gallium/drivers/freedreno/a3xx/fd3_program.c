@@ -38,43 +38,6 @@
 #include "fd3_texture.h"
 #include "fd3_format.h"
 
-static struct ir3_shader *
-create_shader_stateobj(struct pipe_context *pctx, const struct pipe_shader_state *cso,
-		gl_shader_stage type)
-{
-	struct fd_context *ctx = fd_context(pctx);
-	struct ir3_compiler *compiler = ctx->screen->compiler;
-	return ir3_shader_create(compiler, cso, type, &ctx->debug, pctx->screen);
-}
-
-static void *
-fd3_fp_state_create(struct pipe_context *pctx,
-		const struct pipe_shader_state *cso)
-{
-	return create_shader_stateobj(pctx, cso, MESA_SHADER_FRAGMENT);
-}
-
-static void
-fd3_fp_state_delete(struct pipe_context *pctx, void *hwcso)
-{
-	struct ir3_shader *so = hwcso;
-	ir3_shader_destroy(so);
-}
-
-static void *
-fd3_vp_state_create(struct pipe_context *pctx,
-		const struct pipe_shader_state *cso)
-{
-	return create_shader_stateobj(pctx, cso, MESA_SHADER_VERTEX);
-}
-
-static void
-fd3_vp_state_delete(struct pipe_context *pctx, void *hwcso)
-{
-	struct ir3_shader *so = hwcso;
-	ir3_shader_destroy(so);
-}
-
 bool
 fd3_needs_manual_clipping(const struct ir3_shader *shader,
 						  const struct pipe_rasterizer_state *rast)
@@ -485,11 +448,6 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 void
 fd3_prog_init(struct pipe_context *pctx)
 {
-	pctx->create_fs_state = fd3_fp_state_create;
-	pctx->delete_fs_state = fd3_fp_state_delete;
-
-	pctx->create_vs_state = fd3_vp_state_create;
-	pctx->delete_vs_state = fd3_vp_state_delete;
-
+	ir3_prog_init(pctx);
 	fd_prog_init(pctx);
 }

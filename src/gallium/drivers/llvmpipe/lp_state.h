@@ -57,8 +57,14 @@
 #define LP_NEW_SO            0x20000
 #define LP_NEW_SO_BUFFERS    0x40000
 #define LP_NEW_FS_SSBOS      0x80000
+#define LP_NEW_FS_IMAGES    0x100000
 
-
+#define LP_CSNEW_CS 0x1
+#define LP_CSNEW_CONSTANTS 0x2
+#define LP_CSNEW_SAMPLER 0x4
+#define LP_CSNEW_SAMPLER_VIEW 0x8
+#define LP_CSNEW_SSBOS 0x10
+#define LP_CSNEW_IMAGES 0x20
 
 struct vertex_info;
 struct pipe_context;
@@ -110,6 +116,9 @@ void
 llvmpipe_init_draw_funcs(struct llvmpipe_context *llvmpipe);
 
 void
+llvmpipe_init_compute_funcs(struct llvmpipe_context *llvmpipe);
+
+void
 llvmpipe_init_clip_funcs(struct llvmpipe_context *llvmpipe);
 
 void
@@ -137,4 +146,13 @@ llvmpipe_prepare_geometry_sampling(struct llvmpipe_context *ctx,
                                    unsigned num,
                                    struct pipe_sampler_view **views);
 
+void
+llvmpipe_prepare_vertex_images(struct llvmpipe_context *lp,
+                               unsigned num,
+                               struct pipe_image_view *views);
+
+void
+llvmpipe_prepare_geometry_images(struct llvmpipe_context *lp,
+                                 unsigned num,
+                                 struct pipe_image_view *views);
 #endif

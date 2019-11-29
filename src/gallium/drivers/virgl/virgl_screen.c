@@ -463,8 +463,6 @@ virgl_get_shader_param(struct pipe_screen *screen,
       case PIPE_SHADER_CAP_INT64_ATOMICS:
       case PIPE_SHADER_CAP_FP16:
          return 0;
-      case PIPE_SHADER_CAP_SCALAR_ISA:
-         return 1;
       default:
          return 0;
       }
@@ -659,6 +657,9 @@ virgl_is_format_supported( struct pipe_screen *screen,
                                vscreen->tweak_gles_emulate_bgra;
 
    if (MAX2(1, sample_count) != MAX2(1, storage_sample_count))
+      return false;
+
+   if (!util_is_power_of_two_or_zero(sample_count))
       return false;
 
    assert(target == PIPE_BUFFER ||

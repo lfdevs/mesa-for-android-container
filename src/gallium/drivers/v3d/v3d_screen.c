@@ -175,10 +175,16 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
                 return 4;
 
         case PIPE_CAP_SHADER_BUFFER_OFFSET_ALIGNMENT:
-                return 4;
+                if (screen->has_cache_flush)
+                        return 4;
+                else
+                        return 0; /* Disables shader storage */
 
         case PIPE_CAP_GLSL_FEATURE_LEVEL:
                 return 330;
+
+        case PIPE_CAP_ESSL_FEATURE_LEVEL:
+                return 310;
 
 	case PIPE_CAP_GLSL_FEATURE_LEVEL_COMPATIBILITY:
 		return 140;
@@ -348,23 +354,29 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
                 return 0;
-        case PIPE_SHADER_CAP_SCALAR_ISA:
-                return 1;
         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
                 return V3D_MAX_TEXTURE_SAMPLERS;
 
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
-                if (shader == PIPE_SHADER_VERTEX)
-                        return 0;
+                if (screen->has_cache_flush) {
+                        if (shader == PIPE_SHADER_VERTEX)
+                                return 0;
 
-                return PIPE_MAX_SHADER_BUFFERS;
+                        return PIPE_MAX_SHADER_BUFFERS;
+                 } else {
+                        return 0;
+                 }
 
         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
-                if (screen->devinfo.ver < 41)
+                if (screen->has_cache_flush) {
+                        if (screen->devinfo.ver < 41)
+                                return 0;
+                        else
+                                return PIPE_MAX_SHADER_IMAGES;
+                } else {
                         return 0;
-                else
-                        return PIPE_MAX_SHADER_IMAGES;
+                }
 
         case PIPE_SHADER_CAP_PREFERRED_IR:
                 return PIPE_SHADER_IR_NIR;
@@ -668,7 +680,9 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
 
         slab_create_parent(&screen->transfer_pool, sizeof(struct v3d_transfer), 16);
 
-        screen->has_csd = false; /* until the UABI is enabled. */
+        screen->has_csd = v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_CSD);
+        screen->has_cache_flush =
+                v3d_has_feature(screen, DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH);
 
         v3d_fence_init(screen);
 

@@ -28,6 +28,7 @@
 
 #include "tgsi/tgsi_parse.h"
 #include "compiler/nir/nir.h"
+#include "compiler/nir/nir_serialize.h"
 
 #include "nvc0/nvc0_stateobj.h"
 #include "nvc0/nvc0_context.h"
@@ -740,6 +741,15 @@ nvc0_cp_state_create(struct pipe_context *pipe,
    case PIPE_SHADER_IR_NIR:
       prog->pipe.ir.nir = (nir_shader *)cso->prog;
       break;
+   case PIPE_SHADER_IR_NIR_SERIALIZED: {
+      struct blob_reader reader;
+      const struct pipe_binary_program_header *hdr = cso->prog;
+
+      blob_reader_init(&reader, hdr->blob, hdr->num_bytes);
+      prog->pipe.ir.nir = nir_deserialize(NULL, pipe->screen->get_compiler_options(pipe->screen, PIPE_SHADER_IR_NIR, PIPE_SHADER_COMPUTE), &reader);
+      prog->pipe.type = PIPE_SHADER_IR_NIR;
+      break;
+   }
    default:
       assert(!"unsupported IR!");
       free(prog);
@@ -1055,7 +1065,7 @@ nvc0_so_target_create(struct pipe_context *pipe,
    pipe_reference_init(&targ->pipe.reference, 1);
 
    assert(buf->base.target == PIPE_BUFFER);
-   util_range_add(&buf->valid_buffer_range, offset, offset + size);
+   util_range_add(&buf->base, &buf->valid_buffer_range, offset, offset + size);
 
    return &targ->pipe;
 }

@@ -215,6 +215,14 @@ typedef struct {
     * schedule the instruction.
     */
    int total_spill_needed;
+
+   /* For each physical register, a linked list of loads associated with it in
+    * this block. When we spill a value to a given register, and there are
+    * existing loads associated with it that haven't been scheduled yet, we
+    * have to make sure that the corresponding unspill happens after the last
+    * original use has happened, i.e. is scheduled before.
+    */
+   struct list_head physreg_reads[GPIR_PHYSICAL_REG_NUM];
 } sched_ctx;
 
 static int gpir_min_dist_alu(gpir_dep *dep)
@@ -441,8 +449,9 @@ static void schedule_insert_ready_list(sched_ctx *ctx,
 
    struct list_head *insert_pos = &ctx->ready_list;
    list_for_each_entry(gpir_node, node, &ctx->ready_list, list) {
-      if (insert_node->sched.dist > node->sched.dist ||
-          gpir_op_infos[insert_node->op].schedule_first) {
+      if ((insert_node->sched.dist > node->sched.dist ||
+          gpir_op_infos[insert_node->op].schedule_first) &&
+          !gpir_op_infos[node->op].schedule_first) {
          insert_pos = &node->list;
          break;
       }
@@ -532,6 +541,19 @@ static bool _try_place_node(sched_ctx *ctx, gpir_instr *instr, gpir_node *node)
          node->sched.pos = load->sched.pos;
          return true;
       }
+   }
+
+   if (node->op == gpir_op_store_reg) {
+      /* This register may be loaded in the next basic block, in which case
+       * there still needs to be a 2 instruction gap. We do what the blob
+       * seems to do and simply disable stores in the last two instructions of
+       * the basic block.
+       *
+       * TODO: We may be able to do better than this, but we have to check
+       * first if storing a register works across branches.
+       */
+      if (instr->index < 2)
+         return false;
    }
 
    node->sched.instr = instr;
@@ -705,7 +727,7 @@ static int _schedule_try_node(sched_ctx *ctx, gpir_node *node, bool speculative)
    int score = 0;
 
    gpir_node_foreach_pred(node, dep) {
-      if (!gpir_is_input_node(dep->pred))
+      if (dep->type != GPIR_DEP_INPUT)
          continue;
 
       int pred_score = INT_MIN;
@@ -839,12 +861,12 @@ static uint64_t get_available_regs(sched_ctx *ctx, gpir_node *node,
          if (instr->reg0_use_count == 0)
             use_available = ~0ull;
          else if (!instr->reg0_is_attr)
-            use_available = 0xf << (4 * instr->reg0_index);
+            use_available = 0xfull << (4 * instr->reg0_index);
 
          if (instr->reg1_use_count == 0)
             use_available = ~0ull;
          else
-            use_available |= 0xf << (4 * instr->reg1_index);
+            use_available |= 0xfull << (4 * instr->reg1_index);
 
          available &= use_available;
       }
@@ -1008,10 +1030,6 @@ static bool try_spill_node(sched_ctx *ctx, gpir_node *node)
 
       ctx->live_physregs |= (1ull << physreg);
 
-      /* TODO: when we support multiple basic blocks, there may be register
-       * loads/stores to this register other than this one that haven't been
-       * scheduled yet so we may need to insert write-after-read dependencies.
-       */
       gpir_store_node *store = gpir_node_create(ctx->block, gpir_op_store_reg);
       store->index = physreg / 4;
       store->component = physreg % 4;
@@ -1029,6 +1047,16 @@ static bool try_spill_node(sched_ctx *ctx, gpir_node *node)
       }
       node->sched.physreg_store = store;
       gpir_node_add_dep(&store->node, node, GPIR_DEP_INPUT);
+
+      list_for_each_entry(gpir_load_node, load,
+                          &ctx->physreg_reads[physreg], reg_link) {
+         gpir_node_add_dep(&store->node, &load->node, GPIR_DEP_WRITE_AFTER_READ);
+         if (load->node.sched.ready) {
+            list_del(&load->node.list);
+            load->node.sched.ready = false;
+         }
+      }
+
       node->sched.ready = false;
       schedule_insert_ready_list(ctx, &store->node);
    }
@@ -1154,7 +1182,8 @@ static bool can_use_complex(gpir_node *node)
          continue;
 
       gpir_node *succ = dep->succ;
-      if (succ->type != gpir_node_type_alu)
+      if (succ->type != gpir_node_type_alu ||
+          !succ->sched.instr)
          continue;
 
       /* Note: this must be consistent with gpir_codegen_{mul,add}_slot{0,1}
@@ -1313,6 +1342,17 @@ static bool try_node(sched_ctx *ctx)
 
 static void place_move(sched_ctx *ctx, gpir_node *node)
 {
+   /* For complex1 that is consumed by a postlog2, we cannot allow any moves
+    * in between. Convert the postlog2 to a move and insert a new postlog2,
+    * and try to schedule it again in try_node().
+    */
+   gpir_node *postlog2 = consuming_postlog2(node);
+   if (postlog2) {
+      postlog2->op = gpir_op_mov;
+      create_postlog2(ctx, node);
+      return;
+   }
+
    gpir_node *move = create_move(ctx, node);
    gpir_node_foreach_succ_safe(move, dep) {
       gpir_node *succ = dep->succ;
@@ -1330,10 +1370,14 @@ static void place_move(sched_ctx *ctx, gpir_node *node)
 /* For next-max nodes, not every node can be offloaded to a move in the
  * complex slot. If we run out of non-complex slots, then such nodes cannot
  * have moves placed for them. There should always be sufficient
- * complex-capable nodes so that this isn't a problem.
+ * complex-capable nodes so that this isn't a problem. We also disallow moves
+ * for schedule_first nodes here.
  */
 static bool can_place_move(sched_ctx *ctx, gpir_node *node)
 {
+   if (gpir_op_infos[node->op].schedule_first)
+      return false;
+
    if (!node->sched.next_max_node)
       return true;
 
@@ -1347,17 +1391,7 @@ static bool sched_move(sched_ctx *ctx)
 {
    list_for_each_entry(gpir_node, node, &ctx->ready_list, list) {
       if (node->sched.max_node) {
-         /* For complex1 that is consumed by a postlog2, we cannot allow any
-          * moves in between. Convert the postlog2 to a move and insert a new
-          * postlog2, and try to schedule it again in try_node().
-          */
-         gpir_node *postlog2 = consuming_postlog2(node);
-         if (postlog2) {
-            postlog2->op = gpir_op_mov;
-            create_postlog2(ctx, node);
-         } else {
-            place_move(ctx, node);
-         }
+         place_move(ctx, node);
          return true;
       }
    }
@@ -1550,24 +1584,55 @@ static bool schedule_block(gpir_block *block)
    list_inithead(&ctx.ready_list);
    ctx.block = block;
    ctx.ready_list_slots = 0;
-   /* TODO initialize with block live out once we have proper liveness
-    * tracking
-    */
-   ctx.live_physregs = 0;
+   ctx.live_physregs = block->live_out_phys;
+
+   for (unsigned i = 0; i < GPIR_PHYSICAL_REG_NUM; i++) {
+      list_inithead(&ctx.physreg_reads[i]);
+   }
 
    /* construct the ready list from root nodes */
    list_for_each_entry_safe(gpir_node, node, &block->node_list, list) {
+      /* Add to physreg_reads */
+      if (node->op == gpir_op_load_reg) {
+         gpir_load_node *load = gpir_node_to_load(node);
+         unsigned index = 4 * load->index + load->component;
+         list_addtail(&load->reg_link, &ctx.physreg_reads[index]);
+      }
+
       if (gpir_node_is_root(node))
          schedule_insert_ready_list(&ctx, node);
    }
 
    list_inithead(&block->node_list);
-   while (!list_empty(&ctx.ready_list)) {
+   while (!list_is_empty(&ctx.ready_list)) {
       if (!schedule_one_instr(&ctx))
          return false;
    }
 
    return true;
+}
+
+static void add_fake_dep(gpir_node *node, gpir_node *dep_node,
+                         gpir_node *last_written[])
+{
+      gpir_node_foreach_pred(node, dep) {
+         if (dep->type == GPIR_DEP_INPUT) {
+            int index = dep->pred->value_reg;
+            if (index >= 0 && last_written[index]) {
+               gpir_node_add_dep(last_written[index], dep_node,
+                                 GPIR_DEP_WRITE_AFTER_READ);
+            }
+            if (gpir_op_infos[dep->pred->op].schedule_first) {
+               /* Insert fake dependencies for any schedule_first children on
+                * this node as well. This guarantees that as soon as
+                * "dep_node" is ready to schedule, all of its schedule_first
+                * children, grandchildren, etc. are ready so that they can be
+                * scheduled as soon as possible.
+                */
+               add_fake_dep(dep->pred, dep_node, last_written);
+            }
+         }
+      }
 }
 
 static void schedule_build_dependency(gpir_block *block)
@@ -1594,22 +1659,6 @@ static void schedule_build_dependency(gpir_block *block)
       }
    }
 
-   /* Forward dependencies. We only need to add these for register loads,
-    * since value registers already have an input dependency.
-    */
-   list_for_each_entry(gpir_node, node, &block->node_list, list) {
-      if (node->op == gpir_op_load_reg) {
-         gpir_load_node *load = gpir_node_to_load(node);
-         unsigned index = 4 * load->index + load->component;
-         if (last_written[index]) {
-            gpir_node_add_dep(node, last_written[index], GPIR_DEP_READ_AFTER_WRITE);
-         }
-      }
-
-      if (node->value_reg >= 0)
-         last_written[node->value_reg] = node;
-   }
-
    memset(last_written, 0, sizeof(last_written));
 
    /* False dependencies. For value registers, these exist only to make sure
@@ -1622,16 +1671,12 @@ static void schedule_build_dependency(gpir_block *block)
          if (last_written[index]) {
             gpir_node_add_dep(last_written[index], node, GPIR_DEP_WRITE_AFTER_READ);
          }
+      } else if (node->op == gpir_op_store_reg) {
+         gpir_store_node *store = gpir_node_to_store(node);
+         unsigned index = 4 * store->index + store->component;
+         last_written[index] = node;
       } else {
-         gpir_node_foreach_pred(node, dep) {
-            if (dep->type == GPIR_DEP_INPUT) {
-               int index = dep->pred->value_reg;
-               if (index >= 0 && last_written[index]) {
-                  gpir_node_add_dep(last_written[index], node,
-                                    GPIR_DEP_WRITE_AFTER_READ);
-               }
-            }
-         }
+         add_fake_dep(node, node, last_written);
       }
 
       if (node->value_reg >= 0)

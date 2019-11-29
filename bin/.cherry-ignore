@@ -1,40 +1,6 @@
-# warnings that are not useful
-da5ebe30105f70e3520ce3ae145793b755552569
-6b8cb087568699ca9a6e9e8b7bf49179e622b59f
-
-# Jason doesn't want this applied to 19.2 (it's a revert)
-d15fe8ca8262d502435c4f83985ac414f950bc5f
-
-# This doesn't apply to 19.2
-f833b4cada07b746a10ffa4d93fcd821920c3cb1
-d2db43fcad6a2ea2070ff5f7884411f4b7d3925c
-66f2aa6ccd0b226eebe2c1a46281160b0a54d522
-
-# The author requested that this not be applied to 19.2
-dcc0e23438f3e5929c2ef74d57e8207be25ecb41
-
-# This doesn't apply cleanly, and no one really cares about this file on stable
-# branches anyway.
-bcd9224728dcb8d8fe4bcddc4bd9b2c36fcfe9dd
-
-# De-nominated by its author due to alternate fix not being backported
-43041627445540afda1a05d11861935963660344
-
-# This is immediately reverted, so just don't apply
-19546108d3dd5541a189e36df4ea83b3f519e48f
-
-# The authors requested these not be applied to 19.2
-869e32593a9096b845dd6106f8f86e1c41fac968
-a2c3c65a31de90fdb55f76f2894860dfbafe2043
-bb0c5c487e63e88acbb792f092dd8f392bad8540
-
-# This is reverted shortly after it was landed
+# This is reverted shortly after landing
 4432a2d14d80081d062f7939a950d65ea3a16eed
 
-# These aren't relevant for 19.2
-1a05811936dd8d0c3a367c6f00629624ef39d537
-911a8261419f48dcd756f78832fa5a5f4c5b8d93
-
-# This was manuall backported
-2afeed301010917c4eae55dcd2544f9d329df934
+# This was manually backported
+21be5c8edd3ad156f6cbfbceb96e7939716d9f2c
 4b392ced2d744fccffe95490ff57e6b41033c266

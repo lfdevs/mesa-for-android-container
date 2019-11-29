@@ -260,6 +260,11 @@ void llvmpipe_update_derived( struct llvmpipe_context *llvmpipe )
                             ARRAY_SIZE(llvmpipe->ssbos[PIPE_SHADER_FRAGMENT]),
                             llvmpipe->ssbos[PIPE_SHADER_FRAGMENT]);
 
+   if (llvmpipe->dirty & LP_NEW_FS_IMAGES)
+      lp_setup_set_fs_images(llvmpipe->setup,
+                             ARRAY_SIZE(llvmpipe->images[PIPE_SHADER_FRAGMENT]),
+                             llvmpipe->images[PIPE_SHADER_FRAGMENT]);
+
    if (llvmpipe->dirty & (LP_NEW_SAMPLER_VIEW))
       lp_setup_set_fragment_sampler_views(llvmpipe->setup,
                                           llvmpipe->num_sampler_views[PIPE_SHADER_FRAGMENT],

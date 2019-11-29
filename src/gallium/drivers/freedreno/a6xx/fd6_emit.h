@@ -50,9 +50,16 @@ enum fd6_state_id {
 	FD6_GROUP_LRZ_BINNING,
 	FD6_GROUP_VBO,
 	FD6_GROUP_VS_CONST,
+	FD6_GROUP_HS_CONST,
+	FD6_GROUP_DS_CONST,
+	FD6_GROUP_GS_CONST,
 	FD6_GROUP_FS_CONST,
 	FD6_GROUP_VS_DRIVER_PARAMS,
+	FD6_GROUP_PRIMITIVE_PARAMS,
 	FD6_GROUP_VS_TEX,
+	FD6_GROUP_HS_TEX,
+	FD6_GROUP_DS_TEX,
+	FD6_GROUP_GS_TEX,
 	FD6_GROUP_FS_TEX,
 	FD6_GROUP_IBO,
 	FD6_GROUP_RASTERIZER,
@@ -92,6 +99,9 @@ struct fd6_emit {
 
 	struct ir3_shader_variant *bs;
 	struct ir3_shader_variant *vs;
+	struct ir3_shader_variant *hs;
+	struct ir3_shader_variant *ds;
+	struct ir3_shader_variant *gs;
 	struct ir3_shader_variant *fs;
 
 	unsigned streamout_mask;
@@ -218,6 +228,12 @@ fd6_stage2shadersb(gl_shader_stage type)
 	switch (type) {
 	case MESA_SHADER_VERTEX:
 		return SB6_VS_SHADER;
+	case MESA_SHADER_TESS_CTRL:
+		return SB6_HS_SHADER;
+	case MESA_SHADER_TESS_EVAL:
+		return SB6_DS_SHADER;
+	case MESA_SHADER_GEOMETRY:
+		return SB6_GS_SHADER;
 	case MESA_SHADER_FRAGMENT:
 		return SB6_FS_SHADER;
 	case MESA_SHADER_COMPUTE:

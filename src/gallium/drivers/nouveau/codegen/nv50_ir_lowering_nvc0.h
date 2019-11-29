@@ -171,10 +171,10 @@ private:
    Value *loadMsInfo32(Value *ptr, uint32_t off);
 
    void adjustCoordinatesMS(TexInstruction *);
-   void processSurfaceCoordsGM107(TexInstruction *);
+   TexInstruction *processSurfaceCoordsGM107(TexInstruction *, Instruction *[4]);
    void processSurfaceCoordsNVE4(TexInstruction *);
    void processSurfaceCoordsNVC0(TexInstruction *);
-   void convertSurfaceFormat(TexInstruction *);
+   void convertSurfaceFormat(TexInstruction *, Instruction **);
    void insertOOBSurfaceOpResult(TexInstruction *);
    Value *calculateSampleOffset(Value *sampleID);
 

@@ -49,6 +49,7 @@
 #include "lp_public.h"
 #include "lp_limits.h"
 #include "lp_rast.h"
+#include "lp_cs_tpool.h"
 
 #include "state_tracker/sw_winsys.h"
 
@@ -68,6 +69,7 @@ static const struct debug_named_value lp_debug_flags[] = {
    { "fence", DEBUG_FENCE, NULL },
    { "mem", DEBUG_MEM, NULL },
    { "fs", DEBUG_FS, NULL },
+   { "cs", DEBUG_CS, NULL },
    DEBUG_NAMED_VALUE_END
 };
 #endif
@@ -97,8 +99,7 @@ static const char *
 llvmpipe_get_name(struct pipe_screen *screen)
 {
    static char buf[100];
-   snprintf(buf, sizeof(buf), "llvmpipe (LLVM %u.%u, %u bits)",
-            HAVE_LLVM >> 8, HAVE_LLVM & 0xff,
+   snprintf(buf, sizeof(buf), "llvmpipe (LLVM " MESA_LLVM_VERSION_STRING ", %u bits)",
             lp_native_vector_width );
    return buf;
 }
@@ -216,7 +217,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
       return 0;
    case PIPE_CAP_COMPUTE:
-      return 0;
+      return GALLIVM_HAVE_CORO;
    case PIPE_CAP_USER_VERTEX_BUFFERS:
       return 1;
    case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
@@ -240,7 +241,7 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_MAX_TEXTURE_BUFFER_SIZE:
       return 65536;
    case PIPE_CAP_TEXTURE_BUFFER_OFFSET_ALIGNMENT:
-      return 1;
+      return 16;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return 0;
    case PIPE_CAP_MAX_VIEWPORTS:
@@ -342,7 +343,6 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
    case PIPE_CAP_PCI_BUS:
    case PIPE_CAP_PCI_DEVICE:
    case PIPE_CAP_PCI_FUNCTION:
-   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
    case PIPE_CAP_ROBUST_BUFFER_ACCESS_BEHAVIOR:
    case PIPE_CAP_PRIMITIVE_RESTART_FOR_PATCHES:
    case PIPE_CAP_TGSI_VOTE:
@@ -387,6 +387,9 @@ llvmpipe_get_param(struct pipe_screen *screen, enum pipe_cap param)
       return 32;
    case PIPE_CAP_MAX_SHADER_BUFFER_SIZE:
       return LP_MAX_TGSI_SHADER_BUFFER_SIZE;
+   case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+   case PIPE_CAP_TGSI_TG4_COMPONENT_IN_SWIZZLE:
+      return 1;
    default:
       return u_pipe_screen_get_param_defaults(screen, param);
    }
@@ -400,6 +403,7 @@ llvmpipe_get_shader_param(struct pipe_screen *screen,
    switch(shader)
    {
    case PIPE_SHADER_FRAGMENT:
+   case PIPE_SHADER_COMPUTE:
       switch (param) {
       default:
          return gallivm_get_shader_param(param);
@@ -457,6 +461,58 @@ llvmpipe_get_paramf(struct pipe_screen *screen, enum pipe_capf param)
    return 0.0;
 }
 
+static int
+llvmpipe_get_compute_param(struct pipe_screen *_screen,
+                           enum pipe_shader_ir ir_type,
+                           enum pipe_compute_cap param,
+                           void *ret)
+{
+   switch (param) {
+   case PIPE_COMPUTE_CAP_IR_TARGET:
+      return 0;
+   case PIPE_COMPUTE_CAP_MAX_GRID_SIZE:
+      if (ret) {
+         uint64_t *grid_size = ret;
+         grid_size[0] = 65535;
+         grid_size[1] = 65535;
+         grid_size[2] = 65535;
+      }
+      return 3 * sizeof(uint64_t) ;
+   case PIPE_COMPUTE_CAP_MAX_BLOCK_SIZE:
+      if (ret) {
+         uint64_t *block_size = ret;
+         block_size[0] = 1024;
+         block_size[1] = 1024;
+         block_size[2] = 1024;
+      }
+      return 3 * sizeof(uint64_t);
+   case PIPE_COMPUTE_CAP_MAX_THREADS_PER_BLOCK:
+      if (ret) {
+         uint64_t *max_threads_per_block = ret;
+         *max_threads_per_block = 1024;
+      }
+      return sizeof(uint64_t);
+   case PIPE_COMPUTE_CAP_MAX_LOCAL_SIZE:
+      if (ret) {
+         uint64_t *max_local_size = ret;
+         *max_local_size = 32768;
+      }
+      return sizeof(uint64_t);
+   case PIPE_COMPUTE_CAP_GRID_DIMENSION:
+   case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
+   case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
+   case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
+   case PIPE_COMPUTE_CAP_MAX_MEM_ALLOC_SIZE:
+   case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+   case PIPE_COMPUTE_CAP_IMAGES_SUPPORTED:
+   case PIPE_COMPUTE_CAP_SUBGROUP_SIZE:
+   case PIPE_COMPUTE_CAP_ADDRESS_BITS:
+   case PIPE_COMPUTE_CAP_MAX_VARIABLE_THREADS_PER_BLOCK:
+      break;
+   }
+   return 0;
+}
 
 /**
  * Query format support for creating a texture, drawing surface, etc.
@@ -595,6 +651,9 @@ llvmpipe_destroy_screen( struct pipe_screen *_screen )
    struct llvmpipe_screen *screen = llvmpipe_screen(_screen);
    struct sw_winsys *winsys = screen->winsys;
 
+   if (screen->cs_tpool)
+      lp_cs_tpool_destroy(screen->cs_tpool);
+
    if (screen->rast)
       lp_rast_destroy(screen->rast);
 
@@ -604,7 +663,7 @@ llvmpipe_destroy_screen( struct pipe_screen *_screen )
       winsys->destroy(winsys);
 
    mtx_destroy(&screen->rast_mutex);
-
+   mtx_destroy(&screen->cs_mutex);
    FREE(screen);
 }
 
@@ -690,6 +749,7 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
    screen->base.get_device_vendor = llvmpipe_get_vendor; // TODO should be the CPU vendor
    screen->base.get_param = llvmpipe_get_param;
    screen->base.get_shader_param = llvmpipe_get_shader_param;
+   screen->base.get_compute_param = llvmpipe_get_compute_param;
    screen->base.get_paramf = llvmpipe_get_paramf;
    screen->base.is_format_supported = llvmpipe_is_format_supported;
 
@@ -716,6 +776,15 @@ llvmpipe_create_screen(struct sw_winsys *winsys)
       return NULL;
    }
    (void) mtx_init(&screen->rast_mutex, mtx_plain);
+
+   screen->cs_tpool = lp_cs_tpool_create(screen->num_threads);
+   if (!screen->cs_tpool) {
+      lp_rast_destroy(screen->rast);
+      lp_jit_screen_cleanup(screen);
+      FREE(screen);
+      return NULL;
+   }
+   (void) mtx_init(&screen->cs_mutex, mtx_plain);
 
    return &screen->base;
 }

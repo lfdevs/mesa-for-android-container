@@ -66,6 +66,7 @@ gen_device_name_to_pci_device_id(const char *name)
       { "cml", 0x9b41 },
       { "cnl", 0x5a52 },
       { "icl", 0x8a52 },
+      { "tgl", 0x9a49 },
    };
 
    for (unsigned i = 0; i < ARRAY_SIZE(name_map); i++) {
@@ -1008,6 +1009,53 @@ static const struct gen_device_info gen_device_info_ehl_2x4 = {
    .simulator_id = 28,
 };
 
+#define GEN12_URB_MIN_MAX_ENTRIES                   \
+   .min_entries = {                                 \
+      [MESA_SHADER_VERTEX]    = 64,                 \
+      [MESA_SHADER_TESS_EVAL] = 34,                 \
+   },                                               \
+   .max_entries = {                                 \
+      [MESA_SHADER_VERTEX]    = 3576,               \
+      [MESA_SHADER_TESS_CTRL] = 1548,               \
+      [MESA_SHADER_TESS_EVAL] = 3576,               \
+      [MESA_SHADER_GEOMETRY]  = 1548,               \
+   }
+
+#define GEN12_HW_INFO                               \
+   .gen = 12,                                       \
+   .has_pln = false,                                \
+   .has_sample_with_hiz = false,                    \
+   .has_aux_map = true,                             \
+   .max_vs_threads = 546,                           \
+   .max_gs_threads = 336,                           \
+   .max_tcs_threads = 336,                          \
+   .max_tes_threads = 546,                          \
+   .max_cs_threads = 112, /* threads per DSS */     \
+   .urb = {                                         \
+      GEN12_URB_MIN_MAX_ENTRIES,                    \
+   }
+
+#define GEN12_FEATURES(_gt, _slices, _dual_subslices, _l3)      \
+   GEN8_FEATURES,                                               \
+   GEN12_HW_INFO,                                               \
+   .has_64bit_types = false,                                    \
+   .has_integer_dword_mul = false,                              \
+   .gt = _gt, .num_slices = _slices, .l3_banks = _l3,           \
+   .simulator_id = 22,                                          \
+   .urb.size = (_gt) == 1 ? 512 : 1024,                         \
+   .num_subslices = _dual_subslices,                            \
+   .num_eu_per_subslice = 16
+
+#define dual_subslices(args...) { args, }
+
+static const struct gen_device_info gen_device_info_tgl_1x2x16 = {
+   GEN12_FEATURES(1, 1, dual_subslices(2), 8),
+};
+
+static const struct gen_device_info gen_device_info_tgl_1x6x16 = {
+   GEN12_FEATURES(2, 1, dual_subslices(6), 8),
+};
+
 static void
 gen_device_info_set_eu_mask(struct gen_device_info *devinfo,
                             unsigned slice,
@@ -1226,6 +1274,7 @@ gen_get_device_info_from_pci_id(int pci_id,
 #define CHIPSET(id, family, name) \
       case id: *devinfo = gen_device_info_##family; break;
 #include "pci_ids/i965_pci_ids.h"
+#include "pci_ids/iris_pci_ids.h"
    default:
       fprintf(stderr, "Driver does not support the 0x%x PCI ID.\n", pci_id);
       return false;
@@ -1255,11 +1304,13 @@ gen_get_device_info_from_pci_id(int pci_id,
                               * 4; /* effective subslices per slice */
       break;
    case 11:
+   case 12:
       devinfo->max_wm_threads = 128 /* threads-per-PSD */
                               * devinfo->num_slices
                               * 8; /* subslices per slice */
       break;
    default:
+      assert(devinfo->gen < 9);
       break;
    }
 
@@ -1276,6 +1327,7 @@ gen_get_device_name(int devid)
 #undef CHIPSET
 #define CHIPSET(id, family, name) case id: return name;
 #include "pci_ids/i965_pci_ids.h"
+#include "pci_ids/iris_pci_ids.h"
    default:
       return NULL;
    }

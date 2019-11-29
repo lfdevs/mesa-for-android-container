@@ -60,4 +60,8 @@ pipe_tegra_create_screen(int fd, const struct pipe_screen_config *config);
 struct pipe_screen *
 pipe_lima_create_screen(int fd, const struct pipe_screen_config *config);
 
+struct pipe_screen *
+pipe_zink_create_screen(int fd, const struct pipe_screen_config *config);
+
+
 #endif /* _DRM_HELPER_PUBLIC_H */

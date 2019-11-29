@@ -31,14 +31,6 @@
 #include <stdint.h>
 #include <panfrost-misc.h>
 
-#define MALI_SHORT_PTR_BITS (sizeof(u64)*8)
-
-#define MALI_FBD_HIERARCHY_WEIGHTS 8
-
-#define MALI_PAYLOAD_SIZE 256
-
-typedef u32 mali_jd_core_req;
-
 enum mali_job_type {
         JOB_NOT_STARTED	= 0,
         JOB_TYPE_NULL = 1,
@@ -70,7 +62,6 @@ enum mali_draw_mode {
 
 /* Applies to tiler_gl_enables */
 
-
 #define MALI_OCCLUSION_QUERY    (1 << 3)
 #define MALI_OCCLUSION_PRECISE  (1 << 4)
 
@@ -78,6 +69,7 @@ enum mali_draw_mode {
  * In OpenGL, this would corresponds to glFrontFace(GL_CW). Mesa and the blob
  * disagree about how to do viewport flipping, so the blob actually sets this
  * for GL_CW but then has a negative viewport stride */
+
 #define MALI_FRONT_CCW_TOP      (1 << 5)
 
 #define MALI_CULL_FACE_FRONT    (1 << 6)
@@ -804,9 +796,9 @@ struct mali_payload_set_value {
  * let shift=extra_flags=0. Stride is set to the image format's bytes-per-pixel
  * (*NOT the row stride*). Size is set to the size of the image itself.
  *
- * Special internal varyings (including gl_FrontFacing) are handled vai
- * MALI_ATTR_INTERNAL, which has all fields set to zero and uses a special
- * elements pseudo-pointer.
+ * Special internal varyings (including gl_FrontFacing) could be seen as
+ * IMAGE/INTERNAL as well as LINEAR, setting all fields set to zero and using a
+ * special elements pseudo-pointer.
  */
 
 enum mali_attr_mode {
@@ -819,16 +811,23 @@ enum mali_attr_mode {
         MALI_ATTR_INTERNAL = 6
 };
 
-/* Pseudo-address for gl_FrontFacing */
+/* Pseudo-address for gl_FrontFacing, used with INTERNAL. Same addres is used
+ * for gl_FragCoord with IMAGE, needing a coordinate flip. Who knows. */
 
-#define MALI_VARYING_FRONT_FACING (0x20)
+#define MALI_VARYING_FRAG_COORD (0x25)
+#define MALI_VARYING_FRONT_FACING (0x26)
 
 /* This magic "pseudo-address" is used as `elements` to implement
  * gl_PointCoord. When read from a fragment shader, it generates a point
  * coordinate per the OpenGL ES 2.0 specification. Flipped coordinate spaces
  * require an affine transformation in the shader. */
 
-#define MALI_VARYING_POINT_COORD (0x60)
+#define MALI_VARYING_POINT_COORD (0x61)
+
+/* Used for comparison to check if an address is special. Mostly a guess, but
+ * it doesn't really matter. */
+
+#define MALI_VARYING_SPECIAL (0x100)
 
 union mali_attr {
 	/* This is used for actual attributes. */
@@ -876,6 +875,9 @@ enum mali_fbd_type {
 #define FBD_TYPE (1)
 #define FBD_MASK (~0x3f)
 
+/* ORed into an MFBD address to specify the fbx section is included */
+#define MALI_MFBD_TAG_EXTRA (0x2)
+
 struct mali_uniform_buffer_meta {
         /* This is actually the size minus 1 (MALI_POSITIVE), in units of 16
          * bytes. This gives a maximum of 2^14 bytes, which just so happens to
@@ -901,6 +903,9 @@ struct mali_uniform_buffer_meta {
 #define MALI_DRAW_INDEXED_UINT8  (0x10)
 #define MALI_DRAW_INDEXED_UINT16 (0x20)
 #define MALI_DRAW_INDEXED_UINT32 (0x30)
+#define MALI_DRAW_INDEXED_SIZE   (0x30)
+#define MALI_DRAW_INDEXED_SHIFT  (4)
+
 #define MALI_DRAW_VARYING_SIZE   (0x100)
 #define MALI_DRAW_PRIMITIVE_RESTART_FIXED_INDEX (0x10000)
 
@@ -1079,8 +1084,7 @@ struct mali_vertex_tiler_postfix {
         u64 sampler_descriptor;
 
         u64 uniforms;
-        u8 flags : 4;
-        u64 _shader_upper : MALI_SHORT_PTR_BITS - 4; /* struct shader_meta */
+        u64 shader;
         u64 attributes; /* struct attribute_buffer[] */
         u64 attribute_meta; /* attribute_meta[] */
         u64 varyings; /* struct attr */
@@ -1179,10 +1183,21 @@ enum mali_texture_type {
 /* For each pointer, there is an address and optionally also a stride */
 #define MAX_ELEMENTS (2)
 
-/* Corresponds to the type passed to glTexImage2D and so forth */
+/* It's not known why there are 4-bits allocated -- this enum is almost
+ * certainly incomplete */
 
-/* Flags for usage2 */
-#define MALI_TEX_MANUAL_STRIDE (0x20)
+enum mali_texture_layout {
+        /* For a Z/S texture, this is linear */
+        MALI_TEXTURE_TILED = 0x1,
+
+        /* Z/S textures cannot be tiled */
+        MALI_TEXTURE_LINEAR = 0x2,
+
+        /* 16x16 sparse */
+        MALI_TEXTURE_AFBC = 0xC
+};
+
+/* Corresponds to the type passed to glTexImage2D and so forth */
 
 struct mali_texture_format {
         unsigned swizzle : 12;
@@ -1192,8 +1207,15 @@ struct mali_texture_format {
         unsigned unknown1 : 1;
 
         enum mali_texture_type type : 2;
+        enum mali_texture_layout layout : 4;
 
-        unsigned usage2 : 8;
+        /* Always set */
+        unsigned unknown2 : 1;
+
+        /* Set to allow packing an explicit stride */
+        unsigned manual_stride : 1;
+
+        unsigned zero : 2;
 } __attribute__((packed));
 
 struct mali_texture_descriptor {
@@ -1210,7 +1232,7 @@ struct mali_texture_descriptor {
         uint8_t unknown3A;
 
         /* Zero for non-mipmapped, (number of levels - 1) for mipmapped */
-        uint8_t nr_mipmap_levels;
+        uint8_t levels;
 
         /* Swizzling is a single 32-bit word, broken up here for convenience.
          * Here, swizzling refers to the ES 3.0 texture parameters for channel
@@ -1328,11 +1350,6 @@ struct mali_viewport {
 
 #define MALI_TILE_COORD_X(coord) ((coord) & MALI_X_COORD_MASK)
 #define MALI_TILE_COORD_Y(coord) (((coord) & MALI_Y_COORD_MASK) >> 16)
-#define MALI_TILE_COORD_FLAGS(coord) ((coord) & ~(MALI_X_COORD_MASK | MALI_Y_COORD_MASK))
-
-/* No known flags yet, but just in case...? */
-
-#define MALI_TILE_NO_FLAG (0)
 
 /* Helpers to generate tile coordinates based on the boundary coordinates in
  * screen space. So, with the bounds (0, 0) to (128, 128) for the screen, these
@@ -1371,6 +1388,12 @@ struct mali_payload_fragment {
  * within the larget framebuffer descriptor). Analogous to
  * bifrost_tiler_heap_meta and bifrost_tiler_meta*/
 
+/* See pan_tiler.c for derivation */
+#define MALI_HIERARCHY_MASK ((1 << 9) - 1)
+
+/* Flag disabling the tiler for clear-only jobs */
+#define MALI_TILER_DISABLED (1 << 12)
+
 struct midgard_tiler_descriptor {
         /* Size of the entire polygon list; see pan_tiler.c for the
          * computation. It's based on hierarchical tiling */
@@ -1381,7 +1404,9 @@ struct midgard_tiler_descriptor {
          * flagged here is less known. We do that (tiler_hierarchy_mask & 0x1ff)
          * specifies a mask of hierarchy weights, which explains some of the
          * performance mysteries around setting it. We also see the bottom bit
-         * of tiler_flags set in the kernel, but no comment why. */
+         * of tiler_flags set in the kernel, but no comment why.
+         *
+         * hierarchy_mask can have the TILER_DISABLED flag */
 
         u16 hierarchy_mask;
         u16 flags;
@@ -1514,27 +1539,21 @@ struct bifrost_render_target {
 
         u64 zero1;
 
-        union {
-                struct {
-                        /* Stuff related to ARM Framebuffer Compression. When AFBC is enabled,
-                         * there is an extra metadata buffer that contains 16 bytes per tile.
-                         * The framebuffer needs to be the same size as before, since we don't
-                         * know ahead of time how much space it will take up. The
-                         * framebuffer_stride is set to 0, since the data isn't stored linearly
-                         * anymore.
-                         */
+        struct {
+                /* Stuff related to ARM Framebuffer Compression. When AFBC is enabled,
+                 * there is an extra metadata buffer that contains 16 bytes per tile.
+                 * The framebuffer needs to be the same size as before, since we don't
+                 * know ahead of time how much space it will take up. The
+                 * framebuffer_stride is set to 0, since the data isn't stored linearly
+                 * anymore.
+                 *
+                 * When AFBC is disabled, these fields are zero.
+                 */
 
-                        mali_ptr metadata;
-                        u32 stride; // stride in units of tiles
-                        u32 unk; // = 0x20000
-                } afbc;
-
-                struct {
-                        /* Heck if I know */
-                        u64 unk;
-                        mali_ptr pointer;
-                } chunknown;
-        };
+                mali_ptr metadata;
+                u32 stride; // stride in units of tiles
+                u32 unk; // = 0x20000
+        } afbc;
 
         mali_ptr framebuffer;
 

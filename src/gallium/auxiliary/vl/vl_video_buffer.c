@@ -38,60 +38,6 @@
 
 #include "vl_video_buffer.h"
 
-const enum pipe_format const_resource_formats_YV12[3] = {
-   PIPE_FORMAT_R8_UNORM,
-   PIPE_FORMAT_R8_UNORM,
-   PIPE_FORMAT_R8_UNORM
-};
-
-const enum pipe_format const_resource_formats_NV12[3] = {
-   PIPE_FORMAT_R8_UNORM,
-   PIPE_FORMAT_R8G8_UNORM,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_YUVA[3] = {
-   PIPE_FORMAT_R8G8B8A8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_VUYA[3] = {
-   PIPE_FORMAT_B8G8R8A8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_YUVX[3] = {
-   PIPE_FORMAT_R8G8B8X8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_VUYX[3] = {
-   PIPE_FORMAT_B8G8R8X8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_YUYV[3] = {
-   PIPE_FORMAT_R8G8_R8B8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_UYVY[3] = {
-   PIPE_FORMAT_G8R8_B8R8_UNORM,
-   PIPE_FORMAT_NONE,
-   PIPE_FORMAT_NONE
-};
-
-const enum pipe_format const_resource_formats_P016[3] = {
-   PIPE_FORMAT_R16_UNORM,
-   PIPE_FORMAT_R16G16_UNORM,
-   PIPE_FORMAT_NONE
-};
-
 const unsigned const_resource_plane_order_YUV[3] = {
    0,
    1,
@@ -104,40 +50,22 @@ const unsigned const_resource_plane_order_YVU[3] = {
    1
 };
 
-const enum pipe_format *
-vl_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format)
+void
+vl_get_video_buffer_formats(struct pipe_screen *screen, enum pipe_format format,
+                            enum pipe_format out_format[VL_NUM_COMPONENTS])
 {
-   switch(format) {
-   case PIPE_FORMAT_YV12:
-      return const_resource_formats_YV12;
+   unsigned num_planes = util_format_get_num_planes(format);
+   unsigned i;
 
-   case PIPE_FORMAT_NV12:
-      return const_resource_formats_NV12;
+   for (i = 0; i < num_planes; i++)
+      out_format[i] = util_format_get_plane_format(format, i);
+   for (; i < VL_NUM_COMPONENTS; i++)
+      out_format[i] = PIPE_FORMAT_NONE;
 
-   case PIPE_FORMAT_R8G8B8A8_UNORM:
-      return const_resource_formats_YUVA;
-
-   case PIPE_FORMAT_B8G8R8A8_UNORM:
-      return const_resource_formats_VUYA;
-
-   case PIPE_FORMAT_R8G8B8X8_UNORM:
-      return const_resource_formats_YUVX;
-
-   case PIPE_FORMAT_B8G8R8X8_UNORM:
-      return const_resource_formats_VUYX;
-
-   case PIPE_FORMAT_YUYV:
-      return const_resource_formats_YUYV;
-
-   case PIPE_FORMAT_UYVY:
-      return const_resource_formats_UYVY;
-
-   case PIPE_FORMAT_P016:
-      return const_resource_formats_P016;
-
-   default:
-      return NULL;
-   }
+   if (format == PIPE_FORMAT_YUYV)
+      out_format[0] = PIPE_FORMAT_R8G8_R8B8_UNORM;
+   else if (format == PIPE_FORMAT_UYVY)
+      out_format[0] = PIPE_FORMAT_G8R8_B8R8_UNORM;
 }
 
 const unsigned *
@@ -178,12 +106,10 @@ vl_video_buffer_is_format_supported(struct pipe_screen *screen,
                                     enum pipe_video_profile profile,
                                     enum pipe_video_entrypoint entrypoint)
 {
-   const enum pipe_format *resource_formats;
+   enum pipe_format resource_formats[VL_NUM_COMPONENTS];
    unsigned i;
 
-   resource_formats = vl_video_buffer_formats(screen, format);
-   if (!resource_formats)
-      return false;
+   vl_get_video_buffer_formats(screen, format, resource_formats);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
       enum pipe_format format = resource_formats[i];
@@ -328,7 +254,7 @@ vl_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
    struct vl_video_buffer *buf = (struct vl_video_buffer *)buffer;
    struct pipe_sampler_view sv_templ;
    struct pipe_context *pipe;
-   const enum pipe_format *sampler_format;
+   enum pipe_format sampler_format[VL_NUM_COMPONENTS];
    const unsigned *plane_order;
    unsigned i, j, component;
 
@@ -336,7 +262,7 @@ vl_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
 
    pipe = buf->base.context;
 
-   sampler_format = vl_video_buffer_formats(pipe->screen, buf->base.buffer_format);
+   vl_get_video_buffer_formats(pipe->screen, buf->base.buffer_format, sampler_format);
    plane_order = vl_video_buffer_plane_order(buf->base.buffer_format);
 
    for (component = 0, i = 0; i < buf->num_planes; ++i ) {
@@ -416,7 +342,7 @@ struct pipe_video_buffer *
 vl_video_buffer_create(struct pipe_context *pipe,
                        const struct pipe_video_buffer *tmpl)
 {
-   const enum pipe_format *resource_formats;
+   enum pipe_format resource_formats[VL_NUM_COMPONENTS];
    struct pipe_video_buffer templat, *result;
    bool pot_buffers;
 
@@ -431,9 +357,7 @@ vl_video_buffer_create(struct pipe_context *pipe,
       PIPE_VIDEO_CAP_NPOT_TEXTURES
    );
 
-   resource_formats = vl_video_buffer_formats(pipe->screen, tmpl->buffer_format);
-   if (!resource_formats)
-      return NULL;
+   vl_get_video_buffer_formats(pipe->screen, tmpl->buffer_format, resource_formats);
 
    templat = *tmpl;
    templat.width = pot_buffers ? util_next_power_of_two(tmpl->width)
@@ -530,4 +454,44 @@ vl_video_buffer_create_ex2(struct pipe_context *pipe,
    }
 
    return &buffer->base;
+}
+
+/* Create pipe_video_buffer by using resource_create with planar formats. */
+struct pipe_video_buffer *
+vl_video_buffer_create_as_resource(struct pipe_context *pipe,
+                                   const struct pipe_video_buffer *tmpl)
+{
+   struct pipe_resource templ, *resources[VL_NUM_COMPONENTS] = {};
+   unsigned array_size =  tmpl->interlaced ? 2 : 1;
+
+   memset(&templ, 0, sizeof(templ));
+   templ.target = array_size > 1 ? PIPE_TEXTURE_2D_ARRAY : PIPE_TEXTURE_2D;
+   templ.width0 = align(tmpl->width, VL_MACROBLOCK_WIDTH);
+   templ.height0 = align(tmpl->height / array_size, VL_MACROBLOCK_HEIGHT);
+   templ.depth0 = 1;
+   templ.array_size = array_size;
+   templ.bind = PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET | tmpl->bind;
+   templ.usage = PIPE_USAGE_DEFAULT;
+
+   if (tmpl->buffer_format == PIPE_FORMAT_YUYV)
+      templ.format = PIPE_FORMAT_R8G8_R8B8_UNORM;
+   else if (tmpl->buffer_format == PIPE_FORMAT_UYVY)
+      templ.format = PIPE_FORMAT_G8R8_B8R8_UNORM;
+   else
+      templ.format = tmpl->buffer_format;
+
+   resources[0] = pipe->screen->resource_create(pipe->screen, &templ);
+   if (!resources[0])
+      return NULL;
+
+   if (resources[0]->next) {
+      pipe_resource_reference(&resources[1], resources[0]->next);
+      if (resources[1]->next)
+         pipe_resource_reference(&resources[2], resources[1]->next);
+   }
+
+   struct pipe_video_buffer vidtemplate = *tmpl;
+   vidtemplate.width = templ.width0;
+   vidtemplate.height = templ.height0 * array_size;
+   return vl_video_buffer_create_ex2(pipe, &vidtemplate, resources);
 }

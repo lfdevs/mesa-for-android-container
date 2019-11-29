@@ -35,23 +35,34 @@ static void cik_sdma_copy_buffer(struct si_context *ctx,
 {
 	struct radeon_cmdbuf *cs = ctx->dma_cs;
 	unsigned i, ncopy, csize;
+	unsigned align = ~0u;
 	struct si_resource *sdst = si_resource(dst);
 	struct si_resource *ssrc = si_resource(src);
 
 	/* Mark the buffer range of destination as valid (initialized),
 	 * so that transfer_map knows it should wait for the GPU when mapping
 	 * that range. */
-	util_range_add(&sdst->valid_buffer_range, dst_offset,
+	util_range_add(dst, &sdst->valid_buffer_range, dst_offset,
 		       dst_offset + size);
 
 	dst_offset += sdst->gpu_address;
 	src_offset += ssrc->gpu_address;
 
 	ncopy = DIV_ROUND_UP(size, CIK_SDMA_COPY_MAX_SIZE);
+
+	/* Align copy size to dw if src/dst address are dw aligned */
+	if ((src_offset & 0x3) == 0 &&
+	    (dst_offset & 0x3) == 0 &&
+	    size > 4 &&
+	    (size & 3) != 0) {
+		align = ~0x3u;
+		ncopy++;
+	}
+
 	si_need_dma_space(ctx, ncopy * 7, sdst, ssrc);
 
 	for (i = 0; i < ncopy; i++) {
-		csize = MIN2(size, CIK_SDMA_COPY_MAX_SIZE);
+		csize = size >= 4 ? MIN2(size & align, CIK_SDMA_COPY_MAX_SIZE) : size;
 		radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_COPY,
 						CIK_SDMA_COPY_SUB_OPCODE_LINEAR,
 						0));

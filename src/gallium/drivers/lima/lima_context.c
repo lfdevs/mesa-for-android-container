@@ -138,13 +138,13 @@ lima_context_destroy(struct pipe_context *pctx)
 
    for (int i = 0; i < LIMA_CTX_PLB_MAX_NUM; i++) {
       if (ctx->plb[i])
-         lima_bo_free(ctx->plb[i]);
+         lima_bo_unreference(ctx->plb[i]);
       if (ctx->gp_tile_heap[i])
-         lima_bo_free(ctx->gp_tile_heap[i]);
+         lima_bo_unreference(ctx->gp_tile_heap[i]);
    }
 
    if (ctx->plb_gp_stream)
-      lima_bo_free(ctx->plb_gp_stream);
+      lima_bo_unreference(ctx->plb_gp_stream);
 
    if (ctx->plb_pp_stream)
       assert(!_mesa_hash_table_num_entries(ctx->plb_pp_stream));

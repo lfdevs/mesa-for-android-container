@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2019-01-07 09:52:31)
-- copyright.xml  (   1597 bytes, from 2019-01-07 09:52:31)
-- common.xml     (  35468 bytes, from 2019-01-07 09:52:31)
-- common_3d.xml  (  14322 bytes, from 2019-08-19 14:35:07)
+- texdesc_3d.xml (   3183 bytes, from 2019-08-09 17:33:50)
+- copyright.xml  (   1597 bytes, from 2019-08-09 17:34:08)
+- common.xml     (  35468 bytes, from 2019-08-09 17:16:20)
+- common_3d.xml  (  14991 bytes, from 2019-09-12 20:32:47)
 
 Copyright (C) 2012-2019 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -139,13 +139,17 @@ DEALINGS IN THE SOFTWARE.
 #define TEXDESC_ASTC3						0x00000064
 
 #define TEXDESC_BASELOD						0x00000068
-#define TEXDESC_BASELOD_UNK23					0x00800000
 #define TEXDESC_BASELOD_BASELOD__MASK				0x0000000f
 #define TEXDESC_BASELOD_BASELOD__SHIFT				0
 #define TEXDESC_BASELOD_BASELOD(x)				(((x) << TEXDESC_BASELOD_BASELOD__SHIFT) & TEXDESC_BASELOD_BASELOD__MASK)
 #define TEXDESC_BASELOD_MAXLOD__MASK				0x00000f00
 #define TEXDESC_BASELOD_MAXLOD__SHIFT				8
 #define TEXDESC_BASELOD_MAXLOD(x)				(((x) << TEXDESC_BASELOD_MAXLOD__SHIFT) & TEXDESC_BASELOD_MAXLOD__MASK)
+#define TEXDESC_BASELOD_COMPARE_ENABLE				0x00010000
+#define TEXDESC_BASELOD_COMPARE_FUNC__MASK			0x00700000
+#define TEXDESC_BASELOD_COMPARE_FUNC__SHIFT			20
+#define TEXDESC_BASELOD_COMPARE_FUNC(x)				(((x) << TEXDESC_BASELOD_COMPARE_FUNC__SHIFT) & TEXDESC_BASELOD_COMPARE_FUNC__MASK)
+#define TEXDESC_BASELOD_BASELOD_ENABLE				0x00800000
 
 #define TEXDESC_CONFIG2						0x0000006c
 
@@ -184,7 +188,7 @@ DEALINGS IN THE SOFTWARE.
 #define TEXDESC_LOG_SIZE_HEIGHT__SHIFT				10
 #define TEXDESC_LOG_SIZE_HEIGHT(x)				(((x) << TEXDESC_LOG_SIZE_HEIGHT__SHIFT) & TEXDESC_LOG_SIZE_HEIGHT__MASK)
 #define TEXDESC_LOG_SIZE_ASTC					0x10000000
-#define TEXDESC_LOG_SIZE_RGB					0x20000000
+#define TEXDESC_LOG_SIZE_INT_FILTER				0x20000000
 #define TEXDESC_LOG_SIZE_SRGB					0x80000000
 
 #define TEXDESC_BORDER_COLOR_R					0x0000008c

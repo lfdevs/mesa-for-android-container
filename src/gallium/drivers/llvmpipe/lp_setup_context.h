@@ -50,6 +50,7 @@
 #define LP_SETUP_NEW_SCISSOR     0x08
 #define LP_SETUP_NEW_VIEWPORTS   0x10
 #define LP_SETUP_NEW_SSBOS       0x20
+#define LP_SETUP_NEW_IMAGES      0x40
 
 struct lp_setup_variant;
 
@@ -147,6 +148,10 @@ struct lp_setup_context
    struct {
       struct pipe_shader_buffer current;
    } ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
+
+   struct {
+      struct pipe_image_view current;
+   } images[LP_MAX_TGSI_SHADER_IMAGES];
 
    struct {
       struct pipe_blend_color current;

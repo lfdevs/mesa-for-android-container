@@ -342,7 +342,7 @@ LLVMValueRef si_get_bounded_indirect_index(struct si_shader_context *ctx,
 					   int rel_index, unsigned num);
 LLVMValueRef si_get_sample_id(struct si_shader_context *ctx);
 
-void si_shader_context_init_alu(struct lp_build_tgsi_context *bld_base);
+void si_shader_context_init_alu(struct si_shader_context *ctx);
 void si_shader_context_init_mem(struct si_shader_context *ctx);
 
 LLVMValueRef si_load_sampler_desc(struct si_shader_context *ctx,

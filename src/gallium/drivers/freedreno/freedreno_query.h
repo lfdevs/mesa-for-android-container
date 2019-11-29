@@ -46,6 +46,7 @@ struct fd_query {
 	const struct fd_query_funcs *funcs;
 	bool active;
 	int type;
+	unsigned index;
 };
 
 static inline struct fd_query *
@@ -102,6 +103,12 @@ int pidx(unsigned query_type)
 		return 3;
 	case PIPE_QUERY_TIMESTAMP:
 		return 4;
+
+	case PIPE_QUERY_PRIMITIVES_GENERATED:
+		return 5;
+	case PIPE_QUERY_PRIMITIVES_EMITTED:
+		return 6;
+
 	default:
 		return -1;
 	}

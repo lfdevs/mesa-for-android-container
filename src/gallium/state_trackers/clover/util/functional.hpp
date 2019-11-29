@@ -347,6 +347,21 @@ namespace clover {
       const std::string &name;
    };
 
+   class id_equals {
+   public:
+      id_equals(const uint32_t id) : id(id) {
+      }
+
+      template<typename T>
+      bool
+      operator()(const T &x) const {
+         return x.id == id;
+      }
+
+   private:
+      const uint32_t id;
+   };
+
    template<typename T>
    class key_equals_t {
    public:

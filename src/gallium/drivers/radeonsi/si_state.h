@@ -37,6 +37,7 @@
 #define SI_NUM_SAMPLERS			32 /* OpenGL textures units per shader */
 #define SI_NUM_CONST_BUFFERS		16
 #define SI_NUM_IMAGES			16
+#define SI_NUM_IMAGE_SLOTS		(SI_NUM_IMAGES * 2) /* the second half are FMASK slots */
 #define SI_NUM_SHADER_BUFFERS		16
 
 struct si_screen;
@@ -647,14 +648,16 @@ static inline unsigned si_get_shaderbuf_slot(unsigned slot)
 
 static inline unsigned si_get_sampler_slot(unsigned slot)
 {
-	/* samplers are in slots [8..39], ascending */
-	return SI_NUM_IMAGES / 2 + slot;
+	/* 32 samplers are in sampler slots [16..47], 16 dw per slot, ascending */
+	/* those are equivalent to image slots [32..95], 8 dw per slot, ascending  */
+	return SI_NUM_IMAGE_SLOTS / 2 + slot;
 }
 
 static inline unsigned si_get_image_slot(unsigned slot)
 {
-	/* images are in slots [15..0] (sampler slots [7..0]), descending */
-	return SI_NUM_IMAGES - 1 - slot;
+	/* image slots are in [31..0] (sampler slots [15..0]), descending */
+	/* images are in slots [31..16], while FMASKs are in slots [15..0] */
+	return SI_NUM_IMAGE_SLOTS - 1 - slot;
 }
 
 #endif
