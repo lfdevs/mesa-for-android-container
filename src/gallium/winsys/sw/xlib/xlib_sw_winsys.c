@@ -126,7 +126,8 @@ alloc_shm(struct xlib_displaytarget *buf, unsigned size)
    shminfo->shmid = -1;
    shminfo->shmaddr = (char *) -1;
 
-   shminfo->shmid = shmget(IPC_PRIVATE, size, IPC_CREAT|0777);
+   /* 0600 = user read+write */
+   shminfo->shmid = shmget(IPC_PRIVATE, size, IPC_CREAT | 0600);
    if (shminfo->shmid < 0) {
       return NULL;
    }

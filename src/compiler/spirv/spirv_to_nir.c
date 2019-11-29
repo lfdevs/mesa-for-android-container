@@ -4647,7 +4647,8 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
    }
 
    /* Set shader info defaults */
-   b->shader->info.gs.invocations = 1;
+   if (stage == MESA_SHADER_GEOMETRY)
+      b->shader->info.gs.invocations = 1;
 
    b->specializations = spec;
    b->num_specializations = num_spec;

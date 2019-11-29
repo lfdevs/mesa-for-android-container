@@ -2094,6 +2094,8 @@ builtin_builder::create_builtins()
                 _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::sampler2DMSArray_type),
                 _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::isampler2DMSArray_type),
                 _textureSize(texture_multisample_array, glsl_type::ivec3_type, glsl_type::usampler2DMSArray_type),
+
+                _textureSize(texture_external_es3, glsl_type::ivec2_type, glsl_type::samplerExternalOES_type),
                 NULL);
 
    add_function("textureSize1D",

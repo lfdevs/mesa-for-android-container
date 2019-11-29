@@ -3051,7 +3051,7 @@ genX(upload_blend_state)(struct brw_context *brw)
 #endif
 }
 
-static const struct brw_tracked_state genX(blend_state) = {
+UNUSED static const struct brw_tracked_state genX(blend_state) = {
    .dirty = {
       .mesa = _NEW_BUFFERS |
               _NEW_COLOR |
@@ -3412,7 +3412,7 @@ genX(upload_color_calc_state)(struct brw_context *brw)
 #endif
 }
 
-static const struct brw_tracked_state genX(color_calc_state) = {
+UNUSED static const struct brw_tracked_state genX(color_calc_state) = {
    .dirty = {
       .mesa = _NEW_COLOR |
               _NEW_STENCIL |
@@ -3429,6 +3429,35 @@ static const struct brw_tracked_state genX(color_calc_state) = {
    .emit = genX(upload_color_calc_state),
 };
 
+
+/* ---------------------------------------------------------------------- */
+
+#if GEN_IS_HASWELL
+static void
+genX(upload_color_calc_and_blend_state)(struct brw_context *brw)
+{
+   genX(upload_blend_state)(brw);
+   genX(upload_color_calc_state)(brw);
+}
+
+/* On Haswell when BLEND_STATE is emitted CC_STATE should also be re-emitted,
+ * this workarounds the flickering shadows in several games.
+ */
+static const struct brw_tracked_state genX(cc_and_blend_state) = {
+   .dirty = {
+      .mesa = _NEW_BUFFERS |
+              _NEW_COLOR |
+              _NEW_STENCIL |
+              _NEW_MULTISAMPLE,
+      .brw = BRW_NEW_BATCH |
+             BRW_NEW_BLORP |
+             BRW_NEW_CC_STATE |
+             BRW_NEW_FS_PROG_DATA |
+             BRW_NEW_STATE_BASE_ADDRESS,
+   },
+   .emit = genX(upload_color_calc_and_blend_state),
+};
+#endif
 
 /* ---------------------------------------------------------------------- */
 
@@ -5697,8 +5726,12 @@ genX(init_atoms)(struct brw_context *brw)
       &gen7_l3_state,
       &gen7_push_constant_space,
       &gen7_urb,
+#if GEN_IS_HASWELL
+      &genX(cc_and_blend_state),
+#else
       &genX(blend_state),		/* must do before cc unit */
       &genX(color_calc_state),	/* must do before cc unit */
+#endif
       &genX(depth_stencil_state),	/* must do before cc unit */
 
       &brw_vs_image_surfaces, /* Before vs push/pull constants and binding table */

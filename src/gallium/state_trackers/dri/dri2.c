@@ -907,7 +907,7 @@ dri2_create_image_from_fd(__DRIscreen *_screen,
       whandles[i].stride = (unsigned)strides[index];
       whandles[i].offset = (unsigned)offsets[index];
       whandles[i].modifier = modifier;
-      whandles[i].plane = i;
+      whandles[i].plane = index;
    }
 
    img = dri2_create_image_from_winsys(_screen, width, height, map,

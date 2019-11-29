@@ -69,6 +69,9 @@ e = 'e'
 # expression this indicates that the constructed value should have that
 # bit-size.
 #
+# If the opcode in a replacement expression is prefixed by a '!' character,
+# this indicated that the new expression will be marked exact.
+#
 # A special condition "many-comm-expr" can be used with expressions to note
 # that the expression and its subexpressions have more commutative expressions
 # than nir_replace_instr can handle.  If this special condition is needed with
@@ -1327,8 +1330,8 @@ optimizations += [(bitfield_reverse('x@32'), ('bitfield_reverse', 'x'), '!option
 # and, if a is a NaN then the second comparison will fail anyway.
 for op in ['flt', 'fge', 'feq']:
    optimizations += [
-      (('iand', ('feq', a, a), (op, a, b)), (op, a, b)),
-      (('iand', ('feq', a, a), (op, b, a)), (op, b, a)),
+      (('iand', ('feq', a, a), (op, a, b)), ('!' + op, a, b)),
+      (('iand', ('feq', a, a), (op, b, a)), ('!' + op, b, a)),
    ]
 
 # Add optimizations to handle the case where the result of a ternary is

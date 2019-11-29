@@ -1329,7 +1329,7 @@ fs_visitor::nir_emit_alu(const fs_builder &bld, nir_alu_instr *instr,
       temp_op[0] = bld.fix_byte_src(op[0]);
       temp_op[1] = bld.fix_byte_src(op[1]);
 
-      const uint32_t bit_size = nir_src_bit_size(instr->src[0].src);
+      const uint32_t bit_size = type_sz(temp_op[0].type) * 8;
       if (bit_size != 32)
          dest = bld.vgrf(temp_op[0].type, 1);
 

@@ -138,6 +138,9 @@ typedef struct {
     */
    bool inexact;
 
+   /** In a replacement, requests that the instruction be marked exact. */
+   bool exact;
+
    /* Commutative expression index.  This is assigned by opt_algebraic.py when
     * search structures are constructed and is a unique (to this structure)
     * index within the commutative operation bitfield used for searching for

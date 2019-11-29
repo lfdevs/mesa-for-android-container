@@ -89,8 +89,9 @@ alloc_back_shm_ximage(XMesaBuffer b, GLuint width, GLuint height)
       return GL_FALSE;
    }
 
+   /* 0600 = user read+write */
    b->shminfo.shmid = shmget(IPC_PRIVATE, b->backxrb->ximage->bytes_per_line
-			     * b->backxrb->ximage->height, IPC_CREAT|0777);
+                             * b->backxrb->ximage->height, IPC_CREAT | 0600);
    if (b->shminfo.shmid < 0) {
       _mesa_warning(NULL, "shmget failed while allocating back buffer.\n");
       XDestroyImage(b->backxrb->ximage);

@@ -692,7 +692,20 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     * when not using MCJIT so no instructions are generated which the old JIT
     * can't handle. Not entirely sure if we really need to do anything yet.
     */
-#if defined(PIPE_ARCH_LITTLE_ENDIAN)  && defined(PIPE_ARCH_PPC_64)
+
+#ifdef PIPE_ARCH_PPC_64
+   /*
+    * Large programs, e.g. gnome-shell and firefox, may tax the addressability
+    * of the Medium code model once dynamically generated JIT-compiled shader
+    * programs are linked in and relocated.  Yet the default code model as of
+    * LLVM 8 is Medium or even Small.
+    * The cost of changing from Medium to Large is negligible:
+    * - an additional 8-byte pointer stored immediately before the shader entrypoint;
+    * - change an add-immediate (addis) instruction to a load (ld).
+    */
+   builder.setCodeModel(CodeModel::Large);
+
+#ifdef PIPE_ARCH_LITTLE_ENDIAN
    /*
     * Versions of LLVM prior to 4.0 lacked a table entry for "POWER8NVL",
     * resulting in (big-endian) "generic" being returned on
@@ -704,6 +717,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     */
    if (MCPU == "generic")
       MCPU = "pwr8";
+#endif
 #endif
    builder.setMCPU(MCPU);
    if (gallivm_debug & (GALLIVM_DEBUG_IR | GALLIVM_DEBUG_ASM | GALLIVM_DEBUG_DUMP_BC)) {

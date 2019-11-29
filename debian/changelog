@@ -1,3 +1,10 @@
+mesa (19.2.6-1) unstable; urgency=medium
+
+  * New upstream release.
+  * create-gles-pc-files-with-old-glvnd.diff: Dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 29 Nov 2019 21:08:25 +0200
+
 mesa (19.2.4-1) unstable; urgency=medium
 
   * New upstream release. (Closes: #944880)

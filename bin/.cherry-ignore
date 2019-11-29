@@ -27,3 +27,14 @@ bcd9224728dcb8d8fe4bcddc4bd9b2c36fcfe9dd
 869e32593a9096b845dd6106f8f86e1c41fac968
 a2c3c65a31de90fdb55f76f2894860dfbafe2043
 bb0c5c487e63e88acbb792f092dd8f392bad8540
+
+# This is reverted shortly after it was landed
+4432a2d14d80081d062f7939a950d65ea3a16eed
+
+# These aren't relevant for 19.2
+1a05811936dd8d0c3a367c6f00629624ef39d537
+911a8261419f48dcd756f78832fa5a5f4c5b8d93
+
+# This was manuall backported
+2afeed301010917c4eae55dcd2544f9d329df934
+4b392ced2d744fccffe95490ff57e6b41033c266

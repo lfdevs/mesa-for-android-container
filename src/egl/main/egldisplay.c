@@ -135,15 +135,6 @@ _eglNativePlatformDetectNativeDisplay(void *nativeDisplay)
       if (first_pointer == gbm_create_device)
          return _EGL_PLATFORM_DRM;
 #endif
-
-#ifdef HAVE_X11_PLATFORM
-      /* If not matched to any other platform, fallback to x11. */
-      return _EGL_PLATFORM_X11;
-#endif
-
-#ifdef HAVE_HAIKU_PLATFORM
-      return _EGL_PLATFORM_HAIKU;
-#endif
    }
 
    return _EGL_INVALID_PLATFORM;

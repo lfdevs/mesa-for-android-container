@@ -65,6 +65,8 @@ dri_fill_st_options(struct dri_screen *screen)
 
    options->disable_blend_func_extended =
       driQueryOptionb(optionCache, "disable_blend_func_extended");
+   options->disable_arb_gpu_shader5 =
+      driQueryOptionb(optionCache, "disable_arb_gpu_shader5");
    options->disable_glsl_line_continuations =
       driQueryOptionb(optionCache, "disable_glsl_line_continuations");
    options->force_glsl_extensions_warn =

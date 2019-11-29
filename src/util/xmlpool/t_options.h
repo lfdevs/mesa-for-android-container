@@ -80,6 +80,11 @@ DRI_CONF_OPT_BEGIN_B(disable_blend_func_extended, def) \
         DRI_CONF_DESC(en,gettext("Disable dual source blending")) \
 DRI_CONF_OPT_END
 
+#define DRI_CONF_DISABLE_ARB_GPU_SHADER5(def) \
+DRI_CONF_OPT_BEGIN_B(disable_arb_gpu_shader5, def) \
+        DRI_CONF_DESC(en,"Disable GL_ARB_gpu_shader5") \
+DRI_CONF_OPT_END
+
 #define DRI_CONF_DUAL_COLOR_BLEND_BY_LOCATION(def) \
 DRI_CONF_OPT_BEGIN_B(dual_color_blend_by_location, def) \
         DRI_CONF_DESC(en,gettext("Identify dual color blending sources by location rather than index")) \

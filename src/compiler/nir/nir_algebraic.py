@@ -200,7 +200,7 @@ class Value(object):
    ${val.cond if val.cond else 'NULL'},
    ${val.swizzle()},
 % elif isinstance(val, Expression):
-   ${'true' if val.inexact else 'false'},
+   ${'true' if val.inexact else 'false'}, ${'true' if val.exact else 'false'},
    ${val.comm_expr_idx}, ${val.comm_exprs},
    ${val.c_opcode()},
    { ${', '.join(src.c_value_ptr(cache) for src in val.sources)} },
@@ -348,7 +348,7 @@ class Variable(Value):
          return '{' + ', '.join([str(swizzles[c]) for c in self.swiz[1:]]) + '}'
       return '{0, 1, 2, 3}'
 
-_opcode_re = re.compile(r"(?P<inexact>~)?(?P<opcode>\w+)(?:@(?P<bits>\d+))?"
+_opcode_re = re.compile(r"(?P<inexact>~)?(?P<exact>!)?(?P<opcode>\w+)(?:@(?P<bits>\d+))?"
                         r"(?P<cond>\([^\)]+\))?")
 
 class Expression(Value):
@@ -362,7 +362,11 @@ class Expression(Value):
       self.opcode = m.group('opcode')
       self._bit_size = int(m.group('bits')) if m.group('bits') else None
       self.inexact = m.group('inexact') is not None
+      self.exact = m.group('exact') is not None
       self.cond = m.group('cond')
+
+      assert not self.inexact or not self.exact, \
+            'Expression cannot be both exact and inexact.'
 
       # "many-comm-expr" isn't really a condition.  It's notification to the
       # generator that this pattern is known to have too many commutative
