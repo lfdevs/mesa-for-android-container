@@ -52,6 +52,9 @@ struct dri_drawable
    unsigned old_w;
    unsigned old_h;
 
+   struct pipe_box *damage_rects;
+   unsigned int num_damage_rects;
+
    struct pipe_resource *textures[ST_ATTACHMENT_COUNT];
    struct pipe_resource *msaa_textures[ST_ATTACHMENT_COUNT];
    unsigned int texture_mask, texture_stamp;

@@ -1,2 +1,2 @@
-usr/include/EGL
-usr/lib/*/pkgconfig/egl.pc
+usr/include/EGL/eglmesaext.h
+usr/include/EGL/eglextchromium.h

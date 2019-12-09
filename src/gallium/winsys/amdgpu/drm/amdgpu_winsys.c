@@ -326,7 +326,6 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    aws = util_hash_table_get(dev_tab, dev);
    if (aws) {
       pipe_reference(NULL, &aws->reference);
-      simple_mtx_unlock(&dev_tab_mutex);
 
       /* Release the device handle, because we don't need it anymore.
        * This function is returning an existing winsys instance, which

@@ -754,6 +754,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].EmitNoSat =
       !screen->get_param(screen, PIPE_CAP_VERTEX_SHADER_SATURATE);
 
+   ctx->Const.ShaderCompilerOptions[MESA_SHADER_VERTEX].PositionAlwaysInvariant = options->vs_position_always_invariant;
+
    if (ctx->Const.GLSLVersion < 400) {
       for (i = 0; i < MESA_SHADER_STAGES; i++)
          ctx->Const.ShaderCompilerOptions[i].EmitNoIndirectSampler = true;

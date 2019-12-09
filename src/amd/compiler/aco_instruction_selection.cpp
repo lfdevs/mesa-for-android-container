@@ -1976,8 +1976,12 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    }
    case nir_op_i2i64: {
       Temp src = get_alu_src(ctx, instr->src[0]);
-      if (instr->src[0].src.ssa->bit_size == 32) {
-         bld.pseudo(aco_opcode::p_create_vector, Definition(dst), src, Operand(0u));
+      if (src.regClass() == s1) {
+         Temp high = bld.sopc(aco_opcode::s_ashr_i32, bld.def(s1, scc), src, Operand(31u));
+         bld.pseudo(aco_opcode::p_create_vector, Definition(dst), src, high);
+      } else if (src.regClass() == v1) {
+         Temp high = bld.vop2(aco_opcode::v_ashrrev_i32, bld.def(v1), Operand(31u), src);
+         bld.pseudo(aco_opcode::p_create_vector, Definition(dst), src, high);
       } else {
          fprintf(stderr, "Unimplemented NIR instr bit size: ");
          nir_print_instr(&instr->instr, stderr);
@@ -6572,11 +6576,6 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
       }
    }
 
-   if (!(has_ddx && has_ddy) && !has_lod && !level_zero &&
-       instr->sampler_dim != GLSL_SAMPLER_DIM_MS &&
-       instr->sampler_dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
-      coords = emit_wqm(ctx, coords, bld.tmp(coords.regClass()), true);
-
    std::vector<Operand> args;
    if (has_offset)
       args.emplace_back(Operand(offset));
@@ -6592,7 +6591,7 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
    if (has_lod)
       args.emplace_back(lod);
 
-   Operand arg;
+   Temp arg;
    if (args.size() > 1) {
       aco_ptr<Pseudo_instruction> vec{create_instruction<Pseudo_instruction>(aco_opcode::p_create_vector, Format::PSEUDO, args.size(), 1)};
       unsigned size = 0;
@@ -6604,11 +6603,19 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
       Temp tmp = bld.tmp(rc);
       vec->definitions[0] = Definition(tmp);
       ctx->block->instructions.emplace_back(std::move(vec));
-      arg = Operand(tmp);
+      arg = tmp;
    } else {
       assert(args[0].isTemp());
-      arg = Operand(as_vgpr(ctx, args[0].getTemp()));
+      arg = as_vgpr(ctx, args[0].getTemp());
    }
+
+   /* we don't need the bias, sample index, compare value or offset to be
+    * computed in WQM but if the p_create_vector copies the coordinates, then it
+    * needs to be in WQM */
+   if (!(has_ddx && has_ddy) && !has_lod && !level_zero &&
+       instr->sampler_dim != GLSL_SAMPLER_DIM_MS &&
+       instr->sampler_dim != GLSL_SAMPLER_DIM_SUBPASS_MS)
+      arg = emit_wqm(ctx, arg, bld.tmp(arg.regClass()), true);
 
    if (instr->sampler_dim == GLSL_SAMPLER_DIM_BUF) {
       //FIXME: if (ctx->abi->gfx9_stride_size_workaround) return ac_build_buffer_load_format_gfx9_safe()
@@ -6741,7 +6748,7 @@ void visit_tex(isel_context *ctx, nir_tex_instr *instr)
    }
 
    tex.reset(create_instruction<MIMG_instruction>(opcode, Format::MIMG, 3, 1));
-   tex->operands[0] = arg;
+   tex->operands[0] = Operand(arg);
    tex->operands[1] = Operand(resource);
    tex->operands[2] = Operand(sampler);
    tex->dim = dim;

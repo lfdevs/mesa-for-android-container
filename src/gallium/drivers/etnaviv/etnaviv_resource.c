@@ -498,7 +498,6 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    struct etna_resource *rsc;
    struct etna_resource_level *level;
    struct pipe_resource *prsc;
-   struct pipe_resource *ptiled = NULL;
 
    DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
        "nr_samples=%u, usage=%u, bind=%x, flags=%x",
@@ -572,8 +571,6 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
 
 fail:
    etna_resource_destroy(pscreen, prsc);
-   if (ptiled)
-      etna_resource_destroy(pscreen, ptiled);
 
    return NULL;
 }

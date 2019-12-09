@@ -92,6 +92,18 @@ dri_st_framebuffer_validate(struct st_context_iface *stctx,
       }
    } while (lastStamp != drawable->dPriv->lastStamp);
 
+   /* Flush the pending set_damage_region request. */
+   struct pipe_screen *pscreen = screen->base.screen;
+
+   if (new_mask & (1 << ST_ATTACHMENT_BACK_LEFT) &&
+       pscreen->set_damage_region) {
+      struct pipe_resource *resource = textures[ST_ATTACHMENT_BACK_LEFT];
+
+      pscreen->set_damage_region(pscreen, resource,
+                                 drawable->num_damage_rects,
+                                 drawable->damage_rects);
+   }
+
    if (!out)
       return true;
 
@@ -197,6 +209,7 @@ dri_destroy_buffer(__DRIdrawable * dPriv)
    /* Notify the st manager that this drawable is no longer valid */
    stapi->destroy_drawable(stapi, &drawable->base);
 
+   FREE(drawable->damage_rects);
    FREE(drawable);
 }
 

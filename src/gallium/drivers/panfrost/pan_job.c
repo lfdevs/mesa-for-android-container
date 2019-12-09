@@ -933,6 +933,25 @@ panfrost_batch_submit(struct panfrost_batch *batch)
         if (ret)
                 fprintf(stderr, "panfrost_batch_submit failed: %d\n", ret);
 
+        /* We must reset the damage info of our render targets here even
+         * though a damage reset normally happens when the DRI layer swaps
+         * buffers. That's because there can be implicit flushes the GL
+         * app is not aware of, and those might impact the damage region: if
+         * part of the damaged portion is drawn during those implicit flushes,
+         * you have to reload those areas before next draws are pushed, and
+         * since the driver can't easily know what's been modified by the draws
+         * it flushed, the easiest solution is to reload everything.
+         */
+        for (unsigned i = 0; i < batch->key.nr_cbufs; i++) {
+                struct panfrost_resource *res;
+
+                if (!batch->key.cbufs[i])
+                        continue;
+
+                res = pan_resource(batch->key.cbufs[i]->texture);
+                panfrost_resource_reset_damage(res);
+        }
+
 out:
         panfrost_freeze_batch(batch);
         panfrost_free_batch(batch);

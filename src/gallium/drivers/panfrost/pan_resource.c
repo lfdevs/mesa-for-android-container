@@ -48,7 +48,7 @@
 #include "pan_util.h"
 #include "pan_tiling.h"
 
-static void
+void
 panfrost_resource_reset_damage(struct panfrost_resource *pres)
 {
         /* We set the damage extent to the full resource size but keep the

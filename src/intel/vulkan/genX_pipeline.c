@@ -369,8 +369,8 @@ emit_3dstate_sbe(struct anv_pipeline *pipeline)
       if (input_index < 0)
          continue;
 
-      /* gl_Layer is stored in the VUE header */
-      if (attr == VARYING_SLOT_LAYER) {
+      /* gl_Viewport and gl_Layer are stored in the VUE header */
+      if (attr == VARYING_SLOT_VIEWPORT || attr == VARYING_SLOT_LAYER) {
          urb_entry_read_offset = 0;
          continue;
       }

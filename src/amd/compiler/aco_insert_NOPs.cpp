@@ -392,7 +392,7 @@ void insert_NOPs_gfx8_9(Program* program)
    }
 }
 
-void handle_instruction_gfx10(NOP_ctx_gfx10 &ctx, aco_ptr<Instruction>& instr,
+void handle_instruction_gfx10(Program *program, NOP_ctx_gfx10 &ctx, aco_ptr<Instruction>& instr,
                               std::vector<aco_ptr<Instruction>>& old_instructions,
                               std::vector<aco_ptr<Instruction>>& new_instructions)
 {
@@ -403,6 +403,9 @@ void handle_instruction_gfx10(NOP_ctx_gfx10 &ctx, aco_ptr<Instruction>& instr,
        instr->format == Format::SCRATCH || instr->format == Format::DS) {
       /* Remember all SGPRs that are read by the VMEM instruction */
       mark_read_regs(instr, ctx.sgprs_read_by_VMEM);
+      ctx.sgprs_read_by_VMEM.set(exec);
+      if (program->wave_size == 64)
+         ctx.sgprs_read_by_VMEM.set(exec_hi);
    } else if (instr->isSALU() || instr->format == Format::SMEM) {
       /* Check if SALU writes an SGPR that was previously read by the VALU */
       if (check_written_regs(instr, ctx.sgprs_read_by_VMEM)) {
@@ -535,7 +538,7 @@ void handle_instruction_gfx10(NOP_ctx_gfx10 &ctx, aco_ptr<Instruction>& instr,
    }
 }
 
-void handle_block_gfx10(NOP_ctx_gfx10& ctx, Block& block)
+void handle_block_gfx10(Program *program, NOP_ctx_gfx10& ctx, Block& block)
 {
    if (block.instructions.empty())
       return;
@@ -544,7 +547,7 @@ void handle_block_gfx10(NOP_ctx_gfx10& ctx, Block& block)
    instructions.reserve(block.instructions.size());
 
    for (aco_ptr<Instruction>& instr : block.instructions) {
-      handle_instruction_gfx10(ctx, instr, block.instructions, instructions);
+      handle_instruction_gfx10(program, ctx, instr, block.instructions, instructions);
       instructions.emplace_back(std::move(instr));
    }
 
@@ -569,7 +572,7 @@ void mitigate_hazards_gfx10(Program *program)
             for (unsigned b : program->blocks[idx].linear_preds)
                loop_block_ctx.join(all_ctx[b]);
 
-            handle_block_gfx10(loop_block_ctx, program->blocks[idx]);
+            handle_block_gfx10(program, loop_block_ctx, program->blocks[idx]);
 
             /* We only need to continue if the loop header context changed */
             if (idx == loop_header_indices.top() && loop_block_ctx == all_ctx[idx])
@@ -584,7 +587,7 @@ void mitigate_hazards_gfx10(Program *program)
       for (unsigned b : block.linear_preds)
          ctx.join(all_ctx[b]);
 
-      handle_block_gfx10(ctx, block);
+      handle_block_gfx10(program, ctx, block);
    }
 }
 

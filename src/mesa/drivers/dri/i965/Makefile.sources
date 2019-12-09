@@ -35,9 +35,7 @@ i965_FILES = \
 	brw_object_purgeable.c \
 	brw_pipe_control.c \
 	brw_pipe_control.h \
-	brw_performance_query.h \
 	brw_performance_query.c \
-	brw_performance_query_metrics.h \
 	brw_program.c \
 	brw_program.h \
 	brw_program_binary.c \

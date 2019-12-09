@@ -3953,8 +3953,43 @@ ac_build_scan(struct ac_llvm_context *ctx, nir_op op, LLVMValueRef src, LLVMValu
 {
 	LLVMValueRef result, tmp;
 
-	if (ctx->chip_class >= GFX10) {
-		result = inclusive ? src : identity;
+	if (inclusive) {
+		result = src;
+	} else if (ctx->chip_class >= GFX10) {
+		/* wavefront shift_right by 1 on GFX10 (emulate dpp_wf_sr1) */
+		LLVMValueRef active, tmp1, tmp2;
+		LLVMValueRef tid = ac_get_thread_id(ctx);
+
+		tmp1 = ac_build_dpp(ctx, identity, src, dpp_row_sr(1), 0xf, 0xf, false);
+
+		tmp2 = ac_build_permlane16(ctx, src, (uint64_t)~0, true, false);
+
+		if (maxprefix > 32) {
+			active = LLVMBuildICmp(ctx->builder, LLVMIntEQ, tid,
+					       LLVMConstInt(ctx->i32, 32, false), "");
+
+			tmp2 = LLVMBuildSelect(ctx->builder, active,
+					       ac_build_readlane(ctx, src,
+								 LLVMConstInt(ctx->i32, 31, false)),
+					       tmp2, "");
+
+			active = LLVMBuildOr(ctx->builder, active,
+					     LLVMBuildICmp(ctx->builder, LLVMIntEQ,
+							   LLVMBuildAnd(ctx->builder, tid,
+									LLVMConstInt(ctx->i32, 0x1f, false), ""),
+							   LLVMConstInt(ctx->i32, 0x10, false), ""), "");
+			src = LLVMBuildSelect(ctx->builder, active, tmp2, tmp1, "");
+		} else if (maxprefix > 16) {
+			active = LLVMBuildICmp(ctx->builder, LLVMIntEQ, tid,
+					       LLVMConstInt(ctx->i32, 16, false), "");
+
+			src = LLVMBuildSelect(ctx->builder, active, tmp2, tmp1, "");
+		}
+
+		result = src;
+	} else if (ctx->chip_class >= GFX8) {
+		src = ac_build_dpp(ctx, identity, src, dpp_wf_sr1, 0xf, 0xf, false);
+		result = src;
 	} else {
 		if (!inclusive)
 			src = ac_build_dpp(ctx, identity, src, dpp_wf_sr1, 0xf, 0xf, false);
@@ -3984,33 +4019,31 @@ ac_build_scan(struct ac_llvm_context *ctx, nir_op op, LLVMValueRef src, LLVMValu
 		return result;
 
 	if (ctx->chip_class >= GFX10) {
-		/* dpp_row_bcast{15,31} are not supported on gfx10. */
-		LLVMBuilderRef builder = ctx->builder;
 		LLVMValueRef tid = ac_get_thread_id(ctx);
-		LLVMValueRef cc;
-		/* TODO-GFX10: Can we get better code-gen by putting this into
-		 * a branch so that LLVM generates EXEC mask manipulations? */
-		if (inclusive)
-			tmp = result;
-		else
-			tmp = ac_build_alu_op(ctx, result, src, op);
-		tmp = ac_build_permlane16(ctx, tmp, ~(uint64_t)0, true, false);
-		tmp = ac_build_alu_op(ctx, result, tmp, op);
-		cc = LLVMBuildAnd(builder, tid, LLVMConstInt(ctx->i32, 16, false), "");
-		cc = LLVMBuildICmp(builder, LLVMIntNE, cc, ctx->i32_0, "");
-		result = LLVMBuildSelect(builder, cc, tmp, result, "");
+		LLVMValueRef active;
+
+		tmp = ac_build_permlane16(ctx, result, ~(uint64_t)0, true, false);
+
+		active = LLVMBuildICmp(ctx->builder, LLVMIntNE,
+				       LLVMBuildAnd(ctx->builder, tid,
+						    LLVMConstInt(ctx->i32, 16, false), ""),
+				       ctx->i32_0, "");
+
+		tmp = LLVMBuildSelect(ctx->builder, active, tmp, identity, "");
+
+		result = ac_build_alu_op(ctx, result, tmp, op);
+
 		if (maxprefix <= 32)
 			return result;
 
-		if (inclusive)
-			tmp = result;
-		else
-			tmp = ac_build_alu_op(ctx, result, src, op);
-		tmp = ac_build_readlane(ctx, tmp, LLVMConstInt(ctx->i32, 31, false));
-		tmp = ac_build_alu_op(ctx, result, tmp, op);
-		cc = LLVMBuildICmp(builder, LLVMIntUGE, tid,
-				   LLVMConstInt(ctx->i32, 32, false), "");
-		result = LLVMBuildSelect(builder, cc, tmp, result, "");
+		tmp = ac_build_readlane(ctx, result, LLVMConstInt(ctx->i32, 31, false));
+
+		active = LLVMBuildICmp(ctx->builder, LLVMIntUGE, tid,
+				       LLVMConstInt(ctx->i32, 32, false), "");
+
+		tmp = LLVMBuildSelect(ctx->builder, active, tmp, identity, "");
+
+		result = ac_build_alu_op(ctx, result, tmp, op);
 		return result;
 	}
 

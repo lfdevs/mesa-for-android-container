@@ -98,6 +98,7 @@ DRI_CONF_BEGIN
 
    DRI_CONF_SECTION_MISCELLANEOUS
       DRI_CONF_GLSL_ZERO_INIT("false")
+      DRI_CONF_VS_POSITION_ALWAYS_INVARIANT("false")
       DRI_CONF_ALLOW_RGB10_CONFIGS("false")
       DRI_CONF_ALLOW_RGB565_CONFIGS("true")
       DRI_CONF_ALLOW_FP16_CONFIGS("false")
@@ -2797,6 +2798,8 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
     */
    screen->compiler->constant_buffer_0_is_relative = devinfo->gen < 8 ||
       !(screen->kernel_features & KERNEL_ALLOWS_CONTEXT_ISOLATION);
+
+   screen->compiler->glsl_compiler_options[MESA_SHADER_VERTEX].PositionAlwaysInvariant = driQueryOptionb(&screen->optionCache, "vs_position_always_invariant");
 
    screen->compiler->supports_pull_constants = true;
 

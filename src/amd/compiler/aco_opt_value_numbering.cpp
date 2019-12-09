@@ -130,8 +130,7 @@ struct InstrPred {
                return false;
          }
       }
-      if (a->format == Format::PSEUDO_BRANCH)
-         return false;
+
       if (a->isVOP3()) {
          VOP3A_instruction* a3 = static_cast<VOP3A_instruction*>(a);
          VOP3A_instruction* b3 = static_cast<VOP3A_instruction*>(b);
@@ -147,7 +146,8 @@ struct InstrPred {
       if (a->isDPP()) {
          DPP_instruction* aDPP = static_cast<DPP_instruction*>(a);
          DPP_instruction* bDPP = static_cast<DPP_instruction*>(b);
-         return aDPP->dpp_ctrl == bDPP->dpp_ctrl &&
+         return aDPP->pass_flags == bDPP->pass_flags &&
+                aDPP->dpp_ctrl == bDPP->dpp_ctrl &&
                 aDPP->bank_mask == bDPP->bank_mask &&
                 aDPP->row_mask == bDPP->row_mask &&
                 aDPP->bound_ctrl == bDPP->bound_ctrl &&
@@ -156,6 +156,7 @@ struct InstrPred {
                 aDPP->neg[0] == bDPP->neg[0] &&
                 aDPP->neg[1] == bDPP->neg[1];
       }
+
       switch (a->format) {
          case Format::VOPC: {
             /* Since the results depend on the exec mask, these shouldn't
@@ -191,7 +192,7 @@ struct InstrPred {
             /* this is fine since they are only used for vertex input fetches */
             MTBUF_instruction* aM = static_cast<MTBUF_instruction *>(a);
             MTBUF_instruction* bM = static_cast<MTBUF_instruction *>(b);
-            return aM->can_reorder == bM->can_reorder &&
+            return aM->can_reorder && bM->can_reorder &&
                    aM->barrier == bM->barrier &&
                    aM->dfmt == bM->dfmt &&
                    aM->nfmt == bM->nfmt &&
@@ -208,6 +209,10 @@ struct InstrPred {
          case Format::FLAT:
          case Format::GLOBAL:
          case Format::SCRATCH:
+         case Format::EXP:
+         case Format::SOPP:
+         case Format::PSEUDO_BRANCH:
+         case Format::PSEUDO_BARRIER:
             return false;
          case Format::DS: {
             /* we already handle potential issue with permute/swizzle above */
@@ -276,6 +281,10 @@ void process_block(vn_ctx& ctx, Block& block)
             op.setTemp(it->second);
       }
 
+      if (instr->opcode == aco_opcode::p_discard_if ||
+          instr->opcode == aco_opcode::p_demote_to_helper)
+         ctx.exec_id++;
+
       if (instr->definitions.empty()) {
          new_instructions.emplace_back(std::move(instr));
          continue;
@@ -288,10 +297,6 @@ void process_block(vn_ctx& ctx, Block& block)
          ctx.renames[instr->definitions[0].tempId()] = instr->operands[0].getTemp();
       }
 
-      if (instr->opcode == aco_opcode::p_discard_if ||
-          instr->opcode == aco_opcode::p_demote_to_helper)
-         ctx.exec_id++;
-
       instr->pass_flags = ctx.exec_id;
       std::pair<expr_set::iterator, bool> res = ctx.expr_values.emplace(instr.get(), block.index);
 
@@ -303,6 +308,7 @@ void process_block(vn_ctx& ctx, Block& block)
          if (dominates(ctx, res.first->second, block.index)) {
             for (unsigned i = 0; i < instr->definitions.size(); i++) {
                assert(instr->definitions[i].regClass() == orig_instr->definitions[i].regClass());
+               assert(instr->definitions[i].isTemp());
                ctx.renames[instr->definitions[i].tempId()] = orig_instr->definitions[i].getTemp();
             }
          } else {

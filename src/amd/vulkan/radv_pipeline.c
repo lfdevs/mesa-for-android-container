@@ -1101,15 +1101,32 @@ radv_pipeline_init_multisample_state(struct radv_pipeline *pipeline,
 	int ps_iter_samples = 1;
 	uint32_t mask = 0xffff;
 
-	if (vkms)
+	if (vkms) {
 		ms->num_samples = vkms->rasterizationSamples;
-	else
-		ms->num_samples = 1;
 
-	if (vkms)
-		ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
-	if (vkms && !vkms->sampleShadingEnable && pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.force_persample) {
-		ps_iter_samples = ms->num_samples;
+		/* From the Vulkan 1.1.129 spec, 26.7. Sample Shading:
+		 *
+		 * "Sample shading is enabled for a graphics pipeline:
+		 *
+		 * - If the interface of the fragment shader entry point of the
+		 *   graphics pipeline includes an input variable decorated
+		 *   with SampleId or SamplePosition. In this case
+		 *   minSampleShadingFactor takes the value 1.0.
+		 * - Else if the sampleShadingEnable member of the
+		 *   VkPipelineMultisampleStateCreateInfo structure specified
+		 *   when creating the graphics pipeline is set to VK_TRUE. In
+		 *   this case minSampleShadingFactor takes the value of
+		 *   VkPipelineMultisampleStateCreateInfo::minSampleShading.
+		 *
+		 * Otherwise, sample shading is considered disabled."
+		 */
+		if (pipeline->shaders[MESA_SHADER_FRAGMENT]->info.ps.force_persample) {
+			ps_iter_samples = ms->num_samples;
+		} else {
+			ps_iter_samples = radv_pipeline_get_ps_iter_samples(vkms);
+		}
+	} else {
+		ms->num_samples = 1;
 	}
 
 	const struct VkPipelineRasterizationStateRasterizationOrderAMD *raster_order =

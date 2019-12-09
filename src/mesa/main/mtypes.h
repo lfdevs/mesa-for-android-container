@@ -3193,6 +3193,9 @@ struct gl_shader_compiler_options
    /** Clamp UBO and SSBO block indices so they don't go out-of-bounds. */
    GLboolean ClampBlockIndicesToArrayBounds;
 
+   /** (driconf) Force gl_Position to be considered invariant */
+   GLboolean PositionAlwaysInvariant;
+
    const struct nir_shader_compiler_options *NirOptions;
 };
 
