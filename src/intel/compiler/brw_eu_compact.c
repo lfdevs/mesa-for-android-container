@@ -1512,10 +1512,10 @@ has_immediate(const struct gen_device_info *devinfo, const brw_inst *inst,
 {
    if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src0_type(devinfo, inst);
-      return *type != -1;
+      return *type != (enum brw_reg_type)-1;
    } else if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src1_type(devinfo, inst);
-      return *type != -1;
+      return *type != (enum brw_reg_type)-1;
    }
 
    return false;

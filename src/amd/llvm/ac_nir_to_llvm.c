@@ -3713,11 +3713,21 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 		break;
 	}
 	case nir_intrinsic_load_constant: {
+		unsigned base = nir_intrinsic_base(instr);
+		unsigned range = nir_intrinsic_range(instr);
+
 		LLVMValueRef offset = get_src(ctx, instr->src[0]);
-		LLVMValueRef base = LLVMConstInt(ctx->ac.i32,
-						 nir_intrinsic_base(instr),
-						 false);
-		offset = LLVMBuildAdd(ctx->ac.builder, offset, base, "");
+		offset = LLVMBuildAdd(ctx->ac.builder, offset,
+				      LLVMConstInt(ctx->ac.i32, base, false), "");
+
+		/* Clamp the offset to avoid out-of-bound access because global
+		 * instructions can't handle them.
+		 */
+		LLVMValueRef size = LLVMConstInt(ctx->ac.i32, base + range, false);
+		LLVMValueRef cond = LLVMBuildICmp(ctx->ac.builder, LLVMIntULT,
+						  offset, size, "");
+		offset = LLVMBuildSelect(ctx->ac.builder, cond, offset, size, "");
+
 		LLVMValueRef ptr = ac_build_gep0(&ctx->ac, ctx->constant_data,
 						 offset);
 		LLVMTypeRef comp_type =

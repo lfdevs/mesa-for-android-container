@@ -163,6 +163,13 @@ struct iris_resource {
    } aux;
 
    /**
+    * For external surfaces, this is format that was used to create or import
+    * the surface. For internal surfaces, this will always be
+    * PIPE_FORMAT_NONE.
+    */
+   enum pipe_format external_format;
+
+   /**
     * For external surfaces, this is DRM format modifier that was used to
     * create or import the surface.  For internal surfaces, this will always
     * be DRM_FORMAT_MOD_INVALID.

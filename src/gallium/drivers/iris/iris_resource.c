@@ -960,12 +960,21 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
    struct gen_device_info *devinfo = &screen->devinfo;
    struct iris_bufmgr *bufmgr = screen->bufmgr;
    struct iris_resource *res = iris_alloc_resource(pscreen, templ);
+   const struct isl_drm_modifier_info *mod_inf =
+	   isl_drm_modifier_get_info(whandle->modifier);
+   uint32_t tiling;
+
    if (!res)
       return NULL;
 
    switch (whandle->type) {
    case WINSYS_HANDLE_TYPE_FD:
-      res->bo = iris_bo_import_dmabuf(bufmgr, whandle->handle);
+      if (mod_inf)
+         tiling = isl_tiling_to_i915_tiling(mod_inf->tiling);
+      else
+         tiling = I915_TILING_LAST + 1;
+      res->bo = iris_bo_import_dmabuf(bufmgr, whandle->handle,
+                                      tiling, whandle->stride);
       break;
    case WINSYS_HANDLE_TYPE_SHARED:
       res->bo = iris_bo_gem_create_from_name(bufmgr, "winsys image",
@@ -979,12 +988,14 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
 
    res->offset = whandle->offset;
 
-   uint64_t modifier = whandle->modifier;
-   if (modifier == DRM_FORMAT_MOD_INVALID) {
-      modifier = tiling_to_modifier(res->bo->tiling_mode);
+   if (mod_inf == NULL) {
+      mod_inf =
+         isl_drm_modifier_get_info(tiling_to_modifier(res->bo->tiling_mode));
    }
-   res->mod_info = isl_drm_modifier_get_info(modifier);
-   assert(res->mod_info);
+   assert(mod_inf);
+
+   res->external_format = whandle->format;
+   res->mod_info = mod_inf;
 
    isl_surf_usage_flags_t isl_usage = pipe_bind_to_isl_usage(templ->bind);
 
@@ -995,7 +1006,8 @@ iris_resource_from_handle(struct pipe_screen *pscreen,
    if (templ->target == PIPE_BUFFER) {
       res->surf.tiling = ISL_TILING_LINEAR;
    } else {
-      if (whandle->modifier == DRM_FORMAT_MOD_INVALID || whandle->plane == 0) {
+      /* Create a surface for each plane specified by the external format. */
+      if (whandle->plane < util_format_get_num_planes(whandle->format)) {
          UNUSED const bool isl_surf_created_successfully =
             isl_surf_init(&screen->isl_dev, &res->surf,
                           .dim = target_to_isl_surf_dim(templ->target),
@@ -1173,6 +1185,8 @@ iris_resource_get_handle(struct pipe_screen *pscreen,
       whandle->stride = res->surf.row_pitch_B;
       bo = res->bo;
    }
+
+   whandle->format = res->external_format;
    whandle->modifier =
       res->mod_info ? res->mod_info->modifier
                     : tiling_to_modifier(res->bo->tiling_mode);

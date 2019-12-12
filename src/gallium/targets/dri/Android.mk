@@ -57,7 +57,8 @@ endif
 LOCAL_STATIC_LIBRARIES += \
 	libfreedreno_drm \
 	libfreedreno_ir3 \
-	libpanfrost_shared \
+	libmesa_gallium \
+	libpanfrost_shared
 
 ifeq ($(USE_LIBBACKTRACE),true)
 	LOCAL_SHARED_LIBRARIES += libbacktrace
@@ -75,7 +76,6 @@ LOCAL_WHOLE_STATIC_LIBRARIES := \
 	libmesa_nir \
 	libmesa_dri_common \
 	libmesa_megadriver_stub \
-	libmesa_gallium \
 	libmesa_pipe_loader \
 	libmesa_util \
 	libmesa_loader

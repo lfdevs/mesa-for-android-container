@@ -71,6 +71,8 @@
 #define MAP_READ  (1 << 0)
 #define MAP_WRITE (1 << 1)
 
+#define OA_REPORT_INVALID_CTX_ID (0xffffffff)
+
 /**
  * Periodic OA samples are read() into these buffer structures via the
  * i915 perf kernel interface and appended to the
@@ -1137,7 +1139,9 @@ gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
 {
    int i, idx = 0;
 
-   result->hw_id = start[2];
+   if (result->hw_id == OA_REPORT_INVALID_CTX_ID &&
+       start[2] != OA_REPORT_INVALID_CTX_ID)
+      result->hw_id = start[2];
    result->reports_accumulated++;
 
    switch (query->oa_format) {
@@ -1175,7 +1179,7 @@ void
 gen_perf_query_result_clear(struct gen_perf_query_result *result)
 {
    memset(result, 0, sizeof(*result));
-   result->hw_id = 0xffffffff; /* invalid */
+   result->hw_id = OA_REPORT_INVALID_CTX_ID; /* invalid */
 }
 
 static void
@@ -1456,8 +1460,8 @@ get_free_sample_buf(struct gen_perf_context *perf_ctx)
 
       exec_node_init(&buf->link);
       buf->refcount = 0;
-      buf->len = 0;
    }
+   buf->len = 0;
 
    return buf;
 }
@@ -1974,7 +1978,8 @@ read_oa_samples_until(struct gen_perf_context *perf_ctx,
       exec_list_get_tail(&perf_ctx->sample_buffers);
    struct oa_sample_buf *tail_buf =
       exec_node_data(struct oa_sample_buf, tail_node, link);
-   uint32_t last_timestamp = tail_buf->last_timestamp;
+   uint32_t last_timestamp =
+      tail_buf->len == 0 ? start_timestamp : tail_buf->last_timestamp;
 
    while (1) {
       struct oa_sample_buf *buf = get_free_sample_buf(perf_ctx);
@@ -1989,12 +1994,13 @@ read_oa_samples_until(struct gen_perf_context *perf_ctx,
          exec_list_push_tail(&perf_ctx->free_sample_buffers, &buf->link);
 
          if (len < 0) {
-            if (errno == EAGAIN)
-               return ((last_timestamp - start_timestamp) >=
+            if (errno == EAGAIN) {
+               return ((last_timestamp - start_timestamp) < INT32_MAX &&
+                       (last_timestamp - start_timestamp) >=
                        (end_timestamp - start_timestamp)) ?
                       OA_READ_STATUS_FINISHED :
                       OA_READ_STATUS_UNFINISHED;
-            else {
+            } else {
                DBG("Error reading i915 perf samples: %m\n");
             }
          } else
@@ -2210,6 +2216,17 @@ discard_all_queries(struct gen_perf_context *perf_ctx)
    }
 }
 
+/* Looks for the validity bit of context ID (dword 2) of an OA report. */
+static bool
+oa_report_ctx_id_valid(const struct gen_device_info *devinfo,
+                       const uint32_t *report)
+{
+   assert(devinfo->gen >= 8);
+   if (devinfo->gen == 8)
+      return (report[0] & (1 << 25)) != 0;
+   return (report[0] & (1 << 16)) != 0;
+}
+
 /**
  * Accumulate raw OA counter values based on deltas between pairs of
  * OA reports.
@@ -2237,7 +2254,7 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
    uint32_t *last;
    uint32_t *end;
    struct exec_node *first_samples_node;
-   bool in_ctx = true;
+   bool last_report_ctx_match = true;
    int out_duration = 0;
 
    assert(query->oa.map != NULL);
@@ -2266,7 +2283,7 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
    first_samples_node = query->oa.samples_head->next;
 
    foreach_list_typed_from(struct oa_sample_buf, buf, link,
-                           &perf_ctx.sample_buffers,
+                           &perf_ctx->sample_buffers,
                            first_samples_node)
    {
       int offset = 0;
@@ -2283,6 +2300,7 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
          switch (header->type) {
          case DRM_I915_PERF_RECORD_SAMPLE: {
             uint32_t *report = (uint32_t *)(header + 1);
+            bool report_ctx_match = true;
             bool add = true;
 
             /* Ignore reports that come before the start marker.
@@ -2311,35 +2329,30 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
              * of OA counters while any other context is acctive.
              */
             if (devinfo->gen >= 8) {
-               if (in_ctx && report[2] != query->oa.result.hw_id) {
-                  DBG("i915 perf: Switch AWAY (observed by ID change)\n");
-                  in_ctx = false;
+               /* Consider that the current report matches our context only if
+                * the report says the report ID is valid.
+                */
+               report_ctx_match = oa_report_ctx_id_valid(devinfo, report) &&
+                  report[2] == start[2];
+               if (report_ctx_match)
                   out_duration = 0;
-               } else if (in_ctx == false && report[2] == query->oa.result.hw_id) {
-                  DBG("i915 perf: Switch TO\n");
-                  in_ctx = true;
-
-                  /* From experimentation in IGT, we found that the OA unit
-                   * might label some report as "idle" (using an invalid
-                   * context ID), right after a report for a given context.
-                   * Deltas generated by those reports actually belong to the
-                   * previous context, even though they're not labelled as
-                   * such.
-                   *
-                   * We didn't *really* Switch AWAY in the case that we e.g.
-                   * saw a single periodic report while idle...
-                   */
-                  if (out_duration >= 1)
-                     add = false;
-               } else if (in_ctx) {
-                  assert(report[2] == query->oa.result.hw_id);
-                  DBG("i915 perf: Continuation IN\n");
-               } else {
-                  assert(report[2] != query->oa.result.hw_id);
-                  DBG("i915 perf: Continuation OUT\n");
-                  add = false;
+               else
                   out_duration++;
-               }
+
+               /* Only add the delta between <last, report> if the last report
+                * was clearly identified as our context, or if we have at most
+                * 1 report without a matching ID.
+                *
+                * The OA unit will sometimes label reports with an invalid
+                * context ID when i915 rewrites the execlist submit register
+                * with the same context as the one currently running. This
+                * happens when i915 wants to notify the HW of ringbuffer tail
+                * register update. We have to consider this report as part of
+                * our context as the 3d pipeline behind the OACS unit is still
+                * processing the operations started at the previous execlist
+                * submission.
+                */
+               add = last_report_ctx_match && out_duration < 2;
             }
 
             if (add) {
@@ -2349,6 +2362,7 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
             }
 
             last = report;
+            last_report_ctx_match = report_ctx_match;
 
             break;
          }

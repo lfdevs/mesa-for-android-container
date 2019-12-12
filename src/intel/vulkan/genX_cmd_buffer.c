@@ -3893,6 +3893,13 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
          vfe.NumberofURBEntries     = 2;
          vfe.URBEntryAllocationSize = 2;
       }
+
+      /* We just emitted a dummy MEDIA_VFE_STATE so now that packet is
+       * invalid. Set the compute pipeline to dirty to force a re-emit of the
+       * pipeline in case we get back-to-back dispatch calls with the same
+       * pipeline and a PIPELINE_SELECT in between.
+       */
+      cmd_buffer->state.compute.pipeline_dirty = true;
    }
 #endif
 

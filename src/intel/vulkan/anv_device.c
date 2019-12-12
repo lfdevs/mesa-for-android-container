@@ -3000,6 +3000,14 @@ VkResult anv_DeviceWaitIdle(
 bool
 anv_vma_alloc(struct anv_device *device, struct anv_bo *bo)
 {
+   const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
+   const struct gen_device_info *devinfo = &pdevice->info;
+   /* Gen12 CCS surface addresses need to be 64K aligned. We have no way of
+    * telling what this allocation is for so pick the largest alignment.
+    */
+   const uint32_t vma_alignment =
+      devinfo->gen >= 12 ? (64 * 1024) : (4 * 1024);
+
    if (!(bo->flags & EXEC_OBJECT_PINNED))
       return true;
 
@@ -3009,7 +3017,8 @@ anv_vma_alloc(struct anv_device *device, struct anv_bo *bo)
 
    if (bo->flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS &&
        device->vma_hi_available >= bo->size) {
-      uint64_t addr = util_vma_heap_alloc(&device->vma_hi, bo->size, 4096);
+      uint64_t addr =
+         util_vma_heap_alloc(&device->vma_hi, bo->size, vma_alignment);
       if (addr) {
          bo->offset = gen_canonical_address(addr);
          assert(addr == gen_48b_address(bo->offset));
@@ -3018,7 +3027,8 @@ anv_vma_alloc(struct anv_device *device, struct anv_bo *bo)
    }
 
    if (bo->offset == 0 && device->vma_lo_available >= bo->size) {
-      uint64_t addr = util_vma_heap_alloc(&device->vma_lo, bo->size, 4096);
+      uint64_t addr =
+         util_vma_heap_alloc(&device->vma_lo, bo->size, vma_alignment);
       if (addr) {
          bo->offset = gen_canonical_address(addr);
          assert(addr == gen_48b_address(bo->offset));
@@ -3267,9 +3277,10 @@ VkResult anv_AllocateMemory(
                                       i915_tiling);
          if (ret) {
             anv_bo_cache_release(device, &device->bo_cache, mem->bo);
-            return vk_errorf(device->instance, NULL,
-                             VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                             "failed to set BO tiling: %m");
+            result = vk_errorf(device->instance, NULL,
+                               VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                               "failed to set BO tiling: %m");
+            goto fail;
          }
       }
    }

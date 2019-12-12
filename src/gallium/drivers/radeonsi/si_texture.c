@@ -199,7 +199,8 @@ static unsigned si_texture_get_offset(struct si_screen *sscreen,
 
 		/* Each texture is an array of slices. Each slice is an array
 		 * of mipmap levels. */
-		return box->z * tex->surface.u.gfx9.surf_slice_size +
+		return tex->surface.u.gfx9.surf_offset +
+		       box->z * tex->surface.u.gfx9.surf_slice_size +
 		       tex->surface.u.gfx9.offset[level] +
 		       (box->y / tex->surface.blk_h *
 			tex->surface.u.gfx9.surf_pitch +
@@ -1721,10 +1722,12 @@ struct pipe_resource *si_texture_create(struct pipe_screen *screen,
 		tex->plane_index = i;
 		tex->num_planes = num_planes;
 
-		if (!last_plane)
+		if (!plane0) {
 			plane0 = last_plane = tex;
-		else
+		} else {
 			last_plane->buffer.b.b.next = &tex->buffer.b.b;
+			last_plane = tex;
+		}
 	}
 
 	return (struct pipe_resource *)plane0;

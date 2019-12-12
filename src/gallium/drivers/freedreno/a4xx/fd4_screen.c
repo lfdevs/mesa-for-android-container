@@ -60,9 +60,9 @@ fd4_screen_is_format_supported(struct pipe_screen *pscreen,
 	}
 
 	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
+			(fd4_pipe2tex(format) != (enum a4xx_tex_fmt)~0) &&
 			(target == PIPE_BUFFER ||
-			 util_format_get_blocksize(format) != 12) &&
-			(fd4_pipe2tex(format) != (enum a4xx_tex_fmt)~0)) {
+			 util_format_get_blocksize(format) != 12)) {
 		retval |= PIPE_BIND_SAMPLER_VIEW;
 	}
 

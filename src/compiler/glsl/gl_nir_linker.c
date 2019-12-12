@@ -34,32 +34,11 @@
  */
 
 static bool
-add_interface_variables(const struct gl_context *cts,
-                        struct gl_shader_program *prog,
-                        struct set *resource_set,
-                        unsigned stage, GLenum programInterface)
+add_vars_from_list(const struct gl_context *ctx,
+                   struct gl_shader_program *prog, struct set *resource_set,
+                   const struct exec_list *var_list, unsigned stage,
+                   GLenum programInterface)
 {
-   const struct exec_list *var_list = NULL;
-
-   struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
-   if (!sh)
-      return true;
-
-   nir_shader *nir = sh->Program->nir;
-   assert(nir);
-
-   switch (programInterface) {
-   case GL_PROGRAM_INPUT:
-      var_list = &nir->inputs;
-      break;
-   case GL_PROGRAM_OUTPUT:
-      var_list = &nir->outputs;
-      break;
-   default:
-      assert("!Should not get here");
-      break;
-   }
-
    nir_foreach_variable(var, var_list) {
       if (var->data.how_declared == nir_var_hidden)
          continue;
@@ -106,6 +85,38 @@ add_interface_variables(const struct gl_context *cts,
    }
 
    return true;
+}
+
+static bool
+add_interface_variables(const struct gl_context *ctx,
+                        struct gl_shader_program *prog,
+                        struct set *resource_set,
+                        unsigned stage, GLenum programInterface)
+{
+   struct gl_linked_shader *sh = prog->_LinkedShaders[stage];
+   if (!sh)
+      return true;
+
+   nir_shader *nir = sh->Program->nir;
+   assert(nir);
+
+   switch (programInterface) {
+   case GL_PROGRAM_INPUT: {
+      bool result = add_vars_from_list(ctx, prog, resource_set,
+                                       &nir->inputs, stage, programInterface);
+      result &= add_vars_from_list(ctx, prog, resource_set, &nir->system_values,
+                                   stage, programInterface);
+      return result;
+   }
+   case GL_PROGRAM_OUTPUT:
+      return add_vars_from_list(ctx, prog, resource_set, &nir->outputs, stage,
+                                programInterface);
+   default:
+      assert("!Should not get here");
+      break;
+   }
+
+   return false;
 }
 
 /* TODO: as we keep adding features, this method is becoming more and more

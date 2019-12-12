@@ -1294,7 +1294,8 @@ iris_bo_get_tiling(struct iris_bo *bo, uint32_t *tiling_mode,
 }
 
 struct iris_bo *
-iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd)
+iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd,
+                      uint32_t tiling, uint32_t stride)
 {
    uint32_t handle;
    struct iris_bo *bo;
@@ -1345,9 +1346,15 @@ iris_bo_import_dmabuf(struct iris_bufmgr *bufmgr, int prime_fd)
    if (gen_ioctl(bufmgr->fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling))
       goto err;
 
-   bo->tiling_mode = get_tiling.tiling_mode;
-   bo->swizzle_mode = get_tiling.swizzle_mode;
-   /* XXX stride is unknown */
+   if (get_tiling.tiling_mode == tiling || tiling > I915_TILING_LAST) {
+      bo->tiling_mode = get_tiling.tiling_mode;
+      bo->swizzle_mode = get_tiling.swizzle_mode;
+       /* XXX stride is unknown */
+   } else {
+      if (bo_set_tiling_internal(bo, tiling, stride)) {
+         goto err;
+      }
+   }
 
 out:
    mtx_unlock(&bufmgr->lock);
