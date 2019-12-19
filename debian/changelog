@@ -1,3 +1,10 @@
+mesa (19.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * fix-radv-secure-compile.diff: Dropped, upstream.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 19 Dec 2019 16:45:25 +0200
+
 mesa (19.3.0-1) experimental; urgency=medium
 
   * New upstream release.

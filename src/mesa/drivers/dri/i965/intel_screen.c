@@ -218,6 +218,9 @@ static const struct intel_image_format intel_image_formats[] = {
    { __DRI_IMAGE_FOURCC_SARGB8888, __DRI_IMAGE_COMPONENTS_RGBA, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_SARGB8, 4 } } },
 
+   { __DRI_IMAGE_FOURCC_SXRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
+     { { 0, 0, 0, __DRI_IMAGE_FORMAT_SXRGB8, 4 } } },
+
    { DRM_FORMAT_XRGB8888, __DRI_IMAGE_COMPONENTS_RGB, 1,
      { { 0, 0, 0, __DRI_IMAGE_FORMAT_XRGB8888, 4 }, } },
 
@@ -1334,12 +1337,13 @@ intel_query_dma_buf_formats(__DRIscreen *_screen, int max,
    int num_formats = 0, i;
 
    for (i = 0; i < ARRAY_SIZE(intel_image_formats); i++) {
-      /* These two formats are valid DRI formats but do not exist in
-       * drm_fourcc.h in the Linux kernel.  We don't want to accidentally
-       * advertise them through the EGL layer.
+      /* These formats are valid DRI formats but do not exist in drm_fourcc.h
+       * in the Linux kernel. We don't want to accidentally advertise them
+       * them through the EGL layer.
        */
       if (intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SARGB8888 ||
-          intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SABGR8888)
+          intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SABGR8888 ||
+          intel_image_formats[i].fourcc == __DRI_IMAGE_FOURCC_SXRGB8888)
          continue;
 
       if (!intel_image_format_is_supported(&screen->devinfo,
@@ -1759,12 +1763,14 @@ intelCreateBuffer(__DRIscreen *dri_screen,
    } else if (mesaVis->redBits == 5) {
       rgbFormat = mesaVis->redMask == 0x1f ? MESA_FORMAT_R5G6B5_UNORM
                                            : MESA_FORMAT_B5G6R5_UNORM;
+   } else if (mesaVis->alphaBits == 0) {
+      rgbFormat = mesaVis->redMask == 0xff ? MESA_FORMAT_R8G8B8X8_SRGB
+                                           : MESA_FORMAT_B8G8R8X8_SRGB;
+      fb->Visual.sRGBCapable = true;
    } else if (mesaVis->sRGBCapable) {
       rgbFormat = mesaVis->redMask == 0xff ? MESA_FORMAT_R8G8B8A8_SRGB
                                            : MESA_FORMAT_B8G8R8A8_SRGB;
-   } else if (mesaVis->alphaBits == 0) {
-      rgbFormat = mesaVis->redMask == 0xff ? MESA_FORMAT_R8G8B8X8_UNORM
-                                           : MESA_FORMAT_B8G8R8X8_UNORM;
+      fb->Visual.sRGBCapable = true;
    } else {
       rgbFormat = mesaVis->redMask == 0xff ? MESA_FORMAT_R8G8B8A8_SRGB
                                            : MESA_FORMAT_B8G8R8A8_SRGB;
@@ -2222,6 +2228,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       MESA_FORMAT_B8G8R8X8_UNORM,
 
       MESA_FORMAT_B8G8R8A8_SRGB,
+      MESA_FORMAT_B8G8R8X8_SRGB,
 
       /* For 10 bpc, 30 bit depth framebuffers. */
       MESA_FORMAT_B10G10R10A2_UNORM,

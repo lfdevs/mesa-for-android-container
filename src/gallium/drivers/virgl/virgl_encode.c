@@ -492,12 +492,13 @@ int virgl_encode_shader_state(struct virgl_context *ctx,
          if (virgl_debug & VIRGL_DEBUG_VERBOSE)
             debug_printf("Failed to translate shader in available space - trying again\n");
          old_size = str_total_size;
-         str_total_size = 65536 * ++retry_size;
+         str_total_size = 65536 * retry_size;
+         retry_size *= 2;
          str = REALLOC(str, old_size, str_total_size);
          if (!str)
             return -1;
       }
-   } while (bret == false && retry_size < 10);
+   } while (bret == false && retry_size < 1024);
 
    if (bret == false)
       return -1;

@@ -807,6 +807,8 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
       if (templ->usage == PIPE_USAGE_STAGING ||
           templ->bind & (PIPE_BIND_LINEAR | PIPE_BIND_CURSOR) )
          tiling_flags = ISL_TILING_LINEAR_BIT;
+      else if (templ->bind & PIPE_BIND_SCANOUT)
+         tiling_flags = ISL_TILING_X_BIT;
    }
 
    isl_surf_usage_flags_t usage = pipe_bind_to_isl_usage(templ->bind);

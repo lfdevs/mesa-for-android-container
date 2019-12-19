@@ -344,7 +344,7 @@ static int gfx6_compute_level(ADDR_HANDLE addrlib,
 	    surf_level->mode == RADEON_SURF_MODE_2D &&
 	    level == 0 &&
 	    !(surf->flags & RADEON_SURF_NO_HTILE)) {
-		AddrHtileIn->flags.tcCompatible = AddrSurfInfoIn->flags.tcCompatible;
+		AddrHtileIn->flags.tcCompatible = AddrSurfInfoOut->tcCompatible;
 		AddrHtileIn->pitch = AddrSurfInfoOut->pitch;
 		AddrHtileIn->height = AddrSurfInfoOut->height;
 		AddrHtileIn->numSlices = AddrSurfInfoOut->depth;
@@ -779,19 +779,12 @@ static int gfx6_compute_surface(ADDR_HANDLE addrlib,
 			if (level > 0)
 				continue;
 
-			/* Check that we actually got a TC-compatible HTILE if
-			 * we requested it (only for level 0, since we're not
-			 * supporting HTILE on higher mip levels anyway). */
-			assert(AddrSurfInfoOut.tcCompatible ||
-			       !AddrSurfInfoIn.flags.tcCompatible ||
-			       AddrSurfInfoIn.flags.matchStencilTileCfg);
+			if (!AddrSurfInfoOut.tcCompatible) {
+				AddrSurfInfoIn.flags.tcCompatible = 0;
+				surf->flags &= ~RADEON_SURF_TC_COMPATIBLE_HTILE;
+			}
 
 			if (AddrSurfInfoIn.flags.matchStencilTileCfg) {
-				if (!AddrSurfInfoOut.tcCompatible) {
-					AddrSurfInfoIn.flags.tcCompatible = 0;
-					surf->flags &= ~RADEON_SURF_TC_COMPATIBLE_HTILE;
-				}
-
 				AddrSurfInfoIn.flags.matchStencilTileCfg = 0;
 				AddrSurfInfoIn.tileIndex = AddrSurfInfoOut.tileIndex;
 				stencil_tile_idx = AddrSurfInfoOut.stencilTileIdx;

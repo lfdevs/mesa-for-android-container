@@ -1985,8 +1985,16 @@ static int install_seccomp_filter() {
 		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, AUDIT_ARCH_X86_64, 0, 12),
 
 		/* Futex is required for mutex locks */
+		#if defined __NR__newselect
+		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, (offsetof(struct seccomp_data, nr))),
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR__newselect, 11, 0),
+		#elif defined __NR_select
 		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, (offsetof(struct seccomp_data, nr))),
 		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_select, 11, 0),
+		#else
+		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, (offsetof(struct seccomp_data, nr))),
+		BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, __NR_pselect6, 11, 0),
+		#endif
 
 		/* Allow system exit calls for the forked process */
 		BPF_STMT(BPF_LD + BPF_W + BPF_ABS, (offsetof(struct seccomp_data, nr))),

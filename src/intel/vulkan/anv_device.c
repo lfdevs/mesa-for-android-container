@@ -1683,7 +1683,7 @@ void anv_GetPhysicalDeviceProperties2(
          VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *properties =
             (VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT *)ext;
          properties->filterMinmaxImageComponentMapping = pdevice->info.gen >= 9;
-         properties->filterMinmaxSingleComponentFormats = true;
+         properties->filterMinmaxSingleComponentFormats = pdevice->info.gen >= 9;
          break;
       }
 
