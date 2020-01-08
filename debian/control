@@ -235,7 +235,6 @@ Architecture: any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- libglapi-mesa (= ${binary:Version}),
  libgl1-mesa-dri,
 Provides: libglx-vendor
 Breaks:
@@ -302,6 +301,8 @@ Package: mesa-common-dev
 Section: libdevel
 Architecture: any
 Depends:
+ libgl-dev,
+ libglx-dev,
  libx11-dev,
  libdrm-dev (>= 2.4.95) [!hurd-any],
  ${misc:Depends},
@@ -319,7 +320,6 @@ Architecture: any
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
- libglapi-mesa (= ${binary:Version}),
 Pre-Depends: ${misc:Pre-Depends}
 Multi-Arch: same
 Description: Mesa Off-screen rendering extension

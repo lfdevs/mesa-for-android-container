@@ -1,3 +1,16 @@
+mesa (19.3.1-4) unstable; urgency=medium
+
+  [ Julien Cristau ]
+  * Ensure strict dependencies on libglapi-mesa (closes: #947813).
+
+  [ Timo Aaltonen ]
+  * control: Add libgl{,x}-dev to mesa-common-dev Depends. (Closes:
+    #947392)
+  * drisw-fix-depth-for-ximage.diff: Fix sw driver rgbBits/depth calculation.
+    (Closes: #947196)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 08 Jan 2020 11:38:56 +0200
+
 mesa (19.3.1-3) unstable; urgency=medium
 
   * control, rules: Actually build radv on mipsel, drop mips from

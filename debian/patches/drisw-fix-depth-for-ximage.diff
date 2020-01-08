@@ -1,0 +1,51 @@
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index 3bf15322ff85e1397aa3174a308a870c50ec4756..61e11c3dbc4317fff0484b6cd9e0110765246a25 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -53,6 +53,28 @@ handle_xerror(Display *dpy, XErrorEvent *event)
+ static Bool
+ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
+ {
++   int depth = 0;
++
++   /* Use the visual depth, if this fbconfig corresponds to a visual */
++   if (pdp->config->visualID != 0) {
++      int matches = 0;
++      XVisualInfo *visinfo, template;
++
++      template.visualid = pdp->config->visualID;
++      template.screen = pdp->config->screen;
++      visinfo = XGetVisualInfo(dpy, VisualIDMask | VisualScreenMask,
++                               &template, &matches);
++
++      if (visinfo && matches) {
++         depth = visinfo->depth;
++         XFree(visinfo);
++      }
++   }
++
++   /* Otherwise, or if XGetVisualInfo failed, use rgb(not a) size */
++   if (depth == 0)
++      depth = pdp->config->rgbBits - pdp->config->alphaBits;
++
+    if (pdp->ximage) {
+       XDestroyImage(pdp->ximage);
+       pdp->ximage = NULL;
+@@ -64,7 +86,7 @@ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
+       pdp->shminfo.shmid = shmid;
+       pdp->ximage = XShmCreateImage(dpy,
+                                     NULL,
+-                                    pdp->config->rgbBits,
++                                    depth,
+                                     ZPixmap,              /* format */
+                                     NULL,                 /* data */
+                                     &pdp->shminfo,        /* shminfo */
+@@ -94,7 +116,7 @@ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
+       pdp->shminfo.shmid = -1;
+       pdp->ximage = XCreateImage(dpy,
+                                  NULL,
+-                                 pdp->config->rgbBits,
++                                 depth,
+                                  ZPixmap, 0,             /* format, offset */
+                                  NULL,                   /* data */
+                                  0, 0,                   /* width, height */
