@@ -2119,6 +2119,24 @@ genX(graphics_pipeline_create)(
       return result;
    }
 
+   /* If rasterization is not enabled, various CreateInfo structs must be
+    * ignored.
+    */
+   const bool raster_enabled =
+      !pCreateInfo->pRasterizationState->rasterizerDiscardEnable;
+
+   const VkPipelineViewportStateCreateInfo *vp_info =
+      raster_enabled ? pCreateInfo->pViewportState : NULL;
+
+   const VkPipelineMultisampleStateCreateInfo *ms_info =
+      raster_enabled ? pCreateInfo->pMultisampleState : NULL;
+
+   const VkPipelineDepthStencilStateCreateInfo *ds_info =
+      raster_enabled ? pCreateInfo->pDepthStencilState : NULL;
+
+   const VkPipelineColorBlendStateCreateInfo *cb_info =
+      raster_enabled ? pCreateInfo->pColorBlendState : NULL;
+
    const VkPipelineRasterizationLineStateCreateInfoEXT *line_info =
       vk_find_struct_const(pCreateInfo->pRasterizationState->pNext,
                            PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT);
@@ -2128,19 +2146,17 @@ genX(graphics_pipeline_create)(
    assert(pCreateInfo->pRasterizationState);
    emit_rs_state(pipeline, pCreateInfo->pInputAssemblyState,
                            pCreateInfo->pRasterizationState,
-                           pCreateInfo->pMultisampleState,
-                           line_info, pass, subpass);
-   emit_ms_state(pipeline, pCreateInfo->pMultisampleState);
-   emit_ds_state(pipeline, pCreateInfo->pDepthStencilState, pass, subpass);
-   emit_cb_state(pipeline, pCreateInfo->pColorBlendState,
-                           pCreateInfo->pMultisampleState);
-   compute_kill_pixel(pipeline, pCreateInfo->pMultisampleState, subpass);
+                           ms_info, line_info, pass, subpass);
+   emit_ms_state(pipeline, ms_info);
+   emit_ds_state(pipeline, ds_info, pass, subpass);
+   emit_cb_state(pipeline, cb_info, ms_info);
+   compute_kill_pixel(pipeline, ms_info, subpass);
 
    emit_urb_setup(pipeline);
 
    emit_3dstate_clip(pipeline,
                      pCreateInfo->pInputAssemblyState,
-                     pCreateInfo->pViewportState,
+                     vp_info,
                      pCreateInfo->pRasterizationState);
    emit_3dstate_streamout(pipeline, pCreateInfo->pRasterizationState);
 
@@ -2170,10 +2186,8 @@ genX(graphics_pipeline_create)(
    emit_3dstate_wm(pipeline, subpass,
                    pCreateInfo->pInputAssemblyState,
                    pCreateInfo->pRasterizationState,
-                   pCreateInfo->pColorBlendState,
-                   pCreateInfo->pMultisampleState, line_info);
-   emit_3dstate_ps(pipeline, pCreateInfo->pColorBlendState,
-                   pCreateInfo->pMultisampleState);
+                   cb_info, ms_info, line_info);
+   emit_3dstate_ps(pipeline, cb_info, ms_info);
 #if GEN_GEN >= 8
    emit_3dstate_ps_extra(pipeline, subpass, pCreateInfo->pColorBlendState);
    emit_3dstate_vf_topology(pipeline);

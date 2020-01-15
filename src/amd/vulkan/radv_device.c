@@ -1178,11 +1178,11 @@ void radv_GetPhysicalDeviceProperties(
 		.maxFragmentCombinedOutputResources       = 8,
 		.maxComputeSharedMemorySize               = 32768,
 		.maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
-		.maxComputeWorkGroupInvocations           = 2048,
+		.maxComputeWorkGroupInvocations           = 1024,
 		.maxComputeWorkGroupSize = {
-			2048,
-			2048,
-			2048
+			1024,
+			1024,
+			1024
 		},
 		.subPixelPrecisionBits                    = 8,
 		.subTexelPrecisionBits                    = 8,
@@ -1215,7 +1215,7 @@ void radv_GetPhysicalDeviceProperties(
 		.framebufferNoAttachmentsSampleCounts     = sample_counts,
 		.maxColorAttachments                      = MAX_RTS,
 		.sampledImageColorSampleCounts            = sample_counts,
-		.sampledImageIntegerSampleCounts          = VK_SAMPLE_COUNT_1_BIT,
+		.sampledImageIntegerSampleCounts          = sample_counts,
 		.sampledImageDepthSampleCounts            = sample_counts,
 		.sampledImageStencilSampleCounts          = sample_counts,
 		.storageImageSampleCounts                 = pdevice->rad_info.chip_class >= GFX8 ? sample_counts : VK_SAMPLE_COUNT_1_BIT,

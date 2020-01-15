@@ -1162,7 +1162,7 @@ bool validate_ra(Program* program, const struct radv_nir_compiler_options *optio
 #ifndef NDEBUG
 void perfwarn(bool cond, const char *msg, Instruction *instr=NULL);
 #else
-#define perfwarn(program, cond, msg, ...)
+#define perfwarn(program, cond, msg, ...) do {} while(0)
 #endif
 
 void aco_print_instr(Instruction *instr, FILE *output);

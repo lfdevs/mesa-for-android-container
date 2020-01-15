@@ -1011,7 +1011,8 @@ anv_semaphore_impl_cleanup(struct anv_device *device,
       break;
 
    case ANV_SEMAPHORE_TYPE_SYNC_FILE:
-      close(impl->fd);
+      if (impl->fd >= 0)
+         close(impl->fd);
       break;
 
    case ANV_SEMAPHORE_TYPE_DRM_SYNCOBJ:

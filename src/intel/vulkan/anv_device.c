@@ -1423,7 +1423,7 @@ void anv_GetPhysicalDeviceProperties(
       .framebufferNoAttachmentsSampleCounts     = sample_counts,
       .maxColorAttachments                      = MAX_RTS,
       .sampledImageColorSampleCounts            = sample_counts,
-      .sampledImageIntegerSampleCounts          = VK_SAMPLE_COUNT_1_BIT,
+      .sampledImageIntegerSampleCounts          = sample_counts,
       .sampledImageDepthSampleCounts            = sample_counts,
       .sampledImageStencilSampleCounts          = sample_counts,
       .storageImageSampleCounts                 = VK_SAMPLE_COUNT_1_BIT,

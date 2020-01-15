@@ -941,6 +941,7 @@ radeon_drm_winsys_create(int fd, const struct pipe_screen_config *config,
 
     /* TTM aligns the BO size to the CPU page size */
     ws->info.gart_page_size = sysconf(_SC_PAGESIZE);
+    ws->info.pte_fragment_size = 64 * 1024; /* GPUVM page size */
 
     if (ws->num_cpus > 1 && debug_get_option_thread())
         util_queue_init(&ws->cs_queue, "rcs", 8, 1, 0);

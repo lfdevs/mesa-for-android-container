@@ -797,7 +797,8 @@ static bool si_resource_commit(struct pipe_context *pctx,
 		si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC, NULL);
 	}
 
-	ctx->ws->cs_sync_flush(ctx->dma_cs);
+	if (ctx->dma_cs)
+		ctx->ws->cs_sync_flush(ctx->dma_cs);
 	ctx->ws->cs_sync_flush(ctx->gfx_cs);
 
 	assert(resource->target == PIPE_BUFFER);

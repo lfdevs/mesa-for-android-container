@@ -266,7 +266,7 @@ void radv_logi_v(const char *format, va_list va);
 				fprintf(stderr, "%s:%d ASSERT: %s\n", __FILE__, __LINE__, #x); \
 		})
 #else
-#define radv_assert(x)
+#define radv_assert(x) do {} while(0)
 #endif
 
 #define stub_return(v)					\
@@ -1675,6 +1675,15 @@ radv_graphics_pipeline_create(VkDevice device,
 			      const struct radv_graphics_pipeline_create_info *extra,
 			      const VkAllocationCallbacks *alloc,
 			      VkPipeline *pPipeline);
+
+struct radv_binning_settings {
+	unsigned context_states_per_bin; /* allowed range: [1, 6] */
+	unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
+	unsigned fpovs_per_batch; /* allowed range: [0, 255], 0 = unlimited */
+};
+
+struct radv_binning_settings
+radv_get_binning_settings(const struct radv_physical_device *pdev);
 
 struct vk_format_description;
 uint32_t radv_translate_buffer_dataformat(const struct vk_format_description *desc,

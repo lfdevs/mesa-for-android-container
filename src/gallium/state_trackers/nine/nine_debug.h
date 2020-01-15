@@ -116,7 +116,7 @@ _nine_stub( const char *file,
 #define user_warn(x) \
     if ((x)) { DBG_FLAG(DBG_USER, "User warning: `%s'\n", #x); }
 #else
-#define user_warn(x)
+#define user_warn(x) do {} while(0)
 #endif
 
 /* nonfatal assert */

@@ -9,3 +9,6 @@ b6905438514ae4de0b7f85c861e3d811ddaadda9
 # This isn't worth the effort to backport, as it only affects build with
 # asserts enable, which hopefully wont happen in a stable branch.
 937b9055698be0dfdb7d2e0673a989e2ecc05912
+
+# this is reverted, so just don't apply
+973181c06cca3fe232c3a435abde31f2fc1b81ef

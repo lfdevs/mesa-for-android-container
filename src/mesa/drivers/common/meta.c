@@ -110,6 +110,8 @@ static void meta_decompress_cleanup(struct gl_context *ctx,
                                     struct decompress_state *decompress);
 static void meta_drawpix_cleanup(struct gl_context *ctx,
                                  struct drawpix_state *drawpix);
+static void meta_drawtex_cleanup(struct gl_context *ctx,
+                                 struct drawtex_state *drawtex);
 
 void
 _mesa_meta_framebuffer_texture_image(struct gl_context *ctx,
@@ -429,6 +431,7 @@ _mesa_meta_free(struct gl_context *ctx)
    cleanup_temp_texture(ctx, &ctx->Meta->TempTex);
    meta_decompress_cleanup(ctx, &ctx->Meta->Decompress);
    meta_drawpix_cleanup(ctx, &ctx->Meta->DrawPix);
+   meta_drawtex_cleanup(ctx, &ctx->Meta->DrawTex);
    if (old_context)
       _mesa_make_current(old_context, old_context->WinSysDrawBuffer, old_context->WinSysReadBuffer);
    else
@@ -1967,6 +1970,17 @@ meta_drawpix_cleanup(struct gl_context *ctx, struct drawpix_state *drawpix)
    if (drawpix->DepthFP != 0) {
       _mesa_DeleteProgramsARB(1, &drawpix->DepthFP);
       drawpix->DepthFP = 0;
+   }
+}
+
+static void
+meta_drawtex_cleanup(struct gl_context *ctx, struct drawtex_state *drawtex)
+{
+   if (drawtex->VAO != 0) {
+      _mesa_DeleteVertexArrays(1, &drawtex->VAO);
+      drawtex->VAO = 0;
+
+      _mesa_reference_buffer_object(ctx, &drawtex->buf_obj, NULL);
    }
 }
 

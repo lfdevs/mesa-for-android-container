@@ -1977,7 +1977,7 @@ void visit_alu_instr(isel_context *ctx, nir_alu_instr *instr)
    case nir_op_i2i64: {
       Temp src = get_alu_src(ctx, instr->src[0]);
       if (src.regClass() == s1) {
-         Temp high = bld.sopc(aco_opcode::s_ashr_i32, bld.def(s1, scc), src, Operand(31u));
+         Temp high = bld.sop2(aco_opcode::s_ashr_i32, bld.def(s1), bld.def(s1, scc), src, Operand(31u));
          bld.pseudo(aco_opcode::p_create_vector, Definition(dst), src, high);
       } else if (src.regClass() == v1) {
          Temp high = bld.vop2(aco_opcode::v_ashrrev_i32, bld.def(v1), Operand(31u), src);

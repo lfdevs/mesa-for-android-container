@@ -1394,6 +1394,8 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
          image = pixmap_buffer;
       }
 
+      buffer_fds[i] = -1;
+
       ret = draw->ext->image->queryImage(image, __DRI_IMAGE_ATTRIB_FD,
                                          &buffer_fds[i]);
       ret &= draw->ext->image->queryImage(image, __DRI_IMAGE_ATTRIB_STRIDE,
@@ -1466,7 +1468,8 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int format,
 
 no_buffer_attrib:
    do {
-      close(buffer_fds[i]);
+      if (buffer_fds[i] != -1)
+         close(buffer_fds[i]);
    } while (--i >= 0);
    draw->ext->image->destroyImage(pixmap_buffer);
 no_linear_buffer:

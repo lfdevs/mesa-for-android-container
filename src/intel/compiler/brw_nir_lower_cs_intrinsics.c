@@ -55,6 +55,20 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
 
       nir_ssa_def *sysval;
       switch (intrinsic->intrinsic) {
+      case nir_intrinsic_barrier: {
+         /* Our HW barrier instruction doesn't do a memory barrier for us but
+          * the GLSL barrier() intrinsic does for shared memory.  Insert a
+          * shared memory barrier before every barrier().
+          */
+         b->cursor = nir_before_instr(&intrinsic->instr);
+
+         nir_intrinsic_instr *shared_barrier =
+            nir_intrinsic_instr_create(b->shader,
+                                       nir_intrinsic_memory_barrier_shared);
+         nir_builder_instr_insert(b, &shared_barrier->instr);
+         continue;
+      }
+
       case nir_intrinsic_load_local_invocation_index:
       case nir_intrinsic_load_local_invocation_id: {
          /* First time we are using those, so let's calculate them. */

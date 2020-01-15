@@ -817,10 +817,7 @@ static float r600_get_paramf(struct pipe_screen* pscreen,
 	case PIPE_CAPF_MAX_LINE_WIDTH_AA:
 	case PIPE_CAPF_MAX_POINT_WIDTH:
 	case PIPE_CAPF_MAX_POINT_WIDTH_AA:
-		if (rscreen->family >= CHIP_CEDAR)
-			return 16384.0f;
-		else
-			return 8192.0f;
+         return 8191.0f;
 	case PIPE_CAPF_MAX_TEXTURE_ANISOTROPY:
 		return 16.0f;
 	case PIPE_CAPF_MAX_TEXTURE_LOD_BIAS:

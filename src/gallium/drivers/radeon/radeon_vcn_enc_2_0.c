@@ -196,7 +196,13 @@ static void radeon_enc_nalu_pps_hevc(struct radeon_encoder *enc)
 	radeon_enc_code_se(enc, 0x0);
 	radeon_enc_code_fixed_bits(enc, enc->enc_pic.hevc_spec_misc.constrained_intra_pred_flag, 1);
 	radeon_enc_code_fixed_bits(enc, 0x0, 1);
-	radeon_enc_code_fixed_bits(enc, 0x0, 1);
+	if (enc->enc_pic.rc_session_init.rate_control_method ==
+		RENCODE_RATE_CONTROL_METHOD_NONE)
+		radeon_enc_code_fixed_bits(enc, 0x0, 1);
+	else {
+		radeon_enc_code_fixed_bits(enc, 0x1, 1);
+		radeon_enc_code_ue(enc, 0x0);
+	}
 	radeon_enc_code_se(enc, enc->enc_pic.hevc_deblock.cb_qp_offset);
 	radeon_enc_code_se(enc, enc->enc_pic.hevc_deblock.cr_qp_offset);
 	radeon_enc_code_fixed_bits(enc, 0x0, 1);

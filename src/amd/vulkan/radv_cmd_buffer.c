@@ -1139,6 +1139,33 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 }
 
 static void
+radv_emit_batch_break_on_new_ps(struct radv_cmd_buffer *cmd_buffer)
+{
+	if (!cmd_buffer->device->pbb_allowed)
+		return;
+
+        struct radv_binning_settings settings =
+                radv_get_binning_settings(cmd_buffer->device->physical_device);
+	bool break_for_new_ps =
+		(!cmd_buffer->state.emitted_pipeline ||
+		 cmd_buffer->state.emitted_pipeline->shaders[MESA_SHADER_FRAGMENT] !=
+		 cmd_buffer->state.pipeline->shaders[MESA_SHADER_FRAGMENT]) &&
+		(settings.context_states_per_bin > 1 ||
+		 settings.persistent_states_per_bin > 1);
+	bool break_for_new_cb_target_mask =
+		(!cmd_buffer->state.emitted_pipeline ||
+		 cmd_buffer->state.emitted_pipeline->graphics.cb_target_mask !=
+		 cmd_buffer->state.pipeline->graphics.cb_target_mask) &&
+		 settings.context_states_per_bin > 1;
+
+	if (!break_for_new_ps && !break_for_new_cb_target_mask)
+		return;
+
+	radeon_emit(cmd_buffer->cs, PKT3(PKT3_EVENT_WRITE, 0, 0));
+	radeon_emit(cmd_buffer->cs, EVENT_TYPE(V_028A90_BREAK_BATCH) | EVENT_INDEX(0));
+}
+
+static void
 radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 {
 	struct radv_pipeline *pipeline = cmd_buffer->state.pipeline;
@@ -1169,6 +1196,8 @@ radv_emit_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer)
 		radeon_emit_array(cmd_buffer->cs, pipeline->ctx_cs.buf, pipeline->ctx_cs.cdw);
 		cmd_buffer->state.context_roll_without_scissor_emitted = true;
 	}
+
+	radv_emit_batch_break_on_new_ps(cmd_buffer);
 
 	for (unsigned i = 0; i < MESA_SHADER_COMPUTE; i++) {
 		if (!pipeline->shaders[i])
@@ -2428,8 +2457,12 @@ radv_flush_vertex_descriptors(struct radv_cmd_buffer *cmd_buffer,
 				  S_008F0C_DST_SEL_W(V_008F0C_SQ_SEL_W);
 
 			if (cmd_buffer->device->physical_device->rad_info.chip_class >= GFX10) {
+				/* OOB_SELECT chooses the out-of-bounds check:
+				 * - 1: index >= NUM_RECORDS (Structured)
+				 * - 3: offset >= NUM_RECORDS (Raw)
+				 */
                                desc[3] |= S_008F0C_FORMAT(V_008F0C_IMG_FORMAT_32_UINT) |
-                                          S_008F0C_OOB_SELECT(1) |
+                                          S_008F0C_OOB_SELECT(stride ? 1 : 3) |
                                           S_008F0C_RESOURCE_LEVEL(1);
                        } else {
                                desc[3] |= S_008F0C_NUM_FORMAT(V_008F0C_BUF_NUM_FORMAT_UINT) |

@@ -460,6 +460,10 @@ etna_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 
       _mesa_set_remove_key(rsc->pending_ctx, ctx);
 
+      /* if resource has no pending ctx's reset its status */
+      if (_mesa_set_next_entry(rsc->pending_ctx, NULL) == NULL)
+         rsc->status &= ~ETNA_PENDING_READ;
+
       pipe_resource_reference(&referenced, NULL);
    }
    _mesa_set_clear(ctx->used_resources_read, NULL);
@@ -469,6 +473,10 @@ etna_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
       struct pipe_resource *referenced = &rsc->base;
 
       _mesa_set_remove_key(rsc->pending_ctx, ctx);
+
+      /* if resource has no pending ctx's reset its status */
+      if (_mesa_set_next_entry(rsc->pending_ctx, NULL) == NULL)
+         rsc->status &= ~ETNA_PENDING_WRITE;
 
       pipe_resource_reference(&referenced, NULL);
    }

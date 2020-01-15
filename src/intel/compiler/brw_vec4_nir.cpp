@@ -1109,6 +1109,18 @@ vec4_visitor::fix_float_operands(src_reg op[3], nir_alu_instr *instr)
    }
 }
 
+static bool
+const_src_fits_in_16_bits(const nir_src &src, brw_reg_type type)
+{
+   assert(nir_src_is_const(src));
+   if (type_is_unsigned_int(type)) {
+      return nir_src_comp_as_uint(src, 0) <= UINT16_MAX;
+   } else {
+      const int64_t c = nir_src_comp_as_int(src, 0);
+      return c <= INT16_MAX && c >= INT16_MIN;
+   }
+}
+
 void
 vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
 {
@@ -1217,14 +1229,14 @@ vec4_visitor::nir_emit_alu(nir_alu_instr *instr)
           */
          if (nir_src_is_const(instr->src[0].src) &&
              nir_alu_instr_src_read_mask(instr, 0) == 1 &&
-             nir_src_comp_as_uint(instr->src[0].src, 0) < (1 << 16)) {
+             const_src_fits_in_16_bits(instr->src[0].src, op[0].type)) {
             if (devinfo->gen < 7)
                emit(MUL(dst, op[0], op[1]));
             else
                emit(MUL(dst, op[1], op[0]));
          } else if (nir_src_is_const(instr->src[1].src) &&
                     nir_alu_instr_src_read_mask(instr, 1) == 1 &&
-                    nir_src_comp_as_uint(instr->src[1].src, 0) < (1 << 16)) {
+                    const_src_fits_in_16_bits(instr->src[1].src, op[1].type)) {
             if (devinfo->gen < 7)
                emit(MUL(dst, op[1], op[0]));
             else

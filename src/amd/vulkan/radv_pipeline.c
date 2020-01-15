@@ -3330,6 +3330,28 @@ radv_pipeline_generate_disabled_binning_state(struct radeon_cmdbuf *ctx_cs,
 	pipeline->graphics.binning.db_dfsm_control = db_dfsm_control;
 }
 
+struct radv_binning_settings
+radv_get_binning_settings(const struct radv_physical_device *pdev)
+{
+	struct radv_binning_settings settings;
+	if (pdev->rad_info.has_dedicated_vram) {
+		settings.context_states_per_bin = 1;
+		settings.persistent_states_per_bin = 1;
+		settings.fpovs_per_batch = 63;
+	} else {
+		/* The context states are affected by the scissor bug. */
+		settings.context_states_per_bin = 6;
+		/* 32 causes hangs for RAVEN. */
+		settings.persistent_states_per_bin = 16;
+		settings.fpovs_per_batch = 63;
+	}
+
+	if (pdev->rad_info.has_gfx9_scissor_bug)
+		settings.context_states_per_bin = 1;
+
+	return settings;
+}
+
 static void
 radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 				     struct radv_pipeline *pipeline,
@@ -3348,21 +3370,8 @@ radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 		unreachable("Unhandled generation for binning bin size calculation");
 
 	if (pipeline->device->pbb_allowed && bin_size.width && bin_size.height) {
-		unsigned context_states_per_bin; /* allowed range: [1, 6] */
-		unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
-		unsigned fpovs_per_batch; /* allowed range: [0, 255], 0 = unlimited */
-
-		if (pipeline->device->physical_device->rad_info.has_dedicated_vram) {
-			context_states_per_bin = 1;
-			persistent_states_per_bin = 1;
-			fpovs_per_batch = 63;
-		} else {
-			/* The context states are affected by the scissor bug. */
-			context_states_per_bin = pipeline->device->physical_device->rad_info.has_gfx9_scissor_bug ? 1 : 6;
-			/* 32 causes hangs for RAVEN. */
-			persistent_states_per_bin = 16;
-			fpovs_per_batch = 63;
-		}
+		struct radv_binning_settings settings =
+			radv_get_binning_settings(pipeline->device->physical_device);
 
 		bool disable_start_of_prim = true;
 		uint32_t db_dfsm_control = S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF);
@@ -3383,10 +3392,10 @@ radv_pipeline_generate_binning_state(struct radeon_cmdbuf *ctx_cs,
 	                S_028C44_BIN_SIZE_Y(bin_size.height == 16) |
 	                S_028C44_BIN_SIZE_X_EXTEND(util_logbase2(MAX2(bin_size.width, 32)) - 5) |
 	                S_028C44_BIN_SIZE_Y_EXTEND(util_logbase2(MAX2(bin_size.height, 32)) - 5) |
-	                S_028C44_CONTEXT_STATES_PER_BIN(context_states_per_bin - 1) |
-	                S_028C44_PERSISTENT_STATES_PER_BIN(persistent_states_per_bin - 1) |
+	                S_028C44_CONTEXT_STATES_PER_BIN(settings.context_states_per_bin - 1) |
+	                S_028C44_PERSISTENT_STATES_PER_BIN(settings.persistent_states_per_bin - 1) |
 	                S_028C44_DISABLE_START_OF_PRIM(disable_start_of_prim) |
-	                S_028C44_FPOVS_PER_BATCH(fpovs_per_batch) |
+	                S_028C44_FPOVS_PER_BATCH(settings.fpovs_per_batch) |
 	                S_028C44_OPTIMAL_BIN_SELECTION(1);
 
 		pipeline->graphics.binning.pa_sc_binner_cntl_0 = pa_sc_binner_cntl_0;

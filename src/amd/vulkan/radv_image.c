@@ -1874,7 +1874,9 @@ void radv_GetImageSubresourceLayout(
 	struct radeon_surf *surface = &plane->surface;
 
 	if (device->physical_device->rad_info.chip_class >= GFX9) {
-		pLayout->offset = plane->offset + surface->u.gfx9.offset[level] + surface->u.gfx9.surf_slice_size * layer;
+		uint64_t level_offset = surface->is_linear ? surface->u.gfx9.offset[level] : 0;
+		
+		pLayout->offset = plane->offset + level_offset + surface->u.gfx9.surf_slice_size * layer;
 		if (image->vk_format == VK_FORMAT_R32G32B32_UINT ||
 		    image->vk_format == VK_FORMAT_R32G32B32_SINT ||
 		    image->vk_format == VK_FORMAT_R32G32B32_SFLOAT) {
@@ -1884,8 +1886,10 @@ void radv_GetImageSubresourceLayout(
 			 */
 			pLayout->rowPitch = surface->u.gfx9.surf_pitch * surface->bpe / 3;
 		} else {
+			uint32_t pitch = surface->is_linear ? surface->u.gfx9.pitch[level] : surface->u.gfx9.surf_pitch;
+
 			assert(util_is_power_of_two_nonzero(surface->bpe));
-			pLayout->rowPitch = surface->u.gfx9.surf_pitch * surface->bpe;
+			pLayout->rowPitch = pitch * surface->bpe;
 		}
 
 		pLayout->arrayPitch = surface->u.gfx9.surf_slice_size;

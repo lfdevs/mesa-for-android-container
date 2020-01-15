@@ -485,6 +485,11 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen,
 
 	if (sscreen->info.num_sdma_rings &&
 	    !(sscreen->debug_flags & DBG(NO_ASYNC_DMA)) &&
+	    /* SDMA causes corruption on RX 580:
+	     *    https://gitlab.freedesktop.org/mesa/mesa/issues/1399
+	     *    https://gitlab.freedesktop.org/mesa/mesa/issues/1889
+	     */
+	    (sctx->chip_class != GFX8 || sscreen->debug_flags & DBG(FORCE_DMA)) &&
 	    /* SDMA timeouts sometimes on gfx10 so disable it for now. See:
 	     *    https://bugs.freedesktop.org/show_bug.cgi?id=111481
 	     *    https://gitlab.freedesktop.org/mesa/mesa/issues/1907

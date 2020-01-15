@@ -605,7 +605,9 @@ union packed_tex_data {
       unsigned is_shadow:1;
       unsigned is_new_style_shadow:1;
       unsigned component:2;
-      unsigned unused:10; /* Mark unused for valgrind. */
+      unsigned texture_non_uniform:1;
+      unsigned sampler_non_uniform:1;
+      unsigned unused:8; /* Mark unused for valgrind. */
    } u;
 };
 
@@ -628,6 +630,8 @@ write_tex(write_ctx *ctx, const nir_tex_instr *tex)
       .u.is_shadow = tex->is_shadow,
       .u.is_new_style_shadow = tex->is_new_style_shadow,
       .u.component = tex->component,
+      .u.texture_non_uniform = tex->texture_non_uniform,
+      .u.sampler_non_uniform = tex->sampler_non_uniform,
    };
    blob_write_uint32(ctx->blob, packed.u32);
 
@@ -659,6 +663,8 @@ read_tex(read_ctx *ctx)
    tex->is_shadow = packed.u.is_shadow;
    tex->is_new_style_shadow = packed.u.is_new_style_shadow;
    tex->component = packed.u.component;
+   tex->texture_non_uniform = packed.u.texture_non_uniform;
+   tex->sampler_non_uniform = packed.u.sampler_non_uniform;
 
    read_dest(ctx, &tex->dest, &tex->instr);
    for (unsigned i = 0; i < tex->num_srcs; i++) {
