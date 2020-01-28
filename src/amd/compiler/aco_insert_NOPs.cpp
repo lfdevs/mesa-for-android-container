@@ -455,9 +455,9 @@ void handle_instruction_gfx10(Program *program, NOP_ctx_gfx10 &ctx, aco_ptr<Inst
          ctx.has_nonVALU_exec_read = false;
 
          /* Insert s_waitcnt_depctr instruction with magic imm to mitigate the problem */
-         aco_ptr<SOPP_instruction> depctr{create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 1)};
+         aco_ptr<SOPP_instruction> depctr{create_instruction<SOPP_instruction>(aco_opcode::s_waitcnt_depctr, Format::SOPP, 0, 0)};
          depctr->imm = 0xfffe;
-         depctr->definitions[0] = Definition(sgpr_null, s1);
+         depctr->block = -1;
          new_instructions.emplace_back(std::move(depctr));
       } else if (instr_writes_sgpr(instr)) {
          /* Any VALU instruction that writes an SGPR mitigates the problem */

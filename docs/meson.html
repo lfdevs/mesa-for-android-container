@@ -47,7 +47,7 @@ or
 <pre>
 sudo dnf install meson   # Fedora
 </pre>
-
+<p>
 Some older versions of meson do not check that they are too old and will error
 out in odd ways.
 </p>
@@ -287,13 +287,14 @@ was added in meson 0.49.0, but LLVM cannot be found until 0.51) Due to the
 way LLVM implements its cmake finder it will only find static libraries, it
 will never find libllvm.so.
 
-There is also a <pre>-Dcmake_module_path</pre> option in this meson version,
+There is also a <code>-Dcmake_module_path</code> option in this meson version,
 which points to the root of an alternative installation (the prefix). For
 example:
+</p>
 <pre>
         meson builddir -Dcmake_module_path=/home/user/mycmake/prefix
 </pre>
-</p></dd>
+</dd>
 
 <dd><p>
 As of meson 0.49.0 meson also has the concept of a
@@ -418,8 +419,6 @@ workarounds for the wrong version of LLVM might be used resulting in build
 failures.</p>
 
 </dd>
-</dl>
-
 <dt><code>PKG_CONFIG_PATH</code></dt>
 <dd><p>The
 <code>pkg-config</code> utility is a hard requirement for configuring and

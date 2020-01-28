@@ -1773,7 +1773,9 @@ blorp_update_clear_color(struct blorp_batch *batch,
                                  .MemoryAddress = clear_addr);
       /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
       dw[2] = info->clear_color.u32[0];
+      dw[3] = 0;
       dw[4] = info->clear_color.u32[1];
+      dw[5] = 0;
 
       clear_addr.offset += 8;
       dw = blorp_emitn(batch, GENX(MI_ATOMIC), num_dwords,
@@ -1785,7 +1787,9 @@ blorp_update_clear_color(struct blorp_batch *batch,
                                  .MemoryAddress = clear_addr);
       /* dw starts at dword 1, but we need to fill dwords 3 and 5 */
       dw[2] = info->clear_color.u32[2];
+      dw[3] = 0;
       dw[4] = info->clear_color.u32[3];
+      dw[5] = 0;
 
       blorp_emit(batch, GENX(PIPE_CONTROL), pipe) {
          pipe.StateCacheInvalidationEnable = true;

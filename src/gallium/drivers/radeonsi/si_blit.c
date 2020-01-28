@@ -443,7 +443,7 @@ static void si_blit_decompress_color(struct si_context *sctx,
 	if (!need_dcc_decompress)
 		level_mask &= tex->dirty_level_mask;
 	if (!level_mask)
-		return;
+		goto expand_fmask;
 
 	if (unlikely(sctx->log))
 		u_log_printf(sctx->log,
@@ -514,6 +514,7 @@ static void si_blit_decompress_color(struct si_context *sctx,
 				   vi_dcc_enabled(tex, first_level),
 				   tex->surface.u.gfx9.dcc.pipe_aligned);
 
+expand_fmask:
 	if (need_fmask_expand && tex->surface.fmask_offset && tex->fmask_is_not_identity) {
 		si_compute_expand_fmask(&sctx->b, &tex->buffer.b.b);
 		tex->fmask_is_not_identity = false;
@@ -823,10 +824,10 @@ void si_decompress_textures(struct si_context *sctx, unsigned shader_mask)
  * blitting if any decompression is needed.
  * The driver doesn't decompress resources automatically while u_blitter is
  * rendering. */
-static void si_decompress_subresource(struct pipe_context *ctx,
-				      struct pipe_resource *tex,
-				      unsigned planes, unsigned level,
-				      unsigned first_layer, unsigned last_layer)
+void si_decompress_subresource(struct pipe_context *ctx,
+			       struct pipe_resource *tex,
+			       unsigned planes, unsigned level,
+			       unsigned first_layer, unsigned last_layer)
 {
 	struct si_context *sctx = (struct si_context *)ctx;
 	struct si_texture *stex = (struct si_texture*)tex;

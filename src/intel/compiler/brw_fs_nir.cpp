@@ -3975,17 +3975,20 @@ fs_visitor::get_nir_image_intrinsic_image(const brw::fs_builder &bld,
                                           nir_intrinsic_instr *instr)
 {
    fs_reg image = retype(get_nir_src_imm(instr->src[0]), BRW_REGISTER_TYPE_UD);
+   fs_reg surf_index = image;
 
    if (stage_prog_data->binding_table.image_start > 0) {
       if (image.file == BRW_IMMEDIATE_VALUE) {
-         image.d += stage_prog_data->binding_table.image_start;
+         surf_index =
+            brw_imm_ud(image.d + stage_prog_data->binding_table.image_start);
       } else {
-         bld.ADD(image, image,
+         surf_index = vgrf(glsl_type::uint_type);
+         bld.ADD(surf_index, image,
                  brw_imm_d(stage_prog_data->binding_table.image_start));
       }
    }
 
-   return bld.emit_uniformize(image);
+   return bld.emit_uniformize(surf_index);
 }
 
 fs_reg
@@ -4243,6 +4246,9 @@ fs_visitor::nir_emit_intrinsic(const fs_builder &bld, nir_intrinsic_instr *instr
             slm_fence = false;
          }
       }
+
+      if (stage != MESA_SHADER_COMPUTE)
+         slm_fence = false;
 
       /* Be conservative in Gen11+ and always stall in a fence.  Since there
        * are two different fences, and shader might want to synchronize

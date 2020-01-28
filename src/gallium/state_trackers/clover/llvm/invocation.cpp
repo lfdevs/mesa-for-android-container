@@ -104,6 +104,7 @@ namespace {
          LLVMInitializeAllTargets();
          LLVMInitializeAllTargetInfos();
          LLVMInitializeAllTargetMCs();
+         LLVMInitializeAllAsmParsers();
          LLVMInitializeAllAsmPrinters();
          targets_initialized = true;
       }

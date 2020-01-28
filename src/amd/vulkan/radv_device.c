@@ -4736,7 +4736,6 @@ static VkResult radv_alloc_memory(struct radv_device *device,
 
 fail:
 	radv_free_memory(device, pAllocator,mem);
-	vk_free2(&device->alloc, pAllocator, mem);
 
 	return result;
 }
@@ -6562,6 +6561,7 @@ radv_init_sampler(struct radv_device *device,
 	bool compat_mode = device->physical_device->rad_info.chip_class == GFX8 ||
 			   device->physical_device->rad_info.chip_class == GFX9;
 	unsigned filter_mode = V_008F30_SQ_IMG_FILTER_MODE_BLEND;
+	unsigned depth_compare_func = V_008F30_SQ_TEX_DEPTH_COMPARE_NEVER;
 
 	const struct VkSamplerReductionModeCreateInfoEXT *sampler_reduction =
 		vk_find_struct_const(pCreateInfo->pNext,
@@ -6569,11 +6569,14 @@ radv_init_sampler(struct radv_device *device,
 	if (sampler_reduction)
 		filter_mode = radv_tex_filter_mode(sampler_reduction->reductionMode);
 
+	if (pCreateInfo->compareEnable)
+		depth_compare_func = radv_tex_compare(pCreateInfo->compareOp);
+
 	sampler->state[0] = (S_008F30_CLAMP_X(radv_tex_wrap(pCreateInfo->addressModeU)) |
 			     S_008F30_CLAMP_Y(radv_tex_wrap(pCreateInfo->addressModeV)) |
 			     S_008F30_CLAMP_Z(radv_tex_wrap(pCreateInfo->addressModeW)) |
 			     S_008F30_MAX_ANISO_RATIO(max_aniso_ratio) |
-			     S_008F30_DEPTH_COMPARE_FUNC(radv_tex_compare(pCreateInfo->compareOp)) |
+			     S_008F30_DEPTH_COMPARE_FUNC(depth_compare_func) |
 			     S_008F30_FORCE_UNNORMALIZED(pCreateInfo->unnormalizedCoordinates ? 1 : 0) |
 			     S_008F30_ANISO_THRESHOLD(max_aniso_ratio >> 1) |
 			     S_008F30_ANISO_BIAS(max_aniso_ratio) |

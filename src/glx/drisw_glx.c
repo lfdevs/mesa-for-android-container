@@ -64,7 +64,7 @@ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
       pdp->shminfo.shmid = shmid;
       pdp->ximage = XShmCreateImage(dpy,
                                     NULL,
-                                    pdp->config->rgbBits,
+                                    pdp->xDepth,
                                     ZPixmap,              /* format */
                                     NULL,                 /* data */
                                     &pdp->shminfo,        /* shminfo */
@@ -94,7 +94,7 @@ XCreateDrawable(struct drisw_drawable * pdp, int shmid, Display * dpy)
       pdp->shminfo.shmid = -1;
       pdp->ximage = XCreateImage(dpy,
                                  NULL,
-                                 pdp->config->rgbBits,
+                                 pdp->xDepth,
                                  ZPixmap, 0,             /* format, offset */
                                  NULL,                   /* data */
                                  0, 0,                   /* width, height */
@@ -647,6 +647,7 @@ driswCreateDrawable(struct glx_screen *base, XID xDrawable,
    __GLXDRIconfigPrivate *config = (__GLXDRIconfigPrivate *) modes;
    struct drisw_screen *psc = (struct drisw_screen *) base;
    const __DRIswrastExtension *swrast = psc->swrast;
+   Display *dpy = psc->base.dpy;
 
    pdp = calloc(1, sizeof(*pdp));
    if (!pdp)
@@ -656,7 +657,34 @@ driswCreateDrawable(struct glx_screen *base, XID xDrawable,
    pdp->base.drawable = drawable;
    pdp->base.psc = &psc->base;
    pdp->config = modes;
-   pdp->gc = XCreateGC(psc->base.dpy, xDrawable, 0, NULL);
+   pdp->gc = XCreateGC(dpy, xDrawable, 0, NULL);
+   pdp->xDepth = 0;
+
+   /* Use the visual depth, if this fbconfig corresponds to a visual */
+   if (pdp->config->visualID != 0) {
+      int matches = 0;
+      XVisualInfo *visinfo, template;
+
+      template.visualid = pdp->config->visualID;
+      template.screen = pdp->config->screen;
+      visinfo = XGetVisualInfo(dpy, VisualIDMask | VisualScreenMask,
+                               &template, &matches);
+
+      if (visinfo && matches) {
+         pdp->xDepth = visinfo->depth;
+         XFree(visinfo);
+      }
+   }
+
+   /* Otherwise, or if XGetVisualInfo failed, ask the server */
+   if (pdp->xDepth == 0) {
+      Window root;
+      int x, y;
+      unsigned uw, uh, bw, depth;
+
+      XGetGeometry(dpy, xDrawable, &root, &x, &y, &uw, &uh, &bw, &depth);
+      pdp->xDepth = depth;
+   }
 
    /* Create a new drawable */
    pdp->driDrawable =

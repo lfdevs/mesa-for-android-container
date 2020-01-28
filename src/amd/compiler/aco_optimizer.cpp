@@ -85,7 +85,7 @@ enum Label {
 };
 
 static constexpr uint32_t instr_labels = label_vec | label_mul | label_mad | label_omod_success | label_clamp_success | label_add_sub | label_bitwise | label_minmax | label_fcmp;
-static constexpr uint32_t temp_labels = label_abs | label_neg | label_temp | label_vcc | label_b2f;
+static constexpr uint32_t temp_labels = label_abs | label_neg | label_temp | label_vcc | label_b2f | label_omod2 | label_omod4 | label_omod5 | label_clamp;
 static constexpr uint32_t val_labels = label_constant | label_literal | label_mad;
 
 struct ssa_info {
@@ -210,9 +210,10 @@ struct ssa_info {
       return label & label_mad;
    }
 
-   void set_omod2()
+   void set_omod2(Temp def)
    {
       add_label(label_omod2);
+      temp = def;
    }
 
    bool is_omod2()
@@ -220,9 +221,10 @@ struct ssa_info {
       return label & label_omod2;
    }
 
-   void set_omod4()
+   void set_omod4(Temp def)
    {
       add_label(label_omod4);
+      temp = def;
    }
 
    bool is_omod4()
@@ -230,9 +232,10 @@ struct ssa_info {
       return label & label_omod4;
    }
 
-   void set_omod5()
+   void set_omod5(Temp def)
    {
       add_label(label_omod5);
+      temp = def;
    }
 
    bool is_omod5()
@@ -251,9 +254,10 @@ struct ssa_info {
       return label & label_omod_success;
    }
 
-   void set_clamp()
+   void set_clamp(Temp def)
    {
       add_label(label_clamp);
+      temp = def;
    }
 
    bool is_clamp()
@@ -669,7 +673,7 @@ void label_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
          DS_instruction *ds = static_cast<DS_instruction *>(instr.get());
          Temp base;
          uint32_t offset;
-         if (i == 0 && parse_base_offset(ctx, instr.get(), i, &base, &offset) && base.regClass() == instr->operands[i].regClass()) {
+         if (i == 0 && parse_base_offset(ctx, instr.get(), i, &base, &offset) && base.regClass() == instr->operands[i].regClass() && instr->opcode != aco_opcode::ds_swizzle_b32) {
             if (instr->opcode == aco_opcode::ds_write2_b32 || instr->opcode == aco_opcode::ds_read2_b32 ||
                 instr->opcode == aco_opcode::ds_write2_b64 || instr->opcode == aco_opcode::ds_read2_b64) {
                if (offset % 4 == 0 &&
@@ -871,11 +875,11 @@ void label_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
       for (unsigned i = 0; i < 2; i++) {
          if (instr->operands[!i].isConstant() && instr->operands[i].isTemp()) {
             if (instr->operands[!i].constantValue() == 0x40000000) { /* 2.0 */
-               ctx.info[instr->operands[i].tempId()].set_omod2();
+               ctx.info[instr->operands[i].tempId()].set_omod2(instr->definitions[0].getTemp());
             } else if (instr->operands[!i].constantValue() == 0x40800000) { /* 4.0 */
-               ctx.info[instr->operands[i].tempId()].set_omod4();
+               ctx.info[instr->operands[i].tempId()].set_omod4(instr->definitions[0].getTemp());
             } else if (instr->operands[!i].constantValue() == 0x3f000000) { /* 0.5 */
-               ctx.info[instr->operands[i].tempId()].set_omod5();
+               ctx.info[instr->operands[i].tempId()].set_omod5(instr->definitions[0].getTemp());
             } else if (instr->operands[!i].constantValue() == 0x3f800000) { /* 1.0 */
                ctx.info[instr->definitions[0].tempId()].set_temp(instr->operands[i].getTemp());
             } else {
@@ -930,7 +934,7 @@ void label_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
             idx = i;
       }
       if (found_zero && found_one && instr->operands[idx].isTemp()) {
-         ctx.info[instr->operands[idx].tempId()].set_clamp();
+         ctx.info[instr->operands[idx].tempId()].set_clamp(instr->definitions[0].getTemp());
       }
       break;
    }
@@ -1885,7 +1889,8 @@ bool apply_omod_clamp(opt_ctx &ctx, aco_ptr<Instruction>& instr)
 
          Instruction* omod_instr = ctx.info[instr->operands[1].tempId()].instr;
          /* check if we have an additional clamp modifier */
-         if (ctx.info[instr->definitions[0].tempId()].is_clamp() && ctx.uses[instr->definitions[0].tempId()] == 1) {
+         if (ctx.info[instr->definitions[0].tempId()].is_clamp() && ctx.uses[instr->definitions[0].tempId()] == 1 &&
+             ctx.uses[ctx.info[instr->definitions[0].tempId()].temp.id()]) {
             static_cast<VOP3A_instruction*>(omod_instr)->clamp = true;
             ctx.info[instr->definitions[0].tempId()].set_clamp_success(omod_instr);
          }
@@ -1938,22 +1943,23 @@ bool apply_omod_clamp(opt_ctx &ctx, aco_ptr<Instruction>& instr)
    /* apply omod / clamp modifiers if the def is used only once and the instruction can have modifiers */
    if (!instr->definitions.empty() && ctx.uses[instr->definitions[0].tempId()] == 1 &&
        can_use_VOP3(instr) && instr_info.can_use_output_modifiers[(int)instr->opcode]) {
-      if(ctx.info[instr->definitions[0].tempId()].is_omod2()) {
+      ssa_info& def_info = ctx.info[instr->definitions[0].tempId()];
+      if (def_info.is_omod2() && ctx.uses[def_info.temp.id()]) {
          to_VOP3(ctx, instr);
          static_cast<VOP3A_instruction*>(instr.get())->omod = 1;
-         ctx.info[instr->definitions[0].tempId()].set_omod_success(instr.get());
-      } else if (ctx.info[instr->definitions[0].tempId()].is_omod4()) {
+         def_info.set_omod_success(instr.get());
+      } else if (def_info.is_omod4() && ctx.uses[def_info.temp.id()]) {
          to_VOP3(ctx, instr);
          static_cast<VOP3A_instruction*>(instr.get())->omod = 2;
-         ctx.info[instr->definitions[0].tempId()].set_omod_success(instr.get());
-      } else if (ctx.info[instr->definitions[0].tempId()].is_omod5()) {
+         def_info.set_omod_success(instr.get());
+      } else if (def_info.is_omod5() && ctx.uses[def_info.temp.id()]) {
          to_VOP3(ctx, instr);
          static_cast<VOP3A_instruction*>(instr.get())->omod = 3;
-         ctx.info[instr->definitions[0].tempId()].set_omod_success(instr.get());
-      } else if (ctx.info[instr->definitions[0].tempId()].is_clamp()) {
+         def_info.set_omod_success(instr.get());
+      } else if (def_info.is_clamp() && ctx.uses[def_info.temp.id()]) {
          to_VOP3(ctx, instr);
          static_cast<VOP3A_instruction*>(instr.get())->clamp = true;
-         ctx.info[instr->definitions[0].tempId()].set_clamp_success(instr.get());
+         def_info.set_clamp_success(instr.get());
       }
    }
 
@@ -2202,12 +2208,7 @@ void select_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
 {
    const uint32_t threshold = 4;
 
-   /* Dead Code Elimination:
-    * We remove instructions if they define temporaries which all are unused */
-   const bool is_used = instr->definitions.empty() ||
-                        std::any_of(instr->definitions.begin(), instr->definitions.end(),
-                                    [&ctx](const Definition& def) { return ctx.uses[def.tempId()]; });
-   if (!is_used) {
+   if (is_dead(ctx.uses, instr.get())) {
       instr.reset();
       return;
    }

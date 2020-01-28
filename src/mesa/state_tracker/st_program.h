@@ -71,8 +71,13 @@ st_get_external_sampler_key(struct st_context *st, struct gl_program *prog)
       unsigned unit = u_bit_scan(&mask);
       struct st_texture_object *stObj =
             st_get_texture_object(st->ctx, prog, unit);
+      enum pipe_format format = st_get_view_format(stObj);
 
-      switch (st_get_view_format(stObj)) {
+      /* if resource format matches then YUV wasn't lowered */
+      if (format == stObj->pt->format)
+         continue;
+
+      switch (format) {
       case PIPE_FORMAT_NV12:
       case PIPE_FORMAT_P016:
          key.lower_nv12 |= (1 << unit);
@@ -93,7 +98,7 @@ st_get_external_sampler_key(struct st_context *st, struct gl_program *prog)
          key.lower_xyuv |= (1 << unit);
          break;
       default:
-         printf("unhandled %u\n", st_get_view_format(stObj));
+         printf("unhandled %u\n", format);
          break;
       }
    }

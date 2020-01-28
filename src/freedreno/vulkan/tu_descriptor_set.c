@@ -157,6 +157,9 @@ tu_CreateDescriptorSetLayout(
       unsigned binding_buffer_count = 1;
 
       switch (binding->descriptorType) {
+      case VK_DESCRIPTOR_TYPE_SAMPLER:
+         binding_buffer_count = 0;
+         break;
       case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
       case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
          assert(!(pCreateInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR));

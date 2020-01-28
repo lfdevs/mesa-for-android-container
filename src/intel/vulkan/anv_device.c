@@ -1095,26 +1095,28 @@ void anv_GetPhysicalDeviceFeatures2(
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT: {
          VkPhysicalDeviceDescriptorIndexingFeaturesEXT *features =
             (VkPhysicalDeviceDescriptorIndexingFeaturesEXT *)ext;
+         bool descIndexing = pdevice->has_a64_buffer_access &&
+                             pdevice->has_bindless_images;
          features->shaderInputAttachmentArrayDynamicIndexing = false;
-         features->shaderUniformTexelBufferArrayDynamicIndexing = true;
-         features->shaderStorageTexelBufferArrayDynamicIndexing = true;
+         features->shaderUniformTexelBufferArrayDynamicIndexing = descIndexing;
+         features->shaderStorageTexelBufferArrayDynamicIndexing = descIndexing;
          features->shaderUniformBufferArrayNonUniformIndexing = false;
-         features->shaderSampledImageArrayNonUniformIndexing = true;
-         features->shaderStorageBufferArrayNonUniformIndexing = true;
-         features->shaderStorageImageArrayNonUniformIndexing = true;
+         features->shaderSampledImageArrayNonUniformIndexing = descIndexing;
+         features->shaderStorageBufferArrayNonUniformIndexing = descIndexing;
+         features->shaderStorageImageArrayNonUniformIndexing = descIndexing;
          features->shaderInputAttachmentArrayNonUniformIndexing = false;
-         features->shaderUniformTexelBufferArrayNonUniformIndexing = true;
-         features->shaderStorageTexelBufferArrayNonUniformIndexing = true;
+         features->shaderUniformTexelBufferArrayNonUniformIndexing = descIndexing;
+         features->shaderStorageTexelBufferArrayNonUniformIndexing = descIndexing;
          features->descriptorBindingUniformBufferUpdateAfterBind = false;
-         features->descriptorBindingSampledImageUpdateAfterBind = true;
-         features->descriptorBindingStorageImageUpdateAfterBind = true;
-         features->descriptorBindingStorageBufferUpdateAfterBind = true;
-         features->descriptorBindingUniformTexelBufferUpdateAfterBind = true;
-         features->descriptorBindingStorageTexelBufferUpdateAfterBind = true;
-         features->descriptorBindingUpdateUnusedWhilePending = true;
-         features->descriptorBindingPartiallyBound = true;
+         features->descriptorBindingSampledImageUpdateAfterBind = descIndexing;
+         features->descriptorBindingStorageImageUpdateAfterBind = descIndexing;
+         features->descriptorBindingStorageBufferUpdateAfterBind = descIndexing;
+         features->descriptorBindingUniformTexelBufferUpdateAfterBind = descIndexing;
+         features->descriptorBindingStorageTexelBufferUpdateAfterBind = descIndexing;
+         features->descriptorBindingUpdateUnusedWhilePending = descIndexing;
+         features->descriptorBindingPartiallyBound = descIndexing;
          features->descriptorBindingVariableDescriptorCount = false;
-         features->runtimeDescriptorArray = true;
+         features->runtimeDescriptorArray = descIndexing;
          break;
       }
 
@@ -1551,9 +1553,13 @@ void anv_GetPhysicalDeviceProperties2(
             (VkPhysicalDeviceDriverPropertiesKHR *) ext;
 
          driver_props->driverID = VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA_KHR;
+         memset(driver_props->driverName, 0,
+                sizeof(driver_props->driverName));
          snprintf(driver_props->driverName, VK_MAX_DRIVER_NAME_SIZE_KHR,
                   "Intel open-source Mesa driver");
 
+         memset(driver_props->driverInfo, 0,
+                sizeof(driver_props->driverInfo));
          snprintf(driver_props->driverInfo, VK_MAX_DRIVER_INFO_SIZE_KHR,
                   "Mesa " PACKAGE_VERSION MESA_GIT_SHA1);
 
@@ -1580,6 +1586,7 @@ void anv_GetPhysicalDeviceProperties2(
          memcpy(id_props->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
          memcpy(id_props->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
          /* The LUID is for Windows. */
+         memset(id_props->deviceLUID, 0, VK_UUID_SIZE);
          id_props->deviceLUIDValid = false;
          break;
       }

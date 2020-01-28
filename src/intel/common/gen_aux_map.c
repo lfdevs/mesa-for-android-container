@@ -151,7 +151,7 @@ align_and_verify_space(struct gen_aux_map_context *ctx, uint32_t size,
    struct aux_map_buffer *tail =
       list_last_entry(&ctx->buffers, struct aux_map_buffer, link);
    uint64_t gpu = tail->buffer->gpu + ctx->tail_offset;
-   uint64_t aligned = ALIGN(gpu, align);
+   uint64_t aligned = align64(gpu, align);
 
    if ((aligned - gpu) + size > ctx->tail_remaining) {
       return false;
@@ -464,8 +464,8 @@ gen_aux_map_add_image(struct gen_aux_map_context *ctx,
    pthread_mutex_lock(&ctx->mutex);
    uint64_t map_addr = address;
    uint64_t dest_aux_addr = aux_address;
-   assert(ALIGN(address, 64 * 1024) == address);
-   assert(ALIGN(aux_address, 4 * 64) == aux_address);
+   assert(align64(address, 64 * 1024) == address);
+   assert(align64(aux_address, 4 * 64) == aux_address);
    while (map_addr - address < isl_surf->size_B) {
       add_mapping(ctx, map_addr, dest_aux_addr, isl_surf, &state_changed);
       map_addr += 64 * 1024;
@@ -540,7 +540,7 @@ gen_aux_map_unmap_range(struct gen_aux_map_context *ctx, uint64_t address,
               address + size);
 
    uint64_t map_addr = address;
-   assert(ALIGN(address, 64 * 1024) == address);
+   assert(align64(address, 64 * 1024) == address);
    while (map_addr - address < size) {
       remove_mapping(ctx, map_addr, &state_changed);
       map_addr += 64 * 1024;

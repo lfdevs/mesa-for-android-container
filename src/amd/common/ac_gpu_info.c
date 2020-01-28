@@ -506,8 +506,8 @@ bool ac_query_gpu_info(int fd, void *dev_p,
 	 */
 	info->has_clear_state = info->chip_class >= GFX7;
 
-	info->has_distributed_tess = info->chip_class >= GFX8 &&
-				     info->max_se >= 2;
+	info->has_distributed_tess = info->chip_class >= GFX10 ||
+				     (info->chip_class >= GFX8 && info->max_se >= 2);
 
 	info->has_dcc_constant_encode = info->family == CHIP_RAVEN2 ||
 					info->family == CHIP_RENOIR ||

@@ -1240,6 +1240,10 @@ void si_blitter_begin(struct si_context *sctx, enum si_blitter_op op);
 void si_blitter_end(struct si_context *sctx);
 void si_init_blit_functions(struct si_context *sctx);
 void si_decompress_textures(struct si_context *sctx, unsigned shader_mask);
+void si_decompress_subresource(struct pipe_context *ctx,
+			       struct pipe_resource *tex,
+			       unsigned planes, unsigned level,
+			       unsigned first_layer, unsigned last_layer);
 void si_resource_copy_region(struct pipe_context *ctx,
 			     struct pipe_resource *dst,
 			     unsigned dst_level,

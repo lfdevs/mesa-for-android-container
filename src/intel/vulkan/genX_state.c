@@ -507,7 +507,9 @@ VkResult genX(CreateSampler)(
          .ChromaKeyEnable = 0,
          .ChromaKeyIndex = 0,
          .ChromaKeyMode = 0,
-         .ShadowFunction = vk_to_gen_shadow_compare_op[pCreateInfo->compareOp],
+         .ShadowFunction =
+            vk_to_gen_shadow_compare_op[pCreateInfo->compareEnable ?
+                                        pCreateInfo->compareOp : VK_COMPARE_OP_NEVER],
          .CubeSurfaceControlMode = OVERRIDE,
 
          .BorderColorPointer = border_color_offset,

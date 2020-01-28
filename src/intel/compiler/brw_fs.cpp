@@ -6265,6 +6265,8 @@ get_lowered_simd_width(const struct gen_device_info *devinfo,
    case BRW_OPCODE_SHR:
    case BRW_OPCODE_SHL:
    case BRW_OPCODE_ASR:
+   case BRW_OPCODE_ROR:
+   case BRW_OPCODE_ROL:
    case BRW_OPCODE_CMPN:
    case BRW_OPCODE_CSEL:
    case BRW_OPCODE_F32TO16:

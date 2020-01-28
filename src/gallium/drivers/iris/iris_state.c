@@ -5023,7 +5023,7 @@ genX(emit_aux_map_state)(struct iris_batch *batch)
        * cached translations.
        */
       uint64_t base_addr = gen_aux_map_get_base(aux_map_ctx);
-      assert(base_addr != 0 && ALIGN(base_addr, 32 * 1024) == base_addr);
+      assert(base_addr != 0 && align64(base_addr, 32 * 1024) == base_addr);
       iris_load_register_imm64(batch, GENX(GFX_AUX_TABLE_BASE_ADDR_num),
                                base_addr);
       batch->last_aux_map_state = aux_map_state_num;

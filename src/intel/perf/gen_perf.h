@@ -113,6 +113,16 @@ struct gen_perf_query_result {
     * query.
     */
    uint64_t unslice_frequency[2];
+
+   /**
+    * Timestamp of the query.
+    */
+   uint64_t begin_timestamp;
+
+   /**
+    * Whether the query was interrupted by another workload (aka preemption).
+    */
+   bool query_disjoint;
 };
 
 struct gen_perf_query_counter {

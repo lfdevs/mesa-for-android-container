@@ -1142,6 +1142,8 @@ gen_perf_query_result_accumulate(struct gen_perf_query_result *result,
    if (result->hw_id == OA_REPORT_INVALID_CTX_ID &&
        start[2] != OA_REPORT_INVALID_CTX_ID)
       result->hw_id = start[2];
+   if (result->reports_accumulated == 0)
+      result->begin_timestamp = start[1];
    result->reports_accumulated++;
 
    switch (query->oa_format) {
@@ -2359,6 +2361,12 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
                gen_perf_query_result_accumulate(&query->oa.result,
                                                 query->queryinfo,
                                                 last, report);
+            } else {
+               /* We're not adding the delta because we've identified it's not
+                * for the context we filter for. We can consider that the
+                * query was split.
+                */
+               query->oa.result.query_disjoint = true;
             }
 
             last = report;

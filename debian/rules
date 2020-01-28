@@ -61,7 +61,7 @@ else
 	endif
 
 	ifneq (,$(filter $(DEB_HOST_ARCH), amd64 i386 x32))
-		GALLIUM_DRIVERS += svga,
+		GALLIUM_DRIVERS += svga,zink,
 		# svga needs xa state tracker
 		confflags_GALLIUM += -Dgallium-xa=true
 		VULKAN_DRIVERS += intel,

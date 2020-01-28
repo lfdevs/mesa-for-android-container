@@ -173,6 +173,7 @@ Section: libdevel
 Architecture: any
 Depends:
  libegl-dev,
+ libglvnd-dev,
  ${misc:Depends},
 Multi-Arch: same
 Description: free implementation of the EGL API -- development files
@@ -211,6 +212,7 @@ Section: oldlibs
 Architecture: any
 Depends:
  libgles-dev,
+ libglvnd-dev,
  ${misc:Depends},
 Multi-Arch: same
 Description: transitional dummy package
@@ -292,6 +294,7 @@ Section: oldlibs
 Architecture: any
 Depends:
  libgl-dev,
+ libglvnd-dev,
  ${misc:Depends},
 Multi-Arch: same
 Description: transitional dummy package

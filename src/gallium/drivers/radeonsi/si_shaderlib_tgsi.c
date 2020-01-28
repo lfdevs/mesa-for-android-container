@@ -689,7 +689,7 @@ void *si_create_fmask_expand_cs(struct pipe_context *ctx, unsigned num_samples,
 	struct ureg_src tid = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_THREAD_ID, 0);
 	struct ureg_src blk = ureg_DECL_system_value(ureg, TGSI_SEMANTIC_BLOCK_ID, 0);
 	struct ureg_dst coord = ureg_writemask(ureg_DECL_temporary(ureg),
-					       TGSI_WRITEMASK_XYZ);
+					       TGSI_WRITEMASK_XYZW);
 	ureg_UMAD(ureg, ureg_writemask(coord, TGSI_WRITEMASK_XY),
 		  ureg_swizzle(blk, 0, 1, 1, 1), ureg_imm2u(ureg, 8, 8),
 		  ureg_swizzle(tid, 0, 1, 1, 1));

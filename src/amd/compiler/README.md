@@ -154,7 +154,6 @@ A VALU instruction or an `s_waitcnt vmcnt(0)` between the two instructions.
 
 Triggered by:
 An SMEM instruction reads an SGPR. Then, a VALU instruction writes that same SGPR.
-Despite LLVM
 
 Mitigated by:
 Any non-SOPP SALU instruction (except `s_setvskip`, `s_version`, and any non-lgkmcnt `s_waitcnt`).

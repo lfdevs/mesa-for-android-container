@@ -403,6 +403,24 @@ void anv_CmdCopyImage(
    blorp_batch_finish(&batch);
 }
 
+static enum isl_format
+isl_format_for_size(unsigned size_B)
+{
+   /* Prefer 32-bit per component formats for CmdFillBuffer */
+   switch (size_B) {
+   case 1:  return ISL_FORMAT_R8_UINT;
+   case 2:  return ISL_FORMAT_R16_UINT;
+   case 3:  return ISL_FORMAT_R8G8B8_UINT;
+   case 4:  return ISL_FORMAT_R32_UINT;
+   case 6:  return ISL_FORMAT_R16G16B16_UINT;
+   case 8:  return ISL_FORMAT_R32G32_UINT;
+   case 12: return ISL_FORMAT_R32G32B32_UINT;
+   case 16: return ISL_FORMAT_R32G32B32A32_UINT;
+   default:
+      unreachable("Unknown format size");
+   }
+}
+
 static void
 copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
                      struct anv_buffer *anv_buffer,
@@ -450,32 +468,49 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
             anv_get_layerCount(anv_image, &pRegions[r].imageSubresource);
       }
 
-      const enum isl_format buffer_format =
+      const enum isl_format linear_format =
          anv_get_isl_format(&cmd_buffer->device->info, anv_image->vk_format,
                             aspect, VK_IMAGE_TILING_LINEAR);
+      const struct isl_format_layout *linear_fmtl =
+         isl_format_get_layout(linear_format);
 
-      const VkExtent3D bufferImageExtent = {
-         .width  = pRegions[r].bufferRowLength ?
-                   pRegions[r].bufferRowLength : extent.width,
-         .height = pRegions[r].bufferImageHeight ?
-                   pRegions[r].bufferImageHeight : extent.height,
-      };
+      const uint32_t buffer_row_length =
+         pRegions[r].bufferRowLength ?
+         pRegions[r].bufferRowLength : extent.width;
 
-      const struct isl_format_layout *buffer_fmtl =
-         isl_format_get_layout(buffer_format);
+      const uint32_t buffer_image_height =
+         pRegions[r].bufferImageHeight ?
+         pRegions[r].bufferImageHeight : extent.height;
 
       const uint32_t buffer_row_pitch =
-         DIV_ROUND_UP(bufferImageExtent.width, buffer_fmtl->bw) *
-         (buffer_fmtl->bpb / 8);
+         DIV_ROUND_UP(buffer_row_length, linear_fmtl->bw) *
+         (linear_fmtl->bpb / 8);
 
       const uint32_t buffer_layer_stride =
-         DIV_ROUND_UP(bufferImageExtent.height, buffer_fmtl->bh) *
+         DIV_ROUND_UP(buffer_image_height, linear_fmtl->bh) *
          buffer_row_pitch;
+
+      /* Some formats have additional restrictions which may cause ISL to
+       * fail to create a surface for us.  Some examples include:
+       *
+       *    1. ASTC formats are not allowed to be LINEAR and must be tiled
+       *    2. YCbCr formats have to have 2-pixel aligned strides
+       *
+       * To avoid these issues, we always bind the buffer as if it's a
+       * "normal" format like RGBA32_UINT.  Since we're using blorp_copy,
+       * the format doesn't matter as long as it has the right bpb.
+       */
+      const VkExtent2D buffer_extent = {
+         .width = DIV_ROUND_UP(extent.width, linear_fmtl->bw),
+         .height = DIV_ROUND_UP(extent.height, linear_fmtl->bh),
+      };
+      const enum isl_format buffer_format =
+         isl_format_for_size(linear_fmtl->bpb / 8);
 
       struct isl_surf buffer_isl_surf;
       get_blorp_surf_for_anv_buffer(cmd_buffer->device,
                                     anv_buffer, pRegions[r].bufferOffset,
-                                    extent.width, extent.height,
+                                    buffer_extent.width, buffer_extent.height,
                                     buffer_row_pitch, buffer_format,
                                     &buffer.surf, &buffer_isl_surf);
 
@@ -689,18 +724,6 @@ void anv_CmdBlitImage(
    }
 
    blorp_batch_finish(&batch);
-}
-
-static enum isl_format
-isl_format_for_size(unsigned size_B)
-{
-   switch (size_B) {
-   case 4:  return ISL_FORMAT_R32_UINT;
-   case 8:  return ISL_FORMAT_R32G32_UINT;
-   case 16: return ISL_FORMAT_R32G32B32A32_UINT;
-   default:
-      unreachable("Not a power-of-two format size");
-   }
 }
 
 /**

@@ -154,7 +154,11 @@ void aco_compile_shader(unsigned shader_count,
    }
 
    size += code.size() * sizeof(uint32_t) + sizeof(radv_shader_binary_legacy);
-   radv_shader_binary_legacy* legacy_binary = (radv_shader_binary_legacy*) malloc(size);
+   /* We need to calloc to prevent unintialized data because this will be used
+    * directly for the disk cache. Uninitialized data can appear because of
+    * padding in the struct or because legacy_binary->data can be at an offset
+    * from the start less than sizeof(radv_shader_binary_legacy). */
+   radv_shader_binary_legacy* legacy_binary = (radv_shader_binary_legacy*) calloc(size, 1);
 
    legacy_binary->base.type = RADV_BINARY_TYPE_LEGACY;
    legacy_binary->base.stage = shaders[shader_count-1]->info.stage;

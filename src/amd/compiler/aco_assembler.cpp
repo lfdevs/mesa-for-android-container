@@ -602,7 +602,7 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
       exp->enabled_mask = 0;
       exp->compressed = false;
       exp->done = true;
-      exp->valid_mask = program->stage & hw_fs;
+      exp->valid_mask = (program->stage & hw_fs) || program->chip_class >= GFX10;
       if (program->stage & hw_fs)
          exp->dest = 9; /* NULL */
       else

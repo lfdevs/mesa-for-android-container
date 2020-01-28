@@ -906,6 +906,8 @@ constexpr barrier_interaction get_barrier_interaction(Instruction* instr)
    }
 }
 
+bool is_dead(const std::vector<uint16_t>& uses, Instruction *instr);
+
 enum block_kind {
    /* uniform indicates that leaving this block,
     * all actives lanes stay active */
@@ -1182,6 +1184,7 @@ typedef struct {
    const int16_t opcode_gfx10[static_cast<int>(aco_opcode::num_opcodes)];
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> can_use_input_modifiers;
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> can_use_output_modifiers;
+   const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> is_atomic;
    const char *name[static_cast<int>(aco_opcode::num_opcodes)];
    const aco::Format format[static_cast<int>(aco_opcode::num_opcodes)];
 } Info;

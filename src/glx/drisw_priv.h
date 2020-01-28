@@ -66,6 +66,7 @@ struct drisw_drawable
    struct glx_config *config;
    XImage *ximage;
    XShmSegmentInfo shminfo;
+   int xDepth;
 };
 
 _X_HIDDEN int

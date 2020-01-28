@@ -1347,7 +1347,7 @@ void register_allocation(Program *program, std::vector<std::set<Temp>> live_out_
       }
 
       /* fill in sgpr_live_in */
-      for (unsigned i = 0; i < ctx.max_used_sgpr; i++)
+      for (unsigned i = 0; i <= ctx.max_used_sgpr; i++)
          sgpr_live_in[block.index][i] = register_file[i];
       sgpr_live_in[block.index][127] = register_file[scc.reg];
 

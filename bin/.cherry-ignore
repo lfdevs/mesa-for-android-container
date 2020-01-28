@@ -5,6 +5,8 @@
 21be5c8edd3ad156f6cbfbceb96e7939716d9f2c
 4b392ced2d744fccffe95490ff57e6b41033c266
 b6905438514ae4de0b7f85c861e3d811ddaadda9
+809c8feb92d33c43ace3ef25584a2adca24b1be0
+05c81875d7bf871f73f24903e04dad3d286ed02e
 
 # This isn't worth the effort to backport, as it only affects build with
 # asserts enable, which hopefully wont happen in a stable branch.
