@@ -64,7 +64,10 @@ struct sampler_info
 struct cso_context {
    struct pipe_context *pipe;
    struct cso_cache *cache;
+
    struct u_vbuf *vbuf;
+   struct u_vbuf *vbuf_current;
+   bool always_use_vbuf;
 
    boolean has_geometry_shader;
    boolean has_tessellation;
@@ -287,15 +290,22 @@ sanitize_hash(struct cso_hash *hash, enum cso_cache_type type,
 static void cso_init_vbuf(struct cso_context *cso, unsigned flags)
 {
    struct u_vbuf_caps caps;
+   bool uses_user_vertex_buffers = !(flags & CSO_NO_USER_VERTEX_BUFFERS);
 
-   /* Install u_vbuf if there is anything unsupported. */
-   if (u_vbuf_get_caps(cso->pipe->screen, &caps, flags)) {
+   u_vbuf_get_caps(cso->pipe->screen, &caps);
+
+   /* Enable u_vbuf if needed. */
+   if (caps.fallback_always ||
+       (uses_user_vertex_buffers &&
+        caps.fallback_only_for_user_vbuffers)) {
       cso->vbuf = u_vbuf_create(cso->pipe, &caps);
+      cso->vbuf_current = cso->vbuf;
+      cso->always_use_vbuf = caps.fallback_always;
    }
 }
 
 struct cso_context *
-cso_create_context(struct pipe_context *pipe, unsigned u_vbuf_flags)
+cso_create_context(struct pipe_context *pipe, unsigned flags)
 {
    struct cso_context *ctx = CALLOC_STRUCT(cso_context);
    if (!ctx)
@@ -311,7 +321,7 @@ cso_create_context(struct pipe_context *pipe, unsigned u_vbuf_flags)
    ctx->pipe = pipe;
    ctx->sample_mask = ~0;
 
-   cso_init_vbuf(ctx, u_vbuf_flags);
+   cso_init_vbuf(ctx, flags);
 
    /* Enable for testing: */
    if (0) cso_set_maximum_cache_size( ctx->cache, 4 );
@@ -1049,21 +1059,15 @@ void cso_delete_compute_shader(struct cso_context *ctx, void *handle)
    ctx->pipe->delete_compute_state(ctx->pipe, handle);
 }
 
-enum pipe_error
-cso_set_vertex_elements(struct cso_context *ctx,
-                        unsigned count,
-                        const struct pipe_vertex_element *states)
+static void
+cso_set_vertex_elements_direct(struct cso_context *ctx,
+                               unsigned count,
+                               const struct pipe_vertex_element *states)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
    unsigned key_size, hash_key;
    struct cso_hash_iter iter;
    void *handle;
    struct cso_velems_state velems_state;
-
-   if (vbuf) {
-      u_vbuf_set_vertex_elements(vbuf, count, states);
-      return PIPE_OK;
-   }
 
    /* Need to include the count into the stored state data too.
     * Otherwise first few count pipe_vertex_elements could be identical
@@ -1081,7 +1085,7 @@ cso_set_vertex_elements(struct cso_context *ctx,
    if (cso_hash_iter_is_null(iter)) {
       struct cso_velements *cso = MALLOC(sizeof(struct cso_velements));
       if (!cso)
-         return PIPE_ERROR_OUT_OF_MEMORY;
+         return;
 
       memcpy(&cso->state, &velems_state, key_size);
       cso->data = ctx->pipe->create_vertex_elements_state(ctx->pipe, count,
@@ -1093,7 +1097,7 @@ cso_set_vertex_elements(struct cso_context *ctx,
       iter = cso_insert_state(ctx->cache, hash_key, CSO_VELEMENTS, cso);
       if (cso_hash_iter_is_null(iter)) {
          FREE(cso);
-         return PIPE_ERROR_OUT_OF_MEMORY;
+         return;
       }
 
       handle = cso->data;
@@ -1106,13 +1110,28 @@ cso_set_vertex_elements(struct cso_context *ctx,
       ctx->velements = handle;
       ctx->pipe->bind_vertex_elements_state(ctx->pipe, handle);
    }
+}
+
+enum pipe_error
+cso_set_vertex_elements(struct cso_context *ctx,
+                        unsigned count,
+                        const struct pipe_vertex_element *states)
+{
+   struct u_vbuf *vbuf = ctx->vbuf_current;
+
+   if (vbuf) {
+      u_vbuf_set_vertex_elements(vbuf, count, states);
+      return PIPE_OK;
+   }
+
+   cso_set_vertex_elements_direct(ctx, count, states);
    return PIPE_OK;
 }
 
 static void
 cso_save_vertex_elements(struct cso_context *ctx)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
+   struct u_vbuf *vbuf = ctx->vbuf_current;
 
    if (vbuf) {
       u_vbuf_save_vertex_elements(vbuf);
@@ -1126,7 +1145,7 @@ cso_save_vertex_elements(struct cso_context *ctx)
 static void
 cso_restore_vertex_elements(struct cso_context *ctx)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
+   struct u_vbuf *vbuf = ctx->vbuf_current;
 
    if (vbuf) {
       u_vbuf_restore_vertex_elements(vbuf);
@@ -1142,22 +1161,14 @@ cso_restore_vertex_elements(struct cso_context *ctx)
 
 /* vertex buffers */
 
-void cso_set_vertex_buffers(struct cso_context *ctx,
-                            unsigned start_slot, unsigned count,
-                            const struct pipe_vertex_buffer *buffers)
+static void
+cso_set_vertex_buffers_direct(struct cso_context *ctx,
+                              unsigned start_slot, unsigned count,
+                              const struct pipe_vertex_buffer *buffers)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
-
-   if (!count)
-      return;
-
-   if (vbuf) {
-      u_vbuf_set_vertex_buffers(vbuf, start_slot, count, buffers);
-      return;
-   }
-
    /* Save what's in the auxiliary slot, so that we can save and restore it
-    * for meta ops. */
+    * for meta ops.
+    */
    if (start_slot == 0) {
       if (buffers) {
          pipe_vertex_buffer_reference(&ctx->vertex_buffer0_current,
@@ -1170,10 +1181,28 @@ void cso_set_vertex_buffers(struct cso_context *ctx,
    ctx->pipe->set_vertex_buffers(ctx->pipe, start_slot, count, buffers);
 }
 
+
+void cso_set_vertex_buffers(struct cso_context *ctx,
+                            unsigned start_slot, unsigned count,
+                            const struct pipe_vertex_buffer *buffers)
+{
+   struct u_vbuf *vbuf = ctx->vbuf_current;
+
+   if (!count)
+      return;
+
+   if (vbuf) {
+      u_vbuf_set_vertex_buffers(vbuf, start_slot, count, buffers);
+      return;
+   }
+
+   cso_set_vertex_buffers_direct(ctx, start_slot, count, buffers);
+}
+
 static void
 cso_save_vertex_buffer0(struct cso_context *ctx)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
+   struct u_vbuf *vbuf = ctx->vbuf_current;
 
    if (vbuf) {
       u_vbuf_save_vertex_buffer0(vbuf);
@@ -1187,7 +1216,7 @@ cso_save_vertex_buffer0(struct cso_context *ctx)
 static void
 cso_restore_vertex_buffer0(struct cso_context *ctx)
 {
-   struct u_vbuf *vbuf = ctx->vbuf;
+   struct u_vbuf *vbuf = ctx->vbuf_current;
 
    if (vbuf) {
       u_vbuf_restore_vertex_buffer0(vbuf);
@@ -1198,6 +1227,68 @@ cso_restore_vertex_buffer0(struct cso_context *ctx)
    pipe_vertex_buffer_unreference(&ctx->vertex_buffer0_saved);
 }
 
+/**
+ * Set vertex buffers and vertex elements. Skip u_vbuf if it's only needed
+ * for user vertex buffers and user vertex buffers are not set by this call.
+ * u_vbuf will be disabled. To re-enable u_vbuf, call this function again.
+ *
+ * Skipping u_vbuf decreases CPU overhead for draw calls that don't need it,
+ * such as VBOs, glBegin/End, and display lists.
+ *
+ * Internal operations that do "save states, draw, restore states" shouldn't
+ * use this, because the states are only saved in either cso_context or
+ * u_vbuf, not both.
+ */
+void
+cso_set_vertex_buffers_and_elements(struct cso_context *ctx,
+                                    unsigned velem_count,
+                                    const struct pipe_vertex_element *velems,
+                                    unsigned vb_count,
+                                    unsigned unbind_trailing_vb_count,
+                                    const struct pipe_vertex_buffer *vbuffers,
+                                    bool uses_user_vertex_buffers)
+{
+   struct u_vbuf *vbuf = ctx->vbuf;
+
+   if (vbuf && (ctx->always_use_vbuf || uses_user_vertex_buffers)) {
+      if (!ctx->vbuf_current) {
+         /* Unbind all buffers in cso_context, because we'll use u_vbuf. */
+         unsigned unbind_vb_count = vb_count + unbind_trailing_vb_count;
+         if (unbind_vb_count)
+            cso_set_vertex_buffers_direct(ctx, 0, unbind_vb_count, NULL);
+
+         /* Unset this to make sure the CSO is re-bound on the next use. */
+         ctx->velements = NULL;
+         ctx->vbuf_current = vbuf;
+      } else if (unbind_trailing_vb_count) {
+         u_vbuf_set_vertex_buffers(vbuf, vb_count, unbind_trailing_vb_count,
+                                   NULL);
+      }
+
+      if (vb_count)
+         u_vbuf_set_vertex_buffers(vbuf, 0, vb_count, vbuffers);
+      u_vbuf_set_vertex_elements(vbuf, velem_count, velems);
+      return;
+   }
+
+   if (ctx->vbuf_current) {
+      /* Unbind all buffers in u_vbuf, because we'll use cso_context. */
+      unsigned unbind_vb_count = vb_count + unbind_trailing_vb_count;
+      if (unbind_vb_count)
+         u_vbuf_set_vertex_buffers(vbuf, 0, unbind_vb_count, NULL);
+
+      /* Unset this to make sure the CSO is re-bound on the next use. */
+      u_vbuf_unset_vertex_elements(vbuf);
+      ctx->vbuf_current = NULL;
+   } else if (unbind_trailing_vb_count) {
+      cso_set_vertex_buffers_direct(ctx, vb_count, unbind_trailing_vb_count,
+                                    NULL);
+   }
+
+   if (vb_count)
+      cso_set_vertex_buffers_direct(ctx, 0, vb_count, vbuffers);
+   cso_set_vertex_elements_direct(ctx, velem_count, velems);
+}
 
 void
 cso_single_sampler(struct cso_context *ctx, enum pipe_shader_type shader_stage,
@@ -1693,7 +1784,7 @@ void
 cso_draw_vbo(struct cso_context *cso,
              const struct pipe_draw_info *info)
 {
-   struct u_vbuf *vbuf = cso->vbuf;
+   struct u_vbuf *vbuf = cso->vbuf_current;
 
    /* We can't have both indirect drawing and SO-vertex-count drawing */
    assert(info->indirect == NULL || info->count_from_stream_output == NULL);

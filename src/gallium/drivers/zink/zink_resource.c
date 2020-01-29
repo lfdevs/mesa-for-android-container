@@ -29,7 +29,7 @@
 
 #include "util/slab.h"
 #include "util/u_debug.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
@@ -104,7 +104,8 @@ resource_create(struct pipe_screen *pscreen,
       bci.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
       bci.size = templ->width0;
 
-      bci.usage = 0;
+      bci.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT |
+                  VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
       if (templ->bind & PIPE_BIND_VERTEX_BUFFER)
          bci.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -120,9 +121,6 @@ resource_create(struct pipe_screen *pscreen,
 
       if (templ->bind & PIPE_BIND_COMMAND_ARGS_BUFFER)
          bci.usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
-
-      if (templ->usage == PIPE_USAGE_STAGING)
-         bci.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
       if (vkCreateBuffer(screen->dev, &bci, NULL, &res->buffer) !=
           VK_SUCCESS) {
@@ -192,10 +190,9 @@ resource_create(struct pipe_screen *pscreen,
          ici.tiling = VK_IMAGE_TILING_LINEAR;
 
       /* sadly, gallium doesn't let us know if it'll ever need this, so we have to assume */
-      ici.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-      if (templ->bind & PIPE_BIND_SAMPLER_VIEW)
-         ici.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+      ici.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                  VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                  VK_IMAGE_USAGE_SAMPLED_BIT;
 
       if (templ->bind & PIPE_BIND_SHADER_IMAGE)
          ici.usage |= VK_IMAGE_USAGE_STORAGE_BIT;

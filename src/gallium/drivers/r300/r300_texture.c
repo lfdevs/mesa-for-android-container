@@ -30,8 +30,8 @@
 #include "r300_transfer.h"
 #include "r300_screen.h"
 
-#include "util/u_format.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format.h"
+#include "util/format/u_format_s3tc.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 

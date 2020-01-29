@@ -84,6 +84,7 @@ COMPILER_FILES = \
 	compiler/brw_nir.c \
 	compiler/brw_nir_analyze_boolean_resolves.c \
 	compiler/brw_nir_analyze_ubo_ranges.c \
+	compiler/brw_nir_clamp_image_1d_2d_array_sizes.c \
 	compiler/brw_nir_attribute_workarounds.c \
 	compiler/brw_nir_lower_alpha_to_coverage.c \
 	compiler/brw_nir_lower_conversions.c \
@@ -258,8 +259,8 @@ VULKAN_FILES := \
 	vulkan/anv_nir.h \
 	vulkan/anv_nir_add_base_work_group_id.c \
 	vulkan/anv_nir_apply_pipeline_layout.c \
+	vulkan/anv_nir_compute_push_layout.c \
 	vulkan/anv_nir_lower_multiview.c \
-	vulkan/anv_nir_lower_push_constants.c \
 	vulkan/anv_nir_lower_ycbcr_textures.c \
 	vulkan/anv_pass.c \
 	vulkan/anv_perf.c \
@@ -348,7 +349,9 @@ GEN_PERF_XML_FILES = \
 	perf/oa-cflgt2.xml \
 	perf/oa-cflgt3.xml \
 	perf/oa-cnl.xml \
-	perf/oa-icl.xml
+	perf/oa-icl.xml \
+	perf/oa-lkf.xml \
+	perf/oa-tgl.xml
 
 GEN_PERF_FILES = \
 	perf/gen_perf.c \

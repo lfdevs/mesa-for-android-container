@@ -363,6 +363,20 @@ struct fd_context {
 	 *    - solid_vbuf / 12 / R32G32B32_FLOAT
 	 */
 	struct fd_vertex_state blit_vbuf_state;
+
+	/*
+	 * Info about state of previous draw, for state that comes from
+	 * pipe_draw_info (ie. not part of a CSO).  This allows us to
+	 * skip some register emit when the state doesn't change from
+	 * draw-to-draw
+	 */
+	struct {
+		bool dirty;               /* last draw state unknown */
+		bool primitive_restart;
+		uint32_t index_start;
+		uint32_t instance_start;
+		uint32_t restart_index;
+	} last;
 };
 
 static inline struct fd_context *
@@ -393,6 +407,7 @@ fd_context_unlock(struct fd_context *ctx)
 static inline void
 fd_context_all_dirty(struct fd_context *ctx)
 {
+	ctx->last.dirty = true;
 	ctx->dirty = ~0;
 	for (unsigned i = 0; i < PIPE_SHADER_TYPES; i++)
 		ctx->dirty_shader[i] = ~0;

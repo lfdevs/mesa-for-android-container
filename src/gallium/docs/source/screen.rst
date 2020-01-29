@@ -564,6 +564,9 @@ The integer capabilities:
   as opposed to writing gl_PointSize for every point.
 * ``PIPE_CAP_TWO_SIDED_COLOR``: Driver supports two-sided coloring.
 * ``PIPE_CAP_CLIP_PLANES``: Driver supports user-defined clip-planes.
+* ``PIPE_CAP_MAX_VERTEX_BUFFERS``: Number of supported vertex buffers.
+* ``PIPE_CAP_OPENCL_INTEGER_FUNCTIONS``: Driver supports extended OpenCL-style integer functions.  This includes averge, saturating additiong, saturating subtraction, absolute difference, count leading zeros, and count trailing zeros.
+* ``PIPE_CAP_INTEGER_MULTIPLY_32X16``: Driver supports integer multiplication between a 32-bit integer and a 16-bit integer.  If the second operand is 32-bits, the upper 16-bits are ignored, and the low 16-bits are possibly sign extended as necessary.
 
 .. _pipe_capf:
 

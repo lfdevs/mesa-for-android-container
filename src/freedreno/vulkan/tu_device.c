@@ -257,8 +257,9 @@ tu_physical_device_init(struct tu_physical_device *device,
 
    switch (device->gpu_id) {
    case 630:
-      device->tile_align_w = 32;
-      device->tile_align_h = 32;
+   case 640:
+      device->tile_align_w = 64;
+      device->tile_align_h = 16;
       break;
    default:
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
@@ -353,6 +354,7 @@ static const struct debug_control tu_debug_options[] = {
    { "startup", TU_DEBUG_STARTUP },
    { "nir", TU_DEBUG_NIR },
    { "ir3", TU_DEBUG_IR3 },
+   { "nobin", TU_DEBUG_NOBIN },
    { NULL, 0 }
 };
 
@@ -724,7 +726,7 @@ tu_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
       .maxImageArrayLayers = (1 << 11),
       .maxTexelBufferElements = 128 * 1024 * 1024,
       .maxUniformBufferRange = UINT32_MAX,
-      .maxStorageBufferRange = UINT32_MAX,
+      .maxStorageBufferRange = MAX_STORAGE_BUFFER_RANGE,
       .maxPushConstantsSize = MAX_PUSH_CONSTANTS_SIZE,
       .maxMemoryAllocationCount = UINT32_MAX,
       .maxSamplerAllocationCount = 64 * 1024,
@@ -784,7 +786,7 @@ tu_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
       .viewportBoundsRange = { INT16_MIN, INT16_MAX },
       .viewportSubPixelBits = 8,
       .minMemoryMapAlignment = 4096, /* A page */
-      .minTexelBufferOffsetAlignment = 1,
+      .minTexelBufferOffsetAlignment = 64,
       .minUniformBufferOffsetAlignment = 4,
       .minStorageBufferOffsetAlignment = 4,
       .minTexelOffset = -32,
@@ -808,7 +810,7 @@ tu_GetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice,
       .sampledImageStencilSampleCounts = sample_counts,
       .storageImageSampleCounts = VK_SAMPLE_COUNT_1_BIT,
       .maxSampleMaskWords = 1,
-      .timestampComputeAndGraphics = true,
+      .timestampComputeAndGraphics = false, /* FINISHME */
       .timestampPeriod = 1,
       .maxClipDistances = 8,
       .maxCullDistances = 8,
@@ -897,7 +899,7 @@ static const VkQueueFamilyProperties tu_queue_family_properties = {
    .queueFlags =
       VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT,
    .queueCount = 1,
-   .timestampValidBits = 64,
+   .timestampValidBits = 0, /* FINISHME */
    .minImageTransferGranularity = { 1, 1, 1 },
 };
 
@@ -1561,7 +1563,7 @@ tu_GetImageMemoryRequirements(VkDevice _device,
    TU_FROM_HANDLE(tu_image, image, _image);
 
    pMemoryRequirements->memoryTypeBits = 1;
-   pMemoryRequirements->size = image->size;
+   pMemoryRequirements->size = image->layout.size;
    pMemoryRequirements->alignment = image->alignment;
 }
 
@@ -1958,6 +1960,7 @@ tu_init_sampler(struct tu_device *device,
     */
 
    sampler->needs_border = needs_border;
+   sampler->border = pCreateInfo->borderColor;
 }
 
 VkResult

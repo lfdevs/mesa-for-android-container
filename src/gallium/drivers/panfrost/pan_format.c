@@ -174,6 +174,8 @@ panfrost_find_format(const struct util_format_description *desc) {
 
         case PIPE_FORMAT_R10G10B10A2_UINT:
         case PIPE_FORMAT_B10G10R10A2_UINT:
+        case PIPE_FORMAT_R10G10B10A2_USCALED:
+        case PIPE_FORMAT_B10G10R10A2_USCALED:
                 return MALI_RGB10_A2UI;
 
         case PIPE_FORMAT_R10G10B10A2_SSCALED:
@@ -182,7 +184,12 @@ panfrost_find_format(const struct util_format_description *desc) {
 
         case PIPE_FORMAT_Z32_UNORM:
         case PIPE_FORMAT_Z24X8_UNORM:
+        case PIPE_FORMAT_Z24_UNORM_S8_UINT:
                 return MALI_Z32_UNORM;
+
+        case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
+                /* Z32F = R32F to the hardware */
+                return MALI_R32F;
 
         case PIPE_FORMAT_B5G6R5_UNORM:
                 return MALI_RGB565;
@@ -210,9 +217,39 @@ panfrost_find_format(const struct util_format_description *desc) {
         case PIPE_FORMAT_R9G9B9E5_FLOAT:
                 return MALI_R9F_G9F_B9F_E5F;
 
+        case PIPE_FORMAT_ETC1_RGB8:
+        case PIPE_FORMAT_ETC2_RGB8:
+        case PIPE_FORMAT_ETC2_SRGB8:
+                return MALI_ETC2_RGB8;
+
+        case PIPE_FORMAT_ETC2_RGB8A1:
+        case PIPE_FORMAT_ETC2_SRGB8A1:
+                return MALI_ETC2_RGB8A1;
+
+        case PIPE_FORMAT_ETC2_RGBA8:
+        case PIPE_FORMAT_ETC2_SRGBA8:
+                return MALI_ETC2_RGBA8;
+
+        case PIPE_FORMAT_ETC2_R11_UNORM:
+                return MALI_ETC2_R11_UNORM;
+        case PIPE_FORMAT_ETC2_R11_SNORM:
+                return MALI_ETC2_R11_SNORM;
+
+        case PIPE_FORMAT_ETC2_RG11_UNORM:
+                return MALI_ETC2_RG11_UNORM;
+        case PIPE_FORMAT_ETC2_RG11_SNORM:
+                return MALI_ETC2_RG11_SNORM;
+
         default:
                 /* Fallthrough to default */
                 break;
+        }
+
+        if (desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+                if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
+                        return MALI_ASTC_SRGB_SUPP;
+                else
+                        return MALI_ASTC_HDR_SUPP;
         }
 
         /* Formats must match in channel count */
@@ -247,4 +284,39 @@ panfrost_find_format(const struct util_format_description *desc) {
         return (enum mali_format) format;
 }
 
+void
+panfrost_invert_swizzle(const unsigned char *in, unsigned char *out)
+{
+        /* First, default to all zeroes to prevent uninitialized junk */
 
+        for (unsigned c = 0; c < 4; ++c)
+                out[c] = PIPE_SWIZZLE_0;
+
+        /* Now "do" what the swizzle says */
+
+        for (unsigned c = 0; c < 4; ++c) {
+                unsigned char i = in[c];
+
+                /* Who cares? */
+                assert(PIPE_SWIZZLE_X == 0);
+                if (i > PIPE_SWIZZLE_W)
+                        continue;
+
+                /* Invert */
+                unsigned idx = i - PIPE_SWIZZLE_X;
+                out[idx] = PIPE_SWIZZLE_X + c;
+        }
+}
+
+/* Is a format encoded like Z24S8 and therefore compatible for render? */
+bool
+panfrost_is_z24s8_variant(enum pipe_format fmt)
+{
+        switch (fmt) {
+                case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+                case PIPE_FORMAT_Z24X8_UNORM:
+                        return true;
+                default:
+                        return false;
+        }
+}

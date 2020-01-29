@@ -38,7 +38,6 @@
 #include "egldevice.h"
 #include "egldisplay.h"
 #include "egldriver.h"
-#include "egllog.h"
 
 #include "util/macros.h"
 
@@ -161,10 +160,10 @@ _eglGetClientExtensionString(void)
 EGLBoolean
 _eglPointerIsDereferencable(void *p)
 {
-#ifdef HAVE_MINCORE
    uintptr_t addr = (uintptr_t) p;
-   unsigned char valid = 0;
    const long page_size = getpagesize();
+#ifdef HAVE_MINCORE
+   unsigned char valid = 0;
 
    if (p == NULL)
       return EGL_FALSE;
@@ -173,7 +172,6 @@ _eglPointerIsDereferencable(void *p)
    addr &= ~(page_size - 1);
 
    if (mincore((void *) addr, page_size, &valid) < 0) {
-      _eglLog(_EGL_DEBUG, "mincore failed: %m");
       return EGL_FALSE;
    }
 
@@ -190,6 +188,7 @@ _eglPointerIsDereferencable(void *p)
     */
    return EGL_TRUE;
 #else
-   return p != NULL;
+   // Without mincore(), we just assume that the first page is unmapped.
+   return addr >= page_size;
 #endif
 }

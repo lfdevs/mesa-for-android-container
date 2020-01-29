@@ -231,7 +231,8 @@ struct gen_batch_decode_ctx {
     */
    struct gen_batch_decode_bo (*get_bo)(void *user_data, bool ppgtt, uint64_t address);
    unsigned (*get_state_size)(void *user_data,
-                              uint32_t offset_from_dynamic_state_base_addr);
+                              uint64_t address,
+                              uint64_t base_address);
    void *user_data;
 
    FILE *fp;
@@ -259,7 +260,8 @@ void gen_batch_decode_ctx_init(struct gen_batch_decode_ctx *ctx,
                                                                     bool,
                                                                     uint64_t),
 
-                               unsigned (*get_state_size)(void *, uint32_t),
+                               unsigned (*get_state_size)(void *, uint64_t,
+                                                          uint64_t),
                                void *user_data);
 void gen_batch_decode_ctx_finish(struct gen_batch_decode_ctx *ctx);
 

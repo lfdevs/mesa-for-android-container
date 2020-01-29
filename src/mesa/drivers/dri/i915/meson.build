@@ -86,9 +86,9 @@ files_i915 = files(
 
 libi915 = static_library(
   'i915',
-  [files_i915, xmlpool_options_h],
+  files_i915,
   include_directories : [inc_common, inc_dri_common, inc_util],
   c_args : [c_vis_args, no_override_init_args],
   cpp_args : [cpp_vis_args],
-  dependencies : [dep_libdrm, dep_libdrm_intel],
+  dependencies : [dep_libdrm, dep_libdrm_intel, idep_xmlconfig_headers],
 )

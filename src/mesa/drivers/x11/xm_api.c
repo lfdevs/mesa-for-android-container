@@ -944,7 +944,7 @@ XMesaContext XMesaCreateContext( XMesaVisual v, XMesaContext share_list )
        !_vbo_CreateContext( mesaCtx ) ||
        !_tnl_CreateContext( mesaCtx ) ||
        !_swsetup_CreateContext( mesaCtx )) {
-      _mesa_free_context_data(&c->mesa, true);
+      _mesa_free_context_data(&c->mesa);
       free(c);
       return NULL;
    }
@@ -981,7 +981,7 @@ void XMesaDestroyContext( XMesaContext c )
    _swrast_DestroyContext( mesaCtx );
    _tnl_DestroyContext( mesaCtx );
    _vbo_DestroyContext( mesaCtx );
-   _mesa_free_context_data(mesaCtx, true);
+   _mesa_free_context_data(mesaCtx);
    free( c );
 }
 

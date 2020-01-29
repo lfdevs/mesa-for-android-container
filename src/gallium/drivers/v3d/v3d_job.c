@@ -459,6 +459,11 @@ v3d_read_and_accumulate_primitive_counters(struct v3d_context *v3d)
         if (v3d_bo_wait(rsc->bo, PIPE_TIMEOUT_INFINITE, "prim-counts")) {
                 uint32_t *map = v3d_bo_map(rsc->bo) + v3d->prim_counts_offset;
                 v3d->tf_prims_generated += map[V3D_PRIM_COUNTS_TF_WRITTEN];
+                /* When we only have a vertex shader we determine the primitive
+                 * count in the CPU so don't update it here again.
+                 */
+                if (v3d->prog.gs)
+                        v3d->prims_generated += map[V3D_PRIM_COUNTS_WRITTEN];
         }
 }
 

@@ -202,8 +202,10 @@ blorp_alloc_vertex_buffer(struct blorp_batch *blorp_batch,
 static void
 blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *blorp_batch,
                                            const struct blorp_address *addrs,
+                                           UNUSED uint32_t *sizes,
                                            unsigned num_vbs)
 {
+#if GEN_GEN < 11
    struct iris_context *ice = blorp_batch->blorp->driver_ctx;
    struct iris_batch *batch = blorp_batch->driver_batch;
    bool need_invalidate = false;
@@ -224,6 +226,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *blorp_batch,
                                    PIPE_CONTROL_VF_CACHE_INVALIDATE |
                                    PIPE_CONTROL_CS_STALL);
    }
+#endif
 }
 
 static struct blorp_address

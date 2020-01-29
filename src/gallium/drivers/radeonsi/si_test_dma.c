@@ -223,7 +223,7 @@ void si_test_dma(struct si_screen *sscreen)
 		struct si_texture *ssrc;
 		struct cpu_texture src_cpu, dst_cpu;
 		unsigned bpp, max_width, max_height, max_depth, j, num;
-		unsigned gfx_blits = 0, dma_blits = 0, max_tex_side_gen;
+		unsigned gfx_blits = 0, dma_blits = 0, cs_blits = 0, max_tex_side_gen;
 		unsigned max_tex_layers;
 		bool pass;
 		bool do_partial_copies = rand() & 1;
@@ -323,6 +323,7 @@ void si_test_dma(struct si_screen *sscreen)
 			struct pipe_box box;
 			unsigned old_num_draw_calls = sctx->num_draw_calls;
 			unsigned old_num_dma_calls = sctx->num_dma_calls;
+			unsigned old_num_cs_calls = sctx->num_compute_calls;
 
 			if (!do_partial_copies) {
 				/* copy whole src to dst */
@@ -382,6 +383,7 @@ void si_test_dma(struct si_screen *sscreen)
 			/* See which engine was used. */
 			gfx_blits += sctx->num_draw_calls > old_num_draw_calls;
 			dma_blits += sctx->num_dma_calls > old_num_dma_calls;
+			cs_blits  += sctx->num_compute_calls > old_num_cs_calls;
 
 			/* CPU copy */
 			util_copy_box(dst_cpu.ptr, tdst.format, dst_cpu.stride,
@@ -398,8 +400,8 @@ void si_test_dma(struct si_screen *sscreen)
 		else
 			num_fail++;
 
-		printf("BLITs: GFX = %2u, DMA = %2u, %s [%u/%u]\n",
-		       gfx_blits, dma_blits, pass ? "pass" : "fail",
+		printf("BLITs: GFX = %2u, DMA = %2u, CS = %2u, %s [%u/%u]\n",
+		       gfx_blits, dma_blits, cs_blits, pass ? "pass" : "fail",
 		       num_pass, num_pass+num_fail);
 
 		/* cleanup */

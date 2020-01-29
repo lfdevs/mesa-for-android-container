@@ -25,7 +25,7 @@
 
 #include "util/u_bitmask.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "svga_context.h"
 #include "svga_cmd.h"
 #include "svga_format.h"

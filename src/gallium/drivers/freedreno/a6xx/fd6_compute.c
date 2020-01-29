@@ -86,7 +86,8 @@ cs_program_emit(struct fd_ringbuffer *ring, struct ir3_shader_variant *v,
 
 	OUT_PKT4(ring, REG_A6XX_SP_CS_CONFIG, 2);
 	OUT_RING(ring, A6XX_SP_CS_CONFIG_ENABLED |
-			A6XX_SP_CS_CONFIG_NIBO(v->image_mapping.num_ibo) |
+			A6XX_SP_CS_CONFIG_NIBO(v->shader->nir->info.num_ssbos +
+					v->shader->nir->info.num_images) |
 			A6XX_SP_CS_CONFIG_NTEX(v->num_samp) |
 			A6XX_SP_CS_CONFIG_NSAMP(v->num_samp));    /* SP_VS_CONFIG */
 	OUT_RING(ring, v->instrlen);                      /* SP_VS_INSTRLEN */

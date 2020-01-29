@@ -99,19 +99,6 @@ enum radeon_transfer_flags {
 
 #define RADEON_SPARSE_PAGE_SIZE (64 * 1024)
 
-enum ring_type {
-    RING_GFX = 0,
-    RING_COMPUTE,
-    RING_DMA,
-    RING_UVD,
-    RING_VCE,
-    RING_UVD_ENC,
-    RING_VCN_DEC,
-    RING_VCN_ENC,
-    RING_VCN_JPEG,
-    RING_LAST,
-};
-
 enum radeon_value_id {
     RADEON_REQUESTED_VRAM_MEMORY,
     RADEON_REQUESTED_GTT_MEMORY,
@@ -233,6 +220,8 @@ struct radeon_bo_metadata {
             unsigned dcc_offset_256B:24;
             unsigned dcc_pitch_max:14;   /* (mip chain pitch - 1) for DCN */
             unsigned dcc_independent_64B:1;
+
+            bool scanout;
         } gfx9;
     } u;
 

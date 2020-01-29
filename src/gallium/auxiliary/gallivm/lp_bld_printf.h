@@ -28,6 +28,9 @@
 #ifndef LP_BLD_PRINTF_H
 #define LP_BLD_PRINTF_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "pipe/p_compiler.h"
 #include "lp_bld.h"
@@ -42,6 +45,10 @@ LLVMValueRef
 lp_build_print_value(struct gallivm_state *gallivm,
                      const char *msg,
                      LLVMValueRef value);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

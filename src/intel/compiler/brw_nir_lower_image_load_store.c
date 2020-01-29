@@ -583,7 +583,7 @@ lower_image_store_instr(nir_builder *b,
    /* For write-only surfaces, we trust that the hardware can just do the
     * conversion for us.
     */
-   if (var->data.image.access & ACCESS_NON_READABLE)
+   if (var->data.access & ACCESS_NON_READABLE)
       return false;
 
    const enum isl_format image_fmt =
@@ -696,7 +696,7 @@ lower_image_size_instr(nir_builder *b,
    /* For write-only images, we have an actual image surface so we fall back
     * and let the back-end emit a TXS for this.
     */
-   if (var->data.image.access & ACCESS_NON_READABLE)
+   if (var->data.access & ACCESS_NON_READABLE)
       return false;
 
    /* If we have a matching typed format, then we have an actual image surface

@@ -23,6 +23,8 @@
 
 #include <gtest/gtest.h>
 #include "brw_eu.h"
+#include "brw_eu_defines.h"
+#include "util/bitset.h"
 #include "util/ralloc.h"
 
 static const struct gen_info {
@@ -185,6 +187,397 @@ TEST_P(validation_test, opcode46)
       EXPECT_FALSE(validate(p));
    } else {
       EXPECT_TRUE(validate(p));
+   }
+}
+
+TEST_P(validation_test, invalid_exec_size_encoding)
+{
+   const struct {
+      enum brw_execution_size exec_size;
+      bool expected_result;
+   } test_case[] = {
+      { BRW_EXECUTE_1,      true  },
+      { BRW_EXECUTE_2,      true  },
+      { BRW_EXECUTE_4,      true  },
+      { BRW_EXECUTE_8,      true  },
+      { BRW_EXECUTE_16,     true  },
+      { BRW_EXECUTE_32,     true  },
+
+      { (enum brw_execution_size)((int)BRW_EXECUTE_32 + 1), false },
+      { (enum brw_execution_size)((int)BRW_EXECUTE_32 + 2), false },
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_case); i++) {
+      brw_MOV(p, g0, g0);
+
+      brw_inst_set_exec_size(&devinfo, last_inst, test_case[i].exec_size);
+      brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+      brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_GENERAL_REGISTER_FILE, BRW_REGISTER_TYPE_W);
+
+      if (test_case[i].exec_size == BRW_EXECUTE_1) {
+         brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_0);
+         brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_1);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_0);
+      } else {
+         brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_2);
+         brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_2);
+         brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+      }
+
+      EXPECT_EQ(test_case[i].expected_result, validate(p));
+
+      clear_instructions(p);
+   }
+}
+
+TEST_P(validation_test, invalid_file_encoding)
+{
+   /* Register file on Gen12 is only one bit */
+   if (devinfo.gen >= 12)
+      return;
+
+   brw_MOV(p, g0, g0);
+   brw_inst_set_dst_file_type(&devinfo, last_inst, BRW_MESSAGE_REGISTER_FILE, BRW_REGISTER_TYPE_F);
+
+   if (devinfo.gen > 6) {
+      EXPECT_FALSE(validate(p));
+   } else {
+      EXPECT_TRUE(validate(p));
+   }
+
+   clear_instructions(p);
+
+   if (devinfo.gen < 6) {
+      gen4_math(p, g0, BRW_MATH_FUNCTION_SIN, 0, g0, BRW_MATH_PRECISION_FULL);
+   } else {
+      gen6_math(p, g0, BRW_MATH_FUNCTION_SIN, g0, null);
+   }
+   brw_inst_set_src0_file_type(&devinfo, last_inst, BRW_MESSAGE_REGISTER_FILE, BRW_REGISTER_TYPE_F);
+
+   if (devinfo.gen > 6) {
+      EXPECT_FALSE(validate(p));
+   } else {
+      EXPECT_TRUE(validate(p));
+   }
+}
+
+TEST_P(validation_test, invalid_type_encoding)
+{
+   enum brw_reg_file files[2] = {
+      BRW_GENERAL_REGISTER_FILE,
+      BRW_IMMEDIATE_VALUE,
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(files); i++) {
+      const enum brw_reg_file file = files[i];
+      const int num_bits = devinfo.gen >= 8 ? 4 : 3;
+      const int num_encodings = 1 << num_bits;
+
+      /* The data types are encoded into <num_bits> bits to be used in hardware
+       * instructions, so keep a record in a bitset the invalid patterns so
+       * they can be verified to be invalid when used.
+       */
+      BITSET_DECLARE(invalid_encodings, num_encodings);
+
+      const struct {
+         enum brw_reg_type type;
+         bool expected_result;
+      } test_case[] = {
+         { BRW_REGISTER_TYPE_NF, devinfo.gen == 11 && file != IMM },
+         { BRW_REGISTER_TYPE_DF, devinfo.has_64bit_float && (devinfo.gen >= 8 || file != IMM) },
+         { BRW_REGISTER_TYPE_F,  true },
+         { BRW_REGISTER_TYPE_HF, devinfo.gen >= 8 },
+         { BRW_REGISTER_TYPE_VF, file == IMM },
+         { BRW_REGISTER_TYPE_Q,  devinfo.has_64bit_int },
+         { BRW_REGISTER_TYPE_UQ, devinfo.has_64bit_int },
+         { BRW_REGISTER_TYPE_D,  true },
+         { BRW_REGISTER_TYPE_UD, true },
+         { BRW_REGISTER_TYPE_W,  true },
+         { BRW_REGISTER_TYPE_UW, true },
+         { BRW_REGISTER_TYPE_B,  file == FIXED_GRF },
+         { BRW_REGISTER_TYPE_UB, file == FIXED_GRF },
+         { BRW_REGISTER_TYPE_V,  file == IMM },
+         { BRW_REGISTER_TYPE_UV, devinfo.gen >= 6 && file == IMM },
+      };
+
+      /* Initially assume all hardware encodings are invalid */
+      BITSET_ONES(invalid_encodings);
+
+      brw_set_default_exec_size(p, BRW_EXECUTE_4);
+
+      for (unsigned i = 0; i < ARRAY_SIZE(test_case); i++) {
+         if (test_case[i].expected_result) {
+            unsigned hw_type = brw_reg_type_to_hw_type(&devinfo, file, test_case[i].type);
+            if (hw_type != INVALID_REG_TYPE) {
+               /* ... and remove valid encodings from the set */
+               assert(BITSET_TEST(invalid_encodings, hw_type));
+               BITSET_CLEAR(invalid_encodings, hw_type);
+            }
+
+            if (file == FIXED_GRF) {
+               struct brw_reg g = retype(g0, test_case[i].type);
+               brw_MOV(p, g, g);
+               brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+               brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_4);
+               brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+            } else {
+               enum brw_reg_type t;
+
+               switch (test_case[i].type) {
+               case BRW_REGISTER_TYPE_V:
+                  t = BRW_REGISTER_TYPE_W;
+                  break;
+               case BRW_REGISTER_TYPE_UV:
+                  t = BRW_REGISTER_TYPE_UW;
+                  break;
+               case BRW_REGISTER_TYPE_VF:
+                  t = BRW_REGISTER_TYPE_F;
+                  break;
+               default:
+                  t = test_case[i].type;
+                  break;
+               }
+
+               struct brw_reg g = retype(g0, t);
+               brw_MOV(p, g, retype(brw_imm_w(0), test_case[i].type));
+            }
+
+            EXPECT_TRUE(validate(p));
+
+            clear_instructions(p);
+         }
+      }
+
+      /* The remaining encodings in invalid_encodings do not have a mapping
+       * from BRW_REGISTER_TYPE_* and must be invalid. Verify that invalid
+       * encodings are rejected by the validator.
+       */
+      int e;
+      BITSET_FOREACH_SET(e, invalid_encodings, num_encodings) {
+         if (file == FIXED_GRF) {
+            brw_MOV(p, g0, g0);
+            brw_inst_set_src0_vstride(&devinfo, last_inst, BRW_VERTICAL_STRIDE_4);
+            brw_inst_set_src0_width(&devinfo, last_inst, BRW_WIDTH_4);
+            brw_inst_set_src0_hstride(&devinfo, last_inst, BRW_HORIZONTAL_STRIDE_1);
+         } else {
+            brw_MOV(p, g0, brw_imm_w(0));
+         }
+         brw_inst_set_dst_reg_hw_type(&devinfo, last_inst, e);
+         brw_inst_set_src0_reg_hw_type(&devinfo, last_inst, e);
+
+         EXPECT_FALSE(validate(p));
+
+         clear_instructions(p);
+      }
+   }
+}
+
+TEST_P(validation_test, invalid_type_encoding_3src_a16)
+{
+   /* 3-src instructions in align16 mode only supported on Gen6-10 */
+   if (devinfo.gen < 6 || devinfo.gen > 10)
+      return;
+
+   const int num_bits = devinfo.gen >= 8 ? 3 : 2;
+   const int num_encodings = 1 << num_bits;
+
+   /* The data types are encoded into <num_bits> bits to be used in hardware
+    * instructions, so keep a record in a bitset the invalid patterns so
+    * they can be verified to be invalid when used.
+    */
+   BITSET_DECLARE(invalid_encodings, num_encodings);
+
+   const struct {
+      enum brw_reg_type type;
+      bool expected_result;
+   } test_case[] = {
+      { BRW_REGISTER_TYPE_DF, devinfo.gen >= 7  },
+      { BRW_REGISTER_TYPE_F,  true },
+      { BRW_REGISTER_TYPE_HF, devinfo.gen >= 8  },
+      { BRW_REGISTER_TYPE_D,  devinfo.gen >= 7  },
+      { BRW_REGISTER_TYPE_UD, devinfo.gen >= 7  },
+   };
+
+   /* Initially assume all hardware encodings are invalid */
+   BITSET_ONES(invalid_encodings);
+
+   brw_set_default_access_mode(p, BRW_ALIGN_16);
+   brw_set_default_exec_size(p, BRW_EXECUTE_4);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_case); i++) {
+      if (test_case[i].expected_result) {
+         unsigned hw_type = brw_reg_type_to_a16_hw_3src_type(&devinfo, test_case[i].type);
+         if (hw_type != INVALID_HW_REG_TYPE) {
+            /* ... and remove valid encodings from the set */
+            assert(BITSET_TEST(invalid_encodings, hw_type));
+            BITSET_CLEAR(invalid_encodings, hw_type);
+         }
+
+         struct brw_reg g = retype(g0, test_case[i].type);
+         if (!brw_reg_type_is_integer(test_case[i].type)) {
+            brw_MAD(p, g, g, g, g);
+         } else {
+            brw_BFE(p, g, g, g, g);
+         }
+
+         EXPECT_TRUE(validate(p));
+
+         clear_instructions(p);
+      }
+   }
+
+   /* The remaining encodings in invalid_encodings do not have a mapping
+    * from BRW_REGISTER_TYPE_* and must be invalid. Verify that invalid
+    * encodings are rejected by the validator.
+    */
+   int e;
+   BITSET_FOREACH_SET(e, invalid_encodings, num_encodings) {
+      for (unsigned i = 0; i < 2; i++) {
+         if (i == 0) {
+            brw_MAD(p, g0, g0, g0, g0);
+         } else {
+            brw_BFE(p, g0, g0, g0, g0);
+         }
+
+         brw_inst_set_3src_a16_dst_hw_type(&devinfo, last_inst, e);
+         brw_inst_set_3src_a16_src_hw_type(&devinfo, last_inst, e);
+
+         EXPECT_FALSE(validate(p));
+
+         clear_instructions(p);
+
+         if (devinfo.gen == 6)
+            break;
+      }
+   }
+}
+
+TEST_P(validation_test, invalid_type_encoding_3src_a1)
+{
+   /* 3-src instructions in align1 mode only supported on Gen10+ */
+   if (devinfo.gen < 10)
+      return;
+
+   const int num_bits = 3 + 1 /* for exec_type */;
+   const int num_encodings = 1 << num_bits;
+
+   /* The data types are encoded into <num_bits> bits to be used in hardware
+    * instructions, so keep a record in a bitset the invalid patterns so
+    * they can be verified to be invalid when used.
+    */
+   BITSET_DECLARE(invalid_encodings, num_encodings);
+
+   const struct {
+      enum brw_reg_type type;
+      unsigned exec_type;
+      bool expected_result;
+   } test_case[] = {
+#define E(x) ((unsigned)BRW_ALIGN1_3SRC_EXEC_TYPE_##x)
+      { BRW_REGISTER_TYPE_NF, E(FLOAT), devinfo.gen == 11 },
+      { BRW_REGISTER_TYPE_DF, E(FLOAT), devinfo.has_64bit_float },
+      { BRW_REGISTER_TYPE_F,  E(FLOAT), true  },
+      { BRW_REGISTER_TYPE_HF, E(FLOAT), true  },
+      { BRW_REGISTER_TYPE_D,  E(INT),   true  },
+      { BRW_REGISTER_TYPE_UD, E(INT),   true  },
+      { BRW_REGISTER_TYPE_W,  E(INT),   true  },
+      { BRW_REGISTER_TYPE_UW, E(INT),   true  },
+
+      /* There are no ternary instructions that can operate on B-type sources
+       * on Gen11-12. Src1/Src2 cannot be B-typed either.
+       */
+      { BRW_REGISTER_TYPE_B,  E(INT),   devinfo.gen == 10 },
+      { BRW_REGISTER_TYPE_UB, E(INT),   devinfo.gen == 10 },
+   };
+
+   /* Initially assume all hardware encodings are invalid */
+   BITSET_ONES(invalid_encodings);
+
+   brw_set_default_access_mode(p, BRW_ALIGN_1);
+   brw_set_default_exec_size(p, BRW_EXECUTE_4);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_case); i++) {
+      if (test_case[i].expected_result) {
+         unsigned hw_type = brw_reg_type_to_a1_hw_3src_type(&devinfo, test_case[i].type);
+         unsigned hw_exec_type = hw_type | (test_case[i].exec_type << 3);
+         if (hw_type != INVALID_HW_REG_TYPE) {
+            /* ... and remove valid encodings from the set */
+            assert(BITSET_TEST(invalid_encodings, hw_exec_type));
+            BITSET_CLEAR(invalid_encodings, hw_exec_type);
+         }
+
+         struct brw_reg g = retype(g0, test_case[i].type);
+         if (!brw_reg_type_is_integer(test_case[i].type)) {
+            brw_MAD(p, g, g, g, g);
+         } else {
+            brw_BFE(p, g, g, g, g);
+         }
+
+         EXPECT_TRUE(validate(p));
+
+         clear_instructions(p);
+      }
+   }
+
+   /* The remaining encodings in invalid_encodings do not have a mapping
+    * from BRW_REGISTER_TYPE_* and must be invalid. Verify that invalid
+    * encodings are rejected by the validator.
+    */
+   int e;
+   BITSET_FOREACH_SET(e, invalid_encodings, num_encodings) {
+      const unsigned hw_type = e & 0x7;
+      const unsigned exec_type = e >> 3;
+
+      for (unsigned i = 0; i < 2; i++) {
+         if (i == 0) {
+            brw_MAD(p, g0, g0, g0, g0);
+            brw_inst_set_3src_a1_exec_type(&devinfo, last_inst, BRW_ALIGN1_3SRC_EXEC_TYPE_FLOAT);
+         } else {
+            brw_CSEL(p, g0, g0, g0, g0);
+            brw_inst_set_3src_cond_modifier(&devinfo, last_inst, BRW_CONDITIONAL_NZ);
+            brw_inst_set_3src_a1_exec_type(&devinfo, last_inst, BRW_ALIGN1_3SRC_EXEC_TYPE_INT);
+         }
+
+         brw_inst_set_3src_a1_exec_type(&devinfo, last_inst, exec_type);
+         brw_inst_set_3src_a1_dst_hw_type (&devinfo, last_inst, hw_type);
+         brw_inst_set_3src_a1_src0_hw_type(&devinfo, last_inst, hw_type);
+         brw_inst_set_3src_a1_src1_hw_type(&devinfo, last_inst, hw_type);
+         brw_inst_set_3src_a1_src2_hw_type(&devinfo, last_inst, hw_type);
+
+         EXPECT_FALSE(validate(p));
+
+         clear_instructions(p);
+      }
+   }
+}
+
+TEST_P(validation_test, 3src_inst_access_mode)
+{
+   /* 3-src instructions only supported on Gen6+ */
+   if (devinfo.gen < 6)
+      return;
+
+   /* No access mode bit on Gen12+ */
+   if (devinfo.gen >= 12)
+      return;
+
+   const struct {
+      unsigned mode;
+      bool expected_result;
+   } test_case[] = {
+      { BRW_ALIGN_1,  devinfo.gen >= 10 },
+      { BRW_ALIGN_16, devinfo.gen <= 10 },
+   };
+
+   for (unsigned i = 0; i < ARRAY_SIZE(test_case); i++) {
+      if (devinfo.gen < 10)
+         brw_set_default_access_mode(p, BRW_ALIGN_16);
+
+      brw_MAD(p, g0, g0, g0, g0);
+      brw_inst_set_access_mode(&devinfo, last_inst, test_case[i].mode);
+
+      EXPECT_EQ(test_case[i].expected_result, validate(p));
+
+      clear_instructions(p);
    }
 }
 
@@ -451,7 +844,7 @@ TEST_P(validation_test, vstride_on_align16_must_be_0_or_4)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(vstride) / sizeof(vstride[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(vstride); i++) {
       brw_ADD(p, g0, g0, g0);
       brw_inst_set_src0_vstride(&devinfo, last_inst, vstride[i].vstride);
 
@@ -460,7 +853,7 @@ TEST_P(validation_test, vstride_on_align16_must_be_0_or_4)
       clear_instructions(p);
    }
 
-   for (unsigned i = 0; i < sizeof(vstride) / sizeof(vstride[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(vstride); i++) {
       brw_ADD(p, g0, g0, g0);
       brw_inst_set_src1_vstride(&devinfo, last_inst, vstride[i].vstride);
 
@@ -795,7 +1188,7 @@ TEST_P(validation_test, packed_byte_destination)
       { BRW_REGISTER_TYPE_B , BRW_REGISTER_TYPE_D , 0, 0, 0, false },
    };
 
-   for (unsigned i = 0; i < sizeof(move) / sizeof(move[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(move); i++) {
       brw_MOV(p, retype(g0, move[i].dst_type), retype(g0, move[i].src_type));
       brw_inst_set_src0_negate(&devinfo, last_inst, move[i].neg);
       brw_inst_set_src0_abs(&devinfo, last_inst, move[i].abs);
@@ -892,8 +1285,14 @@ TEST_P(validation_test, byte_64bit_conversion)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types && type_sz(inst[i].src_type) == 8)
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          inst[i].src_type == BRW_REGISTER_TYPE_DF)
+         continue;
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
          continue;
 
       brw_MOV(p, retype(g0, inst[i].dst_type), retype(g0, inst[i].src_type));
@@ -988,11 +1387,18 @@ TEST_P(validation_test, half_float_conversion)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types &&
-          (type_sz(inst[i].src_type) == 8 || type_sz(inst[i].dst_type) == 8)) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_DF ||
+           inst[i].src_type == BRW_REGISTER_TYPE_DF))
          continue;
-      }
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].dst_type == BRW_REGISTER_TYPE_UQ ||
+           inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
+         continue;
 
       brw_MOV(p, retype(g0, inst[i].dst_type), retype(g0, inst[i].src_type));
 
@@ -1068,7 +1474,7 @@ TEST_P(validation_test, mixed_float_source_indirect_addressing)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1122,7 +1528,7 @@ TEST_P(validation_test, mixed_float_align1_simd16)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1189,7 +1595,7 @@ TEST_P(validation_test, mixed_float_align1_packed_fp16_dst_acc_read_offset_0)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(inst[i].read_acc ? acc0 : g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1265,7 +1671,7 @@ TEST_P(validation_test, mixed_float_fp16_dest_with_acc)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       if (inst[i].opcode == BRW_OPCODE_MAC) {
          brw_MAC(p, retype(g0, inst[i].dst_type),
                     retype(g0, inst[i].src0_type),
@@ -1332,7 +1738,7 @@ TEST_P(validation_test, mixed_float_align1_math_strided_fp16_inputs)
    if (devinfo.gen < 9)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       gen6_math(p, retype(g0, inst[i].dst_type),
                    BRW_MATH_FUNCTION_POW,
                    retype(g0, inst[i].src0_type),
@@ -1407,7 +1813,7 @@ TEST_P(validation_test, mixed_float_align1_packed_fp16_dst)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1478,7 +1884,7 @@ TEST_P(validation_test, mixed_float_align16_packed_data)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1529,7 +1935,7 @@ TEST_P(validation_test, mixed_float_align16_no_simd16)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1580,7 +1986,7 @@ TEST_P(validation_test, mixed_float_align16_no_acc_read)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       brw_ADD(p, retype(g0, inst[i].dst_type),
                  retype(inst[i].read_acc ? acc0 : g0, inst[i].src0_type),
                  retype(g0, inst[i].src1_type));
@@ -1635,7 +2041,7 @@ TEST_P(validation_test, mixed_float_align16_math_packed_format)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       gen6_math(p, retype(g0, inst[i].dst_type),
                    BRW_MATH_FUNCTION_POW,
                    retype(g0, inst[i].src0_type),
@@ -1672,7 +2078,7 @@ TEST_P(validation_test, vector_immediate_destination_alignment)
       { BRW_REGISTER_TYPE_W, BRW_REGISTER_TYPE_UV,  1, BRW_EXECUTE_8, false },
    };
 
-   for (unsigned i = 0; i < sizeof(move) / sizeof(move[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(move); i++) {
       /* UV type is Gen6+ */
       if (devinfo.gen < 6 &&
           move[i].src_type == BRW_REGISTER_TYPE_UV)
@@ -1714,7 +2120,7 @@ TEST_P(validation_test, vector_immediate_destination_stride)
       { BRW_REGISTER_TYPE_B, BRW_REGISTER_TYPE_UV, BRW_HORIZONTAL_STRIDE_2, true  },
    };
 
-   for (unsigned i = 0; i < sizeof(move) / sizeof(move[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(move); i++) {
       /* UV type is Gen6+ */
       if (devinfo.gen < 6 &&
           move[i].src_type == BRW_REGISTER_TYPE_UV)
@@ -1874,9 +2280,17 @@ TEST_P(validation_test, qword_low_power_align1_regioning_restrictions)
    if (devinfo.gen >= 12)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types &&
-          (type_sz(inst[i].dst_type) == 8 || type_sz(inst[i].src_type) == 8))
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_DF ||
+           inst[i].src_type == BRW_REGISTER_TYPE_DF))
+         continue;
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].dst_type == BRW_REGISTER_TYPE_UQ ||
+           inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
          continue;
 
       if (inst[i].opcode == BRW_OPCODE_MOV) {
@@ -1998,9 +2412,17 @@ TEST_P(validation_test, qword_low_power_no_indirect_addressing)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types &&
-          (type_sz(inst[i].dst_type) == 8 || type_sz(inst[i].src_type) == 8))
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_DF ||
+           inst[i].src_type == BRW_REGISTER_TYPE_DF))
+         continue;
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].dst_type == BRW_REGISTER_TYPE_UQ ||
+           inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
          continue;
 
       if (inst[i].opcode == BRW_OPCODE_MOV) {
@@ -2138,9 +2560,17 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
    if (devinfo.gen < 8)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types &&
-          (type_sz(inst[i].dst_type) == 8 || type_sz(inst[i].src_type) == 8))
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_DF ||
+           inst[i].src_type == BRW_REGISTER_TYPE_DF))
+         continue;
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].dst_type == BRW_REGISTER_TYPE_UQ ||
+           inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
          continue;
 
       if (inst[i].opcode == BRW_OPCODE_MOV) {
@@ -2171,7 +2601,7 @@ TEST_P(validation_test, qword_low_power_no_64bit_arf)
       clear_instructions(p);
    }
 
-   if (!devinfo.has_64bit_types)
+   if (!devinfo.has_64bit_float)
       return;
 
    /* MAC implicitly reads the accumulator */
@@ -2241,7 +2671,7 @@ TEST_P(validation_test, align16_64_bit_integer)
 
    brw_set_default_access_mode(p, BRW_ALIGN_16);
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
       if (inst[i].opcode == BRW_OPCODE_MOV) {
          brw_MOV(p, retype(g0, inst[i].dst_type),
                     retype(g0, inst[i].src_type));
@@ -2347,9 +2777,17 @@ TEST_P(validation_test, qword_low_power_no_depctrl)
    if (devinfo.gen >= 12)
       return;
 
-   for (unsigned i = 0; i < sizeof(inst) / sizeof(inst[0]); i++) {
-      if (!devinfo.has_64bit_types &&
-          (type_sz(inst[i].dst_type) == 8 || type_sz(inst[i].src_type) == 8))
+   for (unsigned i = 0; i < ARRAY_SIZE(inst); i++) {
+      if (!devinfo.has_64bit_float &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_DF ||
+           inst[i].src_type == BRW_REGISTER_TYPE_DF))
+         continue;
+
+      if (!devinfo.has_64bit_int &&
+          (inst[i].dst_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].dst_type == BRW_REGISTER_TYPE_UQ ||
+           inst[i].src_type == BRW_REGISTER_TYPE_Q ||
+           inst[i].src_type == BRW_REGISTER_TYPE_UQ))
          continue;
 
       if (inst[i].opcode == BRW_OPCODE_MOV) {

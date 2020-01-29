@@ -830,7 +830,7 @@ static unsigned si_identity(unsigned slot)
 
 static void si_dump_descriptors(struct si_context *sctx,
 				enum pipe_shader_type processor,
-				const struct tgsi_shader_info *info,
+				const struct si_shader_info *info,
 				struct u_log_context *log)
 {
 	struct si_descriptors *descs =
@@ -868,7 +868,7 @@ static void si_dump_descriptors(struct si_context *sctx,
 		desc.list = sctx->vb_descriptors_gpu_list;
 		desc.gpu_list = sctx->vb_descriptors_gpu_list;
 		desc.element_dw_size = 4;
-		desc.num_active_slots = sctx->vertex_elements->desc_list_byte_size / 16;
+		desc.num_active_slots = sctx->vertex_elements->vb_desc_list_alloc_size / 16;
 
 		si_dump_descriptor_list(sctx->screen, &desc, name,
 					" - Vertex buffer", 4, info->num_inputs,

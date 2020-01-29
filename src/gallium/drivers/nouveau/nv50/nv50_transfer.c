@@ -1,5 +1,5 @@
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "nv50/nv50_context.h"
 

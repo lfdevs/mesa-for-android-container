@@ -55,8 +55,8 @@ struct panfrost_blend_shader {
 /* A blend shader descriptor ready for actual use */
 
 struct panfrost_blend_shader_final {
-        /* The compiled shader in GPU memory, possibly patched */
-        struct panfrost_bo *bo;
+        /* GPU address where we're compiled to */
+        uint64_t gpu;
 
         /* First instruction tag (for tagging the pointer) */
         unsigned first_tag;
@@ -113,6 +113,6 @@ void
 panfrost_blend_context_init(struct pipe_context *pipe);
 
 struct panfrost_blend_final
-panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rt);
+panfrost_get_blend_for_context(struct panfrost_context *ctx, unsigned rt, struct panfrost_bo **bo, unsigned *shader_offset);
 
 #endif

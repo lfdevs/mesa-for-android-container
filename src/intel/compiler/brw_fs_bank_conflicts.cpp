@@ -567,13 +567,21 @@ namespace {
                constrained[p.atom_of_reg(reg_of(inst->src[i]))] = true;
          }
 
+         /* Preserve the original allocation of VGRFs used by the barycentric
+          * source of the LINTERP instruction on Gen6, since pair-aligned
+          * barycentrics allow the PLN instruction to be used.
+          */
+         if (v->devinfo->has_pln && v->devinfo->gen <= 6 &&
+             inst->opcode == FS_OPCODE_LINTERP)
+            constrained[p.atom_of_reg(reg_of(inst->src[0]))] = true;
+
          /* The location of the Gen7 MRF hack registers is hard-coded in the
           * rest of the compiler back-end.  Don't attempt to move them around.
           */
          if (v->devinfo->gen >= 7) {
             assert(inst->dst.file != MRF);
 
-            for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
+            for (unsigned i = 0; i < inst->implied_mrf_writes(); i++) {
                const unsigned reg = GEN7_MRF_HACK_START + inst->base_mrf + i;
                constrained[p.atom_of_reg(reg)] = true;
             }

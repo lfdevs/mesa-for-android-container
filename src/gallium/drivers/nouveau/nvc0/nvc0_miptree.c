@@ -26,7 +26,7 @@
 #include "pipe/p_defines.h"
 #include "state_tracker/drm_driver.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "nvc0/nvc0_context.h"
 #include "nvc0/nvc0_resource.h"

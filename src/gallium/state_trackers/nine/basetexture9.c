@@ -33,7 +33,7 @@
 #include "nine_dump.h"
 #endif
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #define DBG_CHANNEL DBG_BASETEXTURE
 

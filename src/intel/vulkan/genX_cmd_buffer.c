@@ -40,6 +40,9 @@
 #define __gen_address_offset anv_address_add
 #include "common/gen_mi_builder.h"
 
+static void genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
+                                        uint32_t pipeline);
+
 static void
 emit_lri(struct anv_batch *batch, uint32_t reg, uint32_t imm)
 {
@@ -53,6 +56,8 @@ void
 genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_device *device = cmd_buffer->device;
+   UNUSED const struct gen_device_info *devinfo = &device->info;
+   uint32_t mocs = device->isl_dev.mocs.internal;
 
    /* If we are emitting a new state base address we probably need to re-emit
     * binding tables.
@@ -73,32 +78,53 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
 #if GEN_GEN >= 12
       pc.TileCacheFlushEnable = true;
 #endif
+#if GEN_GEN == 12
+      /* GEN:BUG:1606662791:
+       *
+       *   Software must program PIPE_CONTROL command with "HDC Pipeline
+       *   Flush" prior to programming of the below two non-pipeline state :
+       *      * STATE_BASE_ADDRESS
+       *      * 3DSTATE_BINDING_TABLE_POOL_ALLOC
+       */
+      if (devinfo->revision == 0 /* A0 */)
+         pc.HDCPipelineFlushEnable = true;
+#endif
    }
+
+#if GEN_GEN == 12
+   /* GEN:BUG:1607854226:
+    *
+    *  Workaround the non pipelined state not applying in MEDIA/GPGPU pipeline
+    *  mode by putting the pipeline temporarily in 3D mode.
+    */
+   uint32_t gen12_wa_pipeline = cmd_buffer->state.current_pipeline;
+   genX(flush_pipeline_select_3d)(cmd_buffer);
+#endif
 
    anv_batch_emit(&cmd_buffer->batch, GENX(STATE_BASE_ADDRESS), sba) {
       sba.GeneralStateBaseAddress = (struct anv_address) { NULL, 0 };
-      sba.GeneralStateMOCS = GENX(MOCS);
+      sba.GeneralStateMOCS = mocs;
       sba.GeneralStateBaseAddressModifyEnable = true;
 
-      sba.StatelessDataPortAccessMOCS = GENX(MOCS);
+      sba.StatelessDataPortAccessMOCS = mocs;
 
       sba.SurfaceStateBaseAddress =
          anv_cmd_buffer_surface_base_address(cmd_buffer);
-      sba.SurfaceStateMOCS = GENX(MOCS);
+      sba.SurfaceStateMOCS = mocs;
       sba.SurfaceStateBaseAddressModifyEnable = true;
 
       sba.DynamicStateBaseAddress =
          (struct anv_address) { device->dynamic_state_pool.block_pool.bo, 0 };
-      sba.DynamicStateMOCS = GENX(MOCS);
+      sba.DynamicStateMOCS = mocs;
       sba.DynamicStateBaseAddressModifyEnable = true;
 
       sba.IndirectObjectBaseAddress = (struct anv_address) { NULL, 0 };
-      sba.IndirectObjectMOCS = GENX(MOCS);
+      sba.IndirectObjectMOCS = mocs;
       sba.IndirectObjectBaseAddressModifyEnable = true;
 
       sba.InstructionBaseAddress =
          (struct anv_address) { device->instruction_state_pool.block_pool.bo, 0 };
-      sba.InstructionMOCS = GENX(MOCS);
+      sba.InstructionMOCS = mocs;
       sba.InstructionBaseAddressModifyEnable = true;
 
 #  if (GEN_GEN >= 8)
@@ -133,7 +159,7 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
       sba.InstructionAccessUpperBoundModifyEnable = true;
 #  endif
 #  if (GEN_GEN >= 9)
-      if (cmd_buffer->device->instance->physicalDevice.use_softpin) {
+      if (cmd_buffer->device->physical->use_softpin) {
          sba.BindlessSurfaceStateBaseAddress = (struct anv_address) {
             .bo = device->surface_state_pool.block_pool.bo,
             .offset = 0,
@@ -143,16 +169,25 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
          sba.BindlessSurfaceStateBaseAddress = ANV_NULL_ADDRESS;
          sba.BindlessSurfaceStateSize = 0;
       }
-      sba.BindlessSurfaceStateMOCS = GENX(MOCS);
+      sba.BindlessSurfaceStateMOCS = mocs;
       sba.BindlessSurfaceStateBaseAddressModifyEnable = true;
 #  endif
 #  if (GEN_GEN >= 10)
       sba.BindlessSamplerStateBaseAddress = (struct anv_address) { NULL, 0 };
-      sba.BindlessSamplerStateMOCS = GENX(MOCS);
+      sba.BindlessSamplerStateMOCS = mocs;
       sba.BindlessSamplerStateBaseAddressModifyEnable = true;
       sba.BindlessSamplerStateBufferSize = 0;
 #  endif
    }
+
+#if GEN_GEN == 12
+   /* GEN:BUG:1607854226:
+    *
+    *  Put the pipeline back into its current mode.
+    */
+   if (gen12_wa_pipeline != UINT32_MAX)
+      genX(flush_pipeline_select)(cmd_buffer, gen12_wa_pipeline);
+#endif
 
    /* After re-setting the surface state base address, we have to do some
     * cache flusing so that the sampler engine will pick up the new
@@ -207,7 +242,7 @@ add_surface_reloc(struct anv_cmd_buffer *cmd_buffer,
    VkResult result =
       anv_reloc_list_add(&cmd_buffer->surface_relocs, &cmd_buffer->pool->alloc,
                          state.offset + isl_dev->ss.addr_offset,
-                         addr.bo, addr.offset);
+                         addr.bo, addr.offset, NULL);
    if (result != VK_SUCCESS)
       anv_batch_set_error(&cmd_buffer->batch, result);
 }
@@ -226,7 +261,9 @@ add_surface_state_relocs(struct anv_cmd_buffer *cmd_buffer,
          anv_reloc_list_add(&cmd_buffer->surface_relocs,
                             &cmd_buffer->pool->alloc,
                             state.state.offset + isl_dev->ss.aux_addr_offset,
-                            state.aux_address.bo, state.aux_address.offset);
+                            state.aux_address.bo,
+                            state.aux_address.offset,
+                            NULL);
       if (result != VK_SUCCESS)
          anv_batch_set_error(&cmd_buffer->batch, result);
    }
@@ -237,7 +274,9 @@ add_surface_state_relocs(struct anv_cmd_buffer *cmd_buffer,
                             &cmd_buffer->pool->alloc,
                             state.state.offset +
                             isl_dev->ss.clear_color_state_offset,
-                            state.clear_address.bo, state.clear_address.offset);
+                            state.clear_address.bo,
+                            state.clear_address.offset,
+                            NULL);
       if (result != VK_SUCCESS)
          anv_batch_set_error(&cmd_buffer->batch, result);
    }
@@ -269,6 +308,7 @@ color_attachment_compute_aux_usage(struct anv_device * device,
    att_state->aux_usage =
       anv_layout_to_aux_usage(&device->info, iview->image,
                               VK_IMAGE_ASPECT_COLOR_BIT,
+                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                               VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
    /* If we don't have aux, then we should have returned early in the layer
@@ -303,7 +343,7 @@ color_attachment_compute_aux_usage(struct anv_device * device,
           */
          if (cmd_state->pass->attachments[att].first_subpass_layout ==
              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-            anv_perf_warn(device->instance, iview->image,
+            anv_perf_warn(device, iview->image,
                           "Not temporarily enabling CCS_E.");
          }
       } else {
@@ -367,13 +407,13 @@ color_attachment_compute_aux_usage(struct anv_device * device,
       if (att_state->fast_clear &&
           (iview->planes[0].isl.base_level > 0 ||
            iview->planes[0].isl.base_array_layer > 0)) {
-         anv_perf_warn(device->instance, iview->image,
+         anv_perf_warn(device, iview->image,
                        "Rendering with multi-lod or multi-layer framebuffer "
                        "with LOAD_OP_LOAD and baseMipLevel > 0 or "
                        "baseArrayLayer > 0.  Not fast clearing.");
          att_state->fast_clear = false;
       } else if (att_state->fast_clear && cmd_state->framebuffer->layers > 1) {
-         anv_perf_warn(device->instance, iview->image,
+         anv_perf_warn(device, iview->image,
                        "Rendering to a multi-layer framebuffer with "
                        "LOAD_OP_CLEAR.  Only fast-clearing the first slice");
       }
@@ -399,6 +439,11 @@ depth_stencil_attachment_compute_aux_usage(struct anv_device *device,
    att_state->aux_usage = ISL_AUX_USAGE_NONE;
    att_state->input_aux_usage = ISL_AUX_USAGE_NONE;
 
+   /* This is unused for depth/stencil but valgrind complains if it
+    * isn't initialized
+    */
+   att_state->clear_color_is_zero_one = false;
+
    if (GEN_GEN == 7) {
       /* We don't do any HiZ or depth fast-clears on gen7 yet */
       att_state->fast_clear = false;
@@ -421,6 +466,7 @@ depth_stencil_attachment_compute_aux_usage(struct anv_device *device,
    const enum isl_aux_usage first_subpass_aux_usage =
       anv_layout_to_aux_usage(&device->info, iview->image,
                               VK_IMAGE_ASPECT_DEPTH_BIT,
+                              VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                               pass_att->first_subpass_layout);
    if (!blorp_can_hiz_clear_depth(&device->info,
                                   &iview->image->planes[0].surface.isl,
@@ -474,34 +520,52 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
                         VkImageLayout initial_layout,
                         VkImageLayout final_layout)
 {
-   const bool hiz_enabled = ISL_AUX_USAGE_HIZ ==
-      anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                              VK_IMAGE_ASPECT_DEPTH_BIT, initial_layout);
-   const bool enable_hiz = ISL_AUX_USAGE_HIZ ==
-      anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                              VK_IMAGE_ASPECT_DEPTH_BIT, final_layout);
+   uint32_t depth_plane =
+      anv_image_aspect_to_plane(image->aspects, VK_IMAGE_ASPECT_DEPTH_BIT);
+   if (image->planes[depth_plane].aux_usage == ISL_AUX_USAGE_NONE)
+      return;
 
-   enum isl_aux_op hiz_op;
-   if (hiz_enabled && !enable_hiz) {
-      hiz_op = ISL_AUX_OP_FULL_RESOLVE;
-   } else if (!hiz_enabled && enable_hiz) {
-      hiz_op = ISL_AUX_OP_AMBIGUATE;
-   } else {
-      assert(hiz_enabled == enable_hiz);
-      /* If the same buffer will be used, no resolves are necessary. */
-      hiz_op = ISL_AUX_OP_NONE;
-   }
+   const enum isl_aux_state initial_state =
+      anv_layout_to_aux_state(&cmd_buffer->device->info, image,
+                              VK_IMAGE_ASPECT_DEPTH_BIT,
+                              initial_layout);
+   const enum isl_aux_state final_state =
+      anv_layout_to_aux_state(&cmd_buffer->device->info, image,
+                              VK_IMAGE_ASPECT_DEPTH_BIT,
+                              final_layout);
 
-   if (hiz_op != ISL_AUX_OP_NONE)
+   const bool initial_depth_valid =
+      isl_aux_state_has_valid_primary(initial_state);
+   const bool initial_hiz_valid =
+      isl_aux_state_has_valid_aux(initial_state);
+   const bool final_needs_depth =
+      isl_aux_state_has_valid_primary(final_state);
+   const bool final_needs_hiz =
+      isl_aux_state_has_valid_aux(final_state);
+
+   /* Getting into the pass-through state for Depth is tricky and involves
+    * both a resolve and an ambiguate.  We don't handle that state right now
+    * as anv_layout_to_aux_state never returns it.
+    */
+   assert(final_state != ISL_AUX_STATE_PASS_THROUGH);
+
+   if (final_needs_depth && !initial_depth_valid) {
+      assert(initial_hiz_valid);
       anv_image_hiz_op(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
-                       0, 0, 1, hiz_op);
+                       0, 0, 1, ISL_AUX_OP_FULL_RESOLVE);
+   } else if (final_needs_hiz && !initial_hiz_valid) {
+      assert(initial_depth_valid);
+      anv_image_hiz_op(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
+                       0, 0, 1, ISL_AUX_OP_AMBIGUATE);
+   }
 }
 
 static inline bool
 vk_image_layout_stencil_write_optimal(VkImageLayout layout)
 {
    return layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
-          layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL;
+          layout == VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL ||
+          layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR;
 }
 
 /* Transitions a HiZ-enabled depth buffer from one layout to another. Unless
@@ -522,18 +586,19 @@ transition_stencil_buffer(struct anv_cmd_buffer *cmd_buffer,
 
    /* On gen7, we have to store a texturable version of the stencil buffer in
     * a shadow whenever VK_IMAGE_USAGE_SAMPLED_BIT is set and copy back and
-    * forth at strategic points.  Stencil writes are only allowed in three
+    * forth at strategic points. Stencil writes are only allowed in following
     * layouts:
     *
     *  - VK_IMAGE_LAYOUT_GENERAL
     *  - VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     *  - VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     *  - VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+    *  - VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR
     *
     * For general, we have no nice opportunity to transition so we do the copy
-    * to the shadow unconditionally at the end of the subpass.  For transfer
-    * destinations, we can update it as part of the transfer op.  For the
-    * other two, we delay the copy until a transition into some other layout.
+    * to the shadow unconditionally at the end of the subpass. For transfer
+    * destinations, we can update it as part of the transfer op. For the other
+    * layouts, we delay the copy until a transition into some other layout.
     */
    if (image->planes[plane].shadow_surface.isl.size_B > 0 &&
        vk_image_layout_stencil_write_optimal(initial_layout) &&
@@ -750,7 +815,7 @@ anv_cmd_predicated_ccs_resolve(struct anv_cmd_buffer *cmd_buffer,
     * to do a partial resolve on a CCS_D surface.
     */
    if (resolve_op == ISL_AUX_OP_PARTIAL_RESOLVE &&
-       image->planes[plane].aux_usage == ISL_AUX_USAGE_NONE)
+       image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_D)
       resolve_op = ISL_AUX_OP_FULL_RESOLVE;
 
    anv_image_ccs_op(cmd_buffer, image, format, aspect, level,
@@ -925,6 +990,102 @@ genX(copy_fast_clear_dwords)(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+#define READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
+
+#if GEN_GEN == 12
+static void
+anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
+                      const struct anv_image *image,
+                      VkImageAspectFlagBits aspect,
+                      uint32_t base_level, uint32_t level_count,
+                      uint32_t base_layer, uint32_t layer_count)
+{
+   uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
+   assert(isl_aux_usage_has_ccs(image->planes[plane].aux_usage));
+
+   uint64_t base_address =
+      anv_address_physical(image->planes[plane].address);
+
+   const struct isl_surf *isl_surf = &image->planes[plane].surface.isl;
+   uint64_t format_bits = gen_aux_map_format_bits_for_isl_surf(isl_surf);
+
+   /* We're about to live-update the AUX-TT.  We really don't want anyone else
+    * trying to read it while we're doing this.  We could probably get away
+    * with not having this stall in some cases if we were really careful but
+    * it's better to play it safe.  Full stall the GPU.
+    */
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+   for (uint32_t a = 0; a < layer_count; a++) {
+      const uint32_t layer = base_layer + a;
+
+      uint64_t start_offset_B = UINT64_MAX, end_offset_B = 0;
+      for (uint32_t l = 0; l < level_count; l++) {
+         const uint32_t level = base_level + l;
+
+         uint32_t logical_array_layer, logical_z_offset_px;
+         if (image->type == VK_IMAGE_TYPE_3D) {
+            logical_array_layer = 0;
+
+            /* If the given miplevel does not have this layer, then any higher
+             * miplevels won't either because miplevels only get smaller the
+             * higher the LOD.
+             */
+            assert(layer < image->extent.depth);
+            if (layer >= anv_minify(image->extent.depth, level))
+               break;
+            logical_z_offset_px = layer;
+         } else {
+            assert(layer < image->array_size);
+            logical_array_layer = layer;
+            logical_z_offset_px = 0;
+         }
+
+         uint32_t slice_start_offset_B, slice_end_offset_B;
+         isl_surf_get_image_range_B_tile(isl_surf, level,
+                                         logical_array_layer,
+                                         logical_z_offset_px,
+                                         &slice_start_offset_B,
+                                         &slice_end_offset_B);
+
+         start_offset_B = MIN2(start_offset_B, slice_start_offset_B);
+         end_offset_B = MAX2(end_offset_B, slice_end_offset_B);
+      }
+
+      /* Aux operates 64K at a time */
+      start_offset_B = align_down_u64(start_offset_B, 64 * 1024);
+      end_offset_B = align_u64(end_offset_B, 64 * 1024);
+
+      for (uint64_t offset = start_offset_B;
+           offset < end_offset_B; offset += 64 * 1024) {
+         uint64_t address = base_address + offset;
+
+         uint64_t aux_entry_address, *aux_entry_map;
+         aux_entry_map = gen_aux_map_get_entry(cmd_buffer->device->aux_map_ctx,
+                                               address, &aux_entry_address);
+
+         const uint64_t old_aux_entry = READ_ONCE(*aux_entry_map);
+         uint64_t new_aux_entry =
+            (old_aux_entry & ~GEN_AUX_MAP_FORMAT_BITS_MASK) | format_bits;
+
+         /* We're only going to update the top 32 bits */
+         assert((uint32_t)old_aux_entry == (uint32_t)new_aux_entry);
+
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
+            sdi.Address = (struct anv_address) {
+               .bo = NULL,
+               .offset = aux_entry_address + 4,
+            };
+            sdi.ImmediateData = new_aux_entry >> 32;
+         }
+      }
+   }
+
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_AUX_TABLE_INVALIDATE_BIT;
+}
+#endif /* GEN_GEN == 12 */
+
 /**
  * @brief Transitions a color buffer from one layout to another.
  *
@@ -945,7 +1106,8 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
                         VkImageLayout initial_layout,
                         VkImageLayout final_layout)
 {
-   const struct gen_device_info *devinfo = &cmd_buffer->device->info;
+   struct anv_device *device = cmd_buffer->device;
+   const struct gen_device_info *devinfo = &device->info;
    /* Validate the inputs. */
    assert(cmd_buffer);
    assert(image && image->aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV);
@@ -990,10 +1152,21 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    if (base_layer >= anv_image_aux_layers(image, aspect, base_level))
       return;
 
-   assert(image->tiling == VK_IMAGE_TILING_OPTIMAL);
+   assert(image->planes[plane].surface.isl.tiling != ISL_TILING_LINEAR);
 
    if (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
        initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+#if GEN_GEN == 12
+      if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage) &&
+          device->physical->has_implicit_ccs && devinfo->has_aux_map) {
+         anv_image_init_aux_tt(cmd_buffer, image, aspect,
+                               base_level, level_count,
+                               base_layer, layer_count);
+      }
+#else
+      assert(!(device->physical->has_implicit_ccs && devinfo->has_aux_map));
+#endif
+
       /* A subresource in the undefined layout may have been aliased and
        * populated with any arrangement of bits. Therefore, we must initialize
        * the related aux buffer and clear buffer entry with desirable values.
@@ -1061,7 +1234,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
          }
       } else {
          if (image->samples == 4 || image->samples == 16) {
-            anv_perf_warn(cmd_buffer->device->instance, image,
+            anv_perf_warn(cmd_buffer->device, image,
                           "Doing a potentially unnecessary fast-clear to "
                           "define an MCS buffer.");
          }
@@ -1076,9 +1249,9 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    }
 
    const enum isl_aux_usage initial_aux_usage =
-      anv_layout_to_aux_usage(devinfo, image, aspect, initial_layout);
+      anv_layout_to_aux_usage(devinfo, image, aspect, 0, initial_layout);
    const enum isl_aux_usage final_aux_usage =
-      anv_layout_to_aux_usage(devinfo, image, aspect, final_layout);
+      anv_layout_to_aux_usage(devinfo, image, aspect, 0, final_layout);
 
    /* The current code assumes that there is no mixing of CCS_E and CCS_D.
     * We can handle transitions between CCS_D/E to and from NONE.  What we
@@ -1289,6 +1462,7 @@ genX(cmd_buffer_setup_attachments)(struct anv_cmd_buffer *cmd_buffer,
          }
 
          state->attachments[i].current_layout = att->initial_layout;
+         state->attachments[i].current_stencil_layout = att->stencil_initial_layout;
          state->attachments[i].pending_clear_aspects = clear_aspects;
          state->attachments[i].pending_load_aspects = load_aspects;
          if (clear_aspects)
@@ -1384,9 +1558,18 @@ genX(BeginCommandBuffer)(
     * executing anything.  The chances are fairly high that they will use
     * blorp at least once per primary command buffer so it shouldn't be
     * wasted.
+    *
+    * There is also a workaround on gen8 which requires us to invalidate the
+    * VF cache occasionally.  It's easier if we can assume we start with a
+    * fresh cache (See also genX(cmd_buffer_set_binding_for_gen8_vb_flush).)
     */
-   if (cmd_buffer->level == VK_COMMAND_BUFFER_LEVEL_PRIMARY)
-      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
+
+   /* Re-emit the aux table register in every command buffer.  This way we're
+    * ensured that we have the table even if this command buffer doesn't
+    * initialize any images.
+    */
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_AUX_TABLE_INVALIDATE_BIT;
 
    /* We send an "Indirect State Pointers Disable" packet at
     * EndCommandBuffer, so all push contant packets are ignored during a
@@ -1423,7 +1606,9 @@ genX(BeginCommandBuffer)(
 
             enum isl_aux_usage aux_usage =
                anv_layout_to_aux_usage(&cmd_buffer->device->info, iview->image,
-                                       VK_IMAGE_ASPECT_DEPTH_BIT, layout);
+                                       VK_IMAGE_ASPECT_DEPTH_BIT,
+                                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                       layout);
 
             cmd_buffer->state.hiz_enabled = aux_usage == ISL_AUX_USAGE_HIZ;
          }
@@ -1589,6 +1774,14 @@ genX(CmdExecuteCommands)(
       }
 
       anv_cmd_buffer_add_secondary(primary, secondary);
+   }
+
+   /* The secondary isn't counted in our VF cache tracking so we need to
+    * invalidate the whole thing.
+    */
+   if (GEN_GEN >= 8 && GEN_GEN <= 9) {
+      primary->state.pending_pipe_bits |=
+         ANV_PIPE_CS_STALL_BIT | ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
    }
 
    /* The secondary may have selected a different pipeline (3D or compute) and
@@ -1767,7 +1960,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
    emit_lri(&cmd_buffer->batch, GENX(L3CNTLREG3_num), l3cr3);
 
 #if GEN_IS_HASWELL
-   if (cmd_buffer->device->instance->physicalDevice.cmd_parser_version >= 4) {
+   if (cmd_buffer->device->physical->cmd_parser_version >= 4) {
       /* Enable L3 atomics on HSW if we have a DC partition, otherwise keep
        * them disabled to avoid crashing the system hard.
        */
@@ -1791,6 +1984,9 @@ void
 genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
 {
    enum anv_pipe_bits bits = cmd_buffer->state.pending_pipe_bits;
+
+   if (cmd_buffer->device->physical->always_flush_cache)
+      bits |= ANV_PIPE_FLUSH_BITS | ANV_PIPE_INVALIDATE_BITS;
 
    /* Flushes are pipelined while invalidations are handled immediately.
     * Therefore, if we're flushing anything then we need to schedule a stall
@@ -1826,6 +2022,24 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       bits |= ANV_PIPE_TILE_CACHE_FLUSH_BIT;
    }
 
+   /* GEN:BUG:1409226450, Wait for EU to be idle before pipe control which
+    * invalidates the instruction cache
+    */
+   if (GEN_GEN == 12 && (bits & ANV_PIPE_INSTRUCTION_CACHE_INVALIDATE_BIT))
+      bits |= ANV_PIPE_CS_STALL_BIT | ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+
+   if ((GEN_GEN >= 8 && GEN_GEN <= 9) &&
+       (bits & ANV_PIPE_CS_STALL_BIT) &&
+       (bits & ANV_PIPE_VF_CACHE_INVALIDATE_BIT)) {
+      /* If we are doing a VF cache invalidate AND a CS stall (it must be
+       * both) then we can reset our vertex cache tracking.
+       */
+      memset(cmd_buffer->state.gfx.vb_dirty_ranges, 0,
+             sizeof(cmd_buffer->state.gfx.vb_dirty_ranges));
+      memset(&cmd_buffer->state.gfx.ib_dirty_range, 0,
+             sizeof(cmd_buffer->state.gfx.ib_dirty_range));
+   }
+
    if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
 #if GEN_GEN >= 12
@@ -1836,7 +2050,16 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
          pipe.RenderTargetCacheFlushEnable =
             bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
 
+         /* GEN:BUG:1409600907: "PIPE_CONTROL with Depth Stall Enable bit must
+          * be set with any PIPE_CONTROL with Depth Flush Enable bit set.
+          */
+#if GEN_GEN >= 12
+         pipe.DepthStallEnable =
+            pipe.DepthCacheFlushEnable || (bits & ANV_PIPE_DEPTH_STALL_BIT);
+#else
          pipe.DepthStallEnable = bits & ANV_PIPE_DEPTH_STALL_BIT;
+#endif
+
          pipe.CommandStreamerStallEnable = bits & ANV_PIPE_CS_STALL_BIT;
          pipe.StallAtPixelScoreboard = bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
 
@@ -1905,9 +2128,19 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
          if (GEN_GEN == 9 && pipe.VFCacheInvalidationEnable) {
             pipe.PostSyncOperation = WriteImmediateData;
             pipe.Address =
-               (struct anv_address) { &cmd_buffer->device->workaround_bo, 0 };
+               (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
          }
       }
+
+#if GEN_GEN == 12
+      if ((bits & ANV_PIPE_AUX_TABLE_INVALIDATE_BIT) &&
+          cmd_buffer->device->info.has_aux_map) {
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
+            lri.RegisterOffset = GENX(GFX_CCS_AUX_INV_num);
+            lri.DataDWord = 1;
+         }
+      }
+#endif
 
       bits &= ~ANV_PIPE_INVALIDATE_BITS;
    }
@@ -2064,34 +2297,6 @@ cmd_buffer_alloc_push_constants(struct anv_cmd_buffer *cmd_buffer)
    cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_ALL_GRAPHICS;
 }
 
-static const struct anv_descriptor *
-anv_descriptor_for_binding(const struct anv_cmd_pipeline_state *pipe_state,
-                           const struct anv_pipeline_binding *binding)
-{
-   assert(binding->set < MAX_SETS);
-   const struct anv_descriptor_set *set =
-      pipe_state->descriptors[binding->set];
-   const uint32_t offset =
-      set->layout->binding[binding->binding].descriptor_index;
-   return &set->descriptors[offset + binding->index];
-}
-
-static uint32_t
-dynamic_offset_for_binding(const struct anv_cmd_pipeline_state *pipe_state,
-                           const struct anv_pipeline_binding *binding)
-{
-   assert(binding->set < MAX_SETS);
-   const struct anv_descriptor_set *set =
-      pipe_state->descriptors[binding->set];
-
-   uint32_t dynamic_offset_idx =
-      pipe_state->layout->set[binding->set].dynamic_offset_start +
-      set->layout->binding[binding->binding].dynamic_offset_index +
-      binding->index;
-
-   return pipe_state->dynamic_offsets[dynamic_offset_idx];
-}
-
 static struct anv_address
 anv_descriptor_set_address(struct anv_cmd_buffer *cmd_buffer,
                            struct anv_descriptor_set *set)
@@ -2099,7 +2304,7 @@ anv_descriptor_set_address(struct anv_cmd_buffer *cmd_buffer,
    if (set->pool) {
       /* This is a normal descriptor set */
       return (struct anv_address) {
-         .bo = &set->pool->bo,
+         .bo = set->pool->bo,
          .offset = set->desc_mem.offset,
       };
    } else {
@@ -2142,8 +2347,7 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
       return VK_SUCCESS;
    }
 
-   struct anv_shader_bin *bin = pipeline->shaders[stage];
-   struct anv_pipeline_bind_map *map = &bin->bind_map;
+   struct anv_pipeline_bind_map *map = &pipeline->shaders[stage]->bind_map;
    if (map->surface_count == 0) {
       *bt_state = (struct anv_state) { 0, };
       return VK_SUCCESS;
@@ -2161,17 +2365,21 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
     * softpin then we always keep all user-allocated memory objects resident.
     */
    const bool need_client_mem_relocs =
-      !cmd_buffer->device->instance->physicalDevice.use_softpin;
+      !cmd_buffer->device->physical->use_softpin;
 
    for (uint32_t s = 0; s < map->surface_count; s++) {
       struct anv_pipeline_binding *binding = &map->surface_to_descriptor[s];
 
       struct anv_state surface_state;
 
-      if (binding->set == ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS) {
+      switch (binding->set) {
+      case ANV_DESCRIPTOR_SET_NULL:
+         bt_map[s] = 0;
+         break;
+
+      case ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS:
          /* Color attachment binding */
          assert(stage == MESA_SHADER_FRAGMENT);
-         assert(binding->binding == 0);
          if (binding->index < subpass->color_count) {
             const unsigned att =
                subpass->color_attachments[binding->index].attachment;
@@ -2192,8 +2400,9 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
          }
 
          bt_map[s] = surface_state.offset + state_offset;
-         continue;
-      } else if (binding->set == ANV_DESCRIPTOR_SET_SHADER_CONSTANTS) {
+         break;
+
+      case ANV_DESCRIPTOR_SET_SHADER_CONSTANTS: {
          struct anv_state surface_state =
             anv_cmd_buffer_alloc_surface_state(cmd_buffer);
 
@@ -2212,12 +2421,12 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
 
          bt_map[s] = surface_state.offset + state_offset;
          add_surface_reloc(cmd_buffer, surface_state, constant_data);
-         continue;
-      } else if (binding->set == ANV_DESCRIPTOR_SET_NUM_WORK_GROUPS) {
+         break;
+      }
+
+      case ANV_DESCRIPTOR_SET_NUM_WORK_GROUPS: {
          /* This is always the first binding for compute shaders */
          assert(stage == MESA_SHADER_COMPUTE && s == 0);
-         if (!get_cs_prog_data(pipeline)->uses_num_work_groups)
-            continue;
 
          struct anv_state surface_state =
             anv_cmd_buffer_alloc_surface_state(cmd_buffer);
@@ -2233,47 +2442,35 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             add_surface_reloc(cmd_buffer, surface_state,
                               cmd_buffer->state.compute.num_workgroups);
          }
-         continue;
-      } else if (binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS) {
+         break;
+      }
+
+      case ANV_DESCRIPTOR_SET_DESCRIPTORS: {
          /* This is a descriptor set buffer so the set index is actually
           * given by binding->binding.  (Yes, that's confusing.)
           */
          struct anv_descriptor_set *set =
-            pipe_state->descriptors[binding->binding];
+            pipe_state->descriptors[binding->index];
          assert(set->desc_mem.alloc_size);
          assert(set->desc_surface_state.alloc_size);
          bt_map[s] = set->desc_surface_state.offset + state_offset;
          add_surface_reloc(cmd_buffer, set->desc_surface_state,
                            anv_descriptor_set_address(cmd_buffer, set));
-         continue;
-      }
-
-      const struct anv_descriptor *desc =
-         anv_descriptor_for_binding(pipe_state, binding);
-
-      switch (desc->type) {
-      case VK_DESCRIPTOR_TYPE_SAMPLER:
-         /* Nothing for us to do here */
-         continue;
-
-      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
-         struct anv_surface_state sstate =
-            (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
-            desc->image_view->planes[binding->plane].general_sampler_surface_state :
-            desc->image_view->planes[binding->plane].optimal_sampler_surface_state;
-         surface_state = sstate.state;
-         assert(surface_state.alloc_size);
-         if (need_client_mem_relocs)
-            add_surface_state_relocs(cmd_buffer, sstate);
          break;
       }
-      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-         assert(stage == MESA_SHADER_FRAGMENT);
-         if ((desc->image_view->aspect_mask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0) {
-            /* For depth and stencil input attachments, we treat it like any
-             * old texture that a user may have bound.
-             */
+
+      default: {
+         assert(binding->set < MAX_SETS);
+         const struct anv_descriptor *desc =
+            &pipe_state->descriptors[binding->set]->descriptors[binding->index];
+
+         switch (desc->type) {
+         case VK_DESCRIPTOR_TYPE_SAMPLER:
+            /* Nothing for us to do here */
+            continue;
+
+         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
             struct anv_surface_state sstate =
                (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
                desc->image_view->planes[binding->plane].general_sampler_surface_state :
@@ -2282,117 +2479,106 @@ emit_binding_table(struct anv_cmd_buffer *cmd_buffer,
             assert(surface_state.alloc_size);
             if (need_client_mem_relocs)
                add_surface_state_relocs(cmd_buffer, sstate);
-         } else {
-            /* For color input attachments, we create the surface state at
-             * vkBeginRenderPass time so that we can include aux and clear
-             * color information.
-             */
-            assert(binding->input_attachment_index < subpass->input_count);
-            const unsigned subpass_att = binding->input_attachment_index;
-            const unsigned att = subpass->input_attachments[subpass_att].attachment;
-            surface_state = cmd_buffer->state.attachments[att].input.state;
+            break;
          }
-         break;
+         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            assert(stage == MESA_SHADER_FRAGMENT);
+            if ((desc->image_view->aspect_mask & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0) {
+               /* For depth and stencil input attachments, we treat it like any
+                * old texture that a user may have bound.
+                */
+               assert(desc->image_view->n_planes == 1);
+               struct anv_surface_state sstate =
+                  (desc->layout == VK_IMAGE_LAYOUT_GENERAL) ?
+                  desc->image_view->planes[0].general_sampler_surface_state :
+                  desc->image_view->planes[0].optimal_sampler_surface_state;
+               surface_state = sstate.state;
+               assert(surface_state.alloc_size);
+               if (need_client_mem_relocs)
+                  add_surface_state_relocs(cmd_buffer, sstate);
+            } else {
+               /* For color input attachments, we create the surface state at
+                * vkBeginRenderPass time so that we can include aux and clear
+                * color information.
+                */
+               assert(binding->input_attachment_index < subpass->input_count);
+               const unsigned subpass_att = binding->input_attachment_index;
+               const unsigned att = subpass->input_attachments[subpass_att].attachment;
+               surface_state = cmd_buffer->state.attachments[att].input.state;
+            }
+            break;
 
-      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
-         struct anv_surface_state sstate = (binding->write_only)
-            ? desc->image_view->planes[binding->plane].writeonly_storage_surface_state
-            : desc->image_view->planes[binding->plane].storage_surface_state;
-         surface_state = sstate.state;
-         assert(surface_state.alloc_size);
-         if (need_client_mem_relocs)
-            add_surface_state_relocs(cmd_buffer, sstate);
-         break;
-      }
-
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-         surface_state = desc->buffer_view->surface_state;
-         assert(surface_state.alloc_size);
-         if (need_client_mem_relocs) {
-            add_surface_reloc(cmd_buffer, surface_state,
-                              desc->buffer_view->address);
+         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
+            struct anv_surface_state sstate = (binding->write_only)
+               ? desc->image_view->planes[binding->plane].writeonly_storage_surface_state
+               : desc->image_view->planes[binding->plane].storage_surface_state;
+            surface_state = sstate.state;
+            assert(surface_state.alloc_size);
+            if (need_client_mem_relocs)
+               add_surface_state_relocs(cmd_buffer, sstate);
+            break;
          }
-         break;
 
-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-         /* If the shader never does any UBO pulls (this is a fairly common
-          * case) then we don't need to fill out those binding table entries.
-          * The real cost savings here is that we don't have to build the
-          * surface state for them which is surprisingly expensive when it's
-          * on the hot-path.
-          */
-         if (!bin->prog_data->has_ubo_pull)
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            surface_state = desc->buffer_view->surface_state;
+            assert(surface_state.alloc_size);
+            if (need_client_mem_relocs) {
+               add_surface_reloc(cmd_buffer, surface_state,
+                                 desc->buffer_view->address);
+            }
+            break;
+
+         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
+            /* Compute the offset within the buffer */
+            struct anv_push_constants *push =
+               &cmd_buffer->state.push_constants[stage];
+
+            uint32_t dynamic_offset =
+               push->dynamic_offsets[binding->dynamic_offset_index];
+            uint64_t offset = desc->offset + dynamic_offset;
+            /* Clamp to the buffer size */
+            offset = MIN2(offset, desc->buffer->size);
+            /* Clamp the range to the buffer size */
+            uint32_t range = MIN2(desc->range, desc->buffer->size - offset);
+
+            struct anv_address address =
+               anv_address_add(desc->buffer->address, offset);
+
+            surface_state =
+               anv_state_stream_alloc(&cmd_buffer->surface_state_stream, 64, 64);
+            enum isl_format format =
+               anv_isl_format_for_descriptor_type(desc->type);
+
+            anv_fill_buffer_surface_state(cmd_buffer->device, surface_state,
+                                          format, address, range, 1);
+            if (need_client_mem_relocs)
+               add_surface_reloc(cmd_buffer, surface_state, address);
+            break;
+         }
+
+         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            surface_state = (binding->write_only)
+               ? desc->buffer_view->writeonly_storage_surface_state
+               : desc->buffer_view->storage_surface_state;
+            assert(surface_state.alloc_size);
+            if (need_client_mem_relocs) {
+               add_surface_reloc(cmd_buffer, surface_state,
+                                 desc->buffer_view->address);
+            }
+            break;
+
+         default:
+            assert(!"Invalid descriptor type");
             continue;
-         /* Fall through */
-
-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC: {
-         /* Compute the offset within the buffer */
-         uint32_t dynamic_offset =
-            dynamic_offset_for_binding(pipe_state, binding);
-         uint64_t offset = desc->offset + dynamic_offset;
-         /* Clamp to the buffer size */
-         offset = MIN2(offset, desc->buffer->size);
-         /* Clamp the range to the buffer size */
-         uint32_t range = MIN2(desc->range, desc->buffer->size - offset);
-
-         struct anv_address address =
-            anv_address_add(desc->buffer->address, offset);
-
-         surface_state =
-            anv_state_stream_alloc(&cmd_buffer->surface_state_stream, 64, 64);
-         enum isl_format format =
-            anv_isl_format_for_descriptor_type(desc->type);
-
-         anv_fill_buffer_surface_state(cmd_buffer->device, surface_state,
-                                       format, address, range, 1);
-         if (need_client_mem_relocs)
-            add_surface_reloc(cmd_buffer, surface_state, address);
-         break;
-      }
-
-      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-         surface_state = (binding->write_only)
-            ? desc->buffer_view->writeonly_storage_surface_state
-            : desc->buffer_view->storage_surface_state;
-         assert(surface_state.alloc_size);
-         if (need_client_mem_relocs) {
-            add_surface_reloc(cmd_buffer, surface_state,
-                              desc->buffer_view->address);
          }
+         bt_map[s] = surface_state.offset + state_offset;
          break;
-
-      default:
-         assert(!"Invalid descriptor type");
-         continue;
       }
-
-      bt_map[s] = surface_state.offset + state_offset;
+      }
    }
-
-#if GEN_GEN >= 11
-   /* The PIPE_CONTROL command description says:
-    *
-    *    "Whenever a Binding Table Index (BTI) used by a Render Taget Message
-    *     points to a different RENDER_SURFACE_STATE, SW must issue a Render
-    *     Target Cache Flush by enabling this bit. When render target flush
-    *     is set due to new association of BTI, PS Scoreboard Stall bit must
-    *     be set in this packet."
-    *
-    * FINISHME: Currently we shuffle around the surface states in the binding
-    * table based on if they are getting used or not. So, we've to do below
-    * pipe control flush for every binding table upload. Make changes so
-    * that we do it only when we modify render target surface states.
-    */
-   anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
-      pc.RenderTargetCacheFlushEnable  = true;
-      pc.StallAtPixelScoreboard        = true;
-#if GEN_GEN >= 12
-      pc.TileCacheFlushEnable = true;
-#endif
-   }
-#endif
 
    return VK_SUCCESS;
 }
@@ -2427,7 +2613,7 @@ emit_samplers(struct anv_cmd_buffer *cmd_buffer,
    for (uint32_t s = 0; s < map->sampler_count; s++) {
       struct anv_pipeline_binding *binding = &map->sampler_to_descriptor[s];
       const struct anv_descriptor *desc =
-         anv_descriptor_for_binding(pipe_state, binding);
+         &pipe_state->descriptors[binding->set]->descriptors[binding->index];
 
       if (desc->type != VK_DESCRIPTOR_TYPE_SAMPLER &&
           desc->type != VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
@@ -2449,10 +2635,9 @@ emit_samplers(struct anv_cmd_buffer *cmd_buffer,
 }
 
 static uint32_t
-flush_descriptor_sets(struct anv_cmd_buffer *cmd_buffer)
+flush_descriptor_sets(struct anv_cmd_buffer *cmd_buffer,
+                      struct anv_pipeline *pipeline)
 {
-   struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
-
    VkShaderStageFlags dirty = cmd_buffer->state.descriptors_dirty &
                               pipeline->active_stages;
 
@@ -2545,9 +2730,61 @@ cmd_buffer_emit_descriptor_pointers(struct anv_cmd_buffer *cmd_buffer,
    }
 }
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+static struct anv_address
+get_push_range_address(struct anv_cmd_buffer *cmd_buffer,
+                       gl_shader_stage stage,
+                       const struct anv_push_range *range)
+{
+   const struct anv_cmd_graphics_state *gfx_state = &cmd_buffer->state.gfx;
+   switch (range->set) {
+   case ANV_DESCRIPTOR_SET_DESCRIPTORS: {
+      /* This is a descriptor set buffer so the set index is
+       * actually given by binding->binding.  (Yes, that's
+       * confusing.)
+       */
+      struct anv_descriptor_set *set =
+         gfx_state->base.descriptors[range->index];
+      return anv_descriptor_set_address(cmd_buffer, set);
+      break;
+   }
+
+   case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS: {
+      struct anv_state state =
+         anv_cmd_buffer_push_constants(cmd_buffer, stage);
+      return (struct anv_address) {
+         .bo = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
+         .offset = state.offset,
+      };
+      break;
+   }
+
+   default: {
+      assert(range->set < MAX_SETS);
+      struct anv_descriptor_set *set =
+         gfx_state->base.descriptors[range->set];
+      const struct anv_descriptor *desc =
+         &set->descriptors[range->index];
+
+      if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+         return desc->buffer_view->address;
+      } else {
+         assert(desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+         struct anv_push_constants *push =
+            &cmd_buffer->state.push_constants[stage];
+         uint32_t dynamic_offset =
+            push->dynamic_offsets[range->dynamic_offset_index];
+         return anv_address_add(desc->buffer->address,
+                                desc->offset + dynamic_offset);
+      }
+   }
+   }
+}
+#endif
+
 static void
-cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
-                                VkShaderStageFlags dirty_stages)
+cmd_buffer_emit_push_constant(struct anv_cmd_buffer *cmd_buffer,
+                              gl_shader_stage stage, unsigned buffer_count)
 {
    const struct anv_cmd_graphics_state *gfx_state = &cmd_buffer->state.gfx;
    const struct anv_pipeline *pipeline = gfx_state->base.pipeline;
@@ -2561,145 +2798,184 @@ cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
       [MESA_SHADER_COMPUTE]                     = 0,
    };
 
-   VkShaderStageFlags flushed = 0;
+   assert(stage < ARRAY_SIZE(push_constant_opcodes));
+   assert(push_constant_opcodes[stage] > 0);
 
-   anv_foreach_stage(stage, dirty_stages) {
-      assert(stage < ARRAY_SIZE(push_constant_opcodes));
-      assert(push_constant_opcodes[stage] > 0);
+   anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_VS), c) {
+      c._3DCommandSubOpcode = push_constant_opcodes[stage];
 
-      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_VS), c) {
-         c._3DCommandSubOpcode = push_constant_opcodes[stage];
+      if (anv_pipeline_has_stage(pipeline, stage)) {
+         const struct anv_pipeline_bind_map *bind_map =
+            &pipeline->shaders[stage]->bind_map;
 
-         if (anv_pipeline_has_stage(pipeline, stage)) {
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
-            const struct brw_stage_prog_data *prog_data =
-               pipeline->shaders[stage]->prog_data;
-            const struct anv_pipeline_bind_map *bind_map =
-               &pipeline->shaders[stage]->bind_map;
+         /* The Skylake PRM contains the following restriction:
+          *
+          *    "The driver must ensure The following case does not occur
+          *     without a flush to the 3D engine: 3DSTATE_CONSTANT_* with
+          *     buffer 3 read length equal to zero committed followed by a
+          *     3DSTATE_CONSTANT_* with buffer 0 read length not equal to
+          *     zero committed."
+          *
+          * To avoid this, we program the buffers in the highest slots.
+          * This way, slot 0 is only used if slot 3 is also used.
+          */
+         assert(buffer_count <= 4);
+         const unsigned shift = 4 - buffer_count;
+         for (unsigned i = 0; i < buffer_count; i++) {
+            const struct anv_push_range *range = &bind_map->push_ranges[i];
 
-            /* The Skylake PRM contains the following restriction:
-             *
-             *    "The driver must ensure The following case does not occur
-             *     without a flush to the 3D engine: 3DSTATE_CONSTANT_* with
-             *     buffer 3 read length equal to zero committed followed by a
-             *     3DSTATE_CONSTANT_* with buffer 0 read length not equal to
-             *     zero committed."
-             *
-             * To avoid this, we program the buffers in the highest slots.
-             * This way, slot 0 is only used if slot 3 is also used.
+            /* At this point we only have non-empty ranges */
+            assert(range->length > 0);
+
+            /* For Ivy Bridge, make sure we only set the first range (actual
+             * push constants)
              */
-            int n = 3;
+            assert((GEN_GEN >= 8 || GEN_IS_HASWELL) || i == 0);
 
-            for (int i = 3; i >= 0; i--) {
-               const struct brw_ubo_range *range = &prog_data->ubo_ranges[i];
-               if (range->length == 0)
-                  continue;
-
-               const unsigned surface =
-                  prog_data->binding_table.ubo_start + range->block;
-
-               assert(surface <= bind_map->surface_count);
-               const struct anv_pipeline_binding *binding =
-                  &bind_map->surface_to_descriptor[surface];
-
-               struct anv_address addr;
-               if (binding->set == ANV_DESCRIPTOR_SET_SHADER_CONSTANTS) {
-                  addr = (struct anv_address) {
-                     .bo = pipeline->device->dynamic_state_pool.block_pool.bo,
-                     .offset = pipeline->shaders[stage]->constant_data.offset,
-                  };
-               } else if (binding->set == ANV_DESCRIPTOR_SET_DESCRIPTORS) {
-                  /* This is a descriptor set buffer so the set index is
-                   * actually given by binding->binding.  (Yes, that's
-                   * confusing.)
-                   */
-                  struct anv_descriptor_set *set =
-                     gfx_state->base.descriptors[binding->binding];
-                  addr = anv_descriptor_set_address(cmd_buffer, set);
-               } else {
-                  const struct anv_descriptor *desc =
-                     anv_descriptor_for_binding(&gfx_state->base, binding);
-
-                  if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
-                     addr = desc->buffer_view->address;
-                  } else {
-                     assert(desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
-
-                     uint32_t dynamic_offset =
-                        dynamic_offset_for_binding(&gfx_state->base, binding);
-                     addr = anv_address_add(desc->buffer->address,
-                                            desc->offset + dynamic_offset);
-                  }
-               }
-
-               c.ConstantBody.Buffer[n] =
-                  anv_address_add(addr, range->start * 32);
-               c.ConstantBody.ReadLength[n] = range->length;
-               n--;
-            }
-
-            struct anv_state state =
-               anv_cmd_buffer_push_constants(cmd_buffer, stage);
-
-            if (state.alloc_size > 0) {
-               c.ConstantBody.Buffer[n] = (struct anv_address) {
-                  .bo = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
-                  .offset = state.offset,
-               };
-               c.ConstantBody.ReadLength[n] =
-                  DIV_ROUND_UP(state.alloc_size, 32);
-            }
-#else
-            /* For Ivy Bridge, the push constants packets have a different
-             * rule that would require us to iterate in the other direction
-             * and possibly mess around with dynamic state base address.
-             * Don't bother; just emit regular push constants at n = 0.
-             */
-            struct anv_state state =
-               anv_cmd_buffer_push_constants(cmd_buffer, stage);
-
-            if (state.alloc_size > 0) {
-               c.ConstantBody.Buffer[0].offset = state.offset,
-               c.ConstantBody.ReadLength[0] =
-                  DIV_ROUND_UP(state.alloc_size, 32);
-            }
-#endif
+            const struct anv_address addr =
+               get_push_range_address(cmd_buffer, stage, range);
+            c.ConstantBody.ReadLength[i + shift] = range->length;
+            c.ConstantBody.Buffer[i + shift] =
+               anv_address_add(addr, range->start * 32);
          }
+#else
+         /* For Ivy Bridge, push constants are relative to dynamic state
+          * base address and we only ever push actual push constants.
+          */
+         if (bind_map->push_ranges[0].length > 0) {
+            assert(bind_map->push_ranges[0].set ==
+                   ANV_DESCRIPTOR_SET_PUSH_CONSTANTS);
+            struct anv_state state =
+               anv_cmd_buffer_push_constants(cmd_buffer, stage);
+            c.ConstantBody.ReadLength[0] = bind_map->push_ranges[0].length;
+            c.ConstantBody.Buffer[0].bo = NULL;
+            c.ConstantBody.Buffer[0].offset = state.offset;
+         }
+         assert(bind_map->push_ranges[1].length == 0);
+         assert(bind_map->push_ranges[2].length == 0);
+         assert(bind_map->push_ranges[3].length == 0);
+#endif
       }
-
-      flushed |= mesa_to_vk_shader_stage(stage);
    }
-
-   cmd_buffer->state.push_constants_dirty &= ~flushed;
 }
 
 #if GEN_GEN >= 12
-void
-genX(cmd_buffer_aux_map_state)(struct anv_cmd_buffer *cmd_buffer)
+static void
+cmd_buffer_emit_push_constant_all(struct anv_cmd_buffer *cmd_buffer,
+                                  uint32_t shader_mask, uint32_t count)
 {
-   void *aux_map_ctx = cmd_buffer->device->aux_map_ctx;
-   if (!aux_map_ctx)
+   if (count == 0) {
+      anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_CONSTANT_ALL), c) {
+         c.ShaderUpdateEnable = shader_mask;
+      }
       return;
-   uint32_t aux_map_state_num = gen_aux_map_get_state_num(aux_map_ctx);
-   if (cmd_buffer->state.last_aux_map_state != aux_map_state_num) {
-      /* If the aux-map state number increased, then we need to rewrite the
-       * register. Rewriting the register is used to both set the aux-map
-       * translation table address, and also to invalidate any previously
-       * cached translations.
-       */
-      uint64_t base_addr = gen_aux_map_get_base(aux_map_ctx);
-      anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
-         lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num);
-         lri.DataDWord = base_addr & 0xffffffff;
-      }
-      anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_IMM), lri) {
-         lri.RegisterOffset = GENX(GFX_AUX_TABLE_BASE_ADDR_num) + 4;
-         lri.DataDWord = base_addr >> 32;
-      }
-      cmd_buffer->state.last_aux_map_state = aux_map_state_num;
+   }
+
+   const struct anv_cmd_graphics_state *gfx_state = &cmd_buffer->state.gfx;
+   const struct anv_pipeline *pipeline = gfx_state->base.pipeline;
+
+   static const uint32_t push_constant_opcodes[] = {
+      [MESA_SHADER_VERTEX]                      = 21,
+      [MESA_SHADER_TESS_CTRL]                   = 25, /* HS */
+      [MESA_SHADER_TESS_EVAL]                   = 26, /* DS */
+      [MESA_SHADER_GEOMETRY]                    = 22,
+      [MESA_SHADER_FRAGMENT]                    = 23,
+      [MESA_SHADER_COMPUTE]                     = 0,
+   };
+
+   gl_shader_stage stage = vk_to_mesa_shader_stage(shader_mask);
+   assert(stage < ARRAY_SIZE(push_constant_opcodes));
+   assert(push_constant_opcodes[stage] > 0);
+
+   const struct anv_pipeline_bind_map *bind_map =
+      &pipeline->shaders[stage]->bind_map;
+
+   uint32_t *dw;
+   const uint32_t buffers = (1 << count) - 1;
+   const uint32_t num_dwords = 2 + 2 * count;
+
+   dw = anv_batch_emitn(&cmd_buffer->batch, num_dwords,
+                        GENX(3DSTATE_CONSTANT_ALL),
+                        .ShaderUpdateEnable = shader_mask,
+                        .PointerBufferMask = buffers);
+
+   for (int i = 0; i < count; i++) {
+      const struct anv_push_range *range = &bind_map->push_ranges[i];
+      const struct anv_address addr =
+         get_push_range_address(cmd_buffer, stage, range);
+
+      GENX(3DSTATE_CONSTANT_ALL_DATA_pack)(
+         &cmd_buffer->batch, dw + 2 + i * 2,
+         &(struct GENX(3DSTATE_CONSTANT_ALL_DATA)) {
+            .PointerToConstantBuffer = anv_address_add(addr, range->start * 32),
+            .ConstantBufferReadLength = range->length,
+         });
    }
 }
 #endif
+
+static void
+cmd_buffer_flush_push_constants(struct anv_cmd_buffer *cmd_buffer,
+                                VkShaderStageFlags dirty_stages)
+{
+   VkShaderStageFlags flushed = 0;
+   const struct anv_cmd_graphics_state *gfx_state = &cmd_buffer->state.gfx;
+   const struct anv_pipeline *pipeline = gfx_state->base.pipeline;
+
+#if GEN_GEN >= 12
+   uint32_t nobuffer_stages = 0;
+#endif
+
+   anv_foreach_stage(stage, dirty_stages) {
+      unsigned buffer_count = 0;
+      flushed |= mesa_to_vk_shader_stage(stage);
+      uint32_t max_push_range = 0;
+
+      if (anv_pipeline_has_stage(pipeline, stage)) {
+         const struct anv_pipeline_bind_map *bind_map =
+            &pipeline->shaders[stage]->bind_map;
+
+         for (unsigned i = 0; i < 4; i++) {
+            const struct anv_push_range *range = &bind_map->push_ranges[i];
+            if (range->length > 0) {
+               buffer_count++;
+               if (GEN_GEN >= 12 && range->length > max_push_range)
+                  max_push_range = range->length;
+            }
+         }
+      }
+
+#if GEN_GEN >= 12
+      /* If this stage doesn't have any push constants, emit it later in a
+       * single CONSTANT_ALL packet.
+       */
+      if (buffer_count == 0) {
+         nobuffer_stages |= 1 << stage;
+         continue;
+      }
+
+      /* The Constant Buffer Read Length field from 3DSTATE_CONSTANT_ALL
+       * contains only 5 bits, so we can only use it for buffers smaller than
+       * 32.
+       */
+      if (max_push_range < 32) {
+         cmd_buffer_emit_push_constant_all(cmd_buffer, 1 << stage,
+                                           buffer_count);
+         continue;
+      }
+#endif
+
+      cmd_buffer_emit_push_constant(cmd_buffer, stage, buffer_count);
+   }
+
+#if GEN_GEN >= 12
+   if (nobuffer_stages)
+      cmd_buffer_emit_push_constant_all(cmd_buffer, nobuffer_stages, 0);
+#endif
+
+   cmd_buffer->state.push_constants_dirty &= ~flushed;
+}
 
 void
 genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
@@ -2718,10 +2994,6 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
    genX(cmd_buffer_emit_hashing_mode)(cmd_buffer, UINT_MAX, UINT_MAX, 1);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
-
-#if GEN_GEN >= 12
-   genX(cmd_buffer_aux_map_state)(cmd_buffer);
-#endif
 
    if (vb_emit) {
       const uint32_t num_buffers = __builtin_popcount(vb_emit);
@@ -2754,6 +3026,12 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 #endif
          };
 
+#if GEN_GEN >= 8 && GEN_GEN <= 9
+         genX(cmd_buffer_set_binding_for_gen8_vb_flush)(cmd_buffer, vb,
+                                                        state.BufferStartingAddress,
+                                                        state.BufferSize);
+#endif
+
          GENX(VERTEX_BUFFER_STATE_pack)(&cmd_buffer->batch, &p[1 + i * 4], &state);
          i++;
       }
@@ -2778,7 +3056,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 
             if (cmd_buffer->state.xfb_enabled && xfb->buffer && xfb->size != 0) {
                sob.SOBufferEnable = true;
-               sob.MOCS = cmd_buffer->device->default_mocs,
+               sob.MOCS = cmd_buffer->device->isl_dev.mocs.internal,
                sob.StreamOffsetWriteEnable = false;
                sob.SurfaceBaseAddress = anv_address_add(xfb->buffer->address,
                                                         xfb->offset);
@@ -2796,11 +3074,6 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
 
    if (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) {
       anv_batch_emit_batch(&cmd_buffer->batch, &pipeline->batch);
-
-      /* The exact descriptor layout is pulled from the pipeline, so we need
-       * to re-emit binding tables on every pipeline change.
-       */
-      cmd_buffer->state.descriptors_dirty |= pipeline->active_stages;
 
       /* If the pipeline changed, we may need to re-allocate push constant
        * space in the URB.
@@ -2825,7 +3098,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
          pc.DepthStallEnable  = true;
          pc.PostSyncOperation = WriteImmediateData;
          pc.Address           =
-            (struct anv_address) { &cmd_buffer->device->workaround_bo, 0 };
+            (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
       }
    }
 #endif
@@ -2843,7 +3116,7 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
     */
    uint32_t dirty = 0;
    if (cmd_buffer->state.descriptors_dirty)
-      dirty = flush_descriptor_sets(cmd_buffer);
+      dirty = flush_descriptor_sets(cmd_buffer, pipeline);
 
    if (dirty || cmd_buffer->state.push_constants_dirty) {
       /* Because we're pushing UBOs, we have to push whenever either
@@ -2871,8 +3144,6 @@ genX(cmd_buffer_flush_state)(struct anv_cmd_buffer *cmd_buffer)
       gen7_cmd_buffer_emit_scissor(cmd_buffer);
 
    genX(cmd_buffer_flush_dynamic_state)(cmd_buffer);
-
-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 }
 
 static void
@@ -2888,7 +3159,8 @@ emit_vertex_bo(struct anv_cmd_buffer *cmd_buffer,
          .VertexBufferIndex = index,
          .AddressModifyEnable = true,
          .BufferPitch = 0,
-         .MOCS = anv_mocs_for_bo(cmd_buffer->device, addr.bo),
+         .MOCS = addr.bo ? anv_mocs_for_bo(cmd_buffer->device, addr.bo) : 0,
+         .NullVertexBuffer = size == 0,
 #if (GEN_GEN >= 8)
          .BufferStartingAddress = addr,
          .BufferSize = size
@@ -2897,31 +3169,38 @@ emit_vertex_bo(struct anv_cmd_buffer *cmd_buffer,
          .EndAddress = anv_address_add(addr, size),
 #endif
       });
+
+   genX(cmd_buffer_set_binding_for_gen8_vb_flush)(cmd_buffer,
+                                                  index, addr, size);
 }
 
 static void
 emit_base_vertex_instance_bo(struct anv_cmd_buffer *cmd_buffer,
                              struct anv_address addr)
 {
-   emit_vertex_bo(cmd_buffer, addr, 8, ANV_SVGS_VB_INDEX);
+   emit_vertex_bo(cmd_buffer, addr, addr.bo ? 8 : 0, ANV_SVGS_VB_INDEX);
 }
 
 static void
 emit_base_vertex_instance(struct anv_cmd_buffer *cmd_buffer,
                           uint32_t base_vertex, uint32_t base_instance)
 {
-   struct anv_state id_state =
-      anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, 8, 4);
+   if (base_vertex == 0 && base_instance == 0) {
+      emit_base_vertex_instance_bo(cmd_buffer, ANV_NULL_ADDRESS);
+   } else {
+      struct anv_state id_state =
+         anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, 8, 4);
 
-   ((uint32_t *)id_state.map)[0] = base_vertex;
-   ((uint32_t *)id_state.map)[1] = base_instance;
+      ((uint32_t *)id_state.map)[0] = base_vertex;
+      ((uint32_t *)id_state.map)[1] = base_instance;
 
-   struct anv_address addr = {
-      .bo = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
-      .offset = id_state.offset,
-   };
+      struct anv_address addr = {
+         .bo = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
+         .offset = id_state.offset,
+      };
 
-   emit_base_vertex_instance_bo(cmd_buffer, addr);
+      emit_base_vertex_instance_bo(cmd_buffer, addr);
+   }
 }
 
 static void
@@ -2938,6 +3217,25 @@ emit_draw_index(struct anv_cmd_buffer *cmd_buffer, uint32_t draw_index)
    };
 
    emit_vertex_bo(cmd_buffer, addr, 4, ANV_DRAWID_VB_INDEX);
+}
+
+static void
+update_dirty_vbs_for_gen8_vb_flush(struct anv_cmd_buffer *cmd_buffer,
+                                   uint32_t access_type)
+{
+   struct anv_pipeline *pipeline = cmd_buffer->state.gfx.base.pipeline;
+   const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
+
+   uint64_t vb_used = pipeline->vb_used;
+   if (vs_prog_data->uses_firstvertex ||
+       vs_prog_data->uses_baseinstance)
+      vb_used |= 1ull << ANV_SVGS_VB_INDEX;
+   if (vs_prog_data->uses_drawid)
+      vb_used |= 1ull << ANV_DRAWID_VB_INDEX;
+
+   genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(cmd_buffer,
+                                                       access_type == RANDOM,
+                                                       vb_used);
 }
 
 void genX(CmdDraw)(
@@ -2965,6 +3263,11 @@ void genX(CmdDraw)(
    if (vs_prog_data->uses_drawid)
       emit_draw_index(cmd_buffer, 0);
 
+   /* Emitting draw index or vertex index BOs may result in needing
+    * additional VF cache flushes.
+    */
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
    /* Our implementation of VK_KHR_multiview uses instancing to draw the
     * different views.  We need to multiply instanceCount by the view count.
     */
@@ -2980,6 +3283,8 @@ void genX(CmdDraw)(
       prim.StartInstanceLocation    = firstInstance;
       prim.BaseVertexLocation       = 0;
    }
+
+   update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
 }
 
 void genX(CmdDrawIndexed)(
@@ -3008,6 +3313,11 @@ void genX(CmdDrawIndexed)(
    if (vs_prog_data->uses_drawid)
       emit_draw_index(cmd_buffer, 0);
 
+   /* Emitting draw index or vertex index BOs may result in needing
+    * additional VF cache flushes.
+    */
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
    /* Our implementation of VK_KHR_multiview uses instancing to draw the
     * different views.  We need to multiply instanceCount by the view count.
     */
@@ -3023,6 +3333,8 @@ void genX(CmdDrawIndexed)(
       prim.StartInstanceLocation    = firstInstance;
       prim.BaseVertexLocation       = vertexOffset;
    }
+
+   update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, RANDOM);
 }
 
 /* Auto-Draw / Indirect Registers */
@@ -3062,6 +3374,11 @@ void genX(CmdDrawIndirectByteCountEXT)(
    if (vs_prog_data->uses_drawid)
       emit_draw_index(cmd_buffer, 0);
 
+   /* Emitting draw index or vertex index BOs may result in needing
+    * additional VF cache flushes.
+    */
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
    /* Our implementation of VK_KHR_multiview uses instancing to draw the
     * different views.  We need to multiply instanceCount by the view count.
     */
@@ -3090,6 +3407,8 @@ void genX(CmdDrawIndirectByteCountEXT)(
       prim.VertexAccessType         = SEQUENTIAL;
       prim.PrimitiveTopologyType    = pipeline->topology;
    }
+
+   update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
 #endif /* GEN_IS_HASWELL || GEN_GEN >= 8 */
 }
 
@@ -3160,6 +3479,11 @@ void genX(CmdDrawIndirect)(
       if (vs_prog_data->uses_drawid)
          emit_draw_index(cmd_buffer, i);
 
+      /* Emitting draw index or vertex index BOs may result in needing
+       * additional VF cache flushes.
+       */
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       load_indirect_parameters(cmd_buffer, draw, false);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
@@ -3168,6 +3492,8 @@ void genX(CmdDrawIndirect)(
          prim.VertexAccessType         = SEQUENTIAL;
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
+
+      update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
 
       offset += stride;
    }
@@ -3203,6 +3529,11 @@ void genX(CmdDrawIndexedIndirect)(
       if (vs_prog_data->uses_drawid)
          emit_draw_index(cmd_buffer, i);
 
+      /* Emitting draw index or vertex index BOs may result in needing
+       * additional VF cache flushes.
+       */
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       load_indirect_parameters(cmd_buffer, draw, true);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
@@ -3211,6 +3542,8 @@ void genX(CmdDrawIndexedIndirect)(
          prim.VertexAccessType         = RANDOM;
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
+
+      update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, RANDOM);
 
       offset += stride;
    }
@@ -3306,7 +3639,7 @@ emit_draw_count_predicate_with_conditional_render(
 }
 #endif
 
-void genX(CmdDrawIndirectCountKHR)(
+void genX(CmdDrawIndirectCount)(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    _buffer,
     VkDeviceSize                                offset,
@@ -3352,6 +3685,11 @@ void genX(CmdDrawIndirectCountKHR)(
       if (vs_prog_data->uses_drawid)
          emit_draw_index(cmd_buffer, i);
 
+      /* Emitting draw index or vertex index BOs may result in needing
+       * additional VF cache flushes.
+       */
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       load_indirect_parameters(cmd_buffer, draw, false);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
@@ -3361,11 +3699,13 @@ void genX(CmdDrawIndirectCountKHR)(
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
 
+      update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, SEQUENTIAL);
+
       offset += stride;
    }
 }
 
-void genX(CmdDrawIndexedIndirectCountKHR)(
+void genX(CmdDrawIndexedIndirectCount)(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    _buffer,
     VkDeviceSize                                offset,
@@ -3412,6 +3752,11 @@ void genX(CmdDrawIndexedIndirectCountKHR)(
       if (vs_prog_data->uses_drawid)
          emit_draw_index(cmd_buffer, i);
 
+      /* Emitting draw index or vertex index BOs may result in needing
+       * additional VF cache flushes.
+       */
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       load_indirect_parameters(cmd_buffer, draw, true);
 
       anv_batch_emit(&cmd_buffer->batch, GENX(3DPRIMITIVE), prim) {
@@ -3420,6 +3765,8 @@ void genX(CmdDrawIndexedIndirectCountKHR)(
          prim.VertexAccessType         = RANDOM;
          prim.PrimitiveTopologyType    = pipeline->topology;
       }
+
+      update_dirty_vbs_for_gen8_vb_flush(cmd_buffer, RANDOM);
 
       offset += stride;
    }
@@ -3526,77 +3873,16 @@ void genX(CmdEndTransformFeedbackEXT)(
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_XFB_ENABLE;
 }
 
-static VkResult
-flush_compute_descriptor_set(struct anv_cmd_buffer *cmd_buffer)
-{
-   struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
-   struct anv_state surfaces = { 0, }, samplers = { 0, };
-   VkResult result;
-
-   result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
-   if (result != VK_SUCCESS) {
-      assert(result == VK_ERROR_OUT_OF_DEVICE_MEMORY);
-
-      result = anv_cmd_buffer_new_binding_table_block(cmd_buffer);
-      if (result != VK_SUCCESS)
-         return result;
-
-      /* Re-emit state base addresses so we get the new surface state base
-       * address before we start emitting binding tables etc.
-       */
-      genX(cmd_buffer_emit_state_base_address)(cmd_buffer);
-
-      result = emit_binding_table(cmd_buffer, MESA_SHADER_COMPUTE, &surfaces);
-      if (result != VK_SUCCESS) {
-         anv_batch_set_error(&cmd_buffer->batch, result);
-         return result;
-      }
-   }
-
-   result = emit_samplers(cmd_buffer, MESA_SHADER_COMPUTE, &samplers);
-   if (result != VK_SUCCESS) {
-      anv_batch_set_error(&cmd_buffer->batch, result);
-      return result;
-   }
-
-   uint32_t iface_desc_data_dw[GENX(INTERFACE_DESCRIPTOR_DATA_length)];
-   struct GENX(INTERFACE_DESCRIPTOR_DATA) desc = {
-      .BindingTablePointer = surfaces.offset,
-      .SamplerStatePointer = samplers.offset,
-   };
-   GENX(INTERFACE_DESCRIPTOR_DATA_pack)(NULL, iface_desc_data_dw, &desc);
-
-   struct anv_state state =
-      anv_cmd_buffer_merge_dynamic(cmd_buffer, iface_desc_data_dw,
-                                   pipeline->interface_descriptor_data,
-                                   GENX(INTERFACE_DESCRIPTOR_DATA_length),
-                                   64);
-
-   uint32_t size = GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t);
-   anv_batch_emit(&cmd_buffer->batch,
-                  GENX(MEDIA_INTERFACE_DESCRIPTOR_LOAD), mid) {
-      mid.InterfaceDescriptorTotalLength        = size;
-      mid.InterfaceDescriptorDataStartAddress   = state.offset;
-   }
-
-   return VK_SUCCESS;
-}
-
 void
 genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_pipeline *pipeline = cmd_buffer->state.compute.base.pipeline;
-   VkResult result;
 
    assert(pipeline->active_stages == VK_SHADER_STAGE_COMPUTE_BIT);
 
    genX(cmd_buffer_config_l3)(cmd_buffer, pipeline->urb.l3_config);
 
    genX(flush_pipeline_select_gpgpu)(cmd_buffer);
-
-#if GEN_GEN >= 12
-   genX(cmd_buffer_aux_map_state)(cmd_buffer);
-#endif
 
    if (cmd_buffer->state.compute.pipeline_dirty) {
       /* From the Sky Lake PRM Vol 2a, MEDIA_VFE_STATE:
@@ -3611,16 +3897,38 @@ genX(cmd_buffer_flush_compute_state)(struct anv_cmd_buffer *cmd_buffer)
       genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
       anv_batch_emit_batch(&cmd_buffer->batch, &pipeline->batch);
+
+      /* The workgroup size of the pipeline affects our push constant layout
+       * so flag push constants as dirty if we change the pipeline.
+       */
+      cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
    }
 
    if ((cmd_buffer->state.descriptors_dirty & VK_SHADER_STAGE_COMPUTE_BIT) ||
        cmd_buffer->state.compute.pipeline_dirty) {
-      /* FIXME: figure out descriptors for gen7 */
-      result = flush_compute_descriptor_set(cmd_buffer);
-      if (result != VK_SUCCESS)
-         return;
+      flush_descriptor_sets(cmd_buffer, pipeline);
 
-      cmd_buffer->state.descriptors_dirty &= ~VK_SHADER_STAGE_COMPUTE_BIT;
+      uint32_t iface_desc_data_dw[GENX(INTERFACE_DESCRIPTOR_DATA_length)];
+      struct GENX(INTERFACE_DESCRIPTOR_DATA) desc = {
+         .BindingTablePointer =
+            cmd_buffer->state.binding_tables[MESA_SHADER_COMPUTE].offset,
+         .SamplerStatePointer =
+            cmd_buffer->state.samplers[MESA_SHADER_COMPUTE].offset,
+      };
+      GENX(INTERFACE_DESCRIPTOR_DATA_pack)(NULL, iface_desc_data_dw, &desc);
+
+      struct anv_state state =
+         anv_cmd_buffer_merge_dynamic(cmd_buffer, iface_desc_data_dw,
+                                      pipeline->interface_descriptor_data,
+                                      GENX(INTERFACE_DESCRIPTOR_DATA_length),
+                                      64);
+
+      uint32_t size = GENX(INTERFACE_DESCRIPTOR_DATA_length) * sizeof(uint32_t);
+      anv_batch_emit(&cmd_buffer->batch,
+                     GENX(MEDIA_INTERFACE_DESCRIPTOR_LOAD), mid) {
+         mid.InterfaceDescriptorTotalLength        = size;
+         mid.InterfaceDescriptorDataStartAddress   = state.offset;
+      }
    }
 
    if (cmd_buffer->state.push_constants_dirty & VK_SHADER_STAGE_COMPUTE_BIT) {
@@ -3649,8 +3957,8 @@ verify_cmd_parser(const struct anv_device *device,
                   int required_version,
                   const char *function)
 {
-   if (device->instance->physicalDevice.cmd_parser_version < required_version) {
-      return vk_errorf(device->instance, device->instance,
+   if (device->physical->cmd_parser_version < required_version) {
+      return vk_errorf(device, device->physical,
                        VK_ERROR_FEATURE_NOT_PRESENT,
                        "cmd parser version %d is required for %s",
                        required_version, function);
@@ -3672,12 +3980,12 @@ anv_cmd_buffer_push_base_group_id(struct anv_cmd_buffer *cmd_buffer,
 
    struct anv_push_constants *push =
       &cmd_buffer->state.push_constants[MESA_SHADER_COMPUTE];
-   if (push->base_work_group_id[0] != baseGroupX ||
-       push->base_work_group_id[1] != baseGroupY ||
-       push->base_work_group_id[2] != baseGroupZ) {
-      push->base_work_group_id[0] = baseGroupX;
-      push->base_work_group_id[1] = baseGroupY;
-      push->base_work_group_id[2] = baseGroupZ;
+   if (push->cs.base_work_group_id[0] != baseGroupX ||
+       push->cs.base_work_group_id[1] != baseGroupY ||
+       push->cs.base_work_group_id[2] != baseGroupZ) {
+      push->cs.base_work_group_id[0] = baseGroupX;
+      push->cs.base_work_group_id[1] = baseGroupY;
+      push->cs.base_work_group_id[2] = baseGroupZ;
 
       cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
    }
@@ -3893,7 +4201,7 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
        * really know why.
        */
       const uint32_t subslices =
-         MAX2(cmd_buffer->device->instance->physicalDevice.subslice_total, 1);
+         MAX2(cmd_buffer->device->physical->subslice_total, 1);
       anv_batch_emit(&cmd_buffer->batch, GENX(MEDIA_VFE_STATE), vfe) {
          vfe.MaximumNumberofThreads =
             devinfo->max_cs_threads * subslices - 1;
@@ -3928,6 +4236,11 @@ genX(flush_pipeline_select)(struct anv_cmd_buffer *cmd_buffer,
       pc.CommandStreamerStallEnable    = true;
 #if GEN_GEN >= 12
       pc.TileCacheFlushEnable = true;
+
+      /* GEN:BUG:1409600907: "PIPE_CONTROL with Depth Stall Enable bit must be
+       * set with any PIPE_CONTROL with Depth Flush Enable bit set.
+       */
+      pc.DepthStallEnable = true;
 #endif
    }
 
@@ -4012,6 +4325,120 @@ genX(cmd_buffer_emit_gen7_depth_flush)(struct anv_cmd_buffer *cmd_buffer)
    }
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
       pipe.DepthStallEnable = true;
+   }
+}
+
+/* From the Skylake PRM, 3DSTATE_VERTEX_BUFFERS:
+ *
+ *    "The VF cache needs to be invalidated before binding and then using
+ *    Vertex Buffers that overlap with any previously bound Vertex Buffer
+ *    (at a 64B granularity) since the last invalidation.  A VF cache
+ *    invalidate is performed by setting the "VF Cache Invalidation Enable"
+ *    bit in PIPE_CONTROL."
+ *
+ * This is implemented by carefully tracking all vertex and index buffer
+ * bindings and flushing if the cache ever ends up with a range in the cache
+ * that would exceed 4 GiB.  This is implemented in three parts:
+ *
+ *    1. genX(cmd_buffer_set_binding_for_gen8_vb_flush)() which must be called
+ *       every time a 3DSTATE_VERTEX_BUFFER packet is emitted and informs the
+ *       tracking code of the new binding.  If this new binding would cause
+ *       the cache to have a too-large range on the next draw call, a pipeline
+ *       stall and VF cache invalidate are added to pending_pipeline_bits.
+ *
+ *    2. genX(cmd_buffer_apply_pipe_flushes)() resets the cache tracking to
+ *       empty whenever we emit a VF invalidate.
+ *
+ *    3. genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)() must be called
+ *       after every 3DPRIMITIVE and copies the bound range into the dirty
+ *       range for each used buffer.  This has to be a separate step because
+ *       we don't always re-bind all buffers and so 1. can't know which
+ *       buffers are actually bound.
+ */
+void
+genX(cmd_buffer_set_binding_for_gen8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
+                                               int vb_index,
+                                               struct anv_address vb_address,
+                                               uint32_t vb_size)
+{
+   if (GEN_GEN < 8 || GEN_GEN > 9 ||
+       !cmd_buffer->device->physical->use_softpin)
+      return;
+
+   struct anv_vb_cache_range *bound, *dirty;
+   if (vb_index == -1) {
+      bound = &cmd_buffer->state.gfx.ib_bound_range;
+      dirty = &cmd_buffer->state.gfx.ib_dirty_range;
+   } else {
+      assert(vb_index >= 0);
+      assert(vb_index < ARRAY_SIZE(cmd_buffer->state.gfx.vb_bound_ranges));
+      assert(vb_index < ARRAY_SIZE(cmd_buffer->state.gfx.vb_dirty_ranges));
+      bound = &cmd_buffer->state.gfx.vb_bound_ranges[vb_index];
+      dirty = &cmd_buffer->state.gfx.vb_dirty_ranges[vb_index];
+   }
+
+   if (vb_size == 0) {
+      bound->start = 0;
+      bound->end = 0;
+      return;
+   }
+
+   assert(vb_address.bo && (vb_address.bo->flags & EXEC_OBJECT_PINNED));
+   bound->start = gen_48b_address(anv_address_physical(vb_address));
+   bound->end = bound->start + vb_size;
+   assert(bound->end > bound->start); /* No overflow */
+
+   /* Align everything to a cache line */
+   bound->start &= ~(64ull - 1ull);
+   bound->end = align_u64(bound->end, 64);
+
+   /* Compute the dirty range */
+   dirty->start = MIN2(dirty->start, bound->start);
+   dirty->end = MAX2(dirty->end, bound->end);
+
+   /* If our range is larger than 32 bits, we have to flush */
+   assert(bound->end - bound->start <= (1ull << 32));
+   if (dirty->end - dirty->start > (1ull << 32)) {
+      cmd_buffer->state.pending_pipe_bits |=
+         ANV_PIPE_CS_STALL_BIT | ANV_PIPE_VF_CACHE_INVALIDATE_BIT;
+   }
+}
+
+void
+genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(struct anv_cmd_buffer *cmd_buffer,
+                                                    uint32_t access_type,
+                                                    uint64_t vb_used)
+{
+   if (GEN_GEN < 8 || GEN_GEN > 9 ||
+       !cmd_buffer->device->physical->use_softpin)
+      return;
+
+   if (access_type == RANDOM) {
+      /* We have an index buffer */
+      struct anv_vb_cache_range *bound = &cmd_buffer->state.gfx.ib_bound_range;
+      struct anv_vb_cache_range *dirty = &cmd_buffer->state.gfx.ib_dirty_range;
+
+      if (bound->end > bound->start) {
+         dirty->start = MIN2(dirty->start, bound->start);
+         dirty->end = MAX2(dirty->end, bound->end);
+      }
+   }
+
+   uint64_t mask = vb_used;
+   while (mask) {
+      int i = u_bit_scan64(&mask);
+      assert(i >= 0);
+      assert(i < ARRAY_SIZE(cmd_buffer->state.gfx.vb_bound_ranges));
+      assert(i < ARRAY_SIZE(cmd_buffer->state.gfx.vb_dirty_ranges));
+
+      struct anv_vb_cache_range *bound, *dirty;
+      bound = &cmd_buffer->state.gfx.vb_bound_ranges[i];
+      dirty = &cmd_buffer->state.gfx.vb_dirty_ranges[i];
+
+      if (bound->end > bound->start) {
+         dirty->start = MIN2(dirty->start, bound->start);
+         dirty->end = MAX2(dirty->end, bound->end);
+      }
    }
 }
 
@@ -4181,6 +4608,20 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
 
    isl_emit_depth_stencil_hiz_s(&device->isl_dev, dw, &info);
 
+   if (GEN_GEN >= 12) {
+      /* GEN:BUG:1408224581
+       *
+       * Workaround: Gen12LP Astep only An additional pipe control with
+       * post-sync = store dword operation would be required.( w/a is to
+       * have an additional pipe control after the stencil state whenever
+       * the surface state bits of this state is changing).
+       */
+      anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
+         pc.PostSyncOperation = WriteImmediateData;
+         pc.Address =
+            (struct anv_address) { cmd_buffer->device->workaround_bo, 0 };
+      }
+   }
    cmd_buffer->state.hiz_enabled = info.hiz_usage == ISL_AUX_USAGE_HIZ;
 }
 
@@ -4291,6 +4732,9 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
          target_layout = subpass->attachments[i].layout;
       }
 
+      VkImageLayout target_stencil_layout =
+         subpass->attachments[i].stencil_layout;
+
       uint32_t base_layer, layer_count;
       if (image->type == VK_IMAGE_TYPE_3D) {
          base_layer = 0;
@@ -4314,16 +4758,20 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
                                  att_state->current_layout, target_layout);
          att_state->aux_usage =
             anv_layout_to_aux_usage(&cmd_buffer->device->info, image,
-                                    VK_IMAGE_ASPECT_DEPTH_BIT, target_layout);
+                                    VK_IMAGE_ASPECT_DEPTH_BIT,
+                                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                    target_layout);
       }
 
       if (image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
          transition_stencil_buffer(cmd_buffer, image,
                                    iview->planes[0].isl.base_level, 1,
                                    base_layer, layer_count,
-                                   att_state->current_layout, target_layout);
+                                   att_state->current_stencil_layout,
+                                   target_stencil_layout);
       }
       att_state->current_layout = target_layout;
+      att_state->current_stencil_layout = target_stencil_layout;
 
       if (att_state->pending_clear_aspects & VK_IMAGE_ASPECT_COLOR_BIT) {
          assert(att_state->pending_clear_aspects == VK_IMAGE_ASPECT_COLOR_BIT);
@@ -4475,7 +4923,7 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
 
       if (GEN_GEN < 10 &&
           (att_state->pending_load_aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) &&
-          image->planes[0].aux_surface.isl.size_B > 0 &&
+          image->planes[0].aux_usage != ISL_AUX_USAGE_NONE &&
           iview->planes[0].isl.base_level == 0 &&
           iview->planes[0].isl.base_array_layer == 0) {
          if (att_state->aux_usage != ISL_AUX_USAGE_NONE) {
@@ -4548,6 +4996,20 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer_emit_depth_stencil(cmd_buffer);
+
+#if GEN_GEN >= 11
+   /* The PIPE_CONTROL command description says:
+    *
+    *    "Whenever a Binding Table Index (BTI) used by a Render Taget Message
+    *     points to a different RENDER_SURFACE_STATE, SW must issue a Render
+    *     Target Cache Flush by enabling this bit. When render target flush
+    *     is set due to new association of BTI, PS Scoreboard Stall bit must
+    *     be set in this packet."
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+      ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+#endif
 }
 
 static enum blorp_filter
@@ -4665,13 +5127,13 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
 
       const VkRect2D render_area = cmd_buffer->state.render_area;
 
+      struct anv_attachment_state *src_state =
+         &cmd_state->attachments[src_att];
+      struct anv_attachment_state *dst_state =
+         &cmd_state->attachments[dst_att];
+
       if ((src_iview->image->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
           subpass->depth_resolve_mode != VK_RESOLVE_MODE_NONE_KHR) {
-
-         struct anv_attachment_state *src_state =
-            &cmd_state->attachments[src_att];
-         struct anv_attachment_state *dst_state =
-            &cmd_state->attachments[dst_att];
 
          /* MSAA resolves sample from the source attachment.  Transition the
           * depth attachment first to get rid of any HiZ that we may not be
@@ -4679,12 +5141,13 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
           */
          transition_depth_buffer(cmd_buffer, src_iview->image,
                                  src_state->current_layout,
-                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
          src_state->aux_usage =
             anv_layout_to_aux_usage(&cmd_buffer->device->info, src_iview->image,
                                     VK_IMAGE_ASPECT_DEPTH_BIT,
-                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-         src_state->current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+         src_state->current_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 
          /* MSAA resolves write to the resolve attachment as if it were any
           * other transfer op.  Transition the resolve attachment accordingly.
@@ -4707,6 +5170,7 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
          dst_state->aux_usage =
             anv_layout_to_aux_usage(&cmd_buffer->device->info, dst_iview->image,
                                     VK_IMAGE_ASPECT_DEPTH_BIT,
+                                    VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
          dst_state->current_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
@@ -4730,6 +5194,9 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
 
       if ((src_iview->image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
           subpass->stencil_resolve_mode != VK_RESOLVE_MODE_NONE_KHR) {
+
+         src_state->current_stencil_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+         dst_state->current_stencil_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
          enum isl_aux_usage src_aux_usage = ISL_AUX_USAGE_NONE;
          enum isl_aux_usage dst_aux_usage = ISL_AUX_USAGE_NONE;
@@ -4756,18 +5223,19 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
 #if GEN_GEN == 7
    /* On gen7, we have to store a texturable version of the stencil buffer in
     * a shadow whenever VK_IMAGE_USAGE_SAMPLED_BIT is set and copy back and
-    * forth at strategic points.  Stencil writes are only allowed in three
+    * forth at strategic points. Stencil writes are only allowed in following
     * layouts:
     *
     *  - VK_IMAGE_LAYOUT_GENERAL
     *  - VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
     *  - VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
     *  - VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+    *  - VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR
     *
     * For general, we have no nice opportunity to transition so we do the copy
-    * to the shadow unconditionally at the end of the subpass.  For transfer
-    * destinations, we can update it as part of the transfer op.  For the
-    * other two, we delay the copy until a transition into some other layout.
+    * to the shadow unconditionally at the end of the subpass. For transfer
+    * destinations, we can update it as part of the transfer op. For the other
+    * layouts, we delay the copy until a transition into some other layout.
     */
    if (subpass->depth_stencil_attachment) {
       uint32_t a = subpass->depth_stencil_attachment->attachment;
@@ -4782,7 +5250,7 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
                                                     VK_IMAGE_ASPECT_STENCIL_BIT);
 
          if (image->planes[plane].shadow_surface.isl.size_B > 0 &&
-             att_state->current_layout == VK_IMAGE_LAYOUT_GENERAL) {
+             att_state->current_stencil_layout == VK_IMAGE_LAYOUT_GENERAL) {
             assert(image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT);
             anv_image_copy_to_shadow(cmd_buffer, image,
                                      VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -4820,7 +5288,7 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
           * SRGB view & a UNORM image).
           */
          if (fast_clear_type != ANV_FAST_CLEAR_NONE) {
-            anv_perf_warn(cmd_buffer->device->instance, iview,
+            anv_perf_warn(cmd_buffer->device, iview,
                           "Doing a partial resolve to get rid of clear color at the "
                           "end of a renderpass due to an image/view format mismatch");
 
@@ -4859,6 +5327,8 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
       /* Transition the image into the final layout for this render pass */
       VkImageLayout target_layout =
          cmd_state->pass->attachments[a].final_layout;
+      VkImageLayout target_stencil_layout =
+         cmd_state->pass->attachments[a].stencil_final_layout;
 
       uint32_t base_layer, layer_count;
       if (image->type == VK_IMAGE_TYPE_3D) {
@@ -4887,7 +5357,8 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
          transition_stencil_buffer(cmd_buffer, image,
                                    iview->planes[0].isl.base_level, 1,
                                    base_layer, layer_count,
-                                   att_state->current_layout, target_layout);
+                                   att_state->current_stencil_layout,
+                                   target_stencil_layout);
       }
    }
 
@@ -4926,7 +5397,7 @@ void genX(CmdBeginRenderPass)(
    cmd_buffer_begin_subpass(cmd_buffer, 0);
 }
 
-void genX(CmdBeginRenderPass2KHR)(
+void genX(CmdBeginRenderPass2)(
     VkCommandBuffer                             commandBuffer,
     const VkRenderPassBeginInfo*                pRenderPassBeginInfo,
     const VkSubpassBeginInfoKHR*                pSubpassBeginInfo)
@@ -4951,7 +5422,7 @@ void genX(CmdNextSubpass)(
    cmd_buffer_begin_subpass(cmd_buffer, prev_subpass + 1);
 }
 
-void genX(CmdNextSubpass2KHR)(
+void genX(CmdNextSubpass2)(
     VkCommandBuffer                             commandBuffer,
     const VkSubpassBeginInfoKHR*                pSubpassBeginInfo,
     const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
@@ -4983,7 +5454,7 @@ void genX(CmdEndRenderPass)(
    cmd_buffer->state.subpass = NULL;
 }
 
-void genX(CmdEndRenderPass2KHR)(
+void genX(CmdEndRenderPass2)(
     VkCommandBuffer                             commandBuffer,
     const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
 {

@@ -70,7 +70,7 @@
 #include "util/u_upload_mgr.h"
 #include "pipe/p_shader_tokens.h"
 #include "util/u_tile.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_sampler.h"
 #include "util/u_math.h"
@@ -226,6 +226,18 @@ st_FreeTextureImageBuffer(struct gl_context *ctx,
    st_texture_release_all_sampler_views(st, stObj);
 }
 
+bool
+st_astc_format_fallback(const struct st_context *st, mesa_format format)
+{
+   if (!_mesa_is_format_astc_2d(format))
+      return false;
+
+   if (format == MESA_FORMAT_RGBA_ASTC_5x5 ||
+       format == MESA_FORMAT_SRGB8_ALPHA8_ASTC_5x5)
+      return !st->has_astc_5x5_ldr;
+
+   return !st->has_astc_2d_ldr;
+}
 
 bool
 st_compressed_format_fallback(struct st_context *st, mesa_format format)
@@ -236,8 +248,8 @@ st_compressed_format_fallback(struct st_context *st, mesa_format format)
    if (_mesa_is_format_etc2(format))
       return !st->has_etc2;
 
-   if (_mesa_is_format_astc_2d(format))
-      return !st->has_astc_2d_ldr;
+   if (st_astc_format_fallback(st, format))
+      return true;
 
    return false;
 }
@@ -511,6 +523,17 @@ allocate_full_mipmap(const struct st_texture_object *stObj,
    }
 
    if (stImage->base.Level > 0 || stObj->base.GenerateMipmap)
+      return TRUE;
+
+   /* If the application has explicitly called glTextureParameter to set
+    * GL_TEXTURE_MAX_LEVEL, such that (max - base) > 0, then they're trying
+    * to communicate that they will have multiple miplevels.
+    *
+    * Core Mesa will initialize MaxLevel to value much larger than
+    * MAX_TEXTURE_LEVELS, so we check that to see if it's been set at all.
+    */
+   if (stObj->base.MaxLevel < MAX_TEXTURE_LEVELS &&
+       stObj->base.MaxLevel - stObj->base.BaseLevel > 0)
       return TRUE;
 
    if (stImage->base._BaseFormat == GL_DEPTH_COMPONENT ||
@@ -2046,6 +2069,8 @@ st_GetTexSubImage(struct gl_context * ctx,
       case PIPE_FORMAT_ASTC_12x10:
       case PIPE_FORMAT_ASTC_12x12:
       case PIPE_FORMAT_BPTC_RGBA_UNORM:
+      case PIPE_FORMAT_FXT1_RGB:
+      case PIPE_FORMAT_FXT1_RGBA:
          dst_glformat = GL_RGBA8;
          break;
       case PIPE_FORMAT_RGTC1_SNORM:
@@ -2090,7 +2115,8 @@ st_GetTexSubImage(struct gl_context * ctx,
       }
 
       dst_format = st_choose_format(st, dst_glformat, format, type,
-                                    pipe_target, 0, 0, bind, FALSE);
+                                    pipe_target, 0, 0, bind,
+                                    false, false);
 
       if (dst_format == PIPE_FORMAT_NONE) {
          /* unable to get an rgba format!?! */

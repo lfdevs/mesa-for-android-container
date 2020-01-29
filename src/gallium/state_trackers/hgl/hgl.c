@@ -13,7 +13,7 @@
 
 #include "pipe/p_format.h"
 #include "util/u_atomic.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "state_tracker/st_gl_api.h" /* for st_gl_api_create */

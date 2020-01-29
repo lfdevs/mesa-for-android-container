@@ -24,7 +24,7 @@
  **********************************************************/
 
 #include "git_sha1.h" /* For MESA_GIT_SHA1 */
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_screen.h"

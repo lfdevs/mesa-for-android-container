@@ -73,6 +73,8 @@ foreach d : [[with_gallium_kmsro, [
                'ili9225_dri.so',
                'ili9341_dri.so',
                'imx-drm_dri.so',
+               'ingenic-drm_dri.so',
+               'mcde_dri.so',
                'meson_dri.so',
                'mi0283qt_dri.so',
                'mxsfb-drm_dri.so',
@@ -108,8 +110,7 @@ foreach d : [[with_gallium_kmsro, [
 endforeach
 
 meson.add_install_script(
-  prog_python.path(),
-  join_paths(meson.source_root(), 'bin/install_megadrivers.py'),
+  install_megadrivers_py.path(),
   libgallium_dri.full_path(),
   dri_drivers_path,
   gallium_dri_drivers,

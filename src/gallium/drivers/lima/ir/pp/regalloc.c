@@ -310,8 +310,6 @@ static bool ppir_update_spilled_src(ppir_compiler *comp, ppir_block *block,
    ppir_dest *alu_dest = &move_alu->dest;
    alu_dest->type = ppir_target_ssa;
    alu_dest->ssa.num_components = num_components;
-   alu_dest->ssa.live_in = INT_MAX;
-   alu_dest->ssa.live_out = 0;
    alu_dest->ssa.spilled = true;
    alu_dest->write_mask = u_bit_consecutive(0, num_components);
 
@@ -417,10 +415,9 @@ static bool ppir_update_spilled_dest(ppir_compiler *comp, ppir_block *block,
    ppir_store_node *store = ppir_node_to_store(store_node);
 
    store->index = -comp->prog->stack_size; /* index sizes are negative */
-   store->num_components = reg->num_components;
 
-   store->src.type = dest->type;
-   store->src.reg = reg;
+   ppir_node_target_assign(&store->src, node);
+   store->num_components = reg->num_components;
 
    /* insert the new node as successor */
    ppir_node_foreach_succ_safe(node, dep) {
@@ -486,7 +483,7 @@ static ppir_reg *ppir_regalloc_choose_spill_node(ppir_compiler *comp,
    const float slot_scale = 1.1f;
 
    list_for_each_entry(ppir_reg, reg, &comp->reg_list, list) {
-      if (reg->spilled || reg->live_out == INT_MAX) {
+      if (reg->spilled) {
          /* not considered for spilling */
          spill_costs[reg->regalloc_index] = 0.0f;
          continue;
@@ -559,31 +556,74 @@ static ppir_reg *ppir_regalloc_choose_spill_node(ppir_compiler *comp,
 
 static void ppir_regalloc_reset_liveness_info(ppir_compiler *comp)
 {
-   int bitset_words = BITSET_WORDS(list_length(&comp->reg_list));
    int idx = 0;
 
    list_for_each_entry(ppir_reg, reg, &comp->reg_list, list) {
-      reg->live_in = INT_MAX;
-      reg->live_out = 0;
       reg->regalloc_index = idx++;
    }
 
    list_for_each_entry(ppir_block, block, &comp->block_list, list) {
-      if (block->def)
-         ralloc_free(block->def);
-      block->def = rzalloc_array(comp, BITSET_WORD, bitset_words);
-
-      if (block->use)
-         ralloc_free(block->use);
-      block->use = rzalloc_array(comp, BITSET_WORD, bitset_words);
 
       if (block->live_in)
          ralloc_free(block->live_in);
-      block->live_in = rzalloc_array(comp, BITSET_WORD, bitset_words);
+      block->live_in = rzalloc_array(comp,
+            struct ppir_liveness, list_length(&comp->reg_list));
+
+      if (block->live_in_set)
+         _mesa_set_destroy(block->live_in_set, NULL);
+      block->live_in_set = _mesa_set_create(comp,
+                                            _mesa_hash_pointer,
+                                            _mesa_key_pointer_equal);
 
       if (block->live_out)
          ralloc_free(block->live_out);
-      block->live_out = rzalloc_array(comp, BITSET_WORD, bitset_words);
+      block->live_out = rzalloc_array(comp,
+            struct ppir_liveness, list_length(&comp->reg_list));
+
+      if (block->live_out_set)
+         _mesa_set_destroy(block->live_out_set, NULL);
+      block->live_out_set = _mesa_set_create(comp,
+                                             _mesa_hash_pointer,
+                                             _mesa_key_pointer_equal);
+
+      list_for_each_entry(ppir_instr, instr, &block->instr_list, list) {
+
+         if (instr->live_in)
+            ralloc_free(instr->live_in);
+         instr->live_in = rzalloc_array(comp,
+               struct ppir_liveness, list_length(&comp->reg_list));
+
+         if (instr->live_in_set)
+            _mesa_set_destroy(instr->live_in_set, NULL);
+         instr->live_in_set = _mesa_set_create(comp,
+                                               _mesa_hash_pointer,
+                                               _mesa_key_pointer_equal);
+
+         if (instr->live_out)
+            ralloc_free(instr->live_out);
+         instr->live_out = rzalloc_array(comp,
+               struct ppir_liveness, list_length(&comp->reg_list));
+
+         if (instr->live_out_set)
+            _mesa_set_destroy(instr->live_out_set, NULL);
+         instr->live_out_set = _mesa_set_create(comp,
+                                                _mesa_hash_pointer,
+                                                _mesa_key_pointer_equal);
+      }
+   }
+}
+
+static void ppir_all_interference(ppir_compiler *comp, struct ra_graph *g,
+                                  struct set *liveness)
+{
+   set_foreach(liveness, entry1) {
+      set_foreach(liveness, entry2) {
+         const struct ppir_liveness *r1 = entry1->key;
+         const struct ppir_liveness *r2 = entry2->key;
+         ra_add_node_interference(g, r1->reg->regalloc_index,
+                                     r2->reg->regalloc_index);
+      }
+      _mesa_set_remove(liveness, entry1);
    }
 }
 
@@ -592,8 +632,6 @@ int lima_ppir_force_spilling = 0;
 static bool ppir_regalloc_prog_try(ppir_compiler *comp, bool *spilled)
 {
    ppir_regalloc_reset_liveness_info(comp);
-
-   ppir_liveness_analysis(comp);
 
    struct ra_graph *g = ra_alloc_interference_graph(
       comp->ra, list_length(&comp->reg_list));
@@ -606,32 +644,13 @@ static bool ppir_regalloc_prog_try(ppir_compiler *comp, bool *spilled)
       ra_set_node_class(g, n++, c);
    }
 
-   int n1 = 0;
-   list_for_each_entry(ppir_reg, reg1, &comp->reg_list, list) {
-      int n2 = n1 + 1;
-      list_for_each_entry_from(ppir_reg, reg2, reg1->list.next,
-                               &comp->reg_list, list) {
-         bool interference = false;
+   ppir_liveness_analysis(comp);
 
-         if (reg1->undef || reg2->undef)
-            interference = false;
-         else if (reg1->live_in < reg2->live_in) {
-            if (reg1->live_out > reg2->live_in)
-               interference = true;
-         }
-         else if (reg1->live_in > reg2->live_in) {
-            if (reg2->live_out > reg1->live_in)
-               interference = true;
-         }
-         else
-            interference = true;
-
-         if (interference)
-            ra_add_node_interference(g, n1, n2);
-
-         n2++;
+   list_for_each_entry(ppir_block, block, &comp->block_list, list) {
+      list_for_each_entry(ppir_instr, instr, &block->instr_list, list) {
+         ppir_all_interference(comp, g, instr->live_in_set);
+         ppir_all_interference(comp, g, instr->live_out_set);
       }
-      n1++;
    }
 
    *spilled = false;

@@ -29,4 +29,5 @@ libgtest = static_library(
 idep_gtest = declare_dependency(
   link_with : libgtest,
   include_directories : include_directories('include', is_system : true),
+  dependencies : [dep_thread],
 )

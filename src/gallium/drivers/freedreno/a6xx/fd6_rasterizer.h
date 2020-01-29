@@ -31,21 +31,12 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 
+#include "freedreno_context.h"
+
 struct fd6_rasterizer_stateobj {
 	struct pipe_rasterizer_state base;
 
-	uint32_t gras_su_point_minmax;
-	uint32_t gras_su_point_size;
-	uint32_t gras_su_poly_offset_scale;
-	uint32_t gras_su_poly_offset_offset;
-	uint32_t gras_su_poly_offset_clamp;
-
-	uint32_t gras_su_cntl;
-	uint32_t gras_cl_clip_cntl;
-	uint32_t pc_primitive_cntl;
-	uint32_t pc_raster_cntl;
-
-	struct fd_ringbuffer *stateobj;
+	struct fd_ringbuffer *stateobjs[2];
 };
 
 static inline struct fd6_rasterizer_stateobj *
@@ -57,5 +48,22 @@ fd6_rasterizer_stateobj(struct pipe_rasterizer_state *rast)
 void * fd6_rasterizer_state_create(struct pipe_context *pctx,
 		const struct pipe_rasterizer_state *cso);
 void fd6_rasterizer_state_delete(struct pipe_context *, void *hwcso);
+
+struct fd_ringbuffer * __fd6_setup_rasterizer_stateobj(struct fd_context *ctx,
+		const struct pipe_rasterizer_state *cso, bool primitive_restart);
+
+static inline struct fd_ringbuffer *
+fd6_rasterizer_state(struct fd_context *ctx, bool primitive_restart)
+{
+	struct fd6_rasterizer_stateobj *rasterizer = fd6_rasterizer_stateobj(ctx->rasterizer);
+	unsigned variant = primitive_restart;
+
+	if (unlikely(!rasterizer->stateobjs[variant])) {
+		rasterizer->stateobjs[variant] =
+			__fd6_setup_rasterizer_stateobj(ctx, ctx->rasterizer, primitive_restart);
+	}
+
+	return rasterizer->stateobjs[variant];
+}
 
 #endif /* FD6_RASTERIZER_H_ */

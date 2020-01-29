@@ -39,7 +39,7 @@
  * Lowers fixed-function blending to a load of the destination color and a
  * series of ALU operations before the store of the output.
  */
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "vc4_qir.h"
 #include "compiler/nir/nir_builder.h"
 #include "compiler/nir/nir_format_convert.h"

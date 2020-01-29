@@ -103,13 +103,15 @@ etna_create_surface(struct pipe_context *pctx, struct pipe_resource *prsc,
    if (VIV_FEATURE(ctx->screen, chipFeatures, FAST_CLEAR) &&
        VIV_FEATURE(ctx->screen, chipMinorFeatures0, MC20) &&
        !rsc->ts_bo &&
+       /* needs to be RS/BLT compatible for transfer_map/unmap */
        (rsc->levels[level].padded_width & ETNA_RS_WIDTH_MASK) == 0 &&
-       (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0) {
+       (rsc->levels[level].padded_height & ETNA_RS_HEIGHT_MASK) == 0 &&
+       etna_resource_hw_tileable(ctx->specs.use_blt, prsc)) {
       etna_screen_resource_alloc_ts(pctx->screen, rsc);
    }
 
    surf->base.texture = &rsc->base;
-   surf->base.format = rsc->base.format;
+   surf->base.format = templat->format;
    surf->base.width = rsc->levels[level].width;
    surf->base.height = rsc->levels[level].height;
    surf->base.writable = templat->writable; /* what is this for anyway */

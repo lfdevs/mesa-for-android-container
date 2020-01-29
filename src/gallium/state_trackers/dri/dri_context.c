@@ -241,7 +241,7 @@ dri_destroy_context(__DRIcontext * cPriv)
     * to avoid having to add code elsewhere to cope with flushing a
     * partially destroyed context.
     */
-   ctx->st->flush(ctx->st, 0, NULL);
+   ctx->st->flush(ctx->st, 0, NULL, NULL, NULL);
    ctx->st->destroy(ctx->st);
    free(ctx);
 }

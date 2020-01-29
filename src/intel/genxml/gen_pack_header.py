@@ -69,13 +69,13 @@ union __gen_value {
    uint32_t dw;
 };
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_mbo(uint32_t start, uint32_t end)
 {
    return (~0ull >> (64 - (end - start + 1))) << start;
 }
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_uint(uint64_t v, uint32_t start, NDEBUG_UNUSED uint32_t end)
 {
    __gen_validate_value(v);
@@ -91,7 +91,7 @@ __gen_uint(uint64_t v, uint32_t start, NDEBUG_UNUSED uint32_t end)
    return v << start;
 }
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_sint(int64_t v, uint32_t start, uint32_t end)
 {
    const int width = end - start + 1;
@@ -111,7 +111,7 @@ __gen_sint(int64_t v, uint32_t start, uint32_t end)
    return (v & mask) << start;
 }
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_offset(uint64_t v, NDEBUG_UNUSED uint32_t start, NDEBUG_UNUSED uint32_t end)
 {
    __gen_validate_value(v);
@@ -124,14 +124,14 @@ __gen_offset(uint64_t v, NDEBUG_UNUSED uint32_t start, NDEBUG_UNUSED uint32_t en
    return v;
 }
 
-static inline uint32_t
+static inline __attribute__((always_inline)) uint32_t
 __gen_float(float v)
 {
    __gen_validate_value(v);
    return ((union __gen_value) { .f = (v) }).dw;
 }
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
 {
    __gen_validate_value(v);
@@ -150,7 +150,7 @@ __gen_sfixed(float v, uint32_t start, uint32_t end, uint32_t fract_bits)
    return (int_val & mask) << start;
 }
 
-static inline uint64_t
+static inline __attribute__((always_inline)) uint64_t
 __gen_ufixed(float v, uint32_t start, NDEBUG_UNUSED uint32_t end, uint32_t fract_bits)
 {
    __gen_validate_value(v);
@@ -618,7 +618,7 @@ class Parser(object):
     def emit_pack_function(self, name, group):
         name = self.gen_prefix(name)
         print(textwrap.dedent("""\
-            static inline void
+            static inline __attribute__((always_inline)) void
             %s_pack(__attribute__((unused)) __gen_user_data *data,
                   %s__attribute__((unused)) void * restrict dst,
                   %s__attribute__((unused)) const struct %s * restrict values)

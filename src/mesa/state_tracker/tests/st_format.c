@@ -32,7 +32,7 @@
 #include "state_tracker/st_context.h"
 #include "state_tracker/st_format.h"
 #include "state_tracker/st_texture.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include <stdbool.h>
 
 static bool
@@ -56,6 +56,10 @@ int main(int argc, char **argv)
    };
    struct st_context local_st = {
       .pipe = &pctx,
+      .has_etc1 = true,
+      .has_etc2 = true,
+      .has_astc_2d_ldr = true,
+      .has_astc_5x5_ldr = true,
    };
    struct st_context *st = &local_st;
 
@@ -63,10 +67,12 @@ int main(int argc, char **argv)
 
    /* test all Mesa formats */
    for (i = 1; i < MESA_FORMAT_COUNT; i++) {
+      if (!_mesa_get_format_name(i))
+         continue;
+
       enum pipe_format pf;
 
-      if (st_compressed_format_fallback(st, i))
-         continue;
+      assert(!st_compressed_format_fallback(st, i));
 
       pf = st_mesa_format_to_pipe_format(st, i);
       if (pf != PIPE_FORMAT_NONE) {
@@ -77,16 +83,7 @@ int main(int argc, char **argv)
                     _mesa_get_format_name(mf));
             return 1;
          }
-      }
-   }
 
-   /* Test all Gallium formats */
-   for (i = 1; i < PIPE_FORMAT_COUNT; i++) {
-      mesa_format mf = st_pipe_format_to_mesa_format(i);
-      if (st_compressed_format_fallback(st, mf))
-         continue;
-
-      if (mf != MESA_FORMAT_NONE) {
          const struct util_format_description *desc = util_format_description(i);
 
          /* Make sure that gallium and Mesa agree on whether the format is an
@@ -108,16 +105,6 @@ int main(int argc, char **argv)
                        mesa_array ? "" : "not ");
                return 1;
             }
-         }
-
-         enum pipe_format pf =
-            st_mesa_format_to_pipe_format(st, mf);
-         if (pf != i) {
-            fprintf(stderr, "Round-tripping %s -> %s -> %s failed\n",
-                    util_format_short_name(i),
-                    _mesa_get_format_name(mf),
-                    util_format_short_name(pf));
-            return 1;
          }
       }
    }

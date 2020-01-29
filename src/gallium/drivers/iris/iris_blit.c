@@ -25,7 +25,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/ralloc.h"
 #include "intel/blorp/blorp.h"
@@ -230,6 +230,7 @@ apply_blit_scissor(const struct pipe_scissor_state *scissor,
 
 void
 iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
+                             struct isl_device *isl_dev,
                              struct blorp_surf *surf,
                              struct pipe_resource *p_res,
                              enum isl_aux_usage aux_usage,
@@ -250,7 +251,7 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
          .buffer = res->bo,
          .offset = res->offset,
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-         .mocs = vtbl->mocs(res->bo),
+         .mocs = vtbl->mocs(res->bo, isl_dev),
       },
       .aux_usage = aux_usage,
    };
@@ -261,7 +262,7 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
          .buffer = res->aux.bo,
          .offset = res->aux.offset,
          .reloc_flags = is_render_target ? EXEC_OBJECT_WRITE : 0,
-         .mocs = vtbl->mocs(res->bo),
+         .mocs = vtbl->mocs(res->bo, isl_dev),
       };
       surf->clear_color =
          iris_resource_get_clear_color(res, NULL, NULL);
@@ -269,11 +270,9 @@ iris_blorp_surf_for_resource(struct iris_vtable *vtbl,
          .buffer = res->aux.clear_color_bo,
          .offset = res->aux.clear_color_offset,
          .reloc_flags = 0,
-         .mocs = vtbl->mocs(res->aux.clear_color_bo),
+         .mocs = vtbl->mocs(res->aux.clear_color_bo, isl_dev),
       };
    }
-
-   // XXX: ASTC
 }
 
 static bool
@@ -353,7 +352,7 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       iris_format_for_usage(devinfo, info->src.format,
                             ISL_SURF_USAGE_TEXTURE_BIT);
    enum isl_aux_usage src_aux_usage =
-      iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt, 0);
+      iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt);
 
    if (iris_resource_level_has_hiz(src_res, info->src.level))
       src_aux_usage = ISL_AUX_USAGE_NONE;
@@ -373,10 +372,12 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
    bool dst_clear_supported = dst_aux_usage != ISL_AUX_USAGE_NONE;
 
    struct blorp_surf src_surf, dst_surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &src_surf, info->src.resource,
-                                src_aux_usage, info->src.level, false);
-   iris_blorp_surf_for_resource(&ice->vtbl, &dst_surf, info->dst.resource,
-                                dst_aux_usage, info->dst.level, true);
+   iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev,  &src_surf,
+                                info->src.resource, src_aux_usage,
+                                info->src.level, false);
+   iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev, &dst_surf,
+                                info->dst.resource, dst_aux_usage,
+                                info->dst.level, true);
 
    iris_resource_prepare_access(ice, batch, dst_res, info->dst.level, 1,
                                 info->dst.box.z, info->dst.box.depth,
@@ -493,7 +494,7 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
          iris_format_for_usage(devinfo, src_res->base.format,
                                ISL_SURF_USAGE_TEXTURE_BIT);
       stc_src_aux_usage =
-         iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt, 0);
+         iris_resource_texture_aux_usage(ice, src_res, src_fmt.fmt);
 
       struct iris_format_info dst_fmt =
          iris_format_for_usage(devinfo, stc_dst->base.format,
@@ -523,10 +524,12 @@ iris_blit(struct pipe_context *ctx, const struct pipe_blit_info *info)
       iris_resource_prepare_access(ice, batch, stc_dst, info->dst.level, 1,
                                    info->dst.box.z, info->dst.box.depth,
                                    stc_dst_aux_usage, false);
-      iris_blorp_surf_for_resource(&ice->vtbl, &src_surf, &src_res->base,
-                                   stc_src_aux_usage, info->src.level, false);
-      iris_blorp_surf_for_resource(&ice->vtbl, &dst_surf, &stc_dst->base,
-                                   stc_dst_aux_usage, info->dst.level, true);
+      iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev, &src_surf,
+                                   &src_res->base, stc_src_aux_usage,
+                                   info->src.level, false);
+      iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev, &dst_surf,
+                                   &stc_dst->base, stc_dst_aux_usage,
+                                   info->dst.level, true);
 
       for (int slice = 0; slice < info->dst.box.depth; slice++) {
          iris_batch_maybe_flush(batch, 1500);
@@ -570,6 +573,15 @@ get_copy_region_aux_settings(const struct gen_device_info *devinfo,
                              bool is_render_target)
 {
    switch (res->aux.usage) {
+   case ISL_AUX_USAGE_HIZ:
+      if (!is_render_target && iris_sample_with_depth_aux(devinfo, res)) {
+         *out_aux_usage = ISL_AUX_USAGE_HIZ;
+         *out_clear_supported = true;
+      } else {
+         *out_aux_usage = ISL_AUX_USAGE_NONE;
+         *out_clear_supported = false;
+      }
+      break;
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_MCS_CCS:
    case ISL_AUX_USAGE_CCS_E:
@@ -653,10 +665,10 @@ iris_copy_region(struct blorp_context *blorp,
       // XXX: what about one surface being a buffer and not the other?
 
       struct blorp_surf src_surf, dst_surf;
-      iris_blorp_surf_for_resource(&ice->vtbl, &src_surf, src, src_aux_usage,
-                                   src_level, false);
-      iris_blorp_surf_for_resource(&ice->vtbl, &dst_surf, dst, dst_aux_usage,
-                                   dst_level, true);
+      iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev, &src_surf,
+                                   src, src_aux_usage, src_level, false);
+      iris_blorp_surf_for_resource(&ice->vtbl, &screen->isl_dev, &dst_surf,
+                                   dst, dst_aux_usage, dst_level, true);
 
       iris_resource_prepare_access(ice, batch, src_res, src_level, 1,
                                    src_box->z, src_box->depth,

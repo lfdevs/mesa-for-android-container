@@ -300,6 +300,22 @@ iris_fence_get_fd(struct pipe_screen *p_screen,
    struct iris_screen *screen = (struct iris_screen *)p_screen;
    int fd = -1;
 
+   if (fence->count == 0) {
+      /* Our fence has no syncobj's recorded.  This means that all of the
+       * batches had already completed, their syncobj's had been signalled,
+       * and so we didn't bother to record them.  But we're being asked to
+       * export such a fence.  So export a dummy already-signalled syncobj.
+       */
+      struct drm_syncobj_handle args = {
+         .flags = DRM_SYNCOBJ_HANDLE_TO_FD_FLAGS_EXPORT_SYNC_FILE, .fd = -1,
+      };
+
+      args.handle = gem_syncobj_create(screen->fd, DRM_SYNCOBJ_CREATE_SIGNALED);
+      gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD, &args);
+      gem_syncobj_destroy(screen->fd, args.handle);
+      return args.fd;
+   }
+
    for (unsigned i = 0; i < fence->count; i++) {
       struct drm_syncobj_handle args = {
          .handle = fence->syncpt[i]->handle,
@@ -327,7 +343,12 @@ iris_fence_create_fd(struct pipe_context *ctx,
       .flags = DRM_SYNCOBJ_FD_TO_HANDLE_FLAGS_IMPORT_SYNC_FILE,
       .fd = fd,
    };
-   gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args);
+   if (gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args) == -1) {
+      fprintf(stderr, "DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE failed: %s\n",
+              strerror(errno));
+      *out = NULL;
+      return;
+   }
 
    struct iris_syncpt *syncpt = malloc(sizeof(*syncpt));
    syncpt->handle = args.handle;

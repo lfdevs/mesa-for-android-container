@@ -217,6 +217,8 @@ intel_screen_init_surface_formats(struct intel_screen *screen)
       gen += 5;
 
    for (format = MESA_FORMAT_NONE + 1; format < MESA_FORMAT_COUNT; format++) {
+      if (!_mesa_get_format_name(format))
+         continue;
       enum isl_format texture, render;
       bool is_integer = _mesa_is_format_integer_color(format);
 

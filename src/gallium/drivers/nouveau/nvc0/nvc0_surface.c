@@ -26,7 +26,7 @@
 
 #include "util/u_inlines.h"
 #include "util/u_pack_color.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 
 #include "os/os_thread.h"
@@ -1276,6 +1276,18 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
     * render target, with scissors defining the destination region.
     * The vertex is supplied with non-normalized texture coordinates
     * arranged in a way to yield the desired offset and scale.
+    *
+    * Note that while the source texture is presented to the sampler as
+    * non-MSAA (even if it is), the destination texture is treated as MSAA for
+    * rendering. This means that
+    *  - destination coordinates shouldn't be scaled
+    *  - without per-sample rendering, the target will be a solid-fill for all
+    *    of the samples
+    *
+    * The last point implies that this process is very bad for 1:1 blits, as
+    * well as scaled blits between MSAA surfaces. This works fine for
+    * upscaling and downscaling though. The 1:1 blits should ideally be
+    * handled by the 2d engine, which can do it perfectly.
     */
 
    minx = info->dst.box.x;
@@ -1364,14 +1376,14 @@ nvc0_blit_3d(struct nvc0_context *nvc0, const struct pipe_blit_info *info)
       *(vbuf++) = fui(y0);
       *(vbuf++) = fui(z);
 
-      *(vbuf++) = fui(32768 << nv50_miptree(dst)->ms_x);
+      *(vbuf++) = fui(32768.0f);
       *(vbuf++) = fui(0.0f);
       *(vbuf++) = fui(x1);
       *(vbuf++) = fui(y0);
       *(vbuf++) = fui(z);
 
       *(vbuf++) = fui(0.0f);
-      *(vbuf++) = fui(32768 << nv50_miptree(dst)->ms_y);
+      *(vbuf++) = fui(32768.0f);
       *(vbuf++) = fui(x0);
       *(vbuf++) = fui(y1);
       *(vbuf++) = fui(z);

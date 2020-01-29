@@ -41,9 +41,8 @@
 
 struct ir3_legalize_ctx {
 	struct ir3_compiler *compiler;
+	struct ir3_shader_variant *so;
 	gl_shader_stage type;
-	bool has_ssbo;
-	bool need_pixlod;
 	int max_bary;
 };
 
@@ -113,7 +112,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 	list_replace(&block->instr_list, &instr_list);
 	list_inithead(&block->instr_list);
 
-	list_for_each_entry_safe (struct ir3_instruction, n, &instr_list, node) {
+	foreach_instr_safe (n, &instr_list) {
 		struct ir3_register *reg;
 		unsigned i;
 
@@ -134,6 +133,15 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		if (last_n && is_barrier(last_n)) {
 			n->flags |= IR3_INSTR_SS | IR3_INSTR_SY;
 			last_input_needs_ss = false;
+			regmask_init(&state->needs_ss_war);
+			regmask_init(&state->needs_ss);
+			regmask_init(&state->needs_sy);
+		}
+
+		if (last_n && (last_n->opc == OPC_IF)) {
+			n->flags |= IR3_INSTR_SS;
+			regmask_init(&state->needs_ss_war);
+			regmask_init(&state->needs_ss);
 		}
 
 		/* NOTE: consider dst register too.. it could happen that
@@ -238,12 +246,19 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 			list_addtail(&n->node, &block->instr_list);
 		}
 
+		if (n->opc == OPC_DSXPP_1 || n->opc == OPC_DSYPP_1) {
+			struct ir3_instruction *op_p = ir3_instr_clone(n);
+			op_p->flags = IR3_INSTR_P;
+
+			ctx->so->need_fine_derivatives = true;
+		}
+
 		if (is_sfu(n))
 			regmask_set(&state->needs_ss, n->regs[0]);
 
 		if (is_tex(n) || (n->opc == OPC_META_TEX_PREFETCH)) {
 			regmask_set(&state->needs_sy, n->regs[0]);
-			ctx->need_pixlod = true;
+			ctx->so->need_pixlod = true;
 			if (n->opc == OPC_META_TEX_PREFETCH)
 				has_tex_prefetch = true;
 		} else if (n->opc == OPC_RESINFO) {
@@ -272,7 +287,7 @@ legalize_block(struct ir3_legalize_ctx *ctx, struct ir3_block *block)
 		}
 
 		if (is_ssbo(n->opc) || (is_atomic(n->opc) && (n->flags & IR3_INSTR_G)))
-			ctx->has_ssbo = true;
+			ctx->so->has_ssbo = true;
 
 		/* both tex/sfu appear to not always immediately consume
 		 * their src register(s):
@@ -512,8 +527,8 @@ resolve_jump(struct ir3_instruction *instr)
 static bool
 resolve_jumps(struct ir3 *ir)
 {
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node)
-		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node)
+	foreach_block (block, &ir->block_list)
+		foreach_instr (instr, &block->instr_list)
 			if (is_flow(instr) && instr->cat0.target)
 				if (resolve_jump(instr))
 					return true;
@@ -538,7 +553,7 @@ static void mark_jp(struct ir3_block *block)
 static void
 mark_xvergence_points(struct ir3 *ir)
 {
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		if (block->predecessors->entries > 1) {
 			/* if a block has more than one possible predecessor, then
 			 * the first instruction is a convergence point.
@@ -559,30 +574,29 @@ mark_xvergence_points(struct ir3 *ir)
 }
 
 void
-ir3_legalize(struct ir3 *ir, bool *has_ssbo, bool *need_pixlod, int *max_bary)
+ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
 {
 	struct ir3_legalize_ctx *ctx = rzalloc(ir, struct ir3_legalize_ctx);
 	bool progress;
 
+	ctx->so = so;
 	ctx->max_bary = -1;
 	ctx->compiler = ir->compiler;
 	ctx->type = ir->type;
 
 	/* allocate per-block data: */
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		block->data = rzalloc(ctx, struct ir3_legalize_block_data);
 	}
 
 	/* process each block: */
 	do {
 		progress = false;
-		list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		foreach_block (block, &ir->block_list) {
 			progress |= legalize_block(ctx, block);
 		}
 	} while (progress);
 
-	*has_ssbo = ctx->has_ssbo;
-	*need_pixlod = ctx->need_pixlod;
 	*max_bary = ctx->max_bary;
 
 	do {

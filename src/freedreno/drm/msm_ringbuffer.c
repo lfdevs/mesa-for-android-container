@@ -612,6 +612,9 @@ msm_ringbuffer_emit_reloc_ring(struct fd_ringbuffer *ring,
 		.offset = msm_target->offset,
 	});
 
+	if (!size)
+		return 0;
+
 	if ((target->flags & _FD_RINGBUFFER_OBJECT) &&
 			!(ring->flags & _FD_RINGBUFFER_OBJECT)) {
 		struct msm_submit *msm_submit = to_msm_submit(msm_ring->u.submit);

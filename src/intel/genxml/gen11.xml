@@ -735,7 +735,6 @@
       <value name="180DEG" value="2"/>
       <value name="270DEG" value="3"/>
     </field>
-    <field name="Force Non-Comparison Reduction Type" start="159" end="159" type="bool"/>
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
     <field name="Surface Min LOD" start="164" end="167" type="uint"/>
     <field name="Mip Tail Start LOD" start="168" end="171" type="uint"/>
@@ -1142,7 +1141,7 @@
   <struct name="SO_DECL" length="1">
     <field name="Component Mask" start="0" end="3" type="uint" default="0"/>
     <field name="Register Index" start="4" end="9" type="uint"/>
-    <field name="Hole Flag" start="11" end="11" type="uint"/>
+    <field name="Hole Flag" start="11" end="11" type="bool"/>
     <field name="Output Buffer Slot" start="12" end="13" type="uint"/>
   </struct>
 
@@ -6238,6 +6237,7 @@
     <field name="3D Command Opcode" start="24" end="26" type="uint" default="2"/>
     <field name="Command SubType" start="27" end="28" type="uint" default="3"/>
     <field name="Command Type" start="29" end="31" type="uint" default="3"/>
+    <field name="HDC Pipeline Flush Enable" start="9" end="9" type="bool"/>
     <field name="Depth Cache Flush Enable" start="32" end="32" type="bool"/>
     <field name="Stall At Pixel Scoreboard" start="33" end="33" type="bool"/>
     <field name="State Cache Invalidation Enable" start="34" end="34" type="bool"/>
@@ -7004,6 +7004,13 @@
     <field name="RO Allocation" start="11" end="17" type="uint"/>
     <field name="DC Allocation" start="18" end="24" type="uint"/>
     <field name="All Allocation" start="25" end="31" type="uint"/>
+  </register>
+
+  <register name="TCCNTLREG" length="1" num="0xb0a4">
+    <field name="URB Partial Write Merging Enable" start="0" end="0" type="bool"/>
+    <field name="Color/Z Partial Write Merging Enable" start="1" end="1" type="bool"/>
+    <field name="L3 Data Partial Write Merging Enable" start="2" end="2" type="bool"/>
+    <field name="TC Disable" start="3" end="3" type="bool"/>
   </register>
 
   <register name="PERFCNT1" length="2" num="0x91b8">

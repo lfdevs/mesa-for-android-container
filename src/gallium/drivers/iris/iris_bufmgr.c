@@ -160,18 +160,6 @@ static uint64_t vma_alloc(struct iris_bufmgr *bufmgr,
                           enum iris_memory_zone memzone,
                           uint64_t size, uint64_t alignment);
 
-static uint32_t
-key_hash_uint(const void *key)
-{
-   return _mesa_hash_data(key, 4);
-}
-
-static bool
-key_uint_equal(const void *a, const void *b)
-{
-   return *((unsigned *) a) == *((unsigned *) b);
-}
-
 static struct iris_bo *
 find_and_ref_external_bo(struct hash_table *ht, unsigned int key)
 {
@@ -1698,9 +1686,9 @@ iris_bufmgr_init(struct gen_device_info *devinfo, int fd, bool bo_reuse)
    init_cache_buckets(bufmgr);
 
    bufmgr->name_table =
-      _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
+      _mesa_hash_table_create(NULL, _mesa_hash_uint, _mesa_key_uint_equal);
    bufmgr->handle_table =
-      _mesa_hash_table_create(NULL, key_hash_uint, key_uint_equal);
+      _mesa_hash_table_create(NULL, _mesa_hash_uint, _mesa_key_uint_equal);
 
    if (devinfo->gen >= 12) {
       bufmgr->aux_map_ctx = gen_aux_map_init(bufmgr, &aux_map_allocator,

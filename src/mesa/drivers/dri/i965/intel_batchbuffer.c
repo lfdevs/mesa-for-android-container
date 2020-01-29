@@ -104,12 +104,13 @@ decode_get_bo(void *v_brw, bool ppgtt, uint64_t address)
 }
 
 static unsigned
-decode_get_state_size(void *v_brw, uint32_t offset_from_dsba)
+decode_get_state_size(void *v_brw, uint64_t address, uint64_t base_address)
 {
    struct brw_context *brw = v_brw;
    struct intel_batchbuffer *batch = &brw->batch;
-   unsigned size = (uintptr_t) _mesa_hash_table_u64_search(
-      batch->state_batch_sizes, offset_from_dsba);
+   unsigned size = (uintptr_t)
+      _mesa_hash_table_u64_search(batch->state_batch_sizes,
+                                  address - base_address);
    return size;
 }
 

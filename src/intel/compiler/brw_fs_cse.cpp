@@ -105,7 +105,7 @@ is_expression(const fs_visitor *v, const fs_inst *const inst)
    case SHADER_OPCODE_COS:
       return inst->mlen < 2;
    case SHADER_OPCODE_LOAD_PAYLOAD:
-      return !inst->is_copy_payload(v->alloc);
+      return !is_coalescing_payload(v->alloc, inst);
    default:
       return inst->is_send_from_grf() && !inst->has_side_effects() &&
          !inst->is_volatile();
@@ -242,14 +242,13 @@ create_copy_instr(const fs_builder &bld, fs_inst *inst, fs_reg src, bool negate)
 }
 
 bool
-fs_visitor::opt_cse_local(bblock_t *block)
+fs_visitor::opt_cse_local(bblock_t *block, int &ip)
 {
    bool progress = false;
    exec_list aeb;
 
    void *cse_ctx = ralloc_context(NULL);
 
-   int ip = block->start_ip;
    foreach_inst_in_block(fs_inst, inst, block) {
       /* Skip some cases. */
       if (is_expression(this, inst) && !inst->is_partial_write() &&
@@ -370,11 +369,12 @@ bool
 fs_visitor::opt_cse()
 {
    bool progress = false;
+   int ip = 0;
 
    calculate_live_intervals();
 
    foreach_block (block, cfg) {
-      progress = opt_cse_local(block) || progress;
+      progress = opt_cse_local(block, ip) || progress;
    }
 
    if (progress)

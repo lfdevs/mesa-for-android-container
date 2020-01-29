@@ -27,31 +27,7 @@
 #include "pan_util.h"
 #include "pan_format.h"
 
-#include "util/u_format.h"
-
-static void
-panfrost_invert_swizzle(const unsigned char *in, unsigned char *out)
-{
-        /* First, default to all zeroes to prevent uninitialized junk */
-
-        for (unsigned c = 0; c < 4; ++c)
-                out[c] = PIPE_SWIZZLE_0;
-
-        /* Now "do" what the swizzle says */
-
-        for (unsigned c = 0; c < 4; ++c) {
-                unsigned char i = in[c];
-
-                /* Who cares? */
-                assert(PIPE_SWIZZLE_X == 0);
-                if (i > PIPE_SWIZZLE_W)
-                        continue;
-
-                /* Invert */
-                unsigned idx = i - PIPE_SWIZZLE_X;
-                out[idx] = PIPE_SWIZZLE_X + c;
-        }
-}
+#include "util/format/u_format.h"
 
 static struct mali_rt_format
 panfrost_mfbd_format(struct pipe_surface *surf)
@@ -224,15 +200,15 @@ panfrost_mfbd_set_cbuf(
         /* Now, we set the layout specific pieces */
 
         if (rsrc->layout == PAN_LINEAR) {
-                rt->format.block = MALI_MFBD_BLOCK_LINEAR;
+                rt->format.block = MALI_BLOCK_LINEAR;
                 rt->framebuffer = base;
                 rt->framebuffer_stride = stride / 16;
         } else if (rsrc->layout == PAN_TILED) {
-                rt->format.block = MALI_MFBD_BLOCK_TILED;
+                rt->format.block = MALI_BLOCK_TILED;
                 rt->framebuffer = base;
                 rt->framebuffer_stride = stride;
         } else if (rsrc->layout == PAN_AFBC) {
-                rt->format.block = MALI_MFBD_BLOCK_AFBC;
+                rt->format.block = MALI_BLOCK_AFBC;
 
                 unsigned header_size = rsrc->slices[level].header_size;
 
@@ -250,20 +226,6 @@ panfrost_mfbd_set_cbuf(
         }
 }
 
-/* Is a format encoded like Z24S8 and therefore compatible for render? */
-
-static bool
-panfrost_is_z24s8_variant(enum pipe_format fmt)
-{
-        switch (fmt) {
-                case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-                case PIPE_FORMAT_Z24X8_UNORM:
-                        return true;
-                default:
-                        return false;
-        }
-}
-
 static void
 panfrost_mfbd_set_zsbuf(
         struct bifrost_framebuffer *fb,
@@ -273,26 +235,23 @@ panfrost_mfbd_set_zsbuf(
         struct panfrost_resource *rsrc = pan_resource(surf->texture);
 
         unsigned level = surf->u.tex.level;
-        assert(surf->u.tex.first_layer == 0);
+        unsigned first_layer = surf->u.tex.first_layer;
+        assert(surf->u.tex.last_layer == first_layer);
 
-        unsigned offset = rsrc->slices[level].offset;
+        mali_ptr base = panfrost_get_texture_address(rsrc, level, first_layer);
 
         if (rsrc->layout == PAN_AFBC) {
                 /* The only Z/S format we can compress is Z24S8 or variants
                  * thereof (handled by the state tracker) */
                 assert(panfrost_is_z24s8_variant(surf->format));
 
-                mali_ptr base = rsrc->bo->gpu + offset;
                 unsigned header_size = rsrc->slices[level].header_size;
 
                 fb->mfbd_flags |= MALI_MFBD_EXTRA;
 
-                fbx->flags =
-                        MALI_EXTRA_PRESENT |
-                        MALI_EXTRA_AFBC |
-                        MALI_EXTRA_AFBC_ZS |
-                        MALI_EXTRA_ZS |
-                        0x1; /* unknown */
+                fbx->flags_hi |= MALI_EXTRA_PRESENT;
+                fbx->flags_lo |= MALI_EXTRA_ZS | 0x1; /* unknown */
+                fbx->zs_block = MALI_BLOCK_AFBC;
 
                 fbx->ds_afbc.depth_stencil = base + header_size;
                 fbx->ds_afbc.depth_stencil_afbc_metadata = base;
@@ -300,34 +259,43 @@ panfrost_mfbd_set_zsbuf(
 
                 fbx->ds_afbc.zero1 = 0x10009;
                 fbx->ds_afbc.padding = 0x1000;
-        } else if (rsrc->layout == PAN_LINEAR) {
+        } else if (rsrc->layout == PAN_LINEAR || rsrc->layout == PAN_TILED) {
                 /* TODO: Z32F(S8) support, which is always linear */
 
                 int stride = rsrc->slices[level].stride;
 
                 fb->mfbd_flags |= MALI_MFBD_EXTRA;
-                fbx->flags |= MALI_EXTRA_PRESENT | MALI_EXTRA_ZS;
+                fbx->flags_hi |= MALI_EXTRA_PRESENT;
+                fbx->flags_lo |= MALI_EXTRA_ZS;
 
-                fbx->ds_linear.depth = rsrc->bo->gpu + offset;
-                fbx->ds_linear.depth_stride = stride;
+                fbx->ds_linear.depth = base;
+
+                if (rsrc->layout == PAN_LINEAR) {
+                        fbx->zs_block = MALI_BLOCK_LINEAR;
+                        fbx->ds_linear.depth_stride = stride / 16;
+                } else {
+                        fbx->zs_block = MALI_BLOCK_TILED;
+                        fbx->ds_linear.depth_stride = stride;
+                }
 
                 if (panfrost_is_z24s8_variant(surf->format)) {
-                        fbx->flags |= 0x1;
+                        fbx->flags_lo |= 0x1;
                 } else if (surf->format == PIPE_FORMAT_Z32_UNORM) {
                         /* default flags (0 in bottom place) */
                 } else if (surf->format == PIPE_FORMAT_Z32_FLOAT) {
-                        fbx->flags |= 0xA;
+                        fbx->flags_lo |= 0xA;
                         fb->mfbd_flags ^= 0x100;
                         fb->mfbd_flags |= 0x200;
                 } else if (surf->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT) {
-                        fbx->flags |= 0x1000A;
+                        fbx->flags_hi |= 0x400;
+                        fbx->flags_lo |= 0xA;
                         fb->mfbd_flags ^= 0x100;
                         fb->mfbd_flags |= 0x201;
 
                         struct panfrost_resource *stencil = rsrc->separate_stencil;
                         struct panfrost_slice stencil_slice = stencil->slices[level];
 
-                        fbx->ds_linear.stencil = stencil->bo->gpu + stencil_slice.offset;
+                        fbx->ds_linear.stencil = panfrost_get_texture_address(stencil, level, first_layer);
                         fbx->ds_linear.stencil_stride = stencil_slice.stride;
                 }
 
@@ -389,14 +357,57 @@ panfrost_mfbd_upload(struct panfrost_batch *batch,
 
 #undef UPLOAD
 
+static struct bifrost_framebuffer
+panfrost_emit_mfbd(struct panfrost_batch *batch, unsigned vertex_count)
+{
+        struct panfrost_context *ctx = batch->ctx;
+        struct pipe_context *gallium = (struct pipe_context *) ctx;
+        struct panfrost_screen *screen = pan_screen(gallium->screen);
+
+        unsigned width = batch->key.width;
+        unsigned height = batch->key.height;
+
+        unsigned shift = panfrost_get_stack_shift(batch->stack_size);
+
+        struct bifrost_framebuffer framebuffer = {
+                .width1 = MALI_POSITIVE(width),
+                .height1 = MALI_POSITIVE(height),
+                .width2 = MALI_POSITIVE(width),
+                .height2 = MALI_POSITIVE(height),
+
+                .unk1 = 0x1080,
+
+                .rt_count_1 = MALI_POSITIVE(batch->key.nr_cbufs),
+                .rt_count_2 = 4,
+
+                .unknown2 = 0x1f,
+                .tiler = panfrost_emit_midg_tiler(batch, vertex_count),
+                
+                .stack_shift = shift,
+                .unk0 = 0x1e,
+                .scratchpad = panfrost_batch_get_scratchpad(batch, shift, screen->thread_tls_alloc, screen->core_count)->gpu
+        };
+
+        return framebuffer;
+}
+
+void
+panfrost_attach_mfbd(struct panfrost_batch *batch, unsigned vertex_count)
+{
+        struct bifrost_framebuffer mfbd =
+                panfrost_emit_mfbd(batch, vertex_count);
+
+        memcpy(batch->framebuffer.cpu, &mfbd, sizeof(mfbd));
+}
+
 /* Creates an MFBD for the FRAGMENT section of the bound framebuffer */
 
 mali_ptr
 panfrost_mfbd_fragment(struct panfrost_batch *batch, bool has_draws)
 {
         struct bifrost_framebuffer fb = panfrost_emit_mfbd(batch, has_draws);
-        struct bifrost_fb_extra fbx = {};
-        struct bifrost_render_target rts[4] = {};
+        struct bifrost_fb_extra fbx = {0};
+        struct bifrost_render_target rts[4] = {0};
 
         /* We always upload at least one dummy GL_NONE render target */
 
@@ -479,7 +490,7 @@ panfrost_mfbd_fragment(struct panfrost_batch *batch, bool has_draws)
                         struct panfrost_slice *slice = &rsrc->slices[level];
 
                         fb.mfbd_flags |= MALI_MFBD_EXTRA;
-                        fbx.flags |= MALI_EXTRA_PRESENT;
+                        fbx.flags_lo |= MALI_EXTRA_PRESENT;
                         fbx.checksum_stride = slice->checksum_stride;
                         fbx.checksum = bo->gpu + slice->checksum_offset;
                 }

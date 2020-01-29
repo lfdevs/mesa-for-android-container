@@ -37,7 +37,7 @@
 #include "util/os_memory.h"
 #include "util/u_cpu_detect.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_threaded_context.h"
 #include "util/u_transfer.h"
 #include "util/u_transfer_helper.h"
@@ -553,6 +553,8 @@ iris_resource_configure_aux(struct iris_screen *screen,
          initial_state = ISL_AUX_STATE_PASS_THROUGH;
       *alloc_flags |= BO_ALLOC_ZEROED;
       break;
+   case ISL_AUX_USAGE_MC:
+      unreachable("Unsupported aux mode");
    }
 
    /* Create the aux_state for the auxiliary buffer. */
@@ -1240,6 +1242,10 @@ iris_invalidate_resource(struct pipe_context *ctx,
    if (resource->target != PIPE_BUFFER)
       return;
 
+   /* If it's already invalidated, don't bother doing anything. */
+   if (res->valid_buffer_range.start > res->valid_buffer_range.end)
+      return;
+
    if (!resource_is_busy(ice, res)) {
       /* The resource is idle, so just mark that it contains no data and
        * keep using the same underlying buffer object.
@@ -1271,7 +1277,7 @@ iris_invalidate_resource(struct pipe_context *ctx,
    /* Rebind the buffer, replacing any state referring to the old BO's
     * address, and marking state dirty so it's reemitted.
     */
-   ice->vtbl.rebind_buffer(ice, res, old_bo->gtt_offset);
+   ice->vtbl.rebind_buffer(ice, res);
 
    util_range_set_empty(&res->valid_buffer_range);
 

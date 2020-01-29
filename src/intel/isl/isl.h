@@ -1015,6 +1015,11 @@ struct isl_device {
       uint8_t stencil_offset;
       uint8_t hiz_offset;
    } ds;
+
+   struct {
+      uint32_t internal;
+      uint32_t external;
+   } mocs;
 };
 
 struct isl_extent2d {
@@ -1697,6 +1702,20 @@ isl_aux_usage_has_ccs(enum isl_aux_usage usage)
           usage == ISL_AUX_USAGE_MCS_CCS;
 }
 
+static inline bool
+isl_aux_state_has_valid_primary(enum isl_aux_state state)
+{
+   return state == ISL_AUX_STATE_RESOLVED ||
+          state == ISL_AUX_STATE_PASS_THROUGH ||
+          state == ISL_AUX_STATE_AUX_INVALID;
+}
+
+static inline bool
+isl_aux_state_has_valid_aux(enum isl_aux_state state)
+{
+   return state != ISL_AUX_STATE_AUX_INVALID;
+}
+
 const struct isl_drm_modifier_info * ATTRIBUTE_CONST
 isl_drm_modifier_get_info(uint64_t modifier);
 
@@ -2084,6 +2103,27 @@ isl_surf_get_image_offset_B_tile_sa(const struct isl_surf *surf,
                                     uint32_t *offset_B,
                                     uint32_t *x_offset_sa,
                                     uint32_t *y_offset_sa);
+
+/**
+ * Calculate the range in bytes occupied by a subimage, to the nearest tile.
+ *
+ * The range returned will be the smallest memory range in which the give
+ * subimage fits, rounded to even tiles.  Intel images do not usually have a
+ * direct subimage -> range mapping so the range returned may contain data
+ * from other sub-images.  The returned range is a half-open interval where
+ * all of the addresses within the subimage are < end_tile_B.
+ *
+ * @invariant level < surface levels
+ * @invariant logical_array_layer < logical array length of surface
+ * @invariant logical_z_offset_px < logical depth of surface at level
+ */
+void
+isl_surf_get_image_range_B_tile(const struct isl_surf *surf,
+                                uint32_t level,
+                                uint32_t logical_array_layer,
+                                uint32_t logical_z_offset_px,
+                                uint32_t *start_tile_B,
+                                uint32_t *end_tile_B);
 
 /**
  * Create an isl_surf that represents a particular subimage in the surface.

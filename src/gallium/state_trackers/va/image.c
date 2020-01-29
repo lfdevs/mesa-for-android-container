@@ -223,7 +223,8 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
    if (!surf || !surf->buffer)
       return VA_STATUS_ERROR_INVALID_SURFACE;
 
-   if (surf->buffer->interlaced)
+   if (surf->buffer->interlaced &&
+      surf->buffer->buffer_format != PIPE_FORMAT_NV12)
      return VA_STATUS_ERROR_OPERATION_FAILED;
 
    surfaces = surf->buffer->get_surfaces(surf->buffer);
@@ -260,6 +261,10 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
          offset = 0;
    }
 
+   img->num_planes = 1;
+   img->offsets[0] = offset;
+   img->data_size  = img->pitches[0] * h;
+
    switch (img->format.fourcc) {
    case VA_FOURCC('U','Y','V','Y'):
    case VA_FOURCC('Y','U','Y','V'):
@@ -275,6 +280,51 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
       assert(img->pitches[0] >= (w * 4));
       break;
 
+   case VA_FOURCC('P','0','1','0'):
+   case VA_FOURCC('P','0','1','6'):
+   case VA_FOURCC('N','V','1','2'):
+      if (surf->buffer->interlaced) {
+         struct pipe_video_buffer *new_buffer;
+         struct u_rect src_rect, dst_rect;
+
+         surf->templat.interlaced = false;
+         new_buffer = drv->pipe->create_video_buffer(drv->pipe, &surf->templat);
+
+         /* convert the interlaced to the progressive */
+         src_rect.x0 = dst_rect.x0 = 0;
+         src_rect.x1 = dst_rect.x1 = surf->templat.width;
+         src_rect.y0 = dst_rect.y0 = 0;
+         src_rect.y1 = dst_rect.y1 = surf->templat.height;
+
+         vl_compositor_yuv_deint_full(&drv->cstate, &drv->compositor,
+                           surf->buffer, new_buffer,
+                           &src_rect, &dst_rect,
+                           VL_COMPOSITOR_WEAVE);
+
+         surf->buffer->destroy(surf->buffer);
+         surf->buffer = new_buffer;
+
+         /* recalculate the values now that we have a new surface */
+         surfaces = surf->buffer->get_surfaces(surf->buffer);
+         if (screen->resource_get_info) {
+            screen->resource_get_info(screen, surfaces[0]->texture, &stride,
+                                    &offset);
+            if (!stride)
+               offset = 0;
+         }
+
+         w = align(surf->buffer->width, 2);
+         h = align(surf->buffer->height, 2);
+      }
+
+      img->num_planes = 2;
+      img->pitches[0] = stride > 0 ? stride : w;
+      img->offsets[0] = 0;
+      img->pitches[1] = stride > 0 ? stride : w;
+      img->offsets[1] = (stride > 0 ? stride : w) * h;
+      img->data_size  = (stride > 0 ? stride : w) * h * 3 / 2;
+      break;
+
    default:
       /* VaDeriveImage only supports contiguous planes. But there is now a
          more generic api vlVaExportSurfaceHandle. */
@@ -283,9 +333,6 @@ vlVaDeriveImage(VADriverContextP ctx, VASurfaceID surface, VAImage *image)
       return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
-   img->num_planes = 1;
-   img->offsets[0] = offset;
-   img->data_size  = img->pitches[0] * h;
 
    img_buf = CALLOC(1, sizeof(vlVaBuffer));
    if (!img_buf) {
@@ -405,13 +452,20 @@ vlVaGetImage(VADriverContextP ctx, VASurfaceID surface, int x, int y,
       return VA_STATUS_ERROR_OPERATION_FAILED;
    }
 
+
    if (format != surf->buffer->buffer_format) {
       /* support NV12 to YV12 and IYUV conversion now only */
       if ((format == PIPE_FORMAT_YV12 &&
-          surf->buffer->buffer_format == PIPE_FORMAT_NV12) ||
-          (format == PIPE_FORMAT_IYUV &&
-          surf->buffer->buffer_format == PIPE_FORMAT_NV12))
+         surf->buffer->buffer_format == PIPE_FORMAT_NV12) ||
+         (format == PIPE_FORMAT_IYUV &&
+         surf->buffer->buffer_format == PIPE_FORMAT_NV12))
          convert = true;
+      else if (format == PIPE_FORMAT_NV12 &&
+         (surf->buffer->buffer_format == PIPE_FORMAT_P010 ||
+          surf->buffer->buffer_format == PIPE_FORMAT_P016)) {
+         mtx_unlock(&drv->mutex);
+         return VA_STATUS_ERROR_OPERATION_FAILED;
+      }
       else {
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_OPERATION_FAILED;

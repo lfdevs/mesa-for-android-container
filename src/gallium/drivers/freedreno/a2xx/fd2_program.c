@@ -29,7 +29,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
 #include "nir/tgsi_to_nir.h"

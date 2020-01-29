@@ -25,6 +25,7 @@
 #include "program/prog_parameter.h"
 #include "nir/nir_builder.h"
 #include "compiler/brw_nir.h"
+#include "util/mesa-sha1.h"
 #include "util/set.h"
 
 /* Sampler tables don't actually have a maximum size but we pick one just so
@@ -39,16 +40,15 @@ struct apply_pipeline_layout_state {
    nir_shader *shader;
    nir_builder builder;
 
-   struct anv_pipeline_layout *layout;
+   const struct anv_pipeline_layout *layout;
    bool add_bounds_checks;
    nir_address_format ssbo_addr_format;
 
    /* Place to flag lowered instructions so we don't lower them twice */
    struct set *lowered_instrs;
 
-   int dynamic_offset_uniform_start;
-
    bool uses_constants;
+   bool has_dynamic_buffers;
    uint8_t constants_offset;
    struct {
       bool desc_buffer_used;
@@ -564,7 +564,7 @@ lower_load_vulkan_descriptor(nir_intrinsic_instr *intrin,
       if (!state->add_bounds_checks)
          desc = nir_pack_64_2x32(b, nir_channels(b, desc, 0x3));
 
-      if (state->dynamic_offset_uniform_start >= 0) {
+      if (state->has_dynamic_buffers) {
          /* This shader has dynamic offsets and we have no way of knowing
           * (save from the dynamic offset base index) if this buffer has a
           * dynamic offset.
@@ -598,8 +598,10 @@ lower_load_vulkan_descriptor(nir_intrinsic_instr *intrin,
          }
 
          nir_intrinsic_instr *dyn_load =
-            nir_intrinsic_instr_create(b->shader, nir_intrinsic_load_uniform);
-         nir_intrinsic_set_base(dyn_load, state->dynamic_offset_uniform_start);
+            nir_intrinsic_instr_create(b->shader,
+                                       nir_intrinsic_load_push_constant);
+         nir_intrinsic_set_base(dyn_load, offsetof(struct anv_push_constants,
+                                                   dynamic_offsets));
          nir_intrinsic_set_range(dyn_load, MAX_DYNAMIC_BUFFERS * 4);
          dyn_load->src[0] = nir_src_for_ssa(nir_imul_imm(b, dyn_offset_idx, 4));
          dyn_load->num_components = 1;
@@ -750,7 +752,7 @@ lower_image_intrinsic(nir_intrinsic_instr *intrin,
       nir_ssa_def_rewrite_uses(&intrin->dest.ssa, nir_src_for_ssa(desc));
    } else if (binding_offset > MAX_BINDING_TABLE_SIZE) {
       const bool write_only =
-         (var->data.image.access & ACCESS_NON_READABLE) != 0;
+         (var->data.access & ACCESS_NON_READABLE) != 0;
       nir_ssa_def *desc =
          build_descriptor_load(deref, 0, 2, 32, state);
       nir_ssa_def *handle = nir_channel(b, desc, write_only ? 1 : 0);
@@ -781,6 +783,11 @@ lower_load_constant(nir_intrinsic_instr *intrin,
    nir_builder *b = &state->builder;
 
    b->cursor = nir_before_instr(&intrin->instr);
+
+   /* Any constant-offset load_constant instructions should have been removed
+    * by constant folding.
+    */
+   assert(!nir_src_is_const(intrin->src[0]));
 
    nir_ssa_def *index = nir_imm_int(b, state->constants_offset);
    nir_ssa_def *offset = nir_iadd(b, nir_ssa_for_src(b, intrin->src[0], 1),
@@ -1100,9 +1107,8 @@ compare_binding_infos(const void *_a, const void *_b)
 void
 anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
                               bool robust_buffer_access,
-                              struct anv_pipeline_layout *layout,
+                              const struct anv_pipeline_layout *layout,
                               nir_shader *shader,
-                              struct brw_stage_prog_data *prog_data,
                               struct anv_pipeline_bind_map *map)
 {
    void *mem_ctx = ralloc_context(NULL);
@@ -1114,7 +1120,6 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
       .add_bounds_checks = robust_buffer_access,
       .ssbo_addr_format = anv_nir_ssbo_addr_format(pdevice, robust_buffer_access),
       .lowered_instrs = _mesa_pointer_set_create(mem_ctx),
-      .dynamic_offset_uniform_start = -1,
    };
 
    for (unsigned s = 0; s < layout->num_sets; s++) {
@@ -1137,7 +1142,7 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
          map->surface_to_descriptor[map->surface_count] =
             (struct anv_pipeline_binding) {
                .set = ANV_DESCRIPTOR_SET_DESCRIPTORS,
-               .binding = s,
+               .index = s,
             };
          state.set[s].desc_offset = map->surface_count;
          map->surface_count++;
@@ -1166,12 +1171,12 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
       rzalloc_array(mem_ctx, struct binding_info, used_binding_count);
    used_binding_count = 0;
    for (uint32_t set = 0; set < layout->num_sets; set++) {
-      struct anv_descriptor_set_layout *set_layout = layout->set[set].layout;
+      const struct anv_descriptor_set_layout *set_layout = layout->set[set].layout;
       for (unsigned b = 0; b < set_layout->binding_count; b++) {
          if (state.set[set].use_count[b] == 0)
             continue;
 
-         struct anv_descriptor_set_binding_layout *binding =
+         const struct anv_descriptor_set_binding_layout *binding =
                &layout->set[set].layout->binding[b];
 
          /* Do a fixed-point calculation to generate a score based on the
@@ -1204,17 +1209,15 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
    qsort(infos, used_binding_count, sizeof(struct binding_info),
          compare_binding_infos);
 
-   bool have_dynamic_buffers = false;
-
    for (unsigned i = 0; i < used_binding_count; i++) {
       unsigned set = infos[i].set, b = infos[i].binding;
-      struct anv_descriptor_set_binding_layout *binding =
+      const struct anv_descriptor_set_binding_layout *binding =
             &layout->set[set].layout->binding[b];
 
-      if (binding->dynamic_offset_index >= 0)
-         have_dynamic_buffers = true;
-
       const uint32_t array_size = binding->array_size;
+
+      if (binding->dynamic_offset_index >= 0)
+         state.has_dynamic_buffers = true;
 
       if (binding->data & ANV_DESCRIPTOR_SURFACE_STATE) {
          if (map->surface_count + array_size > MAX_BINDING_TABLE_SIZE ||
@@ -1226,16 +1229,28 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
             state.set[set].surface_offsets[b] = BINDLESS_OFFSET;
          } else {
             state.set[set].surface_offsets[b] = map->surface_count;
-            struct anv_sampler **samplers = binding->immutable_samplers;
-            for (unsigned i = 0; i < binding->array_size; i++) {
-               uint8_t planes = samplers ? samplers[i]->n_planes : 1;
-               for (uint8_t p = 0; p < planes; p++) {
+            if (binding->dynamic_offset_index < 0) {
+               struct anv_sampler **samplers = binding->immutable_samplers;
+               for (unsigned i = 0; i < binding->array_size; i++) {
+                  uint8_t planes = samplers ? samplers[i]->n_planes : 1;
+                  for (uint8_t p = 0; p < planes; p++) {
+                     map->surface_to_descriptor[map->surface_count++] =
+                        (struct anv_pipeline_binding) {
+                           .set = set,
+                           .index = binding->descriptor_index + i,
+                           .plane = p,
+                        };
+                  }
+               }
+            } else {
+               for (unsigned i = 0; i < binding->array_size; i++) {
                   map->surface_to_descriptor[map->surface_count++] =
                      (struct anv_pipeline_binding) {
                         .set = set,
-                        .binding = b,
-                        .index = i,
-                        .plane = p,
+                        .index = binding->descriptor_index + i,
+                        .dynamic_offset_index =
+                           layout->set[set].dynamic_offset_start +
+                           binding->dynamic_offset_index + i,
                      };
                }
             }
@@ -1264,24 +1279,13 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
                   map->sampler_to_descriptor[map->sampler_count++] =
                      (struct anv_pipeline_binding) {
                         .set = set,
-                        .binding = b,
-                        .index = i,
+                        .index = binding->descriptor_index + i,
                         .plane = p,
                      };
                }
             }
          }
       }
-   }
-
-   if (have_dynamic_buffers) {
-      state.dynamic_offset_uniform_start = shader->num_uniforms;
-      uint32_t *param = brw_stage_prog_data_add_params(prog_data,
-                                                       MAX_DYNAMIC_BUFFERS);
-      for (unsigned i = 0; i < MAX_DYNAMIC_BUFFERS; i++)
-         param[i] = ANV_PARAM_DYN_OFFSET(i);
-      shader->num_uniforms += MAX_DYNAMIC_BUFFERS * 4;
-      assert(shader->num_uniforms == prog_data->nr_params * 4);
    }
 
    nir_foreach_variable(var, &shader->uniforms) {
@@ -1294,8 +1298,9 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
 
       const uint32_t set = var->data.descriptor_set;
       const uint32_t binding = var->data.binding;
-      const uint32_t array_size =
-         layout->set[set].layout->binding[binding].array_size;
+      const struct anv_descriptor_set_binding_layout *bind_layout =
+            &layout->set[set].layout->binding[binding];
+      const uint32_t array_size = bind_layout->array_size;
 
       if (state.set[set].use_count[binding] == 0)
          continue;
@@ -1307,21 +1312,23 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
          &map->surface_to_descriptor[state.set[set].surface_offsets[binding]];
       for (unsigned i = 0; i < array_size; i++) {
          assert(pipe_binding[i].set == set);
-         assert(pipe_binding[i].binding == binding);
-         assert(pipe_binding[i].index == i);
+         assert(pipe_binding[i].index == bind_layout->descriptor_index + i);
 
          if (dim == GLSL_SAMPLER_DIM_SUBPASS ||
              dim == GLSL_SAMPLER_DIM_SUBPASS_MS)
             pipe_binding[i].input_attachment_index = var->data.index + i;
 
+         /* NOTE: This is a uint8_t so we really do need to != 0 here */
          pipe_binding[i].write_only =
-            (var->data.image.access & ACCESS_NON_READABLE) != 0;
+            (var->data.access & ACCESS_NON_READABLE) != 0;
       }
    }
 
    nir_foreach_function(function, shader) {
       if (!function->impl)
          continue;
+
+      nir_builder_init(&state.builder, function->impl);
 
       /* Before we do the normal lowering, we look for any SSBO operations
        * that we can lower to the BTI model and lower them up-front.  The BTI
@@ -1355,7 +1362,6 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
        */
       lower_direct_buffer_access(function->impl, &state);
 
-      nir_builder_init(&state.builder, function->impl);
       nir_foreach_block(block, function->impl)
          apply_pipeline_layout_block(block, &state);
       nir_metadata_preserve(function->impl, nir_metadata_block_index |
@@ -1363,4 +1369,15 @@ anv_nir_apply_pipeline_layout(const struct anv_physical_device *pdevice,
    }
 
    ralloc_free(mem_ctx);
+
+   /* Now that we're done computing the surface and sampler portions of the
+    * bind map, hash them.  This lets us quickly determine if the actual
+    * mapping has changed and not just a no-op pipeline change.
+    */
+   _mesa_sha1_compute(map->surface_to_descriptor,
+                      map->surface_count * sizeof(struct anv_pipeline_binding),
+                      map->surface_sha1);
+   _mesa_sha1_compute(map->sampler_to_descriptor,
+                      map->sampler_count * sizeof(struct anv_pipeline_binding),
+                      map->sampler_sha1);
 }

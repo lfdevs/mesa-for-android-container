@@ -29,7 +29,7 @@
 #include "etnaviv_resource.h"
 #include "etnaviv_screen.h"
 #include "hw/common.xml.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 bool
 etna_etc2_needs_patching(const struct pipe_resource *prsc)

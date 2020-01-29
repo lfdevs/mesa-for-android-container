@@ -35,14 +35,15 @@
 
 int main(int argc, char **argv)
 {
-   struct anv_instance instance = { };
+   struct anv_physical_device physical_device = { };
    struct anv_device device = {
-      .instance = &instance,
+      .physical = &physical_device,
    };
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_state_pool_init(&state_pool, &device, 4096, 4096, 0);
+   anv_bo_cache_init(&device.bo_cache);
+   anv_state_pool_init(&state_pool, &device, 4096, 4096);
 
    /* Grab one so a zero offset is impossible */
    anv_state_pool_alloc(&state_pool, 16, 16);

@@ -330,6 +330,12 @@ _mesa_TexImage3D_no_error(GLenum target, GLint level, GLint internalformat,
 extern void GLAPIENTRY
 _mesa_EGLImageTargetTexture2DOES( GLenum target, GLeglImageOES image );
 
+extern void GLAPIENTRY
+_mesa_EGLImageTargetTexStorageEXT(GLenum target, GLeglImageOES image,
+                                  const GLint *attrib_list);
+extern void GLAPIENTRY
+_mesa_EGLImageTargetTextureStorageEXT(GLuint texture, GLeglImageOES image,
+                                      const GLint *attrib_list);
 void GLAPIENTRY
 _mesa_TexSubImage1D_no_error(GLenum target, GLint level, GLint xoffset,
                              GLsizei width,
@@ -785,6 +791,10 @@ _mesa_TexBufferRange(GLenum target, GLenum internalFormat, GLuint buffer,
                      GLintptr offset, GLsizeiptr size);
 
 extern void GLAPIENTRY
+_mesa_TextureBufferRangeEXT(GLuint texture, GLenum target, GLenum internalFormat,
+                            GLuint buffer, GLintptr offset, GLsizeiptr size);
+
+extern void GLAPIENTRY
 _mesa_TextureBuffer(GLuint texture, GLenum internalFormat, GLuint buffer);
 
 extern void GLAPIENTRY
@@ -833,6 +843,18 @@ _mesa_TextureStorage3DMultisample(GLuint texture, GLsizei samples,
                                   GLenum internalformat, GLsizei width,
                                   GLsizei height, GLsizei depth,
                                   GLboolean fixedsamplelocations);
+
+extern void GLAPIENTRY
+_mesa_TextureStorage2DMultisampleEXT(GLuint texture, GLenum target, GLsizei samples,
+                                     GLenum internalformat, GLsizei width,
+                                     GLsizei height, GLboolean fixedsamplelocations);
+
+extern void GLAPIENTRY
+_mesa_TextureStorage3DMultisampleEXT(GLuint texture, GLenum target, GLsizei samples,
+                                     GLenum internalformat, GLsizei width,
+                                     GLsizei height, GLsizei depth,
+                                     GLboolean fixedsamplelocations);
+
 /*@}*/
 
 #ifdef __cplusplus

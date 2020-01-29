@@ -52,7 +52,7 @@ build_fmask_expand_compute_shader(struct radv_device *device, int samples)
 						       img_type, "out_img");
 	output_img->data.descriptor_set = 0;
 	output_img->data.binding = 0;
-	output_img->data.image.access = ACCESS_NON_READABLE;
+	output_img->data.access = ACCESS_NON_READABLE;
 
 	nir_ssa_def *invoc_id = nir_load_local_invocation_id(&b);
 	nir_ssa_def *wg_id = nir_load_work_group_id(&b);
@@ -98,6 +98,7 @@ build_fmask_expand_compute_shader(struct radv_device *device, int samples)
 		store->src[1] = nir_src_for_ssa(global_id);
 		store->src[2] = nir_src_for_ssa(nir_imm_int(&b, i));
 		store->src[3] = nir_src_for_ssa(outval);
+		store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
 		nir_builder_instr_insert(&b, &store->instr);
 	}
 

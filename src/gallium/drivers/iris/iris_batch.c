@@ -150,20 +150,13 @@ decode_get_bo(void *v_batch, bool ppgtt, uint64_t address)
 }
 
 static unsigned
-decode_get_state_size(void *v_batch, uint32_t offset_from_base)
+decode_get_state_size(void *v_batch,
+                      uint64_t address,
+                      UNUSED uint64_t base_address)
 {
    struct iris_batch *batch = v_batch;
-
-   /* The decoder gives us offsets from a base address, which is not great.
-    * Binding tables are relative to surface state base address, and other
-    * state is relative to dynamic state base address.  These could alias,
-    * but in practice it's unlikely because surface offsets are always in
-    * the [0, 64K) range, and we assign dynamic state addresses starting at
-    * the top of the 4GB range.  We should fix this but it's likely good
-    * enough for now.
-    */
    unsigned size = (uintptr_t)
-      _mesa_hash_table_u64_search(batch->state_sizes, offset_from_base);
+      _mesa_hash_table_u64_search(batch->state_sizes, address);
 
    return size;
 }

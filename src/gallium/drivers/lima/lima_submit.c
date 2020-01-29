@@ -78,6 +78,7 @@ struct lima_submit *lima_submit_create(struct lima_context *ctx, uint32_t pipe)
       goto err_out1;
 
    util_dynarray_init(&s->gem_bos, s);
+   util_dynarray_init(&s->bos, s);
 
    return s;
 

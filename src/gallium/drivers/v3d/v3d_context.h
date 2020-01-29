@@ -59,7 +59,8 @@ void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
 #define VC5_DIRTY_ZSA                 (1ull <<  2)
 #define VC5_DIRTY_COMPTEX             (1ull <<  3)
 #define VC5_DIRTY_VERTTEX             (1ull <<  4)
-#define VC5_DIRTY_FRAGTEX             (1ull <<  5)
+#define VC5_DIRTY_GEOMTEX             (1ull <<  5)
+#define VC5_DIRTY_FRAGTEX             (1ull <<  6)
 
 #define VC5_DIRTY_SHADER_IMAGE        (1ull <<  9)
 #define VC5_DIRTY_BLEND_COLOR         (1ull << 10)
@@ -77,18 +78,22 @@ void v3d_job_add_bo(struct v3d_job *job, struct v3d_bo *bo);
 #define VC5_DIRTY_CLIP                (1ull << 22)
 #define VC5_DIRTY_UNCOMPILED_CS       (1ull << 23)
 #define VC5_DIRTY_UNCOMPILED_VS       (1ull << 24)
-#define VC5_DIRTY_UNCOMPILED_FS       (1ull << 25)
+#define VC5_DIRTY_UNCOMPILED_GS       (1ull << 25)
+#define VC5_DIRTY_UNCOMPILED_FS       (1ull << 26)
 
 #define VC5_DIRTY_COMPILED_CS         (1ull << 29)
 #define VC5_DIRTY_COMPILED_VS         (1ull << 30)
-#define VC5_DIRTY_COMPILED_FS         (1ull << 31)
+#define VC5_DIRTY_COMPILED_GS_BIN     (1ULL << 31)
+#define VC5_DIRTY_COMPILED_GS         (1ULL << 32)
+#define VC5_DIRTY_COMPILED_FS         (1ull << 33)
 
-#define VC5_DIRTY_FS_INPUTS           (1ull << 35)
-#define VC5_DIRTY_STREAMOUT           (1ull << 36)
-#define VC5_DIRTY_OQ                  (1ull << 37)
-#define VC5_DIRTY_CENTROID_FLAGS      (1ull << 38)
-#define VC5_DIRTY_NOPERSPECTIVE_FLAGS (1ull << 39)
-#define VC5_DIRTY_SSBO                (1ull << 40)
+#define VC5_DIRTY_FS_INPUTS           (1ull << 38)
+#define VC5_DIRTY_GS_INPUTS           (1ull << 39)
+#define VC5_DIRTY_STREAMOUT           (1ull << 40)
+#define VC5_DIRTY_OQ                  (1ull << 41)
+#define VC5_DIRTY_CENTROID_FLAGS      (1ull << 42)
+#define VC5_DIRTY_NOPERSPECTIVE_FLAGS (1ull << 43)
+#define VC5_DIRTY_SSBO                (1ull << 44)
 
 #define VC5_MAX_FS_INPUTS 64
 
@@ -206,6 +211,7 @@ struct v3d_compiled_shader {
         union {
                 struct v3d_prog_data *base;
                 struct v3d_vs_prog_data *vs;
+                struct v3d_gs_prog_data *gs;
                 struct v3d_fs_prog_data *fs;
                 struct v3d_compute_prog_data *compute;
         } prog_data;
@@ -219,8 +225,8 @@ struct v3d_compiled_shader {
 };
 
 struct v3d_program_stateobj {
-        struct v3d_uncompiled_shader *bind_vs, *bind_fs, *bind_compute;
-        struct v3d_compiled_shader *cs, *vs, *fs, *compute;
+        struct v3d_uncompiled_shader *bind_vs, *bind_gs, *bind_fs, *bind_compute;
+        struct v3d_compiled_shader *cs, *vs, *gs_bin, *gs, *fs, *compute;
 
         struct hash_table *cache[MESA_SHADER_STAGES];
 
@@ -348,6 +354,8 @@ struct v3d_job {
         */
         uint32_t draw_width;
         uint32_t draw_height;
+        uint32_t num_layers;
+
         /** @} */
         /** @{ Tile information, depending on MSAA and float color buffer. */
         uint32_t draw_tiles_x; /** @< Number of tiles wide for framebuffer. */
@@ -619,7 +627,8 @@ v3d_ioctl(int fd, unsigned long request, void *arg)
 static inline bool
 v3d_transform_feedback_enabled(struct v3d_context *v3d)
 {
-        return v3d->prog.bind_vs->num_tf_specs != 0 &&
+        return (v3d->prog.bind_vs->num_tf_specs != 0 ||
+                (v3d->prog.bind_gs && v3d->prog.bind_gs->num_tf_specs != 0)) &&
                v3d->active_queries;
 }
 
@@ -684,7 +693,7 @@ bool v3d_generate_mipmap(struct pipe_context *pctx,
 
 struct v3d_fence *v3d_fence_create(struct v3d_context *v3d);
 
-void v3d_tf_update_counters(struct v3d_context *v3d);
+void v3d_update_primitive_counters(struct v3d_context *v3d);
 
 #ifdef v3dX
 #  include "v3dx_context.h"

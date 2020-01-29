@@ -23,10 +23,71 @@
  */
 
 #include "si_build_pm4.h"
+#include "util/u_upload_mgr.h"
 #include "util/u_viewport.h"
-#include "tgsi/tgsi_scan.h"
 
 #define SI_MAX_SCISSOR 16384
+
+void si_update_ngg_small_prim_precision(struct si_context *ctx)
+{
+	if (!ctx->screen->use_ngg_culling)
+		return;
+
+	/* Set VS_STATE.SMALL_PRIM_PRECISION for NGG culling. */
+	unsigned num_samples = ctx->framebuffer.nr_samples;
+	unsigned quant_mode = ctx->viewports.as_scissor[0].quant_mode;
+	float precision;
+
+	if (quant_mode == SI_QUANT_MODE_12_12_FIXED_POINT_1_4096TH)
+		precision = num_samples / 4096.0;
+	else if (quant_mode == SI_QUANT_MODE_14_10_FIXED_POINT_1_1024TH)
+		precision = num_samples / 1024.0;
+	else
+		precision = num_samples / 256.0;
+
+	ctx->current_vs_state &= C_VS_STATE_SMALL_PRIM_PRECISION;
+	ctx->current_vs_state |= S_VS_STATE_SMALL_PRIM_PRECISION(fui(precision) >> 23);
+}
+
+void si_get_small_prim_cull_info(struct si_context *sctx,
+				 struct si_small_prim_cull_info *out)
+{
+	/* This is needed by the small primitive culling, because it's done
+	 * in screen space.
+	 */
+	struct si_small_prim_cull_info info;
+	unsigned num_samples = sctx->framebuffer.nr_samples;
+	assert(num_samples >= 1);
+
+	info.scale[0] = sctx->viewports.states[0].scale[0];
+	info.scale[1] = sctx->viewports.states[0].scale[1];
+	info.translate[0] = sctx->viewports.states[0].translate[0];
+	info.translate[1] = sctx->viewports.states[0].translate[1];
+
+	/* The viewport shouldn't flip the X axis for the small prim culling to work. */
+	assert(-info.scale[0] + info.translate[0] <= info.scale[0] + info.translate[0]);
+
+	/* If the Y axis is inverted (OpenGL default framebuffer), reverse it.
+	 * This is because the viewport transformation inverts the clip space
+	 * bounding box, so min becomes max, which breaks small primitive
+	 * culling.
+	 */
+	if (sctx->viewports.y_inverted) {
+		info.scale[1] = -info.scale[1];
+		info.translate[1] = -info.translate[1];
+	}
+
+	/* Scale the framebuffer up, so that samples become pixels and small
+	 * primitive culling is the same for all sample counts.
+	 * This only works with the standard DX sample positions, because
+	 * the samples are evenly spaced on both X and Y axes.
+	 */
+	for (unsigned i = 0; i < 2; i++) {
+		info.scale[i] *= num_samples;
+		info.translate[i] *= num_samples;
+	}
+	*out = info;
+}
 
 static void si_set_scissor_states(struct pipe_context *pctx,
 				  unsigned start_slot,
@@ -282,6 +343,8 @@ static void si_emit_guardband(struct si_context *ctx)
 						       vp_as_scissor.quant_mode));
 	if (initial_cdw != ctx->gfx_cs->current.cdw)
 		ctx->context_roll = true;
+
+	si_update_ngg_small_prim_precision(ctx);
 }
 
 static void si_emit_scissors(struct si_context *ctx)
@@ -409,6 +472,35 @@ static void si_emit_viewports(struct si_context *ctx)
 	struct radeon_cmdbuf *cs = ctx->gfx_cs;
 	struct pipe_viewport_state *states = ctx->viewports.states;
 
+	if (ctx->screen->use_ngg_culling) {
+		/* Set the viewport info for small primitive culling. */
+		struct si_small_prim_cull_info info;
+		si_get_small_prim_cull_info(ctx, &info);
+
+		if (memcmp(&info, &ctx->last_small_prim_cull_info, sizeof(info))) {
+			unsigned offset = 0;
+
+			/* Align to 256, because the address is shifted by 8 bits. */
+			u_upload_data(ctx->b.const_uploader, 0, sizeof(info), 256,
+				      &info, &offset,
+				      (struct pipe_resource**)&ctx->small_prim_cull_info_buf);
+
+			ctx->small_prim_cull_info_address =
+				ctx->small_prim_cull_info_buf->gpu_address + offset;
+			ctx->last_small_prim_cull_info = info;
+			ctx->small_prim_cull_info_dirty = true;
+		}
+
+		if (ctx->small_prim_cull_info_dirty) {
+			/* This will end up in SGPR6 as (value << 8), shifted by the hw. */
+			radeon_add_to_buffer_list(ctx, ctx->gfx_cs, ctx->small_prim_cull_info_buf,
+						  RADEON_USAGE_READ, RADEON_PRIO_CONST_BUFFER);
+			radeon_set_sh_reg(ctx->gfx_cs, R_00B220_SPI_SHADER_PGM_LO_GS,
+					  ctx->small_prim_cull_info_address >> 8);
+			ctx->small_prim_cull_info_dirty = false;
+		}
+	}
+
 	/* The simple case: Only 1 viewport is active. */
 	if (!ctx->vs_writes_viewport_index) {
 		radeon_set_context_reg_seq(cs, R_02843C_PA_CL_VPORT_XSCALE, 6);
@@ -487,7 +579,7 @@ static void si_emit_viewport_states(struct si_context *ctx)
  */
 void si_update_vs_viewport_state(struct si_context *ctx)
 {
-	struct tgsi_shader_info *info = si_get_vs_info(ctx);
+	struct si_shader_info *info = si_get_vs_info(ctx);
 	bool vs_window_space;
 
 	if (!info)

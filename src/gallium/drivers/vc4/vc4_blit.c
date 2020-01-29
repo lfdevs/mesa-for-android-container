@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_blitter.h"
 #include "compiler/nir/nir_builder.h"

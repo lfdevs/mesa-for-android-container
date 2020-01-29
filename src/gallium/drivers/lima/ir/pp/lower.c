@@ -150,26 +150,25 @@ static bool ppir_lower_texture(ppir_block *block, ppir_node *node)
 {
    ppir_load_texture_node *load_tex = ppir_node_to_load_texture(node);
    ppir_dest *dest = ppir_node_get_dest(node);
-
-   if (ppir_node_is_root(node) && dest->type == ppir_target_ssa) {
-      ppir_node_delete(node);
-      return true;
-   }
-
    ppir_node *src_coords = ppir_node_get_src(node, 0)->node;
    ppir_load_node *load = NULL;
+
    if (src_coords && ppir_node_has_single_src_succ(src_coords) &&
        (src_coords->op == ppir_op_load_coords))
       load = ppir_node_to_load(src_coords);
    else {
       /* Create load_coords node */
-      load = ppir_node_create(block, ppir_op_load_coords, -1, 0);
+      load = ppir_node_create(block, ppir_op_load_coords_reg, -1, 0);
       if (!load)
          return false;
       list_addtail(&load->node.list, &node->list);
 
-      load->src = load_tex->src_coords;
+      load->src = load_tex->src[0];
       load->num_src = 1;
+      if (load_tex->sampler_dim == GLSL_SAMPLER_DIM_CUBE)
+         load->num_components = 3;
+      else
+         load->num_components = 2;
 
       ppir_debug("%s create load_coords node %d for %d\n",
                  __FUNCTION__, load->node.index, node->index);
@@ -183,32 +182,11 @@ static bool ppir_lower_texture(ppir_block *block, ppir_node *node)
    }
 
    assert(load);
-   load_tex->src_coords.type = load->dest.type = ppir_target_pipeline;
-   load_tex->src_coords.pipeline = load->dest.pipeline = ppir_pipeline_reg_discard;
+   load_tex->src[0].type = load->dest.type = ppir_target_pipeline;
+   load_tex->src[0].pipeline = load->dest.pipeline = ppir_pipeline_reg_discard;
 
-   if (ppir_node_has_single_src_succ(node)) {
-      ppir_node *succ = ppir_node_first_succ(node);
-      switch (succ->type) {
-      case ppir_node_type_alu:
-      case ppir_node_type_branch: {
-         for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
-            ppir_src *src = ppir_node_get_src(succ, i);
-            if (src->node == node) {
-               /* Can consume samplers directly */
-               src->type = dest->type = ppir_target_pipeline;
-               src->pipeline = dest->pipeline = ppir_pipeline_reg_sampler;
-            }
-         }
-         return true;
-      }
-      default:
-         /* Create mov for everyone else */
-         break;
-      }
-   }
-
-   /* Create move node */
-   ppir_node *move = ppir_node_insert_mov(node);
+   /* Always create move node since there can be successors in other blocks */
+   ppir_node *move = ppir_node_insert_mov_all_blocks(node);
    if (unlikely(!move))
       return false;
 
@@ -333,8 +311,6 @@ static bool ppir_lower_branch(ppir_block *block, ppir_node *node)
    zero->dest.type = ppir_target_pipeline;
    zero->dest.pipeline = ppir_pipeline_reg_const0;
    zero->dest.ssa.num_components = 1;
-   zero->dest.ssa.live_in = INT_MAX;
-   zero->dest.ssa.live_out = 0;
    zero->dest.write_mask = 0x01;
 
    /* For now we're just comparing branch condition with 0,

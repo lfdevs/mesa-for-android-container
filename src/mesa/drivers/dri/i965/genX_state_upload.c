@@ -2101,13 +2101,7 @@ static const struct brw_tracked_state genX(wm_state) = {
       GEN_GEN == 11 ?                                                     \
       0 :                                                                 \
       DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4);          \
-   /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to     \
-    * disable prefetching of binding tables in A0 and B0 steppings.       \
-    * TODO: Revisit this WA on C0 stepping.                               \
-    */                                                                    \
    pkt.BindingTableEntryCount =                                           \
-      GEN_GEN == 11 ?                                                     \
-      0 :                                                                 \
       stage_prog_data->binding_table.size_bytes / 4;                      \
    pkt.FloatingPointMode  = stage_prog_data->use_alt_mode;                \
                                                                           \
@@ -3877,13 +3871,7 @@ genX(upload_ps)(struct brw_context *brw)
          0 : DIV_ROUND_UP(CLAMP(stage_state->sampler_count, 0, 16), 4);
 
       /* BRW_NEW_FS_PROG_DATA */
-      /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to disable
-       * prefetching of binding tables in A0 and B0 steppings.
-       * TODO: Revisit this workaround on C0 stepping.
-       */
-      ps.BindingTableEntryCount = GEN_GEN == 11 ?
-                                  0 :
-                                  prog_data->base.binding_table.size_bytes / 4;
+      ps.BindingTableEntryCount = prog_data->base.binding_table.size_bytes / 4;
 
       if (prog_data->base.use_alt_mode)
          ps.FloatingPointMode = Alternate;

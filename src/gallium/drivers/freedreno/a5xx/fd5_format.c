@@ -25,7 +25,7 @@
  */
 
 #include "pipe/p_defines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "fd5_format.h"
 

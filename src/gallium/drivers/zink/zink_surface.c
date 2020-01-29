@@ -26,7 +26,7 @@
 #include "zink_screen.h"
 #include "zink_surface.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 

@@ -31,7 +31,7 @@
 
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_atomic.h"
 #include "util/u_upload_mgr.h"
 #include "util/u_transfer.h"
@@ -320,6 +320,8 @@ swr_blit(struct pipe_context *pipe, const struct pipe_blit_info *blit_info)
    util_blitter_save_vertex_elements(ctx->blitter, (void *)ctx->velems);
    util_blitter_save_vertex_shader(ctx->blitter, (void *)ctx->vs);
    util_blitter_save_geometry_shader(ctx->blitter, (void*)ctx->gs);
+   util_blitter_save_tessctrl_shader(ctx->blitter, (void*)ctx->tcs);
+   util_blitter_save_tesseval_shader(ctx->blitter, (void*)ctx->tes);
    util_blitter_save_so_targets(
       ctx->blitter,
       ctx->num_so_targets,
@@ -472,6 +474,18 @@ swr_UpdateStatsFE(HANDLE hPrivateContext, const SWR_STATS_FE *pStats)
    }
 }
 
+static void
+swr_UpdateStreamOut(HANDLE hPrivateContext, uint64_t numPrims)
+{
+   swr_draw_context *pDC = (swr_draw_context*)hPrivateContext;
+
+   if (!pDC)
+      return;
+
+   if (pDC->soPrims)
+       *pDC->soPrims += numPrims;
+}
+
 struct pipe_context *
 swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
 {
@@ -496,6 +510,7 @@ swr_create_context(struct pipe_screen *p_screen, void *priv, unsigned flags)
    createInfo.pfnStoreTile = swr_StoreHotTile;
    createInfo.pfnUpdateStats = swr_UpdateStats;
    createInfo.pfnUpdateStatsFE = swr_UpdateStatsFE;
+   createInfo.pfnUpdateStreamOut = swr_UpdateStreamOut;
    createInfo.pfnMakeGfxPtr = swr_MakeGfxPtr;
 
    SWR_THREADING_INFO threadingInfo {0};

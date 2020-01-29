@@ -35,4 +35,9 @@
 void fd6_blitter_init(struct pipe_context *pctx);
 unsigned fd6_tile_mode(const struct pipe_resource *tmpl);
 
+void
+fd6_clear_surface(struct fd_context *ctx,
+		struct fd_ringbuffer *ring, struct pipe_surface *psurf,
+		uint32_t width, uint32_t height, union pipe_color_union *color);
+
 #endif /* FD6_BLIT_H_ */

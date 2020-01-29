@@ -37,7 +37,7 @@
 #define LP_BLD_TYPE_H
 
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "pipe/p_compiler.h"
 #include "gallivm/lp_bld.h"
 

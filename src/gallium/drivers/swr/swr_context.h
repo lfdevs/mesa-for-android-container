@@ -53,7 +53,12 @@
 #define SWR_NEW_FRAMEBUFFER (1 << 15)
 #define SWR_NEW_CLIP (1 << 16)
 #define SWR_NEW_SO (1 << 17)
-#define SWR_LARGE_CLIENT_DRAW (1<<18) // Indicates client draw will block
+#define SWR_BLOCK_CLIENT_DRAW ( 1 << 18) // Indicates client draw will block
+#define SWR_NEW_TCS (1 << 19)
+#define SWR_NEW_TES (1 << 20)
+#define SWR_NEW_TS (1 << 21)
+#define SWR_NEW_TCSCONSTANTS (1 << 22)
+#define SWR_NEW_TESCONSTANTS (1 << 23)
 
 namespace std
 {
@@ -91,6 +96,10 @@ struct swr_draw_context {
    uint32_t num_constantsFS[PIPE_MAX_CONSTANT_BUFFERS];
    const float *constantGS[PIPE_MAX_CONSTANT_BUFFERS];
    uint32_t num_constantsGS[PIPE_MAX_CONSTANT_BUFFERS];
+   const float *constantTCS[PIPE_MAX_CONSTANT_BUFFERS];
+   uint32_t num_constantsTCS[PIPE_MAX_CONSTANT_BUFFERS];
+   const float *constantTES[PIPE_MAX_CONSTANT_BUFFERS];
+   uint32_t num_constantsTES[PIPE_MAX_CONSTANT_BUFFERS];
 
    swr_jit_texture texturesVS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    swr_jit_sampler samplersVS[PIPE_MAX_SAMPLERS];
@@ -98,6 +107,10 @@ struct swr_draw_context {
    swr_jit_sampler samplersFS[PIPE_MAX_SAMPLERS];
    swr_jit_texture texturesGS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
    swr_jit_sampler samplersGS[PIPE_MAX_SAMPLERS];
+   swr_jit_texture texturesTCS[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   swr_jit_sampler samplersTCS[PIPE_MAX_SAMPLERS];
+   swr_jit_texture texturesTES[PIPE_MAX_SHADER_SAMPLER_VIEWS];
+   swr_jit_sampler samplersTES[PIPE_MAX_SAMPLERS];
 
    float userClipPlanes[PIPE_MAX_CLIP_PLANES][4];
 
@@ -107,6 +120,8 @@ struct swr_draw_context {
    struct swr_query_result *pStats; // @llvm_struct
    SWR_INTERFACE *pAPI; // @llvm_struct - Needed for the swr_memory callbacks
    SWR_TILE_INTERFACE *pTileAPI; // @llvm_struct - Needed for the swr_memory callbacks
+
+   uint64_t* soPrims; //number of primitives written to StreamOut buffer
 };
 
 /* gen_llvm_types FINI */
@@ -115,6 +130,8 @@ struct swr_context {
    struct pipe_context pipe; /**< base class */
 
    HANDLE swrContext;
+
+   SWR_TS_STATE tsState;
 
    /** Constant state objects */
    struct swr_blend_state *blend;
@@ -125,6 +142,8 @@ struct swr_context {
    struct swr_vertex_shader *vs;
    struct swr_fragment_shader *fs;
    struct swr_geometry_shader *gs;
+   struct swr_tess_control_shader *tcs;
+   struct swr_tess_evaluation_shader *tes;
    struct swr_vertex_element_state *velems;
 
    /** Other rendering state */
@@ -160,6 +179,7 @@ struct swr_context {
    // streamout
    pipe_stream_output_target *so_targets[MAX_SO_STREAMS];
    uint32_t num_so_targets;
+   uint64_t so_primCounter; // number of primitives written to StreamOut buffer
 
    /* Temp storage for user_buffer constants */
    struct swr_scratch_buffers *scratch;

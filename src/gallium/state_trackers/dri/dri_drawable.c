@@ -34,7 +34,7 @@
 #include "dri_drawable.h"
 
 #include "pipe/p_screen.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 
@@ -404,6 +404,56 @@ dri_postprocessing(struct dri_context *ctx,
       pp_run(ctx->pp, src, src, zsbuf);
 }
 
+struct notify_before_flush_cb_args {
+   struct dri_context *ctx;
+   struct dri_drawable *drawable;
+   unsigned flags;
+   enum __DRI2throttleReason reason;
+   bool swap_msaa_buffers;
+};
+
+static void
+notify_before_flush_cb(void* _args)
+{
+   struct notify_before_flush_cb_args *args = (struct notify_before_flush_cb_args *) _args;
+   struct st_context_iface *st = args->ctx->st;
+   struct pipe_context *pipe = st->pipe;
+
+   if (args->drawable->stvis.samples > 1 &&
+       (args->reason == __DRI2_THROTTLE_SWAPBUFFER ||
+        args->reason == __DRI2_THROTTLE_COPYSUBBUFFER)) {
+      /* Resolve the MSAA back buffer. */
+      dri_pipe_blit(st->pipe,
+                    args->drawable->textures[ST_ATTACHMENT_BACK_LEFT],
+                    args->drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]);
+
+      if (args->reason == __DRI2_THROTTLE_SWAPBUFFER &&
+          args->drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT] &&
+          args->drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]) {
+         args->swap_msaa_buffers = true;
+      }
+
+      /* FRONT_LEFT is resolved in drawable->flush_frontbuffer. */
+   }
+
+   dri_postprocessing(args->ctx, args->drawable, ST_ATTACHMENT_BACK_LEFT);
+
+   if (pipe->invalidate_resource &&
+       (args->flags & __DRI2_FLUSH_INVALIDATE_ANCILLARY)) {
+      if (args->drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL])
+         pipe->invalidate_resource(pipe, args->drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+      if (args->drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL])
+         pipe->invalidate_resource(pipe, args->drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL]);
+   }
+
+   if (args->ctx->hud) {
+      hud_run(args->ctx->hud, args->ctx->st->cso_context,
+              args->drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
+   }
+
+   pipe->flush_resource(pipe, args->drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
+}
+
 /**
  * DRI2 flush extension, the flush_with_flags function.
  *
@@ -422,7 +472,7 @@ dri_flush(__DRIcontext *cPriv,
    struct dri_drawable *drawable = dri_drawable(dPriv);
    struct st_context_iface *st;
    unsigned flush_flags;
-   bool swap_msaa_buffers = false;
+   struct notify_before_flush_cb_args args = { 0 };
 
    if (!ctx) {
       assert(0);
@@ -444,44 +494,18 @@ dri_flush(__DRIcontext *cPriv,
       flags &= ~__DRI2_FLUSH_DRAWABLE;
    }
 
-   /* Flush the drawable. */
    if ((flags & __DRI2_FLUSH_DRAWABLE) &&
        drawable->textures[ST_ATTACHMENT_BACK_LEFT]) {
-      struct pipe_context *pipe = st->pipe;
-
-      if (drawable->stvis.samples > 1 &&
-          (reason == __DRI2_THROTTLE_SWAPBUFFER ||
-           reason == __DRI2_THROTTLE_COPYSUBBUFFER)) {
-         /* Resolve the MSAA back buffer. */
-         dri_pipe_blit(st->pipe,
-                       drawable->textures[ST_ATTACHMENT_BACK_LEFT],
-                       drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]);
-
-         if (reason == __DRI2_THROTTLE_SWAPBUFFER &&
-             drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT] &&
-             drawable->msaa_textures[ST_ATTACHMENT_BACK_LEFT]) {
-            swap_msaa_buffers = true;
-         }
-
-         /* FRONT_LEFT is resolved in drawable->flush_frontbuffer. */
-      }
-
-      dri_postprocessing(ctx, drawable, ST_ATTACHMENT_BACK_LEFT);
-
-      if (pipe->invalidate_resource &&
-          (flags & __DRI2_FLUSH_INVALIDATE_ANCILLARY)) {
-         if (drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL])
-            pipe->invalidate_resource(pipe, drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
-         if (drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL])
-            pipe->invalidate_resource(pipe, drawable->msaa_textures[ST_ATTACHMENT_DEPTH_STENCIL]);
-      }
-
-      if (ctx->hud) {
-         hud_run(ctx->hud, ctx->st->cso_context,
-                 drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
-      }
-
-      pipe->flush_resource(pipe, drawable->textures[ST_ATTACHMENT_BACK_LEFT]);
+      /* We can't do operations on the back buffer here, because there
+       * may be some pending operations that will get flushed by the
+       * call to st->flush (eg: FLUSH_VERTICES).
+       * Instead we register a callback to be notified when all operations
+       * have been submitted but before the call to st_flush.
+       */
+      args.ctx = ctx;
+      args.drawable = drawable;
+      args.flags = flags;
+      args.reason = reason;
    }
 
    flush_flags = 0;
@@ -499,7 +523,7 @@ dri_flush(__DRIcontext *cPriv,
       struct pipe_screen *screen = drawable->screen->base.screen;
       struct pipe_fence_handle *new_fence = NULL;
 
-      st->flush(st, flush_flags, &new_fence);
+      st->flush(st, flush_flags, &new_fence, args.ctx ? notify_before_flush_cb : NULL, &args);
 
       /* throttle on the previous fence */
       if (drawable->throttle_fence) {
@@ -509,7 +533,7 @@ dri_flush(__DRIcontext *cPriv,
       drawable->throttle_fence = new_fence;
    }
    else if (flags & (__DRI2_FLUSH_DRAWABLE | __DRI2_FLUSH_CONTEXT)) {
-      st->flush(st, flush_flags, NULL);
+      st->flush(st, flush_flags, NULL, args.ctx ? notify_before_flush_cb : NULL, &args);
    }
 
    if (drawable) {
@@ -520,7 +544,7 @@ dri_flush(__DRIcontext *cPriv,
     * from the front buffer after SwapBuffers returns what was
     * in the back buffer.
     */
-   if (swap_msaa_buffers) {
+   if (args.swap_msaa_buffers) {
       struct pipe_resource *tmp =
          drawable->msaa_textures[ST_ATTACHMENT_FRONT_LEFT];
 

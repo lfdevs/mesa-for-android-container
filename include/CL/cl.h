@@ -137,19 +137,23 @@ typedef struct _cl_image_desc {
     size_t                  image_slice_pitch;
     cl_uint                 num_mip_levels;
     cl_uint                 num_samples;
+#ifdef CL_VERSION_2_0
 #ifdef __GNUC__
     __extension__   /* Prevents warnings about anonymous union in -pedantic builds */
 #endif
 #ifdef _MSC_VER
-#pragma warning( push )  
+#pragma warning( push )
 #pragma warning( disable : 4201 ) /* Prevents warning about nameless struct/union in /W4 /Za builds */
 #endif
     union {
+#endif
       cl_mem                  buffer;
+#ifdef CL_VERSION_2_0
       cl_mem                  mem_object;
     };
 #ifdef _MSC_VER
-#pragma warning( pop )  
+#pragma warning( pop )
+#endif
 #endif
 } cl_image_desc;
 
@@ -356,10 +360,10 @@ typedef struct _cl_buffer_region {
 #define CL_DEVICE_REFERENCE_COUNT                        0x1047
 #define CL_DEVICE_PREFERRED_INTEROP_USER_SYNC            0x1048
 #define CL_DEVICE_PRINTF_BUFFER_SIZE                     0x1049
-#define CL_DEVICE_IMAGE_PITCH_ALIGNMENT                  0x104A
-#define CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT           0x104B
 #endif
 #ifdef CL_VERSION_2_0
+#define CL_DEVICE_IMAGE_PITCH_ALIGNMENT                  0x104A
+#define CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT           0x104B
 #define CL_DEVICE_MAX_READ_WRITE_IMAGE_ARGS              0x104C
 #define CL_DEVICE_MAX_GLOBAL_VARIABLE_SIZE               0x104D
 #define CL_DEVICE_QUEUE_ON_DEVICE_PROPERTIES             0x104E

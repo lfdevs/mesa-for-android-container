@@ -105,7 +105,7 @@ namespace {
 
    std::vector<char>
    emit_code(::llvm::Module &mod, const target &target,
-             TargetMachine::CodeGenFileType ft,
+             compat::CodeGenFileType ft,
              std::string &r_log) {
       std::string err;
       auto t = ::llvm::TargetRegistry::lookupTarget(target.triple, err);
@@ -128,7 +128,7 @@ namespace {
 
          mod.setDataLayout(tm->createDataLayout());
          tm->Options.MCOptions.AsmVerbose =
-            (ft == TargetMachine::CGFT_AssemblyFile);
+            (ft == compat::CGFT_AssemblyFile);
 
          if (compat::add_passes_to_emit_file(*tm, pm, os, ft))
             fail(r_log, build_error(), "TargetMachine can't emit this file");
@@ -145,7 +145,7 @@ clover::llvm::build_module_native(::llvm::Module &mod, const target &target,
                                   const clang::CompilerInstance &c,
                                   std::string &r_log) {
    const auto code = emit_code(mod, target,
-                               TargetMachine::CGFT_ObjectFile, r_log);
+                               compat::CGFT_ObjectFile, r_log);
    return build_module_common(mod, code, get_symbol_offsets(code, r_log), c);
 }
 
@@ -156,7 +156,7 @@ clover::llvm::print_module_native(const ::llvm::Module &mod,
    try {
       std::unique_ptr< ::llvm::Module> cmod { compat::clone_module(mod) };
       return as_string(emit_code(*cmod, target,
-                                 TargetMachine::CGFT_AssemblyFile, log));
+                                 compat::CGFT_AssemblyFile, log));
    } catch (...) {
       return "Couldn't output native disassembly: " + log;
    }

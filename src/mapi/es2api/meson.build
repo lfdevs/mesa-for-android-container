@@ -62,14 +62,14 @@ pkg.generate(
   libraries_private : gl_priv_libs,
 )
 
-if with_tests and prog_nm.found()
+if with_symbols_check
   test(
     'es2-ABI-check',
     symbols_check,
     args : [
       '--lib', libgles2,
       '--symbols-file', files('gles2-symbols.txt'),
-      '--nm', prog_nm.path(),
+      symbols_check_args,
     ],
     suite : ['mapi'],
   )

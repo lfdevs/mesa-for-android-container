@@ -2398,6 +2398,134 @@ u64shr_emit_cpu(
    emit_data->output[emit_data->chan] = lp_build_shr(uint_bld, emit_data->args[0],
                                                      masked_count);
 }
+static void bfi_emit_cpu(const struct lp_build_tgsi_action *action,
+                         struct lp_build_tgsi_context *bld_base,
+                         struct lp_build_emit_data *emit_data) {
+  /*
+   * def bfi(base, insert, offset, bits):
+   *   if offset < 0 or bits < 0 or offset + bits > 32:
+   *     return undefined
+   *   # << defined such that mask == ~0 when bits == 32, offset == 0
+   *   mask = ((1 << bits) - 1) << offset
+   *   return ((insert << offset) & mask) | (base & ~mask)
+   */
+  struct lp_build_context *uint_bld = &bld_base->uint_bld;
+  LLVMValueRef one_shl_bits_dec_one = lp_build_sub(
+      uint_bld, lp_build_shl(uint_bld, uint_bld->one, emit_data->args[3]),
+      uint_bld->one);
+  LLVMValueRef mask =
+      lp_build_shl(uint_bld, one_shl_bits_dec_one, emit_data->args[2]);
+  LLVMValueRef insert_shl_offset =
+      lp_build_shl(uint_bld, emit_data->args[1], emit_data->args[2]);
+  LLVMValueRef insert_shl_offset_and_mask =
+      lp_build_and(uint_bld, insert_shl_offset, mask);
+  LLVMValueRef base_and_not_mask =
+      lp_build_and(uint_bld, emit_data->args[0], lp_build_not(uint_bld, mask));
+
+  emit_data->output[emit_data->chan] =
+      lp_build_or(uint_bld, insert_shl_offset_and_mask, base_and_not_mask);
+}
+
+static void lsb_emit_cpu(const struct lp_build_tgsi_action *action,
+                         struct lp_build_tgsi_context *bld_base,
+                         struct lp_build_emit_data *emit_data) {
+  struct lp_build_context *uint_bld = &bld_base->int_bld;
+
+  LLVMValueRef result = lp_build_cttz(uint_bld, emit_data->args[0]);
+  LLVMValueRef cond =
+      lp_build_cmp(uint_bld, PIPE_FUNC_LESS, result,
+                   lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 32));
+  emit_data->output[emit_data->chan] = lp_build_select(
+      uint_bld, cond, result,
+      lp_build_const_vec(uint_bld->gallivm, uint_bld->type, -1));
+}
+
+static void umsb_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  struct lp_build_context *uint_bld = &bld_base->int_bld;
+  emit_data->output[emit_data->chan] = lp_build_sub(
+      uint_bld, lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 31),
+      lp_build_ctlz(uint_bld, emit_data->args[0]));
+}
+
+static void imsb_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  struct lp_build_context *uint_bld = &bld_base->int_bld;
+
+  LLVMValueRef cond =
+      lp_build_cmp(uint_bld, PIPE_FUNC_LESS, emit_data->args[0],
+                   lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 0));
+  emit_data->args[0] = lp_build_select(
+      uint_bld, cond, lp_build_not(uint_bld, emit_data->args[0]),
+      emit_data->args[0]);
+  umsb_emit_cpu(action, bld_base, emit_data);
+}
+
+static void popc_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  struct lp_build_context *uint_bld = &bld_base->int_bld;
+  emit_data->output[emit_data->chan] =
+      lp_build_popcount(uint_bld, emit_data->args[0]);
+}
+
+static void ibfe_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  /* def ibfe(value, offset, bits):
+   *   if offset < 0 or bits < 0 or offset + bits > 32:
+   *     return undefined
+   *   if bits == 0: return 0
+   *   # Note: >> sign-extends
+   *   return (value << (32 - offset - bits)) >> (32 - bits)
+   */
+  struct lp_build_context *uint_bld = &bld_base->int_bld;
+
+  LLVMValueRef r_32_sub_bits = lp_build_sub(
+      uint_bld, lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 32),
+      emit_data->args[2]);
+  LLVMValueRef temp1 =
+      lp_build_sub(uint_bld, r_32_sub_bits, emit_data->args[1]);
+  LLVMValueRef temp2 = lp_build_shl(uint_bld, emit_data->args[0], temp1);
+  LLVMValueRef cond =
+      lp_build_cmp(uint_bld, PIPE_FUNC_EQUAL, emit_data->args[2],
+                   lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 0));
+  emit_data->output[emit_data->chan] = lp_build_select(
+      uint_bld, cond, lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 0),
+      lp_build_shr(uint_bld, temp2, r_32_sub_bits));
+}
+
+static void ubfe_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  /* def ubfe(value, offset, bits):
+   *   if offset < 0 or bits < 0 or offset + bits > 32:
+   *     return undefined
+   *   if bits == 0: return 0
+   *   # Note: >> does not sign-extend
+   *   return (value << (32 - offset - bits)) >> (32 - bits)
+   */
+  struct lp_build_context *uint_bld = &bld_base->uint_bld;
+
+  LLVMValueRef r_32_sub_bits = lp_build_sub(
+      uint_bld, lp_build_const_vec(uint_bld->gallivm, uint_bld->type, 32),
+      emit_data->args[2]);
+  LLVMValueRef temp1 =
+      lp_build_sub(uint_bld, r_32_sub_bits, emit_data->args[1]);
+  LLVMValueRef temp2 = lp_build_shl(uint_bld, emit_data->args[0], temp1);
+  emit_data->output[emit_data->chan] =
+      lp_build_shr(uint_bld, temp2, r_32_sub_bits);
+}
+
+static void brev_emit_cpu(const struct lp_build_tgsi_action *action,
+                          struct lp_build_tgsi_context *bld_base,
+                          struct lp_build_emit_data *emit_data) {
+  struct lp_build_context *uint_bld = &bld_base->uint_bld;
+  emit_data->output[emit_data->chan] =
+      lp_build_bitfield_reverse(uint_bld, emit_data->args[0]);
+}
 
 void
 lp_set_default_actions_cpu(
@@ -2507,4 +2635,14 @@ lp_set_default_actions_cpu(
    bld_base->op_actions[TGSI_OPCODE_U64SHL].emit = u64shl_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_I64SHR].emit = i64shr_emit_cpu;
    bld_base->op_actions[TGSI_OPCODE_U64SHR].emit = u64shr_emit_cpu;
+
+   bld_base->op_actions[TGSI_OPCODE_BFI].emit = bfi_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_POPC].emit = popc_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_LSB].emit = lsb_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_IMSB].emit = imsb_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_UMSB].emit = umsb_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_IBFE].emit = ibfe_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_UBFE].emit = ubfe_emit_cpu;
+   bld_base->op_actions[TGSI_OPCODE_BREV].emit = brev_emit_cpu;
+
 }

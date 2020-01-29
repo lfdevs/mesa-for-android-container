@@ -29,7 +29,6 @@
 #include "util/u_debug.h"
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
-#include "util/u_suballoc.h"
 #include "util/hash_table.h"
 
 #include "lima_screen.h"
@@ -70,19 +69,15 @@ lima_ctx_buff_map(struct lima_context *ctx, enum lima_ctx_buff buff)
 
 void *
 lima_ctx_buff_alloc(struct lima_context *ctx, enum lima_ctx_buff buff,
-                    unsigned size, bool uploader)
+                    unsigned size)
 {
    struct lima_ctx_buff_state *cbs = ctx->buffer_state + buff;
    void *ret = NULL;
 
    cbs->size = align(size, 0x40);
 
-   if (uploader)
-      u_upload_alloc(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
-                     &cbs->res, &ret);
-   else
-      u_suballocator_alloc(ctx->suballocator, cbs->size, 0x10,
-                           &cbs->offset, &cbs->res);
+   u_upload_alloc(ctx->uploader, 0, cbs->size, 0x40, &cbs->offset,
+                  &cbs->res, &ret);
 
    return ret;
 }
@@ -110,6 +105,19 @@ lima_context_free_drm_ctx(struct lima_screen *screen, int id)
 }
 
 static void
+lima_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
+{
+   struct lima_context *ctx = lima_context(pctx);
+
+   if (ctx->framebuffer.base.zsbuf && (ctx->framebuffer.base.zsbuf->texture == prsc))
+      ctx->resolve &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
+
+   if (ctx->framebuffer.base.nr_cbufs &&
+       (ctx->framebuffer.base.cbufs[0]->texture == prsc))
+      ctx->resolve &= ~PIPE_CLEAR_COLOR0;
+}
+
+static void
 lima_context_destroy(struct pipe_context *pctx)
 {
    struct lima_context *ctx = lima_context(pctx);
@@ -128,9 +136,6 @@ lima_context_destroy(struct pipe_context *pctx)
    if (ctx->blitter)
       util_blitter_destroy(ctx->blitter);
 
-   if (ctx->suballocator)
-      u_suballocator_destroy(ctx->suballocator);
-
    if (ctx->uploader)
       u_upload_destroy(ctx->uploader);
 
@@ -145,6 +150,9 @@ lima_context_destroy(struct pipe_context *pctx)
 
    if (ctx->plb_gp_stream)
       lima_bo_unreference(ctx->plb_gp_stream);
+
+   if (ctx->gp_output)
+      lima_bo_unreference(ctx->gp_output);
 
    if (ctx->plb_pp_stream)
       assert(!_mesa_hash_table_num_entries(ctx->plb_pp_stream));
@@ -197,6 +205,7 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->base.screen = pscreen;
    ctx->base.destroy = lima_context_destroy;
    ctx->base.set_debug_callback = lima_set_debug_callback;
+   ctx->base.invalidate_resource = lima_invalidate_resource;
 
    lima_resource_context_init(ctx);
    lima_fence_context_init(ctx);
@@ -217,12 +226,8 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->base.stream_uploader = ctx->uploader;
    ctx->base.const_uploader = ctx->uploader;
 
-   /* for varying output which need not mmap */
-   ctx->suballocator =
-      u_suballocator_create(&ctx->base, 1024 * 1024, 0,
-                            PIPE_USAGE_STREAM, 0, false);
-   if (!ctx->suballocator)
-      goto err_out;
+   ctx->damage_rect.minx = ctx->damage_rect.miny = 0xffff;
+   ctx->damage_rect.maxx = ctx->damage_rect.maxy = 0;
 
    util_dynarray_init(&ctx->vs_cmd_array, ctx);
    util_dynarray_init(&ctx->plbu_cmd_array, ctx);
@@ -281,16 +286,4 @@ lima_need_flush(struct lima_context *ctx, struct lima_bo *bo, bool write)
 {
    return lima_submit_has_bo(ctx->gp_submit, bo, write) ||
       lima_submit_has_bo(ctx->pp_submit, bo, write);
-}
-
-bool
-lima_is_scanout(struct lima_context *ctx)
-{
-        /* If there is no color buffer, it's an FBO */
-        if (!ctx->framebuffer.base.nr_cbufs)
-                return false;
-
-        return ctx->framebuffer.base.cbufs[0]->texture->bind & PIPE_BIND_DISPLAY_TARGET ||
-               ctx->framebuffer.base.cbufs[0]->texture->bind & PIPE_BIND_SCANOUT ||
-               ctx->framebuffer.base.cbufs[0]->texture->bind & PIPE_BIND_SHARED;
 }

@@ -34,7 +34,7 @@
 #include "pipe/p_defines.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"

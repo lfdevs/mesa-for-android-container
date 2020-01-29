@@ -27,17 +27,17 @@
 
 int main(int argc, char **argv)
 {
-   struct anv_instance instance = {
-      .physicalDevice = {
-         .use_softpin = true,
-      },
+   struct anv_physical_device physical_device = {
+      .use_softpin = true,
    };
    struct anv_device device = {
-      .instance = &instance,
+      .physical = &physical_device,
    };
    struct anv_state_pool state_pool;
 
-   anv_state_pool_init(&state_pool, &device, 4096, 4096, EXEC_OBJECT_PINNED);
+   pthread_mutex_init(&device.mutex, NULL);
+   anv_bo_cache_init(&device.bo_cache);
+   anv_state_pool_init(&state_pool, &device, 4096, 4096);
 
    /* Get the size of the underlying block_pool */
    struct anv_block_pool *bp = &state_pool.block_pool;

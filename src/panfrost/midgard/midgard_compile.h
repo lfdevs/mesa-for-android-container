@@ -26,27 +26,7 @@
 
 #include "compiler/nir/nir.h"
 #include "util/u_dynarray.h"
-#include "util/register_allocate.h"
-
-/* To be shoved inside panfrost_screen for the Gallium driver, or somewhere
- * else for Vulkan/standalone. The single compiler "screen" to be shared across
- * all shader compiles, used to store complex initialization (for instance,
- * related to register allocation) */
-
-struct midgard_screen {
-        /* Precomputed register allocation sets for varying numbers of work
-         * registers.  The zeroeth entry corresponds to 8 work registers. The
-         * eighth entry corresponds to 16 work registers. NULL if this set has
-         * not been allocated yet. */
-
-        struct ra_regs *regs[9];
-
-        /* Work register classes corresponds to the above register sets. 20 per
-         * set for 5 classes per work/ldst/ldst27/texr/texw/fragc. TODO: Unify with
-         * compiler.h */
-
-        unsigned reg_classes[9][5 * 5];
-};
+#include "panfrost-job.h"
 
 /* Define the general compiler entry point */
 
@@ -68,6 +48,7 @@ enum {
         PAN_SYSVAL_TEXTURE_SIZE = 3,
         PAN_SYSVAL_SSBO = 4,
         PAN_SYSVAL_NUM_WORK_GROUPS = 5,
+        PAN_SYSVAL_SAMPLER = 7,
 } pan_sysval;
 
 #define PAN_TXS_SYSVAL_ID(texidx, dim, is_array)          \
@@ -76,6 +57,15 @@ enum {
 #define PAN_SYSVAL_ID_TO_TXS_TEX_IDX(id)        ((id) & 0x7f)
 #define PAN_SYSVAL_ID_TO_TXS_DIM(id)            (((id) >> 7) & 0x3)
 #define PAN_SYSVAL_ID_TO_TXS_IS_ARRAY(id)       !!((id) & (1 << 9))
+
+/* Special attribute slots for vertex builtins. Sort of arbitrary but let's be
+ * consistent with the blob so we can compare traces easier. */
+
+enum {
+        PAN_VERTEX_ID   = 16,
+        PAN_INSTANCE_ID = 17,
+        PAN_MAX_ATTRIBUTE
+} pan_special_attributes;
 
 typedef struct {
         int work_register_count;
@@ -89,6 +79,7 @@ typedef struct {
         unsigned sysvals[MAX_SYSVAL_COUNT];
 
         unsigned varyings[32];
+        enum mali_format varying_type[32];
 
         /* Boolean properties of the program */
         bool writes_point_size;
@@ -111,7 +102,7 @@ typedef struct {
 } midgard_program;
 
 int
-midgard_compile_shader_nir(struct midgard_screen *screen, nir_shader *nir, midgard_program *program, bool is_blend);
+midgard_compile_shader_nir(nir_shader *nir, midgard_program *program, bool is_blend, unsigned blend_rt, unsigned gpu_id, bool shaderdb);
 
 /* NIR options are shared between the standalone compiler and the online
  * compiler. Defining it here is the simplest, though maybe not the Right
@@ -138,14 +129,27 @@ static const nir_shader_compiler_options midgard_nir_options = {
          * eventually */
         .lower_fsign = true,
 
-        .vertex_id_zero_based = true,
         .lower_extract_byte = true,
         .lower_extract_word = true,
         .lower_rotate = true,
 
+        .lower_pack_half_2x16 = true,
+        .lower_pack_half_2x16_split = true,
+        .lower_pack_unorm_2x16 = true,
+        .lower_pack_snorm_2x16 = true,
+        .lower_pack_unorm_4x8 = true,
+        .lower_pack_snorm_4x8 = true,
+        .lower_unpack_half_2x16 = true,
+        .lower_unpack_half_2x16_split = true,
+        .lower_unpack_unorm_2x16 = true,
+        .lower_unpack_snorm_2x16 = true,
+        .lower_unpack_unorm_4x8 = true,
+        .lower_unpack_snorm_4x8 = true,
+
         .lower_doubles_options = nir_lower_dmod,
 
         .vectorize_io = true,
+        .use_interpolated_input_intrinsics = true
 };
 
 #endif

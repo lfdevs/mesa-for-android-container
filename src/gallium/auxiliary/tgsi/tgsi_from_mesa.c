@@ -123,6 +123,10 @@ tgsi_get_gl_varying_semantic(gl_varying_slot attr,
       *semantic_name = TGSI_SEMANTIC_VIEWPORT_INDEX;
       *semantic_index = 0;
       break;
+   case VARYING_SLOT_FACE:
+      *semantic_name = TGSI_SEMANTIC_FACE;
+      *semantic_index = 0;
+      break;
    case VARYING_SLOT_PNTC:
       *semantic_name = TGSI_SEMANTIC_PCOORD;
       *semantic_index = 0;

@@ -83,7 +83,7 @@ swr_free_cb(struct swr_fence_work *work)
 {
    if (aligned_free)
       AlignedFree(work->free.data);
-   else  
+   else
       FREE(work->free.data);
 }
 
@@ -104,6 +104,19 @@ swr_delete_gs_cb(struct swr_fence_work *work)
 {
    delete work->free.swr_gs;
 }
+
+static void
+swr_delete_tcs_cb(struct swr_fence_work *work)
+{
+   delete work->free.swr_tcs;
+}
+
+static void
+swr_delete_tes_cb(struct swr_fence_work *work)
+{
+   delete work->free.swr_tes;
+}
+
 
 bool
 swr_fence_work_free(struct pipe_fence_handle *fence, void *data,
@@ -162,6 +175,37 @@ swr_fence_work_delete_gs(struct pipe_fence_handle *fence,
       return false;
    work->callback = swr_delete_gs_cb;
    work->free.swr_gs = swr_gs;
+
+   swr_add_fence_work(fence, work);
+
+   return true;
+}
+
+bool
+swr_fence_work_delete_tcs(struct pipe_fence_handle *fence,
+                          struct swr_tess_control_shader *swr_tcs)
+{
+   struct swr_fence_work *work = CALLOC_STRUCT(swr_fence_work);
+   if (!work)
+      return false;
+   work->callback = swr_delete_tcs_cb;
+   work->free.swr_tcs = swr_tcs;
+
+   swr_add_fence_work(fence, work);
+
+   return true;
+}
+
+
+bool
+swr_fence_work_delete_tes(struct pipe_fence_handle *fence,
+                          struct swr_tess_evaluation_shader *swr_tes)
+{
+   struct swr_fence_work *work = CALLOC_STRUCT(swr_fence_work);
+   if (!work)
+      return false;
+   work->callback = swr_delete_tes_cb;
+   work->free.swr_tes = swr_tes;
 
    swr_add_fence_work(fence, work);
 

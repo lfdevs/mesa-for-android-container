@@ -151,7 +151,7 @@ vl_vlc_fillbits(struct vl_vlc *vlc)
          /* enough bytes in buffer, read in a whole dword */
          uint64_t value = *(const uint32_t*)vlc->data;
 
-#ifndef PIPE_ARCH_BIG_ENDIAN
+#if !UTIL_ARCH_BIG_ENDIAN
          value = util_bswap32(value);
 #endif
 

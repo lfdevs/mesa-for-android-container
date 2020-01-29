@@ -7,8 +7,10 @@ env = env.Clone()
 
 env.Prepend(LIBS = [
     ws_xlib,
+    compiler,
     mesautil,
     gallium,
+    nir,
 ])
 
 env.Append(LIBS = env['X11_LIBS'])

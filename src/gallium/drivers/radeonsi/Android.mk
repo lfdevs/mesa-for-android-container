@@ -65,7 +65,7 @@ $(intermediates)/radeonsi/si_driinfo.h: $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS)
 	$(hide) $(MESA_PYTHON2) $(MERGE_DRIINFO) $(GEN_DRIINFO_INPUTS) > $@ || ($(RM) $@; false)
 
 GEN10_FORMAT_TABLE_INPUTS := \
-	$(MESA_TOP)/src/gallium/auxiliary/util/u_format.csv \
+	$(MESA_TOP)/src/util/format/u_format.csv \
 	$(MESA_TOP)/src/amd/registers/gfx10-rsrc.json
 
 GEN10_FORMAT_TABLE_DEP := \

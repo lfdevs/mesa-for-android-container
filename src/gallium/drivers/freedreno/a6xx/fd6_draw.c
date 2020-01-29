@@ -118,6 +118,19 @@ fixup_shader_state(struct fd_context *ctx, struct ir3_shader_key *key)
 	}
 }
 
+static void
+fixup_draw_state(struct fd_context *ctx, struct fd6_emit *emit)
+{
+	if (ctx->last.dirty ||
+			(ctx->last.primitive_restart != emit->primitive_restart)) {
+		/* rasterizer state is effected by primitive-restart: */
+		ctx->dirty |= FD_DIRTY_RASTERIZER;
+		ctx->last.primitive_restart = emit->primitive_restart;
+	}
+
+	ctx->last.dirty = false;
+}
+
 static bool
 fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
              unsigned index_offset)
@@ -129,8 +142,6 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.info = info,
 		.key = {
 			.vs = ctx->prog.vs,
-			.hs = ctx->prog.hs,
-			.ds = ctx->prog.ds,
 			.gs = ctx->prog.gs,
 			.fs = ctx->prog.fs,
 			.key = {
@@ -155,7 +166,28 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 		.rasterflat = ctx->rasterizer->flatshade,
 		.sprite_coord_enable = ctx->rasterizer->sprite_coord_enable,
 		.sprite_coord_mode = ctx->rasterizer->sprite_coord_mode,
+		.primitive_restart = info->primitive_restart && info->index_size,
 	};
+
+	if (info->mode == PIPE_PRIM_PATCHES) {
+		emit.key.hs = ctx->prog.hs;
+		emit.key.ds = ctx->prog.ds;
+
+		shader_info *ds_info = &emit.key.ds->nir->info;
+		switch (ds_info->tess.primitive_mode) {
+		case GL_ISOLINES:
+			emit.key.key.tessellation = IR3_TESS_ISOLINES;
+			break;
+		case GL_TRIANGLES:
+			emit.key.key.tessellation = IR3_TESS_TRIANGLES;
+			break;
+		case GL_QUADS:
+			emit.key.key.tessellation = IR3_TESS_QUADS;
+			break;
+		default:
+			unreachable("bad tessmode");
+		}
+	}
 
 	if (emit.key.gs)
 		emit.key.key.has_gs = true;
@@ -194,15 +226,76 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	struct fd_ringbuffer *ring = ctx->batch->draw;
 	enum pc_di_primtype primtype = ctx->primtypes[info->mode];
 
+	uint32_t tess_draw0 = 0;
+	if (info->mode == PIPE_PRIM_PATCHES) {
+		shader_info *ds_info = &emit.ds->shader->nir->info;
+		uint32_t factor_stride;
+		uint32_t patch_type;
+
+		switch (ds_info->tess.primitive_mode) {
+		case GL_ISOLINES:
+			patch_type = TESS_ISOLINES;
+			factor_stride = 12;
+			break;
+		case GL_TRIANGLES:
+			patch_type = TESS_TRIANGLES;
+			factor_stride = 20;
+			break;
+		case GL_QUADS:
+			patch_type = TESS_QUADS;
+			factor_stride = 28;
+			break;
+		default:
+			unreachable("bad tessmode");
+		}
+
+		primtype = DI_PT_PATCHES0 + info->vertices_per_patch;
+		tess_draw0 |= CP_DRAW_INDX_OFFSET_0_PATCH_TYPE(patch_type) |
+			CP_DRAW_INDX_OFFSET_0_TESS_ENABLE;
+
+		ctx->batch->tessellation = true;
+		ctx->batch->tessparam_size = MAX2(ctx->batch->tessparam_size,
+				emit.hs->shader->output_size * 4 * info->count);
+		ctx->batch->tessfactor_size = MAX2(ctx->batch->tessfactor_size,
+				factor_stride * info->count);
+
+		if (!ctx->batch->tess_addrs_constobj) {
+			/* Reserve space for the bo address - we'll write them later in
+			 * setup_tess_buffers().  We need 2 bo address, but indirect
+			 * constant upload needs at least 4 vec4s.
+			 */
+			unsigned size = 4 * 16;
+
+			ctx->batch->tess_addrs_constobj = fd_submit_new_ringbuffer(
+				ctx->batch->submit, size, FD_RINGBUFFER_STREAMING);
+
+			ctx->batch->tess_addrs_constobj->cur += size;
+		}
+	}
+
+	uint32_t index_start = info->index_size ? info->index_bias : info->start;
+	if (ctx->last.dirty || (ctx->last.index_start != index_start)) {
+		OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 1);
+		OUT_RING(ring, index_start); /* VFD_INDEX_OFFSET */
+		ctx->last.index_start = index_start;
+	}
+
+	if (ctx->last.dirty || (ctx->last.instance_start != info->start_instance)) {
+		OUT_PKT4(ring, REG_A6XX_VFD_INSTANCE_START_OFFSET, 1);
+		OUT_RING(ring, info->start_instance); /* VFD_INSTANCE_START_OFFSET */
+		ctx->last.instance_start = info->start_instance;
+	}
+
+	uint32_t restart_index = info->primitive_restart ? info->restart_index : 0xffffffff;
+	if (ctx->last.dirty || (ctx->last.restart_index != restart_index)) {
+		OUT_PKT4(ring, REG_A6XX_PC_RESTART_INDEX, 1);
+		OUT_RING(ring, restart_index); /* PC_RESTART_INDEX */
+		ctx->last.restart_index = restart_index;
+	}
+
+	fixup_draw_state(ctx, &emit);
+
 	fd6_emit_state(ring, &emit);
-
-	OUT_PKT4(ring, REG_A6XX_VFD_INDEX_OFFSET, 2);
-	OUT_RING(ring, info->index_size ? info->index_bias : info->start); /* VFD_INDEX_OFFSET */
-	OUT_RING(ring, info->start_instance);   /* VFD_INSTANCE_START_OFFSET */
-
-	OUT_PKT4(ring, REG_A6XX_PC_RESTART_INDEX, 1);
-	OUT_RING(ring, info->primitive_restart ? /* PC_RESTART_INDEX */
-			info->restart_index : 0xffffffff);
 
 	/* for debug after a lock up, write a unique counter value
 	 * to scratch7 for each draw, to make it easier to match up
@@ -213,11 +306,10 @@ fd6_draw_vbo(struct fd_context *ctx, const struct pipe_draw_info *info,
 	emit_marker6(ring, 7);
 
 	uint32_t draw0 =
+		CP_DRAW_INDX_OFFSET_0_VIS_CULL(USE_VISIBILITY) |
 		CP_DRAW_INDX_OFFSET_0_PRIM_TYPE(primtype) |
-		CP_DRAW_INDX_OFFSET_0_VIS_CULL(USE_VISIBILITY);
-
-	if (emit.key.gs)
-		draw0 |= CP_DRAW_INDX_OFFSET_0_GS_ENABLE;
+		tess_draw0 |
+		COND(emit.key.gs, CP_DRAW_INDX_OFFSET_0_GS_ENABLE);
 
 	if (info->index_size) {
 		draw0 |=

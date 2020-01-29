@@ -58,6 +58,7 @@
 #include "adreno_common.xml.h"
 #include "adreno_pm4.xml.h"
 #include "a6xx.xml.h"
+#include "fdl/freedreno_layout.h"
 
 #include "tu_descriptor_set.h"
 #include "tu_extensions.h"
@@ -93,6 +94,8 @@ typedef uint32_t xcb_window_t;
 #define NUM_META_FS_KEYS 13
 #define TU_MAX_DRM_DEVICES 8
 #define MAX_VIEWS 8
+/* The Qualcomm driver exposes 0x20000058 */
+#define MAX_STORAGE_BUFFER_RANGE 0x20000000
 
 #define NUM_DEPTH_CLEAR_PIPELINES 3
 
@@ -326,6 +329,7 @@ enum tu_debug_flags
    TU_DEBUG_STARTUP = 1 << 0,
    TU_DEBUG_NIR = 1 << 1,
    TU_DEBUG_IR3 = 1 << 2,
+   TU_DEBUG_NOBIN = 1 << 3,
 };
 
 struct tu_instance
@@ -419,6 +423,7 @@ struct tu_meta_state
 
 struct tu_fence
 {
+   struct wsi_fence *fence_wsi;
    bool signaled;
    int fd;
 };
@@ -503,6 +508,11 @@ struct tu_cs_entry
 
    uint32_t size;
    uint32_t offset;
+};
+
+struct ts_cs_memory {
+   uint32_t *map;
+   uint64_t iova;
 };
 
 enum tu_cs_mode
@@ -662,6 +672,12 @@ struct tu_buffer
    VkDeviceSize bo_offset;
 };
 
+static inline uint64_t
+tu_buffer_iova(struct tu_buffer *buffer)
+{
+   return buffer->bo->iova + buffer->bo_offset;
+}
+
 enum tu_dynamic_state_bits
 {
    TU_DYNAMIC_VIEWPORT = 1 << 0,
@@ -759,19 +775,6 @@ tu_get_debug_option_name(int id);
 const char *
 tu_get_perftest_option_name(int id);
 
-/**
- * Attachment state when recording a renderpass instance.
- *
- * The clear value is valid only if there exists a pending clear.
- */
-struct tu_attachment_state
-{
-   VkImageAspectFlags pending_clear_aspects;
-   uint32_t cleared_views;
-   VkClearValue clear_value;
-   VkImageLayout current_layout;
-};
-
 struct tu_descriptor_state
 {
    struct tu_descriptor_set *sets[MAX_SETS];
@@ -793,15 +796,11 @@ struct tu_tile
 struct tu_tiling_config
 {
    VkRect2D render_area;
-   uint32_t buffer_cpp[MAX_RTS + 2];
-   uint32_t buffer_count;
 
    /* position and size of the first tile */
    VkRect2D tile0;
    /* number of tiles */
    VkExtent2D tile_count;
-
-   uint32_t gmem_offsets[MAX_RTS + 2];
 
    /* size of the first VSC pipe */
    VkExtent2D pipe0;
@@ -816,8 +815,10 @@ struct tu_tiling_config
 enum tu_cmd_dirty_bits
 {
    TU_CMD_DIRTY_PIPELINE = 1 << 0,
-   TU_CMD_DIRTY_VERTEX_BUFFERS = 1 << 1,
-   TU_CMD_DIRTY_DESCRIPTOR_SETS = 1 << 2,
+   TU_CMD_DIRTY_COMPUTE_PIPELINE = 1 << 1,
+   TU_CMD_DIRTY_VERTEX_BUFFERS = 1 << 2,
+   TU_CMD_DIRTY_DESCRIPTOR_SETS = 1 << 3,
+   TU_CMD_DIRTY_PUSH_CONSTANTS = 1 << 4,
 
    TU_CMD_DIRTY_DYNAMIC_LINE_WIDTH = 1 << 16,
    TU_CMD_DIRTY_DYNAMIC_STENCIL_COMPARE_MASK = 1 << 17,
@@ -830,6 +831,7 @@ struct tu_cmd_state
    uint32_t dirty;
 
    struct tu_pipeline *pipeline;
+   struct tu_pipeline *compute_pipeline;
 
    /* Vertex buffers */
    struct
@@ -850,7 +852,6 @@ struct tu_cmd_state
    const struct tu_render_pass *pass;
    const struct tu_subpass *subpass;
    const struct tu_framebuffer *framebuffer;
-   struct tu_attachment_state *attachments;
 
    struct tu_tiling_config tiling_config;
 
@@ -935,19 +936,40 @@ struct tu_cmd_buffer
    struct tu_bo_list bo_list;
    struct tu_cs cs;
    struct tu_cs draw_cs;
-   struct tu_cs draw_state;
-   struct tu_cs tile_cs;
+   struct tu_cs draw_epilogue_cs;
+   struct tu_cs sub_cs;
 
    uint16_t marker_reg;
    uint32_t marker_seqno;
 
    struct tu_bo scratch_bo;
    uint32_t scratch_seqno;
+#define VSC_OVERFLOW 0x8
+#define VSC_SCRATCH 0x10
+
+   struct tu_bo vsc_data;
+   struct tu_bo vsc_data2;
+   uint32_t vsc_data_pitch;
+   uint32_t vsc_data2_pitch;
+   bool use_vsc_data;
 
    bool wait_for_idle;
 };
 
-void
+/* Temporary struct for tracking a register state to be written, used by
+ * a6xx-pack.h and tu_cs_emit_regs()
+ */
+struct tu_reg_value {
+   uint32_t reg;
+   uint64_t value;
+   bool is_address;
+   struct tu_bo *bo;
+   bool bo_write;
+   uint32_t bo_offset;
+   uint32_t bo_shift;
+};
+
+unsigned
 tu6_emit_event_write(struct tu_cmd_buffer *cmd,
                      struct tu_cs *cs,
                      enum vgt_event_type event,
@@ -1034,9 +1056,12 @@ struct tu_shader_compile_options
 struct tu_descriptor_map
 {
    /* TODO: avoid fixed size array/justify the size */
-   unsigned num;
+   unsigned num; /* number of array entries */
+   unsigned num_desc; /* Number of descriptors (sum of array_size[]) */
    int set[64];
    int binding[64];
+   int value[64];
+   int array_size[64];
 };
 
 struct tu_shader
@@ -1047,6 +1072,7 @@ struct tu_shader
    struct tu_descriptor_map sampler_map;
    struct tu_descriptor_map ubo_map;
    struct tu_descriptor_map ssbo_map;
+   struct tu_descriptor_map image_map;
 
    /* This may be true for vertex shaders.  When true, variants[1] is the
     * binning variant and binning_binary is non-NULL.
@@ -1063,6 +1089,7 @@ struct tu_shader *
 tu_shader_create(struct tu_device *dev,
                  gl_shader_stage stage,
                  const VkPipelineShaderStageCreateInfo *stage_info,
+                 struct tu_pipeline_layout *layout,
                  const VkAllocationCallbacks *alloc);
 
 void
@@ -1093,7 +1120,7 @@ struct tu_program_descriptor_linkage
    struct tu_descriptor_map sampler_map;
    struct tu_descriptor_map ubo_map;
    struct tu_descriptor_map ssbo_map;
-   struct ir3_ibo_mapping image_mapping;
+   struct tu_descriptor_map image_map;
 };
 
 struct tu_pipeline
@@ -1158,6 +1185,11 @@ struct tu_pipeline
    {
       struct tu_cs_entry state_ib;
    } blend;
+
+   struct
+   {
+      uint32_t local_size[3];
+   } compute;
 };
 
 void
@@ -1228,6 +1260,13 @@ void
 tu_pack_clear_value(const VkClearValue *val,
                     VkFormat format,
                     uint32_t buf[4]);
+
+void
+tu_2d_clear_color(const VkClearColorValue *val, VkFormat format, uint32_t buf[4]);
+
+void
+tu_2d_clear_zs(const VkClearDepthStencilValue *val, VkFormat format, uint32_t buf[4]);
+
 enum a6xx_2d_ifmt tu6_rb_fmt_to_ifmt(enum a6xx_color_fmt fmt);
 enum a6xx_depth_format tu6_pipe2depth(VkFormat format);
 
@@ -1255,14 +1294,9 @@ struct tu_image
    VkSampleCountFlagBits samples;
 
 
-   VkDeviceSize size;
    uint32_t alignment;
 
-   /* memory layout */
-   VkDeviceSize layer_size;
-   struct tu_image_level levels[15];
-   unsigned tile_mode;
-   unsigned cpp;
+   struct fdl_layout layout;
 
    unsigned queue_family_mask;
    bool exclusive;
@@ -1299,6 +1333,67 @@ tu_get_levelCount(const struct tu_image *image,
              : range->levelCount;
 }
 
+static inline VkDeviceSize
+tu_layer_size(struct tu_image *image, int level)
+{
+   return fdl_layer_stride(&image->layout, level);
+}
+
+static inline uint32_t
+tu_image_stride(struct tu_image *image, int level)
+{
+   return image->layout.slices[level].pitch * image->layout.cpp;
+}
+
+static inline uint64_t
+tu_image_base(struct tu_image *image, int level, int layer)
+{
+   return image->bo->iova + image->bo_offset +
+      fdl_surface_offset(&image->layout, level, layer);
+}
+
+#define tu_image_base_ref(image, level, layer)                          \
+   .bo = image->bo,                                                     \
+   .bo_offset = (image->bo_offset + fdl_surface_offset(&image->layout,  \
+                                                       level, layer))
+
+#define tu_image_view_base_ref(iview)                                   \
+   tu_image_base_ref(iview->image, iview->base_mip, iview->base_layer)
+
+static inline VkDeviceSize
+tu_image_ubwc_size(struct tu_image *image, int level)
+{
+   return image->layout.ubwc_size;
+}
+
+static inline uint32_t
+tu_image_ubwc_pitch(struct tu_image *image, int level)
+{
+   return image->layout.ubwc_slices[level].pitch;
+}
+
+static inline uint64_t
+tu_image_ubwc_surface_offset(struct tu_image *image, int level, int layer)
+{
+   return image->layout.ubwc_slices[level].offset +
+      layer * tu_image_ubwc_size(image, level);
+}
+
+static inline uint64_t
+tu_image_ubwc_base(struct tu_image *image, int level, int layer)
+{
+   return image->bo->iova + image->bo_offset +
+      tu_image_ubwc_surface_offset(image, level, layer);
+}
+
+#define tu_image_ubwc_base_ref(image, level, layer)                     \
+   .bo = image->bo,                                                     \
+   .bo_offset = (image->bo_offset + tu_image_ubwc_surface_offset(image, \
+                                                                 level, layer))
+
+#define tu_image_view_ubwc_base_ref(iview) \
+   tu_image_ubwc_base_ref(iview->image, iview->base_mip, iview->base_layer)
+
 enum a6xx_tile_mode
 tu6_get_image_tile_mode(struct tu_image *image, int level);
 enum a3xx_msaa_samples
@@ -1330,20 +1425,15 @@ struct tu_sampler
    uint32_t state[A6XX_TEX_SAMP_DWORDS];
 
    bool needs_border;
-};
-
-struct tu_image_create_info
-{
-   const VkImageCreateInfo *vk_info;
-   bool scanout;
-   bool no_metadata_planes;
+   VkBorderColor border;
 };
 
 VkResult
 tu_image_create(VkDevice _device,
-                const struct tu_image_create_info *info,
+                const VkImageCreateInfo *pCreateInfo,
                 const VkAllocationCallbacks *alloc,
-                VkImage *pImage);
+                VkImage *pImage,
+                uint64_t modifier);
 
 VkResult
 tu_image_from_gralloc(VkDevice device_h,
@@ -1359,9 +1449,9 @@ tu_image_view_init(struct tu_image_view *view,
 
 struct tu_buffer_view
 {
-   VkFormat vk_format;
-   uint64_t range; /**< VkBufferViewCreateInfo::range */
-   uint32_t state[4];
+   uint32_t descriptor[A6XX_TEX_CONST_DWORDS];
+
+   struct tu_buffer *buffer;
 };
 void
 tu_buffer_view_init(struct tu_buffer_view *view,
@@ -1415,21 +1505,9 @@ struct tu_framebuffer
    struct tu_attachment_info attachments[0];
 };
 
-struct tu_subpass_barrier
-{
-   VkPipelineStageFlags src_stage_mask;
-   VkAccessFlags src_access_mask;
-   VkAccessFlags dst_access_mask;
-};
-
-void
-tu_subpass_barrier(struct tu_cmd_buffer *cmd_buffer,
-                   const struct tu_subpass_barrier *barrier);
-
 struct tu_subpass_attachment
 {
    uint32_t attachment;
-   VkImageLayout layout;
 };
 
 struct tu_subpass
@@ -1441,33 +1519,27 @@ struct tu_subpass
    struct tu_subpass_attachment *resolve_attachments;
    struct tu_subpass_attachment depth_stencil_attachment;
 
-   /** Subpass has at least one resolve attachment */
-   bool has_resolve;
-
-   struct tu_subpass_barrier start_barrier;
-
-   uint32_t view_mask;
-   VkSampleCountFlagBits max_sample_count;
+   VkSampleCountFlagBits samples;
 };
 
 struct tu_render_pass_attachment
 {
    VkFormat format;
-   uint32_t samples;
+   uint32_t cpp;
    VkAttachmentLoadOp load_op;
    VkAttachmentLoadOp stencil_load_op;
-   VkImageLayout initial_layout;
-   VkImageLayout final_layout;
-   uint32_t view_mask;
+   VkAttachmentStoreOp store_op;
+   VkAttachmentStoreOp stencil_store_op;
+   int32_t gmem_offset;
 };
 
 struct tu_render_pass
 {
    uint32_t attachment_count;
    uint32_t subpass_count;
+   uint32_t gmem_pixels;
    struct tu_subpass_attachment *subpass_attachments;
    struct tu_render_pass_attachment *attachments;
-   struct tu_subpass_barrier end_barrier;
    struct tu_subpass subpasses[0];
 };
 
@@ -1478,12 +1550,11 @@ tu_device_finish_meta(struct tu_device *device);
 
 struct tu_query_pool
 {
-   uint32_t stride;
-   uint32_t availability_offset;
-   uint64_t size;
-   char *ptr;
    VkQueryType type;
-   uint32_t pipeline_stats_mask;
+   uint32_t stride;
+   uint64_t size;
+   uint32_t pipeline_statistics;
+   struct tu_bo bo;
 };
 
 struct tu_semaphore

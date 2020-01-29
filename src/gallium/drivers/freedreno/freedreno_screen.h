@@ -29,6 +29,7 @@
 
 #include "drm/freedreno_drmif.h"
 #include "drm/freedreno_ringbuffer.h"
+#include "perfcntrs/freedreno_perfcntr.h"
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
@@ -37,7 +38,6 @@
 #include "renderonly/renderonly.h"
 
 #include "freedreno_batch_cache.h"
-#include "freedreno_perfcntr.h"
 #include "freedreno_util.h"
 
 struct fd_bo;

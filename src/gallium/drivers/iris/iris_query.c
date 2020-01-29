@@ -69,6 +69,9 @@ struct iris_query {
    int batch_idx;
 
    struct iris_monitor_object *monitor;
+
+   /* Fence for PIPE_QUERY_GPU_FINISHED. */
+   struct pipe_fence_handle *fence;
 };
 
 struct iris_query_snapshots {
@@ -480,6 +483,7 @@ iris_destroy_query(struct pipe_context *ctx, struct pipe_query *p_query)
       query->monitor = NULL;
    } else {
       iris_syncpt_reference(screen, &query->syncpt, NULL);
+      screen->base.fence_reference(ctx->screen, &query->fence, NULL);
    }
    free(query);
 }
@@ -543,6 +547,11 @@ iris_end_query(struct pipe_context *ctx, struct pipe_query *query)
    if (q->monitor)
       return iris_end_monitor(ctx, q->monitor);
 
+   if (q->type == PIPE_QUERY_GPU_FINISHED) {
+      ctx->flush(ctx, &q->fence, PIPE_FLUSH_DEFERRED);
+      return true;
+   }
+
    struct iris_batch *batch = &ice->batches[q->batch_idx];
 
    if (q->type == PIPE_QUERY_TIMESTAMP) {
@@ -604,6 +613,14 @@ iris_get_query_result(struct pipe_context *ctx,
    if (unlikely(screen->no_hw)) {
       result->u64 = 0;
       return true;
+   }
+
+   if (q->type == PIPE_QUERY_GPU_FINISHED) {
+      struct pipe_screen *screen = ctx->screen;
+
+      result->b = screen->fence_finish(screen, ctx, q->fence,
+                                       wait ? PIPE_TIMEOUT_INFINITE : 0);
+      return result->b;
    }
 
    if (!q->ready) {

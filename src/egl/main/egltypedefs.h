@@ -33,6 +33,8 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <EGL/eglmesaext.h>
+#include <EGL/eglextchromium.h>
 
 #ifdef __cplusplus
 extern "C" {

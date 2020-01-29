@@ -89,7 +89,7 @@ lima_texture_desc_set_res(struct lima_context *ctx, lima_tex_desc *desc,
    else {
       /* for padded linear texture */
       if (lima_res->levels[first_level].width != width) {
-         desc->stride = lima_res->levels[first_level].width;
+         desc->stride = lima_res->levels[first_level].stride;
          desc->has_stride = 1;
       }
       layout = 0;
@@ -118,14 +118,26 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
                      struct lima_sampler_view *texture, void *pdesc,
                      unsigned desc_size)
 {
+   /* unit is 1/16 since lod_bias is in fixed format */
+   int lod_bias_delta = 0;
    lima_tex_desc *desc = pdesc;
    unsigned first_level;
    unsigned last_level;
+   float max_lod;
 
    memset(desc, 0, desc_size);
 
-   /* 2D texture */
-   desc->texture_2d = 1;
+   switch (texture->base.target) {
+   case PIPE_TEXTURE_2D:
+   case PIPE_TEXTURE_RECT:
+      desc->texture_type = LIMA_TEXTURE_TYPE_2D;
+      break;
+   case PIPE_TEXTURE_CUBE:
+      desc->texture_type = LIMA_TEXTURE_TYPE_CUBE;
+      break;
+   default:
+      break;
+   }
 
    if (!sampler->base.normalized_coords)
       desc->unnorm_coords = 1;
@@ -135,18 +147,22 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
    if (last_level - first_level >= LIMA_MAX_MIP_LEVELS)
       last_level = first_level + LIMA_MAX_MIP_LEVELS - 1;
 
-   desc->miplevels = (last_level - first_level);
+   desc->min_lod = lima_float_to_fixed8(sampler->base.min_lod);
+   max_lod = MIN2(sampler->base.max_lod, sampler->base.min_lod +
+                                         (last_level - first_level));
+   desc->max_lod = lima_float_to_fixed8(max_lod);
+   desc->lod_bias = lima_float_to_fixed8(sampler->base.lod_bias);
 
    switch (sampler->base.min_mip_filter) {
       case PIPE_TEX_MIPFILTER_LINEAR:
-         desc->min_mipfilter_1 = 0;
          desc->min_mipfilter_2 = 3;
          break;
       case PIPE_TEX_MIPFILTER_NEAREST:
-         desc->min_mipfilter_1 = 0x1ff;
          desc->min_mipfilter_2 = 0;
          break;
       case PIPE_TEX_MIPFILTER_NONE:
+         desc->max_lod = desc->min_lod;
+         break;
       default:
          break;
    }
@@ -168,6 +184,7 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
       break;
    case PIPE_TEX_FILTER_NEAREST:
    default:
+      lod_bias_delta = 8;
       desc->min_img_filter_nearest = 1;
       break;
    }
@@ -205,6 +222,13 @@ lima_update_tex_desc(struct lima_context *ctx, struct lima_sampler_state *sample
    default:
       break;
    }
+
+   if (desc->min_img_filter_nearest && desc->mag_img_filter_nearest &&
+       desc->min_mipfilter_2 == 0 &&
+       (desc->min_lod != desc->max_lod))
+     lod_bias_delta = -1;
+
+   desc->lod_bias += lod_bias_delta;
 
    lima_texture_desc_set_res(ctx, desc, texture->base.texture,
                              first_level, last_level);
@@ -246,7 +270,7 @@ lima_update_textures(struct lima_context *ctx)
    }
 
    uint32_t *descs =
-      lima_ctx_buff_alloc(ctx, lima_ctx_buff_pp_tex_desc, size, true);
+      lima_ctx_buff_alloc(ctx, lima_ctx_buff_pp_tex_desc, size);
 
    off_t offset = lima_tex_list_size;
    for (int i = 0; i < lima_tex->num_samplers; i++) {
@@ -263,4 +287,9 @@ lima_update_textures(struct lima_context *ctx)
    lima_dump_command_stream_print(
       descs, size, false, "add textures_desc at va %x\n",
       lima_ctx_buff_va(ctx, lima_ctx_buff_pp_tex_desc, 0));
+
+   lima_dump_texture_descriptor(
+      descs, size,
+      lima_ctx_buff_va(ctx, lima_ctx_buff_pp_tex_desc, 0) + lima_tex_list_size,
+      lima_tex_list_size);
 }

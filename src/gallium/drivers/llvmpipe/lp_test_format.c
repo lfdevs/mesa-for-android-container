@@ -33,9 +33,9 @@
 #include "util/u_memory.h"
 #include "util/u_pointer.h"
 #include "util/u_string.h"
-#include "util/u_format.h"
-#include "util/u_format_tests.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format.h"
+#include "util/format/u_format_tests.h"
+#include "util/format/u_format_s3tc.h"
 
 #include "gallivm/lp_bld.h"
 #include "gallivm/lp_bld_debug.h"
@@ -392,7 +392,8 @@ test_all(unsigned verbose, FILE *fp)
 
          /* missing fetch funcs */
          if (format_desc->layout == UTIL_FORMAT_LAYOUT_ASTC ||
-             format_desc->layout == UTIL_FORMAT_LAYOUT_ATC) {
+             format_desc->layout == UTIL_FORMAT_LAYOUT_ATC ||
+             format_desc->layout == UTIL_FORMAT_LAYOUT_FXT1) {
             continue;
          }
 

@@ -78,11 +78,11 @@ files_r200 = files(
 
 libr200 = static_library(
   'r200',
-  [files_r200, xmlpool_options_h],
+  files_r200,
   include_directories : [
     inc_common, inc_dri_common, inc_util, include_directories('server'),
   ],
   c_args : [c_vis_args, '-DRADEON_R200'],
   cpp_args : [cpp_vis_args],
-  dependencies : [dep_libdrm, dep_libdrm_radeon],
+  dependencies : [dep_libdrm, dep_libdrm_radeon, idep_xmlconfig_headers],
 )

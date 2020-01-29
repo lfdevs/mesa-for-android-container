@@ -191,14 +191,13 @@ static void add_all_interferences(struct regalloc_ctx *ctx,
                                   BITSET_WORD *live_regs)
 {
    int live_node;
-   BITSET_WORD tmp;
-   BITSET_FOREACH_SET(live_node, tmp, live_nodes, ctx->comp->cur_index) {
+   BITSET_FOREACH_SET(live_node, live_nodes, ctx->comp->cur_index) {
       add_interference(ctx, i,
                        live_node + ctx->comp->cur_reg);
    }
 
    int live_reg;
-   BITSET_FOREACH_SET(live_reg, tmp, ctx->live, ctx->comp->cur_index) {
+   BITSET_FOREACH_SET(live_reg, ctx->live, ctx->comp->cur_index) {
       add_interference(ctx, i, live_reg);
    }
 
@@ -211,11 +210,10 @@ static void print_liveness(struct regalloc_ctx *ctx,
       return;
 
    int live_idx;
-   BITSET_WORD tmp;
-   BITSET_FOREACH_SET(live_idx, tmp, live_reg, ctx->comp->cur_reg) {
+   BITSET_FOREACH_SET(live_idx, live_reg, ctx->comp->cur_reg) {
       printf("reg%d ", live_idx);
    }
-   BITSET_FOREACH_SET(live_idx, tmp, live_val, ctx->comp->cur_index) {
+   BITSET_FOREACH_SET(live_idx, live_val, ctx->comp->cur_index) {
       printf("%d ", live_idx);
    }
    printf("\n");
@@ -446,8 +444,7 @@ static void assign_regs(struct regalloc_ctx *ctx)
       block->live_out_phys = 0;
 
       int reg_idx;
-      BITSET_WORD tmp;
-      BITSET_FOREACH_SET(reg_idx, tmp, block->live_out, ctx->comp->cur_reg) {
+      BITSET_FOREACH_SET(reg_idx, block->live_out, ctx->comp->cur_reg) {
          if (BITSET_TEST(block->def_out, reg_idx)) {
             block->live_out_phys |= (1ull << ctx->registers[reg_idx].assigned_color);
          }

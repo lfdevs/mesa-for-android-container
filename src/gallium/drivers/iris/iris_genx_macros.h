@@ -88,11 +88,14 @@ __gen_combine_address(struct iris_batch *batch, void *location,
 #define iris_pack_command(cmd, dst, name) \
    _iris_pack_command(NULL, cmd, dst, name)
 
-#define iris_pack_state(cmd, dst, name)                           \
+#define _iris_pack_state(batch, cmd, dst, name)                   \
    for (struct cmd name = {},                                     \
         *_dst = (void *)(dst); __builtin_expect(_dst != NULL, 1); \
-        __genxml_cmd_pack(cmd)(NULL, (void *)_dst, &name),        \
+        __genxml_cmd_pack(cmd)(batch, (void *)_dst, &name),       \
         _dst = NULL)
+
+#define iris_pack_state(cmd, dst, name)                           \
+   _iris_pack_state(NULL, cmd, dst, name)
 
 #define iris_emit_cmd(batch, cmd, name) \
    _iris_pack_command(batch, cmd, __gen_get_batch_dwords(batch, __genxml_cmd_length(cmd)), name)

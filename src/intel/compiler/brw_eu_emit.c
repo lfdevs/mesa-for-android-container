@@ -95,14 +95,15 @@ brw_set_dest(struct brw_codegen *p, brw_inst *inst, struct brw_reg dest)
    else if (dest.file == BRW_GENERAL_REGISTER_FILE)
       assert(dest.nr < 128);
 
-   /* The hardware has a restriction where if the destination is Byte,
-    * the instruction needs to have a stride of 2 (except for packed byte
-    * MOV). This seems to be required even if the destination is the NULL
-    * register.
+   /* The hardware has a restriction where a destination of size Byte with
+    * a stride of 1 is only allowed for a packed byte MOV. For any other
+    * instruction, the stride must be at least 2, even when the destination
+    * is the NULL register.
     */
    if (dest.file == BRW_ARCHITECTURE_REGISTER_FILE &&
        dest.nr == BRW_ARF_NULL &&
-       type_sz(dest.type) == 1) {
+       type_sz(dest.type) == 1 &&
+       dest.hstride == BRW_HORIZONTAL_STRIDE_1) {
       dest.hstride = BRW_HORIZONTAL_STRIDE_2;
    }
 
@@ -1019,33 +1020,6 @@ brw_inst *brw_##OP(struct brw_codegen *p,         \
    return brw_alu3(p, BRW_OPCODE_##OP, dest, src0, src1, src2); \
 }
 
-/* Rounding operations (other than RNDD) require two instructions - the first
- * stores a rounded value (possibly the wrong way) in the dest register, but
- * also sets a per-channel "increment bit" in the flag register.  A predicated
- * add of 1.0 fixes dest to contain the desired result.
- *
- * Sandybridge and later appear to round correctly without an ADD.
- */
-#define ROUND(OP)							      \
-void brw_##OP(struct brw_codegen *p,					      \
-	      struct brw_reg dest,					      \
-	      struct brw_reg src)					      \
-{									      \
-   const struct gen_device_info *devinfo = p->devinfo;					      \
-   brw_inst *rnd, *add;							      \
-   rnd = next_insn(p, BRW_OPCODE_##OP);					      \
-   brw_set_dest(p, rnd, dest);						      \
-   brw_set_src0(p, rnd, src);						      \
-									      \
-   if (devinfo->gen < 6) {							      \
-      /* turn on round-increments */					      \
-      brw_inst_set_cond_modifier(devinfo, rnd, BRW_CONDITIONAL_R);            \
-      add = brw_ADD(p, dest, dest, brw_imm_f(1.0f));			      \
-      brw_inst_set_pred_control(devinfo, add, BRW_PREDICATE_NORMAL);          \
-   }									      \
-}
-
-
 ALU2(SEL)
 ALU1(NOT)
 ALU2(AND)
@@ -1060,6 +1034,8 @@ ALU2(ROR)
 ALU3(CSEL)
 ALU1(FRC)
 ALU1(RNDD)
+ALU1(RNDE)
+ALU1(RNDZ)
 ALU2(MAC)
 ALU2(MACH)
 ALU1(LZD)
@@ -1078,9 +1054,6 @@ ALU1(FBL)
 ALU1(CBIT)
 ALU2(ADDC)
 ALU2(SUBB)
-
-ROUND(RNDZ)
-ROUND(RNDE)
 
 brw_inst *
 brw_MOV(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0)
@@ -2704,7 +2677,7 @@ brw_send_indirect_split_message(struct brw_codegen *p,
    }
 
    if (ex_desc.file == BRW_IMMEDIATE_VALUE &&
-       (ex_desc.ud & INTEL_MASK(15, 12)) == 0) {
+       (devinfo->gen >= 12 || (ex_desc.ud & INTEL_MASK(15, 12)) == 0)) {
       ex_desc.ud |= ex_desc_imm;
    } else {
       const struct tgl_swsb swsb = brw_get_default_swsb(p);
@@ -2730,8 +2703,9 @@ brw_send_indirect_split_message(struct brw_codegen *p,
       unsigned imm_part = ex_desc_imm | sfid | eot << 5;
 
       if (ex_desc.file == BRW_IMMEDIATE_VALUE) {
-         /* ex_desc bits 15:12 don't exist in the instruction encoding, so
-          * we may have fallen back to an indirect extended descriptor.
+         /* ex_desc bits 15:12 don't exist in the instruction encoding prior
+          * to Gen12, so we may have fallen back to an indirect extended
+          * descriptor.
           */
          brw_MOV(p, addr, brw_imm_ud(ex_desc.ud | imm_part));
       } else {

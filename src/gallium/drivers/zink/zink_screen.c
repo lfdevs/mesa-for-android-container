@@ -31,7 +31,7 @@
 
 #include "os/os_process.h"
 #include "util/u_debug.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_screen.h"
@@ -122,11 +122,7 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 1 + util_logbase2(screen->props.limits.maxImageDimensionCube);
 
    case PIPE_CAP_BLEND_EQUATION_SEPARATE:
-      return 1;
-
    case PIPE_CAP_FRAGMENT_SHADER_TEXTURE_LOD:
-      return 0; /* TODO: re-enable after implementing nir_texop_txd */
-
    case PIPE_CAP_FRAGMENT_SHADER_DERIVATIVES:
    case PIPE_CAP_VERTEX_SHADER_SATURATE:
       return 1;
@@ -143,10 +139,8 @@ zink_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
 #endif
 
-#if 0 /* TODO: Enable me */
    case PIPE_CAP_MIXED_COLORBUFFER_FORMATS:
       return 1;
-#endif
 
    case PIPE_CAP_SEAMLESS_CUBE_MAP:
       return 1;
@@ -395,12 +389,14 @@ zink_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return INT_MAX;
 
+   case PIPE_SHADER_CAP_INTEGERS:
+      return 1;
+
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
    case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
    case PIPE_SHADER_CAP_SUBROUTINES:
-   case PIPE_SHADER_CAP_INTEGERS:
    case PIPE_SHADER_CAP_INT64_ATOMICS:
    case PIPE_SHADER_CAP_FP16:
       return 0; /* not implemented */
@@ -452,157 +448,6 @@ zink_get_shader_param(struct pipe_screen *pscreen,
    return 0;
 }
 
-static const VkFormat formats[PIPE_FORMAT_COUNT] = {
-#define MAP_FORMAT_NORM(FMT) \
-   [PIPE_FORMAT_ ## FMT ## _UNORM] = VK_FORMAT_ ## FMT ## _UNORM, \
-   [PIPE_FORMAT_ ## FMT ## _SNORM] = VK_FORMAT_ ## FMT ## _SNORM,
-
-#define MAP_FORMAT_SCALED(FMT) \
-   [PIPE_FORMAT_ ## FMT ## _USCALED] = VK_FORMAT_ ## FMT ## _USCALED, \
-   [PIPE_FORMAT_ ## FMT ## _SSCALED] = VK_FORMAT_ ## FMT ## _SSCALED,
-
-#define MAP_FORMAT_INT(FMT) \
-   [PIPE_FORMAT_ ## FMT ## _UINT] = VK_FORMAT_ ## FMT ## _UINT, \
-   [PIPE_FORMAT_ ## FMT ## _SINT] = VK_FORMAT_ ## FMT ## _SINT,
-
-#define MAP_FORMAT_SRGB(FMT) \
-   [PIPE_FORMAT_ ## FMT ## _SRGB] = VK_FORMAT_ ## FMT ## _SRGB,
-
-#define MAP_FORMAT_FLOAT(FMT) \
-   [PIPE_FORMAT_ ## FMT ## _FLOAT] = VK_FORMAT_ ## FMT ## _SFLOAT,
-
-   // one component
-
-   // 8-bits
-   MAP_FORMAT_NORM(R8)
-   MAP_FORMAT_SCALED(R8)
-   MAP_FORMAT_INT(R8)
-   // 16-bits
-   MAP_FORMAT_NORM(R16)
-   MAP_FORMAT_SCALED(R16)
-   MAP_FORMAT_INT(R16)
-   MAP_FORMAT_FLOAT(R16)
-   // 32-bits
-   MAP_FORMAT_INT(R32)
-   MAP_FORMAT_FLOAT(R32)
-
-   // two components
-
-   // 8-bits
-   MAP_FORMAT_NORM(R8G8)
-   MAP_FORMAT_SCALED(R8G8)
-   MAP_FORMAT_INT(R8G8)
-   // 16-bits
-   MAP_FORMAT_NORM(R16G16)
-   MAP_FORMAT_SCALED(R16G16)
-   MAP_FORMAT_INT(R16G16)
-   MAP_FORMAT_FLOAT(R16G16)
-   // 32-bits
-   MAP_FORMAT_INT(R32G32)
-   MAP_FORMAT_FLOAT(R32G32)
-
-   // three components
-
-   // 8-bits
-   MAP_FORMAT_NORM(R8G8B8)
-   MAP_FORMAT_SCALED(R8G8B8)
-   MAP_FORMAT_INT(R8G8B8)
-   MAP_FORMAT_SRGB(R8G8B8)
-   // 16-bits
-   MAP_FORMAT_NORM(R16G16B16)
-   MAP_FORMAT_SCALED(R16G16B16)
-   MAP_FORMAT_INT(R16G16B16)
-   MAP_FORMAT_FLOAT(R16G16B16)
-   // 32-bits
-   MAP_FORMAT_INT(R32G32B32)
-   MAP_FORMAT_FLOAT(R32G32B32)
-
-   // four components
-
-   // 8-bits
-   MAP_FORMAT_NORM(R8G8B8A8)
-   MAP_FORMAT_SCALED(R8G8B8A8)
-   MAP_FORMAT_INT(R8G8B8A8)
-   MAP_FORMAT_SRGB(R8G8B8A8)
-   [PIPE_FORMAT_B8G8R8A8_UNORM] = VK_FORMAT_B8G8R8A8_UNORM,
-   [PIPE_FORMAT_B8G8R8X8_UNORM] = VK_FORMAT_B8G8R8A8_UNORM,
-   MAP_FORMAT_SRGB(B8G8R8A8)
-   [PIPE_FORMAT_A8B8G8R8_SRGB] = VK_FORMAT_A8B8G8R8_SRGB_PACK32,
-   // 16-bits
-   MAP_FORMAT_NORM(R16G16B16A16)
-   MAP_FORMAT_SCALED(R16G16B16A16)
-   MAP_FORMAT_INT(R16G16B16A16)
-   MAP_FORMAT_FLOAT(R16G16B16A16)
-   // 32-bits
-   MAP_FORMAT_INT(R32G32B32A32)
-   MAP_FORMAT_FLOAT(R32G32B32A32)
-
-   // other color formats
-   [PIPE_FORMAT_B5G6R5_UNORM] = VK_FORMAT_R5G6B5_UNORM_PACK16,
-   [PIPE_FORMAT_B5G5R5A1_UNORM] = VK_FORMAT_B5G5R5A1_UNORM_PACK16,
-   [PIPE_FORMAT_R11G11B10_FLOAT] = VK_FORMAT_B10G11R11_UFLOAT_PACK32,
-   [PIPE_FORMAT_R9G9B9E5_FLOAT] = VK_FORMAT_E5B9G9R9_UFLOAT_PACK32,
-   [PIPE_FORMAT_R10G10B10A2_UNORM] = VK_FORMAT_A2B10G10R10_UNORM_PACK32,
-   [PIPE_FORMAT_B10G10R10A2_UNORM] = VK_FORMAT_A2R10G10B10_UNORM_PACK32,
-   [PIPE_FORMAT_R10G10B10A2_UINT] = VK_FORMAT_A2B10G10R10_UINT_PACK32,
-   [PIPE_FORMAT_B10G10R10A2_UINT] = VK_FORMAT_A2R10G10B10_UINT_PACK32,
-
-   // depth/stencil formats
-   [PIPE_FORMAT_Z32_FLOAT] = VK_FORMAT_D32_SFLOAT,
-   [PIPE_FORMAT_Z32_FLOAT_S8X24_UINT] = VK_FORMAT_D32_SFLOAT_S8_UINT,
-   [PIPE_FORMAT_Z16_UNORM] = VK_FORMAT_D16_UNORM,
-   [PIPE_FORMAT_Z24X8_UNORM] = VK_FORMAT_X8_D24_UNORM_PACK32,
-   [PIPE_FORMAT_Z24_UNORM_S8_UINT] = VK_FORMAT_D24_UNORM_S8_UINT,
-
-   // compressed formats
-   [PIPE_FORMAT_DXT1_RGB] = VK_FORMAT_BC1_RGB_UNORM_BLOCK,
-   [PIPE_FORMAT_DXT1_RGBA] = VK_FORMAT_BC1_RGBA_UNORM_BLOCK,
-   [PIPE_FORMAT_DXT3_RGBA] = VK_FORMAT_BC2_UNORM_BLOCK,
-   [PIPE_FORMAT_DXT5_RGBA] = VK_FORMAT_BC3_UNORM_BLOCK,
-   [PIPE_FORMAT_DXT1_SRGB] = VK_FORMAT_BC1_RGB_SRGB_BLOCK,
-   [PIPE_FORMAT_DXT1_SRGBA] = VK_FORMAT_BC1_RGBA_SRGB_BLOCK,
-   [PIPE_FORMAT_DXT3_SRGBA] = VK_FORMAT_BC2_SRGB_BLOCK,
-   [PIPE_FORMAT_DXT5_SRGBA] = VK_FORMAT_BC3_SRGB_BLOCK,
-
-   [PIPE_FORMAT_RGTC1_UNORM] = VK_FORMAT_BC4_UNORM_BLOCK,
-   [PIPE_FORMAT_RGTC1_SNORM] = VK_FORMAT_BC4_SNORM_BLOCK,
-   [PIPE_FORMAT_RGTC2_UNORM] = VK_FORMAT_BC5_UNORM_BLOCK,
-   [PIPE_FORMAT_RGTC2_SNORM] = VK_FORMAT_BC5_SNORM_BLOCK,
-   [PIPE_FORMAT_BPTC_RGBA_UNORM] = VK_FORMAT_BC7_UNORM_BLOCK,
-   [PIPE_FORMAT_BPTC_SRGBA] = VK_FORMAT_BC7_SRGB_BLOCK,
-   [PIPE_FORMAT_BPTC_RGB_FLOAT] = VK_FORMAT_BC6H_SFLOAT_BLOCK,
-   [PIPE_FORMAT_BPTC_RGB_UFLOAT] = VK_FORMAT_BC6H_UFLOAT_BLOCK,
-};
-
-static bool
-is_depth_format_supported(struct zink_screen *screen, VkFormat format)
-{
-   VkFormatProperties props;
-   vkGetPhysicalDeviceFormatProperties(screen->pdev, format, &props);
-   return (props.linearTilingFeatures | props.optimalTilingFeatures) &
-          VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-}
-
-VkFormat
-zink_get_format(struct zink_screen *screen, enum pipe_format format)
-{
-   VkFormat ret = formats[format];
-
-   if (ret == VK_FORMAT_X8_D24_UNORM_PACK32 &&
-       !screen->have_X8_D24_UNORM_PACK32) {
-      assert(is_depth_format_supported(screen, VK_FORMAT_D32_SFLOAT));
-      return VK_FORMAT_D32_SFLOAT;
-   }
-
-   if (ret == VK_FORMAT_D24_UNORM_S8_UINT &&
-       !screen->have_D24_UNORM_S8_UINT) {
-      assert(is_depth_format_supported(screen, VK_FORMAT_D32_SFLOAT_S8_UINT));
-      return VK_FORMAT_D32_SFLOAT_S8_UINT;
-   }
-
-   return ret;
-}
-
 static VkSampleCountFlagBits
 vk_sample_count_flags(uint32_t sample_count)
 {
@@ -635,42 +480,44 @@ zink_is_format_supported(struct pipe_screen *pscreen,
 
    VkFormat vkformat = zink_get_format(screen, format);
    if (vkformat == VK_FORMAT_UNDEFINED)
-      return FALSE;
+      return false;
 
    if (sample_count >= 1) {
       VkSampleCountFlagBits sample_mask = vk_sample_count_flags(sample_count);
+      if (!sample_mask)
+         return false;
       const struct util_format_description *desc = util_format_description(format);
       if (util_format_is_depth_or_stencil(format)) {
          if (util_format_has_depth(desc)) {
             if (bind & PIPE_BIND_DEPTH_STENCIL &&
                 (screen->props.limits.framebufferDepthSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
             if (bind & PIPE_BIND_SAMPLER_VIEW &&
                 (screen->props.limits.sampledImageDepthSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
          }
          if (util_format_has_stencil(desc)) {
             if (bind & PIPE_BIND_DEPTH_STENCIL &&
                 (screen->props.limits.framebufferStencilSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
             if (bind & PIPE_BIND_SAMPLER_VIEW &&
                 (screen->props.limits.sampledImageStencilSampleCounts & sample_mask) != sample_mask)
-               return FALSE;
+               return false;
          }
       } else if (util_format_is_pure_integer(format)) {
          if (bind & PIPE_BIND_RENDER_TARGET &&
              !(screen->props.limits.framebufferColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
          if (bind & PIPE_BIND_SAMPLER_VIEW &&
              !(screen->props.limits.sampledImageIntegerSampleCounts & sample_mask))
-            return FALSE;
+            return false;
       } else {
          if (bind & PIPE_BIND_RENDER_TARGET &&
              !(screen->props.limits.framebufferColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
          if (bind & PIPE_BIND_SAMPLER_VIEW &&
              !(screen->props.limits.sampledImageColorSampleCounts & sample_mask))
-            return FALSE;
+            return false;
       }
    }
 
@@ -680,34 +527,34 @@ zink_is_format_supported(struct pipe_screen *pscreen,
    if (target == PIPE_BUFFER) {
       if (bind & PIPE_BIND_VERTEX_BUFFER &&
           !(props.bufferFeatures & VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT))
-         return FALSE;
+         return false;
    } else {
       /* all other targets are texture-targets */
       if (bind & PIPE_BIND_RENDER_TARGET &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
-         return FALSE;
+         return false;
 
       if (bind & PIPE_BIND_BLENDABLE &&
          !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT))
-        return FALSE;
+        return false;
 
       if (bind & PIPE_BIND_SAMPLER_VIEW &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT))
-         return FALSE;
+         return false;
 
       if (bind & PIPE_BIND_DEPTH_STENCIL &&
           !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
-         return FALSE;
+         return false;
    }
 
    if (util_format_is_compressed(format)) {
       const struct util_format_description *desc = util_format_description(format);
       if (desc->layout == UTIL_FORMAT_LAYOUT_BPTC &&
           !screen->feats.textureCompressionBC)
-         return FALSE;
+         return false;
    }
 
-   return TRUE;
+   return true;
 }
 
 static void
@@ -858,10 +705,10 @@ zink_internal_create_screen(struct sw_winsys *winsys, int fd)
    vkGetPhysicalDeviceFeatures(screen->pdev, &screen->feats);
    vkGetPhysicalDeviceMemoryProperties(screen->pdev, &screen->mem_props);
 
-   screen->have_X8_D24_UNORM_PACK32 = is_depth_format_supported(screen,
-                                         VK_FORMAT_X8_D24_UNORM_PACK32);
-   screen->have_D24_UNORM_S8_UINT = is_depth_format_supported(screen,
-                                         VK_FORMAT_D24_UNORM_S8_UINT);
+   screen->have_X8_D24_UNORM_PACK32 = zink_is_depth_format_supported(screen,
+                                              VK_FORMAT_X8_D24_UNORM_PACK32);
+   screen->have_D24_UNORM_S8_UINT = zink_is_depth_format_supported(screen,
+                                              VK_FORMAT_D24_UNORM_S8_UINT);
 
    uint32_t num_extensions = 0;
    if (vkEnumerateDeviceExtensionProperties(screen->pdev, NULL,

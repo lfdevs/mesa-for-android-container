@@ -32,14 +32,13 @@
 extern "C" {
 #endif
 
-int type_size_scalar(const struct glsl_type *type, bool bindless);
 int type_size_vec4(const struct glsl_type *type, bool bindless);
 int type_size_dvec4(const struct glsl_type *type, bool bindless);
 
 static inline int
 type_size_scalar_bytes(const struct glsl_type *type, bool bindless)
 {
-   return type_size_scalar(type, bindless) * 4;
+   return glsl_count_dword_slots(type, bindless) * 4;
 }
 
 static inline int
@@ -128,11 +127,14 @@ void brw_nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin,
 void brw_nir_rewrite_bindless_image_intrinsic(nir_intrinsic_instr *intrin,
                                               nir_ssa_def *handle);
 
-bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader);
+bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
+                                        const struct gen_device_info *devinfo);
 
 void brw_postprocess_nir(nir_shader *nir,
                          const struct brw_compiler *compiler,
                          bool is_scalar);
+
+bool brw_nir_clamp_image_1d_2d_array_sizes(nir_shader *shader);
 
 bool brw_nir_apply_attribute_workarounds(nir_shader *nir,
                                          const uint8_t *attrib_wa_flags);

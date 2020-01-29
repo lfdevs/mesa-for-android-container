@@ -28,7 +28,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "fd4_texture.h"
 #include "fd4_format.h"
@@ -222,9 +222,9 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 {
 	struct fd4_pipe_sampler_view *so = CALLOC_STRUCT(fd4_pipe_sampler_view);
 	struct fd_resource *rsc = fd_resource(prsc);
+	struct fdl_slice *slice = NULL;
 	enum pipe_format format = cso->format;
 	unsigned lvl, layers = 0;
-	uint32_t sz2 = 0;
 
 	if (!so)
 		return NULL;
@@ -261,12 +261,13 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			A4XX_TEX_CONST_1_HEIGHT(1);
 		so->texconst2 =
 			A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)) |
-			A4XX_TEX_CONST_2_PITCH(elements * rsc->cpp);
+			A4XX_TEX_CONST_2_PITCH(elements * rsc->layout.cpp);
 		so->offset = cso->u.buf.offset;
 	} else {
 		unsigned miplevels;
 
 		lvl = fd_sampler_first_level(cso);
+		slice = fd_resource_slice(rsc, lvl);
 		miplevels = fd_sampler_last_level(cso) - lvl;
 		layers = cso->u.tex.last_layer - cso->u.tex.first_layer + 1;
 
@@ -277,8 +278,7 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 		so->texconst2 =
 			A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)) |
 			A4XX_TEX_CONST_2_PITCH(
-					util_format_get_nblocksx(
-							format, rsc->slices[lvl].pitch) * rsc->cpp);
+				util_format_get_nblocksx(format, slice->pitch) * rsc->layout.cpp);
 		so->offset = fd_resource_offset(rsc, lvl, cso->u.tex.first_layer);
 	}
 
@@ -299,21 +299,20 @@ fd4_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	case PIPE_TEXTURE_2D_ARRAY:
 		so->texconst3 =
 			A4XX_TEX_CONST_3_DEPTH(layers) |
-			A4XX_TEX_CONST_3_LAYERSZ(rsc->layer_size);
+			A4XX_TEX_CONST_3_LAYERSZ(rsc->layout.layer_size);
 		break;
 	case PIPE_TEXTURE_CUBE:
 	case PIPE_TEXTURE_CUBE_ARRAY:
 		so->texconst3 =
 			A4XX_TEX_CONST_3_DEPTH(layers / 6) |
-			A4XX_TEX_CONST_3_LAYERSZ(rsc->layer_size);
+			A4XX_TEX_CONST_3_LAYERSZ(rsc->layout.layer_size);
 		break;
 	case PIPE_TEXTURE_3D:
 		so->texconst3 =
 			A4XX_TEX_CONST_3_DEPTH(u_minify(prsc->depth0, lvl)) |
-			A4XX_TEX_CONST_3_LAYERSZ(rsc->slices[lvl].size0);
-		while (lvl < cso->u.tex.last_level && sz2 != rsc->slices[lvl+1].size0)
-			sz2 = rsc->slices[++lvl].size0;
-		so->texconst4 = A4XX_TEX_CONST_4_LAYERSZ(sz2);
+			A4XX_TEX_CONST_3_LAYERSZ(slice->size0);
+		so->texconst4 = A4XX_TEX_CONST_4_LAYERSZ(
+			fd_resource_slice(rsc, prsc->last_level)->size0);
 		break;
 	default:
 		so->texconst3 = 0x00000000;

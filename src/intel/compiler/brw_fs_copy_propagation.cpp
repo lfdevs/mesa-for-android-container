@@ -48,8 +48,8 @@ struct acp_entry : public exec_node {
    fs_reg dst;
    fs_reg src;
    unsigned global_idx;
-   uint8_t size_written;
-   uint8_t size_read;
+   unsigned size_written;
+   unsigned size_read;
    enum opcode opcode;
    bool saturate;
 };
@@ -194,7 +194,7 @@ fs_copy_prop_dataflow::setup_initial_values()
        * destinations.
        */
       for (int i = 0; i < num_acp; i++) {
-         unsigned idx = acp[i]->dst.nr & (acp_table_size - 1);
+         unsigned idx = reg_space(acp[i]->dst) & (acp_table_size - 1);
          acp_table[idx].push_tail(acp[i]);
       }
 
@@ -203,7 +203,7 @@ fs_copy_prop_dataflow::setup_initial_values()
             if (inst->dst.file != VGRF)
                continue;
 
-            unsigned idx = inst->dst.nr & (acp_table_size - 1);
+            unsigned idx = reg_space(inst->dst) & (acp_table_size - 1);
             foreach_in_list(acp_entry, entry, &acp_table[idx]) {
                if (regions_overlap(inst->dst, inst->size_written,
                                    entry->dst, entry->size_written))
@@ -220,16 +220,17 @@ fs_copy_prop_dataflow::setup_initial_values()
        * sources.
        */
       for (int i = 0; i < num_acp; i++) {
-         unsigned idx = acp[i]->src.nr & (acp_table_size - 1);
+         unsigned idx = reg_space(acp[i]->src) & (acp_table_size - 1);
          acp_table[idx].push_tail(acp[i]);
       }
 
       foreach_block (block, cfg) {
          foreach_inst_in_block(fs_inst, inst, block) {
-            if (inst->dst.file != VGRF)
+            if (inst->dst.file != VGRF &&
+                inst->dst.file != FIXED_GRF)
                continue;
 
-            unsigned idx = inst->dst.nr & (acp_table_size - 1);
+            unsigned idx = reg_space(inst->dst) & (acp_table_size - 1);
             foreach_in_list(acp_entry, entry, &acp_table[idx]) {
                if (regions_overlap(inst->dst, inst->size_written,
                                    entry->src, entry->size_read))
@@ -451,10 +452,24 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    if (entry->src.file == IMM)
       return false;
    assert(entry->src.file == VGRF || entry->src.file == UNIFORM ||
-          entry->src.file == ATTR);
+          entry->src.file == ATTR || entry->src.file == FIXED_GRF);
 
+   /* Avoid propagating a LOAD_PAYLOAD instruction into another if there is a
+    * good chance that we'll be able to eliminate the latter through register
+    * coalescing.  If only part of the sources of the second LOAD_PAYLOAD can
+    * be simplified through copy propagation we would be making register
+    * coalescing impossible, ending up with unnecessary copies in the program.
+    * This is also the case for is_multi_copy_payload() copies that can only
+    * be coalesced when the instruction is lowered into a sequence of MOVs.
+    *
+    * Worse -- In cases where the ACP entry was the result of CSE combining
+    * multiple LOAD_PAYLOAD subexpressions, propagating the first LOAD_PAYLOAD
+    * into the second would undo the work of CSE, leading to an infinite
+    * optimization loop.  Avoid this by detecting LOAD_PAYLOAD copies from CSE
+    * temporaries which should match is_coalescing_payload().
+    */
    if (entry->opcode == SHADER_OPCODE_LOAD_PAYLOAD &&
-       inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD)
+       (is_coalescing_payload(alloc, inst) || is_multi_copy_payload(inst)))
       return false;
 
    assert(entry->dst.file == VGRF);
@@ -466,6 +481,21 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     */
    if (!region_contained_in(inst->src[arg], inst->size_read(arg),
                             entry->dst, entry->size_written))
+      return false;
+
+   /* Avoid propagating a FIXED_GRF register into an EOT instruction in order
+    * for any register allocation restrictions to be applied.
+    */
+   if (entry->src.file == FIXED_GRF && inst->eot)
+      return false;
+
+   /* Avoid propagating odd-numbered FIXED_GRF registers into the first source
+    * of a LINTERP instruction on platforms where the PLN instruction has
+    * register alignment restrictions.
+    */
+   if (devinfo->has_pln && devinfo->gen <= 6 &&
+       entry->src.file == FIXED_GRF && (entry->src.nr & 1) &&
+       inst->opcode == FS_OPCODE_LINTERP && arg == 0)
       return false;
 
    /* we can't generally copy-propagate UD negations because we
@@ -492,14 +522,28 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     * derivatives, assume that their operands are packed so we can't
     * generally propagate strided regions to them.
     */
-   if (instruction_requires_packed_data(inst) && entry->src.stride > 1)
+   const unsigned entry_stride = (entry->src.file == FIXED_GRF ? 1 :
+                                  entry->src.stride);
+   if (instruction_requires_packed_data(inst) && entry_stride > 1)
       return false;
 
    /* Bail if the result of composing both strides would exceed the
     * hardware limit.
     */
-   if (!can_take_stride(inst, arg, entry->src.stride * inst->src[arg].stride,
+   if (!can_take_stride(inst, arg, entry_stride * inst->src[arg].stride,
                         devinfo))
+      return false;
+
+   /* Bail if the source FIXED_GRF region of the copy cannot be trivially
+    * composed with the source region of the instruction -- E.g. because the
+    * copy uses some extended stride greater than 4 not supported natively by
+    * the hardware as a horizontal stride, or because instruction compression
+    * could require us to use a vertical stride shorter than a GRF.
+    */
+   if (entry->src.file == FIXED_GRF &&
+       (inst->src[arg].stride > 4 ||
+        inst->dst.component_size(inst->exec_size) >
+        inst->src[arg].component_size(inst->exec_size)))
       return false;
 
    /* Bail if the instruction type is larger than the execution type of the
@@ -523,7 +567,7 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
     *
     * Which would have different semantics.
     */
-   if (entry->src.stride != 1 &&
+   if (entry_stride != 1 &&
        (inst->src[arg].stride *
         type_sz(inst->src[arg].type)) % type_sz(entry->src.type) != 0)
       return false;
@@ -561,13 +605,42 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
       }
    }
 
+   /* Save the offset of inst->src[arg] relative to entry->dst for it to be
+    * applied later.
+    */
+   const unsigned rel_offset = inst->src[arg].offset - entry->dst.offset;
+
+   /* Fold the copy into the instruction consuming it. */
    inst->src[arg].file = entry->src.file;
    inst->src[arg].nr = entry->src.nr;
-   inst->src[arg].stride *= entry->src.stride;
-   inst->saturate = inst->saturate || entry->saturate;
+   inst->src[arg].subnr = entry->src.subnr;
+   inst->src[arg].offset = entry->src.offset;
 
-   /* Compute the offset of inst->src[arg] relative to entry->dst */
-   const unsigned rel_offset = inst->src[arg].offset - entry->dst.offset;
+   /* Compose the strides of both regions. */
+   if (entry->src.file == FIXED_GRF) {
+      if (inst->src[arg].stride) {
+         const unsigned orig_width = 1 << entry->src.width;
+         const unsigned reg_width = REG_SIZE / (type_sz(inst->src[arg].type) *
+                                                inst->src[arg].stride);
+         inst->src[arg].width = cvt(MIN2(orig_width, reg_width)) - 1;
+         inst->src[arg].hstride = cvt(inst->src[arg].stride);
+         inst->src[arg].vstride = inst->src[arg].hstride + inst->src[arg].width;
+      } else {
+         inst->src[arg].vstride = inst->src[arg].hstride =
+            inst->src[arg].width = 0;
+      }
+
+      inst->src[arg].stride = 1;
+
+      /* Hopefully no Align16 around here... */
+      assert(entry->src.swizzle == BRW_SWIZZLE_XYZW);
+      inst->src[arg].swizzle = entry->src.swizzle;
+   } else {
+      inst->src[arg].stride *= entry->src.stride;
+   }
+
+   /* Compose any saturate modifiers. */
+   inst->saturate = inst->saturate || entry->saturate;
 
    /* Compute the first component of the copy that the instruction is
     * reading, and the base byte offset within that component.
@@ -579,9 +652,8 @@ fs_visitor::try_copy_propagate(fs_inst *inst, int arg, acp_entry *entry)
    /* Calculate the byte offset at the origin of the copy of the given
     * component and suboffset.
     */
-   inst->src[arg].offset = suboffset +
-      component * entry->src.stride * type_sz(entry->src.type) +
-      entry->src.offset;
+   inst->src[arg] = byte_offset(inst->src[arg],
+      component * entry_stride * type_sz(entry->src.type) + suboffset);
 
    if (has_source_modifiers) {
       if (entry->dst.type != inst->src[arg].type) {
@@ -833,9 +905,12 @@ can_propagate_from(fs_inst *inst)
                               inst->src[0], inst->size_read(0))) ||
             inst->src[0].file == ATTR ||
             inst->src[0].file == UNIFORM ||
-            inst->src[0].file == IMM) &&
+            inst->src[0].file == IMM ||
+            (inst->src[0].file == FIXED_GRF &&
+             inst->src[0].is_contiguous())) &&
            inst->src[0].type == inst->dst.type &&
-           !inst->is_partial_write());
+           !inst->is_partial_write()) ||
+          is_identity_payload(FIXED_GRF, inst);
 }
 
 /* Walks a basic block and does copy propagation on it using the acp
@@ -862,7 +937,7 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
       }
 
       /* kill the destination from the ACP */
-      if (inst->dst.file == VGRF) {
+      if (inst->dst.file == VGRF || inst->dst.file == FIXED_GRF) {
          foreach_in_list_safe(acp_entry, entry, &acp[inst->dst.nr % ACP_HASH_SIZE]) {
             if (regions_overlap(entry->dst, entry->size_written,
                                 inst->dst, inst->size_written))
@@ -888,11 +963,12 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
        * operand of another instruction, add it to the ACP.
        */
       if (can_propagate_from(inst)) {
-         acp_entry *entry = ralloc(copy_prop_ctx, acp_entry);
+         acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
          entry->dst = inst->dst;
          entry->src = inst->src[0];
          entry->size_written = inst->size_written;
-         entry->size_read = inst->size_read(0);
+         for (unsigned i = 0; i < inst->sources; i++)
+            entry->size_read += inst->size_read(i);
          entry->opcode = inst->opcode;
          entry->saturate = inst->saturate;
          acp[entry->dst.nr % ACP_HASH_SIZE].push_tail(entry);
@@ -904,7 +980,9 @@ fs_visitor::opt_copy_propagation_local(void *copy_prop_ctx, bblock_t *block,
             assert(effective_width * type_sz(inst->src[i].type) % REG_SIZE == 0);
             const unsigned size_written = effective_width *
                                           type_sz(inst->src[i].type);
-            if (inst->src[i].file == VGRF) {
+            if (inst->src[i].file == VGRF ||
+                (inst->src[i].file == FIXED_GRF &&
+                 inst->src[i].is_contiguous())) {
                acp_entry *entry = rzalloc(copy_prop_ctx, acp_entry);
                entry->dst = byte_offset(inst->dst, offset);
                entry->src = inst->src[i];

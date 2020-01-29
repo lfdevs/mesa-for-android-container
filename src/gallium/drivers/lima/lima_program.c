@@ -68,6 +68,7 @@ static const nir_shader_compiler_options fs_nir_options = {
    .lower_fsign = true,
    .lower_rotate = true,
    .lower_fdot = true,
+   .lower_fdph = true,
    .lower_bitops = true,
    .lower_vector_cmp = true,
 };
@@ -101,6 +102,7 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
    bool progress;
 
    NIR_PASS_V(s, nir_lower_viewport_transform);
+   NIR_PASS_V(s, nir_lower_point_size, 1.0f, 100.0f);
    NIR_PASS_V(s, nir_lower_io, nir_var_all, type_size, 0);
    NIR_PASS_V(s, nir_lower_load_const_to_scalar);
    NIR_PASS_V(s, lima_nir_lower_uniform_to_scalar);
@@ -285,6 +287,8 @@ lima_create_fs_state(struct pipe_context *pctx,
       return NULL;
    }
 
+   so->uses_discard = nir->info.fs.uses_discard;
+
    return so;
 }
 
@@ -378,6 +382,8 @@ lima_create_vs_state(struct pipe_context *pctx,
       ralloc_free(so);
       return NULL;
    }
+
+   ralloc_free(nir);
 
    return so;
 }

@@ -29,6 +29,7 @@ from collections import OrderedDict
 import nir_algebraic
 from nir_opcodes import type_sizes
 import itertools
+import struct
 from math import pi
 
 # Convenience variables
@@ -83,6 +84,9 @@ def lowered_sincos(c):
     x = ('fsub', ('fmul', 2.0, ('ffract', ('fadd', ('fmul', 0.5 / pi, a), c))), 1.0)
     x = ('fmul', ('fsub', x, ('fmul', x, ('fabs', x))), 4.0)
     return ('ffma', ('ffma', x, ('fabs', x), ('fneg', x)), 0.225, x)
+
+def intBitsToFloat(i):
+    return struct.unpack('!f', struct.pack('!I', i))[0]
 
 optimizations = [
 
@@ -476,6 +480,7 @@ optimizations.extend([
    (('fmin', ('fmin', a, b), b), ('fmin', a, b)),
    (('umin', ('umin', a, b), b), ('umin', a, b)),
    (('imin', ('imin', a, b), b), ('imin', a, b)),
+   (('iand@32', a, ('inot', ('ishr', a, 31))), ('imax', a, 0)),
    (('fmax', a, ('fneg', a)), ('fabs', a)),
    (('imax', a, ('ineg', a)), ('iabs', a)),
    (('fmin', a, ('fneg', a)), ('fneg', ('fabs', a))),
@@ -741,6 +746,7 @@ optimizations.extend([
    (('~flog2', ('fpow', a, b)), ('fmul', b, ('flog2', a))),
    (('~fmul', ('fexp2(is_used_once)', a), ('fexp2(is_used_once)', b)), ('fexp2', ('fadd', a, b))),
    (('bcsel', ('flt', a, 0.0), 0.0, ('fsqrt', a)), ('fsqrt', ('fmax', a, 0.0))),
+   (('~fmul', ('fsqrt', a), ('fsqrt', a)), ('fabs',a)),
    # Division and reciprocal
    (('~fdiv', 1.0, a), ('frcp', a)),
    (('fdiv', a, b), ('fmul', a, ('frcp', b)), 'options->lower_fdiv'),
@@ -797,6 +803,11 @@ optimizations.extend([
    (('i2b', ('ineg', a)), ('i2b', a)),
    (('i2b', ('iabs', a)), ('i2b', a)),
    (('inot', ('f2b1', a)), ('feq', a, 0.0)),
+
+   # The C spec says, "If the value of the integral part cannot be represented
+   # by the integer type, the behavior is undefined."  "Undefined" can mean
+   # "the conversion doesn't happen at all."
+   (('~i2f32', ('f2i32', 'a@32')), ('ftrunc', a)),
 
    # Ironically, mark these as imprecise because removing the conversions may
    # preserve more precision than doing the conversions (e.g.,
@@ -940,6 +951,9 @@ optimizations.extend([
    # Lower all Subtractions first - they can get recombined later
    (('fsub', a, b), ('fadd', a, ('fneg', b))),
    (('isub', a, b), ('iadd', a, ('ineg', b))),
+   (('uabs_usub', a, b), ('bcsel', ('ult', a, b), ('ineg', ('isub', a, b)), ('isub', a, b))),
+   # This is correct.  We don't need isub_sat because the result type is unsigned, so it cannot overflow.
+   (('uabs_isub', a, b), ('bcsel', ('ilt', a, b), ('ineg', ('isub', a, b)), ('isub', a, b))),
 
    # Propagate negation up multiplication chains
    (('fmul(is_used_by_non_fsat)', ('fneg', a), b), ('fneg', ('fmul', a, b))),
@@ -989,8 +1003,83 @@ optimizations.extend([
    (('uhadd', a, b), ('iadd', ('iand', a, b), ('ushr', ('ixor', a, b), 1)), 'options->lower_hadd'),
    (('irhadd', a, b), ('isub', ('ior', a, b), ('ishr', ('ixor', a, b), 1)), 'options->lower_hadd'),
    (('urhadd', a, b), ('isub', ('ior', a, b), ('ushr', ('ixor', a, b), 1)), 'options->lower_hadd'),
+   (('ihadd@64', a, b), ('iadd', ('iand', a, b), ('ishr', ('ixor', a, b), 1)), 'options->lower_hadd64 || (options->lower_int64_options & nir_lower_iadd64) != 0'),
+   (('uhadd@64', a, b), ('iadd', ('iand', a, b), ('ushr', ('ixor', a, b), 1)), 'options->lower_hadd64 || (options->lower_int64_options & nir_lower_iadd64) != 0'),
+   (('irhadd@64', a, b), ('isub', ('ior', a, b), ('ishr', ('ixor', a, b), 1)), 'options->lower_hadd64 || (options->lower_int64_options & nir_lower_iadd64) != 0'),
+   (('urhadd@64', a, b), ('isub', ('ior', a, b), ('ushr', ('ixor', a, b), 1)), 'options->lower_hadd64 || (options->lower_int64_options & nir_lower_iadd64) != 0'),
+
+   (('uadd_sat@64', a, b), ('bcsel', ('ult', ('iadd', a, b), a), -1, ('iadd', a, b)), 'options->lower_add_sat || (options->lower_int64_options & nir_lower_iadd64) != 0'),
    (('uadd_sat', a, b), ('bcsel', ('ult', ('iadd', a, b), a), -1, ('iadd', a, b)), 'options->lower_add_sat'),
    (('usub_sat', a, b), ('bcsel', ('ult', a, b), 0, ('isub', a, b)), 'options->lower_add_sat'),
+   (('usub_sat@64', a, b), ('bcsel', ('ult', a, b), 0, ('isub', a, b)), 'options->lower_usub_sat64 || (options->lower_int64_options & nir_lower_iadd64) != 0'),
+
+   # int64_t sum = a + b;
+   #
+   # if (a < 0 && b < 0 && a < sum)
+   #    sum = INT64_MIN;
+   # } else if (a >= 0 && b >= 0 && sum < a)
+   #    sum = INT64_MAX;
+   # }
+   #
+   # A couple optimizations are applied.
+   #
+   # 1. a < sum => sum >= 0.  This replacement works because it is known that
+   #    a < 0 and b < 0, so sum should also be < 0 unless there was
+   #    underflow.
+   #
+   # 2. sum < a => sum < 0.  This replacement works because it is known that
+   #    a >= 0 and b >= 0, so sum should also be >= 0 unless there was
+   #    overflow.
+   #
+   # 3. Invert the second if-condition and swap the order of parameters for
+   #    the bcsel. !(a >= 0 && b >= 0 && sum < 0) becomes !(a >= 0) || !(b >=
+   #    0) || !(sum < 0), and that becomes (a < 0) || (b < 0) || (sum >= 0)
+   #
+   # On Intel Gen11, this saves ~11 instructions.
+   (('iadd_sat@64', a, b), ('bcsel',
+                            ('iand', ('iand', ('ilt', a, 0), ('ilt', b, 0)), ('ige', ('iadd', a, b), 0)),
+                            0x8000000000000000,
+                            ('bcsel',
+                             ('ior', ('ior', ('ilt', a, 0), ('ilt', b, 0)), ('ige', ('iadd', a, b), 0)),
+                             ('iadd', a, b),
+                             0x7fffffffffffffff)),
+    '(options->lower_int64_options & nir_lower_iadd64) != 0'),
+
+   # int64_t sum = a - b;
+   #
+   # if (a < 0 && b >= 0 && a < sum)
+   #    sum = INT64_MIN;
+   # } else if (a >= 0 && b < 0 && a >= sum)
+   #    sum = INT64_MAX;
+   # }
+   #
+   # Optimizations similar to the iadd_sat case are applied here.
+   (('isub_sat@64', a, b), ('bcsel',
+                            ('iand', ('iand', ('ilt', a, 0), ('ige', b, 0)), ('ige', ('isub', a, b), 0)),
+                            0x8000000000000000,
+                            ('bcsel',
+                             ('ior', ('ior', ('ilt', a, 0), ('ige', b, 0)), ('ige', ('isub', a, b), 0)),
+                             ('isub', a, b),
+                             0x7fffffffffffffff)),
+    '(options->lower_int64_options & nir_lower_iadd64) != 0'),
+
+   # These are done here instead of in the backend because the int64 lowering
+   # pass will make a mess of the patterns.  The first patterns are
+   # conditioned on nir_lower_minmax64 because it was not clear that it was
+   # always an improvement on platforms that have real int64 support.  No
+   # shaders in shader-db hit this, so it was hard to say one way or the
+   # other.
+   (('ilt', ('imax(is_used_once)', 'a@64', 'b@64'), 0), ('ilt', ('imax', ('unpack_64_2x32_split_y', a), ('unpack_64_2x32_split_y', b)), 0), '(options->lower_int64_options & nir_lower_minmax64) != 0'),
+   (('ilt', ('imin(is_used_once)', 'a@64', 'b@64'), 0), ('ilt', ('imin', ('unpack_64_2x32_split_y', a), ('unpack_64_2x32_split_y', b)), 0), '(options->lower_int64_options & nir_lower_minmax64) != 0'),
+   (('ige', ('imax(is_used_once)', 'a@64', 'b@64'), 0), ('ige', ('imax', ('unpack_64_2x32_split_y', a), ('unpack_64_2x32_split_y', b)), 0), '(options->lower_int64_options & nir_lower_minmax64) != 0'),
+   (('ige', ('imin(is_used_once)', 'a@64', 'b@64'), 0), ('ige', ('imin', ('unpack_64_2x32_split_y', a), ('unpack_64_2x32_split_y', b)), 0), '(options->lower_int64_options & nir_lower_minmax64) != 0'),
+   (('ilt', 'a@64', 0), ('ilt', ('unpack_64_2x32_split_y', a), 0), '(options->lower_int64_options & nir_lower_icmp64) != 0'),
+   (('ige', 'a@64', 0), ('ige', ('unpack_64_2x32_split_y', a), 0), '(options->lower_int64_options & nir_lower_icmp64) != 0'),
+
+   (('ine', 'a@64', 0), ('ine', ('ior', ('unpack_64_2x32_split_x', a), ('unpack_64_2x32_split_y', a)), 0), '(options->lower_int64_options & nir_lower_icmp64) != 0'),
+   (('ieq', 'a@64', 0), ('ieq', ('ior', ('unpack_64_2x32_split_x', a), ('unpack_64_2x32_split_y', a)), 0), '(options->lower_int64_options & nir_lower_icmp64) != 0'),
+   # 0u < uint(a) <=> uint(a) != 0u
+   (('ult', 0, 'a@64'), ('ine', ('ior', ('unpack_64_2x32_split_x', a), ('unpack_64_2x32_split_y', a)), 0), '(options->lower_int64_options & nir_lower_icmp64) != 0'),
 
    # Alternative lowering that doesn't rely on bfi.
    (('bitfield_insert', 'base', 'insert', 'offset', 'bits'),
@@ -1112,6 +1201,18 @@ optimizations.extend([
                                                             ('extract_i8', 'v', 3))),
                                            127.0))),
      'options->lower_unpack_snorm_4x8'),
+
+   (('pack_half_2x16_split', 'a@32', 'b@32'),
+    ('ior', ('ishl', ('u2u32', ('f2f16', b)), 16), ('u2u32', ('f2f16', a))),
+    'options->lower_pack_half_2x16_split'),
+
+   (('unpack_half_2x16_split_x', 'a@32'),
+    ('f2f32', ('u2u16', a)),
+    'options->lower_unpack_half_2x16_split'),
+
+   (('unpack_half_2x16_split_y', 'a@32'),
+    ('f2f32', ('u2u16', ('ushr', a, 16))),
+    'options->lower_unpack_half_2x16_split'),
 
    (('isign', a), ('imin', ('imax', a, -1), 1), 'options->lower_isign'),
    (('fsign', a), ('fsub', ('b2f', ('flt', 0.0, a)), ('b2f', ('flt', a, 0.0))), 'options->lower_fsign'),
@@ -1415,6 +1516,44 @@ optimizations += [
    (('imadsh_mix16', 'a@32', '#b@32(is_upper_half_zero)', 'c@32'), ('c')),
 ]
 
+# These kinds of sequences can occur after nir_opt_peephole_select.
+#
+# NOTE: fadd is not handled here because that gets in the way of ffma
+# generation in the i965 driver.  Instead, fadd and ffma are handled in
+# late_optimizations.
+
+for op in ['flrp']:
+    optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b, c, d), (op, b, c, e)), (op, b, c, ('bcsel', a, d, e))),
+        (('bcsel', a, (op, b, c, d), (op + '(is_used_once)', b, c, e)), (op, b, c, ('bcsel', a, d, e))),
+        (('bcsel', a, (op + '(is_used_once)', b, c, d), (op, b, e, d)), (op, b, ('bcsel', a, c, e), d)),
+        (('bcsel', a, (op, b, c, d), (op + '(is_used_once)', b, e, d)), (op, b, ('bcsel', a, c, e), d)),
+        (('bcsel', a, (op + '(is_used_once)', b, c, d), (op, e, c, d)), (op, ('bcsel', a, b, e), c, d)),
+        (('bcsel', a, (op, b, c, d), (op + '(is_used_once)', e, c, d)), (op, ('bcsel', a, b, e), c, d)),
+    ]
+
+for op in ['fmul', 'iadd', 'imul', 'iand', 'ior', 'ixor', 'fmin', 'fmax', 'imin', 'imax', 'umin', 'umax']:
+    optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b, c), (op, b, 'd(is_not_const)')), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op + '(is_used_once)', b, 'c(is_not_const)'), (op, b, d)), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op, b, 'c(is_not_const)'), (op + '(is_used_once)', b, d)), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op, b, c), (op + '(is_used_once)', b, 'd(is_not_const)')), (op, b, ('bcsel', a, c, d))),
+    ]
+
+for op in ['fpow']:
+    optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b, c), (op, b, d)), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op, b, c), (op + '(is_used_once)', b, d)), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op + '(is_used_once)', b, c), (op, d, c)), (op, ('bcsel', a, b, d), c)),
+        (('bcsel', a, (op, b, c), (op + '(is_used_once)', d, c)), (op, ('bcsel', a, b, d), c)),
+    ]
+
+for op in ['frcp', 'frsq', 'fsqrt', 'fexp2', 'flog2', 'fsign', 'fsin', 'fcos']:
+    optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b), (op, c)), (op, ('bcsel', a, b, c))),
+        (('bcsel', a, (op, b), (op + '(is_used_once)', c)), (op, ('bcsel', a, b, c))),
+    ]
+
 # This section contains "late" optimizations that should be run before
 # creating ffmas and calling regular optimizations for the final time.
 # Optimizations should go here if they help code generation and conflict
@@ -1550,6 +1689,11 @@ late_optimizations = [
 
    (('bcsel', a, 0, ('b2f32', ('inot', 'b@bool'))), ('b2f32', ('inot', ('ior', a, b)))),
 
+   # Putting this in 'optimizations' interferes with the bcsel(a, op(b, c),
+   # op(b, d)) => op(b, bcsel(a, c, d)) transformations.  I do not know why.
+   (('bcsel', ('feq', ('fsqrt', 'a(is_not_negative)'), 0.0), intBitsToFloat(0x7f7fffff), ('frsq', a)),
+    ('fmin', ('frsq', a), intBitsToFloat(0x7f7fffff))),
+
    # Things that look like DPH in the source shader may get expanded to
    # something that looks like dot(v1.xyz, v2.xyz) + v1.w by the time it gets
    # to NIR.  After FFMA is generated, this can look like:
@@ -1571,6 +1715,21 @@ late_optimizations = [
    (('~fadd', ('ffma(is_used_once)', a, b, ('fmul', 'c(is_not_const_and_not_fsign)', 'd(is_not_const_and_not_fsign)') ), 'e(is_not_const)'),
     ('ffma', a, b, ('ffma', c, d, e)), '(info->stage != MESA_SHADER_VERTEX && info->stage != MESA_SHADER_GEOMETRY) && !options->intel_vec4'),
 ]
+
+for op in ['fadd']:
+    late_optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b, c), (op, b, d)), (op, b, ('bcsel', a, c, d))),
+        (('bcsel', a, (op, b, c), (op + '(is_used_once)', b, d)), (op, b, ('bcsel', a, c, d))),
+    ]
+
+for op in ['ffma']:
+    late_optimizations += [
+        (('bcsel', a, (op + '(is_used_once)', b, c, d), (op, b, c, e)), (op, b, c, ('bcsel', a, d, e))),
+        (('bcsel', a, (op, b, c, d), (op + '(is_used_once)', b, c, e)), (op, b, c, ('bcsel', a, d, e))),
+
+        (('bcsel', a, (op + '(is_used_once)', b, c, d), (op, b, e, d)), (op, b, ('bcsel', a, c, e), d)),
+        (('bcsel', a, (op, b, c, d), (op + '(is_used_once)', b, e, d)), (op, b, ('bcsel', a, c, e), d)),
+    ]
 
 print(nir_algebraic.AlgebraicPass("nir_opt_algebraic", optimizations).render())
 print(nir_algebraic.AlgebraicPass("nir_opt_algebraic_before_ffma",

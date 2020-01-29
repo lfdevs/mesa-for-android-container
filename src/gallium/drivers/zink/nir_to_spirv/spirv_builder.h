@@ -213,7 +213,27 @@ spirv_builder_emit_image_sample(struct spirv_builder *b,
                                 bool proj,
                                 SpvId lod,
                                 SpvId bias,
-                                SpvId dref);
+                                SpvId dref,
+                                SpvId dx,
+                                SpvId dy,
+                                SpvId offset);
+
+SpvId
+spirv_builder_emit_image(struct spirv_builder *b, SpvId result_type,
+                         SpvId sampled_image);
+
+SpvId
+spirv_builder_emit_image_fetch(struct spirv_builder *b,
+                               SpvId result_type,
+                               SpvId image,
+                               SpvId coordinate,
+                               SpvId lod);
+
+SpvId
+spirv_builder_emit_image_query_size(struct spirv_builder *b,
+                                    SpvId result_type,
+                                    SpvId image,
+                                    SpvId lod);
 
 SpvId
 spirv_builder_emit_ext_inst(struct spirv_builder *b, SpvId result_type,

@@ -30,7 +30,7 @@
 #include "util/list.h"
 #include "util/u_draw_quad.h"
 #include "util/u_memory.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format_s3tc.h"
 #include "util/u_upload_mgr.h"
 #include "util/os_time.h"
 #include "vl/vl_decoder.h"
@@ -635,7 +635,7 @@ bool r600_common_context_init(struct r600_common_context *rctx,
 	if (!rctx->ctx)
 		return false;
 
-	if (rscreen->info.num_sdma_rings && !(rscreen->debug_flags & DBG_NO_ASYNC_DMA)) {
+	if (rscreen->info.num_rings[RING_DMA] && !(rscreen->debug_flags & DBG_NO_ASYNC_DMA)) {
 		rctx->dma.cs = rctx->ws->cs_create(rctx->ctx, RING_DMA,
 						   r600_flush_dma_ring,
 						   rctx, false);
@@ -1265,8 +1265,8 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		printf("r600_has_virtual_memory = %i\n", rscreen->info.r600_has_virtual_memory);
 		printf("gfx_ib_pad_with_type2 = %i\n", rscreen->info.gfx_ib_pad_with_type2);
 		printf("has_hw_decode = %u\n", rscreen->info.has_hw_decode);
-		printf("num_sdma_rings = %i\n", rscreen->info.num_sdma_rings);
-		printf("num_compute_rings = %u\n", rscreen->info.num_compute_rings);
+		printf("num_rings[RING_DMA] = %i\n", rscreen->info.num_rings[RING_DMA]);
+		printf("num_rings[RING_COMPUTE] = %u\n", rscreen->info.num_rings[RING_COMPUTE]);
 		printf("uvd_fw_version = %u\n", rscreen->info.uvd_fw_version);
 		printf("vce_fw_version = %u\n", rscreen->info.vce_fw_version);
 		printf("me_fw_version = %i\n", rscreen->info.me_fw_version);

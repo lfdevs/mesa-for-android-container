@@ -83,10 +83,10 @@ struct brw_compiler {
       uint8_t *ra_reg_to_grf;
 
       /**
-       * ra class for the aligned pairs we use for PLN, which doesn't
+       * ra class for the aligned barycentrics we use for PLN, which doesn't
        * appear in *classes.
        */
-      int aligned_pairs_class;
+      int aligned_bary_class;
    } fs_reg_sets[3];
 
    void (*shader_debug_log)(void *, const char *str, ...) PRINTFLIKE(2, 3);
@@ -119,6 +119,12 @@ struct brw_compiler {
     * whether nir_opt_large_constants will be run.
     */
    bool supports_shader_constants;
+
+   /**
+    * Whether or not the driver wants uniform params to be compacted by the
+    * back-end compiler.
+    */
+   bool compact_params;
 };
 
 /**

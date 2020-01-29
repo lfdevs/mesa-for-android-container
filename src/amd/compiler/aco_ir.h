@@ -37,6 +37,7 @@
 #include "aco_util.h"
 
 struct radv_nir_compiler_options;
+struct radv_shader_args;
 struct radv_shader_info;
 
 namespace aco {
@@ -101,13 +102,65 @@ enum class Format : std::uint16_t {
    SDWA = 1 << 15,
 };
 
-enum barrier_interaction {
+enum barrier_interaction : uint8_t {
    barrier_none = 0,
    barrier_buffer = 0x1,
    barrier_image = 0x2,
    barrier_atomic = 0x4,
    barrier_shared = 0x8,
-   barrier_count = 4,
+   /* used for geometry shaders to ensure vertex data writes are before the
+    * GS_DONE s_sendmsg. */
+   barrier_gs_data = 0x10,
+   /* used for geometry shaders to ensure s_sendmsg instructions are in-order. */
+   barrier_gs_sendmsg = 0x20,
+   barrier_count = 6,
+};
+
+enum fp_round {
+   fp_round_ne = 0,
+   fp_round_pi = 1,
+   fp_round_ni = 2,
+   fp_round_tz = 3,
+};
+
+enum fp_denorm {
+   /* Note that v_rcp_f32, v_exp_f32, v_log_f32, v_sqrt_f32, v_rsq_f32 and
+    * v_mad_f32/v_madak_f32/v_madmk_f32/v_mac_f32 always flush denormals. */
+   fp_denorm_flush = 0x0,
+   fp_denorm_keep = 0x3,
+};
+
+struct float_mode {
+   /* matches encoding of the MODE register */
+   union {
+      struct {
+          fp_round round32:2;
+          fp_round round16_64:2;
+          unsigned denorm32:2;
+          unsigned denorm16_64:2;
+      };
+      uint8_t val = 0;
+   };
+   /* if false, optimizations which may remove infs/nan/-0.0 can be done */
+   bool preserve_signed_zero_inf_nan32:1;
+   bool preserve_signed_zero_inf_nan16_64:1;
+   /* if false, optimizations which may remove denormal flushing can be done */
+   bool must_flush_denorms32:1;
+   bool must_flush_denorms16_64:1;
+   bool care_about_round32:1;
+   bool care_about_round16_64:1;
+
+   /* Returns true if instructions using the mode "other" can safely use the
+    * current one instead. */
+   bool canReplace(float_mode other) const noexcept {
+      return val == other.val &&
+             (preserve_signed_zero_inf_nan32 || !other.preserve_signed_zero_inf_nan32) &&
+             (preserve_signed_zero_inf_nan16_64 || !other.preserve_signed_zero_inf_nan16_64) &&
+             (must_flush_denorms32  || !other.must_flush_denorms32) &&
+             (must_flush_denorms16_64 || !other.must_flush_denorms16_64) &&
+             (care_about_round32 || !other.care_about_round32) &&
+             (care_about_round16_64 || !other.care_about_round16_64);
+   }
 };
 
 constexpr Format asVOP3(Format format) {
@@ -252,10 +305,11 @@ public:
          setFixed(PhysReg{128});
       }
    };
-   explicit Operand(uint32_t v) noexcept
+   explicit Operand(uint32_t v, bool is64bit = false) noexcept
    {
       data_.i = v;
       isConstant_ = true;
+      is64BitConst_ = is64bit;
       if (v <= 64)
          setFixed(PhysReg{128 + v});
       else if (v >= 0xFFFFFFF0) /* [-16 .. -1] */
@@ -276,38 +330,46 @@ public:
          setFixed(PhysReg{246});
       else if (v == 0xc0800000) /* -4.0 */
          setFixed(PhysReg{247});
-      else if (v == 0x3e22f983) /* 1/(2*PI) */
-         setFixed(PhysReg{248});
-      else /* Literal Constant */
+      else { /* Literal Constant */
+         assert(!is64bit && "attempt to create a 64-bit literal constant");
          setFixed(PhysReg{255});
+      }
    };
    explicit Operand(uint64_t v) noexcept
    {
       isConstant_ = true;
       is64BitConst_ = true;
-      if (v <= 64)
+      if (v <= 64) {
+         data_.i = (uint32_t) v;
          setFixed(PhysReg{128 + (uint32_t) v});
-      else if (v >= 0xFFFFFFFFFFFFFFF0) /* [-16 .. -1] */
+      } else if (v >= 0xFFFFFFFFFFFFFFF0) { /* [-16 .. -1] */
+         data_.i = (uint32_t) v;
          setFixed(PhysReg{192 - (uint32_t) v});
-      else if (v == 0x3FE0000000000000) /* 0.5 */
+      } else if (v == 0x3FE0000000000000) { /* 0.5 */
+         data_.i = 0x3f000000;
          setFixed(PhysReg{240});
-      else if (v == 0xBFE0000000000000) /* -0.5 */
+      } else if (v == 0xBFE0000000000000) { /* -0.5 */
+         data_.i = 0xbf000000;
          setFixed(PhysReg{241});
-      else if (v == 0x3FF0000000000000) /* 1.0 */
+      } else if (v == 0x3FF0000000000000) { /* 1.0 */
+         data_.i = 0x3f800000;
          setFixed(PhysReg{242});
-      else if (v == 0xBFF0000000000000) /* -1.0 */
+      } else if (v == 0xBFF0000000000000) { /* -1.0 */
+         data_.i = 0xbf800000;
          setFixed(PhysReg{243});
-      else if (v == 0x4000000000000000) /* 2.0 */
+      } else if (v == 0x4000000000000000) { /* 2.0 */
+         data_.i = 0x40000000;
          setFixed(PhysReg{244});
-      else if (v == 0xC000000000000000) /* -2.0 */
+      } else if (v == 0xC000000000000000) { /* -2.0 */
+         data_.i = 0xc0000000;
          setFixed(PhysReg{245});
-      else if (v == 0x4010000000000000) /* 4.0 */
+      } else if (v == 0x4010000000000000) { /* 4.0 */
+         data_.i = 0x40800000;
          setFixed(PhysReg{246});
-      else if (v == 0xC010000000000000) /* -4.0 */
+      } else if (v == 0xC010000000000000) { /* -4.0 */
+         data_.i = 0xc0800000;
          setFixed(PhysReg{247});
-      else if (v == 0x3fc45f306dc9c882) /* 1/(2*PI) */
-         setFixed(PhysReg{248});
-      else { /* Literal Constant: we don't know if it is a long or double.*/
+      } else { /* Literal Constant: we don't know if it is a long or double.*/
          isConstant_ = 0;
          assert(false && "attempt to create a 64-bit literal constant");
       }
@@ -614,6 +676,17 @@ struct Instruction {
    {
       return format == Format::FLAT || format == Format::GLOBAL;
    }
+
+   constexpr bool usesModifiers() const noexcept;
+
+   constexpr bool reads_exec() const noexcept
+   {
+      for (const Operand& op : operands) {
+         if (op.isFixed() && op.physReg() == exec)
+            return true;
+      }
+      return false;
+   }
 };
 
 struct SOPK_instruction : public Instruction {
@@ -646,11 +719,11 @@ struct SOP2_instruction : public Instruction {
  *
  */
 struct SMEM_instruction : public Instruction {
-   bool glc; /* VI+: globally coherent */
-   bool dlc; /* NAVI: device level coherent */
-   bool nv; /* VEGA only: Non-volatile */
-   bool can_reorder;
-   bool disable_wqm;
+   bool glc : 1; /* VI+: globally coherent */
+   bool dlc : 1; /* NAVI: device level coherent */
+   bool nv : 1; /* VEGA only: Non-volatile */
+   bool can_reorder : 1;
+   bool disable_wqm : 1;
    barrier_interaction barrier;
 };
 
@@ -665,10 +738,10 @@ struct VOPC_instruction : public Instruction {
 
 struct VOP3A_instruction : public Instruction {
    bool abs[3];
-   bool opsel[4];
-   bool clamp;
-   unsigned omod;
    bool neg[3];
+   uint8_t opsel : 4;
+   uint8_t omod : 2;
+   bool clamp : 1;
 };
 
 /**
@@ -678,17 +751,17 @@ struct VOP3A_instruction : public Instruction {
  *
  */
 struct DPP_instruction : public Instruction {
-   uint16_t dpp_ctrl;
-   uint8_t row_mask;
-   uint8_t bank_mask;
    bool abs[2];
    bool neg[2];
-   bool bound_ctrl;
+   uint16_t dpp_ctrl;
+   uint8_t row_mask : 4;
+   uint8_t bank_mask : 4;
+   bool bound_ctrl : 1;
 };
 
 struct Interp_instruction : public Instruction {
-   unsigned attribute;
-   unsigned component;
+   uint8_t attribute;
+   uint8_t component;
 };
 
 /**
@@ -715,16 +788,17 @@ struct DS_instruction : public Instruction {
  *
  */
 struct MUBUF_instruction : public Instruction {
-   unsigned offset; /* Unsigned byte offset - 12 bit */
-   bool offen; /* Supply an offset from VGPR (VADDR) */
-   bool idxen; /* Supply an index from VGPR (VADDR) */
-   bool glc; /* globally coherent */
-   bool dlc; /* NAVI: device level coherent */
-   bool slc; /* system level coherent */
-   bool tfe; /* texture fail enable */
-   bool lds; /* Return read-data to LDS instead of VGPRs */
-   bool disable_wqm; /* Require an exec mask without helper invocations */
-   bool can_reorder;
+   uint16_t offset : 12; /* Unsigned byte offset - 12 bit */
+   bool offen : 1; /* Supply an offset from VGPR (VADDR) */
+   bool idxen : 1; /* Supply an index from VGPR (VADDR) */
+   bool addr64 : 1; /* SI, CIK: Address size is 64-bit */
+   bool glc : 1; /* globally coherent */
+   bool dlc : 1; /* NAVI: device level coherent */
+   bool slc : 1; /* system level coherent */
+   bool tfe : 1; /* texture fail enable */
+   bool lds : 1; /* Return read-data to LDS instead of VGPRs */
+   bool disable_wqm : 1; /* Require an exec mask without helper invocations */
+   bool can_reorder : 1;
    barrier_interaction barrier;
 };
 
@@ -737,17 +811,17 @@ struct MUBUF_instruction : public Instruction {
  *
  */
 struct MTBUF_instruction : public Instruction {
+   uint16_t offset; /* Unsigned byte offset - 12 bit */
    uint8_t dfmt : 4; /* Data Format of data in memory buffer */
    uint8_t nfmt : 3; /* Numeric format of data in memory */
-   unsigned offset; /* Unsigned byte offset - 12 bit */
-   bool offen; /* Supply an offset from VGPR (VADDR) */
-   bool idxen; /* Supply an index from VGPR (VADDR) */
-   bool glc; /* globally coherent */
-   bool dlc; /* NAVI: device level coherent */
-   bool slc; /* system level coherent */
-   bool tfe; /* texture fail enable */
-   bool disable_wqm; /* Require an exec mask without helper invocations */
-   bool can_reorder;
+   bool offen : 1; /* Supply an offset from VGPR (VADDR) */
+   bool idxen : 1; /* Supply an index from VGPR (VADDR) */
+   bool glc : 1; /* globally coherent */
+   bool dlc : 1; /* NAVI: device level coherent */
+   bool slc : 1; /* system level coherent */
+   bool tfe : 1; /* texture fail enable */
+   bool disable_wqm : 1; /* Require an exec mask without helper invocations */
+   bool can_reorder : 1;
    barrier_interaction barrier;
 };
 
@@ -760,20 +834,20 @@ struct MTBUF_instruction : public Instruction {
  *
  */
 struct MIMG_instruction : public Instruction {
-   unsigned dmask; /* Data VGPR enable mask */
-   unsigned dim; /* NAVI: dimensionality */
-   bool unrm; /* Force address to be un-normalized */
-   bool dlc; /* NAVI: device level coherent */
-   bool glc; /* globally coherent */
-   bool slc; /* system level coherent */
-   bool tfe; /* texture fail enable */
-   bool da; /* declare an array */
-   bool lwe; /* Force data to be un-normalized */
-   bool r128; /* NAVI: Texture resource size */
-   bool a16; /* VEGA, NAVI: Address components are 16-bits */
-   bool d16; /* Convert 32-bit data to 16-bit data */
-   bool disable_wqm; /* Require an exec mask without helper invocations */
-   bool can_reorder;
+   uint8_t dmask; /* Data VGPR enable mask */
+   uint8_t dim : 3; /* NAVI: dimensionality */
+   bool unrm : 1; /* Force address to be un-normalized */
+   bool dlc : 1; /* NAVI: device level coherent */
+   bool glc : 1; /* globally coherent */
+   bool slc : 1; /* system level coherent */
+   bool tfe : 1; /* texture fail enable */
+   bool da : 1; /* declare an array */
+   bool lwe : 1; /* Force data to be un-normalized */
+   bool r128 : 1; /* NAVI: Texture resource size */
+   bool a16 : 1; /* VEGA, NAVI: Address components are 16-bits */
+   bool d16 : 1; /* Convert 32-bit data to 16-bit data */
+   bool disable_wqm : 1; /* Require an exec mask without helper invocations */
+   bool can_reorder : 1;
    barrier_interaction barrier;
 };
 
@@ -785,20 +859,23 @@ struct MIMG_instruction : public Instruction {
  *
  */
 struct FLAT_instruction : public Instruction {
-   uint16_t offset; /* Vega only */
-   bool slc; /* system level coherent */
-   bool glc; /* globally coherent */
-   bool dlc; /* NAVI: device level coherent */
-   bool lds;
-   bool nv;
+   uint16_t offset; /* Vega/Navi only */
+   bool slc : 1; /* system level coherent */
+   bool glc : 1; /* globally coherent */
+   bool dlc : 1; /* NAVI: device level coherent */
+   bool lds : 1;
+   bool nv : 1;
+   bool disable_wqm : 1; /* Require an exec mask without helper invocations */
+   bool can_reorder : 1;
+   barrier_interaction barrier;
 };
 
 struct Export_instruction : public Instruction {
-   unsigned enabled_mask;
-   unsigned dest;
-   bool compressed;
-   bool done;
-   bool valid_mask;
+   uint8_t enabled_mask;
+   uint8_t dest;
+   bool compressed : 1;
+   bool done : 1;
+   bool valid_mask : 1;
 };
 
 struct Pseudo_instruction : public Instruction {
@@ -871,10 +948,26 @@ T* create_instruction(aco_opcode opcode, Format format, uint32_t num_operands, u
    inst->opcode = opcode;
    inst->format = format;
 
-   inst->operands = aco::span<Operand>((Operand*)(data + sizeof(T)), num_operands);
-   inst->definitions = aco::span<Definition>((Definition*)inst->operands.end(), num_definitions);
+   uint16_t operands_offset = data + sizeof(T) - (char*)&inst->operands;
+   inst->operands = aco::span<Operand>(operands_offset, num_operands);
+   uint16_t definitions_offset = (char*)inst->operands.end() - (char*)&inst->definitions;
+   inst->definitions = aco::span<Definition>(definitions_offset, num_definitions);
 
    return inst;
+}
+
+constexpr bool Instruction::usesModifiers() const noexcept
+{
+   if (isDPP() || isSDWA())
+      return true;
+   if (!isVOP3())
+      return false;
+   const VOP3A_instruction *vop3 = static_cast<const VOP3A_instruction*>(this);
+   for (unsigned i = 0; i < operands.size(); i++) {
+      if (vop3->abs[i] || vop3->neg[i])
+         return true;
+   }
+   return vop3->opsel || vop3->clamp || vop3->omod;
 }
 
 constexpr bool is_phi(Instruction* instr)
@@ -887,24 +980,7 @@ static inline bool is_phi(aco_ptr<Instruction>& instr)
    return is_phi(instr.get());
 }
 
-constexpr barrier_interaction get_barrier_interaction(Instruction* instr)
-{
-   switch (instr->format) {
-   case Format::SMEM:
-      return static_cast<SMEM_instruction*>(instr)->barrier;
-   case Format::MUBUF:
-      return static_cast<MUBUF_instruction*>(instr)->barrier;
-   case Format::MIMG:
-      return static_cast<MIMG_instruction*>(instr)->barrier;
-   case Format::FLAT:
-   case Format::GLOBAL:
-      return barrier_buffer;
-   case Format::DS:
-      return barrier_shared;
-   default:
-      return barrier_none;
-   }
-}
+barrier_interaction get_barrier_interaction(Instruction* instr);
 
 bool is_dead(const std::vector<uint16_t>& uses, Instruction *instr);
 
@@ -926,6 +1002,7 @@ enum block_kind {
    block_kind_uses_discard_if = 1 << 12,
    block_kind_needs_lowering = 1 << 13,
    block_kind_uses_demote = 1 << 14,
+   block_kind_export_end = 1 << 15,
 };
 
 
@@ -996,6 +1073,7 @@ struct RegisterDemand {
 
 /* CFG */
 struct Block {
+   float_mode fp_mode;
    unsigned index;
    unsigned offset = 0;
    std::vector<aco_ptr<Instruction>> instructions;
@@ -1028,23 +1106,25 @@ static constexpr Stage sw_tcs = 1 << 2;
 static constexpr Stage sw_tes = 1 << 3;
 static constexpr Stage sw_fs = 1 << 4;
 static constexpr Stage sw_cs = 1 << 5;
-static constexpr Stage sw_mask = 0x3f;
+static constexpr Stage sw_gs_copy = 1 << 6;
+static constexpr Stage sw_mask = 0x7f;
 
 /* hardware stages (can't be OR'd, just a mask for convenience when testing multiple) */
-static constexpr Stage hw_vs = 1 << 6;
-static constexpr Stage hw_es = 1 << 7; /* not on GFX9. combined into GS on GFX9 (and GFX10/legacy). */
-static constexpr Stage hw_gs = 1 << 8;
-static constexpr Stage hw_ls = 1 << 9; /* not on GFX9. combined into HS on GFX9 (and GFX10/legacy). */
-static constexpr Stage hw_hs = 1 << 10;
-static constexpr Stage hw_fs = 1 << 11;
-static constexpr Stage hw_cs = 1 << 12;
-static constexpr Stage hw_mask = 0x7f << 6;
+static constexpr Stage hw_vs = 1 << 7;
+static constexpr Stage hw_es = 1 << 8; /* not on GFX9. combined into GS on GFX9 (and GFX10/legacy). */
+static constexpr Stage hw_gs = 1 << 9;
+static constexpr Stage hw_ls = 1 << 10; /* not on GFX9. combined into HS on GFX9 (and GFX10/legacy). */
+static constexpr Stage hw_hs = 1 << 11;
+static constexpr Stage hw_fs = 1 << 12;
+static constexpr Stage hw_cs = 1 << 13;
+static constexpr Stage hw_mask = 0x7f << 7;
 
 /* possible settings of Program::stage */
 static constexpr Stage vertex_vs = sw_vs | hw_vs;
 static constexpr Stage fragment_fs = sw_fs | hw_fs;
 static constexpr Stage compute_cs = sw_cs | hw_cs;
 static constexpr Stage tess_eval_vs = sw_tes | hw_vs;
+static constexpr Stage gs_copy_vs = sw_gs_copy | hw_vs;
 /* GFX10/NGG */
 static constexpr Stage ngg_vertex_gs = sw_vs | hw_gs;
 static constexpr Stage ngg_vertex_geometry_gs = sw_vs | sw_gs | hw_gs;
@@ -1063,6 +1143,7 @@ static constexpr Stage geometry_gs = sw_gs | hw_gs;
 
 class Program final {
 public:
+   float_mode next_fp_mode;
    std::vector<Block> blocks;
    RegisterDemand max_reg_demand = RegisterDemand();
    uint16_t num_waves = 0;
@@ -1072,6 +1153,7 @@ public:
    enum chip_class chip_class;
    enum radeon_family family;
    unsigned wave_size;
+   RegClass lane_mask;
    Stage stage; /* Stage */
    bool needs_exact = false; /* there exists an instruction with disable_wqm = true */
    bool needs_wqm = false; /* there exists a p_wqm instruction */
@@ -1081,12 +1163,14 @@ public:
    Temp private_segment_buffer;
    Temp scratch_offset;
 
+   uint16_t min_waves = 0;
    uint16_t lds_alloc_granule;
    uint32_t lds_limit; /* in bytes */
    uint16_t vgpr_limit;
    uint16_t sgpr_limit;
    uint16_t physical_sgprs;
    uint16_t sgpr_alloc_granule; /* minus one. must be power of two */
+   uint16_t vgpr_alloc_granule; /* minus one. must be power of two */
 
    bool needs_vcc = false;
    bool needs_xnack_mask = false;
@@ -1110,11 +1194,13 @@ public:
 
    Block* create_and_insert_block() {
       blocks.emplace_back(blocks.size());
+      blocks.back().fp_mode = next_fp_mode;
       return &blocks.back();
    }
 
    Block* insert_block(Block&& block) {
       block.index = blocks.size();
+      block.fp_mode = next_fp_mode;
       blocks.emplace_back(std::move(block));
       return &blocks.back();
    }
@@ -1134,12 +1220,15 @@ void select_program(Program *program,
                     unsigned shader_count,
                     struct nir_shader *const *shaders,
                     ac_shader_config* config,
-                    struct radv_shader_info *info,
-                    struct radv_nir_compiler_options *options);
+                    struct radv_shader_args *args);
+void select_gs_copy_shader(Program *program, struct nir_shader *gs_shader,
+                           ac_shader_config* config,
+                           struct radv_shader_args *args);
 
 void lower_wqm(Program* program, live& live_vars,
                const struct radv_nir_compiler_options *options);
 void lower_bool_phis(Program* program);
+void calc_min_waves(Program* program);
 void update_vgpr_sgpr_demand(Program* program, const RegisterDemand new_demand);
 live live_var_analysis(Program* program, const struct radv_nir_compiler_options *options);
 std::vector<uint16_t> dead_code_analysis(Program *program);
@@ -1173,13 +1262,16 @@ void aco_print_program(Program *program, FILE *output);
 /* number of sgprs that need to be allocated but might notbe addressable as s0-s105 */
 uint16_t get_extra_sgprs(Program *program);
 
-/* get number of sgprs allocated required to address a number of sgprs */
+/* get number of sgprs/vgprs allocated required to address a number of sgprs/vgprs */
 uint16_t get_sgpr_alloc(Program *program, uint16_t addressable_sgprs);
+uint16_t get_vgpr_alloc(Program *program, uint16_t addressable_vgprs);
 
-/* return number of addressable SGPRs for max_waves */
+/* return number of addressable sgprs/vgprs for max_waves */
 uint16_t get_addr_sgpr_from_waves(Program *program, uint16_t max_waves);
+uint16_t get_addr_vgpr_from_waves(Program *program, uint16_t max_waves);
 
 typedef struct {
+   const int16_t opcode_gfx7[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx9[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx10[static_cast<int>(aco_opcode::num_opcodes)];
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> can_use_input_modifiers;

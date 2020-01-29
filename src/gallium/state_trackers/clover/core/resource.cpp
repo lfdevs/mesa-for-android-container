@@ -24,7 +24,7 @@
 #include "core/memory.hpp"
 #include "pipe/p_screen.h"
 #include "util/u_sampler.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 
 using namespace clover;

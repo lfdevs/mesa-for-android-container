@@ -429,7 +429,7 @@ llvm_pipeline_generic(struct draw_pt_middle_end *middle,
                                              draw->instance_id,
                                              vid_base,
                                              draw->start_instance,
-                                             elts);
+                                             elts, draw->pt.user.drawid);
 
    /* Finished with fetch and vs:
     */

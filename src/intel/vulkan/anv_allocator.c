@@ -29,8 +29,7 @@
 
 #include "anv_private.h"
 
-#include "util/hash_table.h"
-#include "util/simple_mtx.h"
+#include "common/gen_aux_map.h"
 #include "util/anon_file.h"
 
 #ifdef HAVE_VALGRIND
@@ -110,10 +109,7 @@
 struct anv_mmap_cleanup {
    void *map;
    size_t size;
-   uint32_t gem_handle;
 };
-
-#define ANV_MMAP_CLEANUP_INIT ((struct anv_mmap_cleanup){0})
 
 static inline uint32_t
 ilog2_round_up(uint32_t value)
@@ -212,7 +208,7 @@ anv_state_table_expand_range(struct anv_state_table *table, uint32_t size)
    map = mmap(NULL, size, PROT_READ | PROT_WRITE,
               MAP_SHARED | MAP_POPULATE, table->fd, 0);
    if (map == MAP_FAILED) {
-      return vk_errorf(table->device->instance, table->device,
+      return vk_errorf(table->device, table->device,
                        VK_ERROR_OUT_OF_HOST_MEMORY, "mmap failed: %m");
    }
 
@@ -361,57 +357,6 @@ anv_free_list_pop(union anv_free_list *list,
    return NULL;
 }
 
-/* All pointers in the ptr_free_list are assumed to be page-aligned.  This
- * means that the bottom 12 bits should all be zero.
- */
-#define PFL_COUNT(x) ((uintptr_t)(x) & 0xfff)
-#define PFL_PTR(x) ((void *)((uintptr_t)(x) & ~(uintptr_t)0xfff))
-#define PFL_PACK(ptr, count) ({           \
-   (void *)(((uintptr_t)(ptr) & ~(uintptr_t)0xfff) | ((count) & 0xfff)); \
-})
-
-static bool
-anv_ptr_free_list_pop(void **list, void **elem)
-{
-   void *current = *list;
-   while (PFL_PTR(current) != NULL) {
-      void **next_ptr = PFL_PTR(current);
-      void *new_ptr = VG_NOACCESS_READ(next_ptr);
-      unsigned new_count = PFL_COUNT(current) + 1;
-      void *new = PFL_PACK(new_ptr, new_count);
-      void *old = __sync_val_compare_and_swap(list, current, new);
-      if (old == current) {
-         *elem = PFL_PTR(current);
-         return true;
-      }
-      current = old;
-   }
-
-   return false;
-}
-
-static void
-anv_ptr_free_list_push(void **list, void *elem)
-{
-   void *old, *current;
-   void **next_ptr = elem;
-
-   /* The pointer-based free list requires that the pointer be
-    * page-aligned.  This is because we use the bottom 12 bits of the
-    * pointer to store a counter to solve the ABA concurrency problem.
-    */
-   assert(((uintptr_t)elem & 0xfff) == 0);
-
-   old = *list;
-   do {
-      current = old;
-      VG_NOACCESS_WRITE(next_ptr, PFL_PTR(current));
-      unsigned new_count = PFL_COUNT(current) + 1;
-      void *new = PFL_PACK(elem, new_count);
-      old = __sync_val_compare_and_swap(list, current, new);
-   } while (old != current);
-}
-
 static VkResult
 anv_block_pool_expand_range(struct anv_block_pool *pool,
                             uint32_t center_bo_offset, uint32_t size);
@@ -420,25 +365,22 @@ VkResult
 anv_block_pool_init(struct anv_block_pool *pool,
                     struct anv_device *device,
                     uint64_t start_address,
-                    uint32_t initial_size,
-                    uint64_t bo_flags)
+                    uint32_t initial_size)
 {
    VkResult result;
 
    pool->device = device;
-   pool->bo_flags = bo_flags;
+   pool->use_softpin = device->physical->use_softpin;
    pool->nbos = 0;
    pool->size = 0;
    pool->center_bo_offset = 0;
    pool->start_address = gen_canonical_address(start_address);
    pool->map = NULL;
 
-   /* This pointer will always point to the first BO in the list */
-   pool->bo = &pool->bos[0];
-
-   anv_bo_init(pool->bo, 0, 0);
-
-   if (!(pool->bo_flags & EXEC_OBJECT_PINNED)) {
+   if (pool->use_softpin) {
+      pool->bo = NULL;
+      pool->fd = -1;
+   } else {
       /* Just make it 2GB up-front.  The Linux kernel won't actually back it
        * with pages until we either map and fault on one of them or we use
        * userptr and send a chunk of it off to the GPU.
@@ -446,8 +388,13 @@ anv_block_pool_init(struct anv_block_pool *pool,
       pool->fd = os_create_anonymous_file(BLOCK_POOL_MEMFD_SIZE, "block pool");
       if (pool->fd == -1)
          return vk_error(VK_ERROR_INITIALIZATION_FAILED);
-   } else {
-      pool->fd = -1;
+
+      pool->wrapper_bo = (struct anv_bo) {
+         .refcount = 1,
+         .offset = -1,
+         .is_wrapper = true,
+      };
+      pool->bo = &pool->wrapper_bo;
    }
 
    if (!u_vector_init(&pool->mmap_cleanups,
@@ -476,7 +423,7 @@ anv_block_pool_init(struct anv_block_pool *pool,
  fail_mmap_cleanups:
    u_vector_finish(&pool->mmap_cleanups);
  fail_fd:
-   if (!(pool->bo_flags & EXEC_OBJECT_PINNED))
+   if (pool->fd >= 0)
       close(pool->fd);
 
    return result;
@@ -485,21 +432,18 @@ anv_block_pool_init(struct anv_block_pool *pool,
 void
 anv_block_pool_finish(struct anv_block_pool *pool)
 {
-   struct anv_mmap_cleanup *cleanup;
-   const bool use_softpin = !!(pool->bo_flags & EXEC_OBJECT_PINNED);
-
-   u_vector_foreach(cleanup, &pool->mmap_cleanups) {
-      if (use_softpin)
-         anv_gem_munmap(cleanup->map, cleanup->size);
-      else
-         munmap(cleanup->map, cleanup->size);
-
-      if (cleanup->gem_handle)
-         anv_gem_close(pool->device, cleanup->gem_handle);
+   anv_block_pool_foreach_bo(bo, pool) {
+      if (bo->map)
+         anv_gem_munmap(bo->map, bo->size);
+      anv_gem_close(pool->device, bo->gem_handle);
    }
 
+   struct anv_mmap_cleanup *cleanup;
+   u_vector_foreach(cleanup, &pool->mmap_cleanups)
+      munmap(cleanup->map, cleanup->size);
    u_vector_finish(&pool->mmap_cleanups);
-   if (!(pool->bo_flags & EXEC_OBJECT_PINNED))
+
+   if (pool->fd >= 0)
       close(pool->fd);
 }
 
@@ -507,80 +451,17 @@ static VkResult
 anv_block_pool_expand_range(struct anv_block_pool *pool,
                             uint32_t center_bo_offset, uint32_t size)
 {
-   void *map;
-   uint32_t gem_handle;
-   struct anv_mmap_cleanup *cleanup;
-   const bool use_softpin = !!(pool->bo_flags & EXEC_OBJECT_PINNED);
-
    /* Assert that we only ever grow the pool */
    assert(center_bo_offset >= pool->back_state.end);
    assert(size - center_bo_offset >= pool->state.end);
 
    /* Assert that we don't go outside the bounds of the memfd */
    assert(center_bo_offset <= BLOCK_POOL_MEMFD_CENTER);
-   assert(use_softpin ||
+   assert(pool->use_softpin ||
           size - center_bo_offset <=
           BLOCK_POOL_MEMFD_SIZE - BLOCK_POOL_MEMFD_CENTER);
 
-   cleanup = u_vector_add(&pool->mmap_cleanups);
-   if (!cleanup)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   *cleanup = ANV_MMAP_CLEANUP_INIT;
-
-   uint32_t newbo_size = size - pool->size;
-   if (use_softpin) {
-      gem_handle = anv_gem_create(pool->device, newbo_size);
-      map = anv_gem_mmap(pool->device, gem_handle, 0, newbo_size, 0);
-      if (map == MAP_FAILED) {
-         anv_gem_close(pool->device, gem_handle);
-         return vk_errorf(pool->device->instance, pool->device,
-                          VK_ERROR_MEMORY_MAP_FAILED, "gem mmap failed: %m");
-      }
-      assert(center_bo_offset == 0);
-   } else {
-      /* Just leak the old map until we destroy the pool.  We can't munmap it
-       * without races or imposing locking on the block allocate fast path. On
-       * the whole the leaked maps adds up to less than the size of the
-       * current map.  MAP_POPULATE seems like the right thing to do, but we
-       * should try to get some numbers.
-       */
-      map = mmap(NULL, size, PROT_READ | PROT_WRITE,
-                 MAP_SHARED | MAP_POPULATE, pool->fd,
-                 BLOCK_POOL_MEMFD_CENTER - center_bo_offset);
-      if (map == MAP_FAILED)
-         return vk_errorf(pool->device->instance, pool->device,
-                          VK_ERROR_MEMORY_MAP_FAILED, "mmap failed: %m");
-
-      /* Now that we mapped the new memory, we can write the new
-       * center_bo_offset back into pool and update pool->map. */
-      pool->center_bo_offset = center_bo_offset;
-      pool->map = map + center_bo_offset;
-      gem_handle = anv_gem_userptr(pool->device, map, size);
-      if (gem_handle == 0) {
-         munmap(map, size);
-         return vk_errorf(pool->device->instance, pool->device,
-                          VK_ERROR_TOO_MANY_OBJECTS, "userptr failed: %m");
-      }
-   }
-
-   cleanup->map = map;
-   cleanup->size = use_softpin ? newbo_size : size;
-   cleanup->gem_handle = gem_handle;
-
-   /* Regular objects are created I915_CACHING_CACHED on LLC platforms and
-    * I915_CACHING_NONE on non-LLC platforms. However, userptr objects are
-    * always created as I915_CACHING_CACHED, which on non-LLC means
-    * snooped.
-    *
-    * On platforms that support softpin, we are not going to use userptr
-    * anymore, but we still want to rely on the snooped states. So make sure
-    * everything is set to I915_CACHING_CACHED.
-    */
-   if (!pool->device->info.has_llc)
-      anv_gem_set_caching(pool->device, gem_handle, I915_CACHING_CACHED);
-
-   /* For block pool BOs we have to be a bit careful about where we place them
+   /* For state pool BOs we have to be a bit careful about where we place them
     * in the GTT.  There are two documented workarounds for state base address
     * placement : Wa32bitGeneralStateOffset and Wa32bitInstructionBaseOffset
     * which state that those two base addresses do not support 48-bit
@@ -603,65 +484,78 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
     * BO to some particular location of our choosing, but that's significantly
     * more work than just not setting a flag.  So, we explicitly DO NOT set
     * the EXEC_OBJECT_SUPPORTS_48B_ADDRESS flag and the kernel does all of the
-    * hard work for us.
+    * hard work for us.  When using softpin, we're in control and the fixed
+    * addresses we choose are fine for base addresses.
     */
-   struct anv_bo *bo;
-   uint32_t bo_size;
-   uint64_t bo_offset;
+   enum anv_bo_alloc_flags bo_alloc_flags = ANV_BO_ALLOC_CAPTURE;
+   if (!pool->use_softpin)
+      bo_alloc_flags |= ANV_BO_ALLOC_32BIT_ADDRESS;
 
-   assert(pool->nbos < ANV_MAX_BLOCK_POOL_BOS);
+   if (pool->use_softpin) {
+      uint32_t new_bo_size = size - pool->size;
+      struct anv_bo *new_bo;
+      assert(center_bo_offset == 0);
+      VkResult result = anv_device_alloc_bo(pool->device, new_bo_size,
+                                            bo_alloc_flags |
+                                            ANV_BO_ALLOC_FIXED_ADDRESS |
+                                            ANV_BO_ALLOC_MAPPED |
+                                            ANV_BO_ALLOC_SNOOPED,
+                                            pool->start_address + pool->size,
+                                            &new_bo);
+      if (result != VK_SUCCESS)
+         return result;
 
-   if (use_softpin) {
-      /* With softpin, we add a new BO to the pool, and set its offset to right
-       * where the previous BO ends (the end of the pool).
-       */
-      bo = &pool->bos[pool->nbos++];
-      bo_size = newbo_size;
-      bo_offset = pool->start_address + pool->size;
+      pool->bos[pool->nbos++] = new_bo;
+
+      /* This pointer will always point to the first BO in the list */
+      pool->bo = pool->bos[0];
    } else {
-      /* Without softpin, we just need one BO, and we already have a pointer to
-       * it. Simply "allocate" it from our array if we didn't do it before.
-       * The offset doesn't matter since we are not pinning the BO anyway.
+      /* Just leak the old map until we destroy the pool.  We can't munmap it
+       * without races or imposing locking on the block allocate fast path. On
+       * the whole the leaked maps adds up to less than the size of the
+       * current map.  MAP_POPULATE seems like the right thing to do, but we
+       * should try to get some numbers.
        */
-      if (pool->nbos == 0)
-         pool->nbos++;
-      bo = pool->bo;
-      bo_size = size;
-      bo_offset = 0;
+      void *map = mmap(NULL, size, PROT_READ | PROT_WRITE,
+                       MAP_SHARED | MAP_POPULATE, pool->fd,
+                       BLOCK_POOL_MEMFD_CENTER - center_bo_offset);
+      if (map == MAP_FAILED)
+         return vk_errorf(pool->device, pool->device,
+                          VK_ERROR_MEMORY_MAP_FAILED, "mmap failed: %m");
+
+      struct anv_bo *new_bo;
+      VkResult result = anv_device_import_bo_from_host_ptr(pool->device,
+                                                           map, size,
+                                                           bo_alloc_flags,
+                                                           0 /* client_address */,
+                                                           &new_bo);
+      if (result != VK_SUCCESS) {
+         munmap(map, size);
+         return result;
+      }
+
+      struct anv_mmap_cleanup *cleanup = u_vector_add(&pool->mmap_cleanups);
+      if (!cleanup) {
+         munmap(map, size);
+         anv_device_release_bo(pool->device, new_bo);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
+      cleanup->map = map;
+      cleanup->size = size;
+
+      /* Now that we mapped the new memory, we can write the new
+       * center_bo_offset back into pool and update pool->map. */
+      pool->center_bo_offset = center_bo_offset;
+      pool->map = map + center_bo_offset;
+
+      pool->bos[pool->nbos++] = new_bo;
+      pool->wrapper_bo.map = new_bo;
    }
 
-   anv_bo_init(bo, gem_handle, bo_size);
-   bo->offset = bo_offset;
-   bo->flags = pool->bo_flags;
-   bo->map = map;
+   assert(pool->nbos < ANV_MAX_BLOCK_POOL_BOS);
    pool->size = size;
 
    return VK_SUCCESS;
-}
-
-static struct anv_bo *
-anv_block_pool_get_bo(struct anv_block_pool *pool, int32_t *offset)
-{
-   struct anv_bo *bo, *bo_found = NULL;
-   int32_t cur_offset = 0;
-
-   assert(offset);
-
-   if (!(pool->bo_flags & EXEC_OBJECT_PINNED))
-      return pool->bo;
-
-   anv_block_pool_foreach_bo(bo, pool) {
-      if (*offset < cur_offset + bo->size) {
-         bo_found = bo;
-         break;
-      }
-      cur_offset += bo->size;
-   }
-
-   assert(bo_found != NULL);
-   *offset -= cur_offset;
-
-   return bo_found;
 }
 
 /** Returns current memory map of the block pool.
@@ -673,9 +567,20 @@ anv_block_pool_get_bo(struct anv_block_pool *pool, int32_t *offset)
 void*
 anv_block_pool_map(struct anv_block_pool *pool, int32_t offset)
 {
-   if (pool->bo_flags & EXEC_OBJECT_PINNED) {
-      struct anv_bo *bo = anv_block_pool_get_bo(pool, &offset);
-      return bo->map + offset;
+   if (pool->use_softpin) {
+      struct anv_bo *bo = NULL;
+      int32_t bo_offset = 0;
+      anv_block_pool_foreach_bo(iter_bo, pool) {
+         if (offset < bo_offset + iter_bo->size) {
+            bo = iter_bo;
+            break;
+         }
+         bo_offset += iter_bo->size;
+      }
+      assert(bo != NULL);
+      assert(offset >= bo_offset);
+
+      return bo->map + (offset - bo_offset);
    } else {
       return pool->map + offset;
    }
@@ -793,8 +698,6 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
 
    result = anv_block_pool_expand_range(pool, center_bo_offset, size);
 
-   pool->bo->flags = pool->bo_flags;
-
 done:
    pthread_mutex_unlock(&pool->device->mutex);
 
@@ -830,7 +733,7 @@ anv_block_pool_alloc_new(struct anv_block_pool *pool,
       if (state.next + block_size <= state.end) {
          return state.next;
       } else if (state.next <= state.end) {
-         if (pool->bo_flags & EXEC_OBJECT_PINNED && state.next < state.end) {
+         if (pool->use_softpin && state.next < state.end) {
             /* We need to grow the block pool, but still have some leftover
              * space that can't be used by that particular allocation. So we
              * add that as a "padding", and return it.
@@ -907,13 +810,11 @@ VkResult
 anv_state_pool_init(struct anv_state_pool *pool,
                     struct anv_device *device,
                     uint64_t start_address,
-                    uint32_t block_size,
-                    uint64_t bo_flags)
+                    uint32_t block_size)
 {
    VkResult result = anv_block_pool_init(&pool->block_pool, device,
                                          start_address,
-                                         block_size * 16,
-                                         bo_flags);
+                                         block_size * 16);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1358,18 +1259,15 @@ anv_state_stream_alloc(struct anv_state_stream *stream,
    return state;
 }
 
-struct bo_pool_bo_link {
-   struct bo_pool_bo_link *next;
-   struct anv_bo bo;
-};
-
 void
-anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,
-                 uint64_t bo_flags)
+anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device)
 {
    pool->device = device;
-   pool->bo_flags = bo_flags;
-   memset(pool->free_list, 0, sizeof(pool->free_list));
+   for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
+      util_sparse_array_free_list_init(&pool->free_list[i],
+                                       &device->bo_cache.bo_map, 0,
+                                       offsetof(struct anv_bo, free_index));
+   }
 
    VG(VALGRIND_CREATE_MEMPOOL(pool, 0, false));
 }
@@ -1378,14 +1276,15 @@ void
 anv_bo_pool_finish(struct anv_bo_pool *pool)
 {
    for (unsigned i = 0; i < ARRAY_SIZE(pool->free_list); i++) {
-      struct bo_pool_bo_link *link = PFL_PTR(pool->free_list[i]);
-      while (link != NULL) {
-         struct bo_pool_bo_link link_copy = VG_NOACCESS_READ(link);
+      while (1) {
+         struct anv_bo *bo =
+            util_sparse_array_free_list_pop_elem(&pool->free_list[i]);
+         if (bo == NULL)
+            break;
 
-         anv_gem_munmap(link_copy.bo.map, link_copy.bo.size);
-         anv_vma_free(pool->device, &link_copy.bo);
-         anv_gem_close(pool->device, link_copy.bo.gem_handle);
-         link = link_copy.next;
+         /* anv_device_release_bo is going to "free" it */
+         VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, 1));
+         anv_device_release_bo(pool->device, bo);
       }
    }
 
@@ -1393,80 +1292,55 @@ anv_bo_pool_finish(struct anv_bo_pool *pool)
 }
 
 VkResult
-anv_bo_pool_alloc(struct anv_bo_pool *pool, struct anv_bo *bo, uint32_t size)
+anv_bo_pool_alloc(struct anv_bo_pool *pool, uint32_t size,
+                  struct anv_bo **bo_out)
 {
-   VkResult result;
-
    const unsigned size_log2 = size < 4096 ? 12 : ilog2_round_up(size);
    const unsigned pow2_size = 1 << size_log2;
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
 
-   void *next_free_void;
-   if (anv_ptr_free_list_pop(&pool->free_list[bucket], &next_free_void)) {
-      struct bo_pool_bo_link *next_free = next_free_void;
-      *bo = VG_NOACCESS_READ(&next_free->bo);
-      assert(bo->gem_handle);
-      assert(bo->map == next_free);
-      assert(size <= bo->size);
-
+   struct anv_bo *bo =
+      util_sparse_array_free_list_pop_elem(&pool->free_list[bucket]);
+   if (bo != NULL) {
       VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
-
+      *bo_out = bo;
       return VK_SUCCESS;
    }
 
-   struct anv_bo new_bo;
-
-   result = anv_bo_init_new(&new_bo, pool->device, pow2_size);
+   VkResult result = anv_device_alloc_bo(pool->device,
+                                         pow2_size,
+                                         ANV_BO_ALLOC_MAPPED |
+                                         ANV_BO_ALLOC_SNOOPED |
+                                         ANV_BO_ALLOC_CAPTURE,
+                                         0 /* explicit_address */,
+                                         &bo);
    if (result != VK_SUCCESS)
       return result;
 
-   new_bo.flags = pool->bo_flags;
-
-   if (!anv_vma_alloc(pool->device, &new_bo))
-      return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
-
-   assert(new_bo.size == pow2_size);
-
-   new_bo.map = anv_gem_mmap(pool->device, new_bo.gem_handle, 0, pow2_size, 0);
-   if (new_bo.map == MAP_FAILED) {
-      anv_gem_close(pool->device, new_bo.gem_handle);
-      anv_vma_free(pool->device, &new_bo);
-      return vk_error(VK_ERROR_MEMORY_MAP_FAILED);
-   }
-
-   /* We are removing the state flushes, so lets make sure that these buffers
-    * are cached/snooped.
-    */
-   if (!pool->device->info.has_llc) {
-      anv_gem_set_caching(pool->device, new_bo.gem_handle,
-                          I915_CACHING_CACHED);
-   }
-
-   *bo = new_bo;
-
+   /* We want it to look like it came from this pool */
+   VG(VALGRIND_FREELIKE_BLOCK(bo->map, 0));
    VG(VALGRIND_MEMPOOL_ALLOC(pool, bo->map, size));
+
+   *bo_out = bo;
 
    return VK_SUCCESS;
 }
 
 void
-anv_bo_pool_free(struct anv_bo_pool *pool, const struct anv_bo *bo_in)
+anv_bo_pool_free(struct anv_bo_pool *pool, struct anv_bo *bo)
 {
-   /* Make a copy in case the anv_bo happens to be storred in the BO */
-   struct anv_bo bo = *bo_in;
+   VG(VALGRIND_MEMPOOL_FREE(pool, bo->map));
 
-   VG(VALGRIND_MEMPOOL_FREE(pool, bo.map));
-
-   struct bo_pool_bo_link *link = bo.map;
-   VG_NOACCESS_WRITE(&link->bo, bo);
-
-   assert(util_is_power_of_two_or_zero(bo.size));
-   const unsigned size_log2 = ilog2_round_up(bo.size);
+   assert(util_is_power_of_two_or_zero(bo->size));
+   const unsigned size_log2 = ilog2_round_up(bo->size);
    const unsigned bucket = size_log2 - 12;
    assert(bucket < ARRAY_SIZE(pool->free_list));
 
-   anv_ptr_free_list_push(&pool->free_list[bucket], link);
+   assert(util_sparse_array_get(&pool->device->bo_cache.bo_map,
+                                bo->gem_handle) == bo);
+   util_sparse_array_free_list_push(&pool->free_list[bucket],
+                                    &bo->gem_handle, 1);
 }
 
 // Scratch pool
@@ -1482,11 +1356,8 @@ anv_scratch_pool_finish(struct anv_device *device, struct anv_scratch_pool *pool
 {
    for (unsigned s = 0; s < MESA_SHADER_STAGES; s++) {
       for (unsigned i = 0; i < 16; i++) {
-         struct anv_scratch_bo *bo = &pool->bos[i][s];
-         if (bo->exists > 0) {
-            anv_vma_free(device, &bo->bo);
-            anv_gem_close(device, bo->bo.gem_handle);
-         }
+         if (pool->bos[i][s] != NULL)
+            anv_device_release_bo(device, pool->bos[i][s]);
       }
    }
 }
@@ -1501,25 +1372,14 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
    unsigned scratch_size_log2 = ffs(per_thread_scratch / 2048);
    assert(scratch_size_log2 < 16);
 
-   struct anv_scratch_bo *bo = &pool->bos[scratch_size_log2][stage];
+   struct anv_bo *bo = p_atomic_read(&pool->bos[scratch_size_log2][stage]);
 
-   /* We can use "exists" to shortcut and ignore the critical section */
-   if (bo->exists)
-      return &bo->bo;
+   if (bo != NULL)
+      return bo;
 
-   pthread_mutex_lock(&device->mutex);
+   const struct gen_device_info *devinfo = &device->info;
 
-   __sync_synchronize();
-   if (bo->exists) {
-      pthread_mutex_unlock(&device->mutex);
-      return &bo->bo;
-   }
-
-   const struct anv_physical_device *physical_device =
-      &device->instance->physicalDevice;
-   const struct gen_device_info *devinfo = &physical_device->info;
-
-   const unsigned subslices = MAX2(physical_device->subslice_total, 1);
+   const unsigned subslices = MAX2(device->physical->subslice_total, 1);
 
    unsigned scratch_ids_per_subslice;
    if (devinfo->gen >= 11) {
@@ -1572,8 +1432,6 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
 
    uint32_t size = per_thread_scratch * max_threads[stage];
 
-   anv_bo_init_new(&bo->bo, device, size);
-
    /* Even though the Scratch base pointers in 3DSTATE_*S are 64 bits, they
     * are still relative to the general state base address.  When we emit
     * STATE_BASE_ADDRESS, we set general state base address to 0 and the size
@@ -1591,40 +1449,30 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
     *
     * so nothing will ever touch the top page.
     */
-   assert(!(bo->bo.flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS));
+   VkResult result = anv_device_alloc_bo(device, size,
+                                         ANV_BO_ALLOC_32BIT_ADDRESS,
+                                         0 /* explicit_address */,
+                                         &bo);
+   if (result != VK_SUCCESS)
+      return NULL; /* TODO */
 
-   if (device->instance->physicalDevice.has_exec_async)
-      bo->bo.flags |= EXEC_OBJECT_ASYNC;
-
-   if (device->instance->physicalDevice.use_softpin)
-      bo->bo.flags |= EXEC_OBJECT_PINNED;
-
-   anv_vma_alloc(device, &bo->bo);
-
-   /* Set the exists last because it may be read by other threads */
-   __sync_synchronize();
-   bo->exists = true;
-
-   pthread_mutex_unlock(&device->mutex);
-
-   return &bo->bo;
+   struct anv_bo *current_bo =
+      p_atomic_cmpxchg(&pool->bos[scratch_size_log2][stage], NULL, bo);
+   if (current_bo) {
+      anv_device_release_bo(device, bo);
+      return current_bo;
+   } else {
+      return bo;
+   }
 }
-
-struct anv_cached_bo {
-   struct anv_bo bo;
-
-   uint32_t refcount;
-};
 
 VkResult
 anv_bo_cache_init(struct anv_bo_cache *cache)
 {
-   cache->bo_map = _mesa_pointer_hash_table_create(NULL);
-   if (!cache->bo_map)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+   util_sparse_array_init(&cache->bo_map, sizeof(struct anv_bo), 1024);
 
    if (pthread_mutex_init(&cache->mutex, NULL)) {
-      _mesa_hash_table_destroy(cache->bo_map, NULL);
+      util_sparse_array_finish(&cache->bo_map);
       return vk_errorf(NULL, NULL, VK_ERROR_OUT_OF_HOST_MEMORY,
                        "pthread_mutex_init failed: %m");
    }
@@ -1635,35 +1483,8 @@ anv_bo_cache_init(struct anv_bo_cache *cache)
 void
 anv_bo_cache_finish(struct anv_bo_cache *cache)
 {
-   _mesa_hash_table_destroy(cache->bo_map, NULL);
+   util_sparse_array_finish(&cache->bo_map);
    pthread_mutex_destroy(&cache->mutex);
-}
-
-static struct anv_cached_bo *
-anv_bo_cache_lookup_locked(struct anv_bo_cache *cache, uint32_t gem_handle)
-{
-   struct hash_entry *entry =
-      _mesa_hash_table_search(cache->bo_map,
-                              (const void *)(uintptr_t)gem_handle);
-   if (!entry)
-      return NULL;
-
-   struct anv_cached_bo *bo = (struct anv_cached_bo *)entry->data;
-   assert(bo->bo.gem_handle == gem_handle);
-
-   return bo;
-}
-
-UNUSED static struct anv_bo *
-anv_bo_cache_lookup(struct anv_bo_cache *cache, uint32_t gem_handle)
-{
-   pthread_mutex_lock(&cache->mutex);
-
-   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
-
-   pthread_mutex_unlock(&cache->mutex);
-
-   return bo ? &bo->bo : NULL;
 }
 
 #define ANV_BO_CACHE_SUPPORTED_FLAGS \
@@ -1671,65 +1492,179 @@ anv_bo_cache_lookup(struct anv_bo_cache *cache, uint32_t gem_handle)
     EXEC_OBJECT_ASYNC | \
     EXEC_OBJECT_SUPPORTS_48B_ADDRESS | \
     EXEC_OBJECT_PINNED | \
-    ANV_BO_EXTERNAL)
+    EXEC_OBJECT_CAPTURE)
+
+static uint32_t
+anv_bo_alloc_flags_to_bo_flags(struct anv_device *device,
+                               enum anv_bo_alloc_flags alloc_flags)
+{
+   struct anv_physical_device *pdevice = device->physical;
+
+   uint64_t bo_flags = 0;
+   if (!(alloc_flags & ANV_BO_ALLOC_32BIT_ADDRESS) &&
+       pdevice->supports_48bit_addresses)
+      bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+
+   if ((alloc_flags & ANV_BO_ALLOC_CAPTURE) && pdevice->has_exec_capture)
+      bo_flags |= EXEC_OBJECT_CAPTURE;
+
+   if (alloc_flags & ANV_BO_ALLOC_IMPLICIT_WRITE) {
+      assert(alloc_flags & ANV_BO_ALLOC_IMPLICIT_SYNC);
+      bo_flags |= EXEC_OBJECT_WRITE;
+   }
+
+   if (!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_SYNC) && pdevice->has_exec_async)
+      bo_flags |= EXEC_OBJECT_ASYNC;
+
+   if (pdevice->use_softpin)
+      bo_flags |= EXEC_OBJECT_PINNED;
+
+   return bo_flags;
+}
+
+static uint32_t
+anv_device_get_bo_align(struct anv_device *device,
+                        enum anv_bo_alloc_flags alloc_flags)
+{
+   /* Gen12 CCS surface addresses need to be 64K aligned. */
+   if (device->info.gen >= 12 && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS))
+      return 64 * 1024;
+
+   return 4096;
+}
 
 VkResult
-anv_bo_cache_alloc(struct anv_device *device,
-                   struct anv_bo_cache *cache,
-                   uint64_t size, uint64_t bo_flags,
-                   struct anv_bo **bo_out)
+anv_device_alloc_bo(struct anv_device *device,
+                    uint64_t size,
+                    enum anv_bo_alloc_flags alloc_flags,
+                    uint64_t explicit_address,
+                    struct anv_bo **bo_out)
 {
+   if (!device->physical->has_implicit_ccs)
+      assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS));
+
+   const uint32_t bo_flags =
+      anv_bo_alloc_flags_to_bo_flags(device, alloc_flags);
    assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
-
-   struct anv_cached_bo *bo =
-      vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
-               VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-   if (!bo)
-      return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   bo->refcount = 1;
 
    /* The kernel is going to give us whole pages anyway */
    size = align_u64(size, 4096);
 
-   VkResult result = anv_bo_init_new(&bo->bo, device, size);
-   if (result != VK_SUCCESS) {
-      vk_free(&device->alloc, bo);
-      return result;
+   const uint32_t align = anv_device_get_bo_align(device, alloc_flags);
+
+   uint64_t ccs_size = 0;
+   if (device->info.has_aux_map && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS)) {
+      /* Align the size up to the next multiple of 64K so we don't have any
+       * AUX-TT entries pointing from a 64K page to itself.
+       */
+      size = align_u64(size, 64 * 1024);
+
+      /* See anv_bo::_ccs_size */
+      ccs_size = align_u64(DIV_ROUND_UP(size, GEN_AUX_MAP_GEN12_CCS_SCALE), 4096);
    }
 
-   bo->bo.flags = bo_flags;
+   uint32_t gem_handle = anv_gem_create(device, size + ccs_size);
+   if (gem_handle == 0)
+      return vk_error(VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
-   if (!anv_vma_alloc(device, &bo->bo)) {
-      anv_gem_close(device, bo->bo.gem_handle);
-      vk_free(&device->alloc, bo);
-      return vk_errorf(device->instance, NULL,
-                       VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                       "failed to allocate virtual address for BO");
+   struct anv_bo new_bo = {
+      .gem_handle = gem_handle,
+      .refcount = 1,
+      .offset = -1,
+      .size = size,
+      ._ccs_size = ccs_size,
+      .flags = bo_flags,
+      .is_external = (alloc_flags & ANV_BO_ALLOC_EXTERNAL),
+      .has_client_visible_address =
+         (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
+      .has_implicit_ccs = ccs_size > 0,
+   };
+
+   if (alloc_flags & ANV_BO_ALLOC_MAPPED) {
+      new_bo.map = anv_gem_mmap(device, new_bo.gem_handle, 0, size, 0);
+      if (new_bo.map == MAP_FAILED) {
+         anv_gem_close(device, new_bo.gem_handle);
+         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      }
    }
 
-   assert(bo->bo.gem_handle);
+   if (alloc_flags & ANV_BO_ALLOC_SNOOPED) {
+      assert(alloc_flags & ANV_BO_ALLOC_MAPPED);
+      /* We don't want to change these defaults if it's going to be shared
+       * with another process.
+       */
+      assert(!(alloc_flags & ANV_BO_ALLOC_EXTERNAL));
 
-   pthread_mutex_lock(&cache->mutex);
+      /* Regular objects are created I915_CACHING_CACHED on LLC platforms and
+       * I915_CACHING_NONE on non-LLC platforms.  For many internal state
+       * objects, we'd rather take the snooping overhead than risk forgetting
+       * a CLFLUSH somewhere.  Userptr objects are always created as
+       * I915_CACHING_CACHED, which on non-LLC means snooped so there's no
+       * need to do this there.
+       */
+      if (!device->info.has_llc) {
+         anv_gem_set_caching(device, new_bo.gem_handle,
+                             I915_CACHING_CACHED);
+      }
+   }
 
-   _mesa_hash_table_insert(cache->bo_map,
-                           (void *)(uintptr_t)bo->bo.gem_handle, bo);
+   if (alloc_flags & ANV_BO_ALLOC_FIXED_ADDRESS) {
+      new_bo.has_fixed_address = true;
+      new_bo.offset = explicit_address;
+   } else if (new_bo.flags & EXEC_OBJECT_PINNED) {
+      new_bo.offset = anv_vma_alloc(device, new_bo.size + new_bo._ccs_size,
+                                    align, alloc_flags, explicit_address);
+      if (new_bo.offset == 0) {
+         if (new_bo.map)
+            anv_gem_munmap(new_bo.map, size);
+         anv_gem_close(device, new_bo.gem_handle);
+         return vk_errorf(device, NULL, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                          "failed to allocate virtual address for BO");
+      }
+   } else {
+      assert(!new_bo.has_client_visible_address);
+   }
 
-   pthread_mutex_unlock(&cache->mutex);
+   if (new_bo._ccs_size > 0) {
+      assert(device->info.has_aux_map);
+      gen_aux_map_add_mapping(device->aux_map_ctx,
+                              gen_canonical_address(new_bo.offset),
+                              gen_canonical_address(new_bo.offset + new_bo.size),
+                              new_bo.size, 0 /* format_bits */);
+   }
 
-   *bo_out = &bo->bo;
+   assert(new_bo.gem_handle);
+
+   /* If we just got this gem_handle from anv_bo_init_new then we know no one
+    * else is touching this BO at the moment so we don't need to lock here.
+    */
+   struct anv_bo *bo = anv_device_lookup_bo(device, new_bo.gem_handle);
+   *bo = new_bo;
+
+   *bo_out = bo;
 
    return VK_SUCCESS;
 }
 
 VkResult
-anv_bo_cache_import_host_ptr(struct anv_device *device,
-                             struct anv_bo_cache *cache,
-                             void *host_ptr, uint32_t size,
-                             uint64_t bo_flags, struct anv_bo **bo_out)
+anv_device_import_bo_from_host_ptr(struct anv_device *device,
+                                   void *host_ptr, uint32_t size,
+                                   enum anv_bo_alloc_flags alloc_flags,
+                                   uint64_t client_address,
+                                   struct anv_bo **bo_out)
 {
+   assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
+                           ANV_BO_ALLOC_SNOOPED |
+                           ANV_BO_ALLOC_FIXED_ADDRESS)));
+
+   /* We can't do implicit CCS with an aux table on shared memory */
+   if (!device->physical->has_implicit_ccs || device->info.has_aux_map)
+       assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS));
+
+   struct anv_bo_cache *cache = &device->bo_cache;
+   const uint32_t bo_flags =
+      anv_bo_alloc_flags_to_bo_flags(device, alloc_flags);
    assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
-   assert((bo_flags & ANV_BO_EXTERNAL) == 0);
 
    uint32_t gem_handle = anv_gem_userptr(device, host_ptr, size);
    if (!gem_handle)
@@ -1737,59 +1672,94 @@ anv_bo_cache_import_host_ptr(struct anv_device *device,
 
    pthread_mutex_lock(&cache->mutex);
 
-   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
-   if (bo) {
+   struct anv_bo *bo = anv_device_lookup_bo(device, gem_handle);
+   if (bo->refcount > 0) {
       /* VK_EXT_external_memory_host doesn't require handling importing the
        * same pointer twice at the same time, but we don't get in the way.  If
        * kernel gives us the same gem_handle, only succeed if the flags match.
        */
-      if (bo_flags != bo->bo.flags) {
+      assert(bo->gem_handle == gem_handle);
+      if (bo_flags != bo->flags) {
          pthread_mutex_unlock(&cache->mutex);
-         return vk_errorf(device->instance, NULL,
-                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "same host pointer imported two different ways");
       }
+
+      if (bo->has_client_visible_address !=
+          ((alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported with and without buffer "
+                          "device address");
+      }
+
+      if (client_address && client_address != gen_48b_address(bo->offset)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported at two different "
+                          "addresses");
+      }
+
       __sync_fetch_and_add(&bo->refcount, 1);
    } else {
-      bo = vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!bo) {
-         anv_gem_close(device, gem_handle);
-         pthread_mutex_unlock(&cache->mutex);
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      struct anv_bo new_bo = {
+         .gem_handle = gem_handle,
+         .refcount = 1,
+         .offset = -1,
+         .size = size,
+         .map = host_ptr,
+         .flags = bo_flags,
+         .is_external = true,
+         .from_host_ptr = true,
+         .has_client_visible_address =
+            (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
+      };
+
+      assert(client_address == gen_48b_address(client_address));
+      if (new_bo.flags & EXEC_OBJECT_PINNED) {
+         assert(new_bo._ccs_size == 0);
+         new_bo.offset = anv_vma_alloc(device, new_bo.size,
+                                       anv_device_get_bo_align(device,
+                                                               alloc_flags),
+                                       alloc_flags, client_address);
+         if (new_bo.offset == 0) {
+            anv_gem_close(device, new_bo.gem_handle);
+            pthread_mutex_unlock(&cache->mutex);
+            return vk_errorf(device, NULL, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                             "failed to allocate virtual address for BO");
+         }
+      } else {
+         assert(!new_bo.has_client_visible_address);
       }
 
-      bo->refcount = 1;
-
-      anv_bo_init(&bo->bo, gem_handle, size);
-      bo->bo.flags = bo_flags;
-
-      if (!anv_vma_alloc(device, &bo->bo)) {
-         anv_gem_close(device, bo->bo.gem_handle);
-         pthread_mutex_unlock(&cache->mutex);
-         vk_free(&device->alloc, bo);
-         return vk_errorf(device->instance, NULL,
-                          VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "failed to allocate virtual address for BO");
-      }
-
-      _mesa_hash_table_insert(cache->bo_map, (void *)(uintptr_t)gem_handle, bo);
+      *bo = new_bo;
    }
 
    pthread_mutex_unlock(&cache->mutex);
-   *bo_out = &bo->bo;
+   *bo_out = bo;
 
    return VK_SUCCESS;
 }
 
 VkResult
-anv_bo_cache_import(struct anv_device *device,
-                    struct anv_bo_cache *cache,
-                    int fd, uint64_t bo_flags,
-                    struct anv_bo **bo_out)
+anv_device_import_bo(struct anv_device *device,
+                     int fd,
+                     enum anv_bo_alloc_flags alloc_flags,
+                     uint64_t client_address,
+                     struct anv_bo **bo_out)
 {
+   assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
+                           ANV_BO_ALLOC_SNOOPED |
+                           ANV_BO_ALLOC_FIXED_ADDRESS)));
+
+   /* We can't do implicit CCS with an aux table on shared memory */
+   if (!device->physical->has_implicit_ccs || device->info.has_aux_map)
+       assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS));
+
+   struct anv_bo_cache *cache = &device->bo_cache;
+   const uint32_t bo_flags =
+      anv_bo_alloc_flags_to_bo_flags(device, alloc_flags);
    assert(bo_flags == (bo_flags & ANV_BO_CACHE_SUPPORTED_FLAGS));
-   assert(bo_flags & ANV_BO_EXTERNAL);
 
    pthread_mutex_lock(&cache->mutex);
 
@@ -1799,29 +1769,29 @@ anv_bo_cache_import(struct anv_device *device,
       return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
    }
 
-   struct anv_cached_bo *bo = anv_bo_cache_lookup_locked(cache, gem_handle);
-   if (bo) {
+   struct anv_bo *bo = anv_device_lookup_bo(device, gem_handle);
+   if (bo->refcount > 0) {
       /* We have to be careful how we combine flags so that it makes sense.
        * Really, though, if we get to this case and it actually matters, the
        * client has imported a BO twice in different ways and they get what
        * they have coming.
        */
-      uint64_t new_flags = ANV_BO_EXTERNAL;
-      new_flags |= (bo->bo.flags | bo_flags) & EXEC_OBJECT_WRITE;
-      new_flags |= (bo->bo.flags & bo_flags) & EXEC_OBJECT_ASYNC;
-      new_flags |= (bo->bo.flags & bo_flags) & EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
-      new_flags |= (bo->bo.flags | bo_flags) & EXEC_OBJECT_PINNED;
+      uint64_t new_flags = 0;
+      new_flags |= (bo->flags | bo_flags) & EXEC_OBJECT_WRITE;
+      new_flags |= (bo->flags & bo_flags) & EXEC_OBJECT_ASYNC;
+      new_flags |= (bo->flags & bo_flags) & EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+      new_flags |= (bo->flags | bo_flags) & EXEC_OBJECT_PINNED;
+      new_flags |= (bo->flags | bo_flags) & EXEC_OBJECT_CAPTURE;
 
       /* It's theoretically possible for a BO to get imported such that it's
        * both pinned and not pinned.  The only way this can happen is if it
        * gets imported as both a semaphore and a memory object and that would
        * be an application error.  Just fail out in that case.
        */
-      if ((bo->bo.flags & EXEC_OBJECT_PINNED) !=
+      if ((bo->flags & EXEC_OBJECT_PINNED) !=
           (bo_flags & EXEC_OBJECT_PINNED)) {
          pthread_mutex_unlock(&cache->mutex);
-         return vk_errorf(device->instance, NULL,
-                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "The same BO was imported two different ways");
       }
 
@@ -1833,15 +1803,29 @@ anv_bo_cache_import(struct anv_device *device,
        * app is actually that stupid.
        */
       if ((new_flags & EXEC_OBJECT_PINNED) &&
-          (bo->bo.flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS) !=
+          (bo->flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS) !=
           (bo_flags & EXEC_OBJECT_SUPPORTS_48B_ADDRESS)) {
          pthread_mutex_unlock(&cache->mutex);
-         return vk_errorf(device->instance, NULL,
-                          VK_ERROR_INVALID_EXTERNAL_HANDLE,
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
                           "The same BO was imported on two different heaps");
       }
 
-      bo->bo.flags = new_flags;
+      if (bo->has_client_visible_address !=
+          ((alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported with and without buffer "
+                          "device address");
+      }
+
+      if (client_address && client_address != gen_48b_address(bo->offset)) {
+         pthread_mutex_unlock(&cache->mutex);
+         return vk_errorf(device, NULL, VK_ERROR_INVALID_EXTERNAL_HANDLE,
+                          "The same BO was imported at two different "
+                          "addresses");
+      }
+
+      bo->flags = new_flags;
 
       __sync_fetch_and_add(&bo->refcount, 1);
    } else {
@@ -1852,52 +1836,56 @@ anv_bo_cache_import(struct anv_device *device,
          return vk_error(VK_ERROR_INVALID_EXTERNAL_HANDLE);
       }
 
-      bo = vk_alloc(&device->alloc, sizeof(struct anv_cached_bo), 8,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-      if (!bo) {
-         anv_gem_close(device, gem_handle);
-         pthread_mutex_unlock(&cache->mutex);
-         return vk_error(VK_ERROR_OUT_OF_HOST_MEMORY);
+      struct anv_bo new_bo = {
+         .gem_handle = gem_handle,
+         .refcount = 1,
+         .offset = -1,
+         .size = size,
+         .flags = bo_flags,
+         .is_external = true,
+         .has_client_visible_address =
+            (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
+      };
+
+      assert(client_address == gen_48b_address(client_address));
+      if (new_bo.flags & EXEC_OBJECT_PINNED) {
+         assert(new_bo._ccs_size == 0);
+         new_bo.offset = anv_vma_alloc(device, new_bo.size,
+                                       anv_device_get_bo_align(device,
+                                                               alloc_flags),
+                                       alloc_flags, client_address);
+         if (new_bo.offset == 0) {
+            anv_gem_close(device, new_bo.gem_handle);
+            pthread_mutex_unlock(&cache->mutex);
+            return vk_errorf(device, NULL, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+                             "failed to allocate virtual address for BO");
+         }
+      } else {
+         assert(!new_bo.has_client_visible_address);
       }
 
-      bo->refcount = 1;
-
-      anv_bo_init(&bo->bo, gem_handle, size);
-      bo->bo.flags = bo_flags;
-
-      if (!anv_vma_alloc(device, &bo->bo)) {
-         anv_gem_close(device, bo->bo.gem_handle);
-         pthread_mutex_unlock(&cache->mutex);
-         vk_free(&device->alloc, bo);
-         return vk_errorf(device->instance, NULL,
-                          VK_ERROR_OUT_OF_DEVICE_MEMORY,
-                          "failed to allocate virtual address for BO");
-      }
-
-      _mesa_hash_table_insert(cache->bo_map, (void *)(uintptr_t)gem_handle, bo);
+      *bo = new_bo;
    }
 
    pthread_mutex_unlock(&cache->mutex);
-   *bo_out = &bo->bo;
+   *bo_out = bo;
 
    return VK_SUCCESS;
 }
 
 VkResult
-anv_bo_cache_export(struct anv_device *device,
-                    struct anv_bo_cache *cache,
-                    struct anv_bo *bo_in, int *fd_out)
+anv_device_export_bo(struct anv_device *device,
+                     struct anv_bo *bo, int *fd_out)
 {
-   assert(anv_bo_cache_lookup(cache, bo_in->gem_handle) == bo_in);
-   struct anv_cached_bo *bo = (struct anv_cached_bo *)bo_in;
+   assert(anv_device_lookup_bo(device, bo->gem_handle) == bo);
 
    /* This BO must have been flagged external in order for us to be able
     * to export it.  This is done based on external options passed into
     * anv_AllocateMemory.
     */
-   assert(bo->bo.flags & ANV_BO_EXTERNAL);
+   assert(bo->is_external);
 
-   int fd = anv_gem_handle_to_fd(device, bo->bo.gem_handle);
+   int fd = anv_gem_handle_to_fd(device, bo->gem_handle);
    if (fd < 0)
       return vk_error(VK_ERROR_TOO_MANY_OBJECTS);
 
@@ -1925,12 +1913,11 @@ atomic_dec_not_one(uint32_t *counter)
 }
 
 void
-anv_bo_cache_release(struct anv_device *device,
-                     struct anv_bo_cache *cache,
-                     struct anv_bo *bo_in)
+anv_device_release_bo(struct anv_device *device,
+                      struct anv_bo *bo)
 {
-   assert(anv_bo_cache_lookup(cache, bo_in->gem_handle) == bo_in);
-   struct anv_cached_bo *bo = (struct anv_cached_bo *)bo_in;
+   struct anv_bo_cache *cache = &device->bo_cache;
+   assert(anv_device_lookup_bo(device, bo->gem_handle) == bo);
 
    /* Try to decrement the counter but don't go below one.  If this succeeds
     * then the refcount has been decremented and we are not the last
@@ -1951,19 +1938,35 @@ anv_bo_cache_release(struct anv_device *device,
       pthread_mutex_unlock(&cache->mutex);
       return;
    }
+   assert(bo->refcount == 0);
 
-   struct hash_entry *entry =
-      _mesa_hash_table_search(cache->bo_map,
-                              (const void *)(uintptr_t)bo->bo.gem_handle);
-   assert(entry);
-   _mesa_hash_table_remove(cache->bo_map, entry);
+   if (bo->map && !bo->from_host_ptr)
+      anv_gem_munmap(bo->map, bo->size);
 
-   if (bo->bo.map)
-      anv_gem_munmap(bo->bo.map, bo->bo.size);
+   if (bo->_ccs_size > 0) {
+      assert(device->physical->has_implicit_ccs);
+      assert(device->info.has_aux_map);
+      assert(bo->has_implicit_ccs);
+      gen_aux_map_unmap_range(device->aux_map_ctx,
+                              gen_canonical_address(bo->offset),
+                              bo->size);
+   }
 
-   anv_vma_free(device, &bo->bo);
+   if ((bo->flags & EXEC_OBJECT_PINNED) && !bo->has_fixed_address)
+      anv_vma_free(device, bo->offset, bo->size + bo->_ccs_size);
 
-   anv_gem_close(device, bo->bo.gem_handle);
+   uint32_t gem_handle = bo->gem_handle;
+
+   /* Memset the BO just in case.  The refcount being zero should be enough to
+    * prevent someone from assuming the data is valid but it's safer to just
+    * stomp to zero just in case.  We explicitly do this *before* we close the
+    * GEM handle to ensure that if anyone allocates something and gets the
+    * same GEM handle, the memset has already happen and won't stomp all over
+    * any data they may write in this BO.
+    */
+   memset(bo, 0, sizeof(*bo));
+
+   anv_gem_close(device, gem_handle);
 
    /* Don't unlock until we've actually closed the BO.  The whole point of
     * the BO cache is to ensure that we correctly handle races with creating
@@ -1971,6 +1974,4 @@ anv_bo_cache_release(struct anv_device *device,
     * again between mutex unlock and closing the GEM handle.
     */
    pthread_mutex_unlock(&cache->mutex);
-
-   vk_free(&device->alloc, bo);
 }

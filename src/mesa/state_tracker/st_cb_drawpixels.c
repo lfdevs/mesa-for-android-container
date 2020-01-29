@@ -71,7 +71,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_defines.h"
 #include "tgsi/tgsi_ureg.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_simple_shaders.h"
@@ -111,10 +111,10 @@
 
 static nir_ssa_def *
 sample_via_nir(nir_builder *b, nir_variable *texcoord,
-               const char *name, int sampler)
+               const char *name, int sampler, enum glsl_base_type base_type)
 {
    const struct glsl_type *sampler2D =
-      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, GLSL_TYPE_FLOAT);
+      glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, base_type);
 
    nir_variable *var =
       nir_variable_create(b->shader, nir_var_uniform, sampler2D, name);
@@ -163,7 +163,8 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
          nir_variable_create(b.shader, nir_var_shader_out, glsl_float_type(),
                              "gl_FragDepth");
       out->data.location = FRAG_RESULT_DEPTH;
-      nir_ssa_def *depth = sample_via_nir(&b, texcoord, "depth", 0);
+      nir_ssa_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
+                                          GLSL_TYPE_FLOAT);
       nir_store_var(&b, out, depth, 0x1);
 
       /* Also copy color */
@@ -184,7 +185,8 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
          nir_variable_create(b.shader, nir_var_shader_out, glsl_uint_type(),
                              "gl_FragStencilRefARB");
       out->data.location = FRAG_RESULT_STENCIL;
-      nir_ssa_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1);
+      nir_ssa_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
+                                            GLSL_TYPE_UINT);
       nir_store_var(&b, out, stencil, 0x1);
    }
 
@@ -642,7 +644,8 @@ make_texture(struct st_context *st,
 
       pipeFormat = st_choose_format(st, intFormat, format, type,
                                     st->internal_target, 0, 0,
-                                    PIPE_BIND_SAMPLER_VIEW, FALSE);
+                                    PIPE_BIND_SAMPLER_VIEW,
+                                    false, false);
       assert(pipeFormat != PIPE_FORMAT_NONE);
    }
 
@@ -721,11 +724,11 @@ make_texture(struct st_context *st,
       ctx->_ImageTransferState = imageTransferStateSave;
    }
 
-   _mesa_unmap_pbo_source(ctx, unpack);
-
 #if USE_DRAWPIXELS_CACHE
    cache_drawpixels_image(st, width, height, format, type, unpack, pixels, pt);
 #endif
+
+   _mesa_unmap_pbo_source(ctx, unpack);
 
    return pt;
 }
@@ -1362,7 +1365,7 @@ st_DrawPixels(struct gl_context *ctx, GLint x, GLint y,
       fpv = (format != GL_COLOR_INDEX) ? get_color_fp_variant(st) :
                                          get_color_index_fp_variant(st);
 
-      driver_fp = fpv->driver_shader;
+      driver_fp = fpv->base.driver_shader;
 
       if (ctx->Pixel.MapColorFlag && format != GL_COLOR_INDEX) {
          pipe_sampler_view_reference(&sv[1],
@@ -1740,7 +1743,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
 
       rbRead = st_get_color_read_renderbuffer(ctx);
 
-      driver_fp = fpv->driver_shader;
+      driver_fp = fpv->base.driver_shader;
 
       if (ctx->Pixel.MapColorFlag) {
          pipe_sampler_view_reference(&sv[1],
@@ -1772,7 +1775,7 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
       if (type == GL_DEPTH) {
          srcFormat = st_choose_format(st, GL_DEPTH_COMPONENT, GL_NONE,
                                       GL_NONE, st->internal_target, 0, 0,
-                                      srcBind, FALSE);
+                                      srcBind, false, false);
       }
       else {
          assert(type == GL_COLOR);
@@ -1780,27 +1783,27 @@ st_CopyPixels(struct gl_context *ctx, GLint srcx, GLint srcy,
          if (util_format_is_float(srcFormat)) {
             srcFormat = st_choose_format(st, GL_RGBA32F, GL_NONE,
                                          GL_NONE, st->internal_target, 0, 0,
-                                         srcBind, FALSE);
+                                         srcBind, false, false);
          }
          else if (util_format_is_pure_sint(srcFormat)) {
             srcFormat = st_choose_format(st, GL_RGBA32I, GL_NONE,
                                          GL_NONE, st->internal_target, 0, 0,
-                                         srcBind, FALSE);
+                                         srcBind, false, false);
          }
          else if (util_format_is_pure_uint(srcFormat)) {
             srcFormat = st_choose_format(st, GL_RGBA32UI, GL_NONE,
                                          GL_NONE, st->internal_target, 0, 0,
-                                         srcBind, FALSE);
+                                         srcBind, false, false);
          }
          else if (util_format_is_snorm(srcFormat)) {
             srcFormat = st_choose_format(st, GL_RGBA16_SNORM, GL_NONE,
                                          GL_NONE, st->internal_target, 0, 0,
-                                         srcBind, FALSE);
+                                         srcBind, false, false);
          }
          else {
             srcFormat = st_choose_format(st, GL_RGBA, GL_NONE,
                                          GL_NONE, st->internal_target, 0, 0,
-                                         srcBind, FALSE);
+                                         srcBind, false, false);
          }
       }
 

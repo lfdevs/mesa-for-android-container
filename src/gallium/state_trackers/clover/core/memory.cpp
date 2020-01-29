@@ -22,7 +22,7 @@
 
 #include "core/memory.hpp"
 #include "core/resource.hpp"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 using namespace clover;
 

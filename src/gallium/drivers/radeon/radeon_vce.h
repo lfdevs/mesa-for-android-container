@@ -437,10 +437,6 @@ void si_vce_50_init(struct rvce_encoder *enc);
 /* init vce fw 52 specific callbacks */
 void si_vce_52_init(struct rvce_encoder *enc);
 
-/* version specific function for getting parameters */
-void (*si_get_pic_param)(struct rvce_encoder *enc,
-                      struct pipe_h264_enc_picture_desc *pic);
-
 /* get parameters for vce 40.2.2 */
 void si_vce_40_2_2_get_param(struct rvce_encoder *enc,
 			     struct pipe_h264_enc_picture_desc *pic);

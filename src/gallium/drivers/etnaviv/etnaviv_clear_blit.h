@@ -36,7 +36,7 @@ struct etna_surface;
 
 void
 etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
-                          uint32_t clear_value);
+                          uint64_t clear_value);
 
 void
 etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
@@ -50,8 +50,8 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
 void
 etna_blit_save_state(struct etna_context *ctx);
 
-uint32_t
-etna_clear_blit_pack_rgba(enum pipe_format format, const float *rgba);
+uint64_t
+etna_clear_blit_pack_rgba(enum pipe_format format, const union pipe_color_union *color);
 
 void
 etna_clear_blit_init(struct pipe_context *pctx);

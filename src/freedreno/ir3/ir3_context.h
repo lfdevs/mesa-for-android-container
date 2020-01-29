@@ -52,6 +52,18 @@ struct ir3_context {
 	struct ir3 *ir;
 	struct ir3_shader_variant *so;
 
+	/* Tables of scalar inputs/outputs.  Because of the way varying packing
+	 * works, we could have inputs w/ fractional location, which is a bit
+	 * awkward to deal with unless we keep track of the split scalar in/
+	 * out components.
+	 *
+	 * These *only* have inputs/outputs that are touched by load_*input and
+	 * store_output.
+	 */
+	unsigned ninputs, noutputs;
+	struct ir3_instruction **inputs;
+	struct ir3_instruction **outputs;
+
 	struct ir3_block *block;      /* the current block */
 	struct ir3_block *in_block;   /* block created for shader inputs */
 
@@ -71,7 +83,7 @@ struct ir3_context {
 	struct ir3_instruction *frag_face, *frag_coord;
 
 	/* For vertex shaders, keep track of the system values sources */
-	struct ir3_instruction *vertex_id, *basevertex, *instance_id;
+	struct ir3_instruction *vertex_id, *basevertex, *instance_id, *base_instance;
 
 	/* For fragment shaders: */
 	struct ir3_instruction *samp_id, *samp_mask_in;
@@ -79,6 +91,11 @@ struct ir3_context {
 	/* For geometry shaders: */
 	struct ir3_instruction *primitive_id;
 	struct ir3_instruction *gs_header;
+
+	/* For tessellation shaders: */
+	struct ir3_instruction *patch_vertices_in;
+	struct ir3_instruction *tcs_header;
+	struct ir3_instruction *tess_coord;
 
 	/* Compute shader inputs: */
 	struct ir3_instruction *local_invocation_id, *work_group_id;

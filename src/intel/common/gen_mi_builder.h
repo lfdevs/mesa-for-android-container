@@ -358,6 +358,9 @@ _gen_mi_copy_no_unref(struct gen_mi_builder *b,
       case GEN_MI_VALUE_TYPE_IMM:
          gen_mi_builder_emit(b, GENX(MI_STORE_DATA_IMM), sdi) {
             sdi.Address = dst.addr;
+#if GEN_GEN >= 12
+            sdi.ForceWriteCompletionCheck = true;
+#endif
             sdi.ImmediateData = src.imm;
          }
          break;

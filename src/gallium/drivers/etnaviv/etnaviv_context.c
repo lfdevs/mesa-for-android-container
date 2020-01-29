@@ -226,7 +226,7 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
    if (info->index_size) {
       indexbuf = info->has_user_indices ? NULL : info->index.resource;
       if (info->has_user_indices &&
-          !util_upload_index_buffer(pctx, info, &indexbuf, &index_offset)) {
+          !util_upload_index_buffer(pctx, info, &indexbuf, &index_offset, 4)) {
          BUG("Index buffer upload failed.");
          return;
       }
@@ -255,7 +255,7 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
    };
 
    if (pfb->cbufs[0])
-      key.frag_rb_swap = !!translate_rs_format_rb_swap(pfb->cbufs[0]->format);
+      key.frag_rb_swap = !!translate_pe_format_rb_swap(pfb->cbufs[0]->format);
 
    if (!etna_get_vs(ctx, key) || !etna_get_fs(ctx, key)) {
       BUG("compiled shaders are not okay");
@@ -327,7 +327,7 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
    if (ctx->specs.halti >= 2) {
       /* On HALTI2+ (GC3000 and higher) only use instanced drawing commands, as the blob does */
-      etna_draw_instanced(ctx->stream, info->index_size, draw_mode, 1,
+      etna_draw_instanced(ctx->stream, info->index_size, draw_mode, info->instance_count,
          info->count, info->index_size ? info->index_bias : info->start);
    } else {
       if (info->index_size)

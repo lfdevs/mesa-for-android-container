@@ -23,7 +23,7 @@
 #include "nv50/nv98_video.h"
 
 #include "util/u_sampler.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include <nvif/class.h>
 

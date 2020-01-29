@@ -448,10 +448,11 @@ stw_make_current(HDC hDrawDC, HDC hReadDC, DHGLRC dhglrc)
          if (old_ctx->shared) {
             struct pipe_fence_handle *fence = NULL;
             old_ctx->st->flush(old_ctx->st,
-                               ST_FLUSH_FRONT | ST_FLUSH_WAIT, &fence);
+                               ST_FLUSH_FRONT | ST_FLUSH_WAIT, &fence,
+                               NULL, NULL);
          }
          else {
-            old_ctx->st->flush(old_ctx->st, ST_FLUSH_FRONT, NULL);
+            old_ctx->st->flush(old_ctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
          }
       }
    }

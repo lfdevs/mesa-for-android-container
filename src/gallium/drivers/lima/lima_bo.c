@@ -107,6 +107,11 @@ static void
 lima_bo_free(struct lima_bo *bo)
 {
    struct lima_screen *screen = bo->screen;
+
+   if (lima_debug & LIMA_DEBUG_BO_CACHE)
+      fprintf(stderr, "%s: %p (size=%d)\n", __func__,
+              bo, bo->size);
+
    mtx_lock(&screen->bo_table_lock);
    util_hash_table_remove(screen->bo_handles,
                           (void *)(uintptr_t)bo->handle);
@@ -172,15 +177,39 @@ lima_bo_cache_get_bucket(struct lima_screen *screen, unsigned size)
 static void
 lima_bo_cache_free_stale_bos(struct lima_screen *screen, time_t time)
 {
+   unsigned cnt = 0;
    list_for_each_entry_safe(struct lima_bo, entry,
                             &screen->bo_cache_time, time_list) {
       /* Free BOs that are sitting idle for longer than 5 seconds */
       if (time - entry->free_time > 6) {
          lima_bo_cache_remove(entry);
          lima_bo_free(entry);
+         cnt++;
       } else
          break;
    }
+   if ((lima_debug & LIMA_DEBUG_BO_CACHE) && cnt)
+      fprintf(stderr, "%s: freed %d stale BOs\n", __func__, cnt);
+}
+
+static void
+lima_bo_cache_print_stats(struct lima_screen *screen)
+{
+   fprintf(stderr, "===============\n");
+   fprintf(stderr, "BO cache stats:\n");
+   unsigned total_size = 0;
+   for (int i = 0; i < NR_BO_CACHE_BUCKETS; i++) {
+      struct list_head *bucket = &screen->bo_cache_buckets[i];
+      unsigned bucket_size = 0;
+      list_for_each_entry(struct lima_bo, entry, bucket, size_list) {
+         bucket_size += entry->size;
+         total_size += entry->size;
+      }
+      fprintf(stderr, "Bucket #%d, BOs: %d, size: %u\n", i,
+              list_length(bucket),
+              bucket_size);
+   }
+   fprintf(stderr, "Total size: %u\n", total_size);
 }
 
 static bool
@@ -205,6 +234,10 @@ lima_bo_cache_put(struct lima_bo *bo)
    list_addtail(&bo->size_list, bucket);
    list_addtail(&bo->time_list, &screen->bo_cache_time);
    lima_bo_cache_free_stale_bos(screen, time.tv_sec);
+   if (lima_debug & LIMA_DEBUG_BO_CACHE) {
+      fprintf(stderr, "%s: put BO: %p (size=%d)\n", __func__, bo, bo->size);
+      lima_bo_cache_print_stats(screen);
+   }
    mtx_unlock(&screen->bo_cache_lock);
 
    return true;
@@ -223,15 +256,25 @@ lima_bo_cache_get(struct lima_screen *screen, uint32_t size, uint32_t flags)
    }
 
    list_for_each_entry_safe(struct lima_bo, entry, bucket, size_list) {
-      if (entry->size >= size &&
-          entry->flags == flags) {
+      if (entry->size >= size) {
          /* Check if BO is idle. If it's not it's better to allocate new one */
-         if (!lima_bo_wait(entry, LIMA_GEM_WAIT_WRITE, 0))
+         if (!lima_bo_wait(entry, LIMA_GEM_WAIT_WRITE, 0)) {
+            if (lima_debug & LIMA_DEBUG_BO_CACHE) {
+               fprintf(stderr, "%s: found BO %p but it's busy\n", __func__,
+                       entry);
+            }
             break;
+         }
 
          lima_bo_cache_remove(entry);
          p_atomic_set(&entry->refcnt, 1);
+         entry->flags = flags;
          bo = entry;
+         if (lima_debug & LIMA_DEBUG_BO_CACHE) {
+            fprintf(stderr, "%s: got BO: %p (size=%d), requested size %d\n",
+                    __func__, bo, bo->size, size);
+            lima_bo_cache_print_stats(screen);
+         }
          break;
       }
    }
@@ -246,12 +289,12 @@ struct lima_bo *lima_bo_create(struct lima_screen *screen,
 {
    struct lima_bo *bo;
 
+   size = align(size, LIMA_PAGE_SIZE);
+
    /* Try to get bo from cache first */
    bo = lima_bo_cache_get(screen, size, flags);
    if (bo)
       return bo;
-
-   size = align(size, LIMA_PAGE_SIZE);
 
    struct drm_lima_gem_create req = {
       .size = size,
@@ -276,6 +319,10 @@ struct lima_bo *lima_bo_create(struct lima_screen *screen,
 
    if (!lima_bo_get_info(bo))
       goto err_out1;
+
+   if (lima_debug & LIMA_DEBUG_BO_CACHE)
+      fprintf(stderr, "%s: %p (size=%d)\n", __func__,
+              bo, bo->size);
 
    return bo;
 

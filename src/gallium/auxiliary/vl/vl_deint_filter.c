@@ -47,7 +47,7 @@
 #include "util/u_draw.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "vl_types.h"
 #include "vl_video_buffer.h"

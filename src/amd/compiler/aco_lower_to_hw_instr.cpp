@@ -41,65 +41,323 @@ struct lower_context {
    std::vector<aco_ptr<Instruction>> instructions;
 };
 
-void emit_dpp_op(lower_context *ctx, PhysReg dst, PhysReg src0, PhysReg src1, PhysReg vtmp,
-                 aco_opcode op, Format format, bool clobber_vcc, unsigned dpp_ctrl,
-                 unsigned row_mask, unsigned bank_mask, bool bound_ctrl_zero, unsigned size,
-                 Operand *identity=NULL) /* for VOP3 with sparse writes */
-{
-   RegClass rc = RegClass(RegType::vgpr, size);
-   if (format == Format::VOP3) {
-      Builder bld(ctx->program, &ctx->instructions);
-
-      if (identity)
-         bld.vop1(aco_opcode::v_mov_b32, Definition(vtmp, v1), identity[0]);
-      if (identity && size >= 2)
-         bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+1}, v1), identity[1]);
-
-      for (unsigned i = 0; i < size; i++)
-         bld.vop1_dpp(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{src0+i}, v1),
-                      dpp_ctrl, row_mask, bank_mask, bound_ctrl_zero);
-
-      if (clobber_vcc)
-         bld.vop3(op, Definition(dst, rc), Definition(vcc, s2), Operand(vtmp, rc), Operand(src1, rc));
-      else
-         bld.vop3(op, Definition(dst, rc), Operand(vtmp, rc), Operand(src1, rc));
-   } else {
-      assert(format == Format::VOP2 || format == Format::VOP1);
-      assert(size == 1 || (op == aco_opcode::v_mov_b32));
-
-      for (unsigned i = 0; i < size; i++) {
-         aco_ptr<DPP_instruction> dpp{create_instruction<DPP_instruction>(
-            op, (Format) ((uint32_t) format | (uint32_t) Format::DPP),
-            format == Format::VOP2 ? 2 : 1, clobber_vcc ? 2 : 1)};
-         dpp->operands[0] = Operand(PhysReg{src0+i}, rc);
-         if (format == Format::VOP2)
-            dpp->operands[1] = Operand(PhysReg{src1+i}, rc);
-         dpp->definitions[0] = Definition(PhysReg{dst+i}, rc);
-         if (clobber_vcc)
-            dpp->definitions[1] = Definition(vcc, s2);
-         dpp->dpp_ctrl = dpp_ctrl;
-         dpp->row_mask = row_mask;
-         dpp->bank_mask = bank_mask;
-         dpp->bound_ctrl = bound_ctrl_zero;
-         ctx->instructions.emplace_back(std::move(dpp));
-      }
+aco_opcode get_reduce_opcode(chip_class chip, ReduceOp op) {
+   switch (op) {
+   case iadd32: return chip >= GFX9 ? aco_opcode::v_add_u32 : aco_opcode::v_add_co_u32;
+   case imul32: return aco_opcode::v_mul_lo_u32;
+   case fadd32: return aco_opcode::v_add_f32;
+   case fmul32: return aco_opcode::v_mul_f32;
+   case imax32: return aco_opcode::v_max_i32;
+   case imin32: return aco_opcode::v_min_i32;
+   case umin32: return aco_opcode::v_min_u32;
+   case umax32: return aco_opcode::v_max_u32;
+   case fmin32: return aco_opcode::v_min_f32;
+   case fmax32: return aco_opcode::v_max_f32;
+   case iand32: return aco_opcode::v_and_b32;
+   case ixor32: return aco_opcode::v_xor_b32;
+   case ior32: return aco_opcode::v_or_b32;
+   case iadd64: return aco_opcode::num_opcodes;
+   case imul64: return aco_opcode::num_opcodes;
+   case fadd64: return aco_opcode::v_add_f64;
+   case fmul64: return aco_opcode::v_mul_f64;
+   case imin64: return aco_opcode::num_opcodes;
+   case imax64: return aco_opcode::num_opcodes;
+   case umin64: return aco_opcode::num_opcodes;
+   case umax64: return aco_opcode::num_opcodes;
+   case fmin64: return aco_opcode::v_min_f64;
+   case fmax64: return aco_opcode::v_max_f64;
+   case iand64: return aco_opcode::num_opcodes;
+   case ior64: return aco_opcode::num_opcodes;
+   case ixor64: return aco_opcode::num_opcodes;
+   default: return aco_opcode::num_opcodes;
    }
 }
 
-void emit_op(lower_context *ctx, PhysReg dst, PhysReg src0, PhysReg src1,
-             aco_opcode op, Format format, bool clobber_vcc, unsigned size)
+void emit_vadd32(Builder& bld, Definition def, Operand src0, Operand src1)
 {
-   aco_ptr<Instruction> instr;
-   if (format == Format::VOP3)
-      instr.reset(create_instruction<VOP3A_instruction>(op, format, 2, clobber_vcc ? 2 : 1));
-   else
-      instr.reset(create_instruction<VOP2_instruction>(op, format, 2, clobber_vcc ? 2 : 1));
-   instr->operands[0] = Operand(src0, src0.reg >= 256 ? v1 : s1);
-   instr->operands[1] = Operand(src1, v1);
-   instr->definitions[0] = Definition(dst, v1);
-   if (clobber_vcc)
-      instr->definitions[1] = Definition(vcc, s2);
-   ctx->instructions.emplace_back(std::move(instr));
+   Instruction *instr = bld.vadd32(def, src0, src1, false, Operand(s2), true);
+   if (instr->definitions.size() >= 2) {
+      assert(instr->definitions[1].regClass() == bld.lm);
+      instr->definitions[1].setFixed(vcc);
+   }
+}
+
+void emit_int64_dpp_op(lower_context *ctx, PhysReg dst_reg, PhysReg src0_reg, PhysReg src1_reg,
+                       PhysReg vtmp_reg, ReduceOp op,
+                       unsigned dpp_ctrl, unsigned row_mask, unsigned bank_mask, bool bound_ctrl,
+                       Operand *identity=NULL)
+{
+   Builder bld(ctx->program, &ctx->instructions);
+   Definition dst[] = {Definition(dst_reg, v1), Definition(PhysReg{dst_reg+1}, v1)};
+   Definition vtmp_def[] = {Definition(vtmp_reg, v1), Definition(PhysReg{vtmp_reg+1}, v1)};
+   Operand src0[] = {Operand(src0_reg, v1), Operand(PhysReg{src0_reg+1}, v1)};
+   Operand src1[] = {Operand(src1_reg, v1), Operand(PhysReg{src1_reg+1}, v1)};
+   Operand src1_64 = Operand(src1_reg, v2);
+   Operand vtmp_op[] = {Operand(vtmp_reg, v1), Operand(PhysReg{vtmp_reg+1}, v1)};
+   Operand vtmp_op64 = Operand(vtmp_reg, v2);
+   if (op == iadd64) {
+      if (ctx->program->chip_class >= GFX10) {
+         if (identity)
+            bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[0]);
+         bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[0],
+                      dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+         bld.vop3(aco_opcode::v_add_co_u32_e64, dst[0], bld.def(bld.lm, vcc), vtmp_op[0], src1[0]);
+      } else {
+         bld.vop2_dpp(aco_opcode::v_add_co_u32, dst[0], bld.def(bld.lm, vcc), src0[0], src1[0],
+                      dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      }
+      bld.vop2_dpp(aco_opcode::v_addc_co_u32, dst[1], bld.def(bld.lm, vcc), src0[1], src1[1], Operand(vcc, bld.lm),
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+   } else if (op == iand64) {
+      bld.vop2_dpp(aco_opcode::v_and_b32, dst[0], src0[0], src1[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop2_dpp(aco_opcode::v_and_b32, dst[1], src0[1], src1[1],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+   } else if (op == ior64) {
+      bld.vop2_dpp(aco_opcode::v_or_b32, dst[0], src0[0], src1[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop2_dpp(aco_opcode::v_or_b32, dst[1], src0[1], src1[1],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+   } else if (op == ixor64) {
+      bld.vop2_dpp(aco_opcode::v_xor_b32, dst[0], src0[0], src1[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop2_dpp(aco_opcode::v_xor_b32, dst[1], src0[1], src1[1],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+   } else if (op == umin64 || op == umax64 || op == imin64 || op == imax64) {
+      aco_opcode cmp = aco_opcode::num_opcodes;
+      switch (op) {
+      case umin64:
+         cmp = aco_opcode::v_cmp_gt_u64;
+         break;
+      case umax64:
+         cmp = aco_opcode::v_cmp_lt_u64;
+         break;
+      case imin64:
+         cmp = aco_opcode::v_cmp_gt_i64;
+         break;
+      case imax64:
+         cmp = aco_opcode::v_cmp_lt_i64;
+         break;
+      default:
+         break;
+      }
+
+      if (identity) {
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[0]);
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[1], identity[1]);
+      }
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[1], src0[1],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+
+      bld.vopc(cmp, bld.def(bld.lm, vcc), vtmp_op64, src1_64);
+      bld.vop2(aco_opcode::v_cndmask_b32, dst[0], vtmp_op[0], src1[0], Operand(vcc, bld.lm));
+      bld.vop2(aco_opcode::v_cndmask_b32, dst[1], vtmp_op[1], src1[1], Operand(vcc, bld.lm));
+   } else if (op == imul64) {
+      /* t4 = dpp(x_hi)
+       * t1 = umul_lo(t4, y_lo)
+       * t3 = dpp(x_lo)
+       * t0 = umul_lo(t3, y_hi)
+       * t2 = iadd(t0, t1)
+       * t5 = umul_hi(t3, y_lo)
+       * res_hi = iadd(t2, t5)
+       * res_lo = umul_lo(t3, y_lo)
+       * Requires that res_hi != src0[0] and res_hi != src1[0]
+       * and that vtmp[0] != res_hi.
+       */
+      if (identity)
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[1]);
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[1],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop3(aco_opcode::v_mul_lo_u32, vtmp_def[1], vtmp_op[0], src1[0]);
+      if (identity)
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[0]);
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop3(aco_opcode::v_mul_lo_u32, vtmp_def[0], vtmp_op[0], src1[1]);
+      emit_vadd32(bld, vtmp_def[1], vtmp_op[0], vtmp_op[1]);
+      if (identity)
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[0]);
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop3(aco_opcode::v_mul_hi_u32, vtmp_def[0], vtmp_op[0], src1[0]);
+      emit_vadd32(bld, dst[1], vtmp_op[1], vtmp_op[0]);
+      if (identity)
+         bld.vop1(aco_opcode::v_mov_b32, vtmp_def[0], identity[0]);
+      bld.vop1_dpp(aco_opcode::v_mov_b32, vtmp_def[0], src0[0],
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      bld.vop3(aco_opcode::v_mul_lo_u32, dst[0], vtmp_op[0], src1[0]);
+   }
+}
+
+void emit_int64_op(lower_context *ctx, PhysReg dst_reg, PhysReg src0_reg, PhysReg src1_reg, PhysReg vtmp, ReduceOp op)
+{
+   Builder bld(ctx->program, &ctx->instructions);
+   Definition dst[] = {Definition(dst_reg, v1), Definition(PhysReg{dst_reg+1}, v1)};
+   RegClass src0_rc = src0_reg.reg >= 256 ? v1 : s1;
+   Operand src0[] = {Operand(src0_reg, src0_rc), Operand(PhysReg{src0_reg+1}, src0_rc)};
+   Operand src1[] = {Operand(src1_reg, v1), Operand(PhysReg{src1_reg+1}, v1)};
+   Operand src0_64 = Operand(src0_reg, src0_reg.reg >= 256 ? v2 : s2);
+   Operand src1_64 = Operand(src1_reg, v2);
+
+   if (src0_rc == s1 &&
+       (op == imul64 || op == umin64 || op == umax64 || op == imin64 || op == imax64)) {
+      assert(vtmp.reg != 0);
+      bld.vop1(aco_opcode::v_mov_b32, Definition(vtmp, v1), src0[0]);
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+1}, v1), src0[1]);
+      src0_reg = vtmp;
+      src0[0] = Operand(vtmp, v1);
+      src0[1] = Operand(PhysReg{vtmp+1}, v1);
+      src0_64 = Operand(vtmp, v2);
+   } else if (src0_rc == s1 && op == iadd64) {
+      assert(vtmp.reg != 0);
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+1}, v1), src0[1]);
+      src0[1] = Operand(PhysReg{vtmp+1}, v1);
+   }
+
+   if (op == iadd64) {
+      if (ctx->program->chip_class >= GFX10) {
+         bld.vop3(aco_opcode::v_add_co_u32_e64, dst[0], bld.def(bld.lm, vcc), src0[0], src1[0]);
+      } else {
+         bld.vop2(aco_opcode::v_add_co_u32, dst[0], bld.def(bld.lm, vcc), src0[0], src1[0]);
+      }
+      bld.vop2(aco_opcode::v_addc_co_u32, dst[1], bld.def(bld.lm, vcc), src0[1], src1[1], Operand(vcc, bld.lm));
+   } else if (op == iand64) {
+      bld.vop2(aco_opcode::v_and_b32, dst[0], src0[0], src1[0]);
+      bld.vop2(aco_opcode::v_and_b32, dst[1], src0[1], src1[1]);
+   } else if (op == ior64) {
+      bld.vop2(aco_opcode::v_or_b32, dst[0], src0[0], src1[0]);
+      bld.vop2(aco_opcode::v_or_b32, dst[1], src0[1], src1[1]);
+   } else if (op == ixor64) {
+      bld.vop2(aco_opcode::v_xor_b32, dst[0], src0[0], src1[0]);
+      bld.vop2(aco_opcode::v_xor_b32, dst[1], src0[1], src1[1]);
+   } else if (op == umin64 || op == umax64 || op == imin64 || op == imax64) {
+      aco_opcode cmp = aco_opcode::num_opcodes;
+      switch (op) {
+      case umin64:
+         cmp = aco_opcode::v_cmp_gt_u64;
+         break;
+      case umax64:
+         cmp = aco_opcode::v_cmp_lt_u64;
+         break;
+      case imin64:
+         cmp = aco_opcode::v_cmp_gt_i64;
+         break;
+      case imax64:
+         cmp = aco_opcode::v_cmp_lt_i64;
+         break;
+      default:
+         break;
+      }
+
+      bld.vopc(cmp, bld.def(bld.lm, vcc), src0_64, src1_64);
+      bld.vop2(aco_opcode::v_cndmask_b32, dst[0], src0[0], src1[0], Operand(vcc, bld.lm));
+      bld.vop2(aco_opcode::v_cndmask_b32, dst[1], src0[1], src1[1], Operand(vcc, bld.lm));
+   } else if (op == imul64) {
+      if (src1_reg == dst_reg) {
+         /* it's fine if src0==dst but not if src1==dst */
+         std::swap(src0_reg, src1_reg);
+         std::swap(src0[0], src1[0]);
+         std::swap(src0[1], src1[1]);
+         std::swap(src0_64, src1_64);
+      }
+      assert(!(src0_reg == src1_reg));
+      /* t1 = umul_lo(x_hi, y_lo)
+       * t0 = umul_lo(x_lo, y_hi)
+       * t2 = iadd(t0, t1)
+       * t5 = umul_hi(x_lo, y_lo)
+       * res_hi = iadd(t2, t5)
+       * res_lo = umul_lo(x_lo, y_lo)
+       * assumes that it's ok to modify x_hi/y_hi, since we might not have vtmp
+       */
+      Definition tmp0_def(PhysReg{src0_reg+1}, v1);
+      Definition tmp1_def(PhysReg{src1_reg+1}, v1);
+      Operand tmp0_op = src0[1];
+      Operand tmp1_op = src1[1];
+      bld.vop3(aco_opcode::v_mul_lo_u32, tmp0_def, src0[1], src1[0]);
+      bld.vop3(aco_opcode::v_mul_lo_u32, tmp1_def, src0[0], src1[1]);
+      emit_vadd32(bld, tmp0_def, tmp1_op, tmp0_op);
+      bld.vop3(aco_opcode::v_mul_hi_u32, tmp1_def, src0[0], src1[0]);
+      emit_vadd32(bld, dst[1], tmp0_op, tmp1_op);
+      bld.vop3(aco_opcode::v_mul_lo_u32, dst[0], src0[0], src1[0]);
+   }
+}
+
+void emit_dpp_op(lower_context *ctx, PhysReg dst_reg, PhysReg src0_reg, PhysReg src1_reg,
+                 PhysReg vtmp, ReduceOp op, unsigned size,
+                 unsigned dpp_ctrl, unsigned row_mask, unsigned bank_mask, bool bound_ctrl,
+                 Operand *identity=NULL) /* for VOP3 with sparse writes */
+{
+   Builder bld(ctx->program, &ctx->instructions);
+   RegClass rc = RegClass(RegType::vgpr, size);
+   Definition dst(dst_reg, rc);
+   Operand src0(src0_reg, rc);
+   Operand src1(src1_reg, rc);
+
+   aco_opcode opcode = get_reduce_opcode(ctx->program->chip_class, op);
+   bool vop3 = op == imul32 || size == 2;
+
+   if (!vop3) {
+      if (opcode == aco_opcode::v_add_co_u32)
+         bld.vop2_dpp(opcode, dst, bld.def(bld.lm, vcc), src0, src1, dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      else
+         bld.vop2_dpp(opcode, dst, src0, src1, dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+      return;
+   }
+
+   if (opcode == aco_opcode::num_opcodes) {
+      emit_int64_dpp_op(ctx, dst_reg ,src0_reg, src1_reg, vtmp, op,
+                        dpp_ctrl, row_mask, bank_mask, bound_ctrl, identity);
+      return;
+   }
+
+   if (identity)
+      bld.vop1(aco_opcode::v_mov_b32, Definition(vtmp, v1), identity[0]);
+   if (identity && size >= 2)
+      bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+1}, v1), identity[1]);
+
+   for (unsigned i = 0; i < size; i++)
+      bld.vop1_dpp(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{src0_reg+i}, v1),
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+
+   bld.vop3(opcode, dst, Operand(vtmp, rc), src1);
+}
+
+void emit_op(lower_context *ctx, PhysReg dst_reg, PhysReg src0_reg, PhysReg src1_reg,
+             PhysReg vtmp, ReduceOp op, unsigned size)
+{
+   Builder bld(ctx->program, &ctx->instructions);
+   RegClass rc = RegClass(RegType::vgpr, size);
+   Definition dst(dst_reg, rc);
+   Operand src0(src0_reg, RegClass(src0_reg.reg >= 256 ? RegType::vgpr : RegType::sgpr, size));
+   Operand src1(src1_reg, rc);
+
+   aco_opcode opcode = get_reduce_opcode(ctx->program->chip_class, op);
+   bool vop3 = op == imul32 || size == 2;
+
+   if (opcode == aco_opcode::num_opcodes) {
+      emit_int64_op(ctx, dst_reg, src0_reg, src1_reg, vtmp, op);
+      return;
+   }
+
+   if (vop3) {
+      bld.vop3(opcode, dst, src0, src1);
+   } else if (opcode == aco_opcode::v_add_co_u32) {
+      bld.vop2(opcode, dst, bld.def(bld.lm, vcc), src0, src1);
+   } else {
+      bld.vop2(opcode, dst, src0, src1);
+   }
+}
+
+void emit_dpp_mov(lower_context *ctx, PhysReg dst, PhysReg src0, unsigned size,
+                  unsigned dpp_ctrl, unsigned row_mask, unsigned bank_mask, bool bound_ctrl)
+{
+   Builder bld(ctx->program, &ctx->instructions);
+   for (unsigned i = 0; i < size; i++) {
+      bld.vop1_dpp(aco_opcode::v_mov_b32, Definition(PhysReg{dst+i}, v1), Operand(PhysReg{src0+i}, v1),
+                   dpp_ctrl, row_mask, bank_mask, bound_ctrl);
+   }
 }
 
 uint32_t get_reduction_identity(ReduceOp op, unsigned idx)
@@ -151,112 +409,29 @@ uint32_t get_reduction_identity(ReduceOp op, unsigned idx)
    return 0;
 }
 
-aco_opcode get_reduction_opcode(lower_context *ctx, ReduceOp op, bool *clobber_vcc, Format *format)
+void emit_ds_swizzle(Builder bld, PhysReg dst, PhysReg src, unsigned size, unsigned ds_pattern)
 {
-   *clobber_vcc = false;
-   *format = Format::VOP2;
-   switch (op) {
-   case iadd32:
-      *clobber_vcc = ctx->program->chip_class < GFX9;
-      return ctx->program->chip_class < GFX9 ? aco_opcode::v_add_co_u32 : aco_opcode::v_add_u32;
-   case imul32:
-      *format = Format::VOP3;
-      return aco_opcode::v_mul_lo_u32;
-   case fadd32:
-      return aco_opcode::v_add_f32;
-   case fmul32:
-      return aco_opcode::v_mul_f32;
-   case imax32:
-      return aco_opcode::v_max_i32;
-   case imin32:
-      return aco_opcode::v_min_i32;
-   case umin32:
-      return aco_opcode::v_min_u32;
-   case umax32:
-      return aco_opcode::v_max_u32;
-   case fmin32:
-      return aco_opcode::v_min_f32;
-   case fmax32:
-      return aco_opcode::v_max_f32;
-   case iand32:
-      return aco_opcode::v_and_b32;
-   case ixor32:
-      return aco_opcode::v_xor_b32;
-   case ior32:
-      return aco_opcode::v_or_b32;
-   case iadd64:
-   case imul64:
-      assert(false);
-      break;
-   case fadd64:
-      *format = Format::VOP3;
-      return aco_opcode::v_add_f64;
-   case fmul64:
-      *format = Format::VOP3;
-      return aco_opcode::v_mul_f64;
-   case imin64:
-   case imax64:
-   case umin64:
-   case umax64:
-      assert(false);
-      break;
-   case fmin64:
-      *format = Format::VOP3;
-      return aco_opcode::v_min_f64;
-   case fmax64:
-      *format = Format::VOP3;
-      return aco_opcode::v_max_f64;
-   case iand64:
-   case ior64:
-   case ixor64:
-      assert(false);
-      break;
-   default:
-      unreachable("Invalid reduction operation");
-      break;
+   for (unsigned i = 0; i < size; i++) {
+      bld.ds(aco_opcode::ds_swizzle_b32, Definition(PhysReg{dst+i}, v1),
+             Operand(PhysReg{src+i}, v1), ds_pattern);
    }
-   return aco_opcode::v_min_u32;
-}
-
-void emit_vopn(lower_context *ctx, PhysReg dst, PhysReg src0, PhysReg src1,
-               RegClass rc, aco_opcode op, Format format, bool clobber_vcc)
-{
-   aco_ptr<Instruction> instr;
-   switch (format) {
-   case Format::VOP2:
-      instr.reset(create_instruction<VOP2_instruction>(op, format, 2, clobber_vcc ? 2 : 1));
-      break;
-   case Format::VOP3:
-      instr.reset(create_instruction<VOP3A_instruction>(op, format, 2, clobber_vcc ? 2 : 1));
-      break;
-   default:
-      assert(false);
-   }
-   instr->operands[0] = Operand(src0, rc);
-   instr->operands[1] = Operand(src1, rc);
-   instr->definitions[0] = Definition(dst, rc);
-   if (clobber_vcc)
-      instr->definitions[1] = Definition(vcc, s2);
-   ctx->instructions.emplace_back(std::move(instr));
 }
 
 void emit_reduction(lower_context *ctx, aco_opcode op, ReduceOp reduce_op, unsigned cluster_size, PhysReg tmp,
                     PhysReg stmp, PhysReg vtmp, PhysReg sitmp, Operand src, Definition dst)
 {
-   assert(cluster_size == 64 || op == aco_opcode::p_reduce);
+   assert(cluster_size == ctx->program->wave_size || op == aco_opcode::p_reduce);
+   assert(cluster_size <= ctx->program->wave_size);
 
    Builder bld(ctx->program, &ctx->instructions);
 
-   Format format;
-   bool should_clobber_vcc;
-   aco_opcode reduce_opcode = get_reduction_opcode(ctx, reduce_op, &should_clobber_vcc, &format);
    Operand identity[2];
    identity[0] = Operand(get_reduction_identity(reduce_op, 0));
    identity[1] = Operand(get_reduction_identity(reduce_op, 1));
    Operand vcndmask_identity[2] = {identity[0], identity[1]};
 
    /* First, copy the source to tmp and set inactive lanes to the identity */
-   bld.sop1(aco_opcode::s_or_saveexec_b64, Definition(stmp, s2), Definition(scc, s1), Definition(exec, s2), Operand(UINT64_MAX), Operand(exec, s2));
+   bld.sop1(Builder::s_or_saveexec, Definition(stmp, bld.lm), Definition(scc, s1), Definition(exec, bld.lm), Operand(UINT64_MAX), Operand(exec, bld.lm));
 
    for (unsigned i = 0; i < src.size(); i++) {
       /* p_exclusive_scan needs it to be a sgpr or inline constant for the v_writelane_b32
@@ -276,57 +451,79 @@ void emit_reduction(lower_context *ctx, aco_opcode op, ReduceOp reduce_op, unsig
    for (unsigned i = 0; i < src.size(); i++) {
       bld.vop2_e64(aco_opcode::v_cndmask_b32, Definition(PhysReg{tmp + i}, v1),
                    vcndmask_identity[i], Operand(PhysReg{src.physReg() + i}, v1),
-                   Operand(stmp, s2));
+                   Operand(stmp, bld.lm));
    }
 
-   bool exec_restored = false;
-   bool dst_written = false;
+   bool reduction_needs_last_op = false;
    switch (op) {
    case aco_opcode::p_reduce:
       if (cluster_size == 1) break;
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_quad_perm(1, 0, 3, 2), 0xf, 0xf, false, src.size());
-      if (cluster_size == 2) break;
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_quad_perm(2, 3, 0, 1), 0xf, 0xf, false, src.size());
-      if (cluster_size == 4) break;
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_half_mirror, 0xf, 0xf, false, src.size());
-      if (cluster_size == 8) break;
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_mirror, 0xf, 0xf, false, src.size());
-      if (cluster_size == 16) break;
-      if (cluster_size == 32) {
+
+      if (ctx->program->chip_class <= GFX7) {
+         reduction_needs_last_op = true;
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), (1 << 15) | dpp_quad_perm(1, 0, 3, 2));
+         if (cluster_size == 2) break;
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), (1 << 15) | dpp_quad_perm(2, 3, 0, 1));
+         if (cluster_size == 4) break;
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1f, 0, 0x04));
+         if (cluster_size == 8) break;
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1f, 0, 0x08));
+         if (cluster_size == 16) break;
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1f, 0, 0x10));
+         if (cluster_size == 32) break;
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
          for (unsigned i = 0; i < src.size(); i++)
-            bld.ds(aco_opcode::ds_swizzle_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, s1), ds_pattern_bitmode(0x1f, 0, 0x10));
-         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(stmp, s2));
-         exec_restored = true;
-         emit_vopn(ctx, dst.physReg(), vtmp, tmp, src.regClass(), reduce_opcode, format, should_clobber_vcc);
-         dst_written = true;
-      } else if (ctx->program->chip_class >= GFX10) {
-         assert(cluster_size == 64);
+            bld.readlane(Definition(PhysReg{dst.physReg() + i}, s1), Operand(PhysReg{tmp + i}, v1), Operand(0u));
+         // TODO: it would be more effective to do the last reduction step on SALU
+         emit_op(ctx, tmp, dst.physReg(), tmp, vtmp, reduce_op, src.size());
+         reduction_needs_last_op = false;
+         break;
+      }
+
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_quad_perm(1, 0, 3, 2), 0xf, 0xf, false);
+      if (cluster_size == 2) break;
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_quad_perm(2, 3, 0, 1), 0xf, 0xf, false);
+      if (cluster_size == 4) break;
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_row_half_mirror, 0xf, 0xf, false);
+      if (cluster_size == 8) break;
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_row_mirror, 0xf, 0xf, false);
+      if (cluster_size == 16) break;
+
+      if (ctx->program->chip_class >= GFX10) {
          /* GFX10+ doesn't support row_bcast15 and row_bcast31 */
          for (unsigned i = 0; i < src.size(); i++)
             bld.vop3(aco_opcode::v_permlanex16_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, v1), Operand(0u), Operand(0u));
-         emit_op(ctx, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc, src.size());
 
+         if (cluster_size == 32) {
+            reduction_needs_last_op = true;
+            break;
+         }
+
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
          for (unsigned i = 0; i < src.size(); i++)
-            bld.vop3(aco_opcode::v_readlane_b32, Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
-         emit_op(ctx, tmp, sitmp, tmp, reduce_opcode, format, should_clobber_vcc, src.size());
-      } else {
-         assert(cluster_size == 64);
-         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                     dpp_row_bcast15, 0xa, 0xf, false, src.size());
-         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                     dpp_row_bcast31, 0xc, 0xf, false, src.size());
+            bld.readlane(Definition(PhysReg{dst.physReg() + i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(0u));
+         // TODO: it would be more effective to do the last reduction step on SALU
+         emit_op(ctx, tmp, dst.physReg(), tmp, vtmp, reduce_op, src.size());
+         break;
       }
+
+      if (cluster_size == 32) {
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1f, 0, 0x10));
+         reduction_needs_last_op = true;
+         break;
+      }
+      assert(cluster_size == 64);
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_row_bcast15, 0xa, 0xf, false);
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(), dpp_row_bcast31, 0xc, 0xf, false);
       break;
    case aco_opcode::p_exclusive_scan:
       if (ctx->program->chip_class >= GFX10) { /* gfx10 doesn't support wf_sr1, so emulate it */
          /* shift rows right */
-         for (unsigned i = 0; i < src.size(); i++) {
-            bld.vop1_dpp(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, s1), dpp_row_sr(1), 0xf, 0xf, true);
-         }
+         emit_dpp_mov(ctx, vtmp, tmp, src.size(), dpp_row_sr(1), 0xf, 0xf, true);
 
          /* fill in the gaps in rows 1 and 3 */
          bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0x10000u));
@@ -336,78 +533,161 @@ void emit_reduction(lower_context *ctx, aco_opcode op, ReduceOp reduce_op, unsig
                                          Definition(PhysReg{vtmp+i}, v1),
                                          Operand(PhysReg{tmp+i}, v1),
                                          Operand(0xffffffffu), Operand(0xffffffffu)).instr;
-            static_cast<VOP3A_instruction*>(perm)->opsel[0] = true; /* FI (Fetch Inactive) */
+            static_cast<VOP3A_instruction*>(perm)->opsel = 1; /* FI (Fetch Inactive) */
          }
-         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         bld.sop1(Builder::s_mov, Definition(exec, bld.lm), Operand(UINT64_MAX));
 
-         /* fill in the gap in row 2 */
-         for (unsigned i = 0; i < src.size(); i++) {
-            bld.vop3(aco_opcode::v_readlane_b32, Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
-            bld.vop3(aco_opcode::v_writelane_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{sitmp+i}, s1), Operand(32u));
+         if (ctx->program->wave_size == 64) {
+            /* fill in the gap in row 2 */
+            for (unsigned i = 0; i < src.size(); i++) {
+               bld.readlane(Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
+               bld.writelane(Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{sitmp+i}, s1), Operand(32u), Operand(PhysReg{vtmp+i}, v1));
+            }
          }
          std::swap(tmp, vtmp);
+      } else if (ctx->program->chip_class >= GFX8) {
+         emit_dpp_mov(ctx, tmp, tmp, src.size(), dpp_wf_sr1, 0xf, 0xf, true);
       } else {
-         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, aco_opcode::v_mov_b32, Format::VOP1, false,
-                     dpp_wf_sr1, 0xf, 0xf, true, src.size());
+         // TODO: use LDS on CS with a single write and shifted read
+         /* wavefront shift_right by 1 on SI/CI */
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), (1 << 15) | dpp_quad_perm(0, 0, 1, 2));
+         emit_ds_swizzle(bld, tmp, tmp, src.size(), ds_pattern_bitmode(0x1F, 0x00, 0x07)); /* mirror(8) */
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0x10101010u));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         for (unsigned i = 0; i < src.size(); i++)
+            bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, v1));
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, tmp, tmp, src.size(), ds_pattern_bitmode(0x1F, 0x00, 0x08)); /* swap(8) */
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0x01000100u));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         for (unsigned i = 0; i < src.size(); i++)
+            bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, v1));
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, tmp, tmp, src.size(), ds_pattern_bitmode(0x1F, 0x00, 0x10)); /* swap(16) */
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand(1u), Operand(16u));
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand(1u), Operand(16u));
+         for (unsigned i = 0; i < src.size(); i++)
+            bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{tmp+i}, v1));
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         for (unsigned i = 0; i < src.size(); i++) {
+            bld.writelane(Definition(PhysReg{vtmp+i}, v1), identity[i], Operand(0u), Operand(PhysReg{vtmp+i}, v1));
+            bld.readlane(Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(0u));
+            bld.writelane(Definition(PhysReg{vtmp+i}, v1), Operand(PhysReg{sitmp+i}, s1), Operand(32u), Operand(PhysReg{vtmp+i}, v1));
+            identity[i] = Operand(0u); /* prevent further uses of identity */
+         }
+         std::swap(tmp, vtmp);
       }
+
       for (unsigned i = 0; i < src.size(); i++) {
-         if (!identity[i].isConstant() || identity[i].constantValue()) { /* bound_ctrl should take case of this overwise */
+         if (!identity[i].isConstant() || identity[i].constantValue()) { /* bound_ctrl should take care of this overwise */
             if (ctx->program->chip_class < GFX10)
                assert((identity[i].isConstant() && !identity[i].isLiteral()) || identity[i].physReg() == PhysReg{sitmp+i});
-            bld.vop3(aco_opcode::v_writelane_b32, Definition(PhysReg{tmp+i}, v1),
-                     identity[i], Operand(0u));
+            bld.writelane(Definition(PhysReg{tmp+i}, v1), identity[i], Operand(0u), Operand(PhysReg{tmp+i}, v1));
          }
       }
       /* fall through */
    case aco_opcode::p_inclusive_scan:
-      assert(cluster_size == 64);
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_sr(1), 0xf, 0xf, false, src.size(), identity);
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_sr(2), 0xf, 0xf, false, src.size(), identity);
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_sr(4), 0xf, 0xf, false, src.size(), identity);
-      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                  dpp_row_sr(8), 0xf, 0xf, false, src.size(), identity);
+      assert(cluster_size == ctx->program->wave_size);
+      if (ctx->program->chip_class <= GFX7) {
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1e, 0x00, 0x00));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0xAAAAAAAAu));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x1c, 0x01, 0x00));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0xCCCCCCCCu));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x18, 0x03, 0x00));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0xF0F0F0F0u));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x10, 0x07, 0x00));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0xFF00FF00u));
+         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(exec_lo, s1));
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+
+         bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(UINT64_MAX));
+         emit_ds_swizzle(bld, vtmp, tmp, src.size(), ds_pattern_bitmode(0x00, 0x0f, 0x00));
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand(16u), Operand(16u));
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand(16u), Operand(16u));
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+
+         for (unsigned i = 0; i < src.size(); i++)
+            bld.readlane(Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
+         bld.sop2(aco_opcode::s_bfm_b64, Definition(exec, s2), Operand(32u), Operand(32u));
+         emit_op(ctx, tmp, sitmp, tmp, vtmp, reduce_op, src.size());
+         break;
+      }
+
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                  dpp_row_sr(1), 0xf, 0xf, false, identity);
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                  dpp_row_sr(2), 0xf, 0xf, false, identity);
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                  dpp_row_sr(4), 0xf, 0xf, false, identity);
+      emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                  dpp_row_sr(8), 0xf, 0xf, false, identity);
       if (ctx->program->chip_class >= GFX10) {
-         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0xffff0000u));
-         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(0xffff0000u));
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_lo, s1), Operand(16u), Operand(16u));
+         bld.sop2(aco_opcode::s_bfm_b32, Definition(exec_hi, s1), Operand(16u), Operand(16u));
          for (unsigned i = 0; i < src.size(); i++) {
             Instruction *perm = bld.vop3(aco_opcode::v_permlanex16_b32,
                                          Definition(PhysReg{vtmp+i}, v1),
                                          Operand(PhysReg{tmp+i}, v1),
                                          Operand(0xffffffffu), Operand(0xffffffffu)).instr;
-            static_cast<VOP3A_instruction*>(perm)->opsel[0] = true; /* FI (Fetch Inactive) */
+            static_cast<VOP3A_instruction*>(perm)->opsel = 1; /* FI (Fetch Inactive) */
          }
-         emit_op(ctx, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc, src.size());
+         emit_op(ctx, tmp, tmp, vtmp, PhysReg{0}, reduce_op, src.size());
 
-         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_lo, s1), Operand(0u));
-         bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand(0xffffffffu));
-         for (unsigned i = 0; i < src.size(); i++)
-            bld.vop3(aco_opcode::v_readlane_b32, Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
-         emit_op(ctx, tmp, sitmp, tmp, reduce_opcode, format, should_clobber_vcc, src.size());
+         if (ctx->program->wave_size == 64) {
+            bld.sop2(aco_opcode::s_bfm_b64, Definition(exec, s2), Operand(32u), Operand(32u));
+            for (unsigned i = 0; i < src.size(); i++)
+               bld.readlane(Definition(PhysReg{sitmp+i}, s1), Operand(PhysReg{tmp+i}, v1), Operand(31u));
+            emit_op(ctx, tmp, sitmp, tmp, vtmp, reduce_op, src.size());
+         }
       } else {
-         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                     dpp_row_bcast15, 0xa, 0xf, false, src.size(), identity);
-         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_opcode, format, should_clobber_vcc,
-                     dpp_row_bcast31, 0xc, 0xf, false, src.size(), identity);
+         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                     dpp_row_bcast15, 0xa, 0xf, false, identity);
+         emit_dpp_op(ctx, tmp, tmp, tmp, vtmp, reduce_op, src.size(),
+                     dpp_row_bcast31, 0xc, 0xf, false, identity);
       }
       break;
    default:
       unreachable("Invalid reduction mode");
    }
 
-   if (!exec_restored)
-      bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand(stmp, s2));
 
-   if (op == aco_opcode::p_reduce && cluster_size == 64) {
-      for (unsigned k = 0; k < src.size(); k++) {
-         bld.vop3(aco_opcode::v_readlane_b32, Definition(PhysReg{dst.physReg() + k}, s1),
-                  Operand(PhysReg{tmp + k}, v1), Operand(63u));
+   if (op == aco_opcode::p_reduce) {
+      if (reduction_needs_last_op && dst.regClass().type() == RegType::vgpr) {
+         bld.sop1(Builder::s_mov, Definition(exec, bld.lm), Operand(stmp, bld.lm));
+         emit_op(ctx, dst.physReg(), tmp, vtmp, PhysReg{0}, reduce_op, src.size());
+         return;
       }
-   } else if (!(dst.physReg() == tmp) && !dst_written) {
+
+      if (reduction_needs_last_op)
+         emit_op(ctx, tmp, vtmp, tmp, PhysReg{0}, reduce_op, src.size());
+   }
+
+   /* restore exec */
+   bld.sop1(Builder::s_mov, Definition(exec, bld.lm), Operand(stmp, bld.lm));
+
+   if (dst.regClass().type() == RegType::sgpr) {
       for (unsigned k = 0; k < src.size(); k++) {
-         bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{dst.physReg() + k}, s1),
+         bld.readlane(Definition(PhysReg{dst.physReg() + k}, s1),
+                      Operand(PhysReg{tmp + k}, v1), Operand(ctx->program->wave_size - 1));
+      }
+   } else if (dst.physReg() != tmp) {
+      for (unsigned k = 0; k < src.size(); k++) {
+         bld.vop1(aco_opcode::v_mov_b32, Definition(PhysReg{dst.physReg() + k}, v1),
                   Operand(PhysReg{tmp + k}, v1));
       }
    }
@@ -592,6 +872,22 @@ void lower_to_hw_instr(Program* program)
       ctx.program = program;
       Builder bld(program, &ctx.instructions);
 
+      bool set_mode = i == 0 && block->fp_mode.val != program->config->float_mode;
+      for (unsigned pred : block->linear_preds) {
+         if (program->blocks[pred].fp_mode.val != block->fp_mode.val) {
+            set_mode = true;
+            break;
+         }
+      }
+      if (set_mode) {
+         /* only allow changing modes at top-level blocks so this doesn't break
+          * the "jump over empty blocks" optimization */
+         assert(block->kind & block_kind_top_level);
+         uint32_t mode = block->fp_mode.val;
+         /* "((size - 1) << 11) | register" (MODE is encoded as register 1) */
+         bld.sopk(aco_opcode::s_setreg_imm32_b32, Operand(mode), (7 << 11) | 1);
+      }
+
       for (size_t j = 0; j < block->instructions.size(); j++) {
          aco_ptr<Instruction>& instr = block->instructions[j];
          aco_ptr<Instruction> mov;
@@ -666,7 +962,7 @@ void lower_to_hw_instr(Program* program)
                {
                   Operand operand = instr->operands[i];
                   if (operand.isConstant() || operand.size() == 1) {
-                     assert(instr->definitions[i].size() == 1);
+                     assert(instr->definitions[i].size() == operand.size());
                      copy_operations[instr->definitions[i].physReg()] = {operand, instr->definitions[i], 0, 1};
                   } else {
                      RegClass def_rc = RegClass(instr->definitions[i].regClass().type(), 1);
@@ -716,21 +1012,20 @@ void lower_to_hw_instr(Program* program)
             case aco_opcode::p_spill:
             {
                assert(instr->operands[0].regClass() == v1.as_linear());
-               for (unsigned i = 0; i < instr->operands[2].size(); i++) {
-                  bld.vop3(aco_opcode::v_writelane_b32, bld.def(v1, instr->operands[0].physReg()),
-                           Operand(PhysReg{instr->operands[2].physReg() + i}, s1),
-                           Operand(instr->operands[1].constantValue() + i));
-               }
+               for (unsigned i = 0; i < instr->operands[2].size(); i++)
+                  bld.writelane(bld.def(v1, instr->operands[0].physReg()),
+                                Operand(PhysReg{instr->operands[2].physReg() + i}, s1),
+                                Operand(instr->operands[1].constantValue() + i),
+                                instr->operands[0]);
                break;
             }
             case aco_opcode::p_reload:
             {
                assert(instr->operands[0].regClass() == v1.as_linear());
-               for (unsigned i = 0; i < instr->definitions[0].size(); i++) {
-                  bld.vop3(aco_opcode::v_readlane_b32,
-                           bld.def(s1, PhysReg{instr->definitions[0].physReg() + i}),
-                           instr->operands[0], Operand(instr->operands[1].constantValue() + i));
-               }
+               for (unsigned i = 0; i < instr->definitions[0].size(); i++)
+                  bld.readlane(bld.def(s1, PhysReg{instr->definitions[0].physReg() + i}),
+                               instr->operands[0],
+                               Operand(instr->operands[1].constantValue() + i));
                break;
             }
             case aco_opcode::p_as_uniform:
@@ -835,29 +1130,21 @@ void lower_to_hw_instr(Program* program)
                Definition def_temp1(tmp1.physReg(), v1);
                Definition def_temp2(tmp2.physReg(), v1);
 
-               /* Save EXEC and clear it */
-               bld.sop1(aco_opcode::s_and_saveexec_b64, instr->definitions[1], instr->definitions[2],
-                        Definition(exec, s2), Operand(0u), Operand(exec, s2));
+               /* Save EXEC and set it for all lanes */
+               bld.sop1(aco_opcode::s_or_saveexec_b64, instr->definitions[1], instr->definitions[2],
+                        Definition(exec, s2), Operand((uint64_t)-1), Operand(exec, s2));
 
-               /* Set EXEC to enable HI lanes only */
-               bld.sop1(aco_opcode::s_mov_b32, Definition(exec_hi, s1), Operand((uint32_t)-1));
                /* HI: Copy data from high lanes 32-63 to shared vgpr */
-               bld.vop1(aco_opcode::v_mov_b32, shared_vgpr_hi, input_data);
+               bld.vop1_dpp(aco_opcode::v_mov_b32, shared_vgpr_hi, input_data, dpp_quad_perm(0, 1, 2, 3), 0xc, 0xf, false);
 
-               /* Invert EXEC to enable LO lanes only */
-               bld.sop1(aco_opcode::s_not_b64, Definition(exec, s2), Operand(exec, s2));
                /* LO: Copy data from low lanes 0-31 to shared vgpr */
-               bld.vop1(aco_opcode::v_mov_b32, shared_vgpr_lo, input_data);
+               bld.vop1_dpp(aco_opcode::v_mov_b32, shared_vgpr_lo, input_data, dpp_quad_perm(0, 1, 2, 3), 0x3, 0xf, false);
                /* LO: Copy shared vgpr (high lanes' data) to output vgpr */
-               bld.vop1(aco_opcode::v_mov_b32, def_temp1, Operand(shared_vgpr_reg_hi, v1));
+               bld.vop1_dpp(aco_opcode::v_mov_b32, def_temp1, Operand(shared_vgpr_reg_hi, v1), dpp_quad_perm(0, 1, 2, 3), 0x3, 0xf, false);
 
-               /* Invert EXEC to enable HI lanes only */
-               bld.sop1(aco_opcode::s_not_b64, Definition(exec, s2), Operand(exec, s2));
                /* HI: Copy shared vgpr (low lanes' data) to output vgpr */
-               bld.vop1(aco_opcode::v_mov_b32, def_temp1, Operand(shared_vgpr_reg_lo, v1));
+               bld.vop1_dpp(aco_opcode::v_mov_b32, def_temp1, Operand(shared_vgpr_reg_lo, v1), dpp_quad_perm(0, 1, 2, 3), 0xc, 0xf, false);
 
-               /* Enable exec mask for all lanes */
-               bld.sop1(aco_opcode::s_mov_b64, Definition(exec, s2), Operand((uint32_t)-1));
                /* Permute the original input */
                bld.ds(aco_opcode::ds_bpermute_b32, def_temp2, index_x4, input_data);
                /* Permute the swapped input */

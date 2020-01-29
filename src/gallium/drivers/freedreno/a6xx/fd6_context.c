@@ -77,6 +77,7 @@ static const uint8_t primtypes[] = {
 		[PIPE_PRIM_LINE_STRIP_ADJACENCY]        = DI_PT_LINESTRIP_ADJ,
 		[PIPE_PRIM_TRIANGLES_ADJACENCY]         = DI_PT_TRI_ADJ,
 		[PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY]    = DI_PT_TRISTRIP_ADJ,
+		[PIPE_PRIM_PATCHES]                     = DI_PT_PATCHES0,
 		[PIPE_PRIM_MAX]                         = DI_PT_RECTLIST,  /* internal clear blits */
 };
 
@@ -123,6 +124,15 @@ PC_UNKNOWN_9805:
 		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
 		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
 		break;
+	case 640:
+		fd6_ctx->magic.RB_UNKNOWN_8E04_blit = 0x00100000;
+		fd6_ctx->magic.RB_CCU_CNTL_gmem     = 0x7c400000;
+		fd6_ctx->magic.RB_CCU_CNTL_bypass   = 0x10000000;
+		fd6_ctx->magic.PC_UNKNOWN_9805 = 0x1;
+		fd6_ctx->magic.SP_UNKNOWN_A0F8 = 0x1;
+		break;
+	default:
+		unreachable("missing magic config");
 	}
 
 	pctx = &fd6_ctx->base.base;

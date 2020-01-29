@@ -32,7 +32,7 @@
 #include "lp_bld_debug.h"
 #include "lp_bld_const.h"
 #include "lp_bld_bitarit.h"
-
+#include "lp_bld_intr.h"
 
 /**
  * Return (a | b)
@@ -239,4 +239,57 @@ lp_build_shr_imm(struct lp_build_context *bld, LLVMValueRef a, unsigned imm)
    LLVMValueRef b = lp_build_const_int_vec(bld->gallivm, bld->type, imm);
    assert(imm < bld->type.width);
    return lp_build_shr(bld, a, b);
+}
+
+LLVMValueRef
+lp_build_popcount(struct lp_build_context *bld, LLVMValueRef a)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMValueRef result;
+   char intr_str[256];
+
+   lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.ctpop", bld->vec_type);
+   result = lp_build_intrinsic_unary(builder, intr_str, bld->vec_type, a);
+   return result;
+}
+
+LLVMValueRef
+lp_build_bitfield_reverse(struct lp_build_context *bld, LLVMValueRef a)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMValueRef result;
+   char intr_str[256];
+
+   lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.bitreverse", bld->vec_type);
+   result = lp_build_intrinsic_unary(builder, intr_str, bld->vec_type, a);
+   return result;
+}
+
+LLVMValueRef
+lp_build_cttz(struct lp_build_context *bld, LLVMValueRef a)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMValueRef result;
+   char intr_str[256];
+
+   lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.cttz", bld->vec_type);
+
+   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context));
+   result = lp_build_intrinsic_binary(builder, intr_str, bld->vec_type, a, undef_val);
+   return LLVMBuildSelect(builder, LLVMBuildICmp(builder, LLVMIntEQ, a, bld->zero, ""),
+			  lp_build_const_int_vec(bld->gallivm, bld->type, -1), result, "");
+}
+
+LLVMValueRef
+lp_build_ctlz(struct lp_build_context *bld, LLVMValueRef a)
+{
+   LLVMBuilderRef builder = bld->gallivm->builder;
+   LLVMValueRef result;
+   char intr_str[256];
+
+   lp_format_intrinsic(intr_str, sizeof(intr_str), "llvm.ctlz", bld->vec_type);
+
+   LLVMValueRef undef_val = LLVMConstNull(LLVMInt1TypeInContext(bld->gallivm->context));
+   result = lp_build_intrinsic_binary(builder, intr_str, bld->vec_type, a, undef_val);
+   return result;
 }

@@ -23,8 +23,8 @@
 #include <errno.h>
 #include <xf86drm.h>
 #include <nouveau_drm.h>
-#include "util/u_format.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format.h"
+#include "util/format/u_format_s3tc.h"
 #include "util/u_screen.h"
 #include "pipe/p_screen.h"
 #include "compiler/nir/nir.h"

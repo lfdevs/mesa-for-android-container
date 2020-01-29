@@ -83,6 +83,9 @@ struct panfrost_batch {
         float clear_depth;
         unsigned clear_stencil;
 
+        /* Amount of thread local storage required per thread */
+        unsigned stack_size;
+
         /* Whether this job uses the corresponding requirement (PAN_REQ_*
          * bitmask) */
         unsigned requirements;
@@ -100,7 +103,7 @@ struct panfrost_batch {
          * These arrays contain the headers for the "primary batch", our jargon
          * referring to the part of the panfrost_job that actually contains
          * meaningful work. In an OpenGL ES setting, that means the
-         * SET_VALUE/VERTEX/TILER jobs. Excluded is specifically the FRAGMENT
+         * WRITE_VALUE/VERTEX/TILER jobs. Excluded is specifically the FRAGMENT
          * job, which is sent on as a secondary batch containing only a single
          * hardware job. Since there's one and only one FRAGMENT job issued per
          * panfrost_job, there is no need to do any scoreboarding / management;
@@ -149,7 +152,7 @@ struct panfrost_batch {
         struct panfrost_bo *tiler_dummy;
 
         /* Framebuffer descriptor. */
-        mali_ptr framebuffer;
+        struct panfrost_transfer framebuffer;
 
         /* Output sync object. Only valid when submitted is true. */
         struct panfrost_batch_fence *out_sync;
@@ -199,11 +202,11 @@ panfrost_flush_batches_accessing_bo(struct panfrost_context *ctx,
 void
 panfrost_batch_set_requirements(struct panfrost_batch *batch);
 
+struct panfrost_bo *
+panfrost_batch_get_scratchpad(struct panfrost_batch *batch, unsigned shift, unsigned thread_tls_alloc, unsigned core_count);
+
 mali_ptr
 panfrost_batch_get_polygon_list(struct panfrost_batch *batch, unsigned size);
-
-struct panfrost_bo *
-panfrost_batch_get_scratchpad(struct panfrost_batch *batch);
 
 struct panfrost_bo *
 panfrost_batch_get_tiler_heap(struct panfrost_batch *batch);

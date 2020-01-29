@@ -27,7 +27,7 @@
 #include "util/u_atomic.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "drm/freedreno_drmif.h"
 
@@ -363,6 +363,8 @@ output_name(struct ir3_shader_variant *so, int i)
 			return "GS_HEADER";
 		case VARYING_SLOT_GS_VERTEX_FLAGS_IR3:
 			return "GS_VERTEX_FLAGS";
+		case VARYING_SLOT_TCS_HEADER_IR3:
+			return "TCS_HEADER";
 		default:
 			return gl_varying_slot_name(so->outputs[i].slot);
 		}
@@ -378,16 +380,17 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 	uint8_t regid;
 	unsigned i;
 
-	for (i = 0; i < ir->ninputs; i++) {
-		if (!ir->inputs[i]) {
-			fprintf(out, "; in%d unused\n", i);
-			continue;
-		}
-		reg = ir->inputs[i]->regs[0];
+	struct ir3_instruction *instr;
+	foreach_input_n(instr, i, ir) {
+		reg = instr->regs[0];
 		regid = reg->num;
-		fprintf(out, "@in(%sr%d.%c)\tin%d\n",
+		fprintf(out, "@in(%sr%d.%c)\tin%d",
 				(reg->flags & IR3_REG_HALF) ? "h" : "",
 				(regid >> 2), "xyzw"[regid & 0x3], i);
+
+		if (reg->wrmask > 0x1)
+			fprintf(out, " (wrmask=0x%x)", reg->wrmask);
+		fprintf(out, "\n");
 	}
 
 	/* print pre-dispatch texture fetches: */
@@ -400,19 +403,15 @@ ir3_shader_disasm(struct ir3_shader_variant *so, uint32_t *bin, FILE *out)
 				fetch->wrmask, fetch->cmd);
 	}
 
-	for (i = 0; i < ir->noutputs; i++) {
-		if (!ir->outputs[i]) {
-			fprintf(out, "; out%d unused\n", i);
-			continue;
-		}
-		/* kill shows up as a virtual output.. skip it! */
-		if (is_kill(ir->outputs[i]))
-			continue;
-		reg = ir->outputs[i]->regs[0];
+	foreach_output_n(instr, i, ir) {
+		reg = instr->regs[0];
 		regid = reg->num;
-		fprintf(out, "@out(%sr%d.%c)\tout%d\n",
+		fprintf(out, "@out(%sr%d.%c)\tout%d",
 				(reg->flags & IR3_REG_HALF) ? "h" : "",
 				(regid >> 2), "xyzw"[regid & 0x3], i);
+		if (reg->wrmask > 0x1)
+			fprintf(out, " (wrmask=0x%x)", reg->wrmask);
+		fprintf(out, "\n");
 	}
 
 	struct ir3_const_state *const_state = &so->shader->const_state;

@@ -32,7 +32,7 @@
 
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_hash_table.h"
 #include "util/u_screen.h"
 #include "util/u_transfer_helper.h"
@@ -251,6 +251,16 @@ v3d_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
         case PIPE_CAP_UMA:
                 return 1;
 
+        /* Geometry shaders */
+        case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+                /* Minimum required by GLES 3.2 */
+                return 1024;
+        case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+                /* MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS / 4 */
+                return 256;
+        case PIPE_CAP_MAX_GS_INVOCATIONS:
+                return 32;
+
         default:
                 return u_pipe_screen_get_param_defaults(pscreen, param);
         }
@@ -297,6 +307,10 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 if (!screen->has_csd)
                         return 0;
                 break;
+        case PIPE_SHADER_GEOMETRY:
+                if (screen->devinfo.ver < 41)
+                        return 0;
+                break;
         default:
                 return 0;
         }
@@ -313,10 +327,16 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
                 return UINT_MAX;
 
         case PIPE_SHADER_CAP_MAX_INPUTS:
-                if (shader == PIPE_SHADER_FRAGMENT)
-                        return V3D_MAX_FS_INPUTS / 4;
-                else
+                switch (shader) {
+                case PIPE_SHADER_VERTEX:
                         return V3D_MAX_VS_INPUTS / 4;
+                case PIPE_SHADER_GEOMETRY:
+                        return V3D_MAX_GS_INPUTS / 4;
+                case PIPE_SHADER_FRAGMENT:
+                        return V3D_MAX_FS_INPUTS / 4;
+                default:
+                        return 0;
+                };
         case PIPE_SHADER_CAP_MAX_OUTPUTS:
                 if (shader == PIPE_SHADER_FRAGMENT)
                         return 4;
@@ -334,6 +354,7 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
         case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
                 return 0;
         case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
+                return 1;
         case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
                 return 0;
         case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
@@ -360,9 +381,10 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 
         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
                 if (screen->has_cache_flush) {
-                        if (shader == PIPE_SHADER_VERTEX)
+                        if (shader == PIPE_SHADER_VERTEX ||
+                            shader == PIPE_SHADER_GEOMETRY) {
                                 return 0;
-
+                        }
                         return PIPE_MAX_SHADER_BUFFERS;
                  } else {
                         return 0;

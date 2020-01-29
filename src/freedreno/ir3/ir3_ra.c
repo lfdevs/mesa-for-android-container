@@ -297,8 +297,7 @@ ir3_ra_alloc_reg_set(struct ir3_compiler *compiler)
 				unsigned hreg0 = set->gpr_to_ra_reg[i + HALF_OFFSET][(j * 2) + 0];
 				unsigned hreg1 = set->gpr_to_ra_reg[i + HALF_OFFSET][(j * 2) + 1];
 
-				ra_add_transitive_reg_conflict(set->regs, freg, hreg0);
-				ra_add_transitive_reg_conflict(set->regs, freg, hreg1);
+				ra_add_transitive_reg_pair_conflict(set->regs, freg, hreg0, hreg1);
 			}
 		}
 
@@ -388,6 +387,8 @@ writes_gpr(struct ir3_instruction *instr)
 {
 	if (is_store(instr))
 		return false;
+	if (instr->regs_count == 0)
+		return false;
 	/* is dest a normal temp register: */
 	struct ir3_register *reg = instr->regs[0];
 	if (reg->flags & (IR3_REG_CONST | IR3_REG_IMMED))
@@ -419,10 +420,10 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 		return id->defn;
 	}
 
-	if (instr->opc == OPC_META_FI) {
+	if (instr->opc == OPC_META_COLLECT) {
 		/* What about the case where collect is subset of array, we
 		 * need to find the distance between where actual array starts
-		 * and fanin..  that probably doesn't happen currently.
+		 * and collect..  that probably doesn't happen currently.
 		 */
 		struct ir3_register *src;
 		int dsz, doff;
@@ -452,7 +453,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 
 		/* by definition, the entire sequence forms one linked list
 		 * of single scalar register nodes (even if some of them may
-		 * be fanouts from a texture sample (for example) instr.  We
+		 * be splits from a texture sample (for example) instr.  We
 		 * just need to walk the list finding the first element of
 		 * the group defined (lowest ip)
 		 */
@@ -478,7 +479,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 	} else {
 		/* second case is looking directly at the instruction which
 		 * produces multiple values (eg, texture sample), rather
-		 * than the fanout nodes that point back to that instruction.
+		 * than the split nodes that point back to that instruction.
 		 * This isn't quite right, because it may be part of a larger
 		 * group, such as:
 		 *
@@ -498,7 +499,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 		d = instr;
 	}
 
-	if (d->opc == OPC_META_FO) {
+	if (d->opc == OPC_META_SPLIT) {
 		struct ir3_instruction *dd;
 		int dsz, doff;
 
@@ -509,13 +510,13 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 
 		*sz = MAX2(*sz, dsz);
 
-		if (instr->opc == OPC_META_FO)
-			*off = MAX2(*off, instr->fo.off);
+		if (instr->opc == OPC_META_SPLIT)
+			*off = MAX2(*off, instr->split.off);
 
 		d = dd;
 	}
 
-	debug_assert(d->opc != OPC_META_FO);
+	debug_assert(d->opc != OPC_META_SPLIT);
 
 	id->defn = d;
 	id->sz = *sz;
@@ -527,7 +528,7 @@ get_definer(struct ir3_ra_ctx *ctx, struct ir3_instruction *instr,
 static void
 ra_block_find_definers(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 {
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr (instr, &block->instr_list) {
 		struct ir3_ra_instr_data *id = &ctx->instrd[instr->ip];
 		if (instr->regs_count == 0)
 			continue;
@@ -577,7 +578,7 @@ ra_block_find_definers(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 static void
 ra_block_name_instructions(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 {
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr (instr, &block->instr_list) {
 		struct ir3_ra_instr_data *id = &ctx->instrd[instr->ip];
 
 #ifdef DEBUG
@@ -585,9 +586,6 @@ ra_block_name_instructions(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 #endif
 
 		ctx->instr_cnt++;
-
-		if (instr->regs_count == 0)
-			continue;
 
 		if (!writes_gpr(instr))
 			continue;
@@ -615,11 +613,11 @@ ra_init(struct ir3_ra_ctx *ctx)
 
 	ctx->instrd = rzalloc_array(NULL, struct ir3_ra_instr_data, n);
 
-	list_for_each_entry (struct ir3_block, block, &ctx->ir->block_list, node) {
+	foreach_block (block, &ctx->ir->block_list) {
 		ra_block_find_definers(ctx, block);
 	}
 
-	list_for_each_entry (struct ir3_block, block, &ctx->ir->block_list, node) {
+	foreach_block (block, &ctx->ir->block_list) {
 		ra_block_name_instructions(ctx, block);
 	}
 
@@ -634,7 +632,7 @@ ra_init(struct ir3_ra_ctx *ctx)
 
 	/* and vreg names for array elements: */
 	base = ctx->class_base[total_class_count];
-	list_for_each_entry (struct ir3_array, arr, &ctx->ir->array_list, node) {
+	foreach_array (arr, &ctx->ir->array_list) {
 		arr->base = base;
 		ctx->class_alloc_count[total_class_count] += arr->length;
 		base += arr->length;
@@ -703,7 +701,7 @@ ra_block_compute_live_ranges(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 	block->data = bd;
 
 	struct ir3_instruction *first_non_input = NULL;
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr (instr, &block->instr_list) {
 		if (instr->opc != OPC_META_INPUT) {
 			first_non_input = instr;
 			break;
@@ -711,25 +709,22 @@ ra_block_compute_live_ranges(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 	}
 
 
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr (instr, &block->instr_list) {
 		struct ir3_instruction *src;
 		struct ir3_register *reg;
 
-		if (instr->regs_count == 0)
-			continue;
-
 		/* There are a couple special cases to deal with here:
 		 *
-		 * fanout: used to split values from a higher class to a lower
+		 * split: used to split values from a higher class to a lower
 		 *     class, for example split the results of a texture fetch
 		 *     into individual scalar values;  We skip over these from
 		 *     a 'def' perspective, and for a 'use' we walk the chain
 		 *     up to the defining instruction.
 		 *
-		 * fanin: used to collect values from lower class and assemble
+		 * collect: used to collect values from lower class and assemble
 		 *     them together into a higher class, for example arguments
 		 *     to texture sample instructions;  We consider these to be
-		 *     defined at the earliest fanin source.
+		 *     defined at the earliest collect source.
 		 *
 		 * Most of this is handled in the get_definer() helper.
 		 *
@@ -836,7 +831,7 @@ ra_compute_livein_liveout(struct ir3_ra_ctx *ctx)
 	unsigned bitset_words = BITSET_WORDS(ctx->alloc_count);
 	bool progress = false;
 
-	list_for_each_entry (struct ir3_block, block, &ctx->ir->block_list, node) {
+	foreach_block (block, &ctx->ir->block_list) {
 		struct ir3_ra_block_data *bd = block->data;
 
 		/* update livein: */
@@ -897,7 +892,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	struct ir3 *ir = ctx->ir;
 
 	/* initialize array live ranges: */
-	list_for_each_entry (struct ir3_array, arr, &ir->array_list, node) {
+	foreach_array (arr, &ir->array_list) {
 		arr->start_ip = ~0;
 		arr->end_ip = 0;
 	}
@@ -906,7 +901,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	 * block's def/use bitmasks (used below to calculate per-block
 	 * livein/liveout):
 	 */
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		ra_block_compute_live_ranges(ctx, block);
 	}
 
@@ -915,8 +910,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 
 	if (ir3_shader_debug & IR3_DBG_OPTMSGS) {
 		debug_printf("AFTER LIVEIN/OUT:\n");
-		ir3_print(ir);
-		list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+		foreach_block (block, &ir->block_list) {
 			struct ir3_ra_block_data *bd = block->data;
 			debug_printf("block%u:\n", block_id(block));
 			print_bitset("  def", bd->def, ctx->alloc_count);
@@ -924,7 +918,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 			print_bitset("  l/i", bd->livein, ctx->alloc_count);
 			print_bitset("  l/o", bd->liveout, ctx->alloc_count);
 		}
-		list_for_each_entry (struct ir3_array, arr, &ir->array_list, node) {
+		foreach_array (arr, &ir->array_list) {
 			debug_printf("array%u:\n", arr->id);
 			debug_printf("  length:   %u\n", arr->length);
 			debug_printf("  start_ip: %u\n", arr->start_ip);
@@ -933,7 +927,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	}
 
 	/* extend start/end ranges based on livein/liveout info from cfg: */
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		struct ir3_ra_block_data *bd = block->data;
 
 		for (unsigned i = 0; i < ctx->alloc_count; i++) {
@@ -948,7 +942,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 			}
 		}
 
-		list_for_each_entry (struct ir3_array, arr, &ctx->ir->array_list, node) {
+		foreach_array (arr, &ctx->ir->array_list) {
 			for (unsigned i = 0; i < arr->length; i++) {
 				if (BITSET_TEST(bd->livein, i + arr->base)) {
 					arr->start_ip = MIN2(arr->start_ip, block->start_ip);
@@ -961,11 +955,9 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 	}
 
 	/* need to fix things up to keep outputs live: */
-	for (unsigned i = 0; i < ir->noutputs; i++) {
-		struct ir3_instruction *instr = ir->outputs[i];
-		if (!instr)
-			continue;
-		unsigned name = ra_name(ctx, &ctx->instrd[instr->ip]);
+	struct ir3_instruction *out;
+	foreach_output(out, ir) {
+		unsigned name = ra_name(ctx, &ctx->instrd[out->ip]);
 		ctx->use[name] = ctx->instr_cnt;
 	}
 
@@ -989,7 +981,11 @@ static void fixup_half_instr_dst(struct ir3_instruction *instr)
 	case 3:
 		switch (instr->opc) {
 		case OPC_MAD_F32:
-			instr->opc = OPC_MAD_F16;
+			/* Available for that dest is half and srcs are full.
+			 * eg. mad.f32 hr0, r0.x, r0.y, r0.z
+			 */
+			if (instr->regs[1]->flags & IR3_REG_HALF)
+				instr->opc = OPC_MAD_F16;
 			break;
 		case OPC_SEL_B32:
 			instr->opc = OPC_SEL_B16;
@@ -1078,11 +1074,8 @@ reg_assign(struct ir3_ra_ctx *ctx, struct ir3_register *reg,
 static void
 ra_block_alloc(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 {
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr (instr, &block->instr_list) {
 		struct ir3_register *reg;
-
-		if (instr->regs_count == 0)
-			continue;
 
 		if (writes_gpr(instr)) {
 			reg_assign(ctx, instr->regs[0], instr);
@@ -1101,8 +1094,12 @@ ra_block_alloc(struct ir3_ra_ctx *ctx, struct ir3_block *block)
 	}
 }
 
-static int
-ra_alloc(struct ir3_ra_ctx *ctx, struct ir3_instruction **precolor, unsigned nprecolor)
+/* handle pre-colored registers.  This includes "arrays" (which could be of
+ * length 1, used for phi webs lowered to registers in nir), as well as
+ * special shader input values that need to be pinned to certain registers.
+ */
+static void
+ra_precolor(struct ir3_ra_ctx *ctx, struct ir3_instruction **precolor, unsigned nprecolor)
 {
 	unsigned num_precolor = 0;
 	for (unsigned i = 0; i < nprecolor; i++) {
@@ -1143,7 +1140,7 @@ ra_alloc(struct ir3_ra_ctx *ctx, struct ir3_instruction **precolor, unsigned npr
 
 	/* pre-assign array elements:
 	 */
-	list_for_each_entry (struct ir3_array, arr, &ctx->ir->array_list, node) {
+	foreach_array (arr, &ctx->ir->array_list) {
 		unsigned base = 0;
 
 		if (arr->end_ip == 0)
@@ -1153,7 +1150,7 @@ ra_alloc(struct ir3_ra_ctx *ctx, struct ir3_instruction **precolor, unsigned npr
 		 * been assigned:
 		 */
 retry:
-		list_for_each_entry (struct ir3_array, arr2, &ctx->ir->array_list, node) {
+		foreach_array (arr2, &ctx->ir->array_list) {
 			if (arr2 == arr)
 				break;
 			if (arr2->end_ip == 0)
@@ -1207,11 +1204,15 @@ retry:
 			ra_set_node_reg(ctx->g, name, reg);
 		}
 	}
+}
 
+static int
+ra_alloc(struct ir3_ra_ctx *ctx)
+{
 	if (!ra_allocate(ctx->g))
 		return -1;
 
-	list_for_each_entry (struct ir3_block, block, &ctx->ir->block_list, node) {
+	foreach_block (block, &ctx->ir->block_list) {
 		ra_block_alloc(ctx, block);
 	}
 
@@ -1229,7 +1230,8 @@ int ir3_ra(struct ir3_shader_variant *v, struct ir3_instruction **precolor, unsi
 
 	ra_init(&ctx);
 	ra_add_interference(&ctx);
-	ret = ra_alloc(&ctx, precolor, nprecolor);
+	ra_precolor(&ctx, precolor, nprecolor);
+	ret = ra_alloc(&ctx);
 	ra_destroy(&ctx);
 
 	return ret;

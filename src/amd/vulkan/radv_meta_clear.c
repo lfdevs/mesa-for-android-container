@@ -235,7 +235,27 @@ create_color_renderpass(struct radv_device *device,
 						       .preserveAttachmentCount = 0,
 						       .pPreserveAttachments = NULL,
 					       },
-								.dependencyCount = 0,
+							.dependencyCount = 2,
+							.pDependencies = (VkSubpassDependency[]) {
+								{
+									.srcSubpass = VK_SUBPASS_EXTERNAL,
+									.dstSubpass = 0,
+									.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+									.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+									.srcAccessMask = 0,
+									.dstAccessMask = 0,
+									.dependencyFlags = 0
+								},
+								{
+									.srcSubpass = 0,
+									.dstSubpass = VK_SUBPASS_EXTERNAL,
+									.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+									.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+									.srcAccessMask = 0,
+									.dstAccessMask = 0,
+									.dependencyFlags = 0
+								}
+							},
 									 }, &device->meta_state.alloc, pass);
 	mtx_unlock(&device->meta_state.mtx);
 	return result;
@@ -586,7 +606,27 @@ create_depthstencil_renderpass(struct radv_device *device,
 						       .preserveAttachmentCount = 0,
 						       .pPreserveAttachments = NULL,
 					       },
-								.dependencyCount = 0,
+							.dependencyCount = 2,
+							.pDependencies = (VkSubpassDependency[]) {
+								{
+									.srcSubpass = VK_SUBPASS_EXTERNAL,
+									.dstSubpass = 0,
+									.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+									.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+									.srcAccessMask = 0,
+									.dstAccessMask = 0,
+									.dependencyFlags = 0
+								},
+								{
+									.srcSubpass = 0,
+									.dstSubpass = VK_SUBPASS_EXTERNAL,
+									.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+									.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+									.srcAccessMask = 0,
+									.dstAccessMask = 0,
+									.dependencyFlags = 0
+								}
+							}
 									 }, &device->meta_state.alloc, render_pass);
 	mtx_unlock(&device->meta_state.mtx);
 	return result;
@@ -1084,10 +1124,8 @@ radv_fast_clear_depth(struct radv_cmd_buffer *cmd_buffer,
 	VkClearDepthStencilValue clear_value = clear_att->clearValue.depthStencil;
 	VkImageAspectFlags aspects = clear_att->aspectMask;
 	uint32_t clear_word, flush_bits;
-	uint32_t htile_mask;
 
 	clear_word = radv_get_htile_fast_clear_value(iview->image, clear_value);
-	htile_mask = radv_get_htile_mask(iview->image, aspects);
 
 	if (pre_flush) {
 		cmd_buffer->state.flush_bits |= (RADV_CMD_FLAG_FLUSH_AND_INV_DB |
@@ -1095,17 +1133,24 @@ radv_fast_clear_depth(struct radv_cmd_buffer *cmd_buffer,
 		*pre_flush |= cmd_buffer->state.flush_bits;
 	}
 
-	if (htile_mask == UINT_MAX) {
-		/* Clear the whole HTILE buffer. */
-		flush_bits = radv_fill_buffer(cmd_buffer, iview->image->bo,
-					      iview->image->offset + iview->image->htile_offset,
-					      iview->image->planes[0].surface.htile_size, clear_word);
-	} else {
-		/* Only clear depth or stencil bytes in the HTILE buffer. */
-		flush_bits = clear_htile_mask(cmd_buffer, iview->image->bo,
-					      iview->image->offset + iview->image->htile_offset,
-					      iview->image->planes[0].surface.htile_size, clear_word,
-					      htile_mask);
+	struct VkImageSubresourceRange range = {
+		.aspectMask = aspects,
+		.baseMipLevel = 0,
+		.levelCount = VK_REMAINING_MIP_LEVELS,
+		.baseArrayLayer = 0,
+		.layerCount = VK_REMAINING_ARRAY_LAYERS,
+	};
+
+	flush_bits = radv_clear_htile(cmd_buffer, iview->image, &range, clear_word);
+
+	if (iview->image->planes[0].surface.has_stencil &&
+	    !(aspects == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
+		/* Synchronize after performing a depth-only or a stencil-only
+		 * fast clear because the driver uses an optimized path which
+		 * performs a read-modify-write operation, and the two separate
+		 * aspects might use the same HTILE memory.
+		 */
+		cmd_buffer->state.flush_bits |= flush_bits;
 	}
 
 	radv_update_ds_clear_metadata(cmd_buffer, iview, clear_value, aspects);
@@ -1164,6 +1209,7 @@ build_clear_htile_mask_shader()
 	load->src[1] = nir_src_for_ssa(offset);
 	nir_ssa_dest_init(&load->instr, &load->dest, 4, 32, NULL);
 	load->num_components = 4;
+	nir_intrinsic_set_align(load, 16, 0);
 	nir_builder_instr_insert(&b, &load->instr);
 
 	/* data = (data & ~htile_mask) | (htile_value & htile_mask) */
@@ -1179,6 +1225,7 @@ build_clear_htile_mask_shader()
 	store->src[2] = nir_src_for_ssa(offset);
 	nir_intrinsic_set_write_mask(store, 0xf);
 	nir_intrinsic_set_access(store, ACCESS_NON_READABLE);
+	nir_intrinsic_set_align(store, 16, 0);
 	store->num_components = 4;
 	nir_builder_instr_insert(&b, &store->instr);
 
@@ -1518,15 +1565,30 @@ radv_clear_dcc(struct radv_cmd_buffer *cmd_buffer,
 }
 
 uint32_t
-radv_clear_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image,
-		 const VkImageSubresourceRange *range, uint32_t value)
+radv_clear_htile(struct radv_cmd_buffer *cmd_buffer,
+		 const struct radv_image *image,
+		 const VkImageSubresourceRange *range,
+		 uint32_t value)
 {
 	unsigned layer_count = radv_get_layerCount(image, range);
 	uint64_t size = image->planes[0].surface.htile_slice_size * layer_count;
 	uint64_t offset = image->offset + image->htile_offset +
 	                  image->planes[0].surface.htile_slice_size * range->baseArrayLayer;
+	uint32_t htile_mask, flush_bits;
 
-	return radv_fill_buffer(cmd_buffer, image->bo, offset, size, value);
+	htile_mask = radv_get_htile_mask(image, range->aspectMask);
+
+	if (htile_mask == UINT_MAX) {
+		/* Clear the whole HTILE buffer. */
+		flush_bits = radv_fill_buffer(cmd_buffer, image->bo, offset,
+					      size, value);
+	} else {
+		/* Only clear depth or stencil bytes in the HTILE buffer. */
+		flush_bits = clear_htile_mask(cmd_buffer, image->bo, offset,
+					      size, value, htile_mask);
+	}
+
+	return flush_bits;
 }
 
 enum {
@@ -2062,7 +2124,28 @@ radv_clear_image_layer(struct radv_cmd_buffer *cmd_buffer,
 					      .pAttachments = &att_desc,
 					      .subpassCount = 1,
 					      .pSubpasses = &subpass_desc,
-					      },
+					      .dependencyCount = 2,
+					      .pDependencies = (VkSubpassDependency[]) {
+							{
+								.srcSubpass = VK_SUBPASS_EXTERNAL,
+								.dstSubpass = 0,
+								.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+								.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+								.srcAccessMask = 0,
+								.dstAccessMask = 0,
+								.dependencyFlags = 0
+							},
+							{
+								.srcSubpass = 0,
+								.dstSubpass = VK_SUBPASS_EXTERNAL,
+								.srcStageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+								.dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+								.srcAccessMask = 0,
+								.dstAccessMask = 0,
+								.dependencyFlags = 0
+							}
+						}
+					},
 			      &cmd_buffer->pool->alloc,
 			      &pass);
 

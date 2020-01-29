@@ -25,7 +25,7 @@
  */
 
 #include "pipe/p_screen.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "fd4_screen.h"
 #include "fd4_context.h"

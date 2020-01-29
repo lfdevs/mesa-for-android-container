@@ -27,13 +27,11 @@
 
 int main(int argc, char **argv)
 {
-   struct anv_instance instance = {
-      .physicalDevice = {
-         .use_softpin = true,
-      },
+   struct anv_physical_device physical_device = {
+      .use_softpin = true,
    };
    struct anv_device device = {
-      .instance = &instance,
+      .physical = &physical_device,
    };
    struct anv_block_pool pool;
 
@@ -43,7 +41,9 @@ int main(int argc, char **argv)
    const uint32_t block_size = 16 * 1024;
    const uint32_t initial_size = block_size / 2;
 
-   anv_block_pool_init(&pool, &device, 4096, initial_size, EXEC_OBJECT_PINNED);
+   pthread_mutex_init(&device.mutex, NULL);
+   anv_bo_cache_init(&device.bo_cache);
+   anv_block_pool_init(&pool, &device, 4096, initial_size);
    assert(pool.size == initial_size);
 
    uint32_t padding;

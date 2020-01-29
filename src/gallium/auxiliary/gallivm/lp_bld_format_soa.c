@@ -28,7 +28,7 @@
 
 #include "pipe/p_defines.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_string.h"
 #include "util/u_math.h"
@@ -367,7 +367,7 @@ lp_build_rgba8_to_fi32_soa(struct gallivm_state *gallivm,
 
    /* Decode the input vector components */
    for (chan = 0; chan < 4; ++chan) {
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       unsigned start = chan*8;
 #else
       unsigned start = (3-chan)*8;
@@ -654,7 +654,7 @@ lp_build_fetch_rgba_soa(struct gallivm_state *gallivm,
             unsigned blockbits = type.width;
             unsigned vec_nr;
 
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
             vec_nr = (format_desc->block.bits - (chan_desc.shift + chan_desc.size)) / type.width;
 #else
             vec_nr = chan_desc.shift / type.width;

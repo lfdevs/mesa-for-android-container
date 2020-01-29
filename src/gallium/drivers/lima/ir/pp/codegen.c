@@ -53,7 +53,7 @@ static void ppir_codegen_encode_varying(ppir_node *node, void *code)
    int index = ppir_target_get_dest_reg_index(dest);
    int num_components = load->num_components;
 
-   if (num_components) {
+   if (node->op != ppir_op_load_coords_reg) {
       assert(node->op == ppir_op_load_varying ||
              node->op == ppir_op_load_coords ||
              node->op == ppir_op_load_fragcoord ||
@@ -90,18 +90,26 @@ static void ppir_codegen_encode_varying(ppir_node *node, void *code)
             f->imm.source_type = 3;
             f->imm.perspective = 1;
             break;
+         case ppir_op_load_coords:
+            /* num_components == 3 implies cubemap as we don't support 3D textures */
+            f->imm.source_type = num_components == 3 ? 2 : 0;
+            break;
          default:
             break;
       }
    }
-   else {
-      assert(node->op == ppir_op_load_coords);
-
+   else {  /* node->op == ppir_op_load_coords_reg */
       f->reg.dest = index >> 2;
       f->reg.mask = dest->write_mask << (index & 0x3);
 
       if (load->num_src) {
-         f->reg.source_type = 1;
+         /* num_components == 3 implies cubemap as we don't support 3D textures */
+         if (num_components == 3) {
+            f->reg.source_type = 2;
+            f->reg.perspective = 1;
+         } else {
+            f->reg.source_type = 1;
+         }
          ppir_src *src = &load->src;
          index = ppir_target_get_src_reg_index(src);
          f->reg.source = index >> 2;
@@ -118,8 +126,25 @@ static void ppir_codegen_encode_texld(ppir_node *node, void *code)
    ppir_load_texture_node *ldtex = ppir_node_to_load_texture(node);
 
    f->index = ldtex->sampler;
-   f->lod_bias_en = 0;
-   f->type = ppir_codegen_sampler_type_2d;
+
+   f->lod_bias_en = ldtex->lod_bias_en;
+   f->explicit_lod = ldtex->explicit_lod;
+   if (ldtex->lod_bias_en)
+      ppir_target_get_src_reg_index(&ldtex->src[1]);
+
+   switch (ldtex->sampler_dim) {
+   case GLSL_SAMPLER_DIM_2D:
+   case GLSL_SAMPLER_DIM_RECT:
+   case GLSL_SAMPLER_DIM_EXTERNAL:
+      f->type = ppir_codegen_sampler_type_2d;
+      break;
+   case GLSL_SAMPLER_DIM_CUBE:
+      f->type = ppir_codegen_sampler_type_cube;
+      break;
+   default:
+      break;
+   }
+
    f->offset_en = 0;
    f->unknown_2 = 0x39001;
 }

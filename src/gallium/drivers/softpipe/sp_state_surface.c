@@ -34,7 +34,7 @@
 
 #include "draw/draw_context.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 
 

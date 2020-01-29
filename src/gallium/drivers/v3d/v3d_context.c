@@ -123,7 +123,7 @@ v3d_invalidate_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
  * output targets.
  */
 void
-v3d_tf_update_counters(struct v3d_context *v3d)
+v3d_update_primitive_counters(struct v3d_context *v3d)
 {
         struct v3d_job *job = v3d_get_job_for_fbo(v3d);
         if (job->draw_calls_queued == 0)

@@ -249,9 +249,23 @@ static bool si_query_sw_begin(struct si_context *sctx,
 	case SI_QUERY_NUM_SHADERS_CREATED:
 		query->begin_result = p_atomic_read(&sctx->screen->num_shaders_created);
 		break;
-	case SI_QUERY_NUM_SHADER_CACHE_HITS:
-		query->begin_result =
-			p_atomic_read(&sctx->screen->num_shader_cache_hits);
+	case SI_QUERY_LIVE_SHADER_CACHE_HITS:
+		query->begin_result = sctx->screen->live_shader_cache.hits;
+		break;
+	case SI_QUERY_LIVE_SHADER_CACHE_MISSES:
+		query->begin_result = sctx->screen->live_shader_cache.misses;
+		break;
+	case SI_QUERY_MEMORY_SHADER_CACHE_HITS:
+		query->begin_result = sctx->screen->num_memory_shader_cache_hits;
+		break;
+	case SI_QUERY_MEMORY_SHADER_CACHE_MISSES:
+		query->begin_result = sctx->screen->num_memory_shader_cache_misses;
+		break;
+	case SI_QUERY_DISK_SHADER_CACHE_HITS:
+		query->begin_result = sctx->screen->num_disk_shader_cache_hits;
+		break;
+	case SI_QUERY_DISK_SHADER_CACHE_MISSES:
+		query->begin_result = sctx->screen->num_disk_shader_cache_misses;
 		break;
 	case SI_QUERY_PD_NUM_PRIMS_ACCEPTED:
 		query->begin_result = sctx->compute_num_verts_accepted;
@@ -423,9 +437,23 @@ static bool si_query_sw_end(struct si_context *sctx,
 	case SI_QUERY_BACK_BUFFER_PS_DRAW_RATIO:
 		query->end_result = sctx->last_tex_ps_draw_ratio;
 		break;
-	case SI_QUERY_NUM_SHADER_CACHE_HITS:
-		query->end_result =
-			p_atomic_read(&sctx->screen->num_shader_cache_hits);
+	case SI_QUERY_LIVE_SHADER_CACHE_HITS:
+		query->end_result = sctx->screen->live_shader_cache.hits;
+		break;
+	case SI_QUERY_LIVE_SHADER_CACHE_MISSES:
+		query->end_result = sctx->screen->live_shader_cache.misses;
+		break;
+	case SI_QUERY_MEMORY_SHADER_CACHE_HITS:
+		query->end_result = sctx->screen->num_memory_shader_cache_hits;
+		break;
+	case SI_QUERY_MEMORY_SHADER_CACHE_MISSES:
+		query->end_result = sctx->screen->num_memory_shader_cache_misses;
+		break;
+	case SI_QUERY_DISK_SHADER_CACHE_HITS:
+		query->end_result = sctx->screen->num_disk_shader_cache_hits;
+		break;
+	case SI_QUERY_DISK_SHADER_CACHE_MISSES:
+		query->end_result = sctx->screen->num_disk_shader_cache_misses;
 		break;
 	case SI_QUERY_PD_NUM_PRIMS_ACCEPTED:
 		query->end_result = sctx->compute_num_verts_accepted;
@@ -1720,7 +1748,6 @@ void si_resume_queries(struct si_context *sctx)
 static struct pipe_driver_query_info si_driver_query_list[] = {
 	X("num-compilations",		NUM_COMPILATIONS,	UINT64, CUMULATIVE),
 	X("num-shaders-created",	NUM_SHADERS_CREATED,	UINT64, CUMULATIVE),
-	X("num-shader-cache-hits",	NUM_SHADER_CACHE_HITS,	UINT64, CUMULATIVE),
 	X("draw-calls",			DRAW_CALLS,		UINT64, AVERAGE),
 	X("decompress-calls",		DECOMPRESS_CALLS,	UINT64, AVERAGE),
 	X("MRT-draw-calls",		MRT_DRAW_CALLS,		UINT64, AVERAGE),
@@ -1760,6 +1787,12 @@ static struct pipe_driver_query_info si_driver_query_list[] = {
 	X("VRAM-vis-usage",		VRAM_VIS_USAGE,		BYTES, AVERAGE),
 	X("GTT-usage",			GTT_USAGE,		BYTES, AVERAGE),
 	X("back-buffer-ps-draw-ratio",	BACK_BUFFER_PS_DRAW_RATIO, UINT64, AVERAGE),
+	X("live-shader-cache-hits",	LIVE_SHADER_CACHE_HITS, UINT, CUMULATIVE),
+	X("live-shader-cache-misses",	LIVE_SHADER_CACHE_MISSES, UINT, CUMULATIVE),
+	X("memory-shader-cache-hits",	MEMORY_SHADER_CACHE_HITS, UINT, CUMULATIVE),
+	X("memory-shader-cache-misses",	MEMORY_SHADER_CACHE_MISSES, UINT, CUMULATIVE),
+	X("disk-shader-cache-hits",	DISK_SHADER_CACHE_HITS, UINT, CUMULATIVE),
+	X("disk-shader-cache-misses",	DISK_SHADER_CACHE_MISSES, UINT, CUMULATIVE),
 
 	/* GPIN queries are for the benefit of old versions of GPUPerfStudio,
 	 * which use it as a fallback path to detect the GPU type.

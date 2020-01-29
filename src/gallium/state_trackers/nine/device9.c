@@ -47,7 +47,7 @@
 #include "util/u_math.h"
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_upload_mgr.h"
 #include "hud/hud_context.h"

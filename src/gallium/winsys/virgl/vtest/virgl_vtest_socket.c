@@ -29,7 +29,7 @@
 #include <unistd.h>
 
 #include <os/os_process.h>
-#include <util/u_format.h>
+#include <util/format/u_format.h>
 
 #include "virgl_vtest_winsys.h"
 #include "virgl_vtest_public.h"

@@ -24,7 +24,7 @@
  */
 
 #include "pipe/p_context.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 
 #include "main/context.h"
@@ -499,6 +499,7 @@ get_sampler_view_format(struct st_context *st,
    case PIPE_FORMAT_IYUV:
       format = PIPE_FORMAT_R8_UNORM;
       break;
+   case PIPE_FORMAT_P010:
    case PIPE_FORMAT_P016:
       format = PIPE_FORMAT_R16_UNORM;
       break;

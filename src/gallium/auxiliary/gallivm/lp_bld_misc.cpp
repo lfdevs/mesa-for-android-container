@@ -469,7 +469,7 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
     */
    builder.setCodeModel(CodeModel::Large);
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    /*
     * Versions of LLVM prior to 4.0 lacked a table entry for "POWER8NVL",
     * resulting in (big-endian) "generic" being returned on

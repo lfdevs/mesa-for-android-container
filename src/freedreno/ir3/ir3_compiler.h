@@ -92,6 +92,7 @@ enum ir3_shader_debug {
 	IR3_DBG_OPTMSGS    = 0x080,
 	IR3_DBG_FORCES2EN  = 0x100,
 	IR3_DBG_NOUBOOPT   = 0x200,
+	IR3_DBG_SCHEDMSGS  = 0x400,
 };
 
 extern enum ir3_shader_debug ir3_shader_debug;
@@ -112,6 +113,15 @@ shader_debug_enabled(gl_shader_stage type)
 	default:
 		debug_assert(0);
 		return false;
+	}
+}
+
+static inline void
+ir3_debug_print(struct ir3 *ir, const char *when)
+{
+	if (ir3_shader_debug & IR3_DBG_OPTMSGS) {
+		printf("%s:\n", when);
+		ir3_print(ir);
 	}
 }
 

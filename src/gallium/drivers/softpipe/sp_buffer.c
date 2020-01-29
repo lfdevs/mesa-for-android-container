@@ -25,7 +25,7 @@
 #include "sp_buffer.h"
 #include "sp_texture.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 static bool
 get_dimensions(const struct pipe_shader_buffer *bview,

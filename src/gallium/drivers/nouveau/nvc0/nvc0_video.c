@@ -23,7 +23,7 @@
 #include "nvc0/nvc0_video.h"
 
 #include "util/u_sampler.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 static void
 nvc0_decoder_begin_frame(struct pipe_video_codec *decoder,

@@ -25,7 +25,7 @@
 #include "r300_reg.h"
 #include "r300_fs.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 /*
   HiZ rules - taken from various docs 

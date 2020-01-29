@@ -62,6 +62,7 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
 static void
 blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                            const struct blorp_address *addrs,
+                                           uint32_t *sizes,
                                            unsigned num_vbs);
 
 #if GEN_GEN >= 8
@@ -344,15 +345,15 @@ blorp_emit_vertex_buffers(struct blorp_batch *batch,
    memset(vb, 0, sizeof(vb));
 
    struct blorp_address addrs[2] = {};
-   uint32_t size;
-   blorp_emit_vertex_data(batch, params, &addrs[0], &size);
-   blorp_fill_vertex_buffer_state(batch, vb, 0, addrs[0], size,
+   uint32_t sizes[2];
+   blorp_emit_vertex_data(batch, params, &addrs[0], &sizes[0]);
+   blorp_fill_vertex_buffer_state(batch, vb, 0, addrs[0], sizes[0],
                                   3 * sizeof(float));
 
-   blorp_emit_input_varying_data(batch, params, &addrs[1], &size);
-   blorp_fill_vertex_buffer_state(batch, vb, 1, addrs[1], size, 0);
+   blorp_emit_input_varying_data(batch, params, &addrs[1], &sizes[1]);
+   blorp_fill_vertex_buffer_state(batch, vb, 1, addrs[1], sizes[1], 0);
 
-   blorp_vf_invalidate_for_vb_48b_transitions(batch, addrs, num_vbs);
+   blorp_vf_invalidate_for_vb_48b_transitions(batch, addrs, sizes, num_vbs);
 
    const unsigned num_dwords = 1 + num_vbs * GENX(VERTEX_BUFFER_STATE_length);
    uint32_t *dw = blorp_emitn(batch, GENX(3DSTATE_VERTEX_BUFFERS), num_dwords);
@@ -770,13 +771,6 @@ blorp_emit_ps_config(struct blorp_batch *batch,
       } else {
          ps.BindingTableEntryCount = 1;
       }
-
-     /* Gen 11 workarounds table #2056 WABTPPrefetchDisable suggests to
-      * disable prefetching of binding tables on A0 and B0 steppings.
-      * TODO: Revisit this WA on C0 stepping.
-      */
-      if (GEN_GEN == 11)
-         ps.BindingTableEntryCount = 0;
 
       /* SAMPLER_STATE prefetching is broken on Gen11 - WA_1606682166 */
       if (GEN_GEN == 11)
@@ -1252,6 +1246,12 @@ blorp_emit_pipeline(struct blorp_batch *batch,
    (void)depth_stencil_state_offset;
 #endif
 
+#if GEN_GEN >= 12
+   blorp_emit(batch, GENX(3DSTATE_CONSTANT_ALL), pc) {
+      /* Update empty push constants for all stages (bitmask = 11111b) */
+      pc.ShaderUpdateEnable = 0x1f;
+   }
+#else
    blorp_emit(batch, GENX(3DSTATE_CONSTANT_VS), vs);
 #if GEN_GEN >= 7
    blorp_emit(batch, GENX(3DSTATE_CONSTANT_HS), hs);
@@ -1259,6 +1259,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
 #endif
    blorp_emit(batch, GENX(3DSTATE_CONSTANT_GS), gs);
    blorp_emit(batch, GENX(3DSTATE_CONSTANT_PS), ps);
+#endif
 
    if (params->src.enabled)
       blorp_emit_sampler_state(batch);
@@ -1355,8 +1356,12 @@ blorp_emit_surface_state(struct blorp_batch *batch,
       surf.dim = ISL_SURF_DIM_2D;
    }
 
-   /* Blorp doesn't support HiZ in any of the blit or slow-clear paths */
-   assert(!isl_aux_usage_has_hiz(surface->aux_usage));
+   if (isl_aux_usage_has_hiz(surface->aux_usage)) {
+      /* BLORP doesn't render with depth so we can't use HiZ */
+      assert(!is_render_target);
+      /* We can't reinterpret HiZ */
+      assert(surface->surf.format == surface->view.format);
+   }
    enum isl_aux_usage aux_usage = surface->aux_usage;
 
    isl_channel_mask_t write_disable_mask = 0;
@@ -1624,6 +1629,20 @@ blorp_emit_depth_stencil_config(struct blorp_batch *batch,
    }
 
    isl_emit_depth_stencil_hiz_s(isl_dev, dw, &info);
+
+#if GEN_GEN >= 12
+   /* GEN:BUG:1408224581
+    *
+    * Workaround: Gen12LP Astep only An additional pipe control with
+    * post-sync = store dword operation would be required.( w/a is to
+    * have an additional pipe control after the stencil state whenever
+    * the surface state bits of this state is changing).
+    */
+   blorp_emit(batch, GENX(PIPE_CONTROL), pc) {
+      pc.PostSyncOperation = WriteImmediateData;
+      pc.Address = blorp_get_workaround_page(batch);
+   }
+#endif
 }
 
 #if GEN_GEN >= 8

@@ -1,3 +1,10 @@
+mesa (20.0.0~git20200129-1) experimental; urgency=medium
+
+  * New upstream snapshot.
+  * mesa-vulkan-drivers.install: Include overlay control script.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 29 Jan 2020 09:29:20 +0200
+
 mesa (19.3.3-1) unstable; urgency=medium
 
   * New upstream release.

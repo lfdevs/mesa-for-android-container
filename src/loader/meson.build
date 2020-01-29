@@ -35,13 +35,20 @@ else
   libloader_dri3_helper = []
 endif
 
+loader_c_args = [
+  c_vis_args, '-DUSE_DRICONF',
+  '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
+]
+
+if with_gallium_iris and get_option('prefer-iris')
+  loader_c_args += ['-DPREFER_IRIS']
+endif
+
 libloader = static_library(
   'loader',
-  ['loader.c', 'pci_id_driver_map.c', xmlpool_options_h],
-  c_args : [c_vis_args, '-DUSE_DRICONF',
-            '-DDEFAULT_DRIVER_DIR="@0@"'.format(dri_search_path),
-],
+  ['loader.c', 'pci_id_driver_map.c'],
+  c_args : loader_c_args,
   include_directories : [inc_include, inc_src, inc_util],
-  dependencies : [dep_libdrm, dep_thread],
+  dependencies : [dep_libdrm, dep_thread, idep_xmlconfig_headers],
   build_by_default : false,
 )

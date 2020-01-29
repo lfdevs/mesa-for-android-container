@@ -54,6 +54,10 @@
 #define FW_52_8_3 ((52 << 24) | (8 << 16) | (3 << 8))
 #define FW_53 (53 << 24)
 
+/* version specific function for getting parameters */
+static void (*get_pic_param)(struct rvce_encoder *enc,
+                             struct pipe_h264_enc_picture_desc *pic) = NULL;
+
 /**
  * flush commands to the hardware
  */

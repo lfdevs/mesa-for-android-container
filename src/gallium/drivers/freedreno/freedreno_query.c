@@ -192,6 +192,41 @@ fd_set_active_query_state(struct pipe_context *pipe, bool enable)
 {
 }
 
+static enum pipe_driver_query_type
+query_type(enum fd_perfcntr_type type)
+{
+#define ENUM(t) case FD_PERFCNTR_ ## t: return PIPE_DRIVER_QUERY_ ## t
+	switch (type) {
+	ENUM(TYPE_UINT64);
+	ENUM(TYPE_UINT);
+	ENUM(TYPE_FLOAT);
+	ENUM(TYPE_PERCENTAGE);
+	ENUM(TYPE_BYTES);
+	ENUM(TYPE_MICROSECONDS);
+	ENUM(TYPE_HZ);
+	ENUM(TYPE_DBM);
+	ENUM(TYPE_TEMPERATURE);
+	ENUM(TYPE_VOLTS);
+	ENUM(TYPE_AMPS);
+	ENUM(TYPE_WATTS);
+	default:
+		unreachable("bad type");
+		return 0;
+	}
+}
+
+static enum pipe_driver_query_result_type
+query_result_type(enum fd_perfcntr_result_type type)
+{
+	switch (type) {
+	ENUM(RESULT_TYPE_AVERAGE);
+	ENUM(RESULT_TYPE_CUMULATIVE);
+	default:
+		unreachable("bad type");
+		return 0;
+	}
+}
+
 static void
 setup_perfcntr_query_info(struct fd_screen *screen)
 {
@@ -215,8 +250,8 @@ setup_perfcntr_query_info(struct fd_screen *screen)
 
 			info->name = c->name;
 			info->query_type = FD_QUERY_FIRST_PERFCNTR + idx;
-			info->type = c->query_type;
-			info->result_type = c->result_type;
+			info->type = query_type(c->query_type);
+			info->result_type = query_result_type(c->result_type);
 			info->group_id = i;
 			info->flags = PIPE_DRIVER_QUERY_FLAG_BATCH;
 

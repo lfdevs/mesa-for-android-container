@@ -34,8 +34,8 @@ import re
 import sys
 
 AMD_REGISTERS = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "../../../amd/registers"))
-GALLIUM_UTIL = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "../../auxiliary/util"))
-sys.path.extend([AMD_REGISTERS, GALLIUM_UTIL])
+UTIL_FORMAT = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), "../../../util/format"))
+sys.path.extend([AMD_REGISTERS, UTIL_FORMAT])
 
 from regdb import Object, RegisterDatabase
 from u_format_parse import *

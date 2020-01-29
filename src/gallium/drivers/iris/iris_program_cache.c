@@ -89,8 +89,7 @@ iris_find_cached_shader(struct iris_context *ice,
                         uint32_t key_size,
                         const void *key)
 {
-   struct keybox *keybox =
-      make_keybox(ice->shaders.cache, cache_id, key, key_size);
+   struct keybox *keybox = make_keybox(NULL, cache_id, key, key_size);
    struct hash_entry *entry =
       _mesa_hash_table_search(ice->shaders.cache, keybox);
 
@@ -191,7 +190,7 @@ iris_upload_shader(struct iris_context *ice,
    /* Store the 3DSTATE shader packets and other derived state. */
    ice->vtbl.store_derived_program_state(ice, cache_id, shader);
 
-   struct keybox *keybox = make_keybox(cache, cache_id, key, key_size);
+   struct keybox *keybox = make_keybox(shader, cache_id, key, key_size);
    _mesa_hash_table_insert(ice->shaders.cache, keybox, shader);
 
    return shader;

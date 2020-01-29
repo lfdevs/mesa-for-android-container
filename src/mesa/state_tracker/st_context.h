@@ -50,7 +50,7 @@ struct draw_context;
 struct draw_stage;
 struct gen_mipmap_state;
 struct st_context;
-struct st_common_program;
+struct st_program;
 struct st_perf_monitor_group;
 struct u_upload_mgr;
 
@@ -137,6 +137,7 @@ struct st_context
    boolean has_etc1;
    boolean has_etc2;
    boolean has_astc_2d_ldr;
+   boolean has_astc_5x5_ldr;
    boolean prefer_blit_based_texture_transfer;
    boolean force_persample_in_shader;
    boolean has_shareable_shaders;
@@ -188,8 +189,11 @@ struct st_context
       struct pipe_blend_state               blend;
       struct pipe_depth_stencil_alpha_state depth_stencil;
       struct pipe_rasterizer_state          rasterizer;
+      struct pipe_sampler_state vert_samplers[PIPE_MAX_SAMPLERS];
       struct pipe_sampler_state frag_samplers[PIPE_MAX_SAMPLERS];
+      GLuint num_vert_samplers;
       GLuint num_frag_samplers;
+      struct pipe_sampler_view *vert_sampler_views[PIPE_MAX_SAMPLERS];
       struct pipe_sampler_view *frag_sampler_views[PIPE_MAX_SAMPLERS];
       GLuint num_sampler_views[PIPE_SHADER_TYPES];
       struct pipe_clip_state clip;
@@ -244,14 +248,19 @@ struct st_context
     */
    unsigned active_queries;
 
-   struct st_vertex_program *vp;    /**< Currently bound vertex program */
-   struct st_common_program *fp;  /**< Currently bound fragment program */
-   struct st_common_program *gp;  /**< Currently bound geometry program */
-   struct st_common_program *tcp; /**< Currently bound tess control program */
-   struct st_common_program *tep; /**< Currently bound tess eval program */
-   struct st_common_program *cp;   /**< Currently bound compute program */
+   union {
+      struct {
+         struct st_program *vp;    /**< Currently bound vertex program */
+         struct st_program *tcp; /**< Currently bound tess control program */
+         struct st_program *tep; /**< Currently bound tess eval program */
+         struct st_program *gp;  /**< Currently bound geometry program */
+         struct st_program *fp;  /**< Currently bound fragment program */
+         struct st_program *cp;   /**< Currently bound compute program */
+      };
+      struct gl_program *current_program[MESA_SHADER_STAGES];
+   };
 
-   struct st_vp_variant *vp_variant;
+   struct st_common_variant *vp_variant;
 
    struct {
       struct pipe_resource *pixelmap_texture;
@@ -327,6 +336,9 @@ struct st_context
 
    /* The number of vertex buffers from the last call of validate_arrays. */
    unsigned last_num_vbuffers;
+
+   unsigned last_used_atomic_bindings[PIPE_SHADER_TYPES];
+   unsigned last_num_ssbos[PIPE_SHADER_TYPES];
 
    int32_t draw_stamp;
    int32_t read_stamp;

@@ -260,6 +260,13 @@ const ppir_op_info ppir_op_infos[] = {
          PPIR_INSTR_SLOT_VARYING, PPIR_INSTR_SLOT_END
       },
    },
+   [ppir_op_load_coords_reg] = {
+      .name = "ld_coords_reg",
+      .type = ppir_node_type_load,
+      .slots = (int []) {
+         PPIR_INSTR_SLOT_VARYING, PPIR_INSTR_SLOT_END
+      },
+   },
    [ppir_op_load_fragcoord] = {
       .name = "ld_fragcoord",
       .type = ppir_node_type_load,
@@ -337,6 +344,12 @@ const ppir_op_info ppir_op_infos[] = {
    },
    [ppir_op_undef] = {
       .name = "undef",
+      .type = ppir_node_type_alu,
+      .slots = (int []) {
+      },
+   },
+   [ppir_op_dummy] = {
+      .name = "dummy",
       .type = ppir_node_type_alu,
       .slots = (int []) {
       },
@@ -449,7 +462,8 @@ void ppir_node_replace_child(ppir_node *parent, ppir_node *old_child, ppir_node 
    case ppir_node_type_load_texture:
    {
       ppir_load_texture_node *load_texture = ppir_node_to_load_texture(parent);
-      _ppir_node_replace_child(&load_texture->src_coords, old_child, new_child);
+      for (int i = 0; i < load_texture->num_src; i++)
+         _ppir_node_replace_child(ppir_node_get_src(parent, i), old_child, new_child);
       break;
    }
    case ppir_node_type_store:
@@ -615,8 +629,6 @@ static ppir_node *ppir_node_clone_const(ppir_block *block, ppir_node *node)
    }
    new_cnode->dest.type = ppir_target_ssa;
    new_cnode->dest.ssa.num_components = cnode->dest.ssa.num_components;
-   new_cnode->dest.ssa.live_in = INT_MAX;
-   new_cnode->dest.ssa.live_out = 0;
    new_cnode->dest.write_mask = cnode->dest.write_mask;
 
    return &new_cnode->node;
@@ -661,6 +673,27 @@ ppir_node_clone_load(ppir_block *block, ppir_node *node)
    return &new_lnode->node;
 }
 
+void
+ppir_delete_if_orphan(ppir_block *block, ppir_node *node)
+{
+   ppir_dest *dest = ppir_node_get_dest(node);
+   if (!dest)
+      return;
+
+   ppir_node_foreach_succ_safe(node, dep) {
+      ppir_node *succ = dep->succ;
+      for (int i = 0; i < ppir_node_get_src_num(succ); i++) {
+         ppir_src *src = ppir_node_get_src(succ, i);
+         if (!src)
+            continue;
+         if (ppir_node_target_equal(src, dest))
+            return;
+      }
+   }
+
+   ppir_node_delete(node);
+}
+
 ppir_node *ppir_node_clone(ppir_block *block, ppir_node *node)
 {
    switch (node->op) {
@@ -670,6 +703,7 @@ ppir_node *ppir_node_clone(ppir_block *block, ppir_node *node)
    case ppir_op_load_varying:
    case ppir_op_load_temp:
    case ppir_op_load_coords:
+   case ppir_op_load_coords_reg:
       return ppir_node_clone_load(block, node);
    default:
       return NULL;
@@ -698,6 +732,27 @@ ppir_node *ppir_node_insert_mov(ppir_node *node)
    return move;
 }
 
+ppir_node *ppir_node_insert_mov_all_blocks(ppir_node *old)
+{
+   ppir_node *move = ppir_node_insert_mov(old);
+   ppir_compiler *comp = old->block->comp;
+
+   list_for_each_entry(ppir_block, block, &comp->block_list, list) {
+      if (old->block == block)
+         continue;
+      list_for_each_entry_safe(ppir_node, node, &block->node_list, list) {
+         for (int i = 0; i < ppir_node_get_src_num(node); i++){
+            ppir_src *src = ppir_node_get_src(node, i);
+            if (!src)
+               continue;
+            if (src->node == old)
+               ppir_node_target_assign(src, move);
+         }
+      }
+   }
+
+   return move;
+}
 bool ppir_node_has_single_src_succ(ppir_node *node)
 {
    if (list_is_singular(&node->succ_list) &&

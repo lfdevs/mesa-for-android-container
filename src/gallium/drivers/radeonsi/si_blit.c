@@ -25,7 +25,7 @@
 
 #include "si_pipe.h"
 #include "si_compute.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_log.h"
 #include "util/u_surface.h"
 
@@ -99,6 +99,7 @@ void si_blitter_end(struct si_context *sctx)
 	 * non-global VS user SGPRs. */
 	sctx->shader_pointers_dirty |= SI_DESCS_SHADER_MASK(VERTEX);
 	sctx->vertex_buffer_pointer_dirty = sctx->vb_descriptors_buffer != NULL;
+	sctx->vertex_buffer_user_sgprs_dirty = sctx->num_vertex_elements > 0;
 	si_mark_atom_dirty(sctx, &sctx->atoms.s.shader_pointers);
 }
 
@@ -515,9 +516,9 @@ static void si_blit_decompress_color(struct si_context *sctx,
 				   tex->surface.u.gfx9.dcc.pipe_aligned);
 
 expand_fmask:
-	if (need_fmask_expand && tex->surface.fmask_offset && tex->fmask_is_not_identity) {
+	if (need_fmask_expand && tex->surface.fmask_offset && !tex->fmask_is_identity) {
 		si_compute_expand_fmask(&sctx->b, &tex->buffer.b.b);
-		tex->fmask_is_not_identity = false;
+		tex->fmask_is_identity = true;
 	}
 }
 
@@ -1163,10 +1164,13 @@ resolve_to_temp:
 	templ.array_size = 1;
 	templ.usage = PIPE_USAGE_DEFAULT;
 	templ.flags = SI_RESOURCE_FLAG_FORCE_MSAA_TILING |
+		      SI_RESOURCE_FLAG_FORCE_MICRO_TILE_MODE |
+		      SI_RESOURCE_FLAG_MICRO_TILE_MODE_SET(src->surface.micro_tile_mode) |
 		      SI_RESOURCE_FLAG_DISABLE_DCC;
 
 	/* The src and dst microtile modes must be the same. */
-	if (src->surface.micro_tile_mode == RADEON_MICRO_MODE_DISPLAY)
+	if (sctx->chip_class <= GFX8 &&
+	    src->surface.micro_tile_mode == RADEON_MICRO_MODE_DISPLAY)
 		templ.bind = PIPE_BIND_SCANOUT;
 	else
 		templ.bind = 0;
@@ -1213,7 +1217,6 @@ static void si_blit(struct pipe_context *ctx,
 	 * on failure (recursion).
 	 */
 	if (dst->surface.is_linear &&
-	    sctx->dma_copy &&
 	    util_can_blit_via_copy_region(info, false)) {
 		sctx->dma_copy(ctx, info->dst.resource, info->dst.level,
 				 info->dst.box.x, info->dst.box.y,
@@ -1238,7 +1241,7 @@ static void si_blit(struct pipe_context *ctx,
 				  info->src.box.z,
 				  info->src.box.z + info->src.box.depth - 1);
 
-	if (sctx->screen->debug_flags & DBG(FORCE_DMA) &&
+	if (sctx->screen->debug_flags & DBG(FORCE_SDMA) &&
 	    util_try_blit_via_copy_region(ctx, info))
 		return;
 
@@ -1303,8 +1306,10 @@ static void si_flush_resource(struct pipe_context *ctx,
 					 0, util_max_layer(res, 0),
 					 tex->dcc_separate_buffer != NULL, false);
 
-		if (tex->surface.display_dcc_offset)
+		if (tex->surface.display_dcc_offset && tex->displayable_dcc_dirty) {
 			si_retile_dcc(sctx, tex);
+			tex->displayable_dcc_dirty = false;
+		}
 	}
 
 	/* Always do the analysis even if DCC is disabled at the moment. */

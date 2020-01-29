@@ -2804,6 +2804,16 @@ MemoryOpt::combineSt(Record *rec, Instruction *st)
    if (prog->getType() == Program::TYPE_COMPUTE && rec->rel[0])
       return false;
 
+   // There's really no great place to put this in a generic manner. Seemingly
+   // wide stores at 0x60 don't work in GS shaders on SM50+. Don't combine
+   // those.
+   if (prog->getTarget()->getChipset() >= NVISA_GM107_CHIPSET &&
+       prog->getType() == Program::TYPE_GEOMETRY &&
+       st->getSrc(0)->reg.file == FILE_SHADER_OUTPUT &&
+       rec->rel[0] == NULL &&
+       MIN2(offRc, offSt) == 0x60)
+      return false;
+
    // remove any existing load/store records for the store being merged into
    // the existing record.
    purgeRecords(st, DATA_FILE_COUNT);

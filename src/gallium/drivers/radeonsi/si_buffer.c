@@ -36,8 +36,8 @@ bool si_rings_is_buffer_referenced(struct si_context *sctx,
 	if (sctx->ws->cs_is_buffer_referenced(sctx->gfx_cs, buf, usage)) {
 		return true;
 	}
-	if (radeon_emitted(sctx->dma_cs, 0) &&
-	    sctx->ws->cs_is_buffer_referenced(sctx->dma_cs, buf, usage)) {
+	if (radeon_emitted(sctx->sdma_cs, 0) &&
+	    sctx->ws->cs_is_buffer_referenced(sctx->sdma_cs, buf, usage)) {
 		return true;
 	}
 	return false;
@@ -72,8 +72,8 @@ void *si_buffer_map_sync_with_rings(struct si_context *sctx,
 			busy = true;
 		}
 	}
-	if (radeon_emitted(sctx->dma_cs, 0) &&
-	    sctx->ws->cs_is_buffer_referenced(sctx->dma_cs,
+	if (radeon_emitted(sctx->sdma_cs, 0) &&
+	    sctx->ws->cs_is_buffer_referenced(sctx->sdma_cs,
 						resource->buf, rusage)) {
 		if (usage & PIPE_TRANSFER_DONTBLOCK) {
 			si_flush_dma_cs(sctx, PIPE_FLUSH_ASYNC, NULL);
@@ -91,8 +91,8 @@ void *si_buffer_map_sync_with_rings(struct si_context *sctx,
 			/* We will be wait for the GPU. Wait for any offloaded
 			 * CS flush to complete to avoid busy-waiting in the winsys. */
 			sctx->ws->cs_sync_flush(sctx->gfx_cs);
-			if (sctx->dma_cs)
-				sctx->ws->cs_sync_flush(sctx->dma_cs);
+			if (sctx->sdma_cs)
+				sctx->ws->cs_sync_flush(sctx->sdma_cs);
 		}
 	}
 
@@ -503,9 +503,9 @@ static void *si_buffer_transfer_map(struct pipe_context *ctx,
 				box->width + (box->x % SI_MAP_BUFFER_ALIGNMENT)));
 		if (staging) {
 			/* Copy the VRAM buffer to the staging buffer. */
-			sctx->dma_copy(ctx, &staging->b.b, 0,
-				       box->x % SI_MAP_BUFFER_ALIGNMENT,
-				       0, 0, resource, 0, box);
+			si_sdma_copy_buffer(sctx, &staging->b.b, resource,
+					    box->x % SI_MAP_BUFFER_ALIGNMENT,
+					    box->x, box->width);
 
 			data = si_buffer_map_sync_with_rings(sctx, staging,
 							     usage & ~PIPE_TRANSFER_UNSYNCHRONIZED);
@@ -791,14 +791,14 @@ static bool si_resource_commit(struct pipe_context *pctx,
 					       res->buf, RADEON_USAGE_READWRITE)) {
 		si_flush_gfx_cs(ctx, RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW, NULL);
 	}
-	if (radeon_emitted(ctx->dma_cs, 0) &&
-	    ctx->ws->cs_is_buffer_referenced(ctx->dma_cs,
+	if (radeon_emitted(ctx->sdma_cs, 0) &&
+	    ctx->ws->cs_is_buffer_referenced(ctx->sdma_cs,
 					       res->buf, RADEON_USAGE_READWRITE)) {
 		si_flush_dma_cs(ctx, PIPE_FLUSH_ASYNC, NULL);
 	}
 
-	if (ctx->dma_cs)
-		ctx->ws->cs_sync_flush(ctx->dma_cs);
+	if (ctx->sdma_cs)
+		ctx->ws->cs_sync_flush(ctx->sdma_cs);
 	ctx->ws->cs_sync_flush(ctx->gfx_cs);
 
 	assert(resource->target == PIPE_BUFFER);

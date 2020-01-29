@@ -57,17 +57,17 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+   uint64_t address_u64 = 0;
    VkResult result =
       anv_reloc_list_add(&cmd_buffer->surface_relocs, &cmd_buffer->pool->alloc,
-                         ss_offset, address.buffer, address.offset + delta);
+                         ss_offset, address.buffer, address.offset + delta,
+                         &address_u64);
    if (result != VK_SUCCESS)
       anv_batch_set_error(&cmd_buffer->batch, result);
 
    void *dest = anv_block_pool_map(
       &cmd_buffer->device->surface_state_pool.block_pool, ss_offset);
-   uint64_t val = ((struct anv_bo*)address.buffer)->offset + address.offset +
-      delta;
-   write_reloc(cmd_buffer->device, dest, val, false);
+   write_reloc(cmd_buffer->device, dest, address_u64, false);
 }
 
 static uint64_t
@@ -139,26 +139,13 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
                           struct blorp_address *addr)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-
-   /* From the Skylake PRM, 3DSTATE_VERTEX_BUFFERS:
-    *
-    *    "The VF cache needs to be invalidated before binding and then using
-    *    Vertex Buffers that overlap with any previously bound Vertex Buffer
-    *    (at a 64B granularity) since the last invalidation.  A VF cache
-    *    invalidate is performed by setting the "VF Cache Invalidation Enable"
-    *    bit in PIPE_CONTROL."
-    *
-    * This restriction first appears in the Skylake PRM but the internal docs
-    * also list it as being an issue on Broadwell.  In order to avoid this
-    * problem, we align all vertex buffer allocations to 64 bytes.
-    */
    struct anv_state vb_state =
       anv_cmd_buffer_alloc_dynamic_state(cmd_buffer, size, 64);
 
    *addr = (struct blorp_address) {
       .buffer = cmd_buffer->device->dynamic_state_pool.block_pool.bo,
       .offset = vb_state.offset,
-      .mocs = cmd_buffer->device->default_mocs,
+      .mocs = cmd_buffer->device->isl_dev.mocs.internal,
    };
 
    return vb_state.map;
@@ -167,11 +154,28 @@ blorp_alloc_vertex_buffer(struct blorp_batch *batch, uint32_t size,
 static void
 blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                            const struct blorp_address *addrs,
+                                           uint32_t *sizes,
                                            unsigned num_vbs)
 {
-   /* anv forces all vertex buffers into the low 4GB so there are never any
-    * transitions that require a VF invalidation.
+   struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
+
+   for (unsigned i = 0; i < num_vbs; i++) {
+      struct anv_address anv_addr = {
+         .bo = addrs[i].buffer,
+         .offset = addrs[i].offset,
+      };
+      genX(cmd_buffer_set_binding_for_gen8_vb_flush)(cmd_buffer,
+                                                     i, anv_addr, sizes[i]);
+   }
+
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+   /* Technically, we should call this *after* 3DPRIMITIVE but it doesn't
+    * really matter for blorp because we never call apply_pipe_flushes after
+    * this point.
     */
+   genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(cmd_buffer, SEQUENTIAL,
+                                                       (1 << num_vbs) - 1);
 }
 
 #if GEN_GEN >= 8
@@ -181,7 +185,7 @@ blorp_get_workaround_page(struct blorp_batch *batch)
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
 
    return (struct blorp_address) {
-      .buffer = &cmd_buffer->device->workaround_bo,
+      .buffer = cmd_buffer->device->workaround_bo,
    };
 }
 #endif
@@ -255,10 +259,6 @@ genX(blorp_exec)(struct blorp_batch *batch,
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
 
-#if GEN_GEN >= 12
-   genX(cmd_buffer_aux_map_state)(cmd_buffer);
-#endif
-
    genX(cmd_buffer_emit_gen7_depth_flush)(cmd_buffer);
 
    /* BLORP doesn't do anything fancy with depth such as discards, so we want
@@ -267,6 +267,20 @@ genX(blorp_exec)(struct blorp_batch *batch,
    genX(cmd_buffer_enable_pma_fix)(cmd_buffer, false);
 
    blorp_exec(batch, params);
+
+#if GEN_GEN >= 11
+   /* The PIPE_CONTROL command description says:
+    *
+    *    "Whenever a Binding Table Index (BTI) used by a Render Taget Message
+    *     points to a different RENDER_SURFACE_STATE, SW must issue a Render
+    *     Target Cache Flush by enabling this bit. When render target flush
+    *     is set due to new association of BTI, PS Scoreboard Stall bit must
+    *     be set in this packet."
+    */
+   cmd_buffer->state.pending_pipe_bits |=
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT |
+      ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
+#endif
 
    cmd_buffer->state.gfx.vb_dirty = ~0;
    cmd_buffer->state.gfx.dirty = ~0;

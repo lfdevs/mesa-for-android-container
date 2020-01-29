@@ -26,7 +26,7 @@
 #include "pipe/p_state.h"
 #include "util/ralloc.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_upload_mgr.h"
 #include "drm-uapi/i915_drm.h"
 #include "iris_context.h"
@@ -272,6 +272,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    iris_init_program_functions(ctx);
    iris_init_resource_functions(ctx);
    iris_init_flush_functions(ctx);
+   iris_init_perfquery_functions(ctx);
 
    iris_init_program_cache(ice);
    iris_init_border_color_pool(ice);

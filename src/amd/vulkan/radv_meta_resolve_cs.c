@@ -135,6 +135,7 @@ build_resolve_compute_shader(struct radv_device *dev, bool is_integer, bool is_s
 	store->src[1] = nir_src_for_ssa(coord);
 	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
 	store->src[3] = nir_src_for_ssa(outval);
+	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
 	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
@@ -145,7 +146,7 @@ enum {
 };
 
 static const char *
-get_resolve_mode_str(VkResolveModeFlagBitsKHR resolve_mode)
+get_resolve_mode_str(VkResolveModeFlagBits resolve_mode)
 {
 	switch (resolve_mode) {
 	case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR:
@@ -164,7 +165,7 @@ get_resolve_mode_str(VkResolveModeFlagBitsKHR resolve_mode)
 static nir_shader *
 build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 					   int index,
-					   VkResolveModeFlagBitsKHR resolve_mode)
+					   VkResolveModeFlagBits resolve_mode)
 {
 	nir_builder b;
 	char name[64];
@@ -295,6 +296,7 @@ build_depth_stencil_resolve_compute_shader(struct radv_device *dev, int samples,
 	store->src[1] = nir_src_for_ssa(coord);
 	store->src[2] = nir_src_for_ssa(nir_ssa_undef(&b, 1, 32));
 	store->src[3] = nir_src_for_ssa(outval);
+	store->src[4] = nir_src_for_ssa(nir_imm_int(&b, 0));
 	nir_builder_instr_insert(&b, &store->instr);
 	return b.shader;
 }
@@ -411,7 +413,7 @@ static VkResult
 create_depth_stencil_resolve_pipeline(struct radv_device *device,
 				      int samples,
 				      int index,
-				      VkResolveModeFlagBitsKHR resolve_mode,
+				      VkResolveModeFlagBits resolve_mode,
 				      VkPipeline *pipeline)
 {
 	VkResult result;
@@ -705,7 +707,7 @@ emit_depth_stencil_resolve(struct radv_cmd_buffer *cmd_buffer,
 			   const VkOffset2D *dest_offset,
 			   const VkExtent2D *resolve_extent,
 			   VkImageAspectFlags aspects,
-			   VkResolveModeFlagBitsKHR resolve_mode)
+			   VkResolveModeFlagBits resolve_mode)
 {
 	struct radv_device *device = cmd_buffer->device;
 	const uint32_t samples = src_iview->image->info.samples;
@@ -959,7 +961,7 @@ radv_cmd_buffer_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer)
 void
 radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 				      VkImageAspectFlags aspects,
-				      VkResolveModeFlagBitsKHR resolve_mode)
+				      VkResolveModeFlagBits resolve_mode)
 {
 	struct radv_framebuffer *fb = cmd_buffer->state.framebuffer;
 	const struct radv_subpass *subpass = cmd_buffer->state.subpass;
@@ -1043,7 +1045,7 @@ radv_depth_stencil_resolve_subpass_cs(struct radv_cmd_buffer *cmd_buffer,
 	if (radv_image_has_htile(dst_image)) {
 		if (aspects == VK_IMAGE_ASPECT_DEPTH_BIT) {
 			VkImageSubresourceRange range = {};
-			range.aspectMask = aspects;
+			range.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
 			range.baseMipLevel = dst_iview->base_mip;
 			range.levelCount = 1;
 			range.baseArrayLayer = dst_iview->base_layer;

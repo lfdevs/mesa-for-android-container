@@ -31,7 +31,7 @@
 #include "os/os_mman.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_hash_table.h"
 #include "util/u_inlines.h"
 #include "state_tracker/drm_driver.h"
@@ -40,7 +40,7 @@
 
 #include <xf86drm.h>
 #include <libsync.h>
-#include "virtgpu_drm.h"
+#include "drm-uapi/virtgpu_drm.h"
 
 #include "virgl_drm_winsys.h"
 #include "virgl_drm_public.h"

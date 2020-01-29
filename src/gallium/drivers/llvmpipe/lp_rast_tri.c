@@ -436,7 +436,7 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 
 #else
 
-#if defined(_ARCH_PWR8) && defined(PIPE_ARCH_LITTLE_ENDIAN)
+#if defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
 
 #include <altivec.h>
 #include "util/u_pwr8.h"
@@ -556,7 +556,7 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
    __m128i vshuf_mask1;
    __m128i vshuf_mask2;
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    vshuf_mask0 = (__m128i) vec_splats((unsigned int) 0x03020100);
    vshuf_mask1 = (__m128i) vec_splats((unsigned int) 0x07060504);
    vshuf_mask2 = (__m128i) vec_splats((unsigned int) 0x0B0A0908);
@@ -662,7 +662,7 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
    lp_rast_triangle_32_3(task, arg2);
 }
 
-#endif /* _ARCH_PWR8 && PIPE_ARCH_LITTLE_ENDIAN */
+#endif /* _ARCH_PWR8 && UTIL_ARCH_LITTLE_ENDIAN */
 
 void
 lp_rast_triangle_32_4_16(struct lp_rasterizer_task *task,
@@ -687,7 +687,7 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 #if defined PIPE_ARCH_SSE
 #define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks_sse((int)c, (int)cdiff, dcdx, dcdy, omask, pmask)
 #define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear_sse((int)c, dcdx, dcdy)
-#elif (defined(_ARCH_PWR8) && defined(PIPE_ARCH_LITTLE_ENDIAN))
+#elif (defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN)
 #define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks_ppc((int)c, (int)cdiff, dcdx, dcdy, omask, pmask)
 #define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear_ppc((int)c, dcdx, dcdy)
 #else

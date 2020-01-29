@@ -1,3 +1,4 @@
+usr/bin/mesa-overlay-control.py
 usr/share/vulkan/explicit_layer.d/*.json
 usr/share/vulkan/icd.d/*.json
 usr/lib/*/libvulkan_*.so

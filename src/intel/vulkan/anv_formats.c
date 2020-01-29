@@ -475,6 +475,18 @@ anv_get_format_plane(const struct gen_device_info *devinfo, VkFormat vk_format,
        (isl_layout->bpb == 24 || isl_layout->bpb == 48))
       return unsupported;
 
+   if (tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      /* No non-power-of-two fourcc formats exist */
+      if (!util_is_power_of_two_or_zero(isl_layout->bpb))
+         return unsupported;
+
+      if (vk_format_is_depth_or_stencil(vk_format))
+         return unsupported;
+
+      if (isl_format_is_compressed(plane_format.isl_format))
+         return unsupported;
+   }
+
    if (tiling == VK_IMAGE_TILING_OPTIMAL &&
        !util_is_power_of_two_or_zero(isl_layout->bpb)) {
       /* Tiled formats *must* be power-of-two because we need up upload
@@ -544,7 +556,7 @@ anv_get_image_format_features(const struct gen_device_info *devinfo,
       return 0;
 
    struct anv_format_plane base_plane_format = plane_format;
-   if (vk_tiling == VK_IMAGE_TILING_OPTIMAL) {
+   if (vk_tiling != VK_IMAGE_TILING_LINEAR) {
       base_plane_format = anv_get_format_plane(devinfo, vk_format,
                                                VK_IMAGE_ASPECT_COLOR_BIT,
                                                VK_IMAGE_TILING_LINEAR);
@@ -705,11 +717,12 @@ get_buffer_format_features(const struct gen_device_info *devinfo,
 static void
 get_wsi_format_modifier_properties_list(const struct anv_physical_device *physical_device,
                                         VkFormat vk_format,
-                                        struct wsi_format_modifier_properties_list *list)
+                                        VkDrmFormatModifierPropertiesListEXT *list)
 {
    const struct anv_format *anv_format = anv_get_format(vk_format);
 
-   VK_OUTARRAY_MAKE(out, list->modifier_properties, &list->modifier_count);
+   VK_OUTARRAY_MAKE(out, list->pDrmFormatModifierProperties,
+                    &list->drmFormatModifierCount);
 
    /* This is a simplified list where all the modifiers are available */
    assert(vk_format == VK_FORMAT_B8G8R8_SRGB ||
@@ -739,11 +752,11 @@ get_wsi_format_modifier_properties_list(const struct anv_physical_device *physic
          continue;
 
       vk_outarray_append(&out, mod_props) {
-         mod_props->modifier = modifiers[i];
+         mod_props->drmFormatModifier = modifiers[i];
          if (isl_drm_modifier_has_aux(modifiers[i]))
-            mod_props->modifier_plane_count = 2;
+            mod_props->drmFormatModifierPlaneCount = 2;
          else
-            mod_props->modifier_plane_count = anv_format->n_planes;
+            mod_props->drmFormatModifierPlaneCount = anv_format->n_planes;
       }
    }
 }
@@ -781,7 +794,7 @@ void anv_GetPhysicalDeviceFormatProperties2(
    vk_foreach_struct(ext, pFormatProperties->pNext) {
       /* Use unsigned since some cases are not in the VkStructureType enum. */
       switch ((unsigned)ext->sType) {
-      case VK_STRUCTURE_TYPE_WSI_FORMAT_MODIFIER_PROPERTIES_LIST_MESA:
+      case VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT:
          get_wsi_format_modifier_properties_list(physical_device, format,
                                                  (void *)ext);
          break;
@@ -908,6 +921,40 @@ anv_get_image_format_properties(
        */
    }
 
+   if (info->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *modifier_info =
+         vk_find_struct_const(info->pNext,
+                              PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT);
+
+      /* Modifiers are only supported on simple 2D images */
+      if (info->type != VK_IMAGE_TYPE_2D)
+         goto unsupported;
+      maxArraySize = 1;
+      maxMipLevels = 1;
+      assert(sampleCounts == VK_SAMPLE_COUNT_1_BIT);
+
+      /* Modifiers are not yet supported for YCbCr */
+      const struct anv_format *format = anv_get_format(info->format);
+      if (format->n_planes > 1)
+         goto unsupported;
+
+      const struct isl_drm_modifier_info *isl_mod_info =
+         isl_drm_modifier_get_info(modifier_info->drmFormatModifier);
+      if (isl_mod_info->aux_usage == ISL_AUX_USAGE_CCS_E) {
+         /* If we have a CCS modifier, ensure that the format supports CCS
+          * and, if VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT is set, all of the
+          * formats in the format list are CCS compatible.
+          */
+         const VkImageFormatListCreateInfoKHR *fmt_list =
+            vk_find_struct_const(info->pNext,
+                                 IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
+         if (!anv_formats_ccs_e_compatible(devinfo, info->flags,
+                                           info->format, info->tiling,
+                                           fmt_list))
+            goto unsupported;
+      }
+   }
+
    /* From the bspec section entitled "Surface Layout and Tiling",
     * pre-gen9 has a 2 GB limitation of the size in bytes,
     * gen9 and gen10 have a 256 GB limitation and gen11+
@@ -1026,7 +1073,7 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
    const VkPhysicalDeviceExternalImageFormatInfo *external_info = NULL;
    VkExternalImageFormatProperties *external_props = NULL;
    VkSamplerYcbcrConversionImageFormatProperties *ycbcr_props = NULL;
-   struct VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
+   VkAndroidHardwareBufferUsageANDROID *android_usage = NULL;
    VkResult result;
 
    /* Extract input structs */
@@ -1034,6 +1081,9 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
       switch (s->sType) {
       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
          external_info = (const void *) s;
+         break;
+      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT:
+         /* anv_get_image_format_properties will handle this */
          break;
       case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
          /* Ignore but don't warn */
@@ -1110,10 +1160,10 @@ VkResult anv_GetPhysicalDeviceImageFormatProperties2(
           *    vkGetPhysicalDeviceImageFormatProperties2 returns
           *    VK_ERROR_FORMAT_NOT_SUPPORTED.
           */
-         result = vk_errorf(physical_device->instance, physical_device,
-                            VK_ERROR_FORMAT_NOT_SUPPORTED,
-                            "unsupported VkExternalMemoryTypeFlagBits 0x%x",
-                            external_info->handleType);
+         result = vk_errorfi(physical_device->instance, physical_device,
+                             VK_ERROR_FORMAT_NOT_SUPPORTED,
+                             "unsupported VkExternalMemoryTypeFlagBits 0x%x",
+                             external_info->handleType);
          goto fail;
       }
    }
@@ -1221,7 +1271,7 @@ VkResult anv_CreateSamplerYcbcrConversion(
 
    /* Search for VkExternalFormatANDROID and resolve the format. */
    struct anv_format *ext_format = NULL;
-   const struct VkExternalFormatANDROID *ext_info =
+   const VkExternalFormatANDROID *ext_info =
       vk_find_struct_const(pCreateInfo->pNext, EXTERNAL_FORMAT_ANDROID);
 
    uint64_t format = ext_info ? ext_info->externalFormat : 0;

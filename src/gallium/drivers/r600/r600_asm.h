@@ -27,6 +27,10 @@
 #include "r600_isa.h"
 #include "tgsi/tgsi_exec.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct r600_bytecode_alu_src {
 	unsigned			sel;
 	unsigned			chan;
@@ -358,4 +362,9 @@ static inline int fp64_switch(int i)
 	}
 	return 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

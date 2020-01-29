@@ -24,7 +24,7 @@
 
 #include "util/u_memory.h"
 #include "util/u_blitter.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_math.h"
 #include "util/u_debug.h"
@@ -116,6 +116,7 @@ setup_miptree(struct lima_resource *res,
       res->levels[level].width = aligned_width;
       res->levels[level].stride = stride;
       res->levels[level].offset = size;
+      res->levels[level].layer_stride = util_format_get_stride(pres->format, align(width, 16)) * align(height, 16);
 
       /* The start address of each level <= 10 must be 64-aligned
        * in order to be able to pass the addresses
@@ -177,9 +178,13 @@ _lima_resource_create_with_modifiers(struct pipe_screen *pscreen,
                                      int count)
 {
    struct lima_screen *screen = lima_screen(pscreen);
-   bool should_tile = false;
+   bool should_tile = lima_debug & LIMA_DEBUG_NO_TILING ? false : true;
    unsigned width, height;
    bool should_align_dimensions;
+   bool has_user_modifiers = true;
+
+   if (count == 1 && modifiers[0] == DRM_FORMAT_MOD_INVALID)
+      has_user_modifiers = false;
 
    /* VBOs/PBOs are untiled (and 1 height). */
    if (templat->target == PIPE_BUFFER)
@@ -188,9 +193,17 @@ _lima_resource_create_with_modifiers(struct pipe_screen *pscreen,
    if (templat->bind & (PIPE_BIND_LINEAR | PIPE_BIND_SCANOUT))
       should_tile = false;
 
-   /* if linear buffer is not allowed, alloc fail */
-   if (!should_tile && !drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count))
-      return NULL;
+   /* If there's no user modifiers and buffer is shared we use linear */
+   if (!has_user_modifiers && (templat->bind & PIPE_BIND_SHARED))
+      should_tile = false;
+
+   if (drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count))
+      should_tile = false;
+
+   if (has_user_modifiers &&
+      !drm_find_modifier(DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
+                         modifiers, count))
+      should_tile = false;
 
    if (should_tile || (templat->bind & PIPE_BIND_RENDER_TARGET) ||
        (templat->bind & PIPE_BIND_DEPTH_STENCIL)) {
@@ -227,10 +240,9 @@ static struct pipe_resource *
 lima_resource_create(struct pipe_screen *pscreen,
                      const struct pipe_resource *templat)
 {
-   static const uint64_t modifiers[] = {
-      DRM_FORMAT_MOD_LINEAR,
-   };
-   return _lima_resource_create_with_modifiers(pscreen, templat, modifiers, ARRAY_SIZE(modifiers));
+   const uint64_t mod = DRM_FORMAT_MOD_INVALID;
+
+   return _lima_resource_create_with_modifiers(pscreen, templat, &mod, 1);
 }
 
 static struct pipe_resource *
@@ -314,8 +326,24 @@ lima_resource_from_handle(struct pipe_screen *pscreen,
    else
       res->levels[0].width = pres->width0;
 
-   handle->modifier = DRM_FORMAT_MOD_LINEAR;
-   res->tiled = false;
+   switch (handle->modifier) {
+   case DRM_FORMAT_MOD_LINEAR:
+      res->tiled = false;
+      break;
+   case DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED:
+      res->tiled = true;
+      break;
+   case DRM_FORMAT_MOD_INVALID:
+      /* Modifier wasn't specified and it's shared buffer. We create these
+       * as linear, so disable tiling.
+       */
+      res->tiled = false;
+      break;
+   default:
+      fprintf(stderr, "Attempted to import unsupported modifier 0x%llx\n",
+                  (long long)handle->modifier);
+      goto err_out;
+   }
 
    return pres;
 
@@ -333,7 +361,10 @@ lima_resource_get_handle(struct pipe_screen *pscreen,
    struct lima_screen *screen = lima_screen(pscreen);
    struct lima_resource *res = lima_resource(pres);
 
-   handle->modifier = DRM_FORMAT_MOD_LINEAR;
+   if (res->tiled)
+      handle->modifier = DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED;
+   else
+      handle->modifier = DRM_FORMAT_MOD_LINEAR;
 
    if (handle->type == WINSYS_HANDLE_TYPE_KMS && screen->ro &&
        renderonly_get_handle(res->scanout, handle))
@@ -595,20 +626,26 @@ lima_transfer_map(struct pipe_context *pctx,
 
       trans->staging = malloc(ptrans->stride * ptrans->box.height * ptrans->box.depth);
 
-      if (usage & PIPE_TRANSFER_READ)
-         panfrost_load_tiled_image(trans->staging, bo->map + res->levels[level].offset,
-                              &ptrans->box,
-                              ptrans->stride,
-                              res->levels[level].stride,
-                              util_format_get_blocksize(pres->format));
+      if (usage & PIPE_TRANSFER_READ) {
+         unsigned i;
+         for (i = 0; i < ptrans->box.depth; i++)
+            panfrost_load_tiled_image(
+               trans->staging + i * ptrans->stride * ptrans->box.height,
+               bo->map + res->levels[level].offset + (i + box->z) * res->levels[level].layer_stride,
+               ptrans->box.x, ptrans->box.y,
+               ptrans->box.width, ptrans->box.height,
+               ptrans->stride,
+               res->levels[level].stride,
+               pres->format);
+      }
 
       return trans->staging;
    } else {
       ptrans->stride = res->levels[level].stride;
-      ptrans->layer_stride = ptrans->stride * box->height;
+      ptrans->layer_stride = res->levels[level].layer_stride;
 
       return bo->map + res->levels[level].offset +
-         box->z * ptrans->layer_stride +
+         box->z * res->levels[level].layer_stride +
          box->y / util_format_get_blockheight(pres->format) * ptrans->stride +
          box->x / util_format_get_blockwidth(pres->format) *
          util_format_get_blocksize(pres->format);
@@ -635,12 +672,18 @@ lima_transfer_unmap(struct pipe_context *pctx,
 
    if (trans->staging) {
       pres = &res->base;
-      if (ptrans->usage & PIPE_TRANSFER_WRITE)
-         panfrost_store_tiled_image(bo->map + res->levels[ptrans->level].offset, trans->staging,
-                              &ptrans->box,
-                              res->levels[ptrans->level].stride,
-                              ptrans->stride,
-                              util_format_get_blocksize(pres->format));
+      if (ptrans->usage & PIPE_TRANSFER_WRITE) {
+         unsigned i;
+         for (i = 0; i < ptrans->box.depth; i++)
+            panfrost_store_tiled_image(
+               bo->map + res->levels[ptrans->level].offset + (i + ptrans->box.z) * res->levels[ptrans->level].layer_stride,
+               trans->staging + i * ptrans->stride * ptrans->box.height,
+               ptrans->box.x, ptrans->box.y,
+               ptrans->box.width, ptrans->box.height,
+               res->levels[ptrans->level].stride,
+               ptrans->stride,
+               pres->format);
+      }
       free(trans->staging);
    }
 

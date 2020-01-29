@@ -30,6 +30,7 @@
 #include "etnaviv_internal.h"
 #include "etnaviv_tiling.h"
 #include "pipe/p_state.h"
+#include "util/format/u_format.h"
 #include "util/list.h"
 #include "util/set.h"
 #include "util/u_helpers.h"
@@ -51,7 +52,7 @@ struct etna_resource_level {
    uint32_t ts_offset;
    uint32_t ts_layer_stride;
    uint32_t ts_size;
-   uint32_t clear_value; /* clear value of resource level (mainly for TS) */
+   uint64_t clear_value; /* clear value of resource level (mainly for TS) */
    bool ts_valid;
    uint8_t ts_mode;
    int8_t ts_compress_fmt; /* COLOR_COMPRESSION_FORMAT_* (-1 = disable) */
@@ -130,6 +131,17 @@ etna_resource_sampler_only(const struct pipe_resource *pres)
    return (pres->bind & (PIPE_BIND_SAMPLER_VIEW | PIPE_BIND_RENDER_TARGET |
                          PIPE_BIND_DEPTH_STENCIL | PIPE_BIND_BLENDABLE)) ==
           PIPE_BIND_SAMPLER_VIEW;
+}
+
+static inline bool
+etna_resource_hw_tileable(bool use_blt, const struct pipe_resource *pres)
+{
+   if (use_blt)
+      return true;
+
+   /* RS can only tile 16bpp or 32bpp formats */
+   return util_format_get_blocksize(pres->format) == 2 ||
+          util_format_get_blocksize(pres->format) == 4;
 }
 
 static inline struct etna_resource *

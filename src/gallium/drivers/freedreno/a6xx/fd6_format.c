@@ -26,7 +26,7 @@
  */
 
 #include "pipe/p_defines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "fd6_format.h"
 #include "freedreno_resource.h"
@@ -176,9 +176,9 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	_T(L16A16_SINT,    16_16_SINT,  NONE,         WZYX),
 
 	VT(R8G8B8A8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, WZYX),
-	_T(R8G8B8X8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, WZYX),
+	_T(R8G8B8X8_UNORM,   8_8_8_8_UNORM, R8G8B8X8_UNORM, WZYX),
 	_T(R8G8B8A8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, WZYX),
-	_T(R8G8B8X8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, WZYX),
+	_T(R8G8B8X8_SRGB,    8_8_8_8_UNORM, R8G8B8X8_UNORM, WZYX),
 	VT(R8G8B8A8_SNORM,   8_8_8_8_SNORM, R8G8B8A8_SNORM, WZYX),
 	VT(R8G8B8A8_UINT,    8_8_8_8_UINT,  R8G8B8A8_UINT,  WZYX),
 	VT(R8G8B8A8_SINT,    8_8_8_8_SINT,  R8G8B8A8_SINT,  WZYX),
@@ -186,19 +186,19 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	V_(R8G8B8A8_SSCALED, 8_8_8_8_SINT,  NONE,           WZYX),
 
 	VT(B8G8R8A8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, WXYZ),
-	_T(B8G8R8X8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, WXYZ),
+	_T(B8G8R8X8_UNORM,   8_8_8_8_UNORM, R8G8B8X8_UNORM, WXYZ),
 	VT(B8G8R8A8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, WXYZ),
-	_T(B8G8R8X8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, WXYZ),
+	_T(B8G8R8X8_SRGB,    8_8_8_8_UNORM, R8G8B8X8_UNORM, WXYZ),
 
 	VT(A8B8G8R8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, XYZW),
-	_T(X8B8G8R8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, XYZW),
+	_T(X8B8G8R8_UNORM,   8_8_8_8_UNORM, R8G8B8X8_UNORM, XYZW),
 	_T(A8B8G8R8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, XYZW),
-	_T(X8B8G8R8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, XYZW),
+	_T(X8B8G8R8_SRGB,    8_8_8_8_UNORM, R8G8B8X8_UNORM, XYZW),
 
 	VT(A8R8G8B8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, ZYXW),
-	_T(X8R8G8B8_UNORM,   8_8_8_8_UNORM, R8G8B8A8_UNORM, ZYXW),
+	_T(X8R8G8B8_UNORM,   8_8_8_8_UNORM, R8G8B8X8_UNORM, ZYXW),
 	_T(A8R8G8B8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, ZYXW),
-	_T(X8R8G8B8_SRGB,    8_8_8_8_UNORM, R8G8B8A8_UNORM, ZYXW),
+	_T(X8R8G8B8_SRGB,    8_8_8_8_UNORM, R8G8B8X8_UNORM, ZYXW),
 
 	VT(R10G10B10A2_UNORM,   10_10_10_2_UNORM, R10G10B10A2_UNORM, WZYX),
 	VT(B10G10R10A2_UNORM,   10_10_10_2_UNORM, R10G10B10A2_UNORM, WXYZ),
@@ -215,15 +215,15 @@ static struct fd6_format formats[PIPE_FORMAT_COUNT] = {
 	VT(R11G11B10_FLOAT, 11_11_10_FLOAT, R11G11B10_FLOAT, WZYX),
 	_T(R9G9B9E5_FLOAT,  9_9_9_E5_FLOAT, NONE,            WZYX),
 
-	_T(Z24X8_UNORM,       X8Z24_UNORM,  X8Z24_UNORM,   WZYX),
-	_T(X24S8_UINT,        8_8_8_8_UINT, X8Z24_UNORM,   WZYX),
-	_T(Z24_UNORM_S8_UINT, X8Z24_UNORM,  X8Z24_UNORM,   WZYX),
-	_T(Z32_FLOAT,         32_FLOAT,     R32_FLOAT,     WZYX),
-	_T(Z32_FLOAT_S8X24_UINT, 32_FLOAT,  R32_FLOAT,     WZYX),
-	_T(X32_S8X24_UINT,    8_UINT,      R8_UINT,        WZYX),
+	_T(Z24X8_UNORM,          X8Z24_UNORM,       Z24_UNORM_S8_UINT, WZYX),
+	_T(X24S8_UINT,           8_8_8_8_UINT,      Z24_UNORM_S8_UINT, WZYX),
+	_T(Z24_UNORM_S8_UINT,    X8Z24_UNORM,       Z24_UNORM_S8_UINT, WZYX),
+	_T(Z32_FLOAT,            32_FLOAT,          R32_FLOAT,         WZYX),
+	_T(Z32_FLOAT_S8X24_UINT, 32_FLOAT,          R32_FLOAT,         WZYX),
+	_T(X32_S8X24_UINT,       8_UINT,            R8_UINT,           WZYX),
 
 	/* special format for blits: */
-	_T(Z24_UNORM_S8_UINT_AS_R8G8B8A8, Z24_UNORM_S8_UINT,  Z24_UNORM_S8_UINT,   WZYX),
+	_T(Z24_UNORM_S8_UINT_AS_R8G8B8A8, Z24_UNORM_S8_UINT,  Z24_UNORM_S8_UINT_AS_R8G8B8A8,   WZYX),
 
 	/* 48-bit */
 	V_(R16G16B16_UNORM,   16_16_16_UNORM, NONE, WZYX),
@@ -478,32 +478,20 @@ fd6_tex_const_0(struct pipe_resource *prsc,
 			 unsigned swizzle_b, unsigned swizzle_a)
 {
 	struct fd_resource *rsc = fd_resource(prsc);
-	uint32_t swap, texconst0 = 0;
 	unsigned char swiz[4];
-
-	if (util_format_is_srgb(format)) {
-		texconst0 |= A6XX_TEX_CONST_0_SRGB;
-	}
-
-	if (rsc->tile_mode && !fd_resource_level_linear(prsc, level)) {
-		texconst0 |= A6XX_TEX_CONST_0_TILE_MODE(rsc->tile_mode);
-		swap = WZYX;
-	} else {
-		swap = fd6_pipe2swap(format);
-	}
 
 	fd6_tex_swiz(format, swiz,
 			swizzle_r, swizzle_g,
 			swizzle_b, swizzle_a);
 
-	texconst0 |=
+	return
 		A6XX_TEX_CONST_0_FMT(fd6_pipe2tex(format)) |
 		A6XX_TEX_CONST_0_SAMPLES(fd_msaa_samples(prsc->nr_samples)) |
-		A6XX_TEX_CONST_0_SWAP(swap) |
+		A6XX_TEX_CONST_0_SWAP(fd6_resource_swap(rsc, format)) |
+		A6XX_TEX_CONST_0_TILE_MODE(fd_resource_tile_mode(prsc, level)) |
+		COND(util_format_is_srgb(format), A6XX_TEX_CONST_0_SRGB) |
 		A6XX_TEX_CONST_0_SWIZ_X(fd6_pipe2swiz(swiz[0])) |
 		A6XX_TEX_CONST_0_SWIZ_Y(fd6_pipe2swiz(swiz[1])) |
 		A6XX_TEX_CONST_0_SWIZ_Z(fd6_pipe2swiz(swiz[2])) |
 		A6XX_TEX_CONST_0_SWIZ_W(fd6_pipe2swiz(swiz[3]));
-
-	return texconst0;
 }

@@ -81,18 +81,24 @@ struct radeon_debug {
        char indent[RADEON_MAX_INDENT];
 };
 
-extern radeon_debug_type_t radeon_enabled_debug_types;
-
 /**
  * Compabibility layer for old debug code
  **/
-#define RADEON_DEBUG radeon_enabled_debug_types
+#if defined(RADEON_R200)
+extern radeon_debug_type_t r200_enabled_debug_types;
+#define RADEON_DEBUG r200_enabled_debug_types
+#elif defined(RADEON_R100)
+extern radeon_debug_type_t r100_enabled_debug_types;
+#define RADEON_DEBUG r100_enabled_debug_types
+#else
+#error "Neither RADEON_R100 nor RADEON_R200 are defined."
+#endif
 
 static inline int radeon_is_debug_enabled(const radeon_debug_type_t type,
 	   const radeon_debug_level_t level)
 {
        return RADEON_DEBUG_LEVEL >= level
-		&& (type & radeon_enabled_debug_types);
+		&& (type & RADEON_DEBUG);
 }
 
 extern void _radeon_print(const radeon_debug_type_t type,

@@ -24,7 +24,7 @@
  */
 
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "nv_object.xml.h"
 #include "nv30/nv30-40_3d.xml.h"

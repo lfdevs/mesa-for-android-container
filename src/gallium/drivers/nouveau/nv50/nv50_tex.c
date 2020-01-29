@@ -25,7 +25,7 @@
 #include "nv50/g80_texture.xml.h"
 #include "nv50/g80_defs.xml.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 static inline uint32_t
 nv50_tic_swizzle(const struct nv50_format *fmt, unsigned swz, bool tex_int)

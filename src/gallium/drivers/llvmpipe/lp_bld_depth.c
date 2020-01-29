@@ -50,7 +50,7 @@
  */
 
 #include "pipe/p_state.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_cpu_detect.h"
 
 #include "gallivm/lp_bld_type.h"

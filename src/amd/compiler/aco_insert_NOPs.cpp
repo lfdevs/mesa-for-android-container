@@ -110,16 +110,11 @@ bool VALU_writes_sgpr(aco_ptr<Instruction>& instr)
       return true;
    if (instr->isVOP3() && instr->definitions.size() == 2)
       return true;
-   if (instr->opcode == aco_opcode::v_readfirstlane_b32 || instr->opcode == aco_opcode::v_readlane_b32)
+   if (instr->opcode == aco_opcode::v_readfirstlane_b32 ||
+       instr->opcode == aco_opcode::v_readlane_b32 ||
+       instr->opcode == aco_opcode::v_readlane_b32_e64)
       return true;
    return false;
-}
-
-bool instr_reads_exec(const aco_ptr<Instruction>& instr)
-{
-   return std::any_of(instr->operands.begin(), instr->operands.end(), [](const Operand &op) -> bool {
-      return op.physReg() == exec_lo || op.physReg() == exec_hi;
-   });
 }
 
 bool instr_writes_exec(const aco_ptr<Instruction>& instr)
@@ -212,9 +207,34 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
    // TODO: setreg / getreg / m0 writes
    // TODO: try to schedule the NOP-causing instruction up to reduce the number of stall cycles
 
-   /* break off from prevous SMEM clause if needed */
-   if (instr->format == Format::SMEM && ctx.chip_class >= GFX8) {
+
+   if (instr->format == Format::SMEM) {
+      if (ctx.chip_class == GFX6) {
+         bool is_buffer_load = instr->operands.size() && instr->operands[0].size() > 2;
+         for (int pred_idx = new_idx - 1; pred_idx >= 0 && pred_idx >= new_idx - 4; pred_idx--) {
+            aco_ptr<Instruction>& pred = new_instructions[pred_idx];
+            /* A read of an SGPR by SMRD instruction requires 4 wait states
+             * when the SGPR was written by a VALU instruction. */
+            if (VALU_writes_sgpr(pred)) {
+               Definition pred_def = pred->definitions[pred->definitions.size() - 1];
+               for (const Operand& op : instr->operands) {
+                  if (regs_intersect(pred_def.physReg(), pred_def.size(), op.physReg(), op.size()))
+                     return 4 + pred_idx - new_idx + 1;
+               }
+            }
+            /* According to LLVM, this is an undocumented hardware behavior */
+            if (is_buffer_load && pred->isSALU() && pred->definitions.size()) {
+               Definition pred_def = pred->definitions[0];
+               Operand& op = instr->operands[0];
+               if (regs_intersect(pred_def.physReg(), pred_def.size(), op.physReg(), op.size()))
+                  return 4 + pred_idx - new_idx + 1;
+            }
+         }
+      }
+
+      /* break off from prevous SMEM clause if needed */
       return handle_SMEM_clause(instr, new_idx, new_instructions);
+
    } else if (instr->isVALU() || instr->format == Format::VINTRP) {
       int NOPs = 0;
 
@@ -267,7 +287,9 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
 
       switch (instr->opcode) {
          case aco_opcode::v_readlane_b32:
-         case aco_opcode::v_writelane_b32: {
+         case aco_opcode::v_readlane_b32_e64:
+         case aco_opcode::v_writelane_b32:
+         case aco_opcode::v_writelane_b32_e64: {
             if (ctx.VALU_wrsgpr + 4 < new_idx)
                break;
             PhysReg reg = instr->operands[1].physReg();
@@ -294,19 +316,25 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
 
       /* Write VGPRs holding writedata > 64 bit from MIMG/MUBUF instructions */
       // FIXME: handle case if the last instruction of a block without branch is such store
-      // TODO: confirm that DS instructions cannot cause WAR hazards here
       if (new_idx > 0) {
          aco_ptr<Instruction>& pred = new_instructions.back();
-         if (pred->isVMEM() &&
-             pred->operands.size() == 4 &&
-             pred->operands[3].size() > 2 &&
-             pred->operands[1].size() != 8 &&
-             (pred->format != Format::MUBUF || pred->operands[2].physReg() >= 102)) {
-            /* Ops that use a 256-bit T# do not need a wait state.
-             * BUFFER_STORE_* operations that use an SGPR for "offset"
-             * do not require any wait states. */
-            PhysReg wrdata = pred->operands[3].physReg();
-            unsigned size = pred->operands[3].size();
+         /* >64-bit MUBUF/MTBUF store with a constant in SOFFSET */
+         bool consider_buf = (pred->format == Format::MUBUF || pred->format == Format::MTBUF) &&
+                             pred->operands.size() == 4 &&
+                             pred->operands[3].size() > 2 &&
+                             pred->operands[2].physReg() >= 128;
+         /* MIMG store with a 128-bit T# with more than two bits set in dmask (making it a >64-bit store) */
+         bool consider_mimg = pred->format == Format::MIMG &&
+                              pred->operands.size() == 4 &&
+                              pred->operands[3].size() > 2 &&
+                              pred->operands[1].size() != 8;
+         /* FLAT/GLOBAL/SCRATCH store with >64-bit data */
+         bool consider_flat = (pred->isFlatOrGlobal() || pred->format == Format::SCRATCH) &&
+                              pred->operands.size() == 3 &&
+                              pred->operands[2].size() > 2;
+         if (consider_buf || consider_mimg || consider_flat) {
+            PhysReg wrdata = pred->operands[consider_flat ? 2 : 3].physReg();
+            unsigned size = pred->operands[consider_flat ? 2 : 3].size();
             assert(wrdata >= 256);
             for (const Definition& def : instr->definitions) {
                if (regs_intersect(def.physReg(), def.size(), wrdata, size))
@@ -323,6 +351,24 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
                ctx.VALU_wrexec = NOPs ? new_idx : new_idx + 1;
             else if (def.physReg() <= 102)
                ctx.VALU_wrsgpr = NOPs ? new_idx : new_idx + 1;
+         }
+      }
+
+      /* It's required to insert 1 wait state if the dst VGPR of any v_interp_*
+       * is followed by a read with v_readfirstlane or v_readlane to fix GPU
+       * hangs on GFX6. Note that v_writelane_* is apparently not affected.
+       * This hazard isn't documented anywhere but AMD confirmed that hazard.
+       */
+      if (ctx.chip_class == GFX6 &&
+          !new_instructions.empty() &&
+          (instr->opcode == aco_opcode::v_readfirstlane_b32 ||
+           instr->opcode == aco_opcode::v_readlane_b32)) {
+         aco_ptr<Instruction>& pred = new_instructions.back();
+         if (pred->format == Format::VINTRP) {
+            Definition pred_def = pred->definitions[0];
+            Operand& op = instr->operands[0];
+            if (regs_intersect(pred_def.physReg(), pred_def.size(), op.physReg(), op.size()))
+               NOPs = std::max(NOPs, 1);
          }
       }
       return NOPs;
@@ -349,6 +395,14 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
                   return 5 + pred_idx - new_idx + 1;
             }
          }
+      }
+   } else if (instr->format == Format::SOPP) {
+      if (instr->opcode == aco_opcode::s_sendmsg && new_idx > 0) {
+         aco_ptr<Instruction>& pred = new_instructions.back();
+         if (pred->isSALU() &&
+             !pred->definitions.empty() &&
+             pred->definitions[0].physReg() == m0)
+            return 1;
       }
    }
 
@@ -448,7 +502,7 @@ void handle_instruction_gfx10(Program *program, NOP_ctx_gfx10 &ctx, aco_ptr<Inst
    /* VcmpxExecWARHazard
     * Handle any VALU instruction writing the exec mask after it was read by a non-VALU instruction.
     */
-   if (!instr->isVALU() && instr_reads_exec(instr)) {
+   if (!instr->isVALU() && instr->reads_exec()) {
       ctx.has_nonVALU_exec_read = true;
    } else if (instr->isVALU()) {
       if (instr_writes_exec(instr)) {

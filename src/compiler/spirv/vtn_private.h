@@ -534,10 +534,10 @@ struct vtn_image_pointer {
    struct vtn_pointer *image;
    nir_ssa_def *coord;
    nir_ssa_def *sample;
+   nir_ssa_def *lod;
 };
 
 struct vtn_sampled_image {
-   struct vtn_type *type;
    struct vtn_pointer *image; /* Image or array of images */
    struct vtn_pointer *sampler; /* Sampler */
 };
@@ -625,6 +625,9 @@ struct vtn_builder {
 
    /* True if we should watch out for GLSLang issue #179 */
    bool wa_glslang_179;
+
+   /* True if we need to fix up CS OpControlBarrier */
+   bool wa_glslang_cs_barrier;
 
    gl_shader_stage entry_point_stage;
    const char *entry_point_name;

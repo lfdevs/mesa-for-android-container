@@ -100,6 +100,8 @@ def generateHeader(functions):
 
     #include <EGL/egl.h>
     #include <EGL/eglext.h>
+    #include <EGL/eglmesaext.h>
+    #include <EGL/eglextchromium.h>
     #include "glvnd/libeglabi.h"
 
     """.lstrip("\n"))

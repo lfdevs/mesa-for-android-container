@@ -35,7 +35,7 @@
 
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_exec.h"
-
+#include "nir/nir_to_tgsi_info.h"
 #include "pipe/p_shader_tokens.h"
 
 #include "util/u_math.h"
@@ -793,13 +793,17 @@ draw_create_geometry_shader(struct draw_context *draw,
 
    gs->draw = draw;
    gs->state = *state;
-   gs->state.tokens = tgsi_dup_tokens(state->tokens);
-   if (!gs->state.tokens) {
-      FREE(gs);
-      return NULL;
-   }
 
-   tgsi_scan_shader(state->tokens, &gs->info);
+   if (state->type == PIPE_SHADER_IR_TGSI) {
+      gs->state.tokens = tgsi_dup_tokens(state->tokens);
+      if (!gs->state.tokens) {
+         FREE(gs);
+         return NULL;
+      }
+
+      tgsi_scan_shader(state->tokens, &gs->info);
+   } else
+      nir_tgsi_scan_shader(state->ir.nir, &gs->info, true);
 
    /* setup the defaults */
    gs->max_out_prims = 0;

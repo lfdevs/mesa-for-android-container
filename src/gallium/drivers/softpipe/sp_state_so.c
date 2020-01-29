@@ -29,7 +29,7 @@
 #include "sp_state.h"
 #include "sp_texture.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "draw/draw_context.h"
 #include "pipebuffer/pb_buffer.h"

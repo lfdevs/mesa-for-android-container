@@ -79,7 +79,7 @@ v3d_fence_finish(struct pipe_screen *pscreen,
                 return false;
         }
 
-        drmSyncobjImportSyncFile(screen->fd, syncobj, f->fd);
+        ret = drmSyncobjImportSyncFile(screen->fd, syncobj, f->fd);
         if (ret) {
                 fprintf(stderr, "Failed to import fence to syncobj: %d\n", ret);
                 return false;

@@ -222,6 +222,16 @@ etna_native_temp(unsigned reg)
    };
 }
 
+static struct etna_native_reg
+etna_native_internal(unsigned reg)
+{
+   return (struct etna_native_reg) {
+      .valid = 1,
+      .rgroup = INST_RGROUP_INTERNAL,
+      .id = reg
+   };
+}
+
 /** Register allocation **/
 enum reg_sort_order {
    FIRST_USE_ASC,
@@ -622,12 +632,19 @@ assign_special_inputs(struct etna_compile *c)
       /* never assign t0 as it is the position output, start assigning at t1 */
       c->next_free_native = 1;
 
-      /* hardwire TGSI_SEMANTIC_POSITION (input and output) to t0 */
       for (int idx = 0; idx < c->total_decls; ++idx) {
          struct etna_reg_desc *reg = &c->decl[idx];
 
-         if (reg->active && reg->semantic.Name == TGSI_SEMANTIC_POSITION)
+         if (!reg->active)
+            continue;
+
+         /* hardwire TGSI_SEMANTIC_POSITION (input and output) to t0 */
+         if (reg->semantic.Name == TGSI_SEMANTIC_POSITION)
             reg->native = etna_native_temp(0);
+
+         /* hardwire TGSI_SEMANTIC_FACE to i0 */
+         if (reg->semantic.Name == TGSI_SEMANTIC_FACE)
+            reg->native = etna_native_internal(0);
       }
    }
 }
@@ -824,7 +841,34 @@ emit_inst(struct etna_compile *c, struct etna_inst *inst)
    unsigned uni_reg = -1;
 
    for (int src = 0; src < ETNA_NUM_SRC; ++src) {
-      if (etna_rgroup_is_uniform(inst->src[src].rgroup)) {
+      if (inst->src[src].rgroup == INST_RGROUP_INTERNAL &&
+          c->info.processor == PIPE_SHADER_FRAGMENT &&
+          c->key->front_ccw) {
+         struct etna_native_reg inner_temp = etna_compile_get_inner_temp(c);
+
+         /*
+          * Set temporary register to 0.0 or 1.0 based on the gl_FrontFacing
+          * configuration (CW or CCW).
+          */
+         etna_assemble(&c->code[c->inst_ptr * 4], &(struct etna_inst) {
+            .opcode = INST_OPCODE_SET,
+            .cond = INST_CONDITION_NE,
+            .dst = etna_native_to_dst(inner_temp, INST_COMPS_X | INST_COMPS_Y |
+                                                  INST_COMPS_Z | INST_COMPS_W),
+            .src[0] = inst->src[src],
+            .src[1] = alloc_imm_f32(c, 1.0f)
+         });
+         c->inst_ptr++;
+
+         /* Modify instruction to use temp register instead of uniform */
+         inst->src[src].use = 1;
+         inst->src[src].rgroup = INST_RGROUP_TEMP;
+         inst->src[src].reg = inner_temp.id;
+         inst->src[src].swiz = INST_SWIZ_IDENTITY; /* swizzling happens on MOV */
+         inst->src[src].neg = 0; /* negation happens on MOV */
+         inst->src[src].abs = 0; /* abs happens on MOV */
+         inst->src[src].amode = 0; /* amode effects happen on MOV */
+      } else if (etna_rgroup_is_uniform(inst->src[src].rgroup)) {
          if (uni_reg == -1) { /* first unique uniform used */
             uni_rgroup = inst->src[src].rgroup;
             uni_reg = inst->src[src].reg;
@@ -2037,8 +2081,9 @@ static void
 permute_ps_inputs(struct etna_compile *c)
 {
    /* Special inputs:
-    * gl_FragCoord  VARYING_SLOT_POS   TGSI_SEMANTIC_POSITION
-    * gl_PointCoord VARYING_SLOT_PNTC  TGSI_SEMANTIC_PCOORD
+    * gl_FragCoord   VARYING_SLOT_POS   TGSI_SEMANTIC_POSITION
+    * gl_FrontFacing VARYING_SLOT_FACE  TGSI_SEMANTIC_FACE
+    * gl_PointCoord  VARYING_SLOT_PNTC  TGSI_SEMANTIC_PCOORD
     */
    uint native_idx = 1;
 
@@ -2047,7 +2092,9 @@ permute_ps_inputs(struct etna_compile *c)
       uint input_id;
       assert(reg->has_semantic);
 
-      if (!reg->active || reg->semantic.Name == TGSI_SEMANTIC_POSITION)
+      if (!reg->active ||
+          reg->semantic.Name == TGSI_SEMANTIC_POSITION ||
+          reg->semantic.Name == TGSI_SEMANTIC_FACE)
          continue;
 
       input_id = native_idx++;
@@ -2346,10 +2393,6 @@ etna_compile_shader(struct etna_shader_variant *v)
 
    /* optimize outputs */
    etna_compile_pass_optimize_outputs(c);
-
-   /* XXX assign special inputs: gl_FrontFacing (VARYING_SLOT_FACE)
-    *     this is part of RGROUP_INTERNAL
-    */
 
    /* assign inputs: last usage of input should be <= first usage of temp */
    /*   potential optimization case:

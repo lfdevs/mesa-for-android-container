@@ -25,7 +25,7 @@
 #include "pipe/p_context.h"
 #include "pipe/p_state.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "translate/translate.h"
 
 #include "nvc0/nvc0_context.h"

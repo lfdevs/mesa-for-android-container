@@ -38,7 +38,7 @@ endif
 
 libvdpau_gallium = shared_library(
   'vdpau_gallium',
-  ['target.c', xmlpool_options_h],
+  'target.c',
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [vdpau_link_args, ld_args_gc_sections],
@@ -51,7 +51,7 @@ libvdpau_gallium = shared_library(
     libpipe_loader_static, libws_null, libwsw, libswdri, libswkmsdri,
   ],
   dependencies : [
-    idep_mesautil,
+    idep_mesautil, idep_xmlconfig_headers,
     driver_r300, driver_r600, driver_radeonsi, driver_nouveau,
   ],
   link_depends : vdpau_link_depends,
@@ -71,8 +71,7 @@ foreach d : [[with_gallium_r300, 'r300'],
 endforeach
 
 meson.add_install_script(
-  prog_python.path(),
-  join_paths(meson.source_root(), 'bin/install_megadrivers.py'),
+  install_megadrivers_py.path(),
   libvdpau_gallium.full_path(),
   vdpau_drivers_path,
   vdpau_drivers,

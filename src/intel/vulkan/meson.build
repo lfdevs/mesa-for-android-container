@@ -114,8 +114,8 @@ libanv_files = files(
   'anv_nir.h',
   'anv_nir_add_base_work_group_id.c',
   'anv_nir_apply_pipeline_layout.c',
+  'anv_nir_compute_push_layout.c',
   'anv_nir_lower_multiview.c',
-  'anv_nir_lower_push_constants.c',
   'anv_nir_lower_ycbcr_textures.c',
   'anv_pass.c',
   'anv_perf.c',
@@ -133,6 +133,7 @@ anv_deps = [
   dep_valgrind,
   idep_nir_headers,
   idep_vulkan_util_headers,
+  idep_xmlconfig_headers,
 ]
 anv_flags = [
   c_vis_args,
@@ -206,14 +207,14 @@ libvulkan_intel = shared_library(
   install : true,
 )
 
-if with_tests and prog_nm.found()
+if with_symbols_check
   test(
     'anv symbols check',
     symbols_check,
     args : [
       '--lib', libvulkan_intel,
       '--symbols-file', vulkan_icd_symbols,
-      '--nm', prog_nm.path(),
+      symbols_check_args,
     ],
     suite : ['intel'],
   )

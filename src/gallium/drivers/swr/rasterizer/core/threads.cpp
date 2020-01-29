@@ -714,6 +714,9 @@ INLINE void CompleteDrawFE(SWR_CONTEXT* pContext, uint32_t workerId, DRAW_CONTEX
         }
     }
 
+    if (pContext->pfnUpdateStreamOut)
+        pContext->pfnUpdateStreamOut(GetPrivateState(pDC),  pDC->dynState.soPrims);
+
     // Ensure all streaming writes are globally visible before marking this FE done
     _mm_mfence();
     pDC->doneFE = true;

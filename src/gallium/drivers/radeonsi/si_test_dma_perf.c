@@ -112,7 +112,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
 			unsigned cs_dwords_per_thread =
 				test_cs ? cs_dwords_per_thread_list[cs_method % NUM_SHADERS] : 0;
 
-			if (test_sdma && !sctx->dma_cs)
+			if (test_sdma && !sctx->sdma_cs)
 				continue;
 
 			if (sctx->chip_class == GFX6) {
@@ -191,9 +191,7 @@ void si_test_dma_perf(struct si_screen *sscreen)
 					} else if (test_sdma) {
 						/* SDMA */
 						if (is_copy) {
-							struct pipe_box box;
-							u_box_1d(0, size, &box);
-							sctx->dma_copy(ctx, dst, 0, 0, 0, 0, src, 0, &box);
+							si_sdma_copy_buffer(sctx, dst, src, 0, 0, size);
 						} else {
 							si_sdma_clear_buffer(sctx, dst, 0, size, clear_value);
 						}

@@ -47,7 +47,7 @@
 #include "st_format.h"
 #include "st_cb_texture.h"
 #include "pipe/p_context.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "cso_cache/cso_context.h"
 
@@ -195,6 +195,7 @@ update_textures(struct st_context *st,
          sampler_views[extra] =
                st->pipe->create_sampler_view(st->pipe, stObj->pt->next, &tmpl);
          break;
+      case PIPE_FORMAT_P010:
       case PIPE_FORMAT_P016:
          /* we need one additional R16G16 view: */
          tmpl.format = PIPE_FORMAT_RG1616_UNORM;
@@ -266,8 +267,10 @@ st_update_vertex_textures(struct st_context *st)
    const struct gl_context *ctx = st->ctx;
 
    if (ctx->Const.Program[MESA_SHADER_VERTEX].MaxTextureImageUnits > 0) {
-      update_textures_local(st, PIPE_SHADER_VERTEX,
-                            ctx->VertexProgram._Current);
+      update_textures(st,
+                      PIPE_SHADER_VERTEX,
+                      ctx->VertexProgram._Current,
+                      st->state.vert_sampler_views);
    }
 }
 

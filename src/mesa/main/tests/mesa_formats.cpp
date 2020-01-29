@@ -45,6 +45,9 @@ TEST(MesaFormatsTest, FormatTypeAndComps)
       mesa_format f = (mesa_format) fi;
       SCOPED_TRACE(_mesa_get_format_name(f));
 
+      if (!_mesa_get_format_name(f))
+         continue;
+
       /* This function will emit a problem/warning if the format is
        * not handled.
        */
@@ -68,6 +71,9 @@ TEST(MesaFormatsTest, FormatSanity)
    for (int fi = 0; fi < MESA_FORMAT_COUNT; ++fi) {
       mesa_format f = (mesa_format) fi;
       SCOPED_TRACE(_mesa_get_format_name(f));
+      if (!_mesa_get_format_name(f))
+         continue;
+
       GLenum datatype = _mesa_get_format_datatype(f);
       GLint r = _mesa_get_format_bits(f, GL_RED_BITS);
       GLint g = _mesa_get_format_bits(f, GL_GREEN_BITS);

@@ -28,7 +28,7 @@
 #ifndef LP_RAST_PRIV_H
 #define LP_RAST_PRIV_H
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_thread.h"
 #include "gallivm/lp_bld_debug.h"
 #include "lp_memory.h"

@@ -165,7 +165,6 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
       VIVS_PS_INPUT_COUNT_UNK8(fs->input_count_unk8);
    cs->PS_TEMP_REGISTER_CONTROL =
       VIVS_PS_TEMP_REGISTER_CONTROL_NUM_TEMPS(MAX2(fs->num_temps, link.num_varyings + 1));
-   cs->PS_CONTROL = VIVS_PS_CONTROL_SATURATE_RT0; /* XXX when can we set BYPASS? */
    cs->PS_START_PC = 0;
 
    /* Precompute PS_INPUT_COUNT and TEMP_REGISTER_CONTROL in the case of MSAA
@@ -213,7 +212,7 @@ etna_link_shaders(struct etna_context *ctx, struct compiled_shader_state *cs,
    cs->ps_inst_mem_size = fs->code_size;
    cs->PS_INST_MEM = fs->code;
 
-   if (vs->needs_icache | fs->needs_icache) {
+   if (vs->needs_icache || fs->needs_icache) {
       /* If either of the shaders needs ICACHE, we use it for both. It is
        * either switched on or off for the entire shader processor.
        */
@@ -283,6 +282,20 @@ etna_shader_update_vs_inputs(struct compiled_shader_state *cs,
          etna_bitarray_set(vs_input, 8, idx, vs->infile.reg[idx].reg);
       else
          etna_bitarray_set(vs_input, 8, idx, cur_temp++);
+   }
+
+   if (vs->vs_id_in_reg >= 0) {
+      cs->VS_INPUT_COUNT = VIVS_VS_INPUT_COUNT_COUNT(num_vs_inputs + 1) |
+                           VIVS_VS_INPUT_COUNT_UNK8(vs->input_count_unk8) |
+                           VIVS_VS_INPUT_COUNT_ID_ENABLE;
+
+      etna_bitarray_set(vs_input, 8, num_vs_inputs, vs->vs_id_in_reg);
+
+      cs->FE_HALTI5_ID_CONFIG =
+         VIVS_FE_HALTI5_ID_CONFIG_VERTEX_ID_ENABLE |
+         VIVS_FE_HALTI5_ID_CONFIG_INSTANCE_ID_ENABLE |
+         VIVS_FE_HALTI5_ID_CONFIG_VERTEX_ID_REG(vs->vs_id_in_reg * 4) |
+         VIVS_FE_HALTI5_ID_CONFIG_INSTANCE_ID_REG(vs->vs_id_in_reg * 4 + 1);
    }
 
    for (int idx = 0; idx < ARRAY_SIZE(cs->VS_INPUT); ++idx)

@@ -10,8 +10,10 @@ env.Append(CPPPATH = [
 ])
 
 env.Prepend(LIBS = [
+    compiler,
     mesautil,
     gallium,
+    nir,
     'gdi32',
     'user32',
     'ws2_32',

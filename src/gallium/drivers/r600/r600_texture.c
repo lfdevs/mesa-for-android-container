@@ -27,7 +27,7 @@
 #include "r600_pipe_common.h"
 #include "r600_cs.h"
 #include "r600_query.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_log.h"
 #include "util/u_memory.h"
 #include "util/u_pack_color.h"
@@ -1771,7 +1771,7 @@ void evergreen_do_fast_color_clear(struct r600_common_context *rctx,
 	int i;
 
 	/* This function is broken in BE, so just disable this path for now */
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
 	return;
 #endif
 

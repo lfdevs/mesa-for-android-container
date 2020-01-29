@@ -867,6 +867,10 @@ create_rast_threads(struct lp_rasterizer *rast)
       pipe_semaphore_init(&rast->tasks[i].work_done, 0);
       rast->threads[i] = u_thread_create(thread_function,
                                             (void *) &rast->tasks[i]);
+      if (!rast->threads[i]) {
+         rast->num_threads = i; /* previous thread is max */
+         break;
+      }
    }
 }
 

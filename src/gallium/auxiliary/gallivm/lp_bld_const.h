@@ -126,6 +126,11 @@ lp_build_const_int32(struct gallivm_state *gallivm, int i)
    return LLVMConstInt(LLVMInt32TypeInContext(gallivm->context), i, 0);
 }
 
+static inline LLVMValueRef
+lp_build_const_int64(struct gallivm_state *gallivm, int64_t i)
+{
+   return LLVMConstInt(LLVMInt64TypeInContext(gallivm->context), i, 0);
+}
 
 static inline LLVMValueRef
 lp_build_const_float(struct gallivm_state *gallivm, float x)

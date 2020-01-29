@@ -82,7 +82,15 @@ struct panfrost_screen;
 
 struct panfrost_bo {
         /* Must be first for casting */
-        struct list_head link;
+        struct list_head bucket_link;
+
+        /* Used to link the BO to the BO cache LRU list. */
+        struct list_head lru_link;
+
+        /* Store the time this BO was use last, so the BO cache logic can evict
+         * stale BOs.
+         */
+        time_t last_used;
 
         struct pipe_reference reference;
 

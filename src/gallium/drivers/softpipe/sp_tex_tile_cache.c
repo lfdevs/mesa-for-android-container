@@ -35,7 +35,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_tile.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 #include "sp_context.h"
 #include "sp_texture.h"

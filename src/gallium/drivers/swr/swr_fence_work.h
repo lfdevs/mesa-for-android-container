@@ -32,6 +32,8 @@ struct swr_fence_work {
       struct swr_vertex_shader *swr_vs;
       struct swr_fragment_shader *swr_fs;
       struct swr_geometry_shader *swr_gs;
+      struct swr_tess_control_shader *swr_tcs;
+      struct swr_tess_evaluation_shader *swr_tes;
    } free;
 
    struct swr_fence_work *next;
@@ -47,4 +49,8 @@ bool swr_fence_work_delete_fs(struct pipe_fence_handle *fence,
                               struct swr_fragment_shader *swr_vs);
 bool swr_fence_work_delete_gs(struct pipe_fence_handle *fence,
                               struct swr_geometry_shader *swr_gs);
+bool swr_fence_work_delete_tcs(struct pipe_fence_handle *fence,
+                               struct swr_tess_control_shader *swr_tcs);
+bool swr_fence_work_delete_tes(struct pipe_fence_handle *fence,
+                               struct swr_tess_evaluation_shader *swr_tes);
 #endif

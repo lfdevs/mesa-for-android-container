@@ -30,7 +30,7 @@
 #include "util/u_cpu_detect.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_hash_table.h"
 #include "util/u_screen.h"
 #include "util/u_transfer_helper.h"

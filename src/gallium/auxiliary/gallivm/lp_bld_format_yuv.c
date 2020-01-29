@@ -34,7 +34,7 @@
  */
 
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_cpu_detect.h"
 
 #include "lp_bld_arit.h"
@@ -104,7 +104,7 @@ uyvy_to_yuv_soa(struct gallivm_state *gallivm,
 #endif
    {
       LLVMValueRef shift;
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       shift = LLVMBuildMul(builder, i, lp_build_const_int_vec(gallivm, type, 16), "");
       shift = LLVMBuildAdd(builder, shift, lp_build_const_int_vec(gallivm, type, 8), "");
 #else
@@ -114,7 +114,7 @@ uyvy_to_yuv_soa(struct gallivm_state *gallivm,
       *y = LLVMBuildLShr(builder, packed, shift, "");
    }
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    *u = packed;
    *v = LLVMBuildLShr(builder, packed, lp_build_const_int_vec(gallivm, type, 16), "");
 #else
@@ -187,7 +187,7 @@ yuyv_to_yuv_soa(struct gallivm_state *gallivm,
 #endif
    {
       LLVMValueRef shift;
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       shift = LLVMBuildMul(builder, i, lp_build_const_int_vec(gallivm, type, 16), "");
 #else
       shift = LLVMBuildMul(builder, i, lp_build_const_int_vec(gallivm, type, -16), "");
@@ -196,7 +196,7 @@ yuyv_to_yuv_soa(struct gallivm_state *gallivm,
       *y = LLVMBuildLShr(builder, packed, shift, "");
    }
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    *u = LLVMBuildLShr(builder, packed, lp_build_const_int_vec(gallivm, type, 8), "");
    *v = LLVMBuildLShr(builder, packed, lp_build_const_int_vec(gallivm, type, 24), "");
 #else
@@ -334,7 +334,7 @@ rgb_to_rgba_aos(struct gallivm_state *gallivm,
     * Make a 4 x unorm8 vector
     */
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    r = r;
    g = LLVMBuildShl(builder, g, lp_build_const_int_vec(gallivm, type, 8), "");
    b = LLVMBuildShl(builder, b, lp_build_const_int_vec(gallivm, type, 16), "");

@@ -49,8 +49,21 @@
 
 #include <assert.h>
 
-/* Currently, used BLT formats overlap 100% with RS formats */
-#define translate_blt_format translate_rs_format
+static uint32_t
+etna_compatible_blt_format(enum pipe_format fmt)
+{
+   /* YUYV and UYVY are blocksize 4, but 2 bytes per pixel */
+   if (fmt == PIPE_FORMAT_YUYV || fmt == PIPE_FORMAT_UYVY)
+      return BLT_FORMAT_R8G8;
+
+   switch (util_format_get_blocksize(fmt)) {
+   case 1: return BLT_FORMAT_R8;
+   case 2: return BLT_FORMAT_R8G8;
+   case 4: return BLT_FORMAT_A8R8G8B8;
+   case 8: return BLT_FORMAT_A16R16G16B16;
+   default: return ETNA_NO_MATCH;
+   }
+}
 
 static inline uint32_t
 blt_compute_stride_bits(const struct blt_imginfo *img)
@@ -202,7 +215,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_surface *surf = etna_surface(dst);
-   uint32_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color->f);
+   uint64_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color);
 
    struct etna_resource *res = etna_resource(surf->base.texture);
    struct blt_clear_op clr = {};
@@ -219,13 +232,13 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.offset = 0;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
       clr.dest.ts_clear_value[0] = new_clear_value;
-      clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_clear_value[1] = new_clear_value >> 32;
       clr.dest.ts_mode = surf->level->ts_mode;
       clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
 
    clr.clear_value[0] = new_clear_value;
-   clr.clear_value[1] = new_clear_value;
+   clr.clear_value[1] = new_clear_value >> 32;
    clr.clear_bits[0] = 0xffffffff; /* TODO: Might want to clear only specific channels? */
    clr.clear_bits[1] = 0xffffffff;
    clr.rect_x = 0; /* What about scissors? */
@@ -238,7 +251,9 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    /* This made the TS valid */
    if (surf->surf.ts_size) {
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
+      ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = new_clear_value >> 32;
       surf->level->ts_valid = true;
+      ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
    surf->level->clear_value = new_clear_value;
@@ -276,6 +291,10 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    if (buffers & PIPE_CLEAR_STENCIL)
       new_clear_bits |= clear_bits_stencil;
 
+   /* if all bits are cleared, update TS clear value */
+   if (new_clear_bits == 0xffffffff)
+      surf->level->clear_value = new_clear_value;
+
    /* TODO unduplicate this */
    struct etna_resource *res = etna_resource(surf->base.texture);
    struct blt_clear_op clr = {};
@@ -291,8 +310,8 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       clr.dest.ts_addr.bo = res->ts_bo;
       clr.dest.ts_addr.offset = 0;
       clr.dest.ts_addr.flags = ETNA_RELOC_WRITE;
-      clr.dest.ts_clear_value[0] = new_clear_value;
-      clr.dest.ts_clear_value[1] = new_clear_value;
+      clr.dest.ts_clear_value[0] = surf->level->clear_value;
+      clr.dest.ts_clear_value[1] = surf->level->clear_value;
       clr.dest.ts_mode = surf->level->ts_mode;
       clr.dest.ts_compress_fmt = surf->level->ts_compress_fmt;
    }
@@ -310,11 +329,11 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
 
    /* This made the TS valid */
    if (surf->surf.ts_size) {
-      ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = new_clear_value;
+      ctx->framebuffer.TS_DEPTH_CLEAR_VALUE = surf->level->clear_value;
       surf->level->ts_valid = true;
+      ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
-   surf->level->clear_value = new_clear_value;
    resource_written(ctx, surf->base.texture);
    etna_resource(surf->base.texture)->seqno++;
 }
@@ -361,7 +380,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
    assert(blit_info->src.level <= src->base.last_level);
    assert(blit_info->dst.level <= dst->base.last_level);
 
-   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale, NULL))
+   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale))
       return false;
 
    /* The width/height are in pixels; they do not change as a result of
@@ -384,21 +403,20 @@ etna_try_blt_blit(struct pipe_context *pctx,
       return false;
    }
 
-   /* TODO: 1 byte per pixel formats aren't handled by etna_compatible_rs_format nor
-    * translate_rs_format.
+   /* Only support same format (used tiling/detiling) blits for now.
+    * TODO: figure out which different-format blits are possible and test them
+    *  - need to use correct swizzle
+    *  - set sRGB bits correctly
+    *  - avoid trying to convert between float/int formats?
     */
-   unsigned src_format = blit_info->src.format;
-   unsigned dst_format = blit_info->dst.format;
+   if (blit_info->src.format != blit_info->dst.format)
+      return false;
 
-   /* for a copy with same dst/src format, we can use a different format */
-   if (translate_blt_format(src_format) == ETNA_NO_MATCH &&
-       src_format == dst_format) {
-      src_format = dst_format = etna_compatible_rs_format(src_format);
-   }
+   uint32_t format = etna_compatible_blt_format(blit_info->dst.format);
+   if (format == ETNA_NO_MATCH)
+      return false;
 
-   if (translate_blt_format(src_format) == ETNA_NO_MATCH ||
-       translate_blt_format(dst_format) == ETNA_NO_MATCH ||
-       blit_info->scissor_enable ||
+   if (blit_info->scissor_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return false;
@@ -445,13 +463,11 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.src.addr.bo = src->bo;
       op.src.addr.offset = src_lev->offset + blit_info->src.box.z * src_lev->layer_stride;
       op.src.addr.flags = ETNA_RELOC_READ;
-      op.src.format = translate_blt_format(src_format);
+      op.src.format = format;
       op.src.stride = src_lev->stride;
       op.src.tiling = src->layout;
-      const struct util_format_description *src_format_desc =
-         util_format_description(src_format);
       for (unsigned x=0; x<4; ++x)
-         op.src.swizzle[x] = src_format_desc->swizzle[x];
+         op.src.swizzle[x] = x;
 
       if (src_lev->ts_size && src_lev->ts_valid) {
          op.src.use_ts = 1;
@@ -467,13 +483,11 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.dest.addr.bo = dst->bo;
       op.dest.addr.offset = dst_lev->offset + blit_info->dst.box.z * dst_lev->layer_stride;
       op.dest.addr.flags = ETNA_RELOC_WRITE;
-      op.dest.format = translate_blt_format(dst_format);
+      op.dest.format = format;
       op.dest.stride = dst_lev->stride;
       op.dest.tiling = dst->layout;
-      const struct util_format_description *dst_format_desc =
-         util_format_description(dst_format);
       for (unsigned x=0; x<4; ++x)
-         op.dest.swizzle[x] = dst_format_desc->swizzle[x];
+         op.dest.swizzle[x] = x;
 
       op.dest_x = blit_info->dst.box.x;
       op.dest_y = blit_info->dst.box.y;

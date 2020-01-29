@@ -303,11 +303,12 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
        ws->info.has_dedicated_vram = true;
     }
 
+    ws->info.num_rings[RING_GFX] = 1;
     /* Check for dma */
-    ws->info.num_sdma_rings = 0;
+    ws->info.num_rings[RING_DMA] = 0;
     /* DMA is disabled on R700. There is IB corruption and hangs. */
     if (ws->info.chip_class >= EVERGREEN && ws->info.drm_minor >= 27) {
-        ws->info.num_sdma_rings = 1;
+        ws->info.num_rings[RING_DMA] = 1;
     }
 
     /* Check for UVD and VCE */
@@ -316,16 +317,20 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
     if (ws->info.drm_minor >= 32) {
 	uint32_t value = RADEON_CS_RING_UVD;
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
-                                 "UVD Ring working", &value))
+                                 "UVD Ring working", &value)) {
             ws->info.has_hw_decode = value;
+            ws->info.num_rings[RING_UVD] = 1;
+        }
 
         value = RADEON_CS_RING_VCE;
         if (radeon_get_drm_value(ws->fd, RADEON_INFO_RING_WORKING,
                                  NULL, &value) && value) {
 
             if (radeon_get_drm_value(ws->fd, RADEON_INFO_VCE_FW_VERSION,
-                                     "VCE FW version", &value))
+                                     "VCE FW version", &value)) {
                 ws->info.vce_fw_version = value;
+                ws->info.num_rings[RING_VCE] = 1;
+            }
 	}
     }
 

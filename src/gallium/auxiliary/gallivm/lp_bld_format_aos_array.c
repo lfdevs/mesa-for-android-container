@@ -36,7 +36,7 @@
 #include "lp_bld_gather.h"
 
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "pipe/p_state.h"
 
 

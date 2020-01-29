@@ -599,7 +599,7 @@ intelDestroyContext(__DRIcontext * driContextPriv)
       driDestroyOptionCache(&intel->optionCache);
 
       /* free the Mesa context */
-      _mesa_free_context_data(&intel->ctx, true);
+      _mesa_free_context_data(&intel->ctx);
 
       _math_matrix_dtr(&intel->ViewportMatrix);
 

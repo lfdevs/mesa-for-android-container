@@ -28,7 +28,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "freedreno_draw.h"
 #include "freedreno_state.h"
@@ -54,7 +54,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		enum a3xx_color_swap swap = WZYX;
 		bool srgb = false, sint = false, uint = false;
 		struct fd_resource *rsc = NULL;
-		struct fd_resource_slice *slice = NULL;
+		struct fdl_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t size = 0;
 		uint32_t base = 0;
@@ -89,11 +89,10 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 				size = stride * gmem->bin_h;
 				base = gmem->cbuf_base[i];
 			} else {
-				stride = slice->pitch * rsc->cpp;
+				stride = slice->pitch * rsc->layout.cpp;
 				size = slice->size0;
 
-				if (!fd_resource_level_linear(psurf->texture, psurf->u.tex.level))
-					tile_mode = rsc->tile_mode;
+				tile_mode = fd_resource_tile_mode(psurf->texture, psurf->u.tex.level);
 			}
 		}
 
@@ -137,7 +136,7 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
 	if (zsbuf) {
 		struct fd_resource *rsc = fd_resource(zsbuf->texture);
 		enum a5xx_depth_format fmt = fd5_pipe2depth(zsbuf->format);
-		uint32_t cpp = rsc->cpp;
+		uint32_t cpp = rsc->layout.cpp;
 		uint32_t stride = 0;
 		uint32_t size = 0;
 
@@ -145,8 +144,8 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
 			stride = cpp * gmem->bin_w;
 			size = stride * gmem->bin_h;
 		} else {
-			struct fd_resource_slice *slice = fd_resource_slice(rsc, 0);
-			stride = slice->pitch * rsc->cpp;
+			struct fdl_slice *slice = fd_resource_slice(rsc, 0);
+			stride = slice->pitch * rsc->layout.cpp;
 			size = slice->size0;
 		}
 
@@ -192,8 +191,8 @@ emit_zs(struct fd_ringbuffer *ring, struct pipe_surface *zsbuf,
 				stride = 1 * gmem->bin_w;
 				size = stride * gmem->bin_h;
 			} else {
-				struct fd_resource_slice *slice = fd_resource_slice(rsc->stencil, 0);
-				stride = slice->pitch * rsc->cpp;
+				struct fdl_slice *slice = fd_resource_slice(rsc->stencil, 0);
+				stride = slice->pitch * rsc->layout.cpp;
 				size = slice->size0;
 			}
 
@@ -485,22 +484,22 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 		// possibly we want to flip this around gmem2mem and keep depth
 		// tiled in sysmem (and fixup sampler state to assume tiled).. this
 		// might be required for doing depth/stencil in bypass mode?
-		struct fd_resource_slice *slice = fd_resource_slice(rsc, 0);
+		struct fdl_slice *slice = fd_resource_slice(rsc, 0);
 		enum a5xx_color_fmt format =
 			fd5_pipe2color(fd_gmem_restore_format(rsc->base.format));
 
 		OUT_PKT4(ring, REG_A5XX_RB_MRT_BUF_INFO(0), 5);
 		OUT_RING(ring, A5XX_RB_MRT_BUF_INFO_COLOR_FORMAT(format) |
-				A5XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(rsc->tile_mode) |
+				A5XX_RB_MRT_BUF_INFO_COLOR_TILE_MODE(rsc->layout.tile_mode) |
 				A5XX_RB_MRT_BUF_INFO_COLOR_SWAP(WZYX));
-		OUT_RING(ring, A5XX_RB_MRT_PITCH(slice->pitch * rsc->cpp));
+		OUT_RING(ring, A5XX_RB_MRT_PITCH(slice->pitch * rsc->layout.cpp));
 		OUT_RING(ring, A5XX_RB_MRT_ARRAY_PITCH(slice->size0));
 		OUT_RELOC(ring, rsc->bo, 0, 0, 0);  /* BASE_LO/HI */
 
 		buf = BLIT_MRT0;
 	}
 
-	stride = gmem->bin_w * rsc->cpp;
+	stride = gmem->bin_w * rsc->layout.cpp;
 	size = stride * gmem->bin_h;
 
 	OUT_PKT4(ring, REG_A5XX_RB_BLIT_FLAG_DST_LO, 4);
@@ -610,7 +609,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 {
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
-	struct fd_resource_slice *slice;
+	struct fdl_slice *slice;
 	bool tiled;
 	uint32_t offset;
 
@@ -632,14 +631,13 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, 0x00000000);   /* RB_BLIT_FLAG_DST_PITCH */
 	OUT_RING(ring, 0x00000000);   /* RB_BLIT_FLAG_DST_ARRAY_PITCH */
 
-	tiled = rsc->tile_mode &&
-		!fd_resource_level_linear(psurf->texture, psurf->u.tex.level);
+	tiled = fd_resource_tile_mode(psurf->texture, psurf->u.tex.level);
 
 	OUT_PKT4(ring, REG_A5XX_RB_RESOLVE_CNTL_3, 5);
 	OUT_RING(ring, 0x00000004 |   /* XXX RB_RESOLVE_CNTL_3 */
 			COND(tiled, A5XX_RB_RESOLVE_CNTL_3_TILED));
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);     /* RB_BLIT_DST_LO/HI */
-	OUT_RING(ring, A5XX_RB_BLIT_DST_PITCH(slice->pitch * rsc->cpp));
+	OUT_RING(ring, A5XX_RB_BLIT_DST_PITCH(slice->pitch * rsc->layout.cpp));
 	OUT_RING(ring, A5XX_RB_BLIT_DST_ARRAY_PITCH(slice->size0));
 
 	OUT_PKT4(ring, REG_A5XX_RB_BLIT_CNTL, 1);

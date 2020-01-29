@@ -122,6 +122,10 @@ llvmpipe_draw_vbo(struct pipe_context *pipe, const struct pipe_draw_info *info)
    draw_collect_pipeline_statistics(draw,
                                     lp->active_statistics_queries > 0);
 
+   draw_collect_primitives_generated(draw,
+                                     lp->active_primgen_queries &&
+                                     !lp->queries_disabled);
+
    /* draw! */
    draw_vbo(draw, info);
 

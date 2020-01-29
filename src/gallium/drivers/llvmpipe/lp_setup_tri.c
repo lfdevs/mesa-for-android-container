@@ -46,7 +46,7 @@
 
 #if defined(PIPE_ARCH_SSE)
 #include <emmintrin.h>
-#elif defined(_ARCH_PWR8) && defined(PIPE_ARCH_LITTLE_ENDIAN)
+#elif defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
 #include <altivec.h>
 #include "util/u_pwr8.h"
 #endif
@@ -489,7 +489,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       eo = _mm_shuffle_epi32(eo, _MM_SHUFFLE(0,0,0,2));
       plane[2].eo = (uint32_t)_mm_cvtsi128_si32(eo);
    } else
-#elif defined(_ARCH_PWR8) && defined(PIPE_ARCH_LITTLE_ENDIAN)
+#elif defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
    /*
     * XXX this code is effectively disabled for all practical purposes,
     * as the allowed fb size is tiny if FIXED_ORDER is 8.
@@ -513,7 +513,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       __m128i zero = vec_splats((unsigned char) 0);
       PIPE_ALIGN_VAR(16) int32_t temp_vec[4];
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       vshuf_mask.i[0] = 0x07060504;
       vshuf_mask.i[1] = 0x0B0A0908;
       vshuf_mask.i[2] = 0x03020100;

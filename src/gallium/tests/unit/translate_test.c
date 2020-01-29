@@ -26,7 +26,7 @@
 #include <stdio.h>
 #include "translate/translate.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_half.h"
 #include "util/u_cpu_detect.h"
 #include "rtasm/rtasm_cpu.h"

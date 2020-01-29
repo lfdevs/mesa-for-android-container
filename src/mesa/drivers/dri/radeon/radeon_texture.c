@@ -602,20 +602,19 @@ mesa_format _radeon_texformat_argb1555 = MESA_FORMAT_NONE;
 static void
 radeonInitTextureFormats(void)
 {
-   if (_mesa_little_endian()) {
-      _radeon_texformat_rgba8888	= MESA_FORMAT_A8B8G8R8_UNORM;
-      _radeon_texformat_argb8888	= MESA_FORMAT_B8G8R8A8_UNORM;
-      _radeon_texformat_rgb565		= MESA_FORMAT_B5G6R5_UNORM;
-      _radeon_texformat_argb4444	= MESA_FORMAT_B4G4R4A4_UNORM;
-      _radeon_texformat_argb1555	= MESA_FORMAT_B5G5R5A1_UNORM;
-   }
-   else {
-      _radeon_texformat_rgba8888	= MESA_FORMAT_R8G8B8A8_UNORM;
-      _radeon_texformat_argb8888	= MESA_FORMAT_A8R8G8B8_UNORM;
-      _radeon_texformat_rgb565		= MESA_FORMAT_R5G6B5_UNORM;
-      _radeon_texformat_argb4444	= MESA_FORMAT_A4R4G4B4_UNORM;
-      _radeon_texformat_argb1555	= MESA_FORMAT_A1R5G5B5_UNORM;
-   }
+#if UTIL_ARCH_LITTLE_ENDIAN
+   _radeon_texformat_rgba8888	= MESA_FORMAT_A8B8G8R8_UNORM;
+   _radeon_texformat_argb8888	= MESA_FORMAT_B8G8R8A8_UNORM;
+   _radeon_texformat_rgb565	= MESA_FORMAT_B5G6R5_UNORM;
+   _radeon_texformat_argb4444	= MESA_FORMAT_B4G4R4A4_UNORM;
+   _radeon_texformat_argb1555	= MESA_FORMAT_B5G5R5A1_UNORM;
+#else
+   _radeon_texformat_rgba8888	= MESA_FORMAT_R8G8B8A8_UNORM;
+   _radeon_texformat_argb8888	= MESA_FORMAT_A8R8G8B8_UNORM;
+   _radeon_texformat_rgb565	= MESA_FORMAT_R5G6B5_UNORM;
+   _radeon_texformat_argb4444	= MESA_FORMAT_A4R4G4B4_UNORM;
+   _radeon_texformat_argb1555	= MESA_FORMAT_A1R5G5B5_UNORM;
+#endif
 }
 
 void

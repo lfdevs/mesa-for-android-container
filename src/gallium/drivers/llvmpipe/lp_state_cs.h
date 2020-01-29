@@ -89,6 +89,9 @@ struct lp_compute_shader {
    unsigned no;
    unsigned variants_created;
    unsigned variants_cached;
+
+   int max_global_buffers;
+   struct pipe_resource **global_buffers;
 };
 
 struct lp_cs_exec {
@@ -120,6 +123,8 @@ struct lp_cs_context {
    struct {
       struct pipe_image_view current;
    } images[LP_MAX_TGSI_SHADER_IMAGES];
+
+   void *input;
 };
 
 struct lp_cs_context *lp_csctx_create(struct pipe_context *pipe);

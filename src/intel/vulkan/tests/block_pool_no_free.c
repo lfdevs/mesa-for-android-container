@@ -111,14 +111,15 @@ static void validate_monotonic(int32_t **blocks)
 
 static void run_test()
 {
-   struct anv_instance instance = { };
+   struct anv_physical_device physical_device = { };
    struct anv_device device = {
-      .instance = &instance,
+      .physical = &physical_device,
    };
    struct anv_block_pool pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_block_pool_init(&pool, &device, 4096, 4096, 0);
+   anv_bo_cache_init(&device.bo_cache);
+   anv_block_pool_init(&pool, &device, 4096, 4096);
 
    for (unsigned i = 0; i < NUM_THREADS; i++) {
       jobs[i].pool = &pool;

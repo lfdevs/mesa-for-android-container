@@ -32,7 +32,7 @@
  * in our shader code, and this stores the table for doing so.
  */
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/macros.h"
 
 #include "vc4_context.h"

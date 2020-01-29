@@ -633,6 +633,9 @@ set_push_constant_loc(const int nr_uniforms, int *new_uniform_count,
 void
 vec4_visitor::pack_uniform_registers()
 {
+   if (!compiler->compact_params)
+      return;
+
    uint8_t chans_used[this->uniforms];
    int new_loc[this->uniforms];
    int new_chan[this->uniforms];

@@ -272,7 +272,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       static const gl_nir_linker_options opts = {
          .fill_parameters = false,
       };
-      if (!gl_nir_link(ctx, shProg, &opts))
+      if (!gl_nir_link_spirv(ctx, shProg, &opts))
          return GL_FALSE;
    }
 
@@ -332,8 +332,7 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
       brw_shader_gather_info(prog->nir, prog);
 
       NIR_PASS_V(prog->nir, gl_nir_lower_atomics, shProg, false);
-      NIR_PASS_V(prog->nir, nir_lower_atomics_to_ssbo,
-                 prog->nir->info.num_abos);
+      NIR_PASS_V(prog->nir, nir_lower_atomics_to_ssbo);
 
       nir_sweep(prog->nir);
 
@@ -384,9 +383,9 @@ brw_link_shader(struct gl_context *ctx, struct gl_shader_program *shProg)
 
    /* SPIR-V programs build its resource list from linked NIR shaders. */
    if (!shProg->data->spirv)
-      build_program_resource_list(ctx, shProg);
+      build_program_resource_list(ctx, shProg, false);
    else
-      nir_build_program_resource_list(ctx, shProg);
+      nir_build_program_resource_list(ctx, shProg, true);
 
    for (stage = 0; stage < ARRAY_SIZE(shProg->_LinkedShaders); stage++) {
       struct gl_linked_shader *shader = shProg->_LinkedShaders[stage];

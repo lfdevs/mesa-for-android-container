@@ -459,7 +459,7 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
       if (type_sz(reg.type) > 4 &&
           ((devinfo->gen == 7 && !devinfo->is_haswell) ||
            devinfo->is_cherryview || gen_device_info_is_9lp(devinfo) ||
-           !devinfo->has_64bit_types)) {
+           !devinfo->has_64bit_float)) {
          /* IVB has an issue (which we found empirically) where it reads two
           * address register components per channel for indirectly addressed
           * 64-bit sources.
@@ -1711,6 +1711,7 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
     */
    int spill_count = 0, fill_count = 0;
    int loop_count = 0, send_count = 0;
+   bool is_accum_used = false;
 
    struct disasm_info *disasm_info = disasm_initialize(devinfo, cfg);
 
@@ -1739,6 +1740,23 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
           inst->dst.component_size(inst->exec_size) > REG_SIZE) {
          brw_NOP(p);
          last_insn_offset = p->next_insn_offset;
+      }
+
+      /* GEN:BUG:14010017096:
+       *
+       * Clear accumulator register before end of thread.
+       */
+      if (inst->eot && is_accum_used && devinfo->gen >= 12) {
+         brw_set_default_exec_size(p, BRW_EXECUTE_16);
+         brw_set_default_mask_control(p, BRW_MASK_DISABLE);
+         brw_set_default_predicate_control(p, BRW_PREDICATE_NONE);
+         brw_MOV(p, brw_acc_reg(8), brw_imm_f(0.0f));
+         last_insn_offset = p->next_insn_offset;
+      }
+
+      if (!is_accum_used && !inst->eot) {
+         is_accum_used = inst->writes_accumulator_implicitly(devinfo) ||
+                         inst->dst.is_accumulator();
       }
 
       if (unlikely(debug_flag))
@@ -2062,7 +2080,15 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
       case SHADER_OPCODE_SEND:
          generate_send(inst, dst, src[0], src[1], src[2],
                        inst->ex_mlen > 0 ? src[3] : brw_null_reg());
-         send_count++;
+         if ((inst->desc & 0xff) == BRW_BTI_STATELESS ||
+             (inst->desc & 0xff) == GEN8_BTI_STATELESS_NON_COHERENT) {
+            if (inst->size_written)
+               fill_count++;
+            else
+               spill_count++;
+         } else {
+            send_count++;
+         }
          break;
 
       case SHADER_OPCODE_GET_BUFFER_SIZE:
@@ -2167,6 +2193,11 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          assert(src[2].file == BRW_IMMEDIATE_VALUE);
          brw_memory_fence(p, dst, src[0], BRW_OPCODE_SEND, src[1].ud, src[2].ud);
          send_count++;
+         break;
+
+      case FS_OPCODE_SCHEDULING_FENCE:
+         if (unlikely(debug_flag))
+            disasm_info->use_tail = true;
          break;
 
       case SHADER_OPCODE_INTERLOCK:

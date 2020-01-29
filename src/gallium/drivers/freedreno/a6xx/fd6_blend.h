@@ -49,6 +49,7 @@ struct fd6_blend_stateobj {
 	uint32_t rb_blend_cntl;
 	uint32_t rb_dither_cntl;
 	uint32_t sp_blend_cntl;
+	bool lrz_write;
 };
 
 static inline struct fd6_blend_stateobj *

@@ -55,9 +55,14 @@ LOCAL_SHARED_LIBRARIES += \
 endif
 
 LOCAL_STATIC_LIBRARIES += \
+	libetnaviv_drm \
 	libfreedreno_drm \
 	libfreedreno_ir3 \
 	libmesa_gallium \
+	libpanfrost_bifrost \
+	libpanfrost_decode \
+	libpanfrost_encoder \
+	libpanfrost_midgard \
 	libpanfrost_shared
 
 ifeq ($(USE_LIBBACKTRACE),true)

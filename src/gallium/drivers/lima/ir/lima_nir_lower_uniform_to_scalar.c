@@ -44,7 +44,7 @@ lower_load_uniform_to_scalar(nir_builder *b, nir_intrinsic_instr *intr)
       nir_intrinsic_set_type(chan_intr, nir_intrinsic_type(intr));
 
       chan_intr->src[0] =
-         nir_src_for_ssa(nir_fmul_imm(b, intr->src[0].ssa, 4));
+         nir_src_for_ssa(nir_imul_imm(b, intr->src[0].ssa, 4));
 
       nir_builder_instr_insert(b, &chan_intr->instr);
 

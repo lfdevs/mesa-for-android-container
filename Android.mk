@@ -24,7 +24,7 @@
 # BOARD_GPU_DRIVERS should be defined.  The valid values are
 #
 #   classic drivers: i915 i965
-#   gallium drivers: swrast freedreno i915g nouveau kmsro r300g r600g radeonsi vc4 virgl vmwgfx etnaviv iris lima
+#   gallium drivers: swrast freedreno i915g nouveau kmsro r300g r600g radeonsi vc4 virgl vmwgfx etnaviv iris lima panfrost
 #
 # The main target is libGLES_mesa.  For each classic driver enabled, a DRI
 # module will also be built.  DRI modules will be loaded by libGLES_mesa.
@@ -61,7 +61,8 @@ gallium_drivers := \
 	virgl.HAVE_GALLIUM_VIRGL \
 	etnaviv.HAVE_GALLIUM_ETNAVIV \
 	iris.HAVE_GALLIUM_IRIS \
-	lima.HAVE_GALLIUM_LIMA
+	lima.HAVE_GALLIUM_LIMA \
+	panfrost.HAVE_GALLIUM_PANFROST
 
 ifeq ($(BOARD_GPU_DRIVERS),all)
 MESA_BUILD_CLASSIC := $(filter HAVE_%, $(subst ., , $(classic_drivers)))
@@ -83,13 +84,6 @@ endif
 
 $(foreach d, $(MESA_BUILD_CLASSIC) $(MESA_BUILD_GALLIUM), $(eval $(d) := true))
 
-# host and target must be the same arch to generate matypes.h
-ifeq ($(TARGET_ARCH),$(HOST_ARCH))
-MESA_ENABLE_ASM := true
-else
-MESA_ENABLE_ASM := false
-endif
-
 ifneq ($(filter true, $(HAVE_GALLIUM_RADEONSI)),)
 MESA_ENABLE_LLVM := true
 endif
@@ -103,6 +97,7 @@ endef
 
 # add subdirectories
 SUBDIRS := \
+	src/etnaviv \
 	src/freedreno \
 	src/gbm \
 	src/loader \

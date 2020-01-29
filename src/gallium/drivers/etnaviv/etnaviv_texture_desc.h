@@ -28,47 +28,7 @@
 #ifndef H_ETNAVIV_TEXTURE_DESC
 #define H_ETNAVIV_TEXTURE_DESC
 
-#include "drm/etnaviv_drmif.h"
-
 #include "etnaviv_texture.h"
-
-#include "pipe/p_context.h"
-#include "pipe/p_state.h"
-
-#include "hw/state_3d.xml.h"
-
-struct etna_context;
-
-struct etna_sampler_state_desc {
-   struct pipe_sampler_state base;
-   uint32_t SAMP_CTRL0;
-   uint32_t SAMP_CTRL1;
-   uint32_t SAMP_LOD_MINMAX;
-   uint32_t SAMP_LOD_BIAS;
-};
-
-static inline struct etna_sampler_state_desc *
-etna_sampler_state_desc(struct pipe_sampler_state *samp)
-{
-   return (struct etna_sampler_state_desc *)samp;
-}
-
-struct etna_sampler_view_desc {
-   struct pipe_sampler_view base;
-   /* format-dependent merged with sampler state */
-   uint32_t SAMP_CTRL0;
-   uint32_t SAMP_CTRL1;
-
-   struct etna_bo *bo;
-   struct etna_reloc DESC_ADDR;
-   struct etna_sampler_ts ts;
-};
-
-static inline struct etna_sampler_view_desc *
-etna_sampler_view_desc(struct pipe_sampler_view *view)
-{
-   return (struct etna_sampler_view_desc *)view;
-}
 
 /* Initialize context for descriptor-based texture views and descriptors */
 void

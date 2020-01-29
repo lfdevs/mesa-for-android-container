@@ -96,10 +96,10 @@ etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
                                                  ssa->parent_instr);
                } break;
                case nir_intrinsic_store_deref: {
+                  nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
                   if (shader->info.stage != MESA_SHADER_FRAGMENT || !v->key.frag_rb_swap)
                      break;
 
-                  nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
                   assert(deref->deref_type == nir_deref_type_var);
 
                   if (deref->var->data.location != FRAG_RESULT_COLOR &&
@@ -120,6 +120,11 @@ etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
                   nir_ssa_def *ssa = nir_imul(&b, intr->src[0].ssa, nir_imm_int(&b, 16));
                   nir_instr_rewrite_src(instr, &intr->src[0], nir_src_for_ssa(ssa));
                } break;
+               case nir_intrinsic_load_vertex_id:
+               case nir_intrinsic_load_instance_id:
+                  /* detect use of vertex_id/instance_id */
+                  v->vs_id_in_reg = v->infile.num_reg;
+                  break;
                default:
                   break;
                }
@@ -752,6 +757,9 @@ etna_compile_shader_nir(struct etna_shader_variant *v)
    etna_optimize_loop(s);
 
    OPT_V(s, etna_lower_io, v);
+
+   if (v->shader->specs->vs_need_z_div)
+      NIR_PASS_V(s, nir_lower_clip_halfz);
 
    /* lower pre-halti2 to float (halti0 has integers, but only scalar..) */
    if (c->specs->halti < 2) {

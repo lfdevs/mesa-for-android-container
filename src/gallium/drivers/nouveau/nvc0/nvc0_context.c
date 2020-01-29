@@ -134,6 +134,12 @@ nvc0_emit_string_marker(struct pipe_context *pipe, const char *str, int len)
    }
 }
 
+static enum pipe_reset_status
+nvc0_get_device_reset_status(struct pipe_context *pipe)
+{
+   return PIPE_NO_RESET;
+}
+
 static void
 nvc0_context_unreference_resources(struct nvc0_context *nvc0)
 {
@@ -407,6 +413,7 @@ nvc0_create(struct pipe_screen *pscreen, void *priv, unsigned ctxflags)
    pipe->memory_barrier = nvc0_memory_barrier;
    pipe->get_sample_position = nvc0_context_get_sample_position;
    pipe->emit_string_marker = nvc0_emit_string_marker;
+   pipe->get_device_reset_status = nvc0_get_device_reset_status;
 
    nouveau_context_init(&nvc0->base);
    nvc0_init_query_functions(nvc0);

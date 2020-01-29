@@ -299,6 +299,12 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
        dst_level, dst_layer, dst_x0, dst_y0, dst_x1, dst_y1,
        mirror_x, mirror_y);
 
+   if (src_format == MESA_FORMAT_NONE)
+      src_format = src_mt->format;
+
+   if (dst_format == MESA_FORMAT_NONE)
+      dst_format = dst_mt->format;
+
    if (!decode_srgb)
       src_format = _mesa_get_srgb_format_linear(src_format);
 
@@ -389,7 +395,7 @@ brw_blorp_blit_miptrees(struct brw_context *brw,
    /* We do format workarounds for some depth formats so we can't reliably
     * sample with HiZ.  One of these days, we should fix that.
     */
-   if (src_aux_usage == ISL_AUX_USAGE_HIZ)
+   if (src_aux_usage == ISL_AUX_USAGE_HIZ && src_mt->format != src_format)
       src_aux_usage = ISL_AUX_USAGE_NONE;
    const bool src_clear_supported =
       src_aux_usage != ISL_AUX_USAGE_NONE && src_mt->format == src_format;
@@ -457,6 +463,15 @@ brw_blorp_copy_miptrees(struct brw_context *brw,
    bool src_clear_supported, dst_clear_supported;
 
    switch (src_mt->aux_usage) {
+   case ISL_AUX_USAGE_HIZ:
+      if (intel_miptree_sample_with_hiz(brw, src_mt)) {
+         src_aux_usage = src_mt->aux_usage;
+         src_clear_supported = true;
+      } else {
+         src_aux_usage = ISL_AUX_USAGE_NONE;
+         src_clear_supported = false;
+      }
+      break;
    case ISL_AUX_USAGE_MCS:
    case ISL_AUX_USAGE_CCS_E:
       src_aux_usage = src_mt->aux_usage;

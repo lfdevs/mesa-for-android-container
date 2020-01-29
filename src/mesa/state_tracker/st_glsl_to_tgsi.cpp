@@ -49,7 +49,6 @@
 #include "tgsi/tgsi_info.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
-#include "st_glsl_types.h"
 #include "st_program.h"
 #include "st_mesa_to_tgsi.h"
 #include "st_format.h"
@@ -2238,11 +2237,9 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
 
    case ir_unop_get_buffer_size: {
       ir_constant *const_offset = ir->operands[0]->as_constant();
-      int buf_base = ctx->st->has_hw_atomics
-         ? 0 : ctx->Const.Program[shader->Stage].MaxAtomicBuffers;
       st_src_reg buffer(
             PROGRAM_BUFFER,
-            buf_base + (const_offset ? const_offset->value.u[0] : 0),
+            const_offset ? const_offset->value.u[0] : 0,
             GLSL_TYPE_UINT);
       if (!const_offset) {
          buffer.reladdr = ralloc(mem_ctx, st_src_reg);
@@ -2391,6 +2388,13 @@ glsl_to_tgsi_visitor::visit_expression(ir_expression* ir, st_src_reg *op)
    case ir_unop_ssbo_unsized_array_length:
    case ir_unop_atan:
    case ir_binop_atan2:
+   case ir_unop_clz:
+   case ir_binop_add_sat:
+   case ir_binop_sub_sat:
+   case ir_binop_abs_sub:
+   case ir_binop_avg:
+   case ir_binop_avg_round:
+   case ir_binop_mul_32x16:
       /* This operation is not supported, or should have already been handled.
        */
       assert(!"Invalid ir opcode in glsl_to_tgsi_visitor::visit()");
@@ -2766,12 +2770,12 @@ glsl_to_tgsi_visitor::visit(ir_dereference_array *ir)
    if (handle_bound_deref(ir->as_dereference()))
       return;
 
-   /* We only need the logic provided by st_glsl_storage_type_size()
+   /* We only need the logic provided by count_vec4_slots()
     * for arrays of structs. Indirect sampler and image indexing is handled
     * elsewhere.
     */
    int element_size = ir->type->without_array()->is_struct() ?
-      st_glsl_storage_type_size(ir->type, var->data.bindless) :
+      ir->type->count_vec4_slots(false, var->data.bindless) :
       type_size(ir->type);
 
    index = ir->array_index->constant_expression_value(ralloc_parent(ir));
@@ -2876,7 +2880,7 @@ glsl_to_tgsi_visitor::visit(ir_dereference_record *ir)
       if (i == (unsigned) ir->field_idx)
          break;
       const glsl_type *member_type = struct_type->fields.structure[i].type;
-      offset += st_glsl_storage_type_size(member_type, var->data.bindless);
+      offset += member_type->count_vec4_slots(false, var->data.bindless);
    }
 
    /* If the type is smaller than a vec4, replicate the last channel out. */
@@ -3450,7 +3454,9 @@ glsl_to_tgsi_visitor::visit_atomic_counter_intrinsic(ir_call *ir)
 
       resource = buffer;
    } else {
-      st_src_reg buffer(PROGRAM_BUFFER, location->data.binding,
+      st_src_reg buffer(PROGRAM_BUFFER,
+                        prog->info.num_ssbos +
+                        location->data.binding,
                         GLSL_TYPE_ATOMIC_UINT);
 
       if (offset.file != PROGRAM_UNDEFINED) {
@@ -3538,11 +3544,9 @@ glsl_to_tgsi_visitor::visit_ssbo_intrinsic(ir_call *ir)
    ir_rvalue *offset = ((ir_instruction *)param)->as_rvalue();
 
    ir_constant *const_block = block->as_constant();
-   int buf_base = st_context(ctx)->has_hw_atomics
-      ? 0 : ctx->Const.Program[shader->Stage].MaxAtomicBuffers;
    st_src_reg buffer(
          PROGRAM_BUFFER,
-         buf_base + (const_block ? const_block->value.u[0] : 0),
+         const_block ? const_block->value.u[0] : 0,
          GLSL_TYPE_UINT);
 
    if (!const_block) {
@@ -7054,8 +7058,10 @@ st_translate_program(
 
       if (!st_context(ctx)->has_hw_atomics) {
          for (i = 0; i < prog->info.num_abos; i++) {
-            unsigned index = prog->sh.AtomicBuffers[i]->Binding;
-            assert(index < frag_const->MaxAtomicBuffers);
+            unsigned index = (prog->info.num_ssbos +
+                              prog->sh.AtomicBuffers[i]->Binding);
+            assert(prog->sh.AtomicBuffers[i]->Binding <
+                   frag_const->MaxAtomicBuffers);
             t->buffers[index] = ureg_DECL_buffer(ureg, index, true);
          }
       } else {
@@ -7070,11 +7076,7 @@ st_translate_program(
 
       assert(prog->info.num_ssbos <= frag_const->MaxShaderStorageBlocks);
       for (i = 0; i < prog->info.num_ssbos; i++) {
-         unsigned index = i;
-         if (!st_context(ctx)->has_hw_atomics)
-            index += frag_const->MaxAtomicBuffers;
-
-         t->buffers[index] = ureg_DECL_buffer(ureg, index, false);
+         t->buffers[i] = ureg_DECL_buffer(ureg, i, false);
       }
    }
 
@@ -7308,26 +7310,7 @@ get_mesa_program_tgsi(struct gl_context *ctx,
       return NULL;
    }
 
-   struct st_vertex_program *stvp;
-   struct st_common_program *stp;
-
-   switch (shader->Stage) {
-   case MESA_SHADER_VERTEX:
-      stvp = (struct st_vertex_program *)prog;
-      stvp->glsl_to_tgsi = v;
-      break;
-   case MESA_SHADER_FRAGMENT:
-   case MESA_SHADER_TESS_CTRL:
-   case MESA_SHADER_TESS_EVAL:
-   case MESA_SHADER_GEOMETRY:
-   case MESA_SHADER_COMPUTE:
-      stp = st_common_program(prog);
-      stp->glsl_to_tgsi = v;
-      break;
-   default:
-      assert(!"should not be reached");
-      return NULL;
-   }
+   st_program(prog)->glsl_to_tgsi = v;
 
    PRINT_STATS(v->print_stats());
 

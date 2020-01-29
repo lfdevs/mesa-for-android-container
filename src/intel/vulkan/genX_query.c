@@ -49,7 +49,7 @@ VkResult genX(CreateQueryPool)(
     VkQueryPool*                                pQueryPool)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
+   const struct anv_physical_device *pdevice = device->physical;
    struct anv_query_pool *pool;
    VkResult result;
 
@@ -111,31 +111,24 @@ VkResult genX(CreateQueryPool)(
    pool->stride = uint64s_per_slot * sizeof(uint64_t);
    pool->slots = pCreateInfo->queryCount;
 
-   uint64_t size = pool->slots * pool->stride;
-   result = anv_bo_init_new(&pool->bo, device, size);
-   if (result != VK_SUCCESS)
-      goto fail;
-
+   uint32_t bo_flags = 0;
    if (pdevice->supports_48bit_addresses)
-      pool->bo.flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
+      bo_flags |= EXEC_OBJECT_SUPPORTS_48B_ADDRESS;
 
    if (pdevice->use_softpin)
-      pool->bo.flags |= EXEC_OBJECT_PINNED;
+      bo_flags |= EXEC_OBJECT_PINNED;
 
    if (pdevice->has_exec_async)
-      pool->bo.flags |= EXEC_OBJECT_ASYNC;
+      bo_flags |= EXEC_OBJECT_ASYNC;
 
-   anv_vma_alloc(device, &pool->bo);
-
-   /* For query pools, we set the caching mode to I915_CACHING_CACHED.  On LLC
-    * platforms, this does nothing.  On non-LLC platforms, this means snooping
-    * which comes at a slight cost.  However, the buffers aren't big, won't be
-    * written frequently, and trying to handle the flushing manually without
-    * doing too much flushing is extremely painful.
-    */
-   anv_gem_set_caching(device, pool->bo.gem_handle, I915_CACHING_CACHED);
-
-   pool->bo.map = anv_gem_mmap(device, pool->bo.gem_handle, 0, size, 0);
+   uint64_t size = pool->slots * pool->stride;
+   result = anv_device_alloc_bo(device, size,
+                                ANV_BO_ALLOC_MAPPED |
+                                ANV_BO_ALLOC_SNOOPED,
+                                0 /* explicit_address */,
+                                &pool->bo);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    *pQueryPool = anv_query_pool_to_handle(pool);
 
@@ -158,9 +151,7 @@ void genX(DestroyQueryPool)(
    if (!pool)
       return;
 
-   anv_gem_munmap(pool->bo.map, pool->bo.size);
-   anv_vma_free(device, &pool->bo);
-   anv_gem_close(device, pool->bo.gem_handle);
+   anv_device_release_bo(device, pool->bo);
    vk_free2(&device->alloc, pAllocator, pool);
 }
 
@@ -168,7 +159,7 @@ static struct anv_address
 anv_query_address(struct anv_query_pool *pool, uint32_t query)
 {
    return (struct anv_address) {
-      .bo = &pool->bo,
+      .bo = pool->bo,
       .offset = query * pool->stride,
    };
 }
@@ -237,7 +228,7 @@ cpu_write_query_result(void *dst_slot, VkQueryResultFlags flags,
 static void *
 query_slot(struct anv_query_pool *pool, uint32_t query)
 {
-   return pool->bo.map + query * pool->stride;
+   return pool->bo->map + query * pool->stride;
 }
 
 static bool
@@ -250,38 +241,17 @@ static VkResult
 wait_for_available(struct anv_device *device,
                    struct anv_query_pool *pool, uint32_t query)
 {
-   while (true) {
+   uint64_t abs_timeout = anv_get_absolute_timeout(5 * NSEC_PER_SEC);
+
+   while (anv_gettime_ns() < abs_timeout) {
       if (query_is_available(pool, query))
          return VK_SUCCESS;
-
-      int ret = anv_gem_busy(device, pool->bo.gem_handle);
-      if (ret == 1) {
-         /* The BO is still busy, keep waiting. */
-         continue;
-      } else if (ret == -1) {
-         /* We don't know the real error. */
-         return anv_device_set_lost(device, "gem wait failed: %m");
-      } else {
-         assert(ret == 0);
-         /* The BO is no longer busy. */
-         if (query_is_available(pool, query)) {
-            return VK_SUCCESS;
-         } else {
-            VkResult status = anv_device_query_status(device);
-            if (status != VK_SUCCESS)
-               return status;
-
-            /* If we haven't seen availability yet, then we never will.  This
-             * can only happen if we have a client error where they call
-             * GetQueryPoolResults on a query that they haven't submitted to
-             * the GPU yet.  The spec allows us to do anything in this case,
-             * but returning VK_SUCCESS doesn't seem right and we shouldn't
-             * just keep spinning.
-             */
-            return VK_NOT_READY;
-         }
-      }
+      VkResult status = anv_device_query_status(device);
+      if (status != VK_SUCCESS)
+         return status;
    }
+
+   return anv_device_set_lost(device, "query timeout");
 }
 
 VkResult genX(GetQueryPoolResults)(
@@ -338,8 +308,17 @@ VkResult genX(GetQueryPoolResults)(
       switch (pool->type) {
       case VK_QUERY_TYPE_OCCLUSION: {
          uint64_t *slot = query_slot(pool, firstQuery + i);
-         if (write_results)
-            cpu_write_query_result(pData, flags, idx, slot[2] - slot[1]);
+         if (write_results) {
+            /* From the Vulkan 1.2.132 spec:
+             *
+             *    "If VK_QUERY_RESULT_PARTIAL_BIT is set,
+             *    VK_QUERY_RESULT_WAIT_BIT is not set, and the query’s status
+             *    is unavailable, an intermediate result value between zero and
+             *    the final result value is written to pData for that query."
+             */
+            uint64_t result = available ? slot[2] - slot[1] : 0;
+            cpu_write_query_result(pData, flags, idx, result);
+         }
          idx++;
          break;
       }
@@ -574,7 +553,7 @@ void genX(CmdResetQueryPool)(
    }
 }
 
-void genX(ResetQueryPoolEXT)(
+void genX(ResetQueryPool)(
     VkDevice                                    _device,
     VkQueryPool                                 queryPool,
     uint32_t                                    firstQuery,
@@ -583,7 +562,7 @@ void genX(ResetQueryPoolEXT)(
    ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
 
    for (uint32_t i = 0; i < queryCount; i++) {
-      uint64_t *slot = pool->bo.map + (firstQuery + i) * pool->stride;
+      uint64_t *slot = query_slot(pool, firstQuery + i);
       *slot = 0;
    }
 }
@@ -884,6 +863,45 @@ void genX(CmdWriteTimestamp)(
 
 #if GEN_GEN > 7 || GEN_IS_HASWELL
 
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+
+#define MI_PREDICATE_SRC0    0x2400
+#define MI_PREDICATE_SRC1    0x2408
+#define MI_PREDICATE_RESULT  0x2418
+
+/**
+ * Writes the results of a query to dst_addr is the value at poll_addr is equal
+ * to the reference value.
+ */
+static void
+gpu_write_query_result_cond(struct anv_cmd_buffer *cmd_buffer,
+                            struct gen_mi_builder *b,
+                            struct anv_address poll_addr,
+                            struct anv_address dst_addr,
+                            uint64_t ref_value,
+                            VkQueryResultFlags flags,
+                            uint32_t value_index,
+                            struct gen_mi_value query_result)
+{
+   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_SRC0), gen_mi_mem64(poll_addr));
+   gen_mi_store(b, gen_mi_reg64(MI_PREDICATE_SRC1), gen_mi_imm(ref_value));
+   anv_batch_emit(&cmd_buffer->batch, GENX(MI_PREDICATE), mip) {
+      mip.LoadOperation    = LOAD_LOAD;
+      mip.CombineOperation = COMBINE_SET;
+      mip.CompareOperation = COMPARE_SRCS_EQUAL;
+   }
+
+   if (flags & VK_QUERY_RESULT_64_BIT) {
+      struct anv_address res_addr = anv_address_add(dst_addr, value_index * 8);
+      gen_mi_store_if(b, gen_mi_mem64(res_addr), query_result);
+   } else {
+      struct anv_address res_addr = anv_address_add(dst_addr, value_index * 4);
+      gen_mi_store_if(b, gen_mi_mem32(res_addr), query_result);
+   }
+}
+
+#endif /* GEN_GEN >= 8 || GEN_IS_HASWELL */
+
 static void
 gpu_write_query_result(struct gen_mi_builder *b,
                        struct anv_address dst_addr,
@@ -960,7 +978,22 @@ void genX(CmdCopyQueryPoolResults)(
       switch (pool->type) {
       case VK_QUERY_TYPE_OCCLUSION:
          result = compute_query_result(&b, anv_address_add(query_addr, 8));
+#if GEN_GEN >= 8 || GEN_IS_HASWELL
+         /* Like in the case of vkGetQueryPoolResults, if the query is
+          * unavailable and the VK_QUERY_RESULT_PARTIAL_BIT flag is set,
+          * conservatively write 0 as the query result. If the
+          * VK_QUERY_RESULT_PARTIAL_BIT isn't set, don't write any value.
+          */
+         gpu_write_query_result_cond(cmd_buffer, &b, query_addr, dest_addr,
+               1 /* available */, flags, idx, result);
+         if (flags & VK_QUERY_RESULT_PARTIAL_BIT) {
+            gpu_write_query_result_cond(cmd_buffer, &b, query_addr, dest_addr,
+                  0 /* unavailable */, flags, idx, gen_mi_imm(0));
+         }
+         idx++;
+#else /* GEN_GEN < 8 && !GEN_IS_HASWELL */
          gpu_write_query_result(&b, dest_addr, flags, idx++, result);
+#endif
          break;
 
       case VK_QUERY_TYPE_PIPELINE_STATISTICS: {

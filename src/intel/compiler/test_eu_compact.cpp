@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include "util/ralloc.h"
 #include "brw_eu.h"
+#include "brw_gen_enum.h"
 
 static bool
 test_compact_instruction(struct brw_codegen *p, brw_inst src)
@@ -159,6 +160,9 @@ test_fuzz_compact_instruction(struct brw_codegen *p, brw_inst src)
 
          clear_pad_bits(p->devinfo, &instr);
 
+         if (!brw_validate_instruction(p->devinfo, &instr, 0, NULL))
+            continue;
+
 	 if (!test_compact_instruction(p, instr)) {
 	    printf("  twiddled bits for fuzzing %d, %d\n", bit0, bit1);
 	    return false;
@@ -267,16 +271,17 @@ gen_f0_1_MOV_GRF_GRF(struct brw_codegen *p)
 
 struct {
    void (*func)(struct brw_codegen *p);
+   int gens;
 } tests[] = {
-   { gen_MOV_GRF_GRF },
-   { gen_ADD_GRF_GRF_GRF },
-   { gen_ADD_GRF_GRF_IMM },
-   { gen_ADD_GRF_GRF_IMM_d },
-   { gen_ADD_MRF_GRF_GRF },
-   { gen_ADD_vec1_GRF_GRF_GRF },
-   { gen_PLN_MRF_GRF_GRF },
-   { gen_f0_0_MOV_GRF_GRF },
-   { gen_f0_1_MOV_GRF_GRF },
+   { gen_MOV_GRF_GRF,          GEN_ALL      },
+   { gen_ADD_GRF_GRF_GRF,      GEN_ALL      },
+   { gen_ADD_GRF_GRF_IMM,      GEN_ALL      },
+   { gen_ADD_GRF_GRF_IMM_d,    GEN_ALL      },
+   { gen_ADD_MRF_GRF_GRF,      GEN_LE(GEN6) },
+   { gen_ADD_vec1_GRF_GRF_GRF, GEN_ALL      },
+   { gen_PLN_MRF_GRF_GRF,      GEN_LE(GEN6) },
+   { gen_f0_0_MOV_GRF_GRF,     GEN_ALL      },
+   { gen_f0_1_MOV_GRF_GRF,     GEN_ALL      },
 };
 
 static bool
@@ -286,7 +291,14 @@ run_tests(const struct gen_device_info *devinfo)
    bool fail = false;
 
    for (unsigned i = 0; i < ARRAY_SIZE(tests); i++) {
+      if ((tests[i].gens & gen_from_devinfo(devinfo)) == 0)
+         continue;
+
       for (int align_16 = 0; align_16 <= 1; align_16++) {
+         /* Align16 support is not present on Gen11+ */
+         if (devinfo->gen >= 11 && align_16)
+            continue;
+
 	 struct brw_codegen *p = rzalloc(NULL, struct brw_codegen);
 	 brw_init_codegen(devinfo, p, p);
 
@@ -322,7 +334,7 @@ main(int argc, char **argv)
    struct gen_device_info *devinfo = (struct gen_device_info *)calloc(1, sizeof(*devinfo));
    bool fail = false;
 
-   for (devinfo->gen = 5; devinfo->gen <= 9; devinfo->gen++) {
+   for (devinfo->gen = 5; devinfo->gen <= 12; devinfo->gen++) {
       fail |= run_tests(devinfo);
    }
 

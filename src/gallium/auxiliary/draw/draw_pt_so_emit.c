@@ -36,6 +36,7 @@
 #include "pipe/p_state.h"
 
 #include "util/u_math.h"
+#include "util/u_prim.h"
 #include "util/u_memory.h"
 
 struct pt_so_emit {
@@ -273,8 +274,20 @@ void draw_pt_so_emit( struct pt_so_emit *emit,
    struct vbuf_render *render = draw->render;
    unsigned start, i, stream;
 
-   if (!emit->has_so)
+   if (!emit->has_so) {
+      if (draw->collect_primgen) {
+         unsigned i;
+         unsigned total = 0;
+         for (i = 0; i < input_prims->primitive_count; i++) {
+            total +=
+               u_decomposed_prims_for_vertices(input_prims->prim,
+                                               input_prims->primitive_lengths[i]);
+         }
+         render->set_stream_output_info(render,
+                                        0, 0, total);
+      }
       return;
+   }
 
    if (!draw->so.num_targets)
       return;

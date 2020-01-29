@@ -188,6 +188,12 @@ typedef void(SWR_API* PFN_UPDATE_STATS)(HANDLE hPrivateContext, const SWR_STATS*
 typedef void(SWR_API* PFN_UPDATE_STATS_FE)(HANDLE hPrivateContext, const SWR_STATS_FE* pStats);
 
 //////////////////////////////////////////////////////////////////////////
+/// @brief Callback to allow driver to update StreamOut status
+/// @param hPrivateContext - handle to private data
+/// @param numPrims - number of primitives written to StreamOut buffer
+typedef void(SWR_API* PFN_UPDATE_STREAMOUT)(HANDLE hPrivateContext, uint64_t numPrims);
+
+//////////////////////////////////////////////////////////////////////////
 /// BucketManager
 /// Forward Declaration (see rdtsc_buckets.h for full definition)
 /////////////////////////////////////////////////////////////////////////
@@ -272,6 +278,7 @@ struct SWR_CREATECONTEXT_INFO
     PFN_UPDATE_SO_WRITE_OFFSET     pfnUpdateSoWriteOffset;
     PFN_UPDATE_STATS               pfnUpdateStats;
     PFN_UPDATE_STATS_FE            pfnUpdateStatsFE;
+    PFN_UPDATE_STREAMOUT           pfnUpdateStreamOut;
 
 
     // Pointer to rdtsc buckets mgr returned to the caller.

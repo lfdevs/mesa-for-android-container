@@ -58,18 +58,17 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	/* in layer_first layout, the level (slice) contains just one
 	 * layer (since in fact the layer contains the slices)
 	 */
-	uint32_t layers_in_level = rsc->layer_first ? 1 : prsc->array_size;
+	uint32_t layers_in_level = rsc->layout.layer_first ? 1 : prsc->array_size;
 
-	heightalign = tile_alignment[rsc->cpp].heightalign;
+	heightalign = tile_alignment[rsc->layout.cpp].heightalign;
 
 	for (level = 0; level <= prsc->last_level; level++) {
-		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
-		bool linear_level = fd_resource_level_linear(prsc, level);
+		struct fdl_slice *slice = fd_resource_slice(rsc, level);
 		uint32_t aligned_height = height;
 		uint32_t blocks;
 
-		if (rsc->tile_mode && !linear_level) {
-			pitchalign = tile_alignment[rsc->cpp].pitchalign;
+		if (fd_resource_tile_mode(prsc, level)) {
+			pitchalign = tile_alignment[rsc->layout.cpp].pitchalign;
 			aligned_height = align(aligned_height, heightalign);
 		} else {
 			pitchalign = 64;
@@ -102,18 +101,18 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		 */
 		if (prsc->target == PIPE_TEXTURE_3D && (
 					level == 1 ||
-					(level > 1 && rsc->slices[level - 1].size0 > 0xf000)))
-			slice->size0 = align(blocks * rsc->cpp, alignment);
-		else if (level == 0 || rsc->layer_first || alignment == 1)
-			slice->size0 = align(blocks * rsc->cpp, alignment);
+					(level > 1 && fd_resource_slice(rsc, level - 1)->size0 > 0xf000)))
+			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
+		else if (level == 0 || rsc->layout.layer_first || alignment == 1)
+			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
 		else
-			slice->size0 = rsc->slices[level - 1].size0;
+			slice->size0 = fd_resource_slice(rsc, level - 1)->size0;
 
 #if 0
 		debug_printf("%s: %ux%ux%u@%u: %2u: stride=%4u, size=%7u, aligned_height=%3u\n",
 				util_format_name(prsc->format),
-				prsc->width0, prsc->height0, prsc->depth0, rsc->cpp,
-				level, slice->pitch * rsc->cpp,
+				prsc->width0, prsc->height0, prsc->depth0, rsc->layout.cpp,
+				level, slice->pitch * rsc->layout.cpp,
 				slice->size0 * depth * layers_in_level,
 				aligned_height);
 #endif
@@ -128,18 +127,49 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	return size;
 }
 
+static void
+setup_lrz(struct fd_resource *rsc)
+{
+	struct fd_screen *screen = fd_screen(rsc->base.screen);
+	const uint32_t flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
+			DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
+	unsigned lrz_pitch  = align(DIV_ROUND_UP(rsc->base.width0, 8), 64);
+	unsigned lrz_height = DIV_ROUND_UP(rsc->base.height0, 8);
+
+	/* LRZ buffer is super-sampled: */
+	switch (rsc->base.nr_samples) {
+	case 4:
+		lrz_pitch *= 2;
+		/* fallthrough */
+	case 2:
+		lrz_height *= 2;
+	}
+
+	unsigned size = lrz_pitch * lrz_height * 2;
+
+	size += 0x1000; /* for GRAS_LRZ_FAST_CLEAR_BUFFER */
+
+	rsc->lrz_height = lrz_height;
+	rsc->lrz_width = lrz_pitch;
+	rsc->lrz_pitch = lrz_pitch;
+	rsc->lrz = fd_bo_new(screen->dev, size, flags, "lrz");
+}
+
 uint32_t
 fd5_setup_slices(struct fd_resource *rsc)
 {
 	uint32_t alignment;
 
+	if ((fd_mesa_debug & FD_DBG_LRZ) && has_depth(rsc->base.format))
+		setup_lrz(rsc);
+
 	switch (rsc->base.target) {
 	case PIPE_TEXTURE_3D:
-		rsc->layer_first = false;
+		rsc->layout.layer_first = false;
 		alignment = 4096;
 		break;
 	default:
-		rsc->layer_first = true;
+		rsc->layout.layer_first = true;
 		alignment = 1;
 		break;
 	}

@@ -25,7 +25,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_sampler.h"
 #include "vl/vl_zscan.h"
 

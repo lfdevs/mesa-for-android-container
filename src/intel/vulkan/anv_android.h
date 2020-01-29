@@ -40,7 +40,7 @@ VkResult anv_image_from_gralloc(VkDevice device_h,
 
 VkResult anv_image_from_external(VkDevice device_h,
                                  const VkImageCreateInfo *base_info,
-                                 const struct VkExternalMemoryImageCreateInfo *create_info,
+                                 const VkExternalMemoryImageCreateInfo *create_info,
                                  const VkAllocationCallbacks *alloc,
                                  VkImage *out_image_h);
 

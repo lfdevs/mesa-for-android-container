@@ -82,6 +82,7 @@ HANDLE SwrCreateContext(SWR_CREATECONTEXT_INFO* pCreateInfo)
     pContext->pfnUpdateSoWriteOffset     = pCreateInfo->pfnUpdateSoWriteOffset;
     pContext->pfnUpdateStats             = pCreateInfo->pfnUpdateStats;
     pContext->pfnUpdateStatsFE           = pCreateInfo->pfnUpdateStatsFE;
+    pContext->pfnUpdateStreamOut         = pCreateInfo->pfnUpdateStreamOut;
 
 
     pContext->hExternalMemory = pCreateInfo->hExternalMemory;
@@ -616,9 +617,17 @@ void SwrSetSoBuffers(HANDLE hContext, SWR_STREAMOUT_BUFFER* pSoBuffer, uint32_t 
 {
     API_STATE* pState = GetDrawState(GetContext(hContext));
 
-    SWR_ASSERT((slot < 4), "There are only 4 SO buffer slots [0, 3]\nSlot requested: %d", slot);
+    SWR_ASSERT((slot < MAX_SO_STREAMS), "There are only 4 SO buffer slots [0, 3]\nSlot requested: %d", slot);
 
-    pState->soBuffer[slot] = *pSoBuffer;
+    // remember buffer status in case of future resume StreamOut
+    if ((pState->soBuffer[slot].pBuffer != 0) && (pSoBuffer->pBuffer == 0))
+	pState->soPausedBuffer[slot] = pState->soBuffer[slot];
+
+    // resume
+    if (pState->soPausedBuffer[slot].pBuffer == pSoBuffer->pBuffer)
+	pState->soBuffer[slot] = pState->soPausedBuffer[slot];
+    else
+        pState->soBuffer[slot] = *pSoBuffer;
 }
 
 void SwrSetVertexFunc(HANDLE hContext, PFN_VERTEX_FUNC pfnVertexFunc)

@@ -62,7 +62,7 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 #include "util/u_pointer.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_dump.h"
 #include "util/u_string.h"
 #include "util/simple_list.h"
@@ -80,6 +80,7 @@
 #include "gallivm/lp_bld_intr.h"
 #include "gallivm/lp_bld_logic.h"
 #include "gallivm/lp_bld_tgsi.h"
+#include "gallivm/lp_bld_nir.h"
 #include "gallivm/lp_bld_swizzle.h"
 #include "gallivm/lp_bld_flow.h"
 #include "gallivm/lp_bld_debug.h"
@@ -102,7 +103,7 @@
 #include "lp_flush.h"
 #include "lp_state_fs.h"
 #include "lp_rast.h"
-
+#include "nir/nir_to_tgsi_info.h"
 
 /** Fragment shader number (for debugging) */
 static unsigned fs_no = 0;
@@ -341,6 +342,10 @@ generate_fs_loop(struct gallivm_state *gallivm,
 
    memset(&system_values, 0, sizeof(system_values));
 
+   /* truncate then sign extend. */
+   system_values.front_facing = LLVMBuildTrunc(gallivm->builder, facing, LLVMInt1TypeInContext(gallivm->context), "");
+   system_values.front_facing = LLVMBuildSExt(gallivm->builder, system_values.front_facing, LLVMInt32TypeInContext(gallivm->context), "");
+
    if (key->depth.enabled ||
        key->stencil[0].enabled) {
 
@@ -501,8 +506,12 @@ generate_fs_loop(struct gallivm_state *gallivm,
    params.image = image;
 
    /* Build the actual shader */
-   lp_build_tgsi_soa(gallivm, tokens, &params,
-                     outputs);
+   if (shader->base.type == PIPE_SHADER_IR_TGSI)
+      lp_build_tgsi_soa(gallivm, tokens, &params,
+                        outputs);
+   else
+      lp_build_nir_soa(gallivm, shader->base.ir.nir, &params,
+                       outputs);
 
    /* Alpha test */
    if (key->alpha.enabled) {
@@ -1399,7 +1408,7 @@ convert_to_blend_type(struct gallivm_state *gallivm,
       for (j = 0; j < src_fmt->nr_channels; ++j) {
          unsigned mask = 0;
          unsigned sa = src_fmt->channel[j].shift;
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
          unsigned from_lsb = j;
 #else
          unsigned from_lsb = src_fmt->nr_channels - j - 1;
@@ -1581,7 +1590,7 @@ convert_from_blend_type(struct gallivm_state *gallivm,
       for (j = 0; j < src_fmt->nr_channels; ++j) {
          unsigned mask = 0;
          unsigned sa = src_fmt->channel[j].shift;
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
          unsigned from_lsb = j;
 #else
          unsigned from_lsb = src_fmt->nr_channels - j - 1;
@@ -2839,9 +2848,12 @@ dump_fs_variant_key(struct lp_fragment_shader_variant_key *key)
 void
 lp_debug_fs_variant(struct lp_fragment_shader_variant *variant)
 {
-   debug_printf("llvmpipe: Fragment shader #%u variant #%u:\n", 
+   debug_printf("llvmpipe: Fragment shader #%u variant #%u:\n",
                 variant->shader->no, variant->no);
-   tgsi_dump(variant->shader->base.tokens, 0);
+   if (variant->shader->base.type == PIPE_SHADER_IR_TGSI)
+      tgsi_dump(variant->shader->base.tokens, 0);
+   else
+      nir_print_shader(variant->shader->base.ir.nir, stderr);
    dump_fs_variant_key(&variant->key);
    debug_printf("variant->opaque = %u\n", variant->opaque);
    debug_printf("\n");
@@ -2966,11 +2978,17 @@ llvmpipe_create_fs_state(struct pipe_context *pipe,
    shader->no = fs_no++;
    make_empty_list(&shader->variants);
 
-   /* get/save the summary info for this shader */
-   lp_build_tgsi_info(templ->tokens, &shader->info);
+   shader->base.type = templ->type;
+   if (templ->type == PIPE_SHADER_IR_TGSI) {
+      /* get/save the summary info for this shader */
+      lp_build_tgsi_info(templ->tokens, &shader->info);
 
-   /* we need to keep a local copy of the tokens */
-   shader->base.tokens = tgsi_dup_tokens(templ->tokens);
+      /* we need to keep a local copy of the tokens */
+      shader->base.tokens = tgsi_dup_tokens(templ->tokens);
+   } else {
+      shader->base.ir.nir = templ->ir.nir;
+      nir_tgsi_scan_shader(templ->ir.nir, &shader->info.base, true);
+   }
 
    shader->draw_data = draw_create_fragment_shader(llvmpipe->draw, templ);
    if (shader->draw_data == NULL) {
@@ -3330,7 +3348,7 @@ make_variant_key(struct llvmpipe_context *lp,
    /* alpha.ref_value is passed in jit_context */
 
    key->flatshade = lp->rasterizer->flatshade;
-   if (lp->active_occlusion_queries) {
+   if (lp->active_occlusion_queries && !lp->queries_disabled) {
       key->occlusion_count = TRUE;
    }
 

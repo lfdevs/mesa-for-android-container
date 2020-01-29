@@ -670,6 +670,7 @@ svga_create_query(struct pipe_context *pipe,
 {
    struct svga_context *svga = svga_context(pipe);
    struct svga_query *sq;
+   enum pipe_error ret;
 
    assert(query_type < SVGA_QUERY_MAX);
 
@@ -689,7 +690,10 @@ svga_create_query(struct pipe_context *pipe,
    case PIPE_QUERY_OCCLUSION_COUNTER:
       sq->svga_type = SVGA3D_QUERYTYPE_OCCLUSION;
       if (svga_have_vgpu10(svga)) {
-         define_query_vgpu10(svga, sq, sizeof(SVGADXOcclusionQueryResult));
+         ret = define_query_vgpu10(svga, sq,
+                                   sizeof(SVGADXOcclusionQueryResult));
+         if (ret != PIPE_OK)
+            goto fail;
 
          /**
           * In OpenGL, occlusion counter query can be used in conditional
@@ -703,17 +707,24 @@ svga_create_query(struct pipe_context *pipe,
          sq->predicate = svga_create_query(pipe, PIPE_QUERY_OCCLUSION_PREDICATE, index);
 
       } else {
-         define_query_vgpu9(svga, sq);
+         ret = define_query_vgpu9(svga, sq);
+         if (ret != PIPE_OK)
+            goto fail;
       }
       break;
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
       if (svga_have_vgpu10(svga)) {
          sq->svga_type = SVGA3D_QUERYTYPE_OCCLUSIONPREDICATE;
-         define_query_vgpu10(svga, sq, sizeof(SVGADXOcclusionPredicateQueryResult));
+         ret = define_query_vgpu10(svga, sq,
+                                   sizeof(SVGADXOcclusionPredicateQueryResult));
+         if (ret != PIPE_OK)
+            goto fail;
       } else {
          sq->svga_type = SVGA3D_QUERYTYPE_OCCLUSION;
-         define_query_vgpu9(svga, sq);
+         ret = define_query_vgpu9(svga, sq);
+         if (ret != PIPE_OK)
+            goto fail;
       }
       break;
    case PIPE_QUERY_PRIMITIVES_GENERATED:
@@ -721,14 +732,18 @@ svga_create_query(struct pipe_context *pipe,
    case PIPE_QUERY_SO_STATISTICS:
       assert(svga_have_vgpu10(svga));
       sq->svga_type = SVGA3D_QUERYTYPE_STREAMOUTPUTSTATS;
-      define_query_vgpu10(svga, sq,
-                          sizeof(SVGADXStreamOutStatisticsQueryResult));
+      ret = define_query_vgpu10(svga, sq,
+                                sizeof(SVGADXStreamOutStatisticsQueryResult));
+      if (ret != PIPE_OK)
+         goto fail;
       break;
    case PIPE_QUERY_TIMESTAMP:
       assert(svga_have_vgpu10(svga));
       sq->svga_type = SVGA3D_QUERYTYPE_TIMESTAMP;
-      define_query_vgpu10(svga, sq,
-                          sizeof(SVGADXTimestampQueryResult));
+      ret = define_query_vgpu10(svga, sq,
+                                sizeof(SVGADXTimestampQueryResult));
+      if (ret != PIPE_OK)
+         goto fail;
       break;
    case SVGA_QUERY_NUM_DRAW_CALLS:
    case SVGA_QUERY_NUM_FALLBACKS:

@@ -28,7 +28,7 @@
 #include "nine_pipe.h"
 #include "nine_dump.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 
 #define DBG_CHANNEL DBG_VOLUME

@@ -196,6 +196,7 @@ struct draw_context
          int eltBias;         
          unsigned min_index;
          unsigned max_index;
+         unsigned drawid;
          
          /** vertex arrays */
          struct draw_vertex_buffer vbuffer[PIPE_MAX_ATTRIBS];
@@ -347,6 +348,8 @@ struct draw_context
 
    struct pipe_query_data_pipeline_statistics statistics;
    boolean collect_statistics;
+
+   bool collect_primgen;
 
    struct draw_assembler *ia;
 

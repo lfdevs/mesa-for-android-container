@@ -73,6 +73,7 @@ static const struct debug_named_value debug_options[] = {
    {"shaderdb",       ETNA_DBG_SHADERDB, "Enable shaderdb output"},
    {"no_singlebuffer",ETNA_DBG_NO_SINGLEBUF, "Disable single buffer feature"},
    {"nir",            ETNA_DBG_NIR, "use new NIR compiler"},
+   {"deqp",           ETNA_DBG_DEQP, "Hacks to run dEQP GLES3 tests"}, /* needs MESA_GLES_VERSION_OVERRIDE=3.0 */
    DEBUG_NAMED_VALUE_END
 };
 
@@ -180,6 +181,8 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 0;
 
    /* Stream output. */
+   case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
+      return DBG_ENABLED(ETNA_DBG_DEQP) ? 4 : 0;
    case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
    case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
       return 0;
@@ -188,6 +191,11 @@ etna_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
       return 128;
    case PIPE_CAP_MAX_VERTEX_ELEMENT_SRC_OFFSET:
       return 255;
+   case PIPE_CAP_MAX_VERTEX_BUFFERS:
+      return screen->specs.stream_count;
+   case PIPE_CAP_VERTEX_ELEMENT_INSTANCE_DIVISOR:
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
 
    /* Texturing. */
    case PIPE_CAP_TEXTURE_SHADOW_MAP:
@@ -307,7 +315,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return 64; /* Max native temporaries. */
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-      return 1;
+      return DBG_ENABLED(ETNA_DBG_DEQP) ? 16 : 1;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -403,11 +411,74 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
       supported = screen->specs.tex_astc;
    }
 
+   if (util_format_is_snorm(format))
+      supported = VIV_FEATURE(screen, chipMinorFeatures2, HALTI1);
+
+   if (format != PIPE_FORMAT_S8_UINT_Z24_UNORM &&
+       (util_format_is_pure_integer(format) || util_format_is_float(format)))
+      supported = VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+
    if (!supported)
       return false;
 
    if (texture_format_needs_swiz(format))
       return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
+
+   return true;
+}
+
+static bool
+gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
+                           unsigned sample_count)
+{
+   const uint32_t fmt = translate_pe_format(format);
+
+   if (fmt == ETNA_NO_MATCH)
+      return false;
+
+   /* Validate MSAA; number of samples must be allowed, and render target
+    * must have MSAA'able format. */
+   if (sample_count > 1) {
+      if (!VIV_FEATURE(screen, chipFeatures, MSAA))
+         return false;
+      if (!translate_samples_to_xyscale(sample_count, NULL, NULL))
+         return false;
+      if (translate_ts_format(format) == ETNA_NO_MATCH)
+         return false;
+   }
+
+   if (format == PIPE_FORMAT_R8_UNORM)
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
+
+   /* figure out 8bpp RS clear to enable these formats */
+   if (format == PIPE_FORMAT_R8_SINT || format == PIPE_FORMAT_R8_UINT)
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI5);
+
+   if (util_format_is_srgb(format))
+      return VIV_FEATURE(screen, chipMinorFeatures5, HALTI3);
+
+   if (util_format_is_pure_integer(format) || util_format_is_float(format))
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+   if (format == PIPE_FORMAT_R8G8_UNORM)
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
+
+   /* any other extended format is HALTI0 (only R10G10B10A2?) */
+   if (fmt >= PE_FORMAT_R16F)
+      return VIV_FEATURE(screen, chipMinorFeatures1, HALTI0);
+
+   return true;
+}
+
+static bool
+gpu_supports_vertex_format(struct etna_screen *screen, enum pipe_format format)
+{
+   if (translate_vertex_format_type(format) == ETNA_NO_MATCH)
+      return false;
+
+   if (util_format_is_pure_integer(format))
+      return VIV_FEATURE(screen, chipMinorFeatures4, HALTI2);
 
    return true;
 }
@@ -430,19 +501,8 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
       return false;
 
    if (usage & PIPE_BIND_RENDER_TARGET) {
-      /* if render target, must be RS-supported format */
-      if (translate_rs_format(format) != ETNA_NO_MATCH) {
-         /* Validate MSAA; number of samples must be allowed, and render target
-          * must have MSAA'able format. */
-         if (sample_count > 1) {
-            if (translate_samples_to_xyscale(sample_count, NULL, NULL, NULL) &&
-                translate_ts_format(format) != ETNA_NO_MATCH) {
-               allowed |= PIPE_BIND_RENDER_TARGET;
-            }
-         } else {
-            allowed |= PIPE_BIND_RENDER_TARGET;
-         }
-      }
+      if (gpu_supports_render_format(screen, format, sample_count))
+         allowed |= PIPE_BIND_RENDER_TARGET;
    }
 
    if (usage & PIPE_BIND_DEPTH_STENCIL) {
@@ -461,7 +521,7 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
    }
 
    if (usage & PIPE_BIND_VERTEX_BUFFER) {
-      if (translate_vertex_format_type(format) != ETNA_NO_MATCH)
+      if (gpu_supports_vertex_format(screen, format))
          allowed |= PIPE_BIND_VERTEX_BUFFER;
    }
 
@@ -557,6 +617,9 @@ etna_determine_uniform_limits(struct etna_screen *screen)
       screen->specs.max_vs_uniforms = 168;
       screen->specs.max_ps_uniforms = 64;
    }
+
+   if (DBG_ENABLED(ETNA_DBG_DEQP))
+      screen->specs.max_ps_uniforms = 1024;
 }
 
 static bool
@@ -653,6 +716,10 @@ etna_get_specs(struct etna_screen *screen)
    screen->specs.vertex_sampler_offset = 8;
    screen->specs.fragment_sampler_count = 8;
    screen->specs.vertex_sampler_count = 4;
+
+   if (screen->model == 0x400)
+      screen->specs.vertex_sampler_count = 0;
+
    screen->specs.vs_need_z_div =
       screen->model < 0x1000 && screen->model != 0x880;
    screen->specs.has_sin_cos_sqrt =

@@ -35,6 +35,7 @@
 #include "brw_eu_defines.h"
 #include "brw_eu.h"
 #include "brw_shader.h"
+#include "brw_gen_enum.h"
 #include "dev/gen_debug.h"
 
 #include "util/ralloc.h"
@@ -393,12 +394,16 @@ bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
    p->store = (brw_inst *)reralloc_size(p->mem_ctx, p->store, p->next_insn_offset);
    assert(p->store);
 
-   read(fd, p->store + start_offset, sb.st_size);
+   ssize_t ret = read(fd, p->store + start_offset, sb.st_size);
    close(fd);
+   if (ret != sb.st_size) {
+      return false;
+   }
 
-   bool valid = brw_validate_instructions(p->devinfo, p->store,
-                                          start_offset, p->next_insn_offset,
-                                          0);
+   ASSERTED bool valid =
+      brw_validate_instructions(p->devinfo, p->store,
+                                start_offset, p->next_insn_offset,
+                                NULL);
    assert(valid);
 
    return true;
@@ -455,25 +460,6 @@ brw_disassemble(const struct gen_device_info *devinfo,
       brw_disassemble_inst(out, devinfo, insn, compacted);
    }
 }
-
-enum gen {
-   GEN4  = (1 << 0),
-   GEN45 = (1 << 1),
-   GEN5  = (1 << 2),
-   GEN6  = (1 << 3),
-   GEN7  = (1 << 4),
-   GEN75 = (1 << 5),
-   GEN8  = (1 << 6),
-   GEN9  = (1 << 7),
-   GEN10 = (1 << 8),
-   GEN11 = (1 << 9),
-   GEN12 = (1 << 10),
-   GEN_ALL = ~0
-};
-
-#define GEN_LT(gen) ((gen) - 1)
-#define GEN_GE(gen) (~GEN_LT(gen))
-#define GEN_LE(gen) (GEN_LT(gen) | (gen))
 
 static const struct opcode_desc opcode_descs[] = {
    /* IR,                 HW,  name,      nsrc, ndst, gens */
@@ -581,24 +567,6 @@ static const struct opcode_desc opcode_descs[] = {
    { BRW_OPCODE_NOP,      126, "nop",     0,    0,    GEN_LT(GEN12) },
    { BRW_OPCODE_NOP,      96,  "nop",     0,    0,    GEN_GE(GEN12) }
 };
-
-static enum gen
-gen_from_devinfo(const struct gen_device_info *devinfo)
-{
-   switch (devinfo->gen) {
-   case 4: return devinfo->is_g4x ? GEN45 : GEN4;
-   case 5: return GEN5;
-   case 6: return GEN6;
-   case 7: return devinfo->is_haswell ? GEN75 : GEN7;
-   case 8: return GEN8;
-   case 9: return GEN9;
-   case 10: return GEN10;
-   case 11: return GEN11;
-   case 12: return GEN12;
-   default:
-      unreachable("not reached");
-   }
-}
 
 /**
  * Look up the opcode_descs[] entry with \p key member matching \p k which is

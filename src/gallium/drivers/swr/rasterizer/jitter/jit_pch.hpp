@@ -49,6 +49,9 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IntrinsicInst.h"
+#if LLVM_VERSION_MAJOR >= 10
+#include "llvm/IR/IntrinsicsX86.h"
+#endif
 #include "llvm/ExecutionEngine/ObjectCache.h"
 
 #include "llvm/IR/Verifier.h"

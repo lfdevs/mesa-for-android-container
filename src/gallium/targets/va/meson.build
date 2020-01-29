@@ -33,7 +33,7 @@ endif
 
 libva_gallium = shared_library(
   'gallium_drv_video',
-  ['target.c', xmlpool_options_h],
+  'target.c',
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [va_link_args, ld_args_gc_sections],
@@ -47,7 +47,7 @@ libva_gallium = shared_library(
   ],
   dependencies : [
     dep_libdrm, driver_r600, driver_radeonsi, driver_nouveau,
-    idep_mesautil,
+    idep_mesautil, idep_xmlconfig_headers,
   ],
   link_depends : va_link_depends,
   # Will be deleted during installation, see install_megadrivers.py
@@ -65,8 +65,7 @@ foreach d : [[with_gallium_r600, 'r600'],
 endforeach
 
 meson.add_install_script(
-  prog_python.path(),
-  join_paths(meson.source_root(), 'bin/install_megadrivers.py'),
+  install_megadrivers_py.path(),
   libva_gallium.full_path(),
   va_drivers_path,
   va_drivers,

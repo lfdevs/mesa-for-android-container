@@ -37,7 +37,7 @@
  *  data) in return.  Objects in the cache may not have relocations
  * (pointers to other BOs) in them.
  *
- * The inner workings are a simple hash table based on a CRC of the
+ * The inner workings are a simple hash table based on a FNV-1a of the
  * key data.
  *
  * Replacement is not implemented.  Instead, when the cache gets too
@@ -96,17 +96,9 @@ brw_stage_cache_id(gl_shader_stage stage)
 static GLuint
 hash_key(struct brw_cache_item *item)
 {
-   GLuint *ikey = (GLuint *)item->key;
-   GLuint hash = item->cache_id, i;
-
-   assert(item->key_size % 4 == 0);
-
-   /* I'm sure this can be improved on:
-    */
-   for (i = 0; i < item->key_size/4; i++) {
-      hash ^= ikey[i];
-      hash = (hash << 5) | (hash >> 27);
-   }
+    uint32_t hash = _mesa_fnv32_1a_offset_bias;
+    hash = _mesa_fnv32_1a_accumulate(hash, item->cache_id);
+    hash = _mesa_fnv32_1a_accumulate_block(hash, item->key, item->key_size);
 
    return hash;
 }

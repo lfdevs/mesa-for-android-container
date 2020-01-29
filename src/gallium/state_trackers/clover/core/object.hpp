@@ -27,7 +27,6 @@
 #include <functional>
 #include <vector>
 
-#define CL_TARGET_OPENCL_VERSION 220
 #include "CL/cl.h"
 
 #include "core/error.hpp"
@@ -52,7 +51,7 @@ namespace clover {
                        "ICD requires CL API objects to be standard layout.");
       }
 
-      const _cl_icd_dispatch *dispatch;
+      const cl_icd_dispatch *dispatch;
    };
 
    struct default_tag;

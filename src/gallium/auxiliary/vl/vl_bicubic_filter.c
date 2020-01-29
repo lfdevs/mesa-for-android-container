@@ -423,7 +423,7 @@ vl_bicubic_filter_render(struct vl_bicubic_filter *filter,
    }
    viewport.scale[2] = 1;
 
-   struct pipe_constant_buffer cb = {};
+   struct pipe_constant_buffer cb = {0};
    float *ptr = NULL;
 
    u_upload_alloc(filter->pipe->const_uploader, 0, 2 * sizeof(float), 256,

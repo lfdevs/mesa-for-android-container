@@ -142,6 +142,11 @@ genX(cmd_buffer_enable_pma_fix)(struct anv_cmd_buffer *cmd_buffer, bool enable)
       pc.RenderTargetCacheFlushEnable = true;
 #if GEN_GEN >= 12
       pc.TileCacheFlushEnable = true;
+
+      /* GEN:BUG:1409600907: "PIPE_CONTROL with Depth Stall Enable bit must
+       * be set with any PIPE_CONTROL with Depth Flush Enable bit set.
+       */
+      pc.DepthStallEnable = true;
 #endif
    }
 

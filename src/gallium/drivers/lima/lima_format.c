@@ -69,7 +69,6 @@ static const struct lima_format lima_format_table[] = {
    LIMA_FORMAT(B8G8R8A8_SRGB,      RGBA_8888, B8G8R8A8, false),
    LIMA_FORMAT(R8G8B8X8_UNORM,     RGBX_8888, B8G8R8A8, true),
    LIMA_FORMAT(B8G8R8X8_UNORM,     RGBX_8888, B8G8R8A8, false),
-   LIMA_FORMAT(R8G8B8_UNORM,       RGB_888,   NONE,     true),
    LIMA_FORMAT(B5G6R5_UNORM,       BGR_565,   B5G6R5,   false),
    LIMA_FORMAT(Z24_UNORM_S8_UINT,  Z24S8,     Z24S8,    false),
    LIMA_FORMAT(Z24X8_UNORM,        Z24S8,     Z24S8,    false),

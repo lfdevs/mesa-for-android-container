@@ -131,10 +131,8 @@
 #ifndef SI_SHADER_H
 #define SI_SHADER_H
 
-#include <llvm-c/Core.h> /* LLVMModuleRef */
-#include <llvm-c/TargetMachine.h>
-#include "tgsi/tgsi_scan.h"
 #include "util/u_inlines.h"
+#include "util/u_live_shader_cache.h"
 #include "util/u_queue.h"
 #include "util/simple_mtx.h"
 
@@ -159,6 +157,8 @@ struct si_context;
  * index smaller than this.
  */
 #define SI_MAX_IO_GENERIC       32
+
+#define SI_NGG_PRIM_EDGE_FLAG_BITS ((1 << 9) | (1 << 19) | (1 << 29))
 
 /* SGPR user data indices */
 enum {
@@ -212,6 +212,11 @@ enum {
 	/* PS only */
 	SI_SGPR_ALPHA_REF	= SI_NUM_RESOURCE_SGPRS,
 	SI_PS_NUM_USER_SGPR,
+
+	/* The value has to be 12, because the hw requires that descriptors
+	 * are aligned to 4 SGPRs.
+	 */
+	SI_SGPR_VS_VB_DESCRIPTOR_FIRST = 12,
 };
 
 /* LLVM function parameter indices */
@@ -252,8 +257,10 @@ enum {
 #define C_VS_STATE_PROVOKING_VTX_INDEX		0xFFFFFFCF
 #define S_VS_STATE_STREAMOUT_QUERY_ENABLED(x)	(((unsigned)(x) & 0x1) << 6)
 #define C_VS_STATE_STREAMOUT_QUERY_ENABLED	0xFFFFFFBF
-#define S_VS_STATE_LS_OUT_PATCH_SIZE(x)		(((unsigned)(x) & 0x1FFF) << 8)
-#define C_VS_STATE_LS_OUT_PATCH_SIZE		0xFFE000FF
+#define S_VS_STATE_SMALL_PRIM_PRECISION(x)	(((unsigned)(x) & 0xF) << 7)
+#define C_VS_STATE_SMALL_PRIM_PRECISION		0xFFFFF87F
+#define S_VS_STATE_LS_OUT_PATCH_SIZE(x)		(((unsigned)(x) & 0x1FFF) << 11)
+#define C_VS_STATE_LS_OUT_PATCH_SIZE		0xFF0007FF
 #define S_VS_STATE_LS_OUT_VERTEX_SIZE(x)	(((unsigned)(x) & 0xFF) << 24)
 #define C_VS_STATE_LS_OUT_VERTEX_SIZE		0x00FFFFFF
 
@@ -266,6 +273,13 @@ enum {
 	SI_VS_BLIT_SGPRS_POS_COLOR = 7,
 	SI_VS_BLIT_SGPRS_POS_TEXCOORD = 9,
 };
+
+#define SI_NGG_CULL_VIEW_SMALLPRIMS		(1 << 0) /* view.xy + small prims */
+#define SI_NGG_CULL_BACK_FACE			(1 << 1) /* back faces */
+#define SI_NGG_CULL_FRONT_FACE			(1 << 2) /* front faces */
+#define SI_NGG_CULL_GS_FAST_LAUNCH_TRI_LIST	(1 << 3) /* GS fast launch: triangles */
+#define SI_NGG_CULL_GS_FAST_LAUNCH_TRI_STRIP	(1 << 4) /* GS fast launch: triangle strip */
+#define SI_NGG_CULL_GS_FAST_LAUNCH_ALL		(0x3 << 3) /* GS fast launch (both prim types) */
 
 /**
  * For VS shader keys, describe any fixups required for vertex fetch.
@@ -302,11 +316,96 @@ struct si_compiler_ctx_state {
 	bool				is_debug_context;
 };
 
+struct si_shader_info {
+	ubyte num_inputs;
+	ubyte num_outputs;
+	ubyte input_semantic_name[PIPE_MAX_SHADER_INPUTS]; /**< TGSI_SEMANTIC_x */
+	ubyte input_semantic_index[PIPE_MAX_SHADER_INPUTS];
+	ubyte input_interpolate[PIPE_MAX_SHADER_INPUTS];
+	ubyte input_interpolate_loc[PIPE_MAX_SHADER_INPUTS];
+	ubyte input_usage_mask[PIPE_MAX_SHADER_INPUTS];
+	ubyte output_semantic_name[PIPE_MAX_SHADER_OUTPUTS]; /**< TGSI_SEMANTIC_x */
+	ubyte output_semantic_index[PIPE_MAX_SHADER_OUTPUTS];
+	ubyte output_usagemask[PIPE_MAX_SHADER_OUTPUTS];
+	ubyte output_streams[PIPE_MAX_SHADER_OUTPUTS];
+
+	ubyte processor;
+
+	int constbuf0_num_slots;
+	unsigned const_buffers_declared; /**< bitmask of declared const buffers */
+	unsigned samplers_declared; /**< bitmask of declared samplers */
+	ubyte num_stream_output_components[4];
+
+	uint num_memory_instructions; /**< sampler, buffer, and image instructions */
+
+	/**
+	 * If a tessellation control shader reads outputs, this describes which ones.
+	 */
+	bool reads_pervertex_outputs;
+	bool reads_perpatch_outputs;
+	bool reads_tessfactor_outputs;
+
+	ubyte colors_read; /**< which color components are read by the FS */
+	ubyte colors_written;
+	bool reads_samplemask; /**< does fragment shader read sample mask? */
+	bool reads_tess_factors; /**< If TES reads TESSINNER or TESSOUTER */
+	bool writes_z;  /**< does fragment shader write Z value? */
+	bool writes_stencil; /**< does fragment shader write stencil value? */
+	bool writes_samplemask; /**< does fragment shader write sample mask? */
+	bool writes_edgeflag; /**< vertex shader outputs edgeflag */
+	bool uses_kill;  /**< KILL or KILL_IF instruction used? */
+	bool uses_persp_center;
+	bool uses_persp_centroid;
+	bool uses_persp_sample;
+	bool uses_linear_center;
+	bool uses_linear_centroid;
+	bool uses_linear_sample;
+	bool uses_persp_opcode_interp_sample;
+	bool uses_linear_opcode_interp_sample;
+	bool uses_instanceid;
+	bool uses_vertexid;
+	bool uses_vertexid_nobase;
+	bool uses_basevertex;
+	bool uses_drawid;
+	bool uses_primid;
+	bool uses_frontface;
+	bool uses_invocationid;
+	bool uses_thread_id[3];
+	bool uses_block_id[3];
+	bool uses_block_size;
+	bool uses_grid_size;
+	bool uses_subgroup_info;
+	bool writes_position;
+	bool writes_psize;
+	bool writes_clipvertex;
+	bool writes_primid;
+	bool writes_viewport_index;
+	bool writes_layer;
+	bool writes_memory; /**< contains stores or atomics to buffers or images */
+	bool uses_derivatives;
+	bool uses_bindless_samplers;
+	bool uses_bindless_images;
+	bool uses_fbfetch;
+	unsigned clipdist_writemask;
+	unsigned culldist_writemask;
+	unsigned num_written_culldistance;
+	unsigned num_written_clipdistance;
+
+	unsigned images_declared; /**< bitmask of declared images */
+	unsigned msaa_images_declared; /**< bitmask of declared MSAA images */
+	unsigned shader_buffers_declared; /**< bitmask of declared shader buffers */
+
+	unsigned properties[TGSI_PROPERTY_COUNT]; /* index with TGSI_PROPERTY_ */
+
+	/** Whether all codepaths write tess factors in all invocations. */
+	bool tessfactors_are_def_in_all_invocs;
+};
+
 /* A shader selector is a gallium CSO and contains shader variants and
- * binaries for one TGSI program. This can be shared by multiple contexts.
+ * binaries for one NIR program. This can be shared by multiple contexts.
  */
 struct si_shader_selector {
-	struct pipe_reference	reference;
+	struct util_live_shader	base;
 	struct si_screen	*screen;
 	struct util_queue_fence ready;
 	struct si_compiler_ctx_state compiler_ctx_state;
@@ -315,8 +414,8 @@ struct si_shader_selector {
 	struct si_shader	*first_variant; /* immutable after the first variant */
 	struct si_shader	*last_variant; /* mutable */
 
-	/* The compiled TGSI shader expecting a prolog and/or epilog (not
-	 * uploaded to a buffer).
+	/* The compiled NIR shader without a prolog and/or epilog (not
+	 * uploaded to a buffer object).
 	 */
 	struct si_shader	*main_shader_part;
 	struct si_shader	*main_shader_part_ls; /* as_ls is set in the key */
@@ -326,17 +425,21 @@ struct si_shader_selector {
 
 	struct si_shader	*gs_copy_shader;
 
-	struct tgsi_token       *tokens;
 	struct nir_shader       *nir;
+	void			*nir_binary;
+	unsigned		nir_size;
+
 	struct pipe_stream_output_info  so;
-	struct tgsi_shader_info		info;
-	struct tgsi_tessctrl_info	tcs_info;
+	struct si_shader_info		info;
 
 	/* PIPE_SHADER_[VERTEX|FRAGMENT|...] */
 	enum pipe_shader_type type;
 	bool		vs_needs_prolog;
 	bool		force_correct_derivs_after_kill;
 	bool		prim_discard_cs_allowed;
+	bool		ngg_culling_allowed;
+	unsigned	num_vs_inputs;
+	unsigned	num_vbos_in_user_sgprs;
 	unsigned	pa_cl_vs_out_cntl;
 	ubyte		clipdist_mask;
 	ubyte		culldist_mask;
@@ -460,10 +563,13 @@ union si_shader_part_key {
 		unsigned	num_input_sgprs:6;
 		/* For merged stages such as LS-HS, HS input VGPRs are first. */
 		unsigned	num_merged_next_stage_vgprs:3;
-		unsigned	last_input:4;
+		unsigned	num_inputs:5;
 		unsigned	as_ls:1;
 		unsigned	as_es:1;
 		unsigned	as_ngg:1;
+		unsigned	has_ngg_cull_inputs:1; /* from the NGG cull shader */
+		unsigned	gs_fast_launch_tri_list:1; /* for NGG culling */
+		unsigned	gs_fast_launch_tri_strip:1; /* for NGG culling */
 		/* Prologs for monolithic shaders shouldn't set EXEC. */
 		unsigned	is_monolithic:1;
 	} vs_prolog;
@@ -554,6 +660,9 @@ struct si_shader_key {
 		uint64_t	kill_outputs; /* "get_unique_index" bits */
 		unsigned	clip_disable:1;
 
+		/* For NGG VS and TES. */
+		unsigned	ngg_culling:5; /* SI_NGG_CULL_* */
+
 		/* For shaders where monolithic variants have better code.
 		 *
 		 * This is a flag that has no effect on code generation,
@@ -581,7 +690,7 @@ struct si_shader_key {
 #pragma pack(pop)
 
 /* GCN-specific shader info. */
-struct si_shader_info {
+struct si_shader_binary_info {
 	ubyte			vs_output_param_offset[SI_MAX_VS_OUTPUTS];
 	ubyte			num_input_sgprs;
 	ubyte			num_input_vgprs;
@@ -635,7 +744,7 @@ struct si_shader {
 	/* The following data is all that's needed for binary shaders. */
 	struct si_shader_binary		binary;
 	struct ac_shader_config		config;
-	struct si_shader_info		info;
+	struct si_shader_binary_info	info;
 
 	struct {
 		uint16_t ngg_emit_size; /* in dwords */
@@ -685,6 +794,7 @@ struct si_shader {
 			unsigned	pa_cl_vte_cntl;
 			unsigned	pa_cl_ngg_cntl;
 			unsigned	vgt_gs_max_vert_out; /* for API GS */
+			unsigned	ge_pc_alloc; /* uconfig register */
 		} ngg;
 
 		struct {
@@ -694,6 +804,7 @@ struct si_shader {
 			unsigned	spi_vs_out_config;
 			unsigned	spi_shader_pos_format;
 			unsigned	pa_cl_vte_cntl;
+			unsigned	ge_pc_alloc; /* uconfig register */
 		} vs;
 
 		struct {
@@ -722,18 +833,14 @@ struct si_shader_part {
 };
 
 /* si_shader.c */
-struct si_shader *
-si_generate_gs_copy_shader(struct si_screen *sscreen,
-			   struct ac_llvm_compiler *compiler,
-			   struct si_shader_selector *gs_selector,
-			   struct pipe_debug_callback *debug);
-int si_compile_tgsi_shader(struct si_screen *sscreen,
-			   struct ac_llvm_compiler *compiler,
-			   struct si_shader *shader,
-			   struct pipe_debug_callback *debug);
-bool si_shader_create(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
-		     struct si_shader *shader,
-		     struct pipe_debug_callback *debug);
+bool si_compile_shader(struct si_screen *sscreen,
+		       struct ac_llvm_compiler *compiler,
+		       struct si_shader *shader,
+		       struct pipe_debug_callback *debug);
+bool si_create_shader_variant(struct si_screen *sscreen,
+			      struct ac_llvm_compiler *compiler,
+			      struct si_shader *shader,
+			      struct pipe_debug_callback *debug);
 void si_shader_destroy(struct si_shader *shader);
 unsigned si_shader_io_get_unique_index_patch(unsigned semantic_name, unsigned index);
 unsigned si_shader_io_get_unique_index(unsigned semantic_name, unsigned index,
@@ -751,11 +858,16 @@ void si_multiwave_lds_size_workaround(struct si_screen *sscreen,
 const char *si_get_shader_name(const struct si_shader *shader);
 void si_shader_binary_clean(struct si_shader_binary *binary);
 
+/* si_shader_llvm_gs.c */
+struct si_shader *
+si_generate_gs_copy_shader(struct si_screen *sscreen,
+			   struct ac_llvm_compiler *compiler,
+			   struct si_shader_selector *gs_selector,
+			   struct pipe_debug_callback *debug);
+
 /* si_shader_nir.c */
 void si_nir_scan_shader(const struct nir_shader *nir,
-			struct tgsi_shader_info *info);
-void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
-			   struct tgsi_tessctrl_info *out);
+			struct si_shader_info *info);
 void si_nir_adjust_driver_locations(struct nir_shader *nir);
 void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize);
 
@@ -783,6 +895,19 @@ si_get_main_shader_part(struct si_shader_selector *sel,
 }
 
 static inline bool
+gfx10_is_ngg_passthrough(struct si_shader *shader)
+{
+	struct si_shader_selector *sel = shader->selector;
+
+	return sel->type != PIPE_SHADER_GEOMETRY &&
+	       !sel->so.num_outputs &&
+	       !sel->info.writes_edgeflag &&
+	       !shader->key.opt.ngg_culling &&
+	       (sel->type != PIPE_SHADER_VERTEX ||
+		!shader->key.mono.u.vs_export_prim_id);
+}
+
+static inline bool
 si_shader_uses_bindless_samplers(struct si_shader_selector *selector)
 {
 	return selector ? selector->info.uses_bindless_samplers : false;
@@ -792,20 +917,6 @@ static inline bool
 si_shader_uses_bindless_images(struct si_shader_selector *selector)
 {
 	return selector ? selector->info.uses_bindless_images : false;
-}
-
-void si_destroy_shader_selector(struct si_context *sctx,
-			        struct si_shader_selector *sel);
-
-static inline void
-si_shader_selector_reference(struct si_context *sctx,
-			     struct si_shader_selector **dst,
-			     struct si_shader_selector *src)
-{
-	if (pipe_reference(&(*dst)->reference, &src->reference))
-		si_destroy_shader_selector(sctx, *dst);
-
-	*dst = src;
 }
 
 #endif

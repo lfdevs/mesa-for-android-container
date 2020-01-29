@@ -17,7 +17,9 @@ struct asm_context {
    // TODO: keep track of branch instructions referring blocks
    // and, when emitting the block, correct the offset in instr
    asm_context(Program* program) : program(program), chip_class(program->chip_class) {
-      if (chip_class <= GFX9)
+      if (chip_class <= GFX7)
+         opcode = &instr_info.opcode_gfx7[0];
+      else if (chip_class <= GFX9)
          opcode = &instr_info.opcode_gfx9[0];
       else if (chip_class == GFX10)
          opcode = &instr_info.opcode_gfx10[0];
@@ -105,7 +107,7 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |=
          !instr->definitions.empty() && !(instr->definitions[0].physReg() == scc) ?
          instr->definitions[0].physReg() << 16 :
-         !instr->operands.empty() && !(instr->operands[0].physReg() == scc) ?
+         !instr->operands.empty() && instr->operands[0].physReg() <= 127 ?
          instr->operands[0].physReg() << 16 : 0;
       encoding |= sopk->imm;
       out.push_back(encoding);
@@ -145,8 +147,27 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       SMEM_instruction* smem = static_cast<SMEM_instruction*>(instr);
       bool soe = instr->operands.size() >= (!instr->definitions.empty() ? 3 : 4);
       bool is_load = !instr->definitions.empty();
-
       uint32_t encoding = 0;
+
+      if (ctx.chip_class <= GFX7) {
+         encoding = (0b11000 << 27);
+         encoding |= opcode << 22;
+         encoding |= instr->definitions.size() ? instr->definitions[0].physReg() << 15 : 0;
+         encoding |= instr->operands.size() ? (instr->operands[0].physReg() >> 1) << 9 : 0;
+         if (instr->operands.size() >= 2) {
+            if (!instr->operands[1].isConstant() || instr->operands[1].constantValue() >= 1024) {
+               encoding |= instr->operands[1].physReg().reg;
+            } else {
+               encoding |= instr->operands[1].constantValue() >> 2;
+               encoding |= 1 << 8;
+            }
+         }
+         out.push_back(encoding);
+         /* SMRD instructions can take a literal on GFX6 & GFX7 */
+         if (instr->operands.size() >= 2 && instr->operands[1].isConstant() && instr->operands[1].constantValue() >= 1024)
+            out.push_back(instr->operands[1].constantValue() >> 2);
+         return;
+      }
 
       if (ctx.chip_class <= GFX9) {
          encoding = (0b110000 << 26);
@@ -290,8 +311,11 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |= (mubuf->lds ? 1 : 0) << 16;
       encoding |= (mubuf->glc ? 1 : 0) << 14;
       encoding |= (mubuf->idxen ? 1 : 0) << 13;
+      assert(!mubuf->addr64 || ctx.chip_class <= GFX7);
+      if (ctx.chip_class == GFX6 || ctx.chip_class == GFX7)
+         encoding |= (mubuf->addr64 ? 1 : 0) << 15;
       encoding |= (mubuf->offen ? 1 : 0) << 12;
-      if (ctx.chip_class <= GFX9) {
+      if (ctx.chip_class == GFX8 || ctx.chip_class == GFX9) {
          assert(!mubuf->dlc); /* Device-level coherent is not supported on GFX9 and lower */
          encoding |= (mubuf->slc ? 1 : 0) << 17;
       } else if (ctx.chip_class >= GFX10) {
@@ -300,7 +324,7 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |= 0x0FFF & mubuf->offset;
       out.push_back(encoding);
       encoding = 0;
-      if (ctx.chip_class >= GFX10) {
+      if (ctx.chip_class <= GFX7 || ctx.chip_class >= GFX10) {
          encoding |= (mubuf->slc ? 1 : 0) << 22;
       }
       encoding |= instr->operands[2].physReg() << 24;
@@ -326,7 +350,7 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |= 0x0FFF & mtbuf->offset;
       encoding |= (img_format << 19); /* Handles both the GFX10 FORMAT and the old NFMT+DFMT */
 
-      if (ctx.chip_class <= GFX9) {
+      if (ctx.chip_class == GFX8 || ctx.chip_class == GFX9) {
          encoding |= opcode << 15;
       } else {
          encoding |= (opcode & 0x07) << 16; /* 3 LSBs of 4-bit OPCODE */
@@ -399,11 +423,14 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       if (ctx.chip_class <= GFX9) {
          assert(flat->offset <= 0x1fff);
          encoding |= flat->offset & 0x1fff;
-      } else {
+      } else if (instr->format == Format::FLAT) {
          /* GFX10 has a 12-bit immediate OFFSET field,
           * but it has a hw bug: it ignores the offset, called FlatSegmentOffsetBug
           */
          assert(flat->offset == 0);
+      } else {
+         assert(flat->offset <= 0xfff);
+         encoding |= flat->offset & 0xfff;
       }
       if (instr->format == Format::SCRATCH)
          encoding |= 1 << 14;
@@ -422,13 +449,13 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding = (0xFF & instr->operands[0].physReg());
       if (!instr->definitions.empty())
          encoding |= (0xFF & instr->definitions[0].physReg()) << 24;
-      else
+      if (instr->operands.size() >= 3)
          encoding |= (0xFF & instr->operands[2].physReg()) << 8;
       if (!instr->operands[1].isUndefined()) {
          assert(ctx.chip_class >= GFX10 || instr->operands[1].physReg() != 0x7F);
          assert(instr->format != Format::FLAT);
          encoding |= instr->operands[1].physReg() << 16;
-      } else if (instr->format != Format::FLAT) {
+      } else if (instr->format != Format::FLAT || ctx.chip_class >= GFX10) { /* SADDR is actually used with FLAT on GFX10 */
          if (ctx.chip_class <= GFX9)
             encoding |= 0x7F << 16;
          else
@@ -441,9 +468,9 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
    case Format::EXP: {
       Export_instruction* exp = static_cast<Export_instruction*>(instr);
       uint32_t encoding;
-      if (ctx.chip_class <= GFX9) {
+      if (ctx.chip_class == GFX8 || ctx.chip_class == GFX9) {
          encoding = (0b110001 << 26);
-      } else if (ctx.chip_class >= GFX10) {
+      } else {
          encoding = (0b111110 << 26);
       }
 
@@ -470,12 +497,10 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
          if ((uint16_t) instr->format & (uint16_t) Format::VOP2) {
             opcode = opcode + 0x100;
          } else if ((uint16_t) instr->format & (uint16_t) Format::VOP1) {
-            if (ctx.chip_class <= GFX9) {
+            if (ctx.chip_class == GFX8 || ctx.chip_class == GFX9)
                opcode = opcode + 0x140;
-            } else {
-               /* RDNA ISA doc says this is 0x140, but that doesn't work  */
+            else
                opcode = opcode + 0x180;
-            }
          } else if ((uint16_t) instr->format & (uint16_t) Format::VOPC) {
             opcode = opcode + 0x0;
          } else if ((uint16_t) instr->format & (uint16_t) Format::VINTRP) {
@@ -487,14 +512,20 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
             encoding = (0b110100 << 26);
          } else if (ctx.chip_class == GFX10) {
             encoding = (0b110101 << 26);
+         } else {
+            unreachable("Unknown chip_class.");
          }
 
-         encoding |= opcode << 16;
-         encoding |= (vop3->clamp ? 1 : 0) << 15;
+         if (ctx.chip_class <= GFX7) {
+            encoding |= opcode << 17;
+            encoding |= (vop3->clamp ? 1 : 0) << 11;
+         } else {
+            encoding |= opcode << 16;
+            encoding |= (vop3->clamp ? 1 : 0) << 15;
+         }
+         encoding |= vop3->opsel << 11;
          for (unsigned i = 0; i < 3; i++)
             encoding |= vop3->abs[i] << (8+i);
-         for (unsigned i = 0; i < 4; i++)
-            encoding |= vop3->opsel[i] << (11+i);
          if (instr->definitions.size() == 2)
             encoding |= instr->definitions[1].physReg() << 8;
          encoding |= (0xFF & instr->definitions[0].physReg());
@@ -512,6 +543,7 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
          out.push_back(encoding);
 
       } else if (instr->isDPP()){
+         assert(ctx.chip_class >= GFX8);
          /* first emit the instruction without the DPP operand */
          Operand dpp_op = instr->operands[0];
          instr->operands[0] = Operand(PhysReg{250}, v1);
@@ -563,14 +595,14 @@ void emit_block(asm_context& ctx, std::vector<uint32_t>& out, Block& block)
 
 void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
 {
-   for (int idx = program->blocks.size() - 1; idx >= 0; idx--) {
-      Block& block = program->blocks[idx];
+   for (Block& block : program->blocks) {
+      if (!(block.kind & block_kind_export_end))
+         continue;
       std::vector<aco_ptr<Instruction>>::reverse_iterator it = block.instructions.rbegin();
-      bool endBlock = false;
       bool exported = false;
       while ( it != block.instructions.rend())
       {
-         if ((*it)->format == Format::EXP && endBlock) {
+         if ((*it)->format == Format::EXP) {
             Export_instruction* exp = static_cast<Export_instruction*>((*it).get());
             if (program->stage & hw_vs) {
                if (exp->dest >= V_008DFC_SQ_EXP_POS && exp->dest <= (V_008DFC_SQ_EXP_POS + 3)) {
@@ -586,14 +618,9 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
             }
          } else if ((*it)->definitions.size() && (*it)->definitions[0].physReg() == exec)
             break;
-         else if ((*it)->opcode == aco_opcode::s_endpgm) {
-            if (endBlock)
-               break;
-            endBlock = true;
-         }
          ++it;
       }
-      if (!endBlock || exported)
+      if (exported)
          continue;
       /* we didn't find an Export instruction and have to insert a null export */
       aco_ptr<Export_instruction> exp{create_instruction<Export_instruction>(aco_opcode::exp, Format::EXP, 4, 0)};
@@ -607,7 +634,7 @@ void fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
          exp->dest = 9; /* NULL */
       else
          exp->dest = V_008DFC_SQ_EXP_POS;
-      /* insert the null export 1 instruction before endpgm */
+      /* insert the null export 1 instruction before branch/endpgm */
       block.instructions.insert(block.instructions.end() - 1, std::move(exp));
    }
 }

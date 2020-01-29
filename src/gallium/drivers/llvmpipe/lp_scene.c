@@ -30,7 +30,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/simple_list.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "lp_scene.h"
 #include "lp_fence.h"
 #include "lp_debug.h"

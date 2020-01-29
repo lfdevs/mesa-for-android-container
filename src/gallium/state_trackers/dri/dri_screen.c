@@ -43,7 +43,7 @@
 #include "state_tracker/drm_driver.h"
 
 #include "util/u_debug.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format_s3tc.h"
 
 #define MSAA_VISUAL_MAX_SAMPLES 32
 
@@ -472,6 +472,14 @@ dri_get_egl_image(struct st_manager *smapi,
    stimg->format = map ? map->pipe_format : img->texture->format;
    stimg->level = img->level;
    stimg->layer = img->layer;
+
+   if (img->imported_dmabuf && map) {
+      /* Guess sized internal format for dma-bufs. Could be used
+       * by EXT_EGL_image_storage.
+       */
+      mesa_format mesa_format = driImageFormatToGLFormat(map->dri_format);
+      stimg->internalformat = driGLFormatToSizedInternalGLFormat(mesa_format);
+   }
 
    return TRUE;
 }

@@ -128,7 +128,7 @@ static void gather_usage(const nir_deref_instr *deref,
 static void gather_intrinsic_load_deref_input_info(const nir_shader *nir,
 						   const nir_intrinsic_instr *instr,
 						   const nir_deref_instr *deref,
-						   struct tgsi_shader_info *info)
+						   struct si_shader_info *info)
 {
 	switch (nir->info.stage) {
 	case MESA_SHADER_VERTEX:
@@ -141,7 +141,7 @@ static void gather_intrinsic_load_deref_input_info(const nir_shader *nir,
 static void gather_intrinsic_load_deref_output_info(const nir_shader *nir,
 						    const nir_intrinsic_instr *instr,
 						    nir_variable *var,
-						    struct tgsi_shader_info *info)
+						    struct si_shader_info *info)
 {
 	assert(var && var->data.mode == nir_var_shader_out);
 
@@ -167,7 +167,7 @@ static void gather_intrinsic_load_deref_output_info(const nir_shader *nir,
 static void gather_intrinsic_store_deref_output_info(const nir_shader *nir,
 						     const nir_intrinsic_instr *instr,
 						     const nir_deref_instr *deref,
-						     struct tgsi_shader_info *info)
+						     struct si_shader_info *info)
 {
 	switch (nir->info.stage) {
 	case MESA_SHADER_VERTEX: /* needed by LS, ES */
@@ -181,7 +181,7 @@ static void gather_intrinsic_store_deref_output_info(const nir_shader *nir,
 }
 
 static void scan_instruction(const struct nir_shader *nir,
-			     struct tgsi_shader_info *info,
+			     struct si_shader_info *info,
 			     nir_instr *instr)
 {
 	if (instr->type == nir_instr_type_alu) {
@@ -236,6 +236,11 @@ static void scan_instruction(const struct nir_shader *nir,
 		case nir_intrinsic_load_num_work_groups:
 			info->uses_grid_size = true;
 			break;
+		case nir_intrinsic_load_local_invocation_index:
+		case nir_intrinsic_load_subgroup_id:
+		case nir_intrinsic_load_num_subgroups:
+			info->uses_subgroup_info = true;
+			break;
 		case nir_intrinsic_load_local_group_size:
 			/* The block size is translated to IMM with a fixed block size. */
 			if (info->properties[TGSI_PROPERTY_CS_FIXED_BLOCK_WIDTH] == 0)
@@ -277,25 +282,12 @@ static void scan_instruction(const struct nir_shader *nir,
 			info->reads_tess_factors = true;
 			break;
 		case nir_intrinsic_bindless_image_load:
-			info->uses_bindless_images = true;
-
-			if (nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF)
-				info->uses_bindless_buffer_load = true;
-			else
-				info->uses_bindless_image_load = true;
-			break;
 		case nir_intrinsic_bindless_image_size:
 		case nir_intrinsic_bindless_image_samples:
 			info->uses_bindless_images = true;
 			break;
 		case nir_intrinsic_bindless_image_store:
 			info->uses_bindless_images = true;
-
-			if (nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF)
-				info->uses_bindless_buffer_store = true;
-			else
-				info->uses_bindless_image_store = true;
-
 			info->writes_memory = true;
 			info->num_memory_instructions++; /* we only care about stores */
 			break;
@@ -314,12 +306,6 @@ static void scan_instruction(const struct nir_shader *nir,
 		case nir_intrinsic_bindless_image_atomic_exchange:
 		case nir_intrinsic_bindless_image_atomic_comp_swap:
 			info->uses_bindless_images = true;
-
-			if (nir_intrinsic_image_dim(intr) == GLSL_SAMPLER_DIM_BUF)
-				info->uses_bindless_buffer_atomic = true;
-			else
-				info->uses_bindless_image_atomic = true;
-
 			info->writes_memory = true;
 			info->num_memory_instructions++; /* we only care about stores */
 			break;
@@ -425,22 +411,10 @@ static void scan_instruction(const struct nir_shader *nir,
 	}
 }
 
-void si_nir_scan_tess_ctrl(const struct nir_shader *nir,
-			   struct tgsi_tessctrl_info *out)
-{
-	memset(out, 0, sizeof(*out));
-
-	if (nir->info.stage != MESA_SHADER_TESS_CTRL)
-		return;
-
-	out->tessfactors_are_def_in_all_invocs =
-		ac_are_tessfactors_def_in_all_invocs(nir);
-}
-
 static void scan_output_slot(const nir_variable *var,
 			     unsigned var_idx,
 			     unsigned component, unsigned num_components,
-			     struct tgsi_shader_info *info)
+			     struct si_shader_info *info)
 {
 	assert(component + num_components <= 4);
 	assert(component < 4);
@@ -466,8 +440,8 @@ static void scan_output_slot(const nir_variable *var,
 	ubyte usagemask = ((1 << num_components) - 1) << component;
 
 	unsigned gs_out_streams;
-	if (var->data.stream & (1u << 31)) {
-		gs_out_streams = var->data.stream & ~(1u << 31);
+	if (var->data.stream & NIR_STREAM_PACKED) {
+		gs_out_streams = var->data.stream & ~NIR_STREAM_PACKED;
 	} else {
 		assert(var->data.stream < 4);
 		gs_out_streams = 0;
@@ -540,9 +514,9 @@ static void scan_output_slot(const nir_variable *var,
 static void scan_output_helper(const nir_variable *var,
 			       unsigned location,
 			       const struct glsl_type *type,
-			       struct tgsi_shader_info *info)
+			       struct si_shader_info *info)
 {
-	if (glsl_type_is_struct(type)) {
+	if (glsl_type_is_struct(type) || glsl_type_is_interface(type)) {
 		for (unsigned i = 0; i < glsl_get_length(type); i++) {
 			const struct glsl_type *ft = glsl_get_struct_field(type, i);
 			scan_output_helper(var, location, ft, info);
@@ -586,14 +560,12 @@ static void scan_output_helper(const nir_variable *var,
 }
 
 void si_nir_scan_shader(const struct nir_shader *nir,
-			struct tgsi_shader_info *info)
+			struct si_shader_info *info)
 {
 	nir_function *func;
 	unsigned i;
 
 	info->processor = pipe_shader_type_from_mesa(nir->info.stage);
-	info->num_tokens = 2; /* indicate that the shader is non-empty */
-	info->num_instructions = 2;
 
 	info->properties[TGSI_PROPERTY_NEXT_SHADER] =
 		pipe_shader_type_from_mesa(nir->info.next_stage);
@@ -777,7 +749,7 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 	info->num_inputs = nir->num_inputs;
 	info->num_outputs = nir->num_outputs;
 
-	info->const_file_max[0] = nir->num_uniforms - 1;
+	info->constbuf0_num_slots = nir->num_uniforms;
 	info->shader_buffers_declared = u_bit_consecutive(0, nir->info.num_ssbos);
 	info->const_buffers_declared = u_bit_consecutive(1, nir->info.num_ubos);
 	if (nir->num_uniforms > 0)
@@ -794,6 +766,11 @@ void si_nir_scan_shader(const struct nir_shader *nir,
 	if (info->processor == PIPE_SHADER_FRAGMENT)
 		info->uses_kill = nir->info.fs.uses_discard;
 
+	if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
+		info->tessfactors_are_def_in_all_invocs =
+			ac_are_tessfactors_def_in_all_invocs(nir);
+	}
+
 	func = (struct nir_function *)exec_list_get_head_const(&nir->functions);
 	nir_foreach_block(block, func->impl) {
 		nir_foreach_instr(instr, block)
@@ -805,10 +782,6 @@ static void
 si_nir_opts(struct nir_shader *nir)
 {
 	bool progress;
-        unsigned lower_flrp =
-                (nir->options->lower_flrp16 ? 16 : 0) |
-                (nir->options->lower_flrp32 ? 32 : 0) |
-                (nir->options->lower_flrp64 ? 64 : 0);
 
 	do {
 		progress = false;
@@ -839,7 +812,12 @@ si_nir_opts(struct nir_shader *nir)
 		NIR_PASS(progress, nir, nir_opt_algebraic);
 		NIR_PASS(progress, nir, nir_opt_constant_folding);
 
-		if (lower_flrp != 0) {
+		if (!nir->info.flrp_lowered) {
+			unsigned lower_flrp =
+				(nir->options->lower_flrp16 ? 16 : 0) |
+				(nir->options->lower_flrp32 ? 32 : 0) |
+				(nir->options->lower_flrp64 ? 64 : 0);
+			assert(lower_flrp);
 			bool lower_flrp_progress = false;
 
 			NIR_PASS(lower_flrp_progress, nir, nir_lower_flrp,
@@ -855,7 +833,7 @@ si_nir_opts(struct nir_shader *nir)
 			/* Nothing should rematerialize any flrps, so we only
 			 * need to do this lowering once.
 			 */
-			lower_flrp = 0;
+			nir->info.flrp_lowered = true;
 		}
 
 		NIR_PASS(progress, nir, nir_opt_undef);
@@ -949,16 +927,8 @@ void si_nir_adjust_driver_locations(struct nir_shader *nir)
 			variable->data.driver_location *= 4;
 	}
 
-	nir_foreach_variable(variable, &nir->outputs) {
+	nir_foreach_variable(variable, &nir->outputs)
 		variable->data.driver_location *= 4;
-
-		if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-			if (variable->data.location == FRAG_RESULT_DEPTH)
-				variable->data.driver_location += 2;
-			else if (variable->data.location == FRAG_RESULT_STENCIL)
-				variable->data.driver_location += 1;
-		}
-	}
 }
 
 /**
@@ -1003,16 +973,18 @@ static void si_lower_nir(struct si_screen *sscreen, struct nir_shader *nir)
 	 *
 	 * st/mesa calls finalize_nir twice, but we can't call this pass twice.
 	 */
+	bool changed = false;
 	if (!nir->constant_data) {
-		NIR_PASS_V(nir, nir_opt_large_constants,
-			   glsl_get_natural_size_align_bytes, 16);
+		NIR_PASS(changed, nir, nir_opt_large_constants,
+			 glsl_get_natural_size_align_bytes, 16);
 	}
 
-	ac_lower_indirect_derefs(nir, sscreen->info.chip_class);
-
-	si_nir_opts(nir);
+	changed |= ac_lower_indirect_derefs(nir, sscreen->info.chip_class);
+	if (changed)
+		si_nir_opts(nir);
 
 	NIR_PASS_V(nir, nir_lower_bool_to_int32);
+	NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp);
 }
 
 void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)
@@ -1023,230 +995,4 @@ void si_finalize_nir(struct pipe_screen *screen, void *nirptr, bool optimize)
 	nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 	si_nir_lower_ps_inputs(nir);
 	si_lower_nir(sscreen, nir);
-}
-
-static void declare_nir_input_vs(struct si_shader_context *ctx,
-				 struct nir_variable *variable,
-				 unsigned input_index,
-				 LLVMValueRef out[4])
-{
-	si_llvm_load_input_vs(ctx, input_index, out);
-}
-
-LLVMValueRef
-si_nir_lookup_interp_param(struct ac_shader_abi *abi,
-			   enum glsl_interp_mode interp, unsigned location)
-{
-	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-
-	switch (interp) {
-	case INTERP_MODE_FLAT:
-		return NULL;
-	case INTERP_MODE_SMOOTH:
-	case INTERP_MODE_NONE:
-		if (location == INTERP_CENTER)
-			return ctx->abi.persp_center;
-		else if (location == INTERP_CENTROID)
-			return ctx->abi.persp_centroid;
-		else if (location == INTERP_SAMPLE)
-			return ctx->abi.persp_sample;
-		break;
-	case INTERP_MODE_NOPERSPECTIVE:
-		if (location == INTERP_CENTER)
-			return ctx->abi.linear_center;
-		else if (location == INTERP_CENTROID)
-			return ctx->abi.linear_centroid;
-		else if (location == INTERP_SAMPLE)
-			return ctx->abi.linear_sample;
-		break;
-	default:
-		assert(!"Unhandled interpolation mode.");
-	}
-	return NULL;
-}
-
-static LLVMValueRef
-si_nir_load_sampler_desc(struct ac_shader_abi *abi,
-		         unsigned descriptor_set, unsigned base_index,
-		         unsigned constant_index, LLVMValueRef dynamic_index,
-		         enum ac_descriptor_type desc_type, bool image,
-			 bool write, bool bindless)
-{
-	struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-	LLVMBuilderRef builder = ctx->ac.builder;
-	unsigned const_index = base_index + constant_index;
-
-	assert(!descriptor_set);
-	assert(desc_type <= AC_DESC_BUFFER);
-
-	if (bindless) {
-		LLVMValueRef list =
-			LLVMGetParam(ctx->main_fn, ctx->param_bindless_samplers_and_images);
-
-		/* dynamic_index is the bindless handle */
-		if (image) {
-			/* Bindless image descriptors use 16-dword slots. */
-			dynamic_index = LLVMBuildMul(ctx->ac.builder, dynamic_index,
-					     LLVMConstInt(ctx->i64, 2, 0), "");
-			/* FMASK is right after the image. */
-			if (desc_type == AC_DESC_FMASK) {
-				dynamic_index = LLVMBuildAdd(ctx->ac.builder, dynamic_index,
-							     ctx->i32_1, "");
-			}
-
-			return si_load_image_desc(ctx, list, dynamic_index, desc_type,
-						  write, true);
-		}
-
-		/* Since bindless handle arithmetic can contain an unsigned integer
-		 * wraparound and si_load_sampler_desc assumes there isn't any,
-		 * use GEP without "inbounds" (inside ac_build_pointer_add)
-		 * to prevent incorrect code generation and hangs.
-		 */
-		dynamic_index = LLVMBuildMul(ctx->ac.builder, dynamic_index,
-					     LLVMConstInt(ctx->i64, 2, 0), "");
-		list = ac_build_pointer_add(&ctx->ac, list, dynamic_index);
-		return si_load_sampler_desc(ctx, list, ctx->i32_0, desc_type);
-	}
-
-	unsigned num_slots = image ? ctx->num_images : ctx->num_samplers;
-	assert(const_index < num_slots || dynamic_index);
-
-	LLVMValueRef list = LLVMGetParam(ctx->main_fn, ctx->param_samplers_and_images);
-	LLVMValueRef index = LLVMConstInt(ctx->ac.i32, const_index, false);
-
-	if (dynamic_index) {
-		index = LLVMBuildAdd(builder, index, dynamic_index, "");
-
-		/* From the GL_ARB_shader_image_load_store extension spec:
-		 *
-		 *    If a shader performs an image load, store, or atomic
-		 *    operation using an image variable declared as an array,
-		 *    and if the index used to select an individual element is
-		 *    negative or greater than or equal to the size of the
-		 *    array, the results of the operation are undefined but may
-		 *    not lead to termination.
-		 */
-		index = si_llvm_bound_index(ctx, index, num_slots);
-	}
-
-	if (image) {
-		/* FMASKs are separate from images. */
-		if (desc_type == AC_DESC_FMASK) {
-			index = LLVMBuildAdd(ctx->ac.builder, index,
-					     LLVMConstInt(ctx->i32, SI_NUM_IMAGES, 0), "");
-		}
-		index = LLVMBuildSub(ctx->ac.builder,
-				     LLVMConstInt(ctx->i32, SI_NUM_IMAGE_SLOTS - 1, 0),
-				     index, "");
-		return si_load_image_desc(ctx, list, index, desc_type, write, false);
-	}
-
-	index = LLVMBuildAdd(ctx->ac.builder, index,
-			     LLVMConstInt(ctx->i32, SI_NUM_IMAGE_SLOTS / 2, 0), "");
-	return si_load_sampler_desc(ctx, list, index, desc_type);
-}
-
-static void bitcast_inputs(struct si_shader_context *ctx,
-			   LLVMValueRef data[4],
-			   unsigned input_idx)
-{
-	for (unsigned chan = 0; chan < 4; chan++) {
-		ctx->inputs[input_idx + chan] =
-			LLVMBuildBitCast(ctx->ac.builder, data[chan], ctx->ac.i32, "");
-	}
-}
-
-bool si_nir_build_llvm(struct si_shader_context *ctx, struct nir_shader *nir)
-{
-	struct tgsi_shader_info *info = &ctx->shader->selector->info;
-
-	if (nir->info.stage == MESA_SHADER_VERTEX) {
-		uint64_t processed_inputs = 0;
-		nir_foreach_variable(variable, &nir->inputs) {
-			unsigned attrib_count = glsl_count_attribute_slots(variable->type,
-									   true);
-			unsigned input_idx = variable->data.driver_location;
-
-			LLVMValueRef data[4];
-			unsigned loc = variable->data.location;
-
-			for (unsigned i = 0; i < attrib_count; i++) {
-				/* Packed components share the same location so skip
-				 * them if we have already processed the location.
-				 */
-				if (processed_inputs & ((uint64_t)1 << (loc + i))) {
-					input_idx += 4;
-					continue;
-				}
-
-				declare_nir_input_vs(ctx, variable, input_idx / 4, data);
-				bitcast_inputs(ctx, data, input_idx);
-				if (glsl_type_is_dual_slot(variable->type)) {
-					input_idx += 4;
-					declare_nir_input_vs(ctx, variable, input_idx / 4, data);
-					bitcast_inputs(ctx, data, input_idx);
-				}
-
-				processed_inputs |= ((uint64_t)1 << (loc + i));
-				input_idx += 4;
-			}
-		}
-	} else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-                unsigned colors_read =
-                        ctx->shader->selector->info.colors_read;
-                LLVMValueRef main_fn = ctx->main_fn;
-
-                LLVMValueRef undef = LLVMGetUndef(ctx->f32);
-
-                unsigned offset = SI_PARAM_POS_FIXED_PT + 1;
-
-                if (colors_read & 0x0f) {
-                        unsigned mask = colors_read & 0x0f;
-                        LLVMValueRef values[4];
-                        values[0] = mask & 0x1 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[1] = mask & 0x2 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[2] = mask & 0x4 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[3] = mask & 0x8 ? LLVMGetParam(main_fn, offset++) : undef;
-                        ctx->abi.color0 =
-                                ac_to_integer(&ctx->ac,
-                                              ac_build_gather_values(&ctx->ac, values, 4));
-                }
-                if (colors_read & 0xf0) {
-                        unsigned mask = (colors_read & 0xf0) >> 4;
-                        LLVMValueRef values[4];
-                        values[0] = mask & 0x1 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[1] = mask & 0x2 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[2] = mask & 0x4 ? LLVMGetParam(main_fn, offset++) : undef;
-                        values[3] = mask & 0x8 ? LLVMGetParam(main_fn, offset++) : undef;
-                        ctx->abi.color1 =
-                                ac_to_integer(&ctx->ac,
-                                              ac_build_gather_values(&ctx->ac, values, 4));
-                }
-
-		ctx->abi.interp_at_sample_force_center =
-			ctx->shader->key.mono.u.ps.interpolate_at_sample_force_center;
-	} else if (nir->info.stage == MESA_SHADER_COMPUTE) {
-		if (nir->info.cs.user_data_components_amd) {
-			ctx->abi.user_data = LLVMGetParam(ctx->main_fn, ctx->param_cs_user_data);
-			ctx->abi.user_data = ac_build_expand_to_vec4(&ctx->ac, ctx->abi.user_data,
-								     nir->info.cs.user_data_components_amd);
-		}
-	}
-
-	ctx->abi.inputs = &ctx->inputs[0];
-	ctx->abi.load_sampler_desc = si_nir_load_sampler_desc;
-	ctx->abi.clamp_shadow_reference = true;
-	ctx->abi.robust_buffer_access = true;
-
-	ctx->num_samplers = util_last_bit(info->samplers_declared);
-	ctx->num_images = util_last_bit(info->images_declared);
-
-	if (ctx->shader->selector->info.properties[TGSI_PROPERTY_CS_LOCAL_SIZE]) {
-		assert(gl_shader_stage_is_compute(nir->info.stage));
-		si_declare_compute_memory(ctx);
-	}
-	ac_nir_translate(&ctx->ac, &ctx->abi, nir);
-
-	return true;
 }

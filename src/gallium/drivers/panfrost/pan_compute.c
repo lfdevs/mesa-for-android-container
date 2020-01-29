@@ -46,7 +46,8 @@ panfrost_create_compute_state(
         so->cbase = *cso;
         so->is_compute = true;
 
-        struct panfrost_shader_state *v = &so->variants[0];
+        struct panfrost_shader_state *v = calloc(1, sizeof(*v));
+        so->variants = v;
 
         so->variant_count = 1;
         so->active_variant = 0;
@@ -110,6 +111,19 @@ panfrost_launch_grid(struct pipe_context *pipe,
         /* TODO: Stub */
         struct midgard_payload_vertex_tiler *payload = &ctx->payloads[PIPE_SHADER_COMPUTE];
 
+        /* We implement OpenCL inputs as uniforms (or a UBO -- same thing), so
+         * reuse the graphics path for this by lowering to Gallium */
+
+        struct pipe_constant_buffer ubuf = {
+                .buffer = NULL,
+                .buffer_offset = 0,
+                .buffer_size = ctx->shader[PIPE_SHADER_COMPUTE]->cbase.req_input_mem,
+                .user_buffer = info->input
+        };
+
+        if (info->input)
+                pipe->set_constant_buffer(pipe, PIPE_SHADER_COMPUTE, 0, &ubuf);
+
         panfrost_emit_for_draw(ctx, false);
 
         /* Compute jobs have a "compute FBD". It's not a real framebuffer
@@ -145,6 +159,29 @@ panfrost_launch_grid(struct pipe_context *pipe,
         panfrost_flush_all_batches(ctx, true);
 }
 
+static void
+panfrost_set_compute_resources(struct pipe_context *pctx,
+                         unsigned start, unsigned count,
+                         struct pipe_surface **resources)
+{
+        /* TODO */
+}
+
+static void
+panfrost_set_global_binding(struct pipe_context *pctx,
+                      unsigned first, unsigned count,
+                      struct pipe_resource **resources,
+                      uint32_t **handles)
+{
+        /* TODO */
+}
+
+static void
+panfrost_memory_barrier(struct pipe_context *pctx, unsigned flags)
+{
+        /* TODO */
+}
+
 void
 panfrost_compute_context_init(struct pipe_context *pctx)
 {
@@ -153,6 +190,9 @@ panfrost_compute_context_init(struct pipe_context *pctx)
         pctx->delete_compute_state = panfrost_delete_compute_state;
 
         pctx->launch_grid = panfrost_launch_grid;
+
+        pctx->set_compute_resources = panfrost_set_compute_resources;
+        pctx->set_global_binding = panfrost_set_global_binding;
+
+        pctx->memory_barrier = panfrost_memory_barrier;
 }
-
-

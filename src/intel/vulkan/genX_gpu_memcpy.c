@@ -78,6 +78,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       genX(cmd_buffer_config_l3)(cmd_buffer, cfg);
    }
 
+   genX(cmd_buffer_set_binding_for_gen8_vb_flush)(cmd_buffer, 32, src, size);
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    genX(flush_pipeline_select_3d)(cmd_buffer);
@@ -228,6 +229,9 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
       prim.StartInstanceLocation    = 0;
       prim.BaseVertexLocation       = 0;
    }
+
+   genX(cmd_buffer_update_dirty_vbs_for_gen8_vb_flush)(cmd_buffer, SEQUENTIAL,
+                                                       1ull << 32);
 
    cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_PIPELINE;
 }

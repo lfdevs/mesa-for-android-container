@@ -315,13 +315,13 @@ nvc0_tfb_validate(struct nvc0_context *nvc0)
       struct nvc0_so_target *targ = nvc0_so_target(nvc0->tfbbuf[b]);
       struct nv04_resource *buf;
 
-      if (!targ) {
+      if (targ && tfb)
+         targ->stride = tfb->stride[b];
+
+      if (!targ || !targ->stride) {
          IMMED_NVC0(push, NVC0_3D(TFB_BUFFER_ENABLE(b)), 0);
          continue;
       }
-
-      if (tfb)
-         targ->stride = tfb->stride[b];
 
       buf = nv04_resource(targ->pipe.buffer);
 

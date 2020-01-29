@@ -29,7 +29,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "freedreno_program.h"
 
@@ -321,7 +321,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	OUT_PKT0(ring, REG_A3XX_SP_FS_MRT_REG(0), 4);
 	for (i = 0; i < 4; i++) {
 		uint32_t mrt_reg = A3XX_SP_FS_MRT_REG_REGID(color_regid[i]) |
-			COND(fp->key.half_precision, A3XX_SP_FS_MRT_REG_HALF_PRECISION);
+			COND(color_regid[i] & HALF_REG_ID, A3XX_SP_FS_MRT_REG_HALF_PRECISION);
 
 		if (i < nr) {
 			enum pipe_format fmt = pipe_surface_format(bufs[i]);

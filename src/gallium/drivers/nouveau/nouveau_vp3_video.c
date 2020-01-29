@@ -32,7 +32,7 @@
 #include "nouveau_vp3_video.h"
 
 #include "util/u_video.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_sampler.h"
 
 static struct pipe_sampler_view **

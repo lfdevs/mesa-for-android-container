@@ -32,10 +32,6 @@
 #include "pipe/p_compiler.h"
 #include "util/u_debug.h"
 
-extern void
-st_print_current(void);
-
-
 #define DEBUG_PIPE      0x1
 #define DEBUG_TGSI      0x2
 #define DEBUG_TEX       0x4
@@ -49,6 +45,8 @@ st_print_current(void);
 #define DEBUG_MEM           0x4000
 #define DEBUG_FS            0x8000
 #define DEBUG_CS            0x10000
+#define DEBUG_TGSI_IR       0x20000
+#define DEBUG_CL            0x40000
 
 /* Performance flags.  These are active even on release builds.
  */

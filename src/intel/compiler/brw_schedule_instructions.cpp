@@ -424,6 +424,8 @@ schedule_node::set_latency_gen7(bool is_haswell)
 
       case GEN7_SFID_DATAPORT_DATA_CACHE:
          switch ((inst->desc >> 14) & 0x1f) {
+         case GEN7_DATAPORT_DC_DWORD_SCATTERED_READ:
+         case GEN6_DATAPORT_WRITE_MESSAGE_DWORD_SCATTERED_WRITE:
          case HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_READ:
          case HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_WRITE:
             /* We have no data for this but assume it's roughly the same as
@@ -1188,7 +1190,7 @@ fs_instruction_scheduler::calculate_deps()
       }
 
       if (inst->mlen > 0 && inst->base_mrf != -1) {
-         for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
+         for (unsigned i = 0; i < inst->implied_mrf_writes(); i++) {
             add_dep(last_mrf_write[inst->base_mrf + i], n);
             last_mrf_write[inst->base_mrf + i] = n;
          }
@@ -1311,7 +1313,7 @@ fs_instruction_scheduler::calculate_deps()
       }
 
       if (inst->mlen > 0 && inst->base_mrf != -1) {
-         for (int i = 0; i < v->implied_mrf_writes(inst); i++) {
+         for (unsigned i = 0; i < inst->implied_mrf_writes(); i++) {
             last_mrf_write[inst->base_mrf + i] = n;
          }
       }

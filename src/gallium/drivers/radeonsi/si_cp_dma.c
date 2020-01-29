@@ -433,12 +433,12 @@ static void cik_prefetch_shader_async(struct si_context *sctx,
 
 static void cik_prefetch_VBO_descriptors(struct si_context *sctx)
 {
-	if (!sctx->vertex_elements || !sctx->vertex_elements->desc_list_byte_size)
+	if (!sctx->vertex_elements || !sctx->vertex_elements->vb_desc_list_alloc_size)
 		return;
 
 	cik_prefetch_TC_L2_async(sctx, &sctx->vb_descriptors_buffer->b.b,
 				 sctx->vb_descriptors_offset,
-				 sctx->vertex_elements->desc_list_byte_size);
+				 sctx->vertex_elements->vb_desc_list_alloc_size);
 }
 
 /**

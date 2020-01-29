@@ -26,7 +26,7 @@
 #include "pan_blending.h"
 #include "pan_context.h"
 #include "gallium/auxiliary/util/u_blend.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 /*
  * Implements fixed-function blending on Midgard.

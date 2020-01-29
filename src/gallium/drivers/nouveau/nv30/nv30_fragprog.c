@@ -41,7 +41,7 @@ nv30_fragprog_upload(struct nv30_context *nv30)
    if (unlikely(!fp->buffer))
       fp->buffer = pipe_buffer_create(pipe->screen, 0, 0, fp->insn_len * 4);
 
-#ifndef PIPE_ARCH_BIG_ENDIAN
+#if !UTIL_ARCH_BIG_ENDIAN
    pipe_buffer_write(pipe, fp->buffer, 0, fp->insn_len * 4, fp->insn);
 #else
    {

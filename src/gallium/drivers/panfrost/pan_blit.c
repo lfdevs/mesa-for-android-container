@@ -28,7 +28,7 @@
  */
 
 #include "pan_context.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 static void
 panfrost_blitter_save(
@@ -106,7 +106,7 @@ void
 panfrost_blit_wallpaper(struct panfrost_context *ctx, struct pipe_box *box)
 {
         struct panfrost_batch *batch = ctx->wallpaper_batch;
-        struct pipe_blit_info binfo = { };
+        struct pipe_blit_info binfo = {0};
 
         panfrost_blitter_save(ctx, ctx->blitter_wallpaper);
 

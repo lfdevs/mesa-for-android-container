@@ -82,7 +82,7 @@ nir_alpha_saturate(
 {
    nir_ssa_def *Asrc = nir_channel(b, src, 3);
    nir_ssa_def *Adst = nir_channel(b, dst, 3);
-   nir_ssa_def *one = nir_imm_float16(b, 1.0);
+   nir_ssa_def *one = nir_imm_float(b, 1.0);
    nir_ssa_def *Adsti = nir_fsub(b, one, Adst);
 
    return (chan < 3) ? nir_fmin(b, Asrc, Adsti) : one;
@@ -99,7 +99,7 @@ nir_blend_factor_value(
 {
    switch (factor) {
    case BLEND_FACTOR_ZERO:
-      return nir_imm_float16(b, 0.0);
+      return nir_imm_float(b, 0.0);
    case BLEND_FACTOR_SRC_COLOR:
       return nir_channel(b, src, chan);
    case BLEND_FACTOR_DST_COLOR:
@@ -132,7 +132,7 @@ nir_blend_factor(
       nir_blend_factor_value(b, src, dst, bconst, chan, factor);
 
    if (inverted)
-      f = nir_fsub(b, nir_imm_float16(b, 1.0), f);
+      f = nir_fsub(b, nir_imm_float(b, 1.0), f);
 
    return nir_fmul(b, raw_scalar, f);
 }
@@ -167,7 +167,7 @@ nir_blend(
    nir_ssa_def *src, nir_ssa_def *dst)
 {
    /* Grab the blend constant ahead of time */
-   nir_ssa_def *bconst = nir_f2f16(b, nir_load_blend_const_color_rgba(b));
+   nir_ssa_def *bconst = nir_load_blend_const_color_rgba(b);
 
    /* We blend per channel and recombine later */
    nir_ssa_def *channels[4];
@@ -175,7 +175,7 @@ nir_blend(
    for (unsigned c = 0; c < 4; ++c) {
       /* Decide properties based on channel */
       nir_lower_blend_channel chan =
-         (c < 3) ? options.rt[0].rgb : options.rt[0].alpha;
+         (c < 3) ? options.rgb : options.alpha;
 
       nir_ssa_def *psrc = nir_channel(b, src, c);
       nir_ssa_def *pdst = nir_channel(b, dst, c);
@@ -197,7 +197,7 @@ nir_blend(
 
    /* Then just recombine with an applied colormask */
    nir_ssa_def *blended = nir_vec(b, channels, 4);
-   return nir_color_mask(b, options.rt[0].colormask, blended, dst);
+   return nir_color_mask(b, options.colormask, blended, dst);
 }
 
 static bool
@@ -214,8 +214,8 @@ static bool
 nir_is_blend_replace(nir_lower_blend_options options)
 {
    return
-      nir_is_blend_channel_replace(options.rt[0].rgb) &&
-      nir_is_blend_channel_replace(options.rt[0].alpha);
+      nir_is_blend_channel_replace(options.rgb) &&
+      nir_is_blend_channel_replace(options.alpha);
 }
 
 void
@@ -249,13 +249,13 @@ nir_lower_blend(nir_shader *shader, nir_lower_blend_options options)
             b.cursor = nir_before_instr(instr);
 
             /* Grab the input color */
-            nir_ssa_def *src = nir_f2f16(&b, nir_ssa_for_src(&b, intr->src[1], 4));
+            nir_ssa_def *src = nir_ssa_for_src(&b, intr->src[1], 4);
 
             /* Grab the tilebuffer color - io lowered to load_output */
-            nir_ssa_def *dst = nir_f2f16(&b, nir_load_var(&b, var));
+            nir_ssa_def *dst = nir_load_var(&b, var);
 
             /* Blend the two colors per the passed options */
-            nir_ssa_def *blended = nir_f2f32(&b, nir_blend(&b, options, src, dst));
+            nir_ssa_def *blended = nir_blend(&b, options, src, dst);
 
             /* Write out the final color instead of the input */
             nir_instr_rewrite_src(instr, &intr->src[1],

@@ -97,6 +97,7 @@ struct zink_context {
    struct pipe_vertex_buffer buffers[PIPE_MAX_ATTRIBS];
    uint32_t buffers_enabled_mask;
 
+   void *sampler_states[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    VkSampler samplers[PIPE_SHADER_TYPES][PIPE_MAX_SAMPLERS];
    unsigned num_samplers[PIPE_SHADER_TYPES];
    struct pipe_sampler_view *image_views[PIPE_SHADER_TYPES][PIPE_MAX_SHADER_SAMPLER_VIEWS];
@@ -147,5 +148,13 @@ zink_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags);
 
 void
 zink_context_query_init(struct pipe_context *ctx);
+
+void
+zink_blit(struct pipe_context *pctx,
+          const struct pipe_blit_info *info);
+
+void
+zink_draw_vbo(struct pipe_context *pctx,
+              const struct pipe_draw_info *dinfo);
 
 #endif

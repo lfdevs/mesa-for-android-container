@@ -329,7 +329,8 @@ static rvcn_dec_message_hevc_t get_h265_msg(struct radeon_decoder *dec,
 	}
 
 	if (pic->base.profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10) {
-		if (target->buffer_format == PIPE_FORMAT_P016) {
+		if (target->buffer_format == PIPE_FORMAT_P010 ||
+			target->buffer_format == PIPE_FORMAT_P016) {
 			result.p010_mode = 1;
 			result.msb_mode = 1;
 		} else {
@@ -530,7 +531,8 @@ static rvcn_dec_message_vp9_t get_vp9_msg(struct radeon_decoder *dec,
 	result.ref_frame_sign_bias[2] = pic->picture_parameter.pic_fields.alt_ref_frame_sign_bias;
 
 	if (pic->base.profile == PIPE_VIDEO_PROFILE_VP9_PROFILE2) {
-		if (target->buffer_format == PIPE_FORMAT_P016) {
+		if (target->buffer_format == PIPE_FORMAT_P010 ||
+			target->buffer_format == PIPE_FORMAT_P016) {
 			result.p010_mode = 1;
 			result.msb_mode = 1;
 		} else {

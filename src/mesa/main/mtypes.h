@@ -77,6 +77,7 @@ struct prog_instruction;
 struct gl_program_parameter_list;
 struct gl_shader_spirv_data;
 struct set;
+struct shader_includes;
 struct vbo_context;
 /*@}*/
 
@@ -2916,6 +2917,9 @@ struct gl_shader_program_data
     */
    union gl_constant_value *UniformDataDefaults;
 
+   /** Hash for quick search by name. */
+   struct hash_table_u64 *ProgramResourceHash;
+
    GLboolean Validated;
 
    /** List of all active resources after linking. */
@@ -3324,6 +3328,13 @@ struct gl_shared_state
    struct hash_table_u64 *TextureHandles;
    struct hash_table_u64 *ImageHandles;
    mtx_t HandlesMutex; /**< For texture/image handles safety */
+
+   /* GL_ARB_shading_language_include */
+   struct shader_includes *ShaderIncludes;
+   /* glCompileShaderInclude expects ShaderIncludes not to change while it is
+    * in progress.
+    */
+   mtx_t ShaderIncludeMutex;
 
    /**
     * Some context in this share group was affected by a GPU reset
@@ -4133,6 +4144,9 @@ struct gl_constants
    /** Is the drivers uniform storage packed or padded to 16 bytes. */
    bool PackedDriverUniformStorage;
 
+   /** Does the driver make use of the NIR based GLSL linker */
+   bool UseNIRGLSLLinker;
+
    /** Wether or not glBitmap uses red textures rather than alpha */
    bool BitmapUsesRed;
 
@@ -4281,6 +4295,7 @@ struct gl_extensions
    GLboolean EXT_depth_bounds_test;
    GLboolean EXT_disjoint_timer_query;
    GLboolean EXT_draw_buffers2;
+   GLboolean EXT_EGL_image_storage;
    GLboolean EXT_float_blend;
    GLboolean EXT_framebuffer_multisample;
    GLboolean EXT_framebuffer_multisample_blit_scaled;
@@ -4352,6 +4367,7 @@ struct gl_extensions
    GLboolean INTEL_conservative_rasterization;
    GLboolean INTEL_performance_query;
    GLboolean INTEL_shader_atomic_float_minmax;
+   GLboolean INTEL_shader_integer_functions2;
    GLboolean KHR_blend_equation_advanced;
    GLboolean KHR_blend_equation_advanced_coherent;
    GLboolean KHR_robustness;

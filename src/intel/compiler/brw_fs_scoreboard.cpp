@@ -896,7 +896,7 @@ namespace {
             }
 
             if (is_send(inst) && inst->base_mrf != -1) {
-               for (int j = 0; j < shader->implied_mrf_writes(inst); j++)
+               for (unsigned j = 0; j < inst->implied_mrf_writes(); j++)
                   add_dependency(ids, deps[ip], dependency_for_write(inst,
                      sb.get(brw_uvec_mrf(8, inst->base_mrf + j, 0))));
             }

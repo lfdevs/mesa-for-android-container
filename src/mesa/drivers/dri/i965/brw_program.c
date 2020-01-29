@@ -95,6 +95,14 @@ brw_create_nir(struct brw_context *brw,
          nir = _mesa_spirv_to_nir(ctx, shader_prog, stage, options);
       } else {
          nir = glsl_to_nir(ctx, shader_prog, stage, options);
+
+         /* Remap the locations to slots so those requiring two slots will
+          * occupy two locations. For instance, if we have in the IR code a
+          * dvec3 attr0 in location 0 and vec4 attr1 in location 1, in NIR attr0
+          * will use locations/slots 0 and 1, and attr1 will use location/slot 2
+          */
+         if (nir->info.stage == MESA_SHADER_VERTEX)
+            nir_remap_dual_slot_attributes(nir, &prog->DualSlotInputs);
       }
       assert (nir);
 

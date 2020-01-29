@@ -163,7 +163,7 @@ find_and_update_previous_uniform_storage(struct gl_shader_program *prog,
    if (nir_variable_is_in_block(var)) {
       struct gl_uniform_storage *uniform = NULL;
 
-      unsigned num_blks = nir_variable_is_in_ubo(var) ?
+      ASSERTED unsigned num_blks = nir_variable_is_in_ubo(var) ?
          prog->data->NumUniformBlocks :
          prog->data->NumShaderStorageBlocks;
 
@@ -257,7 +257,6 @@ struct nir_link_uniforms_state {
    bool var_is_in_block;
    int top_level_array_size;
    int top_level_array_stride;
-   int main_uniform_storage_index;
 
    struct type_tree_entry *current_type;
 };
@@ -394,7 +393,7 @@ add_parameter(struct gl_uniform_storage *uniform,
    for (unsigned i = 0; i < num_params; i++) {
       struct gl_program_parameter *param = &params->Parameters[base_index + i];
       param->UniformStorageIndex = uniform - prog->data->UniformStorage;
-      param->MainUniformStorageIndex = state->main_uniform_storage_index;
+      param->MainUniformStorageIndex = state->current_var->data.location;
    }
 }
 
@@ -490,9 +489,6 @@ nir_link_uniform(struct gl_context *ctx,
          return -1;
       }
 
-      if (state->main_uniform_storage_index == -1)
-         state->main_uniform_storage_index = prog->data->NumUniformStorage;
-
       uniform = &prog->data->UniformStorage[prog->data->NumUniformStorage];
       prog->data->NumUniformStorage++;
 
@@ -558,11 +554,9 @@ nir_link_uniform(struct gl_context *ctx,
          uniform->array_stride = glsl_type_is_array(type) ?
             glsl_get_explicit_stride(type) : 0;
 
-         if (glsl_type_is_matrix(type)) {
-            assert(parent_type);
-            uniform->matrix_stride = glsl_get_explicit_stride(type);
-
-            uniform->row_major = glsl_matrix_type_is_row_major(type);
+         if (glsl_type_is_matrix(uniform->type)) {
+            uniform->matrix_stride = glsl_get_explicit_stride(uniform->type);
+            uniform->row_major = glsl_matrix_type_is_row_major(uniform->type);
          } else {
             uniform->matrix_stride = 0;
          }
@@ -607,6 +601,7 @@ nir_link_uniform(struct gl_context *ctx,
       uniform->num_compatible_subroutines = 0;
 
       unsigned entries = MAX2(1, uniform->array_elements);
+      unsigned values = glsl_get_component_slots(type);
 
       if (glsl_type_is_sampler(type_no_array)) {
          int sampler_index =
@@ -627,6 +622,8 @@ nir_link_uniform(struct gl_context *ctx,
             state->shader_samplers_used |= 1U << i;
             state->shader_shadow_samplers |= shadow << i;
          }
+
+         state->num_values += values;
       } else if (glsl_type_is_image(type_no_array)) {
          /* @FIXME: image_index should match that of the same image
           * uniform in other shaders. This means we need to match image
@@ -643,7 +640,7 @@ nir_link_uniform(struct gl_context *ctx,
 
          /* Set image access qualifiers */
          enum gl_access_qualifier image_access =
-            state->current_var->data.image.access;
+            state->current_var->data.access;
          const GLenum access =
             (image_access & ACCESS_NON_WRITEABLE) ?
             ((image_access & ACCESS_NON_READABLE) ? GL_NONE :
@@ -655,11 +652,17 @@ nir_link_uniform(struct gl_context *ctx,
               i++) {
             stage_program->sh.ImageAccess[i] = access;
          }
-      }
 
-      unsigned values = glsl_get_component_slots(type);
-      state->num_shader_uniform_components += values;
-      state->num_values += values;
+         if (!uniform->is_shader_storage) {
+            state->num_shader_uniform_components += values;
+            state->num_values += values;
+         }
+      } else {
+         if (!state->var_is_in_block) {
+            state->num_shader_uniform_components += values;
+            state->num_values += values;
+         }
+      }
 
       if (uniform->remap_location != UNMAPPED_UNIFORM_LOC &&
           state->max_uniform_location < uniform->remap_location + entries)
@@ -703,6 +706,8 @@ gl_nir_link_uniforms(struct gl_context *ctx,
       nir_foreach_variable(var, &nir->uniforms) {
          struct gl_uniform_storage *uniform = NULL;
 
+         state.current_var = var;
+
          /* Check if the uniform has been processed already for
           * other stage. If so, validate they are compatible and update
           * the active stage mask.
@@ -721,12 +726,10 @@ gl_nir_link_uniforms(struct gl_context *ctx,
          /* From now on the variable’s location will be its uniform index */
          var->data.location = prog->data->NumUniformStorage;
 
-         state.current_var = var;
          state.offset = 0;
          state.var_is_in_block = nir_variable_is_in_block(var);
          state.top_level_array_size = 0;
          state.top_level_array_stride = 0;
-         state.main_uniform_storage_index = -1;
 
          /*
           * From ARB_program_interface spec, issue (16):

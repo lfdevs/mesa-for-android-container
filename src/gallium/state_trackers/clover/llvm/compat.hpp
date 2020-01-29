@@ -67,9 +67,25 @@
 #include <clang/Frontend/CodeGenOptions.h>
 #endif
 
+#if LLVM_VERSION_MAJOR >= 10
+#include <llvm/Support/CodeGen.h>
+#endif
+
 namespace clover {
    namespace llvm {
       namespace compat {
+
+#if LLVM_VERSION_MAJOR >= 10
+         const auto CGFT_ObjectFile = ::llvm::CGFT_ObjectFile;
+         const auto CGFT_AssemblyFile = ::llvm::CGFT_AssemblyFile;
+         typedef ::llvm::CodeGenFileType CodeGenFileType;
+#else
+         const auto CGFT_ObjectFile = ::llvm::TargetMachine::CGFT_ObjectFile;
+         const auto CGFT_AssemblyFile =
+            ::llvm::TargetMachine::CGFT_AssemblyFile;
+         typedef ::llvm::TargetMachine::CodeGenFileType CodeGenFileType;
+#endif
+
          template<typename T, typename AS>
          unsigned target_address_space(const T &target, const AS lang_as) {
             const auto &map = target.getAddressSpaceMap();

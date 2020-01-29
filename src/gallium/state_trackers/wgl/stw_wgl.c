@@ -258,8 +258,10 @@ wglUseFontBitmapsW(
 
       if (size != GDI_ERROR) {
          if (size == 0) {
-            glBitmap(0, 0, -gm.gmptGlyphOrigin.x, gm.gmptGlyphOrigin.y,
-                     gm.gmCellIncX, gm.gmCellIncY, NULL);
+            glBitmap(0, 0, (GLfloat)-gm.gmptGlyphOrigin.x,
+                     (GLfloat)gm.gmptGlyphOrigin.y,
+                     (GLfloat)gm.gmCellIncX,
+                     (GLfloat)gm.gmCellIncY, NULL);
          }
          else {
             buffer = realloc(buffer, size);

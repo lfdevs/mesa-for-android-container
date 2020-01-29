@@ -199,9 +199,6 @@ brw_inst *brw_##OP(struct brw_codegen *p,	\
 	      struct brw_reg src1,		\
 	      struct brw_reg src2);
 
-#define ROUND(OP) \
-void brw_##OP(struct brw_codegen *p, struct brw_reg dest, struct brw_reg src0);
-
 ALU1(MOV)
 ALU2(SEL)
 ALU1(NOT)
@@ -222,6 +219,8 @@ ALU2(AVG)
 ALU2(MUL)
 ALU1(FRC)
 ALU1(RNDD)
+ALU1(RNDE)
+ALU1(RNDZ)
 ALU2(MAC)
 ALU2(MACH)
 ALU1(LZD)
@@ -244,13 +243,9 @@ ALU2(ADDC)
 ALU2(SUBB)
 ALU2(MAC)
 
-ROUND(RNDZ)
-ROUND(RNDE)
-
 #undef ALU1
 #undef ALU2
 #undef ALU3
-#undef ROUND
 
 
 /* Helpers for SEND instruction:
@@ -693,6 +688,37 @@ brw_dp_byte_scattered_rw_desc(const struct gen_device_info *devinfo,
    const unsigned msg_control =
       SET_BITS(exec_size == 16, 0, 0) |
       SET_BITS(brw_mdc_ds(bit_size), 3, 2);
+
+   return brw_dp_surface_desc(devinfo, msg_type, msg_control);
+}
+
+static inline uint32_t
+brw_dp_dword_scattered_rw_desc(const struct gen_device_info *devinfo,
+                               unsigned exec_size,
+                               bool write)
+{
+   assert(exec_size == 8 || exec_size == 16);
+
+   unsigned msg_type;
+   if (write) {
+      if (devinfo->gen >= 6) {
+         msg_type = GEN6_DATAPORT_WRITE_MESSAGE_DWORD_SCATTERED_WRITE;
+      } else {
+         msg_type = BRW_DATAPORT_WRITE_MESSAGE_DWORD_SCATTERED_WRITE;
+      }
+   } else {
+      if (devinfo->gen >= 7) {
+         msg_type = GEN7_DATAPORT_DC_DWORD_SCATTERED_READ;
+      } else if (devinfo->gen > 4 || devinfo->is_g4x) {
+         msg_type = G45_DATAPORT_READ_MESSAGE_DWORD_SCATTERED_READ;
+      } else {
+         msg_type = BRW_DATAPORT_READ_MESSAGE_DWORD_SCATTERED_READ;
+      }
+   }
+
+   const unsigned msg_control =
+      SET_BITS(1, 1, 1) | /* Legacy SIMD Mode */
+      SET_BITS(exec_size == 16, 0, 0);
 
    return brw_dp_surface_desc(devinfo, msg_type, msg_control);
 }
@@ -1212,6 +1238,9 @@ void brw_debug_compact_uncompact(const struct gen_device_info *devinfo,
                                  brw_inst *orig, brw_inst *uncompacted);
 
 /* brw_eu_validate.c */
+bool brw_validate_instruction(const struct gen_device_info *devinfo,
+                              const brw_inst *inst, int offset,
+                              struct disasm_info *disasm);
 bool brw_validate_instructions(const struct gen_device_info *devinfo,
                                const void *assembly, int start_offset, int end_offset,
                                struct disasm_info *disasm);

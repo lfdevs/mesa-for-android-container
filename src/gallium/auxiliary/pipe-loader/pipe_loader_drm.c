@@ -331,7 +331,7 @@ pipe_loader_drm_get_driinfo_xml(const char *driver_name)
    const struct drm_driver_descriptor *dd =
       get_driver_descriptor(driver_name, &lib);
 
-   if (dd && dd->driconf_xml)
+   if (dd && dd->driconf_xml && *dd->driconf_xml)
       xml = strdup(*dd->driconf_xml);
 
    if (lib)

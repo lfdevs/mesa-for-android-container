@@ -32,7 +32,6 @@
 #include "hw/cmdstream.xml.h"
 
 struct etna_context;
-struct compiled_rs_state;
 
 struct etna_coalesce {
    uint32_t start;

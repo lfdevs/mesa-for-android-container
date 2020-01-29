@@ -457,6 +457,8 @@ bool gpir_compile_nir(struct lima_vs_shader_state *prog, struct nir_shader *nir,
 
    comp->constant_base = nir->num_uniforms;
    prog->uniform_pending_offset = nir->num_uniforms * 16;
+   prog->gl_pos_idx = 0;
+   prog->point_size_idx = -1;
 
    if (!gpir_emit_function(comp, func))
       goto err_out0;
@@ -483,13 +485,24 @@ bool gpir_compile_nir(struct lima_vs_shader_state *prog, struct nir_shader *nir,
       goto err_out0;
 
    nir_foreach_variable(var, &nir->outputs) {
-      if (var->data.location == VARYING_SLOT_POS)
-         assert(var->data.driver_location == 0);
+      bool varying = true;
+      switch (var->data.location) {
+      case VARYING_SLOT_POS:
+         prog->gl_pos_idx = var->data.driver_location;
+         varying = false;
+         break;
+      case VARYING_SLOT_PSIZ:
+         prog->point_size_idx = var->data.driver_location;
+         varying = false;
+         break;
+      }
 
       struct lima_varying_info *v = prog->varying + var->data.driver_location;
       if (!v->components) {
          v->component_size = gpir_glsl_type_size(glsl_get_base_type(var->type));
-         prog->num_varying++;
+         prog->num_outputs++;
+         if (varying)
+            prog->num_varyings++;
       }
 
       v->components += glsl_get_components(var->type);

@@ -320,7 +320,7 @@ swizzle_channel(struct isl_swizzle swizzle, unsigned channel)
 }
 
 static bool
-try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
+try_lower_tex_ycbcr(const struct anv_pipeline_layout *layout,
                     nir_builder *builder,
                     nir_tex_instr *tex)
 {
@@ -448,7 +448,7 @@ try_lower_tex_ycbcr(struct anv_pipeline_layout *layout,
 
 bool
 anv_nir_lower_ycbcr_textures(nir_shader *shader,
-                             struct anv_pipeline_layout *layout)
+                             const struct anv_pipeline_layout *layout)
 {
    bool progress = false;
 

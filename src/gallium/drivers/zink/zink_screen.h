@@ -70,4 +70,7 @@ zink_screen(struct pipe_screen *pipe)
 VkFormat
 zink_get_format(struct zink_screen *screen, enum pipe_format format);
 
+bool
+zink_is_depth_format_supported(struct zink_screen *screen, VkFormat format);
+
 #endif

@@ -132,6 +132,7 @@ emit_halti5_only_state(struct etna_context *ctx, int vs_output_count)
    etna_coalesce_start(stream, &coalesce);
    if (unlikely(dirty & (ETNA_DIRTY_SHADER))) {
       /* Magic states (load balancing, inter-unit sync, buffers) */
+      /*007C4*/ EMIT_STATE(FE_HALTI5_ID_CONFIG, ctx->shader_state.FE_HALTI5_ID_CONFIG);
       /*00870*/ EMIT_STATE(VS_HALTI5_OUTPUT_COUNT, vs_output_count | ((vs_output_count * 0x10) << 8));
       /*008A0*/ EMIT_STATE(VS_HALTI5_UNK008A0, 0x0001000e | ((0x110/vs_output_count) << 20));
       for (int x = 0; x < 4; ++x) {
@@ -327,11 +328,6 @@ etna_emit_state(struct etna_context *ctx)
                /*14640*/ EMIT_STATE(NFE_VERTEX_STREAMS_CONTROL(x), ctx->vertex_buffer.cvb[x].FE_VERTEX_STREAM_CONTROL);
             }
          }
-         for (int x = 0; x < ctx->vertex_buffer.count; ++x) {
-            if (ctx->vertex_buffer.cvb[x].FE_VERTEX_STREAM_BASE_ADDR.bo) {
-               /*14680*/ EMIT_STATE(NFE_VERTEX_STREAMS_VERTEX_DIVISOR(x), ctx->vertex_buffer.cvb[x].FE_VERTEX_STREAM_UNK14680);
-            }
-         }
       } else if(ctx->specs.stream_count > 1) { /* hw w/ multiple vertex streams */
          for (int x = 0; x < ctx->vertex_buffer.count; ++x) {
             /*00680*/ EMIT_STATE_RELOC(FE_VERTEX_STREAMS_BASE_ADDR(x), &ctx->vertex_buffer.cvb[x].FE_VERTEX_STREAM_BASE_ADDR);
@@ -346,6 +342,13 @@ etna_emit_state(struct etna_context *ctx)
          /*00650*/ EMIT_STATE(FE_VERTEX_STREAM_CONTROL, ctx->vertex_buffer.cvb[0].FE_VERTEX_STREAM_CONTROL);
       }
    }
+   /* gallium has instance divisor as part of elements state */
+   if ((dirty & (ETNA_DIRTY_VERTEX_ELEMENTS)) && ctx->specs.halti >= 2) {
+      for (int x = 0; x < ctx->vertex_elements->num_buffers; ++x) {
+         /*14680*/ EMIT_STATE(NFE_VERTEX_STREAMS_VERTEX_DIVISOR(x), ctx->vertex_elements->NFE_VERTEX_STREAMS_VERTEX_DIVISOR[x]);
+      }
+   }
+
    if (unlikely(dirty & (ETNA_DIRTY_SHADER | ETNA_DIRTY_RASTERIZER))) {
 
       /*00804*/ EMIT_STATE(VS_OUTPUT_COUNT, vs_output_count);
@@ -449,7 +452,8 @@ etna_emit_state(struct etna_context *ctx)
                            ctx->framebuffer.msaa_mode
                               ? ctx->shader_state.PS_TEMP_REGISTER_CONTROL_MSAA
                               : ctx->shader_state.PS_TEMP_REGISTER_CONTROL);
-      /*01010*/ EMIT_STATE(PS_CONTROL, ctx->shader_state.PS_CONTROL);
+      /*01010*/ EMIT_STATE(PS_CONTROL, ctx->framebuffer.PS_CONTROL);
+      /*01030*/ EMIT_STATE(PS_CONTROL_EXT, ctx->framebuffer.PS_CONTROL_EXT);
    }
    if (unlikely(dirty & (ETNA_DIRTY_ZSA | ETNA_DIRTY_FRAMEBUFFER | ETNA_DIRTY_SHADER))) {
       /*01400*/ EMIT_STATE(PE_DEPTH_CONFIG, (etna_zsa_state(ctx->zsa)->PE_DEPTH_CONFIG |
@@ -545,6 +549,7 @@ etna_emit_state(struct etna_context *ctx)
       /*01664*/ EMIT_STATE_RELOC(TS_DEPTH_STATUS_BASE, &ctx->framebuffer.TS_DEPTH_STATUS_BASE);
       /*01668*/ EMIT_STATE_RELOC(TS_DEPTH_SURFACE_BASE, &ctx->framebuffer.TS_DEPTH_SURFACE_BASE);
       /*0166C*/ EMIT_STATE(TS_DEPTH_CLEAR_VALUE, ctx->framebuffer.TS_DEPTH_CLEAR_VALUE);
+      /*016BC*/ EMIT_STATE(TS_COLOR_CLEAR_VALUE_EXT, ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT);
    }
    if (unlikely(dirty & (ETNA_DIRTY_SHADER))) {
       /*0381C*/ EMIT_STATE(GL_VARYING_TOTAL_COMPONENTS, ctx->shader_state.GL_VARYING_TOTAL_COMPONENTS);

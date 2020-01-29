@@ -43,18 +43,17 @@ typedef struct {
 } nir_lower_blend_channel;
 
 typedef struct {
-   struct {
-      nir_lower_blend_channel rgb;
-      nir_lower_blend_channel alpha;
+   nir_lower_blend_channel rgb;
+   nir_lower_blend_channel alpha;
 
-      /* 4-bit colormask. 0x0 for none, 0xF for RGBA, 0x1 for R */
-      unsigned colormask;
-   } rt[8];
+   /* 4-bit colormask. 0x0 for none, 0xF for RGBA, 0x1 for R */
+   unsigned colormask;
 } nir_lower_blend_options;
 
 void nir_lower_blend(nir_shader *shader, nir_lower_blend_options options);
 
 void
-nir_lower_framebuffer(nir_shader *shader, enum pipe_format format);
+nir_lower_framebuffer(nir_shader *shader, enum pipe_format format,
+                      unsigned gpu_id);
 
 #endif

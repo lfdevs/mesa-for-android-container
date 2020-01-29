@@ -562,31 +562,12 @@ isl_format_supports_ccs_e(const struct gen_device_info *devinfo,
 
    /* For simplicity, only report that a format supports CCS_E if blorp can
     * perform bit-for-bit copies with an image of that format while compressed.
-    * This allows ISL users to avoid having to resolve the image before
-    * performing such a copy. We may want to change this behavior in the
-    * future.
-    *
-    * The following formats have no equivalent UINT format. Given how
-    * blorp_copy currently works, bit-for-bit copy operations are not possible
-    * without an intermediate resolve.
+    * Unfortunately, R11G11B10_FLOAT is in a compression class of its own and
+    * there is no way to copy to/from it which doesn't potentially loose data
+    * if one of the bit patterns being copied isn't valid finite floats.
     */
-   switch (format) {
-   case ISL_FORMAT_R11G11B10_FLOAT:
-   case ISL_FORMAT_B5G5R5X1_UNORM:
-   case ISL_FORMAT_B5G5R5X1_UNORM_SRGB:
-   case ISL_FORMAT_B5G5R5A1_UNORM:
-   case ISL_FORMAT_B5G5R5A1_UNORM_SRGB:
-   case ISL_FORMAT_A4B4G4R4_UNORM:
-   case ISL_FORMAT_B4G4R4A4_UNORM:
-   case ISL_FORMAT_B4G4R4A4_UNORM_SRGB:
-   case ISL_FORMAT_B5G6R5_UNORM:
-   case ISL_FORMAT_B5G6R5_UNORM_SRGB:
-   case ISL_FORMAT_A1B5G5R5_UNORM:
-   case ISL_FORMAT_A8_UNORM:
+   if (format == ISL_FORMAT_R11G11B10_FLOAT)
       return false;
-   default:
-      break;
-   }
 
    return format_gen(devinfo) >= format_info[format].ccs_e;
 }

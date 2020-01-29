@@ -180,8 +180,8 @@ static void si_add_fence_dependency(struct si_context *sctx,
 {
 	struct radeon_winsys *ws = sctx->ws;
 
-	if (sctx->dma_cs)
-		ws->cs_add_fence_dependency(sctx->dma_cs, fence, 0);
+	if (sctx->sdma_cs)
+		ws->cs_add_fence_dependency(sctx->sdma_cs, fence, 0);
 	ws->cs_add_fence_dependency(sctx->gfx_cs, fence, 0);
 }
 
@@ -513,7 +513,7 @@ static void si_flush_from_st(struct pipe_context *ctx,
 	}
 
 	/* DMA IBs are preambles to gfx IBs, therefore must be flushed first. */
-	if (sctx->dma_cs)
+	if (sctx->sdma_cs)
 		si_flush_dma_cs(sctx, rflags, fence ? &sdma_fence : NULL);
 
 	if (!radeon_emitted(sctx->gfx_cs, sctx->initial_gfx_cs_size)) {
@@ -577,8 +577,8 @@ static void si_flush_from_st(struct pipe_context *ctx,
 	assert(!fine.buf);
 finish:
 	if (!(flags & (PIPE_FLUSH_DEFERRED | PIPE_FLUSH_ASYNC))) {
-		if (sctx->dma_cs)
-			ws->cs_sync_flush(sctx->dma_cs);
+		if (sctx->sdma_cs)
+			ws->cs_sync_flush(sctx->sdma_cs);
 		ws->cs_sync_flush(sctx->gfx_cs);
 	}
 }

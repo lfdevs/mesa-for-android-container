@@ -74,9 +74,13 @@ pkg.generate(
 
 if with_tests
   test('osmesa-render',
-       executable('osmesa-render',
-                  'test-render.c',
-                  include_directories : inc_common,
-                  link_with: libosmesa),
-       suite: 'gallium')
+    executable(
+      'osmesa-render',
+      'test-render.cpp',
+      include_directories : inc_common,
+      link_with: libosmesa,
+      dependencies : [idep_gtest],
+    ),
+    suite: 'gallium'
+  )
 endif

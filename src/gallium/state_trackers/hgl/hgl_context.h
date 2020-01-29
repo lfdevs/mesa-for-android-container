@@ -9,11 +9,13 @@
 #define HGL_CONTEXT_H
 
 
-#include "state_tracker/st_api.h"
-#include "state_tracker/st_manager.h"
+#include "pipe/p_format.h"
 #include "pipe/p_compiler.h"
 #include "pipe/p_screen.h"
 #include "postprocess/filters.h"
+
+#include "state_tracker/st_api.h"
+#include "state_tracker/st_manager.h"
 #include "os/os_thread.h"
 
 #include "bitmap_wrapper.h"

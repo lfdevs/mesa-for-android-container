@@ -329,9 +329,5 @@ else
         libexpat
 endif
 
-ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 27; echo $$?), 0)
-LOCAL_STATIC_LIBRARIES += libgrallocusage
-endif
-
 include $(MESA_COMMON_MK)
 include $(BUILD_SHARED_LIBRARY)

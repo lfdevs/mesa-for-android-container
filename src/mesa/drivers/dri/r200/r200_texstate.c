@@ -1308,8 +1308,11 @@ static void setup_hardware_state(r200ContextPtr rmesa, radeonTexObj *t)
 
    if (!t->image_override) {
       if (VALID_FORMAT(firstImage->TexFormat)) {
-	 const struct tx_table *table = _mesa_little_endian() ? tx_table_le :
-	    tx_table_be;
+#if UTIL_ARCH_LITTLE_ENDIAN
+	 const struct tx_table *table = tx_table_le;
+#else
+	 const struct tx_table *table = tx_table_be;
+#endif
 	 
 	 t->pp_txformat &= ~(R200_TXFORMAT_FORMAT_MASK |
 			     R200_TXFORMAT_ALPHA_IN_MAP);

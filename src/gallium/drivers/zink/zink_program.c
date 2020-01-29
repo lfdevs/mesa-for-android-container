@@ -210,9 +210,8 @@ reference_render_pass(struct zink_screen *screen,
    struct set_entry *entry = _mesa_set_search(prog->render_passes,
                                               render_pass);
    if (!entry) {
-      struct zink_render_pass *tmp = NULL;
       entry = _mesa_set_add(prog->render_passes, render_pass);
-      zink_render_pass_reference(screen, &tmp, render_pass);
+      pipe_reference(NULL, &render_pass->reference);
    }
 }
 

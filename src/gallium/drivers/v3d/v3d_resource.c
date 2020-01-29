@@ -25,12 +25,12 @@
 #include "pipe/p_defines.h"
 #include "util/u_blit.h"
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_surface.h"
 #include "util/u_transfer_helper.h"
 #include "util/u_upload_mgr.h"
-#include "util/u_format_zs.h"
+#include "util/format/u_format_zs.h"
 #include "util/u_drm.h"
 
 #include "drm-uapi/drm_fourcc.h"
@@ -991,8 +991,6 @@ v3d_create_surface(struct pipe_context *pctx,
 
         if (!surface)
                 return NULL;
-
-        assert(surf_tmpl->u.tex.first_layer == surf_tmpl->u.tex.last_layer);
 
         struct pipe_surface *psurf = &surface->base;
         unsigned level = surf_tmpl->u.tex.level;

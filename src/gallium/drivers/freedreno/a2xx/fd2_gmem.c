@@ -89,8 +89,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 {
 	struct fd_ringbuffer *ring = batch->tile_fini;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
-	struct fd_resource_slice *slice =
-		fd_resource_slice(rsc, psurf->u.tex.level);
+	struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset =
 		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
 	enum pipe_format format = fd_gmem_restore_format(psurf->format);
@@ -113,7 +112,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, uint32_t base,
 	OUT_RING(ring, slice->pitch >> 5); /* RB_COPY_DEST_PITCH */
 	OUT_RING(ring,                          /* RB_COPY_DEST_INFO */
 			A2XX_RB_COPY_DEST_INFO_FORMAT(fd2_pipe2color(format)) |
-			COND(!rsc->tile_mode, A2XX_RB_COPY_DEST_INFO_LINEAR) |
+			COND(!rsc->layout.tile_mode, A2XX_RB_COPY_DEST_INFO_LINEAR) |
 			A2XX_RB_COPY_DEST_INFO_WRITE_RED |
 			A2XX_RB_COPY_DEST_INFO_WRITE_GREEN |
 			A2XX_RB_COPY_DEST_INFO_WRITE_BLUE |
@@ -230,8 +229,7 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 {
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
-	struct fd_resource_slice *slice =
-		fd_resource_slice(rsc, psurf->u.tex.level);
+	struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset =
 		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
 	enum pipe_format format = fd_gmem_restore_format(psurf->format);
@@ -437,8 +435,7 @@ fd2_emit_sysmem_prep(struct fd_batch *batch)
 		return;
 
 	struct fd_resource *rsc = fd_resource(psurf->texture);
-	struct fd_resource_slice *slice =
-		fd_resource_slice(rsc, psurf->u.tex.level);
+	struct fdl_slice *slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	uint32_t offset =
 		fd_resource_offset(rsc, psurf->u.tex.level, psurf->u.tex.first_layer);
 
@@ -454,7 +451,7 @@ fd2_emit_sysmem_prep(struct fd_batch *batch)
 	OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 	OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_INFO));
 	OUT_RELOCW(ring, rsc->bo, offset,
-		COND(!rsc->tile_mode, A2XX_RB_COLOR_INFO_LINEAR) |
+		COND(!rsc->layout.tile_mode, A2XX_RB_COLOR_INFO_LINEAR) |
 		A2XX_RB_COLOR_INFO_SWAP(fmt2swap(psurf->format)) |
 		A2XX_RB_COLOR_INFO_FORMAT(fd2_pipe2color(psurf->format)), 0);
 

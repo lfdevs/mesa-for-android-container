@@ -814,13 +814,12 @@ live_defs(nir_function_impl *impl, struct live_def *defs, unsigned *live_map)
    /* apply live_in/live_out to ranges */
 
    nir_foreach_block(block, impl) {
-      BITSET_WORD tmp;
       int i;
 
-      BITSET_FOREACH_SET(i, tmp, block->live_in, state.num_defs)
+      BITSET_FOREACH_SET(i, block->live_in, state.num_defs)
          range_include(&state.defs[i], block_live_index[block->index]);
 
-      BITSET_FOREACH_SET(i, tmp, block->live_out, state.num_defs)
+      BITSET_FOREACH_SET(i, block->live_out, state.num_defs)
          range_include(&state.defs[i], block_live_index[block->index + 1]);
    }
 

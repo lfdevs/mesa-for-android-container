@@ -423,7 +423,10 @@ void JitManager::DumpAsm(Function* pFunction, const char* fileName)
         legacy::PassManager* pMPasses         = new legacy::PassManager();
         auto*                pTarget          = mpExec->getTargetMachine();
         pTarget->Options.MCOptions.AsmVerbose = true;
-#if LLVM_VERSION_MAJOR >= 7
+#if LLVM_VERSION_MAJOR >= 10
+        pTarget->addPassesToEmitFile(
+            *pMPasses, filestream, nullptr, CGFT_AssemblyFile);
+#elif LLVM_VERSION_MAJOR >= 7
         pTarget->addPassesToEmitFile(
             *pMPasses, filestream, nullptr, TargetMachine::CGFT_AssemblyFile);
 #else

@@ -665,6 +665,39 @@ void *si_clear_render_target_shader_1d_array(struct pipe_context *ctx)
 	return ctx->create_compute_state(ctx, &state);
 }
 
+void *si_clear_12bytes_buffer_shader(struct pipe_context *ctx)
+{
+	static const char text[] =
+		"COMP\n"
+		"PROPERTY CS_FIXED_BLOCK_WIDTH 64\n"
+		"PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
+		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
+		"DCL SV[0], THREAD_ID\n"
+		"DCL SV[1], BLOCK_ID\n"
+		"DCL BUFFER[0]\n"
+		"DCL CONST[0][0..0]\n" // 0:xyzw
+		"DCL TEMP[0..0]\n"
+		"IMM[0] UINT32 {64, 1, 12, 0}\n"
+		"UMAD TEMP[0].x, SV[1].xyzz, IMM[0].xyyy, SV[0].xyzz\n"
+		"UMUL TEMP[0].x, TEMP[0].xyzz, IMM[0].zzzz\n" //12 bytes
+		"STORE BUFFER[0].xyz, TEMP[0].xxxx, CONST[0][0].xyzw\n"
+		"END\n";
+
+	struct tgsi_token tokens[1024];
+	struct pipe_compute_state state = {0};
+
+	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
+		assert(false);
+		return NULL;
+	}
+
+	state.ir_type = PIPE_SHADER_IR_TGSI;
+	state.prog = tokens;
+
+	return ctx->create_compute_state(ctx, &state);
+}
+
+
 /* Load samples from the image, and copy them to the same image. This looks like
  * a no-op, but it's not. Loads use FMASK, while stores don't, so samples are
  * reordered to match expanded FMASK.

@@ -62,6 +62,7 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 	enum pipe_format format = pimg->format;
 	struct pipe_resource *prsc = pimg->resource;
 	struct fd_resource *rsc = fd_resource(prsc);
+	struct fdl_slice *slice = NULL;
 	unsigned lvl;
 
 	if (!pimg->resource) {
@@ -74,7 +75,7 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 	img->fetchsize = fd5_pipe2fetchsize(format);
 	img->type      = fd5_tex_type(prsc->target);
 	img->srgb      = util_format_is_srgb(format);
-	img->cpp       = rsc->cpp;
+	img->cpp       = rsc->layout.cpp;
 	img->bo        = rsc->bo;
 
 	if (prsc->target == PIPE_BUFFER) {
@@ -83,8 +84,9 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 		img->pitch  = pimg->u.buf.size;
 	} else {
 		lvl = pimg->u.tex.level;
+		slice = fd_resource_slice(rsc, lvl);
 		img->offset = fd_resource_offset(rsc, lvl, pimg->u.tex.first_layer);
-		img->pitch  = rsc->slices[lvl].pitch * rsc->cpp;
+		img->pitch  = slice->pitch * rsc->layout.cpp;
 	}
 
 	img->width     = u_minify(prsc->width0, lvl);
@@ -96,21 +98,21 @@ static void translate_image(struct fd5_image *img, struct pipe_image_view *pimg)
 	case PIPE_TEXTURE_RECT:
 	case PIPE_TEXTURE_1D:
 	case PIPE_TEXTURE_2D:
-		img->array_pitch = rsc->layer_size;
+		img->array_pitch = rsc->layout.layer_size;
 		img->depth = 1;
 		break;
 	case PIPE_TEXTURE_1D_ARRAY:
 	case PIPE_TEXTURE_2D_ARRAY:
-		img->array_pitch = rsc->layer_size;
+		img->array_pitch = rsc->layout.layer_size;
 		img->depth = layers;
 		break;
 	case PIPE_TEXTURE_CUBE:
 	case PIPE_TEXTURE_CUBE_ARRAY:
-		img->array_pitch = rsc->layer_size;
+		img->array_pitch = rsc->layout.layer_size;
 		img->depth = layers;
 		break;
 	case PIPE_TEXTURE_3D:
-		img->array_pitch = rsc->slices[lvl].size0;
+		img->array_pitch = slice->size0;
 		img->depth = u_minify(prsc->depth0, lvl);
 		break;
 	default:
@@ -208,6 +210,6 @@ fd5_emit_images(struct fd_context *ctx, struct fd_ringbuffer *ring,
 		translate_image(&img, &so->si[index]);
 
 		emit_image_tex(ring, m->image_to_tex[index] + m->tex_base, &img, shader);
-		emit_image_ssbo(ring, m->image_to_ibo[index], &img, shader);
+		emit_image_ssbo(ring, v->shader->nir->info.num_ssbos + index, &img, shader);
 	}
 }

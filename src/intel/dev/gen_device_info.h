@@ -62,6 +62,7 @@ struct gen_device_info
    bool is_geminilake;
    bool is_coffeelake;
    bool is_cannonlake;
+   bool is_elkhartlake;
 
    bool has_hiz_and_separate_stencil;
    bool must_use_separate_stencil;
@@ -69,7 +70,8 @@ struct gen_device_info
    bool has_llc;
 
    bool has_pln;
-   bool has_64bit_types;
+   bool has_64bit_float;
+   bool has_64bit_int;
    bool has_integer_dword_mul;
    bool has_compr4;
    bool has_surface_tile_offset;

@@ -50,7 +50,7 @@ void si_destroy_compute(struct si_compute *program);
 static inline void
 si_compute_reference(struct si_compute **dst, struct si_compute *src)
 {
-	if (pipe_reference(&(*dst)->sel.reference, &src->sel.reference))
+	if (pipe_reference(&(*dst)->sel.base.reference, &src->sel.base.reference))
 		si_destroy_compute(*dst);
 
 	*dst = src;

@@ -23,7 +23,7 @@
 #include "api/dispatch.hpp"
 
 namespace clover {
-   const _cl_icd_dispatch _dispatch = {
+   const cl_icd_dispatch _dispatch = {
       clGetPlatformIDs,
       GetPlatformInfo,
       clGetDeviceIDs,

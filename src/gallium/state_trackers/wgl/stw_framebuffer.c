@@ -647,7 +647,7 @@ DrvSwapBuffers(HDC hdc)
 
       if (ctx->current_framebuffer == fb) {
          /* flush current context */
-         ctx->st->flush(ctx->st, ST_FLUSH_END_OF_FRAME, NULL);
+         ctx->st->flush(ctx->st, ST_FLUSH_END_OF_FRAME, NULL, NULL, NULL);
       }
    }
 

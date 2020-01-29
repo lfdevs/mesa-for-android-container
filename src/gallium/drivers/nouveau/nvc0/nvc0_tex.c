@@ -27,7 +27,7 @@
 #include "nv50/g80_texture.xml.h"
 #include "nv50/g80_defs.xml.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #define NVE4_TIC_ENTRY_INVALID 0x000fffff
 #define NVE4_TSC_ENTRY_INVALID 0xfff00000

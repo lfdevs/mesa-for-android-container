@@ -62,7 +62,7 @@ namespace {
       case SpvStorageClassFunction:
          return module::argument::scalar;
       case SpvStorageClassUniformConstant:
-         return module::argument::constant;
+         return module::argument::global;
       case SpvStorageClassWorkgroup:
          return module::argument::local;
       case SpvStorageClassCrossWorkgroup:
@@ -407,6 +407,12 @@ namespace {
          case SpvCapabilityFloat16:
             if (!dev.has_halves()) {
                r_log += "Capability 'Float16' is not supported.\n";
+               return false;
+            }
+            break;
+         case SpvCapabilityInt64Atomics:
+            if (!dev.has_int64_atomics()) {
+               r_log += "Capability 'Int64Atomics' is not supported.\n";
                return false;
             }
             break;

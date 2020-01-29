@@ -274,6 +274,8 @@ LValue::isUniform() const
    if (defs.size() > 1)
       return false;
    Instruction *insn = getInsn();
+   if (!insn)
+      return false;
    // let's not try too hard here for now ...
    return !insn->srcExists(1) && insn->getSrc(0)->isUniform();
 }

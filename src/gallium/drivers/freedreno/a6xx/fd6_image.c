@@ -72,7 +72,7 @@ static void translate_image(struct fd6_image *img, const struct pipe_image_view 
 	img->fetchsize = fd6_pipe2fetchsize(format);
 	img->type      = fd6_tex_type(prsc->target);
 	img->srgb      = util_format_is_srgb(format);
-	img->cpp       = rsc->cpp;
+	img->cpp       = rsc->layout.cpp;
 	img->bo        = rsc->bo;
 
 	/* Treat cube textures as 2d-array: */
@@ -97,30 +97,31 @@ static void translate_image(struct fd6_image *img, const struct pipe_image_view 
 		img->buffer = false;
 
 		unsigned lvl = pimg->u.tex.level;
+		struct fdl_slice *slice = fd_resource_slice(rsc, lvl);
 		unsigned layers = pimg->u.tex.last_layer - pimg->u.tex.first_layer + 1;
 
 		img->ubwc_offset = fd_resource_ubwc_offset(rsc, lvl, pimg->u.tex.first_layer);
 		img->offset = fd_resource_offset(rsc, lvl, pimg->u.tex.first_layer);
-		img->pitch  = rsc->slices[lvl].pitch * rsc->cpp;
+		img->pitch  = slice->pitch * rsc->layout.cpp;
 
 		switch (prsc->target) {
 		case PIPE_TEXTURE_RECT:
 		case PIPE_TEXTURE_1D:
 		case PIPE_TEXTURE_2D:
-			img->array_pitch = rsc->layer_size;
+			img->array_pitch = rsc->layout.layer_size;
 			img->depth = 1;
 			break;
 		case PIPE_TEXTURE_1D_ARRAY:
 		case PIPE_TEXTURE_2D_ARRAY:
 		case PIPE_TEXTURE_CUBE:
 		case PIPE_TEXTURE_CUBE_ARRAY:
-			img->array_pitch = rsc->layer_size;
+			img->array_pitch = rsc->layout.layer_size;
 			// TODO the CUBE/CUBE_ARRAY might need to be layers/6 for tex state,
 			// but empirically for ibo state it shouldn't be divided.
 			img->depth = layers;
 			break;
 		case PIPE_TEXTURE_3D:
-			img->array_pitch = rsc->slices[lvl].size0;
+			img->array_pitch = slice->size0;
 			img->depth  = u_minify(prsc->depth0, lvl);
 			break;
 		default:
@@ -150,7 +151,7 @@ static void translate_buf(struct fd6_image *img, const struct pipe_shader_buffer
 	img->fetchsize = fd6_pipe2fetchsize(format);
 	img->type      = fd6_tex_type(prsc->target);
 	img->srgb      = util_format_is_srgb(format);
-	img->cpp       = rsc->cpp;
+	img->cpp       = rsc->layout.cpp;
 	img->bo        = rsc->bo;
 	img->buffer    = true;
 
@@ -183,7 +184,7 @@ static void emit_image_tex(struct fd_ringbuffer *ring, struct fd6_image *img)
 		A6XX_TEX_CONST_2_TYPE(img->type) |
 		A6XX_TEX_CONST_2_PITCH(img->pitch));
 	OUT_RING(ring, A6XX_TEX_CONST_3_ARRAY_PITCH(img->array_pitch) |
-		COND(ubwc_enabled, A6XX_TEX_CONST_3_FLAG | A6XX_TEX_CONST_3_UNK27));
+		COND(ubwc_enabled, A6XX_TEX_CONST_3_FLAG | A6XX_TEX_CONST_3_TILE_ALL));
 	if (img->bo) {
 		OUT_RELOC(ring, img->bo, img->offset,
 				(uint64_t)A6XX_TEX_CONST_5_DEPTH(img->depth) << 32, 0);
@@ -195,9 +196,10 @@ static void emit_image_tex(struct fd_ringbuffer *ring, struct fd6_image *img)
 	OUT_RING(ring, 0x00000000);   /* texconst6 */
 
 	if (ubwc_enabled) {
+		struct fdl_slice *ubwc_slice = &rsc->layout.ubwc_slices[img->level];
 		OUT_RELOC(ring, rsc->bo, img->ubwc_offset, 0, 0);
-		OUT_RING(ring, A6XX_TEX_CONST_9_FLAG_BUFFER_ARRAY_PITCH(rsc->ubwc_size));
-		OUT_RING(ring, A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(rsc->ubwc_pitch));
+		OUT_RING(ring, A6XX_TEX_CONST_9_FLAG_BUFFER_ARRAY_PITCH(rsc->layout.ubwc_size));
+		OUT_RING(ring, A6XX_TEX_CONST_10_FLAG_BUFFER_PITCH(ubwc_slice->pitch));
 	} else {
 		OUT_RING(ring, 0x00000000);   /* texconst7 */
 		OUT_RING(ring, 0x00000000);   /* texconst8 */
@@ -230,13 +232,18 @@ fd6_emit_ssbo_tex(struct fd_ringbuffer *ring, const struct pipe_shader_buffer *p
 
 static void emit_image_ssbo(struct fd_ringbuffer *ring, struct fd6_image *img)
 {
-	struct fd_resource *rsc = fd_resource(img->prsc);
-	enum a6xx_tile_mode tile_mode = TILE6_LINEAR;
-	bool ubwc_enabled = fd_resource_ubwc_enabled(rsc, img->level);
-
-	if (rsc->tile_mode && !fd_resource_level_linear(img->prsc, img->level)) {
-		tile_mode = rsc->tile_mode;
+	/* If the SSBO isn't present (becasue gallium doesn't pack atomic
+	 * counters), zero-fill the slot.
+	 */
+	if (!img->prsc) {
+		for (int i = 0; i < 16; i++)
+			OUT_RING(ring, 0);
+		return;
 	}
+
+	struct fd_resource *rsc = fd_resource(img->prsc);
+	enum a6xx_tile_mode tile_mode = fd_resource_tile_mode(img->prsc, img->level);
+	bool ubwc_enabled = fd_resource_ubwc_enabled(rsc, img->level);
 
 	OUT_RING(ring, A6XX_IBO_0_FMT(img->fmt) |
 		A6XX_IBO_0_TILE_MODE(tile_mode));
@@ -257,9 +264,10 @@ static void emit_image_ssbo(struct fd_ringbuffer *ring, struct fd6_image *img)
 	OUT_RING(ring, 0x00000000);
 
 	if (ubwc_enabled) {
+		struct fdl_slice *ubwc_slice = &rsc->layout.ubwc_slices[img->level];
 		OUT_RELOCW(ring, rsc->bo, img->ubwc_offset, 0, 0);
-		OUT_RING(ring, A6XX_IBO_9_FLAG_BUFFER_ARRAY_PITCH(rsc->ubwc_size));
-		OUT_RING(ring, A6XX_IBO_10_FLAG_BUFFER_PITCH(rsc->ubwc_pitch));
+		OUT_RING(ring, A6XX_IBO_9_FLAG_BUFFER_ARRAY_PITCH(rsc->layout.ubwc_size));
+		OUT_RING(ring, A6XX_IBO_10_FLAG_BUFFER_PITCH(ubwc_slice->pitch));
 	} else {
 		OUT_RING(ring, 0x00000000);
 		OUT_RING(ring, 0x00000000);
@@ -281,24 +289,24 @@ fd6_build_ibo_state(struct fd_context *ctx, const struct ir3_shader_variant *v,
 {
 	struct fd_shaderbuf_stateobj *bufso = &ctx->shaderbuf[shader];
 	struct fd_shaderimg_stateobj *imgso = &ctx->shaderimg[shader];
-	const struct ir3_ibo_mapping *mapping = &v->image_mapping;
 
 	struct fd_ringbuffer *state =
 		fd_submit_new_ringbuffer(ctx->batch->submit,
-			mapping->num_ibo * 16 * 4, FD_RINGBUFFER_STREAMING);
+				(v->shader->nir->info.num_ssbos +
+				 v->shader->nir->info.num_images) * 16 * 4,
+				FD_RINGBUFFER_STREAMING);
 
 	assert(shader == PIPE_SHADER_COMPUTE || shader == PIPE_SHADER_FRAGMENT);
 
-	for (unsigned i = 0; i < mapping->num_ibo; i++) {
+	for (unsigned i = 0; i < v->shader->nir->info.num_ssbos; i++) {
 		struct fd6_image img;
-		unsigned idx = mapping->ibo_to_image[i];
+		translate_buf(&img, &bufso->sb[i]);
+		emit_image_ssbo(state, &img);
+	}
 
-		if (idx & IBO_SSBO) {
-			translate_buf(&img, &bufso->sb[idx & ~IBO_SSBO]);
-		} else {
-			translate_image(&img, &imgso->si[idx]);
-		}
-
+	for (unsigned i = 0; i < v->shader->nir->info.num_images; i++) {
+		struct fd6_image img;
+		translate_image(&img, &imgso->si[i]);
 		emit_image_ssbo(state, &img);
 	}
 

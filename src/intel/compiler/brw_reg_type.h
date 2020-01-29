@@ -100,6 +100,9 @@ brw_reg_type_is_integer(enum brw_reg_type type)
    }
 }
 
+#define INVALID_REG_TYPE    ((enum brw_reg_type)-1)
+#define INVALID_HW_REG_TYPE ((unsigned)-1)
+
 unsigned
 brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
                         enum brw_reg_file file, enum brw_reg_type type);

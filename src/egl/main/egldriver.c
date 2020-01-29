@@ -92,6 +92,8 @@ _eglMatchDriver(_EGLDisplay *disp)
    /* set options */
    disp->Options.ForceSoftware =
       env_var_as_boolean("LIBGL_ALWAYS_SOFTWARE", false);
+   if (disp->Options.ForceSoftware)
+      _eglLog(_EGL_DEBUG, "Found 'LIBGL_ALWAYS_SOFTWARE' set, will use a CPU renderer");
 
    best_drv = _eglMatchAndInitialize(disp);
    if (!best_drv && !disp->Options.ForceSoftware) {

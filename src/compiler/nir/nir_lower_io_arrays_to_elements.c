@@ -349,7 +349,7 @@ nir_lower_io_arrays_to_elements_no_indirects(nir_shader *shader,
    struct hash_table *split_inputs = _mesa_pointer_hash_table_create(NULL);
    struct hash_table *split_outputs = _mesa_pointer_hash_table_create(NULL);
 
-   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {{0}};
+   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {0};
 
    lower_io_arrays_to_elements(shader, nir_var_shader_out,
                                indirects, split_outputs, true);
@@ -387,7 +387,7 @@ nir_lower_io_arrays_to_elements(nir_shader *producer, nir_shader *consumer)
    struct hash_table *split_inputs = _mesa_pointer_hash_table_create(NULL);
    struct hash_table *split_outputs = _mesa_pointer_hash_table_create(NULL);
 
-   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {{0}};
+   BITSET_DECLARE(indirects, 4 * VARYING_SLOT_TESS_MAX) = {0};
 
    create_indirects_mask(producer, indirects, nir_var_shader_out);
    create_indirects_mask(consumer, indirects, nir_var_shader_in);

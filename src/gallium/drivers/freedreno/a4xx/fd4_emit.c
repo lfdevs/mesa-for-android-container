@@ -28,7 +28,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_helpers.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_viewport.h"
 
 #include "freedreno_resource.h"
@@ -301,7 +301,7 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 
 			/* note: PIPE_BUFFER disallowed for surfaces */
 			unsigned lvl = bufs[i]->u.tex.level;
-			struct fd_resource_slice *slice = fd_resource_slice(rsc, lvl);
+			struct fdl_slice *slice = fd_resource_slice(rsc, lvl);
 			unsigned offset = fd_resource_offset(rsc, lvl, bufs[i]->u.tex.first_layer);
 
 			/* z32 restore is accomplished using depth write.  If there is
@@ -323,7 +323,7 @@ fd4_emit_gmem_restore_tex(struct fd_ringbuffer *ring, unsigned nr_bufs,
 							PIPE_SWIZZLE_Z, PIPE_SWIZZLE_W));
 			OUT_RING(ring, A4XX_TEX_CONST_1_WIDTH(bufs[i]->width) |
 					A4XX_TEX_CONST_1_HEIGHT(bufs[i]->height));
-			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch * rsc->cpp) |
+			OUT_RING(ring, A4XX_TEX_CONST_2_PITCH(slice->pitch * rsc->layout.cpp) |
 					A4XX_TEX_CONST_2_FETCHSIZE(fd4_pipe2fetchsize(format)));
 			OUT_RING(ring, 0x00000000);
 			OUT_RELOC(ring, rsc->bo, offset, 0, 0);
@@ -376,9 +376,6 @@ fd4_emit_vertex_bufs(struct fd_ringbuffer *ring, struct fd4_emit *emit)
 			continue;
 		if (vp->inputs[i].sysval) {
 			switch(vp->inputs[i].slot) {
-			case SYSTEM_VALUE_FIRST_VERTEX:
-				/* handled elsewhere */
-				break;
 			case SYSTEM_VALUE_VERTEX_ID_ZERO_BASE:
 				vertex_regid = vp->inputs[i].regid;
 				break;

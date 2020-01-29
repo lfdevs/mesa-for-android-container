@@ -117,6 +117,9 @@ blob_finish(struct blob *blob)
       free(blob->data);
 }
 
+void
+blob_finish_get_buffer(struct blob *blob, void **buffer, size_t *size);
+
 /**
  * Add some unstructured, fixed-size data to a blob.
  *
@@ -171,6 +174,27 @@ blob_overwrite_bytes(struct blob *blob,
                      size_t offset,
                      const void *bytes,
                      size_t to_write);
+
+/**
+ * Add a uint8_t to a blob.
+ *
+ * \return True unless allocation failed.
+ */
+bool
+blob_write_uint8(struct blob *blob, uint8_t value);
+
+/**
+ * Add a uint16_t to a blob.
+ *
+ * \note This function will only write to a uint16_t-aligned offset from the
+ * beginning of the blob's data, so some padding bytes may be added to the
+ * blob if this write follows some unaligned write (such as
+ * blob_write_string).
+ *
+ * \return True unless allocation failed.
+ */
+bool
+blob_write_uint16(struct blob *blob, uint16_t value);
 
 /**
  * Add a uint32_t to a blob.
@@ -299,6 +323,27 @@ blob_copy_bytes(struct blob_reader *blob, void *dest, size_t size);
  */
 void
 blob_skip_bytes(struct blob_reader *blob, size_t size);
+
+/**
+ * Read a uint8_t from the current location, (and update the current location
+ * to just past this uint8_t).
+ *
+ * \return The uint8_t read
+ */
+uint8_t
+blob_read_uint8(struct blob_reader *blob);
+
+/**
+ * Read a uint16_t from the current location, (and update the current location
+ * to just past this uint16_t).
+ *
+ * \note This function will only read from a uint16_t-aligned offset from the
+ * beginning of the blob's data, so some padding bytes may be skipped.
+ *
+ * \return The uint16_t read
+ */
+uint16_t
+blob_read_uint16(struct blob_reader *blob);
 
 /**
  * Read a uint32_t from the current location, (and update the current location

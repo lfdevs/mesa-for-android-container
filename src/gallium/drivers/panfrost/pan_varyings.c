@@ -381,7 +381,7 @@ panfrost_emit_varying_descriptor(
 
         /* Fix up unaligned addresses */
         for (unsigned i = 0; i < so_count; ++i) {
-                if (varyings[i].elements < MALI_VARYING_SPECIAL)
+                if (varyings[i].elements < MALI_RECORD_SPECIAL)
                         continue;
 
                 unsigned align = (varyings[i].elements & 63);

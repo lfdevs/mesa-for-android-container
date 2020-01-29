@@ -25,7 +25,7 @@
  */
 
 #include "pipe/p_screen.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "fd2_screen.h"
 #include "fd2_context.h"
@@ -99,9 +99,6 @@ fd2_screen_is_format_supported(struct pipe_screen *pscreen,
 	return retval == usage;
 }
 
-extern const struct fd_perfcntr_group a2xx_perfcntr_groups[];
-extern const unsigned a2xx_num_perfcntr_groups;
-
 void
 fd2_screen_init(struct pipe_screen *pscreen)
 {
@@ -114,11 +111,6 @@ fd2_screen_init(struct pipe_screen *pscreen)
 	screen->setup_slices = fd2_setup_slices;
 	if (fd_mesa_debug & FD_DBG_TTILE)
 		screen->tile_mode = fd2_tile_mode;
-
-	if (fd_mesa_debug & FD_DBG_PERFC) {
-		screen->perfcntr_groups = a2xx_perfcntr_groups;
-		screen->num_perfcntr_groups = a2xx_num_perfcntr_groups;
-	}
 
 	fd2_emit_init_screen(pscreen);
 }

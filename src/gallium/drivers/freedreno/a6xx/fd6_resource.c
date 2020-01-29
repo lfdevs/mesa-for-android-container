@@ -30,139 +30,6 @@
 
 #include "a6xx.xml.h"
 
-/* indexed by cpp, including msaa 2x and 4x: */
-static const struct {
-	unsigned pitchalign;
-	unsigned heightalign;
-} tile_alignment[] = {
-	[1]  = { 128, 32 },
-	[2]  = {  64, 32 },
-	[3]  = {  64, 32 },
-	[4]  = {  64, 16 },
-	[6]  = {  64, 16 },
-	[8]  = {  64, 16 },
-	[12] = {  64, 16 },
-	[16] = {  64, 16 },
-	[24] = {  64, 16 },
-	[32] = {  64, 16 },
-	[48] = {  64, 16 },
-	[64] = {  64, 16 },
-
-	/* special cases for r16: */
-	[0]  = { 128, 16 },
-};
-
-/* NOTE: good way to test this is:  (for example)
- *  piglit/bin/texelFetch fs sampler3D 100x100x8
- */
-static uint32_t
-setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format format)
-{
-	struct pipe_resource *prsc = &rsc->base;
-	struct fd_screen *screen = fd_screen(prsc->screen);
-	enum util_format_layout layout = util_format_description(format)->layout;
-	uint32_t pitchalign = screen->gmem_alignw;
-	uint32_t level, size = 0;
-	uint32_t depth = prsc->depth0;
-	/* linear dimensions: */
-	uint32_t lwidth = prsc->width0;
-	uint32_t lheight = prsc->height0;
-	/* tile_mode dimensions: */
-	uint32_t twidth = util_next_power_of_two(lwidth);
-	uint32_t theight = util_next_power_of_two(lheight);
-	/* in layer_first layout, the level (slice) contains just one
-	 * layer (since in fact the layer contains the slices)
-	 */
-	uint32_t layers_in_level = rsc->layer_first ? 1 : prsc->array_size;
-	int ta = rsc->cpp;
-
-	/* The z16/r16 formats seem to not play by the normal tiling rules: */
-	if ((rsc->cpp == 2) && (util_format_get_nr_components(format) == 1))
-		ta = 0;
-
-	debug_assert(ta < ARRAY_SIZE(tile_alignment));
-	debug_assert(tile_alignment[ta].pitchalign);
-
-	for (level = 0; level <= prsc->last_level; level++) {
-		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
-		bool linear_level = fd_resource_level_linear(prsc, level);
-		uint32_t width, height;
-
-		/* tiled levels of 3D textures are rounded up to PoT dimensions: */
-		if ((prsc->target == PIPE_TEXTURE_3D) && rsc->tile_mode && !linear_level) {
-			width = twidth;
-			height = theight;
-		} else {
-			width = lwidth;
-			height = lheight;
-		}
-		uint32_t aligned_height = height;
-		uint32_t blocks;
-
-		if (rsc->tile_mode && !linear_level) {
-			pitchalign = tile_alignment[ta].pitchalign;
-			aligned_height = align(aligned_height,
-					tile_alignment[ta].heightalign);
-		} else {
-			pitchalign = 64;
-		}
-
-		/* The blits used for mem<->gmem work at a granularity of
-		 * 32x32, which can cause faults due to over-fetch on the
-		 * last level.  The simple solution is to over-allocate a
-		 * bit the last level to ensure any over-fetch is harmless.
-		 * The pitch is already sufficiently aligned, but height
-		 * may not be:
-		 */
-		if ((level == prsc->last_level) && (prsc->target != PIPE_BUFFER))
-			aligned_height = align(aligned_height, 32);
-
-		if (layout == UTIL_FORMAT_LAYOUT_ASTC)
-			slice->pitch =
-				util_align_npot(width, pitchalign * util_format_get_blockwidth(format));
-		else
-			slice->pitch = align(width, pitchalign);
-
-		slice->offset = size;
-		blocks = util_format_get_nblocks(format, slice->pitch, aligned_height);
-
-		/* 1d array and 2d array textures must all have the same layer size
-		 * for each miplevel on a6xx. 3d textures can have different layer
-		 * sizes for high levels, but the hw auto-sizer is buggy (or at least
-		 * different than what this code does), so as soon as the layer size
-		 * range gets into range, we stop reducing it.
-		 */
-		if (prsc->target == PIPE_TEXTURE_3D) {
-			if (level < 1 || (rsc->slices[level - 1].size0 > 0xf000)) {
-				slice->size0 = align(blocks * rsc->cpp, alignment);
-			} else {
-				slice->size0 = rsc->slices[level - 1].size0;
-			}
-		} else {
-			slice->size0 = align(blocks * rsc->cpp, alignment);
-		}
-
-		size += slice->size0 * depth * layers_in_level;
-
-#if 0
-		debug_printf("%s: %ux%ux%u@%u:\t%2u: stride=%4u, size=%6u,%7u, aligned_height=%3u, blocks=%u, offset=0x%x\n",
-				util_format_name(prsc->format),
-				width, height, depth, rsc->cpp,
-				level, slice->pitch * rsc->cpp,
-				slice->size0, size, aligned_height, blocks,
-				slice->offset);
-#endif
-
-		depth = u_minify(depth, 1);
-		lwidth = u_minify(lwidth, 1);
-		lheight = u_minify(lheight, 1);
-		twidth = u_minify(twidth, 1);
-		theight = u_minify(theight, 1);
-	}
-
-	return size;
-}
-
 /* A subset of the valid tiled formats can be compressed.  We do
  * already require tiled in order to be compressed, but just because
  * it can be tiled doesn't mean it can be compressed.
@@ -202,12 +69,12 @@ ok_ubwc_format(enum pipe_format pfmt)
 	case RB6_R8G8B8A8_SINT:
 	case RB6_R8G8B8A8_UINT:
 	case RB6_R8G8B8A8_UNORM:
-	case RB6_R8G8B8_UNORM:
+	case RB6_R8G8B8X8_UNORM:
 	case RB6_R8G8_SINT:
 	case RB6_R8G8_UINT:
 	case RB6_R8G8_UNORM:
-	case RB6_X8Z24_UNORM:
 	case RB6_Z24_UNORM_S8_UINT:
+	case RB6_Z24_UNORM_S8_UINT_AS_R8G8B8A8:
 		return true;
 	default:
 		return false;
@@ -233,7 +100,7 @@ fd6_fill_ubwc_buffer_sizes(struct fd_resource *rsc)
 		return 0;
 
 	uint32_t block_width, block_height;
-	switch (rsc->cpp) {
+	switch (rsc->layout.cpp) {
 	case 2:
 	case 4:
 		block_width = 16;
@@ -262,11 +129,15 @@ fd6_fill_ubwc_buffer_sizes(struct fd_resource *rsc)
 	 * because it is what the kernel expects for scanout.  For non-2D we
 	 * could just use a separate UBWC buffer..
 	 */
-	rsc->ubwc_offset = 0;
-	rsc->offset = meta_size;
-	rsc->ubwc_pitch = meta_stride;
-	rsc->ubwc_size = meta_size >> 2;   /* in dwords??? */
-	rsc->tile_mode = TILE6_3;
+	for (int level = 0; level <= prsc->last_level; level++) {
+		struct fdl_slice *slice = fd_resource_slice(rsc, level);
+		slice->offset += meta_size;
+	}
+
+	rsc->layout.ubwc_slices[0].offset = 0;
+	rsc->layout.ubwc_slices[0].pitch = meta_stride;
+	rsc->layout.ubwc_size = meta_size >> 2;   /* in dwords??? */
+	rsc->layout.tile_mode = TILE6_3;
 
 	return meta_size;
 }
@@ -280,7 +151,7 @@ void
 fd6_validate_format(struct fd_context *ctx, struct fd_resource *rsc,
 		enum pipe_format format)
 {
-	if (!rsc->ubwc_size)
+	if (!rsc->layout.ubwc_size)
 		return;
 
 	if (ok_ubwc_format(format))
@@ -289,21 +160,51 @@ fd6_validate_format(struct fd_context *ctx, struct fd_resource *rsc,
 	fd_resource_uncompress(ctx, rsc);
 }
 
+static void
+setup_lrz(struct fd_resource *rsc)
+{
+	struct fd_screen *screen = fd_screen(rsc->base.screen);
+	const uint32_t flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
+			DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
+	unsigned width0 = rsc->base.width0;
+	unsigned height0 = rsc->base.height0;
+
+	/* LRZ buffer is super-sampled: */
+	switch (rsc->base.nr_samples) {
+	case 4:
+		width0 *= 2;
+		/* fallthru */
+	case 2:
+		height0 *= 2;
+	}
+
+	unsigned lrz_pitch  = align(DIV_ROUND_UP(width0, 8), 32);
+	unsigned lrz_height = align(DIV_ROUND_UP(height0, 8), 16);
+
+	unsigned size = lrz_pitch * lrz_height * 2;
+
+	rsc->lrz_height = lrz_height;
+	rsc->lrz_width = lrz_pitch;
+	rsc->lrz_pitch = lrz_pitch;
+	rsc->lrz = fd_bo_new(screen->dev, size, flags, "lrz");
+}
+
 uint32_t
 fd6_setup_slices(struct fd_resource *rsc)
 {
-	uint32_t alignment;
+	struct pipe_resource *prsc = &rsc->base;
 
-	switch (rsc->base.target) {
-	case PIPE_TEXTURE_3D:
-		rsc->layer_first = false;
-		alignment = 4096;
-		break;
-	default:
-		rsc->layer_first = true;
-		alignment = 1;
-		break;
-	}
+	if (!(fd_mesa_debug & FD_DBG_NOLRZ) && has_depth(rsc->base.format))
+		setup_lrz(rsc);
 
-	return setup_slices(rsc, alignment, rsc->base.format);
+	fdl6_layout(&rsc->layout, prsc->format, fd_resource_nr_samples(prsc),
+			prsc->width0, prsc->height0, prsc->depth0,
+			prsc->last_level + 1, prsc->array_size,
+			prsc->target == PIPE_TEXTURE_3D, false);
+
+	/* The caller does this bit of layout setup again. */
+	if (rsc->layout.layer_first)
+		return rsc->layout.size / prsc->array_size;
+	else
+		return rsc->layout.size;
 }

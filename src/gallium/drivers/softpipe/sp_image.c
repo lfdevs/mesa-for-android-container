@@ -25,7 +25,7 @@
 #include "sp_image.h"
 #include "sp_texture.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 /*
  * Get the offset into the base image

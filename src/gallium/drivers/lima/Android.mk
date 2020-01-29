@@ -56,6 +56,8 @@ LOCAL_SRC_FILES := \
 	lima_draw.c \
 	lima_fence.c \
 	lima_fence.h \
+	lima_parser.c \
+	lima_parser.h \
 	lima_program.c \
 	lima_program.h \
 	lima_query.c \

@@ -268,6 +268,76 @@ num_sources_from_inst(const struct gen_device_info *devinfo,
 }
 
 static struct string
+invalid_values(const struct gen_device_info *devinfo, const brw_inst *inst)
+{
+   unsigned num_sources = num_sources_from_inst(devinfo, inst);
+   struct string error_msg = { .str = NULL, .len = 0 };
+
+   switch ((enum brw_execution_size) brw_inst_exec_size(devinfo, inst)) {
+   case BRW_EXECUTE_1:
+   case BRW_EXECUTE_2:
+   case BRW_EXECUTE_4:
+   case BRW_EXECUTE_8:
+   case BRW_EXECUTE_16:
+   case BRW_EXECUTE_32:
+      break;
+   default:
+      ERROR("invalid execution size");
+      break;
+   }
+
+   if (inst_is_send(devinfo, inst))
+      return error_msg;
+
+   if (num_sources == 3) {
+      /* Nothing to test:
+       *    No 3-src instructions on Gen4-5
+       *    No reg file bits on Gen6-10 (align16)
+       *    No invalid encodings on Gen10-12 (align1)
+       */
+   } else {
+      if (devinfo->gen > 6) {
+         ERROR_IF(brw_inst_dst_reg_file(devinfo, inst) == MRF ||
+                  (num_sources > 0 &&
+                   brw_inst_src0_reg_file(devinfo, inst) == MRF) ||
+                  (num_sources > 1 &&
+                   brw_inst_src1_reg_file(devinfo, inst) == MRF),
+                  "invalid register file encoding");
+      }
+   }
+
+   if (error_msg.str)
+      return error_msg;
+
+   if (num_sources == 3) {
+      if (brw_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
+         if (devinfo->gen >= 10) {
+            ERROR_IF(brw_inst_3src_a1_dst_type (devinfo, inst) == INVALID_REG_TYPE ||
+                     brw_inst_3src_a1_src0_type(devinfo, inst) == INVALID_REG_TYPE ||
+                     brw_inst_3src_a1_src1_type(devinfo, inst) == INVALID_REG_TYPE ||
+                     brw_inst_3src_a1_src2_type(devinfo, inst) == INVALID_REG_TYPE,
+                     "invalid register type encoding");
+         } else {
+            ERROR("Align1 mode not allowed on Gen < 10");
+         }
+      } else {
+         ERROR_IF(brw_inst_3src_a16_dst_type(devinfo, inst) == INVALID_REG_TYPE ||
+                  brw_inst_3src_a16_src_type(devinfo, inst) == INVALID_REG_TYPE,
+                  "invalid register type encoding");
+      }
+   } else {
+      ERROR_IF(brw_inst_dst_type (devinfo, inst) == INVALID_REG_TYPE ||
+               (num_sources > 0 &&
+                brw_inst_src0_type(devinfo, inst) == INVALID_REG_TYPE) ||
+               (num_sources > 1 &&
+                brw_inst_src1_type(devinfo, inst) == INVALID_REG_TYPE),
+               "invalid register type encoding");
+   }
+
+   return error_msg;
+}
+
+static struct string
 sources_not_null(const struct gen_device_info *devinfo,
                  const brw_inst *inst)
 {
@@ -474,6 +544,10 @@ execution_type(const struct gen_device_info *devinfo, const brw_inst *inst)
 
    if (src0_exec_type == src1_exec_type)
       return src0_exec_type;
+
+   if (src0_exec_type == BRW_REGISTER_TYPE_NF ||
+       src1_exec_type == BRW_REGISTER_TYPE_NF)
+      return BRW_REGISTER_TYPE_NF;
 
    /* Mixed operand types where one is float is float on Gen < 6
     * (and not allowed on later platforms)
@@ -1864,27 +1938,18 @@ instruction_restrictions(const struct gen_device_info *devinfo,
 }
 
 bool
-brw_validate_instructions(const struct gen_device_info *devinfo,
-                          const void *assembly, int start_offset, int end_offset,
-                          struct disasm_info *disasm)
+brw_validate_instruction(const struct gen_device_info *devinfo,
+                         const brw_inst *inst, int offset,
+                         struct disasm_info *disasm)
 {
-   bool valid = true;
+   struct string error_msg = { .str = NULL, .len = 0 };
 
-   for (int src_offset = start_offset; src_offset < end_offset;) {
-      struct string error_msg = { .str = NULL, .len = 0 };
-      const brw_inst *inst = assembly + src_offset;
-      bool is_compact = brw_inst_cmpt_control(devinfo, inst);
-      brw_inst uncompacted;
+   if (is_unsupported_inst(devinfo, inst)) {
+      ERROR("Instruction not supported on this Gen");
+   } else {
+      CHECK(invalid_values);
 
-      if (is_compact) {
-         brw_compact_inst *compacted = (void *)inst;
-         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
-         inst = &uncompacted;
-      }
-
-      if (is_unsupported_inst(devinfo, inst)) {
-         ERROR("Instruction not supported on this Gen");
-      } else {
+      if (error_msg.str == NULL) {
          CHECK(sources_not_null);
          CHECK(send_restrictions);
          CHECK(alignment_supported);
@@ -1896,18 +1961,40 @@ brw_validate_instructions(const struct gen_device_info *devinfo,
          CHECK(special_requirements_for_handling_double_precision_data_types);
          CHECK(instruction_restrictions);
       }
+   }
 
-      if (error_msg.str && disasm) {
-         disasm_insert_error(disasm, src_offset, error_msg.str);
-      }
-      valid = valid && error_msg.len == 0;
-      free(error_msg.str);
+   if (error_msg.str && disasm) {
+      disasm_insert_error(disasm, offset, error_msg.str);
+   }
+   free(error_msg.str);
+
+   return error_msg.len == 0;
+}
+
+bool
+brw_validate_instructions(const struct gen_device_info *devinfo,
+                          const void *assembly, int start_offset, int end_offset,
+                          struct disasm_info *disasm)
+{
+   bool valid = true;
+
+   for (int src_offset = start_offset; src_offset < end_offset;) {
+      const brw_inst *inst = assembly + src_offset;
+      bool is_compact = brw_inst_cmpt_control(devinfo, inst);
+      unsigned inst_size = is_compact ? sizeof(brw_compact_inst)
+                                      : sizeof(brw_inst);
+      brw_inst uncompacted;
 
       if (is_compact) {
-         src_offset += sizeof(brw_compact_inst);
-      } else {
-         src_offset += sizeof(brw_inst);
+         brw_compact_inst *compacted = (void *)inst;
+         brw_uncompact_instruction(devinfo, &uncompacted, compacted);
+         inst = &uncompacted;
       }
+
+      bool v = brw_validate_instruction(devinfo, inst, src_offset, disasm);
+      valid = valid && v;
+
+      src_offset += inst_size;
    }
 
    return valid;

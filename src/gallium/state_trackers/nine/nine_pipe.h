@@ -29,7 +29,7 @@
 #include "pipe/p_state.h" /* pipe_box */
 #include "util/macros.h"
 #include "util/u_rect.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "nine_helpers.h"
 
 struct cso_context;

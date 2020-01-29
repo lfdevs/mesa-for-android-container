@@ -446,6 +446,8 @@ enum opcode {
     */
    SHADER_OPCODE_BYTE_SCATTERED_READ_LOGICAL,
    SHADER_OPCODE_BYTE_SCATTERED_WRITE_LOGICAL,
+   SHADER_OPCODE_DWORD_SCATTERED_READ_LOGICAL,
+   SHADER_OPCODE_DWORD_SCATTERED_WRITE_LOGICAL,
 
    /**
     * Memory fence messages.
@@ -459,6 +461,11 @@ enum opcode {
     * Vec4 backend only uses Source 0.
     */
    SHADER_OPCODE_MEMORY_FENCE,
+
+   /**
+    * Scheduling-only fence.
+    */
+   FS_OPCODE_SCHEDULING_FENCE,
 
    SHADER_OPCODE_GEN4_SCRATCH_READ,
    SHADER_OPCODE_GEN4_SCRATCH_WRITE,
@@ -734,6 +741,12 @@ enum opcode {
     * Calculate the high 32-bits of a 32x32 multiply.
     */
    SHADER_OPCODE_MULH,
+
+   /** Signed subtraction with saturation. */
+   SHADER_OPCODE_ISUB_SAT,
+
+   /** Unsigned subtraction with saturation. */
+   SHADER_OPCODE_USUB_SAT,
 
    /**
     * A MOV that uses VxH indirect addressing.

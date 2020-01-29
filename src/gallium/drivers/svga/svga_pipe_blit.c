@@ -32,7 +32,7 @@
 #include "svga_surface.h"
 
 //#include "util/u_blit_sw.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 
 #define FILE_DEBUG_FLAG DEBUG_BLIT

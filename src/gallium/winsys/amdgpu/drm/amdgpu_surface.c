@@ -26,7 +26,7 @@
  */
 
 #include "amdgpu_winsys.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 static int amdgpu_surface_sanity(const struct pipe_resource *tex)
 {

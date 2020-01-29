@@ -33,7 +33,7 @@
  */
 
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "util/u_tile.h"
 #include "sp_tile_cache.h"

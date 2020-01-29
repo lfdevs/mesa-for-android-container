@@ -602,10 +602,11 @@ intelSetTexBuffer(__DRIcontext *pDRICtx, GLint target, __DRIdrawable *dPriv)
 }
 
 static void
-intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
-			      struct gl_texture_object *texObj,
-			      struct gl_texture_image *texImage,
-			      GLeglImageOES image_handle)
+intel_image_target_texture(struct gl_context *ctx, GLenum target,
+                           struct gl_texture_object *texObj,
+                           struct gl_texture_image *texImage,
+                           GLeglImageOES image_handle,
+                           bool storage)
 {
    struct brw_context *brw = brw_context(ctx);
    struct intel_mipmap_tree *mt;
@@ -637,15 +638,57 @@ intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
       image->internal_format != 0 ?
       image->internal_format : _mesa_get_format_base_format(mt->format);
 
-   /* Setup a sized internal format for MESA_FORMAT_R10G10B10[X2|A2]_UNORM. */
+   /* Fix the internal format when _mesa_get_format_base_format(mt->format)
+    * isn't a valid one for that particular format.
+    */
    if (brw->mesa_format_supports_render[image->format]) {
       if (image->format == MESA_FORMAT_R10G10B10A2_UNORM ||
-          image->format == MESA_FORMAT_R10G10B10X2_UNORM)
+          image->format == MESA_FORMAT_R10G10B10X2_UNORM ||
+          image->format == MESA_FORMAT_B10G10R10A2_UNORM ||
+          image->format == MESA_FORMAT_B10G10R10X2_UNORM)
          internal_format = GL_RGB10_A2;
+   }
+
+   /* Guess sized internal format for dma-bufs, as specified by
+    * EXT_EGL_image_storage.
+    */
+   if (storage && target == GL_TEXTURE_2D && image->imported_dmabuf) {
+      internal_format = driGLFormatToSizedInternalGLFormat(image->format);
+      if (internal_format == GL_NONE) {
+         _mesa_error(ctx, GL_INVALID_OPERATION, __func__);
+         return;
+      }
    }
 
    intel_set_texture_image_mt(brw, texImage, internal_format, mt->format, mt);
    intel_miptree_release(&mt);
+}
+
+static void
+intel_image_target_texture_2d(struct gl_context *ctx, GLenum target,
+                              struct gl_texture_object *texObj,
+                              struct gl_texture_image *texImage,
+                              GLeglImageOES image_handle)
+{
+   intel_image_target_texture(ctx, target, texObj, texImage, image_handle,
+                              false);
+}
+
+static void
+intel_image_target_tex_storage(struct gl_context *ctx, GLenum target,
+                              struct gl_texture_object *texObj,
+                              struct gl_texture_image *texImage,
+                              GLeglImageOES image_handle)
+{
+   struct intel_texture_object *intel_texobj = intel_texture_object(texObj);
+   intel_image_target_texture(ctx, target, texObj, texImage, image_handle,
+                              true);
+
+   /* The miptree is in a validated state, so no need to check later. */
+   intel_texobj->needs_validate = false;
+   intel_texobj->validated_first_level = 0;
+   intel_texobj->validated_last_level = 0;
+   intel_texobj->_Format = texImage->TexFormat;
 }
 
 static bool
@@ -940,6 +983,7 @@ intelInitTextureImageFuncs(struct dd_function_table *functions)
    functions->TexSubImage = intelTexSubImage;
    functions->CompressedTexSubImage = intelCompressedTexSubImage;
    functions->EGLImageTargetTexture2D = intel_image_target_texture_2d;
+   functions->EGLImageTargetTexStorage = intel_image_target_tex_storage;
    functions->BindRenderbufferTexImage = intel_bind_renderbuffer_tex_image;
    functions->GetTexSubImage = intel_get_tex_sub_image;
 }

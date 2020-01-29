@@ -27,6 +27,7 @@
 
 #include "vk_util.h"
 #include "wsi_common.h"
+#include "drm-uapi/drm_fourcc.h"
 
 static PFN_vkVoidFunction
 tu_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
@@ -37,10 +38,19 @@ tu_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 VkResult
 tu_wsi_init(struct tu_physical_device *physical_device)
 {
-   return wsi_device_init(&physical_device->wsi_device,
-                          tu_physical_device_to_handle(physical_device),
-                          tu_wsi_proc_addr, &physical_device->instance->alloc,
-                          physical_device->master_fd, NULL);
+   VkResult result;
+
+   result = wsi_device_init(&physical_device->wsi_device,
+                            tu_physical_device_to_handle(physical_device),
+                            tu_wsi_proc_addr,
+                            &physical_device->instance->alloc,
+                            physical_device->master_fd, NULL);
+   if (result != VK_SUCCESS)
+      return result;
+
+   physical_device->wsi_device.supports_modifiers = true;
+
+   return VK_SUCCESS;
 }
 
 void

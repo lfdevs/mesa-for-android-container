@@ -62,7 +62,7 @@
 #include "util/u_atomic.h"
 #include "util/u_box.h"
 #include "util/u_debug.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
@@ -177,14 +177,6 @@ get_st_manager(void)
 }
 
 
-static inline boolean
-little_endian(void)
-{
-   const unsigned ui = 1;
-   return *((const char *) &ui);
-}
-
-
 /**
  * Given an OSMESA_x format and a GL_y type, return the best
  * matching PIPE_FORMAT_z.
@@ -199,10 +191,11 @@ osmesa_choose_format(GLenum format, GLenum type)
    switch (format) {
    case OSMESA_RGBA:
       if (type == GL_UNSIGNED_BYTE) {
-         if (little_endian())
-            return PIPE_FORMAT_R8G8B8A8_UNORM;
-         else
-            return PIPE_FORMAT_A8B8G8R8_UNORM;
+#if UTIL_ARCH_LITTLE_ENDIAN
+         return PIPE_FORMAT_R8G8B8A8_UNORM;
+#else
+         return PIPE_FORMAT_A8B8G8R8_UNORM;
+#endif
       }
       else if (type == GL_UNSIGNED_SHORT) {
          return PIPE_FORMAT_R16G16B16A16_UNORM;
@@ -216,10 +209,11 @@ osmesa_choose_format(GLenum format, GLenum type)
       break;
    case OSMESA_BGRA:
       if (type == GL_UNSIGNED_BYTE) {
-         if (little_endian())
-            return PIPE_FORMAT_B8G8R8A8_UNORM;
-         else
-            return PIPE_FORMAT_A8R8G8B8_UNORM;
+#if UTIL_ARCH_LITTLE_ENDIAN
+         return PIPE_FORMAT_B8G8R8A8_UNORM;
+#else
+         return PIPE_FORMAT_A8R8G8B8_UNORM;
+#endif
       }
       else if (type == GL_UNSIGNED_SHORT) {
          return PIPE_FORMAT_R16G16B16A16_UNORM;
@@ -233,10 +227,11 @@ osmesa_choose_format(GLenum format, GLenum type)
       break;
    case OSMESA_ARGB:
       if (type == GL_UNSIGNED_BYTE) {
-         if (little_endian())
-            return PIPE_FORMAT_A8R8G8B8_UNORM;
-         else
-            return PIPE_FORMAT_B8G8R8A8_UNORM;
+#if UTIL_ARCH_LITTLE_ENDIAN
+         return PIPE_FORMAT_A8R8G8B8_UNORM;
+#else
+         return PIPE_FORMAT_B8G8R8A8_UNORM;
+#endif
       }
       else if (type == GL_UNSIGNED_SHORT) {
          return PIPE_FORMAT_R16G16B16A16_UNORM;

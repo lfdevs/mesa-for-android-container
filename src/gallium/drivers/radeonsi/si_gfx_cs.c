@@ -110,7 +110,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	 * If the driver flushes the GFX IB internally, and it should never ask
 	 * for a fence handle.
 	 */
-	assert(!radeon_emitted(ctx->dma_cs, 0) || fence == NULL);
+	assert(!radeon_emitted(ctx->sdma_cs, 0) || fence == NULL);
 
 	/* Update the sdma_uploads list by flushing the uploader. */
 	u_upload_unmap(ctx->b.const_uploader);
@@ -119,20 +119,18 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags,
 	ctx->sdma_uploads_in_progress = true;
 	for (unsigned i = 0; i < ctx->num_sdma_uploads; i++) {
 		struct si_sdma_upload *up = &ctx->sdma_uploads[i];
-		struct pipe_box box;
 
 		assert(up->src_offset % 4 == 0 && up->dst_offset % 4 == 0 &&
 		       up->size % 4 == 0);
 
-		u_box_1d(up->src_offset, up->size, &box);
-		ctx->dma_copy(&ctx->b, &up->dst->b.b, 0, up->dst_offset, 0, 0,
-			      &up->src->b.b, 0, &box);
+		si_sdma_copy_buffer(ctx, &up->dst->b.b, &up->src->b.b,
+				    up->dst_offset, up->src_offset, up->size);
 	}
 	ctx->sdma_uploads_in_progress = false;
 	si_unref_sdma_uploads(ctx);
 
 	/* Flush SDMA (preamble IB). */
-	if (radeon_emitted(ctx->dma_cs, 0))
+	if (radeon_emitted(ctx->sdma_cs, 0))
 		si_flush_dma_cs(ctx, flags, NULL);
 
 	if (radeon_emitted(ctx->prim_discard_compute_cs, 0)) {
@@ -440,9 +438,6 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 	ctx->last_restart_index = SI_RESTART_INDEX_UNKNOWN;
 	ctx->last_prim = -1;
 	ctx->last_multi_vgt_param = -1;
-	ctx->last_rast_prim = -1;
-	ctx->last_flatshade_first = -1;
-	ctx->last_sc_line_stipple = ~0;
 	ctx->last_vs_state = ~0;
 	ctx->last_ls = NULL;
 	ctx->last_tcs = NULL;
@@ -450,6 +445,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 	ctx->last_num_tcs_input_cp = -1;
 	ctx->last_ls_hs_config = -1; /* impossible value */
 	ctx->last_binning_enabled = -1;
+	ctx->small_prim_cull_info_dirty = ctx->small_prim_cull_info_buf != NULL;
 
 	ctx->prim_discard_compute_ib_initialized = false;
 
@@ -494,6 +490,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 		ctx->tracked_regs.reg_value[SI_TRACKED_PA_SU_HARDWARE_SCREEN_OFFSET] = 0;
 		ctx->tracked_regs.reg_value[SI_TRACKED_PA_SU_VTX_CNTL] = 0x00000005;
 		ctx->tracked_regs.reg_value[SI_TRACKED_PA_SC_CLIPRECT_RULE]	= 0xffff;
+		ctx->tracked_regs.reg_value[SI_TRACKED_PA_SC_LINE_STIPPLE]	= 0;
 		ctx->tracked_regs.reg_value[SI_TRACKED_VGT_ESGS_RING_ITEMSIZE]  = 0x00000000;
 		ctx->tracked_regs.reg_value[SI_TRACKED_VGT_GSVS_RING_OFFSET_1]  = 0x00000000;
 		ctx->tracked_regs.reg_value[SI_TRACKED_VGT_GSVS_RING_OFFSET_2]  = 0x00000000;
@@ -527,11 +524,13 @@ void si_begin_new_gfx_cs(struct si_context *ctx)
 		ctx->tracked_regs.reg_value[SI_TRACKED_VGT_TF_PARAM]  = 0x00000000;
 		ctx->tracked_regs.reg_value[SI_TRACKED_VGT_VERTEX_REUSE_BLOCK_CNTL]  = 0x0000001e; /* From GFX8 */
 
-		/* Set all saved registers state to saved. */
-		ctx->tracked_regs.reg_saved = 0xffffffffffffffff;
+		/* Set all cleared context registers to saved. */
+		ctx->tracked_regs.reg_saved = ~(1ull << SI_TRACKED_GE_PC_ALLOC); /* uconfig reg */
+		ctx->last_gs_out_prim = 0; /* cleared by CLEAR_STATE */
 	} else {
-		/* Set all saved registers state to unknown. */
+		/* Set all register values to unknown. */
 		ctx->tracked_regs.reg_saved = 0;
+		ctx->last_gs_out_prim = -1; /* unknown */
 	}
 
 	/* 0xffffffff is a impossible value to register SPI_PS_INPUT_CNTL_n */

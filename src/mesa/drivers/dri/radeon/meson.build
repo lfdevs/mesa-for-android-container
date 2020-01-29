@@ -74,11 +74,11 @@ files_r100 = files(
 
 libr100 = static_library(
   'r100',
-  [files_r100, xmlpool_options_h],
+  files_r100,
   include_directories : [
     inc_common, inc_dri_common, inc_util, include_directories('server'),
   ],
   c_args : [c_vis_args, '-DRADEON_R100'],
   cpp_args : [cpp_vis_args],
-  dependencies : [dep_libdrm, dep_libdrm_radeon],
+  dependencies : [dep_libdrm, dep_libdrm_radeon, idep_xmlconfig_headers],
 )

@@ -1277,6 +1277,7 @@ intel_create_image_from_dma_bufs2(__DRIscreen *dri_screen,
    image->sample_range = sample_range;
    image->horizontal_siting = horizontal_siting;
    image->vertical_siting = vertical_siting;
+   image->imported_dmabuf = true;
 
    *error = __DRI_IMAGE_ERROR_SUCCESS;
    return image;
@@ -2809,6 +2810,7 @@ __DRIconfig **intelInitScreen2(__DRIscreen *dri_screen)
    screen->compiler->glsl_compiler_options[MESA_SHADER_VERTEX].PositionAlwaysInvariant = driQueryOptionb(&screen->optionCache, "vs_position_always_invariant");
 
    screen->compiler->supports_pull_constants = true;
+   screen->compiler->compact_params = true;
 
    screen->has_exec_fence =
      intel_get_boolean(screen, I915_PARAM_HAS_EXEC_FENCE);

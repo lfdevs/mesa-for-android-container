@@ -60,6 +60,8 @@ struct llvmpipe_screen
 
    struct lp_cs_tpool *cs_tpool;
    mtx_t cs_mutex;
+
+   bool use_tgsi;
 };
 
 

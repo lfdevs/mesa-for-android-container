@@ -26,7 +26,7 @@
 #include "r300_screen_buffer.h"
 
 #include "util/u_memory.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_box.h"
 
 struct r300_transfer {

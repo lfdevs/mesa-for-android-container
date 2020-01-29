@@ -25,7 +25,7 @@
 #ifndef FD3_FORMAT_H_
 #define FD3_FORMAT_H_
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "freedreno_util.h"
 
 #include "a3xx.xml.h"

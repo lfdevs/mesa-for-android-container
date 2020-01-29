@@ -1,0 +1,37 @@
+C_SOURCES := \
+	nir/nir_lower_blend.c \
+	nir/nir_lower_blend.h \
+	nir/nir_lower_framebuffer.c \
+    \
+	pan_afbc.c \
+	pan_allocate.c \
+	pan_allocate.h \
+	pan_assemble.c \
+	pan_blend_cso.c \
+	pan_blend.h \
+	pan_blending.c \
+	pan_blending.h \
+	pan_blend_shaders.c \
+	pan_blend_shaders.h \
+	pan_blit.c \
+	pan_bo.c \
+	pan_bo.h \
+	pan_compute.c \
+	pan_context.c \
+	pan_context.h \
+	pan_format.c \
+	pan_format.h \
+	pan_fragment.c \
+	pan_attributes.c \
+	pan_job.c \
+	pan_job.h \
+	pan_mfbd.c \
+	pan_public.h \
+	pan_resource.c \
+	pan_resource.h \
+	pan_scoreboard.c \
+	pan_screen.c \
+	pan_screen.h \
+	pan_sfbd.c \
+	pan_util.h \
+	pan_varyings.c

@@ -1355,7 +1355,7 @@ get_image_var(struct ttn_compile *c, int binding,
       var = nir_variable_create(c->build.shader, nir_var_uniform, type, "image");
       var->data.binding = binding;
       var->data.explicit_binding = true;
-      var->data.image.access = access;
+      var->data.access = access;
       var->data.image.format = format;
       c->images[binding] = var;
    }
@@ -1920,7 +1920,7 @@ ttn_mem(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
       nir_deref_instr *image_deref = nir_build_deref_var(b, image);
       const struct glsl_type *type = image_deref->type;
 
-      nir_intrinsic_set_access(instr, image_deref->var->data.image.access);
+      nir_intrinsic_set_access(instr, image_deref->var->data.access);
 
       instr->src[0] = nir_src_for_ssa(&image_deref->dest.ssa);
       instr->src[1] = nir_src_for_ssa(src[addr_src_index]);
@@ -1932,8 +1932,13 @@ ttn_mem(struct ttn_compile *c, nir_alu_dest dest, nir_ssa_def **src)
          instr->src[2] = nir_src_for_ssa(nir_ssa_undef(b, 1, 32));
       }
 
+      if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_LOAD) {
+         instr->src[3] = nir_src_for_ssa(nir_imm_int(b, 0)); /* LOD */
+      }
+
       if (tgsi_inst->Instruction.Opcode == TGSI_OPCODE_STORE) {
          instr->src[3] = nir_src_for_ssa(nir_swizzle(b, src[1], SWIZ(X, Y, Z, W), 4));
+         instr->src[4] = nir_src_for_ssa(nir_imm_int(b, 0)); /* LOD */
       }
 
       instr->num_components = 4;

@@ -29,7 +29,7 @@
 #include "pipe/p_format.h"
 #include "pipe/p_context.h"
 #include "util/u_math.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "translate/translate.h"
 
 #define DBG_CHANNEL DBG_VERTEXDECLARATION

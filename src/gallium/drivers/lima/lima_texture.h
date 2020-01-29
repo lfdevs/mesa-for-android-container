@@ -27,23 +27,26 @@
 
 #define lima_min_tex_desc_size 64
 
+#define LIMA_TEXTURE_TYPE_2D   2
+#define LIMA_TEXTURE_TYPE_CUBE 5
+
 typedef struct __attribute__((__packed__)) {
    /* Word 0 */
    uint32_t format : 6;
    uint32_t flag1: 1;
    uint32_t swap_r_b: 1;
-   uint32_t unknown_0_1: 10;
-   uint32_t stride: 13;
+   uint32_t unknown_0_1: 8;
+   uint32_t stride: 15;
    uint32_t unknown_0_2: 1;
 
    /* Word 1-3 */
    uint32_t unknown_1_1: 7;
    uint32_t unnorm_coords: 1;
-   uint32_t unknown_1_2: 2;
-   uint32_t texture_2d: 1;
-   uint32_t unknown_1_3: 13;
-   uint32_t miplevels: 4;
-   uint32_t min_mipfilter_1: 9; /* 0x0 for linear, 0x1ff for nearest */
+   uint32_t unknown_1_2: 1;
+   uint32_t texture_type: 3;
+   uint32_t min_lod: 8; /* Fixed point, 4.4, unsigned */
+   uint32_t max_lod: 8; /* Fixed point, 4.4, unsigned */
+   uint32_t lod_bias: 9; /* Fixed point, signed, 1.4.4 */
    uint32_t unknown_2_1: 3;
    uint32_t has_stride: 1;
    uint32_t min_mipfilter_2: 2; /* 0x3 for linear, 0x0 for nearest */
@@ -91,5 +94,23 @@ void lima_texture_desc_set_res(struct lima_context *ctx, lima_tex_desc *desc,
                                struct pipe_resource *prsc,
                                unsigned first_level, unsigned last_level);
 void lima_update_textures(struct lima_context *ctx);
+
+
+static inline int16_t lima_float_to_fixed8(float f)
+{
+   return (int)(f * 16.0);
+}
+
+static inline float lima_fixed8_to_float(int16_t i)
+{
+   float sign = 1.0;
+
+   if (i > 0xff) {
+      i = 0x200 - i;
+      sign = -1;
+   }
+
+   return sign * (float)(i / 16.0);
+}
 
 #endif

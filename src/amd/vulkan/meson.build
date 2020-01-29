@@ -101,6 +101,8 @@ libradv_files = files(
   'radv_radeon_winsys.h',
   'radv_shader.c',
   'radv_shader.h',
+  'radv_shader_args.c',
+  'radv_shader_args.h',
   'radv_shader_helper.h',
   'radv_shader_info.c',
   'radv_query.c',
@@ -148,7 +150,7 @@ endif
 
 libvulkan_radeon = shared_library(
   'vulkan_radeon',
-  [libradv_files, radv_entrypoints, radv_extensions_c, amd_vk_format_table_c, sha1_h, xmlpool_options_h, radv_gfx10_format_table_h],
+  [libradv_files, radv_entrypoints, radv_extensions_c, amd_vk_format_table_c, sha1_h, radv_gfx10_format_table_h],
   include_directories : [
     inc_common, inc_amd, inc_amd_common, inc_amd_common_llvm, inc_compiler, inc_util, inc_vulkan_wsi,
   ],
@@ -166,14 +168,14 @@ libvulkan_radeon = shared_library(
   install : true,
 )
 
-if with_tests and prog_nm.found()
+if with_symbols_check
   test(
     'radv symbols check',
     symbols_check,
     args : [
       '--lib', libvulkan_radeon,
       '--symbols-file', vulkan_icd_symbols,
-      '--nm', prog_nm.path(),
+      symbols_check_args,
     ],
     suite : ['amd'],
   )

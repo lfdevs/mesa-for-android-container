@@ -96,6 +96,7 @@ VaFourccToPipeFormat(unsigned format)
    case VA_FOURCC('N','V','1','2'):
       return PIPE_FORMAT_NV12;
    case VA_FOURCC('P','0','1','0'):
+      return PIPE_FORMAT_P010;
    case VA_FOURCC('P','0','1','6'):
       return PIPE_FORMAT_P016;
    case VA_FOURCC('I','4','2','0'):
@@ -126,6 +127,8 @@ PipeFormatToVaFourcc(enum pipe_format p_format)
    switch (p_format) {
    case PIPE_FORMAT_NV12:
       return VA_FOURCC('N','V','1','2');
+   case PIPE_FORMAT_P010:
+      return VA_FOURCC('P','0','1','0');
    case PIPE_FORMAT_P016:
       return VA_FOURCC('P','0','1','6');
    case PIPE_FORMAT_IYUV:

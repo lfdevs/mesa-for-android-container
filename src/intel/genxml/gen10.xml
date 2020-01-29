@@ -719,7 +719,6 @@
       <value name="180DEG" value="2"/>
       <value name="270DEG" value="3"/>
     </field>
-    <field name="Force Non-Comparison Reduction Type" start="159" end="159" type="bool"/>
     <field name="MIP Count / LOD" start="160" end="163" type="uint"/>
     <field name="Surface Min LOD" start="164" end="167" type="uint"/>
     <field name="Mip Tail Start LOD" start="168" end="171" type="uint"/>
@@ -1101,7 +1100,7 @@
   <struct name="SO_DECL" length="1">
     <field name="Component Mask" start="0" end="3" type="uint" default="0"/>
     <field name="Register Index" start="4" end="9" type="uint"/>
-    <field name="Hole Flag" start="11" end="11" type="uint"/>
+    <field name="Hole Flag" start="11" end="11" type="bool"/>
     <field name="Output Buffer Slot" start="12" end="13" type="uint"/>
   </struct>
 

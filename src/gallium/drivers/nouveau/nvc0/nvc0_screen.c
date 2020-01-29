@@ -23,8 +23,8 @@
 #include <xf86drm.h>
 #include <nouveau_drm.h>
 #include <nvif/class.h>
-#include "util/u_format.h"
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format.h"
+#include "util/format/u_format_s3tc.h"
 #include "util/u_screen.h"
 #include "pipe/p_screen.h"
 #include "compiler/nir/nir.h"
@@ -282,6 +282,7 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_DIV:
    case PIPE_CAP_TGSI_ATOMINC_WRAP:
    case PIPE_CAP_DEMOTE_TO_HELPER_INVOCATION:
+   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
       return 1;
    case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
       return nouveau_screen(pscreen)->vram_domain & NOUVEAU_BO_VRAM ? 1 : 0;
@@ -323,7 +324,6 @@ nvc0_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
    case PIPE_CAP_TGSI_VS_WINDOW_SPACE_POSITION:
    case PIPE_CAP_VERTEXID_NOBASE:
    case PIPE_CAP_RESOURCE_FROM_USER_MEMORY:
-   case PIPE_CAP_DEVICE_RESET_STATUS_QUERY:
    case PIPE_CAP_TGSI_FS_POSITION_IS_SYSVAL:
    case PIPE_CAP_GENERATE_MIPMAP:
    case PIPE_CAP_BUFFER_SAMPLER_VIEW_RGBA_ONLY:
@@ -972,7 +972,7 @@ static const nir_shader_compiler_options nir_options = {
    .use_interpolated_input_intrinsics = true,
    .lower_mul_2x32_64 = true, // TODO
    .max_unroll_iterations = 32,
-   .lower_int64_options = nir_lower_divmod64, // TODO
+   .lower_int64_options = nir_lower_ufind_msb64|nir_lower_divmod64, // TODO
    .lower_doubles_options = nir_lower_dmod, // TODO
    .lower_to_scalar = true,
 };

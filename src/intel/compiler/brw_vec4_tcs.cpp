@@ -308,12 +308,15 @@ vec4_tcs_visitor::nir_emit_intrinsic(nir_intrinsic_instr *instr)
       break;
    }
 
-   case nir_intrinsic_barrier: {
+   case nir_intrinsic_control_barrier: {
       dst_reg header = dst_reg(this, glsl_type::uvec4_type);
       emit(TCS_OPCODE_CREATE_BARRIER_HEADER, header);
       emit(SHADER_OPCODE_BARRIER, dst_null_ud(), src_reg(header));
       break;
    }
+
+   case nir_intrinsic_memory_barrier_tcs_patch:
+      break;
 
    default:
       vec4_visitor::nir_emit_intrinsic(instr);

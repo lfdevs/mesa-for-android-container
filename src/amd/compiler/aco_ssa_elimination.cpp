@@ -58,6 +58,7 @@ void collect_phi_info(ssa_elimination_ctx& ctx)
             std::vector<unsigned>& preds = phi->opcode == aco_opcode::p_phi ? block.logical_preds : block.linear_preds;
             phi_info& info = phi->opcode == aco_opcode::p_phi ? ctx.logical_phi_info : ctx.linear_phi_info;
             const auto result = info.emplace(preds[i], std::vector<std::pair<Definition, Operand>>());
+            assert(phi->definitions[0].size() == phi->operands[i].size());
             result.first->second.emplace_back(phi->definitions[0], phi->operands[i]);
             ctx.empty_blocks[preds[i]] = false;
          }
@@ -110,6 +111,35 @@ void insert_parallelcopies(ssa_elimination_ctx& ctx)
    }
 }
 
+bool is_empty_block(Block* block, bool ignore_exec_writes)
+{
+   /* check if this block is empty and the exec mask is not needed */
+   for (aco_ptr<Instruction>& instr : block->instructions) {
+      switch (instr->opcode) {
+         case aco_opcode::p_linear_phi:
+         case aco_opcode::p_phi:
+         case aco_opcode::p_logical_start:
+         case aco_opcode::p_logical_end:
+         case aco_opcode::p_branch:
+            break;
+         case aco_opcode::p_parallelcopy:
+            for (unsigned i = 0; i < instr->definitions.size(); i++) {
+               if (ignore_exec_writes && instr->definitions[i].physReg() == exec)
+                  continue;
+               if (instr->definitions[i].physReg() != instr->operands[i].physReg())
+                  return false;
+            }
+            break;
+         case aco_opcode::s_andn2_b64:
+         case aco_opcode::s_andn2_b32:
+            if (ignore_exec_writes && instr->definitions[0].physReg() == exec)
+               break;
+         default:
+            return false;
+      }
+   }
+   return true;
+}
 
 void try_remove_merge_block(ssa_elimination_ctx& ctx, Block* block)
 {
@@ -119,22 +149,9 @@ void try_remove_merge_block(ssa_elimination_ctx& ctx, Block* block)
        !(ctx.program->blocks[block->linear_succs[0]].kind & block_kind_merge))
       return;
 
-   /* check if this block is empty and the exec mask is not needed */
-   for (aco_ptr<Instruction>& instr : block->instructions) {
-      if (instr->opcode == aco_opcode::p_parallelcopy) {
-         if (instr->definitions[0].physReg() == exec)
-            continue;
-         else
-            return;
-      }
-
-      if (instr->opcode != aco_opcode::p_linear_phi &&
-          instr->opcode != aco_opcode::p_phi &&
-          instr->opcode != aco_opcode::p_logical_start &&
-          instr->opcode != aco_opcode::p_logical_end &&
-          instr->opcode != aco_opcode::p_branch)
-         return;
-   }
+   /* check if this block is empty */
+   if (!is_empty_block(block, true))
+      return;
 
    /* keep the branch instruction and remove the rest */
    aco_ptr<Instruction> branch = std::move(block->instructions.back());
@@ -145,17 +162,13 @@ void try_remove_merge_block(ssa_elimination_ctx& ctx, Block* block)
 void try_remove_invert_block(ssa_elimination_ctx& ctx, Block* block)
 {
    assert(block->linear_succs.size() == 2);
+   /* only remove this block if the successor got removed as well */
    if (block->linear_succs[0] != block->linear_succs[1])
       return;
 
-   /* check if we can remove this block */
-   for (aco_ptr<Instruction>& instr : block->instructions) {
-      if (instr->opcode != aco_opcode::p_linear_phi &&
-          instr->opcode != aco_opcode::p_phi &&
-          instr->opcode != aco_opcode::s_andn2_b64 &&
-          instr->opcode != aco_opcode::p_branch)
-         return;
-   }
+   /* check if block is otherwise empty */
+   if (!is_empty_block(block, true))
+      return;
 
    unsigned succ_idx = block->linear_succs[0];
    assert(block->linear_preds.size() == 2);
@@ -177,12 +190,8 @@ void try_remove_invert_block(ssa_elimination_ctx& ctx, Block* block)
 
 void try_remove_simple_block(ssa_elimination_ctx& ctx, Block* block)
 {
-   for (aco_ptr<Instruction>& instr : block->instructions) {
-      if (instr->opcode != aco_opcode::p_logical_start &&
-          instr->opcode != aco_opcode::p_logical_end &&
-          instr->opcode != aco_opcode::p_branch)
-         return;
-   }
+   if (!is_empty_block(block, false))
+      return;
 
    Block& pred = ctx.program->blocks[block->linear_preds[0]];
    Block& succ = ctx.program->blocks[block->linear_succs[0]];
@@ -198,7 +207,7 @@ void try_remove_simple_block(ssa_elimination_ctx& ctx, Block* block)
       branch->opcode = aco_opcode::p_branch;
    } else if (branch->target[1] == block->index) {
       /* check if there is a fall-through path from block to succ */
-      bool falls_through = true;
+      bool falls_through = block->index < succ.index;
       for (unsigned j = block->index + 1; falls_through && j < succ.index; j++) {
          assert(ctx.program->blocks[j].index == j);
          if (!ctx.program->blocks[j].instructions.empty())
@@ -208,6 +217,8 @@ void try_remove_simple_block(ssa_elimination_ctx& ctx, Block* block)
          branch->target[1] = succ.index;
       } else {
          /* check if there is a fall-through path for the alternative target */
+         if (block->index >= branch->target[0])
+            return;
          for (unsigned j = block->index + 1; j < branch->target[0]; j++) {
             if (!ctx.program->blocks[j].instructions.empty())
                return;

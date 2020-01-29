@@ -36,7 +36,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_sampler.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "tgsi/tgsi_text.h"
 #include "pipe-loader/pipe_loader.h"
 

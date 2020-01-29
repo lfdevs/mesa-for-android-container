@@ -3,7 +3,7 @@
 #define __NV50_BLIT_H__
 
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 void *
 nv50_blitter_make_fp(struct pipe_context *,

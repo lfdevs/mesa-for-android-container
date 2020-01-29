@@ -3382,23 +3382,28 @@ _mesa_TexImage3D_no_error(GLenum target, GLint level, GLint internalFormat,
                      width, height, depth, border, format, type, 0, pixels);
 }
 
-
-void GLAPIENTRY
-_mesa_EGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image)
+/*
+ * Helper used by __mesa_EGLImageTargetTexture2DOES and
+ * _mesa_EGLImageTargetTexStorageEXT.
+ */
+static void
+egl_image_target_texture(struct gl_context *ctx,
+                         struct gl_texture_object *texObj, GLenum target,
+                         GLeglImageOES image, bool tex_storage,
+                         const char *caller)
 {
-   struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    bool valid_target;
-   GET_CURRENT_CONTEXT(ctx);
    FLUSH_VERTICES(ctx, 0);
 
    switch (target) {
    case GL_TEXTURE_2D:
-      valid_target = ctx->Extensions.OES_EGL_image;
+      valid_target = _mesa_has_OES_EGL_image(ctx) ||
+                     (tex_storage && _mesa_has_EXT_EGL_image_storage(ctx));
       break;
    case GL_TEXTURE_EXTERNAL_OES:
       valid_target =
-         _mesa_is_gles(ctx) ? ctx->Extensions.OES_EGL_image_external : false;
+         _mesa_is_gles(ctx) ? _mesa_has_OES_EGL_image_external(ctx) : false;
       break;
    default:
       valid_target = false;
@@ -3406,45 +3411,139 @@ _mesa_EGLImageTargetTexture2DOES (GLenum target, GLeglImageOES image)
    }
 
    if (!valid_target) {
-      _mesa_error(ctx, GL_INVALID_ENUM,
-                  "glEGLImageTargetTexture2D(target=%d)", target);
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(target=%d)", caller, target);
       return;
    }
 
    if (!image) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glEGLImageTargetTexture2D(image=%p)", image);
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(image=%p)", caller, image);
       return;
    }
 
    if (ctx->NewState & _NEW_PIXEL)
       _mesa_update_state(ctx);
 
-   texObj = _mesa_get_current_tex_object(ctx, target);
-   if (!texObj)
-      return;
-
    _mesa_lock_texture(ctx, texObj);
 
    if (texObj->Immutable) {
-      _mesa_error(ctx, GL_INVALID_OPERATION,
-                  "glEGLImageTargetTexture2D(texture is immutable)");
+      _mesa_error(ctx, GL_INVALID_OPERATION, "%s(texture is immutable)", caller);
       _mesa_unlock_texture(ctx, texObj);
       return;
    }
 
    texImage = _mesa_get_tex_image(ctx, texObj, target, 0);
    if (!texImage) {
-      _mesa_error(ctx, GL_OUT_OF_MEMORY, "glEGLImageTargetTexture2D");
+      _mesa_error(ctx, GL_OUT_OF_MEMORY, "%s", caller);
    } else {
       ctx->Driver.FreeTextureImageBuffer(ctx, texImage);
 
-      ctx->Driver.EGLImageTargetTexture2D(ctx, target,
-                                          texObj, texImage, image);
+      if (tex_storage) {
+         ctx->Driver.EGLImageTargetTexStorage(ctx, target, texObj, texImage,
+                                              image);
+      } else {
+         ctx->Driver.EGLImageTargetTexture2D(ctx, target, texObj, texImage,
+                                             image);
+      }
 
       _mesa_dirty_texobj(ctx, texObj);
    }
+
+   if (tex_storage)
+      _mesa_set_texture_view_state(ctx, texObj, target, 1);
+
    _mesa_unlock_texture(ctx, texObj);
+}
+
+void GLAPIENTRY
+_mesa_EGLImageTargetTexture2DOES(GLenum target, GLeglImageOES image)
+{
+   struct gl_texture_object *texObj;
+   const char *func = "glEGLImageTargetTexture2D";
+   GET_CURRENT_CONTEXT(ctx);
+
+   texObj = _mesa_get_current_tex_object(ctx, target);
+   if (!texObj) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(target=%d)", func, target);
+      return;
+   }
+
+   egl_image_target_texture(ctx, texObj, target, image, false, func);
+}
+
+static void
+egl_image_target_texture_storage(struct gl_context *ctx,
+                                 struct gl_texture_object *texObj, GLenum target,
+                                 GLeglImageOES image, const GLint *attrib_list,
+                                 const char *caller)
+{
+   /*
+    * EXT_EGL_image_storage:
+    *
+    * "<attrib_list> must be NULL or a pointer to the value GL_NONE."
+    */
+   if (attrib_list && attrib_list[0] != GL_NONE) {
+      _mesa_error(ctx, GL_INVALID_VALUE, "%s(image=%p)", caller, image);
+      return;
+   }
+
+   switch (target) {
+   case GL_TEXTURE_2D:
+   case GL_TEXTURE_EXTERNAL_OES:
+      break;
+   default:
+    /*
+     * The EXT_EGL_image_storage spec allows for many other targets besides
+     * GL_TEXTURE_2D and GL_TEXTURE_EXTERNAL_OES, however these are complicated
+     * to implement.
+     */
+     _mesa_error(ctx, GL_INVALID_OPERATION, "%s(unsupported target=%d)",
+                 caller, target);
+     return;
+   }
+
+   egl_image_target_texture(ctx, texObj, target, image, true, caller);
+}
+
+
+void GLAPIENTRY
+_mesa_EGLImageTargetTexStorageEXT(GLenum target, GLeglImageOES image,
+                                  const GLint *attrib_list)
+{
+   struct gl_texture_object *texObj;
+   const char *func = "glEGLImageTargetTexStorageEXT";
+   GET_CURRENT_CONTEXT(ctx);
+
+   texObj = _mesa_get_current_tex_object(ctx, target);
+   if (!texObj) {
+      _mesa_error(ctx, GL_INVALID_ENUM, "%s(target=%d)", func, target);
+      return;
+   }
+
+   egl_image_target_texture_storage(ctx, texObj, target, image, attrib_list,
+                                    func);
+}
+
+void GLAPIENTRY
+_mesa_EGLImageTargetTextureStorageEXT(GLuint texture, GLeglImageOES image,
+                                      const GLint *attrib_list)
+{
+   struct gl_texture_object *texObj;
+   const char *func = "glEGLImageTargetTextureStorageEXT";
+   GET_CURRENT_CONTEXT(ctx);
+
+   if (!(_mesa_is_desktop_gl(ctx) && ctx->Version >= 45) &&
+       !_mesa_has_ARB_direct_state_access(ctx) &&
+       !_mesa_has_EXT_direct_state_access(ctx)) {
+      _mesa_error(ctx, GL_INVALID_OPERATION, "direct access not supported");
+      return;
+   }
+
+   texObj = _mesa_lookup_texture_err(ctx, texture, func);
+   if (!texObj)
+      return;
+
+   egl_image_target_texture_storage(ctx, texObj, texObj->Target, image,
+                                    attrib_list, func);
 }
 
 /**
@@ -6401,6 +6500,52 @@ _mesa_TexBufferRange(GLenum target, GLenum internalFormat, GLuint buffer,
                         offset, size, "glTexBufferRange");
 }
 
+
+/** GL_ARB_texture_buffer_range + GL_EXT_direct_state_access */
+void GLAPIENTRY
+_mesa_TextureBufferRangeEXT(GLuint texture, GLenum target, GLenum internalFormat,
+                            GLuint buffer, GLintptr offset, GLsizeiptr size)
+{
+   struct gl_texture_object *texObj;
+   struct gl_buffer_object *bufObj;
+
+   GET_CURRENT_CONTEXT(ctx);
+
+   texObj = _mesa_lookup_or_create_texture(ctx, target, texture, false, true,
+                                           "glTextureBufferRangeEXT");
+   if (!texObj)
+      return;
+
+   if (!check_texture_buffer_target(ctx, target, "glTextureBufferRangeEXT"))
+      return;
+
+   if (buffer) {
+      bufObj = _mesa_lookup_bufferobj_err(ctx, buffer, "glTextureBufferRangeEXT");
+      if (!bufObj)
+         return;
+
+      if (!check_texture_buffer_range(ctx, bufObj, offset, size,
+          "glTextureBufferRangeEXT"))
+         return;
+
+   } else {
+      /* OpenGL 4.5 core spec (02.02.2015) says in Section 8.9 Buffer
+       * Textures (PDF page 254):
+       *    "If buffer is zero, then any buffer object attached to the buffer
+       *    texture is detached, the values offset and size are ignored and
+       *    the state for offset and size for the buffer texture are reset to
+       *    zero."
+       */
+      offset = 0;
+      size = 0;
+      bufObj = NULL;
+   }
+
+   texture_buffer_range(ctx, texObj, internalFormat, bufObj,
+                        offset, size, "glTextureBufferRangeEXT");
+}
+
+
 void GLAPIENTRY
 _mesa_TextureBuffer(GLuint texture, GLenum internalFormat, GLuint buffer)
 {
@@ -6882,6 +7027,52 @@ _mesa_TextureStorage3DMultisample(GLuint texture, GLsizei samples,
                              internalformat, width, height, depth,
                              fixedsamplelocations, GL_TRUE, 0,
                              "glTextureStorage3DMultisample");
+}
+
+void GLAPIENTRY
+_mesa_TextureStorage2DMultisampleEXT(GLuint texture, GLenum target, GLsizei samples,
+                                     GLenum internalformat, GLsizei width,
+                                     GLsizei height,
+                                     GLboolean fixedsamplelocations)
+{
+   struct gl_texture_object *texObj;
+   GET_CURRENT_CONTEXT(ctx);
+
+   texObj = lookup_texture_ext_dsa(ctx, target, texture,
+                                   "glTextureStorage2DMultisampleEXT");
+   if (!texObj)
+      return;
+
+   if (!valid_texstorage_ms_parameters(width, height, 1, 2))
+      return;
+
+   texture_image_multisample(ctx, 2, texObj, NULL, texObj->Target,
+                             samples, internalformat, width, height, 1,
+                             fixedsamplelocations, GL_TRUE, 0,
+                             "glTextureStorage2DMultisampleEXT");
+}
+
+void GLAPIENTRY
+_mesa_TextureStorage3DMultisampleEXT(GLuint texture, GLenum target, GLsizei samples,
+                                     GLenum internalformat, GLsizei width,
+                                     GLsizei height, GLsizei depth,
+                                     GLboolean fixedsamplelocations)
+{
+   struct gl_texture_object *texObj;
+   GET_CURRENT_CONTEXT(ctx);
+
+   texObj = lookup_texture_ext_dsa(ctx, target, texture,
+                                   "glTextureStorage3DMultisampleEXT");
+   if (!texObj)
+      return;
+
+   if (!valid_texstorage_ms_parameters(width, height, depth, 3))
+      return;
+
+   texture_image_multisample(ctx, 3, texObj, NULL, texObj->Target, samples,
+                             internalformat, width, height, depth,
+                             fixedsamplelocations, GL_TRUE, 0,
+                             "glTextureStorage3DMultisampleEXT");
 }
 
 void

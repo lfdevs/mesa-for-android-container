@@ -37,6 +37,7 @@ static void ir3_setup_const_state(struct ir3_shader *shader, nir_shader *nir);
 static const nir_shader_compiler_options options = {
 		.lower_fpow = true,
 		.lower_scmp = true,
+		.lower_flrp16 = true,
 		.lower_flrp32 = true,
 		.lower_flrp64 = true,
 		.lower_ffract = true,
@@ -45,7 +46,9 @@ static const nir_shader_compiler_options options = {
 		.lower_isign = true,
 		.lower_ldexp = true,
 		.lower_uadd_carry = true,
+		.lower_usub_borrow = true,
 		.lower_mul_high = true,
+		.lower_mul_2x32_64 = true,
 		.fuse_ffma = true,
 		.vertex_id_zero_based = true,
 		.lower_extract_byte = true,
@@ -54,6 +57,18 @@ static const nir_shader_compiler_options options = {
 		.lower_helper_invocation = true,
 		.lower_bitfield_insert_to_shifts = true,
 		.lower_bitfield_extract_to_shifts = true,
+		.lower_pack_half_2x16 = true,
+		.lower_pack_half_2x16_split = true,
+		.lower_pack_snorm_4x8 = true,
+		.lower_pack_snorm_2x16 = true,
+		.lower_pack_unorm_4x8 = true,
+		.lower_pack_unorm_2x16 = true,
+		.lower_unpack_half_2x16 = true,
+		.lower_unpack_half_2x16_split = true,
+		.lower_unpack_snorm_4x8 = true,
+		.lower_unpack_snorm_2x16 = true,
+		.lower_unpack_unorm_4x8 = true,
+		.lower_unpack_unorm_2x16 = true,
 		.use_interpolated_input_intrinsics = true,
 		.lower_rotate = true,
 		.lower_to_scalar = true,
@@ -64,6 +79,7 @@ static const nir_shader_compiler_options options = {
 static const nir_shader_compiler_options options_a6xx = {
 		.lower_fpow = true,
 		.lower_scmp = true,
+		.lower_flrp16 = true,
 		.lower_flrp32 = true,
 		.lower_flrp64 = true,
 		.lower_ffract = true,
@@ -72,7 +88,9 @@ static const nir_shader_compiler_options options_a6xx = {
 		.lower_isign = true,
 		.lower_ldexp = true,
 		.lower_uadd_carry = true,
+		.lower_usub_borrow = true,
 		.lower_mul_high = true,
+		.lower_mul_2x32_64 = true,
 		.fuse_ffma = true,
 		.vertex_id_zero_based = false,
 		.lower_extract_byte = true,
@@ -81,6 +99,18 @@ static const nir_shader_compiler_options options_a6xx = {
 		.lower_helper_invocation = true,
 		.lower_bitfield_insert_to_shifts = true,
 		.lower_bitfield_extract_to_shifts = true,
+		.lower_pack_half_2x16 = true,
+		.lower_pack_half_2x16_split = true,
+		.lower_pack_snorm_4x8 = true,
+		.lower_pack_snorm_2x16 = true,
+		.lower_pack_unorm_4x8 = true,
+		.lower_pack_unorm_2x16 = true,
+		.lower_unpack_half_2x16 = true,
+		.lower_unpack_half_2x16_split = true,
+		.lower_unpack_snorm_4x8 = true,
+		.lower_unpack_snorm_2x16 = true,
+		.lower_unpack_unorm_4x8 = true,
+		.lower_unpack_unorm_2x16 = true,
 		.use_interpolated_input_intrinsics = true,
 		.lower_rotate = true,
 		.vectorize_io = true,
@@ -104,7 +134,7 @@ ir3_key_lowers_nir(const struct ir3_shader_key *key)
 			key->vsaturate_s | key->vsaturate_t | key->vsaturate_r |
 			key->ucp_enables | key->color_two_side |
 			key->fclamp_color | key->vclamp_color |
-			key->has_gs;
+			key->tessellation | key->has_gs;
 }
 
 #define OPT(nir, pass, ...) ({                             \
@@ -146,6 +176,7 @@ ir3_optimize_loop(nir_shader *s)
 		progress |= OPT(s, nir_opt_peephole_select, 16, true, true);
 		progress |= OPT(s, nir_opt_intrinsics);
 		progress |= OPT(s, nir_opt_algebraic);
+		progress |= OPT(s, nir_lower_alu);
 		progress |= OPT(s, nir_opt_constant_folding);
 
 		if (lower_flrp != 0) {
@@ -189,10 +220,18 @@ ir3_optimize_nir(struct ir3_shader *shader, nir_shader *s,
 			.lower_tg4_offsets = true,
 	};
 
-	if (key && key->has_gs) {
+	if (key && (key->has_gs || key->tessellation)) {
 		switch (shader->type) {
 		case MESA_SHADER_VERTEX:
-			NIR_PASS_V(s, ir3_nir_lower_vs_to_explicit_io, shader);
+			NIR_PASS_V(s, ir3_nir_lower_to_explicit_io, shader, key->tessellation);
+			break;
+		case MESA_SHADER_TESS_CTRL:
+			NIR_PASS_V(s, ir3_nir_lower_tess_ctrl, shader, key->tessellation);
+			break;
+		case MESA_SHADER_TESS_EVAL:
+			NIR_PASS_V(s, ir3_nir_lower_tess_eval, key->tessellation);
+			if (key->has_gs)
+				NIR_PASS_V(s, ir3_nir_lower_to_explicit_io, shader, key->tessellation);
 			break;
 		case MESA_SHADER_GEOMETRY:
 			NIR_PASS_V(s, ir3_nir_lower_gs, shader);
@@ -376,6 +415,10 @@ ir3_nir_scan_driver_consts(nir_shader *shader,
 					layout->num_driver_params =
 						MAX2(layout->num_driver_params, IR3_DP_VTXID_BASE + 1);
 					break;
+				case nir_intrinsic_load_base_instance:
+					layout->num_driver_params =
+						MAX2(layout->num_driver_params, IR3_DP_INSTID_BASE + 1);
+					break;
 				case nir_intrinsic_load_user_clip_plane:
 					layout->num_driver_params =
 						MAX2(layout->num_driver_params, IR3_DP_UCP7_W + 1);
@@ -451,6 +494,13 @@ ir3_setup_const_state(struct ir3_shader *shader, nir_shader *nir)
 	case MESA_SHADER_VERTEX:
 		const_state->offsets.primitive_param = constoff;
 		constoff += 1;
+		break;
+	case MESA_SHADER_TESS_CTRL:
+	case MESA_SHADER_TESS_EVAL:
+		constoff = align(constoff - 1, 4) + 3;
+		const_state->offsets.primitive_param = constoff;
+		const_state->offsets.primitive_map = constoff + 5;
+		constoff += 5 + DIV_ROUND_UP(nir->num_inputs, 4);
 		break;
 	case MESA_SHADER_GEOMETRY:
 		const_state->offsets.primitive_param = constoff;

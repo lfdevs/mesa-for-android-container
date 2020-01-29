@@ -72,8 +72,7 @@ radv_use_tc_compat_htile_for_image(struct radv_device *device,
 	if (device->physical_device->rad_info.chip_class < GFX8)
 		return false;
 
-	if ((pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) ||
-	    (pCreateInfo->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT))
+	if ((pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
 		return false;
 
 	if (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR)
@@ -101,10 +100,10 @@ radv_use_tc_compat_htile_for_image(struct radv_device *device,
 		return false;
 
 	if (pCreateInfo->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
-		const struct VkImageFormatListCreateInfoKHR *format_list =
-			(const struct  VkImageFormatListCreateInfoKHR *)
+		const struct VkImageFormatListCreateInfo *format_list =
+			(const struct  VkImageFormatListCreateInfo *)
 				vk_find_struct_const(pCreateInfo->pNext,
-						     IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
+						     IMAGE_FORMAT_LIST_CREATE_INFO);
 
 		/* We have to ignore the existence of the list if viewFormatCount = 0 */
 		if (format_list && format_list->viewFormatCount) {
@@ -129,17 +128,14 @@ radv_use_tc_compat_htile_for_image(struct radv_device *device,
 static bool
 radv_surface_has_scanout(struct radv_device *device, const struct radv_image_create_info *info)
 {
-	if (info->scanout)
-		return true;
-
-	if (!info->bo_metadata)
-		return false;
-
-	if (device->physical_device->rad_info.chip_class >= GFX9) {
-		return info->bo_metadata->u.gfx9.swizzle_mode == 0 || info->bo_metadata->u.gfx9.swizzle_mode % 4 == 2;
-	} else {
-		return info->bo_metadata->u.legacy.scanout;
+	if (info->bo_metadata) {
+		if (device->physical_device->rad_info.chip_class >= GFX9)
+			return info->bo_metadata->u.gfx9.scanout;
+		else
+			return info->bo_metadata->u.legacy.scanout;
 	}
+
+	return info->scanout;
 }
 
 static bool
@@ -162,8 +158,7 @@ radv_use_dcc_for_image(struct radv_device *device,
 		return false;
 
 	/* TODO: Enable DCC for storage images. */
-	if ((pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) ||
-	    (pCreateInfo->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT))
+	if ((pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
 		return false;
 
 	if (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR)
@@ -196,10 +191,10 @@ radv_use_dcc_for_image(struct radv_device *device,
 						     &blendable);
 
 	if (pCreateInfo->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
-		const struct VkImageFormatListCreateInfoKHR *format_list =
-			(const struct  VkImageFormatListCreateInfoKHR *)
+		const struct VkImageFormatListCreateInfo *format_list =
+			(const struct  VkImageFormatListCreateInfo *)
 				vk_find_struct_const(pCreateInfo->pNext,
-						     IMAGE_FORMAT_LIST_CREATE_INFO_KHR);
+						     IMAGE_FORMAT_LIST_CREATE_INFO);
 
 		/* We have to ignore the existence of the list if viewFormatCount = 0 */
 		if (format_list && format_list->viewFormatCount) {
@@ -528,7 +523,7 @@ radv_make_buffer_descriptor(struct radv_device *device,
 		 *       else: swizzle_address >= NUM_RECORDS
 		 */
 		state[3] |= S_008F0C_FORMAT(fmt->img_format) |
-			    S_008F0C_OOB_SELECT(0) |
+			    S_008F0C_OOB_SELECT(V_008F0C_OOB_SELECT_STRUCTURED_WITH_OFFSET) |
 			    S_008F0C_RESOURCE_LEVEL(1);
 	} else {
 		num_format = radv_translate_buffer_numformat(desc, first_non_void);
@@ -1152,6 +1147,7 @@ radv_init_metadata(struct radv_device *device,
 
 	if (device->physical_device->rad_info.chip_class >= GFX9) {
 		metadata->u.gfx9.swizzle_mode = surface->u.gfx9.surf.swizzle_mode;
+		metadata->u.gfx9.scanout = (surface->flags & RADEON_SURF_SCANOUT) != 0;
 	} else {
 		metadata->u.legacy.microtile = surface->u.legacy.level[0].mode >= RADEON_SURF_MODE_1D ?
 			RADEON_LAYOUT_TILED : RADEON_LAYOUT_LINEAR;
@@ -1757,6 +1753,8 @@ bool radv_layout_has_htile(const struct radv_image *image,
 
 	return radv_image_has_htile(image) &&
 	       (layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+		layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR ||
+		layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR ||
 	        (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
 	         queue_mask == (1u << RADV_QUEUE_GENERAL)));
 }
@@ -1771,6 +1769,8 @@ bool radv_layout_is_htile_compressed(const struct radv_image *image,
 
 	return radv_image_has_htile(image) &&
 	       (layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL ||
+	        layout == VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR ||
+		layout == VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR ||
 	        (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL &&
 	         queue_mask == (1u << RADV_QUEUE_GENERAL)));
 }

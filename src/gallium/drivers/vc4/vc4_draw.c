@@ -24,8 +24,9 @@
 
 #include "util/u_blitter.h"
 #include "util/u_prim.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_pack_color.h"
+#include "util/u_split_draw.h"
 #include "util/u_upload_mgr.h"
 #include "indices/u_primconvert.h"
 
@@ -448,45 +449,14 @@ vc4_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
                 while (count) {
                         uint32_t this_count = count;
-                        uint32_t step = count;
+                        uint32_t step;
 
                         if (needs_drawarrays_shader_state) {
                                 vc4_emit_gl_shader_state(vc4, info,
                                                          extra_index_bias);
                         }
 
-                        if (count > max_verts) {
-                                switch (info->mode) {
-                                case PIPE_PRIM_POINTS:
-                                        this_count = step = max_verts;
-                                        break;
-                                case PIPE_PRIM_LINES:
-                                        this_count = step = max_verts - (max_verts % 2);
-                                        break;
-                                case PIPE_PRIM_LINE_STRIP:
-                                        this_count = max_verts;
-                                        step = max_verts - 1;
-                                        break;
-                                case PIPE_PRIM_LINE_LOOP:
-                                        this_count = max_verts;
-                                        step = max_verts - 1;
-                                        debug_warn_once("unhandled line loop "
-                                                        "looping behavior with "
-                                                        ">65535 verts\n");
-                                        break;
-                                case PIPE_PRIM_TRIANGLES:
-                                        this_count = step = max_verts - (max_verts % 3);
-                                        break;
-                                case PIPE_PRIM_TRIANGLE_STRIP:
-                                        this_count = max_verts;
-                                        step = max_verts - 2;
-                                        break;
-                                default:
-                                        debug_warn_once("unhandled primitive "
-                                                        "max vert count, truncating\n");
-                                        this_count = step = max_verts;
-                                }
-                        }
+                        u_split_draw(info, max_verts, &this_count, &step);
 
                         cl_emit(&job->bcl, VERTEX_ARRAY_PRIMITIVES, array) {
                                 array.primitive_mode = info->mode;

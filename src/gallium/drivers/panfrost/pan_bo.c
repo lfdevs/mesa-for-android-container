@@ -186,7 +186,7 @@ pan_bucket_index(unsigned size)
 static struct list_head *
 pan_bucket(struct panfrost_screen *screen, unsigned size)
 {
-        return &screen->bo_cache[pan_bucket_index(size)];
+        return &screen->bo_cache.buckets[pan_bucket_index(size)];
 }
 
 /* Tries to fetch a BO of sufficient size with the appropriate flags from the
@@ -198,12 +198,13 @@ static struct panfrost_bo *
 panfrost_bo_cache_fetch(struct panfrost_screen *screen,
                         size_t size, uint32_t flags, bool dontwait)
 {
-        pthread_mutex_lock(&screen->bo_cache_lock);
+        pthread_mutex_lock(&screen->bo_cache.lock);
         struct list_head *bucket = pan_bucket(screen, size);
         struct panfrost_bo *bo = NULL;
 
         /* Iterate the bucket looking for something suitable */
-        list_for_each_entry_safe(struct panfrost_bo, entry, bucket, link) {
+        list_for_each_entry_safe(struct panfrost_bo, entry, bucket,
+                                 bucket_link) {
                 if (entry->size < size || entry->flags != flags)
                         continue;
 
@@ -218,7 +219,8 @@ panfrost_bo_cache_fetch(struct panfrost_screen *screen,
                 int ret;
 
                 /* This one works, splice it out of the cache */
-                list_del(&entry->link);
+                list_del(&entry->bucket_link);
+                list_del(&entry->lru_link);
 
                 ret = drmIoctl(screen->fd, DRM_IOCTL_PANFROST_MADVISE, &madv);
                 if (!ret && !madv.retained) {
@@ -229,9 +231,34 @@ panfrost_bo_cache_fetch(struct panfrost_screen *screen,
                 bo = entry;
                 break;
         }
-        pthread_mutex_unlock(&screen->bo_cache_lock);
+        pthread_mutex_unlock(&screen->bo_cache.lock);
 
         return bo;
+}
+
+static void
+panfrost_bo_cache_evict_stale_bos(struct panfrost_screen *screen)
+{
+        struct timespec time;
+
+        clock_gettime(CLOCK_MONOTONIC, &time);
+        list_for_each_entry_safe(struct panfrost_bo, entry,
+                                 &screen->bo_cache.lru, lru_link) {
+                /* We want all entries that have been used more than 1 sec
+                 * ago to be dropped, others can be kept.
+                 * Note the <= 2 check and not <= 1. It's here to account for
+                 * the fact that we're only testing ->tv_sec, not ->tv_nsec.
+                 * That means we might keep entries that are between 1 and 2
+                 * seconds old, but we don't really care, as long as unused BOs
+                 * are dropped at some point.
+                 */
+                if (time.tv_sec - entry->last_used <= 2)
+                        break;
+
+                list_del(&entry->bucket_link);
+                list_del(&entry->lru_link);
+                panfrost_bo_free(entry);
+        }
 }
 
 /* Tries to add a BO to the cache. Returns if it was
@@ -245,9 +272,10 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
         if (bo->flags & PAN_BO_DONT_REUSE)
                 return false;
 
-        pthread_mutex_lock(&screen->bo_cache_lock);
+        pthread_mutex_lock(&screen->bo_cache.lock);
         struct list_head *bucket = pan_bucket(screen, bo->size);
         struct drm_panfrost_madvise madv;
+        struct timespec time;
 
         madv.handle = bo->gem_handle;
         madv.madv = PANFROST_MADV_DONTNEED;
@@ -256,8 +284,18 @@ panfrost_bo_cache_put(struct panfrost_bo *bo)
         drmIoctl(screen->fd, DRM_IOCTL_PANFROST_MADVISE, &madv);
 
         /* Add us to the bucket */
-        list_addtail(&bo->link, bucket);
-        pthread_mutex_unlock(&screen->bo_cache_lock);
+        list_addtail(&bo->bucket_link, bucket);
+
+        /* Add us to the LRU list and update the last_used field. */
+        list_addtail(&bo->lru_link, &screen->bo_cache.lru);
+        clock_gettime(CLOCK_MONOTONIC, &time);
+        bo->last_used = time.tv_sec;
+
+        /* Let's do some cleanup in the BO cache while we hold the
+         * lock.
+         */
+        panfrost_bo_cache_evict_stale_bos(screen);
+        pthread_mutex_unlock(&screen->bo_cache.lock);
 
         return true;
 }
@@ -272,16 +310,18 @@ void
 panfrost_bo_cache_evict_all(
                 struct panfrost_screen *screen)
 {
-        pthread_mutex_lock(&screen->bo_cache_lock);
-        for (unsigned i = 0; i < ARRAY_SIZE(screen->bo_cache); ++i) {
-                struct list_head *bucket = &screen->bo_cache[i];
+        pthread_mutex_lock(&screen->bo_cache.lock);
+        for (unsigned i = 0; i < ARRAY_SIZE(screen->bo_cache.buckets); ++i) {
+                struct list_head *bucket = &screen->bo_cache.buckets[i];
 
-                list_for_each_entry_safe(struct panfrost_bo, entry, bucket, link) {
-                        list_del(&entry->link);
+                list_for_each_entry_safe(struct panfrost_bo, entry, bucket,
+                                         bucket_link) {
+                        list_del(&entry->bucket_link);
+                        list_del(&entry->lru_link);
                         panfrost_bo_free(entry);
                 }
         }
-        pthread_mutex_unlock(&screen->bo_cache_lock);
+        pthread_mutex_unlock(&screen->bo_cache.lock);
 }
 
 void

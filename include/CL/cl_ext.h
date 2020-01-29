@@ -147,20 +147,28 @@ typedef CL_API_ENTRY cl_program
                                            size_t       length,
                                            cl_int *     errcode_ret) CL_EXT_SUFFIX__VERSION_1_2;
 
-/* Extension: cl_khr_image2D_buffer
+/* Extension: cl_khr_image2d_from_buffer
  *
- * This extension allows a 2D image to be created from a cl_mem buffer without a copy.
- * The type associated with a 2D image created from a buffer in an OpenCL program is image2d_t.
- * Both the sampler and sampler-less read_image built-in functions are supported for 2D images
- * and 2D images created from a buffer.  Similarly, the write_image built-ins are also supported
- * for 2D images created from a buffer.
+ * This extension allows a 2D image to be created from a cl_mem buffer without
+ * a copy. The type associated with a 2D image created from a buffer in an
+ * OpenCL program is image2d_t. Both the sampler and sampler-less read_image
+ * built-in functions are supported for 2D images and 2D images created from
+ * a buffer.  Similarly, the write_image built-ins are also supported for 2D
+ * images created from a buffer.
  *
- * When the 2D image from buffer is created, the client must specify the width,
- * height, image format (i.e. channel order and channel data type) and optionally the row pitch
+ * When the 2D image from buffer is created, the client must specify the
+ * width, height, image format (i.e. channel order and channel data type)
+ * and optionally the row pitch.
  *
- * The pitch specified must be a multiple of CL_DEVICE_IMAGE_PITCH_ALIGNMENT pixels.
- * The base address of the buffer must be aligned to CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT pixels.
+ * The pitch specified must be a multiple of
+ * CL_DEVICE_IMAGE_PITCH_ALIGNMENT_KHR pixels.
+ * The base address of the buffer must be aligned to
+ * CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT_KHR pixels.
  */
+
+#define CL_DEVICE_IMAGE_PITCH_ALIGNMENT_KHR              0x104A
+#define CL_DEVICE_IMAGE_BASE_ADDRESS_ALIGNMENT_KHR       0x104B
+
 
 /**************************************
  * cl_khr_initialize_memory extension *
@@ -570,6 +578,49 @@ typedef cl_uint  cl_queue_throttle_khr;
 #define CL_DEVICE_MAX_NAMED_BARRIER_COUNT_KHR       0x2035
 
 
+/*********************************
+* cl_khr_extended_versioning
+*********************************/
+
+#define CL_VERSION_MAJOR_BITS_KHR (10)
+#define CL_VERSION_MINOR_BITS_KHR (10)
+#define CL_VERSION_PATCH_BITS_KHR (12)
+
+#define CL_VERSION_MAJOR_MASK_KHR ((1 << CL_VERSION_MAJOR_BITS_KHR) - 1)
+#define CL_VERSION_MINOR_MASK_KHR ((1 << CL_VERSION_MINOR_BITS_KHR) - 1)
+#define CL_VERSION_PATCH_MASK_KHR ((1 << CL_VERSION_PATCH_BITS_KHR) - 1)
+
+#define CL_VERSION_MAJOR_KHR(version) ((version) >> (CL_VERSION_MINOR_BITS_KHR + CL_VERSION_PATCH_BITS_KHR))
+#define CL_VERSION_MINOR_KHR(version) (((version) >> CL_VERSION_PATCH_BITS_KHR) & CL_VERSION_MINOR_MASK_KHR)
+#define CL_VERSION_PATCH_KHR(version) ((version) & CL_VERSION_PATCH_MASK_KHR)
+
+#define CL_MAKE_VERSION_KHR(major, minor, patch) \
+    ((((major) & CL_VERSION_MAJOR_MASK_KHR) << (CL_VERSION_MINOR_BITS_KHR + CL_VERSION_PATCH_BITS_KHR)) | \
+    (((minor) &  CL_VERSION_MINOR_MASK_KHR) << CL_VERSION_PATCH_BITS_KHR) | \
+    ((patch) & CL_VERSION_PATCH_MASK_KHR))
+
+typedef cl_uint cl_version_khr;
+
+#define CL_NAME_VERSION_MAX_NAME_SIZE_KHR 64
+
+typedef struct _cl_name_version_khr
+{
+    cl_version_khr version;
+    char name[CL_NAME_VERSION_MAX_NAME_SIZE_KHR];
+} cl_name_version_khr;
+
+/* cl_platform_info */
+#define CL_PLATFORM_NUMERIC_VERSION_KHR                  0x0906
+#define CL_PLATFORM_EXTENSIONS_WITH_VERSION_KHR          0x0907
+
+/* cl_device_info */
+#define CL_DEVICE_NUMERIC_VERSION_KHR                    0x105E
+#define CL_DEVICE_OPENCL_C_NUMERIC_VERSION_KHR           0x105F
+#define CL_DEVICE_EXTENSIONS_WITH_VERSION_KHR            0x1060
+#define CL_DEVICE_ILS_WITH_VERSION_KHR                   0x1061
+#define CL_DEVICE_BUILT_IN_KERNELS_WITH_VERSION_KHR      0x1062
+
+
 /**********************************
  * cl_arm_import_memory extension *
  **********************************/
@@ -588,6 +639,12 @@ typedef intptr_t cl_import_properties_arm;
 
 /* Protected DMA BUF memory type value for CL_IMPORT_TYPE_ARM property */
 #define CL_IMPORT_TYPE_PROTECTED_ARM              0x40B5
+
+/* Android hardware buffer type value for CL_IMPORT_TYPE_ARM property */
+#define CL_IMPORT_TYPE_ANDROID_HARDWARE_BUFFER_ARM 0x41E2
+
+/* Import memory size value to indicate a size for the whole buffer */
+#define CL_IMPORT_MEMORY_WHOLE_ALLOCATION_ARM SIZE_MAX
 
 /* This extension adds a new function that allows for direct memory import into
  * OpenCL via the clImportMemoryARM function.
@@ -733,6 +790,18 @@ clSetKernelExecInfoARM(cl_kernel            kernel,
 #define CL_DEVICE_COMPUTE_UNITS_BITFIELD_ARM      0x40BF
 
 #endif  /* CL_VERSION_1_2 */
+
+/*********************************
+* cl_arm_job_slot_selection
+*********************************/
+
+#define cl_arm_job_slot_selection 1
+
+/* cl_device_info */
+#define CL_DEVICE_JOB_SLOTS_ARM                   0x41E0
+
+/* cl_command_queue_properties */
+#define CL_QUEUE_JOB_SLOT_ARM                     0x41E1
 
 #ifdef __cplusplus
 }

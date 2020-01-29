@@ -36,6 +36,8 @@ struct swr_scratch_buffers {
    struct swr_scratch_space vs_constants;
    struct swr_scratch_space fs_constants;
    struct swr_scratch_space gs_constants;
+   struct swr_scratch_space tcs_constants;
+   struct swr_scratch_space tes_constants;
    struct swr_scratch_space vertex_buffer;
    struct swr_scratch_space index_buffer;
 };

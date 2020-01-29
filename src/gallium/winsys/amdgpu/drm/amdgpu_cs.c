@@ -1176,17 +1176,20 @@ static void add_fence_to_list(struct amdgpu_fence_list *fences,
    amdgpu_fence_reference(&fences->list[idx], (struct pipe_fence_handle*)fence);
 }
 
-/* TODO: recognizing dependencies as no-ops doesn't take the parallel
- * compute IB into account. The compute IB won't wait for these.
- * Also, the scheduler can execute compute and SDMA IBs on any rings.
- * Should we always insert dependencies?
- */
 static bool is_noop_fence_dependency(struct amdgpu_cs *acs,
                                      struct amdgpu_fence *fence)
 {
    struct amdgpu_cs_context *cs = acs->csc;
 
-   if (!amdgpu_fence_is_syncobj(fence) &&
+   /* Detect no-op dependencies only when there is only 1 ring,
+    * because IBs on one ring are always executed one at a time.
+    *
+    * We always want no dependency between back-to-back gfx IBs, because
+    * we need the parallelism between IBs for good performance.
+    */
+   if ((acs->ring_type == RING_GFX ||
+        acs->ctx->ws->info.num_rings[acs->ring_type] == 1) &&
+       !amdgpu_fence_is_syncobj(fence) &&
        fence->ctx == acs->ctx &&
        fence->fence.ip_type == cs->ib[IB_MAIN].ip_type &&
        fence->fence.ip_instance == cs->ib[IB_MAIN].ip_instance &&

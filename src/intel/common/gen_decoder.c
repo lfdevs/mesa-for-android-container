@@ -738,10 +738,10 @@ struct gen_spec *
 gen_spec_load_from_path(const struct gen_device_info *devinfo,
                         const char *path)
 {
-   size_t len, filename_len = strlen(path) + 20;
+   size_t filename_len = strlen(path) + 20;
    char *filename = malloc(filename_len);
 
-   len = snprintf(filename, filename_len, "%s/gen%i.xml",
+   ASSERTED size_t len = snprintf(filename, filename_len, "%s/gen%i.xml",
                   path, devinfo_to_gen(devinfo, false));
    assert(len < filename_len);
 

@@ -45,18 +45,12 @@ void * ir3_alloc(struct ir3 *shader, int sz)
 	return rzalloc_size(shader, sz); /* TODO: don't use rzalloc */
 }
 
-struct ir3 * ir3_create(struct ir3_compiler *compiler,
-		gl_shader_stage type, unsigned nin, unsigned nout)
+struct ir3 * ir3_create(struct ir3_compiler *compiler, gl_shader_stage type)
 {
 	struct ir3 *shader = rzalloc(NULL, struct ir3);
 
 	shader->compiler = compiler;
 	shader->type = type;
-	shader->ninputs = nin;
-	shader->inputs = ir3_alloc(shader, sizeof(shader->inputs[0]) * nin);
-
-	shader->noutputs = nout;
-	shader->outputs = ir3_alloc(shader, sizeof(shader->outputs[0]) * nout);
 
 	list_inithead(&shader->block_list);
 	list_inithead(&shader->array_list);
@@ -153,6 +147,16 @@ static int emit_cat0(struct ir3_instruction *instr, void *ptr,
 	cat0->jmp_tgt  = !!(instr->flags & IR3_INSTR_JP);
 	cat0->sync     = !!(instr->flags & IR3_INSTR_SY);
 	cat0->opc_cat  = 0;
+
+	switch (instr->opc) {
+	case OPC_IF:
+	case OPC_ELSE:
+	case OPC_ENDIF:
+		cat0->dummy4 = 16;
+		break;
+	default:
+		break;
+	}
 
 	return 0;
 }
@@ -801,16 +805,24 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 
 		cat6->src_off = true;
 
-		cat6a->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
-		cat6a->src1_im = !!(src1->flags & IR3_REG_IMMED);
+		if (instr->opc == OPC_LDG) {
+			/* For LDG src1 can not be immediate, so src1_imm is redundant and
+			 * instead used to signal whether (when true) 'off' is a 32 bit
+			 * register or an immediate offset.
+			 */
+			cat6a->src1 = reg(src1, info, instr->repeat, 0);
+			cat6a->src1_im = !(src3->flags & IR3_REG_IMMED);
+			cat6a->off = reg(src3, info, instr->repeat, IR3_REG_IMMED);
+		} else {
+			cat6a->src1 = reg(src1, info, instr->repeat, IR3_REG_IMMED);
+			cat6a->src1_im = !!(src1->flags & IR3_REG_IMMED);
+			cat6a->off = reg(src3, info, instr->repeat, IR3_REG_IMMED);
+			iassert(src3->flags & IR3_REG_IMMED);
+		}
 
 		/* Num components */
 		cat6a->src2 = reg(src2, info, instr->repeat, IR3_REG_IMMED);
 		cat6a->src2_im = true;
-
-		/* Offset */
-		iassert(src3->flags & IR3_REG_IMMED);
-		cat6a->off = reg(src3, info, instr->repeat, IR3_REG_IMMED);
 	} else {
 		instr_cat6b_t *cat6b = ptr;
 
@@ -829,7 +841,18 @@ static int emit_cat6(struct ir3_instruction *instr, void *ptr,
 		instr_cat6c_t *cat6c = ptr;
 		cat6->dst_off = true;
 		cat6c->dst = reg(dst, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
-		cat6c->off = instr->cat6.dst_offset;
+
+		if (instr->flags & IR3_INSTR_G) {
+			struct ir3_register *src3 = instr->regs[4];
+			cat6c->off = reg(src3, info, instr->repeat, IR3_REG_R | IR3_REG_HALF);
+			if (src3->flags & IR3_REG_IMMED) {
+				/* Immediate offsets are in bytes... */
+				cat6->g = false;
+				cat6c->off *= 4;
+			}
+		} else {
+			cat6c->off = instr->cat6.dst_offset;
+		}
 	} else {
 		instr_cat6d_t *cat6d = ptr;
 		cat6->dst_off = false;
@@ -876,8 +899,8 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 	info->sizedwords    = 0;
 	info->ss = info->sy = 0;
 
-	list_for_each_entry (struct ir3_block, block, &shader->block_list, node) {
-		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_block (block, &shader->block_list) {
+		foreach_instr (instr, &block->instr_list) {
 			info->sizedwords += 2;
 		}
 	}
@@ -894,12 +917,19 @@ void * ir3_assemble(struct ir3 *shader, struct ir3_info *info,
 
 	ptr = dwords = calloc(4, info->sizedwords);
 
-	list_for_each_entry (struct ir3_block, block, &shader->block_list, node) {
-		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_block (block, &shader->block_list) {
+		foreach_instr (instr, &block->instr_list) {
 			int ret = emit[opc_cat(instr->opc)](instr, dwords, info);
 			if (ret)
 				goto fail;
+
+			if ((instr->opc == OPC_BARY_F) && (instr->regs[0]->flags & IR3_REG_EI))
+				info->last_baryf = info->instrs_count;
+
 			info->instrs_count += 1 + instr->repeat + instr->nop;
+			info->nops_count += instr->nop;
+			if (instr->opc == OPC_NOP)
+				info->nops_count += 1 + instr->repeat;
 			dwords += 2;
 
 			if (instr->flags & IR3_INSTR_SS)
@@ -1059,14 +1089,14 @@ ir3_instr_set_address(struct ir3_instruction *instr,
 void
 ir3_block_clear_mark(struct ir3_block *block)
 {
-	list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node)
+	foreach_instr (instr, &block->instr_list)
 		instr->flags &= ~IR3_INSTR_MARK;
 }
 
 void
 ir3_clear_mark(struct ir3 *ir)
 {
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		ir3_block_clear_mark(block);
 	}
 }
@@ -1076,10 +1106,10 @@ unsigned
 ir3_count_instructions(struct ir3 *ir)
 {
 	unsigned cnt = 0;
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		block->start_ip = cnt;
 		block->end_ip = cnt;
-		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+		foreach_instr (instr, &block->instr_list) {
 			instr->ip = cnt++;
 			block->end_ip = instr->ip;
 		}
@@ -1090,7 +1120,7 @@ ir3_count_instructions(struct ir3 *ir)
 struct ir3_array *
 ir3_lookup_array(struct ir3 *ir, unsigned id)
 {
-	list_for_each_entry (struct ir3_array, arr, &ir->array_list, node)
+	foreach_array (arr, &ir->array_list)
 		if (arr->id == id)
 			return arr;
 	return NULL;

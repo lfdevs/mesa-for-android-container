@@ -36,6 +36,7 @@ struct lima_resource_level {
    uint32_t width;
    uint32_t stride;
    uint32_t offset;
+   uint32_t layer_stride;
 };
 
 struct lima_damage_region {

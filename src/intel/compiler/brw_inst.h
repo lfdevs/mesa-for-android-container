@@ -1273,6 +1273,7 @@ BRW_IA16_ADDR_IMM(send_dst,    -1, -1,  62,  56,  52)
 static inline uint64_t
 brw_inst_bits(const brw_inst *inst, unsigned high, unsigned low)
 {
+   assert(high < 128);
    assert(high >= low);
    /* We assume the field doesn't cross 64-bit boundaries. */
    const unsigned word = high / 64;
@@ -1294,6 +1295,7 @@ brw_inst_bits(const brw_inst *inst, unsigned high, unsigned low)
 static inline void
 brw_inst_set_bits(brw_inst *inst, unsigned high, unsigned low, uint64_t value)
 {
+   assert(high < 128);
    assert(high >= low);
    const unsigned word = high / 64;
    assert(word == low / 64);

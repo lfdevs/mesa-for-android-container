@@ -49,6 +49,14 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 
 	DBG("%p: flush: flags=%x\n", ctx->batch, flags);
 
+	/* In some sequence of events, we can end up with a last_fence that is
+	 * not an "fd" fence, which results in eglDupNativeFenceFDANDROID()
+	 * errors.
+	 *
+	 */
+	if (flags & PIPE_FLUSH_FENCE_FD)
+		fd_fence_ref(&ctx->last_fence, NULL);
+
 	/* if no rendering since last flush, ie. app just decided it needed
 	 * a fence, re-use the last one:
 	 */
@@ -63,10 +71,8 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 	/* Take a ref to the batch's fence (batch can be unref'd when flushed: */
 	fd_fence_ref(&fence, batch->fence);
 
-	/* TODO is it worth trying to figure out if app is using fence-fd's, to
-	 * avoid requesting one every batch?
-	 */
-	batch->needs_out_fence_fd = true;
+	if (flags & PIPE_FLUSH_FENCE_FD)
+		batch->needs_out_fence_fd = true;
 
 	if (!ctx->screen->reorder) {
 		fd_batch_flush(batch, true);

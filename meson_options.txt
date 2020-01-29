@@ -1,4 +1,4 @@
-# Copyright © 2017-2018 Intel Corporation
+# Copyright © 2017-2019 Intel Corporation
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -315,6 +315,13 @@ option(
   description : 'Architectures to build SWR support for.',
 )
 option(
+  'shared-swr',
+  type : 'boolean',
+  value : true,
+  description : 'Whether to link SWR shared or statically.',
+)
+
+option(
   'tools',
   type : 'array',
   value : [],
@@ -347,6 +354,12 @@ option(
   value : false,
   description : 'Allow work-in-progress freedreno vulkan driver to be enabled',
 )
+option(
+  'prefer-iris',
+  type : 'boolean',
+  value : true,
+  description : 'Prefer new Intel iris driver over older i965 driver'
+)
 option('egl-lib-suffix',
   type : 'string',
   value : '',
@@ -365,4 +378,11 @@ option(
   max : 28,
   value : 25,
   description : 'Android Platform SDK version. Default: Nougat version.'
+)
+option(
+  'zstd',
+  type : 'combo',
+  choices : ['auto', 'true', 'false'],
+  value : 'auto',
+  description : 'Use ZSTD instead of ZLIB in some cases.'
 )

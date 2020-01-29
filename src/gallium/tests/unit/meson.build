@@ -19,8 +19,7 @@
 # SOFTWARE.
 
 foreach t : ['pipe_barrier_test', 'u_cache_test', 'u_half_test',
-             'u_format_test', 'u_format_compatible_test', 'translate_test',
-             'u_prim_verts_test' ]
+             'translate_test', 'u_prim_verts_test']
   exe = executable(
     t,
     '@0@.c'.format(t),

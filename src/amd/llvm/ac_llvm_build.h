@@ -30,6 +30,8 @@
 #include "compiler/nir/nir.h"
 #include "amd_family.h"
 #include "ac_shader_util.h"
+#include "ac_shader_args.h"
+#include "ac_shader_abi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,12 +65,15 @@ struct ac_llvm_context {
 	LLVMModuleRef module;
 	LLVMBuilderRef builder;
 
+	LLVMValueRef main_function;
+
 	LLVMTypeRef voidt;
 	LLVMTypeRef i1;
 	LLVMTypeRef i8;
 	LLVMTypeRef i16;
 	LLVMTypeRef i32;
 	LLVMTypeRef i64;
+	LLVMTypeRef i128;
 	LLVMTypeRef intptr;
 	LLVMTypeRef f16;
 	LLVMTypeRef f32;
@@ -92,6 +97,8 @@ struct ac_llvm_context {
 	LLVMValueRef i32_1;
 	LLVMValueRef i64_0;
 	LLVMValueRef i64_1;
+	LLVMValueRef i128_0;
+	LLVMValueRef i128_1;
 	LLVMValueRef f16_0;
 	LLVMValueRef f16_1;
 	LLVMValueRef f32_0;
@@ -295,8 +302,7 @@ ac_build_buffer_store_dword(struct ac_llvm_context *ctx,
 			    LLVMValueRef voffset,
 			    LLVMValueRef soffset,
 			    unsigned inst_offset,
-			    unsigned cache_policy,
-			    bool swizzle_enable_hint);
+			    unsigned cache_policy);
 
 void
 ac_build_buffer_store_format(struct ac_llvm_context *ctx,
@@ -529,6 +535,7 @@ enum ac_image_cache_policy {
 	ac_glc = 1 << 0, /* per-CU cache control */
 	ac_slc = 1 << 1, /* global L2 cache control */
 	ac_dlc = 1 << 2, /* per-shader-array cache control */
+	ac_swizzled = 1 << 3, /* the access is swizzled, disabling load/store merging */
 };
 
 struct ac_image_args {
@@ -648,6 +655,9 @@ void ac_apply_fmask_to_sample(struct ac_llvm_context *ac, LLVMValueRef fmask,
 LLVMValueRef
 ac_build_ds_swizzle(struct ac_llvm_context *ctx, LLVMValueRef src, unsigned mask);
 
+LLVMValueRef ac_build_readlane_no_opt_barrier(struct ac_llvm_context *ctx,
+					      LLVMValueRef src, LLVMValueRef lane);
+
 LLVMValueRef
 ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src, LLVMValueRef lane);
 
@@ -742,6 +752,53 @@ void
 ac_export_mrt_z(struct ac_llvm_context *ctx, LLVMValueRef depth,
 		LLVMValueRef stencil, LLVMValueRef samplemask,
 		struct ac_export_args *args);
+
+void ac_build_sendmsg_gs_alloc_req(struct ac_llvm_context *ctx, LLVMValueRef wave_id,
+				   LLVMValueRef vtx_cnt, LLVMValueRef prim_cnt);
+
+struct ac_ngg_prim {
+	unsigned num_vertices;
+	LLVMValueRef isnull;
+	LLVMValueRef index[3];
+	LLVMValueRef edgeflag[3];
+	LLVMValueRef passthrough;
+};
+
+LLVMValueRef ac_pack_prim_export(struct ac_llvm_context *ctx,
+				 const struct ac_ngg_prim *prim);
+void ac_build_export_prim(struct ac_llvm_context *ctx,
+			  const struct ac_ngg_prim *prim);
+
+static inline LLVMValueRef
+ac_get_arg(struct ac_llvm_context *ctx, struct ac_arg arg)
+{
+	assert(arg.used);
+	return LLVMGetParam(ctx->main_function, arg.arg_index);
+}
+
+enum ac_llvm_calling_convention {
+	AC_LLVM_AMDGPU_VS = 87,
+	AC_LLVM_AMDGPU_GS = 88,
+	AC_LLVM_AMDGPU_PS = 89,
+	AC_LLVM_AMDGPU_CS = 90,
+	AC_LLVM_AMDGPU_HS = 93,
+};
+
+LLVMValueRef ac_build_main(const struct ac_shader_args *args,
+			   struct ac_llvm_context *ctx,
+			   enum ac_llvm_calling_convention convention,
+			   const char *name, LLVMTypeRef ret_type,
+			   LLVMModuleRef module);
+void ac_build_s_endpgm(struct ac_llvm_context *ctx);
+
+LLVMValueRef ac_prefix_bitcount(struct ac_llvm_context *ctx,
+				LLVMValueRef mask, LLVMValueRef index);
+LLVMValueRef ac_prefix_bitcount_2x64(struct ac_llvm_context *ctx,
+				     LLVMValueRef mask[2], LLVMValueRef index);
+void ac_build_triangle_strip_indices_to_triangle(struct ac_llvm_context *ctx,
+						 LLVMValueRef is_odd,
+						 LLVMValueRef flatshade_first,
+						 LLVMValueRef index[3]);
 
 #ifdef __cplusplus
 }

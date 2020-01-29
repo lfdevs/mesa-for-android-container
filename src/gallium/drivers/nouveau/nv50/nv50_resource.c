@@ -1,7 +1,7 @@
 
 #include "pipe/p_context.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "nouveau_screen.h"
 

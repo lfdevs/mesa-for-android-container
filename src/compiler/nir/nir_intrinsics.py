@@ -195,7 +195,6 @@ intrinsic("get_buffer_size", src_comp=[-1], dest_comp=1,
 def barrier(name):
     intrinsic(name)
 
-barrier("barrier")
 barrier("discard")
 
 # Demote fragment shader invocation to a helper invocation.  Any stores to
@@ -207,6 +206,12 @@ barrier("discard")
 barrier("demote")
 intrinsic("is_helper_invocation", dest_comp=1, flags=[CAN_ELIMINATE])
 
+# A workgroup-level control barrier.  Any thread which hits this barrier will
+# pause until all threads within the current workgroup have also hit the
+# barrier.  For compute shaders, the workgroup is defined as the local group.
+# For tessellation control shaders, the workgroup is defined as the current
+# patch.  This intrinsic does not imply any sort of memory barrier.
+barrier("control_barrier")
 
 # Memory barrier with semantics analogous to the memoryBarrier() GLSL
 # intrinsic.
@@ -254,6 +259,9 @@ barrier("memory_barrier_image")
 barrier("memory_barrier_shared")
 barrier("begin_invocation_interlock")
 barrier("end_invocation_interlock")
+
+# Memory barrier for synchronizing TCS patch outputs
+barrier("memory_barrier_tcs_patch")
 
 # A conditional discard/demote, with a single boolean source.
 intrinsic("discard_if", src_comp=[1])
@@ -379,8 +387,8 @@ def image(name, src_comp=[], **kwargs):
     intrinsic("bindless_image_" + name, src_comp=[1] + src_comp,
               indices=[IMAGE_DIM, IMAGE_ARRAY, FORMAT, ACCESS], **kwargs)
 
-image("load", src_comp=[4, 1], dest_comp=0, flags=[CAN_ELIMINATE])
-image("store", src_comp=[4, 1, 0])
+image("load", src_comp=[4, 1, 1], dest_comp=0, flags=[CAN_ELIMINATE])
+image("store", src_comp=[4, 1, 0, 1])
 image("atomic_add",  src_comp=[4, 1, 1], dest_comp=1)
 image("atomic_imin",  src_comp=[4, 1, 1], dest_comp=1)
 image("atomic_umin",  src_comp=[4, 1, 1], dest_comp=1)
@@ -792,6 +800,20 @@ system_value("vs_vertex_stride_ir3", 1)
 system_value("gs_header_ir3", 1)
 system_value("primitive_location_ir3", 1, indices=[DRIVER_LOCATION])
 
+# System values for freedreno tessellation shaders.
+system_value("hs_patch_stride_ir3", 1)
+system_value("tess_factor_base_ir3", 2)
+system_value("tess_param_base_ir3", 2)
+system_value("tcs_header_ir3", 1)
+
+# IR3-specific intrinsics for tessellation control shaders.  cond_end_ir3 end
+# the shader when src0 is false and is used to narrow down the TCS shader to
+# just thread 0 before writing out tessellation levels.
+intrinsic("cond_end_ir3", src_comp=[1])
+# end_patch_ir3 is used just before thread 0 exist the TCS and presumably
+# signals the TE that the patch is complete and can be tessellated.
+intrinsic("end_patch_ir3")
+
 # IR3-specific load/store intrinsics. These access a buffer used to pass data
 # between geometry stages - perhaps it's explicit access to the vertex cache.
 
@@ -799,6 +821,17 @@ system_value("primitive_location_ir3", 1, indices=[DRIVER_LOCATION])
 store("shared_ir3", 2, [BASE, WRMASK, ALIGN_MUL, ALIGN_OFFSET])
 # src[] = { offset }.
 load("shared_ir3", 1, [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
+
+# IR3-specific load/store global intrinsics. They take a 64-bit base address
+# and a 32-bit offset.  The hardware will add the base and the offset, which
+# saves us from doing 64-bit math on the base address.
+
+# src[] = { value, address(vec2 of hi+lo uint32_t), offset }.
+# const_index[] = { write_mask, align_mul, align_offset }
+intrinsic("store_global_ir3", [0, 2, 1], indices=[WRMASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+# src[] = { address(vec2 of hi+lo uint32_t), offset }.
+# const_index[] = { access, align_mul, align_offset }
+intrinsic("load_global_ir3", [2, 1], dest_comp=0, indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=[CAN_ELIMINATE])
 
 # Intrinsics used by the Midgard/Bifrost blend pipeline. These are defined
 # within a blend shader to read/write the raw value from the tile buffer,
@@ -811,10 +844,20 @@ load("shared_ir3", 1, [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # One notable divergence is sRGB, which is asymmetric: raw_input_pan requires
 # an sRGB->linear conversion, but linear values should be written to
 # raw_output_pan and the hardware handles linear->sRGB.
+#
+# We also have format-specific Midgard intrinsics. There are rather
+# here-be-dragons. load_output_u8_as_fp16_pan does the equivalent of
+# load_raw_out_pan on an RGBA8 UNORM framebuffer followed by u2u16 -> fp16 ->
+# division by 255.
 
 # src[] = { value }
 store("raw_output_pan", 1, [])
 load("raw_output_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
+load("output_u8_as_fp16_pan", 0, [], [CAN_ELIMINATE, CAN_REORDER])
+
+# Loads the sampler paramaters <min_lod, max_lod, lod_bias>
+# src[] = { sampler_index }
+load("sampler_lod_parameters_pan", 1, [CAN_ELIMINATE, CAN_REORDER])
 
 # V3D-specific instrinc for tile buffer color reads.
 #
@@ -833,3 +876,7 @@ load("tlb_color_v3d", 1, [BASE, COMPONENT], [])
 # src[] = { value, render_target }
 # BASE = sample index
 store("tlb_sample_color_v3d", 2, [BASE, COMPONENT, TYPE], [])
+
+# V3D-specific intrinsic to load the number of layers attached to
+# the target framebuffer
+intrinsic("load_fb_layers_v3d", dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER])

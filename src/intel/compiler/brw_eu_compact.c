@@ -1413,6 +1413,20 @@ compact_immediate(const struct gen_device_info *devinfo,
                   enum brw_reg_type type, unsigned imm)
 {
    if (devinfo->gen >= 12) {
+      /* 16-bit immediates need to be replicated through the 32-bit immediate
+       * field
+       */
+      switch (type) {
+      case BRW_REGISTER_TYPE_W:
+      case BRW_REGISTER_TYPE_UW:
+      case BRW_REGISTER_TYPE_HF:
+         if ((imm >> 16) != (imm & 0xffff))
+            return -1;
+         break;
+      default:
+         break;
+      }
+
       switch (type) {
       case BRW_REGISTER_TYPE_F:
          /* We get the high 12-bits as-is; rest must be zero */
@@ -1453,7 +1467,7 @@ compact_immediate(const struct gen_device_info *devinfo,
       case BRW_REGISTER_TYPE_UQ:
       case BRW_REGISTER_TYPE_B:
       case BRW_REGISTER_TYPE_UB:
-         unreachable("not reached");
+         return -1;
       }
    } else {
       /* We get the low 12 bits as-is; 13th is replicated */
@@ -1512,10 +1526,10 @@ has_immediate(const struct gen_device_info *devinfo, const brw_inst *inst,
 {
    if (brw_inst_src0_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src0_type(devinfo, inst);
-      return *type != (enum brw_reg_type)-1;
+      return *type != INVALID_REG_TYPE;
    } else if (brw_inst_src1_reg_file(devinfo, inst) == BRW_IMMEDIATE_VALUE) {
       *type = brw_inst_src1_type(devinfo, inst);
-      return *type != (enum brw_reg_type)-1;
+      return *type != INVALID_REG_TYPE;
    }
 
    return false;

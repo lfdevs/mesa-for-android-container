@@ -66,15 +66,29 @@ etna_blit_save_state(struct etna_context *ctx)
          ctx->num_fragment_sampler_views, ctx->sampler_view);
 }
 
-uint32_t
-etna_clear_blit_pack_rgba(enum pipe_format format, const float *rgba)
+uint64_t
+etna_clear_blit_pack_rgba(enum pipe_format format, const union pipe_color_union *color)
 {
    union util_color uc;
-   util_pack_color(rgba, format, &uc);
-   if (util_format_get_blocksize(format) == 2)
-      return uc.ui[0] << 16 | (uc.ui[0] & 0xffff);
-   else
-      return uc.ui[0];
+
+   if (util_format_is_pure_uint(format)) {
+      util_format_write_4ui(format, color->ui, 0, &uc, 0, 0, 0, 1, 1);
+   } else if (util_format_is_pure_sint(format)) {
+      util_format_write_4i(format, color->i, 0, &uc, 0, 0, 0, 1, 1);
+   } else {
+      util_pack_color(color->f, format, &uc);
+   }
+
+   switch (util_format_get_blocksize(format)) {
+   case 1:
+      uc.ui[0] = uc.ui[0] << 8 | (uc.ui[0] & 0xff);
+   case 2:
+      uc.ui[0] =  uc.ui[0] << 16 | (uc.ui[0] & 0xffff);
+   case 4:
+      uc.ui[1] = uc.ui[0];
+   default:
+      return (uint64_t) uc.ui[1] << 32 | uc.ui[0];
+   }
 }
 
 static void

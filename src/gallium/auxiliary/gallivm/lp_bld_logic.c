@@ -257,6 +257,7 @@ lp_build_select_bitwise(struct lp_build_context *bld,
    LLVMBuilderRef builder = bld->gallivm->builder;
    struct lp_type type = bld->type;
    LLVMValueRef res;
+   LLVMTypeRef int_vec_type = lp_build_int_vec_type(bld->gallivm, type);
 
    assert(lp_check_value(type, a));
    assert(lp_check_value(type, b));
@@ -266,11 +267,12 @@ lp_build_select_bitwise(struct lp_build_context *bld,
    }
 
    if(type.floating) {
-      LLVMTypeRef int_vec_type = lp_build_int_vec_type(bld->gallivm, type);
       a = LLVMBuildBitCast(builder, a, int_vec_type, "");
       b = LLVMBuildBitCast(builder, b, int_vec_type, "");
    }
 
+   if (type.width > 32)
+      mask = LLVMBuildSExt(builder, mask, int_vec_type, "");
    a = LLVMBuildAnd(builder, a, mask, "");
 
    /* This often gets translated to PANDN, but sometimes the NOT is
@@ -359,6 +361,11 @@ lp_build_select(struct lp_build_context *bld,
       LLVMTypeRef arg_type;
       LLVMValueRef args[3];
 
+      LLVMTypeRef mask_type = LLVMGetElementType(LLVMTypeOf(mask));
+      if (LLVMGetIntTypeWidth(mask_type) != type.width) {
+         LLVMTypeRef int_vec_type = LLVMVectorType(LLVMIntTypeInContext(lc, type.width), type.length);
+         mask = LLVMBuildSExt(builder, mask, int_vec_type, "");
+      }
       /*
        *  There's only float blend in AVX but can just cast i32/i64
        *  to float.

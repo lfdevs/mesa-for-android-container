@@ -57,6 +57,7 @@ enum ir3_driver_param {
 	/* vertex shader driver params: */
 	IR3_DP_VTXID_BASE = 0,
 	IR3_DP_VTXCNT_MAX = 1,
+	IR3_DP_INSTID_BASE = 2,
 	/* user-clip-plane components, up to 8x vec4's: */
 	IR3_DP_UCP0_X     = 4,
 	/* .... */
@@ -249,6 +250,17 @@ struct ir3_shader_key {
 			unsigned rasterflat : 1;
 			unsigned fclamp_color : 1;
 
+			/* Indicates that this is a tessellation pipeline which requires a
+			 * whole different kind of vertex shader.  In case of
+			 * tessellation, this field also tells us which kind of output
+			 * topology the TES uses, which the TCS needs to know.
+			 */
+#define IR3_TESS_NONE		0
+#define IR3_TESS_TRIANGLES	1
+#define IR3_TESS_QUADS		2
+#define IR3_TESS_ISOLINES	3
+			unsigned tessellation : 2;
+
 			unsigned has_gs : 1;
 		};
 		uint32_t global;
@@ -348,6 +360,7 @@ ir3_normalize_key(struct ir3_shader_key *key, gl_shader_stage type)
 			key->vastc_srgb = 0;
 			key->vsamples = 0;
 			key->has_gs = false; /* FS doesn't care */
+			key->tessellation = IR3_TESS_NONE;
 		}
 		break;
 	case MESA_SHADER_VERTEX:
@@ -362,6 +375,27 @@ ir3_normalize_key(struct ir3_shader_key *key, gl_shader_stage type)
 			key->fastc_srgb = 0;
 			key->fsamples = 0;
 		}
+
+		/* VS and GS only care about whether or not we're tessellating. */
+		key->tessellation = !!key->tessellation;
+		break;
+	case MESA_SHADER_TESS_CTRL:
+	case MESA_SHADER_TESS_EVAL:
+		key->color_two_side = false;
+		key->half_precision = false;
+		key->rasterflat = false;
+		if (key->has_per_samp) {
+			key->fsaturate_s = 0;
+			key->fsaturate_t = 0;
+			key->fsaturate_r = 0;
+			key->fastc_srgb = 0;
+			key->fsamples = 0;
+			key->vsaturate_s = 0;
+			key->vsaturate_t = 0;
+			key->vsaturate_r = 0;
+			key->vastc_srgb = 0;
+			key->vsamples = 0;
+ 		}
 		break;
 	default:
 		/* TODO */
@@ -393,12 +427,10 @@ ir3_normalize_key(struct ir3_shader_key *key, gl_shader_stage type)
  */
 struct ir3_ibo_mapping {
 #define IBO_INVALID 0xff
-	/* Maps logical SSBO state to hw state: */
-	uint8_t ssbo_to_ibo[IR3_MAX_SHADER_BUFFERS];
+	/* Maps logical SSBO state to hw tex state: */
 	uint8_t ssbo_to_tex[IR3_MAX_SHADER_BUFFERS];
 
-	/* Maps logical Image state to hw state: */
-	uint8_t image_to_ibo[IR3_MAX_SHADER_IMAGES];
+	/* Maps logical Image state to hw tex state: */
 	uint8_t image_to_tex[IR3_MAX_SHADER_IMAGES];
 
 	/* Maps hw state back to logical SSBO or Image state:
@@ -407,10 +439,8 @@ struct ir3_ibo_mapping {
 	 * hw slot is used for SSBO state vs Image state.
 	 */
 #define IBO_SSBO    0x80
-	uint8_t ibo_to_image[32];
 	uint8_t tex_to_image[32];
 
-	uint8_t num_ibo;
 	uint8_t num_tex;    /* including real textures */
 	uint8_t tex_base;   /* the number of real textures, ie. image/ssbo start here */
 };
@@ -534,6 +564,8 @@ struct ir3_shader_variant {
 	/* do we need derivatives: */
 	bool need_pixlod;
 
+	bool need_fine_derivatives;
+
 	/* do we have kill, image write, etc (which prevents early-z): */
 	bool no_earlyz;
 
@@ -582,6 +614,7 @@ struct ir3_ubo_range {
 
 struct ir3_ubo_analysis_state {
 	struct ir3_ubo_range range[IR3_MAX_CONSTANT_BUFFERS];
+	uint32_t enabled;
 	uint32_t size;
 	uint32_t lower_count;
 	uint32_t cmdstream_size; /* for per-gen backend to stash required cmdstream size */
@@ -738,6 +771,7 @@ ir3_find_output_regid(const struct ir3_shader_variant *so, unsigned slot)
 
 #define VARYING_SLOT_GS_HEADER_IR3			(VARYING_SLOT_MAX + 0)
 #define VARYING_SLOT_GS_VERTEX_FLAGS_IR3	(VARYING_SLOT_MAX + 1)
+#define VARYING_SLOT_TCS_HEADER_IR3			(VARYING_SLOT_MAX + 2)
 
 
 static inline uint32_t
@@ -757,6 +791,16 @@ static inline uint32_t
 ir3_shader_halfregs(const struct ir3_shader_variant *v)
 {
 	return (2 * (v->info.max_reg + 1)) + (v->info.max_half_reg + 1);
+}
+
+static inline uint32_t
+ir3_shader_nibo(const struct ir3_shader_variant *v)
+{
+	/* The dummy variant used in binning mode won't have an actual shader. */
+	if (!v->shader)
+		return 0;
+
+	return v->shader->nir->info.num_ssbos + v->shader->nir->info.num_images;
 }
 
 #endif /* IR3_SHADER_H_ */

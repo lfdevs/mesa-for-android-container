@@ -43,6 +43,7 @@
 #include "gallivm/lp_bld_flow.h"
 #include "gallivm/lp_bld_debug.h"
 #include "gallivm/lp_bld_tgsi.h"
+#include "gallivm/lp_bld_nir.h"
 #include "gallivm/lp_bld_printf.h"
 #include "gallivm/lp_bld_intr.h"
 #include "gallivm/lp_bld_init.h"
@@ -646,7 +647,10 @@ draw_llvm_create_variant(struct draw_llvm *llvm,
    memcpy(&variant->key, key, shader->variant_key_size);
 
    if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      tgsi_dump(llvm->draw->vs.vertex_shader->state.tokens, 0);
+      if (llvm->draw->vs.vertex_shader->state.type == PIPE_SHADER_IR_TGSI)
+         tgsi_dump(llvm->draw->vs.vertex_shader->state.tokens, 0);
+      else
+         nir_print_shader(llvm->draw->vs.vertex_shader->state.ir.nir, stderr);
       draw_llvm_dump_variant_key(&variant->key);
    }
 
@@ -712,10 +716,17 @@ generate_vs(struct draw_llvm_variant *variant,
    params.ssbo_sizes_ptr = num_ssbos_ptr;
    params.image = draw_image;
 
-   lp_build_tgsi_soa(variant->gallivm,
-                     tokens,
-                     &params,
-                     outputs);
+   if (llvm->draw->vs.vertex_shader->state.ir.nir &&
+       llvm->draw->vs.vertex_shader->state.type == PIPE_SHADER_IR_NIR)
+      lp_build_nir_soa(variant->gallivm,
+                       llvm->draw->vs.vertex_shader->state.ir.nir,
+                       &params,
+                       outputs);
+   else
+      lp_build_tgsi_soa(variant->gallivm,
+                        tokens,
+                        &params,
+                        outputs);
 
    {
       LLVMValueRef out;
@@ -926,7 +937,7 @@ static LLVMValueRef
 adjust_mask(struct gallivm_state *gallivm,
             LLVMValueRef mask)
 {
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef vertex_id;
    LLVMValueRef clipmask;
@@ -1611,7 +1622,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    struct gallivm_state *gallivm = variant->gallivm;
    LLVMContextRef context = gallivm->context;
    LLVMTypeRef int32_type = LLVMInt32TypeInContext(context);
-   LLVMTypeRef arg_types[11];
+   LLVMTypeRef arg_types[12];
    unsigned num_arg_types = ARRAY_SIZE(arg_types);
    LLVMTypeRef func_type;
    LLVMValueRef context_ptr;
@@ -1620,7 +1631,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    char func_name[64];
    struct lp_type vs_type;
    LLVMValueRef count, fetch_elts, start_or_maxelt;
-   LLVMValueRef vertex_id_offset, start_instance;
+   LLVMValueRef vertex_id_offset;
    LLVMValueRef stride, step, io_itr;
    LLVMValueRef ind_vec, start_vec, have_elts, fetch_max, tmp;
    LLVMValueRef io_ptr, vbuffers_ptr, vb_ptr;
@@ -1662,7 +1673,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    struct lp_bld_tgsi_system_values system_values;
 
    memset(&system_values, 0, sizeof(system_values));
-
+   memset(&outputs, 0, sizeof(outputs));
    snprintf(func_name, sizeof(func_name), "draw_llvm_vs_variant%u",
             variant->shader->variants_cached);
 
@@ -1678,6 +1689,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    arg_types[i++] = int32_type;                          /* vertex_id_offset */
    arg_types[i++] = int32_type;                          /* start_instance */
    arg_types[i++] = LLVMPointerType(int32_type, 0);      /* fetch_elts  */
+   arg_types[i++] = int32_type;                          /* draw_id */
 
    func_type = LLVMFunctionType(LLVMInt8TypeInContext(context),
                                 arg_types, num_arg_types, 0);
@@ -1710,8 +1722,9 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    vb_ptr                    = LLVMGetParam(variant_func, 6);
    system_values.instance_id = LLVMGetParam(variant_func, 7);
    vertex_id_offset          = LLVMGetParam(variant_func, 8);
-   start_instance            = LLVMGetParam(variant_func, 9);
+   system_values.base_instance = LLVMGetParam(variant_func, 9);
    fetch_elts                = LLVMGetParam(variant_func, 10);
+   system_values.draw_id     = LLVMGetParam(variant_func, 11);
 
    lp_build_name(context_ptr, "context");
    lp_build_name(io_ptr, "io");
@@ -1722,8 +1735,9 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
    lp_build_name(vb_ptr, "vb");
    lp_build_name(system_values.instance_id, "instance_id");
    lp_build_name(vertex_id_offset, "vertex_id_offset");
-   lp_build_name(start_instance, "start_instance");
+   lp_build_name(system_values.base_instance, "start_instance");
    lp_build_name(fetch_elts, "fetch_elts");
+   lp_build_name(system_values.draw_id, "draw_id");
 
    /*
     * Function body
@@ -1837,7 +1851,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
                                              lp_build_const_int32(gallivm,
                                                                   velem->instance_divisor),
                                              "instance_divisor");
-            instance_index[j] = lp_build_uadd_overflow(gallivm, start_instance,
+            instance_index[j] = lp_build_uadd_overflow(gallivm, system_values.base_instance,
                                                        current_instance, &ofbit);
          }
 
@@ -1985,12 +1999,13 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
        * the primitive was split (we split rendering into chunks of at
        * most 4095-vertices) we need to back out the original start
        * index out of our vertex id here.
+       * for ARB_shader_draw_parameters, base_vertex should be 0 for non-indexed draws.
        */
-      system_values.basevertex = lp_build_broadcast_scalar(&blduivec,
-                                                           vertex_id_offset);
+      LLVMValueRef base_vertex = lp_build_select(&bld, have_elts, vertex_id_offset, lp_build_const_int32(gallivm, 0));;
+      system_values.basevertex = lp_build_broadcast_scalar(&blduivec, base_vertex);
       system_values.vertex_id = true_index_array;
       system_values.vertex_id_nobase = LLVMBuildSub(builder, true_index_array,
-                                                      system_values.basevertex, "");
+                                                    lp_build_broadcast_scalar(&blduivec, vertex_id_offset), "");
 
       ptr_aos = (const LLVMValueRef (*)[TGSI_NUM_CHANNELS]) inputs;
       generate_vs(variant,
@@ -2405,6 +2420,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
    unsigned vector_length = variant->shader->base.vector_length;
 
    memset(&system_values, 0, sizeof(system_values));
+   memset(&outputs, 0, sizeof(outputs));
 
    snprintf(func_name, sizeof(func_name), "draw_llvm_gs_variant%u",
             variant->shader->variants_cached);
@@ -2495,7 +2511,10 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
    }
 
    if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      tgsi_dump(tokens, 0);
+      if (llvm->draw->gs.geometry_shader->state.type == PIPE_SHADER_IR_TGSI)
+         tgsi_dump(tokens, 0);
+      else
+         nir_print_shader(llvm->draw->gs.geometry_shader->state.ir.nir, stderr);
       draw_gs_llvm_dump_variant_key(&variant->key);
    }
 
@@ -2515,10 +2534,16 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
    params.ssbo_sizes_ptr = num_ssbos_ptr;
    params.image = image;
 
-   lp_build_tgsi_soa(variant->gallivm,
-                     tokens,
-                     &params,
-                     outputs);
+   if (llvm->draw->gs.geometry_shader->state.type == PIPE_SHADER_IR_TGSI)
+      lp_build_tgsi_soa(variant->gallivm,
+                        tokens,
+                        &params,
+                        outputs);
+   else
+      lp_build_nir_soa(variant->gallivm,
+                       llvm->draw->gs.geometry_shader->state.ir.nir,
+                       &params,
+                       outputs);
 
    sampler->destroy(sampler);
    image->destroy(image);

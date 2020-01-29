@@ -347,7 +347,8 @@ struct EarlyRastHelper<SIMD512>
 /// @param oneTileMask - defines triangles for ER to work on
 ///                      (tris that fit into ER tile)
 template <typename SIMD_T, uint32_t SIMD_WIDTH, typename CT>
-uint32_t SIMDCALL EarlyRasterizer(SIMDBBOX_T<SIMD_T>& er_bbox,
+uint32_t SIMDCALL EarlyRasterizer(DRAW_CONTEXT*       pDC,
+                                  SIMDBBOX_T<SIMD_T>& er_bbox,
                                   Integer<SIMD_T> (&vAi)[3],
                                   Integer<SIMD_T> (&vBi)[3],
                                   Integer<SIMD_T> (&vXi)[3],
@@ -1025,7 +1026,7 @@ void SIMDCALL BinTrianglesImpl(DRAW_CONTEXT*          pDC,
 
             // Try early rasterization
             triMask = EarlyRasterizer<SIMD_T, SIMD_WIDTH, CT>(
-                er_bbox, vAi, vBi, vXi, vYi, cwTrisMask, triMask, oneTileMask);
+                pDC, er_bbox, vAi, vBi, vXi, vYi, cwTrisMask, triMask, oneTileMask);
 
             if (!triMask)
             {

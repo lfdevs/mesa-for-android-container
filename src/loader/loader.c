@@ -61,6 +61,11 @@
 #define __IS_LOADER
 #include "pci_id_driver_map.h"
 
+/* For systems like Hurd */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 static void default_logger(int level, const char *fmt, ...)
 {
    if (level <= _LOADER_WARNING) {
@@ -107,6 +112,13 @@ static char *loader_get_kernel_driver_name(int fd)
 #else
    return NULL;
 #endif
+}
+
+bool
+is_kernel_i915(int fd)
+{
+   char *kernel_driver = loader_get_kernel_driver_name(fd);
+   return kernel_driver && strcmp(kernel_driver, "i915") == 0;
 }
 
 #if defined(HAVE_LIBDRM)

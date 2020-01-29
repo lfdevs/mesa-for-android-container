@@ -94,6 +94,48 @@ static const struct hw_type {
 } gen4_hw_type[] = {
    [0 ... BRW_REGISTER_TYPE_LAST] = {     INVALID, INVALID             },
 
+   [BRW_REGISTER_TYPE_F]  = { BRW_HW_REG_TYPE_F,   BRW_HW_IMM_TYPE_F   },
+   [BRW_REGISTER_TYPE_VF] = { INVALID,             BRW_HW_IMM_TYPE_VF  },
+
+   [BRW_REGISTER_TYPE_D]  = { BRW_HW_REG_TYPE_D,   BRW_HW_IMM_TYPE_D   },
+   [BRW_REGISTER_TYPE_UD] = { BRW_HW_REG_TYPE_UD,  BRW_HW_IMM_TYPE_UD  },
+   [BRW_REGISTER_TYPE_W]  = { BRW_HW_REG_TYPE_W,   BRW_HW_IMM_TYPE_W   },
+   [BRW_REGISTER_TYPE_UW] = { BRW_HW_REG_TYPE_UW,  BRW_HW_IMM_TYPE_UW  },
+   [BRW_REGISTER_TYPE_B]  = { BRW_HW_REG_TYPE_B,   INVALID             },
+   [BRW_REGISTER_TYPE_UB] = { BRW_HW_REG_TYPE_UB,  INVALID             },
+   [BRW_REGISTER_TYPE_V]  = { INVALID,             BRW_HW_IMM_TYPE_V   },
+}, gen6_hw_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = {     INVALID, INVALID             },
+
+   [BRW_REGISTER_TYPE_F]  = { BRW_HW_REG_TYPE_F,   BRW_HW_IMM_TYPE_F   },
+   [BRW_REGISTER_TYPE_VF] = { INVALID,             BRW_HW_IMM_TYPE_VF  },
+
+   [BRW_REGISTER_TYPE_D]  = { BRW_HW_REG_TYPE_D,   BRW_HW_IMM_TYPE_D   },
+   [BRW_REGISTER_TYPE_UD] = { BRW_HW_REG_TYPE_UD,  BRW_HW_IMM_TYPE_UD  },
+   [BRW_REGISTER_TYPE_W]  = { BRW_HW_REG_TYPE_W,   BRW_HW_IMM_TYPE_W   },
+   [BRW_REGISTER_TYPE_UW] = { BRW_HW_REG_TYPE_UW,  BRW_HW_IMM_TYPE_UW  },
+   [BRW_REGISTER_TYPE_B]  = { BRW_HW_REG_TYPE_B,   INVALID             },
+   [BRW_REGISTER_TYPE_UB] = { BRW_HW_REG_TYPE_UB,  INVALID             },
+   [BRW_REGISTER_TYPE_V]  = { INVALID,             BRW_HW_IMM_TYPE_V   },
+   [BRW_REGISTER_TYPE_UV] = { INVALID,             BRW_HW_IMM_TYPE_UV  },
+}, gen7_hw_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = {     INVALID, INVALID             },
+
+   [BRW_REGISTER_TYPE_DF] = { GEN7_HW_REG_TYPE_DF, INVALID             },
+   [BRW_REGISTER_TYPE_F]  = { BRW_HW_REG_TYPE_F,   BRW_HW_IMM_TYPE_F   },
+   [BRW_REGISTER_TYPE_VF] = { INVALID,             BRW_HW_IMM_TYPE_VF  },
+
+   [BRW_REGISTER_TYPE_D]  = { BRW_HW_REG_TYPE_D,   BRW_HW_IMM_TYPE_D   },
+   [BRW_REGISTER_TYPE_UD] = { BRW_HW_REG_TYPE_UD,  BRW_HW_IMM_TYPE_UD  },
+   [BRW_REGISTER_TYPE_W]  = { BRW_HW_REG_TYPE_W,   BRW_HW_IMM_TYPE_W   },
+   [BRW_REGISTER_TYPE_UW] = { BRW_HW_REG_TYPE_UW,  BRW_HW_IMM_TYPE_UW  },
+   [BRW_REGISTER_TYPE_B]  = { BRW_HW_REG_TYPE_B,   INVALID             },
+   [BRW_REGISTER_TYPE_UB] = { BRW_HW_REG_TYPE_UB,  INVALID             },
+   [BRW_REGISTER_TYPE_V]  = { INVALID,             BRW_HW_IMM_TYPE_V   },
+   [BRW_REGISTER_TYPE_UV] = { INVALID,             BRW_HW_IMM_TYPE_UV  },
+}, gen8_hw_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = {     INVALID, INVALID             },
+
    [BRW_REGISTER_TYPE_DF] = { GEN7_HW_REG_TYPE_DF, GEN8_HW_IMM_TYPE_DF },
    [BRW_REGISTER_TYPE_F]  = { BRW_HW_REG_TYPE_F,   BRW_HW_IMM_TYPE_F   },
    [BRW_REGISTER_TYPE_HF] = { GEN8_HW_REG_TYPE_HF, GEN8_HW_IMM_TYPE_HF },
@@ -110,14 +152,13 @@ static const struct hw_type {
    [BRW_REGISTER_TYPE_V]  = { INVALID,             BRW_HW_IMM_TYPE_V   },
    [BRW_REGISTER_TYPE_UV] = { INVALID,             BRW_HW_IMM_TYPE_UV  },
 }, gen11_hw_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = {      INVALID, INVALID              },
+
    [BRW_REGISTER_TYPE_NF] = { GEN11_HW_REG_TYPE_NF, INVALID              },
-   [BRW_REGISTER_TYPE_DF] = { GEN11_HW_REG_TYPE_DF, GEN11_HW_IMM_TYPE_DF },
    [BRW_REGISTER_TYPE_F]  = { GEN11_HW_REG_TYPE_F,  GEN11_HW_IMM_TYPE_F  },
    [BRW_REGISTER_TYPE_HF] = { GEN11_HW_REG_TYPE_HF, GEN11_HW_IMM_TYPE_HF },
    [BRW_REGISTER_TYPE_VF] = { INVALID,              GEN11_HW_IMM_TYPE_VF },
 
-   [BRW_REGISTER_TYPE_Q]  = { GEN11_HW_REG_TYPE_Q,  GEN11_HW_IMM_TYPE_Q  },
-   [BRW_REGISTER_TYPE_UQ] = { GEN11_HW_REG_TYPE_UQ, GEN11_HW_IMM_TYPE_UQ },
    [BRW_REGISTER_TYPE_D]  = { GEN11_HW_REG_TYPE_D,  GEN11_HW_IMM_TYPE_D  },
    [BRW_REGISTER_TYPE_UD] = { GEN11_HW_REG_TYPE_UD, GEN11_HW_IMM_TYPE_UD },
    [BRW_REGISTER_TYPE_W]  = { GEN11_HW_REG_TYPE_W,  GEN11_HW_IMM_TYPE_W  },
@@ -127,14 +168,12 @@ static const struct hw_type {
    [BRW_REGISTER_TYPE_V]  = { INVALID,              GEN11_HW_IMM_TYPE_V  },
    [BRW_REGISTER_TYPE_UV] = { INVALID,              GEN11_HW_IMM_TYPE_UV },
 }, gen12_hw_type[] = {
-   [BRW_REGISTER_TYPE_NF] = { INVALID,                    INVALID                    },
-   [BRW_REGISTER_TYPE_DF] = { GEN12_HW_REG_TYPE_FLOAT(3), GEN12_HW_REG_TYPE_FLOAT(3) },
+   [0 ... BRW_REGISTER_TYPE_LAST] = {            INVALID, INVALID                    },
+
    [BRW_REGISTER_TYPE_F]  = { GEN12_HW_REG_TYPE_FLOAT(2), GEN12_HW_REG_TYPE_FLOAT(2) },
    [BRW_REGISTER_TYPE_HF] = { GEN12_HW_REG_TYPE_FLOAT(1), GEN12_HW_REG_TYPE_FLOAT(1) },
    [BRW_REGISTER_TYPE_VF] = { INVALID,                    GEN12_HW_REG_TYPE_FLOAT(0) },
 
-   [BRW_REGISTER_TYPE_Q]  = { GEN12_HW_REG_TYPE_SINT(3),  GEN12_HW_REG_TYPE_SINT(3)  },
-   [BRW_REGISTER_TYPE_UQ] = { GEN12_HW_REG_TYPE_UINT(3),  GEN12_HW_REG_TYPE_UINT(3)  },
    [BRW_REGISTER_TYPE_D]  = { GEN12_HW_REG_TYPE_SINT(2),  GEN12_HW_REG_TYPE_SINT(2)  },
    [BRW_REGISTER_TYPE_UD] = { GEN12_HW_REG_TYPE_UINT(2),  GEN12_HW_REG_TYPE_UINT(2)  },
    [BRW_REGISTER_TYPE_W]  = { GEN12_HW_REG_TYPE_SINT(1),  GEN12_HW_REG_TYPE_SINT(1)  },
@@ -181,7 +220,18 @@ enum hw_3src_reg_type {
 static const struct hw_3src_type {
    enum hw_3src_reg_type reg_type;
    enum gen10_align1_3src_exec_type exec_type;
-} gen7_hw_3src_type[] = {
+} gen6_hw_3src_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
+
+   [BRW_REGISTER_TYPE_F]  = { GEN7_3SRC_TYPE_F  },
+}, gen7_hw_3src_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
+
+   [BRW_REGISTER_TYPE_F]  = { GEN7_3SRC_TYPE_F  },
+   [BRW_REGISTER_TYPE_D]  = { GEN7_3SRC_TYPE_D  },
+   [BRW_REGISTER_TYPE_UD] = { GEN7_3SRC_TYPE_UD },
+   [BRW_REGISTER_TYPE_DF] = { GEN7_3SRC_TYPE_DF },
+}, gen8_hw_3src_type[] = {
    [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
 
    [BRW_REGISTER_TYPE_F]  = { GEN7_3SRC_TYPE_F  },
@@ -193,8 +243,20 @@ static const struct hw_3src_type {
 #define E(x) BRW_ALIGN1_3SRC_EXEC_TYPE_##x
    [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
 
-   [BRW_REGISTER_TYPE_NF] = { GEN11_ALIGN1_3SRC_REG_TYPE_NF, E(FLOAT) },
    [BRW_REGISTER_TYPE_DF] = { GEN10_ALIGN1_3SRC_REG_TYPE_DF, E(FLOAT) },
+   [BRW_REGISTER_TYPE_F]  = { GEN10_ALIGN1_3SRC_REG_TYPE_F,  E(FLOAT) },
+   [BRW_REGISTER_TYPE_HF] = { GEN10_ALIGN1_3SRC_REG_TYPE_HF, E(FLOAT) },
+
+   [BRW_REGISTER_TYPE_D]  = { GEN10_ALIGN1_3SRC_REG_TYPE_D,  E(INT)   },
+   [BRW_REGISTER_TYPE_UD] = { GEN10_ALIGN1_3SRC_REG_TYPE_UD, E(INT)   },
+   [BRW_REGISTER_TYPE_W]  = { GEN10_ALIGN1_3SRC_REG_TYPE_W,  E(INT)   },
+   [BRW_REGISTER_TYPE_UW] = { GEN10_ALIGN1_3SRC_REG_TYPE_UW, E(INT)   },
+   [BRW_REGISTER_TYPE_B]  = { GEN10_ALIGN1_3SRC_REG_TYPE_B,  E(INT)   },
+   [BRW_REGISTER_TYPE_UB] = { GEN10_ALIGN1_3SRC_REG_TYPE_UB, E(INT)   },
+}, gen11_hw_3src_type[] = {
+   [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
+
+   [BRW_REGISTER_TYPE_NF] = { GEN11_ALIGN1_3SRC_REG_TYPE_NF, E(FLOAT) },
    [BRW_REGISTER_TYPE_F]  = { GEN10_ALIGN1_3SRC_REG_TYPE_F,  E(FLOAT) },
    [BRW_REGISTER_TYPE_HF] = { GEN10_ALIGN1_3SRC_REG_TYPE_HF, E(FLOAT) },
 
@@ -207,7 +269,6 @@ static const struct hw_3src_type {
 }, gen12_hw_3src_type[] = {
    [0 ... BRW_REGISTER_TYPE_LAST] = { INVALID },
 
-   [BRW_REGISTER_TYPE_DF] = { GEN12_HW_REG_TYPE_UINT(3),     E(FLOAT), },
    [BRW_REGISTER_TYPE_F]  = { GEN12_HW_REG_TYPE_UINT(2),     E(FLOAT), },
    [BRW_REGISTER_TYPE_HF] = { GEN12_HW_REG_TYPE_UINT(1),     E(FLOAT), },
 
@@ -238,13 +299,19 @@ brw_reg_type_to_hw_type(const struct gen_device_info *devinfo,
    } else if (devinfo->gen >= 11) {
       assert(type < ARRAY_SIZE(gen11_hw_type));
       table = gen11_hw_type;
+   } else if (devinfo->gen >= 8) {
+      assert(type < ARRAY_SIZE(gen8_hw_type));
+      table = gen8_hw_type;
+   } else if (devinfo->gen >= 7) {
+      assert(type < ARRAY_SIZE(gen7_hw_type));
+      table = gen7_hw_type;
+   } else if (devinfo->gen >= 6) {
+      assert(type < ARRAY_SIZE(gen6_hw_type));
+      table = gen6_hw_type;
    } else {
       assert(type < ARRAY_SIZE(gen4_hw_type));
       table = gen4_hw_type;
    }
-
-   assert(devinfo->has_64bit_types || brw_reg_type_to_size(type) < 8 ||
-          type == BRW_REGISTER_TYPE_NF);
 
    if (file == BRW_IMMEDIATE_VALUE) {
       assert(table[type].imm_type != (enum hw_imm_type)INVALID);
@@ -270,6 +337,12 @@ brw_hw_type_to_reg_type(const struct gen_device_info *devinfo,
       table = gen12_hw_type;
    } else if (devinfo->gen >= 11) {
       table = gen11_hw_type;
+   } else if (devinfo->gen >= 8) {
+      table = gen8_hw_type;
+   } else if (devinfo->gen >= 7) {
+      table = gen7_hw_type;
+   } else if (devinfo->gen >= 6) {
+      table = gen6_hw_type;
    } else {
       table = gen4_hw_type;
    }
@@ -287,7 +360,7 @@ brw_hw_type_to_reg_type(const struct gen_device_info *devinfo,
          }
       }
    }
-   return (enum brw_reg_type)-1;
+   return INVALID_REG_TYPE;
 }
 
 /**
@@ -298,10 +371,21 @@ unsigned
 brw_reg_type_to_a16_hw_3src_type(const struct gen_device_info *devinfo,
                                  enum brw_reg_type type)
 {
-   assert(type < ARRAY_SIZE(gen7_hw_3src_type));
-   assert(devinfo->gen >= 8 || type != BRW_REGISTER_TYPE_HF);
-   assert(gen7_hw_3src_type[type].reg_type != (enum hw_3src_reg_type)INVALID);
-   return gen7_hw_3src_type[type].reg_type;
+   const struct hw_3src_type *table;
+
+   if (devinfo->gen >= 8) {
+      assert(type < ARRAY_SIZE(gen8_hw_3src_type));
+      table = gen8_hw_3src_type;
+   } else if (devinfo->gen >= 7) {
+      assert(type < ARRAY_SIZE(gen7_hw_3src_type));
+      table = gen7_hw_3src_type;
+   } else {
+      assert(type < ARRAY_SIZE(gen6_hw_3src_type));
+      table = gen6_hw_3src_type;
+   }
+
+   assert(table[type].reg_type != (enum hw_3src_reg_type)INVALID);
+   return table[type].reg_type;
 }
 
 /**
@@ -314,11 +398,12 @@ brw_reg_type_to_a1_hw_3src_type(const struct gen_device_info *devinfo,
 {
    if (devinfo->gen >= 12) {
       assert(type < ARRAY_SIZE(gen12_hw_3src_type));
-      assert(gen12_hw_3src_type[type].reg_type != (enum hw_3src_reg_type)INVALID);
       return gen12_hw_3src_type[type].reg_type;
+   } else if (devinfo->gen >= 11) {
+      assert(type < ARRAY_SIZE(gen11_hw_3src_type));
+      return gen11_hw_3src_type[type].reg_type;
    } else {
       assert(type < ARRAY_SIZE(gen10_hw_3src_align1_type));
-      assert(gen10_hw_3src_align1_type[type].reg_type != (enum hw_3src_reg_type)INVALID);
       return gen10_hw_3src_align1_type[type].reg_type;
    }
 }
@@ -331,13 +416,22 @@ enum brw_reg_type
 brw_a16_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
                                  unsigned hw_type)
 {
-   assert(devinfo->gen >= 8 || hw_type != GEN8_3SRC_TYPE_HF);
+   const struct hw_3src_type *table = NULL;
+
+   if (devinfo->gen >= 8) {
+      table = gen8_hw_3src_type;
+   } else if (devinfo->gen >= 7) {
+      table = gen7_hw_3src_type;
+   } else if (devinfo->gen >= 6) {
+      table = gen6_hw_3src_type;
+   }
+
    for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
-      if (gen7_hw_3src_type[i].reg_type == hw_type) {
+      if (table[i].reg_type == hw_type) {
          return i;
       }
    }
-   return (enum brw_reg_type)-1;
+   return INVALID_REG_TYPE;
 }
 
 /**
@@ -349,6 +443,7 @@ brw_a1_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
                                 unsigned hw_type, unsigned exec_type)
 {
    const struct hw_3src_type *table = (devinfo->gen >= 12 ? gen12_hw_3src_type :
+                                       devinfo->gen >= 11 ? gen11_hw_3src_type :
                                        gen10_hw_3src_align1_type);
 
    for (enum brw_reg_type i = 0; i <= BRW_REGISTER_TYPE_LAST; i++) {
@@ -357,7 +452,7 @@ brw_a1_hw_3src_type_to_reg_type(const struct gen_device_info *devinfo,
          return i;
       }
    }
-   return (enum brw_reg_type)-1;
+   return INVALID_REG_TYPE;
 }
 
 /**
@@ -384,6 +479,9 @@ brw_reg_type_to_size(enum brw_reg_type type)
       [BRW_REGISTER_TYPE_V]  = 2,
       [BRW_REGISTER_TYPE_UV] = 2,
    };
+   if (type >= ARRAY_SIZE(type_size))
+      return -1;
+
    return type_size[type];
 }
 
@@ -414,6 +512,9 @@ brw_reg_type_to_letters(enum brw_reg_type type)
       [BRW_REGISTER_TYPE_V]  = "V",
       [BRW_REGISTER_TYPE_UV] = "UV",
    };
+   if (type >= ARRAY_SIZE(letters))
+      return "INVALID";
+
    assert(type < ARRAY_SIZE(letters));
    return letters[type];
 }

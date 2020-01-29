@@ -43,6 +43,7 @@ enum panfrost_memory_layout {
 struct panfrost_slice {
         unsigned offset;
         unsigned stride;
+        unsigned size0;
 
         /* If there is a header preceding each slice, how big is
          * that header?  Used for AFBC */
@@ -82,6 +83,8 @@ struct panfrost_resource {
 
         /* Is transaciton elimination enabled? */
         bool checksummed;
+
+        enum pipe_format internal_format;
 };
 
 static inline struct panfrost_resource *

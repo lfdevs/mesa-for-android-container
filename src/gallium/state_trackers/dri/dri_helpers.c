@@ -97,7 +97,7 @@ dri2_create_fence(__DRIcontext *_ctx)
    if (!fence)
       return NULL;
 
-   stapi->flush(stapi, 0, &fence->pipe_fence);
+   stapi->flush(stapi, 0, &fence->pipe_fence, NULL, NULL);
 
    if (!fence->pipe_fence) {
       FREE(fence);
@@ -117,7 +117,7 @@ dri2_create_fence_fd(__DRIcontext *_ctx, int fd)
 
    if (fd == -1) {
       /* exporting driver created fence, flush: */
-      stapi->flush(stapi, ST_FLUSH_FENCE_FD, &fence->pipe_fence);
+      stapi->flush(stapi, ST_FLUSH_FENCE_FD, &fence->pipe_fence, NULL, NULL);
    } else {
       /* importing a foreign fence fd: */
       ctx->create_fence_fd(ctx, &fence->pipe_fence, fd, PIPE_FD_TYPE_NATIVE_SYNC);
@@ -567,6 +567,21 @@ dri2_get_pipe_format_for_dri_format(int format)
 }
 
 boolean
+dri2_yuv_dma_buf_supported(struct dri_screen *screen,
+                           const struct dri2_format_mapping *map)
+{
+   struct pipe_screen *pscreen = screen->base.screen;
+
+   for (unsigned i = 0; i < map->nplanes; i++) {
+      if (!pscreen->is_format_supported(pscreen,
+            dri2_get_pipe_format_for_dri_format(map->planes[i].dri_format),
+            screen->target, 0, 0, PIPE_BIND_SAMPLER_VIEW))
+         return false;
+   }
+   return true;
+}
+
+boolean
 dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
                            int *count)
 {
@@ -589,7 +604,8 @@ dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
                                        PIPE_BIND_RENDER_TARGET) ||
           pscreen->is_format_supported(pscreen, map->pipe_format,
                                        screen->target, 0, 0,
-                                       PIPE_BIND_SAMPLER_VIEW)) {
+                                       PIPE_BIND_SAMPLER_VIEW) ||
+          dri2_yuv_dma_buf_supported(screen, map)) {
          if (j < max)
             formats[j] = map->dri_fourcc;
          j++;

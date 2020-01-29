@@ -28,7 +28,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "freedreno_draw.h"
 #include "freedreno_state.h"
@@ -61,7 +61,7 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 		enum a3xx_color_swap swap = WZYX;
 		bool srgb = false;
 		struct fd_resource *rsc = NULL;
-		struct fd_resource_slice *slice = NULL;
+		struct fdl_slice *slice = NULL;
 		uint32_t stride = 0;
 		uint32_t base = 0;
 		uint32_t offset = 0;
@@ -97,13 +97,13 @@ emit_mrt(struct fd_ringbuffer *ring, unsigned nr_bufs,
 					psurf->u.tex.first_layer);
 
 			if (bin_w) {
-				stride = bin_w * rsc->cpp;
+				stride = bin_w * rsc->layout.cpp;
 
 				if (bases) {
 					base = bases[i];
 				}
 			} else {
-				stride = slice->pitch * rsc->cpp;
+				stride = slice->pitch * rsc->layout.cpp;
 			}
 		} else if ((i < nr_bufs) && bases) {
 			base = bases[i];
@@ -152,7 +152,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct fd_resource *rsc = fd_resource(psurf->texture);
 	enum pipe_format pformat = psurf->format;
-	struct fd_resource_slice *slice;
+	struct fdl_slice *slice;
 	uint32_t offset;
 
 	if (!rsc->valid)
@@ -164,7 +164,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 		pformat = rsc->base.format;
 	}
 
-	slice = &rsc->slices[psurf->u.tex.level];
+	slice = fd_resource_slice(rsc, psurf->u.tex.level);
 	offset = fd_resource_offset(rsc, psurf->u.tex.level,
 			psurf->u.tex.first_layer);
 
@@ -175,7 +175,7 @@ emit_gmem2mem_surf(struct fd_batch *batch, bool stencil,
 			A4XX_RB_COPY_CONTROL_MODE(RB_COPY_RESOLVE) |
 			A4XX_RB_COPY_CONTROL_GMEM_BASE(base));
 	OUT_RELOCW(ring, rsc->bo, offset, 0, 0);   /* RB_COPY_DEST_BASE */
-	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->cpp));
+	OUT_RING(ring, A4XX_RB_COPY_DEST_PITCH_PITCH(slice->pitch * rsc->layout.cpp));
 	OUT_RING(ring, A4XX_RB_COPY_DEST_INFO_TILE(TILE4_LINEAR) |
 			A4XX_RB_COPY_DEST_INFO_FORMAT(fd4_pipe2color(pformat)) |
 			A4XX_RB_COPY_DEST_INFO_COMPONENT_ENABLE(0xf) |
@@ -715,7 +715,7 @@ fd4_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 
 	if (pfb->zsbuf) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		uint32_t cpp = rsc->cpp;
+		uint32_t cpp = rsc->layout.cpp;
 
 		OUT_PKT0(ring, REG_A4XX_RB_DEPTH_INFO, 3);
 		OUT_RING(ring, A4XX_RB_DEPTH_INFO_DEPTH_BASE(gmem->zsbuf_base[0]) |
@@ -727,7 +727,7 @@ fd4_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 		if (rsc->stencil) {
 			OUT_RING(ring, A4XX_RB_STENCIL_INFO_SEPARATE_STENCIL |
 					A4XX_RB_STENCIL_INFO_STENCIL_BASE(gmem->zsbuf_base[1]));
-			OUT_RING(ring, A4XX_RB_STENCIL_PITCH(rsc->stencil->cpp * gmem->bin_w));
+			OUT_RING(ring, A4XX_RB_STENCIL_PITCH(rsc->stencil->layout.cpp * gmem->bin_w));
 		} else {
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x00000000);

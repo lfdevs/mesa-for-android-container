@@ -26,13 +26,11 @@
 #include "compiler/brw_compiler.h"
 
 bool
-anv_nir_add_base_work_group_id(nir_shader *shader,
-                               struct brw_cs_prog_data *prog_data)
+anv_nir_add_base_work_group_id(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_COMPUTE);
 
    nir_builder b;
-   int base_id_offset = -1;
    bool progress = false;
    nir_foreach_function(function, shader) {
       if (!function->impl)
@@ -51,27 +49,14 @@ anv_nir_add_base_work_group_id(nir_shader *shader,
 
             b.cursor = nir_after_instr(&load_id->instr);
 
-            if (base_id_offset < 0) {
-               /* If we don't have a set of BASE_WORK_GROUP_ID params,
-                * add them.
-                */
-               assert(shader->num_uniforms == prog_data->base.nr_params * 4);
-               uint32_t *param =
-                  brw_stage_prog_data_add_params(&prog_data->base, 3);
-               param[0] = BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_X;
-               param[1] = BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_Y;
-               param[2] = BRW_PARAM_BUILTIN_BASE_WORK_GROUP_ID_Z;
-
-               base_id_offset = shader->num_uniforms;
-               shader->num_uniforms += 12;
-            }
-
             nir_intrinsic_instr *load_base =
-               nir_intrinsic_instr_create(shader, nir_intrinsic_load_uniform);
+               nir_intrinsic_instr_create(shader, nir_intrinsic_load_push_constant);
             load_base->num_components = 3;
             load_base->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
             nir_ssa_dest_init(&load_base->instr, &load_base->dest, 3, 32, NULL);
-            nir_intrinsic_set_base(load_base, base_id_offset);
+            nir_intrinsic_set_base(load_base,
+                                   offsetof(struct anv_push_constants,
+                                            cs.base_work_group_id));
             nir_intrinsic_set_range(load_base, 3 * sizeof(uint32_t));
             nir_builder_instr_insert(&b, &load_base->instr);
 

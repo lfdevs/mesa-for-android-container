@@ -26,7 +26,7 @@
 #include "util/u_inlines.h"
 #include "pipe/p_defines.h"
 #include "util/u_math.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "svga_context.h"
 #include "svga_state.h"

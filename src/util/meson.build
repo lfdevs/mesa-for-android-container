@@ -20,6 +20,7 @@
 
 inc_util = include_directories('.')
 
+subdir('format')
 subdir('xmlpool')
 
 files_mesa_util = files(
@@ -44,6 +45,7 @@ files_mesa_util = files(
   'double.h',
   'fast_idiv_by_const.c',
   'fast_idiv_by_const.h',
+  'fnv1a.h',
   'format_r11g11b10f.h',
   'format_rgb9e5.h',
   'format_srgb.h',
@@ -61,6 +63,8 @@ files_mesa_util = files(
   'os_file.c',
   'os_misc.c',
   'os_misc.h',
+  'os_socket.c',
+  'os_socket.h',
   'u_process.c',
   'u_process.h',
   'sha1/sha1.c',
@@ -84,6 +88,8 @@ files_mesa_util = files(
   'slab.h',
   'softfloat.c',
   'softfloat.h',
+  'sparse_array.c',
+  'sparse_array.h',
   'string_buffer.c',
   'string_buffer.h',
   'strndup.h',
@@ -103,12 +109,15 @@ files_mesa_util = files(
   'u_vector.h',
   'u_math.c',
   'u_math.h',
+  'u_mm.c',
+  'u_mm.h',
   'u_debug.c',
   'u_debug.h',
   'u_cpu_detect.c',
   'u_cpu_detect.h',
   'vma.c',
   'vma.h',
+  'xxhash.h',
 )
 
 files_drirc = files('00-mesa-defaults.conf')
@@ -147,6 +156,7 @@ deps_for_libmesa_util = [
   dep_atomic,
   dep_m,
   dep_valgrind,
+  dep_zstd,
 ]
 
 if with_platform_android
@@ -158,6 +168,7 @@ _libmesa_util = static_library(
   [files_mesa_util, format_srgb],
   include_directories : inc_common,
   dependencies : deps_for_libmesa_util,
+  link_with: libmesa_format,
   c_args : [c_msvc_compat_args, c_vis_args],
   build_by_default : false
 )
@@ -186,10 +197,8 @@ _libxmlconfig = static_library(
 )
 
 idep_xmlconfig = declare_dependency(
-  sources : xmlpool_options_h,
-  include_directories : inc_util,
+  dependencies : [idep_xmlconfig_headers, dep_expat],
   link_with : _libxmlconfig,
-  dependencies : dep_expat,
 )
 
 if with_tests
@@ -279,4 +288,7 @@ if with_tests
   endif
   subdir('tests/vma')
   subdir('tests/set')
+  subdir('tests/sparse_array')
+  subdir('tests/format')
+  subdir('tests/vector')
 endif

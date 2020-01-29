@@ -318,6 +318,7 @@ type_sz(unsigned type)
    case BRW_REGISTER_TYPE_UQ:
    case BRW_REGISTER_TYPE_Q:
    case BRW_REGISTER_TYPE_DF:
+   case BRW_REGISTER_TYPE_NF:
       return 8;
    case BRW_REGISTER_TYPE_UD:
    case BRW_REGISTER_TYPE_D:

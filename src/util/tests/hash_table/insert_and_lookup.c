@@ -43,7 +43,7 @@ main(int argc, char **argv)
    (void) argc;
    (void) argv;
 
-   ht = _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+   ht = _mesa_hash_table_create(NULL, _mesa_hash_string,
                                 _mesa_key_string_equal);
 
    _mesa_hash_table_insert(ht, str1, NULL);

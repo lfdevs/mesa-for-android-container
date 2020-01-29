@@ -106,6 +106,7 @@ static bool ppir_do_one_node_to_instr(ppir_block *block, ppir_node *node, ppir_n
       switch (node->op) {
       case ppir_op_load_varying:
       case ppir_op_load_coords:
+      case ppir_op_load_coords_reg:
       case ppir_op_load_fragcoord:
       case ppir_op_load_pointcoord:
       case ppir_op_load_frontface:

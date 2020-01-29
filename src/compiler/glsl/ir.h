@@ -905,7 +905,7 @@ public:
        *
        * For array types, this represents the binding point for the first element.
        */
-      int16_t binding;
+      uint16_t binding;
 
       /**
        * Storage location of the base of this variable

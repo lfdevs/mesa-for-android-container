@@ -116,65 +116,6 @@ lower_uniforms_to_ubo(nir_shader *shader)
    return progress;
 }
 
-static void
-lower_pos_write(nir_builder *b, struct nir_instr *instr)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   struct nir_src *src;
-   if (intr->intrinsic == nir_intrinsic_store_output) {
-      if (nir_intrinsic_base(intr) != VARYING_SLOT_POS)
-         return;
-      src = &intr->src[0];
-   } else if (intr->intrinsic == nir_intrinsic_store_deref) {
-      nir_variable *var = nir_intrinsic_get_var(intr, 0);
-      if (var->data.mode != nir_var_shader_out ||
-          var->data.location != VARYING_SLOT_POS)
-         return;
-      src = &intr->src[1];
-   } else
-      return;
-
-   b->cursor = nir_before_instr(&intr->instr);
-
-   nir_ssa_def *pos = nir_ssa_for_src(b, *src, 4);
-   nir_ssa_def *def = nir_vec4(b,
-                               nir_channel(b, pos, 0),
-                               nir_channel(b, pos, 1),
-                               nir_fmul(b,
-                                        nir_fadd(b,
-                                                 nir_channel(b, pos, 2),
-                                                 nir_channel(b, pos, 3)),
-                                        nir_imm_float(b, 0.5)),
-                               nir_channel(b, pos, 3));
-   nir_instr_rewrite_src(&intr->instr, src, nir_src_for_ssa(def));
-}
-
-static void
-lower_clip_halfz(nir_shader *s)
-{
-   if (s->info.stage != MESA_SHADER_VERTEX)
-      return;
-
-   nir_foreach_function(function, s) {
-      if (function->impl) {
-         nir_builder b;
-         nir_builder_init(&b, function->impl);
-
-         nir_foreach_block(block, function->impl) {
-            nir_foreach_instr_safe(instr, block) {
-               lower_pos_write(&b, instr);
-            }
-         }
-
-         nir_metadata_preserve(function->impl, nir_metadata_block_index |
-                                               nir_metadata_dominance);
-      }
-   }
-}
-
 static bool
 lower_discard_if_instr(nir_intrinsic_instr *instr, nir_builder *b)
 {
@@ -298,7 +239,7 @@ zink_compile_nir(struct zink_screen *screen, struct nir_shader *nir)
    struct zink_shader *ret = CALLOC_STRUCT(zink_shader);
 
    NIR_PASS_V(nir, lower_uniforms_to_ubo);
-   NIR_PASS_V(nir, lower_clip_halfz);
+   NIR_PASS_V(nir, nir_lower_clip_halfz);
    NIR_PASS_V(nir, nir_lower_regs_to_ssa);
    optimize_nir(nir);
    NIR_PASS_V(nir, nir_remove_dead_variables, nir_var_function_temp);
@@ -315,18 +256,30 @@ zink_compile_nir(struct zink_screen *screen, struct nir_shader *nir)
 
    ret->num_bindings = 0;
    nir_foreach_variable(var, &nir->uniforms) {
-      if (glsl_type_is_sampler(var->type)) {
-         ret->bindings[ret->num_bindings].index = var->data.driver_location;
-         var->data.binding = zink_binding(stage, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, var->data.driver_location);
-         ret->bindings[ret->num_bindings].binding = var->data.binding;
-         ret->bindings[ret->num_bindings].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-         ret->num_bindings++;
-      } else if (var->interface_type) {
+      if (var->data.mode == nir_var_mem_ubo) {
          ret->bindings[ret->num_bindings].index = var->data.binding;
          var->data.binding = zink_binding(stage, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, var->data.binding);
          ret->bindings[ret->num_bindings].binding = var->data.binding;
          ret->bindings[ret->num_bindings].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
          ret->num_bindings++;
+      } else {
+         assert(var->data.mode == nir_var_uniform);
+         if (glsl_type_is_array(var->type) &&
+             glsl_type_is_sampler(glsl_get_array_element(var->type))) {
+            for (int i = 0; i < glsl_get_length(var->type); ++i) {
+               ret->bindings[ret->num_bindings].index = var->data.driver_location + i;
+               var->data.binding = zink_binding(stage, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, var->data.driver_location + i);
+               ret->bindings[ret->num_bindings].binding = var->data.binding;
+               ret->bindings[ret->num_bindings].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+               ret->num_bindings++;
+            }
+         } else if (glsl_type_is_sampler(var->type)) {
+            ret->bindings[ret->num_bindings].index = var->data.driver_location;
+            var->data.binding = zink_binding(stage, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, var->data.driver_location);
+            ret->bindings[ret->num_bindings].binding = var->data.binding;
+            ret->bindings[ret->num_bindings].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            ret->num_bindings++;
+         }
       }
    }
 

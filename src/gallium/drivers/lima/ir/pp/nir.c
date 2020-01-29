@@ -42,8 +42,6 @@ static void *ppir_node_create_ssa(ppir_block *block, ppir_op op, nir_ssa_def *ss
    ppir_dest *dest = ppir_node_get_dest(node);
    dest->type = ppir_target_ssa;
    dest->ssa.num_components = ssa->num_components;
-   dest->ssa.live_in = INT_MAX;
-   dest->ssa.live_out = 0;
    dest->write_mask = u_bit_consecutive(0, ssa->num_components);
 
    if (node->type == ppir_node_type_load ||
@@ -106,11 +104,22 @@ static void ppir_node_add_src(ppir_compiler *comp, ppir_node *node,
       case ppir_op_const:
          child = ppir_node_clone(node->block, child);
          break;
-      case ppir_op_load_varying:
-         if ((node->op != ppir_op_load_texture)) {
+      case ppir_op_load_varying: {
+         bool is_load_coords = false;
+         if (node->op == ppir_op_load_texture) {
+            nir_tex_src *nts = (nir_tex_src *)ns;
+            if (nts->src_type == nir_tex_src_coord)
+               is_load_coords = true;
+         }
+
+         if (!is_load_coords) {
             /* Clone varying loads for each block */
             if (child->block != node->block) {
-               child = ppir_node_clone(node->block, child);
+               ppir_node *new = ppir_node_clone(node->block, child);
+               /* If we clone it for every block and there is no user of
+                * the original load left, delete the original one. */
+               ppir_delete_if_orphan(node->block, child);
+               child = new;
                comp->var_nodes[ns->ssa->index] = child;
             }
             break;
@@ -118,9 +127,11 @@ static void ppir_node_add_src(ppir_compiler *comp, ppir_node *node,
          /* At least one successor is load_texture, promote it to load_coords
           * to ensure that is has exactly one successor */
          child->op = ppir_op_load_coords;
+      }
          /* Fallthrough */
       case ppir_op_load_uniform:
       case ppir_op_load_coords:
+      case ppir_op_load_coords_reg:
          /* Clone uniform and texture coord loads for each block.
           * Also ensure that each load has a single successor.
           * Let's do a fetch each time and hope for a cache hit instead
@@ -145,12 +156,12 @@ static void ppir_node_add_src(ppir_compiler *comp, ppir_node *node,
          child = comp->var_nodes[(reg->index << 2) + comp->reg_base + swizzle];
          /* Reg is read before it was written, create a dummy node for it */
          if (!child) {
-            child = ppir_node_create_reg(node->block, ppir_op_undef, reg,
+            child = ppir_node_create_reg(node->block, ppir_op_dummy, reg,
                u_bit_consecutive(0, 4));
             comp->var_nodes[(reg->index << 2) + comp->reg_base + swizzle] = child;
          }
          /* Don't add dummies or recursive deps for ops like r1 = r1 + ssa1 */
-         if (child && node != child && child->op != ppir_op_undef)
+         if (child && node != child && child->op != ppir_op_dummy)
             ppir_node_add_dep(node, child, ppir_dep_src);
       }
    }
@@ -376,8 +387,6 @@ static ppir_node *ppir_emit_intrinsic(ppir_block *block, nir_instr *ni)
       ppir_dest *dest = ppir_node_get_dest(&alu_node->node);
       dest->type = ppir_target_ssa;
       dest->ssa.num_components = instr->num_components;
-      dest->ssa.live_in = INT_MAX;
-      dest->ssa.live_out = 0;
       dest->ssa.index = 0;
       dest->write_mask = u_bit_consecutive(0, instr->num_components);
 
@@ -431,9 +440,6 @@ static ppir_node *ppir_emit_ssa_undef(ppir_block *block, nir_instr *ni)
 
    ppir_dest *dest = &alu->dest;
    dest->ssa.undef = true;
-   ppir_reg *ssa = &dest->ssa;
-
-   list_add(&ssa->list, &block->comp->reg_list);
 
    return node;
 }
@@ -443,7 +449,12 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
    nir_tex_instr *instr = nir_instr_as_tex(ni);
    ppir_load_texture_node *node;
 
-   if (instr->op != nir_texop_tex) {
+   switch (instr->op) {
+   case nir_texop_tex:
+   case nir_texop_txb:
+   case nir_texop_txl:
+      break;
+   default:
       ppir_error("unsupported texop %d\n", instr->op);
       return NULL;
    }
@@ -460,6 +471,7 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
 
    switch (instr->sampler_dim) {
    case GLSL_SAMPLER_DIM_2D:
+   case GLSL_SAMPLER_DIM_CUBE:
    case GLSL_SAMPLER_DIM_RECT:
    case GLSL_SAMPLER_DIM_EXTERNAL:
       break;
@@ -471,17 +483,24 @@ static ppir_node *ppir_emit_tex(ppir_block *block, nir_instr *ni)
    node->sampler_dim = instr->sampler_dim;
 
    for (int i = 0; i < instr->coord_components; i++)
-         node->src_coords.swizzle[i] = i;
+         node->src[0].swizzle[i] = i;
 
    for (int i = 0; i < instr->num_srcs; i++) {
       switch (instr->src[i].src_type) {
       case nir_tex_src_coord:
-         ppir_node_add_src(block->comp, &node->node, &node->src_coords, &instr->src[i].src,
+         ppir_node_add_src(block->comp, &node->node, &node->src[0], &instr->src[i].src,
                            u_bit_consecutive(0, instr->coord_components));
+         node->num_src++;
+         break;
+      case nir_tex_src_bias:
+      case nir_tex_src_lod:
+         node->lod_bias_en = true;
+         node->explicit_lod = (instr->src[i].src_type == nir_tex_src_lod);
+         ppir_node_add_src(block->comp, &node->node, &node->src[1], &instr->src[i].src, 1);
+         node->num_src++;
          break;
       default:
          ppir_error("unsupported texture source type\n");
-         assert(0);
          return NULL;
       }
    }
@@ -872,8 +891,6 @@ bool ppir_compile_nir(struct lima_fs_shader_state *prog, struct nir_shader *nir,
 
       r->index = reg->index;
       r->num_components = reg->num_components;
-      r->live_in = INT_MAX;
-      r->live_out = 0;
       r->is_head = false;
       list_addtail(&r->list, &comp->reg_list);
    }

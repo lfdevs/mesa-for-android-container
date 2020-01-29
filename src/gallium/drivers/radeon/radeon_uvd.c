@@ -741,7 +741,8 @@ static struct ruvd_h265 get_h265_msg(struct ruvd_decoder *dec, struct pipe_video
 	}
 
 	if (pic->base.profile == PIPE_VIDEO_PROFILE_HEVC_MAIN_10) {
-		if (target->buffer_format == PIPE_FORMAT_P016) {
+		if (target->buffer_format == PIPE_FORMAT_P010 ||
+		    target->buffer_format == PIPE_FORMAT_P016) {
 			result.p010_mode = 1;
 			result.msb_mode = 1;
 		} else {

@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_surface.h"
 #include "util/u_blitter.h"
 #include "v3d_context.h"
@@ -172,6 +172,7 @@ v3d_blitter_save(struct v3d_context *v3d)
         util_blitter_save_vertex_buffer_slot(v3d->blitter, v3d->vertexbuf.vb);
         util_blitter_save_vertex_elements(v3d->blitter, v3d->vtx);
         util_blitter_save_vertex_shader(v3d->blitter, v3d->prog.bind_vs);
+        util_blitter_save_geometry_shader(v3d->blitter, v3d->prog.bind_gs);
         util_blitter_save_so_targets(v3d->blitter, v3d->streamout.num_targets,
                                      v3d->streamout.targets);
         util_blitter_save_rasterizer(v3d->blitter, v3d->rasterizer);

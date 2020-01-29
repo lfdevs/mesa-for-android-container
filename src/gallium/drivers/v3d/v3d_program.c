@@ -22,7 +22,7 @@
  */
 
 #include <inttypes.h>
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/ralloc.h"
@@ -175,6 +175,27 @@ type_size(const struct glsl_type *type, bool bindless)
         return glsl_count_attribute_slots(type, false);
 }
 
+static void
+precompile_all_outputs(nir_shader *s,
+                       struct v3d_varying_slot *outputs,
+                       uint8_t *num_outputs)
+{
+        nir_foreach_variable(var, &s->outputs) {
+                const int array_len = MAX2(glsl_get_length(var->type), 1);
+                for (int j = 0; j < array_len; j++) {
+                        const int slot = var->data.location + j;
+                        const int num_components =
+                                glsl_get_components(var->type);
+                        for (int i = 0; i < num_components; i++) {
+                                const int swiz = var->data.location_frac + i;
+                                outputs[(*num_outputs)++] =
+                                        v3d_slot_from_slot_and_component(slot,
+                                                                         swiz);
+                        }
+                }
+        }
+}
+
 /**
  * Precompiles a shader variant at shader state creation time if
  * V3D_DEBUG=precompile is set.  Used for shader-db
@@ -204,35 +225,50 @@ v3d_shader_precompile(struct v3d_context *v3d,
 
                 v3d_setup_shared_precompile_key(so, &key.base);
                 v3d_get_compiled_shader(v3d, &key.base, sizeof(key));
-        } else {
-                struct v3d_vs_key key = {
+        } else if (s->info.stage == MESA_SHADER_GEOMETRY) {
+                struct v3d_gs_key key = {
                         .base.shader_state = so,
+                        .base.is_last_geometry_stage = true,
                 };
 
                 v3d_setup_shared_precompile_key(so, &key.base);
 
-                /* Compile VS: All outputs */
-                nir_foreach_variable(var, &s->outputs) {
-                        unsigned array_len = MAX2(glsl_get_length(var->type), 1);
-                        assert(array_len == 1);
-                        (void)array_len;
+                precompile_all_outputs(s,
+                                       key.used_outputs,
+                                       &key.num_used_outputs);
 
-                        int slot = var->data.location;
-                        for (int i = 0; i < glsl_get_components(var->type); i++) {
-                                int swiz = var->data.location_frac + i;
-                                key.fs_inputs[key.num_fs_inputs++] =
-                                        v3d_slot_from_slot_and_component(slot,
-                                                                         swiz);
-                        }
+                v3d_get_compiled_shader(v3d, &key.base, sizeof(key));
+
+                /* Compile GS bin shader: only position (XXX: include TF) */
+                key.is_coord = true;
+                key.num_used_outputs = 0;
+                for (int i = 0; i < 4; i++) {
+                        key.used_outputs[key.num_used_outputs++] =
+                                v3d_slot_from_slot_and_component(VARYING_SLOT_POS,
+                                                                 i);
                 }
+                v3d_get_compiled_shader(v3d, &key.base, sizeof(key));
+        } else {
+                assert(s->info.stage == MESA_SHADER_VERTEX);
+                struct v3d_vs_key key = {
+                        .base.shader_state = so,
+                        /* Emit fixed function outputs */
+                        .base.is_last_geometry_stage = true,
+                };
+
+                v3d_setup_shared_precompile_key(so, &key.base);
+
+                precompile_all_outputs(s,
+                                       key.used_outputs,
+                                       &key.num_used_outputs);
 
                 v3d_get_compiled_shader(v3d, &key.base, sizeof(key));
 
                 /* Compile VS bin shader: only position (XXX: include TF) */
                 key.is_coord = true;
-                key.num_fs_inputs = 0;
+                key.num_used_outputs = 0;
                 for (int i = 0; i < 4; i++) {
-                        key.fs_inputs[key.num_fs_inputs++] =
+                        key.used_outputs[key.num_used_outputs++] =
                                 v3d_slot_from_slot_and_component(VARYING_SLOT_POS,
                                                                  i);
                 }
@@ -271,8 +307,10 @@ v3d_uncompiled_shader_create(struct pipe_context *pctx,
         }
 
         nir_variable_mode lower_mode = nir_var_all & ~nir_var_uniform;
-        if (s->info.stage == MESA_SHADER_VERTEX)
+        if (s->info.stage == MESA_SHADER_VERTEX ||
+            s->info.stage == MESA_SHADER_GEOMETRY) {
                 lower_mode &= ~(nir_var_shader_in | nir_var_shader_out);
+        }
         NIR_PASS_V(s, nir_lower_io, lower_mode,
                    type_size,
                    (nir_lower_io_options)0);
@@ -609,17 +647,92 @@ v3d_update_compiled_fs(struct v3d_context *v3d, uint8_t prim_mode)
 }
 
 static void
+v3d_update_compiled_gs(struct v3d_context *v3d, uint8_t prim_mode)
+{
+        struct v3d_gs_key local_key;
+        struct v3d_gs_key *key = &local_key;
+
+        if (!(v3d->dirty & (VC5_DIRTY_GEOMTEX |
+                            VC5_DIRTY_RASTERIZER |
+                            VC5_DIRTY_UNCOMPILED_GS |
+                            VC5_DIRTY_PRIM_MODE |
+                            VC5_DIRTY_FS_INPUTS))) {
+                return;
+        }
+
+        if (!v3d->prog.bind_gs) {
+                v3d->prog.gs = NULL;
+                v3d->prog.gs_bin = NULL;
+                return;
+        }
+
+        memset(key, 0, sizeof(*key));
+        v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_GEOMETRY]);
+        key->base.shader_state = v3d->prog.bind_gs;
+        key->base.ucp_enables = v3d->rasterizer->base.clip_plane_enable;
+        key->base.is_last_geometry_stage = true;
+        key->num_used_outputs = v3d->prog.fs->prog_data.fs->num_inputs;
+        STATIC_ASSERT(sizeof(key->used_outputs) ==
+                      sizeof(v3d->prog.fs->prog_data.fs->input_slots));
+        memcpy(key->used_outputs, v3d->prog.fs->prog_data.fs->input_slots,
+               sizeof(key->used_outputs));
+
+        key->per_vertex_point_size =
+                (prim_mode == PIPE_PRIM_POINTS &&
+                 v3d->rasterizer->base.point_size_per_vertex);
+
+        struct v3d_compiled_shader *gs =
+                v3d_get_compiled_shader(v3d, &key->base, sizeof(*key));
+        if (gs != v3d->prog.gs) {
+                v3d->prog.gs = gs;
+                v3d->dirty |= VC5_DIRTY_COMPILED_GS;
+        }
+
+        key->is_coord = true;
+
+        /* The last bin-mode shader in the geometry pipeline only outputs
+         * varyings used by transform feedback.
+         */
+        struct v3d_uncompiled_shader *shader_state = key->base.shader_state;
+        memcpy(key->used_outputs, shader_state->tf_outputs,
+               sizeof(*key->used_outputs) * shader_state->num_tf_outputs);
+        if (shader_state->num_tf_outputs < key->num_used_outputs) {
+                uint32_t size = sizeof(*key->used_outputs) *
+                                (key->num_used_outputs -
+                                 shader_state->num_tf_outputs);
+                memset(&key->used_outputs[shader_state->num_tf_outputs],
+                       0, size);
+        }
+        key->num_used_outputs = shader_state->num_tf_outputs;
+
+        struct v3d_compiled_shader *old_gs = v3d->prog.gs;
+        struct v3d_compiled_shader *gs_bin =
+                v3d_get_compiled_shader(v3d, &key->base, sizeof(*key));
+        if (gs_bin != old_gs) {
+                v3d->prog.gs_bin = gs_bin;
+                v3d->dirty |= VC5_DIRTY_COMPILED_GS_BIN;
+        }
+
+        if (old_gs && memcmp(v3d->prog.gs->prog_data.gs->input_slots,
+                             old_gs->prog_data.gs->input_slots,
+                             sizeof(v3d->prog.gs->prog_data.gs->input_slots))) {
+                v3d->dirty |= VC5_DIRTY_GS_INPUTS;
+        }
+}
+
+static void
 v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
 {
         struct v3d_vs_key local_key;
         struct v3d_vs_key *key = &local_key;
 
-        if (!(v3d->dirty & (VC5_DIRTY_PRIM_MODE |
-                            VC5_DIRTY_RASTERIZER |
-                            VC5_DIRTY_VERTTEX |
+        if (!(v3d->dirty & (VC5_DIRTY_VERTTEX |
                             VC5_DIRTY_VTXSTATE |
                             VC5_DIRTY_UNCOMPILED_VS |
-                            VC5_DIRTY_FS_INPUTS))) {
+                            (v3d->prog.bind_gs ? 0 : VC5_DIRTY_RASTERIZER) |
+                            (v3d->prog.bind_gs ? 0 : VC5_DIRTY_PRIM_MODE) |
+                            (v3d->prog.bind_gs ? VC5_DIRTY_GS_INPUTS :
+                                                 VC5_DIRTY_FS_INPUTS)))) {
                 return;
         }
 
@@ -627,11 +740,22 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         v3d_setup_shared_key(v3d, &key->base, &v3d->tex[PIPE_SHADER_VERTEX]);
         key->base.shader_state = v3d->prog.bind_vs;
         key->base.ucp_enables = v3d->rasterizer->base.clip_plane_enable;
-        key->num_fs_inputs = v3d->prog.fs->prog_data.fs->num_inputs;
-        STATIC_ASSERT(sizeof(key->fs_inputs) ==
-                      sizeof(v3d->prog.fs->prog_data.fs->input_slots));
-        memcpy(key->fs_inputs, v3d->prog.fs->prog_data.fs->input_slots,
-               sizeof(key->fs_inputs));
+        key->base.is_last_geometry_stage = !v3d->prog.bind_gs;
+
+        if (!v3d->prog.bind_gs) {
+            key->num_used_outputs = v3d->prog.fs->prog_data.fs->num_inputs;
+            STATIC_ASSERT(sizeof(key->used_outputs) ==
+                          sizeof(v3d->prog.fs->prog_data.fs->input_slots));
+            memcpy(key->used_outputs, v3d->prog.fs->prog_data.fs->input_slots,
+                   sizeof(key->used_outputs));
+        } else {
+            key->num_used_outputs = v3d->prog.gs->prog_data.gs->num_inputs;
+            STATIC_ASSERT(sizeof(key->used_outputs) ==
+                          sizeof(v3d->prog.gs->prog_data.gs->input_slots));
+            memcpy(key->used_outputs, v3d->prog.gs->prog_data.gs->input_slots,
+                   sizeof(key->used_outputs));
+        }
+
         key->clamp_color = v3d->rasterizer->base.clamp_vertex_color;
 
         key->per_vertex_point_size =
@@ -646,17 +770,29 @@ v3d_update_compiled_vs(struct v3d_context *v3d, uint8_t prim_mode)
         }
 
         key->is_coord = true;
-        /* Coord shaders only output varyings used by transform feedback. */
-        struct v3d_uncompiled_shader *shader_state = key->base.shader_state;
-        memcpy(key->fs_inputs, shader_state->tf_outputs,
-               sizeof(*key->fs_inputs) * shader_state->num_tf_outputs);
-        if (shader_state->num_tf_outputs < key->num_fs_inputs) {
-                memset(&key->fs_inputs[shader_state->num_tf_outputs],
-                       0,
-                       sizeof(*key->fs_inputs) * (key->num_fs_inputs -
-                                                  shader_state->num_tf_outputs));
+
+        /* Coord shaders only output varyings used by transform feedback,
+         * unless they are linked to other shaders in the geometry side
+         * of the pipeline, since in that case any of the output varyings
+         * could be required in later geometry stages to compute
+         * gl_Position or TF outputs.
+         */
+        if (!v3d->prog.bind_gs) {
+                struct v3d_uncompiled_shader *shader_state =
+                        key->base.shader_state;
+                memcpy(key->used_outputs, shader_state->tf_outputs,
+                       sizeof(*key->used_outputs) *
+                       shader_state->num_tf_outputs);
+                if (shader_state->num_tf_outputs < key->num_used_outputs) {
+                        uint32_t tail_bytes =
+                                sizeof(*key->used_outputs) *
+                                (key->num_used_outputs -
+                                 shader_state->num_tf_outputs);
+                        memset(&key->used_outputs[shader_state->num_tf_outputs],
+                               0, tail_bytes);
+                }
+                key->num_used_outputs = shader_state->num_tf_outputs;
         }
-        key->num_fs_inputs = shader_state->num_tf_outputs;
 
         struct v3d_compiled_shader *cs =
                 v3d_get_compiled_shader(v3d, &key->base, sizeof(*key));
@@ -670,6 +806,7 @@ void
 v3d_update_compiled_shaders(struct v3d_context *v3d, uint8_t prim_mode)
 {
         v3d_update_compiled_fs(v3d, prim_mode);
+        v3d_update_compiled_gs(v3d, prim_mode);
         v3d_update_compiled_vs(v3d, prim_mode);
 }
 
@@ -703,6 +840,12 @@ fs_cache_hash(const void *key)
 }
 
 static uint32_t
+gs_cache_hash(const void *key)
+{
+        return _mesa_hash_data(key, sizeof(struct v3d_gs_key));
+}
+
+static uint32_t
 vs_cache_hash(const void *key)
 {
         return _mesa_hash_data(key, sizeof(struct v3d_vs_key));
@@ -718,6 +861,12 @@ static bool
 fs_cache_compare(const void *key1, const void *key2)
 {
         return memcmp(key1, key2, sizeof(struct v3d_fs_key)) == 0;
+}
+
+static bool
+gs_cache_compare(const void *key1, const void *key2)
+{
+        return memcmp(key1, key2, sizeof(struct v3d_gs_key)) == 0;
 }
 
 static bool
@@ -772,6 +921,14 @@ v3d_fp_state_bind(struct pipe_context *pctx, void *hwcso)
 }
 
 static void
+v3d_gp_state_bind(struct pipe_context *pctx, void *hwcso)
+{
+        struct v3d_context *v3d = v3d_context(pctx);
+        v3d->prog.bind_gs = hwcso;
+        v3d->dirty |= VC5_DIRTY_UNCOMPILED_GS;
+}
+
+static void
 v3d_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
         struct v3d_context *v3d = v3d_context(pctx);
@@ -804,10 +961,14 @@ v3d_program_init(struct pipe_context *pctx)
         pctx->create_vs_state = v3d_shader_state_create;
         pctx->delete_vs_state = v3d_shader_state_delete;
 
+        pctx->create_gs_state = v3d_shader_state_create;
+        pctx->delete_gs_state = v3d_shader_state_delete;
+
         pctx->create_fs_state = v3d_shader_state_create;
         pctx->delete_fs_state = v3d_shader_state_delete;
 
         pctx->bind_fs_state = v3d_fp_state_bind;
+        pctx->bind_gs_state = v3d_gp_state_bind;
         pctx->bind_vs_state = v3d_vp_state_bind;
 
         if (v3d->screen->has_csd) {
@@ -818,6 +979,8 @@ v3d_program_init(struct pipe_context *pctx)
 
         v3d->prog.cache[MESA_SHADER_VERTEX] =
                 _mesa_hash_table_create(pctx, vs_cache_hash, vs_cache_compare);
+        v3d->prog.cache[MESA_SHADER_GEOMETRY] =
+                _mesa_hash_table_create(pctx, gs_cache_hash, gs_cache_compare);
         v3d->prog.cache[MESA_SHADER_FRAGMENT] =
                 _mesa_hash_table_create(pctx, fs_cache_hash, fs_cache_compare);
         v3d->prog.cache[MESA_SHADER_COMPUTE] =

@@ -109,6 +109,7 @@ struct __DRIimageRec {
 
    void *loader_private;
 
+   boolean imported_dmabuf;
    /**
     * Provided by EGL_EXT_image_dma_buf_import.
     */

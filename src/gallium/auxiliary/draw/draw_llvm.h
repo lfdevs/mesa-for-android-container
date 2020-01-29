@@ -328,7 +328,8 @@ typedef boolean
                       unsigned instance_id,
                       unsigned vertex_id_offset,
                       unsigned start_instance,
-                      const unsigned *fetch_elts);
+                      const unsigned *fetch_elts,
+                      unsigned draw_id);
 
 
 typedef int

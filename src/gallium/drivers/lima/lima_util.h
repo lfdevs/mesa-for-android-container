@@ -29,8 +29,17 @@
 
 #define LIMA_PAGE_SIZE 4096
 
+FILE *lima_dump_command_stream;
+
 bool lima_get_absolute_timeout(uint64_t *timeout);
+void lima_dump_file_open(void);
+void lima_dump_file_next(void);
+void lima_dump_file_close(void);
 void lima_dump_blob(FILE *fp, void *data, int size, bool is_float);
+void lima_dump_vs_command_stream_print(void *data, int size, uint32_t start);
+void lima_dump_plbu_command_stream_print(void *data, int size, uint32_t start);
+void lima_dump_rsw_command_stream_print(void *data, int size, uint32_t start);
+void lima_dump_texture_descriptor(void *data, int size, uint32_t start, uint32_t offset);
 void lima_dump_command_stream_print(void *data, int size, bool is_float,
                                     const char *fmt, ...);
 

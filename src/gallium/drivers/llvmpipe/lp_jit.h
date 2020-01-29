@@ -324,6 +324,8 @@ struct lp_jit_cs_context
    const uint32_t *ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
    int num_ssbos[LP_MAX_TGSI_SHADER_BUFFERS];
 
+   void *kernel_args;
+
    uint32_t shared_size;
 };
 
@@ -339,6 +341,7 @@ enum {
    LP_JIT_CS_CTX_IMAGES,
    LP_JIT_CS_CTX_SSBOS,
    LP_JIT_CS_CTX_NUM_SSBOS,
+   LP_JIT_CS_CTX_KERNEL_ARGS,
    LP_JIT_CS_CTX_SHARED_SIZE,
    LP_JIT_CS_CTX_COUNT
 };
@@ -367,6 +370,9 @@ enum {
 #define lp_jit_cs_context_shared_size(_gallivm, _ptr) \
    lp_build_struct_get_ptr(_gallivm, _ptr, LP_JIT_CS_CTX_SHARED_SIZE, "shared_size")
 
+#define lp_jit_cs_context_kernel_args(_gallivm, _ptr) \
+   lp_build_struct_get(_gallivm, _ptr, LP_JIT_CS_CTX_KERNEL_ARGS, "kernel_args")
+
 
 typedef void
 (*lp_jit_cs_func)(const struct lp_jit_cs_context *context,
@@ -379,6 +385,7 @@ typedef void
                   uint32_t grid_size_x,
                   uint32_t grid_size_y,
                   uint32_t grid_size_z,
+                  uint32_t work_dim,
                   struct lp_jit_cs_thread_data *thread_data);
 
 void

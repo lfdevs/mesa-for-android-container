@@ -46,9 +46,14 @@ struct ShaderVariant {
    ~ShaderVariant() { gallivm_destroy(gallivm); }
 };
 
+using PFN_TCS_FUNC = PFN_HS_FUNC;
+using PFN_TES_FUNC = PFN_DS_FUNC;
+
 typedef ShaderVariant<PFN_VERTEX_FUNC> VariantVS;
 typedef ShaderVariant<PFN_PIXEL_KERNEL> VariantFS;
 typedef ShaderVariant<PFN_GS_FUNC> VariantGS;
+typedef ShaderVariant<PFN_TCS_FUNC> VariantTCS;
+typedef ShaderVariant<PFN_TES_FUNC> VariantTES;
 
 /* skeleton */
 struct swr_vertex_shader {
@@ -75,6 +80,23 @@ struct swr_geometry_shader {
 
    std::unordered_map<swr_jit_gs_key, std::unique_ptr<VariantGS>> map;
 };
+
+struct swr_tess_control_shader {
+   struct pipe_shader_state pipe;
+   struct lp_tgsi_info info;
+   uint32_t vertices_per_patch;
+
+   std::unordered_map<swr_jit_tcs_key, std::unique_ptr<VariantTCS>> map;
+};
+
+struct swr_tess_evaluation_shader {
+   struct pipe_shader_state pipe;
+   struct lp_tgsi_info info;
+   SWR_TS_STATE ts_state;
+
+   std::unordered_map<swr_jit_tes_key, std::unique_ptr<VariantTES>> map;
+};
+
 
 /* Vertex element state */
 struct swr_vertex_element_state {
@@ -340,7 +362,7 @@ swr_convert_target_type(const enum pipe_texture_target target)
  * Convert mesa PIPE_PRIM_X to SWR enum PRIMITIVE_TOPOLOGY
  */
 static INLINE enum PRIMITIVE_TOPOLOGY
-swr_convert_prim_topology(const unsigned mode)
+swr_convert_prim_topology(const unsigned mode, const unsigned tcs_verts)
 {
    switch (mode) {
    case PIPE_PRIM_POINTS:
@@ -371,6 +393,9 @@ swr_convert_prim_topology(const unsigned mode)
       return TOP_TRI_LIST_ADJ;
    case PIPE_PRIM_TRIANGLE_STRIP_ADJACENCY:
       return TOP_TRI_STRIP_ADJ;
+   case PIPE_PRIM_PATCHES:
+      // rasterizer has a separate type for each possible number of patch vertices
+      return (PRIMITIVE_TOPOLOGY)((unsigned)TOP_PATCHLIST_BASE + tcs_verts);
    default:
       assert(0 && "Unknown topology");
       return TOP_UNKNOWN;
@@ -395,5 +420,6 @@ swr_convert_fill_mode(const unsigned mode)
       return SWR_FILLMODE_SOLID; // at least do something sensible
    }
 }
+
 
 #endif

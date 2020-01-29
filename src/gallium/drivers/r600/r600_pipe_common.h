@@ -118,7 +118,7 @@ enum r600_coherency {
 	R600_COHERENCY_CB_META,
 };
 
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
 #define R600_BIG_ENDIAN 1
 #else
 #define R600_BIG_ENDIAN 0

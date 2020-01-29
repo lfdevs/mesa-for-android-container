@@ -28,7 +28,7 @@
 #include "r600_shader.h"
 #include "r600d.h"
 
-#include "util/u_format_s3tc.h"
+#include "util/format/u_format_s3tc.h"
 #include "util/u_index_modify.h"
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
@@ -546,7 +546,8 @@ static void r600_bind_vertex_elements(struct pipe_context *ctx, void *state)
 static void r600_delete_vertex_elements(struct pipe_context *ctx, void *state)
 {
 	struct r600_fetch_shader *shader = (struct r600_fetch_shader*)state;
-	r600_resource_reference(&shader->buffer, NULL);
+	if (shader)
+		r600_resource_reference(&shader->buffer, NULL);
 	FREE(shader);
 }
 

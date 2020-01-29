@@ -121,7 +121,7 @@ ir3_insert_by_depth(struct ir3_instruction *instr, struct list_head *list)
 	list_delinit(&instr->node);
 
 	/* find where to re-insert instruction: */
-	list_for_each_entry (struct ir3_instruction, pos, list, node) {
+	foreach_instr (pos, list) {
 		if (pos->depth > instr->depth) {
 			list_add(&instr->node, &pos->node);
 			return;
@@ -171,20 +171,17 @@ static bool
 remove_unused_by_block(struct ir3_block *block)
 {
 	bool progress = false;
-	list_for_each_entry_safe (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_instr_safe (instr, &block->instr_list) {
 		if (instr->opc == OPC_END || instr->opc == OPC_CHSH || instr->opc == OPC_CHMASK)
 			continue;
 		if (instr->flags & IR3_INSTR_UNUSED) {
-			if (instr->opc == OPC_META_FO) {
+			if (instr->opc == OPC_META_SPLIT) {
 				struct ir3_instruction *src = ssa(instr->regs[1]);
-				/* leave inputs alone.. we can't optimize out components of
-				 * an input, since the hw is still going to be writing all
-				 * of the components, and we could end up in a situation
-				 * where multiple inputs overlap.
+				/* tex (cat5) instructions have a writemask, so we can
+				 * mask off unused components.  Other instructions do not.
 				 */
-				if ((src->opc != OPC_META_INPUT) &&
-						(src->regs[0]->wrmask > 1)) {
-					src->regs[0]->wrmask &= ~(1 << instr->fo.off);
+				if (is_tex(src) && (src->regs[0]->wrmask > 1)) {
+					src->regs[0]->wrmask &= ~(1 << instr->split.off);
 
 					/* prune no-longer needed right-neighbors.  We could
 					 * probably do the same for left-neighbors (ie. tex
@@ -220,8 +217,8 @@ compute_depth_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
 	/* initially mark everything as unused, we'll clear the flag as we
 	 * visit the instructions:
 	 */
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
-		list_for_each_entry (struct ir3_instruction, instr, &block->instr_list, node) {
+	foreach_block (block, &ir->block_list) {
+		foreach_instr (instr, &block->instr_list) {
 			/* special case, if pre-fs texture fetch used, we cannot
 			 * eliminate the barycentric i/j input
 			 */
@@ -233,11 +230,11 @@ compute_depth_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
 		}
 	}
 
-	for (i = 0; i < ir->noutputs; i++)
-		if (ir->outputs[i])
-			ir3_instr_depth(ir->outputs[i], 0, false);
+	struct ir3_instruction *out;
+	foreach_output(out, ir)
+		ir3_instr_depth(out, 0, false);
 
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		for (i = 0; i < block->keeps_count; i++)
 			ir3_instr_depth(block->keeps[i], 0, false);
 
@@ -247,7 +244,7 @@ compute_depth_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
 	}
 
 	/* mark un-used instructions: */
-	list_for_each_entry (struct ir3_block, block, &ir->block_list, node) {
+	foreach_block (block, &ir->block_list) {
 		progress |= remove_unused_by_block(block);
 	}
 
@@ -261,11 +258,10 @@ compute_depth_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
 	}
 
 	/* cleanup unused inputs: */
-	for (i = 0; i < ir->ninputs; i++) {
-		struct ir3_instruction *in = ir->inputs[i];
-		if (in && (in->flags & IR3_INSTR_UNUSED))
-			ir->inputs[i] = NULL;
-	}
+	struct ir3_instruction *in;
+	foreach_input_n(in, n, ir)
+		if (in->flags & IR3_INSTR_UNUSED)
+			ir->inputs[n] = NULL;
 
 	return progress;
 }

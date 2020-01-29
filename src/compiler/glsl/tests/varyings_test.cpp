@@ -80,11 +80,11 @@ link_varyings::SetUp()
    this->ir.make_empty();
 
    this->consumer_inputs =
-         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+         _mesa_hash_table_create(NULL, _mesa_hash_string,
                                  _mesa_key_string_equal);
 
    this->consumer_interface_inputs =
-         _mesa_hash_table_create(NULL, _mesa_key_hash_string,
+         _mesa_hash_table_create(NULL, _mesa_hash_string,
                                  _mesa_key_string_equal);
 
    /* Needs to happen after glsl type initialization */

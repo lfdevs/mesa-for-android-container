@@ -86,7 +86,7 @@ is_coalesce_candidate(const fs_visitor *v, const fs_inst *inst)
       return false;
 
    if (inst->opcode == SHADER_OPCODE_LOAD_PAYLOAD) {
-      if (!inst->is_copy_payload(v->alloc)) {
+      if (!is_coalescing_payload(v->alloc, inst)) {
          return false;
       }
    }

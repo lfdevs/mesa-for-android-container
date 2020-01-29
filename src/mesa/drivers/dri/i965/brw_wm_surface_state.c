@@ -1374,9 +1374,9 @@ brw_upload_ubo_surfaces(struct brw_context *brw, struct gl_program *prog,
                             ISL_FORMAT_R32G32B32A32_FLOAT, 0);
    }
 
-   uint32_t *abo_surf_offsets =
+   uint32_t *ssbo_surf_offsets =
       &stage_state->surf_offset[prog_data->binding_table.ssbo_start];
-   uint32_t *ssbo_surf_offsets = abo_surf_offsets + prog->info.num_abos;
+   uint32_t *abo_surf_offsets = ssbo_surf_offsets + prog->info.num_ssbos;
 
    for (int i = 0; i < prog->info.num_abos; i++) {
       struct gl_buffer_binding *binding =

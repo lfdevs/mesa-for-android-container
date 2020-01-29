@@ -46,7 +46,7 @@ zink_create_fence(struct pipe_screen *pscreen)
    struct zink_fence *ret = CALLOC_STRUCT(zink_fence);
    if (!ret) {
       debug_printf("CALLOC_STRUCT failed\n");
-      goto fail;
+      return NULL;
    }
 
    if (vkCreateFence(screen->dev, &fci, NULL, &ret->fence) != VK_SUCCESS) {

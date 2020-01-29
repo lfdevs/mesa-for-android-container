@@ -56,14 +56,15 @@ static void *alloc_states(void *_job)
 
 static void run_test()
 {
-   struct anv_instance instance = { };
+   struct anv_physical_device physical_device = { };
    struct anv_device device = {
-      .instance = &instance,
+      .physical = &physical_device,
    };
    struct anv_state_pool state_pool;
 
    pthread_mutex_init(&device.mutex, NULL);
-   anv_state_pool_init(&state_pool, &device, 4096, 64, 0);
+   anv_bo_cache_init(&device.bo_cache);
+   anv_state_pool_init(&state_pool, &device, 4096, 64);
 
    pthread_barrier_init(&barrier, NULL, NUM_THREADS);
 

@@ -81,6 +81,7 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
           context->target->buffer_format != PIPE_FORMAT_B8G8R8X8_UNORM &&
           context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM &&
           context->target->buffer_format != PIPE_FORMAT_NV12 &&
+          context->target->buffer_format != PIPE_FORMAT_P010 &&
           context->target->buffer_format != PIPE_FORMAT_P016)
          return VA_STATUS_ERROR_UNIMPLEMENTED;
 

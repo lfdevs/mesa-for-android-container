@@ -242,6 +242,7 @@ NIR_FILES = \
 	nir/nir_lower_clamp_color_outputs.c \
 	nir/nir_lower_clip.c \
 	nir/nir_lower_clip_cull_distance_arrays.c \
+	nir/nir_lower_clip_halfz.c \
 	nir/nir_lower_constant_initializers.c \
 	nir/nir_lower_double_ops.c \
 	nir/nir_lower_drawpixels.c \
@@ -270,6 +271,7 @@ NIR_FILES = \
 	nir/nir_lower_passthrough_edgeflags.c \
 	nir/nir_lower_patch_vertices.c \
 	nir/nir_lower_phis_to_scalar.c \
+	nir/nir_lower_point_size.c \
 	nir/nir_lower_point_size_mov.c \
 	nir/nir_lower_regs_to_ssa.c \
 	nir/nir_lower_returns.c \
@@ -308,6 +310,7 @@ NIR_FILES = \
 	nir/nir_opt_intrinsics.c \
 	nir/nir_opt_loop_unroll.c \
 	nir/nir_opt_large_constants.c \
+	nir/nir_opt_load_store_vectorize.c \
 	nir/nir_opt_move.c \
 	nir/nir_opt_peephole_select.c \
 	nir/nir_opt_rematerialize_compares.c \
@@ -325,12 +328,12 @@ NIR_FILES = \
 	nir/nir_range_analysis.h \
 	nir/nir_remove_dead_variables.c \
 	nir/nir_repair_ssa.c \
+	nir/nir_schedule.c \
 	nir/nir_search.c \
 	nir/nir_search.h \
 	nir/nir_search_helpers.h \
 	nir/nir_serialize.c \
 	nir/nir_serialize.h \
-	nir/nir_strip.c \
 	nir/nir_split_per_member_structs.c \
 	nir/nir_split_var_copies.c \
 	nir/nir_split_vars.c \

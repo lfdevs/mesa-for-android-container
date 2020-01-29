@@ -1645,6 +1645,8 @@ NVC0LoweringPass::handleATOM(Instruction *atom)
       else if (targ->getChipset() < NVISA_GM107_CHIPSET)
          handleSharedATOMNVE4(atom);
       return true;
+   case FILE_MEMORY_GLOBAL:
+      return true;
    default:
       assert(atom->src(0).getFile() == FILE_MEMORY_BUFFER);
       base = loadBufInfo64(ind, atom->getSrc(0)->reg.fileIndex * 16);

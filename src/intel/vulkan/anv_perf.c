@@ -98,9 +98,8 @@ VkResult anv_InitializePerformanceApiINTEL(
     const VkInitializePerformanceApiInfoINTEL*  pInitializeInfo)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
 
-   if (!pdevice->perf)
+   if (!device->physical->perf)
       return VK_ERROR_EXTENSION_NOT_PRESENT;
 
    /* Not much to do here */
@@ -113,9 +112,8 @@ VkResult anv_GetPerformanceParameterINTEL(
     VkPerformanceValueINTEL*                    pValue)
 {
       ANV_FROM_HANDLE(anv_device, device, _device);
-      const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
 
-      if (!pdevice->perf)
+      if (!device->physical->perf)
          return VK_ERROR_EXTENSION_NOT_PRESENT;
 
       VkResult result = VK_SUCCESS;
@@ -155,15 +153,14 @@ VkResult anv_AcquirePerformanceConfigurationINTEL(
     VkPerformanceConfigurationINTEL*            pConfiguration)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
-   const struct anv_physical_device *pdevice = &device->instance->physicalDevice;
 
    struct gen_perf_registers *perf_config =
-      gen_perf_load_configuration(pdevice->perf, device->fd,
+      gen_perf_load_configuration(device->physical->perf, device->fd,
                                   GEN_PERF_QUERY_GUID_MDAPI);
    if (!perf_config)
       return VK_INCOMPLETE;
 
-   int ret = gen_perf_store_configuration(pdevice->perf, device->fd,
+   int ret = gen_perf_store_configuration(device->physical->perf, device->fd,
                                           perf_config, NULL /* guid */);
    if (ret < 0) {
       ralloc_free(perf_config);

@@ -80,7 +80,7 @@ zink_destroy_query(struct pipe_context *pctx,
                    struct pipe_query *q)
 {
    struct zink_screen *screen = zink_screen(pctx->screen);
-   struct zink_query *query = CALLOC_STRUCT(zink_query);
+   struct zink_query *query = (struct zink_query *)q;
 
    vkDestroyQueryPool(screen->dev, query->query_pool, NULL);
 }

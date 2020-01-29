@@ -37,7 +37,7 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
                             const struct isl_surf_fill_state_info *restrict info);
 
 void
-isl_genX(buffer_fill_state_s)(void *state,
+isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
                               const struct isl_buffer_fill_state_info *restrict info);
 
 void

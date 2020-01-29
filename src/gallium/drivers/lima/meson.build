@@ -64,6 +64,8 @@ files_lima = files(
   'lima_bo.h',
   'lima_submit.c',
   'lima_submit.h',
+  'lima_parser.c',
+  'lima_parser.h',
   'lima_util.c',
   'lima_util.h',
   'lima_texture.c',

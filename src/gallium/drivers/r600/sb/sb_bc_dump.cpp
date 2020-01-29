@@ -157,6 +157,8 @@ void bc_dump::dump(cf_node& n) {
 
 		s << "  ES:" << n.bc.elem_size;
 
+      s << " OP:" << n.bc.rat_inst;
+
 		if (n.bc.mark)
 			s << " MARK";
 

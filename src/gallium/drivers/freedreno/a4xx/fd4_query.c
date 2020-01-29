@@ -166,7 +166,7 @@ time_elapsed_get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	OUT_PKT3(ring, CP_REG_TO_MEM, 2);
 	OUT_RING(ring, CP_REG_TO_MEM_0_REG(REG_A4XX_RBBM_PERFCTR_CP_0_LO) |
 			CP_REG_TO_MEM_0_64B |
-			CP_REG_TO_MEM_0_CNT(2-1)); /* write 2 regs to mem */
+			CP_REG_TO_MEM_0_CNT(2)); /* write 2 regs to mem */
 	OUT_RELOCW(ring, scratch_bo, sample_off, 0, 0);
 
 	/* ok... here we really *would* like to use the CP_SET_CONSTANT
@@ -188,7 +188,7 @@ time_elapsed_get_sample(struct fd_batch *batch, struct fd_ringbuffer *ring)
 	OUT_PKT3(ring, CP_REG_TO_MEM, 2);
 	OUT_RING(ring, CP_REG_TO_MEM_0_REG(HW_QUERY_BASE_REG) |
 			CP_REG_TO_MEM_0_ACCUMULATE |
-			CP_REG_TO_MEM_0_CNT(1-1));       /* readback 1 regs */
+			CP_REG_TO_MEM_0_CNT(0));       /* readback 1 regs */
 	OUT_RELOCW(ring, scratch_bo, addr_off, 0, 0);
 
 	/* now copy that back to CP_ME_NRT_ADDR: */

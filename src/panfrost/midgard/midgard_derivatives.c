@@ -72,12 +72,19 @@ mir_derivative_op(nir_op op)
  * implicitly */
 
 bool
-mir_op_computes_derivatives(unsigned op)
+mir_op_computes_derivatives(gl_shader_stage stage, unsigned op)
 {
+        /* Only fragment shaders may compute derivatives, but the sense of
+         * "normal" changes in vertex shaders on certain GPUs */
+
+        if (op == TEXTURE_OP_NORMAL && stage != MESA_SHADER_FRAGMENT)
+                return false;
+
         switch (op) {
         case TEXTURE_OP_NORMAL:
         case TEXTURE_OP_DFDX:
         case TEXTURE_OP_DFDY:
+                assert(stage == MESA_SHADER_FRAGMENT);
                 return true;
         default:
                 return false;
@@ -95,18 +102,18 @@ midgard_emit_derivatives(compiler_context *ctx, nir_alu_instr *instr)
                 .type = TAG_TEXTURE_4,
                 .mask = mask_of(nr_components),
                 .dest = nir_dest_index(ctx, &instr->dest.dest),
-                .src = { nir_alu_src_index(ctx, &instr->src[0]), ~0, ~0 },
+                .src = { nir_alu_src_index(ctx, &instr->src[0]), ~0, ~0, ~0 },
                 .texture = {
                         .op = mir_derivative_op(instr->op),
                         .format = MALI_TEX_2D,
-                        .swizzle = SWIZZLE_XYXX,
-                        .in_reg_swizzle = SWIZZLE_XYXX,
-
                         .in_reg_full = 1,
                         .out_full = 1,
                         .sampler_type = MALI_SAMPLER_FLOAT,
                 }
         };
+
+        ins.swizzle[0][2] = ins.swizzle[0][3] = COMPONENT_X;
+        ins.swizzle[1][2] = ins.swizzle[1][3] = COMPONENT_X;
 
         if (!instr->dest.dest.is_ssa)
                 ins.mask &= instr->dest.write_mask;
@@ -142,10 +149,11 @@ midgard_lower_derivatives(compiler_context *ctx, midgard_block *block)
                 dup.mask &= 0b1100;
 
                 /* Fixup swizzles */
-                assert(ins->texture.swizzle == SWIZZLE_XYXX);
-                assert(ins->texture.in_reg_swizzle == SWIZZLE_XYXX);
-                dup.texture.swizzle = SWIZZLE_XXXY;
-                dup.texture.in_reg_swizzle = SWIZZLE_ZWWW;
+                dup.swizzle[0][0] = dup.swizzle[0][1] = dup.swizzle[0][2] = COMPONENT_X;
+                dup.swizzle[0][3] = COMPONENT_Y;
+
+                dup.swizzle[1][0] = COMPONENT_Z;
+                dup.swizzle[1][1] = dup.swizzle[1][2] = dup.swizzle[1][3] = COMPONENT_W;
 
                 /* Insert the new instruction */
                 mir_insert_instruction_before(ctx, mir_next_op(ins), dup);

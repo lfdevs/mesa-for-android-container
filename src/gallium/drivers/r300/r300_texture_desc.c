@@ -24,7 +24,7 @@
 #include "r300_texture_desc.h"
 #include "r300_context.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include <inttypes.h>
 
 /* Returns the number of pixels that the texture should be aligned to

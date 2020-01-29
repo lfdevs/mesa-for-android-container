@@ -668,7 +668,7 @@
   <struct name="SO_DECL" length="1">
     <field name="Component Mask" start="0" end="3" type="uint" default="0"/>
     <field name="Register Index" start="4" end="9" type="uint"/>
-    <field name="Hole Flag" start="11" end="11" type="uint"/>
+    <field name="Hole Flag" start="11" end="11" type="bool"/>
     <field name="Output Buffer Slot" start="12" end="13" type="uint"/>
   </struct>
 

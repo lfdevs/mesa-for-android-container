@@ -40,7 +40,7 @@
 #include "pipe/p_shader_tokens.h"
 #include "util/u_inlines.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_pstipple.h"
@@ -51,6 +51,8 @@
 #include "draw_context.h"
 #include "draw_pipe.h"
 
+#include "nir.h"
+#include "nir/nir_draw_helpers.h"
 
 /** Approx number of new tokens for instructions in pstip_transform_inst() */
 #define NUM_NEW_TOKENS 53
@@ -133,12 +135,20 @@ generate_pstip_fs(struct pstip_stage *pstip)
                    TGSI_FILE_SYSTEM_VALUE : TGSI_FILE_INPUT;
 
    pstip_fs = *orig_fs; /* copy to init */
-   pstip_fs.tokens = util_pstipple_create_fragment_shader(orig_fs->tokens,
-                                                          &pstip->fs->sampler_unit,
-                                                          0,
-                                                          wincoord_file);
-   if (pstip_fs.tokens == NULL)
-      return FALSE;
+   if (orig_fs->type == PIPE_SHADER_IR_TGSI) {
+      pstip_fs.tokens = util_pstipple_create_fragment_shader(orig_fs->tokens,
+                                                             &pstip->fs->sampler_unit,
+                                                             0,
+                                                             wincoord_file);
+      if (pstip_fs.tokens == NULL)
+         return FALSE;
+   } else {
+#ifdef LLVM_AVAILABLE
+      pstip_fs.ir.nir = nir_shader_clone(NULL, orig_fs->ir.nir);
+      nir_lower_pstipple_fs(pstip_fs.ir.nir,
+                            &pstip->fs->sampler_unit, 0, wincoord_file == TGSI_FILE_SYSTEM_VALUE);
+#endif
+   }
 
    assert(pstip->fs->sampler_unit < PIPE_MAX_SAMPLERS);
 
@@ -334,7 +344,11 @@ pstip_create_fs_state(struct pipe_context *pipe,
    struct pstip_fragment_shader *pstipfs = CALLOC_STRUCT(pstip_fragment_shader);
 
    if (pstipfs) {
-      pstipfs->state.tokens = tgsi_dup_tokens(fs->tokens);
+      pstipfs->state.type = fs->type;
+      if (fs->type == PIPE_SHADER_IR_TGSI)
+         pstipfs->state.tokens = tgsi_dup_tokens(fs->tokens);
+      else
+         pstipfs->state.ir.nir = nir_shader_clone(NULL, fs->ir.nir);
 
       /* pass-through */
       pstipfs->driver_fs = pstip->driver_create_fs_state(pstip->pipe, fs);
@@ -368,7 +382,10 @@ pstip_delete_fs_state(struct pipe_context *pipe, void *fs)
    if (pstipfs->pstip_fs)
       pstip->driver_delete_fs_state(pstip->pipe, pstipfs->pstip_fs);
 
-   FREE((void*)pstipfs->state.tokens);
+   if (pstipfs->state.type == PIPE_SHADER_IR_TGSI)
+      FREE((void*)pstipfs->state.tokens);
+   else
+      ralloc_free(pstipfs->state.ir.nir);
    FREE(pstipfs);
 }
 

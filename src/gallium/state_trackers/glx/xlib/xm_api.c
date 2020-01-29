@@ -1358,7 +1358,7 @@ void XMesaSwapBuffers( XMesaBuffer b )
    }
 
    if (xmctx && xmctx->xm_buffer == b) {
-      xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL);
+      xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
    }
 
    xmesa_swap_st_framebuffer(b->stfb);
@@ -1373,7 +1373,7 @@ void XMesaCopySubBuffer( XMesaBuffer b, int x, int y, int width, int height )
 {
    XMesaContext xmctx = XMesaGetCurrentContext();
 
-   xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL);
+   xmctx->st->flush( xmctx->st, ST_FLUSH_FRONT, NULL, NULL, NULL);
 
    xmesa_copy_st_framebuffer(b->stfb,
          ST_ATTACHMENT_BACK_LEFT, ST_ATTACHMENT_FRONT_LEFT,
@@ -1388,7 +1388,7 @@ void XMesaFlush( XMesaContext c )
       XMesaDisplay xmdpy = xmesa_init_display(c->xm_visual->display);
       struct pipe_fence_handle *fence = NULL;
 
-      c->st->flush(c->st, ST_FLUSH_FRONT, &fence);
+      c->st->flush(c->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
       if (fence) {
          xmdpy->screen->fence_finish(xmdpy->screen, NULL, fence,
                                      PIPE_TIMEOUT_INFINITE);

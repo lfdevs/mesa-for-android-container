@@ -34,7 +34,7 @@ _xa_version = '.'.join(xa_version)
 
 libxatracker = shared_library(
   'xatracker',
-  ['target.c', xmlpool_options_h],
+  'target.c',
   c_args : c_vis_args,
   cpp_args : cpp_vis_args,
   link_args : [xa_link_args, ld_args_gc_sections],
@@ -48,7 +48,7 @@ libxatracker = shared_library(
   ],
   link_depends : xa_link_depends,
   dependencies : [
-    idep_mesautil,
+    idep_mesautil, idep_xmlconfig_headers,
     driver_nouveau, driver_i915, driver_svga, driver_freedreno,
   ],
   version : _xa_version,

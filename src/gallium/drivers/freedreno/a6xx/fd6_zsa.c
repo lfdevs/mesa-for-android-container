@@ -47,44 +47,60 @@ fd6_zsa_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
-	switch (cso->depth.func) {
-	case PIPE_FUNC_LESS:
-	case PIPE_FUNC_LEQUAL:
-		so->gras_lrz_cntl = A6XX_GRAS_LRZ_CNTL_ENABLE;
-		so->rb_lrz_cntl = A6XX_RB_LRZ_CNTL_ENABLE;
-		break;
-
-	case PIPE_FUNC_GREATER:
-	case PIPE_FUNC_GEQUAL:
-		so->gras_lrz_cntl = A6XX_GRAS_LRZ_CNTL_ENABLE | A6XX_GRAS_LRZ_CNTL_GREATER;
-		so->rb_lrz_cntl = A6XX_RB_LRZ_CNTL_ENABLE;
-		break;
-
-	default:
-		/* LRZ not enabled */
-		so->gras_lrz_cntl = 0;
-		break;
-	}
-
-	if (cso->depth.writemask) {
-		if (cso->depth.enabled)
-			so->gras_lrz_cntl |= A6XX_GRAS_LRZ_CNTL_UNK4;
-		so->lrz_write = true;
-	}
-
 	so->rb_depth_cntl |=
 		A6XX_RB_DEPTH_CNTL_ZFUNC(cso->depth.func); /* maps 1:1 */
 
-	if (cso->depth.enabled)
+	if (cso->depth.enabled) {
 		so->rb_depth_cntl |=
 			A6XX_RB_DEPTH_CNTL_Z_ENABLE |
 			A6XX_RB_DEPTH_CNTL_Z_TEST_ENABLE;
+
+		so->gras_lrz_cntl |= A6XX_GRAS_LRZ_CNTL_Z_TEST_ENABLE;
+
+		if (cso->depth.writemask) {
+			so->lrz_write = true;
+		}
+
+		switch (cso->depth.func) {
+		case PIPE_FUNC_LESS:
+		case PIPE_FUNC_LEQUAL:
+			so->gras_lrz_cntl |= A6XX_GRAS_LRZ_CNTL_ENABLE;
+			so->rb_lrz_cntl |= A6XX_RB_LRZ_CNTL_ENABLE;
+			break;
+
+		case PIPE_FUNC_GREATER:
+		case PIPE_FUNC_GEQUAL:
+			so->gras_lrz_cntl |= A6XX_GRAS_LRZ_CNTL_ENABLE | A6XX_GRAS_LRZ_CNTL_GREATER;
+			so->rb_lrz_cntl |= A6XX_RB_LRZ_CNTL_ENABLE;
+			break;
+
+		case PIPE_FUNC_NEVER:
+			so->gras_lrz_cntl |= A6XX_GRAS_LRZ_CNTL_ENABLE;
+			so->rb_lrz_cntl |= A6XX_RB_LRZ_CNTL_ENABLE;
+			so->lrz_write = false;
+			break;
+
+		case PIPE_FUNC_EQUAL:
+		case PIPE_FUNC_NOTEQUAL:
+		case PIPE_FUNC_ALWAYS:
+			so->lrz_write = false;
+			so->invalidate_lrz = true;
+			break;
+		}
+	}
 
 	if (cso->depth.writemask)
 		so->rb_depth_cntl |= A6XX_RB_DEPTH_CNTL_Z_WRITE_ENABLE;
 
 	if (cso->stencil[0].enabled) {
 		const struct pipe_stencil_state *s = &cso->stencil[0];
+
+		/* stencil test happens before depth test, so without performing
+		 * stencil test we don't really know what the updates to the
+		 * depth buffer will be.
+		 */
+		so->lrz_write = false;
+		so->invalidate_lrz = true;
 
 		so->rb_stencil_control |=
 			A6XX_RB_STENCIL_CONTROL_STENCIL_READ |

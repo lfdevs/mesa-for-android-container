@@ -103,6 +103,7 @@ struct fd_batch {
 	bool flushed : 1;
 	bool blit : 1;
 	bool back_blit : 1;      /* only blit so far is resource shadowing back-blit */
+	bool tessellation : 1;      /* tessellation used in batch */
 
 	/* Keep track if WAIT_FOR_IDLE is needed for registers we need
 	 * to update via RMW:
@@ -223,6 +224,18 @@ struct fd_batch {
 
 	/** set of dependent batches.. holds refs to dependent batches: */
 	uint32_t dependents_mask;
+
+	/* Buffer for tessellation engine input
+	 */
+	struct fd_bo *tessfactor_bo;
+	uint32_t tessfactor_size;
+
+	/* Buffer for passing parameters between TCS and TES
+	 */
+	struct fd_bo *tessparam_bo;
+	uint32_t tessparam_size;
+
+	struct fd_ringbuffer *tess_addrs_constobj;
 };
 
 struct fd_batch * fd_batch_create(struct fd_context *ctx, bool nondraw);

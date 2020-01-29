@@ -37,10 +37,10 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 	uint32_t depth = prsc->depth0;
 
 	for (level = 0; level <= prsc->last_level; level++) {
-		struct fd_resource_slice *slice = fd_resource_slice(rsc, level);
+		struct fdl_slice *slice = fd_resource_slice(rsc, level);
 		uint32_t blocks;
 
-		if (rsc->tile_mode) {
+		if (rsc->layout.tile_mode) {
 			if (prsc->target != PIPE_TEXTURE_CUBE) {
 				if (level == 0) {
 					width = util_next_power_of_two(width);
@@ -73,12 +73,12 @@ setup_slices(struct fd_resource *rsc, uint32_t alignment, enum pipe_format forma
 		 */
 		if (prsc->target == PIPE_TEXTURE_3D && (
 					level == 1 ||
-					(level > 1 && rsc->slices[level - 1].size0 > 0xf000)))
-			slice->size0 = align(blocks * rsc->cpp, alignment);
+					(level > 1 && fd_resource_slice(rsc, level - 1)->size0 > 0xf000)))
+			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
 		else if (level == 0 || alignment == 1)
-			slice->size0 = align(blocks * rsc->cpp, alignment);
+			slice->size0 = align(blocks * rsc->layout.cpp, alignment);
 		else
-			slice->size0 = rsc->slices[level - 1].size0;
+			slice->size0 = fd_resource_slice(rsc, level - 1)->size0;
 
 		size += slice->size0 * depth * prsc->array_size;
 

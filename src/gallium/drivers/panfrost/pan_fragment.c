@@ -25,8 +25,9 @@
 #include "pan_context.h"
 #include "pan_util.h"
 #include "pan_format.h"
+#include "panfrost-quirks.h"
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 /* Mark a surface as written */
 
@@ -48,11 +49,12 @@ panfrost_initialize_surface(
  * presentations, this is supposed to correspond to eglSwapBuffers) */
 
 mali_ptr
-panfrost_fragment_job(struct panfrost_batch *batch, bool has_draws)
+panfrost_fragment_job(struct panfrost_batch *batch, bool has_draws,
+                      struct mali_job_descriptor_header **header_cpu)
 {
         struct panfrost_screen *screen = pan_screen(batch->ctx->base.screen);
 
-        mali_ptr framebuffer = screen->require_sfbd ?
+        mali_ptr framebuffer = (screen->quirks & MIDGARD_SFBD) ?
                                panfrost_sfbd_fragment(batch, has_draws) :
                                panfrost_mfbd_fragment(batch, has_draws);
 
@@ -100,12 +102,9 @@ panfrost_fragment_job(struct panfrost_batch *batch, bool has_draws)
                 .framebuffer = framebuffer,
         };
 
-        /* Normally, there should be no padding. However, fragment jobs are
-         * shared with 64-bit Bifrost systems, and accordingly there is 4-bytes
-         * of zero padding in between. */
-
         struct panfrost_transfer transfer = panfrost_allocate_transient(batch, sizeof(header) + sizeof(payload));
         memcpy(transfer.cpu, &header, sizeof(header));
         memcpy(transfer.cpu + sizeof(header), &payload, sizeof(payload));
+        *header_cpu = (struct mali_job_descriptor_header *)transfer.cpu;
         return transfer.gpu;
 }

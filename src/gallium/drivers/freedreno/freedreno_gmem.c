@@ -28,7 +28,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 
 #include "freedreno_gmem.h"
 #include "freedreno_context.h"
@@ -130,9 +130,9 @@ calculate_tiles(struct fd_batch *batch)
 
 	if (has_zs) {
 		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		zsbuf_cpp[0] = rsc->cpp;
+		zsbuf_cpp[0] = rsc->layout.cpp;
 		if (rsc->stencil)
-			zsbuf_cpp[1] = rsc->stencil->cpp;
+			zsbuf_cpp[1] = rsc->stencil->layout.cpp;
 	} else {
 		/* we might have a zsbuf, but it isn't used */
 		batch->restore &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
@@ -446,6 +446,9 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		}
 	}
 
+	if (fd_mesa_debug & FD_DBG_NOGMEM)
+		sysmem = true;
+
 	/* Layered rendering always needs bypass. */
 	for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
 		struct pipe_surface *psurf = pfb->cbufs[i];
@@ -453,6 +456,14 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 			continue;
 		if (psurf->u.tex.first_layer < psurf->u.tex.last_layer)
 			sysmem = true;
+	}
+
+	/* Tessellation doesn't seem to support tiled rendering so fall back to
+	 * bypass.
+	 */
+	if (batch->tessellation) {
+		debug_assert(ctx->emit_sysmem_prep);
+		sysmem = true;
 	}
 
 	fd_reset_wfi(batch);

@@ -29,6 +29,10 @@
 #include <unistd.h>
 #include <errno.h>
 
+#ifndef HAVE_DIRENT_D_TYPE
+#include <limits.h> // PATH_MAX
+#endif
+
 #include <drm-uapi/i915_drm.h>
 
 #include "common/gen_gem.h"
@@ -396,6 +400,20 @@ static inline uint64_t to_user_pointer(void *ptr)
 }
 
 static bool
+is_dir_or_link(const struct dirent *entry, const char *parent_dir)
+{
+#ifdef HAVE_DIRENT_D_TYPE
+   return entry->d_type == DT_DIR || entry->d_type == DT_LNK;
+#else
+   struct stat st;
+   char path[PATH_MAX + 1];
+   snprintf(path, sizeof(path), "%s/%s", parent_dir, entry->d_name);
+   lstat(path, &st);
+   return S_ISDIR(st.st_mode) || S_ISLNK(st.st_mode);
+#endif
+}
+
+static bool
 get_sysfs_dev_dir(struct gen_perf_config *perf, int fd)
 {
    struct stat sb;
@@ -434,8 +452,7 @@ get_sysfs_dev_dir(struct gen_perf_config *perf, int fd)
    }
 
    while ((drm_entry = readdir(drmdir))) {
-      if ((drm_entry->d_type == DT_DIR ||
-           drm_entry->d_type == DT_LNK) &&
+      if (is_dir_or_link(drm_entry, perf->sysfs_dev_dir) &&
           strncmp(drm_entry->d_name, "card", 4) == 0)
       {
          len = snprintf(perf->sysfs_dev_dir,
@@ -551,9 +568,7 @@ enumerate_sysfs_metrics(struct gen_perf_config *perf)
 
    while ((metric_entry = readdir(metricsdir))) {
       struct hash_entry *entry;
-
-      if ((metric_entry->d_type != DT_DIR &&
-           metric_entry->d_type != DT_LNK) ||
+      if (!is_dir_or_link(metric_entry, buf) ||
           metric_entry->d_name[0] == '.')
          continue;
 
@@ -789,8 +804,13 @@ get_register_queries_function(const struct gen_device_info *devinfo)
    }
    if (devinfo->is_cannonlake)
       return gen_oa_register_queries_cnl;
-   if (devinfo->gen == 11)
+   if (devinfo->gen == 11) {
+      if (devinfo->is_elkhartlake)
+         return gen_oa_register_queries_lkf;
       return gen_oa_register_queries_icl;
+   }
+   if (devinfo->gen == 12)
+      return gen_oa_register_queries_tgl;
 
    return NULL;
 }
@@ -947,7 +967,7 @@ load_oa_metrics(struct gen_perf_config *perf, int fd,
       return false;
 
    perf->oa_metrics_table =
-      _mesa_hash_table_create(perf, _mesa_key_hash_string,
+      _mesa_hash_table_create(perf, _mesa_hash_string,
                               _mesa_key_string_equal);
 
    /* Index all the metric sets mesa knows about before looking to see what
@@ -1509,11 +1529,11 @@ free_sample_bufs(struct gen_perf_context *perf_ctx)
  * pipeline statistics for the performance query object.
  */
 static void
-snapshot_statistics_registers(void *context,
-                              struct gen_perf_config *perf,
+snapshot_statistics_registers(struct gen_perf_context *ctx,
                               struct gen_perf_query_object *obj,
                               uint32_t offset_in_bytes)
 {
+   struct gen_perf_config *perf = ctx->perf;
    const struct gen_perf_query_info *query = obj->queryinfo;
    const int n_counters = query->n_counters;
 
@@ -1522,10 +1542,24 @@ snapshot_statistics_registers(void *context,
 
       assert(counter->data_type == GEN_PERF_COUNTER_DATA_TYPE_UINT64);
 
-      perf->vtbl.store_register_mem64(context, obj->pipeline_stats.bo,
-                                      counter->pipeline_stat.reg,
-                                      offset_in_bytes + i * sizeof(uint64_t));
+      perf->vtbl.store_register_mem(ctx->ctx, obj->pipeline_stats.bo,
+                                    counter->pipeline_stat.reg, 8,
+                                    offset_in_bytes + i * sizeof(uint64_t));
    }
+}
+
+static void
+snapshot_freq_register(struct gen_perf_context *ctx,
+                       struct gen_perf_query_object *query,
+                       uint32_t bo_offset)
+{
+   struct gen_perf_config *perf = ctx->perf;
+   const struct gen_device_info *devinfo = ctx->devinfo;
+
+   if (devinfo->gen == 8 && !devinfo->is_cherryview)
+      perf->vtbl.store_register_mem(ctx->ctx, query->oa.bo, GEN7_RPSTAT1, 4, bo_offset);
+   else if (devinfo->gen >= 9)
+      perf->vtbl.store_register_mem(ctx->ctx, query->oa.bo, GEN9_RPSTAT0, 4, bo_offset);
 }
 
 static void
@@ -1713,15 +1747,9 @@ gen_perf_begin_query(struct gen_perf_context *perf_ctx,
     * end snapshot - otherwise the results won't be a complete representation
     * of the work.
     *
-    * Theoretically there could be opportunities to minimize how much of the
-    * GPU pipeline is drained, or that we stall for, when we know what specific
-    * units the performance counters being queried relate to but we don't
-    * currently attempt to be clever here.
-    *
-    * Note: with our current simple approach here then for back-to-back queries
-    * we will redundantly emit duplicate commands to synchronize the command
-    * streamer with the rest of the GPU pipeline, but we assume that in HW the
-    * second synchronization is effectively a NOOP.
+    * To achieve this, we stall the pipeline at pixel scoreboard (prevent any
+    * additional work to be processed by the pipeline until all pixels of the
+    * previous draw has be completed).
     *
     * N.B. The final results are based on deltas of counters between (inside)
     * Begin/End markers so even though the total wall clock time of the
@@ -1735,7 +1763,7 @@ gen_perf_begin_query(struct gen_perf_context *perf_ctx,
     * This is our Begin synchronization point to drain current work on the
     * GPU before we capture our first counter snapshot...
     */
-   perf_cfg->vtbl.emit_mi_flush(perf_ctx->ctx);
+   perf_cfg->vtbl.emit_stall_at_pixel_scoreboard(perf_ctx->ctx);
 
    switch (queryinfo->kind) {
    case GEN_PERF_QUERY_TYPE_OA:
@@ -1848,19 +1876,10 @@ gen_perf_begin_query(struct gen_perf_context *perf_ctx,
       query->oa.begin_report_id = perf_ctx->next_query_start_report_id;
       perf_ctx->next_query_start_report_id += 2;
 
-      /* We flush the batchbuffer here to minimize the chances that MI_RPC
-       * delimiting commands end up in different batchbuffers. If that's the
-       * case, the measurement will include the time it takes for the kernel
-       * scheduler to load a new request into the hardware. This is manifested in
-       * tools like frameretrace by spikes in the "GPU Core Clocks" counter.
-       */
-      perf_cfg->vtbl.batchbuffer_flush(perf_ctx->ctx, __FILE__, __LINE__);
-
       /* Take a starting OA counter snapshot. */
       perf_cfg->vtbl.emit_mi_report_perf_count(perf_ctx->ctx, query->oa.bo, 0,
                                                query->oa.begin_report_id);
-      perf_cfg->vtbl.capture_frequency_stat_register(perf_ctx->ctx, query->oa.bo,
-                                                     MI_FREQ_START_OFFSET_BYTES);
+      snapshot_freq_register(perf_ctx, query, MI_FREQ_START_OFFSET_BYTES);
 
       ++perf_ctx->n_active_oa_queries;
 
@@ -1900,7 +1919,7 @@ gen_perf_begin_query(struct gen_perf_context *perf_ctx,
                                  STATS_BO_SIZE);
 
       /* Take starting snapshots. */
-      snapshot_statistics_registers(perf_ctx->ctx , perf_cfg, query, 0);
+      snapshot_statistics_registers(perf_ctx, query, 0);
 
       ++perf_ctx->n_active_pipeline_stats_queries;
       break;
@@ -1925,7 +1944,7 @@ gen_perf_end_query(struct gen_perf_context *perf_ctx,
     * For more details see comment in brw_begin_perf_query for
     * corresponding flush.
     */
-  perf_cfg->vtbl.emit_mi_flush(perf_ctx->ctx);
+   perf_cfg->vtbl.emit_stall_at_pixel_scoreboard(perf_ctx->ctx);
 
    switch (query->queryinfo->kind) {
    case GEN_PERF_QUERY_TYPE_OA:
@@ -1938,8 +1957,7 @@ gen_perf_end_query(struct gen_perf_context *perf_ctx,
        */
       if (!query->oa.results_accumulated) {
          /* Take an ending OA counter snapshot. */
-         perf_cfg->vtbl.capture_frequency_stat_register(perf_ctx->ctx, query->oa.bo,
-                                                     MI_FREQ_END_OFFSET_BYTES);
+         snapshot_freq_register(perf_ctx, query, MI_FREQ_END_OFFSET_BYTES);
          perf_cfg->vtbl.emit_mi_report_perf_count(perf_ctx->ctx, query->oa.bo,
                                              MI_RPC_BO_END_OFFSET_BYTES,
                                              query->oa.begin_report_id + 1);
@@ -1954,7 +1972,7 @@ gen_perf_end_query(struct gen_perf_context *perf_ctx,
       break;
 
    case GEN_PERF_QUERY_TYPE_PIPELINE:
-      snapshot_statistics_registers(perf_ctx->ctx, perf_cfg, query,
+      snapshot_statistics_registers(perf_ctx, query,
                                     STATS_BO_END_OFFSET_BYTES);
       --perf_ctx->n_active_pipeline_stats_queries;
       break;
@@ -2271,6 +2289,14 @@ accumulate_oa_reports(struct gen_perf_context *perf_ctx,
    if (end[0] != (query->oa.begin_report_id + 1)) {
       DBG("Spurious end report id=%"PRIu32"\n", end[0]);
       goto error;
+   }
+
+   /* On Gen12+ OA reports are sourced from per context counters, so we don't
+    * ever have to look at the global OA buffer. Yey \o/
+    */
+   if (perf_ctx->devinfo->gen >= 12) {
+      last = start;
+      goto end;
    }
 
    /* See if we have any periodic reports to accumulate too... */

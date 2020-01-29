@@ -90,8 +90,6 @@ resolve_sampler_views(struct iris_context *ice,
 {
    uint32_t views = info ? (shs->bound_sampler_views & info->textures_used) : 0;
 
-   unsigned astc5x5_wa_bits = 0; // XXX: actual tracking
-
    while (views) {
       const int i = u_bit_scan(&views);
       struct iris_sampler_view *isv = shs->textures[i];
@@ -107,8 +105,7 @@ resolve_sampler_views(struct iris_context *ice,
          iris_resource_prepare_texture(ice, batch, res, isv->view.format,
                                        isv->view.base_level, isv->view.levels,
                                        isv->view.base_array_layer,
-                                       isv->view.array_len,
-                                       astc5x5_wa_bits);
+                                       isv->view.array_len);
       }
 
       iris_cache_flush_for_read(batch, res->bo);
@@ -177,8 +174,6 @@ iris_predraw_resolve_inputs(struct iris_context *ice,
       resolve_image_views(ice, batch, shs, draw_aux_buffer_disabled,
                           consider_framebuffer);
    }
-
-   // XXX: ASTC hacks
 }
 
 void
@@ -225,8 +220,7 @@ iris_predraw_resolve_framebuffer(struct iris_context *ice,
             iris_resource_prepare_texture(ice, batch, res, surf->view.format,
                                           surf->view.base_level, 1,
                                           surf->view.base_array_layer,
-                                          surf->view.array_len,
-                                          0);
+                                          surf->view.array_len);
          }
       }
    }
@@ -480,8 +474,8 @@ iris_resolve_color(struct iris_context *ice,
    //DBG("%s to mt %p level %u layer %u\n", __FUNCTION__, mt, level, layer);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &surf, &res->base, res->aux.usage,
-                                level, true);
+   iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev, &surf,
+                                &res->base, res->aux.usage, level, true);
 
    iris_batch_maybe_flush(batch, 1500);
 
@@ -533,8 +527,8 @@ iris_mcs_partial_resolve(struct iris_context *ice,
    assert(isl_aux_usage_has_mcs(res->aux.usage));
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &surf, &res->base, res->aux.usage,
-                                0, true);
+   iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev, &surf,
+                                &res->base, res->aux.usage, 0, true);
 
    struct blorp_batch blorp_batch;
    blorp_batch_init(&ice->blorp, &blorp_batch, batch, 0);
@@ -565,9 +559,9 @@ format_ccs_e_compat_with_resource(const struct gen_device_info *devinfo,
    return isl_formats_are_ccs_e_compatible(devinfo, isl_format, access_format);
 }
 
-static bool
-sample_with_depth_aux(const struct gen_device_info *devinfo,
-                      const struct iris_resource *res)
+bool
+iris_sample_with_depth_aux(const struct gen_device_info *devinfo,
+                           const struct iris_resource *res)
 {
    switch (res->aux.usage) {
    case ISL_AUX_USAGE_HIZ:
@@ -684,8 +678,8 @@ iris_hiz_exec(struct iris_context *ice,
    iris_batch_maybe_flush(batch, 1500);
 
    struct blorp_surf surf;
-   iris_blorp_surf_for_resource(&ice->vtbl, &surf, &res->base,
-                                res->aux.usage, level, true);
+   iris_blorp_surf_for_resource(&ice->vtbl, &batch->screen->isl_dev, &surf,
+                                &res->base, res->aux.usage, level, true);
 
    struct blorp_batch blorp_batch;
    enum blorp_batch_flags flags = 0;
@@ -1338,30 +1332,19 @@ can_texture_with_ccs(const struct gen_device_info *devinfo,
 enum isl_aux_usage
 iris_resource_texture_aux_usage(struct iris_context *ice,
                                 const struct iris_resource *res,
-                                enum isl_format view_format,
-                                enum gen9_astc5x5_wa_tex_type astc5x5_wa_bits)
+                                enum isl_format view_format)
 {
    struct iris_screen *screen = (void *) ice->ctx.screen;
    struct gen_device_info *devinfo = &screen->devinfo;
 
-   assert(devinfo->gen == 9 || astc5x5_wa_bits == 0);
-
-   /* On gen9, ASTC 5x5 textures cannot live in the sampler cache along side
-    * CCS or HiZ compressed textures.  See gen9_apply_astc5x5_wa_flush() for
-    * details.
-    */
-   if ((astc5x5_wa_bits & GEN9_ASTC5X5_WA_TEX_TYPE_ASTC5x5) &&
-       res->aux.usage != ISL_AUX_USAGE_MCS)
-      return ISL_AUX_USAGE_NONE;
-
    switch (res->aux.usage) {
    case ISL_AUX_USAGE_HIZ:
-      if (sample_with_depth_aux(devinfo, res))
+      if (iris_sample_with_depth_aux(devinfo, res))
          return ISL_AUX_USAGE_HIZ;
       break;
 
    case ISL_AUX_USAGE_HIZ_CCS:
-      if (sample_with_depth_aux(devinfo, res))
+      if (iris_sample_with_depth_aux(devinfo, res))
          return ISL_AUX_USAGE_CCS_E;
       break;
 
@@ -1413,11 +1396,10 @@ iris_resource_prepare_texture(struct iris_context *ice,
                               struct iris_resource *res,
                               enum isl_format view_format,
                               uint32_t start_level, uint32_t num_levels,
-                              uint32_t start_layer, uint32_t num_layers,
-                              enum gen9_astc5x5_wa_tex_type astc5x5_wa_bits)
+                              uint32_t start_layer, uint32_t num_layers)
 {
    enum isl_aux_usage aux_usage =
-      iris_resource_texture_aux_usage(ice, res, view_format, astc5x5_wa_bits);
+      iris_resource_texture_aux_usage(ice, res, view_format);
 
    bool clear_supported = aux_usage != ISL_AUX_USAGE_NONE;
 

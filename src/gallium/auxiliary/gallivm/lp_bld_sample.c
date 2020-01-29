@@ -34,7 +34,7 @@
 
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 #include "util/u_cpu_detect.h"
 #include "lp_bld_arit.h"

@@ -440,7 +440,7 @@ nvc0_fp_gen_header(struct nvc0_program *fp, struct nv50_ir_prog_info *info)
 
    if (info->prop.fp.usesDiscard)
       fp->hdr[0] |= 0x8000;
-   if (info->prop.fp.numColourResults > 1)
+   if (!info->prop.fp.separateFragData)
       fp->hdr[0] |= 0x4000;
    if (info->io.sampleMask < PIPE_MAX_SHADER_OUTPUTS)
       fp->hdr[19] |= 0x1;

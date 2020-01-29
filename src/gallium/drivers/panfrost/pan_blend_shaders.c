@@ -85,42 +85,40 @@
  */
 
 static nir_lower_blend_options
-nir_make_options(const struct pipe_blend_state *blend, unsigned nr_cbufs)
+nir_make_options(const struct pipe_blend_state *blend, unsigned i)
 {
         nir_lower_blend_options options;
 
-        for (unsigned i = 0; i < nr_cbufs; ++i) {
-                /* If blend is disabled, we just use replace mode */
+        /* If blend is disabled, we just use replace mode */
 
-                nir_lower_blend_channel rgb = {
-                        .func = BLEND_FUNC_ADD,
-                        .src_factor = BLEND_FACTOR_ZERO,
-                        .invert_src_factor = true,
-                        .dst_factor = BLEND_FACTOR_ZERO,
-                        .invert_dst_factor = false
-                };
+        nir_lower_blend_channel rgb = {
+                .func = BLEND_FUNC_ADD,
+                .src_factor = BLEND_FACTOR_ZERO,
+                .invert_src_factor = true,
+                .dst_factor = BLEND_FACTOR_ZERO,
+                .invert_dst_factor = false
+        };
 
-                nir_lower_blend_channel alpha = rgb;
+        nir_lower_blend_channel alpha = rgb;
 
-                if (blend->rt[i].blend_enable) {
-                        rgb.func = util_blend_func_to_shader(blend->rt[i].rgb_func);
-                        rgb.src_factor = util_blend_factor_to_shader(blend->rt[i].rgb_src_factor);
-                        rgb.dst_factor = util_blend_factor_to_shader(blend->rt[i].rgb_dst_factor);
-                        rgb.invert_src_factor = util_blend_factor_is_inverted(blend->rt[i].rgb_src_factor);
-                        rgb.invert_dst_factor = util_blend_factor_is_inverted(blend->rt[i].rgb_dst_factor);
+        if (blend->rt[i].blend_enable) {
+                rgb.func = util_blend_func_to_shader(blend->rt[i].rgb_func);
+                rgb.src_factor = util_blend_factor_to_shader(blend->rt[i].rgb_src_factor);
+                rgb.dst_factor = util_blend_factor_to_shader(blend->rt[i].rgb_dst_factor);
+                rgb.invert_src_factor = util_blend_factor_is_inverted(blend->rt[i].rgb_src_factor);
+                rgb.invert_dst_factor = util_blend_factor_is_inverted(blend->rt[i].rgb_dst_factor);
 
-                        alpha.func = util_blend_func_to_shader(blend->rt[i].alpha_func);
-                        alpha.src_factor = util_blend_factor_to_shader(blend->rt[i].alpha_src_factor);
-                        alpha.dst_factor = util_blend_factor_to_shader(blend->rt[i].alpha_dst_factor);
-                        alpha.invert_src_factor = util_blend_factor_is_inverted(blend->rt[i].alpha_src_factor);
-                        alpha.invert_dst_factor = util_blend_factor_is_inverted(blend->rt[i].alpha_dst_factor);
-                }
-
-                options.rt[i].rgb = rgb;
-                options.rt[i].alpha = alpha;
-
-                options.rt[i].colormask = blend->rt[i].colormask;
+                alpha.func = util_blend_func_to_shader(blend->rt[i].alpha_func);
+                alpha.src_factor = util_blend_factor_to_shader(blend->rt[i].alpha_src_factor);
+                alpha.dst_factor = util_blend_factor_to_shader(blend->rt[i].alpha_dst_factor);
+                alpha.invert_src_factor = util_blend_factor_is_inverted(blend->rt[i].alpha_src_factor);
+                alpha.invert_dst_factor = util_blend_factor_is_inverted(blend->rt[i].alpha_dst_factor);
         }
+
+        options.rgb = rgb;
+        options.alpha = alpha;
+
+        options.colormask = blend->rt[i].colormask;
 
         return options;
 }
@@ -129,8 +127,10 @@ struct panfrost_blend_shader
 panfrost_compile_blend_shader(
         struct panfrost_context *ctx,
         struct pipe_blend_state *cso,
-        enum pipe_format format)
+        enum pipe_format format,
+        unsigned rt)
 {
+        struct panfrost_screen *screen = pan_screen(ctx->base.screen);
         struct panfrost_blend_shader res;
 
         res.ctx = ctx;
@@ -164,18 +164,15 @@ panfrost_compile_blend_shader(
         nir_store_var(b, c_out, s_src, 0xFF);
 
         nir_lower_blend_options options =
-                nir_make_options(cso, 1);
+                nir_make_options(cso, rt);
         NIR_PASS_V(shader, nir_lower_blend, options);
 
-        NIR_PASS_V(shader, nir_lower_framebuffer, format);
+        NIR_PASS_V(shader, nir_lower_framebuffer, format, screen->gpu_id);
 
         /* Compile the built shader */
 
         midgard_program program;
-        midgard_compile_shader_nir(&ctx->compiler, shader, &program, true);
-
-        /* At least two work registers are needed due to an encoding quirk */
-        res.work_count = MAX2(program.work_register_count, 2);
+        midgard_compile_shader_nir(shader, &program, true, rt, screen->gpu_id, false);
 
         /* Allow us to patch later */
         res.patch_index = program.blend_patch_offset;

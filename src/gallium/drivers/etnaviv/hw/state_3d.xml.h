@@ -10,15 +10,15 @@ git clone git://0x04.net/rules-ng-ng
 The rules-ng-ng source files this header was generated from are:
 - state.xml     (  26666 bytes, from 2019-08-12 13:32:55)
 - common.xml    (  35468 bytes, from 2019-08-09 17:16:20)
-- common_3d.xml (  14991 bytes, from 2019-09-12 20:32:47)
-- state_hi.xml  (  30396 bytes, from 2019-09-12 20:21:39)
+- common_3d.xml (  15058 bytes, from 2019-09-12 20:37:35)
+- state_hi.xml  (  30552 bytes, from 2020-01-06 02:44:00)
 - copyright.xml (   1597 bytes, from 2019-08-09 17:34:08)
 - state_2d.xml  (  51552 bytes, from 2019-08-09 17:34:00)
-- state_3d.xml  (  83069 bytes, from 2019-09-12 20:28:49)
+- state_3d.xml  (  83644 bytes, from 2020-01-06 02:44:06)
 - state_blt.xml (  14252 bytes, from 2019-09-12 20:21:39)
 - state_vg.xml  (   5975 bytes, from 2019-08-09 17:33:52)
 
-Copyright (C) 2012-2019 by the following authors:
+Copyright (C) 2012-2020 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
 - Christian Gmeiner <christian.gmeiner@gmail.com>
 - Lucas Stach <l.stach@pengutronix.de>
@@ -167,6 +167,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_VS_INPUT_COUNT_UNK8__MASK				0x00001f00
 #define VIVS_VS_INPUT_COUNT_UNK8__SHIFT				8
 #define VIVS_VS_INPUT_COUNT_UNK8(x)				(((x) << VIVS_VS_INPUT_COUNT_UNK8__SHIFT) & VIVS_VS_INPUT_COUNT_UNK8__MASK)
+#define VIVS_VS_INPUT_COUNT_ID_ENABLE				0x80000000
 
 #define VIVS_VS_TEMP_REGISTER_CONTROL				0x0000080c
 #define VIVS_VS_TEMP_REGISTER_CONTROL_NUM_TEMPS__MASK		0x0000003f
@@ -1233,6 +1234,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_RS_SOURCE_STRIDE_STRIDE__MASK			0x0003ffff
 #define VIVS_RS_SOURCE_STRIDE_STRIDE__SHIFT			0
 #define VIVS_RS_SOURCE_STRIDE_STRIDE(x)				(((x) << VIVS_RS_SOURCE_STRIDE_STRIDE__SHIFT) & VIVS_RS_SOURCE_STRIDE_STRIDE__MASK)
+#define VIVS_RS_SOURCE_STRIDE_UNK29				0x20000000
 #define VIVS_RS_SOURCE_STRIDE_MULTI				0x40000000
 #define VIVS_RS_SOURCE_STRIDE_TILING				0x80000000
 
@@ -1536,6 +1538,27 @@ DEALINGS IN THE SOFTWARE.
 
 #define VIVS_TE_SAMPLER_UNK02240(i0)			       (0x00002240 + 0x4*(i0))
 
+#define VIVS_TE_SAMPLER_ASTC0(i0)			       (0x00002280 + 0x4*(i0))
+#define VIVS_TE_SAMPLER_ASTC0_ASTC_FORMAT__MASK			0x0000000f
+#define VIVS_TE_SAMPLER_ASTC0_ASTC_FORMAT__SHIFT		0
+#define VIVS_TE_SAMPLER_ASTC0_ASTC_FORMAT(x)			(((x) << VIVS_TE_SAMPLER_ASTC0_ASTC_FORMAT__SHIFT) & VIVS_TE_SAMPLER_ASTC0_ASTC_FORMAT__MASK)
+#define VIVS_TE_SAMPLER_ASTC0_ASTC_SRGB				0x00000010
+#define VIVS_TE_SAMPLER_ASTC0_UNK8__MASK			0x0000ff00
+#define VIVS_TE_SAMPLER_ASTC0_UNK8__SHIFT			8
+#define VIVS_TE_SAMPLER_ASTC0_UNK8(x)				(((x) << VIVS_TE_SAMPLER_ASTC0_UNK8__SHIFT) & VIVS_TE_SAMPLER_ASTC0_UNK8__MASK)
+#define VIVS_TE_SAMPLER_ASTC0_UNK16__MASK			0x00ff0000
+#define VIVS_TE_SAMPLER_ASTC0_UNK16__SHIFT			16
+#define VIVS_TE_SAMPLER_ASTC0_UNK16(x)				(((x) << VIVS_TE_SAMPLER_ASTC0_UNK16__SHIFT) & VIVS_TE_SAMPLER_ASTC0_UNK16__MASK)
+#define VIVS_TE_SAMPLER_ASTC0_UNK24__MASK			0xff000000
+#define VIVS_TE_SAMPLER_ASTC0_UNK24__SHIFT			24
+#define VIVS_TE_SAMPLER_ASTC0_UNK24(x)				(((x) << VIVS_TE_SAMPLER_ASTC0_UNK24__SHIFT) & VIVS_TE_SAMPLER_ASTC0_UNK24__MASK)
+
+#define VIVS_TE_SAMPLER_ASTC1(i0)			       (0x00002300 + 0x4*(i0))
+
+#define VIVS_TE_SAMPLER_ASTC2(i0)			       (0x00002380 + 0x4*(i0))
+
+#define VIVS_TE_SAMPLER_ASTC3(i0)			       (0x00002340 + 0x4*(i0))
+
 #define VIVS_TE_SAMPLER_LOD_ADDR(i0, i1)		       (0x00002400 + 0x4*(i0) + 0x40*(i1))
 #define VIVS_TE_SAMPLER_LOD_ADDR__ESIZE				0x00000040
 #define VIVS_TE_SAMPLER_LOD_ADDR__LEN				0x0000000e
@@ -1616,7 +1639,9 @@ DEALINGS IN THE SOFTWARE.
 
 #define VIVS_NTE_SAMPLER_UNK10200(i0)			       (0x00010200 + 0x4*(i0))
 
-#define VIVS_NTE_SAMPLER_UNK10280(i0)			       (0x00010280 + 0x4*(i0))
+#define VIVS_NTE_SAMPLER_LINEAR_STRIDE(i0, i1)		       (0x00010280 + 0x4*(i0) + 0x4*(i1))
+#define VIVS_NTE_SAMPLER_LINEAR_STRIDE__ESIZE			0x00000004
+#define VIVS_NTE_SAMPLER_LINEAR_STRIDE__LEN			0x00000020
 
 #define VIVS_NTE_SAMPLER_3D_CONFIG(i0)			       (0x00010300 + 0x4*(i0))
 #define VIVS_NTE_SAMPLER_3D_CONFIG_DEPTH__MASK			0x00003fff
@@ -1678,7 +1703,7 @@ DEALINGS IN THE SOFTWARE.
 
 #define VIVS_NTE_SAMPLER_ASTC2(i0)			       (0x00010600 + 0x4*(i0))
 
-#define VIVS_NTE_SAMPLER_ASTC3(i0)			       (0x00010600 + 0x4*(i0))
+#define VIVS_NTE_SAMPLER_ASTC3(i0)			       (0x00010680 + 0x4*(i0))
 
 #define VIVS_NTE_SAMPLER_BASELOD(i0)			       (0x00010700 + 0x4*(i0))
 #define VIVS_NTE_SAMPLER_BASELOD_BASELOD__MASK			0x0000000f

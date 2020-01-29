@@ -23,7 +23,7 @@
  *
  */
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_inlines.h"
 
 #include "nv30/nv30_screen.h"

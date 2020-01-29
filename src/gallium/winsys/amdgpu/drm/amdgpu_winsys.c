@@ -138,6 +138,7 @@ static void do_winsys_deinit(struct amdgpu_winsys *ws)
    }
    pb_cache_deinit(&ws->bo_cache);
    util_hash_table_destroy(ws->bo_export_table);
+   simple_mtx_destroy(&ws->sws_list_lock);
    simple_mtx_destroy(&ws->global_bo_list_lock);
    simple_mtx_destroy(&ws->bo_export_table_lock);
 
@@ -171,8 +172,26 @@ static void amdgpu_winsys_destroy(struct radeon_winsys *rws)
 
    simple_mtx_unlock(&dev_tab_mutex);
 
-   if (destroy)
+   if (destroy) {
       do_winsys_deinit(ws);
+   } else {
+      struct amdgpu_screen_winsys **sws_iter;
+
+      /* Remove this amdgpu_screen_winsys from amdgpu_winsys' list */
+      simple_mtx_lock(&ws->sws_list_lock);
+      for (sws_iter = &ws->sws_list; *sws_iter; sws_iter = &(*sws_iter)->next) {
+         if (*sws_iter == sws) {
+            *sws_iter = sws->next;
+            break;
+         }
+      }
+      simple_mtx_unlock(&ws->sws_list_lock);
+   }
+
+   if (sws->kms_handles) {
+      assert(!destroy);
+      _mesa_hash_table_destroy(sws->kms_handles, NULL);
+   }
 
    close(sws->fd);
    FREE(rws);
@@ -294,6 +313,18 @@ static void amdgpu_pin_threads_to_L3_cache(struct radeon_winsys *rws,
                          util_cpu_caps.cores_per_L3);
 }
 
+static uint32_t kms_handle_hash(const void *key)
+{
+   const struct amdgpu_winsys_bo *bo = key;
+
+   return bo->u.real.kms_handle;
+}
+
+static bool kms_handle_equals(const void *a, const void *b)
+{
+   return a == b;
+}
+
 PUBLIC struct radeon_winsys *
 amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 		     radeon_screen_create_t screen_create)
@@ -316,7 +347,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 
    /* Initialize the amdgpu device. This should always return the same pointer
     * for the same fd. */
-   r = amdgpu_device_initialize(fd, &drm_major, &drm_minor, &dev);
+   r = amdgpu_device_initialize(ws->fd, &drm_major, &drm_minor, &dev);
    if (r) {
       fprintf(stderr, "amdgpu: amdgpu_device_initialize failed.\n");
       goto fail;
@@ -325,13 +356,18 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
    /* Lookup a winsys if we have already created one for this device. */
    aws = util_hash_table_get(dev_tab, dev);
    if (aws) {
-      pipe_reference(NULL, &aws->reference);
-
       /* Release the device handle, because we don't need it anymore.
        * This function is returning an existing winsys instance, which
        * has its own device handle.
        */
       amdgpu_device_deinitialize(dev);
+
+      ws->kms_handles = _mesa_hash_table_create(NULL, kms_handle_hash,
+                                                kms_handle_equals);
+      if (!ws->kms_handles)
+         goto fail;
+
+      pipe_reference(NULL, &aws->reference);
    } else {
       /* Create a new winsys. */
       aws = CALLOC_STRUCT(amdgpu_winsys);
@@ -339,6 +375,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
          goto fail;
 
       aws->dev = dev;
+      aws->fd = ws->fd;
       aws->info.drm_major = drm_major;
       aws->info.drm_minor = drm_minor;
 
@@ -385,6 +422,7 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
       list_inithead(&aws->global_bo_list);
       aws->bo_export_table = util_hash_table_create(hash_pointer, compare_pointers);
 
+      (void) simple_mtx_init(&aws->sws_list_lock, mtx_plain);
       (void) simple_mtx_init(&aws->global_bo_list_lock, mtx_plain);
       (void) simple_mtx_init(&aws->bo_fence_lock, mtx_plain);
       (void) simple_mtx_init(&aws->bo_export_table_lock, mtx_plain);
@@ -435,6 +473,11 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
       return NULL;
    }
 
+   simple_mtx_lock(&aws->sws_list_lock);
+   ws->next = aws->sws_list;
+   aws->sws_list = ws;
+   simple_mtx_unlock(&aws->sws_list_lock);
+
    /* We must unlock the mutex once the winsys is fully initialized, so that
     * other threads attempting to create the winsys from the same fd will
     * get a fully initialized winsys and not just half-way initialized. */
@@ -445,6 +488,8 @@ amdgpu_winsys_create(int fd, const struct pipe_screen_config *config,
 fail_alloc:
    FREE(aws);
 fail:
+   if (ws->kms_handles)
+      _mesa_hash_table_destroy(ws->kms_handles, NULL);
    close(ws->fd);
    FREE(ws);
    simple_mtx_unlock(&dev_tab_mutex);

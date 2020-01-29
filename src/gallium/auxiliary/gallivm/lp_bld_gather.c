@@ -141,7 +141,7 @@ lp_build_gather_elem(struct gallivm_state *gallivm,
    if (src_width < dst_width) {
       res = LLVMBuildZExt(gallivm->builder, res, dst_elem_type, "");
       if (vector_justify) {
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
          res = LLVMBuildShl(gallivm->builder, res,
                             LLVMConstInt(dst_elem_type, dst_width - src_width, 0), "");
 #endif
@@ -234,7 +234,7 @@ lp_build_gather_elem_vec(struct gallivm_state *gallivm,
           */
          res = LLVMBuildZExt(gallivm->builder, res, dst_elem_type, "");
 
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
          if (vector_justify) {
          res = LLVMBuildShl(gallivm->builder, res,
                             LLVMConstInt(dst_elem_type,
@@ -553,7 +553,7 @@ lp_build_gather(struct gallivm_state *gallivm,
       if (vec_zext) {
          res = LLVMBuildZExt(gallivm->builder, res, res_t, "");
          if (vector_justify) {
-#ifdef PIPE_ARCH_BIG_ENDIAN
+#if UTIL_ARCH_BIG_ENDIAN
             unsigned sv = dst_type.width - src_width;
             res = LLVMBuildShl(gallivm->builder, res,
                                lp_build_const_int_vec(gallivm, res_type, sv), "");

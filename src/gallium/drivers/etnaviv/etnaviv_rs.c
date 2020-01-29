@@ -50,6 +50,21 @@
 
 #include <assert.h>
 
+/* return a RS "compatible" format for use when copying */
+static uint32_t
+etna_compatible_rs_format(enum pipe_format fmt)
+{
+   /* YUYV and UYVY are blocksize 4, but 2 bytes per pixel */
+   if (fmt == PIPE_FORMAT_YUYV || fmt == PIPE_FORMAT_UYVY)
+      return RS_FORMAT_A4R4G4B4;
+
+   switch (util_format_get_blocksize(fmt)) {
+   case 2: return RS_FORMAT_A4R4G4B4;
+   case 4: return RS_FORMAT_A8R8G8B8;
+   default: return ETNA_NO_MATCH;
+   }
+}
+
 void
 etna_compile_rs_state(struct etna_context *ctx, struct compiled_rs_state *cs,
                       const struct rs_state *rs)
@@ -250,7 +265,7 @@ etna_submit_rs_state(struct etna_context *ctx,
 /* Generate clear command for a surface (non-fast clear case) */
 void
 etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
-                          uint32_t clear_value)
+                          uint64_t clear_value)
 {
    struct etna_resource *dst = etna_resource(surf->base.texture);
    uint32_t format;
@@ -286,7 +301,7 @@ etna_rs_gen_clear_surface(struct etna_context *ctx, struct etna_surface *surf,
       .dither = {0xffffffff, 0xffffffff},
       .width = surf->surf.padded_width, /* These must be padded to 16x4 if !LINEAR, otherwise RS will hang */
       .height = surf->surf.padded_height,
-      .clear_value = {clear_value},
+      .clear_value = {clear_value, clear_value >> 32, clear_value, clear_value >> 32},
       .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_ENABLED1,
       .clear_bits = 0xffff
    });
@@ -298,10 +313,11 @@ etna_blit_clear_color_rs(struct pipe_context *pctx, struct pipe_surface *dst,
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_surface *surf = etna_surface(dst);
-   uint32_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color->f);
+   uint64_t new_clear_value = etna_clear_blit_pack_rgba(surf->base.format, color);
 
    if (surf->surf.ts_size) { /* TS: use precompiled clear command */
       ctx->framebuffer.TS_COLOR_CLEAR_VALUE = new_clear_value;
+      ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = new_clear_value >> 32;
 
       if (VIV_FEATURE(ctx->screen, chipMinorFeatures1, AUTO_DISABLE)) {
          /* Set number of color tiles to be filled */
@@ -535,6 +551,30 @@ etna_get_rs_alignment_mask(const struct etna_context *ctx,
    *height_mask = h_align -1;
 }
 
+static bool msaa_config(const struct pipe_resource *src,
+                        const struct pipe_resource *dst,
+                        int *msaa_xscale,
+                        int *msaa_yscale)
+{
+   int src_xscale = 1, src_yscale = 1;
+   int dst_xscale = 1, dst_yscale = 1;
+
+   assert(src->nr_samples <= 4);
+   assert(dst->nr_samples <= 4);
+
+   translate_samples_to_xyscale(src->nr_samples, &src_xscale, &src_yscale);
+   translate_samples_to_xyscale(dst->nr_samples, &dst_xscale, &dst_yscale);
+
+   /* RS does not support upscaling */
+   if ((src_xscale < dst_xscale) || (src_yscale < dst_yscale))
+      return false;
+
+   *msaa_xscale = src_xscale - dst_xscale + 1;
+   *msaa_yscale = src_yscale - dst_yscale + 1;
+
+   return true;
+}
+
 static bool
 etna_try_rs_blit(struct pipe_context *pctx,
                  const struct pipe_blit_info *blit_info)
@@ -549,8 +589,10 @@ etna_try_rs_blit(struct pipe_context *pctx,
    assert(blit_info->src.level <= src->base.last_level);
    assert(blit_info->dst.level <= dst->base.last_level);
 
-   if (!translate_samples_to_xyscale(src->base.nr_samples, &msaa_xscale, &msaa_yscale, NULL))
+   if (!msaa_config(&src->base, &dst->base, &msaa_xscale, &msaa_yscale)) {
+      DBG("upsampling not supported");
       return false;
+   }
 
    /* The width/height are in pixels; they do not change as a result of
     * multi-sampling. So, when blitting from a 4x multisampled surface
@@ -571,18 +613,19 @@ etna_try_rs_blit(struct pipe_context *pctx,
       return false;
    }
 
-   unsigned src_format = blit_info->src.format;
-   unsigned dst_format = blit_info->dst.format;
+   /* Only support same format (used tiling/detiling) blits for now.
+    * TODO: figure out which different-format blits are possible and test them
+    *  - fail if swizzle needed
+    *  - avoid trying to convert between float/int formats?
+    */
+   if (blit_info->src.format != blit_info->dst.format)
+      return false;
 
-   /* for a copy with same dst/src format, we can use a different format */
-   if (translate_rs_format(src_format) == ETNA_NO_MATCH &&
-       src_format == dst_format) {
-      src_format = dst_format = etna_compatible_rs_format(src_format);
-   }
+   uint32_t format = etna_compatible_rs_format(blit_info->dst.format);
+   if (format == ETNA_NO_MATCH)
+      return false;
 
-   if (translate_rs_format(src_format) == ETNA_NO_MATCH ||
-       translate_rs_format(dst_format) == ETNA_NO_MATCH ||
-       blit_info->scissor_enable ||
+   if (blit_info->scissor_enable ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return false;
@@ -700,6 +743,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
       etna_set_state_reloc(ctx->stream, VIVS_TS_COLOR_SURFACE_BASE, &reloc);
 
       etna_set_state(ctx->stream, VIVS_TS_COLOR_CLEAR_VALUE, src_lev->clear_value);
+      etna_set_state(ctx->stream, VIVS_TS_COLOR_CLEAR_VALUE_EXT, src_lev->clear_value >> 32);
 
       source_ts_valid = true;
    } else {
@@ -709,7 +753,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
 
    /* Kick off RS here */
    etna_compile_rs_state(ctx, &copy_to_screen, &(struct rs_state) {
-      .source_format = translate_rs_format(src_format),
+      .source_format = format,
       .source_tiling = src->layout,
       .source = src->bo,
       .source_offset = src_offset,
@@ -718,7 +762,7 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .source_padded_height = src_lev->padded_height,
       .source_ts_valid = source_ts_valid,
       .source_ts_compressed = src_lev->ts_compress_fmt >= 0,
-      .dest_format = translate_rs_format(dst_format),
+      .dest_format = format,
       .dest_tiling = dst->layout,
       .dest = dst->bo,
       .dest_offset = dst_offset,

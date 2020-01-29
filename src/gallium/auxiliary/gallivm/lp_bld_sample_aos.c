@@ -39,7 +39,7 @@
 #include "util/u_dump.h"
 #include "util/u_memory.h"
 #include "util/u_math.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_cpu_detect.h"
 #include "lp_bld_debug.h"
 #include "lp_bld_type.h"
@@ -602,7 +602,7 @@ lp_build_sample_fetch_image_linear(struct lp_build_sample_context *bld,
       r_fpart = LLVMBuildBitCast(builder, r_fpart, u8n_vec_type, "");
 
    for (j = 0; j < u8n.type.length; j += 4) {
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       unsigned subindex = 0;
 #else
       unsigned subindex = 3;

@@ -166,7 +166,7 @@ lp_build_const_pack_shuffle(struct gallivm_state *gallivm, unsigned n)
    assert(n <= LP_MAX_VECTOR_LENGTH);
 
    for(i = 0; i < n; ++i)
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
       elems[i] = lp_build_const_int32(gallivm, 2*i);
 #else
       elems[i] = lp_build_const_int32(gallivm, 2*i+1);
@@ -429,7 +429,7 @@ lp_build_unpack2(struct gallivm_state *gallivm,
       msb = lp_build_zero(gallivm, src_type);
 
    /* Interleave bits */
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    *dst_lo = lp_build_interleave2(gallivm, src_type, src, msb, 0);
    *dst_hi = lp_build_interleave2(gallivm, src_type, src, msb, 1);
 
@@ -483,7 +483,7 @@ lp_build_unpack2_native(struct gallivm_state *gallivm,
       msb = lp_build_zero(gallivm, src_type);
 
    /* Interleave bits */
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
    if (src_type.length * src_type.width == 256 && util_cpu_caps.has_avx2) {
       *dst_lo = lp_build_interleave2_half(gallivm, src_type, src, msb, 0);
       *dst_hi = lp_build_interleave2_half(gallivm, src_type, src, msb, 1);
@@ -606,7 +606,7 @@ lp_build_pack2(struct gallivm_state *gallivm,
             } else {
                intrinsic = "llvm.ppc.altivec.vpkuwus";
             }
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
             swap_intrinsic_operands = TRUE;
 #endif
          }
@@ -617,7 +617,7 @@ lp_build_pack2(struct gallivm_state *gallivm,
                intrinsic = "llvm.x86.sse2.packsswb.128";
             } else if (util_cpu_caps.has_altivec) {
                intrinsic = "llvm.ppc.altivec.vpkshss";
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
                swap_intrinsic_operands = TRUE;
 #endif
             }
@@ -626,7 +626,7 @@ lp_build_pack2(struct gallivm_state *gallivm,
                intrinsic = "llvm.x86.sse2.packuswb.128";
             } else if (util_cpu_caps.has_altivec) {
                intrinsic = "llvm.ppc.altivec.vpkshus";
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
                swap_intrinsic_operands = TRUE;
 #endif
             }

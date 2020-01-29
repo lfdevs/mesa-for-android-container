@@ -19,6 +19,14 @@
 # SOFTWARE.
 
 clover_cpp_args = []
+clover_opencl_cpp_args = [
+  '-DCL_TARGET_OPENCL_VERSION=220',
+  '-DCL_USE_DEPRECATED_OPENCL_1_0_APIS',
+  '-DCL_USE_DEPRECATED_OPENCL_1_1_APIS',
+  '-DCL_USE_DEPRECATED_OPENCL_1_2_APIS',
+  '-DCL_USE_DEPRECATED_OPENCL_2_0_APIS',
+  '-DCL_USE_DEPRECATED_OPENCL_2_1_APIS'
+]
 clover_spirv_cpp_args = []
 clover_incs = [inc_include, inc_src, inc_gallium, inc_gallium_aux]
 
@@ -53,6 +61,7 @@ libclllvm = static_library(
   include_directories : clover_incs,
   cpp_args : [
     clover_cpp_args,
+    clover_opencl_cpp_args,
     clover_spirv_cpp_args,
     cpp_vis_args,
     '-DLIBCLC_INCLUDEDIR="@0@/"'.format(dep_clc.get_pkgconfig_variable('includedir')),
@@ -70,7 +79,7 @@ libclspirv = static_library(
   'clspirv',
   files('spirv/invocation.cpp', 'spirv/invocation.hpp'),
   include_directories : clover_incs,
-  cpp_args : [clover_spirv_cpp_args, cpp_vis_args],
+  cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args, cpp_vis_args],
   dependencies : [dep_spirv_tools],
   override_options : clover_cpp_std,
 )
@@ -80,7 +89,7 @@ libclnir = static_library(
   files('nir/invocation.cpp', 'nir/invocation.hpp'),
   include_directories : [clover_incs, inc_mesa],
   dependencies : idep_nir,
-  cpp_args : [clover_spirv_cpp_args, cpp_vis_args],
+  cpp_args : [clover_opencl_cpp_args, clover_spirv_cpp_args, cpp_vis_args],
   override_options : clover_cpp_std,
 )
 
@@ -144,7 +153,12 @@ libclover = static_library(
   'clover',
   [clover_files, sha1_h],
   include_directories : clover_incs,
-  cpp_args : [clover_spirv_cpp_args, clover_cpp_args, cpp_vis_args],
+  cpp_args : [
+    clover_opencl_cpp_args,
+    clover_spirv_cpp_args,
+    clover_cpp_args,
+    cpp_vis_args
+  ],
   link_with : [libclllvm, libclspirv, libclnir],
   override_options : clover_cpp_std,
 )

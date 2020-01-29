@@ -68,6 +68,8 @@ typedef struct YYLTYPE {
    int last_line;
    int last_column;
    unsigned source;
+   /* Path for ARB_shading_language_include include source */
+   char *path;
 } YYLTYPE;
 # define YYLTYPE_IS_DECLARED 1
 # define YYLTYPE_IS_TRIVIAL 1
@@ -727,6 +729,8 @@ struct _mesa_glsl_parse_state {
    bool ARB_shader_viewport_layer_array_warn;
    bool ARB_shading_language_420pack_enable;
    bool ARB_shading_language_420pack_warn;
+   bool ARB_shading_language_include_enable;
+   bool ARB_shading_language_include_warn;
    bool ARB_shading_language_packing_enable;
    bool ARB_shading_language_packing_warn;
    bool ARB_tessellation_shader_enable;
@@ -868,6 +872,8 @@ struct _mesa_glsl_parse_state {
    bool INTEL_conservative_rasterization_warn;
    bool INTEL_shader_atomic_float_minmax_enable;
    bool INTEL_shader_atomic_float_minmax_warn;
+   bool INTEL_shader_integer_functions2_enable;
+   bool INTEL_shader_integer_functions2_warn;
    bool MESA_shader_integer_functions_enable;
    bool MESA_shader_integer_functions_warn;
    bool NV_compute_shader_derivatives_enable;
@@ -958,6 +964,7 @@ do {                                                            \
       (Current).first_column = YYRHSLOC(Rhs, 1).first_column;   \
       (Current).last_line    = YYRHSLOC(Rhs, N).last_line;      \
       (Current).last_column  = YYRHSLOC(Rhs, N).last_column;    \
+      (Current).path         = YYRHSLOC(Rhs, N).path;           \
    }                                                            \
    else                                                         \
    {                                                            \
@@ -965,6 +972,7 @@ do {                                                            \
          YYRHSLOC(Rhs, 0).last_line;                            \
       (Current).first_column = (Current).last_column =          \
          YYRHSLOC(Rhs, 0).last_column;                          \
+      (Current).path = YYRHSLOC(Rhs, 0).path;                   \
    }                                                            \
    (Current).source = 0;                                        \
 } while (0)

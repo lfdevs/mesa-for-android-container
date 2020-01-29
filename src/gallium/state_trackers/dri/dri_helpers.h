@@ -56,6 +56,9 @@ dri2_get_pipe_format_for_dri_format(int format);
 boolean
 dri2_query_dma_buf_formats(__DRIscreen *_screen, int max, int *formats,
                            int *count);
+boolean
+dri2_yuv_dma_buf_supported(struct dri_screen *screen,
+                           const struct dri2_format_mapping *map);
 
 __DRIimage *
 dri2_lookup_egl_image(struct dri_screen *screen, void *handle);

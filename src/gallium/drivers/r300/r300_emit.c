@@ -23,7 +23,7 @@
 
 /* r300_emit: Functions for emitting state. */
 
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_math.h"
 
 #include "r300_context.h"

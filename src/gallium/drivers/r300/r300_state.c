@@ -1157,7 +1157,7 @@ static void* r300_create_rs_state(struct pipe_context* pipe,
     rs->rs_draw.offset_tri = 0;
     rs->rs_draw.offset_clamp = 0;
 
-#ifdef PIPE_ARCH_LITTLE_ENDIAN
+#if UTIL_ARCH_LITTLE_ENDIAN
     vap_control_status = R300_VC_NO_SWAP;
 #else
     vap_control_status = R300_VC_32BIT_SWAP;

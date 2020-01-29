@@ -42,7 +42,7 @@
 #include <GL/wglext.h>
 
 #include "pipe/p_compiler.h"
-#include "util/u_format.h"
+#include "util/format/u_format.h"
 #include "util/u_memory.h"
 #include "stw_device.h"
 #include "stw_pixelformat.h"

@@ -88,7 +88,8 @@ etna_fence_server_sync(struct pipe_context *pctx,
 {
    struct etna_context *ctx = etna_context(pctx);
 
-   sync_accumulate("etnaviv", &ctx->in_fence_fd, pfence->fence_fd);
+   if (pfence->fence_fd != -1)
+      sync_accumulate("etnaviv", &ctx->in_fence_fd, pfence->fence_fd);
 }
 
 static int

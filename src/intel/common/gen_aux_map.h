@@ -43,6 +43,13 @@ extern "C" {
 struct gen_aux_map_context;
 struct gen_device_info;
 
+#define GEN_AUX_MAP_ADDRESS_MASK       0x0000ffffffffff00ull
+#define GEN_AUX_MAP_FORMAT_BITS_MASK   0xfff0000000000000ull
+#define GEN_AUX_MAP_GEN12_CCS_SCALE    256
+#define GEN_AUX_MAP_MAIN_PAGE_SIZE     (64 * 1024)
+#define GEN_AUX_MAP_AUX_PAGE_SIZE \
+   (GEN_AUX_MAP_MAIN_PAGE_SIZE / GEN_AUX_MAP_GEN12_CCS_SCALE)
+
 struct gen_aux_map_context *
 gen_aux_map_init(void *driver_ctx,
                  struct gen_mapped_pinned_buffer_alloc *buffer_alloc,
@@ -75,6 +82,19 @@ gen_aux_map_fill_bos(struct gen_aux_map_context *ctx, void **driver_bos,
 
 uint64_t
 gen_aux_map_get_base(struct gen_aux_map_context *ctx);
+
+uint64_t
+gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf);
+
+uint64_t *
+gen_aux_map_get_entry(struct gen_aux_map_context *ctx,
+                      uint64_t address,
+                      uint64_t *entry_address);
+
+void
+gen_aux_map_add_mapping(struct gen_aux_map_context *ctx, uint64_t address,
+                        uint64_t aux_address, uint64_t main_size_B,
+                        uint64_t format_bits);
 
 void
 gen_aux_map_add_image(struct gen_aux_map_context *ctx,

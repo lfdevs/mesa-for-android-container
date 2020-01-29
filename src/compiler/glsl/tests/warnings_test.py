@@ -65,11 +65,11 @@ def main():
         file = os.path.join(args.test_directory, file)
 
         with open('{}.expected'.format(file), 'rb') as f:
-            expected = f.read().strip()
+            expected = f.read().splitlines()
 
         actual = subprocess.check_output(
             runner + ['--just-log', '--version', '150', file]
-        ).strip()
+        ).splitlines()
 
         if actual == expected:
             print('PASS')

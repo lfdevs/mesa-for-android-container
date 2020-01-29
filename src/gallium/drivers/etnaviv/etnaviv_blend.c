@@ -123,7 +123,7 @@ etna_update_blend(struct etna_context *ctx)
    uint32_t colormask;
 
    if (pfb->cbufs[0] &&
-       translate_rs_format_rb_swap(pfb->cbufs[0]->format)) {
+       translate_pe_format_rb_swap(pfb->cbufs[0]->format)) {
       colormask = rt0->colormask & (PIPE_MASK_A | PIPE_MASK_G);
       if (rt0->colormask & PIPE_MASK_R)
          colormask |= PIPE_MASK_B;
@@ -164,7 +164,7 @@ etna_update_blend_color(struct etna_context *ctx)
 {
    struct pipe_framebuffer_state *pfb = &ctx->framebuffer_s;
    struct compiled_blend_color *cs = &ctx->blend_color;
-   bool rb_swap = (pfb->cbufs[0] && translate_rs_format_rb_swap(pfb->cbufs[0]->format));
+   bool rb_swap = (pfb->cbufs[0] && translate_pe_format_rb_swap(pfb->cbufs[0]->format));
 
    cs->PE_ALPHA_BLEND_COLOR =
       VIVS_PE_ALPHA_BLEND_COLOR_R(etna_cfloat_to_uint8(cs->color[rb_swap ? 2 : 0])) |

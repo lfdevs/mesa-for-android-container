@@ -28,7 +28,10 @@ include $(CLEAR_VARS)
 LOCAL_SRC_FILES := \
 	$(C_SOURCES)
 
-LOCAL_SHARED_LIBRARIES := libdrm_etnaviv
+LOCAL_GENERATED_SOURCES := $(MESA_GEN_NIR_H)
+
+LOCAL_SHARED_LIBRARIES := libdrm
+LOCAL_STATIC_LIBRARIES := libmesa_nir libetnaviv_drm
 LOCAL_MODULE := libmesa_pipe_etnaviv
 
 include $(GALLIUM_COMMON_MK)

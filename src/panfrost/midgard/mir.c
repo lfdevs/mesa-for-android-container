@@ -45,145 +45,14 @@ mir_get_alu_src(midgard_instruction *ins, unsigned idx)
         return vector_alu_from_unsigned(b);
 }
 
-unsigned
-mir_get_swizzle(midgard_instruction *ins, unsigned idx)
-{
-        if (ins->type == TAG_ALU_4) {
-                if (idx == 2 || ins->compact_branch)
-                        return ins->cond_swizzle;
-
-                return (mir_get_alu_src(ins, idx)).swizzle;
-        } else if (ins->type == TAG_LOAD_STORE_4) {
-                /* Main swizzle of a load is on the destination */
-                if (!OP_IS_STORE(ins->load_store.op))
-                        idx++;
-
-                switch (idx) {
-                case 0:
-                        return ins->load_store.swizzle;
-                case 1:
-                case 2: {
-                        uint8_t raw =
-                                (idx == 2) ? ins->load_store.arg_2 : ins->load_store.arg_1;
-
-                        /* TODO: Integrate component count with properties */
-                        unsigned components = 1;
-                        switch (ins->load_store.op) {
-                        case midgard_op_ld_int4:
-                                components = (idx == 0) ? 2 : 1;
-                                break;
-                        case midgard_op_st_int4:
-                                components = (idx == 1) ? 2 : 1;
-                                break;
-                        case midgard_op_ld_cubemap_coords:
-                                components = 3;
-                                break;
-                        case midgard_op_ldst_perspective_division_z:
-                                components = 3;
-                                break;
-                        case midgard_op_ldst_perspective_division_w:
-                                components = 4;
-                                break;
-                        default:
-                                components = 1;
-                                break;
-                        }
-
-                        return component_to_swizzle(midgard_ldst_select(raw).component, components);
-                }
-                default:
-                        unreachable("Unknown load/store source");
-                }
-        } else if (ins->type == TAG_TEXTURE_4) {
-                switch (idx) {
-                case 0:
-                        return ins->texture.in_reg_swizzle;
-                case 1:
-                        /* Swizzle on bias doesn't make sense */
-                        return 0;
-                default:
-                        unreachable("Unknown texture source");
-                }
-        } else {
-                unreachable("Unknown type");
-        }
-}
-
-void
-mir_set_swizzle(midgard_instruction *ins, unsigned idx, unsigned new)
-{
-        if (ins->type == TAG_ALU_4) {
-                if (idx == 2 || ins->compact_branch) {
-                        ins->cond_swizzle = new;
-                        return;
-                }
-
-                unsigned b = (idx == 0) ? ins->alu.src1 : ins->alu.src2;
-
-                midgard_vector_alu_src s =
-                        vector_alu_from_unsigned(b);
-
-                s.swizzle = new;
-                unsigned pack = vector_alu_srco_unsigned(s);
-
-                if (idx == 0)
-                        ins->alu.src1 = pack;
-                else
-                        ins->alu.src2 = pack;
-        } else if (ins->type == TAG_LOAD_STORE_4) {
-                /* Main swizzle of a load is on the destination */
-                if (!OP_IS_STORE(ins->load_store.op))
-                        idx++;
-
-                switch (idx) {
-                case 0:
-                        ins->load_store.swizzle = new;
-                        break;
-                case 1:
-                case 2: {
-                        uint8_t raw =
-                                (idx == 2) ? ins->load_store.arg_2 : ins->load_store.arg_1;
-
-                        midgard_ldst_register_select sel
-                                = midgard_ldst_select(raw);
-                        sel.component = swizzle_to_component(new);
-                        uint8_t packed = midgard_ldst_pack(sel);
-
-                        if (idx == 2)
-                                ins->load_store.arg_2 = packed;
-                        else
-                                ins->load_store.arg_1 = packed;
-
-                        break;
-                }
-                default:
-                        assert(new == 0);
-                        break;
-                }
-        } else if (ins->type == TAG_TEXTURE_4) {
-                switch (idx) {
-                case 0:
-                        ins->texture.in_reg_swizzle = new;
-                        break;
-                default:
-                        assert(new == 0);
-                        break;
-                }
-        } else {
-                unreachable("Unknown type");
-        }
-}
-
 static void
-mir_rewrite_index_src_single_swizzle(midgard_instruction *ins, unsigned old, unsigned new, unsigned swizzle)
+mir_rewrite_index_src_single_swizzle(midgard_instruction *ins, unsigned old, unsigned new, unsigned *swizzle)
 {
         for (unsigned i = 0; i < ARRAY_SIZE(ins->src); ++i) {
                 if (ins->src[i] != old) continue;
 
                 ins->src[i] = new;
-
-                mir_set_swizzle(ins, i,
-                        pan_compose_swizzle(mir_get_swizzle(ins, i), swizzle));
+                mir_compose_swizzle(ins->swizzle[i], swizzle, ins->swizzle[i]);
         }
 }
 
@@ -196,7 +65,7 @@ mir_rewrite_index_src(compiler_context *ctx, unsigned old, unsigned new)
 }
 
 void
-mir_rewrite_index_src_swizzle(compiler_context *ctx, unsigned old, unsigned new, unsigned swizzle)
+mir_rewrite_index_src_swizzle(compiler_context *ctx, unsigned old, unsigned new, unsigned *swizzle)
 {
         mir_foreach_instr_global(ctx, ins) {
                 mir_rewrite_index_src_single_swizzle(ins, old, new, swizzle);
@@ -253,18 +122,17 @@ mir_nontrivial_raw_mod(midgard_vector_alu_src src, bool is_int)
                 return src.mod;
 }
 
-bool
-mir_nontrivial_mod(midgard_vector_alu_src src, bool is_int, unsigned mask)
+static bool
+mir_nontrivial_mod(midgard_vector_alu_src src, bool is_int, unsigned mask, unsigned *swizzle)
 {
         if (mir_nontrivial_raw_mod(src, is_int)) return true;
 
         /* size-conversion */
         if (src.half) return true;
 
-        /* swizzle */
-        for (unsigned c = 0; c < 4; ++c) {
+        for (unsigned c = 0; c < 16; ++c) {
                 if (!(mask & (1 << c))) continue;
-                if (((src.swizzle >> (2*c)) & 3) != c) return true;
+                if (swizzle[c] != c) return true;
         }
 
         return false;
@@ -278,7 +146,7 @@ mir_nontrivial_source2_mod(midgard_instruction *ins)
         midgard_vector_alu_src src2 =
                 vector_alu_from_unsigned(ins->alu.src2);
 
-        return mir_nontrivial_mod(src2, is_int, ins->mask);
+        return mir_nontrivial_mod(src2, is_int, ins->mask, ins->swizzle[1]);
 }
 
 bool
@@ -397,7 +265,6 @@ mir_srcsize(midgard_instruction *ins, unsigned i)
 
         if (i >= 2) {
                 /* TODO: 16-bit conditions, ffma */
-                assert(i == 2);
                 return midgard_reg_mode_32;
         }
 
@@ -415,9 +282,27 @@ mir_srcsize(midgard_instruction *ins, unsigned i)
         return mode;
 }
 
+midgard_reg_mode
+mir_mode_for_destsize(unsigned size)
+{
+        switch (size) {
+        case 8:
+                return midgard_reg_mode_8;
+        case 16:
+                return midgard_reg_mode_16;
+        case 32:
+                return midgard_reg_mode_32;
+        case 64:
+                return midgard_reg_mode_64;
+        default:
+                unreachable("Unknown destination size");
+        }
+}
+
+
 /* Converts per-component mask to a byte mask */
 
-static uint16_t
+uint16_t
 mir_to_bytemask(midgard_reg_mode mode, unsigned mask)
 {
         switch (mode) {
@@ -426,7 +311,7 @@ mir_to_bytemask(midgard_reg_mode mode, unsigned mask)
 
         case midgard_reg_mode_16: {
                 unsigned space =
-                        ((mask & 0x1) << (0 - 0)) |
+                        (mask & 0x1) |
                         ((mask & 0x2) << (2 - 1)) |
                         ((mask & 0x4) << (4 - 2)) |
                         ((mask & 0x8) << (6 - 3)) |
@@ -440,7 +325,7 @@ mir_to_bytemask(midgard_reg_mode mode, unsigned mask)
 
         case midgard_reg_mode_32: {
                 unsigned space =
-                        ((mask & 0x1) << (0 - 0)) |
+                        (mask & 0x1) |
                         ((mask & 0x2) << (4 - 1)) |
                         ((mask & 0x4) << (8 - 2)) |
                         ((mask & 0x8) << (12 - 3));
@@ -496,22 +381,21 @@ mir_from_bytemask(uint16_t bytemask, midgard_reg_mode mode)
         return value;
 }
 
-/* Rounds down a bytemask to fit a given component count. Iterate each
- * component, and check if all bytes in the component are masked on */
+/* Rounds up a bytemask to fill a given component count. Iterate each
+ * component, and check if any bytes in the component are masked on */
 
 uint16_t
-mir_round_bytemask_down(uint16_t mask, midgard_reg_mode mode)
+mir_round_bytemask_up(uint16_t mask, midgard_reg_mode mode)
 {
         unsigned bytes = mir_bytes_for_mode(mode);
         unsigned maxmask = mask_of(bytes);
         unsigned channels = 16 / bytes;
 
         for (unsigned c = 0; c < channels; ++c) {
-                /* Get bytes in component */
-                unsigned submask = (mask >> c * channels) & maxmask;
+                unsigned submask = maxmask << (c * bytes);
 
-                if (submask != maxmask)
-                        mask &= ~(maxmask << (c * channels));
+                if (mask & submask)
+                        mask |= submask;
         }
 
         return mask;
@@ -531,6 +415,35 @@ mir_set_bytemask(midgard_instruction *ins, uint16_t bytemask)
         ins->mask = mir_from_bytemask(bytemask, mir_typesize(ins));
 }
 
+/* Checks if we should use an upper destination override, rather than the lower
+ * one in the IR. Returns zero if no, returns the bytes to shift otherwise */
+
+unsigned
+mir_upper_override(midgard_instruction *ins)
+{
+        /* If there is no override, there is no upper override, tautology */
+        if (ins->alu.dest_override == midgard_dest_override_none)
+                return 0;
+
+        /* Make sure we didn't already lower somehow */
+        assert(ins->alu.dest_override == midgard_dest_override_lower);
+
+        /* What is the mask in terms of currently? */
+        midgard_reg_mode type = mir_typesize(ins);
+
+        /* There are 16 bytes per vector, so there are (16/bytes)
+         * components per vector. So the magic half is half of
+         * (16/bytes), which simplifies to 8/bytes */
+
+        unsigned threshold = 8 / mir_bytes_for_mode(type);
+
+        /* How many components did we shift over? */
+        unsigned zeroes = __builtin_ctz(ins->mask);
+
+        /* Did we hit the threshold? */
+        return (zeroes >= threshold) ? threshold : 0;
+}
+
 /* Creates a mask of the components of a node read by an instruction, by
  * analyzing the swizzle with respect to the instruction's mask. E.g.:
  *
@@ -540,15 +453,13 @@ mir_set_bytemask(midgard_instruction *ins, uint16_t bytemask)
  */
 
 static uint16_t
-mir_bytemask_of_read_components_single(unsigned swizzle, unsigned inmask, midgard_reg_mode mode)
+mir_bytemask_of_read_components_single(unsigned *swizzle, unsigned inmask, midgard_reg_mode mode)
 {
         unsigned cmask = 0;
 
-        for (unsigned c = 0; c < 4; ++c) {
+        for (unsigned c = 0; c < MIR_VEC_COMPONENTS; ++c) {
                 if (!(inmask & (1 << c))) continue;
-
-                unsigned comp = (swizzle >> (2*c)) & 3;
-                cmask |= (1 << comp);
+                cmask |= (1 << swizzle[c]);
         }
 
         return mir_to_bytemask(mode, cmask);
@@ -570,7 +481,7 @@ mir_bytemask_of_read_components(midgard_instruction *ins, unsigned node)
                         return 0xFFFF;
 
                 /* Conditional branches read one 32-bit component = 4 bytes (TODO: multi branch??) */
-                if (ins->compact_branch && !ins->prepacked_branch && ins->branch.conditional && (i == 0))
+                if (ins->compact_branch && ins->branch.conditional && (i == 0))
                         return 0xF;
 
                 /* ALU ops act componentwise so we need to pay attention to
@@ -588,30 +499,10 @@ mir_bytemask_of_read_components(midgard_instruction *ins, unsigned node)
                                 qmask = mask_of(channel_override);
                 }
 
-                unsigned swizzle = mir_get_swizzle(ins, i);
-                mask |= mir_bytemask_of_read_components_single(swizzle, qmask, mir_srcsize(ins, i));
+                mask |= mir_bytemask_of_read_components_single(ins->swizzle[i], qmask, mir_srcsize(ins, i));
         }
 
         return mask;
-}
-
-unsigned
-mir_ubo_shift(midgard_load_store_op op)
-{
-        switch (op) {
-        case midgard_op_ld_ubo_char:
-                return 0;
-        case midgard_op_ld_ubo_char2:
-                return 1;
-        case midgard_op_ld_ubo_char4:
-                return 2;
-        case midgard_op_ld_ubo_short4:
-                return 3;
-        case midgard_op_ld_ubo_int4:
-                return 4;
-        default:
-                unreachable("Invalid op");
-        }
 }
 
 /* Register allocation occurs after instruction scheduling, which is fine until
@@ -682,6 +573,7 @@ mir_insert_instruction_before_scheduled(
         memcpy(bundles + before, &new, sizeof(new));
 
         list_addtail(&new.instructions[0]->link, &before_bundle->instructions[0]->link);
+        block->quadword_count += midgard_word_size[new.tag];
 }
 
 void
@@ -706,6 +598,7 @@ mir_insert_instruction_after_scheduled(
         midgard_bundle new = mir_bundle_for_op(ctx, ins);
         memcpy(bundles + after + 1, &new, sizeof(new));
         list_add(&new.instructions[0]->link, &after_bundle->instructions[after_bundle->instruction_count - 1]->link);
+        block->quadword_count += midgard_word_size[new.tag];
 }
 
 /* Flip the first-two arguments of a (binary) op. Currently ALU
@@ -723,6 +616,11 @@ mir_flip(midgard_instruction *ins)
         temp = ins->alu.src1;
         ins->alu.src1 = ins->alu.src2;
         ins->alu.src2 = temp;
+
+        unsigned temp_swizzle[16];
+        memcpy(temp_swizzle, ins->swizzle[0], sizeof(ins->swizzle[0]));
+        memcpy(ins->swizzle[0], ins->swizzle[1], sizeof(ins->swizzle[0]));
+        memcpy(ins->swizzle[1], temp_swizzle, sizeof(ins->swizzle[0]));
 }
 
 /* Before squashing, calculate ctx->temp_count just by observing the MIR */

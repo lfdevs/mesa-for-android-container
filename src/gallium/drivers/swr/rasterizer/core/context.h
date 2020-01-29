@@ -276,6 +276,7 @@ OSALIGNLINE(struct) API_STATE
     // Streamout state
     SWR_STREAMOUT_STATE          soState;
     mutable SWR_STREAMOUT_BUFFER soBuffer[MAX_SO_STREAMS];
+    mutable SWR_STREAMOUT_BUFFER soPausedBuffer[MAX_SO_STREAMS];
 
     // Tessellation State
     PFN_HS_FUNC  pfnHsFunc;
@@ -422,6 +423,7 @@ struct DRAW_DYNAMIC_STATE
 
     SWR_STATS_FE statsFE; // Only one FE thread per DC.
     SWR_STATS*   pStats;
+    uint64_t     soPrims; // number of primitives written to StremOut buffer
 };
 
 // Draw Context
@@ -540,6 +542,7 @@ struct SWR_CONTEXT
     PFN_UPDATE_SO_WRITE_OFFSET     pfnUpdateSoWriteOffset;
     PFN_UPDATE_STATS               pfnUpdateStats;
     PFN_UPDATE_STATS_FE            pfnUpdateStatsFE;
+    PFN_UPDATE_STREAMOUT           pfnUpdateStreamOut;
 
 
     // Global Stats
