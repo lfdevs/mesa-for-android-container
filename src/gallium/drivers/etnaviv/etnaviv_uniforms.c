@@ -67,6 +67,7 @@ etna_uniforms_write(const struct etna_context *ctx,
    const struct etna_shader_uniform_info *uinfo = &sobj->uniforms;
    bool frag = (sobj == ctx->shader.fs);
    uint32_t base = frag ? ctx->specs.ps_uniforms_offset : ctx->specs.vs_uniforms_offset;
+   unsigned idx;
 
    if (!uinfo->imm_count)
       return;
@@ -94,11 +95,11 @@ etna_uniforms_write(const struct etna_context *ctx,
          break;
 
       case ETNA_IMMEDIATE_UBO0_ADDR ... ETNA_IMMEDIATE_UBOMAX_ADDR:
-         assert(uinfo->imm_contents[i] == ETNA_IMMEDIATE_UBO0_ADDR);
+         idx = uinfo->imm_contents[i] - ETNA_IMMEDIATE_UBO0_ADDR;
          etna_cmd_stream_reloc(stream, &(struct etna_reloc) {
-            .bo = etna_resource(cb->buffer)->bo,
+            .bo = etna_resource(cb[idx].buffer)->bo,
             .flags = ETNA_RELOC_READ,
-            .offset = cb->buffer_offset + val,
+            .offset = cb[idx].buffer_offset + val,
          });
          break;
 

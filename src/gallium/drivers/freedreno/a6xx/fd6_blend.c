@@ -33,6 +33,7 @@
 #include "fd6_blend.h"
 #include "fd6_context.h"
 #include "fd6_format.h"
+#include "fd6_pack.h"
 
 // XXX move somewhere common.. same across a3xx/a4xx/a5xx..
 static enum a3xx_rb_blend_opcode
@@ -59,6 +60,7 @@ void *
 fd6_blend_state_create(struct pipe_context *pctx,
 		const struct pipe_blend_state *cso)
 {
+	struct fd_context *ctx = fd_context(pctx);
 	struct fd6_blend_stateobj *so;
 	enum a3xx_rop_code rop = ROP_COPY;
 	bool reads_dest = false;
@@ -90,10 +92,13 @@ fd6_blend_state_create(struct pipe_context *pctx,
 		return NULL;
 
 	so->base = *cso;
+	struct fd_ringbuffer *ring = fd_ringbuffer_new_object(ctx->pipe,
+			((A6XX_MAX_RENDER_TARGETS * 4) + 4) * 4);
+	so->stateobj = ring;
 
 	so->lrz_write = true;  /* unless blend enabled for any MRT */
 
-	for (i = 0; i < ARRAY_SIZE(so->rb_mrt); i++) {
+	for (i = 0; i < A6XX_MAX_RENDER_TARGETS; i++) {
 		const struct pipe_rt_blend_state *rt;
 
 		if (cso->independent_blend_enable)
@@ -101,60 +106,64 @@ fd6_blend_state_create(struct pipe_context *pctx,
 		else
 			rt = &cso->rt[0];
 
-		so->rb_mrt[i].blend_control_rgb =
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(fd_blend_factor(rt->rgb_src_factor)) |
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(blend_func(rt->rgb_func)) |
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(rt->rgb_dst_factor));
+		OUT_REG(ring, A6XX_RB_MRT_BLEND_CONTROL(i,
+				.rgb_src_factor     = fd_blend_factor(rt->rgb_src_factor),
+				.rgb_blend_opcode   = blend_func(rt->rgb_func),
+				.rgb_dest_factor    = fd_blend_factor(rt->rgb_dst_factor),
+				.alpha_src_factor   = fd_blend_factor(rt->alpha_src_factor),
+				.alpha_blend_opcode = blend_func(rt->alpha_func),
+				.alpha_dest_factor  = fd_blend_factor(rt->alpha_dst_factor),
+			));
 
-		so->rb_mrt[i].blend_control_alpha =
-				A6XX_RB_MRT_BLEND_CONTROL_ALPHA_SRC_FACTOR(fd_blend_factor(rt->alpha_src_factor)) |
-				A6XX_RB_MRT_BLEND_CONTROL_ALPHA_BLEND_OPCODE(blend_func(rt->alpha_func)) |
-				A6XX_RB_MRT_BLEND_CONTROL_ALPHA_DEST_FACTOR(fd_blend_factor(rt->alpha_dst_factor));
-
-		so->rb_mrt[i].blend_control_no_alpha_rgb =
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_SRC_FACTOR(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_src_factor))) |
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_BLEND_OPCODE(blend_func(rt->rgb_func)) |
-				A6XX_RB_MRT_BLEND_CONTROL_RGB_DEST_FACTOR(fd_blend_factor(util_blend_dst_alpha_to_one(rt->rgb_dst_factor)));
-
-
-		so->rb_mrt[i].control =
-				A6XX_RB_MRT_CONTROL_ROP_CODE(rop) |
-				COND(cso->logicop_enable, A6XX_RB_MRT_CONTROL_ROP_ENABLE) |
-				A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE(rt->colormask);
+		OUT_REG(ring, A6XX_RB_MRT_CONTROL(i,
+				.rop_code         = rop,
+				.rop_enable       = cso->logicop_enable,
+				.component_enable = rt->colormask,
+				.blend            = rt->blend_enable,
+				.blend2           = rt->blend_enable,
+			));
 
 		if (rt->blend_enable) {
-			so->rb_mrt[i].control |=
-//					A6XX_RB_MRT_CONTROL_READ_DEST_ENABLE |
-					A6XX_RB_MRT_CONTROL_BLEND |
-					A6XX_RB_MRT_CONTROL_BLEND2;
 			mrt_blend |= (1 << i);
 			so->lrz_write = false;
 		}
 
 		if (reads_dest) {
-//			so->rb_mrt[i].control |= A6XX_RB_MRT_CONTROL_READ_DEST_ENABLE;
 			mrt_blend |= (1 << i);
 			so->lrz_write = false;
 		}
 	}
 
-	if (cso->dither) {
-		so->rb_dither_cntl = A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT0(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT1(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT2(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT3(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT4(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT5(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT6(DITHER_ALWAYS) |
-				A6XX_RB_DITHER_CNTL_DITHER_MODE_MRT7(DITHER_ALWAYS);
-	}
+	OUT_REG(ring, A6XX_RB_DITHER_CNTL(
+			.dither_mode_mrt0 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt1 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt2 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt3 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt4 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt5 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt6 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+			.dither_mode_mrt7 = cso->dither ? DITHER_ALWAYS : DITHER_DISABLE,
+		));
 
 	so->rb_blend_cntl = A6XX_RB_BLEND_CNTL_ENABLE_BLEND(mrt_blend) |
 		COND(cso->alpha_to_coverage, A6XX_RB_BLEND_CNTL_ALPHA_TO_COVERAGE) |
 		COND(cso->independent_blend_enable, A6XX_RB_BLEND_CNTL_INDEPENDENT_BLEND);
-	so->sp_blend_cntl = A6XX_SP_BLEND_CNTL_UNK8 |
-		COND(cso->alpha_to_coverage, A6XX_SP_BLEND_CNTL_ALPHA_TO_COVERAGE) |
-		COND(mrt_blend, A6XX_SP_BLEND_CNTL_ENABLED);
+
+	OUT_REG(ring, A6XX_SP_BLEND_CNTL(
+			.unk8              = true,
+			.alpha_to_coverage = cso->alpha_to_coverage,
+			.enabled           = !!mrt_blend,
+		));
 
 	return so;
+}
+
+void
+fd6_blend_state_delete(struct pipe_context *pctx, void *hwcso)
+{
+	struct fd6_blend_stateobj *so = hwcso;
+
+	fd_ringbuffer_del(so->stateobj);
+
+	FREE(hwcso);
 }

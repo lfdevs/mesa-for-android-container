@@ -388,6 +388,18 @@ lima_screen_set_plb_max_blk(struct lima_screen *screen)
 static bool
 lima_screen_query_info(struct lima_screen *screen)
 {
+   drmVersionPtr version = drmGetVersion(screen->fd);
+   if (!version)
+      return false;
+
+   if (version->version_major > 1 || version->version_minor > 0)
+      screen->has_growable_heap_buffer = true;
+
+   drmFreeVersion(version);
+
+   if (lima_debug & LIMA_DEBUG_NO_GROW_HEAP)
+      screen->has_growable_heap_buffer = false;
+
    struct drm_lima_get_param param;
 
    memset(&param, 0, sizeof(param));
@@ -455,6 +467,8 @@ static const struct debug_named_value debug_options[] = {
           "print debug info for BO cache" },
         { "notiling", LIMA_DEBUG_NO_TILING,
           "don't use tiled buffers" },
+        { "nogrowheap",   LIMA_DEBUG_NO_GROW_HEAP,
+          "disable growable heap buffer" },
         { NULL }
 };
 

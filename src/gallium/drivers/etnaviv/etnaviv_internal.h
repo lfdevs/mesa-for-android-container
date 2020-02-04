@@ -38,6 +38,7 @@
 #define ETNA_NUM_LOD (14)
 #define ETNA_NUM_LAYERS (6)
 #define ETNA_MAX_UNIFORMS (256)
+#define ETNA_MAX_CONST_BUF 16
 #define ETNA_MAX_PIXELPIPES 2
 
 /* All RS operations must have width%16 = 0 */

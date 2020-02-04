@@ -668,12 +668,12 @@ etna_emit_state(struct etna_context *ctx)
       if (do_uniform_flush)
          etna_set_state(stream, VIVS_VS_UNIFORM_CACHE, VIVS_VS_UNIFORM_CACHE_FLUSH);
 
-      etna_uniforms_write(ctx, ctx->shader.vs, &ctx->constant_buffer[PIPE_SHADER_VERTEX]);
+      etna_uniforms_write(ctx, ctx->shader.vs, ctx->constant_buffer[PIPE_SHADER_VERTEX]);
 
       if (do_uniform_flush)
          etna_set_state(stream, VIVS_VS_UNIFORM_CACHE, VIVS_VS_UNIFORM_CACHE_FLUSH | VIVS_VS_UNIFORM_CACHE_PS);
 
-      etna_uniforms_write(ctx, ctx->shader.fs, &ctx->constant_buffer[PIPE_SHADER_FRAGMENT]);
+      etna_uniforms_write(ctx, ctx->shader.fs, ctx->constant_buffer[PIPE_SHADER_FRAGMENT]);
 
       if (ctx->specs.halti >= 5) {
          /* HALTI5 needs to be prompted to pre-fetch shaders */
@@ -687,14 +687,14 @@ etna_emit_state(struct etna_context *ctx)
          etna_set_state(stream, VIVS_VS_UNIFORM_CACHE, VIVS_VS_UNIFORM_CACHE_FLUSH);
 
       if (dirty & (uniform_dirty_bits | ctx->shader.vs->uniforms_dirty_bits))
-         etna_uniforms_write(ctx, ctx->shader.vs, &ctx->constant_buffer[PIPE_SHADER_VERTEX]);
+         etna_uniforms_write(ctx, ctx->shader.vs, ctx->constant_buffer[PIPE_SHADER_VERTEX]);
 
       /* ideally this cache would only be flushed if there are PS uniform changes */
       if (do_uniform_flush)
          etna_set_state(stream, VIVS_VS_UNIFORM_CACHE, VIVS_VS_UNIFORM_CACHE_FLUSH | VIVS_VS_UNIFORM_CACHE_PS);
 
       if (dirty & (uniform_dirty_bits | ctx->shader.fs->uniforms_dirty_bits))
-         etna_uniforms_write(ctx, ctx->shader.fs, &ctx->constant_buffer[PIPE_SHADER_FRAGMENT]);
+         etna_uniforms_write(ctx, ctx->shader.fs, ctx->constant_buffer[PIPE_SHADER_FRAGMENT]);
    }
 /**** End of state update ****/
 #undef EMIT_STATE

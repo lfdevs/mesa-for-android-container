@@ -36,10 +36,6 @@
 #include <stdio.h>
 #include <inttypes.h>
 
-#ifndef AMDGPU_GEM_CREATE_VM_ALWAYS_VALID
-#define AMDGPU_GEM_CREATE_VM_ALWAYS_VALID (1 << 6)
-#endif
-
 #ifndef AMDGPU_VA_RANGE_HIGH
 #define AMDGPU_VA_RANGE_HIGH	0x2
 #endif
@@ -183,10 +179,21 @@ void amdgpu_bo_destroy(struct pb_buffer *_buf)
       simple_mtx_unlock(&ws->global_bo_list_lock);
    }
 
+   /* Close all KMS handles retrieved for other DRM file descriptions */
    simple_mtx_lock(&ws->sws_list_lock);
    for (sws_iter = ws->sws_list; sws_iter; sws_iter = sws_iter->next) {
-      if (sws_iter->kms_handles)
-         _mesa_hash_table_remove_key(sws_iter->kms_handles, bo);
+      struct hash_entry *entry;
+
+      if (!sws_iter->kms_handles)
+         continue;
+
+      entry = _mesa_hash_table_search(sws_iter->kms_handles, bo);
+      if (entry) {
+         struct drm_gem_close args = { .handle = (uintptr_t)entry->data };
+
+         drmIoctl(sws_iter->fd, DRM_IOCTL_GEM_CLOSE, &args);
+         _mesa_hash_table_remove(sws_iter->kms_handles, entry);
+      }
    }
    simple_mtx_unlock(&ws->sws_list_lock);
 
@@ -504,9 +511,6 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
       request.flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
    if (flags & RADEON_FLAG_GTT_WC)
       request.flags |= AMDGPU_GEM_CREATE_CPU_GTT_USWC;
-   if (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING &&
-       ws->info.has_local_buffers)
-      request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
    if (ws->zero_all_vram_allocs &&
        (request.preferred_heap & AMDGPU_GEM_DOMAIN_VRAM))
       request.flags |= AMDGPU_GEM_CREATE_VRAM_CLEARED;
@@ -556,7 +560,6 @@ static struct amdgpu_winsys_bo *amdgpu_create_bo(struct amdgpu_winsys *ws,
    bo->u.real.va_handle = va_handle;
    bo->initial_domain = initial_domain;
    bo->unique_id = __sync_fetch_and_add(&ws->next_bo_unique_id, 1);
-   bo->is_local = !!(request.flags & AMDGPU_GEM_CREATE_VM_ALWAYS_VALID);
 
    if (initial_domain & RADEON_DOMAIN_VRAM)
       ws->allocated_vram += align64(size, ws->info.gart_page_size);

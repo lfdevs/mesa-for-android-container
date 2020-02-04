@@ -1075,39 +1075,7 @@ fd6_emit_state(struct fd_ringbuffer *ring, struct fd6_emit *emit)
 
 	if (dirty & FD_DIRTY_BLEND) {
 		struct fd6_blend_stateobj *blend = fd6_blend_stateobj(ctx->blend);
-		uint32_t i;
-
-		for (i = 0; i < pfb->nr_cbufs; i++) {
-			enum pipe_format format = pipe_surface_format(pfb->cbufs[i]);
-			bool is_int = util_format_is_pure_integer(format);
-			bool has_alpha = util_format_has_alpha(format);
-			uint32_t control = blend->rb_mrt[i].control;
-			uint32_t blend_control = blend->rb_mrt[i].blend_control_alpha;
-
-			if (is_int) {
-				control &= A6XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK;
-				control |= A6XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
-			}
-
-			if (has_alpha) {
-				blend_control |= blend->rb_mrt[i].blend_control_rgb;
-			} else {
-				blend_control |= blend->rb_mrt[i].blend_control_no_alpha_rgb;
-				control &= ~A6XX_RB_MRT_CONTROL_BLEND2;
-			}
-
-			OUT_PKT4(ring, REG_A6XX_RB_MRT_CONTROL(i), 1);
-			OUT_RING(ring, control);
-
-			OUT_PKT4(ring, REG_A6XX_RB_MRT_BLEND_CONTROL(i), 1);
-			OUT_RING(ring, blend_control);
-		}
-
-		OUT_PKT4(ring, REG_A6XX_RB_DITHER_CNTL, 1);
-		OUT_RING(ring, blend->rb_dither_cntl);
-
-		OUT_PKT4(ring, REG_A6XX_SP_BLEND_CNTL, 1);
-		OUT_RING(ring, blend->sp_blend_cntl);
+		fd6_emit_add_group(emit, blend->stateobj, FD6_GROUP_BLEND, ENABLE_DRAW);
 	}
 
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_SAMPLE_MASK)) {

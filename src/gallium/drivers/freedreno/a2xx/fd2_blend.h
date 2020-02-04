@@ -32,9 +32,7 @@
 
 struct fd2_blend_stateobj {
 	struct pipe_blend_state base;
-	uint32_t rb_blendcontrol_rgb;
-	uint32_t rb_blendcontrol_alpha;
-	uint32_t rb_blendcontrol_no_alpha_rgb;
+	uint32_t rb_blendcontrol;
 	uint32_t rb_colorcontrol;   /* must be OR'd w/ zsa->rb_colorcontrol */
 	uint32_t rb_colormask;
 };

@@ -325,9 +325,9 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
                              pred->operands[2].physReg() >= 128;
          /* MIMG store with a 128-bit T# with more than two bits set in dmask (making it a >64-bit store) */
          bool consider_mimg = pred->format == Format::MIMG &&
-                              pred->operands.size() == 4 &&
-                              pred->operands[3].size() > 2 &&
-                              pred->operands[1].size() != 8;
+                              pred->operands[1].regClass().type() == RegType::vgpr &&
+                              pred->operands[1].size() > 2 &&
+                              pred->operands[0].size() == 4;
          /* FLAT/GLOBAL/SCRATCH store with >64-bit data */
          bool consider_flat = (pred->isFlatOrGlobal() || pred->format == Format::SCRATCH) &&
                               pred->operands.size() == 3 &&
@@ -376,6 +376,7 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
       /* If the VALU writes the SGPR that is used by a VMEM, the user must add five wait states. */
       for (int pred_idx = new_idx - 1; pred_idx >= 0 && pred_idx >= new_idx - 5; pred_idx--) {
          aco_ptr<Instruction>& pred = new_instructions[pred_idx];
+         // TODO: break if something else writes the SGPR
          if (!(pred->isVALU() && VALU_writes_sgpr(pred)))
             continue;
 
@@ -383,16 +384,10 @@ int handle_instruction_gfx8_9(NOP_ctx_gfx8_9& ctx, aco_ptr<Instruction>& instr,
             if (def.physReg() > 102)
                continue;
 
-            if (instr->operands.size() > 1 &&
-                regs_intersect(instr->operands[1].physReg(), instr->operands[1].size(),
-                               def.physReg(), def.size())) {
+            for (const Operand& op : instr->operands) {
+               if (regs_intersect(op.physReg(), op.size(), def.physReg(), def.size()))
                   return 5 + pred_idx - new_idx + 1;
-            }
 
-            if (instr->operands.size() > 2 &&
-                regs_intersect(instr->operands[2].physReg(), instr->operands[2].size(),
-                               def.physReg(), def.size())) {
-                  return 5 + pred_idx - new_idx + 1;
             }
          }
       }

@@ -38,6 +38,7 @@
 #include "renderonly/renderonly.h"
 
 #include "freedreno_batch_cache.h"
+#include "freedreno_gmem.h"
 #include "freedreno_util.h"
 
 struct fd_bo;
@@ -113,6 +114,7 @@ struct fd_screen {
 	int64_t cpu_gpu_time_delta;
 
 	struct fd_batch_cache batch_cache;
+	struct fd_gmem_cache gmem_cache;
 
 	bool reorder;
 

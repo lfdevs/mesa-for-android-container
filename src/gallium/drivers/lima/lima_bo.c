@@ -246,6 +246,10 @@ lima_bo_cache_put(struct lima_bo *bo)
 static struct lima_bo *
 lima_bo_cache_get(struct lima_screen *screen, uint32_t size, uint32_t flags)
 {
+   /* we won't cache heap buffer */
+   if (flags & LIMA_BO_FLAG_HEAP)
+      return NULL;
+
    struct lima_bo *bo = NULL;
    mtx_lock(&screen->bo_cache_lock);
    struct list_head *bucket = lima_bo_cache_get_bucket(screen, size);
@@ -314,7 +318,8 @@ struct lima_bo *lima_bo_create(struct lima_screen *screen,
    bo->size = req.size;
    bo->flags = req.flags;
    bo->handle = req.handle;
-   bo->cacheable = !(lima_debug & LIMA_DEBUG_NO_BO_CACHE);
+   bo->cacheable = !(lima_debug & LIMA_DEBUG_NO_BO_CACHE ||
+                     flags & LIMA_BO_FLAG_HEAP);
    p_atomic_set(&bo->refcnt, 1);
 
    if (!lima_bo_get_info(bo))

@@ -94,7 +94,6 @@ static inline bool is_sysval(nir_instr *instr)
 #define CONST_VAL(a, b) (nir_const_value) {.u64 = (uint64_t)(a) << 32 | (uint64_t)(b)}
 #define CONST(x) CONST_VAL(ETNA_IMMEDIATE_CONSTANT, x)
 #define UNIFORM(x) CONST_VAL(ETNA_IMMEDIATE_UNIFORM, x)
-#define UNIFORM_BASE(x) CONST_VAL(ETNA_IMMEDIATE_UBO0_ADDR, x)
 #define TEXSCALE(x, i) CONST_VAL(ETNA_IMMEDIATE_TEXRECT_SCALE_X + (i), x)
 
 static int
@@ -388,6 +387,7 @@ get_src(struct state *state, nir_src *src)
       case nir_intrinsic_load_input:
       case nir_intrinsic_load_instance_id:
       case nir_intrinsic_load_uniform:
+      case nir_intrinsic_load_ubo:
          return ra_src(state, src);
       case nir_intrinsic_load_front_face:
          return (hw_src) { .use = 1, .rgroup = INST_RGROUP_INTERNAL };
@@ -586,6 +586,7 @@ dest_for_instr(nir_instr *instr)
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
       if (intr->intrinsic == nir_intrinsic_load_uniform ||
+          intr->intrinsic == nir_intrinsic_load_ubo ||
           intr->intrinsic == nir_intrinsic_load_input ||
           intr->intrinsic == nir_intrinsic_load_instance_id)
          dest = &intr->dest;
@@ -908,8 +909,8 @@ ra_assign(struct state *state, nir_shader *shader)
 
       if (instr->type == nir_instr_type_intrinsic) {
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-         if (intr->intrinsic == nir_intrinsic_load_uniform) {
-            /* make sure there isn't any reswizzling */
+         /* can't have dst swizzle or sparse writemask on UBO loads */
+         if (intr->intrinsic == nir_intrinsic_load_ubo) {
             assert(dest == &intr->dest);
             if (dest->ssa.num_components == 2)
                c = REG_CLASS_VIRT_VEC2C;
@@ -1102,9 +1103,37 @@ emit_intrinsic(struct state *state, nir_intrinsic_instr * intr)
       break;
    case nir_intrinsic_load_uniform: {
       unsigned dst_swiz;
-      hw_dst dst = ra_dest(state, &intr->dest, &dst_swiz);
-      /* TODO: might have a problem with dst_swiz .. */
-      emit(load_ubo, dst, get_src(state, &intr->src[0]), const_src(state, &UNIFORM_BASE(nir_intrinsic_base(intr) * 16), 1));
+      struct etna_inst_dst dst = ra_dest(state, &intr->dest, &dst_swiz);
+
+      /* TODO: rework so extra MOV isn't required, load up to 4 addresses at once */
+      emit_inst(state->c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_MOVAR,
+         .dst.write_mask = 0x1,
+         .src[2] = get_src(state, &intr->src[0]),
+      });
+      emit_inst(state->c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_MOV,
+         .dst = dst,
+         .src[2] = {
+            .use = 1,
+            .rgroup = INST_RGROUP_UNIFORM_0,
+            .reg = nir_intrinsic_base(intr),
+            .swiz = dst_swiz,
+            .amode = INST_AMODE_ADD_A_X,
+         },
+      });
+   } break;
+   case nir_intrinsic_load_ubo: {
+      /* TODO: if offset is of the form (x + C) then add C to the base instead */
+      unsigned idx = nir_src_as_const_value(intr->src[0])[0].u32;
+      unsigned dst_swiz;
+      emit_inst(state->c, &(struct etna_inst) {
+         .opcode = INST_OPCODE_LOAD,
+         .type = INST_TYPE_U32,
+         .dst = ra_dest(state, &intr->dest, &dst_swiz),
+         .src[0] = get_src(state, &intr->src[1]),
+         .src[1] = const_src(state, &CONST_VAL(ETNA_IMMEDIATE_UBO0_ADDR + idx, 0), 1),
+      });
    } break;
    case nir_intrinsic_load_front_face:
    case nir_intrinsic_load_frag_coord:
@@ -1402,6 +1431,8 @@ emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
       .shader = shader,
       .impl = nir_shader_get_entrypoint(shader),
    };
+   bool have_indirect_uniform = false;
+   unsigned indirect_max = 0;
 
    nir_builder b;
    nir_builder_init(&b, state.impl);
@@ -1421,19 +1452,25 @@ emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
          } break;
          case nir_instr_type_intrinsic: {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            /* TODO: load_ubo can also become a constant in some cases
+             * (at the moment it can end up emitting a LOAD with two
+             *  uniform sources, which could be a problem on HALTI2)
+             */
             if (intr->intrinsic != nir_intrinsic_load_uniform)
                break;
             nir_const_value *off = nir_src_as_const_value(intr->src[0]);
-            if (!off || off[0].u64 >> 32 != ETNA_IMMEDIATE_CONSTANT)
+            if (!off || off[0].u64 >> 32 != ETNA_IMMEDIATE_CONSTANT) {
+               have_indirect_uniform = true;
+               indirect_max = nir_intrinsic_base(intr) + nir_intrinsic_range(intr);
                break;
+            }
 
             unsigned base = nir_intrinsic_base(intr);
             /* pre halti2 uniform offset will be float */
             if (c->specs->halti < 2)
-               base += (unsigned) off[0].f32 / 16;
+               base += (unsigned) off[0].f32;
             else
-               base += off[0].u32 / 16;
-
+               base += off[0].u32;
             nir_const_value value[4];
 
             for (unsigned i = 0; i < intr->dest.ssa.num_components; i++) {
@@ -1453,6 +1490,13 @@ emit_shader(struct etna_compile *c, unsigned *num_temps, unsigned *num_consts)
             break;
          }
       }
+   }
+
+   /* TODO: only emit required indirect uniform ranges */
+   if (have_indirect_uniform) {
+      for (unsigned i = 0; i < indirect_max * 4; i++)
+         c->consts[i] = UNIFORM(i).u64;
+      state.const_count = indirect_max;
    }
 
    /* add mov for any store output using sysval/const  */

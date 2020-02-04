@@ -74,8 +74,6 @@ struct fd_batch {
 
 	struct fd_context *ctx;
 
-	struct util_queue_fence flush_fence;
-
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
 	 * there was a glClear() that invalidated the entire previous buffer
 	 * contents.  Keep track of which buffer(s) are cleared, or needs
@@ -125,6 +123,12 @@ struct fd_batch {
 		FD_GMEM_LOGICOP_ENABLED      = 0x20,
 		FD_GMEM_FB_READ              = 0x40,
 	} gmem_reason;
+
+	/* At submit time, once we've decided that this batch will use GMEM
+	 * rendering, the appropriate gmem state is looked up:
+	 */
+	const struct fd_gmem_stateobj *gmem_state;
+
 	unsigned num_draws;   /* number of draws in current batch */
 	unsigned num_vertices;   /* number of vertices in current batch */
 
@@ -241,8 +245,7 @@ struct fd_batch {
 struct fd_batch * fd_batch_create(struct fd_context *ctx, bool nondraw);
 
 void fd_batch_reset(struct fd_batch *batch);
-void fd_batch_sync(struct fd_batch *batch);
-void fd_batch_flush(struct fd_batch *batch, bool sync);
+void fd_batch_flush(struct fd_batch *batch);
 void fd_batch_add_dep(struct fd_batch *batch, struct fd_batch *dep);
 void fd_batch_resource_used(struct fd_batch *batch, struct fd_resource *rsc, bool write);
 void fd_batch_check_size(struct fd_batch *batch);

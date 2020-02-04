@@ -107,6 +107,7 @@ struct amdgpu_screen_winsys {
    struct radeon_winsys base;
    struct amdgpu_winsys *aws;
    int fd;
+   struct pipe_reference reference;
    struct amdgpu_screen_winsys *next;
 
    /* Maps a BO to its KMS handle valid for this DRM file descriptor

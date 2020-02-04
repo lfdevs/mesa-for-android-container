@@ -288,8 +288,10 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
    }
 
    /* Mark constant buffers as being read */
-   resource_read(ctx, ctx->constant_buffer[PIPE_SHADER_VERTEX].buffer);
-   resource_read(ctx, ctx->constant_buffer[PIPE_SHADER_FRAGMENT].buffer);
+   for (unsigned i = 0; i < ETNA_MAX_CONST_BUF; i++) {
+      resource_read(ctx, ctx->constant_buffer[PIPE_SHADER_VERTEX][i].buffer);
+      resource_read(ctx, ctx->constant_buffer[PIPE_SHADER_FRAGMENT][i].buffer);
+   }
 
    /* Mark VBOs as being read */
    foreach_bit(i, ctx->vertex_buffer.enabled_mask) {
@@ -371,7 +373,6 @@ etna_reset_gpu_state(struct etna_context *ctx)
    etna_set_state(stream, VIVS_PA_VIEWPORT_UNK00A84, fui(8192.0));
    etna_set_state(stream, VIVS_PA_ZFARCLIPPING, 0x00000000);
    etna_set_state(stream, VIVS_RA_HDEPTH_CONTROL, 0x00007000);
-   etna_set_state(stream, VIVS_PE_STENCIL_CONFIG_EXT2, 0x00000000);
    etna_set_state(stream, VIVS_PS_CONTROL_EXT, 0x00000000);
 
    /* There is no HALTI0 specific state */

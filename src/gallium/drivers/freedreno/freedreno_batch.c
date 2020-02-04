@@ -41,9 +41,6 @@ batch_init(struct fd_batch *batch)
 	struct fd_context *ctx = batch->ctx;
 	unsigned size = 0;
 
-	if (ctx->screen->reorder)
-		util_queue_fence_init(&batch->flush_fence);
-
 	/* if kernel is too old to support unlimited # of cmd buffers, we
 	 * have no option but to allocate large worst-case sizes so that
 	 * we don't need to grow the ringbuffer.  Performance is likely to
@@ -191,9 +188,6 @@ batch_fini(struct fd_batch *batch)
 		fd_hw_sample_reference(batch->ctx, &samp, NULL);
 	}
 	util_dynarray_fini(&batch->samples);
-
-	if (batch->ctx->screen->reorder)
-		util_queue_fence_destroy(&batch->flush_fence);
 }
 
 static void
@@ -204,7 +198,7 @@ batch_flush_reset_dependencies(struct fd_batch *batch, bool flush)
 
 	foreach_batch(dep, cache, batch->dependents_mask) {
 		if (flush)
-			fd_batch_flush(dep, false);
+			fd_batch_flush(dep);
 		fd_batch_reference(&dep, NULL);
 	}
 
@@ -238,8 +232,6 @@ static void
 batch_reset(struct fd_batch *batch)
 {
 	DBG("%p", batch);
-
-	fd_batch_sync(batch);
 
 	batch_flush_reset_dependencies(batch, false);
 	batch_reset_resources(batch);
@@ -286,32 +278,6 @@ __fd_batch_describe(char* buf, const struct fd_batch *batch)
 	sprintf(buf, "fd_batch<%u>", batch->seqno);
 }
 
-void
-fd_batch_sync(struct fd_batch *batch)
-{
-	if (!batch->ctx->screen->reorder)
-		return;
-	util_queue_fence_wait(&batch->flush_fence);
-}
-
-static void
-batch_flush_func(void *job, int id)
-{
-	struct fd_batch *batch = job;
-
-	DBG("%p", batch);
-
-	fd_gmem_render_tiles(batch);
-	batch_reset_resources(batch);
-}
-
-static void
-batch_cleanup_func(void *job, int id)
-{
-	struct fd_batch *batch = job;
-	fd_batch_reference(&batch, NULL);
-}
-
 static void
 batch_flush(struct fd_batch *batch)
 {
@@ -333,20 +299,8 @@ batch_flush(struct fd_batch *batch)
 
 	fd_fence_ref(&batch->ctx->last_fence, batch->fence);
 
-	if (batch->ctx->screen->reorder) {
-		struct fd_batch *tmp = NULL;
-		fd_batch_reference(&tmp, batch);
-
-		if (!util_queue_is_initialized(&batch->ctx->flush_queue))
-			util_queue_init(&batch->ctx->flush_queue, "flush_queue", 16, 1, 0);
-
-		util_queue_add_job(&batch->ctx->flush_queue,
-				batch, &batch->flush_fence,
-				batch_flush_func, batch_cleanup_func, 0);
-	} else {
-		fd_gmem_render_tiles(batch);
-		batch_reset_resources(batch);
-	}
+	fd_gmem_render_tiles(batch);
+	batch_reset_resources(batch);
 
 	debug_assert(batch->reference.count > 0);
 
@@ -364,7 +318,7 @@ batch_flush(struct fd_batch *batch)
  *   a fence to sync on
  */
 void
-fd_batch_flush(struct fd_batch *batch, bool sync)
+fd_batch_flush(struct fd_batch *batch)
 {
 	struct fd_batch *tmp = NULL;
 	bool newbatch = false;
@@ -400,9 +354,6 @@ fd_batch_flush(struct fd_batch *batch, bool sync)
 		ctx->batch = new_batch;
 		fd_context_all_dirty(ctx);
 	}
-
-	if (sync)
-		fd_batch_sync(tmp);
 
 	fd_batch_reference(&tmp, NULL);
 }
@@ -445,7 +396,7 @@ flush_write_batch(struct fd_resource *rsc)
 	fd_batch_reference_locked(&b, rsc->write_batch);
 
 	mtx_unlock(&b->ctx->screen->lock);
-	fd_batch_flush(b, true);
+	fd_batch_flush(b);
 	mtx_lock(&b->ctx->screen->lock);
 
 	fd_bc_invalidate_batch(b, false);
@@ -519,7 +470,7 @@ fd_batch_check_size(struct fd_batch *batch)
 	debug_assert(!batch->flushed);
 
 	if (unlikely(fd_mesa_debug & FD_DBG_FLUSH)) {
-		fd_batch_flush(batch, true);
+		fd_batch_flush(batch);
 		return;
 	}
 
@@ -528,7 +479,7 @@ fd_batch_check_size(struct fd_batch *batch)
 
 	struct fd_ringbuffer *ring = batch->draw;
 	if ((ring->cur - ring->start) > (ring->size/4 - 0x1000))
-		fd_batch_flush(batch, true);
+		fd_batch_flush(batch);
 }
 
 /* emit a WAIT_FOR_IDLE only if needed, ie. if there has not already

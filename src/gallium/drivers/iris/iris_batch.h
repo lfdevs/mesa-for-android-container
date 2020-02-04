@@ -67,16 +67,17 @@ struct iris_batch {
    struct iris_bo *bo;
    void *map;
    void *map_next;
-   /** Size of the primary batch if we've moved on to a secondary. */
+
+   /** Size of the primary batch being submitted to execbuf (in bytes). */
    unsigned primary_batch_size;
+
+   /** Total size of all chained batches (in bytes). */
+   unsigned total_chained_batch_size;
 
    /** Last Surface State Base Address set in this hardware context. */
    uint64_t last_surface_base_address;
 
    uint32_t hw_ctx_id;
-
-   /** Which engine this batch targets - a I915_EXEC_RING_MASK value */
-   uint8_t engine;
 
    /** The validation list */
    struct drm_i915_gem_exec_object2 *validation_list;
@@ -138,7 +139,6 @@ void iris_init_batch(struct iris_batch *batch,
                      struct hash_table_u64 *state_sizes,
                      struct iris_batch *all_batches,
                      enum iris_batch_name name,
-                     uint8_t ring,
                      int priority);
 void iris_chain_to_new_batch(struct iris_batch *batch);
 void iris_batch_free(struct iris_batch *batch);

@@ -181,7 +181,6 @@ iris_init_batch(struct iris_batch *batch,
                 struct hash_table_u64 *state_sizes,
                 struct iris_batch *all_batches,
                 enum iris_batch_name name,
-                uint8_t engine,
                 int priority)
 {
    batch->screen = screen;
@@ -190,11 +189,6 @@ iris_init_batch(struct iris_batch *batch,
    batch->reset = reset;
    batch->state_sizes = state_sizes;
    batch->name = name;
-
-   /* engine should be one of I915_EXEC_RENDER, I915_EXEC_BLT, etc. */
-   assert((engine & ~I915_EXEC_RING_MASK) == 0);
-   assert(util_bitcount(engine) == 1);
-   batch->engine = engine;
 
    batch->hw_ctx_id = iris_create_hw_context(screen->bufmgr);
    assert(batch->hw_ctx_id);
@@ -376,6 +370,7 @@ iris_batch_reset(struct iris_batch *batch)
 
    iris_bo_unreference(batch->bo);
    batch->primary_batch_size = 0;
+   batch->total_chained_batch_size = 0;
    batch->contains_draw = false;
    batch->decoder.surface_base = batch->last_surface_base_address;
 
@@ -436,29 +431,36 @@ iris_batch_maybe_flush(struct iris_batch *batch, unsigned estimate)
    }
 }
 
+static void
+record_batch_sizes(struct iris_batch *batch)
+{
+   unsigned batch_size = iris_batch_bytes_used(batch);
+
+   VG(VALGRIND_CHECK_MEM_IS_DEFINED(batch->map, batch_size));
+
+   if (batch->bo == batch->exec_bos[0])
+      batch->primary_batch_size = batch_size;
+
+   batch->total_chained_batch_size += batch_size;
+}
+
 void
 iris_chain_to_new_batch(struct iris_batch *batch)
 {
-   /* We only support chaining a single time. */
-   assert(batch->bo == batch->exec_bos[0]);
-
-   VG(void *map = batch->map);
    uint32_t *cmd = batch->map_next;
    uint64_t *addr = batch->map_next + 4;
    batch->map_next += 12;
 
+   record_batch_sizes(batch);
+
    /* No longer held by batch->bo, still held by validation list */
    iris_bo_unreference(batch->bo);
-   batch->primary_batch_size = iris_batch_bytes_used(batch);
    create_batch(batch);
 
    /* Emit MI_BATCH_BUFFER_START to chain to another batch. */
    *cmd = (0x31 << 23) | (1 << 8) | (3 - 2);
    *addr = batch->bo->gtt_offset;
-
-   VG(VALGRIND_CHECK_MEM_IS_DEFINED(map, batch->primary_batch_size));
 }
-
 
 static void
 add_aux_map_bos_to_batch(struct iris_batch *batch)
@@ -499,10 +501,8 @@ iris_finish_batch(struct iris_batch *batch)
    map[0] = (0xA << 23);
 
    batch->map_next += 4;
-   VG(VALGRIND_CHECK_MEM_IS_DEFINED(batch->map, iris_batch_bytes_used(batch)));
 
-   if (batch->bo == batch->exec_bos[0])
-      batch->primary_batch_size = iris_batch_bytes_used(batch);
+   record_batch_sizes(batch);
 }
 
 /**
@@ -587,7 +587,7 @@ submit_batch(struct iris_batch *batch)
       .batch_start_offset = 0,
       /* This must be QWord aligned. */
       .batch_len = ALIGN(batch->primary_batch_size, 8),
-      .flags = batch->engine |
+      .flags = I915_EXEC_RENDER |
                I915_EXEC_NO_RELOC |
                I915_EXEC_BATCH_FIRST |
                I915_EXEC_HANDLE_LUT,
@@ -650,17 +650,11 @@ _iris_batch_flush(struct iris_batch *batch, const char *file, int line)
 
    if (unlikely(INTEL_DEBUG &
                 (DEBUG_BATCH | DEBUG_SUBMIT | DEBUG_PIPE_CONTROL))) {
-      int bytes_for_commands = iris_batch_bytes_used(batch);
-      int second_bytes = 0;
-      if (batch->bo != batch->exec_bos[0]) {
-         second_bytes = bytes_for_commands;
-         bytes_for_commands += batch->primary_batch_size;
-      }
-      fprintf(stderr, "%19s:%-3d: %s batch [%u] flush with %5d+%5db (%0.1f%%) "
+      fprintf(stderr, "%19s:%-3d: %s batch [%u] flush with %5db (%0.1f%%) "
               "(cmds), %4d BOs (%0.1fMb aperture)\n",
               file, line, batch_name_to_string(batch->name), batch->hw_ctx_id,
-              batch->primary_batch_size, second_bytes,
-              100.0f * bytes_for_commands / BATCH_SZ,
+              batch->total_chained_batch_size,
+              100.0f * batch->total_chained_batch_size / BATCH_SZ,
               batch->exec_count,
               (float) batch->aperture_space / (1024 * 1024));
 

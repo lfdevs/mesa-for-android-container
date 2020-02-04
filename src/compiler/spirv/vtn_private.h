@@ -891,6 +891,11 @@ bool vtn_handle_amd_shader_ballot_instruction(struct vtn_builder *b, SpvOp ext_o
 bool vtn_handle_amd_shader_trinary_minmax_instruction(struct vtn_builder *b, SpvOp ext_opcode,
 						      const uint32_t *words, unsigned count);
 
+bool vtn_handle_amd_shader_explicit_vertex_parameter_instruction(struct vtn_builder *b,
+                                                                 SpvOp ext_opcode,
+                                                                 const uint32_t *words,
+                                                                 unsigned count);
+
 SpvMemorySemanticsMask vtn_storage_class_to_memory_semantics(SpvStorageClass sc);
 
 void vtn_emit_memory_barrier(struct vtn_builder *b, SpvScope scope,

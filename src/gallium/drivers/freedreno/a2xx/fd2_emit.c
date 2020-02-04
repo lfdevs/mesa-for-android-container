@@ -217,15 +217,9 @@ fd2_emit_state_binning(struct fd_context *ctx, const enum fd_dirty_3d_state dirt
 
 	/* not sure why this is needed */
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER)) {
-		enum pipe_format format =
-			pipe_surface_format(ctx->batch->framebuffer.cbufs[0]);
-		bool has_alpha = util_format_has_alpha(format);
-
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
-		OUT_RING(ring, blend->rb_blendcontrol_alpha |
-			COND(has_alpha, blend->rb_blendcontrol_rgb) |
-			COND(!has_alpha, blend->rb_blendcontrol_no_alpha_rgb));
+		OUT_RING(ring, blend->rb_blendcontrol);
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));
@@ -376,15 +370,9 @@ fd2_emit_state(struct fd_context *ctx, const enum fd_dirty_3d_state dirty)
 	}
 
 	if (dirty & (FD_DIRTY_BLEND | FD_DIRTY_FRAMEBUFFER)) {
-		enum pipe_format format =
-			pipe_surface_format(ctx->batch->framebuffer.cbufs[0]);
-		bool has_alpha = util_format_has_alpha(format);
-
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_BLEND_CONTROL));
-		OUT_RING(ring, blend->rb_blendcontrol_alpha |
-			COND(has_alpha, blend->rb_blendcontrol_rgb) |
-			COND(!has_alpha, blend->rb_blendcontrol_no_alpha_rgb));
+		OUT_RING(ring, blend->rb_blendcontrol);
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_RB_COLOR_MASK));

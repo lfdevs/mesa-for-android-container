@@ -1341,11 +1341,11 @@ anv_descriptor_set_write_buffer(struct anv_device *device,
                     element * anv_descriptor_size(bind_layout);
 
    if (bind_layout->data & ANV_DESCRIPTOR_ADDRESS_RANGE) {
-      struct anv_address_range_descriptor desc = {
+      struct anv_address_range_descriptor desc_data = {
          .address = anv_address_physical(bind_addr),
          .range = bind_range,
       };
-      memcpy(desc_map, &desc, sizeof(desc));
+      memcpy(desc_map, &desc_data, sizeof(desc_data));
    }
 }
 

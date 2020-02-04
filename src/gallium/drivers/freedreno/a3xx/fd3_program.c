@@ -174,7 +174,7 @@ fd3_program_emit(struct fd_ringbuffer *ring, struct fd3_emit *emit,
 	face_regid      = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRONT_FACE);
 	coord_regid     = ir3_find_sysval_regid(fp, SYSTEM_VALUE_FRAG_COORD);
 	zwcoord_regid   = (coord_regid == regid(63,0)) ? regid(63,0) : (coord_regid + 2);
-	vcoord_regid    = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_PIXEL);
+	vcoord_regid    = ir3_find_sysval_regid(fp, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
 
 	/* adjust regids for alpha output formats. there is no alpha render
 	 * format, so it's just treated like red

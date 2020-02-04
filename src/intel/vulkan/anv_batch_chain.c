@@ -874,7 +874,8 @@ anv_cmd_buffer_reset_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
       anv_binding_table_pool_free(cmd_buffer->device, *bt_block);
    }
    assert(u_vector_length(&cmd_buffer->bt_block_states) == 1);
-   cmd_buffer->bt_next = ANV_STATE_NULL;
+   cmd_buffer->bt_next = *(struct anv_state *)u_vector_head(&cmd_buffer->bt_block_states);
+   cmd_buffer->bt_next.offset = 0;
 
    anv_reloc_list_clear(&cmd_buffer->surface_relocs);
    cmd_buffer->last_ss_pool_center = 0;

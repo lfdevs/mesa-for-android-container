@@ -528,9 +528,9 @@ void to_VOP3(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 }
 
 /* only covers special cases */
-bool can_accept_constant(aco_ptr<Instruction>& instr, unsigned operand)
+bool alu_can_accept_constant(aco_opcode opcode, unsigned operand)
 {
-   switch (instr->opcode) {
+   switch (opcode) {
    case aco_opcode::v_interp_p2_f32:
    case aco_opcode::v_mac_f32:
    case aco_opcode::v_writelane_b32:
@@ -547,12 +547,6 @@ bool can_accept_constant(aco_ptr<Instruction>& instr, unsigned operand)
    case aco_opcode::v_readfirstlane_b32:
       return operand != 0;
    default:
-      if ((instr->format == Format::MUBUF ||
-           instr->format == Format::MIMG) &&
-          instr->definitions.size() == 1 &&
-          instr->operands.size() == 4) {
-         return operand != 3;
-      }
       return true;
    }
 }
@@ -719,7 +713,8 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
                break;
             }
          }
-         if ((info.is_constant() || info.is_constant_64bit() || (info.is_literal() && instr->format == Format::PSEUDO)) && !instr->operands[i].isFixed() && can_accept_constant(instr, i)) {
+         if ((info.is_constant() || info.is_constant_64bit() || (info.is_literal() && instr->format == Format::PSEUDO)) &&
+             !instr->operands[i].isFixed() && alu_can_accept_constant(instr->opcode, i)) {
             instr->operands[i] = get_constant_op(ctx, info.val, info.is_constant_64bit());
             continue;
          }
@@ -754,7 +749,7 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
                static_cast<VOP3A_instruction*>(instr.get())->neg[i] = true;
             continue;
          }
-         if ((info.is_constant() || info.is_constant_64bit()) && can_accept_constant(instr, i)) {
+         if ((info.is_constant() || info.is_constant_64bit()) && alu_can_accept_constant(instr->opcode, i)) {
             Operand op = get_constant_op(ctx, info.val, info.is_constant_64bit());
             perfwarn(instr->opcode == aco_opcode::v_cndmask_b32 && i == 2, "v_cndmask_b32 with a constant selector", instr.get());
             if (i == 0 || instr->opcode == aco_opcode::v_readlane_b32 || instr->opcode == aco_opcode::v_writelane_b32) {
@@ -780,9 +775,9 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
          while (info.is_temp())
             info = ctx.info[info.temp.id()];
 
-         if (mubuf->offen && i == 0 && info.is_constant_or_literal() && mubuf->offset + info.val < 4096) {
+         if (mubuf->offen && i == 1 && info.is_constant_or_literal() && mubuf->offset + info.val < 4096) {
             assert(!mubuf->idxen);
-            instr->operands[i] = Operand(v1);
+            instr->operands[1] = Operand(v1);
             mubuf->offset += info.val;
             mubuf->offen = false;
             continue;
@@ -790,9 +785,9 @@ void label_instruction(opt_ctx &ctx, Block& block, aco_ptr<Instruction>& instr)
             instr->operands[2] = Operand((uint32_t) 0);
             mubuf->offset += info.val;
             continue;
-         } else if (mubuf->offen && i == 0 && parse_base_offset(ctx, instr.get(), i, &base, &offset) && base.regClass() == v1 && mubuf->offset + offset < 4096) {
+         } else if (mubuf->offen && i == 1 && parse_base_offset(ctx, instr.get(), i, &base, &offset) && base.regClass() == v1 && mubuf->offset + offset < 4096) {
             assert(!mubuf->idxen);
-            instr->operands[i].setTemp(base);
+            instr->operands[1].setTemp(base);
             mubuf->offset += offset;
             continue;
          } else if (i == 2 && parse_base_offset(ctx, instr.get(), i, &base, &offset) && base.regClass() == s1 && mubuf->offset + offset < 4096) {
@@ -2698,7 +2693,7 @@ void select_instruction(opt_ctx &ctx, aco_ptr<Instruction>& instr)
          continue;
       }
 
-      if (!can_accept_constant(instr, i))
+      if (!alu_can_accept_constant(instr->opcode, i))
          continue;
 
       if (ctx.uses[op.tempId()] < literal_uses) {

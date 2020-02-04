@@ -565,7 +565,7 @@ anv_block_pool_expand_range(struct anv_block_pool *pool,
  * rather than the start of the block pool BO map.
  */
 void*
-anv_block_pool_map(struct anv_block_pool *pool, int32_t offset)
+anv_block_pool_map(struct anv_block_pool *pool, int32_t offset, uint32_t size)
 {
    if (pool->use_softpin) {
       struct anv_bo *bo = NULL;
@@ -579,6 +579,7 @@ anv_block_pool_map(struct anv_block_pool *pool, int32_t offset)
       }
       assert(bo != NULL);
       assert(offset >= bo_offset);
+      assert((offset - bo_offset) + size <= bo->size);
 
       return bo->map + (offset - bo_offset);
    } else {
@@ -611,7 +612,8 @@ anv_block_pool_map(struct anv_block_pool *pool, int32_t offset)
  *     the pool and a 4K CPU page.
  */
 static uint32_t
-anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
+anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state,
+                    uint32_t contiguous_size)
 {
    VkResult result = VK_SUCCESS;
 
@@ -642,12 +644,24 @@ anv_block_pool_grow(struct anv_block_pool *pool, struct anv_block_state *state)
     */
    assert(old_size > 0);
 
+   const uint32_t old_back = pool->center_bo_offset;
+   const uint32_t old_front = old_size - pool->center_bo_offset;
+
    /* The back_used and front_used may actually be smaller than the actual
     * requirement because they are based on the next pointers which are
     * updated prior to calling this function.
     */
-   uint32_t back_required = MAX2(back_used, pool->center_bo_offset);
-   uint32_t front_required = MAX2(front_used, old_size - pool->center_bo_offset);
+   uint32_t back_required = MAX2(back_used, old_back);
+   uint32_t front_required = MAX2(front_used, old_front);
+
+   if (pool->use_softpin) {
+      /* With softpin, the pool is made up of a bunch of buffers with separate
+       * maps.  Make sure we have enough contiguous space that we can get a
+       * properly contiguous map for the next chunk.
+       */
+      assert(old_back == 0);
+      front_required = MAX2(front_required, old_front + contiguous_size);
+   }
 
    if (back_used * 2 <= back_required && front_used * 2 <= front_required) {
       /* If we're in this case then this isn't the firsta allocation and we
@@ -756,7 +770,7 @@ anv_block_pool_alloc_new(struct anv_block_pool *pool,
           */
          new.next = state.next + block_size;
          do {
-            new.end = anv_block_pool_grow(pool, pool_state);
+            new.end = anv_block_pool_grow(pool, pool_state, block_size);
          } while (new.end < new.next);
 
          old.u64 = __sync_lock_test_and_set(&pool_state->u64, new.u64);
@@ -929,7 +943,9 @@ anv_state_pool_return_blocks(struct anv_state_pool *pool,
                                                       st_idx + i);
       state_i->alloc_size = block_size;
       state_i->offset = chunk_offset + block_size * i;
-      state_i->map = anv_block_pool_map(&pool->block_pool, state_i->offset);
+      state_i->map = anv_block_pool_map(&pool->block_pool,
+                                        state_i->offset,
+                                        state_i->alloc_size);
    }
 
    uint32_t block_bucket = anv_state_pool_get_bucket(block_size);
@@ -1070,7 +1086,7 @@ anv_state_pool_alloc_no_vg(struct anv_state_pool *pool,
    state = anv_state_table_get(&pool->table, idx);
    state->offset = offset;
    state->alloc_size = alloc_size;
-   state->map = anv_block_pool_map(&pool->block_pool, offset);
+   state->map = anv_block_pool_map(&pool->block_pool, offset, alloc_size);
 
    if (padding > 0) {
       uint32_t return_offset = offset - padding;
@@ -1114,7 +1130,7 @@ anv_state_pool_alloc_back(struct anv_state_pool *pool)
    state = anv_state_table_get(&pool->table, idx);
    state->offset = offset;
    state->alloc_size = alloc_size;
-   state->map = anv_block_pool_map(&pool->block_pool, state->offset);
+   state->map = anv_block_pool_map(&pool->block_pool, offset, alloc_size);
 
 done:
    VG(VALGRIND_MEMPOOL_ALLOC(pool, state->map, state->alloc_size));

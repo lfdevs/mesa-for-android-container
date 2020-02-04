@@ -450,15 +450,14 @@ flush_resource(struct fd_context *ctx, struct fd_resource *rsc, unsigned usage)
 		mtx_unlock(&ctx->screen->lock);
 
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask)
-			fd_batch_flush(batch, false);
+			fd_batch_flush(batch);
 
 		foreach_batch(batch, &ctx->screen->batch_cache, batch_mask) {
-			fd_batch_sync(batch);
 			fd_batch_reference(&batches[batch->idx], NULL);
 		}
 		assert(rsc->batch_mask == 0);
 	} else if (write_batch) {
-		fd_batch_flush(write_batch, true);
+		fd_batch_flush(write_batch);
 	}
 
 	fd_batch_reference(&write_batch, NULL);
@@ -559,21 +558,6 @@ fd_resource_transfer_map(struct pipe_context *pctx,
 
 			if (usage & PIPE_TRANSFER_READ) {
 				fd_blit_to_staging(ctx, trans);
-
-				struct fd_batch *batch = NULL;
-
-				fd_context_lock(ctx);
-				fd_batch_reference_locked(&batch, staging_rsc->write_batch);
-				fd_context_unlock(ctx);
-
-				/* we can't fd_bo_cpu_prep() until the blit to staging
-				 * is submitted to kernel.. in that case write_batch
-				 * wouldn't be NULL yet:
-				 */
-				if (batch) {
-					fd_batch_sync(batch);
-					fd_batch_reference(&batch, NULL);
-				}
 
 				fd_bo_cpu_prep(staging_rsc->bo, ctx->pipe,
 						DRM_FREEDRENO_PREP_READ);

@@ -99,8 +99,8 @@ void validate(Program* program, FILE * output)
                bool flat = instr->format == Format::FLAT || instr->format == Format::SCRATCH || instr->format == Format::GLOBAL;
                bool can_be_undef = is_phi(instr) || instr->format == Format::EXP ||
                                    instr->format == Format::PSEUDO_REDUCTION ||
-                                   (flat && i == 1) || (instr->format == Format::MIMG && i == 2) ||
-                                   ((instr->format == Format::MUBUF || instr->format == Format::MTBUF) && i == 0);
+                                   (flat && i == 1) || (instr->format == Format::MIMG && i == 1) ||
+                                   ((instr->format == Format::MUBUF || instr->format == Format::MTBUF) && i == 1);
                check(can_be_undef, "Undefs can only be used in certain operands", instr.get());
             }
          }
@@ -229,13 +229,27 @@ void validate(Program* program, FILE * output)
             break;
          }
          case Format::MTBUF:
-         case Format::MUBUF:
-         case Format::MIMG: {
+         case Format::MUBUF: {
             check(instr->operands.size() > 1, "VMEM instructions must have at least one operand", instr.get());
-            check(instr->operands[0].hasRegClass() && instr->operands[0].regClass().type() == RegType::vgpr,
+            check(instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::vgpr,
                   "VADDR must be in vgpr for VMEM instructions", instr.get());
-            check(instr->operands[1].isTemp() && instr->operands[1].regClass().type() == RegType::sgpr, "VMEM resource constant must be sgpr", instr.get());
+            check(instr->operands[0].isTemp() && instr->operands[0].regClass().type() == RegType::sgpr, "VMEM resource constant must be sgpr", instr.get());
             check(instr->operands.size() < 4 || (instr->operands[3].isTemp() && instr->operands[3].regClass().type() == RegType::vgpr), "VMEM write data must be vgpr", instr.get());
+            break;
+         }
+         case Format::MIMG: {
+            check(instr->operands.size() == 3, "MIMG instructions must have exactly 3 operands", instr.get());
+            check(instr->operands[0].hasRegClass() && (instr->operands[0].regClass() == s4 || instr->operands[0].regClass() == s8),
+                  "MIMG operands[0] (resource constant) must be in 4 or 8 SGPRs", instr.get());
+            if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::sgpr)
+               check(instr->operands[1].regClass() == s4, "MIMG operands[1] (sampler constant) must be 4 SGPRs", instr.get());
+            else if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::vgpr)
+               check(instr->definitions.empty() || instr->definitions[0].regClass() == instr->operands[1].regClass(),
+                     "MIMG operands[1] (VDATA) must be the same as definitions[0] for atomics", instr.get());
+            check(instr->operands[2].hasRegClass() && instr->operands[2].regClass().type() == RegType::vgpr,
+                  "MIMG operands[2] (VADDR) must be VGPR", instr.get());
+            check(instr->definitions.empty() || (instr->definitions[0].isTemp() && instr->definitions[0].regClass().type() == RegType::vgpr),
+                  "MIMG definitions[0] (VDATA) must be VGPR", instr.get());
             break;
          }
          case Format::DS: {

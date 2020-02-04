@@ -531,7 +531,7 @@ svga_texture_transfer_map(struct pipe_context *pipe,
    struct svga_transfer *st;
    struct svga_winsys_surface *surf = tex->handle;
    boolean use_direct_map = svga_have_gb_objects(svga) &&
-                            !svga_have_gb_dma(svga);
+       (!svga_have_gb_dma(svga) || (usage & PIPE_TRANSFER_WRITE));
    void *map = NULL;
    int64_t begin = svga_get_time(svga);
 

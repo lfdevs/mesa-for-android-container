@@ -115,10 +115,36 @@ etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
                   nir_instr_rewrite_src(instr, &intr->src[1], nir_src_for_ssa(ssa));
                } break;
                case nir_intrinsic_load_uniform: {
-                  /* multiply by 16 and convert to int */
+                  /* convert indirect load_uniform to load_ubo when possible
+                   * this is required on HALTI5+ because address register is not implemented
+                   * address register loads also arent done optimally
+                   */
+                  if (v->shader->specs->halti < 2 || nir_src_is_const(intr->src[0]))
+                     break;
+
+                  nir_intrinsic_instr *load_ubo =
+                     nir_intrinsic_instr_create(b.shader, nir_intrinsic_load_ubo);
+                  load_ubo->num_components = intr->num_components;
+                  nir_ssa_dest_init(&load_ubo->instr, &load_ubo->dest,
+                                    load_ubo->num_components, 32, NULL);
+
                   b.cursor = nir_before_instr(instr);
-                  nir_ssa_def *ssa = nir_imul(&b, intr->src[0].ssa, nir_imm_int(&b, 16));
-                  nir_instr_rewrite_src(instr, &intr->src[0], nir_src_for_ssa(ssa));
+                  load_ubo->src[0] = nir_src_for_ssa(nir_imm_int(&b, 0));
+                  load_ubo->src[1] = nir_src_for_ssa(nir_iadd(&b,
+                     nir_imul(&b, intr->src[0].ssa, nir_imm_int(&b, 16)),
+                     nir_imm_int(&b, nir_intrinsic_base(intr) * 16)));
+                  nir_builder_instr_insert(&b, &load_ubo->instr);
+                  nir_ssa_def_rewrite_uses(&intr->dest.ssa,
+                                             nir_src_for_ssa(&load_ubo->dest.ssa));
+                  nir_instr_remove(&intr->instr);
+               } break;
+               case nir_intrinsic_load_ubo: {
+                  nir_const_value *idx = nir_src_as_const_value(intr->src[0]);
+                  assert(idx);
+                  /* offset index by 1, index 0 is used for converted load_uniform */
+                  b.cursor = nir_before_instr(instr);
+                  nir_instr_rewrite_src(instr, &intr->src[0],
+                                        nir_src_for_ssa(nir_imm_int(&b, idx[0].u32 + 1)));
                } break;
                case nir_intrinsic_load_vertex_id:
                case nir_intrinsic_load_instance_id:
@@ -591,44 +617,6 @@ etna_emit_output(struct etna_compile *c, nir_variable *var, struct etna_inst_src
       sf->num_reg++;
       break;
    }
-}
-
-static void
-etna_emit_load_ubo(struct etna_compile *c, struct etna_inst_dst dst,
-                   struct etna_inst_src src, struct etna_inst_src base)
-{
-   /* convert float offset back to integer */
-   if (c->specs->halti < 2) {
-      emit_inst(c, &(struct etna_inst) {
-         .opcode = INST_OPCODE_F2I,
-         .type = INST_TYPE_U32,
-         .dst = dst,
-         .src[0] = src,
-      });
-
-      emit_inst(c, &(struct etna_inst) {
-         .opcode = INST_OPCODE_LOAD,
-         .type = INST_TYPE_U32,
-         .dst = dst,
-         .src[0] = {
-            .use = 1,
-            .rgroup = INST_RGROUP_TEMP,
-            .reg = dst.reg,
-            .swiz = INST_SWIZ_BROADCAST(ffs(dst.write_mask) - 1)
-         },
-         .src[1] = base,
-      });
-
-      return;
-   }
-
-   emit_inst(c, &(struct etna_inst) {
-      .opcode = INST_OPCODE_LOAD,
-      .type = INST_TYPE_U32,
-      .dst = dst,
-      .src[0] = src,
-      .src[1] = base,
-   });
 }
 
 #define OPT(nir, pass, ...) ({                             \

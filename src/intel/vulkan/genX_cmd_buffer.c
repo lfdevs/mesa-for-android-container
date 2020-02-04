@@ -132,13 +132,21 @@ genX(cmd_buffer_emit_state_base_address)(struct anv_cmd_buffer *cmd_buffer)
        * these fields.  However, since we will be growing the BO's live, we
        * just set them all to the maximum.
        */
-      sba.GeneralStateBufferSize                = 0xfffff;
+      sba.GeneralStateBufferSize       = 0xfffff;
+      sba.IndirectObjectBufferSize     = 0xfffff;
+      if (device->physical->use_softpin) {
+         /* With softpin, we use fixed addresses so we actually know how big
+          * our base addresses are.
+          */
+         sba.DynamicStateBufferSize    = DYNAMIC_STATE_POOL_SIZE / 4096;
+         sba.InstructionBufferSize     = INSTRUCTION_STATE_POOL_SIZE / 4096;
+      } else {
+         sba.DynamicStateBufferSize    = 0xfffff;
+         sba.InstructionBufferSize     = 0xfffff;
+      }
       sba.GeneralStateBufferSizeModifyEnable    = true;
-      sba.DynamicStateBufferSize                = 0xfffff;
-      sba.DynamicStateBufferSizeModifyEnable    = true;
-      sba.IndirectObjectBufferSize              = 0xfffff;
       sba.IndirectObjectBufferSizeModifyEnable  = true;
-      sba.InstructionBufferSize                 = 0xfffff;
+      sba.DynamicStateBufferSizeModifyEnable    = true;
       sba.InstructionBuffersizeModifyEnable     = true;
 #  else
       /* On gen7, we have upper bounds instead.  According to the docs,

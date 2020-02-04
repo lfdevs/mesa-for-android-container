@@ -36,12 +36,7 @@ struct fd3_blend_stateobj {
 	struct pipe_blend_state base;
 	uint32_t rb_render_control;
 	struct {
-		/* Blend control bits for color if there is an alpha channel */
-		uint32_t blend_control_rgb;
-		/* Blend control bits for color if there is no alpha channel */
-		uint32_t blend_control_no_alpha_rgb;
-		/* Blend control bits for alpha channel */
-		uint32_t blend_control_alpha;
+		uint32_t blend_control;
 		uint32_t control;
 	} rb_mrt[A3XX_MAX_RENDER_TARGETS];
 };

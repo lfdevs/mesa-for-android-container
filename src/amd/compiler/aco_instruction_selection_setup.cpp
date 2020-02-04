@@ -68,7 +68,12 @@ struct isel_context {
       struct {
          bool is_divergent = false;
       } parent_if;
-      bool exec_potentially_empty = false;
+      bool exec_potentially_empty_discard = false; /* set to false when loop_nest_depth==0 && parent_if.is_divergent==false */
+      uint16_t exec_potentially_empty_break_depth = UINT16_MAX;
+      /* Set to false when loop_nest_depth==exec_potentially_empty_break_depth
+       * and parent_if.is_divergent==false. Called _break but it's also used for
+       * loop continues. */
+      bool exec_potentially_empty_break = false;
       std::unique_ptr<unsigned[]> nir_to_aco; /* NIR block index to ACO block index */
    } cf_info;
 
@@ -302,11 +307,13 @@ void init_context(isel_context *ctx, nir_shader *shader)
                   case nir_intrinsic_load_sample_id:
                   case nir_intrinsic_load_sample_mask_in:
                   case nir_intrinsic_load_input:
+                  case nir_intrinsic_load_input_vertex:
                   case nir_intrinsic_load_per_vertex_input:
                   case nir_intrinsic_load_vertex_id:
                   case nir_intrinsic_load_vertex_id_zero_base:
                   case nir_intrinsic_load_barycentric_sample:
                   case nir_intrinsic_load_barycentric_pixel:
+                  case nir_intrinsic_load_barycentric_model:
                   case nir_intrinsic_load_barycentric_centroid:
                   case nir_intrinsic_load_barycentric_at_sample:
                   case nir_intrinsic_load_barycentric_at_offset:
@@ -435,6 +442,9 @@ void init_context(isel_context *ctx, nir_shader *shader)
                      spi_ps_inputs |= get_interp_input(intrinsic->intrinsic, mode);
                      break;
                   }
+                  case nir_intrinsic_load_barycentric_model:
+                     spi_ps_inputs |= S_0286CC_PERSP_PULL_MODEL_ENA(1);
+                     break;
                   case nir_intrinsic_load_front_face:
                      spi_ps_inputs |= S_0286CC_FRONT_FACE_ENA(1);
                      break;

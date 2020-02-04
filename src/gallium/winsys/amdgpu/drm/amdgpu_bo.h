@@ -93,7 +93,6 @@ struct amdgpu_winsys_bo {
    amdgpu_bo_handle bo; /* NULL for slab entries and sparse buffers */
    bool sparse;
    bool is_user_ptr;
-   bool is_local;
    uint32_t unique_id;
    uint64_t va;
    enum radeon_bo_domain initial_domain;

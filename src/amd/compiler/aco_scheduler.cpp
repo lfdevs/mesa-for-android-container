@@ -548,7 +548,7 @@ void schedule_VMEM(sched_ctx& ctx, Block* block,
       if (current->isVMEM() == candidate->isVMEM()) {
          bool same_resource = true;
          if (current->isVMEM())
-            same_resource = candidate->operands[1].tempId() == current->operands[1].tempId();
+            same_resource = candidate->operands[0].tempId() == current->operands[0].tempId();
          bool can_reorder = can_reorder_vmem || can_reorder_candidate;
          int grab_dist = clause_insert_idx - candidate_idx;
          /* We can't easily tell how much this will decrease the def-to-use

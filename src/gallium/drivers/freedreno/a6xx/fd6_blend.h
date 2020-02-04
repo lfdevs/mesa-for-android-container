@@ -31,25 +31,16 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 
+#include "freedreno_context.h"
 #include "freedreno_util.h"
 
 struct fd6_blend_stateobj {
 	struct pipe_blend_state base;
 
-	struct {
-		uint32_t control;
-		uint32_t buf_info;
-		/* Blend control bits for color if there is an alpha channel */
-		uint32_t blend_control_rgb;
-		/* Blend control bits for color if there is no alpha channel */
-		uint32_t blend_control_no_alpha_rgb;
-		/* Blend control bits for alpha channel */
-		uint32_t blend_control_alpha;
-	} rb_mrt[A6XX_MAX_RENDER_TARGETS];
 	uint32_t rb_blend_cntl;
-	uint32_t rb_dither_cntl;
-	uint32_t sp_blend_cntl;
+
 	bool lrz_write;
+	struct fd_ringbuffer *stateobj;
 };
 
 static inline struct fd6_blend_stateobj *
@@ -60,5 +51,6 @@ fd6_blend_stateobj(struct pipe_blend_state *blend)
 
 void * fd6_blend_state_create(struct pipe_context *pctx,
 		const struct pipe_blend_state *cso);
+void fd6_blend_state_delete(struct pipe_context *, void *hwcso);
 
 #endif /* FD6_BLEND_H_ */

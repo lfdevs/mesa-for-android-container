@@ -1510,6 +1510,34 @@ vtn_get_builtin_location(struct vtn_builder *b,
       *location = SYSTEM_VALUE_GLOBAL_GROUP_SIZE;
       set_mode_system_value(b, mode);
       break;
+   case SpvBuiltInBaryCoordNoPerspAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_LINEAR_PIXEL;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordNoPerspCentroidAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordNoPerspSampleAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordSmoothAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordSmoothCentroidAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordSmoothSampleAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE;
+      set_mode_system_value(b, mode);
+      break;
+   case SpvBuiltInBaryCoordPullModelAMD:
+      *location = SYSTEM_VALUE_BARYCENTRIC_PULL_MODEL;
+      set_mode_system_value(b, mode);
+      break;
    default:
       vtn_fail("Unsupported builtin: %s (%u)",
                spirv_builtin_to_string(builtin), builtin);
@@ -1529,6 +1557,9 @@ apply_var_decoration(struct vtn_builder *b,
       break;
    case SpvDecorationFlat:
       var_data->interpolation = INTERP_MODE_FLAT;
+      break;
+   case SpvDecorationExplicitInterpAMD:
+      var_data->interpolation = INTERP_MODE_EXPLICIT;
       break;
    case SpvDecorationCentroid:
       var_data->centroid = true;

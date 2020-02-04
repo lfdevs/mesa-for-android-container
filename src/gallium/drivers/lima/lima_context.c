@@ -235,11 +235,25 @@ lima_context_create(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->plb_size = screen->plb_max_blk * LIMA_CTX_PLB_BLK_SIZE;
    ctx->plb_gp_size = screen->plb_max_blk * 4;
 
+   uint32_t heap_flags;
+   if (screen->has_growable_heap_buffer) {
+      /* growable size buffer, initially will allocate 32K (by default)
+       * backup memory in kernel driver, and will allocate more when GP
+       * get out of memory interrupt. Max to 16M set here.
+       */
+      ctx->gp_tile_heap_size = 0x1000000;
+      heap_flags = LIMA_BO_FLAG_HEAP;
+   } else {
+      /* fix size buffer */
+      ctx->gp_tile_heap_size = 0x100000;
+      heap_flags = 0;
+   }
+
    for (int i = 0; i < lima_ctx_num_plb; i++) {
       ctx->plb[i] = lima_bo_create(screen, ctx->plb_size, 0);
       if (!ctx->plb[i])
          goto err_out;
-      ctx->gp_tile_heap[i] = lima_bo_create(screen, gp_tile_heap_size, 0);
+      ctx->gp_tile_heap[i] = lima_bo_create(screen, ctx->gp_tile_heap_size, heap_flags);
       if (!ctx->gp_tile_heap[i])
          goto err_out;
    }

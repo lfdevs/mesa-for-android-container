@@ -100,6 +100,7 @@ is_phi_src_scalarizable(nir_phi_src *src,
       case nir_intrinsic_interp_deref_at_centroid:
       case nir_intrinsic_interp_deref_at_sample:
       case nir_intrinsic_interp_deref_at_offset:
+      case nir_intrinsic_interp_deref_at_vertex:
       case nir_intrinsic_load_uniform:
       case nir_intrinsic_load_ubo:
       case nir_intrinsic_load_ssbo:

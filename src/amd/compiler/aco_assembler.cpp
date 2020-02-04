@@ -329,10 +329,10 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       }
       encoding |= instr->operands[2].physReg() << 24;
       encoding |= (mubuf->tfe ? 1 : 0) << 23;
-      encoding |= (instr->operands[1].physReg() >> 2) << 16;
+      encoding |= (instr->operands[0].physReg() >> 2) << 16;
       unsigned reg = instr->operands.size() > 3 ? instr->operands[3].physReg() : instr->definitions[0].physReg();
       encoding |= (0xFF & reg) << 8;
-      encoding |= (0xFF & instr->operands[0].physReg());
+      encoding |= (0xFF & instr->operands[1].physReg());
       out.push_back(encoding);
       break;
    }
@@ -362,10 +362,10 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       encoding |= instr->operands[2].physReg() << 24;
       encoding |= (mtbuf->tfe ? 1 : 0) << 23;
       encoding |= (mtbuf->slc ? 1 : 0) << 22;
-      encoding |= (instr->operands[1].physReg() >> 2) << 16;
+      encoding |= (instr->operands[0].physReg() >> 2) << 16;
       unsigned reg = instr->operands.size() > 3 ? instr->operands[3].physReg() : instr->definitions[0].physReg();
       encoding |= (0xFF & reg) << 8;
-      encoding |= (0xFF & instr->operands[0].physReg());
+      encoding |= (0xFF & instr->operands[1].physReg());
 
       if (ctx.chip_class >= GFX10) {
          encoding |= (((opcode & 0x08) >> 4) << 21); /* MSB of 4-bit OPCODE */
@@ -395,15 +395,15 @@ void emit_instruction(asm_context& ctx, std::vector<uint32_t>& out, Instruction*
       }
       encoding |= (0xF & mimg->dmask) << 8;
       out.push_back(encoding);
-      encoding = (0xFF & instr->operands[0].physReg()); /* VADDR */
+      encoding = (0xFF & instr->operands[2].physReg()); /* VADDR */
       if (!instr->definitions.empty()) {
          encoding |= (0xFF & instr->definitions[0].physReg()) << 8; /* VDATA */
-      } else if (instr->operands.size() == 4) {
-         encoding |= (0xFF & instr->operands[3].physReg()) << 8; /* VDATA */
+      } else if (instr->operands[1].regClass().type() == RegType::vgpr) {
+         encoding |= (0xFF & instr->operands[1].physReg()) << 8; /* VDATA */
       }
-      encoding |= (0x1F & (instr->operands[1].physReg() >> 2)) << 16; /* T# (resource) */
-      if (instr->operands.size() > 2)
-         encoding |= (0x1F & (instr->operands[2].physReg() >> 2)) << 21; /* sampler */
+      encoding |= (0x1F & (instr->operands[0].physReg() >> 2)) << 16; /* T# (resource) */
+      if (instr->operands[1].regClass().type() == RegType::sgpr)
+         encoding |= (0x1F & (instr->operands[1].physReg() >> 2)) << 21; /* sampler */
 
       assert(!mimg->d16 || ctx.chip_class >= GFX9);
       encoding |= mimg->d16 ? 1 << 15 : 0;

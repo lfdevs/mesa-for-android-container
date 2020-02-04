@@ -209,6 +209,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
    case nir_intrinsic_interp_deref_at_centroid:
    case nir_intrinsic_interp_deref_at_sample:
    case nir_intrinsic_interp_deref_at_offset:
+   case nir_intrinsic_interp_deref_at_vertex:
    case nir_intrinsic_load_deref:
    case nir_intrinsic_store_deref:{
       nir_deref_instr *deref = nir_src_as_deref(instr->src[0]);

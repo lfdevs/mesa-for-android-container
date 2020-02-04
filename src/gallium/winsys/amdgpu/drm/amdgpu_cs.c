@@ -1398,9 +1398,6 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
 
       simple_mtx_lock(&ws->global_bo_list_lock);
       LIST_FOR_EACH_ENTRY(bo, &ws->global_bo_list, u.real.global_list_item) {
-         if (bo->is_local)
-            continue;
-
          list[num_handles].bo_handle = bo->u.real.kms_handle;
          list[num_handles].bo_priority = 0;
          ++num_handles;
@@ -1425,10 +1422,6 @@ void amdgpu_cs_submit_ib(void *job, int thread_index)
       unsigned num_handles = 0;
       for (i = 0; i < cs->num_real_buffers; ++i) {
          struct amdgpu_cs_buffer *buffer = &cs->real_buffers[i];
-
-         if (buffer->bo->is_local)
-            continue;
-
          assert(buffer->u.real.priority_usage != 0);
 
          list[num_handles].bo_handle = buffer->bo->u.real.kms_handle;

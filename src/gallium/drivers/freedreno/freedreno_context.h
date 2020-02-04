@@ -159,11 +159,19 @@ enum fd_dirty_shader_state {
 struct fd_context {
 	struct pipe_context base;
 
+	/* We currently need to serialize emitting GMEM batches, because of
+	 * VSC state access in the context.
+	 *
+	 * In practice this lock should not be contended, since pipe_context
+	 * use should be single threaded.  But it is needed to protect the
+	 * case, with batch reordering where a ctxB batch triggers flushing
+	 * a ctxA batch
+	 */
+	mtx_t gmem_lock;
+
 	struct fd_device *dev;
 	struct fd_screen *screen;
 	struct fd_pipe *pipe;
-
-	struct util_queue flush_queue;
 
 	struct blitter_context *blitter;
 	void *clear_rs_state;
@@ -259,15 +267,8 @@ struct fd_context {
 	 */
 	struct pipe_scissor_state disabled_scissor;
 
-	/* Current gmem/tiling configuration.. gets updated on render_tiles()
-	 * if out of date with current maximal-scissor/cpp:
-	 *
-	 * (NOTE: this is kind of related to the batch, but moving it there
-	 * means we'd always have to recalc tiles ever batch)
-	 */
-	struct fd_gmem_stateobj gmem;
-	struct fd_vsc_pipe      vsc_pipe[32];
-	struct fd_tile          tile[512];
+	/* Per vsc pipe bo's (a2xx-a5xx): */
+	struct fd_bo *vsc_pipe_bo[32];
 
 	/* which state objects need to be re-emit'd: */
 	enum fd_dirty_3d_state dirty;
@@ -310,11 +311,11 @@ struct fd_context {
 
 	/* GMEM/tile handling fxns: */
 	void (*emit_tile_init)(struct fd_batch *batch);
-	void (*emit_tile_prep)(struct fd_batch *batch, struct fd_tile *tile);
-	void (*emit_tile_mem2gmem)(struct fd_batch *batch, struct fd_tile *tile);
-	void (*emit_tile_renderprep)(struct fd_batch *batch, struct fd_tile *tile);
-	void (*emit_tile)(struct fd_batch *batch, struct fd_tile *tile);
-	void (*emit_tile_gmem2mem)(struct fd_batch *batch, struct fd_tile *tile);
+	void (*emit_tile_prep)(struct fd_batch *batch, const struct fd_tile *tile);
+	void (*emit_tile_mem2gmem)(struct fd_batch *batch, const struct fd_tile *tile);
+	void (*emit_tile_renderprep)(struct fd_batch *batch, const struct fd_tile *tile);
+	void (*emit_tile)(struct fd_batch *batch, const struct fd_tile *tile);
+	void (*emit_tile_gmem2mem)(struct fd_batch *batch, const struct fd_tile *tile);
 	void (*emit_tile_fini)(struct fd_batch *batch);   /* optional */
 
 	/* optional, for GMEM bypass: */

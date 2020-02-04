@@ -781,8 +781,8 @@ struct DS_instruction : public Instruction {
 
 /**
  * Vector Memory Untyped-buffer Instructions
- * Operand(0): VADDR - Address source. Can carry an index and/or offset
- * Operand(1): SRSRC - Specifies which SGPR supplies T# (resource constant)
+ * Operand(0): SRSRC - Specifies which SGPR supplies T# (resource constant)
+ * Operand(1): VADDR - Address source. Can carry an index and/or offset
  * Operand(2): SOFFSET - SGPR to supply unsigned byte offset. (SGPR, M0, or inline constant)
  * Operand(3) / Definition(0): VDATA - Vector GPR for write result / read data
  *
@@ -804,8 +804,8 @@ struct MUBUF_instruction : public Instruction {
 
 /**
  * Vector Memory Typed-buffer Instructions
- * Operand(0): VADDR - Address source. Can carry an index and/or offset
- * Operand(1): SRSRC - Specifies which SGPR supplies T# (resource constant)
+ * Operand(0): SRSRC - Specifies which SGPR supplies T# (resource constant)
+ * Operand(1): VADDR - Address source. Can carry an index and/or offset
  * Operand(2): SOFFSET - SGPR to supply unsigned byte offset. (SGPR, M0, or inline constant)
  * Operand(3) / Definition(0): VDATA - Vector GPR for write result / read data
  *
@@ -827,10 +827,11 @@ struct MTBUF_instruction : public Instruction {
 
 /**
  * Vector Memory Image Instructions
- * Operand(0): VADDR - Address source. Can carry an offset or an index.
- * Operand(1): SRSRC - Scalar GPR that specifies the resource constant.
- * Operand(2): SSAMP - Scalar GPR that specifies sampler constant.
- * Operand(3) / Definition(0): VDATA - Vector GPR for read / write result.
+ * Operand(0) SRSRC - Scalar GPR that specifies the resource constant.
+ * Operand(1): SSAMP - Scalar GPR that specifies sampler constant.
+ *             or VDATA - Vector GPR for write data.
+ * Operand(2): VADDR - Address source. Can carry an offset or an index.
+ * Definition(0): VDATA - Vector GPR for read result.
  *
  */
 struct MIMG_instruction : public Instruction {

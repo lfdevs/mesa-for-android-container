@@ -3170,6 +3170,33 @@ static void gfx10_ngg_gs_emit_epilogue_2(struct radv_shader_context *ctx)
 		build_streamout(ctx, &nggso);
 	}
 
+	/* Write shader query data. */
+	tmp = ac_get_arg(&ctx->ac, ctx->args->ngg_gs_state);
+	tmp = LLVMBuildTrunc(builder, tmp, ctx->ac.i1, "");
+	ac_build_ifcc(&ctx->ac, tmp, 5109);
+	tmp = LLVMBuildICmp(builder, LLVMIntULT, tid,
+			    LLVMConstInt(ctx->ac.i32, 4, false), "");
+	ac_build_ifcc(&ctx->ac, tmp, 5110);
+	{
+		tmp = LLVMBuildLoad(builder, ac_build_gep0(&ctx->ac, ctx->gs_ngg_scratch, tid), "");
+
+		ac_llvm_add_target_dep_function_attr(ctx->main_function,
+						     "amdgpu-gds-size", 256);
+
+		LLVMTypeRef gdsptr = LLVMPointerType(ctx->ac.i32, AC_ADDR_SPACE_GDS);
+		LLVMValueRef gdsbase = LLVMBuildIntToPtr(builder, ctx->ac.i32_0, gdsptr, "");
+
+		const char *sync_scope = LLVM_VERSION_MAJOR >= 9 ? "workgroup-one-as" : "workgroup";
+
+		/* Use a plain GDS atomic to accumulate the number of generated
+		 * primitives.
+		 */
+		ac_build_atomic_rmw(&ctx->ac, LLVMAtomicRMWBinOpAdd, gdsbase,
+				    tmp, sync_scope);
+	}
+	ac_build_endif(&ctx->ac, 5110);
+	ac_build_endif(&ctx->ac, 5109);
+
 	/* TODO: culling */
 
 	/* Determine vertex liveness. */

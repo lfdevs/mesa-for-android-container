@@ -92,7 +92,7 @@ enum etna_immediate_contents {
    ETNA_IMMEDIATE_TEXRECT_SCALE_X,
    ETNA_IMMEDIATE_TEXRECT_SCALE_Y,
    ETNA_IMMEDIATE_UBO0_ADDR,
-   ETNA_IMMEDIATE_UBOMAX_ADDR = ETNA_IMMEDIATE_UBO0_ADDR + 255,
+   ETNA_IMMEDIATE_UBOMAX_ADDR = ETNA_IMMEDIATE_UBO0_ADDR + ETNA_MAX_CONST_BUF - 1,
 };
 
 struct etna_shader_uniform_info {
@@ -164,7 +164,7 @@ struct etna_context {
    uint32_t active_sampler_views;
    uint32_t dirty_sampler_views;
    struct pipe_sampler_view *sampler_view[PIPE_MAX_SAMPLERS];
-   struct pipe_constant_buffer constant_buffer[PIPE_SHADER_TYPES];
+   struct pipe_constant_buffer constant_buffer[PIPE_SHADER_TYPES][ETNA_MAX_CONST_BUF];
    struct etna_vertexbuf_state vertex_buffer;
    struct etna_index_buffer index_buffer;
    struct etna_shader_state shader;

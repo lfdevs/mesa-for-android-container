@@ -694,6 +694,7 @@ vmw_ioctl_region_map(struct vmw_region *region)
 	 return NULL;
       }
 
+      (void) madvise(map, region->size, MADV_HUGEPAGE);
       region->data = map;
    }
 
@@ -973,7 +974,6 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
    drmVersionPtr version;
    boolean drm_gb_capable;
    boolean have_drm_2_5;
-   boolean have_drm_2_16;
    const char *getenv_val;
 
    VMW_FUNC;
@@ -990,8 +990,10 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       (version->version_major == 2 && version->version_minor > 8);
    vws->ioctl.have_drm_2_15 = version->version_major > 2 ||
       (version->version_major == 2 && version->version_minor > 14);
-   have_drm_2_16 = version->version_major > 2 ||
+   vws->ioctl.have_drm_2_16 = version->version_major > 2 ||
       (version->version_major == 2 && version->version_minor > 15);
+   vws->ioctl.have_drm_2_17 = version->version_major > 2 ||
+      (version->version_major == 2 && version->version_minor > 16);
 
    vws->ioctl.drm_execbuf_version = vws->ioctl.have_drm_2_9 ? 2 : 1;
 
@@ -1116,7 +1118,7 @@ vmw_ioctl_init(struct vmw_winsys_screen *vws)
       else
          vws->ioctl.num_cap_3d = SVGA3D_DEVCAP_MAX;
 
-      if (have_drm_2_16) {
+      if (vws->ioctl.have_drm_2_16) {
          vws->base.have_coherent = TRUE;
          getenv_val = getenv("SVGA_FORCE_COHERENT");
          if (getenv_val && strcmp(getenv_val, "0") != 0)

@@ -33,6 +33,7 @@ Build-Depends:
  libxcb-sync-dev,
  libxrandr-dev,
  libxshmfence-dev (>= 1.1),
+ libzstd-dev,
  python3,
  python3-mako,
  python3-setuptools,

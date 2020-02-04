@@ -75,7 +75,7 @@ fd_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fencep,
 		batch->needs_out_fence_fd = true;
 
 	if (!ctx->screen->reorder) {
-		fd_batch_flush(batch, true);
+		fd_batch_flush(batch);
 	} else if (flags & PIPE_FLUSH_DEFERRED) {
 		fd_bc_flush_deferred(&ctx->screen->batch_cache, ctx);
 	} else {
@@ -170,9 +170,6 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	fd_fence_ref(&ctx->last_fence, NULL);
 
-	if (ctx->screen->reorder && util_queue_is_initialized(&ctx->flush_queue))
-		util_queue_destroy(&ctx->flush_queue);
-
 	util_copy_framebuffer_state(&ctx->framebuffer, NULL);
 	fd_batch_reference(&ctx->batch, NULL);  /* unref current batch */
 	fd_bc_invalidate_context(ctx);
@@ -193,15 +190,16 @@ fd_context_destroy(struct pipe_context *pctx)
 
 	slab_destroy_child(&ctx->transfer_pool);
 
-	for (i = 0; i < ARRAY_SIZE(ctx->vsc_pipe); i++) {
-		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
-		if (!pipe->bo)
+	for (i = 0; i < ARRAY_SIZE(ctx->vsc_pipe_bo); i++) {
+		if (!ctx->vsc_pipe_bo[i])
 			break;
-		fd_bo_del(pipe->bo);
+		fd_bo_del(ctx->vsc_pipe_bo[i]);
 	}
 
 	fd_device_del(ctx->dev);
 	fd_pipe_del(ctx->pipe);
+
+	mtx_destroy(&ctx->gmem_lock);
 
 	if (fd_mesa_debug & (FD_DBG_BSTAT | FD_DBG_MSGS)) {
 		printf("batch_total=%u, batch_sysmem=%u, batch_gmem=%u, batch_nondraw=%u, batch_restore=%u\n",
@@ -362,6 +360,8 @@ fd_context_init(struct fd_context *ctx, struct pipe_screen *pscreen,
 	for (i = 0; i < PIPE_PRIM_MAX; i++)
 		if (primtypes[i])
 			ctx->primtype_mask |= (1 << i);
+
+	(void) mtx_init(&ctx->gmem_lock, mtx_plain);
 
 	/* need some sane default in case state tracker doesn't
 	 * set some state:

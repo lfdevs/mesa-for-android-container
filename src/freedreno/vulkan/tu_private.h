@@ -778,7 +778,6 @@ tu_get_perftest_option_name(int id);
 struct tu_descriptor_state
 {
    struct tu_descriptor_set *sets[MAX_SETS];
-   uint32_t dirty;
    uint32_t valid;
    struct tu_push_descriptor_set push_set;
    bool push_dirty;

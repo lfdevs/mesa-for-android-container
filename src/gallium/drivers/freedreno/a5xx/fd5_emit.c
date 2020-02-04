@@ -725,17 +725,13 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			bool is_int = util_format_is_pure_integer(format);
 			bool has_alpha = util_format_has_alpha(format);
 			uint32_t control = blend->rb_mrt[i].control;
-			uint32_t blend_control = blend->rb_mrt[i].blend_control_alpha;
 
 			if (is_int) {
 				control &= A5XX_RB_MRT_CONTROL_COMPONENT_ENABLE__MASK;
 				control |= A5XX_RB_MRT_CONTROL_ROP_CODE(ROP_COPY);
 			}
 
-			if (has_alpha) {
-				blend_control |= blend->rb_mrt[i].blend_control_rgb;
-			} else {
-				blend_control |= blend->rb_mrt[i].blend_control_no_alpha_rgb;
+			if (!has_alpha) {
 				control &= ~A5XX_RB_MRT_CONTROL_BLEND2;
 			}
 
@@ -743,7 +739,7 @@ fd5_emit_state(struct fd_context *ctx, struct fd_ringbuffer *ring,
 			OUT_RING(ring, control);
 
 			OUT_PKT4(ring, REG_A5XX_RB_MRT_BLEND_CONTROL(i), 1);
-			OUT_RING(ring, blend_control);
+			OUT_RING(ring, blend->rb_mrt[i].blend_control);
 		}
 
 		OUT_PKT4(ring, REG_A5XX_SP_BLEND_CNTL, 1);

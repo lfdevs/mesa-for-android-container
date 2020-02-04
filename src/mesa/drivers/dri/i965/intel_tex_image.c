@@ -325,7 +325,8 @@ intel_upload_tex(struct gl_context * ctx,
    if (pixels == NULL && !_mesa_is_bufferobj(packing->BufferObj))
       return;
 
-   bool tex_busy = mt && brw_bo_busy(mt->bo);
+   bool tex_busy = mt &&
+      (brw_batch_references(&brw->batch, mt->bo) || brw_bo_busy(mt->bo));
 
    if (_mesa_is_bufferobj(packing->BufferObj) || tex_busy ||
        mt->aux_usage == ISL_AUX_USAGE_CCS_E) {

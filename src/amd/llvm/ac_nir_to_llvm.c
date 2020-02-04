@@ -3228,6 +3228,13 @@ static LLVMValueRef barycentric_sample(struct ac_nir_context *ctx,
 	return LLVMBuildBitCast(ctx->ac.builder, interp_param, ctx->ac.v2i32, "");
 }
 
+static LLVMValueRef barycentric_model(struct ac_nir_context *ctx)
+{
+	return LLVMBuildBitCast(ctx->ac.builder,
+				ac_get_arg(&ctx->ac, ctx->args->pull_model),
+				ctx->ac.v3i32, "");
+}
+
 static LLVMValueRef load_interpolated_input(struct ac_nir_context *ctx,
 					    LLVMValueRef interp_param,
 					    unsigned index, unsigned comp_start,
@@ -3259,25 +3266,53 @@ static LLVMValueRef load_interpolated_input(struct ac_nir_context *ctx,
 	return ac_to_integer(&ctx->ac, ac_build_gather_values(&ctx->ac, values, num_components));
 }
 
-static LLVMValueRef load_flat_input(struct ac_nir_context *ctx,
-				    unsigned index, unsigned comp_start,
-				    unsigned num_components,
-				    unsigned bit_size)
+static LLVMValueRef load_input(struct ac_nir_context *ctx,
+			       nir_intrinsic_instr *instr)
 {
-	LLVMValueRef attr_number = LLVMConstInt(ctx->ac.i32, index, false);
+	unsigned offset_idx = instr->intrinsic == nir_intrinsic_load_input ? 0 : 1;
 
+	/* We only lower inputs for fragment shaders ATM */
+	ASSERTED nir_const_value *offset = nir_src_as_const_value(instr->src[offset_idx]);
+	assert(offset);
+	assert(offset[0].i32 == 0);
+
+	unsigned component = nir_intrinsic_component(instr);
+	unsigned index = nir_intrinsic_base(instr);
+	unsigned vertex_id = 2; /* P0 */
+
+	if (instr->intrinsic == nir_intrinsic_load_input_vertex) {
+		nir_const_value *src0 = nir_src_as_const_value(instr->src[0]);
+
+		switch (src0[0].i32) {
+		case 0:
+			vertex_id = 2;
+			break;
+		case 1:
+			vertex_id = 0;
+			break;
+		case 2:
+			vertex_id = 1;
+			break;
+		default:
+			unreachable("Invalid vertex index");
+		}
+	}
+
+	LLVMValueRef attr_number = LLVMConstInt(ctx->ac.i32, index, false);
 	LLVMValueRef values[8];
 
 	/* Each component of a 64-bit value takes up two GL-level channels. */
+	unsigned num_components = instr->dest.ssa.num_components;
+	unsigned bit_size = instr->dest.ssa.bit_size;
 	unsigned channels =
 		bit_size == 64 ? num_components * 2 : num_components;
 
 	for (unsigned chan = 0; chan < channels; chan++) {
-		if (comp_start + chan > 4)
+		if (component + chan > 4)
 			attr_number = LLVMConstInt(ctx->ac.i32, index + 1, false);
-		LLVMValueRef llvm_chan = LLVMConstInt(ctx->ac.i32, (comp_start + chan) % 4, false);
+		LLVMValueRef llvm_chan = LLVMConstInt(ctx->ac.i32, (component + chan) % 4, false);
 		values[chan] = ac_build_fs_interp_mov(&ctx->ac,
-						      LLVMConstInt(ctx->ac.i32, 2, false),
+						      LLVMConstInt(ctx->ac.i32, vertex_id, false),
 						      llvm_chan,
 						      attr_number,
 						      ac_get_arg(&ctx->ac, ctx->args->prim_mask));
@@ -3599,6 +3634,9 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 	case nir_intrinsic_load_barycentric_sample:
 		result = barycentric_sample(ctx, nir_intrinsic_interp_mode(instr));
 		break;
+	case nir_intrinsic_load_barycentric_model:
+		result = barycentric_model(ctx);
+		break;
 	case nir_intrinsic_load_barycentric_at_offset: {
 		LLVMValueRef offset = ac_to_float(&ctx->ac, get_src(ctx, instr->src[0]));
 		result = barycentric_offset(ctx, nir_intrinsic_interp_mode(instr), offset);
@@ -3624,19 +3662,10 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 						 instr->dest.ssa.bit_size);
 		break;
 	}
-	case nir_intrinsic_load_input: {
-		/* We only lower inputs for fragment shaders ATM */
-		ASSERTED nir_const_value *offset = nir_src_as_const_value(instr->src[0]);
-		assert(offset);
-		assert(offset[0].i32 == 0);
-
-		unsigned index = nir_intrinsic_base(instr);
-		unsigned component = nir_intrinsic_component(instr);
-		result = load_flat_input(ctx, index, component,
-					 instr->dest.ssa.num_components,
-					 instr->dest.ssa.bit_size);
+	case nir_intrinsic_load_input:
+	case nir_intrinsic_load_input_vertex:
+		result = load_input(ctx, instr);
 		break;
-	}
 	case nir_intrinsic_emit_vertex:
 		ctx->abi->emit_vertex(ctx->abi, nir_intrinsic_stream_id(instr), ctx->abi->outputs);
 		break;

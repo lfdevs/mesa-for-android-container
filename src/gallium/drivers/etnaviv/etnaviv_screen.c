@@ -280,6 +280,10 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
                              enum pipe_shader_cap param)
 {
    struct etna_screen *screen = etna_screen(pscreen);
+   bool ubo_enable = screen->specs.halti >= 2 && DBG_ENABLED(ETNA_DBG_NIR);
+
+   if (DBG_ENABLED(ETNA_DBG_DEQP))
+      ubo_enable = true;
 
    switch (shader) {
    case PIPE_SHADER_FRAGMENT:
@@ -315,7 +319,7 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_MAX_TEMPS:
       return 64; /* Max native temporaries. */
    case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-      return DBG_ENABLED(ETNA_DBG_DEQP) ? 16 : 1;
+      return ubo_enable ? ETNA_MAX_CONST_BUF : 1;
    case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
       return 1;
    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
@@ -340,6 +344,8 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
    case PIPE_SHADER_CAP_PREFERRED_IR:
       return DBG_ENABLED(ETNA_DBG_NIR) ? PIPE_SHADER_IR_NIR : PIPE_SHADER_IR_TGSI;
    case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+      if (ubo_enable)
+         return 16384; /* 16384 so state tracker enables UBOs */
       return shader == PIPE_SHADER_FRAGMENT
                 ? screen->specs.max_ps_uniforms * sizeof(float[4])
                 : screen->specs.max_vs_uniforms * sizeof(float[4]);
@@ -617,9 +623,6 @@ etna_determine_uniform_limits(struct etna_screen *screen)
       screen->specs.max_vs_uniforms = 168;
       screen->specs.max_ps_uniforms = 64;
    }
-
-   if (DBG_ENABLED(ETNA_DBG_DEQP))
-      screen->specs.max_ps_uniforms = 1024;
 }
 
 static bool

@@ -1268,7 +1268,7 @@ get_barycentric_centroid(struct ir3_context *ctx)
 		struct ir3_instruction *xy[2];
 		struct ir3_instruction *ij;
 
-		ij = create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_CENTROID, 0x3);
+		ij = create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID, 0x3);
 		ir3_split_dest(ctx->block, xy, ij, 0, 2);
 
 		ctx->ij_centroid = ir3_create_collect(ctx, xy, 2);
@@ -1284,7 +1284,7 @@ get_barycentric_sample(struct ir3_context *ctx)
 		struct ir3_instruction *xy[2];
 		struct ir3_instruction *ij;
 
-		ij = create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_SAMPLE, 0x3);
+		ij = create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE, 0x3);
 		ir3_split_dest(ctx->block, xy, ij, 0, 2);
 
 		ctx->ij_sample = ir3_create_collect(ctx, xy, 2);
@@ -1509,7 +1509,7 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
 	case nir_intrinsic_load_size_ir3:
 		if (!ctx->ij_size) {
 			ctx->ij_size =
-				create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_SIZE, 0x1);
+				create_sysval_input(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_SIZE, 0x1);
 		}
 		dst[0] = ctx->ij_size;
 		break;
@@ -3059,7 +3059,7 @@ emit_instructions(struct ir3_context *ctx)
 	 * because sysvals need to be appended after varyings:
 	 */
 	if (vcoord) {
-		add_sysval_input_compmask(ctx, SYSTEM_VALUE_BARYCENTRIC_PIXEL,
+		add_sysval_input_compmask(ctx, SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL,
 				0x3, vcoord);
 	}
 
@@ -3462,7 +3462,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 		int idx = 0;
 
 		foreach_input(instr, ir) {
-			if (instr->input.sysval != SYSTEM_VALUE_BARYCENTRIC_PIXEL)
+			if (instr->input.sysval != SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL)
 				continue;
 
 			assert(idx < ARRAY_SIZE(precolor));

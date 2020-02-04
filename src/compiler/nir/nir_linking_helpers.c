@@ -523,7 +523,8 @@ gather_varying_component_info(nir_shader *consumer,
          if (intr->intrinsic != nir_intrinsic_load_deref &&
              intr->intrinsic != nir_intrinsic_interp_deref_at_centroid &&
              intr->intrinsic != nir_intrinsic_interp_deref_at_sample &&
-             intr->intrinsic != nir_intrinsic_interp_deref_at_offset)
+             intr->intrinsic != nir_intrinsic_interp_deref_at_offset &&
+             intr->intrinsic != nir_intrinsic_interp_deref_at_vertex)
             continue;
 
          nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);

@@ -220,7 +220,8 @@ void process_live_temps_per_block(Program *program, live& lives, Block* block,
       phi_idx--;
    }
 
-   if (!(block->index != 0 || (live_vgprs.empty() && live_sgprs.empty()))) {
+   if ((block->logical_preds.empty() && !live_vgprs.empty()) ||
+       (block->linear_preds.empty() && !live_sgprs.empty())) {
       aco_print_program(program, stderr);
       fprintf(stderr, "These temporaries are never defined or are defined after use:\n");
       for (Temp vgpr : live_vgprs)

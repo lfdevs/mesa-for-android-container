@@ -60,7 +60,7 @@ int main(int argc, char **argv)
    assert(offset == initial_size);
 
    /* Use the memory to ensure it is valid. */
-   void *map = anv_block_pool_map(&pool, offset);
+   void *map = anv_block_pool_map(&pool, offset, block_size);
    memset(map, 22, block_size);
 
    anv_block_pool_finish(&pool);

@@ -422,8 +422,7 @@ radv_physical_device_init(struct radv_physical_device *device,
 	disk_cache_format_hex_id(buf, device->cache_uuid, VK_UUID_SIZE * 2);
 	device->disk_cache = disk_cache_create(device->name, buf, shader_env_flags);
 
-	if (device->rad_info.chip_class < GFX8 ||
-	    device->rad_info.chip_class > GFX9)
+	if (device->rad_info.chip_class < GFX8)
 		fprintf(stderr, "WARNING: radv is not a conformant vulkan implementation, testing use only.\n");
 
 	radv_get_driver_uuid(&device->driver_uuid);
@@ -1428,12 +1427,171 @@ void radv_GetPhysicalDeviceProperties(
 	memcpy(pProperties->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
 }
 
+static void
+radv_get_physical_device_properties_1_1(struct radv_physical_device *pdevice,
+					VkPhysicalDeviceVulkan11Properties *p)
+{
+	assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES);
+
+	memcpy(p->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
+	memcpy(p->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
+	memset(p->deviceLUID, 0, VK_LUID_SIZE);
+	/* The LUID is for Windows. */
+	p->deviceLUIDValid = false;
+	p->deviceNodeMask = 0;
+
+	p->subgroupSize = RADV_SUBGROUP_SIZE;
+	p->subgroupSupportedStages = VK_SHADER_STAGE_ALL;
+	p->subgroupSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+					 VK_SUBGROUP_FEATURE_VOTE_BIT |
+					 VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+					 VK_SUBGROUP_FEATURE_BALLOT_BIT |
+					 VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
+					 VK_SUBGROUP_FEATURE_QUAD_BIT;
+
+	if (pdevice->rad_info.chip_class == GFX8 ||
+	    pdevice->rad_info.chip_class == GFX9) {
+		p->subgroupSupportedOperations |= VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+						  VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
+	}
+	p->subgroupQuadOperationsInAllStages = true;
+
+	p->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+	p->maxMultiviewViewCount = MAX_VIEWS;
+	p->maxMultiviewInstanceIndex = INT_MAX;
+	p->protectedNoFault = false;
+	p->maxPerSetDescriptors = RADV_MAX_PER_SET_DESCRIPTORS;
+	p->maxMemoryAllocationSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+}
+
+static void
+radv_get_physical_device_properties_1_2(struct radv_physical_device *pdevice,
+					VkPhysicalDeviceVulkan12Properties *p)
+{
+	assert(p->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES);
+
+	p->driverID = VK_DRIVER_ID_MESA_RADV;
+	snprintf(p->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
+	snprintf(p->driverInfo, VK_MAX_DRIVER_INFO_SIZE,
+		 "Mesa " PACKAGE_VERSION MESA_GIT_SHA1
+		 " (LLVM " MESA_LLVM_VERSION_STRING ")");
+	p->conformanceVersion = (VkConformanceVersion) {
+		.major = 1,
+		.minor = 2,
+		.subminor = 0,
+		.patch = 0,
+	};
+
+	/* On AMD hardware, denormals and rounding modes for fp16/fp64 are
+	 * controlled by the same config register.
+	 */
+	p->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
+	p->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
+
+	/* Do not allow both preserving and flushing denorms because different
+	 * shaders in the same pipeline can have different settings and this
+	 * won't work for merged shaders. To make it work, this requires LLVM
+	 * support for changing the register. The same logic applies for the
+	 * rounding modes because they are configured with the same config
+	 * register. TODO: we can enable a lot of these for ACO when it
+	 * supports all stages.
+	 */
+	p->shaderDenormFlushToZeroFloat32 = true;
+	p->shaderDenormPreserveFloat32 = false;
+	p->shaderRoundingModeRTEFloat32 = true;
+	p->shaderRoundingModeRTZFloat32 = false;
+	p->shaderSignedZeroInfNanPreserveFloat32 = true;
+
+	p->shaderDenormFlushToZeroFloat16 = false;
+	p->shaderDenormPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
+	p->shaderRoundingModeRTEFloat16 = pdevice->rad_info.chip_class >= GFX8;
+	p->shaderRoundingModeRTZFloat16 = false;
+	p->shaderSignedZeroInfNanPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
+
+	p->shaderDenormFlushToZeroFloat64 = false;
+	p->shaderDenormPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
+	p->shaderRoundingModeRTEFloat64 = pdevice->rad_info.chip_class >= GFX8;
+	p->shaderRoundingModeRTZFloat64 = false;
+	p->shaderSignedZeroInfNanPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
+
+	p->maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX / 64;
+	p->shaderUniformBufferArrayNonUniformIndexingNative = false;
+	p->shaderSampledImageArrayNonUniformIndexingNative = false;
+	p->shaderStorageBufferArrayNonUniformIndexingNative = false;
+	p->shaderStorageImageArrayNonUniformIndexingNative = false;
+	p->shaderInputAttachmentArrayNonUniformIndexingNative = false;
+	p->robustBufferAccessUpdateAfterBind = false;
+	p->quadDivergentImplicitLod = false;
+
+	size_t max_descriptor_set_size = ((1ull << 31) - 16 * MAX_DYNAMIC_BUFFERS -
+		MAX_INLINE_UNIFORM_BLOCK_SIZE * MAX_INLINE_UNIFORM_BLOCK_COUNT) /
+			(32 /* uniform buffer, 32 due to potential space wasted on alignment */ +
+			 32 /* storage buffer, 32 due to potential space wasted on alignment */ +
+			 32 /* sampler, largest when combined with image */ +
+			 64 /* sampled image */ +
+			 64 /* storage image */);
+	p->maxPerStageDescriptorUpdateAfterBindSamplers = max_descriptor_set_size;
+	p->maxPerStageDescriptorUpdateAfterBindUniformBuffers = max_descriptor_set_size;
+	p->maxPerStageDescriptorUpdateAfterBindStorageBuffers = max_descriptor_set_size;
+	p->maxPerStageDescriptorUpdateAfterBindSampledImages = max_descriptor_set_size;
+	p->maxPerStageDescriptorUpdateAfterBindStorageImages = max_descriptor_set_size;
+	p->maxPerStageDescriptorUpdateAfterBindInputAttachments = max_descriptor_set_size;
+	p->maxPerStageUpdateAfterBindResources = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindSamplers = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindUniformBuffers = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS;
+	p->maxDescriptorSetUpdateAfterBindStorageBuffers = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_STORAGE_BUFFERS;
+	p->maxDescriptorSetUpdateAfterBindSampledImages = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindStorageImages = max_descriptor_set_size;
+	p->maxDescriptorSetUpdateAfterBindInputAttachments = max_descriptor_set_size;
+
+	/* We support all of the depth resolve modes */
+	p->supportedDepthResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+					    VK_RESOLVE_MODE_AVERAGE_BIT_KHR |
+					    VK_RESOLVE_MODE_MIN_BIT_KHR |
+					    VK_RESOLVE_MODE_MAX_BIT_KHR;
+
+	/* Average doesn't make sense for stencil so we don't support that */
+	p->supportedStencilResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+					      VK_RESOLVE_MODE_MIN_BIT_KHR |
+					      VK_RESOLVE_MODE_MAX_BIT_KHR;
+
+	p->independentResolveNone = true;
+	p->independentResolve = true;
+
+	/* GFX6-8 only support single channel min/max filter. */
+	p->filterMinmaxImageComponentMapping = pdevice->rad_info.chip_class >= GFX9;
+	p->filterMinmaxSingleComponentFormats = true;
+
+	p->maxTimelineSemaphoreValueDifference = UINT64_MAX;
+
+	p->framebufferIntegerColorSampleCounts = VK_SAMPLE_COUNT_1_BIT;
+}
+
 void radv_GetPhysicalDeviceProperties2(
 	VkPhysicalDevice                            physicalDevice,
 	VkPhysicalDeviceProperties2                *pProperties)
 {
 	RADV_FROM_HANDLE(radv_physical_device, pdevice, physicalDevice);
 	radv_GetPhysicalDeviceProperties(physicalDevice, &pProperties->properties);
+
+	VkPhysicalDeviceVulkan11Properties core_1_1 = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
+	};
+	radv_get_physical_device_properties_1_1(pdevice, &core_1_1);
+
+	VkPhysicalDeviceVulkan12Properties core_1_2 = {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
+	};
+	radv_get_physical_device_properties_1_2(pdevice, &core_1_2);
+
+#define CORE_RENAMED_PROPERTY(major, minor, ext_property, core_property) \
+   memcpy(&properties->ext_property, &core_##major##_##minor.core_property, \
+          sizeof(core_##major##_##minor.core_property))
+
+#define CORE_PROPERTY(major, minor, property) \
+   CORE_RENAMED_PROPERTY(major, minor, property, property)
 
 	vk_foreach_struct(ext, pProperties->pNext) {
 		switch (ext->sType) {
@@ -1445,21 +1603,22 @@ void radv_GetPhysicalDeviceProperties2(
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES: {
 			VkPhysicalDeviceIDProperties *properties = (VkPhysicalDeviceIDProperties*)ext;
-			memcpy(properties->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
-			memcpy(properties->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
-			properties->deviceLUIDValid = false;
+			CORE_PROPERTY(1, 1, deviceUUID);
+			CORE_PROPERTY(1, 1, driverUUID);
+			CORE_PROPERTY(1, 1, deviceLUID);
+			CORE_PROPERTY(1, 1, deviceLUIDValid);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES: {
 			VkPhysicalDeviceMultiviewProperties *properties = (VkPhysicalDeviceMultiviewProperties*)ext;
-			properties->maxMultiviewViewCount = MAX_VIEWS;
-			properties->maxMultiviewInstanceIndex = INT_MAX;
+			CORE_PROPERTY(1, 1, maxMultiviewViewCount);
+			CORE_PROPERTY(1, 1, maxMultiviewInstanceIndex);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES: {
 			VkPhysicalDevicePointClippingProperties *properties =
 			    (VkPhysicalDevicePointClippingProperties*)ext;
-			properties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+			CORE_PROPERTY(1, 1, pointClippingBehavior);
 			break;
 		}
 		case  VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DISCARD_RECTANGLE_PROPERTIES_EXT: {
@@ -1477,37 +1636,27 @@ void radv_GetPhysicalDeviceProperties2(
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES: {
 			VkPhysicalDeviceSubgroupProperties *properties =
 			    (VkPhysicalDeviceSubgroupProperties*)ext;
-			properties->subgroupSize = RADV_SUBGROUP_SIZE;
-			properties->supportedStages = VK_SHADER_STAGE_ALL;
-			properties->supportedOperations =
-							VK_SUBGROUP_FEATURE_BASIC_BIT |
-							VK_SUBGROUP_FEATURE_VOTE_BIT |
-							VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-							VK_SUBGROUP_FEATURE_BALLOT_BIT |
-							VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
-							VK_SUBGROUP_FEATURE_QUAD_BIT;
-			if (pdevice->rad_info.chip_class == GFX8 ||
-			    pdevice->rad_info.chip_class == GFX9) {
-				properties->supportedOperations |=
-							VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-							VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
-			}
-			properties->quadOperationsInAllStages = true;
+			CORE_PROPERTY(1, 1, subgroupSize);
+			CORE_RENAMED_PROPERTY(1, 1, supportedStages,
+						    subgroupSupportedStages);
+			CORE_RENAMED_PROPERTY(1, 1, supportedOperations,
+						    subgroupSupportedOperations);
+			CORE_RENAMED_PROPERTY(1, 1, quadOperationsInAllStages,
+						    subgroupQuadOperationsInAllStages);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES: {
 			VkPhysicalDeviceMaintenance3Properties *properties =
 			    (VkPhysicalDeviceMaintenance3Properties*)ext;
-			properties->maxPerSetDescriptors = RADV_MAX_PER_SET_DESCRIPTORS;
-			properties->maxMemoryAllocationSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+			CORE_PROPERTY(1, 1, maxPerSetDescriptors);
+			CORE_PROPERTY(1, 1, maxMemoryAllocationSize);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES: {
 			VkPhysicalDeviceSamplerFilterMinmaxProperties *properties =
 				(VkPhysicalDeviceSamplerFilterMinmaxProperties *)ext;
-			/* GFX6-8 only support single channel min/max filter. */
-			properties->filterMinmaxImageComponentMapping = pdevice->rad_info.chip_class >= GFX9;
-			properties->filterMinmaxSingleComponentFormats = true;
+			CORE_PROPERTY(1, 2, filterMinmaxImageComponentMapping);
+			CORE_PROPERTY(1, 2, filterMinmaxSingleComponentFormats);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD: {
@@ -1567,37 +1716,35 @@ void radv_GetPhysicalDeviceProperties2(
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES: {
 			VkPhysicalDeviceDescriptorIndexingProperties *properties =
 				(VkPhysicalDeviceDescriptorIndexingProperties*)ext;
-			properties->maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX / 64;
-			properties->shaderUniformBufferArrayNonUniformIndexingNative = false;
-			properties->shaderSampledImageArrayNonUniformIndexingNative = false;
-			properties->shaderStorageBufferArrayNonUniformIndexingNative = false;
-			properties->shaderStorageImageArrayNonUniformIndexingNative = false;
-			properties->shaderInputAttachmentArrayNonUniformIndexingNative = false;
-			properties->robustBufferAccessUpdateAfterBind = false;
-			properties->quadDivergentImplicitLod = false;
-
-			size_t max_descriptor_set_size = radv_max_descriptor_set_size();
-			properties->maxPerStageDescriptorUpdateAfterBindSamplers = max_descriptor_set_size;
-			properties->maxPerStageDescriptorUpdateAfterBindUniformBuffers = max_descriptor_set_size;
-			properties->maxPerStageDescriptorUpdateAfterBindStorageBuffers = max_descriptor_set_size;
-			properties->maxPerStageDescriptorUpdateAfterBindSampledImages = max_descriptor_set_size;
-			properties->maxPerStageDescriptorUpdateAfterBindStorageImages = max_descriptor_set_size;
-			properties->maxPerStageDescriptorUpdateAfterBindInputAttachments = max_descriptor_set_size;
-			properties->maxPerStageUpdateAfterBindResources = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindSamplers = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindUniformBuffers = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS;
-			properties->maxDescriptorSetUpdateAfterBindStorageBuffers = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_STORAGE_BUFFERS;
-			properties->maxDescriptorSetUpdateAfterBindSampledImages = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindStorageImages = max_descriptor_set_size;
-			properties->maxDescriptorSetUpdateAfterBindInputAttachments = max_descriptor_set_size;
+			CORE_PROPERTY(1, 2, maxUpdateAfterBindDescriptorsInAllPools);
+			CORE_PROPERTY(1, 2, shaderUniformBufferArrayNonUniformIndexingNative);
+			CORE_PROPERTY(1, 2, shaderSampledImageArrayNonUniformIndexingNative);
+			CORE_PROPERTY(1, 2, shaderStorageBufferArrayNonUniformIndexingNative);
+			CORE_PROPERTY(1, 2, shaderStorageImageArrayNonUniformIndexingNative);
+			CORE_PROPERTY(1, 2, shaderInputAttachmentArrayNonUniformIndexingNative);
+			CORE_PROPERTY(1, 2, robustBufferAccessUpdateAfterBind);
+			CORE_PROPERTY(1, 2, quadDivergentImplicitLod);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindSamplers);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindUniformBuffers);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindStorageBuffers);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindSampledImages);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindStorageImages);
+			CORE_PROPERTY(1, 2, maxPerStageDescriptorUpdateAfterBindInputAttachments);
+			CORE_PROPERTY(1, 2, maxPerStageUpdateAfterBindResources);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindSamplers);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindUniformBuffers);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageBuffers);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindSampledImages);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindStorageImages);
+			CORE_PROPERTY(1, 2, maxDescriptorSetUpdateAfterBindInputAttachments);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES: {
 			VkPhysicalDeviceProtectedMemoryProperties *properties =
 				(VkPhysicalDeviceProtectedMemoryProperties *)ext;
-			properties->protectedNoFault = false;
+			CORE_PROPERTY(1, 1, protectedNoFault);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT: {
@@ -1624,21 +1771,12 @@ void radv_GetPhysicalDeviceProperties2(
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES: {
-			VkPhysicalDeviceDriverProperties *driver_props =
+			VkPhysicalDeviceDriverProperties *properties =
 				(VkPhysicalDeviceDriverProperties *) ext;
-
-			driver_props->driverID = VK_DRIVER_ID_MESA_RADV;
-			snprintf(driver_props->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
-			snprintf(driver_props->driverInfo, VK_MAX_DRIVER_INFO_SIZE,
-				"Mesa " PACKAGE_VERSION MESA_GIT_SHA1
-				" (LLVM " MESA_LLVM_VERSION_STRING ")");
-
-			driver_props->conformanceVersion = (VkConformanceVersion) {
-				.major = 1,
-				.minor = 1,
-				.subminor = 2,
-				.patch = 0,
-			};
+			CORE_PROPERTY(1, 2, driverID);
+			CORE_PROPERTY(1, 2, driverName);
+			CORE_PROPERTY(1, 2, driverInfo);
+			CORE_PROPERTY(1, 2, conformanceVersion);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT: {
@@ -1683,22 +1821,10 @@ void radv_GetPhysicalDeviceProperties2(
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES: {
 			VkPhysicalDeviceDepthStencilResolveProperties *properties =
 				(VkPhysicalDeviceDepthStencilResolveProperties *)ext;
-
-			/* We support all of the depth resolve modes */
-			properties->supportedDepthResolveModes =
-				VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-				VK_RESOLVE_MODE_AVERAGE_BIT_KHR |
-				VK_RESOLVE_MODE_MIN_BIT_KHR |
-				VK_RESOLVE_MODE_MAX_BIT_KHR;
-
-			/* Average doesn't make sense for stencil so we don't support that */
-			properties->supportedStencilResolveModes =
-				VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-				VK_RESOLVE_MODE_MIN_BIT_KHR |
-				VK_RESOLVE_MODE_MAX_BIT_KHR;
-
-			properties->independentResolveNone = true;
-			properties->independentResolve = true;
+			CORE_PROPERTY(1, 2, supportedDepthResolveModes);
+			CORE_PROPERTY(1, 2, supportedStencilResolveModes);
+			CORE_PROPERTY(1, 2, independentResolveNone);
+			CORE_PROPERTY(1, 2, independentResolve);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT: {
@@ -1713,47 +1839,29 @@ void radv_GetPhysicalDeviceProperties2(
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES : {
 			VkPhysicalDeviceFloatControlsProperties *properties =
 				(VkPhysicalDeviceFloatControlsProperties *)ext;
-
-			/* On AMD hardware, denormals and rounding modes for
-			 * fp16/fp64 are controlled by the same config
-			 * register.
-			 */
-			properties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY;
-			properties->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY;
-
-			/* Do not allow both preserving and flushing denorms
-			 * because different shaders in the same pipeline can
-			 * have different settings and this won't work for
-			 * merged shaders. To make it work, this requires LLVM
-			 * support for changing the register. The same logic
-			 * applies for the rounding modes because they are
-			 * configured with the same config register.
-			 * TODO: we can enable a lot of these for ACO when it
-			 * supports all stages
-			 */
-			properties->shaderDenormFlushToZeroFloat32 = true;
-			properties->shaderDenormPreserveFloat32 = false;
-			properties->shaderRoundingModeRTEFloat32 = true;
-			properties->shaderRoundingModeRTZFloat32 = false;
-			properties->shaderSignedZeroInfNanPreserveFloat32 = true;
-
-			properties->shaderDenormFlushToZeroFloat16 = false;
-			properties->shaderDenormPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
-			properties->shaderRoundingModeRTEFloat16 = pdevice->rad_info.chip_class >= GFX8;
-			properties->shaderRoundingModeRTZFloat16 = false;
-			properties->shaderSignedZeroInfNanPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
-
-			properties->shaderDenormFlushToZeroFloat64 = false;
-			properties->shaderDenormPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
-			properties->shaderRoundingModeRTEFloat64 = pdevice->rad_info.chip_class >= GFX8;
-			properties->shaderRoundingModeRTZFloat64 = false;
-			properties->shaderSignedZeroInfNanPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
+			CORE_PROPERTY(1, 2, denormBehaviorIndependence);
+			CORE_PROPERTY(1, 2, roundingModeIndependence);
+			CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat16);
+			CORE_PROPERTY(1, 2, shaderDenormPreserveFloat16);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat16);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat16);
+			CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat16);
+			CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat32);
+			CORE_PROPERTY(1, 2, shaderDenormPreserveFloat32);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat32);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat32);
+			CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat32);
+			CORE_PROPERTY(1, 2, shaderDenormFlushToZeroFloat64);
+			CORE_PROPERTY(1, 2, shaderDenormPreserveFloat64);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTEFloat64);
+			CORE_PROPERTY(1, 2, shaderRoundingModeRTZFloat64);
+			CORE_PROPERTY(1, 2, shaderSignedZeroInfNanPreserveFloat64);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES: {
-			VkPhysicalDeviceTimelineSemaphoreProperties *props =
+			VkPhysicalDeviceTimelineSemaphoreProperties *properties =
 				(VkPhysicalDeviceTimelineSemaphoreProperties *) ext;
-			props->maxTimelineSemaphoreValueDifference = UINT64_MAX;
+			CORE_PROPERTY(1, 2, maxTimelineSemaphoreValueDifference);
 			break;
 		}
 		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT: {
@@ -1771,138 +1879,12 @@ void radv_GetPhysicalDeviceProperties2(
 			}
 			break;
 		}
-		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES: {
-			VkPhysicalDeviceVulkan11Properties *props =
-				(VkPhysicalDeviceVulkan11Properties *)ext;
-
-			memcpy(props->deviceUUID, pdevice->device_uuid, VK_UUID_SIZE);
-			memcpy(props->driverUUID, pdevice->driver_uuid, VK_UUID_SIZE);
-			memset(props->deviceLUID, 0, VK_LUID_SIZE);
-			/* The LUID is for Windows. */
-			props->deviceLUIDValid = false;
-			props->deviceNodeMask = 0;
-			{
-				props->subgroupSize = RADV_SUBGROUP_SIZE;
-				props->subgroupSupportedStages = VK_SHADER_STAGE_ALL;
-				props->subgroupSupportedOperations =
-							VK_SUBGROUP_FEATURE_BASIC_BIT |
-							VK_SUBGROUP_FEATURE_VOTE_BIT |
-							VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-							VK_SUBGROUP_FEATURE_BALLOT_BIT |
-							VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
-							VK_SUBGROUP_FEATURE_QUAD_BIT;
-				if (pdevice->rad_info.chip_class == GFX8 ||
-				    pdevice->rad_info.chip_class == GFX9) {
-					props->subgroupSupportedOperations |=
-									VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-									VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT;
-				}
-				props->subgroupQuadOperationsInAllStages = true;
-			}
-			props->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
-			props->maxMultiviewViewCount = MAX_VIEWS;
-			props->maxMultiviewInstanceIndex = INT_MAX;
-			props->protectedNoFault = false;
-			props->maxPerSetDescriptors = RADV_MAX_PER_SET_DESCRIPTORS;
-			props->maxMemoryAllocationSize = RADV_MAX_MEMORY_ALLOCATION_SIZE;
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES:
+			radv_get_physical_device_properties_1_1(pdevice, (void *)ext);
 			break;
-		}
-		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES: {
-			VkPhysicalDeviceVulkan12Properties *props =
-				(VkPhysicalDeviceVulkan12Properties *)ext;
-
-			{
-				props->driverID = VK_DRIVER_ID_MESA_RADV;
-				snprintf(props->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
-				snprintf(props->driverInfo, VK_MAX_DRIVER_INFO_SIZE,
-					 "Mesa " PACKAGE_VERSION MESA_GIT_SHA1
-					 " (LLVM " MESA_LLVM_VERSION_STRING ")");
-
-				props->conformanceVersion = (VkConformanceVersion) {
-					.major = 1,
-					.minor = 1,
-					.subminor = 2,
-					.patch = 0,
-				};
-			}
-
-			props->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
-			props->roundingModeIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
-
-			props->shaderDenormFlushToZeroFloat32 = true;
-			props->shaderDenormPreserveFloat32 = false;
-			props->shaderRoundingModeRTEFloat32 = true;
-			props->shaderRoundingModeRTZFloat32 = false;
-			props->shaderSignedZeroInfNanPreserveFloat32 = true;
-
-			props->shaderDenormFlushToZeroFloat16 = false;
-			props->shaderDenormPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
-			props->shaderRoundingModeRTEFloat16 = pdevice->rad_info.chip_class >= GFX8;
-			props->shaderRoundingModeRTZFloat16 = false;
-			props->shaderSignedZeroInfNanPreserveFloat16 = pdevice->rad_info.chip_class >= GFX8;
-
-			props->shaderDenormFlushToZeroFloat64 = false;
-			props->shaderDenormPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
-			props->shaderRoundingModeRTEFloat64 = pdevice->rad_info.chip_class >= GFX8;
-			props->shaderRoundingModeRTZFloat64 = false;
-			props->shaderSignedZeroInfNanPreserveFloat64 = pdevice->rad_info.chip_class >= GFX8;
-
-			props->maxUpdateAfterBindDescriptorsInAllPools = UINT32_MAX / 64;
-			props->shaderUniformBufferArrayNonUniformIndexingNative = false;
-			props->shaderSampledImageArrayNonUniformIndexingNative = false;
-			props->shaderStorageBufferArrayNonUniformIndexingNative = false;
-			props->shaderStorageImageArrayNonUniformIndexingNative = false;
-			props->shaderInputAttachmentArrayNonUniformIndexingNative = false;
-			props->robustBufferAccessUpdateAfterBind = false;
-			props->quadDivergentImplicitLod = false;
-
-			size_t max_descriptor_set_size = ((1ull << 31) - 16 * MAX_DYNAMIC_BUFFERS -
-				MAX_INLINE_UNIFORM_BLOCK_SIZE * MAX_INLINE_UNIFORM_BLOCK_COUNT) /
-			          (32 /* uniform buffer, 32 due to potential space wasted on alignment */ +
-			           32 /* storage buffer, 32 due to potential space wasted on alignment */ +
-			           32 /* sampler, largest when combined with image */ +
-			           64 /* sampled image */ +
-			           64 /* storage image */);
-			props->maxPerStageDescriptorUpdateAfterBindSamplers = max_descriptor_set_size;
-			props->maxPerStageDescriptorUpdateAfterBindUniformBuffers = max_descriptor_set_size;
-			props->maxPerStageDescriptorUpdateAfterBindStorageBuffers = max_descriptor_set_size;
-			props->maxPerStageDescriptorUpdateAfterBindSampledImages = max_descriptor_set_size;
-			props->maxPerStageDescriptorUpdateAfterBindStorageImages = max_descriptor_set_size;
-			props->maxPerStageDescriptorUpdateAfterBindInputAttachments = max_descriptor_set_size;
-			props->maxPerStageUpdateAfterBindResources = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindSamplers = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindUniformBuffers = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MAX_DYNAMIC_UNIFORM_BUFFERS;
-			props->maxDescriptorSetUpdateAfterBindStorageBuffers = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MAX_DYNAMIC_STORAGE_BUFFERS;
-			props->maxDescriptorSetUpdateAfterBindSampledImages = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindStorageImages = max_descriptor_set_size;
-			props->maxDescriptorSetUpdateAfterBindInputAttachments = max_descriptor_set_size;
-
-			/* We support all of the depth resolve modes */
-			props->supportedDepthResolveModes =
-				VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-				VK_RESOLVE_MODE_AVERAGE_BIT_KHR |
-				VK_RESOLVE_MODE_MIN_BIT_KHR |
-				VK_RESOLVE_MODE_MAX_BIT_KHR;
-
-			/* Average doesn't make sense for stencil so we don't support that */
-			props->supportedStencilResolveModes =
-				VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-				VK_RESOLVE_MODE_MIN_BIT_KHR |
-				VK_RESOLVE_MODE_MAX_BIT_KHR;
-
-			props->independentResolveNone = true;
-			props->independentResolve = true;
-
-			props->filterMinmaxImageComponentMapping = pdevice->rad_info.chip_class >= GFX9;
-			props->filterMinmaxSingleComponentFormats = true;
-
-			props->maxTimelineSemaphoreValueDifference = UINT64_MAX;
-
-			props->framebufferIntegerColorSampleCounts = VK_SAMPLE_COUNT_1_BIT;
+		case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES:
+			radv_get_physical_device_properties_1_2(pdevice, (void *)ext);
 			break;
-		}
 		default:
 			break;
 		}
@@ -3636,6 +3618,7 @@ radv_get_preamble_cs(struct radv_queue *queue,
 		     uint32_t gsvs_ring_size,
 		     bool needs_tess_rings,
 		     bool needs_gds,
+		     bool needs_gds_oa,
 		     bool needs_sample_positions,
 		     struct radeon_cmdbuf **initial_full_flush_preamble_cs,
                      struct radeon_cmdbuf **initial_preamble_cs,
@@ -3650,7 +3633,7 @@ radv_get_preamble_cs(struct radv_queue *queue,
 	struct radeon_winsys_bo *gds_bo = NULL;
 	struct radeon_winsys_bo *gds_oa_bo = NULL;
 	struct radeon_cmdbuf *dest_cs[3] = {0};
-	bool add_tess_rings = false, add_gds = false, add_sample_positions = false;
+	bool add_tess_rings = false, add_gds = false, add_gds_oa = false, add_sample_positions = false;
 	unsigned tess_factor_ring_size = 0, tess_offchip_ring_size = 0;
 	unsigned max_offchip_buffers;
 	unsigned hs_offchip_param = 0;
@@ -3663,6 +3646,10 @@ radv_get_preamble_cs(struct radv_queue *queue,
 	if (!queue->has_gds) {
 		if (needs_gds)
 			add_gds = true;
+	}
+	if (!queue->has_gds_oa) {
+		if (needs_gds_oa)
+			add_gds_oa = true;
 	}
 	if (!queue->has_sample_positions) {
 		if (needs_sample_positions)
@@ -3693,14 +3680,14 @@ radv_get_preamble_cs(struct radv_queue *queue,
 	    compute_scratch_waves <= queue->compute_scratch_waves &&
 	    esgs_ring_size <= queue->esgs_ring_size &&
 	    gsvs_ring_size <= queue->gsvs_ring_size &&
-	    !add_tess_rings && !add_gds && !add_sample_positions &&
+	    !add_tess_rings && !add_gds && !add_gds_oa && !add_sample_positions &&
 	    queue->initial_preamble_cs) {
 		*initial_full_flush_preamble_cs = queue->initial_full_flush_preamble_cs;
 		*initial_preamble_cs = queue->initial_preamble_cs;
 		*continue_preamble_cs = queue->continue_preamble_cs;
 		if (!scratch_size_per_wave && !compute_scratch_size_per_wave &&
 		    !esgs_ring_size && !gsvs_ring_size && !needs_tess_rings &&
-		    !needs_gds && !needs_sample_positions)
+		    !needs_gds && !needs_gds_oa && !needs_sample_positions)
 			*continue_preamble_cs = NULL;
 		return VK_SUCCESS;
 	}
@@ -3788,6 +3775,12 @@ radv_get_preamble_cs(struct radv_queue *queue,
 							  RADV_BO_PRIORITY_SCRATCH);
 		if (!gds_bo)
 			goto fail;
+	} else {
+		gds_bo = queue->gds_bo;
+	}
+
+	if (add_gds_oa) {
+		assert(queue->device->physical_device->rad_info.chip_class >= GFX10);
 
 		gds_oa_bo = queue->device->ws->buffer_create(queue->device->ws,
 							     4, 1,
@@ -3797,7 +3790,6 @@ radv_get_preamble_cs(struct radv_queue *queue,
 		if (!gds_oa_bo)
 			goto fail;
 	} else {
-		gds_bo = queue->gds_bo;
 		gds_oa_bo = queue->gds_oa_bo;
 	}
 
@@ -3981,8 +3973,10 @@ radv_get_preamble_cs(struct radv_queue *queue,
 		queue->has_gds = true;
 	}
 
-	if (gds_oa_bo != queue->gds_oa_bo)
+	if (gds_oa_bo != queue->gds_oa_bo) {
 		queue->gds_oa_bo = gds_oa_bo;
+		queue->has_gds_oa = true;
+	}
 
 	if (descriptor_bo != queue->descriptor_bo) {
 		if (queue->descriptor_bo)
@@ -4253,6 +4247,7 @@ radv_get_preambles(struct radv_queue *queue,
 	uint32_t esgs_ring_size = 0, gsvs_ring_size = 0;
 	bool tess_rings_needed = false;
 	bool gds_needed = false;
+	bool gds_oa_needed = false;
 	bool sample_positions_needed = false;
 
 	for (uint32_t j = 0; j < cmd_buffer_count; j++) {
@@ -4269,13 +4264,14 @@ radv_get_preambles(struct radv_queue *queue,
 		gsvs_ring_size = MAX2(gsvs_ring_size, cmd_buffer->gsvs_ring_size_needed);
 		tess_rings_needed |= cmd_buffer->tess_rings_needed;
 		gds_needed |= cmd_buffer->gds_needed;
+		gds_oa_needed |= cmd_buffer->gds_oa_needed;
 		sample_positions_needed |= cmd_buffer->sample_positions_needed;
 	}
 
 	return radv_get_preamble_cs(queue, scratch_size_per_wave, waves_wanted,
 	                            compute_scratch_size_per_wave, compute_waves_wanted,
 	                            esgs_ring_size, gsvs_ring_size, tess_rings_needed,
-	                            gds_needed, sample_positions_needed,
+	                            gds_needed, gds_oa_needed, sample_positions_needed,
 	                            initial_full_flush_preamble_cs,
 	                            initial_preamble_cs, continue_preamble_cs);
 }

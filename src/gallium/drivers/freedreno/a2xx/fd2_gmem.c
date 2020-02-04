@@ -62,7 +62,7 @@ static uint32_t fmt2swap(enum pipe_format format)
 static bool
 use_hw_binning(struct fd_batch *batch)
 {
-	struct fd_gmem_stateobj *gmem = &batch->ctx->gmem;
+	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
 
 	/* we hardcoded a limit of 8 "pipes", we can increase this limit
 	 * at the cost of a slightly larger command stream
@@ -136,7 +136,7 @@ prepare_tile_fini_ib(struct fd_batch *batch)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	struct fd_ringbuffer *ring;
 
@@ -216,7 +216,7 @@ prepare_tile_fini_ib(struct fd_batch *batch)
 }
 
 static void
-fd2_emit_tile_gmem2mem(struct fd_batch *batch, struct fd_tile *tile)
+fd2_emit_tile_gmem2mem(struct fd_batch *batch, const struct fd_tile *tile)
 {
 	fd2_emit_ib(batch->gmem, batch->tile_fini);
 }
@@ -273,11 +273,11 @@ emit_mem2gmem_surf(struct fd_batch *batch, uint32_t base,
 }
 
 static void
-fd2_emit_tile_mem2gmem(struct fd_batch *batch, struct fd_tile *tile)
+fd2_emit_tile_mem2gmem(struct fd_batch *batch, const struct fd_tile *tile)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
 	unsigned bin_w = tile->bin_w;
@@ -478,7 +478,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 	struct fd_context *ctx = batch->ctx;
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
+	const struct fd_gmem_stateobj *gmem = batch->gmem_state;
 	enum pipe_format format = pipe_surface_format(pfb->cbufs[0]);
 	uint32_t reg;
 
@@ -583,16 +583,14 @@ fd2_emit_tile_init(struct fd_batch *batch)
 		OUT_RING(ring, 0x0000000C);
 
 		for (int i = 0; i < gmem->num_vsc_pipes; i++) {
-			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
-
 			/* allocate in 64k increments to avoid reallocs */
 			uint32_t bo_size = align(batch->num_vertices, 0x10000);
-			if (!pipe->bo || fd_bo_size(pipe->bo) < bo_size) {
-				if (pipe->bo)
-					fd_bo_del(pipe->bo);
-				pipe->bo = fd_bo_new(ctx->dev, bo_size,
+			if (!ctx->vsc_pipe_bo[i] || fd_bo_size(ctx->vsc_pipe_bo[i]) < bo_size) {
+				if (ctx->vsc_pipe_bo[i])
+					fd_bo_del(ctx->vsc_pipe_bo[i]);
+				ctx->vsc_pipe_bo[i] = fd_bo_new(ctx->dev, bo_size,
 						DRM_FREEDRENO_GEM_TYPE_KMEM, "vsc_pipe[%u]", i);
-				assert(pipe->bo);
+				assert(ctx->vsc_pipe_bo[i]);
 			}
 
 			/* memory export address (export32):
@@ -601,7 +599,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 			 * .z: 0x4B00D000 (?)
 			 * .w: 0x4B000000 (?) | max_index (?)
 			*/
-			OUT_RELOCW(ring, pipe->bo, 0, 0x40000000, -2);
+			OUT_RELOCW(ring, ctx->vsc_pipe_bo[i], 0, 0x40000000, -2);
 			OUT_RING(ring, 0x00000000);
 			OUT_RING(ring, 0x4B00D000);
 			OUT_RING(ring, 0x4B000000 | bo_size);
@@ -611,7 +609,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 		OUT_RING(ring, 0x0000018C);
 
 		for (int i = 0; i < gmem->num_vsc_pipes; i++) {
-			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+			const struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
 			float off_x, off_y, mul_x, mul_y;
 
 			/* const to tranform from [-1,1] to bin coordinates for this pipe
@@ -657,7 +655,7 @@ fd2_emit_tile_init(struct fd_batch *batch)
 
 /* before mem2gmem */
 static void
-fd2_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
+fd2_emit_tile_prep(struct fd_batch *batch, const struct fd_tile *tile)
 {
 	struct fd_ringbuffer *ring = batch->gmem;
 	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
@@ -679,7 +677,7 @@ fd2_emit_tile_prep(struct fd_batch *batch, struct fd_tile *tile)
 
 /* before IB to rendering cmds: */
 static void
-fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
+fd2_emit_tile_renderprep(struct fd_batch *batch, const struct fd_tile *tile)
 {
 	struct fd_context *ctx = batch->ctx;
 	struct fd2_context *fd2_ctx = fd2_context(ctx);
@@ -723,7 +721,7 @@ fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 	}
 
 	if (use_hw_binning(batch)) {
-		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[tile->p];
+		struct fd_bo *pipe_bo = ctx->vsc_pipe_bo[tile->p];
 
 		OUT_PKT3(ring, CP_SET_CONSTANT, 2);
 		OUT_RING(ring, CP_REG(REG_A2XX_VGT_CURRENT_BIN_ID_MIN));
@@ -735,7 +733,7 @@ fd2_emit_tile_renderprep(struct fd_batch *batch, struct fd_tile *tile)
 
 		/* TODO only emit this when tile->p changes */
 		OUT_PKT3(ring, CP_SET_DRAW_INIT_FLAGS, 1);
-		OUT_RELOC(ring, pipe->bo, 0, 0, 0);
+		OUT_RELOC(ring, pipe_bo, 0, 0, 0);
 	}
 }
 

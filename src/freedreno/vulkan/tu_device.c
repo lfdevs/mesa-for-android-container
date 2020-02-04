@@ -585,7 +585,7 @@ tu_GetPhysicalDeviceFeatures(VkPhysicalDevice physicalDevice,
       .textureCompressionETC2 = true,
       .textureCompressionASTC_LDR = true,
       .textureCompressionBC = true,
-      .occlusionQueryPrecise = false,
+      .occlusionQueryPrecise = true,
       .pipelineStatisticsQuery = false,
       .vertexPipelineStoresAndAtomics = false,
       .fragmentStoresAndAtomics = false,
@@ -1761,6 +1761,8 @@ tu_DestroyEvent(VkDevice _device,
 
    if (!event)
       return;
+
+   tu_bo_finish(device, &event->bo);
    vk_free2(&device->alloc, pAllocator, event);
 }
 

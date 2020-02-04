@@ -209,7 +209,7 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 			 * spin forever:
 			 */
 			if (hq->no_wait_cnt++ > 5)
-				fd_batch_flush(rsc->write_batch, false);
+				fd_batch_flush(rsc->write_batch);
 			return false;
 		}
 
@@ -237,7 +237,7 @@ fd_hw_get_query_result(struct fd_context *ctx, struct fd_query *q,
 		struct fd_resource *rsc = fd_resource(start->prsc);
 
 		if (rsc->write_batch)
-			fd_batch_flush(rsc->write_batch, true);
+			fd_batch_flush(rsc->write_batch);
 
 		/* some piglit tests at least do query with no draws, I guess: */
 		if (!rsc->bo)

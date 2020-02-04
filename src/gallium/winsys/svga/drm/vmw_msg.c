@@ -31,6 +31,9 @@
 #include "pipe/p_defines.h"
 #include "svga_winsys.h"
 #include "vmw_msg.h"
+#include "vmwgfx_drm.h"
+#include "vmw_screen.h"
+#include "xf86drm.h"
 
 
 #define MESSAGE_STATUS_SUCCESS  0x0001
@@ -424,6 +427,7 @@ void
 vmw_svga_winsys_host_log(struct svga_winsys_screen *sws, const char *log)
 {
    struct rpc_channel channel;
+   struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
    char *msg;
    int msg_len;
    int ret;
@@ -444,9 +448,21 @@ vmw_svga_winsys_host_log(struct svga_winsys_screen *sws, const char *log)
 
    sprintf(msg, "log %s", log);
 
-   if (!(ret = vmw_open_channel(&channel, RPCI_PROTOCOL_NUM))) {
-      ret = vmw_send_msg(&channel, msg);
-      vmw_close_channel(&channel);
+   if (vws->ioctl.have_drm_2_17) {
+      struct drm_vmw_msg_arg msg_arg;
+
+      memset(&msg_arg, 0, sizeof(msg_arg));
+      msg_arg.send = (uint64_t) (unsigned long) (msg);
+      msg_arg.send_only = 1;
+
+      ret = drmCommandWriteRead(vws->ioctl.drm_fd, DRM_VMW_MSG,
+                                &msg_arg, sizeof(msg_arg));
+
+   } else {
+      if (!(ret = vmw_open_channel(&channel, RPCI_PROTOCOL_NUM))) {
+         ret = vmw_send_msg(&channel, msg);
+         vmw_close_channel(&channel);
+      }
    }
 
    if (ret)

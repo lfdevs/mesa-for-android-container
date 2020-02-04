@@ -224,7 +224,7 @@ compute_depth_and_remove_unused(struct ir3 *ir, struct ir3_shader_variant *so)
 			 */
 			if (so->num_sampler_prefetch &&
 					(instr->opc == OPC_META_INPUT) &&
-					(instr->input.sysval == SYSTEM_VALUE_BARYCENTRIC_PIXEL))
+					(instr->input.sysval == SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL))
 				continue;
 			instr->flags |= IR3_INSTR_UNUSED;
 		}

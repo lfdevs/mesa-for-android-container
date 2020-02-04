@@ -25,6 +25,7 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/hash_table.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
@@ -68,6 +69,44 @@
 
 #define BIN_DEBUG 0
 
+/*
+ * GMEM Cache:
+ *
+ * Caches GMEM state based on a given framebuffer state.  The key is
+ * meant to be the minimal set of data that results in a unique gmem
+ * configuration, avoiding multiple keys arriving at the same gmem
+ * state.  For example, the render target format is not part of the
+ * key, only the size per pixel.  And the max_scissor bounds is not
+ * part of they key, only the minx/miny (after clamping to tile
+ * alignment) and width/height.  This ensures that slightly different
+ * max_scissor which would result in the same gmem state, do not
+ * become different keys that map to the same state.
+ */
+
+struct gmem_key {
+	uint16_t minx, miny;
+	uint16_t width, height;
+	uint8_t gmem_page_align;      /* alignment in multiples of 0x1000 to reduce key size */
+	uint8_t nr_cbufs;
+	uint8_t cbuf_cpp[MAX_RENDER_TARGETS];
+	uint8_t zsbuf_cpp[2];
+};
+
+static uint32_t
+gmem_key_hash(const void *_key)
+{
+	const struct gmem_key *key = _key;
+	return _mesa_hash_data(key, sizeof(*key));
+}
+
+static bool
+gmem_key_equals(const void *_a, const void *_b)
+{
+	const struct gmem_key *a = _a;
+	const struct gmem_key *b = _b;
+	return memcmp(a, b, sizeof(*a)) == 0;
+}
+
 static uint32_t bin_width(struct fd_screen *screen)
 {
 	if (is_a4xx(screen) || is_a5xx(screen) || is_a6xx(screen))
@@ -78,148 +117,97 @@ static uint32_t bin_width(struct fd_screen *screen)
 }
 
 static uint32_t
-total_size(uint8_t cbuf_cpp[], uint8_t zsbuf_cpp[2],
-		   uint32_t bin_w, uint32_t bin_h, uint32_t gmem_align,
-		   struct fd_gmem_stateobj *gmem)
+total_size(struct gmem_key *key, uint32_t bin_w, uint32_t bin_h,
+		struct fd_gmem_stateobj *gmem)
 {
+	uint32_t gmem_align = key->gmem_page_align * 0x1000;
 	uint32_t total = 0, i;
 
 	for (i = 0; i < MAX_RENDER_TARGETS; i++) {
-		if (cbuf_cpp[i]) {
+		if (key->cbuf_cpp[i]) {
 			gmem->cbuf_base[i] = align(total, gmem_align);
-			total = gmem->cbuf_base[i] + cbuf_cpp[i] * bin_w * bin_h;
+			total = gmem->cbuf_base[i] + key->cbuf_cpp[i] * bin_w * bin_h;
 		}
 	}
 
-	if (zsbuf_cpp[0]) {
+	if (key->zsbuf_cpp[0]) {
 		gmem->zsbuf_base[0] = align(total, gmem_align);
-		total = gmem->zsbuf_base[0] + zsbuf_cpp[0] * bin_w * bin_h;
+		total = gmem->zsbuf_base[0] + key->zsbuf_cpp[0] * bin_w * bin_h;
 	}
 
-	if (zsbuf_cpp[1]) {
+	if (key->zsbuf_cpp[1]) {
 		gmem->zsbuf_base[1] = align(total, gmem_align);
-		total = gmem->zsbuf_base[1] + zsbuf_cpp[1] * bin_w * bin_h;
+		total = gmem->zsbuf_base[1] + key->zsbuf_cpp[1] * bin_w * bin_h;
 	}
 
 	return total;
 }
 
-static void
-calculate_tiles(struct fd_batch *batch)
+static struct fd_gmem_stateobj *
+gmem_stateobj_init(struct fd_screen *screen, struct gmem_key *key)
 {
-	struct fd_context *ctx = batch->ctx;
-	struct fd_screen *screen = ctx->screen;
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
-	struct pipe_scissor_state *scissor = &batch->max_scissor;
-	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+	struct fd_gmem_stateobj *gmem =
+			rzalloc(screen->gmem_cache.ht, struct fd_gmem_stateobj);
+	pipe_reference_init(&gmem->reference, 1);
+	gmem->screen = screen;
+	gmem->key = key;
+	list_inithead(&gmem->node);
+
 	const uint32_t gmem_alignw = screen->gmem_alignw;
 	const uint32_t gmem_alignh = screen->gmem_alignh;
 	const unsigned npipes = screen->num_vsc_pipes;
 	const uint32_t gmem_size = screen->gmemsize_bytes;
-	uint32_t minx, miny, width, height;
 	uint32_t nbins_x = 1, nbins_y = 1;
 	uint32_t bin_w, bin_h;
-	uint32_t gmem_align = 0x4000;
 	uint32_t max_width = bin_width(screen);
-	uint8_t cbuf_cpp[MAX_RENDER_TARGETS] = {0}, zsbuf_cpp[2] = {0};
 	uint32_t i, j, t, xoff, yoff;
 	uint32_t tpp_x, tpp_y;
-	bool has_zs = !!(batch->gmem_reason & (FD_GMEM_DEPTH_ENABLED |
-		FD_GMEM_STENCIL_ENABLED | FD_GMEM_CLEARS_DEPTH_STENCIL));
 	int tile_n[npipes];
 
-	if (has_zs) {
-		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
-		zsbuf_cpp[0] = rsc->layout.cpp;
-		if (rsc->stencil)
-			zsbuf_cpp[1] = rsc->stencil->layout.cpp;
-	} else {
-		/* we might have a zsbuf, but it isn't used */
-		batch->restore &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
-		batch->resolve &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
-	}
-	for (i = 0; i < pfb->nr_cbufs; i++) {
-		if (pfb->cbufs[i])
-			cbuf_cpp[i] = util_format_get_blocksize(pfb->cbufs[i]->format);
-		else
-			cbuf_cpp[i] = 4;
-		/* if MSAA, color buffers are super-sampled in GMEM: */
-		cbuf_cpp[i] *= pfb->samples;
-	}
-
-	if (!memcmp(gmem->zsbuf_cpp, zsbuf_cpp, sizeof(zsbuf_cpp)) &&
-		!memcmp(gmem->cbuf_cpp, cbuf_cpp, sizeof(cbuf_cpp)) &&
-		!memcmp(&gmem->scissor, scissor, sizeof(gmem->scissor))) {
-		/* everything is up-to-date */
-		return;
-	}
-
-	if (fd_mesa_debug & FD_DBG_NOSCIS) {
-		minx = 0;
-		miny = 0;
-		width = pfb->width;
-		height = pfb->height;
-	} else {
-		/* round down to multiple of alignment: */
-		minx = scissor->minx & ~(gmem_alignw - 1);
-		miny = scissor->miny & ~(gmem_alignh - 1);
-		width = scissor->maxx - minx;
-		height = scissor->maxy - miny;
-	}
-
-	bin_w = align(width, gmem_alignw);
-	bin_h = align(height, gmem_alignh);
+	bin_w = align(key->width, gmem_alignw);
+	bin_h = align(key->height, gmem_alignh);
 
 	/* first, find a bin width that satisfies the maximum width
 	 * restrictions:
 	 */
 	while (bin_w > max_width) {
 		nbins_x++;
-		bin_w = align(width / nbins_x, gmem_alignw);
+		bin_w = align(key->width / nbins_x, gmem_alignw);
 	}
 
 	if (fd_mesa_debug & FD_DBG_MSGS) {
 		debug_printf("binning input: cbuf cpp:");
-		for (i = 0; i < pfb->nr_cbufs; i++)
-			debug_printf(" %d", cbuf_cpp[i]);
+		for (i = 0; i < key->nr_cbufs; i++)
+			debug_printf(" %d", key->cbuf_cpp[i]);
 		debug_printf(", zsbuf cpp: %d; %dx%d\n",
-				zsbuf_cpp[0], width, height);
-	}
-
-	if (is_a20x(screen) && batch->cleared) {
-		/* under normal circumstances the requirement would be 4K
-		 * but the fast clear path requires an alignment of 32K
-		 */
-		gmem_align = 0x8000;
+				key->zsbuf_cpp[0], key->width, key->height);
 	}
 
 	/* then find a bin width/height that satisfies the memory
 	 * constraints:
 	 */
-	while (total_size(cbuf_cpp, zsbuf_cpp, bin_w, bin_h, gmem_align, gmem) >
-		   gmem_size) {
+	while (total_size(key, bin_w, bin_h, gmem) > gmem_size) {
 		if (bin_w > bin_h) {
 			nbins_x++;
-			bin_w = align(width / nbins_x, gmem_alignw);
+			bin_w = align(key->width / nbins_x, gmem_alignw);
 		} else {
 			nbins_y++;
-			bin_h = align(height / nbins_y, gmem_alignh);
+			bin_h = align(key->height / nbins_y, gmem_alignh);
 		}
 	}
 
 	DBG("using %d bins of size %dx%d", nbins_x*nbins_y, bin_w, bin_h);
 
-	gmem->scissor = *scissor;
-	memcpy(gmem->cbuf_cpp, cbuf_cpp, sizeof(cbuf_cpp));
-	memcpy(gmem->zsbuf_cpp, zsbuf_cpp, sizeof(zsbuf_cpp));
+	memcpy(gmem->cbuf_cpp, key->cbuf_cpp, sizeof(key->cbuf_cpp));
+	memcpy(gmem->zsbuf_cpp, key->zsbuf_cpp, sizeof(key->zsbuf_cpp));
 	gmem->bin_h = bin_h;
 	gmem->bin_w = bin_w;
 	gmem->nbins_x = nbins_x;
 	gmem->nbins_y = nbins_y;
-	gmem->minx = minx;
-	gmem->miny = miny;
-	gmem->width = width;
-	gmem->height = height;
+	gmem->minx = key->minx;
+	gmem->miny = key->miny;
+	gmem->width = key->width;
+	gmem->height = key->height;
 
 	/*
 	 * Assign tiles and pipes:
@@ -231,7 +219,7 @@ calculate_tiles(struct fd_batch *batch)
 
 #define div_round_up(v, a)  (((v) + (a) - 1) / (a))
 	/* figure out number of tiles per pipe: */
-	if (is_a20x(ctx->screen)) {
+	if (is_a20x(screen)) {
 		/* for a20x we want to minimize the number of "pipes"
 		 * binning data has 3 bits for x/y (8x8) but the edges are used to
 		 * cull off-screen vertices with hw binning, so we have 6x6 pipes
@@ -253,7 +241,7 @@ calculate_tiles(struct fd_batch *batch)
 	/* configure pipes: */
 	xoff = yoff = 0;
 	for (i = 0; i < npipes; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+		struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
 
 		if (xoff >= nbins_x) {
 			xoff = 0;
@@ -276,14 +264,14 @@ calculate_tiles(struct fd_batch *batch)
 	gmem->num_vsc_pipes = MAX2(1, i);
 
 	for (; i < npipes; i++) {
-		struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+		struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
 		pipe->x = pipe->y = pipe->w = pipe->h = 0;
 	}
 
 	if (BIN_DEBUG) {
 		printf("%dx%d ... tpp=%dx%d\n", nbins_x, nbins_y, tpp_x, tpp_y);
-		for (i = 0; i < ARRAY_SIZE(ctx->vsc_pipe); i++) {
-			struct fd_vsc_pipe *pipe = &ctx->vsc_pipe[i];
+		for (i = 0; i < ARRAY_SIZE(gmem->vsc_pipe); i++) {
+			struct fd_vsc_pipe *pipe = &gmem->vsc_pipe[i];
 			printf("pipe[%d]: %ux%u @ %u,%u\n", i,
 					pipe->w, pipe->h, pipe->x, pipe->y);
 		}
@@ -291,29 +279,29 @@ calculate_tiles(struct fd_batch *batch)
 
 	/* configure tiles: */
 	t = 0;
-	yoff = miny;
+	yoff = key->miny;
 	memset(tile_n, 0, sizeof(tile_n));
 	for (i = 0; i < nbins_y; i++) {
 		uint32_t bw, bh;
 
-		xoff = minx;
+		xoff = key->minx;
 
 		/* clip bin height: */
-		bh = MIN2(bin_h, miny + height - yoff);
+		bh = MIN2(bin_h, key->miny + key->height - yoff);
 
 		for (j = 0; j < nbins_x; j++) {
-			struct fd_tile *tile = &ctx->tile[t];
+			struct fd_tile *tile = &gmem->tile[t];
 			uint32_t p;
 
-			assert(t < ARRAY_SIZE(ctx->tile));
+			assert(t < ARRAY_SIZE(gmem->tile));
 
 			/* pipe number: */
 			p = ((i / tpp_y) * div_round_up(nbins_x, tpp_x)) + (j / tpp_x);
 			assert(p < gmem->num_vsc_pipes);
 
 			/* clip bin width: */
-			bw = MIN2(bin_w, minx + width - xoff);
-			tile->n = !is_a20x(ctx->screen) ? tile_n[p]++ :
+			bw = MIN2(bin_w, key->minx + key->width - xoff);
+			tile->n = !is_a20x(screen) ? tile_n[p]++ :
 				((i % tpp_y + 1) << 3 | (j % tpp_x + 1));
 			tile->p = p;
 			tile->bin_w = bw;
@@ -338,20 +326,141 @@ calculate_tiles(struct fd_batch *batch)
 		t = 0;
 		for (i = 0; i < nbins_y; i++) {
 			for (j = 0; j < nbins_x; j++) {
-				struct fd_tile *tile = &ctx->tile[t++];
+				struct fd_tile *tile = &gmem->tile[t++];
 				printf("|p:%u n:%u|", tile->p, tile->n);
 			}
 			printf("\n");
 		}
 	}
+
+	return gmem;
 }
 
+void
+__fd_gmem_destroy(struct fd_gmem_stateobj *gmem)
+{
+	struct fd_gmem_cache *cache = &gmem->screen->gmem_cache;
+
+	pipe_mutex_assert_locked(gmem->screen->lock);
+
+	_mesa_hash_table_remove_key(cache->ht, gmem->key);
+	list_del(&gmem->node);
+
+	ralloc_free(gmem->key);
+	ralloc_free(gmem);
+}
+
+static struct gmem_key *
+key_init(struct fd_batch *batch)
+{
+	struct fd_screen *screen = batch->ctx->screen;
+	struct pipe_framebuffer_state *pfb = &batch->framebuffer;
+	bool has_zs = pfb->zsbuf && !!(batch->gmem_reason & (FD_GMEM_DEPTH_ENABLED |
+		FD_GMEM_STENCIL_ENABLED | FD_GMEM_CLEARS_DEPTH_STENCIL));
+	struct gmem_key *key = rzalloc(screen->gmem_cache.ht, struct gmem_key);
+
+	if (has_zs) {
+		struct fd_resource *rsc = fd_resource(pfb->zsbuf->texture);
+		key->zsbuf_cpp[0] = rsc->layout.cpp;
+		if (rsc->stencil)
+			key->zsbuf_cpp[1] = rsc->stencil->layout.cpp;
+	} else {
+		/* we might have a zsbuf, but it isn't used */
+		batch->restore &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
+		batch->resolve &= ~(FD_BUFFER_DEPTH | FD_BUFFER_STENCIL);
+	}
+
+	key->nr_cbufs = pfb->nr_cbufs;
+	for (unsigned i = 0; i < pfb->nr_cbufs; i++) {
+		if (pfb->cbufs[i])
+			key->cbuf_cpp[i] = util_format_get_blocksize(pfb->cbufs[i]->format);
+		else
+			key->cbuf_cpp[i] = 4;
+		/* if MSAA, color buffers are super-sampled in GMEM: */
+		key->cbuf_cpp[i] *= pfb->samples;
+	}
+
+	if (fd_mesa_debug & FD_DBG_NOSCIS) {
+		key->minx = 0;
+		key->miny = 0;
+		key->width = pfb->width;
+		key->height = pfb->height;
+	} else {
+		struct pipe_scissor_state *scissor = &batch->max_scissor;
+
+		/* round down to multiple of alignment: */
+		key->minx = scissor->minx & ~(screen->gmem_alignw - 1);
+		key->miny = scissor->miny & ~(screen->gmem_alignh - 1);
+		key->width = scissor->maxx - key->minx;
+		key->height = scissor->maxy - key->miny;
+	}
+
+	if (is_a20x(screen) && batch->cleared) {
+		/* under normal circumstances the requirement would be 4K
+		 * but the fast clear path requires an alignment of 32K
+		 */
+		key->gmem_page_align = 8;
+	} else {
+		// TODO re-check this across gens.. maybe it should only
+		// be a single page in some cases:
+		key->gmem_page_align = 4;
+	}
+
+	return key;
+}
+
+static struct fd_gmem_stateobj *
+lookup_gmem_state(struct fd_batch *batch)
+{
+	struct fd_screen *screen = batch->ctx->screen;
+	struct fd_gmem_cache *cache = &screen->gmem_cache;
+	struct fd_gmem_stateobj *gmem = NULL;
+	struct gmem_key *key = key_init(batch);
+	uint32_t hash = gmem_key_hash(key);
+
+	mtx_lock(&screen->lock);
+
+	struct hash_entry *entry =
+		_mesa_hash_table_search_pre_hashed(cache->ht, hash, key);
+	if (entry) {
+		ralloc_free(key);
+		goto found;
+	}
+
+	/* limit the # of cached gmem states, discarding the least
+	 * recently used state if needed:
+	 */
+	if (cache->ht->entries >= 20) {
+		struct fd_gmem_stateobj *last =
+			list_last_entry(&cache->lru, struct fd_gmem_stateobj, node);
+		fd_gmem_reference(&last, NULL);
+	}
+
+	entry = _mesa_hash_table_insert_pre_hashed(cache->ht,
+			hash, key, gmem_stateobj_init(screen, key));
+
+found:
+	fd_gmem_reference(&gmem, entry->data);
+	/* Move to the head of the LRU: */
+	list_delinit(&gmem->node);
+	list_add(&gmem->node, &cache->lru);
+
+	mtx_unlock(&screen->lock);
+
+	return gmem;
+}
+
+/*
+ * GMEM render pass
+ */
+
 static void
-render_tiles(struct fd_batch *batch)
+render_tiles(struct fd_batch *batch, struct fd_gmem_stateobj *gmem)
 {
 	struct fd_context *ctx = batch->ctx;
-	struct fd_gmem_stateobj *gmem = &ctx->gmem;
 	int i;
+
+	mtx_lock(&ctx->gmem_lock);
 
 	ctx->emit_tile_init(batch);
 
@@ -359,7 +468,7 @@ render_tiles(struct fd_batch *batch)
 		ctx->stats.batch_restore++;
 
 	for (i = 0; i < (gmem->nbins_x * gmem->nbins_y); i++) {
-		struct fd_tile *tile = &ctx->tile[i];
+		struct fd_tile *tile = &gmem->tile[i];
 
 		DBG("bin_h=%d, yoff=%d, bin_w=%d, xoff=%d",
 			tile->bin_h, tile->yoff, tile->bin_w, tile->xoff);
@@ -389,6 +498,8 @@ render_tiles(struct fd_batch *batch)
 
 	if (ctx->emit_tile_fini)
 		ctx->emit_tile_fini(batch);
+
+	mtx_unlock(&ctx->gmem_lock);
 }
 
 static void
@@ -484,15 +595,21 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 		render_sysmem(batch);
 		ctx->stats.batch_sysmem++;
 	} else {
-		struct fd_gmem_stateobj *gmem = &ctx->gmem;
-		calculate_tiles(batch);
+		struct fd_gmem_stateobj *gmem = lookup_gmem_state(batch);
+		batch->gmem_state = gmem;
 		DBG("%p: rendering %dx%d tiles %ux%u (%s/%s)",
 			batch, pfb->width, pfb->height, gmem->nbins_x, gmem->nbins_y,
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 		if (ctx->query_prepare)
 			ctx->query_prepare(batch, gmem->nbins_x * gmem->nbins_y);
-		render_tiles(batch);
+		render_tiles(batch, gmem);
+		batch->gmem_state = NULL;
+
+		mtx_lock(&ctx->screen->lock);
+		fd_gmem_reference(&gmem, NULL);
+		mtx_unlock(&ctx->screen->lock);
+
 		ctx->stats.batch_gmem++;
 	}
 
@@ -505,11 +622,28 @@ fd_gmem_render_tiles(struct fd_batch *batch)
  * case would be a single clear.
  */
 bool
-fd_gmem_needs_restore(struct fd_batch *batch, struct fd_tile *tile,
+fd_gmem_needs_restore(struct fd_batch *batch, const struct fd_tile *tile,
 		uint32_t buffers)
 {
 	if (!(batch->restore & buffers))
 		return false;
 
 	return true;
+}
+
+void
+fd_gmem_screen_init(struct pipe_screen *pscreen)
+{
+	struct fd_gmem_cache *cache = &fd_screen(pscreen)->gmem_cache;
+
+	cache->ht = _mesa_hash_table_create(NULL, gmem_key_hash, gmem_key_equals);
+	list_inithead(&cache->lru);
+}
+
+void
+fd_gmem_screen_fini(struct pipe_screen *pscreen)
+{
+	struct fd_gmem_cache *cache = &fd_screen(pscreen)->gmem_cache;
+
+	_mesa_hash_table_destroy(cache->ht, NULL);
 }

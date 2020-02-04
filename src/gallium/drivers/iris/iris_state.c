@@ -767,10 +767,9 @@ iris_emit_l3_config(struct iris_batch *batch, const struct gen_l3_config *cfg,
 }
 
 static void
-iris_emit_default_l3_config(struct iris_batch *batch,
-                            const struct gen_device_info *devinfo,
-                            bool compute)
+iris_emit_default_l3_config(struct iris_batch *batch, bool compute)
 {
+   const struct gen_device_info *devinfo = &batch->screen->devinfo;
    bool wants_dc_cache = true;
    bool has_slm = compute;
    const struct gen_l3_weights w =
@@ -913,7 +912,7 @@ iris_init_render_context(struct iris_batch *batch)
 
    emit_pipeline_select(batch, _3D);
 
-   iris_emit_default_l3_config(batch, devinfo, false);
+   iris_emit_default_l3_config(batch, false);
 
    init_state_base_address(batch);
 
@@ -1032,7 +1031,7 @@ iris_init_compute_context(struct iris_batch *batch)
    emit_pipeline_select(batch, GPGPU);
 #endif
 
-   iris_emit_default_l3_config(batch, devinfo, true);
+   iris_emit_default_l3_config(batch, true);
 
    init_state_base_address(batch);
 

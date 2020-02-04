@@ -378,7 +378,7 @@ typedef struct nir_variable {
        *
        * \sa glsl_interp_mode
        */
-      unsigned interpolation:2;
+      unsigned interpolation:3;
 
       /**
        * If non-zero, then this variable may be packed along with other variables

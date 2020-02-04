@@ -479,7 +479,7 @@ fd5_blitter_blit(struct fd_context *ctx, const struct pipe_blit_info *info)
 	fd_resource(info->dst.resource)->valid = true;
 	batch->needs_flush = true;
 
-	fd_batch_flush(batch, false);
+	fd_batch_flush(batch);
 	fd_batch_reference(&batch, NULL);
 
 	return true;

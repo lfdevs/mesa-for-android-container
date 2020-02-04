@@ -148,7 +148,8 @@ enum radv_ud_index {
 	AC_UD_INDIRECT_DESCRIPTOR_SETS = 3,
 	AC_UD_VIEW_INDEX = 4,
 	AC_UD_STREAMOUT_BUFFERS = 5,
-	AC_UD_SHADER_START = 6,
+	AC_UD_NGG_GS_STATE = 6,
+	AC_UD_SHADER_START = 7,
 	AC_UD_VS_VERTEX_BUFFERS = AC_UD_SHADER_START,
 	AC_UD_VS_BASE_VERTEX_START_INSTANCE,
 	AC_UD_VS_MAX_UD,
@@ -294,6 +295,7 @@ struct radv_shader_info {
 		uint8_t num_input_clips_culls;
 		uint32_t input_mask;
 		uint32_t flat_shaded_mask;
+		uint32_t explicit_shaded_mask;
 		uint32_t float16_shaded_mask;
 		uint32_t num_interp;
 		bool can_discard;

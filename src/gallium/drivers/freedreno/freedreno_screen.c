@@ -154,6 +154,7 @@ fd_screen_destroy(struct pipe_screen *pscreen)
 		FREE(screen->ro);
 
 	fd_bc_fini(&screen->batch_cache);
+	fd_gmem_screen_fini(pscreen);
 
 	slab_destroy_parent(&screen->transfer_pool);
 
@@ -197,6 +198,7 @@ fd_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_MIXED_COLOR_DEPTH_BITS:
 	case PIPE_CAP_TEXTURE_BARRIER:
 	case PIPE_CAP_INVALIDATE_BUFFER:
+	case PIPE_CAP_RGB_OVERRIDE_DST_ALPHA_BLEND:
 		return 1;
 
 	case PIPE_CAP_PACKED_UNIFORMS:
@@ -968,6 +970,7 @@ fd_screen_create(struct fd_device *dev, struct renderonly *ro)
 
 	fd_resource_screen_init(pscreen);
 	fd_query_screen_init(pscreen);
+	fd_gmem_screen_init(pscreen);
 
 	pscreen->get_name = fd_screen_get_name;
 	pscreen->get_vendor = fd_screen_get_vendor;

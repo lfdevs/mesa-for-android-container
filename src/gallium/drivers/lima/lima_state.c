@@ -226,7 +226,7 @@ lima_set_vertex_buffers(struct pipe_context *pctx,
    struct lima_context *ctx = lima_context(pctx);
    struct lima_context_vertex_buffer *so = &ctx->vertex_buffers;
 
-   util_set_vertex_buffers_mask(so->vb + start_slot, &so->enabled_mask,
+   util_set_vertex_buffers_mask(so->vb, &so->enabled_mask,
                                 vb, start_slot, count);
    so->count = util_last_bit(so->enabled_mask);
 

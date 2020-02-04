@@ -137,6 +137,7 @@ confflags += \
 	-Dgallium-xvmc=false \
 	-Dgallium-omx=disabled \
 	-Db_ndebug=true \
+	-Dbuild-tests=true \
 	$(confflags_DIRECT_RENDERING) \
 	$(confflags_GBM) \
 	$(confflags_DRI3) \
@@ -174,8 +175,6 @@ override_dh_auto_install:
 		sed -e"s,\$${DEB_HOST_MULTIARCH},$(DEB_HOST_MULTIARCH),g" \
 			$${file} > $${file%%.in}; \
 	done
-
-override_dh_auto_test:
 
 allpkg = $(shell dh_listpackages -a)
 

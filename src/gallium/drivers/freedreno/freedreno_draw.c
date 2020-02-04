@@ -464,7 +464,7 @@ fd_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 	batch->needs_flush = true;
 	ctx->launch_grid(ctx, info);
 
-	fd_batch_flush(batch, false);
+	fd_batch_flush(batch);
 
 	fd_batch_reference(&ctx->batch, save_batch);
 	fd_context_all_dirty(ctx);

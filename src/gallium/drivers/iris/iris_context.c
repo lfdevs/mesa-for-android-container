@@ -307,8 +307,7 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    for (int i = 0; i < IRIS_BATCH_COUNT; i++) {
       iris_init_batch(&ice->batches[i], screen, &ice->vtbl, &ice->dbg,
                       &ice->reset, ice->state.sizes,
-                      ice->batches, (enum iris_batch_name) i,
-                      I915_EXEC_RENDER, priority);
+                      ice->batches, (enum iris_batch_name) i, priority);
    }
 
    ice->vtbl.init_render_context(&ice->batches[IRIS_BATCH_RENDER]);

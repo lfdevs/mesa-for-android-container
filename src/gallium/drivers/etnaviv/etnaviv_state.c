@@ -83,24 +83,19 @@ etna_set_constant_buffer(struct pipe_context *pctx,
 {
    struct etna_context *ctx = etna_context(pctx);
 
-   if (unlikely(index > 0)) {
-      DBG("Unhandled buffer index %i", index);
-      return;
-   }
+   assert(index < ETNA_MAX_CONST_BUF);
 
-
-   util_copy_constant_buffer(&ctx->constant_buffer[shader], cb);
+   util_copy_constant_buffer(&ctx->constant_buffer[shader][index], cb);
 
    /* Note that the state tracker can unbind constant buffers by
     * passing NULL here. */
    if (unlikely(!cb || (!cb->buffer && !cb->user_buffer)))
       return;
 
-   /* there is no support for ARB_uniform_buffer_object */
-   assert(cb->buffer == NULL && cb->user_buffer != NULL);
+   assert(index != 0 || cb->user_buffer != NULL);
 
    if (!cb->buffer) {
-      struct pipe_constant_buffer *cb = &ctx->constant_buffer[shader];
+      struct pipe_constant_buffer *cb = &ctx->constant_buffer[shader][index];
       u_upload_data(pctx->const_uploader, 0, cb->buffer_size, 16, cb->user_buffer, &cb->buffer_offset, &cb->buffer);
    }
 

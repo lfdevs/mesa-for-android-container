@@ -1,3 +1,13 @@
+mesa (20.0.0~rc1-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * control: Add libzstd-dev to build-depends for zstd compressed shader
+    cache support.
+  * rules, fix-python-shebang.diff: Enable tests again to see where we
+    are now.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Tue, 04 Feb 2020 15:46:02 +0200
+
 mesa (20.0.0~git20200129-1) experimental; urgency=medium
 
   * New upstream snapshot.

@@ -1792,7 +1792,7 @@ _lima_flush(struct lima_context *ctx, bool end_of_frame)
    gp_frame_reg->plbu_cmd_start = plbu_cmd_va;
    gp_frame_reg->plbu_cmd_end = plbu_cmd_va + plbu_cmd_size;
    gp_frame_reg->tile_heap_start = ctx->gp_tile_heap[ctx->plb_index]->va;
-   gp_frame_reg->tile_heap_end = ctx->gp_tile_heap[ctx->plb_index]->va + gp_tile_heap_size;
+   gp_frame_reg->tile_heap_end = ctx->gp_tile_heap[ctx->plb_index]->va + ctx->gp_tile_heap_size;
 
    lima_dump_command_stream_print(
       &gp_frame, sizeof(gp_frame), false, "add gp frame\n");

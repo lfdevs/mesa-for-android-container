@@ -1254,7 +1254,7 @@ struct glsl_struct_field {
     * For interface blocks, the interpolation mode (as in
     * ir_variable::interpolation).  0 otherwise.
     */
-   unsigned interpolation:2;
+   unsigned interpolation:3;
 
    /**
     * For interface blocks, 1 if this variable uses centroid interpolation (as
