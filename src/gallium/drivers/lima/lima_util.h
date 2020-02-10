@@ -29,7 +29,7 @@
 
 #define LIMA_PAGE_SIZE 4096
 
-FILE *lima_dump_command_stream;
+extern FILE *lima_dump_command_stream;
 
 bool lima_get_absolute_timeout(uint64_t *timeout);
 void lima_dump_file_open(void);

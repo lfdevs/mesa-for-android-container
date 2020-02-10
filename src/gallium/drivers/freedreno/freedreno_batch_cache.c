@@ -295,9 +295,6 @@ fd_bc_alloc_batch(struct fd_batch_cache *cache, struct fd_context *ctx, bool non
 		 */
 		struct fd_batch *flush_batch = NULL;
 		for (unsigned i = 0; i < ARRAY_SIZE(cache->batches); i++) {
-			if ((cache->batches[i] == ctx->batch) ||
-					!cache->batches[i]->needs_flush)
-				continue;
 			if (!flush_batch || (cache->batches[i]->seqno < flush_batch->seqno))
 				fd_batch_reference_locked(&flush_batch, cache->batches[i]);
 		}

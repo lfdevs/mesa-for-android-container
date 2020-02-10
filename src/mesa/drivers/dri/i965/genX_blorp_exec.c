@@ -231,8 +231,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
 #endif
 }
 
-#if GEN_GEN >= 8
-static struct blorp_address
+UNUSED static struct blorp_address
 blorp_get_workaround_page(struct blorp_batch *batch)
 {
    assert(batch->blorp->driver_ctx == batch->driver_batch);
@@ -242,7 +241,6 @@ blorp_get_workaround_page(struct blorp_batch *batch)
       .buffer = brw->workaround_bo,
    };
 }
-#endif
 
 static void
 blorp_flush_range(UNUSED struct blorp_batch *batch, UNUSED void *start,
@@ -253,6 +251,16 @@ blorp_flush_range(UNUSED struct blorp_batch *batch, UNUSED void *start,
     */
 }
 
+#if GEN_GEN >= 7
+static const struct gen_l3_config *
+blorp_get_l3_config(struct blorp_batch *batch)
+{
+   assert(batch->blorp->driver_ctx == batch->driver_batch);
+   struct brw_context *brw = batch->driver_batch;
+
+   return brw->l3.config;
+}
+#else /* GEN_GEN < 7 */
 static void
 blorp_emit_urb_config(struct blorp_batch *batch,
                       unsigned vs_entry_size,
@@ -261,18 +269,14 @@ blorp_emit_urb_config(struct blorp_batch *batch,
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
 
-#if GEN_GEN >= 7
-   if (brw->urb.vsize >= vs_entry_size)
-      return;
-
-   gen7_upload_urb(brw, vs_entry_size, false, false);
-#elif GEN_GEN == 6
+#if GEN_GEN == 6
    gen6_upload_urb(brw, vs_entry_size, false, 0);
 #else
    /* We calculate it now and emit later. */
    brw_calculate_urb_fence(brw, 0, vs_entry_size, sf_entry_size);
 #endif
 }
+#endif
 
 void
 genX(blorp_exec)(struct blorp_batch *batch,
@@ -317,6 +321,7 @@ genX(blorp_exec)(struct blorp_batch *batch,
       brw_cache_flush_for_depth(brw, params->stencil.addr.buffer);
 
    brw_select_pipeline(brw, BRW_RENDER_PIPELINE);
+   brw_emit_l3_state(brw);
 
 retry:
    intel_batchbuffer_require_space(brw, 1400);
@@ -386,6 +391,12 @@ retry:
    brw->no_depth_or_stencil = !params->depth.enabled &&
                               !params->stencil.enabled;
    brw->ib.index_size = -1;
+   brw->urb.vsize = 0;
+   brw->urb.gs_present = false;
+   brw->urb.gsize = 0;
+   brw->urb.tess_present = false;
+   brw->urb.hsize = 0;
+   brw->urb.dsize = 0;
 
    if (params->dst.enabled) {
       brw_render_cache_add_bo(brw, params->dst.addr.buffer,

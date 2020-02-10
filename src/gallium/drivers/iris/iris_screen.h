@@ -34,6 +34,7 @@
 
 struct iris_bo;
 struct iris_monitor_config;
+struct gen_l3_config;
 
 #define READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
 #define WRITE_ONCE(x, v) *(volatile __typeof__(x) *)&(x) = (v)
@@ -79,6 +80,9 @@ struct iris_screen {
    struct iris_bufmgr *bufmgr;
    struct brw_compiler *compiler;
    struct iris_monitor_config *monitor_cfg;
+
+   const struct gen_l3_config *l3_config_3d;
+   const struct gen_l3_config *l3_config_cs;
 
    /**
     * A buffer containing nothing useful, for hardware workarounds that

@@ -321,7 +321,6 @@ void
 fd_batch_flush(struct fd_batch *batch)
 {
 	struct fd_batch *tmp = NULL;
-	bool newbatch = false;
 
 	/* NOTE: we need to hold an extra ref across the body of flush,
 	 * since the last ref to this batch could be dropped when cleaning
@@ -329,30 +328,10 @@ fd_batch_flush(struct fd_batch *batch)
 	 */
 	fd_batch_reference(&tmp, batch);
 
-	if (batch == batch->ctx->batch) {
-		batch->ctx->batch = NULL;
-		newbatch = true;
-	}
-
 	batch_flush(tmp);
 
-	if (newbatch) {
-		struct fd_context *ctx = batch->ctx;
-		struct fd_batch *new_batch;
-
-		if (ctx->screen->reorder) {
-			/* defer allocating new batch until one is needed for rendering
-			 * to avoid unused batches for apps that create many contexts
-			 */
-			new_batch = NULL;
-		} else {
-			new_batch = fd_bc_alloc_batch(&ctx->screen->batch_cache, ctx, false);
-			util_copy_framebuffer_state(&new_batch->framebuffer, &batch->framebuffer);
-		}
-
-		fd_batch_reference(&batch, NULL);
-		ctx->batch = new_batch;
-		fd_context_all_dirty(ctx);
+	if (batch == batch->ctx->batch) {
+		fd_batch_reference(&batch->ctx->batch, NULL);
 	}
 
 	fd_batch_reference(&tmp, NULL);

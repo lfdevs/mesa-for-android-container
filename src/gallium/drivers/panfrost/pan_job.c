@@ -777,9 +777,11 @@ panfrost_batch_draw_wallpaper(struct panfrost_batch *batch)
         damage.maxx = MIN2(batch->maxx,
                            rsrc->damage.biggest_rect.x +
                            rsrc->damage.biggest_rect.width);
+        damage.maxx = MAX2(damage.maxx, damage.minx);
         damage.maxy = MIN2(batch->maxy,
                            rsrc->damage.biggest_rect.y +
                            rsrc->damage.biggest_rect.height);
+        damage.maxy = MAX2(damage.maxy, damage.miny);
 
         /* One damage rectangle means we can end up with at most 4 reload
          * regions:

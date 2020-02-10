@@ -1504,6 +1504,9 @@ gen6_set_sample_maps(struct gl_context *ctx);
 /* gen8_multisample_state.c */
 void gen8_emit_3dstate_sample_pattern(struct brw_context *brw);
 
+/* gen7_l3_state.c */
+void brw_emit_l3_state(struct brw_context *brw);
+
 /* gen7_urb.c */
 void
 gen7_emit_push_constant_state(struct brw_context *brw, unsigned vs_size,

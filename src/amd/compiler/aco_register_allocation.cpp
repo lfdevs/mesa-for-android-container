@@ -1547,7 +1547,7 @@ void register_allocation(Program *program, std::vector<std::set<Temp>> live_out_
             instr->definitions[0].setFixed(instr->operands[3].physReg());
          } else if (instr->format == Format::MIMG &&
                     instr->definitions.size() == 1 &&
-                    instr->operands[1].regClass() == instr->definitions[0].regClass()) {
+                    instr->operands[1].regClass().type() == RegType::vgpr) {
             instr->definitions[0].setFixed(instr->operands[1].physReg());
          }
 

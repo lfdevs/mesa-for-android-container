@@ -996,8 +996,9 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 
 	for (unsigned i = 0; i < subpass->color_count; ++i) {
 		if (subpass->color_attachments[i].attachment == VK_ATTACHMENT_UNUSED) {
-			sx_blend_opt_control |= S_02875C_MRT0_COLOR_OPT_DISABLE(1) << (i * 4);
-			sx_blend_opt_control |= S_02875C_MRT0_ALPHA_OPT_DISABLE(1) << (i * 4);
+			/* We don't set the DISABLE bits, because the HW can't have holes,
+			 * so the SPI color format is set to 32-bit 1-component. */
+			sx_ps_downconvert |= V_028754_SX_RT_EXPORT_32_R << (i * 4);
 			continue;
 		}
 
@@ -1113,10 +1114,10 @@ radv_emit_rbplus_state(struct radv_cmd_buffer *cmd_buffer)
 		}
 	}
 
-	for (unsigned i = subpass->color_count; i < 8; ++i) {
-		sx_blend_opt_control |= S_02875C_MRT0_COLOR_OPT_DISABLE(1) << (i * 4);
-		sx_blend_opt_control |= S_02875C_MRT0_ALPHA_OPT_DISABLE(1) << (i * 4);
-	}
+	/* Do not set the DISABLE bits for the unused attachments, as that
+	 * breaks dual source blending in SkQP and does not seem to improve
+	 * performance. */
+
 	/* TODO: avoid redundantly setting context registers */
 	radeon_set_context_reg_seq(cmd_buffer->cs, R_028754_SX_PS_DOWNCONVERT, 3);
 	radeon_emit(cmd_buffer->cs, sx_ps_downconvert);

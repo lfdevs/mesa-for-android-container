@@ -79,7 +79,6 @@ constexpr bool verbose_shader = false;
 #endif
 
 using namespace SwrJit;
-using namespace llvm;
 
 static unsigned
 locate_linkage(ubyte name, ubyte index, struct tgsi_shader_info *info);
@@ -2191,7 +2190,7 @@ swr_compile_gs(struct swr_context *ctx, swr_jit_gs_key &key)
       "GS");
    PFN_GS_FUNC func = builder.CompileGS(ctx, key);
 
-   ctx->gs->map.insert(std::make_pair(key, std::make_unique<VariantGS>(builder.gallivm, func)));
+   ctx->gs->map.insert(std::make_pair(key, std::unique_ptr<VariantGS>(new VariantGS(builder.gallivm, func))));
    return func;
 }
 
@@ -2204,7 +2203,7 @@ swr_compile_tcs(struct swr_context *ctx, swr_jit_tcs_key &key)
    PFN_TCS_FUNC func = builder.CompileTCS(ctx, key);
 
    ctx->tcs->map.insert(
-      std::make_pair(key, std::make_unique<VariantTCS>(builder.gallivm, func)));
+      std::make_pair(key, std::unique_ptr<VariantTCS>(new VariantTCS(builder.gallivm, func))));
 
    return func;
 }
@@ -2218,7 +2217,7 @@ swr_compile_tes(struct swr_context *ctx, swr_jit_tes_key &key)
    PFN_TES_FUNC func = builder.CompileTES(ctx, key);
 
    ctx->tes->map.insert(
-      std::make_pair(key, std::make_unique<VariantTES>(builder.gallivm, func)));
+      std::make_pair(key, std::unique_ptr<VariantTES>(new VariantTES(builder.gallivm, func))));
 
    return func;
 }
@@ -2492,7 +2491,7 @@ swr_compile_vs(struct swr_context *ctx, swr_jit_vs_key &key)
       "VS");
    PFN_VERTEX_FUNC func = builder.CompileVS(ctx, key);
 
-   ctx->vs->map.insert(std::make_pair(key, std::make_unique<VariantVS>(builder.gallivm, func)));
+   ctx->vs->map.insert(std::make_pair(key, std::unique_ptr<VariantVS>(new VariantVS(builder.gallivm, func))));
    return func;
 }
 
@@ -2961,6 +2960,6 @@ swr_compile_fs(struct swr_context *ctx, swr_jit_fs_key &key)
       "FS");
    PFN_PIXEL_KERNEL func = builder.CompileFS(ctx, key);
 
-   ctx->fs->map.insert(std::make_pair(key, std::make_unique<VariantFS>(builder.gallivm, func)));
+   ctx->fs->map.insert(std::make_pair(key, std::unique_ptr<VariantFS>(new VariantFS(builder.gallivm, func))));
    return func;
 }

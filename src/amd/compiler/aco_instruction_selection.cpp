@@ -3230,6 +3230,7 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
       while (channel_start < num_channels) {
          unsigned fetch_size = num_channels - channel_start;
          unsigned fetch_offset = attrib_offset + channel_start * vtx_info->chan_byte_size;
+         bool expanded = false;
 
          /* use MUBUF when possible to avoid possible alignment issues */
          /* TODO: we could use SDWA to unpack 8/16-bit attributes without extra instructions */
@@ -3244,6 +3245,7 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
             if (fetch_size == 3 && ctx->options->chip_class == GFX6) {
                /* GFX6 only supports loading vec3 with MTBUF, expand to vec4. */
                fetch_size = 4;
+               expanded = true;
             }
          }
 
@@ -3268,6 +3270,8 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
             opcode = use_mubuf ? aco_opcode::buffer_load_dwordx2 : aco_opcode::tbuffer_load_format_xy;
             break;
          case 3:
+            assert(ctx->options->chip_class >= GFX7 ||
+                   (!use_mubuf && ctx->options->chip_class == GFX6));
             opcode = use_mubuf ? aco_opcode::buffer_load_dwordx3 : aco_opcode::tbuffer_load_format_xyz;
             break;
          case 4:
@@ -3279,7 +3283,8 @@ void visit_load_input(isel_context *ctx, nir_intrinsic_instr *instr)
 
          Temp fetch_dst;
          if (channel_start == 0 && fetch_size == dst.size() && !post_shuffle &&
-             (alpha_adjust == RADV_ALPHA_ADJUST_NONE || num_channels <= 3)) {
+             !expanded && (alpha_adjust == RADV_ALPHA_ADJUST_NONE ||
+                           num_channels <= 3)) {
             direct_fetch = true;
             fetch_dst = dst;
          } else {

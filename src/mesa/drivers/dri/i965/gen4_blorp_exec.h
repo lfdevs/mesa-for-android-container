@@ -178,7 +178,7 @@ blorp_emit_pipeline(struct blorp_batch *batch,
    assert(batch->blorp->driver_ctx == batch->driver_batch);
    struct brw_context *brw = batch->driver_batch;
 
-   emit_urb_config(batch, params);
+   emit_urb_config(batch, params, NULL);
 
    blorp_emit(batch, GENX(3DSTATE_PIPELINED_POINTERS), pp) {
       pp.PointertoVSState = blorp_emit_vs_state(batch);

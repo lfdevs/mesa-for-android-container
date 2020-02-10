@@ -147,7 +147,7 @@ genX(cmd_buffer_so_memcpy)(struct anv_cmd_buffer *cmd_buffer,
 
    genX(emit_urb_setup)(cmd_buffer->device, &cmd_buffer->batch,
                         cmd_buffer->state.current_l3_config,
-                        VK_SHADER_STAGE_VERTEX_BIT, entry_size);
+                        VK_SHADER_STAGE_VERTEX_BIT, entry_size, NULL);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(3DSTATE_SO_BUFFER), sob) {
 #if GEN_GEN < 12

@@ -244,7 +244,8 @@ void validate(Program* program, FILE * output)
             if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::sgpr)
                check(instr->operands[1].regClass() == s4, "MIMG operands[1] (sampler constant) must be 4 SGPRs", instr.get());
             else if (instr->operands[1].hasRegClass() && instr->operands[1].regClass().type() == RegType::vgpr)
-               check(instr->definitions.empty() || instr->definitions[0].regClass() == instr->operands[1].regClass(),
+               check((instr->definitions.empty() || instr->definitions[0].regClass() == instr->operands[1].regClass() ||
+                     instr->opcode == aco_opcode::image_atomic_cmpswap || instr->opcode == aco_opcode::image_atomic_fcmpswap),
                      "MIMG operands[1] (VDATA) must be the same as definitions[0] for atomics", instr.get());
             check(instr->operands[2].hasRegClass() && instr->operands[2].regClass().type() == RegType::vgpr,
                   "MIMG operands[2] (VADDR) must be VGPR", instr.get());

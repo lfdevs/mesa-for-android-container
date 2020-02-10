@@ -53,6 +53,7 @@
 #include "iris_screen.h"
 #include "intel/compiler/brw_compiler.h"
 #include "intel/common/gen_gem.h"
+#include "intel/common/gen_l3_config.h"
 #include "iris_monitor.h"
 
 static void
@@ -575,6 +576,17 @@ iris_getparam_integer(struct iris_screen *screen, int param)
    return -1;
 }
 
+static const struct gen_l3_config *
+iris_get_default_l3_config(const struct gen_device_info *devinfo,
+                           bool compute)
+{
+   bool wants_dc_cache = true;
+   bool has_slm = compute;
+   const struct gen_l3_weights w =
+      gen_get_default_l3_weights(devinfo, wants_dc_cache, has_slm);
+   return gen_get_l3_config(devinfo, w);
+}
+
 static void
 iris_shader_debug_log(void *data, const char *fmt, ...)
 {
@@ -672,6 +684,9 @@ iris_screen_create(int fd, const struct pipe_screen_config *config)
    screen->compiler->supports_pull_constants = false;
    screen->compiler->supports_shader_constants = true;
    screen->compiler->compact_params = false;
+
+   screen->l3_config_3d = iris_get_default_l3_config(&screen->devinfo, false);
+   screen->l3_config_cs = iris_get_default_l3_config(&screen->devinfo, true);
 
    iris_disk_cache_init(screen);
 

@@ -208,8 +208,6 @@ gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
                 bool gs_present, bool tess_present)
 {
    const struct gen_device_info *devinfo = &brw->screen->devinfo;
-   const int push_size_kB =
-      (devinfo->gen >= 8 || (devinfo->is_haswell && devinfo->gt == 3)) ? 32 : 16;
 
    /* BRW_NEW_{VS,TCS,TES,GS}_PROG_DATA */
    struct brw_vue_prog_data *prog_data[4] = {
@@ -249,8 +247,9 @@ gen7_upload_urb(struct brw_context *brw, unsigned vs_size,
 
    unsigned entries[4];
    unsigned start[4];
-   gen_get_urb_config(devinfo, 1024 * push_size_kB, 1024 * brw->urb.size,
-                      tess_present, gs_present, entry_size, entries, start);
+   gen_get_urb_config(devinfo, brw->l3.config,
+                      tess_present, gs_present, entry_size,
+                      entries, start, NULL);
 
    if (devinfo->gen == 7 && !devinfo->is_haswell && !devinfo->is_baytrail)
       gen7_emit_vs_workaround_flush(brw);

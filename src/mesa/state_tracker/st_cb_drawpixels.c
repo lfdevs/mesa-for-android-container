@@ -111,7 +111,8 @@
 
 static nir_ssa_def *
 sample_via_nir(nir_builder *b, nir_variable *texcoord,
-               const char *name, int sampler, enum glsl_base_type base_type)
+               const char *name, int sampler, enum glsl_base_type base_type,
+               nir_alu_type alu_type)
 {
    const struct glsl_type *sampler2D =
       glsl_sampler_type(GLSL_SAMPLER_DIM_2D, false, false, base_type);
@@ -127,7 +128,7 @@ sample_via_nir(nir_builder *b, nir_variable *texcoord,
    tex->op = nir_texop_tex;
    tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
    tex->coord_components = 2;
-   tex->dest_type = nir_type_float;
+   tex->dest_type = alu_type;
    tex->src[0].src_type = nir_tex_src_texture_deref;
    tex->src[0].src = nir_src_for_ssa(&deref->dest.ssa);
    tex->src[1].src_type = nir_tex_src_sampler_deref;
@@ -164,7 +165,7 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
                              "gl_FragDepth");
       out->data.location = FRAG_RESULT_DEPTH;
       nir_ssa_def *depth = sample_via_nir(&b, texcoord, "depth", 0,
-                                          GLSL_TYPE_FLOAT);
+                                          GLSL_TYPE_FLOAT, nir_type_float);
       nir_store_var(&b, out, depth, 0x1);
 
       /* Also copy color */
@@ -186,7 +187,7 @@ make_drawpix_z_stencil_program_nir(struct st_context *st,
                              "gl_FragStencilRefARB");
       out->data.location = FRAG_RESULT_STENCIL;
       nir_ssa_def *stencil = sample_via_nir(&b, texcoord, "stencil", 1,
-                                            GLSL_TYPE_UINT);
+                                            GLSL_TYPE_UINT, nir_type_uint);
       nir_store_var(&b, out, stencil, 0x1);
    }
 

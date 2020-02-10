@@ -118,7 +118,8 @@ setup_l3_config(struct brw_context *brw, const struct gen_l3_config *cfg)
    if (devinfo->gen >= 8) {
       assert(!cfg->n[GEN_L3P_IS] && !cfg->n[GEN_L3P_C] && !cfg->n[GEN_L3P_T]);
 
-      const unsigned imm_data = ((has_slm ? GEN8_L3CNTLREG_SLM_ENABLE : 0) |
+      const unsigned imm_data = (
+         (devinfo->gen < 11 && has_slm ? GEN8_L3CNTLREG_SLM_ENABLE : 0) |
          (devinfo->gen == 11 ? GEN11_L3CNTLREG_USE_FULL_WAYS : 0) |
          SET_FIELD(cfg->n[GEN_L3P_URB], GEN8_L3CNTLREG_URB_ALLOC) |
          SET_FIELD(cfg->n[GEN_L3P_RO], GEN8_L3CNTLREG_RO_ALLOC) |
@@ -211,8 +212,8 @@ update_urb_size(struct brw_context *brw, const struct gen_l3_config *cfg)
    }
 }
 
-static void
-emit_l3_state(struct brw_context *brw)
+void
+brw_emit_l3_state(struct brw_context *brw)
 {
    const struct gen_l3_weights w = get_pipeline_state_l3_weights(brw);
    const float dw = gen_diff_l3_weights(w, gen_get_l3_config_weights(brw->l3.config));
@@ -260,7 +261,7 @@ const struct brw_tracked_state gen7_l3_state = {
              BRW_NEW_TES_PROG_DATA |
              BRW_NEW_VS_PROG_DATA,
    },
-   .emit = emit_l3_state
+   .emit = brw_emit_l3_state
 };
 
 /**

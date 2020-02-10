@@ -370,7 +370,6 @@ get_bpp_encoding(uint16_t bpp)
 }
 
 #define GEN_AUX_MAP_ENTRY_Y_TILED_BIT  (0x1ull << 52)
-#define GEN_AUX_MAP_ENTRY_VALID_BIT    0x1ull
 
 uint64_t
 gen_aux_map_format_bits_for_isl_surf(const struct isl_surf *isl_surf)

@@ -62,7 +62,7 @@ namespace clover {
                             const std::string &name) {
          return ::llvm::cast< ::llvm::MDString>(
                detail::get_kernel_metadata_operands(f, name)[arg.getArgNo()])
-            ->getString();
+            ->getString().str();
       }
 
       ///

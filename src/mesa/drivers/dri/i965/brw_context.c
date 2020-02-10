@@ -1523,8 +1523,10 @@ intel_prepare_render(struct brw_context *brw)
     * that will happen next will probably dirty the front buffer.  So
     * mark it as dirty here.
     */
-   if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer))
+   if (_mesa_is_front_buffer_drawing(ctx->DrawBuffer) &&
+       ctx->DrawBuffer != _mesa_get_incomplete_framebuffer()) {
       brw->front_buffer_dirty = true;
+   }
 
    if (brw->is_shared_buffer_bound) {
       /* Subsequent rendering will probably dirty the shared buffer. */

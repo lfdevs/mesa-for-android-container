@@ -196,8 +196,9 @@ clover::llvm::build_module_common(const Module &mod,
                                   const clang::CompilerInstance &c) {
    module m;
 
-   for (const auto &name : map(std::mem_fn(&Function::getName),
+   for (const auto &llvm_name : map(std::mem_fn(&Function::getName),
                                get_kernels(mod))) {
+      const ::std::string name(llvm_name);
       if (offsets.count(name))
          m.syms.emplace_back(name, 0, offsets.at(name),
                              make_kernel_args(mod, name, c));

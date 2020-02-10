@@ -452,8 +452,17 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
        * In the end, while base_offset is nice to look at in the generated
        * code, using it saves us 0 instructions and would require quite a bit
        * of case-by-case work.  It's just not worth it.
+       *
+       * There's some sort of HW bug on Gen12 which causes issues if we write
+       * to the address register in control-flow.  Since we only ever touch
+       * the address register from the generator, we can easily enough work
+       * around it by setting NoMask on the add.
        */
+      brw_push_insn_state(p);
+      if (devinfo->gen == 12)
+         brw_set_default_mask_control(p, BRW_MASK_DISABLE);
       brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
+      brw_pop_insn_state(p);
       brw_set_default_swsb(p, tgl_swsb_regdist(1));
 
       if (type_sz(reg.type) > 4 &&

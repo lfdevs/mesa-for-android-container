@@ -1009,7 +1009,6 @@ anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
                       uint32_t base_layer, uint32_t layer_count)
 {
    uint32_t plane = anv_image_aspect_to_plane(image->aspects, aspect);
-   assert(isl_aux_usage_has_ccs(image->planes[plane].aux_usage));
 
    uint64_t base_address =
       anv_address_physical(image->planes[plane].address);
@@ -1024,6 +1023,9 @@ anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
     */
    cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
+   struct gen_mi_builder b;
+   gen_mi_builder_init(&b, &cmd_buffer->batch);
 
    for (uint32_t a = 0; a < layer_count; a++) {
       const uint32_t layer = base_layer + a;
@@ -1069,24 +1071,25 @@ anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
            offset < end_offset_B; offset += 64 * 1024) {
          uint64_t address = base_address + offset;
 
-         uint64_t aux_entry_address, *aux_entry_map;
+         uint64_t aux_entry_addr64, *aux_entry_map;
          aux_entry_map = gen_aux_map_get_entry(cmd_buffer->device->aux_map_ctx,
-                                               address, &aux_entry_address);
+                                               address, &aux_entry_addr64);
+
+         assert(cmd_buffer->device->physical->use_softpin);
+         struct anv_address aux_entry_address = {
+            .bo = NULL,
+            .offset = aux_entry_addr64,
+         };
 
          const uint64_t old_aux_entry = READ_ONCE(*aux_entry_map);
          uint64_t new_aux_entry =
-            (old_aux_entry & ~GEN_AUX_MAP_FORMAT_BITS_MASK) | format_bits;
+            (old_aux_entry & GEN_AUX_MAP_ADDRESS_MASK) | format_bits;
 
-         /* We're only going to update the top 32 bits */
-         assert((uint32_t)old_aux_entry == (uint32_t)new_aux_entry);
+         if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage))
+            new_aux_entry |= GEN_AUX_MAP_ENTRY_VALID_BIT;
 
-         anv_batch_emit(&cmd_buffer->batch, GENX(MI_STORE_DATA_IMM), sdi) {
-            sdi.Address = (struct anv_address) {
-               .bo = NULL,
-               .offset = aux_entry_address + 4,
-            };
-            sdi.ImmediateData = new_aux_entry >> 32;
-         }
+         gen_mi_store(&b, gen_mi_mem64(aux_entry_address),
+                          gen_mi_imm(new_aux_entry));
       }
    }
 
@@ -1165,8 +1168,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    if (initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
        initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
 #if GEN_GEN == 12
-      if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage) &&
-          device->physical->has_implicit_ccs && devinfo->has_aux_map) {
+      if (device->physical->has_implicit_ccs && devinfo->has_aux_map) {
          anv_image_init_aux_tt(cmd_buffer, image, aspect,
                                base_level, level_count,
                                base_layer, layer_count);
@@ -1889,7 +1891,7 @@ genX(cmd_buffer_config_l3)(struct anv_cmd_buffer *cmd_buffer,
 
    uint32_t l3cr;
    anv_pack_struct(&l3cr, L3_ALLOCATION_REG,
-#if GEN_GEN < 12
+#if GEN_GEN < 11
                    .SLMEnable = has_slm,
 #endif
 #if GEN_GEN == 11
@@ -2046,6 +2048,21 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
              sizeof(cmd_buffer->state.gfx.vb_dirty_ranges));
       memset(&cmd_buffer->state.gfx.ib_dirty_range, 0,
              sizeof(cmd_buffer->state.gfx.ib_dirty_range));
+   }
+
+   /* Project: SKL / Argument: LRI Post Sync Operation [23]
+    *
+    * "PIPECONTROL command with “Command Streamer Stall Enable” must be
+    *  programmed prior to programming a PIPECONTROL command with "LRI
+    *  Post Sync Operation" in GPGPU mode of operation (i.e when
+    *  PIPELINE_SELECT command is set to GPGPU mode of operation)."
+    *
+    * The same text exists a few rows below for Post Sync Op.
+    */
+   if (bits & ANV_PIPE_POST_SYNC_BIT) {
+      if (GEN_GEN == 9 && cmd_buffer->state.current_pipeline == GPGPU)
+         bits |= ANV_PIPE_CS_STALL_BIT;
+      bits &= ~ANV_PIPE_POST_SYNC_BIT;
    }
 
    if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
@@ -4617,6 +4634,9 @@ cmd_buffer_emit_depth_stencil(struct anv_cmd_buffer *cmd_buffer)
    isl_emit_depth_stencil_hiz_s(&device->isl_dev, dw, &info);
 
    if (GEN_GEN >= 12) {
+      cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
+      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
       /* GEN:BUG:1408224581
        *
        * Workaround: Gen12LP Astep only An additional pipe control with
@@ -5568,6 +5588,9 @@ void genX(CmdSetEvent)(
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_event, event, _event);
 
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       if (stageMask & ANV_PIPELINE_STAGE_PIPELINED_BITS) {
          pc.StallAtPixelScoreboard = true;
@@ -5591,6 +5614,9 @@ void genX(CmdResetEvent)(
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    ANV_FROM_HANDLE(anv_event, event, _event);
+
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_POST_SYNC_BIT;
+   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pc) {
       if (stageMask & ANV_PIPELINE_STAGE_PIPELINED_BITS) {

@@ -464,6 +464,7 @@ etna_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
    struct etna_resource *rsc = etna_resource(prsc);
 
    assert(!_mesa_set_next_entry(rsc->pending_ctx, NULL));
+   _mesa_set_destroy(rsc->pending_ctx, NULL);
 
    if (rsc->bo)
       etna_bo_del(rsc->bo);

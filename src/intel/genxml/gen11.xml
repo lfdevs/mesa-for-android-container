@@ -6997,7 +6997,6 @@
   </register>
 
   <register name="L3CNTLREG" length="1" num="0x7034">
-    <field name="SLM Enable" start="0" end="0" type="uint"/>
     <field name="URB Allocation" start="1" end="7" type="uint"/>
     <field name="Error Detection Behavior Control" start="9" end="9" type="bool"/>
     <field name="Use Full Ways" start="10" end="10" type="bool"/>

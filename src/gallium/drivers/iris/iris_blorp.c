@@ -247,24 +247,11 @@ blorp_flush_range(UNUSED struct blorp_batch *blorp_batch,
     */
 }
 
-static void
-blorp_emit_urb_config(struct blorp_batch *blorp_batch,
-                      unsigned vs_entry_size,
-                      UNUSED unsigned sf_entry_size)
+static const struct gen_l3_config *
+blorp_get_l3_config(struct blorp_batch *blorp_batch)
 {
-   struct iris_context *ice = blorp_batch->blorp->driver_ctx;
    struct iris_batch *batch = blorp_batch->driver_batch;
-
-   unsigned size[4] = { vs_entry_size, 1, 1, 1 };
-
-   /* If last VS URB size is good enough for what the BLORP operation needed,
-    * then we can skip reconfiguration
-    */
-   if (ice->shaders.last_vs_entry_size >= vs_entry_size)
-      return;
-
-   genX(emit_urb_setup)(ice, batch, size, false, false);
-   ice->state.dirty |= IRIS_DIRTY_URB;
+   return batch->screen->l3_config_3d;
 }
 
 static void
@@ -346,7 +333,6 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
                          IRIS_DIRTY_UNCOMPILED_GS |
                          IRIS_DIRTY_UNCOMPILED_FS |
                          IRIS_DIRTY_VF |
-                         IRIS_DIRTY_URB |
                          IRIS_DIRTY_SF_CL_VIEWPORT |
                          IRIS_DIRTY_SAMPLER_STATES_VS |
                          IRIS_DIRTY_SAMPLER_STATES_TCS |

@@ -123,10 +123,12 @@ readfile(const char *path, int *sz)
 		if (ret < 0) {
 			free(buf);
 			*sz = 0;
+			close(fd);
 			return NULL;
 		} else if (ret < CHUNKSIZE) {
 			n += ret;
 			*sz = n;
+			close(fd);
 			return buf;
 		} else {
 			n += CHUNKSIZE;
@@ -393,8 +395,10 @@ find_device(void)
 		err(1, "could not open /dev/mem");
 
 	dev.io = mmap(0, dev.size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, dev.base);
-	if (!dev.io)
+	if (!dev.io) {
+		close(fd);
 		err(1, "could not map device");
+	}
 }
 
 /*

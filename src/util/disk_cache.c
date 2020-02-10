@@ -758,7 +758,11 @@ deflate_and_write_to_disk(const void *in_data, size_t in_data_size, int dest,
       free(out);
       return 0;
    }
-   write_all(dest, out, ret);
+   ssize_t written = write_all(dest, out, ret);
+   if (written == -1) {
+      free(out);
+      return 0;
+   }
    free(out);
    return ret;
 #else

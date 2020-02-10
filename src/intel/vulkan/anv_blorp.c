@@ -535,6 +535,14 @@ copy_buffer_to_image(struct anv_cmd_buffer *cmd_buffer,
       bool dst_has_shadow = false;
       struct blorp_surf dst_shadow_surf;
       if (&image == dst) {
+         /* In this case, the source is the buffer and, since blorp takes its
+          * copy dimensions in terms of the source format, we have to use the
+          * scaled down version for compressed textures because the source
+          * format is an RGB format.
+          */
+         extent.width = buffer_extent.width;
+         extent.height = buffer_extent.height;
+
          anv_cmd_buffer_mark_image_written(cmd_buffer, anv_image,
                                            aspect, dst->surf.aux_usage,
                                            dst->level,

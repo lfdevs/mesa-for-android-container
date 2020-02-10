@@ -264,8 +264,6 @@ iris_create_context(struct pipe_screen *pscreen, void *priv, unsigned flags)
    ctx->get_device_reset_status = iris_get_device_reset_status;
    ctx->get_sample_position = iris_get_sample_position;
 
-   ice->shaders.urb_size = devinfo->urb.size;
-
    iris_init_context_fence_functions(ctx);
    iris_init_blit_functions(ctx);
    iris_init_clear_functions(ctx);

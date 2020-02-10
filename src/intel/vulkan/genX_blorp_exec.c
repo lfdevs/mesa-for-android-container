@@ -178,8 +178,7 @@ blorp_vf_invalidate_for_vb_48b_transitions(struct blorp_batch *batch,
                                                        (1 << num_vbs) - 1);
 }
 
-#if GEN_GEN >= 8
-static struct blorp_address
+UNUSED static struct blorp_address
 blorp_get_workaround_page(struct blorp_batch *batch)
 {
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
@@ -188,7 +187,6 @@ blorp_get_workaround_page(struct blorp_batch *batch)
       .buffer = cmd_buffer->device->workaround_bo,
    };
 }
-#endif
 
 static void
 blorp_flush_range(struct blorp_batch *batch, void *start, size_t size)
@@ -197,22 +195,11 @@ blorp_flush_range(struct blorp_batch *batch, void *start, size_t size)
     */
 }
 
-static void
-blorp_emit_urb_config(struct blorp_batch *batch,
-                      unsigned vs_entry_size, unsigned sf_entry_size)
+static const struct gen_l3_config *
+blorp_get_l3_config(struct blorp_batch *batch)
 {
-   struct anv_device *device = batch->blorp->driver_ctx;
    struct anv_cmd_buffer *cmd_buffer = batch->driver_batch;
-
-   assert(sf_entry_size == 0);
-
-   const unsigned entry_size[4] = { vs_entry_size, 1, 1, 1 };
-
-   genX(emit_urb_setup)(device, &cmd_buffer->batch,
-                        cmd_buffer->state.current_l3_config,
-                        VK_SHADER_STAGE_VERTEX_BIT |
-                        VK_SHADER_STAGE_FRAGMENT_BIT,
-                        entry_size);
+   return cmd_buffer->state.current_l3_config;
 }
 
 void

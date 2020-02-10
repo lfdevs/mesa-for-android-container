@@ -56,7 +56,14 @@ could_coissue(const struct gen_device_info *devinfo, const fs_inst *inst)
    case BRW_OPCODE_CMP:
    case BRW_OPCODE_ADD:
    case BRW_OPCODE_MUL:
-      return true;
+      /* Only float instructions can coissue.  We don't have a great
+       * understanding of whether or not something like float(int(a) + int(b))
+       * would be considered float (based on the destination type) or integer
+       * (based on the source types), so we take the conservative choice of
+       * only promoting when both destination and source are float.
+       */
+      return inst->dst.type == BRW_REGISTER_TYPE_F &&
+             inst->src[0].type == BRW_REGISTER_TYPE_F;
    default:
       return false;
    }
