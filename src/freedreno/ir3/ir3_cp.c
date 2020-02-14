@@ -305,6 +305,12 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_register *reg, unsigned new_flags
 
 	reg = ir3_reg_clone(ctx->shader, reg);
 
+	/* Half constant registers seems to handle only 32-bit values
+	 * within floating-point opcodes. So convert back to 32-bit values.
+	 */
+	if (f_opcode && (new_flags & IR3_REG_HALF))
+		reg->uim_val = fui(_mesa_half_to_float(reg->uim_val));
+
 	/* in some cases, there are restrictions on (abs)/(neg) plus const..
 	 * so just evaluate those and clear the flags:
 	 */
@@ -349,12 +355,6 @@ lower_immed(struct ir3_cp_ctx *ctx, struct ir3_register *reg, unsigned new_flags
 		/* need to generate a new immediate: */
 		swiz = i % 4;
 		idx  = i / 4;
-
-		/* Half constant registers seems to handle only 32-bit values
-		 * within floating-point opcodes. So convert back to 32-bit values. */
-		if (f_opcode && (new_flags & IR3_REG_HALF)) {
-			reg->uim_val = fui(_mesa_half_to_float(reg->uim_val));
-		}
 
 		const_state->immediates[idx].val[swiz] = reg->uim_val;
 		const_state->immediates_count = idx + 1;

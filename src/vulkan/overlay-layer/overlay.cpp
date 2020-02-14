@@ -1319,43 +1319,56 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
 
    device_data->vtable.CmdEndRenderPass(draw->command_buffer);
 
-   /* Bounce the image to display back to present layout. */
-   imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-   imb.pNext = nullptr;
-   imb.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-   imb.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-   imb.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-   imb.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-   imb.image = data->images[image_index];
-   imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-   imb.subresourceRange.baseMipLevel = 0;
-   imb.subresourceRange.levelCount = 1;
-   imb.subresourceRange.baseArrayLayer = 0;
-   imb.subresourceRange.layerCount = 1;
-   imb.srcQueueFamilyIndex = device_data->graphic_queue->family_index;
-   imb.dstQueueFamilyIndex = present_queue->family_index;
-   device_data->vtable.CmdPipelineBarrier(draw->command_buffer,
-                                          VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                                          VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
-                                          0,          /* dependency flags */
-                                          0, nullptr, /* memory barriers */
-                                          0, nullptr, /* buffer memory barriers */
-                                          1, &imb);   /* image memory barriers */
+   if (device_data->graphic_queue->family_index != present_queue->family_index)
+   {
+      /* Transfer the image back to the present queue family
+       * image layout was already changed to present by the render pass 
+       */
+      imb.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      imb.pNext = nullptr;
+      imb.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      imb.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+      imb.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      imb.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+      imb.image = data->images[image_index];
+      imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      imb.subresourceRange.baseMipLevel = 0;
+      imb.subresourceRange.levelCount = 1;
+      imb.subresourceRange.baseArrayLayer = 0;
+      imb.subresourceRange.layerCount = 1;
+      imb.srcQueueFamilyIndex = device_data->graphic_queue->family_index;
+      imb.dstQueueFamilyIndex = present_queue->family_index;
+      device_data->vtable.CmdPipelineBarrier(draw->command_buffer,
+                                             VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                                             VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT,
+                                             0,          /* dependency flags */
+                                             0, nullptr, /* memory barriers */
+                                             0, nullptr, /* buffer memory barriers */
+                                             1, &imb);   /* image memory barriers */
+   }
 
    device_data->vtable.EndCommandBuffer(draw->command_buffer);
 
+   VkPipelineStageFlags *stages_wait = (VkPipelineStageFlags*) malloc(sizeof(VkPipelineStageFlags) * n_wait_semaphores);
+   for (unsigned i = 0; i < n_wait_semaphores; i++)
+   {
+      // wait in the fragment stage until the swapchain image is ready
+      stages_wait[i] = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+   }
+   
    VkSubmitInfo submit_info = {};
-   VkPipelineStageFlags stage_wait = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
    submit_info.commandBufferCount = 1;
    submit_info.pCommandBuffers = &draw->command_buffer;
-   submit_info.pWaitDstStageMask = &stage_wait;
+   submit_info.pWaitDstStageMask = stages_wait;
    submit_info.waitSemaphoreCount = n_wait_semaphores;
    submit_info.pWaitSemaphores = wait_semaphores;
    submit_info.signalSemaphoreCount = 1;
    submit_info.pSignalSemaphores = &draw->semaphore;
 
    device_data->vtable.QueueSubmit(device_data->graphic_queue->queue, 1, &submit_info, draw->fence);
+   
+   free(stages_wait);
 
    return draw;
 }
@@ -1890,15 +1903,18 @@ static VkResult overlay_QueuePresentKHR(
          struct swapchain_data *swapchain_data =
             FIND(struct swapchain_data, swapchain);
 
+         uint32_t image_index = pPresentInfo->pImageIndices[i];
+
          before_present(swapchain_data,
                         queue_data,
                         pPresentInfo->pWaitSemaphores,
                         pPresentInfo->waitSemaphoreCount,
-                        pPresentInfo->pImageIndices[i]);
+                        image_index);
 
          VkPresentInfoKHR present_info = *pPresentInfo;
          present_info.swapchainCount = 1;
          present_info.pSwapchains = &swapchain;
+         present_info.pImageIndices = &image_index;
 
          uint64_t ts0 = os_time_get();
          result = queue_data->device->vtable.QueuePresentKHR(queue, &present_info);
@@ -1910,11 +1926,13 @@ static VkResult overlay_QueuePresentKHR(
          VkSwapchainKHR swapchain = pPresentInfo->pSwapchains[i];
          struct swapchain_data *swapchain_data =
             FIND(struct swapchain_data, swapchain);
+
+         uint32_t image_index = pPresentInfo->pImageIndices[i];
+
          VkPresentInfoKHR present_info = *pPresentInfo;
          present_info.swapchainCount = 1;
          present_info.pSwapchains = &swapchain;
-
-         uint32_t image_index = pPresentInfo->pImageIndices[i];
+         present_info.pImageIndices = &image_index;
 
          struct overlay_draw *draw = before_present(swapchain_data,
                                                     queue_data,

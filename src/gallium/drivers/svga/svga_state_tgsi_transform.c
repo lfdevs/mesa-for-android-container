@@ -131,7 +131,7 @@ emulate_point_sprite(struct svga_context *svga,
          tgsi_dump(new_tokens, 0);
       }
 
-      templ.tokens = new_tokens;
+      pipe_shader_state_from_tgsi(&templ, new_tokens);
       templ.stream_output.num_outputs = 0;
 
       if (streamout) {

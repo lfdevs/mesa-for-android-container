@@ -1395,14 +1395,10 @@ dri2_query_dma_buf_modifiers(__DRIscreen *_screen, int fourcc, int max,
        (pscreen->is_format_supported(pscreen, format, screen->target, 0, 0,
                                      PIPE_BIND_RENDER_TARGET) ||
         pscreen->is_format_supported(pscreen, format, screen->target, 0, 0,
-                                     PIPE_BIND_SAMPLER_VIEW))) {
+                                     PIPE_BIND_SAMPLER_VIEW) ||
+        dri2_yuv_dma_buf_supported(screen, map))) {
       pscreen->query_dmabuf_modifiers(pscreen, format, max, modifiers,
                                       external_only, count);
-      return true;
-   } else if (dri2_yuv_dma_buf_supported(screen, map)) {
-      *count = 1;
-      if (modifiers)
-         modifiers[0] = DRM_FORMAT_MOD_NONE;
       return true;
    }
    return false;

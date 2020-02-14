@@ -43,7 +43,7 @@
 //========================================================
 void KnobBase::autoExpandEnvironmentVariables(std::string& text)
 {
-#if (__GNUC__) && (GCC_VERSION < 409000)
+#if (__GNUC__) && (GCC_VERSION < 40900)
     // <regex> isn't implemented prior to gcc-4.9.0
     // unix style variable replacement
     size_t start;

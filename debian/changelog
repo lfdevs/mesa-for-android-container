@@ -1,3 +1,10 @@
+mesa (20.0.0~rc3-1) experimental; urgency=medium
+
+  * New upstream release candidate.
+  * rules: Fix dh_auto_test accepting failure.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Fri, 14 Feb 2020 14:07:05 +0200
+
 mesa (20.0.0~rc2-1) experimental; urgency=medium
 
   * New upstream release candidate.

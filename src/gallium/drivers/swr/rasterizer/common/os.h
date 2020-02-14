@@ -182,7 +182,7 @@ static INLINE void _mm256_storeu2_m128i(__m128i* hi, __m128i* lo, __m256i a)
 }
 
 // gcc prior to 4.9 doesn't have _mm*_undefined_*
-#if (__GNUC__) && (GCC_VERSION < 409000)
+#if (__GNUC__) && (GCC_VERSION < 40900)
 #define _mm_undefined_si128 _mm_setzero_si128
 #define _mm256_undefined_ps _mm256_setzero_ps
 #endif

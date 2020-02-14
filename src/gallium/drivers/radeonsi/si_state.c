@@ -685,7 +685,7 @@ static void si_bind_blend_state(struct pipe_context *ctx, void *state)
 
 	if (old_blend->cb_target_mask != blend->cb_target_mask ||
 	    old_blend->dual_src_blend != blend->dual_src_blend ||
-	    (old_blend->blend_enable_4bit != blend->blend_enable_4bit &&
+	    (old_blend->dcc_msaa_corruption_4bit != blend->dcc_msaa_corruption_4bit &&
 	     sctx->framebuffer.nr_samples >= 2 &&
 	     sctx->screen->dcc_msaa_allowed))
 		si_mark_atom_dirty(sctx, &sctx->atoms.s.cb_render_state);
@@ -2240,13 +2240,6 @@ static bool si_is_format_supported(struct pipe_screen *screen,
 	if (target >= PIPE_MAX_TEXTURE_TYPES) {
 		PRINT_ERR("radeonsi: unsupported texture type %d\n", target);
 		return false;
-	}
-
-	if (util_format_get_num_planes(format) >= 2) {
-		return util_format_planar_is_supported(screen, format, target,
-						       sample_count,
-						       storage_sample_count,
-						       usage);
 	}
 
 	if (MAX2(1, sample_count) < MAX2(1, storage_sample_count))

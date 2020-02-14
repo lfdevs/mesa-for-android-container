@@ -207,6 +207,8 @@ static const struct vgpu10_format_entry format_conversion_table[] =
    [ PIPE_FORMAT_L32_SINT ] =              { SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       SVGA3D_R32_SINT,             TF_XXX1 },
    [ PIPE_FORMAT_L32A32_SINT ] =           { SVGA3D_FORMAT_INVALID,      SVGA3D_FORMAT_INVALID,       SVGA3D_R32G32_SINT,          TF_XXXY },
    [ PIPE_FORMAT_R10G10B10A2_UINT ] =      { SVGA3D_R10G10B10A2_UINT,    SVGA3D_R10G10B10A2_UINT,     SVGA3D_R10G10B10A2_UINT,     0 },
+   /* Must specify following entry to give the sense of size of format_conversion_table[] */
+   [ PIPE_FORMAT_COUNT ] = {SVGA3D_FORMAT_INVALID, SVGA3D_FORMAT_INVALID,    SVGA3D_FORMAT_INVALID,       0 },
 };
 
 

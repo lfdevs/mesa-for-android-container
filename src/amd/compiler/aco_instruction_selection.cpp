@@ -2657,6 +2657,7 @@ void load_lds(isel_context *ctx, unsigned elem_size_bytes, Temp dst,
    unsigned total_bytes = num_components * elem_size_bytes;
    std::array<Temp, NIR_MAX_VEC_COMPONENTS> result;
    bool large_ds_read = ctx->options->chip_class >= GFX7;
+   bool usable_read2 = ctx->options->chip_class >= GFX7;
 
    while (bytes_read < total_bytes) {
       unsigned todo = total_bytes - bytes_read;
@@ -2668,7 +2669,7 @@ void load_lds(isel_context *ctx, unsigned elem_size_bytes, Temp dst,
       if (todo >= 16 && aligned16 && large_ds_read) {
          op = aco_opcode::ds_read_b128;
          todo = 16;
-      } else if (todo >= 16 && aligned8) {
+      } else if (todo >= 16 && aligned8 && usable_read2) {
          op = aco_opcode::ds_read2_b64;
          read2 = true;
          todo = 16;
@@ -2678,7 +2679,7 @@ void load_lds(isel_context *ctx, unsigned elem_size_bytes, Temp dst,
       } else if (todo >= 8 && aligned8) {
          op = aco_opcode::ds_read_b64;
          todo = 8;
-      } else if (todo >= 8) {
+      } else if (todo >= 8 && usable_read2) {
          op = aco_opcode::ds_read2_b32;
          read2 = true;
          todo = 8;
@@ -2783,6 +2784,7 @@ void ds_write_helper(isel_context *ctx, Operand m, Temp address, Temp data, unsi
    Builder bld(ctx->program, ctx->block);
    unsigned bytes_written = 0;
    bool large_ds_write = ctx->options->chip_class >= GFX7;
+   bool usable_write2 = ctx->options->chip_class >= GFX7;
 
    while (bytes_written < total_size * 4) {
       unsigned todo = total_size * 4 - bytes_written;
@@ -2795,7 +2797,7 @@ void ds_write_helper(isel_context *ctx, Operand m, Temp address, Temp data, unsi
       if (todo >= 16 && aligned16 && large_ds_write) {
          op = aco_opcode::ds_write_b128;
          size = 4;
-      } else if (todo >= 16 && aligned8) {
+      } else if (todo >= 16 && aligned8 && usable_write2) {
          op = aco_opcode::ds_write2_b64;
          write2 = true;
          size = 4;
@@ -2805,7 +2807,7 @@ void ds_write_helper(isel_context *ctx, Operand m, Temp address, Temp data, unsi
       } else if (todo >= 8 && aligned8) {
          op = aco_opcode::ds_write_b64;
          size = 2;
-      } else if (todo >= 8) {
+      } else if (todo >= 8 && usable_write2) {
          op = aco_opcode::ds_write2_b32;
          write2 = true;
          size = 2;

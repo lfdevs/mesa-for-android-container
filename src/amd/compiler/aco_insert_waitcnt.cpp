@@ -374,13 +374,16 @@ wait_imm kill(Instruction* instr, wait_ctx& ctx)
 
    imm.combine(parse_wait_instr(ctx, instr));
 
-   if (ctx.chip_class >= GFX10) {
-      /* Seems to be required on GFX10 to achieve correct behaviour.
-       * It shouldn't cost anything anyways since we're about to do s_endpgm.
-       */
-      if (ctx.lgkm_cnt && instr->opcode == aco_opcode::s_dcache_wb)
-         imm.lgkm = 0;
 
+   /* It's required to wait for scalar stores before "writing back" data.
+    * It shouldn't cost anything anyways since we're about to do s_endpgm.
+    */
+   if (ctx.lgkm_cnt && instr->opcode == aco_opcode::s_dcache_wb) {
+      assert(ctx.chip_class >= GFX8);
+      imm.lgkm = 0;
+   }
+
+   if (ctx.chip_class >= GFX10) {
       /* GFX10: A store followed by a load at the same address causes a problem because
        * the load doesn't load the correct values unless we wait for the store first.
        * This is NOT mitigated by an s_nop.

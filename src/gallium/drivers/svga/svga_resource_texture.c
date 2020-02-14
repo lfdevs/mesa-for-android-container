@@ -133,25 +133,26 @@ svga_transfer_dma(struct svga_context *svga,
       }
    }
    else {
-      int y, h, srcy;
+      int y, h, y_max;
       unsigned blockheight =
          util_format_get_blockheight(st->base.resource->format);
 
       h = st->hw_nblocksy * blockheight;
-      srcy = 0;
+      y_max = st->box.y + st->box.h;
 
-      for (y = 0; y < st->box.h; y += h) {
+      for (y = st->box.y; y < y_max; y += h) {
          unsigned offset, length;
          void *hw, *sw;
 
-         if (y + h > st->box.h)
-            h = st->box.h - y;
+         if (y + h > y_max)
+            h = y_max - y;
 
          /* Transfer band must be aligned to pixel block boundaries */
          assert(y % blockheight == 0);
          assert(h % blockheight == 0);
 
-         offset = y * st->base.stride / blockheight;
+         /* First band starts at the top of the SW buffer. */
+         offset = (y - st->box.y) * st->base.stride / blockheight;
          length = h * st->base.stride / blockheight;
 
          sw = (uint8_t *) st->swbuf + offset;
@@ -159,9 +160,9 @@ svga_transfer_dma(struct svga_context *svga,
          if (transfer == SVGA3D_WRITE_HOST_VRAM) {
             unsigned usage = PIPE_TRANSFER_WRITE;
 
-            /* Wait for the previous DMAs to complete */
-            /* TODO: keep one DMA (at half the size) in the background */
-            if (y) {
+            /* Don't write to an in-flight DMA buffer. Synchronize or
+             * discard in-flight storage. */
+            if (y != st->box.y) {
                svga_context_flush(svga, NULL);
                usage |= PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE;
             }
@@ -177,7 +178,7 @@ svga_transfer_dma(struct svga_context *svga,
          svga_transfer_dma_band(svga, st, transfer,
                                 st->box.x, y, st->box.z,
                                 st->box.w, h, st->box.d,
-                                0, srcy, 0, flags);
+                                0, 0, 0, flags);
 
          /*
           * Prevent the texture contents to be discarded on the next band

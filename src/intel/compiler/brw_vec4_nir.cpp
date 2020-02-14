@@ -1030,7 +1030,8 @@ try_immediate_source(const nir_alu_instr *instr, src_reg *op,
       } else {
          uint8_t vf_values[4] = { 0, 0, 0, 0 };
 
-         for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; i++) {
+         for (unsigned i = 0; i < ARRAY_SIZE(vf_values); i++) {
+
             if (op[idx].abs)
                f[i] = fabs(f[i]);
 
