@@ -107,6 +107,7 @@ public:
    void setup_cs_payload();
    bool fixup_sends_duplicate_payload();
    void fixup_3src_null_dest();
+   bool fixup_nomask_control_flow();
    void assign_curb_setup();
    void assign_urb_setup();
    void convert_attr_sources_to_hw_regs(fs_inst *inst);

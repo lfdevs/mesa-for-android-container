@@ -157,7 +157,7 @@ print_reg(FILE *fp, unsigned reg, unsigned bits)
         char prefix = prefix_for_bits(bits);
 
         if (prefix)
-                putchar(prefix);
+                fputc(prefix, fp);
 
         fprintf(fp, "r%u", reg);
 }

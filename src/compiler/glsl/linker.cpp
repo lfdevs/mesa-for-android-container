@@ -4036,8 +4036,10 @@ build_program_resource_list(struct gl_context *ctx,
          return;
    }
 
-   if (add_packed_varyings_only)
+   if (add_packed_varyings_only) {
+      _mesa_set_destroy(resource_set, NULL);
       return;
+   }
 
    if (!add_fragdata_arrays(ctx, shProg, resource_set))
       return;

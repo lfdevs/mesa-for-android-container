@@ -43,9 +43,6 @@
 //========================================================
 void KnobBase::autoExpandEnvironmentVariables(std::string& text)
 {
-#if (__GNUC__) && (GCC_VERSION < 40900)
-    // <regex> isn't implemented prior to gcc-4.9.0
-    // unix style variable replacement
     size_t start;
     while ((start = text.find("${'${'}")) != std::string::npos)
     {
@@ -64,32 +61,6 @@ void KnobBase::autoExpandEnvironmentVariables(std::string& text)
         const std::string var = GetEnv(text.substr(start + 1, end - start - 1));
         text.replace(start, end - start + 1, var);
     }
-#else
-    {
-        // unix style variable replacement
-        static std::regex env("\\$\\{([^}]+?)\\}");
-        std::smatch       match;
-        while (std::regex_search(text, match, env))
-        {
-            const std::string var = GetEnv(match[1].str());
-            // certain combinations of gcc/libstd++ have problems with this
-            // text.replace(match[0].first, match[0].second, var);
-            text.replace(match.prefix().length(), match[0].length(), var);
-        }
-    }
-    {
-        // win32 style variable replacement
-        static std::regex env("%([^%]+?)%");
-        std::smatch       match;
-        while (std::regex_search(text, match, env))
-        {
-            const std::string var = GetEnv(match[1].str());
-            // certain combinations of gcc/libstd++ have problems with this
-            // text.replace(match[0].first, match[0].second, var);
-            text.replace(match.prefix().length(), match[0].length(), var);
-        }
-    }
-#endif
 }
 
 //========================================================

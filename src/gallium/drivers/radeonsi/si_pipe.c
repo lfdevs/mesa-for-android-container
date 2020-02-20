@@ -172,9 +172,6 @@ static void si_destroy_context(struct pipe_context *context)
 	struct si_context *sctx = (struct si_context *)context;
 	int i;
 
-	util_queue_finish(&sctx->screen->shader_compiler_queue);
-	util_queue_finish(&sctx->screen->shader_compiler_queue_low_priority);
-
 	/* Unreference the framebuffer normally to disable related logic
 	 * properly.
 	 */

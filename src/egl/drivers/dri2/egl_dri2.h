@@ -338,6 +338,9 @@ struct dri2_egl_surface
 
    int out_fence_fd;
    EGLBoolean enable_out_fence;
+
+   /* swrast device */
+   char *swrast_device_buffer;
 };
 
 struct dri2_egl_config

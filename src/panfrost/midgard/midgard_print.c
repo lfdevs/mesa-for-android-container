@@ -110,6 +110,10 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
         bool is_sint = false, is_uint = false, is_hex = false;
         const char *opname = alu_opcode_props[op].name;
 
+        /* Add a sentinel name to prevent crashing */
+        if (!opname)
+                opname = "unknown";
+
         if (opname[0] == 'u') {
                 /* If the opcode starts with a 'u' we are sure we deal with an
                  * unsigned int operation
@@ -134,11 +138,11 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
         switch (reg_mode) {
         case midgard_reg_mode_64:
                 if (is_sint) {
-                        printf("%"PRIi64, consts->i64[c]);
+                        fprintf(fp, "%"PRIi64, consts->i64[c]);
                 } else if (is_uint) {
-                        printf("%"PRIu64, consts->u64[c]);
+                        fprintf(fp, "%"PRIu64, consts->u64[c]);
                 } else if (is_hex) {
-                        printf("0x%"PRIX64, consts->u64[c]);
+                        fprintf(fp, "0x%"PRIX64, consts->u64[c]);
                 } else {
                         double v = consts->f64[c];
 
@@ -160,7 +164,7 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
                         else
                                 v = consts->i32[c];
 
-                        printf("%"PRIi64, v);
+                        fprintf(fp, "%"PRIi64, v);
                 } else if (is_uint || is_hex) {
                         uint64_t v;
 
@@ -169,14 +173,14 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
                         else
                                 v = consts->u32[c];
 
-                        printf(is_uint ? "%"PRIu64 : "0x%"PRIX64, v);
+                        fprintf(fp, is_uint ? "%"PRIu64 : "0x%"PRIX64, v);
                 } else {
                         float v = consts->f32[c];
 
                         if (mod & MIDGARD_FLOAT_MOD_ABS) v = fabsf(v);
                         if (mod & MIDGARD_FLOAT_MOD_NEG) v = -v;
 
-                        printf("%g", v);
+                        fprintf(fp, "%g", v);
                 }
                 break;
 
@@ -191,7 +195,7 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
                         else
                                 v = consts->i16[c];
 
-                        printf("%d", v);
+                        fprintf(fp, "%d", v);
                 } else if (is_uint || is_hex) {
                         uint32_t v;
 
@@ -200,14 +204,14 @@ mir_print_constant_component(FILE *fp, const midgard_constants *consts, unsigned
                         else
                                 v = consts->u16[c];
 
-                        printf(is_uint ? "%u" : "0x%X", v);
+                        fprintf(fp, is_uint ? "%u" : "0x%X", v);
                 } else {
                         float v = _mesa_half_to_float(consts->f16[c]);
 
                         if (mod & MIDGARD_FLOAT_MOD_ABS) v = fabsf(v);
                         if (mod & MIDGARD_FLOAT_MOD_NEG) v = -v;
 
-                        printf("%g", v);
+                        fprintf(fp, "%g", v);
                 }
                 break;
 

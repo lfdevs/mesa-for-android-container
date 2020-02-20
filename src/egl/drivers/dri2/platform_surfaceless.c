@@ -60,6 +60,9 @@ surfaceless_free_images(struct dri2_egl_surface *dri2_surf)
       dri2_dpy->image->destroyImage(dri2_surf->front);
       dri2_surf->front = NULL;
    }
+
+   free(dri2_surf->swrast_device_buffer);
+   dri2_surf->swrast_device_buffer = NULL;
 }
 
 static int

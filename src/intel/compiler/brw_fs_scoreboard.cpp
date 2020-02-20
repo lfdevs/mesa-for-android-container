@@ -281,21 +281,24 @@ namespace {
        * No dependency information.
        */
       dependency() : ordered(TGL_REGDIST_NULL), jp(INT_MIN),
-                     unordered(TGL_SBID_NULL), id(0) {}
+                     unordered(TGL_SBID_NULL), id(0),
+                     exec_all(false) {}
 
       /**
        * Construct a dependency on the in-order instruction with the provided
        * ordered_address instruction counter.
        */
-      dependency(tgl_regdist_mode mode, ordered_address jp) :
-         ordered(mode), jp(jp), unordered(TGL_SBID_NULL), id(0) {}
+      dependency(tgl_regdist_mode mode, ordered_address jp, bool exec_all) :
+         ordered(mode), jp(jp), unordered(TGL_SBID_NULL), id(0),
+         exec_all(exec_all) {}
 
       /**
        * Construct a dependency on the out-of-order instruction with the
        * specified synchronization token.
        */
-      dependency(tgl_sbid_mode mode, unsigned id) :
-         ordered(TGL_REGDIST_NULL), jp(INT_MIN), unordered(mode), id(id) {}
+      dependency(tgl_sbid_mode mode, unsigned id, bool exec_all) :
+         ordered(TGL_REGDIST_NULL), jp(INT_MIN), unordered(mode), id(id),
+         exec_all(exec_all) {}
 
       /**
        * Synchronization mode of in-order dependency, or zero if no in-order
@@ -328,6 +331,14 @@ namespace {
       unsigned id;
 
       /**
+       * Whether the dependency could be run with execution masking disabled,
+       * which might lead to the unwanted execution of the generating
+       * instruction in cases where a BB is executed with all channels
+       * disabled due to hardware bug GEN:BUG:1407528679.
+       */
+      bool exec_all;
+
+      /**
        * Trivial in-order dependency that's always satisfied.
        *
        * Note that unlike a default-constructed dependency() which is also
@@ -343,7 +354,8 @@ namespace {
          return dep0.ordered == dep1.ordered &&
                 dep0.jp == dep1.jp &&
                 dep0.unordered == dep1.unordered &&
-                dep0.id == dep1.id;
+                dep0.id == dep1.id &&
+                dep0.exec_all == dep1.exec_all;
       }
 
       friend bool
@@ -353,7 +365,7 @@ namespace {
       }
    };
 
-   const dependency dependency::done = dependency(TGL_REGDIST_SRC, INT_MIN);
+   const dependency dependency::done = dependency(TGL_REGDIST_SRC, INT_MIN, false);
 
    /**
     * Return whether \p dep contains any dependency information.
@@ -387,6 +399,8 @@ namespace {
          dep.id = eq.link(dep0.unordered ? dep0.id : dep1.id,
                           dep1.unordered ? dep1.id : dep0.id);
       }
+
+      dep.exec_all = dep0.exec_all || dep1.exec_all;
 
       return dep;
    }
@@ -647,11 +661,22 @@ namespace {
             if (dep.ordered && deps[i].ordered) {
                deps[i].jp = MAX2(deps[i].jp, dep.jp);
                deps[i].ordered |= dep.ordered;
+               deps[i].exec_all |= dep.exec_all;
                dep.ordered = TGL_REGDIST_NULL;
             }
 
-            if (dep.unordered && deps[i].unordered && deps[i].id == dep.id) {
+            /* Don't combine otherwise matching unordered dependencies if
+             * there is an exec_all mismatch which would cause a SET
+             * dependency to gain an exec_all flag, since that would prevent
+             * it from being baked into the instruction we want to allocate an
+             * SBID for.
+             */
+            if (dep.unordered && deps[i].unordered && deps[i].id == dep.id &&
+                (deps[i].exec_all == dep.exec_all ||
+                 (deps[i].exec_all && !(dep.unordered & TGL_SBID_SET)) ||
+                 (dep.exec_all && !(deps[i].unordered & TGL_SBID_SET)))) {
                deps[i].unordered |= dep.unordered;
+               deps[i].exec_all |= dep.exec_all;
                dep.unordered = TGL_SBID_NULL;
             }
          }
@@ -664,17 +689,19 @@ namespace {
 
    /**
     * Construct a tgl_swsb annotation encoding any ordered dependencies from
-    * the dependency list \p deps of an instruction with ordered_address
-    * \p jp.
+    * the dependency list \p deps of an instruction with ordered_address \p
+    * jp.  If \p exec_all is false only dependencies known to be executed with
+    * channel masking applied will be considered in the calculation.
     */
    tgl_swsb
    ordered_dependency_swsb(const dependency_list &deps,
-                           const ordered_address &jp)
+                           const ordered_address &jp,
+                           bool exec_all)
    {
       unsigned min_dist = ~0u;
 
       for (unsigned i = 0; i < deps.size(); i++) {
-         if (deps[i].ordered) {
+         if (deps[i].ordered && exec_all >= deps[i].exec_all) {
             const unsigned dist = jp - deps[i].jp;
             const unsigned max_dist = 10;
             assert(jp > deps[i].jp);
@@ -688,27 +715,34 @@ namespace {
 
    /**
     * Return whether the dependency list \p deps of an instruction with
-    * ordered_address \p jp has any non-trivial ordered dependencies.
+    * ordered_address \p jp has any non-trivial ordered dependencies.  If \p
+    * exec_all is false only dependencies known to be executed with channel
+    * masking applied will be considered in the calculation.
     */
    bool
    find_ordered_dependency(const dependency_list &deps,
-                           const ordered_address &jp)
+                           const ordered_address &jp,
+                           bool exec_all)
    {
-      return ordered_dependency_swsb(deps, jp).regdist;
+      return ordered_dependency_swsb(deps, jp, exec_all).regdist;
    }
 
    /**
     * Return the full tgl_sbid_mode bitset for the first unordered dependency
     * on the list \p deps that matches the specified tgl_sbid_mode, or zero if
-    * no such dependency is present.
+    * no such dependency is present.  If \p exec_all is false only
+    * dependencies known to be executed with channel masking applied will be
+    * considered in the calculation.
     */
    tgl_sbid_mode
    find_unordered_dependency(const dependency_list &deps,
-                             tgl_sbid_mode unordered)
+                             tgl_sbid_mode unordered,
+                             bool exec_all)
    {
       if (unordered) {
          for (unsigned i = 0; i < deps.size(); i++) {
-            if (unordered & deps[i].unordered)
+            if ((unordered & deps[i].unordered) &&
+                exec_all >= deps[i].exec_all)
                return deps[i].unordered;
          }
       }
@@ -727,17 +761,18 @@ namespace {
                                    const dependency_list &deps,
                                    const ordered_address &jp)
    {
-      const bool has_ordered = find_ordered_dependency(deps, jp);
+      const bool exec_all = inst->force_writemask_all;
+      const bool has_ordered = find_ordered_dependency(deps, jp, exec_all);
 
-      if (find_unordered_dependency(deps, TGL_SBID_SET))
-         return find_unordered_dependency(deps, TGL_SBID_SET);
+      if (find_unordered_dependency(deps, TGL_SBID_SET, exec_all))
+         return find_unordered_dependency(deps, TGL_SBID_SET, exec_all);
       else if (has_ordered && is_unordered(inst))
          return TGL_SBID_NULL;
-      else if (find_unordered_dependency(deps, TGL_SBID_DST) &&
+      else if (find_unordered_dependency(deps, TGL_SBID_DST, exec_all) &&
                (!has_ordered || !is_unordered(inst)))
-         return find_unordered_dependency(deps, TGL_SBID_DST);
+         return find_unordered_dependency(deps, TGL_SBID_DST, exec_all);
       else if (!has_ordered)
-         return find_unordered_dependency(deps, TGL_SBID_SRC);
+         return find_unordered_dependency(deps, TGL_SBID_SRC, exec_all);
       else
          return TGL_SBID_NULL;
    }
@@ -757,14 +792,17 @@ namespace {
    update_inst_scoreboard(const fs_visitor *shader, const ordered_address *jps,
                           const fs_inst *inst, unsigned ip, scoreboard &sb)
    {
+      const bool exec_all = inst->force_writemask_all;
+
       /* Track any source registers that may be fetched asynchronously by this
        * instruction, otherwise clear the dependency in order to avoid
        * subsequent redundant synchronization.
        */
       for (unsigned i = 0; i < inst->sources; i++) {
          const dependency rd_dep =
-            inst->is_payload(i) || inst->is_math() ? dependency(TGL_SBID_SRC, ip) :
-            ordered_unit(inst) ? dependency(TGL_REGDIST_SRC, jps[ip]) :
+            (inst->is_payload(i) ||
+             inst->is_math()) ? dependency(TGL_SBID_SRC, ip, exec_all) :
+            ordered_unit(inst) ? dependency(TGL_REGDIST_SRC, jps[ip], exec_all) :
             dependency::done;
 
          for (unsigned j = 0; j < regs_read(inst, i); j++)
@@ -772,7 +810,7 @@ namespace {
       }
 
       if (is_send(inst) && inst->base_mrf != -1) {
-         const dependency rd_dep = dependency(TGL_SBID_SRC, ip);
+         const dependency rd_dep = dependency(TGL_SBID_SRC, ip, exec_all);
 
          for (unsigned j = 0; j < inst->mlen; j++)
             sb.set(brw_uvec_mrf(8, inst->base_mrf + j, 0), rd_dep);
@@ -780,8 +818,8 @@ namespace {
 
       /* Track any destination registers of this instruction. */
       const dependency wr_dep =
-         is_unordered(inst) ? dependency(TGL_SBID_DST, ip) :
-         ordered_unit(inst) ? dependency(TGL_REGDIST_DST, jps[ip]) :
+         is_unordered(inst) ? dependency(TGL_SBID_DST, ip, exec_all) :
+         ordered_unit(inst) ? dependency(TGL_REGDIST_DST, jps[ip], exec_all) :
          dependency();
 
       if (is_valid(wr_dep) && inst->dst.file != BAD_FILE &&
@@ -870,6 +908,7 @@ namespace {
       unsigned ip = 0;
 
       foreach_block_and_inst(block, fs_inst, inst, shader->cfg) {
+         const bool exec_all = inst->force_writemask_all;
          scoreboard &sb = sbs[block->num];
 
          for (unsigned i = 0; i < inst->sources; i++) {
@@ -885,7 +924,8 @@ namespace {
          }
 
          if (is_unordered(inst))
-            add_dependency(ids, deps[ip], dependency(TGL_SBID_SET, ip));
+            add_dependency(ids, deps[ip],
+                           dependency(TGL_SBID_SET, ip, exec_all));
 
          if (!inst->no_dd_check) {
             if (inst->dst.file != BAD_FILE && !inst->dst.is_null()) {
@@ -967,7 +1007,8 @@ namespace {
       unsigned ip = 0;
 
       foreach_block_and_inst_safe(block, fs_inst, inst, shader->cfg) {
-         tgl_swsb swsb = ordered_dependency_swsb(deps[ip], jps[ip]);
+         const bool exec_all = inst->force_writemask_all;
+         tgl_swsb swsb = ordered_dependency_swsb(deps[ip], jps[ip], exec_all);
          const tgl_sbid_mode unordered_mode =
             baked_unordered_dependency_mode(inst, deps[ip], jps[ip]);
 
@@ -975,9 +1016,13 @@ namespace {
             const dependency &dep = deps[ip][i];
 
             if (dep.unordered) {
-               if (unordered_mode == dep.unordered && !swsb.mode) {
+               if (unordered_mode == dep.unordered &&
+                   exec_all >= dep.exec_all && !swsb.mode) {
                   /* Bake unordered dependency into the instruction's SWSB if
-                   * possible.
+                   * possible, except in cases where the current instruction
+                   * isn't marked NoMask but the dependency is, since that
+                   * might lead to data coherency issues due to
+                   * GEN:BUG:1407528679.
                    */
                   swsb.sbid = dep.id;
                   swsb.mode = dep.unordered;
@@ -986,13 +1031,34 @@ namespace {
                    * instruction.
                    */
                   const fs_builder ibld = fs_builder(shader, block, inst)
-                     .exec_all().group(1, 0);
+                                          .exec_all().group(1, 0);
                   fs_inst *sync = ibld.emit(BRW_OPCODE_SYNC, ibld.null_reg_ud(),
                                             brw_imm_ud(TGL_SYNC_NOP));
                   sync->sched.sbid = dep.id;
                   sync->sched.mode = dep.unordered;
                   assert(!(sync->sched.mode & TGL_SBID_SET));
                }
+            }
+         }
+
+         for (unsigned i = 0; i < deps[ip].size(); i++) {
+            const dependency &dep = deps[ip][i];
+
+            if (dep.ordered && dep.exec_all > exec_all &&
+                find_ordered_dependency(deps[ip], jps[ip], true)) {
+               /* If the current instruction is not marked NoMask but an
+                * ordered dependency is, perform the synchronization as a
+                * separate NoMask SYNC instruction in order to avoid data
+                * coherency issues due to GEN:BUG:1407528679.  The similar
+                * scenario with unordered dependencies should have been
+                * handled above.
+                */
+               const fs_builder ibld = fs_builder(shader, block, inst)
+                                       .exec_all().group(1, 0);
+               fs_inst *sync = ibld.emit(BRW_OPCODE_SYNC, ibld.null_reg_ud(),
+                                         brw_imm_ud(TGL_SYNC_NOP));
+               sync->sched = ordered_dependency_swsb(deps[ip], jps[ip], true);
+               break;
             }
          }
 

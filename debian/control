@@ -5,7 +5,7 @@ Maintainer: Debian X Strike Force <debian-x@lists.debian.org>
 Uploaders: Andreas Boll <aboll@debian.org>
 Standards-Version: 4.1.4
 Build-Depends:
- debhelper (>= 11),
+ debhelper-compat (= 12),
  glslang-tools [amd64 arm64 armel armhf i386 mips64el mipsel powerpc ppc64 ppc64el s390x sparc64 x32],
  meson (>= 0.45),
  quilt (>= 0.63-8.2~),

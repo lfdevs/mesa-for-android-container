@@ -82,7 +82,7 @@ sw_screen_create(struct sw_winsys *winsys)
    default_driver = "softpipe";
 #elif defined(GALLIUM_SWR)
    default_driver = "swr";
-#elif defined(GALLIUM_SWR)
+#elif defined(GALLIUM_ZINK)
    default_driver = "zink";
 #else
    default_driver = "";

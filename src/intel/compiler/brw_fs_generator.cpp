@@ -1378,8 +1378,8 @@ fs_generator::generate_scratch_write(fs_inst *inst, struct brw_reg src)
       brw_set_default_group(p, inst->group + lower_size * i);
 
       if (i > 0) {
-         brw_set_default_swsb(p, tgl_swsb_null());
-         brw_SYNC(p, TGL_SYNC_ALLRD);
+         assert(swsb.mode & TGL_SBID_SET);
+         brw_set_default_swsb(p, tgl_swsb_sbid(TGL_SBID_SRC, swsb.sbid));
       } else {
          brw_set_default_swsb(p, tgl_swsb_src_dep(swsb));
       }
@@ -1387,11 +1387,7 @@ fs_generator::generate_scratch_write(fs_inst *inst, struct brw_reg src)
       brw_MOV(p, brw_uvec_mrf(lower_size, inst->base_mrf + 1, 0),
               retype(offset(src, block_size * i), BRW_REGISTER_TYPE_UD));
 
-      if (i + 1 < inst->exec_size / lower_size)
-         brw_set_default_swsb(p, tgl_swsb_regdist(1));
-      else
-         brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
-
+      brw_set_default_swsb(p, tgl_swsb_dst_dep(swsb, 1));
       brw_oword_block_write_scratch(p, brw_message_reg(inst->base_mrf),
                                     block_size,
                                     inst->offset + block_size * REG_SIZE * i);
@@ -2224,7 +2220,16 @@ fs_generator::generate_code(const cfg_t *cfg, int dispatch_width,
          brw_find_live_channel(p, dst, mask);
          break;
       }
-
+      case FS_OPCODE_LOAD_LIVE_CHANNELS: {
+         assert(devinfo->gen >= 8);
+         assert(inst->force_writemask_all && inst->group == 0);
+         assert(inst->dst.file == BAD_FILE);
+         brw_set_default_exec_size(p, BRW_EXECUTE_1);
+         brw_MOV(p, retype(brw_flag_subreg(inst->flag_subreg),
+                           BRW_REGISTER_TYPE_UD),
+                 retype(brw_mask_reg(0), BRW_REGISTER_TYPE_UD));
+         break;
+      }
       case SHADER_OPCODE_BROADCAST:
          assert(inst->force_writemask_all);
          brw_broadcast(p, dst, src[0], src[1]);

@@ -491,6 +491,12 @@ enum opcode {
    SHADER_OPCODE_FIND_LIVE_CHANNEL,
 
    /**
+    * Return the current execution mask in the specified flag subregister.
+    * Can be CSE'ed more easily than a plain MOV from the ce0 ARF register.
+    */
+   FS_OPCODE_LOAD_LIVE_CHANNELS,
+
+   /**
     * Pick the channel from its first source register given by the index
     * specified as second source.  Useful for variable indexing of surfaces.
     *

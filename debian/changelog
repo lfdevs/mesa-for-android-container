@@ -1,3 +1,10 @@
+mesa (20.0.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * control: Use debhelper-compat, bump to 12.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 20 Feb 2020 10:46:06 +0200
+
 mesa (20.0.0~rc3-1) experimental; urgency=medium
 
   * New upstream release candidate.

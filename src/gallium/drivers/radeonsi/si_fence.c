@@ -606,7 +606,11 @@ static void si_fence_server_signal(struct pipe_context *ctx,
 	 * Therefore, we must make sure that we flush the pipe to avoid
 	 * new work being emitted and getting executed before the signal
 	 * operation.
+	 * 
+	 * Set sctx->initial_gfx_cs_size to force IB submission even if
+	 * it is empty.
 	 */
+	sctx->initial_gfx_cs_size = 0;
 	si_flush_from_st(ctx, NULL, PIPE_FLUSH_ASYNC);
 }
 
