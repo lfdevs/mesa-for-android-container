@@ -1,3 +1,9 @@
+mesa (20.0.1-2) experimental; urgency=medium
+
+  * control: Fix clang build-dep to actually use libclang-10-dev.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Mon, 09 Mar 2020 23:20:30 +0200
+
 mesa (20.0.1-1) experimental; urgency=medium
 
   * New upstream release.
