@@ -2660,6 +2660,7 @@ void GLAPIENTRY
 _mesa_PatchParameteri_no_error(GLenum pname, GLint value)
 {
    GET_CURRENT_CONTEXT(ctx);
+   FLUSH_VERTICES(ctx, 0);
    ctx->TessCtrlProgram.patch_vertices = value;
 }
 
@@ -2684,6 +2685,7 @@ _mesa_PatchParameteri(GLenum pname, GLint value)
       return;
    }
 
+   FLUSH_VERTICES(ctx, 0);
    ctx->TessCtrlProgram.patch_vertices = value;
 }
 

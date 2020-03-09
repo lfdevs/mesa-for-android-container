@@ -1154,11 +1154,14 @@ tgl_swsb_encode(struct tgl_swsb swsb)
  * tgl_swsb.
  */
 static inline struct tgl_swsb
-tgl_swsb_decode(uint8_t x)
+tgl_swsb_decode(enum opcode opcode, uint8_t x)
 {
    if (x & 0x80) {
       const struct tgl_swsb swsb = { (x & 0x70u) >> 4, x & 0xfu,
-                                     TGL_SBID_DST | TGL_SBID_SET };
+                                     (opcode == BRW_OPCODE_SEND ||
+                                      opcode == BRW_OPCODE_SENDC ||
+                                      opcode == BRW_OPCODE_MATH) ?
+                                     TGL_SBID_SET : TGL_SBID_DST };
       return swsb;
    } else if ((x & 0x70) == 0x20) {
       return tgl_swsb_sbid(TGL_SBID_DST, x & 0xfu);

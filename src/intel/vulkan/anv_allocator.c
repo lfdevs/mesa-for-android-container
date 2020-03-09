@@ -1395,10 +1395,20 @@ anv_scratch_pool_alloc(struct anv_device *device, struct anv_scratch_pool *pool,
 
    const struct gen_device_info *devinfo = &device->info;
 
-   const unsigned subslices = MAX2(device->physical->subslice_total, 1);
+   unsigned subslices = MAX2(device->physical->subslice_total, 1);
+
+   /* For, Gen11+, scratch space allocation is based on the number of threads
+    * in the base configuration. */
+   if (devinfo->gen >= 12)
+      subslices = devinfo->num_subslices[0];
+   else if (devinfo->gen == 11)
+      subslices = 8;
 
    unsigned scratch_ids_per_subslice;
-   if (devinfo->gen >= 11) {
+   if (devinfo->gen >= 12) {
+      /* Same as ICL below, but with 16 EUs. */
+      scratch_ids_per_subslice = 16 * 8;
+   } else if (devinfo->gen == 11) {
       /* The MEDIA_VFE_STATE docs say:
        *
        *    "Starting with this configuration, the Maximum Number of

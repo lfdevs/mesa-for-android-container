@@ -678,9 +678,6 @@ anv_pipeline_lower_nir(struct anv_pipeline *pipeline,
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
-   if (nir->info.num_ssbos > 0 || nir->info.num_images > 0)
-      pipeline->needs_data_cache = true;
-
    NIR_PASS_V(nir, brw_nir_lower_image_load_store, compiler->devinfo);
 
    NIR_PASS_V(nir, nir_lower_explicit_io, nir_var_mem_global,
@@ -1823,7 +1820,7 @@ anv_pipeline_setup_l3_config(struct anv_pipeline *pipeline, bool needs_slm)
    const struct gen_device_info *devinfo = &pipeline->device->info;
 
    const struct gen_l3_weights w =
-      gen_get_default_l3_weights(devinfo, pipeline->needs_data_cache, needs_slm);
+      gen_get_default_l3_weights(devinfo, true, needs_slm);
 
    pipeline->urb.l3_config = gen_get_l3_config(devinfo, w);
    pipeline->urb.total_size =
@@ -1882,8 +1879,6 @@ anv_pipeline_init(struct anv_pipeline *pipeline,
       !pCreateInfo->pRasterizationState->rasterizerDiscardEnable &&
       pCreateInfo->pMultisampleState &&
       pCreateInfo->pMultisampleState->sampleShadingEnable;
-
-   pipeline->needs_data_cache = false;
 
    /* When we free the pipeline, we detect stages based on the NULL status
     * of various prog_data pointers.  Make them NULL by default.

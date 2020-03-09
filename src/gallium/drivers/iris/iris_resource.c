@@ -85,7 +85,8 @@ modifier_is_supported(const struct gen_device_info *devinfo,
 
       enum isl_format linear_format = isl_format_srgb_to_linear(rt_format);
 
-      if (!isl_format_supports_ccs_e(devinfo, linear_format))
+      if (linear_format == ISL_FORMAT_UNSUPPORTED ||
+          !isl_format_supports_ccs_e(devinfo, linear_format))
          return false;
 
       return devinfo->gen >= 9 && devinfo->gen <= 11;

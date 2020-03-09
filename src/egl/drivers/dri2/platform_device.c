@@ -145,15 +145,12 @@ dri2_device_create_surface(_EGLDriver *drv, _EGLDisplay *disp, EGLint type,
       goto cleanup_surface;
    }
 
-   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
+   dri2_surf->visual = dri2_image_format_for_pbuffer_config(dri2_dpy, config);
+   if (dri2_surf->visual == __DRI_IMAGE_FORMAT_NONE)
       goto cleanup_surface;
 
-   if (conf->RedSize == 5)
-      dri2_surf->visual = __DRI_IMAGE_FORMAT_RGB565;
-   else if (conf->AlphaSize == 0)
-      dri2_surf->visual = __DRI_IMAGE_FORMAT_XRGB8888;
-   else
-      dri2_surf->visual = __DRI_IMAGE_FORMAT_ARGB8888;
+   if (!dri2_create_drawable(dri2_dpy, config, dri2_surf, dri2_surf))
+      goto cleanup_surface;
 
    return &dri2_surf->base;
 

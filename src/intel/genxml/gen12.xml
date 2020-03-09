@@ -525,6 +525,7 @@
       <value name="Ftz" value="0"/>
       <value name="SetByKernel" value="1"/>
     </field>
+    <field name="Thread Preemption Disable" start="84" end="84" type="bool"/>
     <field name="Sampler Count" start="98" end="100" type="uint">
       <value name="No samplers used" value="0"/>
       <value name="Between 1 and 4 samplers used" value="1"/>

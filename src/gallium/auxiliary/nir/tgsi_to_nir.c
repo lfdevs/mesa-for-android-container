@@ -72,6 +72,10 @@ struct ttn_compile {
    nir_variable *images[PIPE_MAX_SHADER_IMAGES];
    nir_variable *ssbo[PIPE_MAX_SHADER_BUFFERS];
 
+   unsigned num_samplers;
+   unsigned num_images;
+   unsigned num_msaa_images;
+
    nir_variable *input_var_face;
    nir_variable *input_var_position;
    nir_variable *input_var_point;
@@ -1325,7 +1329,9 @@ get_sampler_var(struct ttn_compile *c, int binding,
                                 "sampler");
       var->data.binding = binding;
       var->data.explicit_binding = true;
+
       c->samplers[binding] = var;
+      c->num_samplers = MAX2(c->num_samplers, binding + 1);
 
       /* Record textures used */
       unsigned mask = 1 << binding;
@@ -1357,7 +1363,11 @@ get_image_var(struct ttn_compile *c, int binding,
       var->data.explicit_binding = true;
       var->data.access = access;
       var->data.image.format = format;
+
       c->images[binding] = var;
+      c->num_images = MAX2(c->num_images, binding + 1);
+      if (dim == GLSL_SAMPLER_DIM_MS)
+         c->num_msaa_images = c->num_images;
    }
 
    return var;
@@ -2655,6 +2665,10 @@ ttn_finalize_nir(struct ttn_compile *c, struct pipe_screen *screen)
       ttn_optimize_nir(nir);
       nir_shader_gather_info(nir, c->build.impl);
    }
+
+   nir->info.num_images = c->num_images;
+   nir->info.num_textures = c->num_samplers;
+   nir->info.last_msaa_image = c->num_msaa_images - 1;
 
    nir_validate_shader(nir, "TTN: after all optimizations");
 }

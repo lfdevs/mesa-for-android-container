@@ -193,14 +193,13 @@ swrastXPutImage(__DRIdrawable * draw, int op,
    ximage->bytes_per_line = stride ? stride : bytes_per_line(w * ximage->bits_per_pixel, 32);
    ximage->data = data;
 
+   ximage->width = ximage->bytes_per_line / ((ximage->bits_per_pixel + 7)/ 8);
+   ximage->height = h;
+
    if (pdp->shminfo.shmid >= 0) {
-      ximage->width = ximage->bytes_per_line / ((ximage->bits_per_pixel + 7)/ 8);
-      ximage->height = h;
       XShmPutImage(dpy, drawable, gc, ximage, srcx, srcy, x, y, w, h, False);
       XSync(dpy, False);
    } else {
-      ximage->width = w;
-      ximage->height = h;
       XPutImage(dpy, drawable, gc, ximage, srcx, srcy, x, y, w, h);
    }
    ximage->data = NULL;
@@ -288,10 +287,10 @@ swrastGetImage(__DRIdrawable * read,
    swrastGetImage2(read, x, y, w, h, 0, data, loaderPrivate);
 }
 
-static void
-swrastGetImageShm(__DRIdrawable * read,
-                  int x, int y, int w, int h,
-                  int shmid, void *loaderPrivate)
+static GLboolean
+swrastGetImageShm2(__DRIdrawable * read,
+                   int x, int y, int w, int h,
+                   int shmid, void *loaderPrivate)
 {
    struct drisw_drawable *prp = loaderPrivate;
    __GLXDRIdrawable *pread = &(prp->base);
@@ -301,8 +300,11 @@ swrastGetImageShm(__DRIdrawable * read,
 
    if (!prp->ximage || shmid != prp->shminfo.shmid) {
       if (!XCreateDrawable(prp, shmid, dpy))
-         return;
+         return GL_FALSE;
    }
+
+   if (prp->shminfo.shmid == -1)
+      return GL_FALSE;
    readable = pread->xDrawable;
 
    ximage = prp->ximage;
@@ -312,10 +314,19 @@ swrastGetImageShm(__DRIdrawable * read,
    ximage->bytes_per_line = bytes_per_line(w * ximage->bits_per_pixel, 32);
 
    XShmGetImage(dpy, readable, ximage, x, y, ~0L);
+   return GL_TRUE;
+}
+
+static void
+swrastGetImageShm(__DRIdrawable * read,
+                  int x, int y, int w, int h,
+                  int shmid, void *loaderPrivate)
+{
+   swrastGetImageShm2(read, x, y, w, h, shmid, loaderPrivate);
 }
 
 static const __DRIswrastLoaderExtension swrastLoaderExtension_shm = {
-   .base = {__DRI_SWRAST_LOADER, 5 },
+   .base = {__DRI_SWRAST_LOADER, 6 },
 
    .getDrawableInfo     = swrastGetDrawableInfo,
    .putImage            = swrastPutImage,
@@ -325,6 +336,7 @@ static const __DRIswrastLoaderExtension swrastLoaderExtension_shm = {
    .putImageShm         = swrastPutImageShm,
    .getImageShm         = swrastGetImageShm,
    .putImageShm2        = swrastPutImageShm2,
+   .getImageShm2        = swrastGetImageShm2,
 };
 
 static const __DRIextension *loader_extensions_shm[] = {

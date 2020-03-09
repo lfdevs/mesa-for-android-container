@@ -526,7 +526,7 @@ unsigned add_coupling_code(exec_ctx& ctx, Block* block,
             /* create phi for loop footer */
             aco_ptr<Pseudo_instruction> phi{create_instruction<Pseudo_instruction>(aco_opcode::p_linear_phi, Format::PSEUDO, preds.size(), 1)};
             phi->definitions[0] = bld.def(bld.lm);
-            if (k == info.num_exec_masks - 1) {
+            if (k == info.num_exec_masks - 1u) {
                phi->definitions[0].setFixed(exec);
                need_parallelcopy = false;
             }

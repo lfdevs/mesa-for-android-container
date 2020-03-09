@@ -2259,8 +2259,6 @@ compute_pipeline_create(
    memset(pipeline->shaders, 0, sizeof(pipeline->shaders));
    pipeline->num_executables = 0;
 
-   pipeline->needs_data_cache = false;
-
    assert(pCreateInfo->stage.stage == VK_SHADER_STAGE_COMPUTE_BIT);
    pipeline->active_stages |= VK_SHADER_STAGE_COMPUTE_BIT;
    ANV_FROM_HANDLE(anv_shader_module, module,  pCreateInfo->stage.module);
@@ -2357,6 +2355,18 @@ compute_pipeline_create(
 #if GEN_GEN >= 8 || GEN_IS_HASWELL
       .CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs,
+#endif
+#if GEN_GEN >= 12
+      /* TODO: Check if we are missing workarounds and enable mid-thread
+       * preemption.
+       *
+       * We still have issues with mid-thread preemption (it was already
+       * disabled by the kernel on gen11, due to missing workarounds). It's
+       * possible that we are just missing some workarounds, and could enable
+       * it later, but for now let's disable it to fix a GPU in compute in Car
+       * Chase (and possibly more).
+       */
+      .ThreadPreemptionDisable = true,
 #endif
 
       .NumberofThreadsinGPGPUThreadGroup = cs_prog_data->threads,

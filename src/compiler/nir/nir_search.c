@@ -789,7 +789,7 @@ nir_algebraic_automaton(nir_instr *instr, struct util_dynarray *states,
        * itertools.product(), which was used to emit the transition
        * table.
        */
-      uint16_t index = 0;
+      unsigned index = 0;
       for (unsigned i = 0; i < nir_op_infos[op].num_inputs; i++) {
          index *= tbl->num_filtered_states;
          index += tbl->filter[*util_dynarray_element(states, uint16_t,

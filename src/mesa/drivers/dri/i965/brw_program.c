@@ -467,8 +467,13 @@ brw_alloc_stage_scratch(struct brw_context *brw,
        * brw->screen->subslice_total is the TOTAL number of subslices
        * and we wish to view that there are 4 subslices per slice
        * instead of the actual number of subslices per slice.
+       *
+       * For, ICL, scratch space allocation is based on the number of threads
+       * in the base configuration.
        */
-      if (devinfo->gen >= 9 && devinfo->gen < 11)
+      if (devinfo->gen == 11)
+         subslices = 8;
+      else if (devinfo->gen >= 9 && devinfo->gen < 11)
          subslices = 4 * brw->screen->devinfo.num_slices;
 
       unsigned scratch_ids_per_subslice;

@@ -130,6 +130,11 @@ struct v3d_resource {
         bool tiled;
 
         /**
+         * Indicates if the CS has written the resource
+         */
+        bool compute_written;
+
+        /**
          * Number of times the resource has been written to.
          *
          * This is used to track whether we need to load the surface on first

@@ -340,12 +340,14 @@ iris_fence_create_fd(struct pipe_context *ctx,
 
    struct iris_screen *screen = (struct iris_screen *)ctx->screen;
    struct drm_syncobj_handle args = {
+      .handle = gem_syncobj_create(screen->fd, DRM_SYNCOBJ_CREATE_SIGNALED),
       .flags = DRM_SYNCOBJ_FD_TO_HANDLE_FLAGS_IMPORT_SYNC_FILE,
       .fd = fd,
    };
    if (gen_ioctl(screen->fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &args) == -1) {
       fprintf(stderr, "DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE failed: %s\n",
               strerror(errno));
+      gem_syncobj_destroy(screen->fd, args.handle);
       *out = NULL;
       return;
    }

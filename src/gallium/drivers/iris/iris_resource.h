@@ -27,6 +27,7 @@
 #include "util/u_inlines.h"
 #include "util/u_range.h"
 #include "intel/isl/isl.h"
+#include "iris_bufmgr.h"
 
 struct iris_batch;
 struct iris_context;
@@ -287,6 +288,12 @@ iris_resource_bo(struct pipe_resource *p_res)
 {
    struct iris_resource *res = (void *) p_res;
    return res->bo;
+}
+
+static inline uint32_t
+iris_mocs(const struct iris_bo *bo, const struct isl_device *dev)
+{
+   return bo && bo->external ? dev->mocs.external : dev->mocs.internal;
 }
 
 struct iris_format_info iris_format_for_usage(const struct gen_device_info *,

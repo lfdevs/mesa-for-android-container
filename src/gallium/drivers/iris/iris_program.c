@@ -177,7 +177,7 @@ iris_upload_ubo_ssbo_surf_state(struct iris_context *ice,
                                         : ISL_FORMAT_R32G32B32A32_FLOAT,
                          .swizzle = ISL_SWIZZLE_IDENTITY,
                          .stride_B = 1,
-                         .mocs = ice->vtbl.mocs(res->bo, &screen->isl_dev));
+                         .mocs = iris_mocs(res->bo, &screen->isl_dev));
 }
 
 static nir_ssa_def *
@@ -2053,16 +2053,26 @@ iris_get_scratch_space(struct iris_context *ice,
     * as well.  This is not currently documented at all.
     *
     * This hack is no longer necessary on Gen11+.
+    *
+    * For, Gen11+, scratch space allocation is based on the number of threads
+    * in the base configuration.
     */
    unsigned subslice_total = screen->subslice_total;
-   if (devinfo->gen < 11)
+   if (devinfo->gen >= 12)
+      subslice_total = devinfo->num_subslices[0];
+   else if (devinfo->gen == 11)
+      subslice_total = 8;
+   else if (devinfo->gen < 11)
       subslice_total = 4 * devinfo->num_slices;
    assert(subslice_total >= screen->subslice_total);
 
    if (!*bop) {
       unsigned scratch_ids_per_subslice = devinfo->max_cs_threads;
 
-      if (devinfo->gen >= 11) {
+      if (devinfo->gen >= 12) {
+         /* Same as ICL below, but with 16 EUs. */
+         scratch_ids_per_subslice = 16 * 8;
+      } else if (devinfo->gen == 11) {
          /* The MEDIA_VFE_STATE docs say:
           *
           *    "Starting with this configuration, the Maximum Number of

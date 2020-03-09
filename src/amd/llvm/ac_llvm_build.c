@@ -2723,27 +2723,48 @@ LLVMValueRef ac_build_fmed3(struct ac_llvm_context *ctx, LLVMValueRef src0,
 			    LLVMValueRef src1, LLVMValueRef src2,
 			    unsigned bitsize)
 {
-	LLVMTypeRef type;
-	char *intr;
+	LLVMValueRef result;
 
-	if (bitsize == 16) {
-		intr = "llvm.amdgcn.fmed3.f16";
-		type = ctx->f16;
-	} else if (bitsize == 32) {
-		intr = "llvm.amdgcn.fmed3.f32";
-		type = ctx->f32;
+	if (bitsize == 64 || (bitsize == 16 && ctx->chip_class <= GFX8)) {
+		/* Lower 64-bit fmed because LLVM doesn't expose an intrinsic,
+		 * or lower 16-bit fmed because it's only supported on GFX9+.
+		 */
+		LLVMValueRef min1, min2, max1;
+
+		min1 = ac_build_fmin(ctx, src0, src1);
+		max1 = ac_build_fmax(ctx, src0, src1);
+		min2 = ac_build_fmin(ctx, max1, src2);
+
+		result = ac_build_fmax(ctx, min2, min1);
 	} else {
-		intr = "llvm.amdgcn.fmed3.f64";
-		type = ctx->f64;
+		LLVMTypeRef type;
+		char *intr;
+
+		if (bitsize == 16) {
+			intr = "llvm.amdgcn.fmed3.f16";
+			type = ctx->f16;
+		} else {
+			assert(bitsize == 32);
+			intr = "llvm.amdgcn.fmed3.f32";
+			type = ctx->f32;
+		}
+
+		LLVMValueRef params[] = {
+			src0,
+			src1,
+			src2,
+		};
+
+		result = ac_build_intrinsic(ctx, intr, type, params, 3,
+					    AC_FUNC_ATTR_READNONE);
 	}
 
-	LLVMValueRef params[] = {
-		src0,
-		src1,
-		src2,
-	};
-	return ac_build_intrinsic(ctx, intr, type, params, 3,
-				  AC_FUNC_ATTR_READNONE);
+	if (ctx->chip_class < GFX9 && bitsize == 32) {
+		/* Only pre-GFX9 chips do not flush denorms. */
+		result = ac_build_canonicalize(ctx, result, bitsize);
+	}
+
+	return result;
 }
 
 LLVMValueRef ac_build_fract(struct ac_llvm_context *ctx, LLVMValueRef src0,

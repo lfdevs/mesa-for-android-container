@@ -338,8 +338,12 @@ iris_format_for_usage(const struct gen_device_info *devinfo,
                       isl_surf_usage_flags_t usage)
 {
    enum isl_format format = iris_isl_format_for_pipe_format(pformat);
-   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
    struct isl_swizzle swizzle = ISL_SWIZZLE_IDENTITY;
+
+   if (format == ISL_FORMAT_UNSUPPORTED)
+      return (struct iris_format_info) { .fmt = format, .swizzle = swizzle };
+
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
 
    if (!util_format_is_srgb(pformat)) {
       if (util_format_is_intensity(pformat)) {

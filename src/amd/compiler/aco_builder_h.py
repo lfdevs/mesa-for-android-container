@@ -392,7 +392,7 @@ public:
       if (!carry_in.op.isUndefined())
          return vop2(aco_opcode::v_addc_co_u32, Definition(dst), hint_vcc(def(lm)), a, b, carry_in);
       else if (program->chip_class >= GFX10 && carry_out)
-         return vop3(aco_opcode::v_add_co_u32_e64, Definition(dst), def(s2), a, b);
+         return vop3(aco_opcode::v_add_co_u32_e64, Definition(dst), def(lm), a, b);
       else if (program->chip_class < GFX9 || carry_out)
          return vop2(aco_opcode::v_add_co_u32, Definition(dst), hint_vcc(def(lm)), a, b);
       else

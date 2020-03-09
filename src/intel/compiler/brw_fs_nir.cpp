@@ -881,6 +881,16 @@ fs_visitor::emit_fsign(const fs_builder &bld, const nir_alu_instr *instr,
       }
 
       op[0] = offset(op[0], bld, fsign_instr->src[0].swizzle[channel]);
+
+      /* Resolve any source modifiers.  We could do slightly better on Gen8+
+       * if the only source modifier is negation, but *shrug*.
+       */
+      if (op[1].negate || op[1].abs) {
+         fs_reg tmp = bld.vgrf(op[1].type);
+
+         bld.MOV(tmp, op[1]);
+         op[1] = tmp;
+      }
    } else {
       assert(!instr->dest.saturate);
    }

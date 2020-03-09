@@ -2281,7 +2281,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
     */
    for (unsigned i = 0; i < num_formats; i++) {
       __DRIconfig **new_configs;
-      int num_depth_stencil_bits = 2;
+      int num_depth_stencil_bits = 1;
 
       if (!intel_allowed_format(dri_screen, formats[i]))
          continue;
@@ -2294,16 +2294,20 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       stencil_bits[0] = 0;
 
       if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
-         depth_bits[1] = 16;
-         stencil_bits[1] = 0;
+         if (devinfo->gen >= 8) {
+            depth_bits[num_depth_stencil_bits] = 16;
+            stencil_bits[num_depth_stencil_bits] = 0;
+            num_depth_stencil_bits++;
+         }
          if (devinfo->gen >= 6) {
-             depth_bits[2] = 24;
-             stencil_bits[2] = 8;
-             num_depth_stencil_bits = 3;
+             depth_bits[num_depth_stencil_bits] = 24;
+             stencil_bits[num_depth_stencil_bits] = 8;
+             num_depth_stencil_bits++;
          }
       } else {
-         depth_bits[1] = 24;
-         stencil_bits[1] = 8;
+         depth_bits[num_depth_stencil_bits] = 24;
+         stencil_bits[num_depth_stencil_bits] = 8;
+         num_depth_stencil_bits++;
       }
 
       new_configs = driCreateConfigs(formats[i],
@@ -2327,8 +2331,16 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
          continue;
 
       if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
-         depth_bits[0] = 16;
-         stencil_bits[0] = 0;
+         if (devinfo->gen >= 8) {
+            depth_bits[0] = 16;
+            stencil_bits[0] = 0;
+         } else if (devinfo->gen >= 6) {
+            depth_bits[0] = 24;
+            stencil_bits[0] = 8;
+         } else {
+            depth_bits[0] = 0;
+            stencil_bits[0] = 0;
+         }
       } else {
          depth_bits[0] = 24;
          stencil_bits[0] = 8;
@@ -2370,7 +2382,7 @@ intel_screen_make_configs(__DRIscreen *dri_screen)
       depth_bits[0] = 0;
       stencil_bits[0] = 0;
 
-      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM) {
+      if (formats[i] == MESA_FORMAT_B5G6R5_UNORM && devinfo->gen >= 8) {
          depth_bits[1] = 16;
          stencil_bits[1] = 0;
       } else {

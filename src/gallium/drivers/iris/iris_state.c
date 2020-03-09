@@ -110,12 +110,6 @@
 #include "iris_genx_macros.h"
 #include "intel/common/gen_guardband.h"
 
-static uint32_t
-mocs(const struct iris_bo *bo, const struct isl_device *dev)
-{
-   return bo && bo->external ? dev->mocs.external : dev->mocs.internal;
-}
-
 /**
  * Statically assert that PIPE_* enums match the hardware packets.
  * (As long as they match, we don't need to translate them.)
@@ -2116,7 +2110,7 @@ fill_buffer_surface_state(struct isl_device *isl_dev,
                          .format = format,
                          .swizzle = swizzle,
                          .stride_B = cpp,
-                         .mocs = mocs(res->bo, isl_dev));
+                         .mocs = iris_mocs(res->bo, isl_dev));
 }
 
 #define SURFACE_STATE_ALIGNMENT 64
@@ -2275,7 +2269,7 @@ fill_surface_state(struct isl_device *isl_dev,
    struct isl_surf_fill_state_info f = {
       .surf = surf,
       .view = view,
-      .mocs = mocs(res->bo, isl_dev),
+      .mocs = iris_mocs(res->bo, isl_dev),
       .address = res->bo->gtt_offset + res->offset + extra_main_offset,
       .x_offset_sa = tile_x_sa,
       .y_offset_sa = tile_y_sa,
@@ -2617,7 +2611,7 @@ iris_create_surface(struct pipe_context *ctx,
    struct isl_surf_fill_state_info f = {
       .surf = &isl_surf,
       .view = view,
-      .mocs = mocs(res->bo, &screen->isl_dev),
+      .mocs = iris_mocs(res->bo, &screen->isl_dev),
       .address = res->bo->gtt_offset + offset_B,
       .x_offset_sa = tile_x_sa,
       .y_offset_sa = tile_y_sa,
@@ -3051,7 +3045,7 @@ iris_set_framebuffer_state(struct pipe_context *ctx,
 
          info.depth_surf = &zres->surf;
          info.depth_address = zres->bo->gtt_offset + zres->offset;
-         info.mocs = mocs(zres->bo, isl_dev);
+         info.mocs = iris_mocs(zres->bo, isl_dev);
 
          view.format = zres->surf.format;
 
@@ -3069,7 +3063,7 @@ iris_set_framebuffer_state(struct pipe_context *ctx,
          info.stencil_address = stencil_res->bo->gtt_offset + stencil_res->offset;
          if (!zres) {
             view.format = stencil_res->surf.format;
-            info.mocs = mocs(stencil_res->bo, isl_dev);
+            info.mocs = iris_mocs(stencil_res->bo, isl_dev);
          }
       }
    }
@@ -3339,7 +3333,7 @@ iris_set_vertex_buffers(struct pipe_context *ctx,
             vb.BufferSize = res->base.width0 - (int) buffer->buffer_offset;
             vb.BufferStartingAddress =
                ro_bo(NULL, res->bo->gtt_offset + (int) buffer->buffer_offset);
-            vb.MOCS = mocs(res->bo, &screen->isl_dev);
+            vb.MOCS = iris_mocs(res->bo, &screen->isl_dev);
          } else {
             vb.NullVertexBuffer = true;
          }
@@ -3641,7 +3635,7 @@ iris_set_stream_output_targets(struct pipe_context *ctx,
          sob.SOBufferEnable = true;
          sob.StreamOffsetWriteEnable = true;
          sob.StreamOutputBufferOffsetAddressEnable = true;
-         sob.MOCS = mocs(res->bo, &screen->isl_dev);
+         sob.MOCS = iris_mocs(res->bo, &screen->isl_dev);
 
          sob.SurfaceSize = MAX2(tgt->base.buffer_size / 4, 1) - 1;
          sob.StreamOffset = offset;
@@ -4369,6 +4363,18 @@ iris_store_cs_state(struct iris_context *ice,
       desc.BarrierEnable = cs_prog_data->uses_barrier;
       desc.CrossThreadConstantDataReadLength =
          cs_prog_data->push.cross_thread.regs;
+#if GEN_GEN >= 12
+      /* TODO: Check if we are missing workarounds and enable mid-thread
+       * preemption.
+       *
+       * We still have issues with mid-thread preemption (it was already
+       * disabled by the kernel on gen11, due to missing workarounds). It's
+       * possible that we are just missing some workarounds, and could enable
+       * it later, but for now let's disable it to fix a GPU in compute in Car
+       * Chase (and possibly more).
+       */
+      desc.ThreadPreemptionDisable = true;
+#endif
    }
 }
 
@@ -5053,12 +5059,8 @@ iris_update_surface_base_address(struct iris_batch *batch,
     *  Workaround the non pipelined state not applying in MEDIA/GPGPU pipeline
     *  mode by putting the pipeline temporarily in 3D mode..
     */
-   if (batch->name == IRIS_BATCH_COMPUTE) {
-      iris_emit_cmd(batch, GENX(PIPELINE_SELECT), sel) {
-         sel.MaskBits = 3;
-         sel.PipelineSelection = _3D;
-      }
-   }
+   if (batch->name == IRIS_BATCH_COMPUTE)
+      emit_pipeline_select(batch, _3D);
 #endif
 
    iris_emit_cmd(batch, GENX(STATE_BASE_ADDRESS), sba) {
@@ -5084,12 +5086,8 @@ iris_update_surface_base_address(struct iris_batch *batch,
     *
     *  Put the pipeline back into compute mode.
     */
-   if (batch->name == IRIS_BATCH_COMPUTE) {
-      iris_emit_cmd(batch, GENX(PIPELINE_SELECT), sel) {
-         sel.MaskBits = 3;
-         sel.PipelineSelection = GPGPU;
-      }
-   }
+   if (batch->name == IRIS_BATCH_COMPUTE)
+      emit_pipeline_select(batch, GPGPU);
 #endif
 
    flush_after_state_base_change(batch);
@@ -5950,7 +5948,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             vb.BufferStartingAddress =
                ro_bo(NULL, res->bo->gtt_offset +
                            (int) ice->draw.draw_params.offset);
-            vb.MOCS = mocs(res->bo, &batch->screen->isl_dev);
+            vb.MOCS = iris_mocs(res->bo, &batch->screen->isl_dev);
          }
          dynamic_bound |= 1ull << count;
          count++;
@@ -5972,7 +5970,7 @@ iris_upload_dirty_render_state(struct iris_context *ice,
             vb.BufferStartingAddress =
                ro_bo(NULL, res->bo->gtt_offset +
                            (int) ice->draw.derived_draw_params.offset);
-            vb.MOCS = mocs(res->bo, &batch->screen->isl_dev);
+            vb.MOCS = iris_mocs(res->bo, &batch->screen->isl_dev);
          }
          dynamic_bound |= 1ull << count;
          count++;
@@ -6228,7 +6226,7 @@ iris_upload_render_state(struct iris_context *ice,
       uint32_t ib_packet[GENX(3DSTATE_INDEX_BUFFER_length)];
       iris_pack_command(GENX(3DSTATE_INDEX_BUFFER), ib_packet, ib) {
          ib.IndexFormat = draw->index_size >> 1;
-         ib.MOCS = mocs(bo, &batch->screen->isl_dev);
+         ib.MOCS = iris_mocs(bo, &batch->screen->isl_dev);
          ib.BufferSize = bo->size - offset;
          ib.BufferStartingAddress = ro_bo(NULL, bo->gtt_offset + offset);
       }
@@ -7486,7 +7484,6 @@ genX(init_state)(struct iris_context *ice)
    ice->vtbl.populate_gs_key = iris_populate_gs_key;
    ice->vtbl.populate_fs_key = iris_populate_fs_key;
    ice->vtbl.populate_cs_key = iris_populate_cs_key;
-   ice->vtbl.mocs = mocs;
    ice->vtbl.lost_genx_state = iris_lost_genx_state;
 
    ice->state.dirty = ~0ull;

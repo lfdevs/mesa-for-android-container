@@ -184,10 +184,23 @@ v3d_job_writes_resource_from_tf(struct v3d_job *job,
 void
 v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
                                 struct pipe_resource *prsc,
-                                enum v3d_flush_cond flush_cond)
+                                enum v3d_flush_cond flush_cond,
+                                bool is_compute_pipeline)
 {
         struct hash_entry *entry = _mesa_hash_table_search(v3d->write_jobs,
                                                            prsc);
+        struct v3d_resource *rsc = v3d_resource(prsc);
+
+        /* We need to sync if graphics pipeline reads a resource written
+         * by the compute pipeline. The same would be needed for the case of
+         * graphics-compute dependency but nowadays all compute jobs
+         * are serialized with the previous submitted job.
+         */
+        if (!is_compute_pipeline && rsc->bo != NULL && rsc->compute_written) {
+           v3d->sync_on_last_compute_job = true;
+           rsc->compute_written = false;
+        }
+
         if (!entry)
                 return;
 
@@ -220,7 +233,8 @@ v3d_flush_jobs_writing_resource(struct v3d_context *v3d,
 void
 v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
                                 struct pipe_resource *prsc,
-                                enum v3d_flush_cond flush_cond)
+                                enum v3d_flush_cond flush_cond,
+                                bool is_compute_pipeline)
 {
         struct v3d_resource *rsc = v3d_resource(prsc);
 
@@ -230,7 +244,8 @@ v3d_flush_jobs_reading_resource(struct v3d_context *v3d,
          * caller intends to write to the resource, so we don't care if
          * there was a previous TF write to it.
          */
-        v3d_flush_jobs_writing_resource(v3d, prsc, flush_cond);
+        v3d_flush_jobs_writing_resource(v3d, prsc, flush_cond,
+                                        is_compute_pipeline);
 
         hash_table_foreach(v3d->jobs, entry) {
                 struct v3d_job *job = entry->data;
@@ -329,7 +344,8 @@ v3d_get_job(struct v3d_context *v3d,
         for (int i = 0; i < V3D_MAX_DRAW_BUFFERS; i++) {
                 if (cbufs[i]) {
                         v3d_flush_jobs_reading_resource(v3d, cbufs[i]->texture,
-                                                        V3D_FLUSH_DEFAULT);
+                                                        V3D_FLUSH_DEFAULT,
+                                                        false);
                         pipe_surface_reference(&job->cbufs[i], cbufs[i]);
 
                         if (cbufs[i]->texture->nr_samples > 1)
@@ -338,7 +354,8 @@ v3d_get_job(struct v3d_context *v3d,
         }
         if (zsbuf) {
                 v3d_flush_jobs_reading_resource(v3d, zsbuf->texture,
-                                                V3D_FLUSH_DEFAULT);
+                                                V3D_FLUSH_DEFAULT,
+                                                false);
                 pipe_surface_reference(&job->zsbuf, zsbuf);
                 if (zsbuf->texture->nr_samples > 1)
                         job->msaa = true;
@@ -356,7 +373,8 @@ v3d_get_job(struct v3d_context *v3d,
                 if (rsc->separate_stencil) {
                         v3d_flush_jobs_reading_resource(v3d,
                                                         &rsc->separate_stencil->base,
-                                                        V3D_FLUSH_DEFAULT);
+                                                        V3D_FLUSH_DEFAULT,
+                                                        false);
                         _mesa_hash_table_insert(v3d->write_jobs,
                                                 &rsc->separate_stencil->base,
                                                 job);

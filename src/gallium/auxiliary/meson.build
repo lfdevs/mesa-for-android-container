@@ -244,7 +244,6 @@ files_libgallium = files(
   'util/u_debug_flush.h',
   'util/u_debug_image.c',
   'util/u_debug_image.h',
-  'util/u_debug_memory.c',
   'util/u_debug_refcnt.c',
   'util/u_debug_refcnt.h',
   'util/u_debug_stack.c',

@@ -154,13 +154,13 @@ vlVdpVideoSurfaceQueryGetPutBitsYCbCrCapabilities(VdpDevice device, VdpChromaTyp
       break;
    }
 
-   *is_supported &= pscreen->is_video_format_supported
-   (
-      pscreen,
-      FormatYCBCRToPipe(bits_ycbcr_format),
-      PIPE_VIDEO_PROFILE_UNKNOWN,
-      PIPE_VIDEO_ENTRYPOINT_BITSTREAM
-   );
+   if (*is_supported &&
+       !pscreen->is_video_format_supported(pscreen,
+                                           FormatYCBCRToPipe(bits_ycbcr_format),
+                                           PIPE_VIDEO_PROFILE_UNKNOWN,
+                                           PIPE_VIDEO_ENTRYPOINT_BITSTREAM)) {
+      *is_supported = false;
+   }
    mtx_unlock(&dev->mutex);
 
    return VDP_STATUS_OK;

@@ -1632,7 +1632,8 @@ qtr_ctrl(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst
 static int
 swsb(FILE *file, const struct gen_device_info *devinfo, const brw_inst *inst)
 {
-   const struct tgl_swsb swsb = tgl_swsb_decode(brw_inst_swsb(devinfo, inst));
+   const struct tgl_swsb swsb = tgl_swsb_decode(brw_inst_opcode(devinfo, inst),
+                                                brw_inst_swsb(devinfo, inst));
    if (swsb.regdist)
       format(file, " @%d", swsb.regdist);
    if (swsb.mode)

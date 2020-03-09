@@ -128,7 +128,7 @@ v3d_tile_blit(struct pipe_context *pctx, const struct pipe_blit_info *info)
         struct pipe_surface *src_surf =
                 v3d_get_blit_surface(pctx, info->src.resource, info->src.level);
 
-        v3d_flush_jobs_reading_resource(v3d, info->src.resource);
+        v3d_flush_jobs_reading_resource(v3d, info->src.resource, false);
 
         struct v3d_job *job = v3d_get_job(v3d, dst_surf, NULL);
         pipe_surface_reference(&job->color_read, src_surf);
@@ -381,8 +381,8 @@ v3d_tfu(struct pipe_context *pctx,
         if (dst_base_slice->tiling == VC5_TILING_RASTER)
                 return false;
 
-        v3d_flush_jobs_writing_resource(v3d, psrc, V3D_FLUSH_DEFAULT);
-        v3d_flush_jobs_reading_resource(v3d, pdst, V3D_FLUSH_DEFAULT);
+        v3d_flush_jobs_writing_resource(v3d, psrc, V3D_FLUSH_DEFAULT, false);
+        v3d_flush_jobs_reading_resource(v3d, pdst, V3D_FLUSH_DEFAULT, false);
 
         struct drm_v3d_submit_tfu tfu = {
                 .ios = (height << 16) | width,
@@ -539,5 +539,5 @@ v3d_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
          * texture uploads before using the textures.
          */
         v3d_flush_jobs_writing_resource(v3d, info.dst.resource,
-                                        V3D_FLUSH_DEFAULT);
+                                        V3D_FLUSH_DEFAULT, false);
 }

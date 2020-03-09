@@ -822,6 +822,11 @@ void st_init_extensions(struct pipe_screen *screen,
         { PIPE_FORMAT_R8_UNORM,
           PIPE_FORMAT_R8G8_UNORM } },
 
+      { { o(EXT_texture_norm16) },
+        { PIPE_FORMAT_R16_UNORM,
+          PIPE_FORMAT_R16G16_UNORM,
+          PIPE_FORMAT_R16G16B16A16_UNORM } },
+
       { { o(EXT_render_snorm) },
         { PIPE_FORMAT_R8_SNORM,
           PIPE_FORMAT_R8G8_SNORM,

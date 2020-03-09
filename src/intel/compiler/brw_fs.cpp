@@ -8811,8 +8811,10 @@ brw_compile_cs(const struct brw_compiler *compiler, void *log_data,
       src_shader->info.cs.local_size[0] * src_shader->info.cs.local_size[1] *
       src_shader->info.cs.local_size[2];
 
+   /* Limit max_threads to 64 for the GPGPU_WALKER command */
+   const uint32_t max_threads = MIN2(64, compiler->devinfo->max_cs_threads);
    unsigned min_dispatch_width =
-      DIV_ROUND_UP(local_workgroup_size, compiler->devinfo->max_cs_threads);
+      DIV_ROUND_UP(local_workgroup_size, max_threads);
    min_dispatch_width = MAX2(8, min_dispatch_width);
    min_dispatch_width = util_next_power_of_two(min_dispatch_width);
    assert(min_dispatch_width <= 32);

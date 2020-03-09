@@ -84,6 +84,48 @@
 
 #define NUM_ATTRIBS 12
 
+static const struct dri2_pbuffer_visual {
+   unsigned int dri_image_format;
+   int rgba_shifts[4];
+   unsigned int rgba_sizes[4];
+} dri2_pbuffer_visuals[] = {
+   {
+      __DRI_IMAGE_FORMAT_ABGR16161616F,
+      { 0, 16, 32, 48 },
+      { 16, 16, 16, 16 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_XBGR16161616F,
+      { 0, 16, 32, -1 },
+      { 16, 16, 16, 0 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_ARGB2101010,
+      { 20, 10, 0, 30 },
+      { 10, 10, 10, 2 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_XRGB2101010,
+      { 20, 10, 0, -1 },
+      { 10, 10, 10, 0 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_ARGB8888,
+      { 16, 8, 0, 24 },
+      { 8, 8, 8, 8 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_XRGB8888,
+      { 16, 8, 0, -1 },
+      { 8, 8, 8, 0 }
+   },
+   {
+      __DRI_IMAGE_FORMAT_RGB565,
+      { 11, 5, 0, -1 },
+      { 5, 6, 5, 0 }
+   },
+};
+
 static void
 dri_set_background_context(void *loaderPrivate)
 {
@@ -331,6 +373,33 @@ dri2_get_render_type_float(const __DRIcoreExtension *core,
 
    core->getConfigAttrib(config, __DRI_ATTRIB_RENDER_TYPE, &render_type);
    *is_float = (render_type & __DRI_ATTRIB_FLOAT_BIT) ? true : false;
+}
+
+unsigned int
+dri2_image_format_for_pbuffer_config(struct dri2_egl_display *dri2_dpy,
+                                     const __DRIconfig *config)
+{
+   int shifts[4];
+   unsigned int sizes[4];
+
+   dri2_get_shifts_and_sizes(dri2_dpy->core, config, shifts, sizes);
+
+   for (unsigned i = 0; i < ARRAY_SIZE(dri2_pbuffer_visuals); ++i) {
+      const struct dri2_pbuffer_visual *visual = &dri2_pbuffer_visuals[i];
+
+      if (shifts[0] == visual->rgba_shifts[0] &&
+          shifts[1] == visual->rgba_shifts[1] &&
+          shifts[2] == visual->rgba_shifts[2] &&
+          shifts[3] == visual->rgba_shifts[3] &&
+          sizes[0] == visual->rgba_sizes[0] &&
+          sizes[1] == visual->rgba_sizes[1] &&
+          sizes[2] == visual->rgba_sizes[2] &&
+          sizes[3] == visual->rgba_sizes[3]) {
+         return visual->dri_image_format;
+      }
+   }
+
+   return __DRI_IMAGE_FORMAT_NONE;
 }
 
 struct dri2_egl_config *

@@ -112,6 +112,7 @@ intelInitExtensions(struct gl_context *ctx)
    ctx->Extensions.EXT_texture_env_dot3 = true;
    ctx->Extensions.EXT_texture_filter_anisotropic = true;
    ctx->Extensions.EXT_texture_integer = true;
+   ctx->Extensions.EXT_texture_norm16 = true;
    ctx->Extensions.EXT_texture_shared_exponent = true;
    ctx->Extensions.EXT_texture_snorm = true;
    ctx->Extensions.EXT_texture_sRGB = true;

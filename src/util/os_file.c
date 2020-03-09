@@ -34,11 +34,12 @@ os_file_create_unique(const char *filename, int filemode)
 #if defined(__linux__)
 
 #include <fcntl.h>
-#include <linux/kcmp.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
+/* copied from <linux/kcmp.h> */
+#define KCMP_FILE 0
 
 static ssize_t
 readN(int fd, char *buf, size_t len)

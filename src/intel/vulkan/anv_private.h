@@ -3160,8 +3160,6 @@ struct anv_pipeline {
    VkPipelineCreateFlags                        flags;
    struct anv_subpass *                         subpass;
 
-   bool                                         needs_data_cache;
-
    struct anv_shader_bin *                      shaders[MESA_SHADER_STAGES];
 
    uint32_t                                     num_executables;
