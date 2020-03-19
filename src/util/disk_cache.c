@@ -455,6 +455,12 @@ disk_cache_destroy(struct disk_cache *cache)
    ralloc_free(cache);
 }
 
+void
+disk_cache_wait_for_idle(struct disk_cache *cache)
+{
+   util_queue_finish(&cache->cache_queue);
+}
+
 /* Return a filename within the cache's directory corresponding to 'key'. The
  * returned filename is ralloced with 'cache' as the parent context.
  *

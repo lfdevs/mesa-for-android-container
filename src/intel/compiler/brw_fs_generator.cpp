@@ -420,6 +420,13 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
       /* We use VxH indirect addressing, clobbering a0.0 through a0.7. */
       struct brw_reg addr = vec8(brw_address_reg(0));
 
+      /* Whether we can use destination dependency control without running the
+       * risk of a hang if an instruction gets shot down.
+       */
+      const bool use_dep_ctrl = !inst->predicate &&
+                                inst->exec_size == dispatch_width;
+      brw_inst *insn;
+
       /* The destination stride of an instruction (in bytes) must be greater
        * than or equal to the size of the rest of the instruction.  Since the
        * address register is of type UW, we can't use a D-type instruction.
@@ -453,17 +460,28 @@ fs_generator::generate_mov_indirect(fs_inst *inst,
        * code, using it saves us 0 instructions and would require quite a bit
        * of case-by-case work.  It's just not worth it.
        *
-       * There's some sort of HW bug on Gen12 which causes issues if we write
-       * to the address register in control-flow.  Since we only ever touch
-       * the address register from the generator, we can easily enough work
-       * around it by setting NoMask on the add.
+       * Due to a hardware bug some platforms (particularly Gen11+) seem to
+       * require the address components of all channels to be valid whether or
+       * not they're active, which causes issues if we use VxH addressing
+       * under non-uniform control-flow.  We can easily work around that by
+       * initializing the whole address register with a pipelined NoMask MOV
+       * instruction.
        */
-      brw_push_insn_state(p);
-      if (devinfo->gen == 12)
-         brw_set_default_mask_control(p, BRW_MASK_DISABLE);
-      brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
-      brw_pop_insn_state(p);
-      brw_set_default_swsb(p, tgl_swsb_regdist(1));
+      if (devinfo->gen >= 7) {
+         insn = brw_MOV(p, addr, brw_imm_uw(imm_byte_offset));
+         brw_inst_set_mask_control(devinfo, insn, BRW_MASK_DISABLE);
+         brw_inst_set_pred_control(devinfo, insn, BRW_PREDICATE_NONE);
+         if (devinfo->gen >= 12)
+            brw_set_default_swsb(p, tgl_swsb_null());
+         else
+            brw_inst_set_no_dd_clear(devinfo, insn, use_dep_ctrl);
+      }
+
+      insn = brw_ADD(p, addr, indirect_byte_offset, brw_imm_uw(imm_byte_offset));
+      if (devinfo->gen >= 12)
+         brw_set_default_swsb(p, tgl_swsb_regdist(1));
+      else if (devinfo->gen >= 7)
+         brw_inst_set_no_dd_check(devinfo, insn, use_dep_ctrl);
 
       if (type_sz(reg.type) > 4 &&
           ((devinfo->gen == 7 && !devinfo->is_haswell) ||

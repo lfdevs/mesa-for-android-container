@@ -1233,6 +1233,12 @@ static void gfx10_shader_ngg(struct si_screen *sscreen, struct si_shader *shader
 	else
 		late_alloc_wave64 = (num_cu_per_sh - 2) * 4;
 
+	/* Limit LATE_ALLOC_GS for prevent a hang (hw bug). */
+	if (sscreen->info.family == CHIP_NAVI10 ||
+	    sscreen->info.family == CHIP_NAVI12 ||
+	    sscreen->info.family == CHIP_NAVI14)
+		late_alloc_wave64 = MIN2(late_alloc_wave64, 64);
+
 	si_pm4_set_reg(pm4, R_00B204_SPI_SHADER_PGM_RSRC4_GS,
 		       S_00B204_CU_EN(0xffff) |
 		       S_00B204_SPI_SHADER_LATE_ALLOC_GS_GFX10(late_alloc_wave64));

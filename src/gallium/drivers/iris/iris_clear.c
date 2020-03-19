@@ -521,7 +521,11 @@ fast_clear_depth(struct iris_context *ice,
    for (unsigned l = 0; l < box->depth; l++) {
       enum isl_aux_state aux_state =
          iris_resource_get_aux_state(res, level, box->z + l);
-      if (aux_state != ISL_AUX_STATE_CLEAR) {
+      if (update_clear_depth || aux_state != ISL_AUX_STATE_CLEAR) {
+         if (aux_state == ISL_AUX_STATE_CLEAR) {
+            perf_debug(&ice->dbg, "Performing HiZ clear just to update the "
+                                  "depth clear value\n");
+         }
          iris_hiz_exec(ice, batch, res, level,
                        box->z + l, 1, ISL_AUX_OP_FAST_CLEAR,
                        update_clear_depth);

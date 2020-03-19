@@ -228,22 +228,22 @@ delete_variant(struct st_context *st, struct st_variant *v, GLenum target)
           */
          switch (target) {
          case GL_VERTEX_PROGRAM_ARB:
-            cso_delete_vertex_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_vs_state(st->pipe, v->driver_shader);
             break;
          case GL_TESS_CONTROL_PROGRAM_NV:
-            cso_delete_tessctrl_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_tcs_state(st->pipe, v->driver_shader);
             break;
          case GL_TESS_EVALUATION_PROGRAM_NV:
-            cso_delete_tesseval_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_tes_state(st->pipe, v->driver_shader);
             break;
          case GL_GEOMETRY_PROGRAM_NV:
-            cso_delete_geometry_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_gs_state(st->pipe, v->driver_shader);
             break;
          case GL_FRAGMENT_PROGRAM_ARB:
-            cso_delete_fragment_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_fs_state(st->pipe, v->driver_shader);
             break;
          case GL_COMPUTE_PROGRAM_NV:
-            cso_delete_compute_shader(st->cso_context, v->driver_shader);
+            st->pipe->delete_compute_state(st->pipe, v->driver_shader);
             break;
          default:
             unreachable("bad shader type in delete_basic_variant");
@@ -262,6 +262,39 @@ delete_variant(struct st_context *st, struct st_variant *v, GLenum target)
    free(v);
 }
 
+static void
+st_unbind_program(struct st_context *st, struct st_program *p)
+{
+   /* Unbind the shader in cso_context and re-bind in st/mesa. */
+   switch (p->Base.info.stage) {
+   case MESA_SHADER_VERTEX:
+      cso_set_vertex_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_VS_STATE;
+      break;
+   case MESA_SHADER_TESS_CTRL:
+      cso_set_tessctrl_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_TCS_STATE;
+      break;
+   case MESA_SHADER_TESS_EVAL:
+      cso_set_tesseval_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_TES_STATE;
+      break;
+   case MESA_SHADER_GEOMETRY:
+      cso_set_geometry_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_GS_STATE;
+      break;
+   case MESA_SHADER_FRAGMENT:
+      cso_set_fragment_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_FS_STATE;
+      break;
+   case MESA_SHADER_COMPUTE:
+      cso_set_compute_shader_handle(st->cso_context, NULL);
+      st->dirty |= ST_NEW_CS_STATE;
+      break;
+   default:
+      unreachable("invalid shader type");
+   }
+}
 
 /**
  * Free all basic program variants.
@@ -270,6 +303,12 @@ void
 st_release_variants(struct st_context *st, struct st_program *p)
 {
    struct st_variant *v;
+
+   /* If we are releasing shaders, re-bind them, because we don't
+    * know which shaders are bound in the driver.
+    */
+   if (p->variants)
+      st_unbind_program(st, p);
 
    for (v = p->variants; v; ) {
       struct st_variant *next = v->next;
@@ -1770,10 +1809,16 @@ destroy_program_variants(struct st_context *st, struct gl_program *target)
 
    struct st_program *p = st_program(target);
    struct st_variant *v, **prevPtr = &p->variants;
+   bool unbound = false;
 
    for (v = p->variants; v; ) {
       struct st_variant *next = v->next;
       if (v->st == st) {
+         if (!unbound) {
+            st_unbind_program(st, p);
+            unbound = true;
+         }
+
          /* unlink from list */
          *prevPtr = next;
          /* destroy this variant */

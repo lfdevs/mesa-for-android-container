@@ -126,7 +126,7 @@ struct nine_ff_ps_key
 
 static unsigned nine_ff_vs_key_hash(void *key)
 {
-    struct nine_ff_vs_key *vs = key;
+    const struct nine_ff_vs_key *vs = key;
     unsigned i;
     uint32_t hash = vs->value32[0];
     for (i = 1; i < ARRAY_SIZE(vs->value32); ++i)
@@ -142,7 +142,7 @@ static int nine_ff_vs_key_comp(void *key1, void *key2)
 }
 static unsigned nine_ff_ps_key_hash(void *key)
 {
-    struct nine_ff_ps_key *ps = key;
+    const struct nine_ff_ps_key *ps = key;
     unsigned i;
     uint32_t hash = ps->value32[0];
     for (i = 1; i < ARRAY_SIZE(ps->value32); ++i)

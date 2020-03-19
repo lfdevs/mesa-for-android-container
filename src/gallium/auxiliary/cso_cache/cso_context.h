@@ -103,27 +103,11 @@ void cso_set_stream_outputs(struct cso_context *ctx,
  */
 
 void cso_set_fragment_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_fragment_shader(struct cso_context *ctx, void *handle );
-
-
 void cso_set_vertex_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_vertex_shader(struct cso_context *ctx, void *handle );
-
-
 void cso_set_geometry_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_geometry_shader(struct cso_context *ctx, void *handle);
-
-
 void cso_set_tessctrl_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_tessctrl_shader(struct cso_context *ctx, void *handle);
-
-
 void cso_set_tesseval_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_tesseval_shader(struct cso_context *ctx, void *handle);
-
-
 void cso_set_compute_shader_handle(struct cso_context *ctx, void *handle);
-void cso_delete_compute_shader(struct cso_context *ctx, void *handle);
 
 
 void cso_set_framebuffer(struct cso_context *cso,

@@ -1,3 +1,11 @@
+mesa (20.0.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * control: Revert to building with llvm/clang-9, until it builds with
+    10.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Thu, 19 Mar 2020 16:03:53 +0200
+
 mesa (20.0.1-2) experimental; urgency=medium
 
   * control: Fix clang build-dep to actually use libclang-10-dev.

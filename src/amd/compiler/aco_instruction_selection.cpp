@@ -4314,9 +4314,6 @@ static Temp get_image_coords(isel_context *ctx, const nir_intrinsic_instr *instr
       }
    }
 
-   if (count == 1 && !gfx9_1d)
-      return emit_extract_vector(ctx, src0, 0, v1);
-
    if (gfx9_1d) {
       coords[0] = emit_extract_vector(ctx, src0, 0, v1);
       coords.resize(coords.size() + 1);

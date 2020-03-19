@@ -239,7 +239,7 @@ libglsl_standalone = static_library(
   c_args : [c_vis_args, c_msvc_compat_args, no_override_init_args],
   cpp_args : [cpp_vis_args, cpp_msvc_compat_args],
   include_directories : [inc_common],
-  link_with : [libglsl, libglsl_util],
+  link_with : [libglsl, libglsl_util, libglcpp_standalone],
   dependencies : [idep_mesautil, idep_getopt],
   build_by_default : false,
 )

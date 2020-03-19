@@ -16,9 +16,7 @@ dEQP-GLES2.functional.shaders.invariance.lowp.common_subexpression_1
 
 # Flaky
 dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_neg_z_and_pos_x_pos_z_and_neg_x_neg_y_pos_z
-dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_1f
-dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_2f
-dEQP-GLES2.functional.default_vertex_attrib.float.vertex_attrib_3f
+dEQP-GLES2.functional.default_vertex_attrib.*
 dEQP-GLES2.functional.fbo.completeness.size.distinct
 dEQP-GLES2.functional.negative_api.shader.uniform_matrixfv_invalid_transpose
 dEQP-GLES2.functional.negative_api.texture.generatemipmap_zero_level_array_compressed

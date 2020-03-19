@@ -829,7 +829,7 @@ st_destroy_pbo_helpers(struct st_context *st)
 
    for (i = 0; i < ARRAY_SIZE(st->pbo.upload_fs); ++i) {
       if (st->pbo.upload_fs[i]) {
-         cso_delete_fragment_shader(st->cso_context, st->pbo.upload_fs[i]);
+         st->pipe->delete_fs_state(st->pipe, st->pbo.upload_fs[i]);
          st->pbo.upload_fs[i] = NULL;
       }
    }
@@ -837,19 +837,19 @@ st_destroy_pbo_helpers(struct st_context *st)
    for (i = 0; i < ARRAY_SIZE(st->pbo.download_fs); ++i) {
       for (unsigned j = 0; j < ARRAY_SIZE(st->pbo.download_fs[0]); ++j) {
          if (st->pbo.download_fs[i][j]) {
-            cso_delete_fragment_shader(st->cso_context, st->pbo.download_fs[i][j]);
+            st->pipe->delete_fs_state(st->pipe, st->pbo.download_fs[i][j]);
             st->pbo.download_fs[i][j] = NULL;
          }
       }
    }
 
    if (st->pbo.gs) {
-      cso_delete_geometry_shader(st->cso_context, st->pbo.gs);
+      st->pipe->delete_gs_state(st->pipe, st->pbo.gs);
       st->pbo.gs = NULL;
    }
 
    if (st->pbo.vs) {
-      cso_delete_vertex_shader(st->cso_context, st->pbo.vs);
+      st->pipe->delete_vs_state(st->pipe, st->pbo.vs);
       st->pbo.vs = NULL;
    }
 }

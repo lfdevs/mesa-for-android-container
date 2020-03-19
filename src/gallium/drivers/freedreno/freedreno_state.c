@@ -252,7 +252,7 @@ fd_set_framebuffer_state(struct pipe_context *pctx,
 		}
 
 		fd_batch_reference(&old_batch, NULL);
-	} else {
+	} else if (ctx->batch) {
 		DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->batch->needs_flush,
 				framebuffer->cbufs[0], framebuffer->zsbuf);
 		fd_batch_flush(ctx->batch);

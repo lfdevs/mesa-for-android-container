@@ -360,7 +360,7 @@ st_destroy_drawtex(struct st_context *st)
 {
    GLuint i;
    for (i = 0; i < NumCachedShaders; i++) {
-      cso_delete_vertex_shader(st->cso_context, CachedShaders[i].handle);
+      st->pipe->delete_vs_state(st->pipe, CachedShaders[i].handle);
    }
    NumCachedShaders = 0;
 }

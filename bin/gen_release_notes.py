@@ -36,7 +36,7 @@ from mako import exceptions
 
 
 CURRENT_GL_VERSION = '4.6'
-CURRENT_VK_VERSION = '1.1'
+CURRENT_VK_VERSION = '1.2'
 
 TEMPLATE = Template(textwrap.dedent("""\
     <%!
@@ -64,7 +64,7 @@ TEMPLATE = Template(textwrap.dedent("""\
     %if not bugfix:
         Mesa ${next_version} is a new development release. People who are concerned
         with stability and reliability should stick with a previous release or
-        wait for Mesa ${version[:-1]}1.
+        wait for Mesa ${next_version[:-1]}1.
     %else:
         Mesa ${next_version} is a bug fix release which fixes bugs found since the ${version} release.
     %endif
@@ -125,7 +125,7 @@ TEMPLATE = Template(textwrap.dedent("""\
 
 async def gather_commits(version: str) -> str:
     p = await asyncio.create_subprocess_exec(
-        'git', 'log', f'mesa-{version}..', '--grep', r'Closes: \(https\|#\).*',
+        'git', 'log', '--oneline', f'mesa-{version}..', '--grep', r'Closes: \(https\|#\).*',
         stdout=asyncio.subprocess.PIPE)
     out, _ = await p.communicate()
     assert p.returncode == 0, f"git log didn't work: {version}"

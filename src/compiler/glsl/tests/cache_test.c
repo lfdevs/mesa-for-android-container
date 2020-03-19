@@ -162,26 +162,6 @@ does_cache_contain(struct disk_cache *cache, const cache_key key)
    return false;
 }
 
-static void
-wait_until_file_written(struct disk_cache *cache, const cache_key key)
-{
-   struct timespec req;
-   struct timespec rem;
-
-   /* Set 100ms delay */
-   req.tv_sec = 0;
-   req.tv_nsec = 100000000;
-
-   unsigned retries = 0;
-   while (retries++ < 20) {
-      if (does_cache_contain(cache, key)) {
-         break;
-      }
-
-      nanosleep(&req, &rem);
-   }
-}
-
 static void *
 cache_exists(struct disk_cache *cache)
 {
@@ -192,7 +172,7 @@ cache_exists(struct disk_cache *cache)
       return NULL;
 
    disk_cache_put(cache, dummy_key, data, sizeof(data), NULL);
-   wait_until_file_written(cache, dummy_key);
+   disk_cache_wait_for_idle(cache);
    return disk_cache_get(cache, dummy_key, NULL);
 }
 
@@ -286,10 +266,8 @@ test_put_and_get(void)
    /* Simple test of put and get. */
    disk_cache_put(cache, blob_key, blob, sizeof(blob), NULL);
 
-   /* disk_cache_put() hands things off to a thread give it some time to
-    * finish.
-    */
-   wait_until_file_written(cache, blob_key);
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
 
    result = disk_cache_get(cache, blob_key, &size);
    expect_equal_str(blob, result, "disk_cache_get of existing item (pointer)");
@@ -301,10 +279,8 @@ test_put_and_get(void)
    disk_cache_compute_key(cache, string, sizeof(string), string_key);
    disk_cache_put(cache, string_key, string, sizeof(string), NULL);
 
-   /* disk_cache_put() hands things off to a thread give it some time to
-    * finish.
-    */
-   wait_until_file_written(cache, string_key);
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
 
    result = disk_cache_get(cache, string_key, &size);
    expect_equal_str(result, string, "2nd disk_cache_get of existing item (pointer)");
@@ -344,10 +320,8 @@ test_put_and_get(void)
 
    free(one_KB);
 
-   /* disk_cache_put() hands things off to a thread give it some time to
-    * finish.
-    */
-   wait_until_file_written(cache, one_KB_key);
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
 
    result = disk_cache_get(cache, one_KB_key, &size);
    expect_non_null(result, "3rd disk_cache_get of existing item (pointer)");
@@ -386,11 +360,8 @@ test_put_and_get(void)
    disk_cache_put(cache, blob_key, blob, sizeof(blob), NULL);
    disk_cache_put(cache, string_key, string, sizeof(string), NULL);
 
-   /* disk_cache_put() hands things off to a thread give it some time to
-    * finish.
-    */
-   wait_until_file_written(cache, blob_key);
-   wait_until_file_written(cache, string_key);
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
 
    count = 0;
    if (does_cache_contain(cache, blob_key))
@@ -414,10 +385,8 @@ test_put_and_get(void)
 
    free(one_MB);
 
-   /* disk_cache_put() hands things off to a thread give it some time to
-    * finish.
-    */
-   wait_until_file_written(cache, one_MB_key);
+   /* disk_cache_put() hands things off to a thread so wait for it. */
+   disk_cache_wait_for_idle(cache);
 
    bool contains_1MB_file = false;
    count = 0;

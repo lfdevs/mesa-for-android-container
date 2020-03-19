@@ -49,7 +49,7 @@ libgallium_dri = shared_library(
   link_args : [ld_args_build_id, ld_args_gc_sections, gallium_dri_ld_args],
   link_depends : gallium_dri_link_depends,
   link_with : [
-    libmesa_gallium, libdricommon, libmegadriver_stub, libdri, libgalliumvl,
+    libdri, libmesa_gallium, libdricommon, libmegadriver_stub, libgalliumvl,
     libgallium, libglapi, libpipe_loader_static, libws_null, libwsw, libswdri,
     libswkmsdri,
   ],

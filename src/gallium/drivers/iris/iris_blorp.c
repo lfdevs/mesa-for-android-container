@@ -302,7 +302,7 @@ iris_blorp_exec(struct blorp_batch *blorp_batch,
    }
 
 #if GEN_GEN >= 12
-   genX(emit_aux_map_state)(batch);
+   genX(invalidate_aux_map_state)(batch);
 #endif
 
    iris_handle_always_flush_cache(batch);

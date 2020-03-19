@@ -631,10 +631,7 @@ _mesa_Vertex2sv( const GLshort *v )
 void GLAPIENTRY
 _mesa_Vertex3dv( const GLdouble *v )
 {
-   if (v[2] == 0.0)
-      VERTEX2( (GLfloat) v[0], (GLfloat) v[1] );
-   else
-      VERTEX3( (GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2] );
+   VERTEX3( (GLfloat) v[0], (GLfloat) v[1], (GLfloat) v[2] );
 }
 
 void GLAPIENTRY

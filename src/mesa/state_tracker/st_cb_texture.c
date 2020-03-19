@@ -1511,7 +1511,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
       }
 
       util_throttle_memory_usage(pipe, &st->throttle,
-                                 width * height * depth *
+                                 (uint64_t) width * height * depth *
                                  util_format_get_blocksize(dst->format));
 
       u_box_3d(xoffset, yoffset, zoffset + dstz, width, height, depth, &box);
@@ -1620,7 +1620,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
    }
 
    util_throttle_memory_usage(pipe, &st->throttle,
-                              width * height * depth *
+                              (uint64_t) width * height * depth *
                               util_format_get_blocksize(src_templ.format));
    throttled = true;
 
@@ -1716,7 +1716,7 @@ st_TexSubImage(struct gl_context *ctx, GLuint dims,
 fallback:
    if (!throttled) {
       util_throttle_memory_usage(pipe, &st->throttle,
-                                 width * height * depth *
+                                 (uint64_t) width * height * depth *
                                  _mesa_get_format_bytes(texImage->TexFormat));
    }
    _mesa_store_texsubimage(ctx, dims, texImage, xoffset, yoffset, zoffset,

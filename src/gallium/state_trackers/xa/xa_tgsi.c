@@ -431,7 +431,7 @@ xa_shaders_create(struct xa_context *r)
 }
 
 static void
-cache_destroy(struct cso_context *cso,
+cache_destroy(struct pipe_context *pipe,
 	      struct cso_hash *hash, unsigned processor)
 {
     struct cso_hash_iter iter = cso_hash_first_node(hash);
@@ -440,9 +440,9 @@ cache_destroy(struct cso_context *cso,
 	void *shader = (void *)cso_hash_iter_data(iter);
 
 	if (processor == PIPE_SHADER_FRAGMENT) {
-	    cso_delete_fragment_shader(cso, shader);
+	    pipe->delete_fs_state(pipe, shader);
 	} else if (processor == PIPE_SHADER_VERTEX) {
-	    cso_delete_vertex_shader(cso, shader);
+	    pipe->delete_vs_state(pipe, shader);
 	}
 	iter = cso_hash_erase(hash, iter);
     }
@@ -452,8 +452,8 @@ cache_destroy(struct cso_context *cso,
 void
 xa_shaders_destroy(struct xa_shaders *sc)
 {
-    cache_destroy(sc->r->cso, sc->vs_hash, PIPE_SHADER_VERTEX);
-    cache_destroy(sc->r->cso, sc->fs_hash, PIPE_SHADER_FRAGMENT);
+    cache_destroy(sc->r->pipe, sc->vs_hash, PIPE_SHADER_VERTEX);
+    cache_destroy(sc->r->pipe, sc->fs_hash, PIPE_SHADER_FRAGMENT);
 
     FREE(sc);
 }

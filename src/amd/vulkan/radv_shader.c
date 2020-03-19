@@ -478,6 +478,7 @@ radv_shader_compile_to_nir(struct radv_device *device,
 
 	nir_lower_global_vars_to_local(nir);
 	nir_remove_dead_variables(nir, nir_var_function_temp);
+	bool gfx7minus = device->physical_device->rad_info.chip_class <= GFX7;
 	nir_lower_subgroups(nir, &(struct nir_lower_subgroups_options) {
 			.subgroup_size = 64,
 			.ballot_bit_size = 64,
@@ -486,6 +487,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			.lower_shuffle = 1,
 			.lower_shuffle_to_32bit = 1,
 			.lower_vote_eq_to_ballot = 1,
+			.lower_quad_broadcast_dynamic = 1,
+			.lower_quad_broadcast_dynamic_to_const = gfx7minus,
 		});
 
 	nir_lower_load_const_to_scalar(nir);

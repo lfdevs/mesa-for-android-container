@@ -3611,10 +3611,14 @@ void ac_apply_fmask_to_sample(struct ac_llvm_context *ac, LLVMValueRef fmask,
 }
 
 static LLVMValueRef
-_ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src, LLVMValueRef lane)
+_ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src,
+		  LLVMValueRef lane, bool with_opt_barrier)
 {
 	LLVMTypeRef type = LLVMTypeOf(src);
 	LLVMValueRef result;
+
+	if (with_opt_barrier)
+		ac_build_optimization_barrier(ctx, &src);
 
 	src = LLVMBuildZExt(ctx->builder, src, ctx->i32, "");
 	if (lane)
@@ -3630,6 +3634,43 @@ _ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src, LLVMValueRef l
 	return LLVMBuildTrunc(ctx->builder, result, type, "");
 }
 
+static LLVMValueRef
+ac_build_readlane_common(struct ac_llvm_context *ctx,
+			 LLVMValueRef src, LLVMValueRef lane,
+			 bool with_opt_barrier)
+{
+	LLVMTypeRef src_type = LLVMTypeOf(src);
+	src = ac_to_integer(ctx, src);
+	unsigned bits = LLVMGetIntTypeWidth(LLVMTypeOf(src));
+	LLVMValueRef ret;
+
+	if (bits > 32) {
+		assert(bits % 32 == 0);
+		LLVMTypeRef vec_type = LLVMVectorType(ctx->i32, bits / 32);
+		LLVMValueRef src_vector =
+			LLVMBuildBitCast(ctx->builder, src, vec_type, "");
+		ret = LLVMGetUndef(vec_type);
+		for (unsigned i = 0; i < bits / 32; i++) {
+			LLVMValueRef ret_comp;
+
+			src = LLVMBuildExtractElement(ctx->builder, src_vector,
+						LLVMConstInt(ctx->i32, i, 0), "");
+
+			ret_comp = _ac_build_readlane(ctx, src, lane,
+						      with_opt_barrier);
+
+			ret = LLVMBuildInsertElement(ctx->builder, ret, ret_comp,
+						LLVMConstInt(ctx->i32, i, 0), "");
+		}
+	} else {
+		ret = _ac_build_readlane(ctx, src, lane, with_opt_barrier);
+	}
+
+	if (LLVMGetTypeKind(src_type) == LLVMPointerTypeKind)
+		return LLVMBuildIntToPtr(ctx->builder, ret, src_type, "");
+	return LLVMBuildBitCast(ctx->builder, ret, src_type, "");
+}
+
 /**
  * Builds the "llvm.amdgcn.readlane" or "llvm.amdgcn.readfirstlane" intrinsic.
  *
@@ -3642,44 +3683,16 @@ _ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src, LLVMValueRef l
  * @return value of the lane
  */
 LLVMValueRef ac_build_readlane_no_opt_barrier(struct ac_llvm_context *ctx,
-					      LLVMValueRef src, LLVMValueRef lane)
+                                             LLVMValueRef src, LLVMValueRef lane)
 {
-	unsigned bits = LLVMGetIntTypeWidth(LLVMTypeOf(src));
-	LLVMValueRef ret;
-
-	if (bits > 32) {
-		assert(bits % 32 == 0);
-		LLVMTypeRef vec_type = LLVMVectorType(ctx->i32, bits / 32);
-		LLVMValueRef src_vector =
-			LLVMBuildBitCast(ctx->builder, src, vec_type, "");
-		ret = LLVMGetUndef(vec_type);
-		for (unsigned i = 0; i < bits / 32; i++) {
-			src = LLVMBuildExtractElement(ctx->builder, src_vector,
-						LLVMConstInt(ctx->i32, i, 0), "");
-			LLVMValueRef ret_comp = _ac_build_readlane(ctx, src, lane);
-			ret = LLVMBuildInsertElement(ctx->builder, ret, ret_comp,
-						LLVMConstInt(ctx->i32, i, 0), "");
-		}
-	} else {
-		ret = _ac_build_readlane(ctx, src, lane);
-	}
-
-	return ret;
+	return ac_build_readlane_common(ctx, src, lane, false);
 }
+
 
 LLVMValueRef
 ac_build_readlane(struct ac_llvm_context *ctx, LLVMValueRef src, LLVMValueRef lane)
 {
-	LLVMTypeRef src_type = LLVMTypeOf(src);
-	src = ac_to_integer(ctx, src);
-	LLVMValueRef ret;
-
-	ac_build_optimization_barrier(ctx, &src);
-
-	ret = ac_build_readlane_no_opt_barrier(ctx, src, lane);
-	if (LLVMGetTypeKind(src_type) == LLVMPointerTypeKind)
-		return LLVMBuildIntToPtr(ctx->builder, ret, src_type, "");
-	return LLVMBuildBitCast(ctx->builder, ret, src_type, "");
+	return ac_build_readlane_common(ctx, src, lane, true);
 }
 
 LLVMValueRef
@@ -4784,12 +4797,45 @@ void ac_build_sendmsg_gs_alloc_req(struct ac_llvm_context *ctx, LLVMValueRef wav
 {
 	LLVMBuilderRef builder = ctx->builder;
 	LLVMValueRef tmp;
+	bool export_dummy_prim = false;
+
+	/* HW workaround for a GPU hang with 100% culling.
+	 * We always have to export at least 1 primitive.
+	 * Export a degenerate triangle using vertex 0 for all 3 vertices.
+	 */
+	if (prim_cnt == ctx->i32_0 &&
+	    (ctx->family == CHIP_NAVI10 ||
+	     ctx->family == CHIP_NAVI12 ||
+	     ctx->family == CHIP_NAVI14)) {
+		assert(vtx_cnt == ctx->i32_0);
+		prim_cnt = ctx->i32_1;
+		vtx_cnt = ctx->i32_1;
+		export_dummy_prim = true;
+	}
 
 	ac_build_ifcc(ctx, LLVMBuildICmp(builder, LLVMIntEQ, wave_id, ctx->i32_0, ""), 5020);
 
 	tmp = LLVMBuildShl(builder, prim_cnt, LLVMConstInt(ctx->i32, 12, false),"");
 	tmp = LLVMBuildOr(builder, tmp, vtx_cnt, "");
 	ac_build_sendmsg(ctx, AC_SENDMSG_GS_ALLOC_REQ, tmp);
+
+	if (export_dummy_prim) {
+		struct ac_ngg_prim prim = {};
+		/* The vertex indices are 0,0,0. */
+		prim.passthrough = ctx->i32_0;
+
+		struct ac_export_args pos = {};
+		pos.out[0] = pos.out[1] = pos.out[2] = pos.out[3] = ctx->f32_0;
+		pos.target = V_008DFC_SQ_EXP_POS;
+		pos.enabled_channels = 0xf;
+		pos.done = true;
+
+		ac_build_ifcc(ctx, LLVMBuildICmp(builder, LLVMIntEQ, ac_get_thread_id(ctx),
+						 ctx->i32_0, ""), 5021);
+		ac_build_export_prim(ctx, &prim);
+		ac_build_export(ctx, &pos);
+		ac_build_endif(ctx, 5021);
+	}
 
 	ac_build_endif(ctx, 5020);
 }

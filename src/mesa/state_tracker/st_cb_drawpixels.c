@@ -1915,12 +1915,11 @@ st_destroy_drawpix(struct st_context *st)
 
    for (i = 0; i < ARRAY_SIZE(st->drawpix.zs_shaders); i++) {
       if (st->drawpix.zs_shaders[i])
-         cso_delete_fragment_shader(st->cso_context,
-                                    st->drawpix.zs_shaders[i]);
+         st->pipe->delete_fs_state(st->pipe, st->drawpix.zs_shaders[i]);
    }
 
    if (st->passthrough_vs)
-      cso_delete_vertex_shader(st->cso_context, st->passthrough_vs);
+      st->pipe->delete_vs_state(st->pipe, st->passthrough_vs);
 
    /* Free cache data */
    for (i = 0; i < ARRAY_SIZE(st->drawpix_cache.entries); i++) {

@@ -588,8 +588,10 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
       result = wsi->GetImageDrmFormatModifierPropertiesEXT(chain->device,
                                                            image->image,
                                                            &image_mod_props);
-      if (result != VK_SUCCESS)
+      if (result != VK_SUCCESS) {
+         close(fd);
          goto fail;
+      }
       image->drm_modifier = image_mod_props.drmFormatModifier;
       assert(image->drm_modifier != DRM_FORMAT_MOD_INVALID);
 
@@ -618,8 +620,9 @@ wsi_create_native_image(const struct wsi_swapchain *chain,
             image->fds[p] = dup(fd);
             if (image->fds[p] == -1) {
                for (uint32_t i = 0; i < p; i++)
-                  close(image->fds[p]);
+                  close(image->fds[i]);
 
+               result = VK_ERROR_OUT_OF_HOST_MEMORY;
                goto fail;
             }
          }

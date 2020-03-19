@@ -1580,7 +1580,7 @@ anv_image_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
     * cache before rendering to it.
     */
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_DEPTH_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    blorp_clear_depth_stencil(&batch, &depth, &stencil,
                              level, base_layer, layer_count,
@@ -1597,7 +1597,7 @@ anv_image_clear_depth_stencil(struct anv_cmd_buffer *cmd_buffer,
     * cache before someone starts trying to do stencil on it.
     */
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    struct blorp_surf stencil_shadow;
    if ((aspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
@@ -1778,7 +1778,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
     * that it is completed before any additional drawing occurs.
     */
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    switch (mcs_op) {
    case ISL_AUX_OP_FAST_CLEAR:
@@ -1797,7 +1797,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    blorp_batch_finish(&batch);
 }
@@ -1859,7 +1859,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
     * that it is completed before any additional drawing occurs.
     */
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    switch (ccs_op) {
    case ISL_AUX_OP_FAST_CLEAR:
@@ -1883,7 +1883,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    blorp_batch_finish(&batch);
 }

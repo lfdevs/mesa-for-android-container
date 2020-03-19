@@ -512,8 +512,12 @@ build_depthstencil_shader(struct nir_shader **out_vs,
 	nir_builder_init_simple_shader(&vs_b, NULL, MESA_SHADER_VERTEX, NULL);
 	nir_builder_init_simple_shader(&fs_b, NULL, MESA_SHADER_FRAGMENT, NULL);
 
-	vs_b.shader->info.name = ralloc_strdup(vs_b.shader, "meta_clear_depthstencil_vs");
-	fs_b.shader->info.name = ralloc_strdup(fs_b.shader, "meta_clear_depthstencil_fs");
+	vs_b.shader->info.name = ralloc_strdup(vs_b.shader,
+					       unrestricted ? "meta_clear_depthstencil_unrestricted_vs"
+							    : "meta_clear_depthstencil_vs");
+	fs_b.shader->info.name = ralloc_strdup(fs_b.shader,
+					       unrestricted ? "meta_clear_depthstencil_unrestricted_fs"
+							    : "meta_clear_depthstencil_fs");
 	const struct glsl_type *position_out_type = glsl_vec4_type();
 
 	nir_variable *vs_out_pos =

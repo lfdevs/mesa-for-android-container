@@ -1021,7 +1021,7 @@ anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
     * with not having this stall in some cases if we were really careful but
     * it's better to play it safe.  Full stall the GPU.
     */
-   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_CS_STALL_BIT;
+   cmd_buffer->state.pending_pipe_bits |= ANV_PIPE_END_OF_PIPE_SYNC_BIT;
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
    struct gen_mi_builder b;
@@ -1315,7 +1315,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
     * we do any more rendering or clearing.
     */
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 
    for (uint32_t l = 0; l < level_count; l++) {
       uint32_t level = base_level + l;
@@ -1351,7 +1351,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
    }
 
    cmd_buffer->state.pending_pipe_bits |=
-      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_CS_STALL_BIT;
+      ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT | ANV_PIPE_END_OF_PIPE_SYNC_BIT;
 }
 
 /**
@@ -1998,20 +1998,53 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
    if (cmd_buffer->device->physical->always_flush_cache)
       bits |= ANV_PIPE_FLUSH_BITS | ANV_PIPE_INVALIDATE_BITS;
 
-   /* Flushes are pipelined while invalidations are handled immediately.
-    * Therefore, if we're flushing anything then we need to schedule a stall
-    * before any invalidations can happen.
+   /*
+    * From Sandybridge PRM, volume 2, "1.7.2 End-of-Pipe Synchronization":
+    *
+    *    Write synchronization is a special case of end-of-pipe
+    *    synchronization that requires that the render cache and/or depth
+    *    related caches are flushed to memory, where the data will become
+    *    globally visible. This type of synchronization is required prior to
+    *    SW (CPU) actually reading the result data from memory, or initiating
+    *    an operation that will use as a read surface (such as a texture
+    *    surface) a previous render target and/or depth/stencil buffer
+    *
+    *
+    * From Haswell PRM, volume 2, part 1, "End-of-Pipe Synchronization":
+    *
+    *    Exercising the write cache flush bits (Render Target Cache Flush
+    *    Enable, Depth Cache Flush Enable, DC Flush) in PIPE_CONTROL only
+    *    ensures the write caches are flushed and doesn't guarantee the data
+    *    is globally visible.
+    *
+    *    SW can track the completion of the end-of-pipe-synchronization by
+    *    using "Notify Enable" and "PostSync Operation - Write Immediate
+    *    Data" in the PIPE_CONTROL command.
+    *
+    * In other words, flushes are pipelined while invalidations are handled
+    * immediately.  Therefore, if we're flushing anything then we need to
+    * schedule an end-of-pipe sync before any invalidations can happen.
     */
    if (bits & ANV_PIPE_FLUSH_BITS)
-      bits |= ANV_PIPE_NEEDS_CS_STALL_BIT;
+      bits |= ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT;
 
-   /* If we're going to do an invalidate and we have a pending CS stall that
-    * has yet to be resolved, we do the CS stall now.
+
+   /* HSD 1209978178: docs say that before programming the aux table:
+    *
+    *    "Driver must ensure that the engine is IDLE but ensure it doesn't
+    *    add extra flushes in the case it knows that the engine is already
+    *    IDLE."
+    */
+   if (GEN_GEN == 12 && ANV_PIPE_AUX_TABLE_INVALIDATE_BIT)
+      bits |= ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT;
+
+   /* If we're going to do an invalidate and we have a pending end-of-pipe
+    * sync that has yet to be resolved, we do the end-of-pipe sync now.
     */
    if ((bits & ANV_PIPE_INVALIDATE_BITS) &&
-       (bits & ANV_PIPE_NEEDS_CS_STALL_BIT)) {
-      bits |= ANV_PIPE_CS_STALL_BIT;
-      bits &= ~ANV_PIPE_NEEDS_CS_STALL_BIT;
+       (bits & ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT)) {
+      bits |= ANV_PIPE_END_OF_PIPE_SYNC_BIT;
+      bits &= ~ANV_PIPE_NEEDS_END_OF_PIPE_SYNC_BIT;
    }
 
    if (GEN_GEN >= 12 &&
@@ -2065,7 +2098,8 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       bits &= ~ANV_PIPE_POST_SYNC_BIT;
    }
 
-   if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT)) {
+   if (bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT |
+               ANV_PIPE_END_OF_PIPE_SYNC_BIT)) {
       anv_batch_emit(&cmd_buffer->batch, GENX(PIPE_CONTROL), pipe) {
 #if GEN_GEN >= 12
          pipe.TileCacheFlushEnable = bits & ANV_PIPE_TILE_CACHE_FLUSH_BIT;
@@ -2088,6 +2122,40 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
          pipe.CommandStreamerStallEnable = bits & ANV_PIPE_CS_STALL_BIT;
          pipe.StallAtPixelScoreboard = bits & ANV_PIPE_STALL_AT_SCOREBOARD_BIT;
 
+         /* From Sandybridge PRM, volume 2, "1.7.3.1 Writing a Value to Memory":
+          *
+          *    "The most common action to perform upon reaching a
+          *    synchronization point is to write a value out to memory. An
+          *    immediate value (included with the synchronization command) may
+          *    be written."
+          *
+          *
+          * From Broadwell PRM, volume 7, "End-of-Pipe Synchronization":
+          *
+          *    "In case the data flushed out by the render engine is to be
+          *    read back in to the render engine in coherent manner, then the
+          *    render engine has to wait for the fence completion before
+          *    accessing the flushed data. This can be achieved by following
+          *    means on various products: PIPE_CONTROL command with CS Stall
+          *    and the required write caches flushed with Post-Sync-Operation
+          *    as Write Immediate Data.
+          *
+          *    Example:
+          *       - Workload-1 (3D/GPGPU/MEDIA)
+          *       - PIPE_CONTROL (CS Stall, Post-Sync-Operation Write
+          *         Immediate Data, Required Write Cache Flush bits set)
+          *       - Workload-2 (Can use the data produce or output by
+          *         Workload-1)
+          */
+         if (bits & ANV_PIPE_END_OF_PIPE_SYNC_BIT) {
+            pipe.CommandStreamerStallEnable = true;
+            pipe.PostSyncOperation = WriteImmediateData;
+            pipe.Address = (struct anv_address) {
+               .bo = cmd_buffer->device->workaround_bo,
+               .offset = 0
+            };
+         }
+
          /*
           * According to the Broadwell documentation, any PIPE_CONTROL with the
           * "Command Streamer Stall" bit set must also have another bit set,
@@ -2103,9 +2171,13 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
           * I chose "Stall at Pixel Scoreboard" since that's what we use in
           * mesa and it seems to work fine. The choice is fairly arbitrary.
           */
-         if ((bits & ANV_PIPE_CS_STALL_BIT) &&
-             !(bits & (ANV_PIPE_FLUSH_BITS | ANV_PIPE_DEPTH_STALL_BIT |
-                       ANV_PIPE_STALL_AT_SCOREBOARD_BIT)))
+         if (pipe.CommandStreamerStallEnable &&
+             !pipe.RenderTargetCacheFlushEnable &&
+             !pipe.DepthCacheFlushEnable &&
+             !pipe.StallAtPixelScoreboard &&
+             !pipe.PostSyncOperation &&
+             !pipe.DepthStallEnable &&
+             !pipe.DCFlushEnable)
             pipe.StallAtPixelScoreboard = true;
       }
 
@@ -2115,7 +2187,51 @@ genX(cmd_buffer_apply_pipe_flushes)(struct anv_cmd_buffer *cmd_buffer)
       if (bits & ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT)
          bits &= ~(ANV_PIPE_RENDER_TARGET_BUFFER_WRITES);
 
-      bits &= ~(ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT);
+      if (GEN_IS_HASWELL) {
+         /* Haswell needs addition work-arounds:
+          *
+          * From Haswell PRM, volume 2, part 1, "End-of-Pipe Synchronization":
+          *
+          *    Option 1:
+          *    PIPE_CONTROL command with the CS Stall and the required write
+          *    caches flushed with Post-SyncOperation as Write Immediate Data
+          *    followed by eight dummy MI_STORE_DATA_IMM (write to scratch
+          *    spce) commands.
+          *
+          *    Example:
+          *       - Workload-1
+          *       - PIPE_CONTROL (CS Stall, Post-Sync-Operation Write
+          *         Immediate Data, Required Write Cache Flush bits set)
+          *       - MI_STORE_DATA_IMM (8 times) (Dummy data, Scratch Address)
+          *       - Workload-2 (Can use the data produce or output by
+          *         Workload-1)
+          *
+          * Unfortunately, both the PRMs and the internal docs are a bit
+          * out-of-date in this regard.  What the windows driver does (and
+          * this appears to actually work) is to emit a register read from the
+          * memory address written by the pipe control above.
+          *
+          * What register we load into doesn't matter.  We choose an indirect
+          * rendering register because we know it always exists and it's one
+          * of the first registers the command parser allows us to write.  If
+          * you don't have command parser support in your kernel (pre-4.2),
+          * this will get turned into MI_NOOP and you won't get the
+          * workaround.  Unfortunately, there's just not much we can do in
+          * that case.  This register is perfectly safe to write since we
+          * always re-load all of the indirect draw registers right before
+          * 3DPRIMITIVE when needed anyway.
+          */
+         anv_batch_emit(&cmd_buffer->batch, GENX(MI_LOAD_REGISTER_MEM), lrm) {
+            lrm.RegisterAddress  = 0x243C; /* GEN7_3DPRIM_START_INSTANCE */
+            lrm.MemoryAddress = (struct anv_address) {
+               .bo = cmd_buffer->device->workaround_bo,
+               .offset = 0
+            };
+         }
+      }
+
+      bits &= ~(ANV_PIPE_FLUSH_BITS | ANV_PIPE_CS_STALL_BIT |
+                ANV_PIPE_END_OF_PIPE_SYNC_BIT);
    }
 
    if (bits & ANV_PIPE_INVALIDATE_BITS) {

@@ -662,16 +662,6 @@ void cso_set_fragment_shader_handle(struct cso_context *ctx, void *handle )
    }
 }
 
-void cso_delete_fragment_shader(struct cso_context *ctx, void *handle )
-{
-   if (handle == ctx->fragment_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_fs_state(ctx->pipe, NULL);
-      ctx->fragment_shader = NULL;
-   }
-   ctx->pipe->delete_fs_state(ctx->pipe, handle);
-}
-
 static void
 cso_save_fragment_shader(struct cso_context *ctx)
 {
@@ -696,16 +686,6 @@ void cso_set_vertex_shader_handle(struct cso_context *ctx, void *handle)
       ctx->vertex_shader = handle;
       ctx->pipe->bind_vs_state(ctx->pipe, handle);
    }
-}
-
-void cso_delete_vertex_shader(struct cso_context *ctx, void *handle )
-{
-   if (handle == ctx->vertex_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_vs_state(ctx->pipe, NULL);
-      ctx->vertex_shader = NULL;
-   }
-   ctx->pipe->delete_vs_state(ctx->pipe, handle);
 }
 
 static void
@@ -914,16 +894,6 @@ void cso_set_geometry_shader_handle(struct cso_context *ctx, void *handle)
    }
 }
 
-void cso_delete_geometry_shader(struct cso_context *ctx, void *handle)
-{
-   if (handle == ctx->geometry_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_gs_state(ctx->pipe, NULL);
-      ctx->geometry_shader = NULL;
-   }
-   ctx->pipe->delete_gs_state(ctx->pipe, handle);
-}
-
 static void
 cso_save_geometry_shader(struct cso_context *ctx)
 {
@@ -957,16 +927,6 @@ void cso_set_tessctrl_shader_handle(struct cso_context *ctx, void *handle)
       ctx->tessctrl_shader = handle;
       ctx->pipe->bind_tcs_state(ctx->pipe, handle);
    }
-}
-
-void cso_delete_tessctrl_shader(struct cso_context *ctx, void *handle)
-{
-   if (handle == ctx->tessctrl_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_tcs_state(ctx->pipe, NULL);
-      ctx->tessctrl_shader = NULL;
-   }
-   ctx->pipe->delete_tcs_state(ctx->pipe, handle);
 }
 
 static void
@@ -1004,16 +964,6 @@ void cso_set_tesseval_shader_handle(struct cso_context *ctx, void *handle)
    }
 }
 
-void cso_delete_tesseval_shader(struct cso_context *ctx, void *handle)
-{
-   if (handle == ctx->tesseval_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_tes_state(ctx->pipe, NULL);
-      ctx->tesseval_shader = NULL;
-   }
-   ctx->pipe->delete_tes_state(ctx->pipe, handle);
-}
-
 static void
 cso_save_tesseval_shader(struct cso_context *ctx)
 {
@@ -1047,16 +997,6 @@ void cso_set_compute_shader_handle(struct cso_context *ctx, void *handle)
       ctx->compute_shader = handle;
       ctx->pipe->bind_compute_state(ctx->pipe, handle);
    }
-}
-
-void cso_delete_compute_shader(struct cso_context *ctx, void *handle)
-{
-   if (handle == ctx->compute_shader) {
-      /* unbind before deleting */
-      ctx->pipe->bind_compute_state(ctx->pipe, NULL);
-      ctx->compute_shader = NULL;
-   }
-   ctx->pipe->delete_compute_state(ctx->pipe, handle);
 }
 
 static void

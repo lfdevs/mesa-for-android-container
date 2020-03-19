@@ -1304,12 +1304,12 @@ llvmpipe_set_global_binding(struct pipe_context *pipe,
    }
 
    for (i = 0; i < count; i++) {
-      uint64_t va;
+      uintptr_t va;
       uint32_t offset;
       pipe_resource_reference(&cs->global_buffers[first + i], resources[i]);
       struct llvmpipe_resource *lp_res = llvmpipe_resource(resources[i]);
       offset = *handles[i];
-      va = (uint64_t)((char *)lp_res->data + offset);
+      va = (uintptr_t)((char *)lp_res->data + offset);
       memcpy(handles[i], &va, sizeof(va));
    }
 }

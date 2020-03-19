@@ -143,7 +143,7 @@ NineVertexShader9_dtor( struct NineVertexShader9 *This )
 
         while (var_so && var_so->vdecl) {
             if (var_so->cso) {
-                cso_delete_vertex_shader(This->base.device->cso_sw, var_so->cso );
+                This->base.device->pipe_sw->delete_vs_state(This->base.device->pipe_sw, var_so->cso);
             }
             var_so = var_so->next;
         }
