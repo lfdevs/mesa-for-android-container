@@ -388,6 +388,7 @@ vtn_handle_opencl_instruction(struct vtn_builder *b, SpvOp ext_opcode,
    case OpenCLstd_Smoothstep:
    case OpenCLstd_S_Upsample:
    case OpenCLstd_U_Upsample:
+   case OpenCLstd_Clz:
       handle_instr(b, ext_opcode, w, count, handle_special);
       return true;
    case OpenCLstd_Vloadn:

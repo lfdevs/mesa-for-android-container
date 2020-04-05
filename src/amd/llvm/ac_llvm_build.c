@@ -65,8 +65,6 @@ ac_llvm_context_init(struct ac_llvm_context *ctx,
 		     enum ac_float_mode float_mode, unsigned wave_size,
 		     unsigned ballot_mask_bits)
 {
-	LLVMValueRef args[1];
-
 	ctx->context = LLVMContextCreate();
 
 	ctx->chip_class = chip_class;
@@ -126,11 +124,6 @@ ac_llvm_context_init(struct ac_llvm_context *ctx,
 
 	ctx->invariant_load_md_kind = LLVMGetMDKindIDInContext(ctx->context,
 							       "invariant.load", 14);
-
-	ctx->fpmath_md_kind = LLVMGetMDKindIDInContext(ctx->context, "fpmath", 6);
-
-	args[0] = LLVMConstReal(ctx->f32, 2.5);
-	ctx->fpmath_md_2p5_ulp = LLVMMDNodeInContext(ctx->context, args, 1);
 
 	ctx->uniform_md_kind = LLVMGetMDKindIDInContext(ctx->context,
 							"amdgpu.uniform", 14);
@@ -707,20 +700,20 @@ ac_build_fdiv(struct ac_llvm_context *ctx,
 	      LLVMValueRef num,
 	      LLVMValueRef den)
 {
-	/* If we do (num / den), LLVM >= 7.0 does:
-	 *    return num * v_rcp_f32(den * (fabs(den) > 0x1.0p+96f ? 0x1.0p-32f : 1.0f));
-	 *
-	 * If we do (num * (1 / den)), LLVM does:
-	 *    return num * v_rcp_f32(den);
-	 */
-	LLVMValueRef one = LLVMConstReal(LLVMTypeOf(num), 1.0);
-	LLVMValueRef rcp = LLVMBuildFDiv(ctx->builder, one, den, "");
-	LLVMValueRef ret = LLVMBuildFMul(ctx->builder, num, rcp, "");
+	unsigned type_size = ac_get_type_size(LLVMTypeOf(den));
+	const char *name;
 
-	/* Use v_rcp_f32 instead of precise division. */
-	if (!LLVMIsConstant(ret))
-		LLVMSetMetadata(ret, ctx->fpmath_md_kind, ctx->fpmath_md_2p5_ulp);
-	return ret;
+	if (type_size == 2)
+		name = "llvm.amdgcn.rcp.f16";
+	else if (type_size == 4)
+		name = "llvm.amdgcn.rcp.f32";
+	else
+		name = "llvm.amdgcn.rcp.f64";
+
+        LLVMValueRef rcp = ac_build_intrinsic(ctx, name, LLVMTypeOf(den),
+                                              &den, 1, AC_FUNC_ATTR_READNONE);
+
+	return LLVMBuildFMul(ctx->builder, num, rcp, "");
 }
 
 /* See fast_idiv_by_const.h. */

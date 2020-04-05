@@ -221,10 +221,11 @@ __fge64(uint64_t a, uint64_t b)
 uint64_t
 __fsat64(uint64_t __a)
 {
-   if (__flt64(__a, 0ul))
+   /* fsat(NaN) should be zero. */
+   if (__is_nan(__a) || __flt64_nonnan(__a, 0ul))
       return 0ul;
 
-   if (__fge64(__a, 0x3FF0000000000000ul /* 1.0 */))
+   if (!__flt64_nonnan(__a, 0x3FF0000000000000ul /* 1.0 */))
       return 0x3FF0000000000000ul;
 
    return __a;
@@ -437,23 +438,25 @@ __roundAndPackFloat64(uint zSign,
          }
          return __packFloat64(zSign, 0x7FF, 0u, 0u);
       }
-      if (zExp < 0) {
-         __shift64ExtraRightJamming(
-            zFrac0, zFrac1, zFrac2, -zExp, zFrac0, zFrac1, zFrac2);
-         zExp = 0;
-         if (roundNearestEven) {
-            increment = zFrac2 < 0u;
+   }
+
+   if (zExp < 0) {
+      __shift64ExtraRightJamming(
+         zFrac0, zFrac1, zFrac2, -zExp, zFrac0, zFrac1, zFrac2);
+      zExp = 0;
+      if (roundNearestEven) {
+         increment = zFrac2 < 0u;
+      } else {
+         if (zSign != 0u) {
+            increment = (FLOAT_ROUNDING_MODE == FLOAT_ROUND_DOWN) &&
+               (zFrac2 != 0u);
          } else {
-            if (zSign != 0u) {
-               increment = (FLOAT_ROUNDING_MODE == FLOAT_ROUND_DOWN) &&
-                  (zFrac2 != 0u);
-            } else {
-               increment = (FLOAT_ROUNDING_MODE == FLOAT_ROUND_UP) &&
-                  (zFrac2 != 0u);
-            }
+            increment = (FLOAT_ROUNDING_MODE == FLOAT_ROUND_UP) &&
+               (zFrac2 != 0u);
          }
       }
    }
+
    if (increment) {
       __add64(zFrac0, zFrac1, 0u, 1u, zFrac0, zFrac1);
       zFrac1 &= ~((zFrac2 + uint(zFrac2 == 0u)) & uint(roundNearestEven));

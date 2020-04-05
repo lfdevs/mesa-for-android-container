@@ -251,9 +251,19 @@ isl_gen6_filter_tiling(const struct isl_device *dev,
    }
 
    if (info->usage & ISL_SURF_USAGE_DISPLAY_BIT) {
-      /* Before Skylake, the display engine does not accept Y */
-      /* FINISHME[SKL]: Y tiling for display surfaces */
-      *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT);
+      if (ISL_DEV_GEN(dev) >= 12) {
+         *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT |
+                    ISL_TILING_Y0_BIT);
+      } else if (ISL_DEV_GEN(dev) >= 9) {
+         /* Note we let Yf even though it was cleared above. This is just for
+          * completeness.
+          */
+         *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT |
+                    ISL_TILING_Y0_BIT | ISL_TILING_Yf_BIT);
+      } else {
+         /* Before Skylake, the display engine does not accept Y */
+         *flags &= (ISL_TILING_LINEAR_BIT | ISL_TILING_X_BIT);
+      }
    }
 
    if (info->samples > 1) {

@@ -1226,9 +1226,10 @@ anv_state_stream_alloc(struct anv_state_stream *stream,
 
    uint32_t offset = align_u32(stream->next, alignment);
    if (offset + size > stream->block.alloc_size) {
+      uint32_t min_block_size = size + sizeof(struct anv_state_stream_block);
       uint32_t block_size = stream->block_size;
-      if (block_size < size)
-         block_size = round_to_power_of_two(size);
+      if (block_size < min_block_size)
+         block_size = round_to_power_of_two(min_block_size);
 
       stream->block = anv_state_pool_alloc_no_vg(stream->state_pool,
                                                  block_size, PAGE_SIZE);

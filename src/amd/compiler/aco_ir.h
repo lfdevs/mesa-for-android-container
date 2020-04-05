@@ -466,6 +466,36 @@ public:
       return isConstant() && constantValue() == cmp;
    }
 
+   constexpr uint64_t constantValue64(bool signext=false) const noexcept
+   {
+      if (is64BitConst_) {
+         if (reg_.reg <= 192)
+            return reg_.reg - 128;
+         else if (reg_.reg <= 208)
+            return 0xFFFFFFFFFFFFFFFF - (reg_.reg - 193);
+
+         switch (reg_.reg) {
+         case 240:
+            return 0x3FE0000000000000;
+         case 241:
+            return 0xBFE0000000000000;
+         case 242:
+            return 0x3FF0000000000000;
+         case 243:
+            return 0xBFF0000000000000;
+         case 244:
+            return 0x4000000000000000;
+         case 245:
+            return 0xC000000000000000;
+         case 246:
+            return 0x4010000000000000;
+         case 247:
+            return 0xC010000000000000;
+         }
+      }
+      return (signext && (data_.i & 0x80000000u) ? 0xffffffff00000000ull : 0ull) | data_.i;
+   }
+
    constexpr void setKill(bool flag) noexcept
    {
       isKill_ = flag;

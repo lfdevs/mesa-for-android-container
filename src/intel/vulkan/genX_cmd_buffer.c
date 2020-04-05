@@ -802,6 +802,7 @@ static void
 anv_cmd_predicated_ccs_resolve(struct anv_cmd_buffer *cmd_buffer,
                                const struct anv_image *image,
                                enum isl_format format,
+                               struct isl_swizzle swizzle,
                                VkImageAspectFlagBits aspect,
                                uint32_t level, uint32_t array_layer,
                                enum isl_aux_op resolve_op,
@@ -826,14 +827,15 @@ anv_cmd_predicated_ccs_resolve(struct anv_cmd_buffer *cmd_buffer,
        image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_D)
       resolve_op = ISL_AUX_OP_FULL_RESOLVE;
 
-   anv_image_ccs_op(cmd_buffer, image, format, aspect, level,
-                    array_layer, 1, resolve_op, NULL, true);
+   anv_image_ccs_op(cmd_buffer, image, format, swizzle, aspect,
+                    level, array_layer, 1, resolve_op, NULL, true);
 }
 
 static void
 anv_cmd_predicated_mcs_resolve(struct anv_cmd_buffer *cmd_buffer,
                                const struct anv_image *image,
                                enum isl_format format,
+                               struct isl_swizzle swizzle,
                                VkImageAspectFlagBits aspect,
                                uint32_t array_layer,
                                enum isl_aux_op resolve_op,
@@ -847,7 +849,7 @@ anv_cmd_predicated_mcs_resolve(struct anv_cmd_buffer *cmd_buffer,
                                      aspect, 0, array_layer,
                                      resolve_op, fast_clear_supported);
 
-   anv_image_mcs_op(cmd_buffer, image, format, aspect,
+   anv_image_mcs_op(cmd_buffer, image, format, swizzle, aspect,
                     array_layer, 1, resolve_op, NULL, true);
 #else
    unreachable("MCS resolves are unsupported on Ivybridge and Bay Trail");
@@ -1233,6 +1235,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
 
             anv_image_ccs_op(cmd_buffer, image,
                              image->planes[plane].surface.isl.format,
+                             ISL_SWIZZLE_IDENTITY,
                              aspect, level, base_layer, level_layer_count,
                              ISL_AUX_OP_AMBIGUATE, NULL, false);
 
@@ -1252,6 +1255,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
          assert(base_level == 0 && level_count == 1);
          anv_image_mcs_op(cmd_buffer, image,
                           image->planes[plane].surface.isl.format,
+                          ISL_SWIZZLE_IDENTITY,
                           aspect, base_layer, layer_count,
                           ISL_AUX_OP_FAST_CLEAR, NULL, false);
       }
@@ -1331,6 +1335,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
          if (image->samples == 1) {
             anv_cmd_predicated_ccs_resolve(cmd_buffer, image,
                                            image->planes[plane].surface.isl.format,
+                                           ISL_SWIZZLE_IDENTITY,
                                            aspect, level, array_layer, resolve_op,
                                            final_fast_clear);
          } else {
@@ -1344,6 +1349,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
 
             anv_cmd_predicated_mcs_resolve(cmd_buffer, image,
                                            image->planes[plane].surface.isl.format,
+                                           ISL_SWIZZLE_IDENTITY,
                                            aspect, array_layer, resolve_op,
                                            final_fast_clear);
          }
@@ -4944,6 +4950,7 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
             if (iview->image->samples == 1) {
                anv_image_ccs_op(cmd_buffer, image,
                                 iview->planes[0].isl.format,
+                                iview->planes[0].isl.swizzle,
                                 VK_IMAGE_ASPECT_COLOR_BIT,
                                 0, 0, 1, ISL_AUX_OP_FAST_CLEAR,
                                 &clear_color,
@@ -4951,6 +4958,7 @@ cmd_buffer_begin_subpass(struct anv_cmd_buffer *cmd_buffer,
             } else {
                anv_image_mcs_op(cmd_buffer, image,
                                 iview->planes[0].isl.format,
+                                iview->planes[0].isl.swizzle,
                                 VK_IMAGE_ASPECT_COLOR_BIT,
                                 0, 1, ISL_AUX_OP_FAST_CLEAR,
                                 &clear_color,
@@ -5457,6 +5465,7 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
                if (image->samples == 1) {
                   anv_cmd_predicated_ccs_resolve(cmd_buffer, image,
                                                  iview->planes[0].isl.format,
+                                                 iview->planes[0].isl.swizzle,
                                                  VK_IMAGE_ASPECT_COLOR_BIT,
                                                  iview->planes[0].isl.base_level,
                                                  array_layer,
@@ -5465,6 +5474,7 @@ cmd_buffer_end_subpass(struct anv_cmd_buffer *cmd_buffer)
                } else {
                   anv_cmd_predicated_mcs_resolve(cmd_buffer, image,
                                                  iview->planes[0].isl.format,
+                                                 iview->planes[0].isl.swizzle,
                                                  VK_IMAGE_ASPECT_COLOR_BIT,
                                                  base_layer,
                                                  ISL_AUX_OP_PARTIAL_RESOLVE,

@@ -285,7 +285,23 @@ svga_buffer_hw_storage_map(struct svga_context *svga,
    svga->hud.num_buffers_mapped++;
 
    if (sws->have_gb_objects) {
-      return svga->swc->surface_map(svga->swc, sbuf->handle, flags, retry);
+      struct svga_winsys_context *swc = svga->swc;
+      boolean rebind;
+      void *map;
+
+      map = swc->surface_map(swc, sbuf->handle, flags, retry, &rebind);
+      if (map && rebind) {
+         enum pipe_error ret;
+
+         ret = SVGA3D_BindGBSurface(swc, sbuf->handle);
+         if (ret != PIPE_OK) {
+            svga_context_flush(svga, NULL);
+            ret = SVGA3D_BindGBSurface(swc, sbuf->handle);
+            assert(ret == PIPE_OK);
+         }
+         svga_context_flush(svga, NULL);
+      }
+      return map;
    } else {
       *retry = FALSE;
       return sws->buffer_map(sws, sbuf->hwbuf, flags);

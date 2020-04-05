@@ -688,8 +688,8 @@ static void visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 		result = LLVMBuildFMul(ctx->ac.builder, src[0], src[1], "");
 		break;
 	case nir_op_frcp:
-		src[0] = ac_to_float(&ctx->ac, src[0]);
-		result = ac_build_fdiv(&ctx->ac, LLVMConstReal(LLVMTypeOf(src[0]), 1.0), src[0]);
+		result = emit_intrin_1f_param(&ctx->ac, "llvm.amdgcn.rcp",
+					      ac_to_float_type(&ctx->ac, def_type), src[0]);
 		break;
 	case nir_op_iand:
 		result = LLVMBuildAnd(ctx->ac.builder, src[0], src[1], "");
@@ -834,9 +834,8 @@ static void visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
 		                              ac_to_float_type(&ctx->ac, def_type), src[0]);
 		break;
 	case nir_op_frsq:
-		result = emit_intrin_1f_param(&ctx->ac, "llvm.sqrt",
-		                              ac_to_float_type(&ctx->ac, def_type), src[0]);
-		result = ac_build_fdiv(&ctx->ac, LLVMConstReal(LLVMTypeOf(result), 1.0), result);
+		result = emit_intrin_1f_param(&ctx->ac, "llvm.amdgcn.rsq",
+					      ac_to_float_type(&ctx->ac, def_type), src[0]);
 		break;
 	case nir_op_frexp_exp:
 		src[0] = ac_to_float(&ctx->ac, src[0]);
@@ -3869,8 +3868,33 @@ static void visit_intrinsic(struct ac_nir_context *ctx,
 		break;
 	}
 	case nir_intrinsic_shuffle:
-		result = ac_build_shuffle(&ctx->ac, get_src(ctx, instr->src[0]),
-				get_src(ctx, instr->src[1]));
+		if (ctx->ac.chip_class == GFX8 ||
+		    ctx->ac.chip_class == GFX9 ||
+		    (ctx->ac.chip_class == GFX10 && ctx->ac.wave_size == 32)) {
+			result = ac_build_shuffle(&ctx->ac, get_src(ctx, instr->src[0]),
+						  get_src(ctx, instr->src[1]));
+		} else {
+			LLVMValueRef src = get_src(ctx, instr->src[0]);
+			LLVMValueRef index = get_src(ctx, instr->src[1]);
+			LLVMTypeRef type = LLVMTypeOf(src);
+	                struct waterfall_context wctx;
+	                LLVMValueRef index_val;
+
+	                index_val = enter_waterfall(ctx, &wctx, index, true);
+
+			src = LLVMBuildZExt(ctx->ac.builder, src,
+					    ctx->ac.i32, "");
+
+			result = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.readlane",
+						    ctx->ac.i32,
+						    (LLVMValueRef []) { src, index_val }, 2,
+						    AC_FUNC_ATTR_READNONE |
+						    AC_FUNC_ATTR_CONVERGENT);
+
+			result = LLVMBuildTrunc(ctx->ac.builder, result, type, "");
+
+		        result = exit_waterfall(ctx, &wctx, result);
+		}
 		break;
 	case nir_intrinsic_reduce:
 		result = ac_build_reduce(&ctx->ac,

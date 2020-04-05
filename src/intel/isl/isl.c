@@ -1368,10 +1368,19 @@ isl_calc_row_pitch_alignment(const struct isl_device *dev,
    if (tile_info->tiling != ISL_TILING_LINEAR) {
       /* According to BSpec: 44930, Gen12's CCS-compressed surface pitches must
        * be 512B-aligned. CCS is only support on Y tilings.
+       *
+       * Only consider 512B alignment when :
+       *    - AUX is not explicitly disabled
+       *    - the caller has specified no pitch
+       *
+       * isl_surf_get_ccs_surf() will check that the main surface alignment
+       * matches CCS expectations.
        */
       if (ISL_DEV_GEN(dev) >= 12 &&
           isl_format_supports_ccs_e(dev->info, surf_info->format) &&
-          tile_info->tiling != ISL_TILING_X) {
+          tile_info->tiling != ISL_TILING_X &&
+          !(surf_info->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT) &&
+          surf_info->row_pitch_B == 0) {
          return isl_align(tile_info->phys_extent_B.width, 512);
       }
 
@@ -1394,16 +1403,27 @@ isl_calc_row_pitch_alignment(const struct isl_device *dev,
     */
    const struct isl_format_layout *fmtl = isl_format_get_layout(surf_info->format);
    const uint32_t bs = fmtl->bpb / 8;
+   uint32_t alignment;
 
    if (surf_info->usage & ISL_SURF_USAGE_RENDER_TARGET_BIT) {
       if (isl_format_is_yuv(surf_info->format)) {
-         return 2 * bs;
+         alignment = 2 * bs;
       } else  {
-         return bs;
+         alignment = bs;
       }
+   } else {
+      alignment = 1;
    }
 
-   return 1;
+   /* From the Broadwell PRM >> Volume 2c: Command Reference: Registers >>
+    * PRI_STRIDE Stride (p1254):
+    *
+    *    "When using linear memory, this must be at least 64 byte aligned."
+    */
+   if (surf_info->usage & ISL_SURF_USAGE_DISPLAY_BIT)
+      alignment = isl_align(alignment, 64);
+
+   return alignment;
 }
 
 static uint32_t

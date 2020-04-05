@@ -1732,7 +1732,7 @@ anv_image_hiz_clear(struct anv_cmd_buffer *cmd_buffer,
 void
 anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
                  const struct anv_image *image,
-                 enum isl_format format,
+                 enum isl_format format, struct isl_swizzle swizzle,
                  VkImageAspectFlagBits aspect,
                  uint32_t base_layer, uint32_t layer_count,
                  enum isl_aux_op mcs_op, union isl_color_value *clear_value,
@@ -1782,7 +1782,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
 
    switch (mcs_op) {
    case ISL_AUX_OP_FAST_CLEAR:
-      blorp_fast_clear(&batch, &surf, format,
+      blorp_fast_clear(&batch, &surf, format, swizzle,
                        0, base_layer, layer_count,
                        0, 0, image->extent.width, image->extent.height);
       break;
@@ -1805,7 +1805,7 @@ anv_image_mcs_op(struct anv_cmd_buffer *cmd_buffer,
 void
 anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
                  const struct anv_image *image,
-                 enum isl_format format,
+                 enum isl_format format, struct isl_swizzle swizzle,
                  VkImageAspectFlagBits aspect, uint32_t level,
                  uint32_t base_layer, uint32_t layer_count,
                  enum isl_aux_op ccs_op, union isl_color_value *clear_value,
@@ -1863,7 +1863,7 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 
    switch (ccs_op) {
    case ISL_AUX_OP_FAST_CLEAR:
-      blorp_fast_clear(&batch, &surf, format,
+      blorp_fast_clear(&batch, &surf, format, swizzle,
                        level, base_layer, layer_count,
                        0, 0, level_width, level_height);
       break;

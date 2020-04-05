@@ -1,0 +1,6 @@
+libGLX_mesa.so.0 libglx-mesa0
+ __glx_Main@Base 17.0.0~
+ glAreTexturesResidentEXT@Base 0
+ glDeleteTexturesEXT@Base 0
+ glGenTexturesEXT@Base 0
+ glIsTextureEXT@Base 0

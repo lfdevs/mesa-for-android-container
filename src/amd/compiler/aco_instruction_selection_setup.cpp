@@ -26,6 +26,7 @@
 #include <unordered_map>
 #include "aco_ir.h"
 #include "nir.h"
+#include "nir_control_flow.h"
 #include "vulkan/radv_shader.h"
 #include "vulkan/radv_descriptor_set.h"
 #include "vulkan/radv_shader_args.h"
@@ -132,6 +133,84 @@ unsigned get_interp_input(nir_intrinsic_op intrin, enum glsl_interp_mode interp)
    return 0;
 }
 
+/* If one side of a divergent IF ends in a branch and the other doesn't, we
+ * might have to emit the contents of the side without the branch at the merge
+ * block instead. This is so that we can use any SGPR live-out of the side
+ * without the branch without creating a linear phi in the invert or merge block. */
+bool
+sanitize_if(nir_function_impl *impl, bool *divergent, nir_if *nif)
+{
+   if (!divergent[nif->condition.ssa->index])
+      return false;
+
+   nir_block *then_block = nir_if_last_then_block(nif);
+   nir_block *else_block = nir_if_last_else_block(nif);
+   bool then_jump = nir_block_ends_in_jump(then_block) || nir_block_is_unreachable(then_block);
+   bool else_jump = nir_block_ends_in_jump(else_block) || nir_block_is_unreachable(else_block);
+   if (then_jump == else_jump)
+      return false;
+
+   /* If the continue from block is empty then return as there is nothing to
+    * move.
+    */
+   if (nir_cf_list_is_empty_block(else_jump ? &nif->then_list : &nif->else_list))
+      return false;
+
+   /* Even though this if statement has a jump on one side, we may still have
+    * phis afterwards.  Single-source phis can be produced by loop unrolling
+    * or dead control-flow passes and are perfectly legal.  Run a quick phi
+    * removal on the block after the if to clean up any such phis.
+    */
+   nir_opt_remove_phis_block(nir_cf_node_as_block(nir_cf_node_next(&nif->cf_node)));
+
+   /* Finally, move the continue from branch after the if-statement. */
+   nir_block *last_continue_from_blk = else_jump ? then_block : else_block;
+   nir_block *first_continue_from_blk = else_jump ?
+      nir_if_first_then_block(nif) : nir_if_first_else_block(nif);
+
+   nir_cf_list tmp;
+   nir_cf_extract(&tmp, nir_before_block(first_continue_from_blk),
+                        nir_after_block(last_continue_from_blk));
+   nir_cf_reinsert(&tmp, nir_after_cf_node(&nif->cf_node));
+
+   /* nir_cf_extract() invalidates dominance metadata, but it should still be
+    * correct because of the specific type of transformation we did. Block
+    * indices are not valid except for block_0's, which is all we care about for
+    * nir_block_is_unreachable(). */
+   impl->valid_metadata =
+      (nir_metadata)(impl->valid_metadata | nir_metadata_dominance | nir_metadata_block_index);
+
+   return true;
+}
+
+bool
+sanitize_cf_list(nir_function_impl *impl, bool *divergent, struct exec_list *cf_list)
+{
+   bool progress = false;
+   foreach_list_typed(nir_cf_node, cf_node, node, cf_list) {
+      switch (cf_node->type) {
+      case nir_cf_node_block:
+         break;
+      case nir_cf_node_if: {
+         nir_if *nif = nir_cf_node_as_if(cf_node);
+         progress |= sanitize_cf_list(impl, divergent, &nif->then_list);
+         progress |= sanitize_cf_list(impl, divergent, &nif->else_list);
+         progress |= sanitize_if(impl, divergent, nif);
+         break;
+      }
+      case nir_cf_node_loop: {
+         nir_loop *loop = nir_cf_node_as_loop(cf_node);
+         progress |= sanitize_cf_list(impl, divergent, &loop->body);
+         break;
+      }
+      case nir_cf_node_function:
+         unreachable("Invalid cf type");
+      }
+   }
+
+   return progress;
+}
+
 void init_context(isel_context *ctx, nir_shader *shader)
 {
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
@@ -139,6 +218,19 @@ void init_context(isel_context *ctx, nir_shader *shader)
 
    ctx->shader = shader;
    ctx->divergent_vals = nir_divergence_analysis(shader, nir_divergence_view_index_uniform);
+
+   /* sanitize control flow */
+   nir_metadata_require(impl, nir_metadata_dominance);
+   sanitize_cf_list(impl, ctx->divergent_vals, &impl->body);
+   nir_metadata_preserve(impl, (nir_metadata)~nir_metadata_block_index);
+
+   /* we'll need this for isel */
+   nir_metadata_require(impl, nir_metadata_block_index);
+
+   if (!(ctx->stage & sw_gs_copy) && ctx->options->dump_preoptir) {
+      fprintf(stderr, "NIR shader before instruction selection:\n");
+      nir_print_shader(shader, stderr);
+   }
 
    std::unique_ptr<Temp[]> allocated{new Temp[impl->ssa_alloc]()};
 
@@ -494,6 +586,8 @@ void init_context(isel_context *ctx, nir_shader *shader)
                unsigned size = nir_instr_as_ssa_undef(instr)->def.num_components;
                if (nir_instr_as_ssa_undef(instr)->def.bit_size == 64)
                   size *= 2;
+               else if (nir_instr_as_ssa_undef(instr)->def.bit_size == 1)
+                  size *= lane_mask_size;
                allocated[nir_instr_as_ssa_undef(instr)->def.index] = Temp(0, RegClass(RegType::sgpr, size));
                break;
             }
@@ -922,7 +1016,6 @@ setup_nir(isel_context *ctx, nir_shader *nir)
 
    nir_function_impl *func = nir_shader_get_entrypoint(nir);
    nir_index_ssa_defs(func);
-   nir_metadata_require(func, nir_metadata_block_index);
 }
 
 isel_context
@@ -1030,11 +1123,6 @@ setup_isel_context(Program* program,
       for (unsigned i = 0; i < shader_count; i++) {
          nir_shader *nir = shaders[i];
          setup_nir(&ctx, nir);
-
-         if (args->options->dump_preoptir) {
-            fprintf(stderr, "NIR shader before instruction selection:\n");
-            nir_print_shader(nir, stderr);
-         }
       }
 
       for (unsigned i = 0; i < shader_count; i++)

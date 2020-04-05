@@ -103,8 +103,6 @@ validate_DispatchComputeGroupSizeARB(struct gl_context *ctx,
                                      const GLuint *num_groups,
                                      const GLuint *group_size)
 {
-   GLuint total_invocations = 1;
-
    if (!check_valid_to_compute(ctx, "glDispatchComputeGroupSizeARB"))
       return GL_FALSE;
 
@@ -153,8 +151,6 @@ validate_DispatchComputeGroupSizeARB(struct gl_context *ctx,
                      "glDispatchComputeGroupSizeARB(group_size_%c)", 'x' + i);
          return GL_FALSE;
       }
-
-      total_invocations *= group_size[i];
    }
 
    /* The ARB_compute_variable_group_size spec says:
@@ -165,11 +161,19 @@ validate_DispatchComputeGroupSizeARB(struct gl_context *ctx,
     *  for compute shaders with variable group size
     *  (MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB)."
     */
+   uint64_t total_invocations = group_size[0] * group_size[1];
+   if (total_invocations <= UINT32_MAX) {
+      /* Only bother multiplying the third value if total still fits in
+       * 32-bit, since MaxComputeVariableGroupInvocations is also 32-bit.
+       */
+      total_invocations *= group_size[2];
+   }
    if (total_invocations > ctx->Const.MaxComputeVariableGroupInvocations) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "glDispatchComputeGroupSizeARB(product of local_sizes "
                   "exceeds MAX_COMPUTE_VARIABLE_GROUP_INVOCATIONS_ARB "
-                  "(%d > %d))", total_invocations,
+                  "(%u * %u * %u > %u))",
+                  group_size[0], group_size[1], group_size[2],
                   ctx->Const.MaxComputeVariableGroupInvocations);
       return GL_FALSE;
    }

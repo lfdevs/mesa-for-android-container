@@ -315,6 +315,7 @@ fast_clear_color(struct iris_context *ice,
     * conversion in convert_fast_clear_color().
     */
    blorp_fast_clear(&blorp_batch, &surf, isl_format_srgb_to_linear(format),
+                    ISL_SWIZZLE_IDENTITY,
                     level, box->z, box->depth,
                     box->x, box->y, box->x + box->width,
                     box->y + box->height);

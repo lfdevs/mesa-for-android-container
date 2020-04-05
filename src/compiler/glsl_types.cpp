@@ -663,9 +663,11 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns,
       assert(((glsl_type *) entry->data)->matrix_columns == columns);
       assert(((glsl_type *) entry->data)->explicit_stride == explicit_stride);
 
+      const glsl_type *t = (const glsl_type *) entry->data;
+
       mtx_unlock(&glsl_type::hash_mutex);
 
-      return (const glsl_type *) entry->data;
+      return t;
    }
 
    assert(!row_major);
@@ -1024,9 +1026,11 @@ glsl_type::get_array_instance(const glsl_type *base,
    assert(((glsl_type *) entry->data)->length == array_size);
    assert(((glsl_type *) entry->data)->fields.array == base);
 
+   glsl_type *t = (glsl_type *) entry->data;
+
    mtx_unlock(&glsl_type::hash_mutex);
 
-   return (glsl_type *) entry->data;
+   return t;
 }
 
 bool
@@ -1225,9 +1229,11 @@ glsl_type::get_struct_instance(const glsl_struct_field *fields,
    assert(strcmp(((glsl_type *) entry->data)->name, name) == 0);
    assert(((glsl_type *) entry->data)->packed == packed);
 
+   glsl_type *t = (glsl_type *) entry->data;
+
    mtx_unlock(&glsl_type::hash_mutex);
 
-   return (glsl_type *) entry->data;
+   return t;
 }
 
 
@@ -1261,9 +1267,11 @@ glsl_type::get_interface_instance(const glsl_struct_field *fields,
    assert(((glsl_type *) entry->data)->length == num_fields);
    assert(strcmp(((glsl_type *) entry->data)->name, block_name) == 0);
 
+   glsl_type *t = (glsl_type *) entry->data;
+
    mtx_unlock(&glsl_type::hash_mutex);
 
-   return (glsl_type *) entry->data;
+   return t;
 }
 
 const glsl_type *
@@ -1290,9 +1298,11 @@ glsl_type::get_subroutine_instance(const char *subroutine_name)
    assert(((glsl_type *) entry->data)->base_type == GLSL_TYPE_SUBROUTINE);
    assert(strcmp(((glsl_type *) entry->data)->name, subroutine_name) == 0);
 
+   glsl_type *t = (glsl_type *) entry->data;
+
    mtx_unlock(&glsl_type::hash_mutex);
 
-   return (glsl_type *) entry->data;
+   return t;
 }
 
 

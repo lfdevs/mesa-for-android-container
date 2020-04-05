@@ -36,14 +36,6 @@
 #include "vc4_context.h"
 #include "vc4_screen.h"
 
-#ifdef HAVE_VALGRIND
-#include <valgrind.h>
-#include <memcheck.h>
-#define VG(x) x
-#else
-#define VG(x)
-#endif
-
 static bool dump_stats = false;
 
 static void

@@ -658,6 +658,16 @@ namespace {
 
          /* Try to combine the specified dependency with any existing ones. */
          for (unsigned i = 0; i < deps.size(); i++) {
+            /* Don't combine otherwise matching dependencies if there is an
+             * exec_all mismatch which would cause a SET dependency to gain an
+             * exec_all flag, since that would prevent it from being baked
+             * into the instruction we want to allocate an SBID for.
+             */
+            if (deps[i].exec_all != dep.exec_all &&
+                (!deps[i].exec_all || (dep.unordered & TGL_SBID_SET)) &&
+                (!dep.exec_all || (deps[i].unordered & TGL_SBID_SET)))
+               continue;
+
             if (dep.ordered && deps[i].ordered) {
                deps[i].jp = MAX2(deps[i].jp, dep.jp);
                deps[i].ordered |= dep.ordered;
@@ -665,16 +675,7 @@ namespace {
                dep.ordered = TGL_REGDIST_NULL;
             }
 
-            /* Don't combine otherwise matching unordered dependencies if
-             * there is an exec_all mismatch which would cause a SET
-             * dependency to gain an exec_all flag, since that would prevent
-             * it from being baked into the instruction we want to allocate an
-             * SBID for.
-             */
-            if (dep.unordered && deps[i].unordered && deps[i].id == dep.id &&
-                (deps[i].exec_all == dep.exec_all ||
-                 (deps[i].exec_all && !(dep.unordered & TGL_SBID_SET)) ||
-                 (dep.exec_all && !(deps[i].unordered & TGL_SBID_SET)))) {
+            if (dep.unordered && deps[i].unordered && deps[i].id == dep.id) {
                deps[i].unordered |= dep.unordered;
                deps[i].exec_all |= dep.exec_all;
                dep.unordered = TGL_SBID_NULL;

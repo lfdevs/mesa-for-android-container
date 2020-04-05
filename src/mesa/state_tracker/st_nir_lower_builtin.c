@@ -138,7 +138,7 @@ get_variable(lower_builtin_state *state, nir_deref_path *path,
       nir_variable_create(shader, nir_var_uniform, glsl_vec4_type(), name);
 
    var->num_state_slots = 1;
-   var->state_slots = ralloc_array(var, nir_state_slot, 1);
+   var->state_slots = rzalloc_array(var, nir_state_slot, 1);
    memcpy(var->state_slots[0].tokens, tokens,
           sizeof(var->state_slots[0].tokens));
 

@@ -108,7 +108,7 @@ EXTENSIONS = [
     Extension('VK_KHR_xlib_surface',                      6, 'VK_USE_PLATFORM_XLIB_KHR'),
     Extension('VK_KHR_multiview',                         1, True),
     Extension('VK_KHR_display',                          23, 'VK_USE_PLATFORM_DISPLAY_KHR'),
-    Extension('VK_KHR_8bit_storage',                      1, 'device->rad_info.chip_class >= GFX8 && !device->use_aco'),
+    Extension('VK_KHR_8bit_storage',                      1, '!device->use_aco'),
     Extension('VK_EXT_direct_mode_display',               1, 'VK_USE_PLATFORM_DISPLAY_KHR'),
     Extension('VK_EXT_acquire_xlib_display',              1, 'VK_USE_PLATFORM_XLIB_XRANDR_EXT'),
     Extension('VK_EXT_buffer_device_address',             1, True),

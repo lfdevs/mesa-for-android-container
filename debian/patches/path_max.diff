@@ -1,0 +1,21 @@
+--- a/src/compiler/glsl/tests/cache_test.c	2020-03-18 22:24:18.000000000 +0100
++++ b/src/compiler/glsl/tests/cache_test.c	2020-03-30 12:09:05.000000000 +0200
+@@ -132,8 +132,8 @@
+ {
+    bool sub_dirs_created = false;
+ 
+-   char buf[PATH_MAX];
+-   if (getcwd(buf, PATH_MAX)) {
++   char *buf = getcwd(NULL, 0);
++   if (buf) {
+       char *full_path = NULL;
+       if (asprintf(&full_path, "%s%s", buf, ++cache_dir) != -1 ) {
+          struct stat sb;
+@@ -142,6 +142,7 @@
+ 
+          free(full_path);
+       }
++      free(buf);
+    }
+ 
+    expect_true(sub_dirs_created, "create sub dirs");

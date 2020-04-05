@@ -2051,7 +2051,7 @@ varying_matches::store_locations() const
             const glsl_type *type =
                get_varying_type(producer_var, producer_stage);
             if (type->is_array() || type->is_matrix() || type->is_struct() ||
-                type->is_double()) {
+                type->is_64bit()) {
                unsigned comp_slots = type->component_slots() + offset;
                unsigned slots = comp_slots / 4;
                if (comp_slots % 4)

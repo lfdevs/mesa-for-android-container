@@ -5905,7 +5905,12 @@ void radv_CmdBindTransformFeedbackBuffersEXT(
 
 		sb[idx].buffer = radv_buffer_from_handle(pBuffers[i]);
 		sb[idx].offset = pOffsets[i];
-		sb[idx].size = pSizes[i];
+
+		if (!pSizes || pSizes[i] == VK_WHOLE_SIZE) {
+			sb[idx].size = sb[idx].buffer->size - sb[idx].offset;
+		} else {
+			sb[idx].size = pSizes[i];
+		}
 
 		radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs,
 				   sb[idx].buffer->bo);

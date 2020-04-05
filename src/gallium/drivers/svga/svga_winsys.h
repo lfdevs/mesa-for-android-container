@@ -390,7 +390,11 @@ struct svga_winsys_context
 
    /**
     * Map a guest-backed surface.
+    * \param swc The winsys context
+    * \param surface The surface to map
     * \param flags  bitmaks of PIPE_TRANSFER_x flags
+    * \param retry Whether to flush and retry the map
+    * \param rebind Whether to issue an immediate rebind and flush.
     *
     * The surface_map() member is allowed to fail due to a
     * shortage of command buffer space, if the
@@ -401,7 +405,8 @@ struct svga_winsys_context
    void *
    (*surface_map)(struct svga_winsys_context *swc,
                   struct svga_winsys_surface *surface,
-                  unsigned flags, boolean *retry);
+                  unsigned flags, boolean *retry,
+                  boolean *rebind);
 
    /**
     * Unmap a guest-backed surface.

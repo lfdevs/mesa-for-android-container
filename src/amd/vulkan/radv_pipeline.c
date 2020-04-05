@@ -2503,6 +2503,17 @@ radv_get_wave_size(struct radv_device *device,
 		return device->physical_device->ge_wave_size;
 }
 
+static uint8_t
+radv_get_ballot_bit_size(struct radv_device *device,
+			 const VkPipelineShaderStageCreateInfo *pStage,
+			 gl_shader_stage stage,
+			 const struct radv_shader_variant_key *key)
+{
+	if (stage == MESA_SHADER_COMPUTE && key->cs.subgroup_size)
+		return key->cs.subgroup_size;
+	return 64;
+}
+
 static void
 radv_fill_shader_info(struct radv_pipeline *pipeline,
 		      const VkPipelineShaderStageCreateInfo **pStages,
@@ -2615,10 +2626,15 @@ radv_fill_shader_info(struct radv_pipeline *pipeline,
 	}
 
 	for (int i = 0; i < MESA_SHADER_STAGES; i++) {
-		if (nir[i])
+		if (nir[i]) {
 			infos[i].wave_size =
 				radv_get_wave_size(pipeline->device, pStages[i],
 						   i, &keys[i]);
+			infos[i].ballot_bit_size =
+				radv_get_ballot_bit_size(pipeline->device,
+							 pStages[i], i,
+							 &keys[i]);
+		}
 	}
 }
 
@@ -2773,17 +2789,28 @@ void radv_create_shaders(struct radv_pipeline *pipeline,
 
 	for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
 		const VkPipelineShaderStageCreateInfo *stage = pStages[i];
+		unsigned subgroup_size = 64, ballot_bit_size = 64;
 
 		if (!modules[i])
 			continue;
 
 		radv_start_feedback(stage_feedbacks[i]);
 
+		if (key->compute_subgroup_size) {
+			/* Only compute shaders currently support requiring a
+			 * specific subgroup size.
+			 */
+			assert(i == MESA_SHADER_COMPUTE);
+			subgroup_size = key->compute_subgroup_size;
+			ballot_bit_size = key->compute_subgroup_size;
+		}
+
 		bool aco = use_aco && radv_aco_supported_stage(i, has_ts);
 		nir[i] = radv_shader_compile_to_nir(device, modules[i],
 						    stage ? stage->pName : "main", i,
 						    stage ? stage->pSpecializationInfo : NULL,
-						    flags, pipeline->layout, aco);
+						    flags, pipeline->layout, aco,
+						    subgroup_size, ballot_bit_size);
 
 		/* We don't want to alter meta shaders IR directly so clone it
 		 * first.
@@ -2864,6 +2891,7 @@ void radv_create_shaders(struct radv_pipeline *pipeline,
 						  pipeline->layout, &key,
 						  &info);
 			info.wave_size = 64; /* Wave32 not supported. */
+			info.ballot_bit_size = 64;
 
 			pipeline->gs_copy_shader = radv_create_gs_copy_shader(
 					device, nir[MESA_SHADER_GEOMETRY], &info,

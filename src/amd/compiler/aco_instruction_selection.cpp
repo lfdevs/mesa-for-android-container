@@ -90,7 +90,7 @@ struct if_context {
    Block BB_endif;
 };
 
-static void visit_cf_list(struct isel_context *ctx,
+static bool visit_cf_list(struct isel_context *ctx,
                           struct exec_list *list);
 
 static void add_logical_edge(unsigned pred_idx, Block *succ)
@@ -3958,6 +3958,9 @@ void visit_discard(isel_context* ctx, nir_intrinsic_instr *instr)
       ctx->block->kind |= block_kind_break;
       unsigned idx = ctx->block->index;
 
+      ctx->cf_info.parent_loop.has_divergent_branch = true;
+      ctx->cf_info.nir_to_aco[instr->instr.block->index] = idx;
+
       /* remove critical edges from linear CFG */
       bld.branch(aco_opcode::p_branch);
       Block* break_block = ctx->program->create_and_insert_block();
@@ -7682,6 +7685,10 @@ void visit_phi(isel_context *ctx, nir_phi_instr *instr)
             continue;
          }
       }
+      /* Handle missing predecessors at the end. This shouldn't happen with loop
+       * headers and we can't ignore these sources for loop header phis. */
+      if (!(ctx->block->kind & block_kind_loop_header) && cur_pred_idx >= preds.size())
+         continue;
       cur_pred_idx++;
       Operand op = get_phi_operand(ctx, src.second);
       operands[num_operands++] = op;
@@ -7935,7 +7942,7 @@ static void visit_loop(isel_context *ctx, nir_loop *loop)
    unsigned loop_header_idx = loop_header->index;
    loop_info_RAII loop_raii(ctx, loop_header_idx, &loop_exit);
    append_logical_start(ctx->block);
-   visit_cf_list(ctx, &loop->body);
+   bool unreachable = visit_cf_list(ctx, &loop->body);
 
    //TODO: what if a loop ends with a unconditional or uniformly branched continue and this branch is never taken?
    if (!ctx->cf_info.has_branch) {
@@ -7980,8 +7987,11 @@ static void visit_loop(isel_context *ctx, nir_loop *loop)
       bld.branch(aco_opcode::p_branch);
    }
 
-   /* fixup phis in loop header from unreachable blocks */
-   if (ctx->cf_info.has_branch || ctx->cf_info.parent_loop.has_divergent_branch) {
+   /* Fixup phis in loop header from unreachable blocks.
+    * has_branch/has_divergent_branch also indicates if the loop ends with a
+    * break/continue instruction, but we don't emit those if unreachable=true */
+   if (unreachable) {
+      assert(ctx->cf_info.has_branch || ctx->cf_info.parent_loop.has_divergent_branch);
       bool linear = ctx->cf_info.has_branch;
       bool logical = ctx->cf_info.has_branch || ctx->cf_info.parent_loop.has_divergent_branch;
       for (aco_ptr<Instruction>& instr : ctx->program->blocks[loop_header_idx].instructions) {
@@ -8173,7 +8183,7 @@ static void end_divergent_if(isel_context *ctx, if_context *ic)
    }
 }
 
-static void visit_if(isel_context *ctx, nir_if *if_stmt)
+static bool visit_if(isel_context *ctx, nir_if *if_stmt)
 {
    Temp cond = get_ssa_temp(ctx, if_stmt->condition.ssa);
    Builder bld(ctx->program, ctx->block);
@@ -8266,6 +8276,7 @@ static void visit_if(isel_context *ctx, nir_if *if_stmt)
          ctx->block = ctx->program->insert_block(std::move(BB_endif));
          append_logical_start(ctx->block);
       }
+      return !ctx->cf_info.has_branch;
    } else { /* non-uniform condition */
       /**
        * To maintain a logical and linear CFG without critical edges,
@@ -8301,10 +8312,12 @@ static void visit_if(isel_context *ctx, nir_if *if_stmt)
       visit_cf_list(ctx, &if_stmt->else_list);
 
       end_divergent_if(ctx, &ic);
+
+      return true;
    }
 }
 
-static void visit_cf_list(isel_context *ctx,
+static bool visit_cf_list(isel_context *ctx,
                           struct exec_list *list)
 {
    foreach_list_typed(nir_cf_node, node, node, list) {
@@ -8313,7 +8326,8 @@ static void visit_cf_list(isel_context *ctx,
          visit_block(ctx, nir_cf_node_as_block(node));
          break;
       case nir_cf_node_if:
-         visit_if(ctx, nir_cf_node_as_if(node));
+         if (!visit_if(ctx, nir_cf_node_as_if(node)))
+            return true;
          break;
       case nir_cf_node_loop:
          visit_loop(ctx, nir_cf_node_as_loop(node));
@@ -8322,6 +8336,7 @@ static void visit_cf_list(isel_context *ctx,
          unreachable("unimplemented cf list type");
       }
    }
+   return false;
 }
 
 static void export_vs_varying(isel_context *ctx, int slot, bool is_pos, int *next_pos)

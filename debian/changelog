@@ -1,3 +1,13 @@
+mesa (20.0.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * path_max.diff, libglx-mesa0.symbols.hurd: Fix build on Hurd.
+    (Closes: #955351)
+  * upstream/signing-key.asc: Added Eric Engestrom's key.
+  * source/local-options: Update extend-diff-ignore.
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Sun, 05 Apr 2020 23:39:55 +0300
+
 mesa (20.0.2-1) unstable; urgency=medium
 
   * New upstream release.

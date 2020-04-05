@@ -236,6 +236,7 @@ struct radv_shader_info {
 	bool uses_invocation_id;
 	bool uses_prim_id;
 	uint8_t wave_size;
+	uint8_t ballot_bit_size;
 	struct radv_userdata_locations user_sgprs_locs;
 	unsigned num_user_sgprs;
 	unsigned num_input_sgprs;
@@ -405,7 +406,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			   const VkSpecializationInfo *spec_info,
 			   const VkPipelineCreateFlags flags,
 			   const struct radv_pipeline_layout *layout,
-			   bool use_aco);
+			   bool use_aco,
+			   unsigned subgroup_size, unsigned ballot_bit_size);
 
 void *
 radv_alloc_shader_memory(struct radv_device *device,

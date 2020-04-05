@@ -947,7 +947,7 @@ ra_add_interference(struct ir3_ra_ctx *ctx)
 				if (BITSET_TEST(bd->livein, i + arr->base)) {
 					arr->start_ip = MIN2(arr->start_ip, block->start_ip);
 				}
-				if (BITSET_TEST(bd->livein, i + arr->base)) {
+				if (BITSET_TEST(bd->liveout, i + arr->base)) {
 					arr->end_ip = MAX2(arr->end_ip, block->end_ip);
 				}
 			}

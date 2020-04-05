@@ -297,7 +297,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 			   const VkSpecializationInfo *spec_info,
 			   const VkPipelineCreateFlags flags,
 			   const struct radv_pipeline_layout *layout,
-			   bool use_aco)
+			   bool use_aco,
+			   unsigned subgroup_size, unsigned ballot_bit_size)
 {
 	nir_shader *nir;
 	const nir_shader_compiler_options *nir_options = use_aco ? &nir_options_aco :
@@ -480,8 +481,8 @@ radv_shader_compile_to_nir(struct radv_device *device,
 	nir_remove_dead_variables(nir, nir_var_function_temp);
 	bool gfx7minus = device->physical_device->rad_info.chip_class <= GFX7;
 	nir_lower_subgroups(nir, &(struct nir_lower_subgroups_options) {
-			.subgroup_size = 64,
-			.ballot_bit_size = 64,
+			.subgroup_size = subgroup_size,
+			.ballot_bit_size = ballot_bit_size,
 			.lower_to_scalar = 1,
 			.lower_subgroup_masks = 1,
 			.lower_shuffle = 1,

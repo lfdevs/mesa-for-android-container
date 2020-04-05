@@ -532,7 +532,8 @@ etna_emit_state(struct etna_context *ctx)
          /*014A8*/ EMIT_STATE(PE_DITHER(x), blend->PE_DITHER[x]);
       }
    }
-   if (unlikely(dirty & (ETNA_DIRTY_BLEND_COLOR))) {
+   if (unlikely(dirty & (ETNA_DIRTY_BLEND_COLOR)) &&
+       VIV_FEATURE(ctx->screen, chipMinorFeatures1, HALF_FLOAT)) {
          /*014B0*/ EMIT_STATE(PE_ALPHA_COLOR_EXT0, ctx->blend_color.PE_ALPHA_COLOR_EXT0);
          /*014B4*/ EMIT_STATE(PE_ALPHA_COLOR_EXT1, ctx->blend_color.PE_ALPHA_COLOR_EXT1);
    }
