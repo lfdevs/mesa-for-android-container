@@ -1,3 +1,14 @@
+mesa (20.0.4-2) unstable; urgency=medium
+
+  * fix-build-with-llvm-10.diff: Add a patch to fix build with Polly,
+    and build with llvm-10 again. (Closes: #956004)
+  * iris-drop-cache-coherent-cpu-mapping.diff: Fix corruption with iris
+    (Closes: #954311) (LP: #1864274)
+  * gallium-fix-bob-compute-shaders.diff: Fix vaapi with bob
+    deinterlacing. (LP: #1867188)
+
+ -- Timo Aaltonen <tjaalton@debian.org>  Wed, 15 Apr 2020 10:16:24 +0300
+
 mesa (20.0.4-1) unstable; urgency=medium
 
   * New upstream release.

@@ -1,0 +1,52 @@
+commit ce2921a9c3bf0c41c795bb605bc88afc152ead55
+Author: Thong Thai <thong.thai@amd.com>
+Date:   Tue Feb 18 12:11:39 2020 -0500
+
+    gallium/auxiliary/vl: fix bob compute shaders for deint yuv
+    
+    Scales the Y-axis by 2 when using the Bob deinterlace filter.
+    
+    Closes: https://gitlab.freedesktop.org/mesa/mesa/issues/2523
+    Signed-off-by: Thong Thai <thong.thai@amd.com>
+    Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+    Tested-by: Marge Bot <https://gitlab.freedesktop.org/mesa/mesa/merge_requests/3857>
+    Part-of: <https://gitlab.freedesktop.org/mesa/mesa/merge_requests/3857>
+    (cherry picked from commit c81aa15d646215eac38c8e0b6dc1a10b35bc13c3)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 1d19040a311..cc1f57008cc 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -13738,7 +13738,7 @@
+         "description": "gallium/auxiliary/vl: fix bob compute shaders for deint yuv",
+         "nominated": false,
+         "nomination_type": null,
+-        "resolution": 4,
++        "resolution": 1,
+         "master_sha": null,
+         "because_sha": null
+     },
+diff --git a/src/gallium/auxiliary/vl/vl_compositor_cs.c b/src/gallium/auxiliary/vl/vl_compositor_cs.c
+index e2bd06a870c..73576f066ee 100644
+--- a/src/gallium/auxiliary/vl/vl_compositor_cs.c
++++ b/src/gallium/auxiliary/vl/vl_compositor_cs.c
+@@ -514,7 +514,9 @@ static const char *compute_shader_yuv_bob_y =
+ 
+          /* Scale */
+          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
++         "DIV TEMP[2], TEMP[2], IMM[1].xyxy\n"
+          "DIV TEMP[3], TEMP[3], CONST[3].zwzw\n"
++         "DIV TEMP[3], TEMP[3], IMM[1].xyxy\n"
+ 
+          /* Fetch texels */
+          "TEX_LZ TEMP[4].x, TEMP[2], SAMP[0], RECT\n"
+@@ -564,7 +566,9 @@ static const char *compute_shader_yuv_bob_uv =
+ 
+          /* Scale */
+          "DIV TEMP[2], TEMP[2], CONST[3].zwzw\n"
++         "DIV TEMP[2], TEMP[2], IMM[1].xyxy\n"
+          "DIV TEMP[3], TEMP[3], CONST[3].zwzw\n"
++         "DIV TEMP[3], TEMP[3], IMM[1].xyxy\n"
+ 
+          /* Fetch texels */
+          "TEX_LZ TEMP[4].x, TEMP[2], SAMP[0], RECT\n"

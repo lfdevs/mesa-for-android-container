@@ -1,3 +1,6 @@
 07_gallium-fix-build-failure-on-powerpcspe.diff
 fix-python-shebang.diff
 path_max.diff
+fix-build-with-llvm-10.diff
+iris-drop-cache-coherent-cpu-mapping.diff
+gallium-fix-bob-compute-shaders.diff

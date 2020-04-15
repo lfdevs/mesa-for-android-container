@@ -1,0 +1,95 @@
+From fbd09ac5ae8a52e198e6f58c51243c06941e7ffb Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Mon, 13 Apr 2020 18:14:24 +0300
+Subject: [PATCH] iris: drop cache coherent cpu mapping for external BO
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We have to assume any external buffer could be used by the display HW.
+In the case that buffer is also CPU mapped, we want to assume no cache
+coherency as it is only available between GT & CPU, not display.
+
+Many thanks to Michel Dänzer for the hint!
+
+v2: Move cache coherent drop to bufmgr (Chris)
+
+v3: Also make BO external if created with PIPE_BIND_SHARED (Eric)
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Cc: <mesa-stable@lists.freedesktop.org>
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/2552
+---
+ src/gallium/drivers/iris/iris_bufmgr.c   | 7 ++++++-
+ src/gallium/drivers/iris/iris_bufmgr.h   | 7 +++++++
+ src/gallium/drivers/iris/iris_resource.c | 6 ++++++
+ 3 files changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/iris/iris_bufmgr.c b/src/gallium/drivers/iris/iris_bufmgr.c
+index ca8db31aed3..c333f7bdaee 100644
+--- a/src/gallium/drivers/iris/iris_bufmgr.c
++++ b/src/gallium/drivers/iris/iris_bufmgr.c
+@@ -1376,12 +1376,17 @@ iris_bo_make_external_locked(struct iris_bo *bo)
+ {
+    if (!bo->external) {
+       _mesa_hash_table_insert(bo->bufmgr->handle_table, &bo->gem_handle, bo);
++      /* If a BO is going to be used externally, it could be sent to the
++       * display HW. So make sure our CPU mappings don't assume cache
++       * coherency since display is outside that cache.
++       */
++      bo->cache_coherent = false;
+       bo->external = true;
+       bo->reusable = false;
+    }
+ }
+ 
+-static void
++void
+ iris_bo_make_external(struct iris_bo *bo)
+ {
+    struct iris_bufmgr *bufmgr = bo->bufmgr;
+diff --git a/src/gallium/drivers/iris/iris_bufmgr.h b/src/gallium/drivers/iris/iris_bufmgr.h
+index caeba61a650..6f4bcbf5e56 100644
+--- a/src/gallium/drivers/iris/iris_bufmgr.h
++++ b/src/gallium/drivers/iris/iris_bufmgr.h
+@@ -309,6 +309,13 @@ int iris_bo_get_tiling(struct iris_bo *bo, uint32_t *tiling_mode,
+  */
+ int iris_bo_flink(struct iris_bo *bo, uint32_t *name);
+ 
++/**
++ * Make a BO externally accessible.
++ *
++ * \param bo Buffer to make external
++ */
++void iris_bo_make_external(struct iris_bo *bo);
++
+ /**
+  * Returns 1 if mapping the buffer for write could cause the process
+  * to block, due to the object being active in the GPU.
+diff --git a/src/gallium/drivers/iris/iris_resource.c b/src/gallium/drivers/iris/iris_resource.c
+index 40655bb4032..3476809529d 100644
+--- a/src/gallium/drivers/iris/iris_resource.c
++++ b/src/gallium/drivers/iris/iris_resource.c
+@@ -801,6 +801,9 @@ iris_resource_create_for_buffer(struct pipe_screen *pscreen,
+       return NULL;
+    }
+ 
++   if (templ->bind & PIPE_BIND_SHARED)
++      iris_bo_make_external(res->bo);
++
+    return &res->base;
+ }
+ 
+@@ -924,6 +927,9 @@ iris_resource_create_with_modifiers(struct pipe_screen *pscreen,
+       map_aux_addresses(screen, res);
+    }
+ 
++   if (templ->bind & PIPE_BIND_SHARED)
++      iris_bo_make_external(res->bo);
++
+    return &res->base;
+ 
+ fail:
+-- 
+2.24.1
+
